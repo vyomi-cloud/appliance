@@ -82,4 +82,26 @@ export default {
     await wire("POST", "/", ELB("CreateTargetGroup", { Name: uniq, Protocol: "HTTP", Port: 80, VpcId: vpcId }));
     return uniq;
   },
+  // Auto Scaling is a separate AWS service ("autoscaling") sharing the same /_wire endpoint.
+  "live-asg": async (wire, uniq) => {
+    await wire("POST", "/", { svc: "autoscaling", headers: { "content-type": "application/x-www-form-urlencoded; charset=utf-8" },
+      body: new URLSearchParams({ Action: "CreateAutoScalingGroup", AutoScalingGroupName: uniq, MinSize: 0, MaxSize: 1, DesiredCapacity: 0 }).toString() });
+    return uniq;
+  },
+  // Trust stores share the ELBv2 engine; the CA bundle is read from Vyomi's own S3.
+  "live-truststore": async (wire, uniq) => {
+    await wire("PUT", "/uic-trust-bundles").catch(() => {});
+    await wire("PUT", "/uic-trust-bundles/ca.pem", { body: "-----BEGIN CERTIFICATE-----\nMIIBfake\n-----END CERTIFICATE-----\n" });
+    await wire("POST", "/", ELB("CreateTrustStore", { Name: uniq, CaCertificatesBundleS3Bucket: "uic-trust-bundles", CaCertificatesBundleS3Key: "ca.pem" }));
+    return uniq;
+  },
+  // Data Lifecycle Manager is a separate AWS service ("dlm", REST JSON) on the same /_wire.
+  "live-dlm-policy": async (wire, uniq) => {
+    const r = await wire("POST", "/policies", { svc: "dlm", body: {
+      Description: uniq, State: "ENABLED",
+      PolicyDetails: { ResourceTypes: ["VOLUME"], TargetTags: [{ Key: "uic", Value: uniq }],
+        Schedules: [{ Name: "s1", CreateRule: { Interval: 24, IntervalUnit: "HOURS" }, RetainRule: { Count: 1 } }] },
+    } });
+    return r.PolicyId;
+  },
 };

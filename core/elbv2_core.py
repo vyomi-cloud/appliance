@@ -100,6 +100,15 @@ class Elbv2Store:
         self.listeners: dict[str, dict] = {}
         self.rules: dict[str, dict] = {}
         self.tags: dict[str, dict] = {}             # arn → {key: value}
+        self.trust_stores: dict[str, dict] = {}     # arn → record (ec2.trust-stores)
+        self.trust_store_revocations: dict[str, dict] = {}   # (trust_store_arn, revocation_id) -> record
+        # Set by the wire router (Nano) / routes/aws_elbv2.py (offline) — the SAME EC2/VPC
+        # model and CloudWatch store autoscaling_core.py and vpc_core.py use, so target
+        # health can react to a target's REAL instance state and HealthyHostCount/
+        # UnHealthyHostCount can be real metrics (see ec2.load-balancing.monitoring).
+        self.vpc_store: object = None
+        self.cw_store: object = None
+        self.s3_store: object = None   # trust-store CA bundles are read from Vyomi's own S3
 
     def persist(self) -> None:
         pass
@@ -681,17 +690,68 @@ def _deregister_targets(store, req):
     return _envelope("DeregisterTargets")
 
 
+def _instance_state(store, instance_id: str) -> str | None:
+    """The target's REAL EC2 instance state (running/stopped/terminated/…), from the SAME
+    vpc_core model the EC2 console reads — None if no vpc_store is wired (older callers /
+    unit tests keep the pre-existing deterministic-on-registration behaviour) or the
+    instance isn't found there (an ENI/IP target, or a plain id a unit test made up)."""
+    vpc_store = getattr(store, "vpc_store", None)
+    if vpc_store is None:
+        return None
+    model = getattr(vpc_store, "_vpc_model", None) or {}
+    inst = (model.get("instances") or {}).get(instance_id)
+    return inst.get("state") if inst else None
+
+
+def _target_health(store, tg: dict, t: dict, in_use: bool) -> dict:
+    if not in_use:
+        return {"State": "unused", "Reason": "Target.NotInUse",
+                "Description": "Target group is not configured to receive traffic from the load balancer"}
+    if tg["TargetType"] == "instance":
+        state = _instance_state(store, t["Id"])
+        if state is not None and state != "running":
+            reason = "Target.DeregistrationInProgress" if state == "stopping" else "Target.FailedHealthChecks"
+            return {"State": "unhealthy" if state in ("stopped", "stopping") else "draining",
+                    "Reason": reason, "Description": f"Instance is in state '{state}'."}
+    return {"State": "healthy"}
+
+
+def _publish_health_metrics(store, tg: dict, lb_arns: list, healthy: int, unhealthy: int) -> None:
+    """Real AWS/ApplicationELB + AWS/NetworkELB HealthyHostCount / UnHealthyHostCount,
+    dimensioned by LoadBalancer + TargetGroup (see ec2.load-balancing.monitoring) —
+    published whenever target health is (re-)evaluated, the same lazy-on-read convention
+    this simulator's other CloudWatch metrics (e.g. EC2 StatusCheckFailed) use."""
+    cw_store = getattr(store, "cw_store", None)
+    if cw_store is None:
+        return
+    from core import cloudwatch_core as _cw
+    tg_dim = tg["TargetGroupArn"].split(":targetgroup/", 1)[1] if ":targetgroup/" in tg["TargetGroupArn"] else tg["TargetGroupArn"]
+    for lb_arn in lb_arns:
+        lb = store.load_balancers.get(lb_arn)
+        if lb is None:
+            continue
+        ns = "AWS/NetworkELB" if lb["Type"] == "network" else "AWS/ApplicationELB"
+        lb_dim = _lb_ids(lb_arn)
+        dims = [{"Name": "LoadBalancer", "Value": lb_dim}, {"Name": "TargetGroup", "Value": tg_dim}]
+        _cw.ingest_internal_metric(cw_store, ns, "HealthyHostCount", dims, float(healthy), unit="Count")
+        _cw.ingest_internal_metric(cw_store, ns, "UnHealthyHostCount", dims, float(unhealthy), unit="Count")
+
+
 def _describe_target_health(store, req):
     tg = _need_tg(store, req.get("TargetGroupArn"))
     wanted = [(t.get("Id"), _int(t.get("Port"), "Port", tg.get("Port"))) for t in _lst(req.get("Targets")) if isinstance(t, dict)]
-    in_use = bool(_tg_lb_arns(store, tg["TargetGroupArn"]))
+    lb_arns = _tg_lb_arns(store, tg["TargetGroupArn"])
+    in_use = bool(lb_arns)
     out = []
+    healthy = unhealthy = 0
     for t in tg["_targets"]:
+        th = _target_health(store, tg, t, in_use)
+        if th["State"] == "healthy":
+            healthy += 1
+        elif th["State"] in ("unhealthy", "draining"):
+            unhealthy += 1
         if wanted and _tkey(t) not in wanted:
             continue
-        th = {"State": "healthy"} if in_use else {
-            "State": "unused", "Reason": "Target.NotInUse",
-            "Description": "Target group is not configured to receive traffic from the load balancer"}
         out.append({"Target": dict(t), "HealthCheckPort": str(t["Port"] if tg["HealthCheckPort"] == "traffic-port" else tg["HealthCheckPort"]),
                     "TargetHealth": th})
     for w in wanted:
@@ -699,6 +759,8 @@ def _describe_target_health(store, req):
             out.append({"Target": {"Id": w[0], "Port": w[1]}, "HealthCheckPort": str(w[1]),
                         "TargetHealth": {"State": "unused", "Reason": "Target.NotRegistered",
                                          "Description": "Target is not registered to the target group"}})
+    if in_use:
+        _publish_health_metrics(store, tg, lb_arns, healthy, unhealthy)
     return _envelope("DescribeTargetHealth", _ser("TargetHealthDescriptions", out))
 
 
@@ -737,6 +799,8 @@ def _create_listener(store, req):
         rec["SslPolicy"] = req.get("SslPolicy") or DEFAULT_SSL_POLICY
     if req.get("AlpnPolicy"):
         rec["AlpnPolicy"] = _strs(req["AlpnPolicy"])
+    if req.get("MutualAuthentication"):
+        rec["MutualAuthentication"] = _mutual_auth(store, req["MutualAuthentication"], proto)
     store.listeners[arn] = rec
     store.tags[arn] = _tags_of(req)
     rarn = arn.replace(":listener/", ":listener-rule/").rsplit("/", 1)[0] + f"/{lid}/{_hex(16)}"
@@ -789,8 +853,150 @@ def _modify_listener(store, req):
         for r in store.rules.values():
             if r["_listener"] == ls["ListenerArn"] and r["IsDefault"]:
                 r["Actions"] = ls["DefaultActions"]
+    if req.get("MutualAuthentication"):
+        ls["MutualAuthentication"] = _mutual_auth(store, req["MutualAuthentication"], ls.get("Protocol"))
     store.persist()
     return _envelope("ModifyListener", _ser("Listeners", [_strip(ls)]))
+
+
+# ── trust stores (mutual TLS, ec2.trust-stores) ─────────────────────────────
+def _need_trust_store(store, arn):
+    ts = store.trust_stores.get(arn or "")
+    if not ts:
+        raise Elbv2Error("TrustStoreNotFound", f"Trust store '{arn}' not found")
+    return ts
+
+
+def _mutual_auth(store, cfg: dict, protocol: str | None) -> dict:
+    mode = str(cfg.get("Mode") or "off")
+    if mode == "off":
+        return {"Mode": "off"}
+    if protocol != "HTTPS":
+        raise Elbv2Error("ValidationError", "MutualAuthentication requires an HTTPS listener.")
+    ts_arn = cfg.get("TrustStoreArn")
+    if not ts_arn:
+        raise Elbv2Error("ValidationError", "TrustStoreArn is required when MutualAuthentication.Mode is not 'off'.")
+    _need_trust_store(store, ts_arn)
+    return {"Mode": mode, "TrustStoreArn": ts_arn,
+            "IgnoreClientCertificateExpiry": str(cfg.get("IgnoreClientCertificateExpiry", "")).lower() == "true",
+            "TrustStoreAssociationStatus": "active"}
+
+
+def _count_pem_certs(body: bytes) -> int:
+    try:
+        return body.decode("utf-8", "ignore").count("-----BEGIN CERTIFICATE-----")
+    except Exception:
+        return 0
+
+
+def _create_trust_store(store, req):
+    name = req.get("Name")
+    if not name or not re.match(r"^[a-zA-Z0-9-]{1,32}$", name):
+        raise Elbv2Error("ValidationError", "Name must be 1-32 alphanumeric/hyphen characters.")
+    if any(t["Name"] == name for t in store.trust_stores.values()):
+        raise Elbv2Error("DuplicateTrustStoreName", f"Trust store '{name}' already exists")
+    bucket, key = req.get("CaCertificatesBundleS3Bucket"), req.get("CaCertificatesBundleS3Key")
+    if not bucket or not key:
+        raise Elbv2Error("ValidationError", "CaCertificatesBundleS3Bucket and CaCertificatesBundleS3Key are required.")
+    cert_count = 0
+    if store.s3_store is not None:
+        from core import s3_object_core as _s3
+        r = _s3.get_object(store.s3_store, bucket, key, {}, {})
+        if r.status != 200:
+            raise Elbv2Error("ValidationError", f"The CA bundle object s3://{bucket}/{key} does not exist.")
+        cert_count = _count_pem_certs(r.body if isinstance(r.body, bytes) else bytes(r.body or b""))
+        if cert_count == 0:
+            raise Elbv2Error("ValidationError", f"s3://{bucket}/{key} does not contain a valid PEM CA bundle (no -----BEGIN CERTIFICATE----- block).")
+    arn = _arn(store, f"truststore/{name}/{_hex(16)}")
+    ts = {"TrustStoreArn": arn, "Name": name, "Status": "ACTIVE",
+          "NumberOfCaCertificates": cert_count, "TotalRevokedEntries": 0,
+          "CaCertificatesBundleS3Bucket": bucket, "CaCertificatesBundleS3Key": key}
+    store.trust_stores[arn] = ts
+    store.tags[arn] = _tags_of(req)
+    store.persist()
+    return _envelope("CreateTrustStore", _ser("TrustStores", [ts]))
+
+
+def _describe_trust_stores(store, req):
+    items = list(store.trust_stores.values())
+    arns = _strs(req.get("TrustStoreArns"))
+    names = _strs(req.get("Names"))
+    if arns:
+        if any(a not in store.trust_stores for a in arns):
+            raise Elbv2Error("TrustStoreNotFound", "One or more trust stores not found")
+        items = [t for t in items if t["TrustStoreArn"] in arns]
+    elif names:
+        items = [t for t in items if t["Name"] in names]
+    page, marker = _page(items, req)
+    return _envelope("DescribeTrustStores", _ser("TrustStores", page) + marker)
+
+
+def _modify_trust_store(store, req):
+    ts = _need_trust_store(store, req.get("TrustStoreArn"))
+    bucket = req.get("CaCertificatesBundleS3Bucket") or ts["CaCertificatesBundleS3Bucket"]
+    key = req.get("CaCertificatesBundleS3Key") or ts["CaCertificatesBundleS3Key"]
+    if store.s3_store is not None and (req.get("CaCertificatesBundleS3Bucket") or req.get("CaCertificatesBundleS3Key")):
+        from core import s3_object_core as _s3
+        r = _s3.get_object(store.s3_store, bucket, key, {}, {})
+        if r.status != 200:
+            raise Elbv2Error("ValidationError", f"The CA bundle object s3://{bucket}/{key} does not exist.")
+        ts["NumberOfCaCertificates"] = _count_pem_certs(r.body if isinstance(r.body, bytes) else bytes(r.body or b""))
+    ts["CaCertificatesBundleS3Bucket"], ts["CaCertificatesBundleS3Key"] = bucket, key
+    store.persist()
+    return _envelope("ModifyTrustStore", _ser("TrustStores", [ts]))
+
+
+def _delete_trust_store(store, req):
+    arn = req.get("TrustStoreArn")
+    ts = _need_trust_store(store, arn)
+    in_use = [l["ListenerArn"] for l in store.listeners.values()
+              if (l.get("MutualAuthentication") or {}).get("TrustStoreArn") == arn]
+    if in_use:
+        raise Elbv2Error("TrustStoreInUse", f"Trust store '{arn}' is associated with listener(s) {in_use}.")
+    store.trust_stores.pop(arn, None)
+    store.trust_store_revocations.pop(arn, None)
+    store.tags.pop(arn, None)
+    store.persist()
+    return _envelope("DeleteTrustStore")
+
+
+def _describe_trust_store_associations(store, req):
+    arn = req.get("TrustStoreArn")
+    _need_trust_store(store, arn)
+    rows = [{"ResourceArn": l["ListenerArn"]} for l in store.listeners.values()
+            if (l.get("MutualAuthentication") or {}).get("TrustStoreArn") == arn]
+    page, marker = _page(rows, req)
+    return _envelope("DescribeTrustStoreAssociations", _ser("TrustStoreAssociations", page) + marker)
+
+
+def _create_trust_store_revocation(store, req):
+    arn = req.get("TrustStoreArn")
+    _need_trust_store(store, arn)
+    bucket, key = req.get("RevocationContents.1.S3Bucket") or req.get("RevocationContentsS3Bucket"), \
+                  req.get("RevocationContents.1.S3Key") or req.get("RevocationContentsS3Key")
+    revs = store.trust_store_revocations.setdefault(arn, {})
+    rev_id = len(revs) + 1
+    revs[rev_id] = {"TrustStoreArn": arn, "RevocationId": rev_id, "RevocationType": "CRL",
+                    "NumberOfRevokedEntries": 0, "S3Bucket": bucket, "S3Key": key}
+    store.trust_stores[arn]["TotalRevokedEntries"] = sum(r["NumberOfRevokedEntries"] for r in revs.values())
+    store.persist()
+    return _envelope("CreateTrustStoreRevocation", _ser("TrustStoreRevocations", [revs[rev_id]]))
+
+
+def _describe_trust_store_revocations(store, req):
+    arn = req.get("TrustStoreArn")
+    _need_trust_store(store, arn)
+    rows = list(store.trust_store_revocations.get(arn, {}).values())
+    return _envelope("DescribeTrustStoreRevocations", _ser("TrustStoreRevocations", rows))
+
+
+def _delete_trust_store_revocation(store, req):
+    arn = req.get("TrustStoreArn")
+    _need_trust_store(store, arn)
+    rev_id = int(req.get("RevocationId"))
+    store.trust_store_revocations.get(arn, {}).pop(rev_id, None)
+    store.persist()
+    return _envelope("DeleteTrustStoreRevocation")
 
 
 def _drop_listener(store, arn: str) -> None:
@@ -1017,6 +1223,12 @@ OPERATIONS = {
     "DeleteRule": _delete_rule, "SetRulePriorities": _set_rule_priorities,
     "AddTags": _add_tags, "RemoveTags": _remove_tags, "DescribeTags": _describe_tags,
     "DescribeSSLPolicies": _describe_ssl_policies, "DescribeAccountLimits": _describe_account_limits,
+    "CreateTrustStore": _create_trust_store, "DescribeTrustStores": _describe_trust_stores,
+    "ModifyTrustStore": _modify_trust_store, "DeleteTrustStore": _delete_trust_store,
+    "DescribeTrustStoreAssociations": _describe_trust_store_associations,
+    "CreateTrustStoreRevocation": _create_trust_store_revocation,
+    "DescribeTrustStoreRevocations": _describe_trust_store_revocations,
+    "DeleteTrustStoreRevocation": _delete_trust_store_revocation,
 }
 
 

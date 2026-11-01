@@ -17,7 +17,7 @@ from core import elbv2_core as elb
 class SpaceElbv2Store(elb.Elbv2Store):
     """Elbv2Store whose dicts live in the active space's service state."""
 
-    _KEYS = ("load_balancers", "target_groups", "listeners", "rules", "tags")
+    _KEYS = ("load_balancers", "target_groups", "listeners", "rules", "tags", "trust_stores", "trust_store_revocations")
 
     def __init__(self) -> None:
         self.account_id = ctx.AWS_ACCOUNT_ID
@@ -25,6 +25,33 @@ class SpaceElbv2Store(elb.Elbv2Store):
 
     def _s(self) -> dict:
         return ctx.elbv2_state
+
+    @property
+    def vpc_store(self):
+        from server import _Ec2CoreSpaceStore
+        return _Ec2CoreSpaceStore()
+
+    @vpc_store.setter
+    def vpc_store(self, value):
+        pass   # always re-derived from the active space (see the getter)
+
+    @property
+    def cw_store(self):
+        from routes import aws_cloudwatch
+        return aws_cloudwatch.get_store()
+
+    @cw_store.setter
+    def cw_store(self, value):
+        pass
+
+    @property
+    def s3_store(self):
+        from core import appliance_stores as aps
+        return aps.s3_store()
+
+    @s3_store.setter
+    def s3_store(self, value):
+        pass
 
     def persist(self) -> None:
         ctx.persist_state()

@@ -96,7 +96,8 @@
     "route": "#/ec2/create-snapshot"
   },
   "lifecycle-manager": {
-    "route": "#/ec2/lifecycle-manager"
+    "route": "#/ec2/lifecycle-manager",
+    "live": "live-dlm-policy"
   },
   "create-lifecycle-policy": {
     "route": "#/ec2/create-lifecycle-policy"
@@ -171,13 +172,15 @@
     "live": "live-tg"
   },
   "trust-stores": {
-    "route": "#/ec2/trust-stores"
+    "route": "#/ec2/trust-stores",
+    "live": "live-truststore"
   },
   "create-trust-store": {
     "route": "#/ec2/create-trust-store"
   },
   "auto-scaling-groups": {
-    "route": "#/ec2/auto-scaling-groups"
+    "route": "#/ec2/auto-scaling-groups",
+    "live": "live-asg"
   },
   "settings": {
     "route": "#/ec2/settings"

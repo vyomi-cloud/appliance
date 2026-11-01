@@ -2,7 +2,7 @@
  * EC2 and VPC share one AWS service ("ec2" credential scope) and one backend
  * core (core/vpc_core.py) — this file only covers the compute/storage/network
  * resource surface the v4 EC2 console needs. */
-import { awsQuery, awsJson, asList } from "../../../common/wire.js";
+import { awsQuery, awsJson, awsRest, asList } from "../../../common/wire.js";
 
 /** Flatten a JS object/array into the Query wire's dotted-index form:
  * {InstanceId: ["i-1"]} -> {"InstanceId.1": "i-1"}
@@ -311,3 +311,111 @@ export async function describeElbTags(arn) {
   const td = asList(r.TagDescriptions?.member)[0];
   return Object.fromEntries(asList(td?.Tags?.member).map((t) => [t.Key, t.Value || ""]));
 }
+
+// ── security group VPC associations (ec2.security-groups.sharing) ──────
+export const associateSecurityGroupVpc = (groupId, vpcId) => call("AssociateSecurityGroupVpc", { GroupId: groupId, VpcId: vpcId });
+export const disassociateSecurityGroupVpc = (groupId, vpcId) => call("DisassociateSecurityGroupVpc", { GroupId: groupId, VpcId: vpcId });
+export async function describeSecurityGroupVpcAssociations(groupId) {
+  const r = await call("DescribeSecurityGroupVpcAssociations", { GroupId: [groupId] });
+  return asList(r.securityGroupVpcAssociationSet?.item);
+}
+
+// ── Allowed AMIs / Serial Console / default credit spec (ec2.settings.other) ──
+export const getAllowedImagesSettings = () => call("GetAllowedImagesSettings").then((r) => ({
+  state: r.allowedImagesSettingsState, criteria: asList(r.imageCriteria?.item).map((c) => asList(c.imageProviders?.item)),
+}));
+export const enableAllowedImagesSettings = () => call("EnableAllowedImagesSettings");
+export const disableAllowedImagesSettings = () => call("DisableAllowedImagesSettings");
+export const replaceImageCriteria = (providerLists) => call("ReplaceImageCriteriaInAllowedImagesSettings", {
+  ImageCriteria: providerLists.map((providers) => ({ ImageProviders: providers })),
+});
+export const getSerialConsoleAccessStatus = () => call("GetSerialConsoleAccessStatus").then((r) => r.serialConsoleAccessEnabled === "true");
+export const enableSerialConsoleAccess = () => call("EnableSerialConsoleAccess");
+export const disableSerialConsoleAccess = () => call("DisableSerialConsoleAccess");
+export const getDefaultCreditSpecification = (family) => call("GetDefaultCreditSpecification", { InstanceFamily: family }).then((r) => r.instanceFamilyCreditSpecification?.cpuCredits);
+export const modifyDefaultCreditSpecification = (family, cpuCredits) => call("ModifyDefaultCreditSpecification", { InstanceFamily: family, CpuCredits: cpuCredits });
+
+// ── Auto Scaling (separate AWS service, signs as "autoscaling"; core/autoscaling_core.py) ──
+const ASG_SVC = "autoscaling";
+const asg = (action, params = {}) => awsQuery(ASG_SVC, action, flatten(params), { version: "2011-01-01" }).then((r) => r[`${action}Response`]?.[`${action}Result`] || {});
+
+export async function createAutoScalingGroup(input) {
+  return asg("CreateAutoScalingGroup", input);
+}
+export async function describeAutoScalingGroups(names) {
+  const r = await asg("DescribeAutoScalingGroups", names ? { AutoScalingGroupNames: names } : {});
+  return asList(r.AutoScalingGroups?.member).map((g) => ({ ...g, Instances: asList(g.Instances?.member), AvailabilityZones: asList(g.AvailabilityZones?.member) }));
+}
+export const describeAutoScalingGroup = (name) => describeAutoScalingGroups([name]).then((xs) => xs[0]);
+export const updateAutoScalingGroup = (name, input) => asg("UpdateAutoScalingGroup", { AutoScalingGroupName: name, ...input });
+export const setDesiredCapacity = (name, desired) => asg("SetDesiredCapacity", { AutoScalingGroupName: name, DesiredCapacity: desired });
+export const deleteAutoScalingGroup = (name, force) => asg("DeleteAutoScalingGroup", { AutoScalingGroupName: name, ForceDelete: force });
+export async function describeAutoScalingInstances() {
+  const r = await asg("DescribeAutoScalingInstances");
+  return asList(r.AutoScalingInstances?.member);
+}
+
+export const putScalingPolicy = (groupName, input) => asg("PutScalingPolicy", { AutoScalingGroupName: groupName, ...input }).then((r) => r.PolicyARN);
+export async function describeScalingPolicies(groupName) {
+  const r = await asg("DescribePolicies", { AutoScalingGroupName: groupName });
+  return asList(r.ScalingPolicies?.member).map((p) => ({ ...p, StepAdjustments: asList(p.StepAdjustments?.member) }));
+}
+export const deleteScalingPolicy = (groupName, policyName) => asg("DeletePolicy", { AutoScalingGroupName: groupName, PolicyName: policyName });
+
+export const putScheduledAction = (groupName, input) => asg("PutScheduledUpdateGroupAction", { AutoScalingGroupName: groupName, ...input });
+export async function describeScheduledActions(groupName) {
+  const r = await asg("DescribeScheduledActions", { AutoScalingGroupName: groupName });
+  return asList(r.ScheduledUpdateGroupActions?.member);
+}
+export const deleteScheduledAction = (groupName, name) => asg("DeleteScheduledAction", { AutoScalingGroupName: groupName, ScheduledActionName: name });
+
+export const putLifecycleHook = (groupName, input) => asg("PutLifecycleHook", { AutoScalingGroupName: groupName, ...input });
+export async function describeLifecycleHooks(groupName) {
+  const r = await asg("DescribeLifecycleHooks", { AutoScalingGroupName: groupName });
+  return asList(r.LifecycleHooks?.member);
+}
+export const deleteLifecycleHook = (groupName, name) => asg("DeleteLifecycleHook", { AutoScalingGroupName: groupName, LifecycleHookName: name });
+export const completeLifecycleAction = (groupName, hookName, instanceId, result) =>
+  asg("CompleteLifecycleAction", { AutoScalingGroupName: groupName, LifecycleHookName: hookName, InstanceId: instanceId, LifecycleActionResult: result });
+
+export const startInstanceRefresh = (groupName) => asg("StartInstanceRefresh", { AutoScalingGroupName: groupName }).then((r) => r.InstanceRefreshId);
+export async function describeInstanceRefreshes(groupName) {
+  const r = await asg("DescribeInstanceRefreshes", { AutoScalingGroupName: groupName });
+  return asList(r.InstanceRefreshes?.member);
+}
+export const cancelInstanceRefresh = (groupName) => asg("CancelInstanceRefresh", { AutoScalingGroupName: groupName });
+
+// ── Trust stores (mutual TLS, ec2.trust-stores — core/elbv2_core.py) ─────
+export const createTrustStore = (input) => elb("CreateTrustStore", input).then((r) => asList(r.TrustStores?.member)[0]);
+export async function describeTrustStores(filter = {}) {
+  const r = await elb("DescribeTrustStores", filter);
+  return asList(r.TrustStores?.member);
+}
+export const describeTrustStore = (arn) => describeTrustStores({ TrustStoreArns: [arn] }).then((xs) => xs[0]);
+export const modifyTrustStore = (arn, input) => elb("ModifyTrustStore", { TrustStoreArn: arn, ...input }).then((r) => asList(r.TrustStores?.member)[0]);
+export const deleteTrustStore = (arn) => elb("DeleteTrustStore", { TrustStoreArn: arn });
+export async function describeTrustStoreAssociations(arn) {
+  const r = await elb("DescribeTrustStoreAssociations", { TrustStoreArn: arn });
+  return asList(r.TrustStoreAssociations?.member);
+}
+export const createTrustStoreRevocation = (arn, s3Bucket, s3Key) => elb("CreateTrustStoreRevocation", {
+  TrustStoreArn: arn, RevocationContents: [{ S3Bucket: s3Bucket, S3Key: s3Key }],
+}).then((r) => asList(r.TrustStoreRevocations?.member)[0]);
+export async function describeTrustStoreRevocations(arn) {
+  const r = await elb("DescribeTrustStoreRevocations", { TrustStoreArn: arn });
+  return asList(r.TrustStoreRevocations?.member);
+}
+export const deleteTrustStoreRevocation = (arn, revocationId) => elb("DeleteTrustStoreRevocation", { TrustStoreArn: arn, RevocationId: revocationId });
+
+// ── Data Lifecycle Manager (ec2.lifecycle-manager — core/dlm_core.py, REST JSON) ──
+const DLM_SVC = "dlm";
+const dlmRest = (method, path, body) => awsRest(DLM_SVC, method, path, { body });
+
+export const createLifecyclePolicy = (input) => dlmRest("POST", "/policies", input).then((r) => r.PolicyId);
+export async function getLifecyclePolicies() {
+  const r = await dlmRest("GET", "/policies");
+  return r.Policies || [];
+}
+export const getLifecyclePolicy = (id) => dlmRest("GET", `/policies/${id}`).then((r) => r.Policy);
+export const updateLifecyclePolicy = (id, input) => dlmRest("PATCH", `/policies/${id}`, input);
+export const deleteLifecyclePolicy = (id) => dlmRest("DELETE", `/policies/${id}`);

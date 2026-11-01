@@ -21,11 +21,6 @@ export const DedicatedHosts = capability("Dedicated Hosts", "ec2.purchasing-opti
 export const CapacityReservations = capability("Capacity Reservations", "ec2.purchasing-options");
 export const UltraServers = capability("UltraServers", "ec2.purchasing-options");
 export const CapacityManager = capability("Capacity Manager", "ec2.purchasing-options");
-export const LifecycleManager = capability("Lifecycle Manager", "ec2.lifecycle-manager");
-export const CreateLifecyclePolicy = capability("Create default policy", "ec2.lifecycle-manager");
-export const TrustStores = capability("Trust stores", "ec2.trust-stores");
-export const CreateTrustStore = capability("Create trust store", "ec2.trust-stores");
-export const AutoScalingGroups = capability("Auto Scaling groups", "ec2.auto-scaling");
 
 export const MigrateAServer = honest("Migrate a server", "AWS Application Migration Service");
 export const RecycleBin = honest("Recycle Bin", "Recycle Bin for deleted AMIs/snapshots/volumes");

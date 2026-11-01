@@ -69,7 +69,11 @@ def _model(store) -> dict:
              "account": {"ebs_encryption_by_default": False, "ebs_default_kms_key_id": "alias/aws/ebs",
                          "vpc_block_public_access": {"internet_gateway_block_mode": "off"},
                          "vpc_block_public_access_exclusions": {}, "local_zones_opt_in": False,
-                         "console_experiments": {}},
+                         "console_experiments": {},
+                         "allowed_images_enabled": False, "allowed_images_criteria": [],
+                         "serial_console_enabled": True,
+                         "default_credit_specification": {"t2": "standard", "t3": "unlimited", "t4g": "unlimited"},
+                         "asg_default_instance_warmup": 0},
              # PrivateLink
              "vpc_endpoints": {}, "vpc_endpoint_services": {}, "vpc_endpoint_connections": {},
              # Network Access Analyzer
@@ -2360,11 +2364,33 @@ def _instance_xml(inst: dict) -> str:
     )
 
 
+def _image_provider(image: dict) -> str:
+    owner = image.get("owner_id", "")
+    if owner == "amazon":
+        return "amazon"
+    if owner == OWNER_ID:
+        return "self"
+    return "aws-marketplace"
+
+
+def _check_allowed_images(m: dict, image: dict) -> None:
+    acct = m["account"]
+    if not acct["allowed_images_enabled"]:
+        return
+    criteria = acct["allowed_images_criteria"]
+    provider = _image_provider(image)
+    if not any(provider in c.get("providers", []) for c in criteria):
+        raise VpcError("UnauthorizedImage",
+                        f"The image '{image['id']}' is not on the account's allowed AMIs list "
+                        f"(provider '{provider}' doesn't match any configured image criteria).")
+
+
 def _launch_one(m: dict, params: dict, tag_specs: dict, idx: int) -> dict:
     image_id = str(params.get("ImageId") or _default_ami_id(m))
     image = m["images"].get(image_id)
     if image is None:
         raise VpcError("InvalidAMIID.NotFound", f"The image id '[{image_id}]' does not exist.")
+    _check_allowed_images(m, image)
     vpc_id, default_subnet, default_sg = _ensure_default_network(m)
     subnet_id = str(params.get("SubnetId") or params.get("NetworkInterface.1.SubnetId") or default_subnet)
     subnet = m["subnets"].get(subnet_id)
@@ -2377,6 +2403,14 @@ def _launch_one(m: dict, params: dict, tag_specs: dict, idx: int) -> dict:
              [v for k, v in params.items() if k.startswith("SecurityGroupIds.")] or \
              [v for k, v in params.items() if k.startswith("NetworkInterface.1.SecurityGroupId.")] or \
              [_vpc_default_sg(m, vpc_id, default_sg)]
+    for sgid in sg_ids:
+        sg = m["sgs"].get(sgid)
+        if sg is None:
+            raise VpcError("InvalidGroup.NotFound", f"The security group '{sgid}' does not exist.")
+        if sg["vpc_id"] != vpc_id and vpc_id not in sg.get("vpc_associations", []):
+            raise VpcError("InvalidParameterValue",
+                            f"Security group {sgid} and subnet/VPC {vpc_id} belong to different networks "
+                            f"(associate it with this VPC first — AssociateSecurityGroupVpc).")
     group_name = str(params.get("Placement.GroupName") or "")
     partition_number = None
     if group_name:
@@ -2414,8 +2448,11 @@ def _launch_one(m: dict, params: dict, tag_specs: dict, idx: int) -> dict:
         "multi_attach": False, "created": _now(), "tags": {},
         "attachments": [{"instance_id": instance_id, "device": "/dev/xvda", "delete_on_termination": True, "attach_time": _now()}],
     }
+    instance_type = str(params.get("InstanceType") or "t3.micro")
+    family = instance_type.split(".")[0]
+    default_credits = m["account"]["default_credit_specification"].get(family, "standard")
     inst = {
-        "id": instance_id, "image_id": image_id, "state": "running", "instance_type": str(params.get("InstanceType") or "t3.micro"),
+        "id": instance_id, "image_id": image_id, "state": "running", "instance_type": instance_type,
         "launch_time": _now(), "az": az, "vpc_id": vpc_id, "subnet_id": subnet_id, "sg_ids": sg_ids,
         "private_ip": private_ip, "public_ip": public_ip, "auto_public_ip": auto_public, "source_dest_check": True,
         "public_dns": f"ec2-{public_ip.replace('.', '-')}.compute-1.amazonaws.com" if public_ip else "",
@@ -2428,7 +2465,7 @@ def _launch_one(m: dict, params: dict, tag_specs: dict, idx: int) -> dict:
         "stop_protection": False, "shutdown_behavior": str(params.get("InstanceInitiatedShutdownBehavior") or "stop"),
         "tenancy": str(params.get("Placement.Tenancy") or "default"), "placement_group": group_name, "partition_number": partition_number,
         "iam_instance_profile": str(params.get("IamInstanceProfile.Name") or params.get("IamInstanceProfile.Arn") or ""),
-        "credit_spec": str(params.get("CreditSpecification.CpuCredits") or "standard"),
+        "credit_spec": str(params.get("CreditSpecification.CpuCredits") or default_credits),
         "hibernation": str(params.get("HibernationOptions.Configured", "")).lower() == "true",
         "auto_recovery": str(params.get("MaintenanceOptions.AutoRecovery") or "default"),
         "hostname_type": str(params.get("PrivateDnsNameOptions.HostnameType") or "ip-name"),
@@ -2540,11 +2577,13 @@ def apply_alarm_action(store, instance_id: str, action: str) -> bool:
 
 
 def launch_for_autoscaling(store, az: str | None = None, instance_type: str | None = None,
-                            image_id: str | None = None, tags: dict | None = None) -> str:
+                            image_id: str | None = None, tags: dict | None = None,
+                            subnet_id: str | None = None, security_group_ids: list | None = None,
+                            key_name: str | None = None) -> str:
     """Called by autoscaling_core when a group scales out: launches one instance through
     the SAME `_launch_one` path RunInstances uses, so a scaled group's instances are
     indistinguishable from any other EC2 instance in the console (see
-    aws.cloudwatch.alarms.actions.compute)."""
+    aws.cloudwatch.alarms.actions.compute and ec2.auto-scaling)."""
     m = _model(store)
     params: dict = {}
     if image_id:
@@ -2553,8 +2592,41 @@ def launch_for_autoscaling(store, az: str | None = None, instance_type: str | No
         params["InstanceType"] = instance_type
     if az:
         params["Placement.AvailabilityZone"] = az
+    if subnet_id:
+        params["SubnetId"] = subnet_id
+    if key_name:
+        params["KeyName"] = key_name
+    for i, sgid in enumerate(security_group_ids or [], start=1):
+        params[f"SecurityGroupIds.{i}"] = sgid
     inst = _launch_one(m, params, {"instance": dict(tags or {})}, 0)
     return inst["id"]
+
+
+def resolve_launch_template(store, lt_id: str | None, lt_name: str | None, version: str | None) -> dict | None:
+    """Auto Scaling groups and `aws ec2 run-instances --launch-template` both reference a
+    template by id/name + version ($Latest/$Default/N) — resolve to its LaunchTemplateData
+    dict (or None if not found), for callers (autoscaling_core) that need ImageId/InstanceType/
+    SubnetId/SecurityGroupIds/KeyName without re-implementing the version lookup."""
+    m = _model(store)
+    lt = None
+    if lt_id:
+        lt = m["launch_templates"].get(str(lt_id))
+    elif lt_name:
+        lt = next((t for t in m["launch_templates"].values() if t["name"] == lt_name), None)
+    if lt is None:
+        return None
+    v = str(version or "$Default")
+    if v == "$Default":
+        vnum = lt["default_version"]
+    elif v == "$Latest":
+        vnum = lt["latest_version"]
+    else:
+        try:
+            vnum = int(v)
+        except ValueError:
+            return None
+    ver = lt["versions"].get(vnum)
+    return dict(ver["data"]) if ver else None
 
 
 def terminate_for_autoscaling(store, instance_id: str) -> bool:
@@ -3218,6 +3290,71 @@ def _revoke(store, params, direction):
     return _envelope(action, "<return>true</return>")
 
 
+# ── security group VPC associations (AssociateSecurityGroupVpc) ────────────
+# The real AWS RAM service shares resources ACROSS accounts; Vyomi simulates one
+# account, so there is no second principal to share with (ec2.security-groups.sharing
+# limitation). What IS a real, same-account AWS feature — and what AWS's own console
+# surfaces under this same "sharing" workflow — is making a security group created in
+# one VPC usable by ENIs/instances in ANOTHER VPC, without copying its rules. We model
+# that for real: RunInstances enforces it (see _launch_one), so a security group from a
+# foreign VPC is genuinely rejected unless associated first.
+def _sgvpc_assoc_xml(sg: dict, vpc_id: str, state: str) -> str:
+    return ("<item>"
+            f"<groupId>{_xml_escape(sg['id'])}</groupId><vpcId>{_xml_escape(vpc_id)}</vpcId>"
+            f"<state>{_xml_escape(state)}</state>"
+            "</item>")
+
+
+def _associate_security_group_vpc(store, params):
+    m = _model(store)
+    sg = _find_sg(m, params.get("GroupId"))
+    vpc_id = str(_req(params, "VpcId"))
+    if vpc_id not in m["vpcs"]:
+        raise VpcError("InvalidVpcID.NotFound", f"VPC {vpc_id} not found.")
+    if vpc_id == sg["vpc_id"]:
+        raise VpcError("InvalidParameterValue", "The security group already belongs to this VPC.")
+    assoc = sg.setdefault("vpc_associations", [])
+    if vpc_id not in assoc:
+        assoc.append(vpc_id)
+    return _envelope("AssociateSecurityGroupVpc", _sgvpc_assoc_xml(sg, vpc_id, "associated"))
+
+
+def _disassociate_security_group_vpc(store, params):
+    m = _model(store)
+    sg = _find_sg(m, params.get("GroupId"))
+    vpc_id = str(_req(params, "VpcId"))
+    assoc = sg.setdefault("vpc_associations", [])
+    for inst in m["instances"].values():
+        if inst.get("vpc_id") == vpc_id and sg["id"] in inst.get("sg_ids", []) and inst["state"] != "terminated":
+            raise VpcError("DependencyViolation",
+                            f"resource {sg['id']} has a dependent object in VPC {vpc_id} (in use by {inst['id']}).")
+    if vpc_id in assoc:
+        assoc.remove(vpc_id)
+    return _envelope("DisassociateSecurityGroupVpc", _sgvpc_assoc_xml(sg, vpc_id, "disassociated"))
+
+
+def _describe_security_group_vpc_associations(store, params):
+    m = _model(store)
+    group_ids = [v for k, v in params.items() if k.startswith("GroupId.")]
+    vpc_ids = [v for k, v in params.items() if k.startswith("VpcId.")]
+    rows = []
+    for sg in m["sgs"].values():
+        if group_ids and sg["id"] not in group_ids:
+            continue
+        for vpc_id in sg.get("vpc_associations", []):
+            if vpc_ids and vpc_id not in vpc_ids:
+                continue
+            rows.append(_sgvpc_assoc_xml(sg, vpc_id, "associated"))
+    return _envelope("DescribeSecurityGroupVpcAssociations", f"<securityGroupVpcAssociationSet>{''.join(rows)}</securityGroupVpcAssociationSet>")
+
+
+def _req(params, key):
+    v = params.get(key)
+    if v is None or v == "":
+        raise VpcError("MissingParameter", f"The request must contain the parameter {key}.")
+    return v
+
+
 # ── placement groups ────────────────────────────────────────────────────
 def _pg_xml(pg: dict) -> str:
     return ("<item>"
@@ -3503,6 +3640,70 @@ def _reset_ebs_default_kms_key_id(store, params):
     return _envelope("ResetEbsDefaultKmsKeyId", "<kmsKeyId>alias/aws/ebs</kmsKeyId>")
 
 
+# ── Allowed AMIs (account setting, EC2 Settings > Allowed AMIs) ─────────────
+def _allowed_images_xml(acct: dict) -> str:
+    criteria = "".join(
+        "<item><imageProviders>" + "".join(f"<item>{_xml_escape(p)}</item>" for p in c.get("providers", [])) + "</imageProviders></item>"
+        for c in acct["allowed_images_criteria"])
+    return (f"<allowedImagesSettingsState>{'enabled' if acct['allowed_images_enabled'] else 'disabled'}</allowedImagesSettingsState>"
+            f"<imageCriteria>{criteria}</imageCriteria>")
+
+
+def _get_allowed_images_settings(store, params):
+    return _envelope("GetAllowedImagesSettings", _allowed_images_xml(_model(store)["account"]))
+
+
+def _set_allowed_images_settings(store, params, enabled):
+    acct = _model(store)["account"]
+    acct["allowed_images_enabled"] = enabled
+    action = "EnableAllowedImagesSettings" if enabled else "DisableAllowedImagesSettings"
+    return _envelope(action, f"<allowedImagesSettingsState>{'enabled' if enabled else 'disabled'}</allowedImagesSettingsState>")
+
+
+def _replace_image_criteria_in_allowed_images_settings(store, params):
+    acct = _model(store)["account"]
+    criteria = []
+    i = 1
+    while f"ImageCriteria.{i}.ImageProviders.1" in params or any(k.startswith(f"ImageCriteria.{i}.ImageProviders.") for k in params):
+        providers = [v for k, v in params.items() if k.startswith(f"ImageCriteria.{i}.ImageProviders.")]
+        if not providers:
+            break
+        criteria.append({"providers": providers})
+        i += 1
+    acct["allowed_images_criteria"] = criteria
+    return _envelope("ReplaceImageCriteriaInAllowedImagesSettings", "<return>true</return>")
+
+
+# ── EC2 Serial Console access (account setting) ─────────────────────────────
+def _get_serial_console_access_status(store, params):
+    enabled = _model(store)["account"]["serial_console_enabled"]
+    return _envelope("GetSerialConsoleAccessStatus", f"<serialConsoleAccessEnabled>{str(enabled).lower()}</serialConsoleAccessEnabled>")
+
+
+def _set_serial_console_access(store, params, enabled):
+    _model(store)["account"]["serial_console_enabled"] = enabled
+    action = "EnableSerialConsoleAccess" if enabled else "DisableSerialConsoleAccess"
+    return _envelope(action, f"<serialConsoleAccessEnabled>{str(enabled).lower()}</serialConsoleAccessEnabled>")
+
+
+# ── Default credit specification (account setting, per T-family) ────────────
+def _get_default_credit_specification(store, params):
+    family = str(_req(params, "InstanceFamily"))
+    spec = _model(store)["account"]["default_credit_specification"].get(family, "standard")
+    return _envelope("GetDefaultCreditSpecification",
+                      f"<instanceFamilyCreditSpecification><instanceFamily>{_xml_escape(family)}</instanceFamily>"
+                      f"<cpuCredits>{_xml_escape(spec)}</cpuCredits></instanceFamilyCreditSpecification>")
+
+
+def _modify_default_credit_specification(store, params):
+    family = str(_req(params, "InstanceFamily"))
+    credits = str(_req(params, "CpuCredits"))
+    _model(store)["account"]["default_credit_specification"][family] = credits
+    return _envelope("ModifyDefaultCreditSpecification",
+                      f"<instanceFamilyCreditSpecification><instanceFamily>{_xml_escape(family)}</instanceFamily>"
+                      f"<cpuCredits>{_xml_escape(credits)}</cpuCredits></instanceFamilyCreditSpecification>")
+
+
 # ── dispatch (EC2 Query protocol) ──────────────────────────────────────────
 _OPS = {
     "CreateVpc": _create_vpc, "CreateSubnet": _create_subnet,
@@ -3652,6 +3853,22 @@ _OPS = {
     "CreateVpcBlockPublicAccessExclusion": _create_vpc_block_public_access_exclusion,
     "DescribeVpcBlockPublicAccessExclusions": _describe_vpc_block_public_access_exclusions,
     "DeleteVpcBlockPublicAccessExclusion": _delete_vpc_block_public_access_exclusion,
+    # security group VPC associations (ec2.security-groups.sharing)
+    "AssociateSecurityGroupVpc": _associate_security_group_vpc,
+    "DisassociateSecurityGroupVpc": _disassociate_security_group_vpc,
+    "DescribeSecurityGroupVpcAssociations": _describe_security_group_vpc_associations,
+    # Allowed AMIs (ec2.settings.other)
+    "GetAllowedImagesSettings": _get_allowed_images_settings,
+    "EnableAllowedImagesSettings": lambda s, p: _set_allowed_images_settings(s, p, True),
+    "DisableAllowedImagesSettings": lambda s, p: _set_allowed_images_settings(s, p, False),
+    "ReplaceImageCriteriaInAllowedImagesSettings": _replace_image_criteria_in_allowed_images_settings,
+    # EC2 Serial Console (ec2.settings.other)
+    "GetSerialConsoleAccessStatus": _get_serial_console_access_status,
+    "EnableSerialConsoleAccess": lambda s, p: _set_serial_console_access(s, p, True),
+    "DisableSerialConsoleAccess": lambda s, p: _set_serial_console_access(s, p, False),
+    # Default credit specification (ec2.settings.other)
+    "GetDefaultCreditSpecification": _get_default_credit_specification,
+    "ModifyDefaultCreditSpecification": _modify_default_credit_specification,
 }
 
 

@@ -1001,7 +1001,9 @@ sns_state = _SpaceScopedDictProxy("sns", lambda: {"topics": {}, "extra": {}})
 ddb_state = _SpaceScopedDictProxy("dynamodb", lambda: {"tables": {}, "events": []})
 kinesis_state = _SpaceScopedDictProxy("kinesis", lambda: {"streams": {}, "policies": {}, "seq": {"n": 0}})
 logs_state = _SpaceScopedDictProxy("logs", lambda: {"log_groups": {}, "resource_policies": {}, "query_definitions": {}, "queries": {}})
-elbv2_state = _SpaceScopedDictProxy("elbv2", lambda: {"load_balancers": {}, "target_groups": {}, "listeners": {}, "rules": {}, "tags": {}})
+elbv2_state = _SpaceScopedDictProxy("elbv2", lambda: {"load_balancers": {}, "target_groups": {}, "listeners": {}, "rules": {},
+                                                      "tags": {}, "trust_stores": {}, "trust_store_revocations": {}})
+asg_state = _SpaceScopedDictProxy("asg", lambda: {"groups": {}, "policies": {}, "scheduled_actions": {}, "lifecycle_hooks": {}, "instance_refreshes": []})
 
 runtime_state = STATE.setdefault(
     "runtime",
