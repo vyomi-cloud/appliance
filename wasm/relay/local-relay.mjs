@@ -20,8 +20,14 @@
  * bundle AUTO-DETECT this relay from an HTTPS tab and prefer it over the cloud
  * tunnel — and detect it the moment it's installed/started, with no reload.
  *
+ * Since 1.1.0 it also bridges TCP to Nano's in-browser VMs (EC2 / Compute Engine /
+ * Azure VMs, wasm/vm): each VM worker connects to /vm, gets a host port in
+ * VM_PORT_MIN..VM_PORT_MAX (default 22000-22999), and `ssh -p <port> user@127.0.0.1`
+ * from this machine reaches the VM's sshd (see "In-browser VM TCP bridge" below).
+ *
  * Run:  vyomi-tunnel                          (brew) — or: node local-relay.mjs
- *   env: RELAY_PORT (default 8090), RELAY_HOST (default 127.0.0.1; set 0.0.0.0 for LAN)
+ *   env: RELAY_PORT (default 8090), RELAY_HOST (default 127.0.0.1; set 0.0.0.0 for LAN),
+ *        VM_PORT_MIN / VM_PORT_MAX (ssh ports for in-browser VMs)
  */
 import http from "node:http";
 import net from "node:net";
