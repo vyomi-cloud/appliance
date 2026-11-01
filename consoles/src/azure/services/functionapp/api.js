@@ -8,6 +8,8 @@ import { armType, getSubscription, parseId } from "../../kit/arm.js";
 import { restJson } from "../../../common/wire.js";
 
 export const ARM = armType("Microsoft.Web", "sites", "2023-12-01");
+const WORKSPACES = armType("Microsoft.OperationalInsights", "workspaces", "2022-10-01");
+const METRIC_ALERTS = armType("Microsoft.Insights", "metricAlerts", "2018-03-01");
 
 const shape = (s) => ({ ...s, resourceGroup: parseId(s.id).resourceGroup });
 
@@ -51,6 +53,53 @@ export const putLock = (rg, name, lockName, level, notes) =>
   restJson("PUT", `${ARM.path(rg, name)}/locks/${encodeURIComponent(lockName)}`, { query: { "api-version": ARM.apiVersion }, body: { properties: { level, notes } } });
 export const deleteLock = (rg, name, lockName) =>
   restJson("DELETE", `${ARM.path(rg, name)}/locks/${encodeURIComponent(lockName)}`, { query: { "api-version": ARM.apiVersion } });
+
+// ── identity (top-level sibling of `properties`, like real ARM) ─────────────────────────
+export const updateIdentity = (rg, name, identity) => ARM.patch(rg, name, { identity });
+
+// ── General settings sub-fields of config/web (siteConfig) — CORS, health check path, … ──
+export const getSiteConfig = async (rg, name) => (await ARM.action(rg, name, "config/web")).properties || {};
+export const updateSiteConfig = async (rg, name, props) => (await putSub(rg, name, "config/web", { properties: props })).properties || {};
+
+// ── custom domains (hostNameBindings) + the SNI/IP SSL binding a "Certificates" view reads ──
+const domainsPath = (rg, name) => `${ARM.path(rg, name)}/hostNameBindings`;
+export const listCustomDomains = async (rg, name) => (await restJson("GET", domainsPath(rg, name), { query: { "api-version": ARM.apiVersion } })).value || [];
+export const addCustomDomain = (rg, name, host, sslState = "Disabled") =>
+  restJson("PUT", `${domainsPath(rg, name)}/${encodeURIComponent(host)}`, { query: { "api-version": ARM.apiVersion }, body: { properties: { sslState } } });
+export const removeCustomDomain = (rg, name, host) => restJson("DELETE", `${domainsPath(rg, name)}/${encodeURIComponent(host)}`, { query: { "api-version": ARM.apiVersion } });
+
+// ── diagnostic settings (Microsoft.Insights/diagnosticSettings, a real ARM extension resource
+// scoped to this site's own id — core/azure_monitor_core.py; same engine every Azure resource's
+// "Diagnostic settings" page uses) ───────────────────────────────────────────────────────
+const DIAG_API_VERSION = "2021-05-01-preview";
+const diagPath = (rg, name) => `${ARM.path(rg, name)}/providers/Microsoft.Insights/diagnosticSettings`;
+export const listDiagnosticSettings = async (rg, name) =>
+  (await restJson("GET", diagPath(rg, name), { query: { "api-version": DIAG_API_VERSION } })).value || [];
+export const putDiagnosticSetting = (rg, name, dsName, body) =>
+  restJson("PUT", `${diagPath(rg, name)}/${encodeURIComponent(dsName)}`, { query: { "api-version": DIAG_API_VERSION }, body });
+export const deleteDiagnosticSetting = (rg, name, dsName) =>
+  restJson("DELETE", `${diagPath(rg, name)}/${encodeURIComponent(dsName)}`, { query: { "api-version": DIAG_API_VERSION } });
+export const listWorkspaces = async () => (await WORKSPACES.list()).map((w) => ({ ...w, resourceGroup: parseId(w.id).resourceGroup }));
+
+// ── authentication (Easy Auth) — require-auth toggle, enforced on invoke ─────────────────
+export const getAuthSettings = async (rg, name) => (await ARM.action(rg, name, "config/authsettingsv2")).properties || {};
+export const updateAuthSettings = async (rg, name, enabled) => (await putSub(rg, name, "config/authsettingsv2", { properties: { platform: { enabled } } })).properties || {};
+
+// ── invocation telemetry (Metrics, Logs, Log stream, Events, Advisor, App Insights panels —
+// all read the SAME real ring buffer the invoke sandbox appends to) ──────────────────────
+export const listInvocationLogs = async (rg, name) => (await restJson("GET", `${ARM.path(rg, name)}/invocationlogs`, { query: { "api-version": ARM.apiVersion } })).value || [];
+export const runHealthCheck = (rg, name) => restJson("GET", `${ARM.path(rg, name)}/healthcheck`, { query: { "api-version": ARM.apiVersion } });
+export const listAdvisorRecommendations = async (rg, name) => (await restJson("GET", `${ARM.path(rg, name)}/advisorrecommendations`, { query: { "api-version": ARM.apiVersion } })).value || [];
+export const listDiagnoseDetectors = async (rg, name) => (await restJson("GET", `${ARM.path(rg, name)}/diagnosedetectors`, { query: { "api-version": ARM.apiVersion } })).value || [];
+
+// ── alerts (Microsoft.Insights/metricAlerts, subscription-wide generic CRUD — core/azure_monitor_core.py
+// — scoped to this app via `properties.scopes`, the real shape of a resource's Alerts blade) ──
+export const listMetricAlertsFor = async (rg, name) => {
+  const site = ARM.path(rg, name).toLowerCase();
+  return (await METRIC_ALERTS.list()).filter((a) => (a.properties?.scopes || []).some((s) => s.toLowerCase() === site));
+};
+export const putMetricAlert = (rg, alertName, body) => METRIC_ALERTS.put(rg, alertName, body);
+export const deleteMetricAlert = (rg, alertName) => METRIC_ALERTS.remove(rg, alertName);
 
 // ── functions ─────────────────────────────────────────────────────────────────────────────
 const fnPath = (rg, name, fn) => `${ARM.path(rg, name)}/functions${fn ? "/" + encodeURIComponent(fn) : ""}`;

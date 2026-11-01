@@ -56,6 +56,7 @@ import hashlib
 import itertools
 import json
 import re
+import time
 import uuid
 from datetime import datetime, timezone
 
@@ -68,6 +69,7 @@ SITES_TYPE = f"{NAMESPACE}/sites"
 PLANS_TYPE = f"{NAMESPACE}/serverfarms"
 EVENT_TYPE = "microsoft.insights/eventtypes"
 EVENTS_PER_RESOURCE = 200
+INVOCATIONLOG_CAP = 200
 
 PLAN_SKUS = {
     "F1": ("Free", 1), "D1": ("Shared", 1), "B1": ("Basic", 1), "B2": ("Basic", 2), "B3": ("Basic", 3),
@@ -243,7 +245,8 @@ def _record_event(state, sub, rg, resource_id, op_value, op_text, status="Succee
 _SUB_LABELS = {"functions": "function", "keys": "function key", "host": "host key", "locks": "lock",
                "slots": "deployment slot", "hostnamebindings": "custom domain"}
 _CONFIG_LABELS = {"web": "configuration", "appsettings": "application settings",
-                  "connectionstrings": "connection strings", "logs": "App Service logs", "backup": "backup configuration"}
+                  "connectionstrings": "connection strings", "logs": "App Service logs", "backup": "backup configuration",
+                  "authsettingsv2": "authentication settings"}
 _LOGGED_ACTIONS = {"start", "stop", "restart", "slotsswap", "resetpublishxml"}
 _READ_ACTIONS = {"list", "listkeys", "invoke", "publishxml"}
 
@@ -472,6 +475,8 @@ def _ensure(rec):
     rec.setdefault("identity", dict(_NO_IDENTITY))
     rec.setdefault("_backups", {})
     rec.setdefault("_backupconfig", None)
+    rec.setdefault("_invocationlog", [])
+    rec.setdefault("_authsettingsv2", {"enabled": False, "token": None})
     return rec
 
 
@@ -616,7 +621,7 @@ def _site_ops(state, sub, rg, chain, method, payload):
     return _err(405, "MethodNotAllowed", f"{method} not allowed.")
 
 
-_WEB_ONLY = ("slots", "slotsswap", "hostnamebindings")
+_WEB_ONLY = ("slots", "slotsswap")
 _FN_ONLY = ("functions", "host")
 
 
@@ -642,6 +647,22 @@ def _site_subresource(state, rec, rest, method, payload):
         return _hostname_ops(rec, rest[1:], method, payload)
     if r0 == "backups":
         return _backup_ops(rec, rest[1:], method, payload)
+    if r0 == "invocationlogs" and len(rest) == 1:
+        if method != "GET":
+            return _err(405, "MethodNotAllowed", "invocationlogs supports GET only.")
+        return _ok({"value": list(reversed(rec.get("_invocationlog") or []))})
+    if r0 == "healthcheck" and len(rest) == 1:
+        if method != "GET":
+            return _err(405, "MethodNotAllowed", "healthcheck supports GET only.")
+        return _ok(_run_health_check(rec))
+    if r0 == "advisorrecommendations" and len(rest) == 1:
+        if method != "GET":
+            return _err(405, "MethodNotAllowed", "advisorrecommendations supports GET only.")
+        return _ok({"value": _advisor_recommendations(rec)})
+    if r0 == "diagnosedetectors" and len(rest) == 1:
+        if method != "GET":
+            return _err(405, "MethodNotAllowed", "diagnosedetectors supports GET only.")
+        return _ok({"value": _diagnose_detectors(rec)})
     if len(rest) == 1:
         return _site_action(rec, r0, method, payload)
     return _err(404, "ResourceTypeNotSupported", f"'{'/'.join(rest)}' is not supported on sites.")
@@ -706,6 +727,16 @@ def _config_ops(rec, rest, method, payload):
         if method in ("PUT", "PATCH"):
             rec["_backupconfig"] = _merge(rec["_backupconfig"] or DEFAULT_BACKUP_CONFIG, _props(payload))
             return _ok({"properties": rec["_backupconfig"]})
+    elif kind == "authsettingsv2":
+        auth = rec["_authsettingsv2"]
+        if read:
+            return _ok({"properties": _auth_view(auth)})
+        if method in ("PUT", "PATCH"):
+            enabled = _to_bool(_props(payload).get("platform", {}).get("enabled"), auth["enabled"])
+            auth["enabled"] = enabled
+            if enabled and not auth["token"]:
+                auth["token"] = _h(rec["id"], "authtoken", _now(), n=40)
+            return _ok({"properties": _auth_view(auth)})
     return _err(405, "MethodNotAllowed", f"{method} not supported on config/{kind}.")
 
 
@@ -833,7 +864,8 @@ def _slot_ops(rec, rest, method, payload):
 def _hostname_doc(rec, host):
     b = rec["_hostnamebindings"][host]
     return {"id": f"{rec['id']}/hostNameBindings/{host}", "name": host, "type": f"{SITES_TYPE}/hostNameBindings",
-            "properties": {"siteName": rec["name"], "hostNameType": "Verified", "sslState": b.get("sslState", "Disabled")}}
+            "properties": {"siteName": rec["name"], "hostNameType": "Verified", "sslState": b.get("sslState", "Disabled"),
+                           "thumbprint": b.get("thumbprint")}}
 
 
 def _hostname_ops(rec, rest, method, payload):
@@ -849,7 +881,11 @@ def _hostname_ops(rec, rest, method, payload):
         return _ok(_hostname_doc(rec, host))
     if method == "PUT":
         existed = host in binds
-        binds[host] = {"sslState": _props(payload).get("sslState", "Disabled")}
+        ssl_state = _props(payload).get("sslState", "Disabled")
+        # A SNI/IP-based SSL binding implies a bound certificate; mint a deterministic
+        # thumbprint for it (Vyomi issues no real cert — see azure.functionapp.certificates).
+        thumbprint = _h(rec["id"], host, "cert", n=40).upper() if ssl_state != "Disabled" else None
+        binds[host] = {"sslState": ssl_state, "thumbprint": thumbprint}
         rec["properties"]["hostNames"] = sorted(set(rec["properties"]["hostNames"]) | {host})
         return _ok(_hostname_doc(rec, host), 200 if existed else 201)
     if method == "DELETE":
@@ -941,11 +977,49 @@ def _scale_capacity(rec):
         return 1
 
 
+def _auth_view(auth):
+    return {"platform": {"enabled": auth["enabled"]}, "token": auth["token"] if auth["enabled"] else None}
+
+
 def _invoke_function(rec, fn, req):
+    """Real sandboxed execution, gated by every ENFORCED setting a real invoke would also be
+    gated by (scale-to-zero, public network access, CORS, Easy Auth) — each check happens
+    before the sandbox runs, same order real Azure applies them. Every attempt (allowed or
+    rejected) is appended to ``_invocationlog`` with a REAL measured duration, the substrate
+    for Metrics / Logs / Log stream / Alerts / Advisor recommendations (never synthetic data)."""
+    t0 = time.perf_counter()
+
+    def finish(result):
+        duration_ms = round((time.perf_counter() - t0) * 1000, 2)
+        log = rec.setdefault("_invocationlog", [])
+        log.append({"timestamp": _now(), "function": fn["name"], "status": result["status"],
+                    "ok": result["ok"], "durationMs": duration_ms, "error": result.get("error")})
+        if len(log) > INVOCATIONLOG_CAP:
+            del log[: len(log) - INVOCATIONLOG_CAP]
+        return result
+
     if _scale_capacity(rec) == 0:
-        return {"ok": False, "status": 429, "body": None,
-                "error": "FunctionsTooBusy: scaleAndConcurrency capacity is 0 (maximumInstanceCount x "
-                         "perInstanceConcurrency) — no instance is available to run this function"}
+        return finish({"ok": False, "status": 429, "body": None,
+                      "error": "FunctionsTooBusy: scaleAndConcurrency capacity is 0 (maximumInstanceCount x "
+                               "perInstanceConcurrency) — no instance is available to run this function"})
+    if rec["properties"].get("publicNetworkAccess") == "Disabled":
+        return finish({"ok": False, "status": 403, "body": None,
+                      "error": "PublicNetworkAccessDisabled: public network access is disabled for this app "
+                               "(see Networking)"})
+    headers = {str(k).lower(): v for k, v in (req.get("headers") or {}).items()}
+    cors = (rec["properties"].get("siteConfig") or {}).get("cors") or {}
+    allowed_origins = cors.get("allowedOrigins") or []
+    origin = headers.get("origin")
+    if origin and allowed_origins and "*" not in allowed_origins and origin not in allowed_origins:
+        return finish({"ok": False, "status": 403, "body": None,
+                      "error": f"CorsRequestBlocked: origin '{origin}' is not in the allowed origins list "
+                               "configured on CORS"})
+    auth = rec.get("_authsettingsv2") or {}
+    if auth.get("enabled"):
+        if headers.get("authorization") != f"Bearer {auth.get('token')}":
+            return finish({"ok": False, "status": 401, "body": None,
+                          "error": "Unauthorized: this app requires authentication — send "
+                                   "'Authorization: Bearer <token>' with the token from the Authentication panel"})
     sandbox = {"__builtins__": dict(_SAFE_BUILTINS), "json": json}
     try:
         exec(compile(fn["_code"], f"<function:{fn['name']}>", "exec"), sandbox)
@@ -954,9 +1028,82 @@ def _invoke_function(rec, fn, req):
             raise RuntimeError(f"entry point '{fn.get('_entry', 'main')}' is not defined")
         result = handler(req)
         fn["_invocations"] = fn.get("_invocations", 0) + 1
-        return {"ok": True, "status": 200, "body": result, "error": None}
+        return finish({"ok": True, "status": 200, "body": result, "error": None})
     except Exception as e:
-        return {"ok": False, "status": 500, "body": None, "error": f"{type(e).__name__}: {e}"}
+        return finish({"ok": False, "status": 500, "body": None, "error": f"{type(e).__name__}: {e}"})
+
+
+def _run_health_check(rec):
+    """Health check (config_only ``healthCheckPath``) turned into an ENFORCED, on-demand probe:
+    resolve the configured path to a function by name and run it through the REAL invoke path
+    (same sandbox, same enforcement) rather than reporting a canned 'Healthy'."""
+    path = ((rec["properties"].get("siteConfig") or {}).get("healthCheckPath") or "").strip()
+    if not path:
+        return {"configured": False, "healthy": None, "detail": "No health check path is configured."}
+    fname = path.strip("/").split("/")[-1]
+    fn = rec["_functions"].get(fname)
+    if fn is None:
+        return {"configured": True, "healthy": False, "path": path,
+                "detail": f"No function named '{fname}' matches the configured path '{path}'."}
+    r = _invoke_function(rec, fn, {"method": "GET", "query": {}, "headers": {}, "body": None})
+    healthy = bool(r["ok"]) and r["status"] < 400
+    return {"configured": True, "healthy": healthy, "path": path, "status": r["status"],
+            "detail": f"GET {path} -> {r['status']}" + (f" ({r['error']})" if r.get("error") else "")}
+
+
+def _advisor_recommendations(rec):
+    """Real, rule-based recommendations derived from this site's actual stored configuration
+    and its real recent invocation outcomes — never random/synthetic data."""
+    p, out = rec["properties"], []
+    if _scale_capacity(rec) == 0:
+        out.append({"category": "Reliability", "impact": "High",
+                    "title": "Scale capacity is 0 — no instance can run this app",
+                    "detail": "maximumInstanceCount x HTTP per-instance concurrency is 0; raise either value "
+                              "under Scale and concurrency."})
+    if not _to_bool(p.get("httpsOnly")):
+        out.append({"category": "Security", "impact": "Medium", "title": "HTTPS Only is disabled",
+                    "detail": "Turn on HTTPS Only so the app rejects plain HTTP traffic."})
+    if not (rec.get("identity") or {}).get("principalId"):
+        out.append({"category": "Security", "impact": "Low", "title": "No managed identity configured",
+                    "detail": "Turn on a system-assigned managed identity under Identity to avoid storing "
+                              "credentials in app settings."})
+    if p.get("state") != "Running":
+        out.append({"category": "Availability", "impact": "High", "title": f"The app is {p.get('state')}",
+                    "detail": "Start the app under Overview to resume serving requests."})
+    recent = (rec.get("_invocationlog") or [])[-20:]
+    errs = [e for e in recent if not e.get("ok")]
+    if recent and len(errs) / len(recent) > 0.2:
+        out.append({"category": "Reliability", "impact": "High",
+                    "title": f"{len(errs)} of the last {len(recent)} invocations failed",
+                    "detail": "Check the Logs panel for the failing function(s)."})
+    if not rec.get("_hostnamebindings"):
+        out.append({"category": "Best practice", "impact": "Low", "title": "No custom domain configured",
+                    "detail": "Add one under Custom domains before serving production traffic."})
+    return out
+
+
+def _diagnose_detectors(rec):
+    """'Diagnose and solve problems' detectors — the SAME real signals as Advisor, framed as
+    pass/fail health detectors instead of recommendations."""
+    p = rec["properties"]
+    recent = (rec.get("_invocationlog") or [])[-20:]
+    errs = [e for e in recent if not e.get("ok")]
+    fail_rate = (len(errs) / len(recent)) if recent else 0
+    return [
+        {"name": "Application state", "status": "Healthy" if p.get("state") == "Running" else "Critical",
+         "detail": f"The app is {p.get('state')}."},
+        {"name": "Function execution failures",
+         "status": "Critical" if fail_rate > 0.2 else ("Warning" if errs else "Healthy"),
+         "detail": f"{len(errs)} of the last {len(recent)} invocations failed." if recent else "No invocations recorded yet."},
+        {"name": "Scale capacity",
+         "status": "Critical" if _scale_capacity(rec) == 0 else "Healthy",
+         "detail": "Scaled to zero — no instance is available to run this app." if _scale_capacity(rec) == 0
+                   else "At least one instance is available to run this app."},
+        {"name": "Public network access",
+         "status": "Warning" if p.get("publicNetworkAccess") == "Disabled" else "Healthy",
+         "detail": "Public network access is disabled; only enabled during enforcement testing." if p.get("publicNetworkAccess") == "Disabled"
+                   else "Public network access is enabled."},
+    ]
 
 
 def _put_key(bucket, owner_id, name, payload):

@@ -103,6 +103,69 @@ check("scaled-to-zero capacity IS enforced: invoke throttled 429 FunctionsTooBus
       zero["body"]["ok"] is False and zero["body"]["status"] == 429, zero["body"])
 call(st, "PATCH", ["sites", "fn1"], {"properties": {"functionAppConfig": {"scaleAndConcurrency": {"maximumInstanceCount": 50}}}})
 
+# custom domains (hostNameBindings): real ARM shared by web apps and function apps alike —
+# a function app is no longer excluded. An SNI/IP SSL binding mints a deterministic thumbprint
+# (Certificates reads this; no real cert is issued).
+dom = call(st, "PUT", ["sites", "fn1", "hostnamebindings", "www.example.com"], {"properties": {"sslState": "SniEnabled"}})
+check("custom domain binding allowed on a function app", dom["status"] == 201 and dom["body"]["properties"]["sslState"] == "SniEnabled", dom["body"])
+check("SSL binding mints a certificate thumbprint", bool(dom["body"]["properties"]["thumbprint"]))
+plain = call(st, "PUT", ["sites", "fn1", "hostnamebindings", "plain.example.com"], {"properties": {}})
+check("a binding without SSL has no thumbprint", plain["body"]["properties"]["thumbprint"] is None)
+check("custom domains listed", len(call(st, "GET", ["sites", "fn1", "hostnamebindings"])["body"]["value"]) == 2)
+call(st, "DELETE", ["sites", "fn1", "hostnamebindings", "plain.example.com"])
+
+# CORS: stored on siteConfig.cors (config/web); ENFORCED on invoke — a disallowed Origin is
+# blocked, an allowed one (or no Origin header at all, e.g. a server-to-server call) runs.
+call(st, "PUT", ["sites", "fn1", "config", "web"], {"properties": {"cors": {"allowedOrigins": ["https://good.example"]}}})
+cors_blocked = call(st, "POST", ["sites", "fn1", "functions", "echo", "invoke"], {"headers": {"Origin": "https://evil.example"}})
+check("CORS blocks a disallowed Origin", cors_blocked["body"]["ok"] is False and cors_blocked["body"]["status"] == 403, cors_blocked["body"])
+cors_ok = call(st, "POST", ["sites", "fn1", "functions", "echo", "invoke"], {"headers": {"Origin": "https://good.example"}})
+check("CORS allows a listed Origin", cors_ok["body"]["ok"] is True, cors_ok["body"])
+no_origin = call(st, "POST", ["sites", "fn1", "functions", "echo", "invoke"], {})
+check("CORS does not block requests with no Origin header", no_origin["body"]["ok"] is True, no_origin["body"])
+call(st, "PUT", ["sites", "fn1", "config", "web"], {"properties": {"cors": {"allowedOrigins": []}}})
+
+# Networking: disabling public network access is ENFORCED against invoke (a config_only field
+# turned real); re-enabling restores normal invokes.
+call(st, "PATCH", ["sites", "fn1"], {"properties": {"publicNetworkAccess": "Disabled"}})
+net_blocked = call(st, "POST", ["sites", "fn1", "functions", "echo", "invoke"], {})
+check("disabling public network access blocks invoke (403)", net_blocked["body"]["ok"] is False and net_blocked["body"]["status"] == 403, net_blocked["body"])
+call(st, "PATCH", ["sites", "fn1"], {"properties": {"publicNetworkAccess": "Enabled"}})
+check("re-enabling public network access restores invoke", call(st, "POST", ["sites", "fn1", "functions", "echo", "invoke"], {})["body"]["ok"] is True)
+
+# Authentication (Easy Auth): turning it on mints a simulator bearer token and ENFORCES it.
+call(st, "PUT", ["sites", "fn1", "config", "authsettingsv2"], {"properties": {"platform": {"enabled": True}}})
+auth_cfg = call(st, "GET", ["sites", "fn1", "config", "authsettingsv2"])["body"]["properties"]
+check("enabling auth mints a token", bool(auth_cfg["token"]))
+unauth = call(st, "POST", ["sites", "fn1", "functions", "echo", "invoke"], {})
+check("auth required: no token → 401", unauth["body"]["ok"] is False and unauth["body"]["status"] == 401, unauth["body"])
+authed = call(st, "POST", ["sites", "fn1", "functions", "echo", "invoke"], {"headers": {"Authorization": f"Bearer {auth_cfg['token']}"}})
+check("auth required: correct bearer token → runs", authed["body"]["ok"] is True, authed["body"])
+call(st, "PUT", ["sites", "fn1", "config", "authsettingsv2"], {"properties": {"platform": {"enabled": False}}})
+
+# Invocation telemetry: every invoke attempt above (including the rejected ones) was recorded
+# with a REAL measured duration — the substrate for Metrics/Logs/Log stream/Alerts/Advisor.
+inv_log = call(st, "GET", ["sites", "fn1", "invocationlogs"])["body"]["value"]
+check("invocation log recorded every attempt (allowed and rejected)", len(inv_log) >= 6, len(inv_log))
+check("invocation log entries carry a real measured duration", all(isinstance(e["durationMs"], (int, float)) and e["durationMs"] >= 0 for e in inv_log))
+check("invocation log is newest-first", inv_log[0]["timestamp"] >= inv_log[-1]["timestamp"])
+
+# Health check: resolves the configured path to a function and runs it through the real invoke.
+call(st, "PUT", ["sites", "fn1", "config", "web"], {"properties": {"healthCheckPath": "/api/echo"}})
+hc = call(st, "GET", ["sites", "fn1", "healthcheck"])["body"]
+check("health check resolves the configured path and runs it", hc["configured"] is True and hc["healthy"] is True, hc)
+call(st, "PUT", ["sites", "fn1", "config", "web"], {"properties": {"healthCheckPath": "/api/doesnotexist"}})
+hc_miss = call(st, "GET", ["sites", "fn1", "healthcheck"])["body"]
+check("health check reports unhealthy when no function matches", hc_miss["healthy"] is False, hc_miss)
+
+# Advisor recommendations / Diagnose and solve detectors: real rule-based signals derived from
+# this app's actual configuration and its real recent invocation outcomes.
+advisor = call(st, "GET", ["sites", "fn1", "advisorrecommendations"])["body"]["value"]
+check("advisor flags the real recent invocation failures", any("invocations failed" in r["title"] for r in advisor), advisor)
+detectors = {d["name"]: d for d in call(st, "GET", ["sites", "fn1", "diagnosedetectors"])["body"]["value"]}
+check("diagnose detectors report the app as Healthy while Running", detectors["Application state"]["status"] == "Healthy", detectors)
+check("diagnose detectors flag the real recent invocation failures", detectors["Function execution failures"]["status"] == "Critical", detectors)
+
 check("subscription-scope list", len(wc.dispatch(st, "GET", "sub1", None, ["sites"], [])["body"]["value"]) == 1)
 check("delete", call(st, "DELETE", ["sites", "fn1"])["status"] == 200 and call(st, "DELETE", ["sites", "zzz"])["status"] == 204)
 
