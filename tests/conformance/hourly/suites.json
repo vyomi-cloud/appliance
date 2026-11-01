@@ -1984,6 +1984,14 @@
       "kind": "ui",
       "cmd": "VYOMI_CONSOLE_URL={ENDPOINT}/console/azure node wasm/ui-tests/validate-azure-apim-appinsights.mjs",
       "timeout": 300
+    },
+    {
+      "id": "offline-post-create-azure-container-app",
+      "target": "offline",
+      "cloud": "azure",
+      "kind": "api",
+      "cmd": "python3 tests/conformance/post_create/probes/azure_container_app.py {ENDPOINT}",
+      "timeout": 300
     }
   ]
 }
