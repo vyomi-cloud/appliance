@@ -4154,7 +4154,10 @@ def _sqs_validate_queue_name(queue_name: str) -> None:
 
 
 def _sqs_queue_url(queue_name: str) -> str:
-    return f"http://127.0.0.1:9000/api/sqs/queues/{queue_name}"
+    # The origin the client reached us on (was hard-coded to 127.0.0.1:9000, so a
+    # simulator on any other port, or reached by another host name, handed out URLs
+    # pointing at a different simulator).
+    return f"{_gcp_public_base().rstrip('/')}/api/sqs/queues/{queue_name}"
 
 
 def _sqs_queue_arn(queue_name: str) -> str:
