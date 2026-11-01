@@ -1,9 +1,10 @@
-/* Secret detail — General details + 5 tabs, all wired to real secretsmanager.* calls except
- * Replication (core/capabilities/aws/secretsmanager.json: secretsmanager.secret.replication,
- * not_simulated — there's no second Region's store to replicate into). Rotation really fires
- * on its own schedule (lazy, on access) and Resource permissions is a real Get/Put/Delete
- * ResourcePolicy editor — both are 'limited', not not_simulated: see the capability badges. */
-import { useState } from "react";
+/* Secret detail — General details + 5 tabs, all wired to real secretsmanager.* calls. Rotation
+ * really fires on its own schedule (lazy, on access), Resource permissions is a real
+ * Get/Put/Delete ResourcePolicy editor, and Replication really adds/removes/promotes replicas
+ * (ReplicateSecretToRegions / RemoveRegionsFromReplication / StopReplicationToReplica) — all
+ * three are 'limited', not not_simulated: see core/capabilities/aws/secretsmanager.json and the
+ * capability badges. */
+import { useEffect, useState } from "react";
 import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
 import ButtonDropdown from "@cloudscape-design/components/button-dropdown";
@@ -24,7 +25,7 @@ import TagEditor from "@cloudscape-design/components/tag-editor";
 import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import { navigate, href, follow } from "../../../common/router.js";
-import { ErrorAlert, fmtDate, KeyValue, NotSimulatedContainer } from "../../kit/common.jsx";
+import { ErrorAlert, fmtDate, KeyValue } from "../../kit/common.jsx";
 import { CapabilityContainer, saveNotice } from "../../kit/Capability.jsx";
 import * as api from "./api.js";
 
@@ -170,6 +171,102 @@ function VersionsTab({ name }) {
   );
 }
 
+const REPLICA_REGIONS = [
+  ["us-east-2", "US East (Ohio)"], ["us-west-2", "US West (Oregon)"], ["eu-west-1", "Europe (Ireland)"],
+  ["eu-central-1", "Europe (Frankfurt)"], ["ap-south-1", "Asia Pacific (Mumbai)"],
+  ["ap-southeast-1", "Asia Pacific (Singapore)"], ["ap-northeast-1", "Asia Pacific (Tokyo)"],
+];
+
+function ReplicationTab({ name, secret, reload }) {
+  const notify = useNotify();
+  const [selected, setSelected] = useState([]);
+  const [adding, setAdding] = useState(null);
+  const [kmsAliases, setKmsAliases] = useState([]);
+  const [confirm, setConfirm] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const replicas = secret.ReplicationStatus || [];
+
+  useEffect(() => {
+    if (adding) api.listKmsAliases().then((aliases) => setKmsAliases(aliases.filter((a) => a !== "aws/secretsmanager"))).catch(() => {});
+  }, [adding]);
+
+  const addRegion = async () => {
+    setBusy(true);
+    try {
+      await api.replicateSecretToRegions(name, [{ Region: adding.region, KmsKeyId: adding.kmsKeyId === "aws/secretsmanager" ? undefined : `alias/${adding.kmsKeyId}` }]);
+      notify.success(`Replicating "${name}" to ${adding.region}.`);
+      setAdding(null); reload();
+    } catch (e) { notify.error(e); } finally { setBusy(false); }
+  };
+
+  const runConfirm = async () => {
+    setBusy(true);
+    try {
+      if (confirm.action === "remove") {
+        await api.removeRegionsFromReplication(name, [confirm.region]);
+        notify.success(`Removed the replica in ${confirm.region}.`);
+      } else {
+        await api.stopReplicationToReplica(api.replicaArn(secret.ARN, confirm.region));
+        notify.success(`Promoted the replica in ${confirm.region} to a standalone secret.`);
+      }
+      setConfirm(null); setSelected([]); reload();
+    } catch (e) { notify.error(e); } finally { setBusy(false); }
+  };
+
+  return (
+    <>
+      <CapabilityContainer id="secretsmanager.secret.replication" title="Replicate secret" counter={`(${replicas.length})`}
+        actions={<SpaceBetween direction="horizontal" size="xs">
+          <ButtonDropdown disabled={!selected.length} items={[
+            { id: "promote", text: "Promote to standalone secret" },
+            { id: "remove", text: "Remove replica" },
+          ]} onItemClick={({ detail }) => setConfirm({ action: detail.id, region: selected[0].Region })}>Actions</ButtonDropdown>
+          <Button onClick={() => setAdding({ region: REPLICA_REGIONS[0][0], kmsKeyId: "aws/secretsmanager" })}>Add Region</Button>
+        </SpaceBetween>}>
+        <Table variant="embedded" selectionType="single" trackBy="Region" items={replicas}
+          selectedItems={selected} onSelectionChange={({ detail }) => setSelected(detail.selectedItems)}
+          columnDefinitions={[
+            { id: "region", header: "Region", cell: (r) => r.Region },
+            { id: "status", header: "Status", cell: (r) => r.Status },
+            { id: "message", header: "Status message", cell: (r) => r.StatusMessage || "-" },
+            { id: "kms", header: "Encryption key", cell: (r) => r.KmsKeyId || "aws/secretsmanager" },
+          ]}
+          empty={<Box textAlign="center" color="inherit"><b>No replicas</b></Box>} />
+      </CapabilityContainer>
+      <Modal visible={!!adding} onDismiss={() => setAdding(null)} header="Add Region"
+        footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs">
+          <Button variant="link" onClick={() => setAdding(null)}>Cancel</Button>
+          <Button variant="primary" loading={busy} onClick={addRegion}>Add Region</Button>
+        </SpaceBetween></Box>}>
+        {adding && <SpaceBetween size="m">
+          <FormField label="AWS Region">
+            <Select selectedOption={{ label: REPLICA_REGIONS.find(([r]) => r === adding.region)?.[1], value: adding.region }}
+              onChange={({ detail }) => setAdding({ ...adding, region: detail.selectedOption.value })}
+              options={REPLICA_REGIONS.map(([value, label]) => ({ value, label }))} />
+          </FormField>
+          <FormField label="Encryption key">
+            <Select selectedOption={{ label: adding.kmsKeyId, value: adding.kmsKeyId }}
+              onChange={({ detail }) => setAdding({ ...adding, kmsKeyId: detail.selectedOption.value })}
+              options={[{ label: "aws/secretsmanager", value: "aws/secretsmanager" }, ...kmsAliases.map((a) => ({ label: a, value: a }))]} />
+          </FormField>
+        </SpaceBetween>}
+      </Modal>
+      <Modal visible={!!confirm} onDismiss={() => setConfirm(null)}
+        header={confirm?.action === "promote" ? "Promote to standalone secret" : "Remove replica"}
+        footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs">
+          <Button variant="link" onClick={() => setConfirm(null)}>Cancel</Button>
+          <Button variant="primary" loading={busy} onClick={runConfirm}>
+            {confirm?.action === "promote" ? "Promote" : "Remove replica"}
+          </Button>
+        </SpaceBetween></Box>}>
+        {confirm?.action === "promote"
+          ? `Promote the replica in ${confirm?.region} to a standalone secret? It stops following "${name}" and becomes independently writable.`
+          : `Remove the replica in ${confirm?.region}? Secrets Manager also deletes the secret in that Region.`}
+      </Modal>
+    </>
+  );
+}
+
 function TagsTab({ name, tags, reload }) {
   const notify = useNotify();
   const [edit, setEdit] = useState(null);
@@ -227,8 +324,7 @@ export default function SecretDetail({ params }) {
           { id: "overview", label: "Overview", content: <OverviewTab name={name} /> },
           { id: "rotation", label: "Rotation", content: <RotationTab name={name} secret={secret} reload={d.reload} /> },
           { id: "versions", label: "Versions", content: <VersionsTab name={name} /> },
-          { id: "replication", label: "Replication", content: <NotSimulatedContainer title="Replicate secret"
-            note="Creating read-only replicas of this secret in other AWS Regions isn't modeled — there's no second Region's store to replicate into." /> },
+          { id: "replication", label: "Replication", content: <ReplicationTab name={name} secret={secret} reload={d.reload} /> },
           { id: "tags", label: "Tags", content: <TagsTab name={name} tags={secret.Tags || []} reload={d.reload} /> },
         ]} />
       </SpaceBetween>

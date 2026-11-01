@@ -47,6 +47,25 @@ public-policy guard real Secrets Manager applies at write time. Resource policy
 CONTENT is still never evaluated for an actual GetSecretValue access decision
 (no multi-principal/cross-account identity model). Replication is not modeled.
 
+v4 depth wave 5b: Cross-Region replication is now real. A secret's `replicas`
+dict tracks region -> {kms_key_id, status, status_message, last_accessed_date}.
+ReplicateSecretToRegions / CreateSecret(AddReplicaRegions=...) add entries;
+GetSecretValue/DescribeSecret called with a replica's Region-qualified ARN read
+THROUGH to the owning secret's current version (replicas are always "InSync" —
+there's genuinely one shared store, so there's no propagation lag to simulate),
+but every write action (PutSecretValue, UpdateSecret, RotateSecret, DeleteSecret,
+Tag/UntagResource, Put/DeleteResourcePolicy, RestoreSecret) rejects a replica ARN
+with InvalidParameterException, same as real Secrets Manager confining writes to
+the primary Region. StopReplicationToReplica ("Promote to standalone secret")
+snapshots the current version into a brand-new, fully independent secret stored
+under a Region-qualified key — from that point it has its own version history and
+accepts writes; RemoveRegionsFromReplication simply deletes the replica link (no
+snapshot, matching real AWS's "Secrets Manager also deletes the secret in that
+Region"). DeleteSecret on an owner with active replicas is rejected until every
+replica is removed. Not modeled: an independent KMS re-encryption per replica
+Region (the KmsKeyId recorded for a replica is cosmetic — reads still decrypt
+through the owner's own key) and asynchronous replication lag/failure.
+
 v4 depth wave 5: a secret that carries a customer KmsKeyId is now genuinely
 encrypted at rest under that key — CreateSecret/PutSecretValue/UpdateSecret run
 SecretString/SecretBinary through core/kms_core.py's real Encrypt before
@@ -67,6 +86,7 @@ before this pass.
 from __future__ import annotations
 
 import base64
+import copy
 import json
 import re
 import time
@@ -79,6 +99,7 @@ from core.kv_store import KvStore
 SM_REGION = "us-east-1"
 CURRENT = "AWSCURRENT"
 PREVIOUS = "AWSPREVIOUS"
+_STANDALONE_SEP = "\x00"  # internal key separator for a promoted replica (never user-visible)
 
 
 @dataclass
@@ -100,26 +121,79 @@ def _req_id() -> str:
     return str(uuid.uuid4())
 
 
-def _secret_arn(store: KvStore, name: str) -> str:
-    return f"arn:aws:secretsmanager:{SM_REGION}:{store.account_id}:secret:{name}"
+def _secret_arn(store: KvStore, name: str, region: str = SM_REGION) -> str:
+    return f"arn:aws:secretsmanager:{region}:{store.account_id}:secret:{name}"
 
 
-# ── name resolution (SecretId may be a bare name or a full ARN) ────────────
-def _resolve_name(store: KvStore, ref: str) -> str | None:
+def _standalone_key(name: str, region: str) -> str:
+    """Storage key for a secret that was promoted from a replica — kept out of the
+    plain-name namespace so it never shadows (or is shadowed by) the owner."""
+    return f"{name}{_STANDALONE_SEP}{region}"
+
+
+def _storage_key_for(secret: dict) -> str:
+    """The store.secrets key a resolved secret dict actually lives under — the
+    plain name for a primary, or the Region-qualified key for a promoted
+    standalone secret (secret["region"] is only ever set on those)."""
+    region = secret.get("region")
+    return _standalone_key(secret["name"], region) if region and region != SM_REGION else secret["name"]
+
+
+# ── name/ARN resolution (SecretId may be a bare name or a full, Region-qualified
+# ARN) — a replica's own Region-qualified ARN resolves to the OWNING secret's
+# record (reads go through to its live content); a promoted replica resolves to
+# its own independent record. ──────────────────────────────────────────────
+def _parse_ref(ref: str) -> tuple[str, str | None]:
     ref = (ref or "").strip()
-    if not ref:
-        return None
     if ":secret:" in ref:
-        ref = ref.split(":secret:", 1)[1]
-    return ref if store.secret_exists(ref) else None
+        name = ref.split(":secret:", 1)[1]
+        parts = ref.split(":")
+        region = parts[3] if len(parts) > 3 and parts[3] else None
+        return name, region
+    return ref, None
+
+
+def _resolve_ref(store: KvStore, ref: str) -> tuple[str | None, dict | None]:
+    """Returns (kind, secret) — kind is 'owner' (a primary or standalone secret,
+    writable directly) or 'replica' (secret is the OWNING record; read-only
+    through this ref), or (None, None) if nothing matches."""
+    name, region = _parse_ref(ref)
+    if not name:
+        return None, None
+    if region and region != SM_REGION:
+        skey = _standalone_key(name, region)
+        if store.secret_exists(skey):
+            return "owner", store.get_secret(skey)
+        owner = store.get_secret(name) if store.secret_exists(name) else None
+        if owner and region in (owner.get("replicas") or {}):
+            return "replica", owner
+        return None, None
+    if store.secret_exists(name):
+        return "owner", store.get_secret(name)
+    return None, None
 
 
 def _require_secret(store: KvStore, ref: str) -> dict:
-    name = _resolve_name(store, ref)
-    if not name:
+    _, secret = _resolve_ref(store, ref)
+    if not secret:
         raise SecretsError("ResourceNotFoundException",
                            f"Secrets Manager can't find the specified secret: {ref}", 400)
-    return store.get_secret(name)
+    return secret
+
+
+def _require_writable(store: KvStore, ref: str) -> dict:
+    """Like _require_secret but rejects a replica's Region — real Secrets Manager
+    confines writes (and delete/rotate/tag/policy) to the secret's primary Region;
+    a replica only answers Get/DescribeSecret."""
+    kind, secret = _resolve_ref(store, ref)
+    if not secret:
+        raise SecretsError("ResourceNotFoundException",
+                           f"Secrets Manager can't find the specified secret: {ref}", 400)
+    if kind == "replica":
+        raise SecretsError("InvalidParameterException",
+                           "This Region holds a read-only replica of this secret. Perform write "
+                           "operations in the secret's primary Region instead.", 400)
+    return secret
 
 
 def _b64e_str(s: str) -> str:
@@ -251,16 +325,20 @@ def _create_secret(store: KvStore, body: dict, kms_store=None) -> dict:
     if body.get("Tags"):
         secret["tags"] = _tags_in(body)
     store.put_secret(name, secret)
+    if body.get("AddReplicaRegions"):
+        _apply_add_replica_regions(secret, body.get("AddReplicaRegions"), bool(body.get("ForceOverwriteReplicaSecret")))
     store.mirror_put(name, secret)
     store.persist()
     out = {"ARN": secret["arn"], "Name": name}
     if has_value:
         out["VersionId"] = vid
+    if secret.get("replicas"):
+        out["ReplicationStatus"] = _replica_status_list(secret)
     return out
 
 
 def _put_value(store: KvStore, body: dict, update: bool = False, kms_store=None) -> dict:
-    secret = _require_secret(store, body.get("SecretId") or body.get("Name") or "")
+    secret = _require_writable(store, body.get("SecretId") or body.get("Name") or "")
     if secret.get("deleted_date"):
         raise SecretsError("InvalidRequestException",
                            "You can't perform this operation on the secret because it was marked for deletion.", 400)
@@ -275,7 +353,7 @@ def _put_value(store: KvStore, body: dict, update: bool = False, kms_store=None)
             secret["kms_key_id"] = new_key
         if s_str is None and s_bin is None:
             secret["last_changed"] = time.time()
-            store.mirror_put(secret["name"], secret)
+            store.mirror_put(_storage_key_for(secret), secret)
             store.persist()
             return {"ARN": secret["arn"], "Name": secret["name"]}
     elif s_str is None and s_bin is None:
@@ -303,7 +381,7 @@ def _put_value(store: KvStore, body: dict, update: bool = False, kms_store=None)
     secret["versions"][vid] = version
     stages = version["stages"]
     secret["last_changed"] = time.time()
-    store.mirror_put(secret["name"], secret)
+    store.mirror_put(_storage_key_for(secret), secret)
     store.persist()
     return {"ARN": secret["arn"], "Name": secret["name"], "VersionId": vid, "VersionStages": stages}
 
@@ -365,7 +443,7 @@ def _rotate_secret(store: KvStore, body: dict, kms_store=None) -> dict:
     real rotation performs (new VersionId → AWSCURRENT, old → AWSPREVIOUS). Also
     schedules the next automatic rotation from RotationRules, so the schedule
     really fires on its own (see _auto_rotate_if_due) even though no Lambda runs."""
-    secret = _require_secret(store, body.get("SecretId") or "")
+    secret = _require_writable(store, body.get("SecretId") or "")
     if secret.get("deleted_date"):
         raise SecretsError("InvalidRequestException",
                            "You can't perform this operation on the secret because it was marked for deletion.", 400)
@@ -384,7 +462,11 @@ def _rotate_secret(store: KvStore, body: dict, kms_store=None) -> dict:
 
 
 def _get_secret_value(store: KvStore, body: dict, kms_store=None) -> dict:
-    secret = _require_secret(store, body.get("SecretId") or "")
+    ref = body.get("SecretId") or ""
+    kind, secret = _resolve_ref(store, ref)
+    if not secret:
+        raise SecretsError("ResourceNotFoundException",
+                           f"Secrets Manager can't find the specified secret: {ref}", 400)
     if secret.get("deleted_date"):
         raise SecretsError("InvalidRequestException",
                            "You can't perform this operation on the secret because it was marked for deletion.", 400)
@@ -396,10 +478,19 @@ def _get_secret_value(store: KvStore, body: dict, kms_store=None) -> dict:
     if not vid or vid not in secret["versions"]:
         raise SecretsError("ResourceNotFoundException",
                            "Secrets Manager can't find the specified secret value.", 400)
-    secret["last_accessed"] = time.time()
+    now = time.time()
+    if kind == "replica":
+        # A replica's own access clock — the owner's last_accessed is untouched by
+        # reads made through a replica Region, same as real per-Region tracking.
+        _, region = _parse_ref(ref)
+        secret["replicas"][region]["last_accessed_date"] = now
+        arn = _secret_arn(store, secret["name"], region)
+    else:
+        secret["last_accessed"] = now
+        arn = secret["arn"]
     store.persist()
     v = secret["versions"][vid]
-    out = {"ARN": secret["arn"], "Name": secret["name"], "VersionId": vid,
+    out = {"ARN": arn, "Name": secret["name"], "VersionId": vid,
            "VersionStages": v.get("stages", []), "CreatedDate": v.get("CreatedDate")}
     s_str, s_bin = _version_plaintext(kms_store, v)
     if s_str is not None:
@@ -429,44 +520,54 @@ def _common_fields(secret: dict) -> dict:
         out["KmsKeyId"] = secret["kms_key_id"]
     if secret.get("tags"):
         out["Tags"] = _tags_out(secret)
+    if secret.get("replicas"):
+        out["ReplicationStatus"] = _replica_status_list(secret)
     return out
 
 
 def _tag_resource(store: KvStore, body: dict) -> dict:
-    secret = _require_secret(store, body.get("SecretId") or "")
+    secret = _require_writable(store, body.get("SecretId") or "")
     secret.setdefault("tags", {}).update(_tags_in(body))
-    store.mirror_put(secret["name"], secret)
+    store.mirror_put(_storage_key_for(secret), secret)
     store.persist()
     return {}
 
 
 def _untag_resource(store: KvStore, body: dict) -> dict:
-    secret = _require_secret(store, body.get("SecretId") or "")
+    secret = _require_writable(store, body.get("SecretId") or "")
     tags = secret.setdefault("tags", {})
     for k in body.get("TagKeys") or []:
         tags.pop(k, None)
-    store.mirror_put(secret["name"], secret)
+    store.mirror_put(_storage_key_for(secret), secret)
     store.persist()
     return {}
 
 
 def _describe_secret(store: KvStore, body: dict, kms_store=None) -> dict:
-    secret = _require_secret(store, body.get("SecretId") or "")
+    ref = body.get("SecretId") or ""
+    kind, secret = _resolve_ref(store, ref)
+    if not secret:
+        raise SecretsError("ResourceNotFoundException",
+                           f"Secrets Manager can't find the specified secret: {ref}", 400)
     _auto_rotate_if_due(store, secret, kms_store)
     vids_to_stages = {vid: v.get("stages", []) for vid, v in secret["versions"].items()}
-    return {"ARN": secret["arn"], "Name": secret["name"], "VersionIdsToStages": vids_to_stages,
+    arn = secret["arn"]
+    if kind == "replica":
+        _, region = _parse_ref(ref)
+        arn = _secret_arn(store, secret["name"], region)
+    return {"ARN": arn, "Name": secret["name"], "VersionIdsToStages": vids_to_stages,
             **_common_fields(secret)}
 
 
 def _list_secrets(store: KvStore, body: dict, kms_store=None) -> dict:
     include_deleted = bool(body.get("IncludePlannedDeletion"))
     out = []
-    for name in store.names():
-        s = store.get_secret(name)
+    for key in store.names():
+        s = store.get_secret(key)
         if s.get("deleted_date") and not include_deleted:
             continue
         _auto_rotate_if_due(store, s, kms_store)
-        out.append({"ARN": s["arn"], "Name": name, **_common_fields(s),
+        out.append({"ARN": s["arn"], "Name": s["name"], **_common_fields(s),
                     "SecretVersionsToStages": {vid: v.get("stages", []) for vid, v in s["versions"].items()}})
     return {"SecretList": out}
 
@@ -480,10 +581,15 @@ def _list_secret_version_ids(store: KvStore, body: dict) -> dict:
 
 
 def _delete_secret(store: KvStore, body: dict) -> dict:
-    secret = _require_secret(store, body.get("SecretId") or "")
+    secret = _require_writable(store, body.get("SecretId") or "")
+    if secret.get("replicas"):
+        raise SecretsError("InvalidParameterException",
+                           "You can't delete a secret that still has replicas. Remove every "
+                           "replica Region first.", 400)
     if body.get("ForceDeleteWithoutRecovery"):
-        store.drop_secret(secret["name"])
-        store.mirror_delete(secret["name"])
+        key = _storage_key_for(secret)
+        store.drop_secret(key)
+        store.mirror_delete(key)
         store.persist()
         return {"ARN": secret["arn"], "Name": secret["name"], "DeletionDate": time.time()}
     days = int(body.get("RecoveryWindowInDays") or 30)
@@ -495,7 +601,7 @@ def _delete_secret(store: KvStore, body: dict) -> dict:
 
 
 def _restore_secret(store: KvStore, body: dict) -> dict:
-    secret = _require_secret(store, body.get("SecretId") or "")
+    secret = _require_writable(store, body.get("SecretId") or "")
     secret["deleted_date"] = None
     store.persist()
     return {"ARN": secret["arn"], "Name": secret["name"]}
@@ -547,7 +653,7 @@ def _put_resource_policy(store: KvStore, body: dict) -> dict:
     (BlockPublicPolicy=true), rejects one that grants public access — enforced
     here the same way; evaluating the policy against an actual caller at
     GetSecretValue time is not modeled (Vyomi has one implicit caller identity)."""
-    secret = _require_secret(store, body.get("SecretId") or "")
+    secret = _require_writable(store, body.get("SecretId") or "")
     policy = body.get("ResourcePolicy")
     if not policy:
         raise SecretsError("InvalidParameterException", "ResourcePolicy is required.", 400)
@@ -562,10 +668,104 @@ def _put_resource_policy(store: KvStore, body: dict) -> dict:
 
 
 def _delete_resource_policy(store: KvStore, body: dict) -> dict:
-    secret = _require_secret(store, body.get("SecretId") or "")
+    secret = _require_writable(store, body.get("SecretId") or "")
     secret["resource_policy"] = None
     store.persist()
     return {"ARN": secret["arn"], "Name": secret["name"]}
+
+
+# ── cross-Region replication (v4 depth wave 5b) ─────────────────────────────
+def _replica_status_list(secret: dict) -> list:
+    out = []
+    for region, v in sorted((secret.get("replicas") or {}).items()):
+        row = {"Region": region, "Status": v.get("status"), "StatusMessage": v.get("status_message")}
+        if v.get("kms_key_id"):
+            row["KmsKeyId"] = v["kms_key_id"]
+        if v.get("last_accessed_date"):
+            row["LastAccessedDate"] = v["last_accessed_date"]
+        out.append(row)
+    return out
+
+
+def _apply_add_replica_regions(secret: dict, add_list, force: bool) -> None:
+    own_region = secret.get("region", SM_REGION)
+    replicas = secret.setdefault("replicas", {})
+    for r in add_list or []:
+        region = str((r or {}).get("Region") or "").strip()
+        if not region:
+            raise SecretsError("InvalidParameterException", "Region is required for each replica.", 400)
+        if region == own_region:
+            raise SecretsError("InvalidParameterException",
+                               f"{region} is where this secret's primary copy already lives — "
+                               "pick a different Region to replicate into.", 400)
+        if region in replicas and not force:
+            raise SecretsError("ResourceExistsException",
+                               f"A replica already exists in {region}. Set ForceOverwriteReplicaSecret "
+                               "to replace it.", 400)
+        replicas[region] = {"kms_key_id": str(r["KmsKeyId"]) if r.get("KmsKeyId") else None,
+                            "status": "InSync", "status_message": "Replication succeeded.",
+                            "last_accessed_date": None}
+
+
+def _replicate_secret_to_regions(store: KvStore, body: dict) -> dict:
+    secret = _require_writable(store, body.get("SecretId") or "")
+    _apply_add_replica_regions(secret, body.get("AddReplicaRegions"), bool(body.get("ForceOverwriteReplicaSecret")))
+    store.mirror_put(_storage_key_for(secret), secret)
+    store.persist()
+    return {"ARN": secret["arn"], "ReplicationStatus": _replica_status_list(secret)}
+
+
+def _remove_regions_from_replication(store: KvStore, body: dict) -> dict:
+    """Deletes the replica outright (no snapshot) — matching real Secrets
+    Manager, which also deletes the secret in the removed Region. Use
+    StopReplicationToReplica instead to keep the replica's current value as an
+    independent secret."""
+    secret = _require_writable(store, body.get("SecretId") or "")
+    replicas = secret.get("replicas") or {}
+    for region in body.get("RemoveReplicaRegions") or []:
+        if region not in replicas:
+            raise SecretsError("ResourceNotFoundException",
+                               f"No replica exists for this secret in Region {region}.", 400)
+        del replicas[region]
+    store.mirror_put(_storage_key_for(secret), secret)
+    store.persist()
+    return {"ARN": secret["arn"], "ReplicationStatus": _replica_status_list(secret)}
+
+
+def _stop_replication_to_replica(store: KvStore, body: dict) -> dict:
+    """'Promote to standalone secret': must be called with the REPLICA's own
+    Region-qualified ARN. Snapshots the owner's current record into a brand-new,
+    fully independent secret keyed by (name, Region) and drops the replica link —
+    from this point the new secret has its own version history and accepts
+    writes, same as real Secrets Manager's StopReplicationToReplica."""
+    ref = body.get("SecretId") or ""
+    name, region = _parse_ref(ref)
+    if not name or not region or region == SM_REGION:
+        raise SecretsError("InvalidParameterException",
+                           "StopReplicationToReplica must be called with a replica's "
+                           "Region-qualified secret ARN.", 400)
+    if not store.secret_exists(name):
+        raise SecretsError("ResourceNotFoundException",
+                           f"Secrets Manager can't find the specified secret: {ref}", 400)
+    owner = store.get_secret(name)
+    replicas = owner.get("replicas") or {}
+    if region not in replicas:
+        raise SecretsError("ResourceNotFoundException",
+                           f"No replica exists for this secret in Region {region}.", 400)
+    standalone = copy.deepcopy(owner)
+    standalone.pop("replicas", None)
+    standalone["region"] = region
+    standalone["arn"] = _secret_arn(store, name, region)
+    rep_key_id = replicas[region].get("kms_key_id")
+    if rep_key_id:
+        standalone["kms_key_id"] = rep_key_id
+    skey = _standalone_key(name, region)
+    store.put_secret(skey, standalone)
+    del replicas[region]
+    store.mirror_put(skey, standalone)
+    store.mirror_put(name, owner)
+    store.persist()
+    return {"ARN": standalone["arn"], "Name": name}
 
 
 # ── native-wire dispatcher (X-Amz-Target action → operation) ───────────────
@@ -612,6 +812,12 @@ def dispatch(store: KvStore, target: str, payload: dict | None = None, kms_store
             return _ok(_put_resource_policy(store, body))
         if action == "DeleteResourcePolicy":
             return _ok(_delete_resource_policy(store, body))
+        if action == "ReplicateSecretToRegions":
+            return _ok(_replicate_secret_to_regions(store, body))
+        if action == "RemoveRegionsFromReplication":
+            return _ok(_remove_regions_from_replication(store, body))
+        if action == "StopReplicationToReplica":
+            return _ok(_stop_replication_to_replica(store, body))
         return _error("UnknownOperationException", f"The action {action} is not implemented.", 400)
     except SecretsError as e:
         return _error(e.code, e.message, e.status)

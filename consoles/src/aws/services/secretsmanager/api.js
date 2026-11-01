@@ -30,6 +30,15 @@ export const getResourcePolicy = (secretId) => call("GetResourcePolicy", { Secre
 export const putResourcePolicy = (secretId, policy) => call("PutResourcePolicy", { SecretId: secretId, ResourcePolicy: policy });
 export const deleteResourcePolicy = (secretId) => call("DeleteResourcePolicy", { SecretId: secretId });
 
+/** Cross-Region replication (core/capabilities/aws/secretsmanager.json:
+ * secretsmanager.secret.replication). replicaArn is the Region-qualified ARN
+ * DescribeSecret's ReplicationStatus doesn't carry directly — build it from the
+ * secret's own ARN by swapping the Region segment. */
+export const replicaArn = (ownerArn, region) => ownerArn.replace(/^(arn:aws:secretsmanager):[^:]*:/, `$1:${region}:`);
+export const replicateSecretToRegions = (secretId, regions) => call("ReplicateSecretToRegions", { SecretId: secretId, AddReplicaRegions: regions });
+export const removeRegionsFromReplication = (secretId, regions) => call("RemoveRegionsFromReplication", { SecretId: secretId, RemoveReplicaRegions: regions });
+export const stopReplicationToReplica = (replicaSecretId) => call("StopReplicationToReplica", { SecretId: replicaSecretId });
+
 /** KMS key aliases, for the Encryption key picker — a real cross-service read (same
  * TrentService wire the KMS console speaks), not a canned list. */
 export const listKmsAliases = () => awsJson("kms", "TrentService.ListAliases", {}, { version: "1.1" }).then((r) => (r.Aliases || []).map((a) => a.AliasName.replace(/^alias\//, "")));

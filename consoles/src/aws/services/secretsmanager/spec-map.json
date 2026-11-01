@@ -13,6 +13,7 @@
       "text=Credentials for other database",
       "text=Other type of secret",
       "role=button[name=\"Next\"]",
+      "role=checkbox[name=\"Replicate secret\"]",
       "role=button[name=\"Next\"]",
       "role=checkbox[name=\"Automatic rotation\"]",
       "role=button[name=\"Next\"]"
