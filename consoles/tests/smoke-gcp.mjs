@@ -1058,6 +1058,48 @@ try {
   await page.getByRole("dialog").waitFor({ state: "detached", timeout: 10000 });
   check("delete function via UI → gone over native wire", (await wire(`/v2/projects/vyomi-project/locations/us-central1/services/${FN}`)).status === 404);
 
+  // Cloud Run functions depth (WAVE 5b): continuous deployment — "Set up continuous
+  // deployment" really connects a repo, and a "push" (trigger build) only lands a new
+  // revision over the native wire when it actually parses, like a real Cloud Build step.
+  const CDFN = `v4-gcp-cdfn-${Date.now() % 100000}`;
+  await page.goto(UI + "#/functions/create");
+  await page.getByRole("radio", { name: "Use an inline editor to create a function" }).check();
+  await page.getByLabel("Service name").fill(CDFN);
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("heading", { name: CDFN, exact: true }).waitFor({ timeout: 10000 });
+  await page.getByRole("button", { name: "Set up continuous deployment" }).click();
+  await page.getByLabel("Repository").fill("octo/widgets");
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
+  await page.getByRole("button", { name: "Simulate push (trigger build)" }).waitFor({ timeout: 10000 });
+  await page.getByRole("button", { name: "Simulate push (trigger build)" }).click();
+  await page.getByText(/build-\d+ — SUCCESS/).waitFor({ timeout: 10000 });
+  await page.getByRole("dialog").getByRole("button", { name: "Close" }).click();
+  const cdFnRevs = await wjson(`/v2/projects/vyomi-project/locations/us-central1/services/${CDFN}/revisions`);
+  check("continuous deployment push really deploys a new revision", (cdFnRevs.revisions || []).length === 2, JSON.stringify(cdFnRevs).slice(0, 200));
+  await shot("12c-functions-continuous-deployment");
+
+  // Cloud Run functions depth: an Eventarc Pub/Sub trigger really invokes the destination
+  // service — publishing a message feeds real Observability metrics, not a stored binding.
+  await wire(`/v1/projects/vyomi-project/topics/${CDFN}-topic`, { method: "PUT", headers: { "content-type": "application/json" }, body: "{}" });
+  await page.goto(UI + `#/functions/detail/us-central1/${CDFN}?tab=triggers`);
+  await page.getByRole("button", { name: "Add trigger" }).click();
+  await page.getByLabel("Trigger name").fill("on-event");
+  await page.getByLabel("Pub/Sub topic ID").fill(`${CDFN}-topic`);
+  await page.getByRole("dialog").getByRole("button", { name: "Add trigger" }).click();
+  await page.getByRole("cell", { name: "on-event" }).waitFor({ timeout: 10000 });
+  await wire(`/v1/projects/vyomi-project/topics/${CDFN}-topic:publish`, {
+    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ messages: [{ data: "e30=" }] }),
+  });
+  const metricsQS = new URLSearchParams({
+    filter: `metric.type="run.googleapis.com/request_count" AND resource.labels.service_name="${CDFN}"`,
+    "interval.startTime": "2000-01-01T00:00:00Z", "interval.endTime": "2100-01-01T00:00:00Z",
+  });
+  const cdFnMetrics = await wjson(`/v3/projects/vyomi-project/timeSeries?${metricsQS}`);
+  check("publishing to the trigger's topic really invokes the service (real metrics)", (cdFnMetrics.timeSeries || []).length === 1, JSON.stringify(cdFnMetrics).slice(0, 200));
+  await page.goto(UI + `#/functions/detail/us-central1/${CDFN}`);
+  await page.getByText("Request count").waitFor({ timeout: 10000 });
+  await shot("12d-functions-eventarc-trigger");
+
   // Cloud Run: create a service via the UI → visible over the native Cloud Run Admin API v2
   // wire, then the reverse (a job created over the wire shows up in the UI jobs list).
   const RUNSVC = `v4-gcp-run-${Date.now() % 100000}`;

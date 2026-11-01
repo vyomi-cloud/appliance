@@ -2,16 +2,17 @@
  * filtered mentally to "Deployment type: Function" by the operator). Native Cloud Run
  * Admin API v2, region-scoped like the real console's region selector. */
 import { useState } from "react";
-import { Box, Button, FormControl, MenuItem, Select, Stack, Typography } from "@mui/material";
+import { Button, FormControl, MenuItem, Select, Stack, Typography } from "@mui/material";
 import AddIcon from "@mui/icons-material/esm/Add.js";
 import CloudUploadIcon from "@mui/icons-material/esm/CloudUpload.js";
+import SyncIcon from "@mui/icons-material/esm/Sync.js";
 import RefreshIcon from "@mui/icons-material/esm/Refresh.js";
 import DeleteIcon from "@mui/icons-material/esm/Delete.js";
 import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import ResourceTable from "../../kit/ResourceTable.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
-import { NotSimulated, fmtDate, PageHeader } from "../../kit/common.jsx";
+import { fmtDate, PageHeader } from "../../kit/common.jsx";
 import { Link, hashHref } from "../../link.jsx";
 import { useProject } from "../../project.js";
 import * as api from "./api.js";
@@ -38,13 +39,11 @@ export default function Services() {
           </Select>
         </FormControl>
         <Button startIcon={<CloudUploadIcon />} href="#/functions/create?source=container">Deploy container</Button>
+        <Button startIcon={<SyncIcon />} href="#/functions/create?source=repo">Connect repo</Button>
         <Button startIcon={<AddIcon />} variant="contained" href="#/functions/create">Write a function</Button>
         <Button startIcon={<RefreshIcon />} onClick={reload}>Refresh</Button>
         <Button startIcon={<DeleteIcon />} disabled={!sel.length} onClick={() => setDel(true)}>Delete</Button>
       </>} />
-      <Box sx={{ mb: 1.5 }}>
-        <NotSimulated compact feature="Connect repo" note="Vyomi has no Cloud Build or source-repository integration — continuous deployment from a repository isn't backed by a Vyomi backend yet." />
-      </Box>
       <ResourceTable
         resourceName="services"
         items={rows}

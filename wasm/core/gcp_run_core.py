@@ -28,9 +28,15 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import random
 import re
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+
+from core import gcp_logging_core as gcp_logging   # real Observability logs (never a disclaimer)
+from core import gcp_monitoring_core as gcp_mon     # real Observability metrics
+from core import gcp_pubsub_core as gcp_ps          # Eventarc Pub/Sub-sourced triggers
 
 REGIONS = ["us-central1", "us-east1", "us-east4", "us-east5", "us-south1", "us-west1", "us-west2", "us-west3",
            "us-west4", "europe-west1", "europe-west2", "europe-west3", "europe-west4", "europe-west8",
@@ -77,7 +83,14 @@ class RunStore:
         self.policies: dict = {}     # full resource name -> IAM Policy
         self.worker_pools: dict = {}     # full worker pool name -> WorkerPool resource
         self.domain_mappings: dict = {}  # full domain mapping name -> DomainMapping resource
+        self.triggers: dict = {}         # full trigger name -> Eventarc-style Trigger (nested under a service)
+        self.builds: dict = {}           # full build name -> Build resource (nested under a service)
         self.seq: dict = {"op": 0, "uid": 0}
+        # Cross-store refs set once by the wire router (never persisted — see nano_persist):
+        # Observability (real metrics/logs fed by invoke_service) and Eventarc Pub/Sub delivery.
+        self.pubsub_store = None
+        self.logging_store = None
+        self.mon_store = None
 
 
 _SHARED: RunStore | None = None
@@ -332,6 +345,111 @@ def _validate_function_source(annotations):
     defs = {n.name for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
     if entry not in defs:
         raise _E(400, "INVALID_ARGUMENT", "Function entry point %r not found in source." % entry)
+
+
+# ── data plane: invoke (feeds Observability with REAL metrics/logs, never synthetic) ──────
+# A minimal, safe-builtins sandbox — same shape/rationale as core/lambda_core.py's, kept
+# local so this GCP core never imports an AWS one. No filesystem / network / process access.
+_INVOKE_BUILTINS = {
+    name: __builtins__[name] if isinstance(__builtins__, dict) else getattr(__builtins__, name)
+    for name in ("abs", "all", "any", "bool", "dict", "enumerate", "filter", "float", "int", "len",
+                 "list", "map", "max", "min", "range", "reversed", "round", "set", "sorted", "str",
+                 "sum", "tuple", "zip", "isinstance", "hasattr", "getattr", "repr", "type", "chr",
+                 "ord", "Exception", "ValueError", "KeyError", "TypeError", "IndexError")
+}
+
+
+def _run_function_source(annotations, event):
+    """Actually execute the stored Python function source against `event` — the real
+    workload, not a stored config echo. Non-Python runtimes have no interpreter here
+    (Vyomi doesn't build/run arbitrary container images below the Pro compute tier); the
+    caller still records a genuine request for those, it just can't run the app code."""
+    runtime = str((annotations or {}).get(_FN_ANN_RUNTIME) or "")
+    if not runtime.lower().startswith("python"):
+        return {"ok": None}
+    source = (annotations or {}).get(_FN_ANN_SOURCE) or ""
+    entry = (annotations or {}).get(_FN_ANN_ENTRY) or "handler"
+    sandbox = {"__builtins__": dict(_INVOKE_BUILTINS), "json": json}
+    try:
+        exec(compile(source, "<function:%s>" % entry, "exec"), sandbox)
+        handler = sandbox.get(entry)
+        if not callable(handler):
+            raise RuntimeError("entry point %r is not defined" % entry)
+        return {"ok": True, "result": handler(event)}
+    except Exception as e:
+        return {"ok": False, "error": "%s: %s" % (type(e).__name__, e)}
+
+
+def _pick_revision(svc):
+    """Which revision serves this request — weighted by the real traffic split, exactly
+    how a load balancer honours a percentage split (not a fabricated metric)."""
+    statuses = svc.get("trafficStatuses") or []
+    if not statuses:
+        return (svc.get("latestReadyRevision") or "").rsplit("/", 1)[-1]
+    if len(statuses) == 1:
+        return statuses[0]["revision"]
+    roll, acc = random.randint(1, 100), 0
+    for st in statuses:
+        acc += int(st.get("percent") or 0)
+        if roll <= acc:
+            return st["revision"]
+    return statuses[-1]["revision"]
+
+
+def _record_observability(store, project, location, sid, revision, svc, out, latency_ms):
+    """Writes a real Cloud Logging entry + Cloud Monitoring points for this request —
+    exactly what the Observability tab's Metrics/Logs sections read back. Fed by
+    invoke_service's actual activity (direct :invoke calls, Eventarc trigger deliveries),
+    never random/synthetic data; a service nobody has called legitimately shows zeros."""
+    now = _ts()
+    ok = out.get("ok") is not False
+    logging_store = getattr(store, "logging_store", None)
+    if logging_store is not None:
+        msg = "%s %s %s %.1fms" % (sid, revision, "OK" if ok else "ERROR", latency_ms)
+        if out.get("ok") is False:
+            msg += " - %s" % out["error"]
+        gcp_logging.write_entries(logging_store, None, {"entries": [{
+            "logName": "projects/%s/logs/run.googleapis.com%%2Frequests" % project,
+            "resource": {"type": "cloud_run_revision",
+                         "labels": {"project_id": project, "service_name": sid, "revision_name": revision,
+                                    "location": location, "configuration_name": sid}},
+            "severity": "ERROR" if not ok else "INFO", "textPayload": msg,
+        }]})
+    mon_store = getattr(store, "mon_store", None)
+    if mon_store is not None:
+        # Metric series are keyed to the service's CURRENT revision (not whichever revision
+        # this particular request landed on) so a traffic-split service still reports ONE
+        # continuous series per metric instead of fragmenting across every pinned revision.
+        metric_revision = (svc.get("latestReadyRevision") or "").rsplit("/", 1)[-1] or revision
+        resource = {"type": "cloud_run_revision",
+                    "labels": {"project_id": project, "service_name": sid, "revision_name": metric_revision, "location": location}}
+        gcp_mon.record_system_point(mon_store, project, "run.googleapis.com/request_count", resource,
+                                     svc.get("_requestCount", 1), now)
+        gcp_mon.record_system_point(mon_store, project, "run.googleapis.com/request_latencies", resource,
+                                     round(latency_ms, 2), now, unit="ms")
+        min_inst = ((svc.get("template") or {}).get("scaling") or {}).get("minInstanceCount", 0)
+        gcp_mon.record_system_point(mon_store, project, "run.googleapis.com/container/instance_count", resource,
+                                     max(min_inst, 1), now)
+
+
+def invoke_service(store, project, location, sid, event):
+    """Deliver one real request to `sid`'s currently-serving revision. The mechanism
+    Observability's metrics/logs are fed from: the console's own :invoke call, or an
+    Eventarc trigger firing for real (see _deliver_eventarc in gcp_pubsub_core.py)."""
+    full, svc = _get_service(store, project, location, sid)
+    revision = _pick_revision(svc)
+    t0 = time.perf_counter()
+    out = _run_function_source(svc.get("annotations"), event if isinstance(event, dict) else {"raw": event})
+    latency_ms = (time.perf_counter() - t0) * 1000
+    svc["_requestCount"] = svc.get("_requestCount", 0) + 1
+    svc["_lastInvokeTime"] = _ts()
+    _record_observability(store, project, location, sid, revision, svc, out, latency_ms)
+    if out.get("ok") is False:
+        return {"status": 500, "body": {"error": out["error"]}}
+    if out.get("ok") is None:
+        return {"status": 202, "body": {"note": "Vyomi received the request but does not execute non-Python "
+                                                  "container workloads (see the Source tab's limitations)."}}
+    return {"status": 200, "body": out.get("result")}
 
 
 def _rev_suffix(svc_full, n):
@@ -1171,6 +1289,14 @@ def _services(store, method, project, location, rest, verb, query, payload):
     elif len(rest) == 1:
         sid = rest[0]
         full = service_name(project, location, sid)
+        if verb == "invoke" and method == "POST":
+            out = invoke_service(store, project, location, sid, payload)
+            body = out["body"]
+            return _json(out["status"], body if isinstance(body, (dict, list)) else {"result": body})
+        if verb == "connectRepo" and method == "POST":
+            return _json(200, connect_repo(store, project, location, sid, payload))
+        if verb == "disconnectRepo" and method == "POST":
+            return _json(200, disconnect_repo(store, project, location, sid))
         if verb:
             _get_service(store, project, location, sid)
             r = _iam_verb(store, full, method, verb, query, payload)
@@ -1198,6 +1324,10 @@ def _services(store, method, project, location, rest, verb, query, payload):
                 return _json(200, revision_view(_get_revision(store, project, location, sid, rest[2])[1]))
             if method == "DELETE":
                 return _json(200, delete_revision(store, project, location, sid, rest[2], query))
+    elif rest[1] == "triggers":
+        return _triggers_dispatch(store, method, project, location, rest[0], rest[2:], verb, query, payload)
+    elif rest[1] == "builds":
+        return _builds_dispatch(store, method, project, location, rest[0], rest[2:], verb, query, payload)
     return _err(404, "NOT_FOUND", "Unknown path or method: %s %s" % (method, "/".join(rest)))
 
 
@@ -1517,3 +1647,229 @@ def _operations(store, method, project, location, rest, verb, query):
             del store.operations[name]
             return _json(200, {})
     return _err(404, "NOT_FOUND", "Unknown operations path: %s" % "/".join(rest))
+
+
+# ── Eventarc triggers (nested under a service — the Triggers tab's destination is always
+# that service) ─────────────────────────────────────────────────────────────────────────
+# Vyomi only has a real event source for ONE Eventarc provider: Pub/Sub. A trigger for any
+# other real event type (Cloud Storage, Cloud Audit Logs, …) is honestly rejected at create
+# time rather than accepted and silently never firing — see core/capabilities/gcp/functions.json.
+TRIGGER_EVENT_TYPES = ("google.cloud.pubsub.topic.v1.messagePublished",)
+
+
+def trigger_name(project, location, sid, tid):
+    return "%s/triggers/%s" % (service_name(project, location, sid), tid)
+
+
+def trigger_view(t):
+    return {k: _copy(v) for k, v in t.items() if not k.startswith("_")}
+
+
+def _get_trigger(store, project, location, sid, tid):
+    full = trigger_name(project, location, sid, tid)
+    t = store.triggers.get(full)
+    if not t:
+        raise _E(404, "NOT_FOUND", "Trigger '%s' does not exist." % tid)
+    return full, t
+
+
+def list_triggers(store, project, location, sid):
+    prefix = service_name(project, location, sid) + "/triggers/"
+    return sorted((trigger_view(t) for n, t in store.triggers.items() if n.startswith(prefix)),
+                  key=lambda t: t["createTime"])
+
+
+def create_trigger(store, project, location, sid, query, payload):
+    _get_service(store, project, location, sid)
+    tid = query.get("triggerId") or ""
+    _check_name("trigger", tid)
+    tfull = trigger_name(project, location, sid, tid)
+    if tfull in store.triggers:
+        raise _E(409, "ALREADY_EXISTS", "Resource '%s' already exists." % tfull)
+    filters = payload.get("eventFilters") or []
+    event_type = next((f.get("value") for f in filters if isinstance(f, dict) and f.get("attribute") == "type"), None)
+    if not event_type:
+        raise _E(400, "INVALID_ARGUMENT", "eventFilters must include an entry with attribute \"type\".")
+    if event_type not in TRIGGER_EVENT_TYPES:
+        raise _E(400, "INVALID_ARGUMENT",
+                 "Event type %r is not simulated: Vyomi has no event source for it (only %s). "
+                 "Use a Pub/Sub-sourced custom event." % (event_type, ", ".join(TRIGGER_EVENT_TYPES)))
+    topic = payload.get("pubsubTopic") or ""
+    if not topic:
+        raise _E(400, "INVALID_ARGUMENT", "pubsubTopic is required for event type %r." % event_type)
+    pubsub_store = getattr(store, "pubsub_store", None)
+    if pubsub_store is not None and gcp_ps.dispatch(pubsub_store, "GET", "/v1/%s" % topic, {}, {}, b"").status != 200:
+        raise _E(400, "INVALID_ARGUMENT", "Pub/Sub topic '%s' does not exist." % topic)
+    now = _ts()
+    trig = {"name": tfull, "uid": _uid(store, "trg", tfull), "createTime": now, "updateTime": now,
+            "eventFilters": _copy(filters), "eventType": event_type, "pubsubTopic": topic,
+            "serviceAccount": payload.get("serviceAccount") or "%s-compute@developer.gserviceaccount.com" % project_number(project),
+            "destination": {"service": sid, "region": location}, "state": "ACTIVE",
+            "etag": '"%s"' % _h("trg", tfull, now)[:16]}
+    if pubsub_store is not None:
+        sub_full = "projects/%s/subscriptions/eventarc-%s" % (project, tid)
+        r = gcp_ps.dispatch(pubsub_store, "PUT", "/v1/%s" % sub_full, {}, {}, json.dumps({
+            "topic": topic,
+            "pushConfig": {"pushEndpoint": "https://eventarc-%s.%s.vyomi.internal/" % (tid, location)},
+        }).encode())
+        if r.status < 300:
+            sub = pubsub_store.get_queue(sub_full)
+            if sub is not None:
+                sub["_eventarc_trigger"] = {"project": project, "location": location, "service": sid}
+            trig["_subscription"] = sub_full
+    store.triggers[tfull] = trig
+    return trigger_view(trig)
+
+
+def delete_trigger(store, project, location, sid, tid):
+    full, t = _get_trigger(store, project, location, sid, tid)
+    sub_full = t.get("_subscription")
+    pubsub_store = getattr(store, "pubsub_store", None)
+    if sub_full and pubsub_store is not None:
+        gcp_ps.dispatch(pubsub_store, "DELETE", "/v1/%s" % sub_full, {}, {}, b"")
+    del store.triggers[full]
+    return trigger_view(t)
+
+
+def _triggers_dispatch(store, method, project, location, sid, rest, verb, query, payload):
+    _get_service(store, project, location, sid)
+    if not rest:
+        if method == "POST" and not verb:
+            return _json(200, create_trigger(store, project, location, sid, query, payload))
+        if method == "GET" and not verb:
+            return _json(200, {"triggers": list_triggers(store, project, location, sid)})
+    elif len(rest) == 1 and not verb:
+        if method == "GET":
+            return _json(200, trigger_view(_get_trigger(store, project, location, sid, rest[0])[1]))
+        if method == "DELETE":
+            return _json(200, delete_trigger(store, project, location, sid, rest[0]))
+    return _err(404, "NOT_FOUND", "Unknown path or method: %s %s" % (method, "/".join(rest)))
+
+
+# ── continuous deployment (nested under a service: "Set up continuous deployment" / the
+# create-service "Continuously deploy from a repository" source) ──────────────────────────
+# Vyomi has no real GitHub/Cloud Source Repositories integration, so the "repository" a
+# service connects to is Vyomi's own stored source (the same inline source the Source tab
+# edits) — connecting one just names it; triggerBuild is the real, enforced behaviour: it
+# "builds" (parses/validates) whatever source is handed to it and only deploys a new
+# revision — a real one, visible on the Revisions tab — if that build succeeds, exactly
+# like Cloud Build cutting a revision from a successful build and refusing to on a failed one.
+_REPO_ANN = "vyomi.dev/repo-connection"
+
+
+def repo_connection(svc):
+    raw = (svc.get("annotations") or {}).get(_REPO_ANN)
+    try:
+        return json.loads(raw) if raw else None
+    except Exception:
+        return None
+
+
+def connect_repo(store, project, location, sid, payload):
+    full, svc = _get_service(store, project, location, sid)
+    repo = str(payload.get("repository") or "").strip()
+    branch = str(payload.get("branch") or "main").strip() or "main"
+    if not repo or "/" not in repo or repo.startswith("/") or repo.endswith("/"):
+        raise _E(400, "INVALID_ARGUMENT", "repository must be of the form \"owner/repo\".")
+    ann = dict(svc.get("annotations") or {})
+    ann[_REPO_ANN] = json.dumps({"repository": repo, "branch": branch, "connectedAt": _ts()})
+    svc["annotations"] = ann
+    svc["updateTime"] = _ts()
+    return service_view(svc)
+
+
+def disconnect_repo(store, project, location, sid):
+    full, svc = _get_service(store, project, location, sid)
+    ann = dict(svc.get("annotations") or {})
+    ann.pop(_REPO_ANN, None)
+    svc["annotations"] = ann
+    svc["updateTime"] = _ts()
+    return service_view(svc)
+
+
+def _pseudo_image(runtime, entry, source):
+    """Deterministic pseudo-image for a build's output — the Python-side twin of api.js's
+    functionImage() so a build that actually changes the code cuts a real new revision."""
+    tag = _h("fnsrc", entry or "", source or "")[:12]
+    rt = re.sub(r"[^a-z0-9.]+", "-", (runtime or "node").lower())
+    return "vyomi.dev/function-source/%s:%s" % (rt, tag)
+
+
+def build_name(project, location, sid, bid):
+    return "%s/builds/%s" % (service_name(project, location, sid), bid)
+
+
+def trigger_build(store, project, location, sid, payload):
+    """A "push": builds the given (or currently-stored) source and, only on success, lands
+    it as a real new revision. Reuses update_service — the SAME validated redeploy path the
+    Source tab's "Save and redeploy" uses — so a continuous-deployment build is held to
+    exactly the bar a manual redeploy is."""
+    full, svc = _get_service(store, project, location, sid)
+    conn = repo_connection(svc)
+    if not conn:
+        raise _E(400, "FAILED_PRECONDITION", "Service '%s' is not connected to a repository; call connectRepo first." % sid)
+    cur_ann = svc.get("annotations") or {}
+    runtime = payload.get("runtime") or cur_ann.get(_FN_ANN_RUNTIME) or "Node.js 22"
+    entry = payload.get("entryPoint") or cur_ann.get(_FN_ANN_ENTRY) or "handler"
+    source = payload.get("source") if payload.get("source") is not None else cur_ann.get(_FN_ANN_SOURCE, "")
+    store.seq["build"] = store.seq.get("build", 0) + 1
+    bid = "build-%05d" % store.seq["build"]
+    bfull = build_name(project, location, sid, bid)
+    now = _ts()
+    build = {"name": bfull, "id": bid, "createTime": now, "repository": conn["repository"], "branch": conn["branch"]}
+    new_ann = dict(cur_ann, **{_FN_ANN_RUNTIME: runtime, _FN_ANN_ENTRY: entry, _FN_ANN_SOURCE: source})
+    try:
+        _validate_function_source(new_ann)
+    except _E as e:
+        build["status"], build["finishTime"] = "FAILURE", _ts()
+        build["logs"] = "Build failed: %s" % e.message
+        store.builds[bfull] = build
+        return trigger_build_view(build)
+    template = _copy(svc["template"])
+    template["containers"][0]["image"] = _pseudo_image(runtime, entry, source)
+    update_service(store, project, location, sid, {"updateMask": "annotations,template"},
+                    {"annotations": new_ann, "template": template})
+    build["status"], build["finishTime"] = "SUCCESS", _ts()
+    build["revision"] = store.services[full]["latestReadyRevision"].rsplit("/", 1)[-1]
+    build["logs"] = "Build succeeded; deployed revision %s." % build["revision"]
+    store.builds[bfull] = build
+    logging_store = getattr(store, "logging_store", None)
+    if logging_store is not None:
+        gcp_logging.write_entries(logging_store, None, {"entries": [{
+            "logName": "projects/%s/logs/cloudbuild" % project,
+            "resource": {"type": "cloud_run_revision",
+                         "labels": {"project_id": project, "service_name": sid, "revision_name": build.get("revision", ""),
+                                    "location": location, "configuration_name": sid}},
+            "severity": "INFO",
+            "textPayload": "Cloud Build %s: %s (%s@%s)" % (bid, build["status"], conn["repository"], conn["branch"]),
+        }]})
+    return trigger_build_view(build)
+
+
+def trigger_build_view(b):
+    return _copy(b)
+
+
+def list_builds(store, project, location, sid):
+    prefix = service_name(project, location, sid) + "/builds/"
+    return sorted((trigger_build_view(b) for n, b in store.builds.items() if n.startswith(prefix)),
+                  key=lambda b: b["createTime"], reverse=True)
+
+
+def _builds_dispatch(store, method, project, location, sid, rest, verb, query, payload):
+    _get_service(store, project, location, sid)
+    if not rest:
+        if method == "POST" and not verb:
+            return _json(200, trigger_build(store, project, location, sid, payload))
+        if method == "GET" and not verb:
+            chunk, nxt = _page(list_builds(store, project, location, sid), query)
+            out = {"builds": chunk}
+            if nxt:
+                out["nextPageToken"] = nxt
+            return _json(200, out)
+    elif len(rest) == 1 and not verb and method == "GET":
+        b = store.builds.get(build_name(project, location, sid, rest[0]))
+        if not b:
+            raise _E(404, "NOT_FOUND", "Build '%s' does not exist." % rest[0])
+        return _json(200, trigger_build_view(b))
+    return _err(404, "NOT_FOUND", "Unknown path or method: %s %s" % (method, "/".join(rest)))

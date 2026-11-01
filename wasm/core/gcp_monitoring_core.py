@@ -363,6 +363,17 @@ BUILTIN_METRICS = {m["type"]: m for m in [
     _md("logging.googleapis.com/log_entry_count", "GAUGE", "INT64", "1",
         "Live month-to-date count of log entries ingested into this project, mirrored from "
         "Cloud Logging's own entries.", [], "Log entries ingested", ["global"]),
+    _md("run.googleapis.com/request_count", "GAUGE", "INT64", "1",
+        "Live cumulative count of requests Cloud Run has received for this revision, fed by "
+        "core/gcp_run_core.py's invoke path — real request activity, not synthetic.", [],
+        "Request count", ["cloud_run_revision"]),
+    _md("run.googleapis.com/request_latencies", "GAUGE", "DOUBLE", "ms",
+        "Wall-clock latency of the most recently completed request to this revision.", [],
+        "Request latency", ["cloud_run_revision"]),
+    _md("run.googleapis.com/container/instance_count", "GAUGE", "INT64", "1",
+        "Container instance count for this revision, derived from its minimum-instance "
+        "configuration and whether it has served a request recently.", [],
+        "Container instance count", ["cloud_run_revision"]),
 ]}
 
 MONITORED_RESOURCES = {r["type"]: r for r in [
@@ -384,6 +395,10 @@ MONITORED_RESOURCES = {r["type"]: r for r in [
     {"type": "pubsub_subscription", "displayName": "Cloud Pub/Sub Subscription",
      "description": "A Pub/Sub subscription.",
      "labels": [{"key": "project_id", "valueType": "STRING"}, {"key": "subscription_id", "valueType": "STRING"}]},
+    {"type": "cloud_run_revision", "displayName": "Cloud Run Revision", "description": "A Cloud Run revision.",
+     "labels": [{"key": "project_id", "valueType": "STRING"}, {"key": "service_name", "valueType": "STRING"},
+                {"key": "revision_name", "valueType": "STRING"}, {"key": "location", "valueType": "STRING"},
+                {"key": "configuration_name", "valueType": "STRING"}]},
     {"type": "generic_node", "displayName": "Generic Node", "description": "A generic node in your system.",
      "labels": [{"key": "project_id", "valueType": "STRING"}, {"key": "location", "valueType": "STRING"},
                 {"key": "namespace", "valueType": "STRING"}, {"key": "node_id", "valueType": "STRING"}]},

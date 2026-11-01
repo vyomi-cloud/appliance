@@ -11,6 +11,8 @@ import ArrowBackIcon from "@mui/icons-material/esm/ArrowBack.js";
 import RefreshIcon from "@mui/icons-material/esm/Refresh.js";
 import DeleteIcon from "@mui/icons-material/esm/Delete.js";
 import EditIcon from "@mui/icons-material/esm/Edit.js";
+import AddIcon from "@mui/icons-material/esm/Add.js";
+import SyncIcon from "@mui/icons-material/esm/Sync.js";
 import ContentCopyIcon from "@mui/icons-material/esm/ContentCopy.js";
 import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
@@ -19,6 +21,7 @@ import DeleteDialog from "../../kit/DeleteDialog.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { ErrorAlert, fmtDate, NotSimulated, NotSimulatedContainer, PageHeader } from "../../kit/common.jsx";
 import { Link, hashHref } from "../../link.jsx";
+import { getProject } from "../../project.js";
 import * as api from "./api.js";
 
 const TABS = [["observability", "Observability"], ["revisions", "Revisions"], ["source", "Source"],
@@ -31,6 +34,7 @@ export default function ServiceDetail({ params, query }) {
   const svc = useAsync(() => api.getService(region, name), [region, name, tab]);
   const pol = useAsync(() => api.getIamPolicy(region, name).catch(() => null), [region, name, tab]);
   const [del, setDel] = useState(false);
+  const [cd, setCd] = useState(false);
   const reloadAll = () => { svc.reload(); pol.reload(); };
   const tabHref = (t) => hashHref("functions", "detail", region, name) + (t === "observability" ? "" : `?tab=${t}`);
 
@@ -38,6 +42,7 @@ export default function ServiceDetail({ params, query }) {
     <>
       <PageHeader title="Service details" back={<IconButton aria-label="Back to services" href="#/functions/services"><ArrowBackIcon /></IconButton>}
         actions={<>
+          <Button startIcon={<SyncIcon />} onClick={() => setCd(true)}>Set up continuous deployment</Button>
           <Button startIcon={<RefreshIcon />} onClick={reloadAll}>Refresh</Button>
           <Button startIcon={<DeleteIcon />} color="error" onClick={() => setDel(true)}>Delete</Button>
         </>} />
@@ -62,29 +67,198 @@ export default function ServiceDetail({ params, query }) {
         {TABS.map(([id, label]) => <Tab key={id} value={id} label={label} />)}
       </Tabs>
       {!svc.data && !svc.error && <Box sx={{ textAlign: "center", py: 4 }}><CircularProgress size={24} /></Box>}
-      {svc.data && tab === "observability" && <Observability />}
+      {svc.data && tab === "observability" && <Observability name={name} />}
       {svc.data && tab === "revisions" && <Revisions region={region} name={name} service={svc.data} reload={svc.reload} />}
       {svc.data && tab === "source" && <Source region={region} name={name} service={svc.data} reload={svc.reload} notify={notify} />}
       {svc.data && tab === "networking" && <Networking region={region} name={name} service={svc.data} reload={svc.reload} notify={notify} />}
       {svc.data && tab === "security" && <Security region={region} name={name} policy={pol} reload={reloadAll} notify={notify} />}
-      {svc.data && tab === "triggers" && <CapabilityContainer id="gcp.functions.services.triggers" title="Triggers" />}
+      {svc.data && tab === "triggers" && <Triggers region={region} name={name} />}
       {svc.data && tab === "yaml" && <Yaml region={region} name={name} service={svc.data} />}
       <DeleteDialog open={del} onClose={() => setDel(false)} title="Delete service?" confirmText={name}
         warning="All revisions are deleted as well. This can't be undone."
         onConfirm={async () => { await api.deleteService(region, name); notify.success(`Deleted service "${name}"`); location.hash = "/functions/services"; }}>
         <Typography variant="body2">Service <b>{name}</b> will be permanently deleted.</Typography>
       </DeleteDialog>
+      {cd && svc.data && <ContinuousDeploymentDialog region={region} name={name} service={svc.data} notify={notify}
+        onClose={() => setCd(false)} reload={svc.reload} />}
     </>
   );
 }
 
-// ── Observability ───────────────────────────────────────────────────────────────────────
-function Observability() {
+// ── Observability (real Cloud Monitoring + Cloud Logging reads, fed by actual invocations) ─
+function Observability({ name }) {
+  const metrics = useAsync(() => api.getObservabilityMetrics(name), [name]);
+  const logs = useAsync(() => api.listServiceLogs(name), [name]);
   return (
     <Stack spacing={2}>
-      <CapabilityContainer id="gcp.functions.services.observability" title="Metrics" />
-      <CapabilityContainer id="gcp.functions.services.observability" title="Logs" />
+      <CapabilityContainer id="gcp.functions.services.observability" title="Metrics">
+        {metrics.error ? <ErrorAlert error={metrics.error} title="Failed to load metrics" /> : (
+          <Stack direction="row" spacing={5} sx={{ flexWrap: "wrap", rowGap: 2 }}>
+            <Metric label="Request count" value={metrics.data?.requestCount} />
+            <Metric label="Request latencies" value={metrics.data?.latencyMs != null ? `${metrics.data.latencyMs.toFixed(1)} ms` : null} />
+            <Metric label="Container instance count" value={metrics.data?.instances} />
+          </Stack>
+        )}
+      </CapabilityContainer>
+      <CapabilityContainer id="gcp.functions.services.observability" title="Logs"
+        actions={<Button size="small" startIcon={<RefreshIcon />} onClick={logs.reload}>Refresh</Button>}>
+        {logs.error ? <ErrorAlert error={logs.error} title="Failed to load logs" /> : (
+          <ResourceTable resourceName="log entries" items={logs.data || []} rowKey={(l) => l.insertId} loading={logs.loading}
+            error={logs.error} onRetry={logs.reload} filterPlaceholder="Filter log entries"
+            columns={[
+              { id: "time", header: "Time", sortField: "timestamp", cell: (l) => fmtDate(l.timestamp) },
+              { id: "severity", header: "Severity", cell: (l) => l.severity },
+              { id: "message", header: "Message", cell: (l) => l.textPayload },
+            ]} />
+        )}
+      </CapabilityContainer>
     </Stack>
+  );
+}
+
+function Metric({ label, value }) {
+  return (
+    <Box>
+      <Typography variant="caption" color="text.secondary">{label}</Typography>
+      <Typography variant="h4">{value == null ? "—" : value}</Typography>
+    </Box>
+  );
+}
+
+// ── Triggers (Eventarc, Pub/Sub-sourced — really deliver, see gcp_run_core.invoke_service) ─
+function Triggers({ region, name }) {
+  const notify = useNotify();
+  const trigs = useAsync(() => api.listTriggers(region, name), [region, name]);
+  const [open, setOpen] = useState(false);
+  return (
+    <CapabilityContainer id="gcp.functions.services.triggers" title="Triggers"
+      actions={<Button size="small" startIcon={<AddIcon />} onClick={() => setOpen(true)}>Add trigger</Button>}>
+      <ResourceTable resourceName="triggers" items={trigs.data || []} rowKey={(t) => t.name} loading={trigs.loading}
+        error={trigs.error} onRetry={trigs.reload} filterPlaceholder="Filter triggers"
+        columns={[
+          { id: "name", header: "Name", cell: (t) => t.name.split("/").pop() },
+          { id: "type", header: "Type", cell: () => "Cloud Pub/Sub" },
+          { id: "event", header: "Event", cell: api.triggerEventLabel },
+          { id: "destination", header: "Destination", cell: api.triggerDestination },
+          { id: "actions", header: "Actions", cell: (t) => (
+            <Button size="small" color="error" onClick={async () => {
+              await api.deleteTrigger(region, name, t.name.split("/").pop()); notify.success("Trigger deleted"); trigs.reload();
+            }}>Delete</Button>
+          ) },
+        ]}
+      />
+      {open && <AddTriggerDialog region={region} name={name} notify={notify}
+        onClose={() => setOpen(false)} onCreated={() => { setOpen(false); trigs.reload(); }} />}
+    </CapabilityContainer>
+  );
+}
+
+function AddTriggerDialog({ region, name, notify, onClose, onCreated }) {
+  const [triggerId, setTriggerId] = useState("");
+  const [eventType, setEventType] = useState(api.TRIGGER_EVENT_TYPES[0][0]);
+  const [topic, setTopic] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const save = async () => {
+    setBusy(true); setError(null);
+    try {
+      await api.createTrigger(region, name, triggerId, eventType, `projects/${getProject()}/topics/${topic}`);
+      notify.success(`Trigger "${triggerId}" created`);
+      onCreated();
+    } catch (e) { setError(e); } finally { setBusy(false); }
+  };
+  return (
+    <Dialog open onClose={busy ? undefined : onClose} maxWidth="sm" fullWidth aria-label="Add trigger">
+      <DialogTitle>Add trigger</DialogTitle>
+      <DialogContent>
+        <Stack spacing={2} sx={{ pt: 1 }}>
+          <TextField label="Trigger name" required value={triggerId} onChange={(e) => setTriggerId(e.target.value.trim())} />
+          <FormControl>
+            <InputLabel id="evt-l">Event type</InputLabel>
+            <Select labelId="evt-l" label="Event type" value={eventType} onChange={(e) => setEventType(e.target.value)}>
+              {api.TRIGGER_EVENT_TYPES.map(([v, l]) => <MenuItem key={v} value={v}>{l}</MenuItem>)}
+            </Select>
+          </FormControl>
+          <TextField label="Pub/Sub topic ID" required value={topic} onChange={(e) => setTopic(e.target.value.trim())}
+            helperText="An existing topic in this project; publishing to it invokes this service." />
+          {error && <Alert severity="error">{error.message}</Alert>}
+        </Stack>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2 }}>
+        <Button onClick={onClose} disabled={busy}>Cancel</Button>
+        <Button variant="contained" disabled={busy || !triggerId || !topic} onClick={save}>{busy ? "Adding…" : "Add trigger"}</Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+// ── Continuous deployment ("Set up continuous deployment" header action) ──────────────────
+function ContinuousDeploymentDialog({ region, name, service, notify, onClose, reload }) {
+  const conn = api.repoConnection(service);
+  const [repository, setRepository] = useState(conn?.repository || "");
+  const [branch, setBranch] = useState(conn?.branch || "main");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const builds = useAsync(() => (conn ? api.listBuilds(region, name) : Promise.resolve([])), [region, name, conn?.repository]);
+
+  const connect = async () => {
+    setBusy(true); setError(null);
+    try { await api.connectRepo(region, name, repository, branch); notify.success(`Connected to "${repository}"`); reload(); }
+    catch (e) { setError(e); } finally { setBusy(false); }
+  };
+  const disconnect = async () => {
+    setBusy(true);
+    try { await api.disconnectRepo(region, name); notify.success("Repository disconnected"); reload(); }
+    finally { setBusy(false); }
+  };
+  const push = async () => {
+    setBusy(true); setError(null);
+    try {
+      const b = await api.triggerBuild(region, name, {});
+      notify[b.status === "SUCCESS" ? "success" : "error"](`Build ${b.id}: ${b.status}${b.revision ? ` → revision ${b.revision}` : ""}`);
+      builds.reload(); reload();
+    } catch (e) { setError(e); } finally { setBusy(false); }
+  };
+
+  return (
+    <Dialog open onClose={busy ? undefined : onClose} maxWidth="sm" fullWidth aria-label="Set up continuous deployment">
+      <DialogTitle>Continuous deployment</DialogTitle>
+      <DialogContent>
+        <CapabilityContainer id="gcp.functions.services.continuous_deployment" title="Repository">
+          <Stack spacing={2}>
+            {!conn ? (
+              <>
+                <TextField label="Repository" placeholder="owner/repo" required value={repository}
+                  onChange={(e) => setRepository(e.target.value)} />
+                <TextField label="Branch" required value={branch} onChange={(e) => setBranch(e.target.value)} />
+                <Box><Button variant="contained" disabled={busy || !repository.includes("/")} onClick={connect}>
+                  {busy ? "Connecting…" : "Connect"}
+                </Button></Box>
+              </>
+            ) : (
+              <>
+                <Typography variant="body2">Connected to <b>{conn.repository}</b> @ <b>{conn.branch}</b></Typography>
+                <Stack direction="row" spacing={1}>
+                  <Button variant="contained" startIcon={<SyncIcon />} disabled={busy} onClick={push}>
+                    {busy ? "Pushing…" : "Simulate push (trigger build)"}
+                  </Button>
+                  <Button color="error" disabled={busy} onClick={disconnect}>Disconnect</Button>
+                </Stack>
+                <Typography variant="subtitle2" sx={{ mt: 1 }}>Build history</Typography>
+                {(builds.data || []).length === 0 && <Typography variant="body2" color="text.secondary">No builds yet.</Typography>}
+                {(builds.data || []).map((b) => (
+                  <Typography key={b.id} variant="body2">
+                    {b.id} — {b.status}{b.revision ? ` → ${b.revision}` : ""}{b.logs ? ` (${b.logs})` : ""}
+                  </Typography>
+                ))}
+              </>
+            )}
+            {error && <Alert severity="error">{error.message}</Alert>}
+          </Stack>
+        </CapabilityContainer>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2 }}><Button onClick={onClose} disabled={busy}>Close</Button></DialogActions>
+    </Dialog>
   );
 }
 

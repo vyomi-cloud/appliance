@@ -157,6 +157,67 @@ export const DEFAULT_FUNCTION_SOURCE = {
   "Python 3.13": "def handler(event):\n    return {\"message\": \"hello from Cloud Run functions\"}\n",
 };
 
+// ── invoke (data plane: the mechanism Observability's metrics/logs are fed from) ──────────
+export const invokeService = (region, name, event) =>
+  restJson("POST", `${base(region)}/services/${e(name)}:invoke`, { body: event || {} });
+
+// ── observability (real Cloud Monitoring + Cloud Logging reads — never synthetic) ─────────
+const METRIC_COUNT = "run.googleapis.com/request_count";
+const METRIC_LATENCY = "run.googleapis.com/request_latencies";
+const METRIC_INSTANCES = "run.googleapis.com/container/instance_count";
+async function metricLatestPoint(metricType, name) {
+  const filter = `metric.type="${metricType}" AND resource.labels.service_name="${name}"`;
+  const r = await restJson("GET", `/v3/projects/${e(getProject())}/timeSeries`, {
+    query: { filter, "interval.startTime": "2000-01-01T00:00:00Z", "interval.endTime": new Date().toISOString() },
+  });
+  const pts = r.timeSeries?.[0]?.points || [];
+  const v = pts[pts.length - 1]?.value;
+  if (!v) return null;
+  return "int64Value" in v ? Number(v.int64Value) : v.doubleValue;
+}
+export async function getObservabilityMetrics(name) {
+  const [requestCount, latencyMs, instances] = await Promise.all([
+    metricLatestPoint(METRIC_COUNT, name), metricLatestPoint(METRIC_LATENCY, name), metricLatestPoint(METRIC_INSTANCES, name),
+  ]);
+  return { requestCount, latencyMs, instances };
+}
+export async function listServiceLogs(name) {
+  const r = await restJson("POST", "/v2/entries:list", {
+    body: { resourceNames: [`projects/${e(getProject())}`],
+            filter: `resource.type="cloud_run_revision" AND resource.labels.service_name="${name}"`,
+            orderBy: "timestamp desc", pageSize: 50 },
+  });
+  return r.entries || [];
+}
+
+// ── Eventarc triggers (nested under the service — the Triggers tab) ───────────────────────
+export const TRIGGER_EVENT_TYPES = [["google.cloud.pubsub.topic.v1.messagePublished", "Custom event (Pub/Sub message published)"]];
+export async function listTriggers(region, name) {
+  const r = await restJson("GET", `${base(region)}/services/${e(name)}/triggers`);
+  return r.triggers || [];
+}
+export const createTrigger = (region, name, triggerId, eventType, pubsubTopic) =>
+  restJson("POST", `${base(region)}/services/${e(name)}/triggers`, {
+    query: { triggerId }, body: { eventFilters: [{ attribute: "type", value: eventType }], pubsubTopic },
+  });
+export const deleteTrigger = (region, name, triggerId) => restJson("DELETE", `${base(region)}/services/${e(name)}/triggers/${e(triggerId)}`);
+export const triggerDestination = (t) => t.destination?.service || "";
+export const triggerEventLabel = (t) => TRIGGER_EVENT_TYPES.find(([v]) => v === t.eventType)?.[1] || t.eventType;
+
+// ── continuous deployment (connect a repo, "push" a build — nested under the service) ─────
+export const REPO_ANN = "vyomi.dev/repo-connection";
+export function repoConnection(svc) {
+  try { return svc?.annotations?.[REPO_ANN] ? JSON.parse(svc.annotations[REPO_ANN]) : null; } catch { return null; }
+}
+export const connectRepo = (region, name, repository, branch) =>
+  restJson("POST", `${base(region)}/services/${e(name)}:connectRepo`, { body: { repository, branch } });
+export const disconnectRepo = (region, name) => restJson("POST", `${base(region)}/services/${e(name)}:disconnectRepo`, { body: {} });
+export const triggerBuild = (region, name, overrides) => restJson("POST", `${base(region)}/services/${e(name)}/builds`, { body: overrides || {} });
+export async function listBuilds(region, name) {
+  const r = await restJson("GET", `${base(region)}/services/${e(name)}/builds`);
+  return r.builds || [];
+}
+
 export const validServiceName = (n) => {
   if (!n) return "Service name is required.";
   if (n.length > 49) return "Service names must be 49 characters or fewer.";
