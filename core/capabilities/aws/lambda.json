@@ -154,11 +154,14 @@
  "lambda.code-signing": {
   "title": "Code signing (deploy-time enforcement)",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "A code signing configuration's AllowedPublishers / validation policy is stored and returned for real (see lambda.code-signing-configs), but Vyomi never checks a deployment's signature against it — UpdateFunctionCode always succeeds regardless of signing policy."
+   "A function's attached code signing config really gates CreateFunction/UpdateFunctionCode: with the config's validation policy set to Enforce, a deploy is rejected with CodeVerificationFailedException unless it declares a SigningProfileVersionArn that is one of the config's AllowedPublishers; with Warn, an unsigned/untrusted deploy is still allowed, exactly like real Lambda. Vyomi has no AWS Signer integration or cryptographic signature pipeline, so 'signed' means the deploy call declares a trusted signing profile ARN — there is no real signature to forge or verify over the code bytes themselves."
+  ],
+  "tests": [
+   "tests/conformance/test_lambda_console_v4_core.py"
   ]
  },
  "lambda.code-signing-configs": {
@@ -168,7 +171,7 @@
    "offline": "limited"
   },
   "limitations": [
-   "The configuration resource (allowed signing profiles, validation policy) is stored and returned for real; it is never enforced against a deployment (see lambda.code-signing)."
+   "The configuration resource (allowed signing profiles, validation policy) is stored and returned for real, and is enforced against deployments of any function it is attached to (see lambda.code-signing). A code signing config cannot be deleted while still attached to a function — Vyomi rejects that with ResourceConflictException, matching real Lambda."
   ],
   "tests": [
    "tests/conformance/test_lambda_console_v4_core.py"

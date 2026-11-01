@@ -106,6 +106,17 @@ export const listCodeSigningConfigs = async () => (await restJson("GET", "/2015-
 export const createCodeSigningConfig = (body) => restJson("POST", "/2015-03-31/code-signing-configs", { body });
 export const deleteCodeSigningConfig = (id) => restJson("DELETE", `/2015-03-31/code-signing-configs/${enc(id)}`);
 
+// Function ↔ code signing config association + deploy-time enforcement (lambda.code-signing):
+// a function's attached config is checked against every CreateFunction/UpdateFunctionCode
+// deploy's SigningProfileVersionArn — see core/lambda_core.py::_check_code_signing.
+export async function getFunctionCodeSigningConfig(name) {
+  try { return await restJson("GET", `${F}/${enc(name)}/code-signing-config`); }
+  catch (e) { if (e.status === 404) return null; throw e; }
+}
+export const putFunctionCodeSigningConfig = (name, codeSigningConfigArn) =>
+  restJson("PUT", `${F}/${enc(name)}/code-signing-config`, { body: { CodeSigningConfigArn: codeSigningConfigArn } });
+export const deleteFunctionCodeSigningConfig = (name) => restJson("DELETE", `${F}/${enc(name)}/code-signing-config`);
+
 export const listNetworkConnectors = async () => (await restJson("GET", "/2015-03-31/network-connectors")).NetworkConnectors || [];
 export const createNetworkConnector = (body) => restJson("POST", "/2015-03-31/network-connectors", { body });
 export const deleteNetworkConnector = (name) => restJson("DELETE", `/2015-03-31/network-connectors/${enc(name)}`);

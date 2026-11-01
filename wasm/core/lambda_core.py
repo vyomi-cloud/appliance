@@ -28,7 +28,11 @@ Honest scope (declared in core/capabilities/aws/lambda.json, not hidden):
     API Gateway, CloudWatch Logs), but Vyomi never polls/subscribes the other service — no
     trigger ever actually invokes the function on its own. Only direct Invoke (Test tab /
     native API) runs code.
-  * Code signing configurations are not modeled (no cryptographic signing pipeline).
+  * Code signing is enforced at deploy time (see `_check_code_signing`): a function's
+    attached code signing config's Enforce/Warn policy really gates CreateFunction /
+    UpdateFunctionCode against a deploy's declared SigningProfileVersionArn. There is no
+    AWS Signer integration or cryptographic signature over the code bytes — "signed" means
+    the deploy call names one of the config's allowed signing profiles.
   * VPC / file-system config is shape-validated for real: SubnetIds/SecurityGroupIds must be
     given in pairs and look like real EC2 resource IDs, and an EFS access point's Arn and
     LocalMountPath must be well-formed — see `_validate_network_config`. Vyomi has no VPC engine
@@ -361,7 +365,12 @@ def _create_function(store, body):
     net_err = _validate_network_config(body.get("VpcConfig"), body.get("FileSystemConfigs"))
     if net_err:
         return _err(400, "InvalidParameterValueException", net_err)
-    source = _extract_source(body.get("Code") or {}, str(body.get("Handler", "index.handler")))
+    csc_arn = body.get("CodeSigningConfigArn")
+    if csc_arn and not _find_csc_by_arn(store, csc_arn):
+        return _err(404, "CodeSigningConfigNotFoundException",
+                    f"Cannot find a code signing configuration with the specified arn: {csc_arn}")
+    code = body.get("Code") or {}
+    source = _extract_source(code, str(body.get("Handler", "index.handler")))
     fn = {
         "name": name, "arn": _fn_arn(name), "runtime": str(body.get("Runtime", "python3.12")),
         "handler": str(body.get("Handler", "index.handler")), "source": source,
@@ -385,12 +394,16 @@ def _create_function(store, body):
         "function_url": None,
         "event_invoke_config": None,
         "policy_statements": {},
+        "code_signing_config_arn": csc_arn or None,
         "aliases": {},
         "versions": {}, "next_version": 1,
         "invocations": [],
         "throttles": 0, "async_delivery_failures": 0,
         "last_modified": _now_iso(), "revision_id": uuid.uuid4().hex,
     }
+    sig_err = _check_code_signing(store, fn, code)
+    if sig_err:
+        return sig_err
     _functions(store)[name] = fn
     _persist(store)
     return _json(201, _fn_view(fn))
@@ -401,6 +414,9 @@ def _update_function_code(store, name, body):
         fn = _require_fn(store, name)
     except _NotFound as e:
         return _err(404, "ResourceNotFoundException", str(e))
+    sig_err = _check_code_signing(store, fn, body)
+    if sig_err:
+        return sig_err
     source = _extract_source(body, fn.get("handler", ""))
     if source:
         fn["source"] = source
@@ -889,11 +905,84 @@ def _update_csc(store, cid, body):
 
 
 def _delete_csc(store, cid):
-    c = _code_signing_configs(store).pop(cid, None)
+    c = _code_signing_configs(store).get(cid)
     if not c:
         return _err(404, "ResourceNotFoundException", f"Code signing config not found: {cid}")
+    arn = f"arn:aws:lambda:{REGION}:{ACCOUNT_ID}:code-signing-config:{cid}"
+    attached = [f["name"] for f in _functions(store).values() if f.get("code_signing_config_arn") == arn]
+    if attached:
+        return _err(409, "ResourceConflictException",
+                    f"Cannot delete code signing config {cid} because it is attached to one or more "
+                    f"Lambda functions ({', '.join(attached)}).")
+    _code_signing_configs(store).pop(cid, None)
     _persist(store)
     return _json(200, {})
+
+
+def _find_csc_by_arn(store, arn):
+    """Resolve a CodeSigningConfigArn back to its stored record (the id is the ARN's last
+    segment — see _csc_view)."""
+    if not arn:
+        return None
+    return _code_signing_configs(store).get(str(arn).rsplit(":", 1)[-1])
+
+
+def _check_code_signing(store, fn, code):
+    """Enforce the code signing config attached to a function (lambda.code-signing): a
+    deployment is treated as signed only if it declares a SigningProfileVersionArn that is
+    one of the config's AllowedPublishers — Vyomi's stand-in for AWS Signer's cryptographic
+    signature embedded in a real deployment package. 'Enforce' blocks an unsigned or
+    untrusted deploy; 'Warn' never blocks, matching real Lambda."""
+    csc = _find_csc_by_arn(store, fn.get("code_signing_config_arn"))
+    if not csc:
+        return None
+    profile = str((code or {}).get("SigningProfileVersionArn") or "")
+    if profile and profile in (csc.get("signing_profiles") or []):
+        return None
+    if csc.get("policy", "Warn") == "Enforce":
+        return _err(400, "CodeVerificationFailedException",
+                    "The code signature failed one or more of the validation checks for signature "
+                    "mismatch or expiry. Deploy a code package signed by one of this function's code "
+                    "signing configuration's allowed signing profiles.")
+    return None
+
+
+def _put_function_code_signing_config(store, name, body):
+    try:
+        fn = _require_fn(store, name)
+    except _NotFound as e:
+        return _err(404, "ResourceNotFoundException", str(e))
+    csc_arn = str(body.get("CodeSigningConfigArn", ""))
+    if not _find_csc_by_arn(store, csc_arn):
+        return _err(404, "CodeSigningConfigNotFoundException",
+                    f"Cannot find a code signing configuration with the specified arn: {csc_arn}")
+    fn["code_signing_config_arn"] = csc_arn
+    fn["last_modified"] = _now_iso()
+    _persist(store)
+    return _json(200, {"CodeSigningConfigArn": csc_arn, "FunctionName": name})
+
+
+def _get_function_code_signing_config(store, name):
+    try:
+        fn = _require_fn(store, name)
+    except _NotFound as e:
+        return _err(404, "ResourceNotFoundException", str(e))
+    arn = fn.get("code_signing_config_arn")
+    if not arn:
+        return _err(404, "CodeSigningConfigNotFoundException",
+                    f"Cannot find a code signing configuration associated with function: {name}")
+    return _json(200, {"CodeSigningConfigArn": arn, "FunctionName": name})
+
+
+def _delete_function_code_signing_config(store, name):
+    try:
+        fn = _require_fn(store, name)
+    except _NotFound as e:
+        return _err(404, "ResourceNotFoundException", str(e))
+    fn["code_signing_config_arn"] = None
+    fn["last_modified"] = _now_iso()
+    _persist(store)
+    return LambdaResponse(status=204)
 
 
 # ── Network connectors (Vyomi-exclusive; bridge a MicroVM into a VPC) ──────────────────
@@ -1664,6 +1753,14 @@ def _dispatch_functions(store, method, tail, query, body, headers=None, msg_stor
             return _put_function_recursion_config(store, name, _parse(body))
         if method == "GET":
             return _get_function_recursion_config(store, name)
+
+    if sub == "code-signing-config" and not rest:
+        if method == "PUT":
+            return _put_function_code_signing_config(store, name, _parse(body))
+        if method == "GET":
+            return _get_function_code_signing_config(store, name)
+        if method == "DELETE":
+            return _delete_function_code_signing_config(store, name)
 
     if sub == "event-invoke-config" and not rest:
         if method in ("PUT", "POST"):
