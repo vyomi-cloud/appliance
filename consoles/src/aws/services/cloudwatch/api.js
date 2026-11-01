@@ -2,7 +2,7 @@
  * CloudWatch speaks JSON 1.0 under X-Amz-Target GraniteServiceVersion20100801.<Op>;
  * CloudWatch Logs speaks JSON 1.1 under Logs_20140328.<Op>. See core/cloudwatch_core.py
  * and core/logs_core.py for the engines both protocols are served from. */
-import { awsJson } from "../../../common/wire.js";
+import { awsJson, awsQuery, asList } from "../../../common/wire.js";
 
 export const REGION = "us-east-1";
 export const ACCOUNT_ID = "123456789012";
@@ -94,3 +94,28 @@ export const startQuery = (params) => LG("StartQuery", params).then((r) => r.que
 export const getQueryResults = (queryId) => LG("GetQueryResults", { queryId });
 export const stopQuery = (queryId) => LG("StopQuery", { queryId });
 export const describeQueries = (params = {}) => LG("DescribeQueries", params).then((r) => r.queries || []);
+
+// ── Logs: anomaly detection ──────────────────────────────────────────────────────────
+export const createLogAnomalyDetector = (logGroupArnList, opts = {}) => LG("CreateLogAnomalyDetector", { logGroupArnList, ...opts }).then((r) => r.anomalyDetectorArn);
+export const listLogAnomalyDetectors = (filterLogGroupArn) => LG("ListLogAnomalyDetectors", filterLogGroupArn ? { filterLogGroupArn } : {}).then((r) => r.anomalyDetectors || []);
+export const updateLogAnomalyDetector = (anomalyDetectorArn, opts) => LG("UpdateLogAnomalyDetector", { anomalyDetectorArn, ...opts });
+export const deleteLogAnomalyDetector = (anomalyDetectorArn) => LG("DeleteLogAnomalyDetector", { anomalyDetectorArn });
+export const listAnomalies = (params = {}) => LG("ListAnomalies", params).then((r) => r.anomalies || []);
+export const updateAnomaly = (anomalyId, suppressionType) => LG("UpdateAnomaly", { anomalyId, suppressionType });
+
+// ── Logs: data sources (vended logs onboarding) ─────────────────────────────────────────
+// A Vyomi "data source" models the one vended-log onboarding Vyomi can really wire end to
+// end: an EC2 VPC Flow Log whose destination is CloudWatch Logs — creating one really
+// creates the EC2 flow log resource (native ec2 Query API, same credential scope the real
+// EC2 console uses) AND the destination log group, through the real cross-service call a
+// real console onboarding wizard makes. See aws.cloudwatch.logs.data-sources.
+const EC2 = (action, params = {}) => awsQuery("ec2", action, params).then((r) => r[`${action}Response`] || {});
+export const describeVpcsForDataSource = () => EC2("DescribeVpcs", {}).then((r) => asList(r.vpcSet?.item).map((v) => ({ VpcId: v.vpcId, CidrBlock: v.cidrBlock })));
+export const describeFlowLogDataSources = () => EC2("DescribeFlowLogs", {}).then((r) => asList(r.flowLogSet?.item)
+  .filter((f) => f.logDestinationType === "cloud-watch-logs")
+  .map((f) => ({ FlowLogId: f.flowLogId, ResourceId: f.resourceId, TrafficType: f.trafficType, LogGroupName: f.logGroupName, Status: f.flowLogStatus })));
+export const createFlowLogDataSource = async (vpcId, logGroupName) => {
+  await createLogGroup(logGroupName).catch((e) => { if (e.code !== "ResourceAlreadyExistsException") throw e; });
+  return EC2("CreateFlowLogs", { ResourceType: "VPC", "ResourceId.1": vpcId, TrafficType: "ALL", LogDestinationType: "cloud-watch-logs", LogGroupName: logGroupName });
+};
+export const deleteFlowLogDataSource = (flowLogId) => EC2("DeleteFlowLogs", { "FlowLogId.1": flowLogId });

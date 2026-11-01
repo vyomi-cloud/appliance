@@ -189,6 +189,7 @@ from core import apigatewayv2_core as apigw2
 from core import ssm_core as ssm
 from core import stepfunctions_core as sfn
 from core import vpc_core as vpc
+from core import autoscaling_core as asg
 from core import kinesis_core as kinesis
 from core import cloudwatch_core as cw
 from core import azure_sql_core as az_sql
@@ -279,6 +280,7 @@ _SIGNING = {
     "sqs": "sqs", "sns": "sns", "iam": "iam", "rds": "rds", "s3": "s3",
     "rds-data": "rds-data",   # the Aurora HTTP SQL surface (async path)
     "events": "events", "lambda": "lambda", "ec2": "vpc", "kinesis": "kinesis", "monitoring": "cloudwatch", "logs": "logs", "states": "stepfunctions",
+    "autoscaling": "asg",
     "elasticloadbalancing": "elbv2",
     "cloudformation": "cloudformation",
     "ssm": "ssm", "scheduler": "scheduler",
@@ -389,6 +391,11 @@ _QUERY_ACTION = {
 }
 
 
+# Auto Scaling (Query protocol; signs as `autoscaling`).
+for _a in asg.OPERATIONS:
+    _QUERY_ACTION.setdefault(_a, "asg")
+
+
 # SQS legacy Query protocol (unsigned `Action=…` requests; signed ones route by scope).
 for _a in ("CreateQueue", "DeleteQueue", "ListQueues", "GetQueueUrl", "GetQueueAttributes",
            "SetQueueAttributes", "SendMessage", "SendMessageBatch", "ReceiveMessage", "DeleteMessage",
@@ -482,6 +489,9 @@ class AwsWireRouter:
         self.vpc = s.get("vpc") or s.get("vpc_net") or _types.SimpleNamespace()   # EC2/VPC network model
         self.vpc.cw_store = self.cw   # real StatusCheckFailed metrics (ec2.instances.monitoring / .alarms-metrics)
         self.cw.vpc_store = self.vpc  # real EC2 alarm actions (aws.cloudwatch.alarms.actions.ec2)
+        self.asg = s.get("asg") or asg.AutoScalingStore()   # EC2 Auto Scaling groups + scaling policies
+        self.asg.vpc_store = self.vpc   # scaling really launches/terminates real EC2 instances
+        self.cw.asg_store = self.asg    # real Auto Scaling alarm actions (aws.cloudwatch.alarms.actions.compute)
         self.logs = s.get("logs") or logs.LogsStore()         # CloudWatch Logs
         self.logs.lam_store, self.logs.kinesis_store = self.lam, self.kinesis   # real subscription-filter delivery
         self.cw.logs_store = self.logs            # real log-based Contributor Insights rules
@@ -903,6 +913,8 @@ class AwsWireRouter:
             r = rds.dispatch(self.rds, params, msg_store=self.msg, s3_store=self.s3)
         elif svc == "vpc":
             r = vpc.dispatch(self.vpc, params)
+        elif svc == "asg":
+            r = asg.dispatch(self.asg, params)
         elif svc == "elbv2":
             r = elbv2.dispatch(self.elbv2, params)
         elif svc == "cloudformation":

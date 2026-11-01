@@ -147,6 +147,7 @@ class CloudWatchStore:
         self.lam_store = None                     # the shared Lambda function registry (set by the wire router) — real Lambda alarm actions
         self.logs_store = None                    # the shared CloudWatch Logs store (set by the wire router) — real Contributor Insights log rules
         self.vpc_store = None                      # the shared EC2/VPC instance model (set by the wire router) — real EC2 alarm actions (stop/terminate/reboot)
+        self.asg_store = None                      # the shared Auto Scaling store (set by the wire router) — real Auto Scaling alarm actions
 
     def persist(self) -> None:
         """Flush hook (no-op in memory)."""
@@ -932,18 +933,21 @@ def _trigger_doc(rec: dict) -> dict:
 
 
 _EC2_AUTOMATE_ARN = re.compile(r"^arn:aws:automate:[^:]*:ec2:(stop|terminate|reboot|recover)$")
+_ASG_POLICY_ARN = re.compile(r"^arn:aws:autoscaling:[^:]*:[^:]*:scalingPolicy:")
 
 
 def _deliver_action(store, arn: str, rec: dict, new_state: str, reason: str, now: float) -> bool:
-    """Real delivery for the three ARN kinds Vyomi backs end-to-end: an SNS topic really
+    """Real delivery for the four ARN kinds Vyomi backs end-to-end: an SNS topic really
     receives the alarm notification (sns_core.publish_arn); a Lambda function is really
     invoked with the alarm event (lambda_core.invoke_by_arn); an EC2 action ARN
     (arn:aws:automate:<region>:ec2:stop|terminate|reboot) really changes the state of the
     instance named by the alarm's own InstanceId dimension (vpc_core.apply_alarm_action) —
-    see aws.cloudwatch.alarms.actions.ec2. Auto Scaling / SSM action ARNs aren't modeled —
-    see aws.cloudwatch.alarms.actions.compute — and fall through to False (recorded as a
-    failed action, same as a real misconfigured action); "recover" is also not modeled
-    (AWS's hardware-recovery automation has no equivalent here)."""
+    see aws.cloudwatch.alarms.actions.ec2; an Auto Scaling scaling-policy ARN really
+    executes that policy (autoscaling_core.execute_policy_arn), adjusting the group's
+    desired capacity and launching/terminating real EC2 instances — see
+    aws.cloudwatch.alarms.actions.compute. SSM action ARNs aren't modeled and fall through
+    to False (recorded as a failed action, same as a real misconfigured action); "recover"
+    is also not modeled (AWS's hardware-recovery automation has no equivalent here)."""
     arn = str(arn)
     m = _EC2_AUTOMATE_ARN.match(arn)
     if m:
@@ -954,6 +958,11 @@ def _deliver_action(store, arn: str, rec: dict, new_state: str, reason: str, now
             return False
         from core import vpc_core as _vpc_mod
         return bool(_vpc_mod.apply_alarm_action(store.vpc_store, instance_id, m.group(1)))
+    if _ASG_POLICY_ARN.match(arn):
+        if store.asg_store is None:
+            return False
+        from core import autoscaling_core as _asg_mod
+        return bool(_asg_mod.execute_policy_arn(store.asg_store, arn))
     if ":sns:" in arn:
         if store.msg_store is None:
             return False

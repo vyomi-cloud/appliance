@@ -156,8 +156,8 @@ def test_alarm_actions_really_deliver_to_sns_and_lambda():
     assert len(recv) == 1 and "act1" in recv[0]["Body"]
     assert len(r.lam._lambda_functions["cw-fn"]["invocations"]) == 1
 
-    # An EC2 action ARN whose alarm has no InstanceId dimension to act on (and an Auto
-    # Scaling ARN, which has no backing core at all) are both honestly recorded as failed.
+    # An EC2 action ARN whose alarm has no InstanceId dimension to act on is honestly
+    # recorded as failed.
     cbor(r, "PutMetricAlarm", AlarmName="act2", Namespace="App", MetricName="Err", Statistic="Sum", Period=60,
          EvaluationPeriods=1, Threshold=1.0, ComparisonOperator="GreaterThanThreshold",
          AlarmActions=["arn:aws:automate:us-east-1:ec2:stop"])
@@ -197,6 +197,103 @@ def test_alarm_ec2_action_really_changes_instance_state():
     assert "<name>running</name>" in vpc.dispatch(r.vpc, {"Action": "DescribeInstances", "InstanceId.1": iid}).body
 
 
+def test_alarm_autoscaling_action_really_scales_ec2_instances():
+    from core import autoscaling_core as asg
+
+    r = AwsWireRouter()
+    create = asg.dispatch(r.asg, {"Action": "CreateAutoScalingGroup", "AutoScalingGroupName": "web-asg",
+                                  "MinSize": "1", "MaxSize": "5", "DesiredCapacity": "1"})
+    assert create.status == 200
+    group = asg.dispatch(r.asg, {"Action": "DescribeAutoScalingGroups", "AutoScalingGroupNames.member.1": "web-asg"}).body
+    assert group.count("<InstanceId>") == 1   # DesiredCapacity=1 really launched one EC2 instance
+
+    policy = asg.dispatch(r.asg, {"Action": "PutScalingPolicy", "AutoScalingGroupName": "web-asg",
+                                  "PolicyName": "scale-out", "AdjustmentType": "ChangeInCapacity",
+                                  "ScalingAdjustment": "2"})
+    policy_arn = re.search(r"<PolicyARN>([^<]+)</PolicyARN>", policy.body).group(1)
+    assert ":scalingPolicy:" in policy_arn
+
+    cbor(r, "PutMetricAlarm", AlarmName="scaleout", Namespace="App", MetricName="Load", Statistic="Sum", Period=60,
+         EvaluationPeriods=1, Threshold=1.0, ComparisonOperator="GreaterThanThreshold",
+         AlarmActions=[policy_arn])
+    cbor(r, "PutMetricData", Namespace="App", MetricData=[{"MetricName": "Load", "Value": 5.0}])
+
+    hist = [h for h in cbor(r, "DescribeAlarmHistory", AlarmName="scaleout")[1]["AlarmHistoryItems"] if h["HistoryItemType"] == "Action"]
+    assert hist and "Successfully executed" in hist[0]["HistorySummary"]
+    group2 = asg.dispatch(r.asg, {"Action": "DescribeAutoScalingGroups", "AutoScalingGroupNames.member.1": "web-asg"}).body
+    assert group2.count("<InstanceId>") == 3   # 1 + ScalingAdjustment(2), clamped to MaxSize=5
+    assert "<DesiredCapacity>3</DesiredCapacity>" in group2
+    # The EC2 console sees exactly these instances too — same vpc_core instance model.
+    live = vpc_dispatch_describe(r)
+    assert live.count("<instanceId>") == 3
+
+    # ExactCapacity down to 1 really terminates the extra instances.
+    scale_in = asg.dispatch(r.asg, {"Action": "PutScalingPolicy", "AutoScalingGroupName": "web-asg",
+                                    "PolicyName": "scale-in", "AdjustmentType": "ExactCapacity", "ScalingAdjustment": "1"})
+    policy_in_arn = re.search(r"<PolicyARN>([^<]+)</PolicyARN>", scale_in.body).group(1)
+    assert asg.execute_policy_arn(r.asg, policy_in_arn) is True
+    group3 = asg.dispatch(r.asg, {"Action": "DescribeAutoScalingGroups", "AutoScalingGroupNames.member.1": "web-asg"}).body
+    assert group3.count("<InstanceId>") == 1
+
+
+def vpc_dispatch_describe(r):
+    from core import vpc_core as vpc
+    return vpc.dispatch(r.vpc, {"Action": "DescribeInstances"}).body
+
+
+def test_log_data_source_onboards_a_real_vpc_flow_log_into_a_real_log_group():
+    """The CloudWatch Logs 'Data sources' tab onboards a VPC Flow Log vended to CloudWatch
+    Logs: a real EC2 Flow Log resource (vpc_core) AND a real destination log group
+    (logs_core) both really exist afterward — the SAME two native calls the console
+    makes (see aws.cloudwatch.logs.data-sources)."""
+    from core import vpc_core as vpc
+    from core import logs_core as lg
+
+    r = AwsWireRouter()
+    vpc_body = vpc.dispatch(r.vpc, {"Action": "CreateVpc", "CidrBlock": "10.0.0.0/16"}).body
+    vpc_id = re.search(r"<vpcId>([^<]+)</vpcId>", vpc_body).group(1)
+
+    lg.dispatch(r.logs, "Logs_20140328.CreateLogGroup", {"logGroupName": "/vpc/flowlogs"})
+    fl_body = vpc.dispatch(r.vpc, {"Action": "CreateFlowLogs", "ResourceType": "VPC", "ResourceId.1": vpc_id,
+                                   "LogDestinationType": "cloud-watch-logs", "LogGroupName": "/vpc/flowlogs"}).body
+    assert "<unsuccessful></unsuccessful>" in fl_body
+    fl_id = re.search(r"<flowLogIdSet><item>([^<]+)</item>", fl_body).group(1)
+
+    desc = vpc.dispatch(r.vpc, {"Action": "DescribeFlowLogs"}).body
+    assert vpc_id in desc and "<logGroupName>/vpc/flowlogs</logGroupName>" in desc and "<logDestinationType>cloud-watch-logs</logDestinationType>" in desc
+    groups = lg.dispatch(r.logs, "Logs_20140328.DescribeLogGroups", {"logGroupNamePrefix": "/vpc/flowlogs"}).body["logGroups"]
+    assert groups and groups[0]["logGroupName"] == "/vpc/flowlogs"
+
+    vpc.dispatch(r.vpc, {"Action": "DeleteFlowLogs", "FlowLogId.1": fl_id})
+    assert fl_id not in vpc.dispatch(r.vpc, {"Action": "DescribeFlowLogs"}).body
+
+
+def test_automatic_dashboard_data_is_real_ec2_activity_not_synthetic():
+    """The CloudWatch 'Automatic dashboards' tab renders whatever AWS/* namespaces
+    ListMetrics already has real data for — this proves EC2's own activity (not a random
+    generator) is what shows up there (see aws.cloudwatch.dashboards.automatic)."""
+    from core import vpc_core as vpc
+
+    r = AwsWireRouter()
+    run_body = vpc.dispatch(r.vpc, {"Action": "RunInstances", "InstanceType": "t3.micro", "MaxCount": "1", "Monitoring.Enabled": "true"}).body
+    iid = re.search(r"<instanceId>([^<]+)</instanceId>", run_body).group(1)
+
+    assert cbor(r, "ListMetrics", Namespace="AWS/EC2")[1]["Metrics"] == []   # no activity yet -> nothing to show
+    vpc.dispatch(r.vpc, {"Action": "DescribeInstanceStatus", "InstanceId.1": iid})
+    metrics = cbor(r, "ListMetrics", Namespace="AWS/EC2")[1]["Metrics"]
+    names = {m["MetricName"] for m in metrics}
+    assert names == {"StatusCheckFailed", "StatusCheckFailed_Instance", "StatusCheckFailed_System"}
+    assert all(d == {"Name": "InstanceId", "Value": iid} for m in metrics for d in m["Dimensions"])
+
+    t = now()
+    data = cbor(r, "GetMetricData", MetricDataQueries=[
+        {"Id": "m1", "MetricStat": {"Metric": {"Namespace": "AWS/EC2", "MetricName": "StatusCheckFailed",
+                                                "Dimensions": [{"Name": "InstanceId", "Value": iid}]},
+                                    "Period": 300, "Stat": "Average"}, "ReturnData": True}],
+         StartTime=t - 600, EndTime=t + 60)[1]["MetricDataResults"][0]
+    assert data["Values"] == [0.0]   # the real (passing) status-check state, not a fabricated number
+
+
 def _band_alarm(name, metric):
     return {
         "AlarmName": name, "ComparisonOperator": "LessThanLowerOrGreaterThanUpperThreshold",
@@ -232,3 +329,20 @@ def test_anomaly_detector_trains_and_band_alarm_evaluates():
     cw.op_put_metric_data(st, {"Namespace": "App", "MetricData": [{"MetricName": "LatSpike", "Value": 10000.0, "Timestamp": cw.Ts(end0 - 30)}]})
     assert st.alarms["band_alarm"]["StateValue"] == "ALARM"
     assert "outside the expected band" in st.alarms["band_alarm"]["StateReason"]
+
+
+if __name__ == "__main__":
+    import sys
+    failures = []
+    for _name, _fn in sorted(globals().items()):
+        if _name.startswith("test_") and callable(_fn):
+            try:
+                _fn()
+                print(f"  ok  {_name}")
+            except Exception as e:
+                print(f"FAIL  {_name}: {e}")
+                failures.append(_name)
+    if failures:
+        print(f"RESULT: FAIL — {', '.join(failures)}")
+        sys.exit(1)
+    print("RESULT: PASS")

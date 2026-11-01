@@ -117,6 +117,7 @@ export default function CreateAlarm({ query }) {
   const [snsArn, setSnsArn] = useState("");
   const [lambdaArn, setLambdaArn] = useState("");
   const [ec2Action, setEc2Action] = useState("none");
+  const [asgPolicyArn, setAsgPolicyArn] = useState("");
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -158,9 +159,11 @@ export default function CreateAlarm({ query }) {
         const sns = actions.find((a) => a.includes(":sns:"));
         const lambda = actions.find((a) => a.includes(":lambda:"));
         const ec2 = actions.find((a) => a.includes(":automate:"));
+        const asgPolicy = actions.find((a) => a.includes(":autoscaling:"));
         if (sns) setSnsArn(sns);
         if (lambda) setLambdaArn(lambda);
         if (ec2) setEc2Action(ec2.split(":").pop());
+        if (asgPolicy) setAsgPolicyArn(asgPolicy);
         if (actions.length) setStateTrigger(rec.AlarmActions?.length ? "In alarm" : rec.OKActions?.length ? "OK" : "Insufficient data");
       }
       const t = await api.listTagsForResource(rec.AlarmArn);
@@ -186,7 +189,7 @@ export default function CreateAlarm({ query }) {
         await api.putCompositeAlarm({ AlarmName: name, AlarmDescription: description || undefined, AlarmRule: rule, Tags: tagList });
       } else {
         const ec2Arn = ec2Action !== "none" ? `arn:aws:automate:${api.REGION}:ec2:${ec2Action}` : "";
-        const actionArns = [snsArn, lambdaArn, ec2Arn].filter(Boolean);
+        const actionArns = [snsArn, lambdaArn, ec2Arn, asgPolicyArn].filter(Boolean);
         const common = {
           AlarmName: name, AlarmDescription: description || undefined,
           EvaluationPeriods: Number(evalPeriods), DatapointsToAlarm: Number(datapointsToAlarm), TreatMissingData: missingData,
@@ -328,7 +331,11 @@ export default function CreateAlarm({ query }) {
                     <Input value={lambdaArn} onChange={({ detail }) => setLambdaArn(detail.value)} placeholder="arn:aws:lambda:us-east-1:123456789012:function:my-function" ariaLabel="Lambda function ARN" />
                   </FormField>
                 </CapabilityContainer>
-                <CapabilityContainer id="aws.cloudwatch.alarms.actions.compute" title="Auto Scaling action" />
+                <CapabilityContainer id="aws.cloudwatch.alarms.actions.compute" title="Auto Scaling action">
+                  <FormField label="Auto Scaling scaling-policy ARN" description="Vyomi really executes this scaling policy when the alarm transitions — adjusting the group's desired capacity and launching/terminating real EC2 instances, through the same Auto Scaling engine the autoscaling API uses. Create the group and policy with the autoscaling API (no Auto Scaling console page in Vyomi yet), then paste the policy ARN here.">
+                    <Input value={asgPolicyArn} onChange={({ detail }) => setAsgPolicyArn(detail.value)} placeholder="arn:aws:autoscaling:us-east-1:123456789012:scalingPolicy:<id>:autoScalingGroupName/my-asg:policyName/my-policy" ariaLabel="Auto Scaling scaling-policy ARN" />
+                  </FormField>
+                </CapabilityContainer>
                 <CapabilityContainer id="aws.cloudwatch.alarms.actions.ec2" title="EC2 action">
                   <FormField label="Take the following action" description="Vyomi really changes the instance's state when the alarm transitions, as long as its metric carries an InstanceId dimension (pick a dimensioned AWS/EC2 metric above).">
                     <RadioGroup value={ec2Action} onChange={({ detail }) => setEc2Action(detail.value)} ariaLabel="EC2 action" items={[

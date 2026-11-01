@@ -19,7 +19,7 @@
   },
   "limitations": [
    "Static threshold alarms and anomaly-detection-band alarms (see aws.cloudwatch.anomaly-detection) are both evaluated live.",
-   "SNS, Lambda (aws.cloudwatch.alarms.actions.lambda) and EC2 (aws.cloudwatch.alarms.actions.ec2) alarm actions really fire; Auto Scaling actions are not offered — see aws.cloudwatch.alarms.actions.compute."
+   "SNS, Lambda (aws.cloudwatch.alarms.actions.lambda), EC2 (aws.cloudwatch.alarms.actions.ec2) and Auto Scaling (aws.cloudwatch.alarms.actions.compute) alarm actions all really fire."
   ],
   "tests": [
    "tests/conformance/test_cloudwatch_core.py"
@@ -50,11 +50,16 @@
  "aws.cloudwatch.alarms.actions.compute": {
   "title": "Auto Scaling alarm action",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Auto Scaling alarm actions are not offered — Vyomi has no Auto Scaling group to act on. EC2 alarm actions are real — see aws.cloudwatch.alarms.actions.ec2."
+   "A scaling-policy ARN (core/autoscaling_core.py) really executes when the alarm transitions: the group's desired capacity is adjusted (clamped to MinSize/MaxSize) and real EC2 instances are launched/terminated through the same vpc_core lifecycle RunInstances/TerminateInstances use.",
+   "Vyomi has no Auto Scaling console page yet — create the group and policy with the native autoscaling API (CLI/SDK/conformance test), then paste the policy ARN into the alarm's action field.",
+   "Launch configurations, lifecycle hooks, warm pools, mixed-instance policies, scheduled actions and target-tracking/step policies aren't modeled — only SimpleScaling (ChangeInCapacity / ExactCapacity / PercentChangeInCapacity)."
+  ],
+  "tests": [
+   "tests/conformance/test_cloudwatch_core.py"
   ]
  },
  "aws.cloudwatch.alarms.actions.ec2": {
@@ -113,21 +118,31 @@
  "aws.cloudwatch.dashboards.automatic": {
   "title": "Automatic dashboards",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Per-service automatic dashboards are an AWS-curated view over service metrics; Vyomi does not generate them."
+   "Really derived from whatever AWS/* namespaces ListMetrics already has real datapoints for (e.g. an EC2 instance's own StatusCheckFailed family, published from its real status-check state) — never a synthetic/random series, and empty until a resource actually publishes.",
+   "Only as many per-service dashboards as Vyomi has real service-to-CloudWatch metric integrations for (currently EC2) — AWS's full curated per-service widget catalog (CPU/network/request/throttle graphs for every service) isn't replicated."
+  ],
+  "tests": [
+   "tests/conformance/test_cloudwatch_core.py"
   ]
  },
  "aws.cloudwatch.metrics.multi-source-query": {
   "title": "Multi source query, cross-account Options and Source selection",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Vyomi simulates a single account/region, so cross-account/cross-region metric source selection has nothing to select."
+   "Multi source query is a real (partial) Metrics Insights SQL engine — SELECT AVG|SUM|MIN|MAX|COUNT(metric) FROM SCHEMA(\"Namespace\"[, dim]) [WHERE dim = 'v'] [GROUP BY dim] [ORDER BY func() ASC|DESC] [LIMIT n] — evaluated against the SAME ListMetrics/GetMetricData data the Browse tab shows, not a fabricated result. Joins, subqueries and the full Metrics Insights grammar aren't implemented.",
+   "Options really changes how the Graph section renders (widget type, statistic, period) — not a cosmetic no-op.",
+   "Source shows the real widget JSON the current graphed metrics/options resolve to.",
+   "Vyomi simulates a single account/region: the Source selection AWS shows once cross-account observability is linked has nothing to select here, same as a real AWS account that never enabled cross-account observability."
+  ],
+  "tests": [
+   "tests/conformance/test_cloudwatch_core.py"
   ]
  },
  "aws.cloudwatch.logs.groups": {
@@ -230,20 +245,32 @@
  "aws.cloudwatch.logs.data-sources": {
   "title": "Log management Data sources tab",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Vended log sources (data source onboarding across accounts/services) are not modeled."
+   "VPC Flow Logs vended to CloudWatch Logs is modeled: adding a data source really creates the EC2 Flow Log resource (core/vpc_core.py) and its destination log group (core/logs_core.py), the same two native calls a real console onboarding wizard makes.",
+   "Vyomi has no EC2 Auto Scaling, VPC, or ENI network namespace to generate real per-packet traffic, so the flow log resource exists and round-trips but delivers no log events — see core/vpc_core.py's CreateFlowLogs note (core/netsim/flowlogs.py renders real records for the offline appliance's network enforcer, not wired to this EC2 API).",
+   "Other vended source types AWS offers from this tab (Route 53 Resolver query logs, WAF logs, CloudFront, Config, Security Hub, …) aren't modeled."
+  ],
+  "tests": [
+   "tests/conformance/test_cloudwatch_core.py"
   ]
  },
  "aws.cloudwatch.logs.anomaly-detection": {
   "title": "Log group anomaly detection",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "full",
+   "offline": "full"
   },
-  "limitations": []
+  "limitations": [
+   "A detector really trains on the first 20 real log events a covered group ingests (via the same pattern-mining tokenizer the Patterns tab uses), then really flags any later event whose masked pattern wasn't in that trained baseline — not a canned or random finding.",
+   "Anomaly severity/priority is derived from the pattern text (error/exception/fail/fatal/panic -> HIGH, else MEDIUM); AWS's ML-scored priority isn't replicated.",
+   "Suppressing/acknowledging an anomaly (UpdateAnomaly) is real and persists; marking a pattern as an expected baseline retroactively is not modeled."
+  ],
+  "tests": [
+   "tests/conformance/test_logs_core.py"
+  ]
  },
  "aws.cloudwatch.logs.data-protection": {
   "title": "Log group data protection (sensitive data masking)",

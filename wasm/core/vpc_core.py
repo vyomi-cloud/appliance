@@ -1818,6 +1818,34 @@ def apply_alarm_action(store, instance_id: str, action: str) -> bool:
     return True
 
 
+def launch_for_autoscaling(store, az: str | None = None, instance_type: str | None = None,
+                            image_id: str | None = None, tags: dict | None = None) -> str:
+    """Called by autoscaling_core when a group scales out: launches one instance through
+    the SAME `_launch_one` path RunInstances uses, so a scaled group's instances are
+    indistinguishable from any other EC2 instance in the console (see
+    aws.cloudwatch.alarms.actions.compute)."""
+    m = _model(store)
+    params: dict = {}
+    if image_id:
+        params["ImageId"] = image_id
+    if instance_type:
+        params["InstanceType"] = instance_type
+    if az:
+        params["Placement.AvailabilityZone"] = az
+    inst = _launch_one(m, params, {"instance": dict(tags or {})}, 0)
+    return inst["id"]
+
+
+def terminate_for_autoscaling(store, instance_id: str) -> bool:
+    """Called by autoscaling_core when a group scales in: reuses the same termination
+    path TerminateInstances uses (see aws.cloudwatch.alarms.actions.compute)."""
+    try:
+        _instance_state_change(store, {"InstanceId.1": instance_id}, "terminate", "terminated")
+        return True
+    except VpcError:
+        return False
+
+
 def _modify_instance_attribute(store, params):
     m = _model(store)
     inst = _find_instance(m, params.get("InstanceId"))
