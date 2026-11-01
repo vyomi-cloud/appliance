@@ -17,12 +17,16 @@
     ['api', 'API reference', 'M16 18l6-6-6-6M8 6l-6 6 6 6']
   ];
   var css = '' +
-    '#vy-appbar{position:relative;z-index:70;height:30px;background:#0f121c;border-bottom:1px solid rgba(255,255,255,.10);display:flex;justify-content:center;font-family:Inter,system-ui,sans-serif}' +
+    '#vy-appbar{position:relative;z-index:70;height:44px;background:#0f121c;border-bottom:1px solid rgba(255,255,255,.10);display:flex;justify-content:center;font-family:Inter,system-ui,sans-serif}' +
     '#vy-appbar .vy-cloud{position:absolute;left:14px;top:0;height:30px;display:flex;align-items:center;gap:6px;font-size:12px;color:#9aa0b4}' +
     '#vy-appbar .vy-cloud b{color:#e4e4e7;font-weight:600}' +
-    '#vy-appbar .vy-notch{height:44px;margin-top:0;padding:0 34px 0 34px;display:flex;align-items:center;gap:2px;background:#0f121c;' +
-      'clip-path:polygon(0 0,100% 0,calc(100% - 22px) 100%,22px 100%);border-bottom:2px solid #4d8cf3;position:relative;top:0}' +
-    '#vy-appbar .vy-notch a{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 10px;border-radius:8px;color:#b4b8cc;font-size:12px;text-decoration:none;white-space:nowrap}' +
+    '#vy-appbar .vy-notch{height:44px;padding:0 38px;display:flex;align-items:center;gap:2px;position:relative;isolation:isolate}' +
+    '#vy-appbar .vy-notch::before{content:"";position:absolute;inset:0;z-index:-1;background:#0f121c;clip-path:polygon(0 0,100% 0,calc(100% - 22px) 100%,22px 100%);border-bottom:2px solid #4d8cf3}' +
+    '#vy-appbar .vy-notch .vy-sep{width:1px;height:20px;background:rgba(255,255,255,.18);margin:0 6px}' +
+    '#vy-appbar #disk-widget-slot{position:relative !important;top:auto !important;right:auto !important;left:auto !important;z-index:5 !important;display:inline-block}' +
+    '#vy-appbar #disk-widget-slot .disk-chip{height:28px;padding:0 10px;font-size:12px;border-radius:8px;border-width:1px}' +
+    '#vy-appbar #disk-widget-slot .disk-popover{top:calc(100% + 14px) !important;right:auto !important;left:50% !important;transform:translateX(-50%)}' +
+'#vy-appbar .vy-notch a{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 10px;border-radius:8px;color:#b4b8cc;font-size:12px;text-decoration:none;white-space:nowrap}' +
     '#vy-appbar .vy-notch a:hover{background:rgba(255,255,255,.08);color:#fff}' +
     '#vy-appbar .vy-notch a svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}' +
     '#vy-appbar .vy-notch a.on{background:rgba(77,140,243,.18);color:#fff}' +
@@ -43,6 +47,8 @@
     }).join('');
     bar.innerHTML = '<div class="vy-cloud">Cloud: <b>' + (NAMES[cloud] || cloud) + '</b></div><nav class="vy-notch" aria-label="Appliance">' + links + '</nav>';
     document.body.insertBefore(bar, document.body.firstChild);
+    var disk = document.getElementById('disk-widget-slot');          // the disk-usage chip lives in the drawer too
+    if (disk) { var nav = bar.querySelector('.vy-notch'); var sp = document.createElement('span'); sp.className = 'vy-sep'; nav.appendChild(sp); nav.appendChild(disk); }
     var m = document.createElement('div'); m.id = 'vy-modal';
     m.innerHTML = '<div class="box" role="dialog" aria-modal="true" aria-labelledby="vy-modal-t"><div class="hd"><span id="vy-modal-t"></span><button type="button" aria-label="Close">\u2715</button></div><iframe title="Appliance"></iframe></div>';
     document.body.appendChild(m);
