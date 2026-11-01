@@ -224,6 +224,7 @@ def _invoke(store, name, body, headers=None):
     if str(hdr.get("x-amz-log-type", "")).lower() == "tail":
         resp.headers["X-Amz-Log-Result"] = base64.b64encode("\n".join(logs).encode("utf-8")[-4096:]).decode("ascii")
     fn.setdefault("logs", []).extend(logs)
+    fn["invocation_count"] = fn.get("invocation_count", 0) + 1
     if str(hdr.get("x-amz-invocation-type", "")).lower() == "event":
         return LambdaResponse(status=202, body=b"", headers={})
     return resp
