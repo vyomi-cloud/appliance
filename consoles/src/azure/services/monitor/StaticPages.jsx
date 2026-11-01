@@ -1,10 +1,13 @@
-/* Monitor nav items that are genuine capability gaps for Vyomi (no backend models Container
- * insights, Azure Cache for Redis, Azure Local, SCOM, Grafana/Prometheus managed services,
- * pipelines, support ticketing, …): title + the honest CapabilityContainer panel, driven by
+/* Monitor nav items that are genuine capability gaps for Vyomi (Azure Local hybrid hardware,
+ * Azure Managed Grafana / SCOM managed instance — separate managed services Vyomi does not
+ * run, Microsoft support ticketing): title + the honest CapabilityContainer panel, driven by
  * core/capabilities/azure/monitor.json — never a hand-written disclaimer. Grouped here (one
  * tiny file per page would be noise), same pattern as consoles/src/azure/services/cost/StaticPages.jsx.
- * Data Collection Endpoints, Private Link Scopes and Diagnostic settings moved out to their own
- * real pages (DataCollectionEndpoints.jsx, PrivateLinkScopes.jsx, DiagnosticSettings.jsx). */
+ * Observability agents, Issues, Health models, Service health, Azure Monitor pipelines and the
+ * Container/Redis/Data Explorer Insights pages moved out to their own real pages
+ * (ObservabilityAgents.jsx, Issues.jsx, HealthModels.jsx, ServiceHealth.jsx, Pipelines.jsx,
+ * ResourceInsights.jsx) once each got a real backend. Data Collection Endpoints, Private Link
+ * Scopes and Diagnostic settings moved out earlier the same way. */
 import { useState } from "react";
 import { Tab, TabList } from "@fluentui/react-components";
 import MonitorShell from "./MonitorShell.jsx";
@@ -12,17 +15,9 @@ import { CapabilityContainer } from "../../kit/Capability.jsx";
 
 /** [route id, exact page title (after "Monitor | "), capability id]. */
 const GAPS = [
-  ["observabilityagents", "Observability agents (preview)", "azure.monitor.observability_agents"],
-  ["issues", "Issues", "azure.monitor.issues"],
-  ["healthmodels", "Health models", "azure.monitor.health_models"],
-  ["servicehealth", "Service health", "azure.monitor.service_health"],
-  ["insights-containers", "Containers", "azure.monitor.containers_insights"],
-  ["insights-redis", "Azure Cache for Redis", "azure.monitor.redis_insights"],
-  ["insights-dataexplorer", "Azure Data Explorer Clusters", "azure.monitor.data_explorer_insights"],
   ["insights-azurelocal", "Azure Local", "azure.monitor.azure_local_insights"],
   ["managedgrafana", "Azure Managed Grafana", "azure.monitor.managed_grafana"],
   ["scommanagedinstance", "Azure Monitor SCOM managed instance", "azure.monitor.scom_managed_instance"],
-  ["pipelines", "Azure Monitor pipelines", "azure.monitor.pipelines"],
   ["support", "New support request", "azure.monitor.new_support_request"],
 ];
 

@@ -27,6 +27,10 @@ const sub = (s = current) => `/subscriptions/${s}`;
 export const getSubscriptionInfo = (s = current) => restJson("GET", sub(s));
 export const listResourceGroups = async (s = current) =>
   (await restJson("GET", `${sub(s)}/resourcegroups`, { query: { "api-version": "2021-04-01" } })).value || [];
+/** Every resource provider namespace Vyomi models, each always "Registered" — there is no
+ *  real Azure platform behind this to go down, so "Available" here is a true statement about
+ *  this environment, not a fabricated incident feed. */
+export const listProviders = async (s = current) => (await restJson("GET", `${sub(s)}/providers`)).value || [];
 
 /** Resource id → {subscription, resourceGroup, provider, type, name}. */
 export function parseId(id = "") {

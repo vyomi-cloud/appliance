@@ -1069,6 +1069,20 @@ class AzureArm:
         if diag_marker is not None:
             return self._diagnostic_settings(method, sub, rg, namespace, chain, diag_marker, payload)
 
+        # Microsoft.Insights/metricDefinitions and metrics: the real Azure Monitor metrics
+        # data-plane pass-through, resource-scoped (same re-entrant "providers" shape as
+        # diagnostic settings) — generic over every catalog type.
+        metrics_marker = monitor_engine.find_metrics_marker(chain)
+        if metrics_marker is not None:
+            return self._metrics(method, sub, rg, namespace, chain, metrics_marker, query)
+
+        # Microsoft.Insights/dataCollectionRuleAssociations: a real ARM extension resource
+        # scoped to ANY other resource's own id (same shape as diagnostic settings above) —
+        # the "Observability agents (preview)" association behind VM insights data collection.
+        dcra_marker = monitor_engine.find_dcra_marker(chain)
+        if dcra_marker is not None:
+            return self._dcr_associations(method, sub, rg, namespace, chain, dcra_marker, payload)
+
         # Microsoft.Authorization/roleAssignments: a real ARM extension resource that can be
         # READ scoped to ANY other resource's own id (chain re-enters "providers", same shape
         # as locks/diagnostic settings above) — real Azure's IAM blade lists assignments at that
@@ -1250,6 +1264,7 @@ class AzureArm:
             resp = self._upsert(rid, key, full_type, leaf_name, top, payload, base, patch=(method == "PATCH"))
             if resp["status"] >= 300:          # validation error from a type hook (e.g. NIC IP allocation)
                 return resp
+            deployment_failed = False
             if full_type.lower() == "microsoft.resources/deployments":
                 # A bounded but REAL template evaluator (literal parameter/variable
                 # substitution only — no expression language, no dependsOn ordering, no
@@ -1261,6 +1276,7 @@ class AzureArm:
                 if errors:
                     rec["properties"]["provisioningState"] = "Failed"
                     rec["properties"]["error"] = {"code": "DeploymentFailed", "details": errors}
+                    deployment_failed = True
                 resp["body"] = _view(rec)
             if full_type.lower() == "microsoft.keyvault/vaults" and resp["status"] == 201:
                 # azure.keyvaults.access_configuration / azure.keyvaults.access_policies,
@@ -1298,8 +1314,12 @@ class AzureArm:
                 resp["headers"].update({"Azure-AsyncOperation": url, "Location": url, "Retry-After": "0"})
             # One ARM-native eventtypes row per mutation (exact resourceId + real
             # resourceGroupName) — supersedes the generic nano_events feed for this call site,
-            # so a resource group's Activity log can aggregate every resource inside it.
-            self._record_activity(rid, f"{full_type}/write", sub)
+            # so a resource group's Activity log can aggregate every resource inside it. A real
+            # template evaluation failure (deployment_failed above) is the one path in this
+            # generic engine that genuinely fails AFTER being accepted, so it is the one real
+            # status="Failed" row the Activity log ever carries — the signal Monitor's Issues
+            # and Health models pages read back (core/azure_monitor_core.py list_failed_activity).
+            self._record_activity(rid, f"{full_type}/write", sub, status="Failed" if deployment_failed else "Succeeded")
             return resp
         if method == "DELETE":
             blocked = self._lock_block(rid, full_type, for_delete=True)
@@ -1798,7 +1818,7 @@ class AzureArm:
             rec["properties"]["provisioningState"] = "Succeeded"
             rec["properties"].pop("error", None)
         rec["properties"]["timestamp"] = _now()
-        self._record_activity(rid, "Microsoft.Resources/deployments/redeploy/action", sub)
+        self._record_activity(rid, "Microsoft.Resources/deployments/redeploy/action", sub, status="Failed" if errors else "Succeeded")
         return _ok(_view(rec))
 
     def _diagnostic_settings(self, method, sub, rg, namespace, chain, marker, payload):
@@ -1826,6 +1846,46 @@ class AzureArm:
                 r = monitor_engine.remove_diagnostic_setting(self.state, scope_rid, name)
                 if r["status"] == 200:
                     _record_activity(activity_name, "Delete diagnostic setting", name)
+            else:
+                return _err(405, "MethodNotAllowed", f"{method} not allowed.")
+        return {"status": r["status"], "headers": dict(r["headers"]), "body": r["body"]}
+
+    def _metrics(self, method, sub, rg, namespace, chain, marker, query):
+        if method != "GET":
+            return _err(405, "MethodNotAllowed", "GET required.")
+        stc, snames = [namespace], []
+        for n, token in enumerate(chain[:marker]):
+            (stc if n % 2 == 0 else snames).append(token)
+        scope_rid = _canonical_id(sub, rg, stc, snames)
+        kind = chain[marker + 2].lower()
+        r = (monitor_engine.list_metric_definitions(self.state, scope_rid) if kind == "metricdefinitions"
+             else monitor_engine.get_metrics(self.state, scope_rid, query))
+        return {"status": r["status"], "headers": dict(r["headers"]), "body": r["body"]}
+
+    def _dcr_associations(self, method, sub, rg, namespace, chain, marker, payload):
+        stc, snames = [namespace], []
+        for n, token in enumerate(chain[:marker]):
+            (stc if n % 2 == 0 else snames).append(token)
+        scope_rid = _canonical_id(sub, rg, stc, snames)
+        rest = chain[marker + 3:]
+        activity_name = snames[-1] if snames else scope_rid
+        if not rest:
+            if method != "GET":
+                return _err(405, "MethodNotAllowed", "Collection supports GET only.")
+            r = monitor_engine.list_dcr_associations(self.state, scope_rid)
+        else:
+            name = rest[0]
+            if method == "GET":
+                r = monitor_engine.get_dcr_association(self.state, scope_rid, name)
+            elif method in ("PUT", "PATCH"):
+                r = monitor_engine.upsert_dcr_association(self.state, scope_rid, name, payload)
+                if r["status"] in (200, 201):
+                    _record_activity(activity_name, "Create data collection rule association" if r["status"] == 201
+                                      else "Update data collection rule association", name)
+            elif method == "DELETE":
+                r = monitor_engine.remove_dcr_association(self.state, scope_rid, name)
+                if r["status"] == 200:
+                    _record_activity(activity_name, "Delete data collection rule association", name)
             else:
                 return _err(405, "MethodNotAllowed", f"{method} not allowed.")
         return {"status": r["status"], "headers": dict(r["headers"]), "body": r["body"]}

@@ -573,6 +573,12 @@ def run() -> int:
     r = arm.handle("PUT", bad_tpl_dep, {"api-version": "2021-04-01"}, {"properties": {"mode": "Incremental", "template": bad_template}})
     _check("a template resource of an unsimulated type honestly fails the deployment",
            r["body"]["properties"]["provisioningState"] == "Failed" and r["body"]["properties"]["error"]["details"])
+    # A real failed deployment is the one path this generic engine logs status="Failed" on —
+    # the signal Monitor's Issues / Health models pages read back (never a fabricated incident).
+    dep_events_url = f"/subscriptions/{SUB}/providers/Microsoft.Insights/eventtypes/management/values"
+    r = arm.handle("GET", dep_events_url, {"api-version": "2015-04-01", "$filter": f"resourceUri eq '{bad_tpl_dep}'"})
+    _check("the failed deployment's own activity log row carries status=Failed",
+           any((e.get("status") or {}).get("value") == "Failed" for e in r["body"]["value"]))
 
     cancel_url = tpl_dep + "/cancel"
     r = arm.handle("POST", cancel_url, {"api-version": "2021-04-01"}, {})
@@ -733,6 +739,28 @@ def run() -> int:
     _check("premium registry delete 200", r["status"] == 200)
     r = arm.handle("DELETE", acr, {"api-version": AV_ACR})
     _check("registry delete 200", r["status"] == 200)
+
+    # Microsoft.Cache/redis and Microsoft.Kusto/clusters — two more generic-catalog resource
+    # types (core/azure_arm_data.py), added so Monitor's "Azure Cache for Redis" / "Azure Data
+    # Explorer Clusters" Insights pages have a real resource type to list; no dedicated engine,
+    # same alternation every other plain catalog type (vnet, nsg, dns, …) goes through.
+    redis = _p(RG, "Microsoft.Cache", "redis", "uicredis")
+    r = arm.handle("PUT", redis, {"api-version": "2024-03-01"}, {"location": "eastus"})
+    _check("redis cache put 200, real defaults filled in", r["status"] == 200
+           and r["body"]["properties"]["hostName"] == "uicredis.redis.cache.windows.net"
+           and r["body"]["sku"]["name"] == "Basic")
+    r = arm.handle("GET", f"/subscriptions/{SUB}/providers/Microsoft.Cache/redis", {"api-version": "2024-03-01"})
+    _check("redis cache subscription-scoped list has it", any(x["name"] == "uicredis" for x in r["body"]["value"]))
+
+    kusto = _p(RG, "Microsoft.Kusto", "clusters", "uickusto")
+    r = arm.handle("PUT", kusto, {"api-version": "2023-08-15"}, {"location": "eastus"})
+    _check("data explorer cluster put 200, real defaults filled in", r["status"] == 200
+           and r["body"]["properties"]["uri"] == "https://uickusto.kusto.windows.net"
+           and r["body"]["properties"]["state"] == "Running")
+    r = arm.handle("DELETE", kusto, {"api-version": "2023-08-15"})
+    _check("data explorer cluster delete 200 then 204", r["status"] == 200
+           and arm.handle("DELETE", kusto, {"api-version": "2023-08-15"})["status"] == 204)
+
     # 21. Network security groups + security rules — a nested, same-namespace child
     # resource (Microsoft.Network/networkSecurityGroups/{nsg}/securityRules/{rule}), the
     # real ARM shape every azure-mgmt-network client/CLI uses (NOT an extension resource
