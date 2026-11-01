@@ -65,6 +65,11 @@
   "category": "aws"
  },
  {
+  "name": "asg",
+  "label": "asg \u00b7 AutoScalingStore",
+  "category": "aws"
+ },
+ {
   "name": "sfn",
   "label": "sfn \u00b7 StepFunctionsStore",
   "category": "aws"

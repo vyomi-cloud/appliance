@@ -374,6 +374,34 @@ try {
   check("UI add app setting → native ARM config/appsettings", settings.properties?.SMOKE_SETTING === "1", JSON.stringify(settings.properties));
   await shot("21-environment-variables");
 
+  // ── CORS: a UI-configured allowed-origin list is ENFORCED on a native-wire invoke ─────
+  await page.goto(UI + `#/functionapp/${FARG}/${FA}/cors`);
+  await page.getByLabel("Allowed origin 1").fill("https://allowed.example");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await page.getByText(/CORS settings for/).waitFor({ timeout: 10000 });
+  const corsBlocked = JSON.parse((await armWeb("POST", `/resourceGroups/${FARG}/providers/Microsoft.Web/sites/${FA}/functions/httptrigger/invoke`,
+    { method: "GET", headers: { Origin: "https://evil.example" } })).text);
+  check("UI-configured CORS allow-list is ENFORCED on a native-wire invoke", corsBlocked.ok === false && corsBlocked.status === 403, JSON.stringify(corsBlocked));
+  const corsAllowed = JSON.parse((await armWeb("POST", `/resourceGroups/${FARG}/providers/Microsoft.Web/sites/${FA}/functions/httptrigger/invoke`,
+    { method: "GET", headers: { Origin: "https://allowed.example" } })).text);
+  check("...while the allowed origin still runs", corsAllowed.ok === true, JSON.stringify(corsAllowed));
+  await shot("21b-functionapp-cors");
+
+  // ── Identity: UI turns on a system-assigned managed identity → real principalId over ARM ──
+  await page.goto(UI + `#/functionapp/${FARG}/${FA}/identity`);
+  await page.getByRole("radio", { name: "On" }).click();
+  await page.getByText(/managed identity was turned on/).waitFor({ timeout: 10000 });
+  const identified = JSON.parse((await armWeb("GET", `/resourceGroups/${FARG}/providers/Microsoft.Web/sites/${FA}`)).text);
+  check("UI enables system-assigned identity → real principalId over native ARM", !!identified.identity?.principalId, JSON.stringify(identified.identity));
+
+  // ── Metrics/Logs: the invocations above are REAL recorded telemetry, read back over ARM ──
+  const invLog = JSON.parse((await armWeb("GET", `/resourceGroups/${FARG}/providers/Microsoft.Web/sites/${FA}/invocationlogs`)).text);
+  check("invoke telemetry recorded over native ARM (not synthetic)", (invLog.value || []).length >= 2, JSON.stringify(invLog.value?.length));
+  await page.goto(UI + `#/functionapp/${FARG}/${FA}/metrics`);
+  await page.getByText("Function Execution Count").waitFor({ timeout: 10000 });
+  check("Metrics panel renders the real recorded invocation count", await page.getByText("Function Execution Count").isVisible());
+  await shot("21c-functionapp-metrics");
+
   // ── App keys panel shows the real host master/default keys ────────────────────────────
   await page.goto(UI + `#/functionapp/${FARG}/${FA}/app-keys`);
   await page.getByRole("cell", { name: "default" }).first().waitFor({ timeout: 10000 });
