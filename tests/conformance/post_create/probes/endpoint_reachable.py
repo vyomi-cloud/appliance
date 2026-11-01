@@ -162,6 +162,30 @@ def azure_sql():
     check("no TDS" in json.dumps(acc) or "HTTP" in json.dumps(acc), "properties say the real access path (HTTP only, no TDS)", str(acc)[:200])
 
 
+def gcp_apigateway():
+    import base64
+    P, sfx = "vyomi-project", SFX
+    fn, api, cfg, gw = f"pcfn{sfx}", f"pcapi{sfx}", f"pccfg{sfx}", f"pcgw{sfx}"
+    jcall("POST", "/api/spaces/space-gcp-default/switch")
+    s, _ = jcall("POST", f"/api/gcp/cloudfunctions/v2/projects/{P}/locations/us-central1/functions",
+                 {"name": fn, "runtime": "python312", "entryPoint": "h", "code": 'def h(request):\n    return {"ok": 1}\n', "httpsTrigger": {}})
+    check(s < 300, "create backing function", str(s))
+    s, _ = jcall("POST", f"/v1/projects/{P}/locations/global/apis?apiId={api}", {"name": api})
+    doc = ("swagger: '2.0'\ninfo:\n  title: t\n  version: '1'\npaths:\n  /hello:\n    get:\n      operationId: hello\n"
+           f"      x-google-backend:\n        address: https://us-central1-{P}.cloudfunctions.net/{fn}\n      responses:\n        '200':\n          description: ok\n")
+    s, c = jcall("POST", f"/v1/projects/{P}/locations/global/apis/{api}/configs?apiConfigId={cfg}",
+                 {"openapiDocuments": [{"document": {"path": "openapi.yaml", "contents": base64.b64encode(doc.encode()).decode()}}]})
+    check(s < 300 and c.get("name", "").endswith(f"/apis/{api}/configs/{cfg}"), "native apiConfigs create is routed and keeps apiConfigId", f"{s} {str(c)[:200]}")
+    s, g = jcall("POST", f"/v1/projects/{P}/locations/us-central1/gateways?gatewayId={gw}",
+                 {"apiConfig": f"projects/{P}/locations/global/apis/{api}/configs/{cfg}"})
+    check(s < 300 and g.get("name", "").endswith(f"/gateways/{gw}"), "native gateway create keeps gatewayId as the name", f"{s} {str(g)[:200]}")
+    s, g = jcall("GET", f"/v1/projects/{P}/locations/us-central1/gateways/{gw}")
+    hn = g.get("defaultHostname", "")
+    check(s == 200 and bool(hn), "GET gateway by id", f"{s} {str(g)[:160]}")
+    st, body, _ = http("GET", "http://" + hn + "/hello")
+    check(st == 200 and b"ok" in body, "GET http://<shown defaultHostname>/hello invokes the gateway", f"{st} {body[:120]}")
+
+
 if __name__ == "__main__":
     globals()[WHAT]()
     sys.exit(1 if fails else 0)

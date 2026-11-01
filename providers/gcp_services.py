@@ -125,6 +125,8 @@ TARGETS = [
     "api_gcp_apigw_create_config",
     "api_gcp_apigw_list_gateways",
     "api_gcp_apigw_create_gateway",
+    "api_gcp_apigw_get_gateway",
+    "api_gcp_apigw_delete_gateway",
     "api_gcp_vpc_list_networks",
     "api_gcp_vpc_create_network",
     "api_gcp_vpc_get_network",
@@ -1654,6 +1656,8 @@ async def api_gcp_apigw_create_config(project: str, request: Request, location: 
     payload = payload if isinstance(payload, dict) else {}
     if api and not payload.get("api"):
         payload["api"] = api
+    if request is not None and request.query_params.get("apiConfigId"):
+        payload["apiConfigId"] = request.query_params["apiConfigId"]
     cfg = s._gcp_apigw_cfg_record(project, location, payload)
     gcp_apigw_state.setdefault("configs", {})[cfg["name"]] = cfg
     return s._gcp_apigateway_config_view(project, location, cfg)
@@ -1676,9 +1680,26 @@ async def api_gcp_apigw_create_gateway(project: str, request: Request, location:
     payload = payload if isinstance(payload, dict) else {}
     if api and not payload.get("apiConfig"):
         payload["apiConfig"] = api
+    if request is not None and request.query_params.get("gatewayId"):
+        payload["gatewayId"] = request.query_params["gatewayId"]
     gw = s._gcp_apigw_gateway_record(project, location, payload)
     gcp_apigw_state.setdefault("gateways", {})[gw["name"]] = gw
     return s._gcp_apigateway_gateway_view(project, location, gw)
+
+
+def api_gcp_apigw_get_gateway(project: str, location: str, gateway: str):
+    s = _server()
+    gw = gcp_apigw_state.get("gateways", {}).get(gateway)
+    if not gw:
+        raise HTTPException(404, detail="Gateway not found")
+    return s._gcp_apigateway_gateway_view(_gcp_project_name(project), s._gcp_location_name(location, "global"), gw)
+
+
+def api_gcp_apigw_delete_gateway(project: str, location: str, gateway: str):
+    if gateway not in gcp_apigw_state.get("gateways", {}):
+        raise HTTPException(404, detail="Gateway not found")
+    del gcp_apigw_state["gateways"][gateway]
+    return {"done": True}
 
 
 def api_gcp_vpc_list_networks(project: str):

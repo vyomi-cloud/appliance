@@ -15118,9 +15118,31 @@ def _gcp_apigw_api_record(project: str, location: str, payload: dict[str, Any]) 
     }
 
 
+def _gcp_apigw_openapi_routes(docs) -> list:
+    """Routes [{method, path, backend}] of a native API config's openapiDocuments (base64 contents)."""
+    import base64
+    from core import gcp_console_tabs as _T
+    out = []
+    for d in docs if isinstance(docs, list) else []:
+        try:
+            raw = ((d or {}).get("document") or {}).get("contents") or ""
+            doc = _T.parse_openapi(base64.b64decode(raw).decode("utf-8") if raw else "")
+            default = (doc.get("x-google-backend") or {}).get("address", "")
+            for path, ops in (doc.get("paths") or {}).items():
+                for method, op in (ops or {}).items():
+                    if method.lower() in ("get", "put", "post", "delete", "patch", "options", "head"):
+                        out.append({"method": method.upper(), "path": path,
+                                    "backend": ((op or {}).get("x-google-backend") or {}).get("address") or default})
+        except Exception:
+            continue
+    return out
+
+
 def _gcp_apigw_cfg_record(project: str, location: str, payload: dict[str, Any]) -> dict:
-    name = str(payload.get("name") or payload.get("apiConfigId") or payload.get("path_part") or payload.get("pathPart") or payload.get("method") or "api-config")
+    name = str(payload.get("apiConfigId") or payload.get("name") or payload.get("path_part") or payload.get("pathPart") or payload.get("method") or "api-config")
+    name = name.rstrip("/").split("/")[-1]
     return {
+        "routes": _gcp_apigw_openapi_routes(payload.get("openapiDocuments")),
         "name": name,
         "project": project,
         "location": location,
@@ -15142,7 +15164,8 @@ def _gcp_apigw_cfg_record(project: str, location: str, payload: dict[str, Any]) 
 
 
 def _gcp_apigw_gateway_record(project: str, location: str, payload: dict[str, Any]) -> dict:
-    name = str(payload.get("name") or payload.get("gatewayId") or payload.get("stage_name") or payload.get("stageName") or payload.get("apiConfig") or "gateway")
+    name = str(payload.get("gatewayId") or payload.get("name") or payload.get("stage_name") or payload.get("stageName") or payload.get("apiConfig") or "gateway")
+    name = name.rstrip("/").split("/")[-1]       # real API: a bare gatewayId (a full resource name is tolerated)
     return {
         "name": name,
         "project": project,
@@ -15174,11 +15197,36 @@ def _gcp_apigw_match_config(api: str, path: str, method: str) -> dict | None:
     cands = [c for c in gcp_apigw_state.get("configs", {}).values()
              if isinstance(c, dict) and (not api or str(c.get("api") or "") == api)]
     for c in cands:
+        for r in c.get("routes") or []:
+            if "/" + str(r.get("path") or "").strip("/") == want and str(r.get("method") or "").upper() in ("", "ANY", method):
+                return {"integration_type": "http", "integration_uri": r.get("backend") or "", "status_code": 200}
+    for c in cands:
         pp = "/" + str(c.get("path_part") or "").strip("/")
         hm = str(c.get("http_method") or "").upper()
         if (pp == want or pp == "/") and hm in ("", "ANY", method):
             return c
     return cands[0] if cands else None
+
+
+def _gcp_apigw_console_route(gateway: str, path: str, method: str):
+    """A route of a gateway deployed through the console's API-config tab (shared core/gcp_console_tabs state)."""
+    try:
+        from providers.gcp_tabs_console import tab_state
+        want, method = "/" + str(path or "").strip("/"), str(method or "").upper()
+        for key, gws in list(tab_state.items()):
+            if not (key.startswith("apigateway/") and key.endswith("/gateways")) or gateway not in gws:
+                continue
+            api = key.split("/")[1]
+            cfgs = tab_state.get(f"apigateway/{api}/configs", {})
+            for r in (cfgs.get(gws[gateway].get("apiConfig")) or {}).get("routes", []):
+                if "/" + str(r.get("path") or "").strip("/") == want and r["method"] in (method, "ANY"):
+                    return {"integration_type": "http", "integration_uri": r.get("backend", ""), "status_code": 200}
+            raise HTTPException(404, detail="No matching API config route")
+    except HTTPException:
+        raise
+    except Exception:
+        pass
+    return None
 
 
 async def api_gcp_apigw_invoke(gateway: str, path: str, request: Request):
@@ -15190,9 +15238,13 @@ async def api_gcp_apigw_invoke(gateway: str, path: str, request: Request):
             if isinstance(g, dict) and g.get("name") == gateway:
                 gw = g
                 break
+    cfg = None
     if not gw:
-        raise HTTPException(404, detail="Gateway not found")
-    cfg = _gcp_apigw_match_config(_gcp_apigw_resolve_api(gw), path, request.method)
+        cfg = _gcp_apigw_console_route(gateway, path, request.method)     # deployed from the console's API-config tab
+        if cfg is None:
+            raise HTTPException(404, detail="Gateway not found")
+    else:
+        cfg = _gcp_apigw_match_config(_gcp_apigw_resolve_api(gw), path, request.method)
     if not cfg:
         raise HTTPException(404, detail="No matching API config route")
     raw = await request.body()
@@ -17325,7 +17377,8 @@ def _gcp_apigateway_api_view(project: str, location: str, api: dict) -> dict:
 def _gcp_apigateway_config_view(project: str, location: str, cfg: dict) -> dict:
     name = str(cfg.get("name") or "")
     return {
-        "name": f"{_gcp_apigateway_root()}/projects/{project}/locations/{location}/apiConfigs/{name}",
+        "name": (f"{_gcp_apigateway_root()}/projects/{project}/locations/{location}/apis/{cfg['api']}/configs/{name}"
+                 if cfg.get("api") and cfg.get("routes") else f"{_gcp_apigateway_root()}/projects/{project}/locations/{location}/apiConfigs/{name}"),
         "displayName": cfg.get("displayName", name),
         "api": cfg.get("api", ""),
         "parent_id": cfg.get("parent_id", ""),
@@ -17356,7 +17409,10 @@ def _gcp_apigateway_gateway_view(project: str, location: str, gw: dict) -> dict:
         "description": gw.get("description", ""),
         "labels": gw.get("labels", {}),
         "state": gw.get("state", "ACTIVE"),
-        "defaultHostname": _gcp_public_host(),
+        # host + path prefix that really routes to this gateway on the simulator (the real
+        # <gw>-<hash>.<region>.gateway.dev is not resolvable here); invokeUrl is the full http URL
+        "defaultHostname": f"{_gcp_public_host()}/api/gcp/apigateway/invoke/{name}",
+        "invokeUrl": f"{_gcp_public_base()}/api/gcp/apigateway/invoke/{name}",
         "createTime": gw.get("createTime", _now()),
         "updateTime": gw.get("updateTime", _now()),
     }
