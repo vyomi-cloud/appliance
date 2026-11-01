@@ -295,11 +295,14 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
   .kv-card{background:#fff;border:1px solid var(--line);border-radius:8px;padding:16px 20px;margin-bottom:14px}
   .kv-grid{display:block}
   .kv-card > div:first-child:not(.kv-grid){font-weight:500;font-size:14px;margin-bottom:6px}
-  /* Overview: key-fact tiles above the Details card */
-  .ov-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:14px}
-  .ov-tile{background:#fff;border:1px solid var(--line);border-radius:8px;padding:14px 16px;min-width:0}
-  .ov-tile .ov-k{font-size:12px;color:var(--sub);margin-bottom:6px}
-  .ov-tile .ov-v{font-size:16px;font-weight:500;font-family:'Google Sans',sans-serif;color:var(--ink);overflow-wrap:anywhere}
+  /* Overview / Properties: every field is its own card */
+  .fld-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px;margin-bottom:14px}
+  .fld-grid.keys{grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
+  .fld-card{background:#fff;border:1px solid var(--line);border-radius:8px;padding:12px 16px;min-width:0}
+  .fld-card .fld-k{font-size:12px;color:var(--sub);margin-bottom:4px}
+  .fld-card .fld-v{font-size:14px;color:var(--ink);overflow-wrap:anywhere;line-height:1.35}
+  .fld-card.key{padding:14px 16px;background:var(--blue-bg)}
+  .fld-card.key .fld-v{font-size:16px;font-weight:500;font-family:'Google Sans',sans-serif}
   /* GCP classic detail list: label on the left, value on the right, one thin rule between rows. */
   .kv-grid > div{display:grid;grid-template-columns:minmax(140px,240px) minmax(0,1fr);gap:8px 24px;align-items:start;padding:11px 0;border-bottom:1px solid var(--line)}
   .kv-grid > div:first-child{padding-top:0}
@@ -1808,13 +1811,22 @@ function renderOverviewTab(host, svc, item, mode){
     const isState = /(state|status)$/i.test(c[0]);
     if (isState) facts.unshift([c[1], v, true]); else facts.push([c[1], v, false]);
   });
+  // Every field is its own small card. Overview leads with the key facts (larger) and lists the remaining
+  // fields as cards; Properties lists every field.
+  const card = (label, v, big) => el("div",{class:"fld-card" + (big ? " key" : "")},
+    el("div",{class:"fld-k"}, label), el("div",{class:"fld-v"}, v instanceof Node ? v : fmtVal(v)));
+  let shown = rows;
   if (mode !== "properties" && facts.length) {
-    const tiles = el("div",{class:"ov-tiles"});
-    facts.slice(0, 4).forEach(([label, v, isState]) => tiles.append(el("div",{class:"ov-tile"},
-      el("div",{class:"ov-k"}, label), el("div",{class:"ov-v"}, isState ? stateBadge(v) : fmtVal(v)))));
+    const key = facts.slice(0, 4);
+    const tiles = el("div",{class:"fld-grid keys"});
+    key.forEach(([label, v, isState]) => tiles.append(card(label, isState ? stateBadge(v) : v, true)));
     host.append(tiles);
+    const used = new Set(key.map(k => k[0]));
+    shown = rows.filter(r => !used.has(r[0]));
   }
-  host.append(kvCardOf(mode === "properties" ? null : "Details", rows));
+  const grid = el("div",{class:"fld-grid"});
+  shown.forEach(([label, v]) => grid.append(card(label, v, false)));
+  host.append(grid);
 }
 // Cloud Scheduler — key/value detail panes; `fields` = [[field,label],…] off the job view.
 function renderSchedKvTab(host, item, fields){
