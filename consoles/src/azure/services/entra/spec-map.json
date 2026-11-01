@@ -27,7 +27,7 @@
   "entra-user-settings": { "route": "#/entra/usersettings" },
   "entra-properties": { "route": "#/entra/properties" },
   "entra-security": { "route": "#/entra/security" },
-  "entra-sign-in-logs": { "route": "#/entra/signinlogs", "honest_page": true },
+  "entra-sign-in-logs": { "route": "#/entra/signinlogs", "live": "entra-sign-in-live" },
   "entra-audit-logs": { "route": "#/entra/auditlogs", "live": "entra-user-live" },
   "entra-provisioning-logs": { "route": "#/entra/provisioninglogs" },
   "entra-health": { "route": "#/entra/health" },
@@ -70,7 +70,7 @@
   "entra-user-groups": { "route": "#/entra/users/uic-entra-user/groups", "fixtures": ["entra-user"], "vars": { "resource-name": "uic-entra-user" } },
   "entra-user-applications": { "route": "#/entra/users/uic-entra-user/applications", "fixtures": ["entra-user"], "vars": { "resource-name": "uic-entra-user" } },
   "entra-user-licenses": { "route": "#/entra/users/uic-entra-user/licenses", "fixtures": ["entra-user"], "vars": { "resource-name": "uic-entra-user" } },
-  "entra-user-devices": { "route": "#/entra/users/uic-entra-user/devices", "fixtures": ["entra-user"], "vars": { "resource-name": "uic-entra-user" } },
+  "entra-user-devices": { "route": "#/entra/users/{live}/devices", "live": "entra-device-live" },
   "entra-user-azure-role-assignments": { "route": "#/entra/users/uic-entra-user/azureroleassignments", "fixtures": ["entra-user"], "vars": { "resource-name": "uic-entra-user" } },
   "entra-user-authentication-methods": { "route": "#/entra/users/uic-entra-user/authenticationmethods", "fixtures": ["entra-user"], "vars": { "resource-name": "uic-entra-user" } }
 }

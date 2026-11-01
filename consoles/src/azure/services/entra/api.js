@@ -2,8 +2,11 @@
  *   Directory objects: Microsoft Graph  /v1.0/...            (core/azure_graph_core.py)
  *   Roles and administrators: Azure RBAC /providers/Microsoft.Authorization/... (core/azure_iam_core.py,
  *     the same checkAccess engine Azure RBAC uses — scope "/" is the tenant root).
+ *   Sign-in: POST /{tenant}/oauth2/v2.0/token — real Azure AD sends this to a different
+ *     host (login.microsoftonline.com) with no AWS-shaped signature either; form-encoded,
+ *     so it goes straight through fetch() rather than restJson's always-JSON body.
  * Neither carries an AWS signature (Azure/Graph send none); routing is by path shape alone. */
-import { restJson } from "../../../common/wire.js";
+import { restJson, WIRE_BASE, WireError } from "../../../common/wire.js";
 
 const graph = (method, path, opts) => restJson(method, `/v1.0${path}`, opts);
 const AUTH = "/providers/Microsoft.Authorization";
@@ -63,6 +66,26 @@ export const updateDirectorySettings = (body) => graph("PATCH", "/settings/direc
 export const listAuditLogs = async () => (await graph("GET", "/auditLogs/directoryAudits")).value || [];
 export const listSignInLogs = async () => (await graph("GET", "/auditLogs/signIns")).value || [];
 
+/** Client-credentials grant with a REAL client secret (the one addPassword returned) —
+ * the one authentication Vyomi can model without an interactive browser. Appends a real
+ * row to Sign-in logs (success or failure) rather than ever faking one. */
+export async function signInWithSecret(appId, clientSecret) {
+  const form = new URLSearchParams({ grant_type: "client_credentials", client_id: appId, client_secret: clientSecret, scope: "https://graph.microsoft.com/.default" });
+  const res = await fetch(`${WIRE_BASE}/${DEFAULT_TENANT_ID}/oauth2/v2.0/token`, {
+    method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: form.toString(),
+  });
+  const text = await res.text();
+  const data = text ? JSON.parse(text) : {};
+  if (!res.ok) throw new WireError(res.status, data.error, data.error_description, text);
+  return data;
+}
+
+// ── Devices (a user's "Devices" tab; Devices overview aggregates across all users) ───
+export const listDevices = async () => (await graph("GET", "/devices")).value || [];
+export const listRegisteredDevices = async (userId) => (await graph("GET", `/users/${encodeURIComponent(userId)}/registeredDevices`)).value || [];
+export const registerDevice = (userId, body) => graph("POST", `/users/${encodeURIComponent(userId)}/registeredDevices`, { body });
+export const deleteDevice = (id) => graph("DELETE", `/devices/${encodeURIComponent(id)}`);
+
 // ── Security defaults (Properties | "Manage security defaults" panel) ─────────────────
 export const getSecurityDefaults = () => graph("GET", "/policies/identitySecurityDefaultsEnforcementPolicy");
 export const updateSecurityDefaults = (body) => graph("PATCH", "/policies/identitySecurityDefaultsEnforcementPolicy", { body });
@@ -86,5 +109,6 @@ export const ELEVATE_ROLE_NAME = "User Access Administrator";
 
 // ── form helpers ──────────────────────────────────────────────────────────────────────
 export const DEFAULT_DOMAIN = "vyomilearn.onmicrosoft.com";
+export const DEFAULT_TENANT_ID = "00000000-0000-0000-0000-cloudlearn01";   // core/azure_graph_core.py's GraphStore.organization id
 export const genPassword = () => `Vy${Math.random().toString(36).slice(2, 8)}!${Math.random().toString(36).slice(2, 6)}A1`;
 export const fmtDateTime = (v) => (v ? new Date(v).toLocaleString() : "--");

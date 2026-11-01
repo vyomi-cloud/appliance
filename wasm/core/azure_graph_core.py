@@ -36,15 +36,33 @@ check runs, so it can never collide with ARM / Blob / Cosmos / Key Vault paths.
   GET/DELETE        /v1.0/directory/administrativeUnits/{id}
   GET/PATCH         /v1.0/organization/{id}                        tenant record (Properties page)
   GET               /v1.0/organization                             -> {"value": [the one tenant]}
+  GET/DELETE        /v1.0/devices/{id}
+  GET               /v1.0/devices                                  every registered device, any owner
+  GET/POST          /v1.0/users/{id}/registeredDevices             a user's own devices / register one
+                                                                     (Vyomi has no OS-level join client,
+                                                                     so this admin-facing POST stands in
+                                                                     for the real device-registration
+                                                                     service — the resulting object is a
+                                                                     real device/{id}, not stored config)
   GET               /v1.0/auditLogs/directoryAudits                real, appended on every mutation
-  GET               /v1.0/auditLogs/signIns                        honestly empty (no sign-in flow)
+  GET               /v1.0/auditLogs/signIns                        real: every /oauth2/v2.0/token call
+                                                                     below appends a row (service
+                                                                     principal sign-ins only — Vyomi has
+                                                                     no interactive browser sign-in flow)
+  POST              /{tenant}/oauth2/v2.0/token                    client_credentials grant: validates
+                                                                     the caller's real client secret
+                                                                     (core/azure_graph_core.py's own
+                                                                     store, set by addPassword/
+                                                                     removePassword) -> access_token or
+                                                                     invalid_client, never synthetic
   GET/PATCH         /v1.0/policies/identitySecurityDefaultsEnforcementPolicy
                                                                      stored/returned as set, not enforced
 
 Errors: Graph-shaped JSON {"error": {"code": ..., "message": ...}} with the matching HTTP
 status (400 Request_BadRequest, 403 Authorization_RequestDenied, 404 Request_ResourceNotFound,
 409 Request_Conflict). 403 is raised for security-group / application creation when the
-matching "User settings" toggle (directory_settings) disables it.
+matching "User settings" toggle (directory_settings) disables it. The OAuth2 token endpoint
+returns AAD's own shape instead: {"error": "invalid_client", "error_description": ...}.
 """
 from __future__ import annotations
 
@@ -104,6 +122,12 @@ class GraphStore:
                              "supportedServices": ["Email", "OfficeCommunicationsOnline"]},
         }
         self.administrative_units: dict[str, dict] = {}
+        self.devices: dict[str, dict] = {}
+        # keyId -> {"appId": ..., "secret": plaintext}. Separate from the application's own
+        # passwordCredentials (which only ever expose the 3-char "hint", matching real Graph)
+        # so the oauth2/v2.0/token endpoint can validate a real caller-supplied secret without
+        # ever returning it again. Removed on removePassword — a revoked secret stops signing in.
+        self.app_secrets: dict[str, dict] = {}
         self.organization: dict = {
             "id": DEFAULT_TENANT_ID,
             "displayName": "Default Directory",
@@ -153,6 +177,24 @@ class GraphStore:
             "result": result, "resultReason": "",
             "initiatedBy": {"user": {"displayName": "Vyomi Console", "userPrincipalName": "console@" + DEFAULT_DOMAIN}},
             "targetResources": [{"displayName": target, "type": category}],
+        })
+
+    def sign_in(self, app: dict | None, app_id: str, success: bool, error_code: int, failure_reason: str | None) -> None:
+        """Append a real "Service principal sign-ins" row — called only from the
+        oauth2/v2.0/token client_credentials grant below, so every entry here reflects an
+        actual client-secret check (never sample/random data)."""
+        self.sign_in_logs.insert(0, {
+            "id": _guid(), "createdDateTime": _now(),
+            "userDisplayName": None, "userPrincipalName": None,
+            "appDisplayName": (app or {}).get("displayName") or "Unknown application",
+            "appId": app_id,
+            "ipAddress": "127.0.0.1", "location": {"city": None, "state": None, "countryOrRegion": None},
+            "clientAppUsed": "Other clients",
+            "signInEventTypes": ["servicePrincipal"],
+            "isInteractive": False,
+            "conditionalAccessStatus": "notApplied",
+            "authenticationRequirement": "singleFactorAuthentication",
+            "status": {"errorCode": 0 if success else error_code, "failureReason": None if success else failure_reason, "additionalDetails": None},
         })
 
 
@@ -388,6 +430,8 @@ def _delete_application(store: GraphStore, oid: str) -> Response:
     for sid, sp in list(store.service_principals.items()):
         if sp.get("appId") == a["appId"]:
             store.service_principals.pop(sid, None)
+    for c in a.get("passwordCredentials", []):
+        store.app_secrets.pop(c["keyId"], None)
     store.audit("Delete application", "ApplicationManagement", a["displayName"])
     return Response(status=204)
 
@@ -405,6 +449,7 @@ def _add_password(store: GraphStore, oid: str, body: dict) -> Response:
         "hint": secret[:3],
     }
     a["passwordCredentials"].append(entry)
+    store.app_secrets[key_id] = {"appId": a["appId"], "secret": secret}
     store.audit("Add application password", "ApplicationManagement", a["displayName"])
     return _json(200, {**entry, "secretText": secret})
 
@@ -415,6 +460,7 @@ def _remove_password(store: GraphStore, oid: str, body: dict) -> Response:
         return _err(404, "Request_ResourceNotFound", f"Resource '{oid}' does not exist.")
     key_id = body.get("keyId")
     a["passwordCredentials"] = [c for c in a["passwordCredentials"] if c["keyId"] != key_id]
+    store.app_secrets.pop(key_id, None)   # revoked — oauth2/v2.0/token rejects it from now on
     return Response(status=204)
 
 
@@ -490,6 +536,68 @@ def _delete_au(store: GraphStore, auid: str) -> Response:
     return Response(status=204)
 
 
+# ── devices (Devices blade; a user's own "Devices" tab registers/lists them) ──
+# Real Entra ID devices self-register through an OS-level join client (Azure AD Join,
+# Hybrid Join, workplace join) or the AADLoginForWindows/AADSSHLoginForLinux VM
+# extension — Vyomi has no OS or VM client to drive that protocol. What IS reasonable to
+# model directly: Microsoft Graph's own device object (POST /devices is real, used by
+# sync/MDM agents) and its owner relationship, so a real device/{id} exists, is listed,
+# and is deletable — not stored config, an actual directory object other calls can see.
+def _device_view(d: dict) -> dict:
+    return {k: v for k, v in d.items() if not k.startswith("_")}
+
+
+def _create_device(store: GraphStore, uid: str, body: dict) -> Response:
+    owner = store.users.get(uid)
+    if not owner:
+        return _err(404, "Request_ResourceNotFound", f"Resource '{uid}' does not exist.")
+    name = body.get("displayName")
+    os_name = body.get("operatingSystem")
+    if not name or not os_name:
+        return _err(400, "Request_BadRequest", "displayName and operatingSystem are required.")
+    did = _guid()
+    now = _now()
+    device = {
+        "id": did, "deviceId": str(uuid.uuid4()),
+        "displayName": name, "operatingSystem": os_name,
+        "operatingSystemVersion": body.get("operatingSystemVersion") or "",
+        "trustType": body.get("trustType") or "AzureAd",
+        "profileType": "RegisteredDevice", "accountEnabled": True,
+        "isCompliant": bool(body.get("isCompliant", False)),
+        "isManaged": bool(body.get("isManaged", False)),
+        "registrationDateTime": now, "approximateLastSignInDateTime": now,
+        "registeredOwnerId": uid,
+    }
+    store.devices[did] = device
+    store.audit("Register device", "DeviceManagement", name)
+    return _json(201, _device_view(device))
+
+
+def _list_devices(store: GraphStore) -> Response:
+    return _collection([_device_view(d) for d in store.devices.values()])
+
+
+def _list_registered_devices(store: GraphStore, uid: str) -> Response:
+    if uid not in store.users:
+        return _err(404, "Request_ResourceNotFound", f"Resource '{uid}' does not exist.")
+    return _collection([_device_view(d) for d in store.devices.values() if d["registeredOwnerId"] == uid])
+
+
+def _get_device(store: GraphStore, did: str) -> Response:
+    d = store.devices.get(did)
+    if not d:
+        return _err(404, "Request_ResourceNotFound", f"Resource '{did}' does not exist.")
+    return _json(200, _device_view(d))
+
+
+def _delete_device(store: GraphStore, did: str) -> Response:
+    d = store.devices.pop(did, None)
+    if not d:
+        return _err(404, "Request_ResourceNotFound", f"Resource '{did}' does not exist.")
+    store.audit("Delete device", "DeviceManagement", d["displayName"])
+    return Response(status=204)
+
+
 # ── organization (tenant) ─────────────────────────────────────────────────────
 def _get_organization(store: GraphStore) -> Response:
     return _collection([store.organization])
@@ -535,7 +643,49 @@ def _list_audit_logs(store: GraphStore) -> Response:
 
 
 def _list_sign_in_logs(store: GraphStore) -> Response:
-    return _collection(store.sign_in_logs)   # honestly empty: Vyomi has no sign-in flow to log
+    return _collection(store.sign_in_logs)   # real rows, appended by _token() below
+
+
+# ── oauth2 token endpoint (POST /{tenant}/oauth2/v2.0/token) ─────────────────
+# The one piece of real authentication Vyomi can model without an interactive browser:
+# an app proving it holds a REAL client secret (the one addPassword returned) to get an
+# access token, the "service principal sign-in" telemetry real Entra ID also records for
+# this grant. Every outcome below — success, wrong secret, revoked secret, disabled
+# enterprise app, unknown client — both decides the HTTP response AND appends the sign-in
+# log row; nothing here is sample data layered on top of a stored flag.
+def _oauth_err(status: int, code: str, description: str) -> Response:
+    return _json(status, {"error": code, "error_description": description})
+
+
+def _token(store: GraphStore, method: str, body: bytes) -> Response:
+    if method != "POST":
+        return _err(405, "Request_UnsupportedQuery", method)
+    from urllib.parse import parse_qs
+    form = {k: v[0] for k, v in parse_qs((body or b"").decode("utf-8")).items()}
+    client_id = form.get("client_id", "")
+    if form.get("grant_type") != "client_credentials":
+        return _oauth_err(400, "unsupported_grant_type", "Vyomi only simulates the client_credentials grant.")
+    app = next((a for a in store.applications.values() if a["appId"] == client_id), None)
+    if not app:
+        store.sign_in(None, client_id, False, 700016, "Application not found in the directory.")
+        return _oauth_err(400, "invalid_client", f"AADSTS700016: Application with identifier '{client_id}' was not found in the directory.")
+    sp = next((s for s in store.service_principals.values() if s["appId"] == client_id), None)
+    if sp is not None and not sp.get("accountEnabled", True):
+        store.sign_in(app, client_id, False, 700016, "The enterprise application is disabled.")
+        return _oauth_err(400, "unauthorized_client", "AADSTS700016: The application is disabled.")
+    client_secret = form.get("client_secret", "")
+    live_key_ids = {c["keyId"] for c in app.get("passwordCredentials", [])}
+    valid = bool(client_secret) and any(
+        kid in live_key_ids and entry.get("secret") == client_secret
+        for kid, entry in store.app_secrets.items() if entry.get("appId") == client_id
+    )
+    if not valid:
+        store.sign_in(app, client_id, False, 7000215, "Invalid client secret is provided.")
+        return _oauth_err(401, "invalid_client", "AADSTS7000215: Invalid client secret is provided.")
+    store.sign_in(app, client_id, True, 0, None)
+    token = "vyomi." + uuid.uuid4().hex + uuid.uuid4().hex
+    return _json(200, {"token_type": "Bearer", "expires_in": 3599, "ext_expires_in": 3599,
+                        "access_token": token, "scope": form.get("scope", "")})
 
 
 # ── dispatch ────────────────────────────────────────────────────────────────
@@ -544,6 +694,12 @@ def dispatch(store: GraphStore, method: str, path: str,
              body: bytes = b"") -> Response:
     method = (method or "GET").upper()
     p = path.split("?", 1)[0]
+    # oauth2/v2.0/token carries no /v1.0 or /beta prefix (it's not a Graph path at all in
+    # real Azure — a different host, login.microsoftonline.com — but this relay routes by
+    # path shape alone), so it's checked before the Graph-version prefix is stripped below.
+    raw_segs = [s for s in p.split("/") if s != ""]
+    if raw_segs and raw_segs[-1] == "token" and "oauth2" in raw_segs:
+        return _token(store, method, body)
     if p.startswith("/v1.0"):
         p = p[len("/v1.0"):]
     elif p.startswith("/beta"):
@@ -572,6 +728,20 @@ def dispatch(store: GraphStore, method: str, path: str,
                 return _delete_user(store, uid)
         if len(segs) == 3 and segs[2] == "memberOf" and method == "GET":
             return _member_of(store, segs[1])
+        if len(segs) == 3 and segs[2] == "registeredDevices":
+            if method == "GET":
+                return _list_registered_devices(store, segs[1])
+            if method == "POST":
+                return _create_device(store, segs[1], payload)
+
+    if head == "devices":
+        if len(segs) == 1 and method == "GET":
+            return _list_devices(store)
+        if len(segs) == 2:
+            if method == "GET":
+                return _get_device(store, segs[1])
+            if method == "DELETE":
+                return _delete_device(store, segs[1])
 
     if head == "groups":
         if len(segs) == 1:

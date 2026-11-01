@@ -151,15 +151,27 @@ function CertificatesSecrets({ app, reload }) {
   const [desc, setDesc] = useState("");
   const [expires, setExpires] = useState("Recommended: 180 days (6 months)");
   const [justCreated, setJustCreated] = useState(null);
+  const [signInResult, setSignInResult] = useState(null);
   const DAYS = { "Recommended: 180 days (6 months)": 180, "90 days (3 months)": 90, "365 days (12 months)": 365, "545 days (18 months)": 545, "730 days (24 months)": 730 };
   const add = async () => {
     const end = new Date(Date.now() + (DAYS[expires] || 180) * 86400000).toISOString();
     const r = await api.addPassword(app.id, desc, end);
-    setJustCreated(r); setAdding(false); setDesc("");
+    setJustCreated(r); setAdding(false); setDesc(""); setSignInResult(null);
     notify.success("Client secret created.", "Certificates & secrets");
     reload();
   };
   const remove = async (keyId) => { await api.removePassword(app.id, keyId); notify.success("Client secret removed.", "Certificates & secrets"); reload(); };
+  // Exercises the real oauth2/v2.0/token client_credentials grant (core/azure_graph_core.py)
+  // with the secret's actual value — a genuine authentication, not a UI-only toast — and
+  // leaves a real row behind on the Sign-in logs page either way.
+  const testSignIn = async (secretText) => {
+    try {
+      await api.signInWithSecret(app.appId, secretText);
+      setSignInResult(`Sign-in succeeded — a real "Service principal sign-ins" row was added to Sign-in logs.`);
+    } catch (e) {
+      setSignInResult(`Sign-in failed (${e.code || e.message}).`);
+    }
+  };
   return (
     <>
       <div className="vy-panel-title">{`${app.displayName} | Certificates & secrets`}</div>
@@ -173,7 +185,13 @@ function CertificatesSecrets({ app, reload }) {
           <div className="vy-cmdbar" role="toolbar" aria-label="Client secrets commands">
             <ToolbarButton icon={<Add20Regular />} onClick={() => setAdding(true)}>New client secret</ToolbarButton>
           </div>
-          {justCreated && <p style={{ wordBreak: "break-all" }}>Value: <code>{justCreated.secretText}</code> — copy now, it will not be shown again.</p>}
+          {justCreated && (
+            <p style={{ wordBreak: "break-all" }}>
+              Value: <code>{justCreated.secretText}</code> — copy now, it will not be shown again.{" "}
+              <Button size="small" onClick={() => testSignIn(justCreated.secretText)}>Test sign-in</Button>
+            </p>
+          )}
+          {signInResult && <p>{signInResult}</p>}
           <Table size="small">
             <TableHeader><TableRow><TableHeaderCell>Description</TableHeaderCell><TableHeaderCell>Expires</TableHeaderCell><TableHeaderCell>Value</TableHeaderCell><TableHeaderCell>Secret ID</TableHeaderCell><TableHeaderCell /></TableRow></TableHeader>
             <TableBody>

@@ -69,6 +69,32 @@ async function liveRole(wire, uniq) {
   return name;
 }
 
+// Registers a real device (core/azure_graph_core.py's /v1.0/users/{id}/registeredDevices)
+// onto a brand-new, uniquely-named user — reusing the SAME unique name for both the user
+// (so the page's "{resource-name} | Devices" title still renders correctly, since that
+// resource-name resolves to this live check's own return value) and the device it owns
+// (so the device genuinely shows up in that user's Devices table, not just the title).
+async function liveDevice(wire, uniq) {
+  const name = `live-device-${uniq}`;
+  const u = await wire("POST", "/v1.0/users", { svc: null, body: { displayName: name, userPrincipalName: `${name}@${DOMAIN}`, passwordProfile: { password: "Vy3omi!2345AB", forceChangePasswordNextSignIn: false } } });
+  await wire("POST", `/v1.0/users/${u.id}/registeredDevices`, { svc: null, body: { displayName: name, operatingSystem: "Windows", operatingSystemVersion: "11" } });
+  return name;
+}
+
+// A real oauth2/v2.0/token client_credentials grant with a freshly-created app's real
+// secret — the "no statics" check for Sign-in logs: the app's name must show up in a
+// genuine Service principal sign-in row, not a sample one.
+async function liveSignIn(wire, uniq) {
+  const name = `live-signin-${uniq}`;
+  const app = await wire("POST", "/v1.0/applications", { svc: null, body: { displayName: name, signInAudience: "AzureADMyOrg" } });
+  const cred = await wire("POST", `/v1.0/applications/${app.id}/addPassword`, { svc: null, body: { passwordCredential: { displayName: "ci" } } });
+  await wire("POST", "/00000000-0000-0000-0000-cloudlearn01/oauth2/v2.0/token", {
+    svc: null, headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: `grant_type=client_credentials&client_id=${encodeURIComponent(app.appId)}&client_secret=${encodeURIComponent(cred.secretText)}`,
+  });
+  return name;
+}
+
 export default {
   "entra-user": ensureUser,
   "entra-group": ensureGroup,
@@ -79,4 +105,6 @@ export default {
   "entra-adminunit-live": liveAdminUnit,
   "entra-domain-live": liveDomain,
   "entra-role-live": liveRole,
+  "entra-device-live": liveDevice,
+  "entra-sign-in-live": liveSignIn,
 };

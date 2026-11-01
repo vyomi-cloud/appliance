@@ -116,11 +116,16 @@
  "azure.entra.sign_in_logs": {
   "title": "Sign-in logs",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Vyomi has no interactive sign-in flow to generate telemetry from; the page honestly shows no sign-ins rather than sample data."
+   "Service principal sign-ins are real: POST /{tenant}/oauth2/v2.0/token validates the caller's actual client secret (set by addPassword/removePassword on the app, core/azure_graph_core.py) and appends a success or failure row for that exact attempt — never sample data.",
+   "'User sign-ins (interactive)', 'User sign-ins (non-interactive)' and 'Managed identity sign-ins' stay honestly empty — Vyomi has no interactive browser sign-in flow and no managed-identity token endpoint to drive them.",
+   "IP address and location are not derived from a real network topology; every row shows the simulator's own loopback address."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_graph_core.py"
   ]
  },
  "azure.entra.security_defaults": {
@@ -139,13 +144,18 @@
   ]
  },
  "azure.entra.devices": {
-  "title": "Devices (MDM/Intune-registered device inventory)",
+  "title": "Devices (registration, inventory, a user's registered devices)",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Device registration (MDM/WIP/BitLocker) is a distinct subsystem Vyomi does not model; no devices are ever listed."
+   "Registration, listing and deletion of real device objects (GET/POST /v1.0/users/{id}/registeredDevices, GET/DELETE /v1.0/devices/{id}) is real and enforced — the Devices overview's alert counts and 'Download devices' export read this same live inventory, not stored config.",
+   "Vyomi has no OS-level join client (Azure AD Join, Hybrid Join, workplace join) or VM login extension, so a device is registered directly rather than by an end-user signing in from it; isCompliant/isManaged are set by the admin at registration time rather than evaluated by a real MDM/Intune policy engine.",
+   "'BitLocker keys' stays an honest not-simulated gap: recovery-key escrow needs real disk encryption on real hardware, which a software simulator cannot provide."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_graph_core.py"
   ]
  }
 }

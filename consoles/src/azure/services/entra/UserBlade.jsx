@@ -1,10 +1,16 @@
 /* A user's own resource blade — the Entra ID peer of StorageAccountBlade.jsx. Overview,
- * Groups and Assigned roles read the real directory; the remaining menu items are
- * reference-only in the spec (title captured, no further structure), so they render
- * honestly as just their title — there is nothing further to fake. */
+ * Groups, Assigned roles and Devices read the real directory; the remaining menu items
+ * are reference-only in the spec (title captured, no further structure), so they render
+ * honestly as just their title — there is nothing further to fake. Devices registers a
+ * real Microsoft Graph device object (core/azure_graph_core.py) — Vyomi has no OS-level
+ * join client, so registration is a direct admin action here rather than a device
+ * signing itself in, but the result is a real, listable, deletable directory object. */
 import { useState } from "react";
-import { Button, Link, Tab, TabList, ToolbarButton } from "@fluentui/react-components";
-import { ArrowClockwise20Regular, Delete20Regular } from "@fluentui/react-icons";
+import {
+  Button, Field, Input, Link, Select, Tab, TabList, ToolbarButton,
+  Table, TableBody, TableCell, TableHeader, TableHeaderCell, TableRow,
+} from "@fluentui/react-components";
+import { Add20Regular, ArrowClockwise20Regular, Delete16Regular, Delete20Regular } from "@fluentui/react-icons";
 import { useNotify } from "../../../common/notify.jsx";
 import { navigate } from "../../../common/router.js";
 import { useAsync } from "../../../common/useAsync.js";
@@ -44,6 +50,7 @@ export default function UserBlade({ params }) {
       overview: () => <Overview user={user} reload={reload} self={self} />,
       groups: () => <Groups user={user} />,
       assignedroles: () => <AssignedRoles user={user} />,
+      devices: () => <Devices user={user} />,
     }[panel];
     body = P ? P() : (
       <>
@@ -131,6 +138,76 @@ function AssignedRoles({ user }) {
       {!loading && !error && (mine.length
         ? <ul>{mine.map((a) => <li key={a.name}>{a.properties.roleDefinitionId}</li>)}</ul>
         : <p>{user.displayName} has no directory roles assigned. <Link href="#/entra/roles">Assign a role</Link></p>)}
+    </>
+  );
+}
+
+const OS_OPTIONS = ["Windows", "macOS", "Linux", "iOS", "Android"];
+
+function Devices({ user }) {
+  const notify = useNotify();
+  const { data, loading, error, reload } = useAsync(() => api.listRegisteredDevices(user.id), [user.id]);
+  const [adding, setAdding] = useState(false);
+  const [name, setName] = useState("");
+  const [os, setOs] = useState("Windows");
+  const register = async () => {
+    await api.registerDevice(user.id, { displayName: name, operatingSystem: os });
+    setAdding(false); setName("");
+    notify.success(`Registered ${name}.`, "Devices");
+    reload();
+  };
+  const remove = async (id, deviceName) => {
+    await api.deleteDevice(id);
+    notify.success(`Removed ${deviceName}.`, "Devices");
+    reload();
+  };
+  const devices = data || [];
+  return (
+    <>
+      <div className="vy-panel-title">{`${user.displayName} | Devices`}</div>
+      <div className="vy-cmdbar" role="toolbar" aria-label="Devices commands">
+        <ToolbarButton icon={<Add20Regular />} onClick={() => setAdding(true)}>Register device</ToolbarButton>
+        <ToolbarButton icon={<ArrowClockwise20Regular />} onClick={reload}>Refresh</ToolbarButton>
+      </div>
+      {loading && <Loading />}
+      {error && <ErrorBar error={error} />}
+      {!loading && !error && (devices.length ? (
+        <Table size="small">
+          <TableHeader><TableRow>
+            <TableHeaderCell>Name</TableHeaderCell><TableHeaderCell>OS</TableHeaderCell>
+            <TableHeaderCell>Join type</TableHeaderCell><TableHeaderCell>Compliant</TableHeaderCell>
+            <TableHeaderCell>Managed</TableHeaderCell><TableHeaderCell>Registered</TableHeaderCell><TableHeaderCell />
+          </TableRow></TableHeader>
+          <TableBody>
+            {devices.map((d) => (
+              <TableRow key={d.id}>
+                <TableCell>{d.displayName}</TableCell>
+                <TableCell>{d.operatingSystem}{d.operatingSystemVersion ? ` ${d.operatingSystemVersion}` : ""}</TableCell>
+                <TableCell>{d.trustType}</TableCell>
+                <TableCell>{d.isCompliant ? "Yes" : "No"}</TableCell>
+                <TableCell>{d.isManaged ? "Yes" : "No"}</TableCell>
+                <TableCell>{new Date(d.registrationDateTime).toLocaleDateString()}</TableCell>
+                <TableCell><Button appearance="subtle" icon={<Delete16Regular />} onClick={() => remove(d.id, d.displayName)} aria-label="Delete device" /></TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      ) : <p>{user.displayName} has no registered devices.</p>)}
+      {adding && (
+        <section className="vy-form-section">
+          <h3>Register a device</h3>
+          <Field label="Name"><Input value={name} onChange={(_, d) => setName(d.value)} /></Field>
+          <Field label="Operating system">
+            <Select value={os} onChange={(_, d) => setOs(d.value)}>
+              {OS_OPTIONS.map((o) => <option key={o}>{o}</option>)}
+            </Select>
+          </Field>
+          <div style={{ marginTop: 8 }}>
+            <Button appearance="primary" onClick={register} disabled={!name}>Register</Button>{" "}
+            <Button onClick={() => setAdding(false)}>Cancel</Button>
+          </div>
+        </section>
+      )}
     </>
   );
 }
