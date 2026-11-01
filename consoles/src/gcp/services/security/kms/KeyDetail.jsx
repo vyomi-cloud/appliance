@@ -148,7 +148,7 @@ function Overview({ loc, keyRing, k, keyData, reload }) {
               <IconButton size="small" aria-label="Edit rotation period" onClick={() => setEditRot(true)}><EditIcon fontSize="inherit" /></IconButton>
             </Stack>],
           ["Next rotation", fmtDate(keyData.nextRotationTime)],
-          ["Labels", ls.length ? <Stack direction="row" spacing={0.5} sx={{ flexWrap: "wrap", rowGap: 0.5 }}>{ls.map(([k2, v]) => <Chip key={k2} size="small" label={`${k2}: ${v}`} />)}</Stack> : "None",
+          ["Labels", ls.length ? <Stack useFlexGap direction="row" spacing={0.5} sx={{ flexWrap: "wrap", rowGap: 0.5 }}>{ls.map(([k2, v]) => <Chip key={k2} size="small" label={`${k2}: ${v}`} />)}</Stack> : "None",
             <IconButton key="e" size="small" aria-label="Edit labels" onClick={() => setEditLabels(true)}><EditIcon fontSize="inherit" /></IconButton>],
         ]} />
       </Section>

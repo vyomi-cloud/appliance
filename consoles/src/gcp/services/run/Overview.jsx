@@ -38,7 +38,7 @@ export default function Overview() {
           <Stack spacing={1.5}>
             <Typography variant="body2" color="text.secondary">Use an inline editor to create a function. Pick a language to get started.</Typography>
             <Typography variant="caption" color="text.secondary">Language</Typography>
-            <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", rowGap: 1 }}>
+            <Stack useFlexGap direction="row" spacing={1} sx={{ flexWrap: "wrap", rowGap: 1 }}>
               {api.RUNTIMES.map((r) => {
                 const lang = r.split(" ")[0].replace(".", "");
                 return <Button key={r} size="small" href={`#/run/create?source=function&runtime=${encodeURIComponent(r)}`}>{lang}</Button>;

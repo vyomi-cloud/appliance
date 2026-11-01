@@ -26,7 +26,7 @@ export default function Overview() {
   return (
     <>
       <PageHeader title="Overview" />
-      <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap" }}>
+      <Stack useFlexGap direction="row" spacing={2} sx={{ flexWrap: "wrap" }}>
         <Stat label="Topics" value={topics.data?.length} href="#/pubsub/topics" />
         <Stat label="Subscriptions" value={subs.data?.length} href="#/pubsub/subscriptions" />
         <Stat label="Snapshots" value={snaps.data?.length} href="#/pubsub/snapshots" />

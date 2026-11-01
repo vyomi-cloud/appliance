@@ -99,7 +99,7 @@ export default function CloudSqlStudio({ params }) {
         </CapabilityContainer>
         <Section title="Tables">
           {tables.data?.length ? (
-            <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
+            <Stack useFlexGap direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
               {tables.data.map((t) => <Button key={t} size="small" onClick={() => setSql(`SELECT * FROM ${t} LIMIT 50`)}>{t}</Button>)}
             </Stack>
           ) : <Typography variant="body2" color="text.secondary">No tables yet — run a CREATE TABLE statement.</Typography>}

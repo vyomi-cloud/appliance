@@ -69,7 +69,7 @@ export default function CreateRoute() {
         <TextField label="Priority" type="number" value={priority} onChange={(e) => setPriority(e.target.value)} sx={{ maxWidth: 200 }} />
 
         <Box>
-          <Stack direction="row" spacing={1} alignItems="center" sx={{ flexWrap: "wrap", mb: 1 }}>
+          <Stack useFlexGap direction="row" spacing={1} alignItems="center" sx={{ flexWrap: "wrap", mb: 1 }}>
             {tags.map((t, i) => <Chip key={i} size="small" label={t} onDelete={() => setTags(tags.filter((_, j) => j !== i))} />)}
           </Stack>
           <TextField size="small" label="Instance tags" value={tagDraft} onChange={(e) => setTagDraft(e.target.value)}

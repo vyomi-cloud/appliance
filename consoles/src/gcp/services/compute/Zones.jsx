@@ -32,7 +32,7 @@ export default function Zones() {
           {
             id: "instances", header: "Instances in use",
             cell: (z) => z._instances.length
-              ? <Stack direction="row" spacing={0.5} flexWrap="wrap">{z._instances.map((n) => <Chip key={n} size="small" label={n} />)}</Stack>
+              ? <Stack useFlexGap direction="row" spacing={0.5} flexWrap="wrap">{z._instances.map((n) => <Chip key={n} size="small" label={n} />)}</Stack>
               : <Typography variant="body2" color="text.secondary">None</Typography>,
           },
         ]}

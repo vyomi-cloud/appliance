@@ -5,7 +5,8 @@
  *  tabs_no_divider         a MUI tab strip with no line under it
  *  tabs_not_edge_to_edge   a page-level tab strip short of the content card's edges
  *  divider_not_edge        a page-level horizontal rule short of the content card's edges
- *  divider_inset_in_card   a horizontal rule inside a card short of that card's edges */
+ *  divider_inset_in_card   a horizontal rule inside a card short of that card's edges
+ *  wrap_row_indented       a wrapped row of a flex Stack that starts indented (use useFlexGap) */
 import { appendFileSync } from "node:fs";
 
 function probe() {
@@ -44,6 +45,23 @@ function probe() {
     if (t.closest(".MuiPaper-root")) continue;
     const box = line(t) ? t : t.parentElement, r = box.getBoundingClientRect();
     if (r.left - m.left > 1 || m.right - r.right > 1) out.push({ issue: "tabs_not_edge_to_edge", cols: tabs, left: Math.round(r.left - m.left), right: Math.round(m.right - r.right) });
+  }
+  // Wrapping rows: the first item on every row starts at the row's left edge, with a gap above it.
+  for (const st of main.querySelectorAll(".MuiStack-root")) {
+    if (getComputedStyle(st).flexWrap !== "wrap" || !visible(st)) continue;
+    const kids = [...st.children].filter(visible);
+    if (kids.length < 2) continue;
+    const rows = [];   // visual rows: items whose boxes overlap vertically (a centred row has mixed tops)
+    for (const k of kids.map((e) => [e, e.getBoundingClientRect()]).sort((x, y) => x[1].top - y[1].top || x[1].left - y[1].left)) {
+      const last = rows[rows.length - 1];
+      if (last && k[1].top < last.bottom - 1) { if (k[1].left < last.first.left) last.first = k[1]; last.bottom = Math.max(last.bottom, k[1].bottom); }
+      else rows.push({ first: k[1], bottom: k[1].bottom, el: k[0] });
+    }
+    if (rows.length < 2) continue;
+    const left = st.getBoundingClientRect().left + parseFloat(getComputedStyle(st).paddingLeft);
+    for (const r of rows.slice(1)) {
+      if (r.first.left - left > 1) out.push({ issue: "wrap_row_indented", cols: r.el.textContent.trim().slice(0, 30), left: Math.round(r.first.left - left) });
+    }
   }
   // Rules: <hr>/MuiDivider, plus any element drawing a lone top or bottom border (a hand-made rule).
   const seen = new Set();

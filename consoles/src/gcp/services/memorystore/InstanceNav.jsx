@@ -16,10 +16,10 @@ export const instanceHref = (location, id, section = "overview") => hashHref("me
 export default function InstanceNav({ location, id, active, actions }) {
   return (
     <Box sx={{ mb: 2 }}>
-      <Stack direction="row" alignItems="center" spacing={1.5} sx={{ minHeight: 48, flexWrap: "wrap", rowGap: 1 }}>
+      <Stack useFlexGap direction="row" alignItems="center" spacing={1.5} sx={{ minHeight: 48, flexWrap: "wrap", rowGap: 1 }}>
         <IconButton aria-label="Back to instances" href="#/memorystore"><ArrowBackIcon /></IconButton>
         <Typography variant="h1" component="h1">{id}</Typography>
-        {actions && <Stack direction="row" spacing={0.5} sx={{ flexWrap: "wrap" }}>{actions}</Stack>}
+        {actions && <Stack useFlexGap direction="row" spacing={0.5} sx={{ flexWrap: "wrap" }}>{actions}</Stack>}
       </Stack>
       <Stack direction="row" spacing={2.5} sx={{ borderBottom: 1, borderColor: "divider", mb: 2.5, mx: -3, px: 3, overflowX: "auto" }} aria-label="Instance sections">
         {SECTIONS.map(([sid, label]) => (

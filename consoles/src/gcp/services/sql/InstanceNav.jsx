@@ -17,10 +17,10 @@ export const instanceHref = (name, section = "overview") => hashHref("sql", "ins
 export default function InstanceNav({ name, active, actions }) {
   return (
     <Box sx={{ mb: 2 }}>
-      <Stack direction="row" alignItems="center" spacing={1.5} sx={{ minHeight: 48, flexWrap: "wrap", rowGap: 1 }}>
+      <Stack useFlexGap direction="row" alignItems="center" spacing={1.5} sx={{ minHeight: 48, flexWrap: "wrap", rowGap: 1 }}>
         <IconButton aria-label="Back to instances" href="#/sql"><ArrowBackIcon /></IconButton>
         <Typography variant="h1" component="h1">{name}</Typography>
-        {actions && <Stack direction="row" spacing={0.5} sx={{ flexWrap: "wrap" }}>{actions}</Stack>}
+        {actions && <Stack useFlexGap direction="row" spacing={0.5} sx={{ flexWrap: "wrap" }}>{actions}</Stack>}
       </Stack>
       <Stack direction="row" spacing={2.5} sx={{ borderBottom: 1, borderColor: "divider", mb: 2.5, mx: -3, px: 3, overflowX: "auto" }} aria-label="Instance sections">
         {SECTIONS.map(([id, label]) => (

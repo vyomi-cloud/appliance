@@ -50,7 +50,7 @@ export default function JobDetail({ params, query }) {
         <Tooltip title="Copy job name"><IconButton size="small" aria-label="Copy job name" onClick={() => navigator.clipboard?.writeText(name).catch(() => {})}><ContentCopyIcon fontSize="inherit" /></IconButton></Tooltip>
       </Stack>
       {job.error ? <ErrorAlert error={job.error} title="Failed to load job" /> : job.data && (
-        <Stack direction="row" spacing={4} sx={{ mb: 1, flexWrap: "wrap", rowGap: 1 }} aria-label="Job summary">
+        <Stack useFlexGap direction="row" spacing={4} sx={{ mb: 1, flexWrap: "wrap", rowGap: 1 }} aria-label="Job summary">
           <Box><Typography variant="caption" color="text.secondary">Region</Typography><Typography variant="body2">{region}</Typography></Box>
           <Box><Typography variant="caption" color="text.secondary">Created by</Typography><Typography variant="body2">{job.data.creator}</Typography></Box>
           <Box><Typography variant="caption" color="text.secondary">Labels</Typography><Typography variant="body2">{api.labelsText(job.data)}</Typography></Box>
@@ -157,7 +157,7 @@ function Observability({ region, name }) {
   return (
     <Stack spacing={2}>
       <CapabilityContainer id="gcp.run.jobs.observability" title="Metrics">
-        <Stack direction="row" spacing={4} sx={{ flexWrap: "wrap", rowGap: 1 }}>
+        <Stack useFlexGap direction="row" spacing={4} sx={{ flexWrap: "wrap", rowGap: 1 }}>
           <Box><Typography variant="caption" color="text.secondary">Executions</Typography><Typography variant="h3" sx={{ fontSize: 20 }}>{list.length}</Typography></Box>
           <Box><Typography variant="caption" color="text.secondary">Succeeded</Typography><Typography variant="h3" sx={{ fontSize: 20 }}>{succeeded}</Typography></Box>
           <Box><Typography variant="caption" color="text.secondary">Failed</Typography><Typography variant="h3" sx={{ fontSize: 20 }}>{failed}</Typography></Box>

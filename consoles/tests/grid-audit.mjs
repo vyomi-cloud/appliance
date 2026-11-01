@@ -22,7 +22,7 @@ for (const cloud of process.argv.slice(2)) {
     for (const m of readFileSync(f, "utf8").matchAll(/pattern:\s*"(\/[^"]+)"/g)) if (!m[1].includes(":")) routes.add(m[1]);
     for (const m of readFileSync(f, "utf8").matchAll(/href:\s*"#(\/[^"?]+)"/g)) if (!m[1].includes(":") && !m[1].includes("$")) routes.add(m[1]);
   }
-  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const ctx = await browser.newContext({ viewport: { width: Number(process.env.GRID_AUDIT_WIDTH || 1440), height: 900 } });
   const page = await ctx.newPage();
   let views = 0;
   for (const r of [...routes].sort()) {

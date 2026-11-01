@@ -176,7 +176,7 @@ export default function CreateInstance() {
       <Step n={2} title="OS and storage">
         <Typography variant="subtitle1" sx={{ fontWeight: 500 }}>Operating system and storage</Typography>
         <Sub title="Boot disk">
-          <Stack direction="row" spacing={2} flexWrap="wrap">
+          <Stack useFlexGap direction="row" spacing={2} flexWrap="wrap">
             <FormControl sx={{ minWidth: 220 }}>
               <InputLabel id="os-l">Operating system</InputLabel>
               <Select labelId="os-l" label="Operating system" value={osIdx} onChange={(e) => setOsIdx(Number(e.target.value))}>

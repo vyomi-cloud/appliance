@@ -66,6 +66,9 @@ export function makeTheme(mode = "light") {
       },
       MuiTextField: { defaultProps: { size: "small" } },
       MuiSelect: { defaultProps: { size: "small" } },
+      // A FormControl's InputLabel takes its offset from the control's size: left at medium, the
+      // label of an empty small Select rests too low in the field.
+      MuiFormControl: { defaultProps: { size: "small" } },
       MuiPaper: { styleOverrides: { root: { backgroundImage: "none" } } },
       MuiDialog: { styleOverrides: { paper: { borderRadius: 16 } } },
       MuiTooltip: { defaultProps: { arrow: false } },

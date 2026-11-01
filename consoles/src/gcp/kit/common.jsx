@@ -63,10 +63,10 @@ export function Section({ title, description, actions, children, className, data
 export function PageHeader({ title, back, actions, children }) {
   return (
     <Box sx={{ mb: 2 }}>
-      <Stack direction="row" alignItems="center" spacing={2} sx={{ minHeight: 56, flexWrap: "wrap", rowGap: 1 }}>
+      <Stack useFlexGap direction="row" alignItems="center" spacing={2} sx={{ minHeight: 56, flexWrap: "wrap", rowGap: 1 }}>
         {back}
         <Typography variant="h1" component="h1" sx={{ mr: 2 }}>{title}</Typography>
-        {actions && <Stack direction="row" spacing={0.5} alignItems="center" sx={{ flexWrap: "wrap" }}>{actions}</Stack>}
+        {actions && <Stack useFlexGap direction="row" spacing={0.5} alignItems="center" sx={{ flexWrap: "wrap" }}>{actions}</Stack>}
       </Stack>
       <Divider sx={{ mx: -3 }} />
       {children}

@@ -16,7 +16,7 @@ function TagsInput({ label, value, onChange, placeholder }) {
   const commit = () => { const v = draft.trim(); if (v) { onChange([...value, v]); setDraft(""); } };
   return (
     <Box>
-      <Stack direction="row" spacing={1} alignItems="center" sx={{ flexWrap: "wrap", mb: 1 }}>
+      <Stack useFlexGap direction="row" spacing={1} alignItems="center" sx={{ flexWrap: "wrap", mb: 1 }}>
         {value.map((t, i) => <Chip key={i} size="small" label={t} onDelete={() => onChange(value.filter((_, j) => j !== i))} />)}
       </Stack>
       <TextField size="small" label={label} placeholder={placeholder} value={draft}

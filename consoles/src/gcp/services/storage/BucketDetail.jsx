@@ -50,7 +50,7 @@ export default function BucketDetail({ params, query }) {
         <Tooltip title="Copy bucket name"><IconButton size="small" aria-label="Copy bucket name" onClick={() => navigator.clipboard?.writeText(bucket).catch(() => {})}><ContentCopyIcon fontSize="inherit" /></IconButton></Tooltip>
       </Stack>
       {b.error ? <ErrorAlert error={b.error} title="Failed to load bucket" /> : (
-        <Stack direction="row" spacing={4} sx={{ mb: 1, flexWrap: "wrap", rowGap: 1 }} aria-label="Bucket summary">
+        <Stack useFlexGap direction="row" spacing={4} sx={{ mb: 1, flexWrap: "wrap", rowGap: 1 }} aria-label="Bucket summary">
           {[["Location", b.data && `${b.data.location.toLowerCase()} (${api.LOCATION_TYPE_LABEL[b.data.locationType]})`],
             ["Storage class", b.data && api.classLabel(b.data.storageClass)],
             ["Public access", b.data && api.publicAccess(b.data, pol.data)],
@@ -163,7 +163,7 @@ function Objects({ bucket, prefix, meta, policy }) {
           ? <Typography key={i} variant="body2" sx={{ fontWeight: 500 }}>{c}</Typography>
           : <Link key={i} href={bucketHref(bucket, { prefix: crumbs.slice(0, i + 1).join("/") + "/" })}>{c}</Link>)}
       </Breadcrumbs>
-      <Stack direction="row" spacing={0.5} sx={{ mb: 1.5, flexWrap: "wrap" }}>
+      <Stack useFlexGap direction="row" spacing={0.5} sx={{ mb: 1.5, flexWrap: "wrap" }}>
         <Button variant="contained" startIcon={busy ? <CircularProgress size={16} color="inherit" /> : <UploadIcon />} disabled={busy} onClick={() => file.current?.click()}>Upload</Button>
         <Button startIcon={<CreateNewFolderIcon />} onClick={() => setFolder("")}>Create folder</Button>
         <Button startIcon={<DownloadIcon />} disabled={sel.length !== 1 || sel[0].endsWith("/")}
@@ -252,7 +252,7 @@ function Configuration({ bucket, reload }) {
           ["Default storage class", api.classLabel(bucket.storageClass), <IconButton key="e" size="small" aria-label="Edit default storage class" onClick={() => setEditClass(true)}><EditIcon fontSize="inherit" /></IconButton>],
           ["Hierarchical namespace", bucket.hierarchicalNamespace?.enabled ? "Enabled" : "Disabled"],
           ["Requester pays", bucket.billing?.requesterPays ? "Enabled" : "Not enabled"],
-          ["Labels", ls.length ? <Stack direction="row" spacing={0.5} sx={{ flexWrap: "wrap", rowGap: 0.5 }}>{ls.map(([k, v]) => <Chip key={k} size="small" label={`${k}: ${v}`} />)}</Stack> : "None",
+          ["Labels", ls.length ? <Stack useFlexGap direction="row" spacing={0.5} sx={{ flexWrap: "wrap", rowGap: 0.5 }}>{ls.map(([k, v]) => <Chip key={k} size="small" label={`${k}: ${v}`} />)}</Stack> : "None",
             <IconButton key="e" size="small" aria-label="Edit labels" onClick={() => setEditLabels(true)}><EditIcon fontSize="inherit" /></IconButton>],
           ["gsutil URI", `gs://${bucket.name}`],
           ["Cloud Console URL", `console.vyomi.cloud/storage/browser/${bucket.name}`],

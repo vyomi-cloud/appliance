@@ -56,7 +56,7 @@ export default function ServiceDetail({ params, query }) {
         <Tooltip title="Copy service name"><IconButton size="small" aria-label="Copy service name" onClick={() => navigator.clipboard?.writeText(name).catch(() => {})}><ContentCopyIcon fontSize="inherit" /></IconButton></Tooltip>
       </Stack>
       {svc.error ? <ErrorAlert error={svc.error} title="Failed to load service" /> : svc.data && (
-        <Stack direction="row" spacing={4} sx={{ mb: 1, flexWrap: "wrap", rowGap: 1 }} aria-label="Service summary">
+        <Stack useFlexGap direction="row" spacing={4} sx={{ mb: 1, flexWrap: "wrap", rowGap: 1 }} aria-label="Service summary">
           <Box><Typography variant="caption" color="text.secondary">URL</Typography><Typography variant="body2">{svc.data.uri}</Typography></Box>
           <Box><Typography variant="caption" color="text.secondary">Region</Typography><Typography variant="body2">{region}</Typography></Box>
           <Box><Typography variant="caption" color="text.secondary">Authentication</Typography><Typography variant="body2">{api.authLabel(pol.data)}</Typography></Box>
@@ -93,7 +93,7 @@ function Observability({ name }) {
     <Stack spacing={2}>
       <CapabilityContainer id="gcp.functions.services.observability" title="Metrics">
         {metrics.error ? <ErrorAlert error={metrics.error} title="Failed to load metrics" /> : (
-          <Stack direction="row" spacing={5} sx={{ flexWrap: "wrap", rowGap: 2 }}>
+          <Stack useFlexGap direction="row" spacing={5} sx={{ flexWrap: "wrap", rowGap: 2 }}>
             <Metric label="Request count" value={metrics.data?.requestCount} />
             <Metric label="Request latencies" value={metrics.data?.latencyMs != null ? `${metrics.data.latencyMs.toFixed(1)} ms` : null} />
             <Metric label="Container instance count" value={metrics.data?.instances} />

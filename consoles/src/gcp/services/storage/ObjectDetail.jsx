@@ -89,7 +89,7 @@ function LiveObject({ o, bucket, bucketMeta, policy, onHoldChange }) {
           ["Retention expiration time", ret.retainUntilTime ? fmtDate(ret.retainUntilTime) : "None"],
           ["Encryption type", "Google-managed key"],
         ]} />
-        <Stack direction="row" spacing={1} sx={{ mt: 1.5, flexWrap: "wrap", rowGap: 1 }}>
+        <Stack useFlexGap direction="row" spacing={1} sx={{ mt: 1.5, flexWrap: "wrap", rowGap: 1 }}>
           <Button size="small" variant="outlined" onClick={() => onHoldChange({ temporaryHold: !o.temporaryHold }, o.temporaryHold ? "Removed temporary hold" : "Added temporary hold")}>
             {o.temporaryHold ? "Remove temporary hold" : "Add temporary hold"}
           </Button>

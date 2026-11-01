@@ -44,7 +44,7 @@ export default function ObjectBrowser() {
   return (
     <>
       <PageHeader title="Object Browser" />
-      <Stack direction="row" spacing={2} sx={{ mb: 2.5, flexWrap: "wrap", rowGap: 1 }}>
+      <Stack useFlexGap direction="row" spacing={2} sx={{ mb: 2.5, flexWrap: "wrap", rowGap: 1 }}>
         <FormControl sx={{ minWidth: 220 }} disabled={!(clusters.data || []).length}>
           <InputLabel id="ob-cluster-l">Cluster</InputLabel>
           <Select labelId="ob-cluster-l" label="Cluster" value={cluster} onChange={(e) => setCluster(e.target.value)} inputProps={{ "aria-label": "Cluster" }}>

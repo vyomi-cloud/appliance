@@ -90,7 +90,7 @@ function Overview({ secret }) {
         ["Encryption", api.encryptionLabel(secret)],
         ["Rotation", secret.rotation?.rotationPeriod ? `Every ${Math.round(Number(secret.rotation.rotationPeriod.replace("s", "")) / 86400)} days` : "Not configured"],
         ["Expiration", secret.expireTime ? fmtDate(secret.expireTime) : "Never"],
-        ["Labels", ls.length ? <Stack direction="row" spacing={0.5} sx={{ flexWrap: "wrap", rowGap: 0.5 }}>{ls.map(([k, v]) => <Chip key={k} size="small" label={`${k}: ${v}`} />)}</Stack> : "None"],
+        ["Labels", ls.length ? <Stack useFlexGap direction="row" spacing={0.5} sx={{ flexWrap: "wrap", rowGap: 0.5 }}>{ls.map(([k, v]) => <Chip key={k} size="small" label={`${k}: ${v}`} />)}</Stack> : "None"],
         ["Created", fmtDate(secret.createTime)],
       ]} />
     </Section>

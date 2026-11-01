@@ -55,7 +55,7 @@ export default function ServiceDetail({ params, query }) {
         <Tooltip title="Copy service name"><IconButton size="small" aria-label="Copy service name" onClick={() => navigator.clipboard?.writeText(name).catch(() => {})}><ContentCopyIcon fontSize="inherit" /></IconButton></Tooltip>
       </Stack>
       {svc.error ? <ErrorAlert error={svc.error} title="Failed to load service" /> : svc.data && (
-        <Stack direction="row" spacing={4} sx={{ mb: 1, flexWrap: "wrap", rowGap: 1 }} aria-label="Service summary">
+        <Stack useFlexGap direction="row" spacing={4} sx={{ mb: 1, flexWrap: "wrap", rowGap: 1 }} aria-label="Service summary">
           <Box><Typography variant="caption" color="text.secondary">URL</Typography><Typography variant="body2">{svc.data.uri}</Typography></Box>
           <Box><Typography variant="caption" color="text.secondary">Region</Typography><Typography variant="body2">{region}</Typography></Box>
           <Box><Typography variant="caption" color="text.secondary">Authentication</Typography><Typography variant="body2">{api.authLabel(pol.data)}</Typography></Box>
@@ -129,7 +129,7 @@ function Observability({ name }) {
   return (
     <Stack spacing={2}>
       <CapabilityContainer id="gcp.run.services.observability" title="Metrics">
-        <Stack direction="row" spacing={4} sx={{ flexWrap: "wrap", rowGap: 1 }}>
+        <Stack useFlexGap direction="row" spacing={4} sx={{ flexWrap: "wrap", rowGap: 1 }}>
           <Box><Typography variant="caption" color="text.secondary">Logged events (all time)</Typography><Typography variant="h3" sx={{ fontSize: 20 }}>{entries.length}</Typography></Box>
           <Box><Typography variant="caption" color="text.secondary">Logged events (last hour)</Typography><Typography variant="h3" sx={{ fontSize: 20 }}>{lastHour}</Typography></Box>
           <Box><Typography variant="caption" color="text.secondary">Last activity</Typography><Typography variant="body2">{entries[0] ? fmtDate(entries[0].timestamp) : "No activity yet"}</Typography></Box>

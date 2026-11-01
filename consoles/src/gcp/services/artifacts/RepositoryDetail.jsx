@@ -53,7 +53,7 @@ export default function RepositoryDetail({ params }) {
             <Typography variant="h2" component="h2" sx={{ fontSize: 22 }}>{name}</Typography>
             <Tooltip title="Copy repository name"><IconButton size="small" aria-label="Copy repository name" onClick={() => navigator.clipboard?.writeText(name).catch(() => {})}><ContentCopyIcon fontSize="inherit" /></IconButton></Tooltip>
           </Stack>
-          <Stack direction="row" spacing={4} sx={{ mb: 3, flexWrap: "wrap", rowGap: 1 }} aria-label="Repository summary">
+          <Stack useFlexGap direction="row" spacing={4} sx={{ mb: 3, flexWrap: "wrap", rowGap: 1 }} aria-label="Repository summary">
             {[["Format", api.FORMAT_LABEL[repo.data.format] || repo.data.format], ["Mode", api.MODE_LABEL[repo.data.mode] || repo.data.mode],
               ["Location", `${location} (${api.locationTypeLabel(location)})`], ["Encryption", api.encryptionLabel(repo.data)],
               ["Description", repo.data.description || "—"]].map(([k, v]) => (

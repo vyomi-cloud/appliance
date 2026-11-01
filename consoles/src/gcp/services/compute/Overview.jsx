@@ -36,7 +36,7 @@ export default function Overview() {
         <NotSimulatedContainer title="Google Cloud incidents" feature="Google Cloud incidents" note="Vyomi is a simulator with no real Google Cloud status feed to report." />
         <Section title="Resource footprint">
           {error ? <Typography color="error" variant="body2">{error.message}</Typography> : (
-            <Stack direction="row" spacing={2} flexWrap="wrap">
+            <Stack useFlexGap direction="row" spacing={2} flexWrap="wrap">
               <Box sx={{ minWidth: 140, flex: 1 }}><Stat label="Total VMs" value={loading ? undefined : data?.instances} /></Box>
               <Box sx={{ minWidth: 140, flex: 1 }}><Stat label="Instance Groups" value={loading ? undefined : data?.groups} /></Box>
               <Box sx={{ minWidth: 140, flex: 1 }}><Stat label="Disks" value={loading ? undefined : data?.disks} /></Box>

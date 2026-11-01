@@ -33,7 +33,7 @@ export default function Overview() {
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
         Project <b>{project}</b> · region <b>{api.regionLabel(region)}</b>
       </Typography>
-      <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", rowGap: 2 }}>
+      <Stack useFlexGap direction="row" spacing={2} sx={{ flexWrap: "wrap", rowGap: 2 }}>
         <Card label="Services" value={data?.services.length ?? "…"} href="#/functions/services" />
         <Card label="Jobs" value={data?.jobs.length ?? "…"} href="#/functions/jobs" />
         <Card label="Worker pools" value={data?.workerPools.length ?? "…"} href="#/functions/worker-pools" />

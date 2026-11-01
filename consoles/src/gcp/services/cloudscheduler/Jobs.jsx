@@ -101,7 +101,7 @@ function JobsTable({ data, loading, error, reload }) {
 
   return (
     <>
-      <Stack direction="row" spacing={1} sx={{ mb: 1.5, flexWrap: "wrap" }}>
+      <Stack useFlexGap direction="row" spacing={1} sx={{ mb: 1.5, flexWrap: "wrap" }}>
         <Button startIcon={<PlayArrowIcon />} disabled={!sel.length} onClick={() => run(selectedJobs(), (j) => api.runJob(api.jobRegion(j), api.jobId(j)), "Ran")}>Force run</Button>
         <Button startIcon={<PauseIcon />} disabled={!sel.length} onClick={() => run(selectedJobs(), (j) => api.pauseJob(api.jobRegion(j), api.jobId(j)), "Paused")}>Pause</Button>
         <Button startIcon={<PlayArrowIcon />} disabled={!sel.length} onClick={() => run(selectedJobs(), (j) => api.resumeJob(api.jobRegion(j), api.jobId(j)), "Resumed")}>Resume</Button>

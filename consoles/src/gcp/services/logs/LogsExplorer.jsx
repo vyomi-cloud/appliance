@@ -67,7 +67,7 @@ export default function LogsExplorer() {
       <Stack spacing={2}>
         <Section title="Query">
           <Stack spacing={2}>
-            <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", rowGap: 2 }}>
+            <Stack useFlexGap direction="row" spacing={2} sx={{ flexWrap: "wrap", rowGap: 2 }}>
               <FormControl sx={{ minWidth: 180 }}>
                 <InputLabel id="scope-l">Scope</InputLabel>
                 <Select labelId="scope-l" label="Scope" value="project" inputProps={{ "aria-label": "Scope" }}><MenuItem value="project">Project logs</MenuItem></Select>
@@ -80,7 +80,7 @@ export default function LogsExplorer() {
                 </Select>
               </FormControl>
             </Stack>
-            <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", rowGap: 2 }}>
+            <Stack useFlexGap direction="row" spacing={2} sx={{ flexWrap: "wrap", rowGap: 2 }}>
               <FormControl sx={{ minWidth: 200 }}>
                 <InputLabel id="res-l">All resources</InputLabel>
                 <Select labelId="res-l" label="All resources" value={resourceType} onChange={(e) => setResourceType(e.target.value)} inputProps={{ "aria-label": "All resources" }}>
