@@ -155,7 +155,10 @@ def run() -> int:
     storage = f"/subscriptions/{SUB}/resourceGroups/{RG}/providers/Microsoft.Storage/storageAccounts/notacluster"
     arm.handle("PUT", storage, {"api-version": "2023-01-01"}, {"location": "eastus"})
     r = arm.handle("POST", storage + "/runCommand", {"api-version": AV})
-    _check("runCommand only valid on managedClusters", r["status"] == 200 and r["body"] == {})
+    # runCommand is also real now for Microsoft.Compute/virtualMachines (azure.vms.run_command,
+    # core/azure_arm_core.py's _vm_run_command) and rejects any other type with the same 400
+    # ActionNotSupported guard VM start/stop already used — no more silent 200 {} no-op.
+    _check("runCommand only valid on managedClusters (or virtualMachines)", r["status"] == 400)
 
     # 10. Delete cascades: node pool AND lock both disappear with the cluster
     r = arm.handle("DELETE", c1, {"api-version": AV})

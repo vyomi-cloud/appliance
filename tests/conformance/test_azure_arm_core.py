@@ -1099,6 +1099,119 @@ def run() -> int:
     _check("checkAccess reflects the deleted assignment immediately",
            _decision(iamrg1, "alice", "Microsoft.Storage/storageAccounts/read") == "NotAllowed")
 
+    # 15. Wave-5b gap sweep — azure.vms.identity (config_only -> limited): a system-assigned
+    # identity really mints a principalId/tenantId; turning it back off really clears them.
+    gaprg = "gap-rg"
+    gvm = _p(gaprg, "Microsoft.Compute", "virtualMachines", "gapvm")
+    r = arm.handle("PUT", gvm, {"api-version": AV},
+                   {"location": "eastus", "identity": {"type": "SystemAssigned"},
+                    "properties": {"hardwareProfile": {"vmSize": "Standard_B1s"}}})
+    principal_id = r["body"]["identity"].get("principalId")
+    _check("SystemAssigned identity mints a real principalId", bool(principal_id))
+    _check("SystemAssigned identity mints a real tenantId", bool(r["body"]["identity"].get("tenantId")))
+    r = arm.handle("GET", gvm, {"api-version": AV})
+    _check("principalId is stable across reads", r["body"]["identity"]["principalId"] == principal_id)
+    r = arm.handle("PATCH", gvm, {"api-version": AV}, {"identity": {"type": "None"}})
+    _check("turning identity off clears principalId/tenantId", "principalId" not in r["body"]["identity"])
+
+    # 16. azure.vms.run_command (not_simulated -> limited): bounded, deterministic script
+    # interpreter — echo/hostname/whoami/date, the IMDS-token + Key Vault secret-fetch
+    # pattern (real RBAC enforcement via _check_access), and an honest non-zero exit for
+    # anything else, never a fabricated success.
+    r = arm.handle("PUT", gvm, {"api-version": AV},
+                   {"properties": {"osProfile": {"computerName": "gapvm", "adminUsername": "azureuser"}}})
+    _check("vm running by default", r["body"]["properties"]["powerState"] == "PowerState/running"
+           if "powerState" in r["body"]["properties"] else True)
+
+    def _runcmd(script, vm=gvm):
+        return arm.handle("POST", vm + "/runCommand", {"api-version": AV},
+                          {"commandId": "RunShellScript", "script": script})
+
+    r = _runcmd(["echo hello from run command"])
+    _check("run command echo is real", r["status"] == 200
+           and r["body"]["value"][0]["message"] == "hello from run command")
+    r = _runcmd(["hostname"])
+    _check("run command hostname reflects the real VM computer name", r["body"]["value"][0]["message"] == "gapvm")
+    r = _runcmd(["whoami"])
+    _check("run command whoami reflects the real admin username", r["body"]["value"][0]["message"] == "azureuser")
+    r = _runcmd(["rm -rf /var/important-but-unmodelled"])
+    _check("an unrecognized script fails honestly instead of faking success",
+           r["body"]["value"][0]["displayStatus"] == "Provisioning failed")
+    r = arm.handle("POST", _p(gaprg, "Microsoft.Storage", "storageAccounts", "gapstg") + "/runCommand", {"api-version": AV}, {})
+    _check("run command rejected on a non-VM resource type", r["status"] == 400)
+    stopvm = _p(gaprg, "Microsoft.Compute", "virtualMachines", "stopvm")
+    arm.handle("PUT", stopvm, {"api-version": AV}, {"location": "eastus", "properties": {}})
+    arm.handle("POST", stopvm + "/powerOff", {"api-version": AV})
+    r = arm.handle("POST", stopvm + "/runCommand", {"api-version": AV}, {"script": ["echo x"]})
+    _check("run command refuses to run against a stopped VM", r["status"] == 409)
+
+    # IMDS token mint — no identity -> real IMDS "identity not found" error, not a fake token.
+    plainvm = _p(gaprg, "Microsoft.Compute", "virtualMachines", "plainvm")
+    arm.handle("PUT", plainvm, {"api-version": AV}, {"location": "eastus", "properties": {}})
+    imds_script = ['curl -H Metadata:true "http://169.254.169.254/metadata/identity/oauth2/token'
+                  '?api-version=2018-02-01&resource=https://vault.azure.net"']
+    r = _runcmd(imds_script, plainvm)
+    _check("IMDS token mint fails honestly with no managed identity assigned",
+           "error" in r["body"]["value"][0]["message"] and r["body"]["value"][0]["displayStatus"] == "Provisioning failed")
+
+    # End-to-end: a system-assigned identity's token, checked for real against a real role
+    # assignment, really gates a Key Vault secret fetch — the identity is genuinely HONOURED
+    # by another resource's access check, not just round-tripped as a flag.
+    kv = _p(gaprg, "Microsoft.KeyVault", "vaults", "gapkv")
+    arm.handle("PUT", kv, {"api-version": "2023-07-01"}, {"location": "eastus"})
+    from core.kv_store import InMemoryKvStore
+    import core.azure_keyvault_secrets_core as kvsec
+    kvstore = InMemoryKvStore()
+    kvsec.dispatch(kvstore, "PUT", "/secrets/dbpassword", {"api-version": "7.4"}, {}, json.dumps({"value": "s3cr3t"}).encode())
+    arm.kv_secrets_store = kvstore
+    # gvm's identity was turned back off in step 15 above — turn it on again for this flow.
+    arm.handle("PATCH", gvm, {"api-version": AV}, {"identity": {"type": "SystemAssigned"}})
+    kv_script = imds_script + ['curl -H "Authorization: Bearer $TOKEN" "https://gapkv.vault.azure.net/secrets/dbpassword?api-version=7.4"']
+    r = _runcmd(kv_script, gvm)
+    _check("no role assignment yet -> the secret fetch is really denied",
+           "Forbidden" in r["body"]["value"][0]["message"])
+    rg_path = _rgpath(gaprg)
+    gvm_rec = arm.handle("GET", gvm, {"api-version": AV})["body"]
+    arm.handle("PUT", f"{rg_path}/providers/Microsoft.Authorization/roleAssignments/gapra1", {"api-version": "2022-04-01"},
+               {"properties": {"principalId": gvm_rec["identity"]["principalId"], "roleName": "Owner"}})
+    r = _runcmd(kv_script, gvm)
+    last_line = r["body"]["value"][0]["message"].splitlines()[-1]
+    _check("a real role assignment on the VM's identity really authorizes the secret fetch",
+           json.loads(last_line).get("value") == "s3cr3t")
+
+    # 17. azure.vms.backup (not_simulated -> limited/full): real "backup as a snapshot" of
+    # the VM's own ARM properties — create, list, get, restore (really overwrites current
+    # properties) and delete.
+    rp_path = gvm + "/providers/Microsoft.Compute/restorePoints/rp1"
+    r = arm.handle("PUT", rp_path, {"api-version": AV}, {})
+    _check("restore point created", r["status"] == 201)
+    r = arm.handle("GET", gvm + "/providers/Microsoft.Compute/restorePoints", {"api-version": AV})
+    _check("restore point listed under the VM", any(x["name"] == "rp1" for x in r["body"]["value"]))
+    arm.handle("PATCH", gvm, {"api-version": AV}, {"properties": {"hardwareProfile": {"vmSize": "Standard_D2s_v3"}}})
+    r = arm.handle("POST", rp_path + "/restore", {"api-version": AV}, {})
+    _check("restore succeeded", r["status"] == 200)
+    r = arm.handle("GET", gvm, {"api-version": AV})
+    _check("restore really reverted the VM's properties", r["body"]["properties"]["hardwareProfile"]["vmSize"] == "Standard_B1s")
+    r = arm.handle("DELETE", rp_path, {"api-version": AV})
+    _check("restore point deleted", r["status"] == 200)
+
+    # 18. azure.vms.tools — Reset password and Redeploy/reapply really mutate VM state
+    # (not a stored-but-inert stub).
+    r = arm.handle("POST", gvm + "/resetPassword", {"api-version": AV}, {"username": "newadmin", "password": "Sup3rSecret!1"})
+    _check("reset password succeeded", r["status"] == 200)
+    r = arm.handle("GET", gvm, {"api-version": AV})
+    _check("reset password really changed the admin username", r["body"]["properties"]["osProfile"]["adminUsername"] == "newadmin")
+    r = arm.handle("POST", gvm + "/redeploy", {"api-version": AV}, {})
+    _check("redeploy succeeded", r["status"] == 200)
+    r = arm.handle("GET", gvm, {"api-version": AV})
+    _check("redeploy really records a timestamp and restarts the VM",
+           r["body"]["properties"]["powerState"] == "PowerState/running"
+           and "lastRedeployTimestamp" in r["body"]["properties"]["instanceView"])
+    r = arm.handle("POST", gvm + "/reapply", {"api-version": AV}, {})
+    _check("reapply succeeded", r["status"] == 200)
+    r = arm.handle("GET", gvm, {"api-version": AV})
+    _check("reapply really records a timestamp", "lastReapplyTimestamp" in r["body"]["properties"]["instanceView"])
+
     print("\nRESULT: PASS — Azure ARM core conforms (native ARM wire + LRO + catalog CRUD) on this substrate.")
     return 0
 

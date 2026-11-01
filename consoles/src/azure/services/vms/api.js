@@ -160,3 +160,100 @@ export function toNicBody(f) {
 export function toNsgBody(f) {
   return { location: f.location, tags: {}, properties: {} };
 }
+
+// ── Run command (POST .../virtualMachines/{vm}/runCommand) — a bounded, deterministic script
+// interpreter (core/azure_arm_core.AzureArm._vm_run_command, azure.vms.run_command): echo/
+// hostname/whoami/date/uname, and the IMDS-token + Key Vault secret-fetch pattern that
+// demonstrates a system-assigned managed identity's token really being checked against a real
+// role assignment (azure.vms.identity) — never a fabricated success for an unrecognized script. ──
+export const runCommand = (rg, name, script, commandId = "RunShellScript") =>
+  ARM.action(rg, name, "runCommand", { commandId, script: script.split("\n") });
+
+// ── Reset password / Redeploy / Reapply — real POST actions that really mutate the VM's own
+// ARM properties (azure.vms.tools), not a stored-but-inert stub. ───────────────────────────
+export const resetPassword = (rg, name, username, password) => ARM.action(rg, name, "resetPassword", { username, password });
+export const redeploy = (rg, name) => ARM.action(rg, name, "redeploy");
+export const reapply = (rg, name) => ARM.action(rg, name, "reapply");
+
+// ── Backup (Microsoft.Compute/virtualMachines/{vm}/providers/Microsoft.Compute/restorePoints):
+// "backup as a snapshot" of the VM's own ARM properties document — a real, stateful
+// sub-resource (core/azure_arm_core.AzureArm._vm_backup, azure.vms.backup), not a stored-but-
+// inert stub. restore really overwrites the VM's current properties with the captured ones. ──
+const RESTORE_POINT_API_VERSION = "2023-09-01";
+const restorePointPath = (rg, name, rpName) => `${ARM.path(rg, name)}/providers/Microsoft.Compute/restorePoints${rpName ? `/${encodeURIComponent(rpName)}` : ""}`;
+export const listRestorePoints = async (rg, name) =>
+  (await restJson("GET", restorePointPath(rg, name), { query: { "api-version": RESTORE_POINT_API_VERSION } })).value || [];
+export const createRestorePoint = (rg, name, rpName) =>
+  restJson("PUT", restorePointPath(rg, name, rpName), { query: { "api-version": RESTORE_POINT_API_VERSION }, body: {} });
+export const deleteRestorePoint = (rg, name, rpName) =>
+  restJson("DELETE", restorePointPath(rg, name, rpName), { query: { "api-version": RESTORE_POINT_API_VERSION } });
+export const restoreRestorePoint = (rg, name, rpName) =>
+  restJson("POST", `${restorePointPath(rg, name, rpName)}/restore`, { query: { "api-version": RESTORE_POINT_API_VERSION }, body: {} });
+
+// ── Diagnostic settings (Microsoft.Insights/diagnosticSettings, a real ARM extension resource
+// scoped to this VM's own id — the SAME generic mechanism core/azure_arm_core.AzureArm.
+// _diagnostic_settings exposes for every lens resource, e.g. the ACR/APIM blades' Diagnostic
+// settings tab). Logs/metrics are stored and validated exactly as the real resource requires,
+// but never delivered anywhere (azure.vms.monitoring). ─────────────────────────────────────
+const DIAG_API_VERSION = "2021-05-01-preview";
+const diagPath = (vmId, setting) => `${vmId}/providers/Microsoft.Insights/diagnosticSettings${setting ? `/${encodeURIComponent(setting)}` : ""}`;
+export const listDiagnosticSettings = async (vmId) => (await restJson("GET", diagPath(vmId), { query: { "api-version": DIAG_API_VERSION } })).value || [];
+export const putDiagnosticSetting = (vmId, setting, body) => restJson("PUT", diagPath(vmId, setting), { query: { "api-version": DIAG_API_VERSION }, body });
+export const deleteDiagnosticSetting = (vmId, setting) => restJson("DELETE", diagPath(vmId, setting), { query: { "api-version": DIAG_API_VERSION } });
+
+// ── Alerts (Microsoft.Insights/metricAlerts + activityLogAlerts, scoped to this VM via
+// properties.scopes) — the SAME generic Azure Monitor engine the Monitor service's own Alert
+// rules page uses (core/azure_monitor_core.py), just filtered/created with this VM as the
+// scope (azure.vms.monitoring). ─────────────────────────────────────────────────────────────
+const METRIC_ALERTS = armType("Microsoft.Insights", "metricAlerts", "2018-03-01");
+const ACTIVITY_LOG_ALERTS = armType("Microsoft.Insights", "activityLogAlerts", "2020-10-01");
+export async function listVmAlertRules(vmId) {
+  const [metric, activity] = await Promise.all([METRIC_ALERTS.list(), ACTIVITY_LOG_ALERTS.list()]);
+  const mine = (r) => (r.properties?.scopes || []).some((s) => s.toLowerCase() === vmId.toLowerCase());
+  return [
+    ...metric.filter(mine).map((r) => ({ ...r, kind: "Metric" })),
+    ...activity.filter(mine).map((r) => ({ ...r, kind: "Activity Log" })),
+  ];
+}
+export const createVmMetricAlert = (rg, name, vmId, body) => METRIC_ALERTS.put(rg, name, { location: "global", properties: { scopes: [vmId], ...body } });
+export const deleteVmMetricAlert = (rg, name) => METRIC_ALERTS.remove(rg, name);
+
+// ── Workbooks (Microsoft.Insights/workbooks) — same generic gallery engine the Monitor
+// service's own Workbooks page uses; a workbook's sourceId optionally names this VM. ───────
+const WORKBOOKS = armType("Microsoft.Insights", "workbooks", "2022-04-01");
+export const listVmWorkbooks = async (vmId) => (await WORKBOOKS.list()).filter((w) => w.properties?.sourceId?.toLowerCase() === vmId.toLowerCase());
+export const createVmWorkbook = (rg, name, vmId, displayName) =>
+  WORKBOOKS.put(rg, name, { location: "global", kind: "shared", properties: { displayName, category: "workbook", sourceId: vmId, serializedData: "{}" } });
+export const deleteVmWorkbook = (rg, name) => WORKBOOKS.remove(rg, name);
+
+// ── Logs (Log Analytics KQL query, core/azure_operationalinsights_core.py) — the first
+// workspace in the subscription, pre-filtered to this VM's own Activity log rows, the same
+// real bounded KQL subset the Monitor service's own Logs page runs (azure.vms.monitoring). ──
+const WORKSPACES = armType("Microsoft.OperationalInsights", "workspaces", "2022-10-01");
+export const listWorkspaces = async () => (await WORKSPACES.list()).map((w) => ({ ...w, resourceGroup: parseId(w.id).resourceGroup }));
+export const runVmLogQuery = (rg, name, query) =>
+  restJson("POST", `${WORKSPACES.path(rg, name)}/api/query`, { query: { "api-version": "2017-10-01" }, body: { query } });
+
+// ── Connection monitor (Microsoft.Network/networkWatchers/{nw}/connectivityCheck) — the SAME
+// shared netsim evaluator the Network security groups / Virtual networks consoles' Network
+// Watcher connectivity-check tool uses, real NSG rules decide Reachable/Unreachable
+// (azure.vms.monitoring). ────────────────────────────────────────────────────────────────
+const NW_ARM = armType("Microsoft.Network", "networkWatchers", "2023-11-01");
+const NETWORK_WATCHER_RG = "NetworkWatcherRG";
+const networkWatcherName = (location) => `NetworkWatcher_${String(location || "eastus").toLowerCase()}`;
+async function ensureNetworkWatcher(location) {
+  const name = networkWatcherName(location);
+  try { await NW_ARM.get(NETWORK_WATCHER_RG, name); }
+  catch { await NW_ARM.put(NETWORK_WATCHER_RG, name, { location }); }
+  return name;
+}
+export const connectionCheck = async (location, vmId, destinationAddress, destinationPort, protocol = "TCP") =>
+  NW_ARM.action(NETWORK_WATCHER_RG, await ensureNetworkWatcher(location), "connectivityCheck",
+    { source: { resourceId: vmId }, destination: { address: destinationAddress, port: Number(destinationPort) }, protocol });
+
+// ── Microsoft Defender for Cloud (Microsoft.Security/assessments, scoped to this VM) — the
+// SAME foundational CSPM rule engine (core/azure_security_core.py) the Defender for Cloud
+// service's own Recommendations page uses, filtered to this one resource (azure.vms.defender). ──
+const SEC_API = "2021-06-01";
+export const listVmAssessments = async (vmId) =>
+  (await restJson("GET", `${vmId}/providers/Microsoft.Security/assessments`, { query: { "api-version": SEC_API } })).value || [];

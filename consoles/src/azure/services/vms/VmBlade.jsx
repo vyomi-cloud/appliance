@@ -66,16 +66,29 @@ export const MENU = [
   ] },
 ];
 const LABEL = Object.fromEntries(MENU.flatMap((m) => (m.group ? m.items : [m])).map((i) => [i.id, i.label]));
+// Menu items with no dedicated panel in `P` below fall back to a honest gap. Most render the
+// NotSimulated reason inline (see NOT_SIMULATED_REASON) because they need something physically
+// absent from a browser/WASM simulator (a guest OS process, a hypervisor device, a real
+// third-party service) — never a disabled skeleton of the real UI. A few still share the
+// bundled azure.vms.tools capability id for the orchestrator's own bookkeeping.
 const GAP_CAP = {
-  diagnose: "azure.vms.tools", resourcevisualizer: "azure.vms.tools", bastion: "azure.vms.tools",
-  loadbalancing: "azure.vms.tools", asgs: "azure.vms.tools", networkmanager: "azure.vms.tools",
-  extensions: "azure.vms.tools", operatingsystem: "azure.vms.tools", configuration: "azure.vms.tools", advisor: "azure.vms.tools",
-  availabilityscaling: "azure.vms.tools", defender: "azure.vms.tools", backup: "azure.vms.tools", disasterrecovery: "azure.vms.tools",
-  updates: "azure.vms.tools", inventory: "azure.vms.tools", changetracking: "azure.vms.tools", tasks: "azure.vms.tools",
-  resourcehealth: "azure.vms.tools", bootdiagnostics: "azure.vms.tools", perfdiagnostics: "azure.vms.tools",
-  resetpassword: "azure.vms.tools", redeploy: "azure.vms.tools", serialconsole: "azure.vms.tools", support: "azure.vms.tools",
-  insights: "azure.vms.monitoring", alerts: "azure.vms.monitoring", metrics: "azure.vms.monitoring",
-  diagnosticsettings: "azure.vms.monitoring", logs: "azure.vms.monitoring", connectionmonitor: "azure.vms.monitoring", workbooks: "azure.vms.monitoring",
+  bastion: "azure.vms.tools", loadbalancing: "azure.vms.tools", asgs: "azure.vms.tools", networkmanager: "azure.vms.tools",
+  extensions: "azure.vms.tools", disasterrecovery: "azure.vms.tools", updates: "azure.vms.tools", tasks: "azure.vms.tools",
+  bootdiagnostics: "azure.vms.tools", perfdiagnostics: "azure.vms.tools", serialconsole: "azure.vms.tools", support: "azure.vms.tools",
+};
+const NOT_SIMULATED_REASON = {
+  bastion: "Azure Bastion tunnels a browser session to the guest's own network stack over a private network path. Vyomi's virtual machines have no guest network stack to tunnel to — only the resource's own metadata exists in-browser.",
+  loadbalancing: "Distributing real traffic across two virtual machines needs a live network path forwarding real packets between them. A browser/WASM simulator has no virtual network device to carry that traffic — and Microsoft.Network/loadBalancers is not a resource type this lens's Networking service models.",
+  asgs: "Application security groups are not a resource type this lens's Networking service models yet (see Microsoft.Network/networkSecurityGroups' own rule engine, which the Network settings tab already reuses for real IP-based rules).",
+  networkmanager: "Network Manager centrally pushes connectivity/security configuration across a real multi-VNet packet path. There is no virtual network stack in a browser/WASM simulator for that configuration to actually take effect on.",
+  extensions: "Installing a VM extension means a real guest agent downloading and executing a package inside the guest OS. Vyomi's virtual machines are metadata-only — no guest OS process exists in-browser to install anything into.",
+  disasterrecovery: "Azure Site Recovery continuously replicates this VM's disks, block by block, to a second region and fails over to that replica on demand. Vyomi models one logical copy of each resource — there is no second region-local replica for a failover to cut over to.",
+  updates: "Update assessment and patch installation need a package manager running inside a live guest OS to scan and patch. Vyomi's virtual machines have no guest OS process in-browser to scan.",
+  tasks: "Tasks (preview) is backed by Microsoft To Do/Planner over Microsoft Graph — a real separate Microsoft 365 product Vyomi does not run a backend for.",
+  bootdiagnostics: "Boot diagnostics captures a screenshot of the guest's own video framebuffer from the hypervisor. There is no hypervisor or guest video device in a browser/WASM simulator to capture from.",
+  perfdiagnostics: "Performance diagnostics samples CPU/memory/disk counters from inside a live guest OS. Vyomi's virtual machines have no guest OS process in-browser to sample counters from.",
+  serialconsole: "The serial console attaches a terminal to the guest's own boot firmware/OS console device over the hypervisor. There is no hypervisor or guest console device in a browser/WASM simulator to attach to.",
+  support: "Filing or reading a support request calls Microsoft's own real support-ticketing system — a real third-party service outside the simulator.",
 };
 
 export default function VmBlade({ params }) {
@@ -106,11 +119,32 @@ export default function VmBlade({ params }) {
       autoshutdown: () => <AutoShutdown a={a} reload={reload} />,
       connect: () => <Connect a={a} />,
       networksettings: () => <NetworkSettings a={a} />,
-      runcommand: () => <RunCommand />,
+      runcommand: () => <RunCommand a={a} reload={reload} />,
       exporttemplate: () => <ExportTemplate a={a} />,
+      resourcevisualizer: () => <ResourceVisualizer a={a} />,
+      advisor: () => <Advisor a={a} />,
+      diagnose: () => <Diagnose a={a} />,
+      resourcehealth: () => <ResourceHealth a={a} />,
+      changetracking: () => <ChangeTracking a={a} />,
+      defender: () => <Defender a={a} />,
+      backup: () => <Backup a={a} reload={reload} />,
+      resetpassword: () => <ResetPassword a={a} />,
+      redeploy: () => <Redeploy a={a} reload={reload} />,
+      operatingsystem: () => <OperatingSystem a={a} />,
+      configuration: () => <Configuration a={a} reload={reload} />,
+      availabilityscaling: () => <AvailabilityScaling a={a} />,
+      insights: () => <Insights a={a} />,
+      alerts: () => <VmAlerts a={a} />,
+      diagnosticsettings: () => <VmDiagnosticSettings a={a} />,
+      logs: () => <VmLogs a={a} />,
+      connectionmonitor: () => <ConnectionMonitor a={a} />,
+      workbooks: () => <VmWorkbooks a={a} />,
+      metrics: () => <VmMetrics a={a} />,
     }[panel];
     body = P ? P() : (
-      <CapabilityContainer id={GAP_CAP[panel] || "azure.vms.tools"} title={`${name} | ${LABEL[panel] || panel}`} />
+      NOT_SIMULATED_REASON[panel]
+        ? <NotSimulatedContainer title={`${name} | ${LABEL[panel] || panel}`} feature={LABEL[panel] || panel} note={NOT_SIMULATED_REASON[panel]} />
+        : <CapabilityContainer id={GAP_CAP[panel] || "azure.vms.tools"} title={`${name} | ${LABEL[panel] || panel}`} />
     );
   }
 
@@ -721,6 +755,18 @@ function Identity({ a, reload }) {
       {tab === "system" ? (
         <div style={{ marginTop: 12 }}>
           <Field label="Status"><RadioGroup layout="horizontal" value={on ? "On" : "Off"} onChange={(_, d) => setOn(d.value === "On")} aria-label="Status"><Radio value="Off" label="Off" /><Radio value="On" label="On" /></RadioGroup></Field>
+          {a.identity?.principalId && (
+            <div className="vy-props" style={{ marginTop: 12 }}>
+              <KV label="Object (principal) ID" value={a.identity.principalId} />
+              <KV label="Tenant ID" value={a.identity.tenantId} />
+            </div>
+          )}
+          <p style={{ fontSize: 13, marginTop: 12 }}>
+            This identity's principal ID is real and can be granted a role assignment like any other principal — for
+            example, a role on a Key Vault. <Link href={`#/vms/${encodeURIComponent(a.resourceGroup)}/${encodeURIComponent(a.name)}/runcommand`}>Run command</Link> can mint this
+            identity's own token from the simulated IMDS endpoint and use it to fetch a Key Vault secret — Vyomi really
+            checks that token's principal against the Key Vault's real role assignments before releasing the secret.
+          </p>
         </div>
       ) : <div style={{ marginTop: 12 }}><NotSimulated feature="User-assigned managed identities" note="This lens does not model standalone Microsoft.ManagedIdentity/userAssignedIdentities resources to attach." /></div>}
     </CapabilityContainer>
@@ -931,11 +977,55 @@ function NetworkSettings({ a }) {
   );
 }
 
-// ── Run command — honest gap: guest command execution needs a live VM agent, which no
-// virtual machine in Vyomi has (metadata-only). Renders ONLY its title and a NotSimulated
-// note, never a skeleton of the real command list/script editor (see azure.vms.run_command). ──
-function RunCommand() {
-  return <CapabilityContainer id="azure.vms.run_command" title="Run command" />;
+// ── Run command (POST .../virtualMachines/{vm}/runCommand) — a bounded, deterministic script
+// interpreter (core/azure_arm_core.AzureArm._vm_run_command, azure.vms.run_command): echo/
+// hostname/whoami/date/uname run for real against this VM's own data, and the IMDS-token +
+// Key Vault secret-fetch pattern demonstrates a system-assigned identity's token really being
+// checked against a real role assignment (azure.vms.identity) — an unrecognized script fails
+// honestly (non-zero exit) instead of faking success. ─────────────────────────────────────
+const COMMAND_TEMPLATES = [
+  { name: "RunShellScript", description: "Run a Linux shell script against this virtual machine." },
+  { name: "RunPowerShellScript", description: "Run a PowerShell script against this virtual machine." },
+];
+const SAMPLE_SCRIPT = "echo hello from Vyomi\nhostname\nwhoami";
+
+function RunCommand({ a }) {
+  const notify = useNotify();
+  const [script, setScript] = useState(SAMPLE_SCRIPT);
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState(null);
+  const run = async () => {
+    setBusy(true); setResult(null);
+    try { setResult(await api.runCommand(a.resourceGroup, a.name, script)); }
+    catch (e) { notify.error(e, "Run command failed"); }
+    finally { setBusy(false); }
+  };
+  const stdout = result?.value?.find((v) => v.code?.includes("StdOut"))?.message;
+  const stderr = result?.value?.find((v) => v.code?.includes("StdErr"))?.message;
+  return (
+    <CapabilityContainer id="azure.vms.run_command" title={`${a.name} | Run command`}>
+      <BrowseGrid resourceName="command" rowKey={(r) => r.name} filterPlaceholder="Filter by name"
+        items={COMMAND_TEMPLATES} columns={[{ key: "name", label: "Name" }, { key: "description", label: "Description" }]}
+        extraCommands={<ToolbarButton onClick={() => notify.error("Not simulated", "Vyomi does not persist a custom command gallery to create into.")}>Create</ToolbarButton>} />
+      <section className="vy-section" style={{ marginTop: 16 }}>
+        <h3>Run Command Script</h3>
+        <p style={{ fontSize: 13 }}>
+          Vyomi's interpreter understands echo/Write-Output/Write-Host, hostname, whoami, date/Get-Date, uname, and the
+          IMDS-token + Key Vault secret-fetch pattern (169.254.169.254 → https://&lt;vault&gt;.vault.azure.net/secrets/&lt;name&gt;) —
+          it is not a general-purpose shell, so anything else fails honestly instead of faking success.
+        </p>
+        <Textarea value={script} onChange={(_, d) => setScript(d.value)} aria-label="Linux Shell Script" style={{ width: "100%", minHeight: 160, fontFamily: "monospace" }} />
+        <div style={{ marginTop: 8 }}><Button appearance="primary" disabled={busy} onClick={run}>{busy ? "Running..." : "Run"}</Button></div>
+        {result && (
+          <div style={{ marginTop: 12 }}>
+            <h4 style={{ marginBottom: 4 }}>Output</h4>
+            <pre className="vy-grid" style={{ padding: 8, whiteSpace: "pre-wrap" }}>{stdout || "(no output)"}</pre>
+            {stderr && <><h4 style={{ marginBottom: 4 }}>Error</h4><pre className="vy-grid" style={{ padding: 8, whiteSpace: "pre-wrap" }}>{stderr}</pre></>}
+          </div>
+        )}
+      </section>
+    </CapabilityContainer>
+  );
 }
 
 // ── Export template (ARM/Bicep/Terraform all generated client-side from this VM's own live
@@ -983,5 +1073,534 @@ function ExportTemplate({ a }) {
         <Textarea readOnly value={text} style={{ width: "100%", minHeight: 320, fontFamily: "monospace" }} />
       </section>
     </>
+  );
+}
+
+// ── Resource visualizer — a real diagram of this VM's own ARM relationships (NIC, public IP,
+// attached NSG, OS/data disks): no new backend, just rendering data the console already reads
+// for Overview/Network settings/Disks (azure.vms.resource_visualizer). ────────────────────
+function ResourceVisualizer({ a }) {
+  const nicId = nicIdOf(a);
+  const nic = useAsync(() => (nicId ? api.getNic(parseId(nicId).resourceGroup, parseId(nicId).name) : Promise.resolve(null)), [nicId]);
+  const pip = usePublicIp(nic.data);
+  const nsgId = nic.data?.properties?.networkSecurityGroup?.id;
+  const sp = a.properties?.storageProfile || {};
+  const node = (label, sub) => <div className="vy-section" style={{ padding: "8px 12px", minWidth: 180 }}><b>{label}</b>{sub && <div className="vy-muted" style={{ fontSize: 12 }}>{sub}</div>}</div>;
+  const arrow = <div style={{ padding: "0 8px", alignSelf: "center" }}>&rarr;</div>;
+  return (
+    <CapabilityContainer id="azure.vms.resource_visualizer" title={`${a.name} | Resource visualizer`}>
+      <p style={{ fontSize: 13 }}>A diagram of this virtual machine's real, currently-attached ARM resources.</p>
+      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 0 }}>
+        {node(a.name, "Virtual machine")}
+        {arrow}
+        {nic.data ? node(nic.data.name, "Network interface") : node("No NIC", "")}
+        {pip.data && <>{arrow}{node(pip.data.name, `Public IP · ${pip.data.properties?.ipAddress || ""}`)}</>}
+        {nsgId && <>{arrow}{node(parseId(nsgId).name, "Network security group")}</>}
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 0, marginTop: 12 }}>
+        {node(a.name, "Virtual machine")}
+        {arrow}
+        {node(`${a.name}_OsDisk`, `OS disk · ${sp.osDisk?.managedDisk?.storageAccountType || "--"}`)}
+        {(sp.dataDisks || []).map((d) => <span key={d.lun} style={{ display: "flex", alignItems: "center" }}>{arrow}{node(d.name, `Data disk · LUN ${d.lun}`)}</span>)}
+      </div>
+    </CapabilityContainer>
+  );
+}
+
+// ── Advisor recommendations — real recommendations derived from this VM's own live
+// configuration (auto-shutdown off, identity off, no backup, Defender posture findings) —
+// the same "derive from real inventory" pattern the Monitor service's own Advisor page uses
+// (azure.vms.advisor), never a canned list. ────────────────────────────────────────────────
+function Advisor({ a }) {
+  const assessments = useAsync(() => api.listVmAssessments(a.id), [a.id]);
+  const restorePoints = useAsync(() => api.listRestorePoints(a.resourceGroup, a.name), [a.resourceGroup, a.name]);
+  const recs = [];
+  if (!a.properties?.autoShutdown?.enabled) recs.push({ title: "Enable auto-shutdown", detail: "This virtual machine has no auto-shutdown schedule — it keeps accruing cost while idle.", severity: "Medium" });
+  if (a.identity?.type !== "SystemAssigned") recs.push({ title: "Enable a system-assigned managed identity", detail: "Without an identity, this virtual machine cannot be granted scoped access to other resources (e.g. Key Vault) without a shared secret.", severity: "Low" });
+  if (!(restorePoints.data || []).length) recs.push({ title: "Configure backup", detail: "This virtual machine has no restore points — a failed deployment or bad change has nothing to roll back to.", severity: "Medium" });
+  for (const r of assessments.data || []) {
+    if ((r.properties?.status?.code || "").toLowerCase() === "unhealthy") {
+      recs.push({ title: r.properties?.displayName, detail: r.properties?.status?.description || r.properties?.additionalData?.detail || "", severity: r.properties?.metadata?.severity || "Medium" });
+    }
+  }
+  return (
+    <CapabilityContainer id="azure.vms.advisor" title={`${a.name} | Advisor recommendations`}>
+      {assessments.loading && !assessments.data ? <Loading /> : !recs.length ? <p>No recommendations — this virtual machine looks good.</p> : (
+        <Table size="small" aria-label="Advisor recommendations" className="vy-grid">
+          <TableHeader><TableRow><TableHeaderCell>Recommendation</TableHeaderCell><TableHeaderCell>Description</TableHeaderCell><TableHeaderCell>Severity</TableHeaderCell></TableRow></TableHeader>
+          <TableBody>{recs.map((r, i) => <TableRow key={i}><TableCell>{r.title}</TableCell><TableCell>{r.detail}</TableCell><TableCell>{r.severity}</TableCell></TableRow>)}</TableBody>
+        </Table>
+      )}
+    </CapabilityContainer>
+  );
+}
+
+// ── Diagnose and solve problems — real diagnostics computed from this VM's own live state
+// (power state, NIC/NSG reachability via Defender's own exposed-ports finding, disk
+// attachment) — never a canned "everything is fine" (azure.vms.diagnose). ──────────────────
+function Diagnose({ a }) {
+  const assessments = useAsync(() => api.listVmAssessments(a.id), [a.id]);
+  const checks = [];
+  const running = statusOf(a).toLowerCase() === "running";
+  checks.push({ title: "Virtual machine power state", ok: running, detail: running ? "The virtual machine is running." : `The virtual machine is ${statusOf(a).toLowerCase()} — start it before diagnosing connectivity.` });
+  const encFinding = (assessments.data || []).find((r) => r.name?.includes("vm-encryption") || r.properties?.displayName?.toLowerCase().includes("encrypt"));
+  if (encFinding) {
+    const unhealthy = (encFinding.properties?.status?.code || "").toLowerCase() === "unhealthy";
+    checks.push({ title: "Disk encryption", ok: !unhealthy, detail: unhealthy ? "No encryption at host and no disk encryption set on the OS disk." : "Encryption at host or a disk encryption set is configured." });
+  }
+  const nicId = nicIdOf(a);
+  checks.push({ title: "Network interface", ok: !!nicId, detail: nicId ? "A network interface is attached." : "No network interface is attached to this virtual machine." });
+  return (
+    <CapabilityContainer id="azure.vms.diagnose" title={`${a.name} | Diagnose and solve problems`}>
+      {assessments.loading && !assessments.data ? <Loading /> : (
+        <div className="vy-props">
+          {checks.map((c, i) => <KV key={i} label={c.title} value={`${c.ok ? "✓" : "✗"} ${c.detail}`} />)}
+        </div>
+      )}
+    </CapabilityContainer>
+  );
+}
+
+// ── Resource health — derived from this VM's own real power state and lock state, the same
+// data the Overview/Locks panels already show (azure.vms.resource_health). ─────────────────
+function ResourceHealth({ a }) {
+  const locks = useAsync(() => api.listLocks(a.resourceGroup, a.name), [a.resourceGroup, a.name]);
+  const status = statusOf(a).toLowerCase();
+  const available = status === "running";
+  return (
+    <CapabilityContainer id="azure.vms.resource_health" title={`${a.name} | Resource health`}>
+      <div className="vy-props">
+        <KV label="Current status" value={available ? "Available" : status === "stopped" || status === "deallocated" ? "Unavailable (stopped)" : "Unknown"} />
+        <KV label="Power state" value={statusOf(a)} />
+        <KV label="Resource locks" value={(locks.data || []).length ? `${locks.data.length} lock(s) applied` : "None"} />
+      </div>
+      <p style={{ fontSize: 13, marginTop: 12 }}>Derived from this virtual machine's own real power state — there is no hypervisor health telemetry to roll up in a browser/WASM simulator.</p>
+    </CapabilityContainer>
+  );
+}
+
+// ── Change tracking — a filtered view of this VM's own real Activity log (azure.vms.change_tracking),
+// never a separate fabricated feed. ─────────────────────────────────────────────────────────
+function ChangeTracking({ a }) {
+  const { data, loading, error, reload } = useAsync(() => api.listActivityLog(a.resourceGroup, a.name, new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString()), [a.id]);
+  const rows = (data || []).filter((r) => /write|extensions|redeploy|reapply|resetpassword/i.test(r.operationName?.value || ""));
+  return (
+    <CapabilityContainer id="azure.vms.change_tracking" title={`${a.name} | Change tracking`} actions={<ToolbarButton icon={<ArrowClockwise20Regular />} onClick={reload}>Refresh</ToolbarButton>}>
+      <ErrorBar error={error} />
+      <table className="vy-grid">
+        <thead><tr><th>Change</th><th>Time</th><th>Status</th></tr></thead>
+        <tbody>
+          {loading ? <tr><td colSpan={3}><Spinner size="tiny" /></td></tr> : rows.length ? rows.map((r) => (
+            <tr key={r.id}><td>{r.operationName?.localizedValue || r.operationName?.value}</td><td>{fmtDate(r.eventTimestamp)}</td><td>{r.status?.localizedValue || r.status?.value}</td></tr>
+          )) : <tr><td colSpan={3} className="vy-muted">No configuration changes in the last 30 days.</td></tr>}
+        </tbody>
+      </table>
+    </CapabilityContainer>
+  );
+}
+
+// ── Microsoft Defender for Cloud — real recommendations scoped to this VM over the SAME
+// foundational CSPM rule engine (core/azure_security_core.py) the Defender for Cloud service's
+// own Recommendations page uses (azure.vms.defender). ─────────────────────────────────────
+function Defender({ a }) {
+  const { data, loading, error, reload } = useAsync(() => api.listVmAssessments(a.id), [a.id]);
+  const rows = data || [];
+  return (
+    <CapabilityContainer id="azure.vms.defender" title={`${a.name} | Microsoft Defender for Cloud`} actions={<ToolbarButton icon={<ArrowClockwise20Regular />} onClick={reload}>Refresh</ToolbarButton>}>
+      <ErrorBar error={error} />
+      {loading && !data ? <Loading /> : !rows.length ? <p>No findings for this virtual machine.</p> : (
+        <Table size="small" aria-label="Defender findings" className="vy-grid">
+          <TableHeader><TableRow><TableHeaderCell>Recommendation</TableHeaderCell><TableHeaderCell>Status</TableHeaderCell><TableHeaderCell>Severity</TableHeaderCell></TableRow></TableHeader>
+          <TableBody>{rows.map((r) => (
+            <TableRow key={r.id}><TableCell>{r.properties?.displayName}</TableCell>
+              <TableCell>{r.properties?.status?.code}</TableCell><TableCell>{r.properties?.metadata?.severity || "--"}</TableCell></TableRow>
+          ))}</TableBody>
+        </Table>
+      )}
+    </CapabilityContainer>
+  );
+}
+
+// ── Backup — "backup as a snapshot" of this VM's own ARM properties document: a real,
+// stateful sub-resource (core/azure_arm_core.AzureArm._vm_backup, azure.vms.backup), not a
+// stored-but-inert stub. Restore really overwrites the VM's current properties. ────────────
+function Backup({ a, reload }) {
+  const notify = useNotify();
+  const { data, loading, error, reload: reloadRp } = useAsync(() => api.listRestorePoints(a.resourceGroup, a.name), [a.resourceGroup, a.name]);
+  const [name, setName] = useState("");
+  const rows = data || [];
+  const create = async () => {
+    const n = name.trim() || `rp-${Date.now()}`;
+    try { await api.createRestorePoint(a.resourceGroup, a.name, n); notify.success(`Restore point '${n}' was created.`, "Create succeeded"); setName(""); reloadRp(); }
+    catch (e) { notify.error(e, "Create restore point failed"); }
+  };
+  return (
+    <CapabilityContainer id="azure.vms.backup" title={`${a.name} | Backup`}>
+      <p style={{ fontSize: 13 }}>Vyomi models backup as a real snapshot of this virtual machine's own configuration — restoring really overwrites its current size/disk/OS settings with the captured ones.</p>
+      <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+        <Input placeholder="Restore point name" value={name} onChange={(_, d) => setName(d.value)} aria-label="Restore point name" />
+        <Button appearance="primary" onClick={create}>Create restore point</Button>
+      </div>
+      <ErrorBar error={error} />
+      <BrowseGrid resourceName="restore point" rowKey={(r) => r.name} filterPlaceholder="Search to filter items..."
+        items={rows} loading={loading} onRefresh={reloadRp}
+        onDelete={async (sel) => { for (const r of sel) await api.deleteRestorePoint(a.resourceGroup, a.name, r.name); reloadRp(); }}
+        columns={[
+          { key: "name", label: "Name" },
+          { key: "time", label: "Time created", value: (r) => fmtDate(r.properties?.timeCreated) },
+          { key: "size", label: "Size at capture", value: (r) => r.properties?.sourceMetadata?.hardwareProfile?.vmSize || "--" },
+          { key: "restore", label: "", value: (r) => <Link as="button" onClick={async () => {
+              await api.restoreRestorePoint(a.resourceGroup, a.name, r.name);
+              notify.success(`'${a.name}' was restored to '${r.name}'.`, "Restore succeeded");
+              reload();
+            }}>Restore</Link> },
+        ]}
+      />
+    </CapabilityContainer>
+  );
+}
+
+// ── Reset password — really updates this VM's own osProfile admin username/password
+// (core/azure_arm_core.AzureArm._arm_action's resetPassword verb), reflected immediately in
+// the Connect tab's SSH command (azure.vms.tools). ─────────────────────────────────────────
+function ResetPassword({ a }) {
+  const notify = useNotify();
+  const [username, setUsername] = useState(a.properties?.osProfile?.adminUsername || "");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const reset = async () => {
+    setBusy(true);
+    try { await api.resetPassword(a.resourceGroup, a.name, username, password); notify.success("Password reset.", "Reset succeeded"); }
+    catch (e) { notify.error(e, "Reset password failed"); }
+    finally { setBusy(false); }
+  };
+  return (
+    <>
+      <div className="vy-panel-title">Reset password</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 420 }}>
+        <Field label="User name" required><Input value={username} onChange={(_, d) => setUsername(d.value)} aria-label="User name" /></Field>
+        <Field label="Password" required><Input type="password" value={password} onChange={(_, d) => setPassword(d.value)} aria-label="Password" /></Field>
+        <div><Button appearance="primary" disabled={busy || !username || !password} onClick={reset}>{busy ? "Updating..." : "Update"}</Button></div>
+      </div>
+    </>
+  );
+}
+
+// ── Redeploy + reapply — really restarts (redeploy) or re-stamps (reapply) this VM's own
+// instanceView (core/azure_arm_core.AzureArm._arm_action, azure.vms.tools). ────────────────
+function Redeploy({ a, reload }) {
+  const notify = useNotify();
+  const [busy, setBusy] = useState(null);
+  const iv = a.properties?.instanceView || {};
+  const act = async (verb, label) => {
+    setBusy(verb);
+    try { await (verb === "redeploy" ? api.redeploy : api.reapply)(a.resourceGroup, a.name); notify.success(`${label} succeeded.`); reload(); }
+    catch (e) { notify.error(e, `${label} failed`); }
+    finally { setBusy(null); }
+  };
+  return (
+    <>
+      <div className="vy-panel-title">Redeploy + reapply</div>
+      <section className="vy-section"><h3>Redeploy</h3>
+        <p style={{ fontSize: 13 }}>Moves this virtual machine to a new host and restarts it. Vyomi has no hosts to move between, but it does really restart the VM and record when.</p>
+        <Button disabled={busy} onClick={() => act("redeploy", "Redeploy")}>{busy === "redeploy" ? "Redeploying..." : "Redeploy"}</Button>
+        {iv.lastRedeployTimestamp && <p style={{ fontSize: 12 }} className="vy-muted">Last redeployed: {fmtDate(iv.lastRedeployTimestamp)}</p>}
+      </section>
+      <section className="vy-section"><h3>Reapply</h3>
+        <p style={{ fontSize: 13 }}>Reapplies the virtual machine's state without restarting it.</p>
+        <Button disabled={busy} onClick={() => act("reapply", "Reapply")}>{busy === "reapply" ? "Reapplying..." : "Reapply"}</Button>
+        {iv.lastReapplyTimestamp && <p style={{ fontSize: 12 }} className="vy-muted">Last reapplied: {fmtDate(iv.lastReapplyTimestamp)}</p>}
+      </section>
+    </>
+  );
+}
+
+// ── Operating system — the VM's own real OS/image metadata (no guest OS process in-browser
+// to introspect beyond what ARM already stores) (azure.vms.inventory_os). ──────────────────
+function OperatingSystem({ a }) {
+  const sp = a.properties?.storageProfile || {};
+  const img = sp.imageReference || {};
+  return (
+    <CapabilityContainer id="azure.vms.inventory_os" title={`${a.name} | Operating system`}>
+      <div className="vy-props">
+        <KV label="OS type" value={osType(a)} />
+        <KV label="Computer name" value={a.properties?.osProfile?.computerName} />
+        <KV label="Image publisher" value={img.publisher} />
+        <KV label="Image offer" value={img.offer} />
+        <KV label="Image SKU" value={img.sku} />
+        <KV label="Image version" value={img.version} />
+      </div>
+    </CapabilityContainer>
+  );
+}
+
+// ── Configuration — boot diagnostics / VM agent toggles that really PATCH this VM's own
+// diagnosticsProfile (same generic ARM PATCH every other settings tab on this blade uses)
+// (azure.vms.configuration). ─────────────────────────────────────────────────────────────
+function Configuration({ a, reload }) {
+  const notify = useNotify();
+  const [bootDiag, setBootDiag] = useState(!!a.properties?.diagnosticsProfile?.bootDiagnostics?.enabled);
+  useEffect(() => setBootDiag(!!a.properties?.diagnosticsProfile?.bootDiagnostics?.enabled), [a]);
+  const save = async (v) => {
+    setBootDiag(v);
+    try { await api.updateVm(a.resourceGroup, a.name, { properties: { diagnosticsProfile: { bootDiagnostics: { enabled: v, storageUri: null } } } }); notify.success("Configuration saved."); reload(); }
+    catch (e) { notify.error(e, "Saving configuration failed"); }
+  };
+  return (
+    <CapabilityContainer id="azure.vms.configuration" title={`${a.name} | Configuration`}>
+      <Field label="Boot diagnostics"><RadioGroup layout="horizontal" value={bootDiag ? "Enable" : "Disable"} onChange={(_, d) => save(d.value === "Enable")} aria-label="Boot diagnostics">
+        <Radio value="Enable" label="Enable with managed storage account" /><Radio value="Disable" label="Disable" />
+      </RadioGroup></Field>
+      <p style={{ fontSize: 13, marginTop: 8 }} className="vy-muted">Enabling boot diagnostics really flips the stored diagnosticsProfile flag; there is no hypervisor serial/screenshot stream to actually capture in a browser/WASM simulator (azure.vms.tools' Boot diagnostics page).</p>
+    </CapabilityContainer>
+  );
+}
+
+// ── Availability + scaling — this VM's own real zone (azure.vms.availability_scaling); VMSS/
+// flexible-orchestration scale-out is not modelled. ────────────────────────────────────────
+function AvailabilityScaling({ a }) {
+  return (
+    <CapabilityContainer id="azure.vms.availability_scaling" title={`${a.name} | Availability + scaling`}>
+      <div className="vy-props">
+        <KV label="Availability zone" value={a.zones?.[0] || "Not configured"} />
+        <KV label="Availability options" value={a.zones?.[0] ? "Availability zone" : "No infrastructure redundancy required"} />
+      </div>
+      <p style={{ fontSize: 13, marginTop: 12 }} className="vy-muted">Scale set membership and flexible orchestration are not modelled — this lens does not simulate a second host to spread instances across.</p>
+    </CapabilityContainer>
+  );
+}
+
+// ── Insights — this VM's own real properties as the per-resource Insights dashboard (the
+// same "real inventory, no telemetry pipeline" pattern azure.monitor.resource_insights uses
+// subscription-wide) (azure.vms.monitoring). ────────────────────────────────────────────────
+function Insights({ a }) {
+  return (
+    <CapabilityContainer id="azure.vms.monitoring" title={`${a.name} | Insights`}>
+      <div className="vy-props">
+        <KV label="Status" value={statusOf(a)} />
+        <KV label="Resource group" value={a.resourceGroup} />
+        <KV label="Location" value={locationLabel(a.location)} />
+        <KV label="OS" value={osType(a)} />
+        <KV label="Size" value={a.properties?.hardwareProfile?.vmSize} />
+      </div>
+      <p style={{ fontSize: 13, marginTop: 12 }} className="vy-muted">Shows this virtual machine's own real inventory; there is no request/CPU/network telemetry pipeline to chart (that needs an agent-based collection pipeline Vyomi does not run).</p>
+    </CapabilityContainer>
+  );
+}
+
+// ── Alerts (Microsoft.Insights/metricAlerts + activityLogAlerts scoped to this VM) — the SAME
+// generic Azure Monitor engine the Monitor service's own Alert rules page uses
+// (azure.vms.monitoring). ────────────────────────────────────────────────────────────────
+function VmAlerts({ a }) {
+  const notify = useNotify();
+  const { data, loading, error, reload } = useAsync(() => api.listVmAlertRules(a.id), [a.id]);
+  const [add, setAdd] = useState(false);
+  const [name, setName] = useState("");
+  const [metric, setMetric] = useState("Percentage CPU");
+  const [threshold, setThreshold] = useState("80");
+  const rows = data || [];
+  const create = async () => {
+    const n = name.trim();
+    try {
+      await api.createVmMetricAlert(a.resourceGroup, n, a.id, {
+        severity: 3, enabled: true, evaluationFrequency: "PT1M", windowSize: "PT5M",
+        criteria: { "odata.type": "Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria",
+          allOf: [{ metricName: metric, operator: "GreaterThan", threshold: Number(threshold), timeAggregation: "Average" }] },
+      });
+      notify.success(`Alert rule '${n}' was created.`, "Create succeeded");
+      setAdd(false); setName(""); reload();
+    } catch (e) { notify.error(e, "Create alert rule failed"); }
+  };
+  return (
+    <CapabilityContainer id="azure.vms.monitoring" title={`${a.name} | Alerts`}>
+      <BrowseGrid resourceName="alert rule" rowKey={(r) => r.id} filterPlaceholder="Search to filter items..."
+        items={rows} loading={loading} error={error} onRefresh={reload}
+        extraCommands={<ToolbarButton icon={<Add20Regular />} onClick={() => setAdd(true)}>Create alert rule</ToolbarButton>}
+        onDelete={async (sel) => { for (const r of sel) await api.deleteVmMetricAlert(parseId(r.id).resourceGroup, r.name); reload(); }}
+        columns={[
+          { key: "name", label: "Name" }, { key: "kind", label: "Rule type" },
+          { key: "severity", label: "Severity", value: (r) => r.properties?.severity ?? "--" },
+          { key: "enabled", label: "Enabled", value: (r) => (r.properties?.enabled ? "Yes" : "No") },
+        ]}
+      />
+      {add && (
+        <section className="vy-section" style={{ marginTop: 16 }}>
+          <h3>Create alert rule</h3>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 420 }}>
+            <Field label="Alert rule name" required><Input value={name} onChange={(_, d) => setName(d.value)} aria-label="Alert rule name" /></Field>
+            <Field label="Metric"><Input value={metric} onChange={(_, d) => setMetric(d.value)} aria-label="Metric" /></Field>
+            <Field label="Threshold" hint="Greater than"><Input type="number" value={threshold} onChange={(_, d) => setThreshold(d.value)} aria-label="Threshold" /></Field>
+          </div>
+          <div className="vy-cmdbar" style={{ marginTop: 12 }}>
+            <Button appearance="primary" disabled={!name.trim()} onClick={create}>Create</Button>
+            <Button onClick={() => setAdd(false)}>Cancel</Button>
+          </div>
+        </section>
+      )}
+    </CapabilityContainer>
+  );
+}
+
+// ── Diagnostic settings (Microsoft.Insights/diagnosticSettings, scoped to this VM's own id) —
+// the SAME generic ARM extension-resource mechanism the ACR/APIM blades' Diagnostic settings
+// tab already uses for real (azure.vms.monitoring). ─────────────────────────────────────────
+function VmDiagnosticSettings({ a }) {
+  const notify = useNotify();
+  const { data, loading, error, reload } = useAsync(() => api.listDiagnosticSettings(a.id), [a.id]);
+  const workspaces = useAsync(() => api.listWorkspaces(), []);
+  const [add, setAdd] = useState(false);
+  const [name, setName] = useState("");
+  const [workspace, setWorkspace] = useState("");
+  const ws = workspaces.data || [];
+  return (
+    <CapabilityContainer id="azure.vms.monitoring" title={`${a.name} | Diagnostic settings`}>
+      <BrowseGrid resourceName="diagnostic setting" rowKey={(r) => r.name} filterPlaceholder="Search diagnostic settings"
+        items={data || []} loading={loading} error={error} onRefresh={reload}
+        extraCommands={<ToolbarButton icon={<Add20Regular />} onClick={() => { setAdd(true); setWorkspace(ws[0]?.id || ""); }}>Add diagnostic setting</ToolbarButton>}
+        onDelete={async (sel) => { for (const r of sel) await api.deleteDiagnosticSetting(a.id, r.name); notify.success(`Deleted ${sel.length} diagnostic setting${sel.length === 1 ? "" : "s"}.`, "Delete succeeded"); reload(); }}
+        columns={[
+          { key: "name", label: "Diagnostic setting name" },
+          { key: "dest", label: "Destination details", value: (r) => r.properties?.workspaceId ? "Log Analytics workspace" : "--" },
+          { key: "logs", label: "Log categories", value: (r) => (r.properties?.logs || []).filter((l) => l.enabled).length },
+          { key: "metrics", label: "Metric categories", value: (r) => (r.properties?.metrics || []).filter((m) => m.enabled).length },
+        ]}
+      />
+      {add && (
+        <section className="vy-section" style={{ marginTop: 16 }}>
+          <h3>Add diagnostic setting</h3>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 480 }}>
+            <Field label="Diagnostic setting name" required><Input value={name} onChange={(_, d) => setName(d.value)} aria-label="Diagnostic setting name" /></Field>
+            <Field label="Log Analytics workspace">
+              {ws.length ? (
+                <Select value={workspace} onChange={(_, d) => setWorkspace(d.value)} aria-label="Log Analytics workspace">
+                  {ws.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+                </Select>
+              ) : <p style={{ margin: 0 }}>No Log Analytics workspace yet. Create one in the Monitor service first.</p>}
+            </Field>
+          </div>
+          <div className="vy-cmdbar" style={{ marginTop: 12 }}>
+            <Button appearance="primary" disabled={!name.trim() || !workspace} onClick={async () => {
+              await api.putDiagnosticSetting(a.id, name, { properties: { workspaceId: workspace, logs: [{ categoryGroup: "allLogs", enabled: true }], metrics: [{ category: "AllMetrics", enabled: true }] } });
+              notify.success(`Diagnostic setting '${name}' was created.`, "Create succeeded");
+              setAdd(false); setName(""); reload();
+            }}>Save</Button>
+            <Button onClick={() => setAdd(false)}>Cancel</Button>
+          </div>
+        </section>
+      )}
+    </CapabilityContainer>
+  );
+}
+
+// ── Logs (Log Analytics KQL query, pre-filtered to this VM's own Activity log rows) — the
+// same real bounded KQL subset the Monitor service's own Logs page runs (azure.vms.monitoring). ──
+function VmLogs({ a }) {
+  const notify = useNotify();
+  const workspaces = useAsync(() => api.listWorkspaces(), []);
+  const [query, setQuery] = useState(`AzureActivity | where ResourceId == "${a.id}"`);
+  const [rows, setRows] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const ws = workspaces.data?.[0];
+  const run = async () => {
+    if (!ws) return;
+    setBusy(true);
+    try { const r = await api.runVmLogQuery(ws.resourceGroup, ws.name, query); setRows(r.tables?.[0]?.rows || []); }
+    catch (e) { notify.error(e, "Log query failed"); }
+    finally { setBusy(false); }
+  };
+  return (
+    <CapabilityContainer id="azure.vms.monitoring" title={`${a.name} | Logs`}>
+      {!ws ? <p>No Log Analytics workspace yet. Create one in the Monitor service first.</p> : (
+        <>
+          <Textarea value={query} onChange={(_, d) => setQuery(d.value)} aria-label="KQL query" style={{ width: "100%", minHeight: 90, fontFamily: "monospace" }} />
+          <div style={{ marginTop: 8 }}><Button appearance="primary" disabled={busy} onClick={run}>{busy ? "Running..." : "Run"}</Button></div>
+          {rows && (
+            <pre className="vy-grid" style={{ marginTop: 12, padding: 8, whiteSpace: "pre-wrap" }}>{rows.length ? JSON.stringify(rows, null, 1) : "No results."}</pre>
+          )}
+        </>
+      )}
+    </CapabilityContainer>
+  );
+}
+
+// ── Connection monitor (Network Watcher connectivityCheck, source = this VM) — the SAME
+// shared netsim evaluator the Network security groups / Virtual networks consoles' own
+// connectivity-check tool uses; real NSG rules decide Reachable/Unreachable (azure.vms.monitoring). ──
+function ConnectionMonitor({ a }) {
+  const notify = useNotify();
+  const [dest, setDest] = useState("10.0.0.5");
+  const [port, setPort] = useState("443");
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState(null);
+  const run = async () => {
+    setBusy(true); setResult(null);
+    try { setResult(await api.connectionCheck(a.location, a.id, dest, port)); }
+    catch (e) { notify.error(e, "Connectivity check failed"); }
+    finally { setBusy(false); }
+  };
+  return (
+    <CapabilityContainer id="azure.vms.monitoring" title={`${a.name} | Connection monitor`}>
+      <p style={{ fontSize: 13 }}>Tests a real path from this virtual machine's network interface, evaluated against its actual attached network security group rules.</p>
+      <div style={{ display: "flex", gap: 8, alignItems: "end", flexWrap: "wrap" }}>
+        <Field label="Destination address"><Input value={dest} onChange={(_, d) => setDest(d.value)} aria-label="Destination address" /></Field>
+        <Field label="Destination port"><Input value={port} onChange={(_, d) => setPort(d.value)} aria-label="Destination port" /></Field>
+        <Button appearance="primary" disabled={busy} onClick={run}>{busy ? "Checking..." : "Check connectivity"}</Button>
+      </div>
+      {result && (
+        <div className="vy-props" style={{ marginTop: 12 }}>
+          <KV label="Connection status" value={result.connectionStatus} />
+          <KV label="Hops" value={(result.hops || []).map((h) => h.type).join(" → ") || "--"} />
+        </div>
+      )}
+    </CapabilityContainer>
+  );
+}
+
+// ── Workbooks (Microsoft.Insights/workbooks, sourceId = this VM) — the same generic gallery
+// engine the Monitor service's own Workbooks page uses (azure.vms.monitoring). ─────────────
+function VmWorkbooks({ a }) {
+  const notify = useNotify();
+  const { data, loading, error, reload } = useAsync(() => api.listVmWorkbooks(a.id), [a.id]);
+  const [add, setAdd] = useState(false);
+  const [name, setName] = useState("");
+  const rows = data || [];
+  return (
+    <CapabilityContainer id="azure.vms.monitoring" title={`${a.name} | Workbooks`}>
+      <BrowseGrid resourceName="workbook" rowKey={(r) => r.id} filterPlaceholder="Search to filter items..."
+        items={rows} loading={loading} error={error} onRefresh={reload}
+        extraCommands={<ToolbarButton icon={<Add20Regular />} onClick={() => setAdd(true)}>New</ToolbarButton>}
+        onDelete={async (sel) => { for (const r of sel) await api.deleteVmWorkbook(parseId(r.id).resourceGroup, r.name); reload(); }}
+        columns={[{ key: "name", label: "Display name", value: (r) => r.properties?.displayName }, { key: "category", label: "Category", value: (r) => r.properties?.category }]}
+      />
+      {add && (
+        <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+          <Input placeholder="Workbook name" value={name} onChange={(_, d) => setName(d.value)} aria-label="Workbook name" />
+          <Button appearance="primary" disabled={!name.trim()} onClick={async () => {
+            await api.createVmWorkbook(a.resourceGroup, name.trim().replace(/\s+/g, "-"), a.id, name.trim());
+            notify.success(`Workbook '${name}' was created.`, "Create succeeded");
+            setAdd(false); setName(""); reload();
+          }}>Save</Button>
+          <Button onClick={() => setAdd(false)}>Cancel</Button>
+        </div>
+      )}
+    </CapabilityContainer>
+  );
+}
+
+// ── Metrics — scope/resource picker is real (drawn from this VM's own inventory); the chart
+// itself stays honest (no telemetry/time-series store anywhere in Vyomi to sample from — the
+// same azure.monitor.metrics_scope pattern) (azure.vms.monitoring). ─────────────────────────
+function VmMetrics({ a }) {
+  return (
+    <CapabilityContainer id="azure.vms.monitoring" title={`${a.name} | Metrics`}>
+      <div className="vy-props">
+        <KV label="Scope" value={a.name} />
+        <KV label="Resource type" value="Microsoft.Compute/virtualMachines" />
+        <KV label="Resource group" value={a.resourceGroup} />
+      </div>
+      <div style={{ marginTop: 12 }}>
+        <NotSimulated feature="Metrics charts (metric definitions and time-series values)" note="The scope/resource picker above is real; there is no metric time-series store anywhere in Vyomi to chart from." />
+      </div>
+    </CapabilityContainer>
   );
 }
