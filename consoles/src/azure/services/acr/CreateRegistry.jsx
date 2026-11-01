@@ -6,7 +6,6 @@ import { useNotify } from "../../../common/notify.jsx";
 import { navigate } from "../../../common/router.js";
 import { useAsync } from "../../../common/useAsync.js";
 import { DEFAULT_RG, LOCATIONS, listResourceGroups, locationLabel } from "../../kit/arm.js";
-import { CapabilityContainer } from "../../kit/Capability.jsx";
 import CreateWizard, { FormRow, FormSection } from "../../kit/CreateWizard.jsx";
 import { Glyph } from "../../kit/common.jsx";
 import { useSubscription } from "../../kit/subscription.js";
@@ -75,7 +74,8 @@ export default function CreateRegistry() {
           </Select>
         </FormRow>
         <FormRow label="Use availability zones">
-          <Checkbox checked={f.availabilityZones} onChange={chk("availabilityZones")} aria-label="Use availability zones" />
+          <Checkbox checked={f.availabilityZones} disabled={f.pricingPlan !== "Premium"} onChange={chk("availabilityZones")} aria-label="Use availability zones" />
+          {f.pricingPlan !== "Premium" && <div style={{ fontSize: 12, marginTop: 4 }} className="vy-muted">Requires Premium</div>}
         </FormRow>
         <FormRow label="Pricing plan" required htmlFor="acr-plan">
           <Select id="acr-plan" value={f.pricingPlan} onChange={set("pricingPlan")} aria-label="Pricing plan">
@@ -145,7 +145,6 @@ export default function CreateRegistry() {
         {dl([["Customer-managed key", p.encryption.status === "enabled" ? "Enabled" : "Disabled"]])}
         <h3>Tags</h3>
         {dl(Object.keys(b.tags).length ? Object.entries(b.tags).map(([k, v]) => [k, v || "(empty)"]) : [["Tags", "None"]])}
-        <CapabilityContainer id="azure.acr.create_fields" title="Domain name label scope / Role assignment permissions mode" />
       </>
     );
   };

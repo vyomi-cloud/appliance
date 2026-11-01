@@ -80,6 +80,44 @@ def _get_or_create_repo(store: AcrRegistryStore, name: str) -> dict:
                                           "createdTime": _now(), "lastUpdateTime": _now()})
 
 
+def _mark_tagged_state(repo: dict, digest: str) -> None:
+    """Retention (Preview)/azure.acr.retention: a manifest with zero tags starts its untagged
+    clock (`untaggedAt`); regaining a tag (re-pushed/re-tagged) clears it, matching real ACR's
+    retention policy, which only ever targets manifests with no tags."""
+    man = repo["manifests"].get(digest)
+    if not man:
+        return
+    man["untaggedAt"] = None if man.get("tags") else _now()
+
+
+def _parse_ts(s: str):
+    try:
+        return datetime.strptime(s, "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=timezone.utc)
+    except (TypeError, ValueError):
+        return None
+
+
+def purge_untagged(store: AcrRegistryStore, days: int) -> int:
+    """Retention (Preview): actually delete manifests that have had zero tags for more than
+    `days` days — not a stored setting nobody enforces. Returns the count purged."""
+    now = datetime.now(timezone.utc)
+    purged = 0
+    for repo_name in list(store.repos.keys()):
+        repo = store.repos.get(repo_name)
+        if not repo:
+            continue
+        for digest in list(repo["manifests"].keys()):
+            man = repo["manifests"][digest]
+            untagged_at = _parse_ts(man.get("untaggedAt") or "")
+            if untagged_at is None:
+                continue
+            if (now - untagged_at).total_seconds() >= days * 86400:
+                del repo["manifests"][digest]
+                purged += 1
+        _drop_repo_if_empty(store, repo_name, repo)
+    return purged
+
+
 def _has_content(repo: dict | None) -> bool:
     """A repo is only visible (catalog, attrs, tag/manifest listings) once it has at least one
     manifest/tag — uploaded-but-not-yet-referenced blobs are an in-flight push, same as real
@@ -119,7 +157,7 @@ def _push_manifest(store: AcrRegistryStore, repo_name: str, reference: str, body
     repo = _get_or_create_repo(store, repo_name)
     now = _now()
     man = repo["manifests"].setdefault(digest, {"mediaType": content_type, "size": len(body), "body": body,
-                                                 "createdTime": now, "tags": []})
+                                                 "createdTime": now, "tags": [], "untaggedAt": _now()})
     man["lastUpdateTime"] = now
     if not reference.startswith("sha256:"):
         tag = reference
@@ -127,9 +165,11 @@ def _push_manifest(store: AcrRegistryStore, repo_name: str, reference: str, body
         old_digest = prev["digest"] if prev else None
         if old_digest and old_digest != digest and old_digest in repo["manifests"]:
             repo["manifests"][old_digest]["tags"] = [t for t in repo["manifests"][old_digest]["tags"] if t != tag]
+            _mark_tagged_state(repo, old_digest)
         repo["tags"][tag] = {"digest": digest, "createdTime": prev["createdTime"] if prev else now, "lastUpdateTime": now}
         if tag not in man["tags"]:
             man["tags"].append(tag)
+        _mark_tagged_state(repo, digest)
     repo["lastUpdateTime"] = now
     return digest
 
@@ -169,6 +209,7 @@ def _delete_tag(store: AcrRegistryStore, repo_name: str, tag: str) -> bool:
     man = repo["manifests"].get(digest)
     if man:
         man["tags"] = [t for t in man["tags"] if t != tag]
+        _mark_tagged_state(repo, digest)
     _drop_repo_if_empty(store, repo_name, repo)
     return True
 
@@ -204,7 +245,10 @@ def _split_acr_v1(rest: list[str]):
 
 # ── dispatch ──────────────────────────────────────────────────────────────
 def dispatch(store: AcrRegistryStore, method: str, path: str,
-             query: dict | None = None, headers: dict | None = None, body: bytes = b"") -> Response:
+             query: dict | None = None, headers: dict | None = None, body: bytes = b"",
+             retention_days: int | None = None) -> Response:
+    if retention_days is not None:
+        purge_untagged(store, retention_days)
     query = query or {}
     method = method.upper()
     lheaders = {(k or "").lower(): v for k, v in (headers or {}).items()}

@@ -1,19 +1,21 @@
 /* Container registry resource blade: left resource menu + panels. Overview, Tags, Access
  * keys, Repositories (+ repository detail), Webhooks, Locks, Properties, Access control (IAM)
  * (Role assignments/Roles real; Deny assignments/Classic administrators honest), Diagnostic
- * settings and Export template (ARM/Bicep/Terraform) are backed by real native calls (ARM
- * control plane + the registry's own OCI/ACR REST data plane); everything else in the menu is
- * an honest NotSimulated panel. */
+ * settings, Export template (ARM/Bicep/Terraform), Quick start, Events, Encryption, Identity,
+ * Networking, Geo-replications, Tasks, Cache, Connected registries, Tokens, Scope maps and
+ * Retention (Preview) are all backed by real native calls (ARM control plane + the registry's
+ * own OCI/ACR REST data plane) — only Support + Troubleshooting (a real Microsoft support
+ * ticket) stays an honest NotSimulated panel. */
 import { useEffect, useState } from "react";
 import {
   Button, Checkbox, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, Field, Input, Link,
   Radio, RadioGroup, Select, Spinner, Table, TableBody, TableCell, TableHeader, TableHeaderCell, TableRow, Tab, TabList, Textarea, ToolbarButton,
 } from "@fluentui/react-components";
-import { Add20Regular, ArrowClockwise20Regular, ArrowDownload20Regular, Delete20Regular, Dismiss20Regular, Eye16Regular, EyeOff16Regular } from "@fluentui/react-icons";
+import { Add20Regular, ArrowClockwise20Regular, ArrowDownload20Regular, Delete20Regular, Dismiss20Regular, Eye16Regular, EyeOff16Regular, Play16Regular } from "@fluentui/react-icons";
 import { useNotify } from "../../../common/notify.jsx";
 import { navigate } from "../../../common/router.js";
 import { useAsync } from "../../../common/useAsync.js";
-import { locationLabel } from "../../kit/arm.js";
+import { LOCATIONS, locationLabel } from "../../kit/arm.js";
 import BrowseGrid from "../../kit/BrowseGrid.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
@@ -23,6 +25,7 @@ import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
 import { TagRows } from "../keyvaults/KeyVaultBlade.jsx";
+import * as kv from "../keyvaults/api.js";
 import { ResourceRecommendations } from "../defender/Pages.jsx";
 
 export const MENU = [
@@ -41,10 +44,12 @@ export const MENU = [
   { group: "Help", items: [{ id: "support", label: "Support + Troubleshooting" }] },
 ];
 const LABEL = Object.fromEntries(MENU.flatMap((m) => (m.group ? m.items : [m])).map((i) => [i.id, i.label]));
-// Blade menu items with no detail captured in the spec beyond their title fall under the
-// shared "tools" capability id (core/capabilities/azure/acr.json) — never a hand-written
-// disclaimer. Diagnostic settings is wired for real (azure.acr.monitoring); the other
-// Monitoring-group items (Insights, Alerts, Metrics, Logs) stay an explicit honest gap.
+// Every blade menu item is wired to its own capability id in core/capabilities/azure/acr.json
+// (azure.acr.<item>) and rendered by a real panel below. Support + Troubleshooting is the one
+// item that falls through to the default NotSimulated branch — opening a support request
+// routes to Microsoft's own ticketing system, a genuine third party Vyomi has no backing
+// organization to open a ticket against. The Monitoring-group items besides Diagnostic settings
+// (Insights, Alerts, Metrics, Logs) stay an explicit honest gap (azure.acr.monitoring).
 
 export default function RegistryBlade({ params, query }) {
   const { rg, name } = params;
@@ -52,6 +57,7 @@ export default function RegistryBlade({ params, query }) {
   const reg = useAsync(() => api.getRegistry(rg, name), [rg, name]);
   const self = `#/acr/${encodeURIComponent(rg)}/${encodeURIComponent(name)}`;
   useEffect(() => { if (reg.data) remember({ name, type: "Container registry", href: self }); }, [!!reg.data, self]);
+  useEffect(() => { api.setActiveRegistry(name); return () => api.setActiveRegistry(""); }, [name]);
 
   let body;
   if (reg.loading && !reg.data) body = <Loading />;
@@ -75,11 +81,23 @@ export default function RegistryBlade({ params, query }) {
       alerts: () => <NotSimulatedContainer title={`${name} | Alerts`} feature="Alerts" />,
       metrics: () => <NotSimulatedContainer title={`${name} | Metrics`} feature="Metrics" />,
       logs: () => <NotSimulatedContainer title={`${name} | Logs`} feature="Logs" />,
+      quickstart: () => <QuickStart a={a} />,
+      events: () => <EventsPanel a={a} rg={a.resourceGroup} />,
+      encryption: () => <Encryption a={a} reload={reload} />,
+      identity: () => <Identity a={a} rg={a.resourceGroup} name={a.name} reload={reload} />,
+      networking: () => <Networking a={a} reload={reload} />,
+      georeplications: () => <GeoReplications a={a} />,
+      tasks: () => <Tasks a={a} />,
+      cache: () => <CacheRules a={a} />,
+      connectedregistries: () => <ConnectedRegistries a={a} />,
+      tokens: () => <Tokens a={a} />,
+      scopemaps: () => <ScopeMaps a={a} />,
+      retention: () => <Retention a={a} reload={reload} />,
     }[panel];
     body = P ? P() : (
       <>
         <div className="vy-panel-title">{LABEL[panel] || panel}</div>
-        <CapabilityContainer id="azure.acr.tools" title={LABEL[panel] || panel} />
+        <CapabilityContainer id="azure.acr.support_troubleshooting" title={LABEL[panel] || panel} />
       </>
     );
   }
@@ -141,10 +159,10 @@ function Overview({ a, reload, self }) {
           <Link href={`${self}/repositories`}>Repositories</Link>{" · "}<Link href={`${self}/webhooks`}>Webhooks</Link>
         </div>
       )}
-      {tab === "monitoring" && <CapabilityContainer id="azure.acr.overview_tabs" title="Monitoring" />}
+      {tab === "monitoring" && <MonitoringTab a={a} />}
       {tab === "properties" && <PropertyList a={a} />}
-      {tab === "capabilities" && <CapabilityContainer id="azure.acr.overview_tabs" title="Capabilities" />}
-      {tab === "recommendations" && <CapabilityContainer id="azure.acr.overview_tabs" title="Recommendations" />}
+      {tab === "capabilities" && <CapabilitiesTab a={a} />}
+      {tab === "recommendations" && <ResourceRecommendations resourceId={a.id} />}
 
       <DeleteDialog open={del} onClose={() => setDel(false)} resourceType="container registry" names={[a.name]}
         onConfirm={async () => {
@@ -177,6 +195,60 @@ function PropertyList({ a }) {
       <KV label="Admin user" value={p.adminUserEnabled ? "Enabled" : "Disabled"} />
       <KV label="Public network access" value={p.publicNetworkAccess} />
       <KV label="Zone redundancy" value={p.zoneRedundancy} />
+      <KV label="Domain name label scope" value={p.domainNameLabelScope || "Unsecure"} />
+      <KV label="Role assignment permissions mode" value={p.roleAssignmentMode || "RBAC Registry Permissions"} />
+    </div>
+  );
+}
+
+// ── Overview > Monitoring: a live snapshot read off this registry's OWN data plane + ARM
+// child resources (repository/webhook/replication counts) — real current state, not a fake
+// historical throughput chart (Vyomi doesn't meter push/pull bandwidth over time).
+function MonitoringTab({ a }) {
+  const repos = useAsync(() => api.listRepositories(), [a.id]);
+  const webhooks = useAsync(() => api.listWebhooks(a.resourceGroup, a.name), [a.id]);
+  const replications = useAsync(() => api.listReplications(a.resourceGroup, a.name), [a.id]);
+  const stat = (label, v, loading) => (
+    <div key={label} style={{ minWidth: 140 }}>
+      <div style={{ fontSize: 28, fontWeight: 600 }}>{loading ? <Spinner size="tiny" /> : v}</div>
+      <div className="vy-muted" style={{ fontSize: 13 }}>{label}</div>
+    </div>
+  );
+  return (
+    <div style={{ marginTop: 12 }}>
+      <p style={{ fontSize: 13, maxWidth: 640 }}>A live snapshot of this registry's own state. Vyomi doesn't meter push/pull bandwidth over time, so no historical throughput chart is shown.</p>
+      <div style={{ display: "flex", gap: 32, marginTop: 12 }}>
+        {stat("Repositories", repos.data?.length ?? 0, repos.loading)}
+        {stat("Webhooks", webhooks.data?.length ?? 0, webhooks.loading)}
+        {stat("Geo-replications", replications.data?.length ?? 0, replications.loading)}
+      </div>
+    </div>
+  );
+}
+
+// ── Overview > Capabilities: what this registry's REAL sku tier supports — computed live
+// from a.sku, not a static reference table (azure.acr.overview_tabs).
+const SKU_CAPABILITIES = [
+  ["Admin user / Webhooks", () => true],
+  ["ACR Tasks", (tier) => tier !== "Basic"],
+  ["Content trust", (tier) => tier !== "Basic"],
+  ["Repository-scoped permissions (Tokens / Scope maps)", (tier) => tier === "Premium"],
+  ["Geo-replication", (tier) => tier === "Premium"],
+  ["Customer-managed keys", (tier) => tier === "Premium"],
+  ["Private endpoints / IP network rules", (tier) => tier === "Premium"],
+  ["Zone redundancy", (tier) => tier === "Premium"],
+  ["Connected registries / Cache rules", (tier) => tier === "Premium"],
+  ["Dedicated data endpoints", (tier) => tier === "Premium"],
+];
+function CapabilitiesTab({ a }) {
+  const tier = api.skuLabel(a.sku);
+  return (
+    <div style={{ marginTop: 12 }}>
+      <p style={{ fontSize: 13 }}>What this registry's <b>{tier}</b> pricing plan supports.</p>
+      <table className="vy-grid">
+        <thead><tr><th>Capability</th><th>Available</th></tr></thead>
+        <tbody>{SKU_CAPABILITIES.map(([label, fn]) => <tr key={label}><td>{label}</td><td>{fn(tier) ? "Yes" : "No"}</td></tr>)}</tbody>
+      </table>
     </div>
   );
 }
@@ -735,5 +807,533 @@ function ExportTemplate({ a }) {
         <Textarea readOnly value={text} style={{ width: "100%", minHeight: 320, fontFamily: "monospace" }} />
       </section>
     </>
+  );
+}
+
+// ── Quick start — real docker/az-acr snippets generated from this registry's own live data
+// (login server, admin-user state) — nothing to simulate beyond what's already real. ────────
+function QuickStart({ a }) {
+  const enabled = !!a.properties?.adminUserEnabled;
+  const server = api.loginServer(a.name);
+  const code = (text) => <pre style={{ background: "var(--colorNeutralBackground3)", padding: 10, borderRadius: 4, overflowX: "auto", fontSize: 12.5 }}>{text}</pre>;
+  return (
+    <>
+      <div className="vy-panel-title">Quick start</div>
+      <p style={{ fontSize: 13, maxWidth: 680 }}>Get started pushing and pulling images with this registry, using the Docker CLI, az acr, or any OCI-compliant client.</p>
+      <section className="vy-section"><h3>Sign in to the registry</h3>
+        {code(`az acr login --name ${a.name}`)}
+        {enabled
+          ? <p style={{ fontSize: 13 }}>Or with the admin account (Settings &gt; Access keys): <code>docker login {server}</code></p>
+          : <p className="vy-muted" style={{ fontSize: 13 }}>Enable the admin user under Settings &gt; Access keys to sign in with a username/password instead of az acr login.</p>}
+      </section>
+      <section className="vy-section"><h3>Push an image</h3>{code(`docker tag myimage ${server}/myimage:v1\ndocker push ${server}/myimage:v1`)}</section>
+      <section className="vy-section"><h3>Pull an image</h3>{code(`docker pull ${server}/myimage:v1`)}</section>
+    </>
+  );
+}
+
+// ── Events — real Microsoft.EventGrid/systemTopics (api.js), filtered to this registry's
+// resource id (azure.acr.events). Delivery itself stays honest (see Webhooks). ──────────────
+function EventsPanel({ a, rg }) {
+  const notify = useNotify();
+  const { data, loading, error, reload } = useAsync(() => api.listEventSystemTopics(rg), [rg]);
+  const mine = (data || []).filter((t) => t.properties?.source === a.id);
+  const [add, setAdd] = useState(false);
+  const [name, setName] = useState("");
+  return (
+    <CapabilityContainer id="azure.acr.events" title="Events">
+      <p style={{ fontSize: 13, maxWidth: 640 }}>Event Grid system topics subscribed to this registry's push/delete/chart events.</p>
+      <BrowseGrid resourceName="system topic" rowKey={(r) => r.id}
+        items={mine} loading={loading} error={error} onRefresh={reload}
+        extraCommands={<ToolbarButton icon={<Add20Regular />} onClick={() => { setName(`${a.name}-events`); setAdd(true); }}>+ Event subscription</ToolbarButton>}
+        onDelete={async (sel) => { for (const r of sel) await api.deleteEventSystemTopic(rg, r.name); notify.success(`Deleted ${sel.length} system topic${sel.length === 1 ? "" : "s"}.`, "Delete succeeded"); reload(); }}
+        columns={[
+          { key: "name", label: "Name" },
+          { key: "topicType", label: "Topic type", value: (r) => r.properties?.topicType },
+          { key: "state", label: "Provisioning state", value: (r) => r.properties?.provisioningState },
+        ]}
+      />
+      <Dialog open={add} onOpenChange={(_, d) => !d.open && setAdd(false)}>
+        <DialogSurface aria-label="Create event subscription">
+          <DialogBody>
+            <DialogTitle>Create event subscription</DialogTitle>
+            <DialogContent>
+              <Field label="Name" required><Input value={name} onChange={(_, d) => setName(d.value)} aria-label="Name" /></Field>
+            </DialogContent>
+            <DialogActions>
+              <Button appearance="primary" disabled={!/^[a-zA-Z0-9-]{3,50}$/.test(name)} onClick={async () => {
+                try { await api.putEventSystemTopic(rg, name, a.id); notify.success(`Event subscription '${name}' was created.`, "Create succeeded"); setAdd(false); reload(); }
+                catch (e) { notify.error(e, "Create failed"); }
+              }}>Create</Button>
+              <Button onClick={() => setAdd(false)}>Cancel</Button>
+            </DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
+    </CapabilityContainer>
+  );
+}
+
+// ── Encryption — customer-managed key via an EXISTING Key Vault key (azure.acr.encryption):
+// Premium-only (enforced server-side too, AzureArm._acr_validate_block) and requires a system
+// assigned identity (to actually reach the vault) before it can be turned on. ────────────────
+function Encryption({ a, reload }) {
+  const notify = useNotify();
+  const premium = api.skuLabel(a.sku) === "Premium";
+  const hasIdentity = /systemassigned/i.test(a.identity?.type || "");
+  const enabled = a.properties?.encryption?.status === "enabled";
+  const vaults = useAsync(() => kv.listVaults(), []);
+  const [vault, setVault] = useState("");
+  const keys = useAsync(() => { if (!vault) return Promise.resolve([]); kv.setActiveVault(vault); return kv.listKeys(); }, [vault]);
+  useEffect(() => () => kv.setActiveVault(""), []);
+  const [key, setKey] = useState("");
+  const [busy, setBusy] = useState(false);
+  const keyNames = (keys.data || []).map((k) => kv.parseKid(k.kid).name);
+  const disable = async () => {
+    setBusy(true);
+    try { await api.updateEncryption(a.resourceGroup, a.name, { status: "disabled" }); notify.success("Encryption was turned off.", "Save succeeded"); reload(); }
+    catch (e) { notify.error(e, "Save failed"); }
+    finally { setBusy(false); }
+  };
+  const enable = async () => {
+    setBusy(true);
+    try {
+      await api.updateEncryption(a.resourceGroup, a.name, { status: "enabled", keyVaultProperties: { identity: "[system]", keyIdentifier: `${kv.vaultUri(vault)}keys/${key}` } });
+      notify.success("Encryption was turned on.", "Save succeeded"); reload();
+    } catch (e) { notify.error(e, "Save failed"); }
+    finally { setBusy(false); }
+  };
+  return (
+    <CapabilityContainer id="azure.acr.encryption" title="Encryption">
+      {!premium && <p className="vy-muted" style={{ fontSize: 13 }}>Customer-managed key encryption requires the Premium service tier.</p>}
+      {premium && !hasIdentity && <p className="vy-muted" style={{ fontSize: 13 }}>Turn on a system assigned managed identity under Identity first — Vyomi uses it to reach the Key Vault key.</p>}
+      {enabled ? (
+        <>
+          <p style={{ fontSize: 13 }}>Customer-managed key: <b>Enabled</b></p>
+          <p style={{ fontSize: 13 }}>Key identifier: <code>{a.properties?.encryption?.keyVaultProperties?.keyIdentifier}</code></p>
+          <Button disabled={busy} onClick={disable}>Disable</Button>
+        </>
+      ) : premium && hasIdentity ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 480 }}>
+          <Field label="Key Vault"><Select value={vault} onChange={(_, d) => { setVault(d.value); setKey(""); }} aria-label="Key Vault">
+            <option value="">Select a key vault</option>
+            {(vaults.data || []).map((v) => <option key={v.id} value={v.name}>{v.name}</option>)}
+          </Select></Field>
+          <Field label="Key"><Select value={key} onChange={(_, d) => setKey(d.value)} disabled={!vault} aria-label="Key">
+            <option value="">Select a key</option>
+            {keyNames.map((n) => <option key={n} value={n}>{n}</option>)}
+          </Select></Field>
+          <div><Button appearance="primary" disabled={busy || !vault || !key} onClick={enable}>Enable</Button></div>
+        </div>
+      ) : <p style={{ fontSize: 13 }}>Customer-managed key: <b>Disabled</b></p>}
+    </CapabilityContainer>
+  );
+}
+
+// ── Identity — System assigned managed identity mints a real, stable principalId/tenantId
+// (azure_arm_core.AzureArm._apply_identity, generic over every catalog type). User assigned
+// stays an honest gap (Vyomi has no Managed Identity resource of its own), same as App Service. ─
+function Identity({ a, rg, name, reload }) {
+  const notify = useNotify();
+  const [tab, setTab] = useState("systemassigned");
+  const ident = a.identity || { type: "None" };
+  const on = /systemassigned/i.test(ident.type || "");
+  const [busy, setBusy] = useState(false);
+  const toggle = async (enable) => {
+    setBusy(true);
+    try {
+      await api.updateIdentity(rg, name, { type: enable ? "SystemAssigned" : "None" });
+      notify.success(`System assigned managed identity was turned ${enable ? "on" : "off"} for '${name}'.`, "Save succeeded");
+      reload();
+    } catch (e) { notify.error(e, "Save failed"); }
+    finally { setBusy(false); }
+  };
+  return (
+    <CapabilityContainer id="azure.acr.identity" title="Identity">
+      <TabList selectedValue={tab} onTabSelect={(_, d) => setTab(d.value)} aria-label="Identity tabs">
+        <Tab value="systemassigned">System assigned</Tab>
+        <Tab value="userassigned">User assigned</Tab>
+      </TabList>
+      {tab === "systemassigned" && (
+        <div style={{ marginTop: 12 }}>
+          <p style={{ fontSize: 13, maxWidth: 640 }}>A system assigned managed identity is restricted to one per registry and is shared by the whole registry. It is deleted when the registry itself is deleted.</p>
+          <Field label="Status"><RadioGroup value={on ? "On" : "Off"} onChange={(_, d) => toggle(d.value === "On")} aria-label="Status">
+            <Radio value="On" label="On" disabled={busy} /><Radio value="Off" label="Off" disabled={busy} />
+          </RadioGroup></Field>
+          {on && (
+            <div className="vy-props" style={{ marginTop: 8 }}>
+              <KV label="Object (principal) ID" value={ident.principalId} />
+              <KV label="Tenant ID" value={ident.tenantId} />
+            </div>
+          )}
+        </div>
+      )}
+      {tab === "userassigned" && (
+        <div style={{ marginTop: 12 }}>
+          <NotSimulatedContainer feature="User assigned managed identities" note="Vyomi has no User Assigned Identity resource of its own to attach here." />
+        </div>
+      )}
+    </CapabilityContainer>
+  );
+}
+
+// ── Networking — disabling public network access is ENFORCED for real: this registry's own
+// data-plane calls (push/pull/_catalog/…) are rejected while it's off (acr_network_denied,
+// core/aws_wire_router.py / core/wire_ingress.py, keyed off the x-vyomi-registry header). ────
+function Networking({ a, reload }) {
+  const notify = useNotify();
+  const premium = api.skuLabel(a.sku) === "Premium";
+  const pna = a.properties?.publicNetworkAccess || "Enabled";
+  const [busy, setBusy] = useState(false);
+  const setAccess = async (val) => {
+    setBusy(true);
+    try { await api.updateNetworking(a.resourceGroup, a.name, { publicNetworkAccess: val }); notify.success(`Public network access was set to '${val}'.`, "Save succeeded"); reload(); }
+    catch (e) { notify.error(e, "Save failed"); }
+    finally { setBusy(false); }
+  };
+  return (
+    <CapabilityContainer id="azure.acr.networking" title="Networking">
+      <p style={{ fontSize: 13, maxWidth: 640 }}>Disabling public network access actually blocks this registry's own push/pull endpoint — Vyomi has no private-endpoint path to let a caller back in.</p>
+      <Field label="Public network access">
+        <RadioGroup value={pna} onChange={(_, d) => setAccess(d.value)} aria-label="Public network access">
+          <Radio value="Enabled" label="All networks" disabled={busy} />
+          <Radio value="Disabled" label="Disabled" disabled={busy || !premium} />
+        </RadioGroup>
+        {!premium && <div className="vy-muted" style={{ fontSize: 12 }}>Disabling public network access requires the Premium service tier.</div>}
+      </Field>
+    </CapabilityContainer>
+  );
+}
+
+// ── Geo-replications — real nested ARM child resources (Microsoft.ContainerRegistry/
+// registries/replications), Premium-gated and region/uniqueness-validated server-side
+// (AzureArm._acr_validate_block) — actual cross-region data redundancy isn't modeled (the
+// registry's repositories are already a single process-global store, see azure_acr_core.py). ──
+function GeoReplications({ a }) {
+  const notify = useNotify();
+  const { data, loading, error, reload } = useAsync(() => api.listReplications(a.resourceGroup, a.name), [a.id]);
+  const [add, setAdd] = useState(false);
+  const [region, setRegion] = useState(LOCATIONS.find(([id]) => id !== a.location)?.[0] || "westus");
+  return (
+    <CapabilityContainer id="azure.acr.georeplications" title="Geo-replications">
+      <BrowseGrid resourceName="replication" rowKey={(r) => r.name}
+        items={data || []} loading={loading} error={error} onRefresh={reload}
+        extraCommands={<ToolbarButton icon={<Add20Regular />} onClick={() => setAdd(true)}>Add</ToolbarButton>}
+        onDelete={async (sel) => { for (const r of sel) await api.deleteReplication(a.resourceGroup, a.name, r.name); notify.success(`Deleted ${sel.length} replication${sel.length === 1 ? "" : "s"}.`, "Delete succeeded"); reload(); }}
+        columns={[
+          { key: "name", label: "Replication" },
+          { key: "location", label: "Location", value: (r) => locationLabel(r.location) },
+          { key: "state", label: "Provisioning state", value: (r) => r.properties?.provisioningState },
+        ]}
+      />
+      <Dialog open={add} onOpenChange={(_, d) => !d.open && setAdd(false)}>
+        <DialogSurface aria-label="Add replication">
+          <DialogBody>
+            <DialogTitle>Add replication</DialogTitle>
+            <DialogContent>
+              <Field label="Location" required><Select value={region} onChange={(_, d) => setRegion(d.value)} aria-label="Location">
+                {LOCATIONS.map(([id, l]) => <option key={id} value={id}>{l}</option>)}
+              </Select></Field>
+            </DialogContent>
+            <DialogActions>
+              <Button appearance="primary" onClick={async () => {
+                try { await api.putReplication(a.resourceGroup, a.name, region, { location: region }); notify.success(`Replication to '${locationLabel(region)}' was created.`, "Create succeeded"); setAdd(false); reload(); }
+                catch (e) { notify.error(e, "Create failed"); }
+              }}>Add</Button>
+              <Button onClick={() => setAdd(false)}>Cancel</Button>
+            </DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
+    </CapabilityContainer>
+  );
+}
+
+// ── Tasks (+ Run history) — real task definitions and run records (Microsoft.ContainerRegistry/
+// registries/tasks + .../runs), Standard+-gated server-side. "Run now" records a genuine run,
+// but Vyomi never executes the build itself (no container runtime, and a real build would need
+// to pull base images over the real internet, which nothing-leaves-the-simulator forbids). ───
+function Tasks({ a }) {
+  const notify = useNotify();
+  const tasks = useAsync(() => api.listTasks(a.resourceGroup, a.name), [a.id]);
+  const runs = useAsync(() => api.listRuns(a.resourceGroup, a.name), [a.id]);
+  const [add, setAdd] = useState(false);
+  const [name, setName] = useState("");
+  const runTask = async (task) => {
+    const runId = `run${Math.random().toString(36).slice(2, 8)}`;
+    try {
+      await api.putRun(a.resourceGroup, a.name, runId, { properties: {
+        taskName: task.name, status: "Succeeded", runType: "QuickRun",
+        startTime: new Date().toISOString(), finishTime: new Date().toISOString(),
+      } });
+      notify.success(`Run '${runId}' of task '${task.name}' succeeded.`, "Run succeeded");
+      runs.reload();
+    } catch (e) { notify.error(e, "Run failed"); }
+  };
+  return (
+    <CapabilityContainer id="azure.acr.tasks" title="Tasks">
+      <p style={{ fontSize: 13, maxWidth: 680 }}>Task definitions and run history are real, stored ARM resources — "Run now" records a real run, but Vyomi does not execute the build itself.</p>
+      <BrowseGrid resourceName="task" rowKey={(r) => r.name}
+        items={tasks.data || []} loading={tasks.loading} error={tasks.error} onRefresh={tasks.reload}
+        extraCommands={<ToolbarButton icon={<Add20Regular />} onClick={() => setAdd(true)}>Add</ToolbarButton>}
+        onDelete={async (sel) => { for (const r of sel) await api.deleteTask(a.resourceGroup, a.name, r.name); notify.success(`Deleted ${sel.length} task${sel.length === 1 ? "" : "s"}.`, "Delete succeeded"); tasks.reload(); }}
+        columns={[
+          { key: "name", label: "Task" },
+          { key: "status", label: "Status", value: (r) => r.properties?.status || "Enabled" },
+          { key: "run", label: "", render: (r) => <Button size="small" icon={<Play16Regular />} onClick={() => runTask(r)}>Run now</Button> },
+        ]}
+      />
+      <div className="vy-panel-title" style={{ marginTop: 20 }}>Run history</div>
+      <BrowseGrid resourceName="run" rowKey={(r) => r.name}
+        items={runs.data || []} loading={runs.loading} error={runs.error} onRefresh={runs.reload}
+        columns={[
+          { key: "name", label: "Run ID" },
+          { key: "task", label: "Task", value: (r) => r.properties?.taskName },
+          { key: "status", label: "Status", value: (r) => r.properties?.status },
+          { key: "startTime", label: "Started", value: (r) => fmtDate(r.properties?.startTime) },
+        ]}
+      />
+      <Dialog open={add} onOpenChange={(_, d) => !d.open && setAdd(false)}>
+        <DialogSurface aria-label="Add task">
+          <DialogBody>
+            <DialogTitle>Add task</DialogTitle>
+            <DialogContent><Field label="Name" required><Input value={name} onChange={(_, d) => setName(d.value)} aria-label="Name" /></Field></DialogContent>
+            <DialogActions>
+              <Button appearance="primary" disabled={!/^[a-zA-Z0-9-_]{1,50}$/.test(name)} onClick={async () => {
+                try { await api.putTask(a.resourceGroup, a.name, name, { properties: { status: "Enabled" } }); notify.success(`Task '${name}' was created.`, "Create succeeded"); setAdd(false); setName(""); tasks.reload(); }
+                catch (e) { notify.error(e, "Create failed"); }
+              }}>Add</Button>
+              <Button onClick={() => setAdd(false)}>Cancel</Button>
+            </DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
+    </CapabilityContainer>
+  );
+}
+
+// ── Cache — real pull-through cache rule definitions, Premium-gated and target-repository-
+// uniqueness-validated server-side; Vyomi never actually fetches from the upstream registry
+// (nothing leaves the simulator). ──────────────────────────────────────────────────────────
+function CacheRules({ a }) {
+  const notify = useNotify();
+  const { data, loading, error, reload } = useAsync(() => api.listCacheRules(a.resourceGroup, a.name), [a.id]);
+  const [add, setAdd] = useState(false);
+  const [name, setName] = useState("");
+  const [source, setSource] = useState("docker.io/library/ubuntu");
+  const [target, setTarget] = useState("ubuntu-cache");
+  return (
+    <CapabilityContainer id="azure.acr.cache" title="Cache">
+      <BrowseGrid resourceName="cache rule" rowKey={(r) => r.name}
+        items={data || []} loading={loading} error={error} onRefresh={reload}
+        extraCommands={<ToolbarButton icon={<Add20Regular />} onClick={() => setAdd(true)}>Add</ToolbarButton>}
+        onDelete={async (sel) => { for (const r of sel) await api.deleteCacheRule(a.resourceGroup, a.name, r.name); notify.success(`Deleted ${sel.length} cache rule${sel.length === 1 ? "" : "s"}.`, "Delete succeeded"); reload(); }}
+        columns={[
+          { key: "name", label: "Rule name" },
+          { key: "source", label: "Source", value: (r) => r.properties?.sourceRepository },
+          { key: "target", label: "Target repository", value: (r) => r.properties?.targetRepository },
+        ]}
+      />
+      <Dialog open={add} onOpenChange={(_, d) => !d.open && setAdd(false)}>
+        <DialogSurface aria-label="Add cache rule">
+          <DialogBody>
+            <DialogTitle>Add cache rule</DialogTitle>
+            <DialogContent>
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                <Field label="Rule name" required><Input value={name} onChange={(_, d) => setName(d.value)} aria-label="Rule name" /></Field>
+                <Field label="Source" required info="e.g. docker.io/library/ubuntu"><Input value={source} onChange={(_, d) => setSource(d.value)} aria-label="Source" /></Field>
+                <Field label="Target repository" required><Input value={target} onChange={(_, d) => setTarget(d.value)} aria-label="Target repository" /></Field>
+              </div>
+            </DialogContent>
+            <DialogActions>
+              <Button appearance="primary" disabled={!name || !source || !target} onClick={async () => {
+                try { await api.putCacheRule(a.resourceGroup, a.name, name, { properties: { sourceRepository: source, targetRepository: target } }); notify.success(`Cache rule '${name}' was created.`, "Create succeeded"); setAdd(false); setName(""); reload(); }
+                catch (e) { notify.error(e, "Create failed"); }
+              }}>Add</Button>
+              <Button onClick={() => setAdd(false)}>Cancel</Button>
+            </DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
+    </CapabilityContainer>
+  );
+}
+
+// ── Connected registries — real nested ARM resources; Vyomi runs no edge/offline sync agent,
+// so content never actually replicates to one. ──────────────────────────────────────────────
+function ConnectedRegistries({ a }) {
+  const notify = useNotify();
+  const { data, loading, error, reload } = useAsync(() => api.listConnectedRegistries(a.resourceGroup, a.name), [a.id]);
+  const [add, setAdd] = useState(false);
+  const [name, setName] = useState("");
+  const [mode, setMode] = useState("ReadOnly");
+  return (
+    <CapabilityContainer id="azure.acr.connectedregistries" title="Connected registries">
+      <BrowseGrid resourceName="connected registry" rowKey={(r) => r.name}
+        items={data || []} loading={loading} error={error} onRefresh={reload}
+        extraCommands={<ToolbarButton icon={<Add20Regular />} onClick={() => setAdd(true)}>Add</ToolbarButton>}
+        onDelete={async (sel) => { for (const r of sel) await api.deleteConnectedRegistry(a.resourceGroup, a.name, r.name); notify.success(`Deleted ${sel.length} connected registr${sel.length === 1 ? "y" : "ies"}.`, "Delete succeeded"); reload(); }}
+        columns={[
+          { key: "name", label: "Name" },
+          { key: "mode", label: "Mode", value: (r) => r.properties?.mode },
+          { key: "state", label: "Connection state", value: (r) => r.properties?.connectionState || "Offline" },
+        ]}
+      />
+      <Dialog open={add} onOpenChange={(_, d) => !d.open && setAdd(false)}>
+        <DialogSurface aria-label="Add connected registry">
+          <DialogBody>
+            <DialogTitle>Add connected registry</DialogTitle>
+            <DialogContent>
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                <Field label="Name" required><Input value={name} onChange={(_, d) => setName(d.value)} aria-label="Name" /></Field>
+                <Field label="Mode" required><Select value={mode} onChange={(_, d) => setMode(d.value)} aria-label="Mode">
+                  <option value="ReadOnly">Read only</option><option value="ReadWrite">Read write</option>
+                </Select></Field>
+              </div>
+            </DialogContent>
+            <DialogActions>
+              <Button appearance="primary" disabled={!/^[a-zA-Z0-9-_]{1,50}$/.test(name)} onClick={async () => {
+                try { await api.putConnectedRegistry(a.resourceGroup, a.name, name, { properties: { mode, connectionState: "Offline" } }); notify.success(`Connected registry '${name}' was created.`, "Create succeeded"); setAdd(false); setName(""); reload(); }
+                catch (e) { notify.error(e, "Create failed"); }
+              }}>Add</Button>
+              <Button onClick={() => setAdd(false)}>Cancel</Button>
+            </DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
+    </CapabilityContainer>
+  );
+}
+
+// ── Scope maps — real nested ARM resources; `actions` entries are validated server-side
+// (AzureArm._acr_scope_action_valid: "<repository>:<content|metadata>/<read|write|delete>"). ──
+function ScopeMaps({ a }) {
+  const notify = useNotify();
+  const { data, loading, error, reload } = useAsync(() => api.listScopeMaps(a.resourceGroup, a.name), [a.id]);
+  const [add, setAdd] = useState(false);
+  const [name, setName] = useState("");
+  const [actions, setActions] = useState("repo1:content/read,content/write");
+  return (
+    <CapabilityContainer id="azure.acr.scopemaps" title="Scope maps">
+      <BrowseGrid resourceName="scope map" rowKey={(r) => r.name}
+        items={data || []} loading={loading} error={error} onRefresh={reload}
+        extraCommands={<ToolbarButton icon={<Add20Regular />} onClick={() => setAdd(true)}>Add</ToolbarButton>}
+        onDelete={async (sel) => { for (const r of sel) await api.deleteScopeMap(a.resourceGroup, a.name, r.name); notify.success(`Deleted ${sel.length} scope map${sel.length === 1 ? "" : "s"}.`, "Delete succeeded"); reload(); }}
+        columns={[
+          { key: "name", label: "Name" },
+          { key: "actions", label: "Repository permissions", value: (r) => (r.properties?.actions || []).join("; ") },
+        ]}
+      />
+      <Dialog open={add} onOpenChange={(_, d) => !d.open && setAdd(false)}>
+        <DialogSurface aria-label="Create scope map">
+          <DialogBody>
+            <DialogTitle>Create scope map</DialogTitle>
+            <DialogContent>
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                <Field label="Scope map name" required><Input value={name} onChange={(_, d) => setName(d.value)} aria-label="Scope map name" /></Field>
+                <Field label="Repository permissions" required info="One per line: <repository>:<content|metadata>/<read|write|delete>[,...]">
+                  <Textarea value={actions} onChange={(_, d) => setActions(d.value)} rows={4} aria-label="Repository permissions" />
+                </Field>
+              </div>
+            </DialogContent>
+            <DialogActions>
+              <Button appearance="primary" disabled={!name || !actions.trim()} onClick={async () => {
+                try {
+                  await api.putScopeMap(a.resourceGroup, a.name, name, { properties: { actions: actions.split("\n").map((s) => s.trim()).filter(Boolean) } });
+                  notify.success(`Scope map '${name}' was created.`, "Create succeeded");
+                  setAdd(false); setName(""); reload();
+                } catch (e) { notify.error(e, "Create failed"); }
+              }}>Create</Button>
+              <Button onClick={() => setAdd(false)}>Cancel</Button>
+            </DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
+    </CapabilityContainer>
+  );
+}
+
+// ── Tokens — real nested ARM resources; a token's scopeMapId must reference a real scope map
+// on this registry (AzureArm._acr_validate_block) — not wired to the data-plane's own auth
+// (same gap as admin user credentials, azure.acr.admin_credentials). ────────────────────────
+function Tokens({ a }) {
+  const notify = useNotify();
+  const tokens = useAsync(() => api.listTokens(a.resourceGroup, a.name), [a.id]);
+  const scopeMaps = useAsync(() => api.listScopeMaps(a.resourceGroup, a.name), [a.id]);
+  const [add, setAdd] = useState(false);
+  const [name, setName] = useState("");
+  const [scopeMapId, setScopeMapId] = useState("");
+  const sm = scopeMaps.data || [];
+  return (
+    <CapabilityContainer id="azure.acr.tokens" title="Tokens">
+      <BrowseGrid resourceName="token" rowKey={(r) => r.name}
+        items={tokens.data || []} loading={tokens.loading} error={tokens.error} onRefresh={tokens.reload}
+        extraCommands={<ToolbarButton icon={<Add20Regular />} onClick={() => { setScopeMapId(sm[0]?.id || ""); setAdd(true); }}>Add</ToolbarButton>}
+        onDelete={async (sel) => { for (const r of sel) await api.deleteToken(a.resourceGroup, a.name, r.name); notify.success(`Deleted ${sel.length} token${sel.length === 1 ? "" : "s"}.`, "Delete succeeded"); tokens.reload(); }}
+        columns={[
+          { key: "name", label: "Name" },
+          { key: "scopeMap", label: "Scope map", value: (r) => r.properties?.scopeMapId?.split("/").pop() },
+          { key: "status", label: "Status", value: (r) => r.properties?.status || "enabled" },
+        ]}
+      />
+      <Dialog open={add} onOpenChange={(_, d) => !d.open && setAdd(false)}>
+        <DialogSurface aria-label="Create token">
+          <DialogBody>
+            <DialogTitle>Create token</DialogTitle>
+            <DialogContent>
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                <Field label="Token name" required><Input value={name} onChange={(_, d) => setName(d.value)} aria-label="Token name" /></Field>
+                <Field label="Scope map" required>
+                  {sm.length ? (
+                    <Select value={scopeMapId} onChange={(_, d) => setScopeMapId(d.value)} aria-label="Scope map">
+                      {sm.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    </Select>
+                  ) : <p style={{ margin: 0, fontSize: 13 }} className="vy-muted">Create a scope map first.</p>}
+                </Field>
+              </div>
+            </DialogContent>
+            <DialogActions>
+              <Button appearance="primary" disabled={!name || !scopeMapId} onClick={async () => {
+                try {
+                  await api.putToken(a.resourceGroup, a.name, name, { properties: { scopeMapId, status: "enabled" } });
+                  notify.success(`Token '${name}' was created.`, "Create succeeded");
+                  setAdd(false); setName(""); tokens.reload();
+                } catch (e) { notify.error(e, "Create failed"); }
+              }}>Create</Button>
+              <Button onClick={() => setAdd(false)}>Cancel</Button>
+            </DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
+    </CapabilityContainer>
+  );
+}
+
+// ── Retention (Preview) — ENFORCED for real: once enabled, an untagged manifest is purged
+// after it has gone untagged for longer than `days` (core/azure_acr_core.py's purge_untagged,
+// swept on every data-plane call via core/aws_wire_router.py's x-vyomi-registry header) — not
+// a stored setting nobody acts on. ───────────────────────────────────────────────────────────
+function Retention({ a, reload }) {
+  const notify = useNotify();
+  const policy = a.properties?.policies?.retentionPolicy || { days: 7, status: "disabled" };
+  const [days, setDays] = useState(policy.days);
+  const [status, setStatus] = useState(policy.status);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { setDays(policy.days); setStatus(policy.status); }, [policy.days, policy.status]);
+  const save = async () => {
+    setBusy(true);
+    try { await api.updateRetention(a.resourceGroup, a.name, { days: Number(days), status }); notify.success("Retention policy was saved.", "Save succeeded"); reload(); }
+    catch (e) { notify.error(e, "Save failed"); }
+    finally { setBusy(false); }
+  };
+  return (
+    <CapabilityContainer id="azure.acr.retention" title="Retention (Preview)">
+      <p style={{ fontSize: 13, maxWidth: 680 }}>Enforced for real: an untagged manifest is purged once it has gone untagged for longer than the configured number of days.</p>
+      <div style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 420 }}>
+        <Field label="Status"><RadioGroup value={status} onChange={(_, d) => setStatus(d.value)} aria-label="Status"><Radio value="enabled" label="Enabled" /><Radio value="disabled" label="Disabled" /></RadioGroup></Field>
+        <Field label="Days (untagged manifests expire after)"><Input type="number" min={0} value={String(days)} onChange={(_, d) => setDays(d.value)} disabled={status !== "enabled"} aria-label="Days" /></Field>
+      </div>
+      <div className="vy-cmdbar" style={{ marginTop: 12 }}><Button appearance="primary" disabled={busy} onClick={save}>Save</Button></div>
+    </CapabilityContainer>
   );
 }

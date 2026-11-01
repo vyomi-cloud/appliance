@@ -441,7 +441,25 @@ def _dispatch_azure(service: str, r: AwsWireRouter, method: str, path: str, quer
         if service in ("azure_acr", "azure_servicebus"):
             from core import azure_acr_core, azure_servicebus_core
             mod, st = (azure_acr_core, r.az_acr) if service == "azure_acr" else (azure_servicebus_core, r.az_sb)
-            resp = mod.dispatch(st, method, path, query or {}, headers or {}, body or b"")
+            kwargs = {}
+            if service == "azure_acr":
+                # Same per-registry networking/retention enforcement as the Nano router
+                # (aws_wire_router.py) — see azure.acr.networking / azure.acr.retention. The
+                # console sends `x-vyomi-registry`; the registry's own data-plane wire has no
+                # other way to say which registry's publicNetworkAccess/retention policy applies.
+                from core.azure_arm_core import acr_network_denied, acr_retention_days
+                lh0 = {str(k).lower(): v for k, v in (headers or {}).items()}
+                reg0 = lh0.get("x-vyomi-registry", "")
+                if reg0 and acr_network_denied(r.az_arm.state, reg0):
+                    import json as _json
+                    body_json = _json.dumps({"errors": [{"code": "Denied",
+                        "message": f"Client is not authorized: public network access is disabled on registry '{reg0}'."}]}).encode()
+                    return {"status": 403, "headers": {"content-type": "application/json"}, "body": body_json}
+                if reg0:
+                    days = acr_retention_days(r.az_arm.state, reg0)
+                    if days is not None:
+                        kwargs["retention_days"] = days
+            resp = mod.dispatch(st, method, path, query or {}, headers or {}, body or b"", **kwargs)
             hdrs = dict(resp.headers or {})
             if resp.media_type and not any(k.lower() == "content-type" for k in hdrs):
                 hdrs["content-type"] = resp.media_type

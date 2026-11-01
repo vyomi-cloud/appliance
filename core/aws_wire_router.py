@@ -183,7 +183,7 @@ from core import azure_queue_core as az_queue
 from core.azure_queue_core import AzureQueueStore
 from core import azure_table_core as az_table
 from core.azure_table_core import AzureTableStore
-from core.azure_arm_core import AzureArm, keyvault_network_denied
+from core.azure_arm_core import AzureArm, keyvault_network_denied, acr_network_denied, acr_retention_days
 from core import azure_servicebus_core as az_sb
 from core import eventbridge_core as events
 from core import scheduler_core as sched
@@ -1014,6 +1014,23 @@ class AwsWireRouter:
                 # managementPolicies/default) — the single source of truth the Configuration/
                 # CORS/Lifecycle/Static website panels already write through ARM.
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), arm_state=self.az_arm.state)
+            elif svc == "az-acr":
+                # Same registry-scoped networking/retention enforcement as the offline substrate
+                # (core/wire_ingress.py) — see azure.acr.networking / azure.acr.retention. The
+                # console sends `x-vyomi-registry` (azure/services/acr/api.js setActiveRegistry);
+                # the registry's own data-plane wire has no other way to say which registry's
+                # publicNetworkAccess/retention policy applies.
+                registry = lheaders.get("x-vyomi-registry", "")
+                if registry and acr_network_denied(self.az_arm.state, registry):
+                    body_json = json.dumps({"errors": [{"code": "Denied",
+                        "message": f"Client is not authorized: public network access is disabled on registry '{registry}'."}]}).encode()
+                    return {"status": 403, "headers": {"content-type": "application/json"}, "body": body_json}
+                kwargs = {}
+                if registry:
+                    days = acr_retention_days(self.az_arm.state, registry)
+                    if days is not None:
+                        kwargs["retention_days"] = days
+                r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), **kwargs)
             else:
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body))
             hdrs = dict(r.headers or {})

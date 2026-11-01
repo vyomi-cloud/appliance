@@ -1164,6 +1164,23 @@ try {
   check("UI create lock → visible over native ARM", acrLockGet.status === 200, `HTTP ${acrLockGet.status}`);
   await shot("29-acr-locks");
 
+  // ── Task created through the UI → visible over native ARM (nested child resource, wave 5b
+  // gap sweep: azure.acr.tasks) → "Run now" records a real run → visible over ARM too ───────
+  await openPanel("Tasks");
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  const ACRTASK = `smoke-acrtask-${n}`;
+  await page.getByLabel("Name", { exact: true }).fill(ACRTASK);
+  await page.getByRole("dialog").getByRole("button", { name: "Add" }).click();
+  await page.getByRole("dialog", { name: "Add task" }).waitFor({ state: "detached", timeout: 20000 });
+  await page.getByText(ACRTASK, { exact: true }).waitFor({ timeout: 10000 });
+  const acrTaskGet = await wire(`/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ContainerRegistry/registries/${ACR}/tasks/${ACRTASK}?api-version=2023-07-01`);
+  check("UI create task → visible over native ARM (nested child resource)", acrTaskGet.status === 200, `HTTP ${acrTaskGet.status}`);
+  await page.getByRole("button", { name: "Run now" }).click();
+  await page.getByText(ACRTASK).nth(1).waitFor({ timeout: 10000 });   // appears again, in Run history's Task column
+  const acrRunsGet = await wire(`/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ContainerRegistry/registries/${ACR}/runs?api-version=2023-07-01`);
+  check("UI Run now → real run recorded over native ARM", acrRunsGet.status === 200 && acrRunsGet.text.includes(ACRTASK), acrRunsGet.text.slice(0, 200));
+  await shot("29b-acr-tasks");
+
   // ── Resource created over the wire → visible in the UI (CLI → UI) ──────────────────────
   const acrPut = await arm("PUT", `/resourceGroups/${RG}/providers/Microsoft.ContainerRegistry/registries/${ACR2}`, { location: "eastus" });
   check("ARM PUT container registry over wire", acrPut.status === 200 || acrPut.status === 201, `HTTP ${acrPut.status}`);
