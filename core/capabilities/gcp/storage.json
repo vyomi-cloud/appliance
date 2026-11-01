@@ -19,10 +19,10 @@
     "level": { "nano": "limited", "offline": "limited" },
     "limitations": [
       "Age, createdBefore, matchesPrefix/Suffix, matchesStorageClass and the custom-time conditions are evaluated against real object fields and really delete or transition objects (swept lazily on every request against the bucket's objects, not once a day like the real API).",
-      "numNewerVersions, daysSinceNoncurrentTime and noncurrentTimeBefore never match — Vyomi keeps no noncurrent object versions to evaluate them against.",
+      "numNewerVersions, daysSinceNoncurrentTime and noncurrentTimeBefore are now evaluated for real against the noncurrent-version archive on buckets with versioning enabled (see gcp.storage.versioning) — on a bucket with versioning off there is nothing noncurrent to match.",
       "The AbortIncompleteMultipartUpload action never fires — Vyomi's resumable-upload sessions carry no persistent \"incomplete upload\" record to sweep."
     ],
-    "tests": ["tests/conformance/test_gcp_storage_lifecycle_core.py"]
+    "tests": ["tests/conformance/test_gcp_storage_lifecycle_core.py", "tests/conformance/test_gcp_storage_versioning_core.py"]
   },
   "gcp.storage.permissions": {
     "title": "Bucket IAM policy (getIamPolicy / setIamPolicy), uniform/fine-grained access control, public access prevention",
@@ -74,33 +74,40 @@
   },
   "gcp.storage.static-website": {
     "title": "Static website configuration (main page suffix / 404 page)",
-    "level": { "nano": "config_only", "offline": "config_only" },
+    "level": { "nano": "limited", "offline": "limited" },
     "limitations": [
-      "The website config round-trips through buckets.patch exactly as a client sets it, but Vyomi does not run the separate public per-bucket static-website HTTP host (storage.googleapis.com website serving) — the suffix object and 404 page are never actually served."
+      "ENFORCED for real: Vyomi serves the configured mainPageSuffix object (and notFoundPage on a miss, with a real 404 status) on its own simulated public host at /storage/website/{bucket}/ — never the real storage.googleapis.com website host or a custom domain, since nothing in Vyomi ever reaches the real internet.",
+      "Serving ignores the bucket's IAM policy and public access prevention — Vyomi has no per-request read-authorization layer to gate this on (see gcp.storage.permissions), so a non-public bucket's website still serves."
     ],
     "tests": ["tests/conformance/test_gcp_storage_config_sections_core.py"]
   },
   "gcp.storage.requester-pays": {
     "title": "Requester Pays billing",
-    "level": { "nano": "config_only", "offline": "config_only" },
+    "level": { "nano": "limited", "offline": "limited" },
     "limitations": [
-      "The billing.requesterPays flag round-trips through buckets.patch exactly as a client sets it, but Vyomi has no billing account or distinct \"requester\" identity separate from the bucket owner to charge — access is never actually billed to a requester."
+      "ENFORCED for real on object data-plane calls (list/get/insert/delete): once billing.requesterPays is on, a request without a userProject query parameter is rejected with the real UserProjectMissing 400 error, matching gsutil/google-cloud-storage's own behaviour.",
+      "Vyomi has no billing account or distinct \"requester\" identity separate from the bucket owner, so any non-empty userProject is accepted and its request count is tracked on the bucket — it is never actually billed, and bucket-level metadata calls (buckets.get/patch, IAM) are not gated."
     ],
     "tests": ["tests/conformance/test_gcp_storage_config_sections_core.py"]
   },
   "gcp.storage.versioning": {
     "title": "Object versioning (noncurrent object versions)",
-    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "level": { "nano": "limited", "offline": "limited" },
     "limitations": [
-      "Vyomi's GCS core keeps only the latest generation of an object; it has no store for noncurrent versions, so turning on versioning cannot preserve, list or restore older generations."
-    ]
+      "ENFORCED for real: turning on bucket.versioning.enabled makes an overwrite or delete archive the prior generation instead of discarding it — ?versions=true lists every generation, a single object GET/download accepts ?generation=N for any of them, and a generation-targeted DELETE permanently removes just that one version.",
+      "A plain delete on a versioned bucket does not create a NEW generation for the removal (matching the real API) — the removed generation's number is reused; only objects.restore (see gcp.storage.soft-delete) or a fresh overwrite allocate a new one.",
+      "Vyomi's archive is an in-process dict on the GCS store, not a separately durable record — see the Nano/offline parity notes for this feature in the service's build notes."
+    ],
+    "tests": ["tests/conformance/test_gcp_storage_versioning_core.py"]
   },
   "gcp.storage.soft-delete": {
     "title": "Soft delete policy (for data recovery)",
-    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "level": { "nano": "limited", "offline": "limited" },
     "limitations": [
-      "Soft delete restores a deleted/overwritten object from its prior generation within a retention window; it depends on the same noncurrent-version history Vyomi does not keep (see gcp.storage.versioning), so a deleted object cannot be recovered."
-    ]
+      "ENFORCED for real: a bucket with softDeletePolicy.retentionDurationSeconds set archives a deleted/overwritten object's prior generation, lists it under ?softDeleted=true, and restores it to a NEW current generation via objects.restore — exactly the real recovery flow.",
+      "The retention window is swept lazily on the next request against the bucket's objects (like Vyomi's lifecycle sweep), not on a background timer like the real API, so an expired soft-deleted version is purged on next access rather than the instant it expires."
+    ],
+    "tests": ["tests/conformance/test_gcp_storage_versioning_core.py"]
   },
   "gcp.storage.encryption": {
     "title": "Data encryption with customer-managed encryption keys (CMEK)",
@@ -112,17 +119,21 @@
   },
   "gcp.storage.hierarchical-namespace": {
     "title": "Hierarchical namespace (HNS buckets with true folders)",
-    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "level": { "nano": "limited", "offline": "limited" },
     "limitations": [
-      "Vyomi's GCS core models every bucket as a flat key-value namespace (folders are zero-byte \"name/\" placeholder objects); it has no HNS bucket mode with atomic folder rename/delete and folder-level IAM."
-    ]
+      "ENFORCED for real: a bucket created with hierarchicalNamespace.enabled (which requires uniform bucket-level access, same as the real API, and is immutable afterward) gets a real Folders sub-resource — create/get/list/delete, plus an atomic rename that moves every object and subfolder under the source folder in ONE operation.",
+      "Modeled as a sub-resource of Vyomi's own classic JSON wire (/storage/v1/b/{bucket}/folders) rather than the real separate gRPC/REST Storage Control API HNS buckets actually use, and folder-level IAM is not modeled — only bucket-level IAM applies."
+    ],
+    "tests": ["tests/conformance/test_gcp_storage_hns_core.py"]
   },
   "gcp.storage.tags": {
     "title": "Resource tags (GCP-wide tag bindings, distinct from labels)",
-    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "level": { "nano": "limited", "offline": "limited" },
     "limitations": [
-      "Tags are bindings against Resource Manager's separate Tags API (tagKeys/tagValues); Vyomi's GCS core has no integration with that service, so tags can't be attached to a bucket."
-    ]
+      "ENFORCED for real against Resource Manager's own Tags v3 API (tagKeys/tagValues/tagBindings — core/gcp_resourcemanager_core.py): adding a tag auto-provisions the tagKey/tagValue if new, binds it to the bucket's full resource name, and real API constraints apply (at most one value per tag key bound to a resource).",
+      "Tag-based IAM conditions and org-policy tag enforcement are not evaluated — Vyomi's bindings are visible and real, but nothing reads them back to gate access."
+    ],
+    "tests": ["tests/conformance/test_gcp_resourcemanager_core.py"]
   },
   "gcp.storage.security-insights": {
     "title": "Security insights (bucket column) and Advisor recommendations",
@@ -133,9 +144,18 @@
   },
   "gcp.storage.observability": {
     "title": "Monitoring (Cloud Monitoring charts: request/error rates, bandwidth)",
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": [
+      "ENFORCED for real: every request against a bucket records a real point on Cloud Monitoring's own storage.googleapis.com/api/request_count metric (resource type gcs_bucket) — derived from actual API activity, not synthetic data — readable through the normal timeSeries.list API and charted for real on the Monitoring page.",
+      "Only request COUNT is metered (no error-rate breakdown by response code, no bandwidth/latency metrics) — a bucket that has never been touched this process lifetime has no series yet, same as the real API before any traffic."
+    ],
+    "tests": ["tests/conformance/test_gcp_storage_observability_core.py", "tests/conformance/test_gcp_monitoring_core.py"]
+  },
+  "gcp.storage.rapid-cache": {
+    "title": "Rapid Storage / Anywhere Cache (regional read-through cache for hot objects)",
     "level": { "nano": "not_simulated", "offline": "not_simulated" },
     "limitations": [
-      "Vyomi does not meter per-request traffic over time, so it has no time-series data to chart for request counts, error rates or bandwidth — including the Time range selector and the \"Filter by: All locations\" control, which have nothing to filter."
+      "Anywhere Cache provisions a real zonal SSD cache fronting a bucket to cut cross-region read latency; Vyomi has one in-process object store with no regional topology or cache tier to provision."
     ]
   },
   "gcp.storage.operations": {

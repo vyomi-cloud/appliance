@@ -89,7 +89,7 @@ def _gcp_service(path):
         # workerPools/operations) because Cloud Logging also lives under /v2/projects/,
         # and Cloud Scheduler's /v1/.../locations/.../jobs shares the shape one version down.
         return "gcp-run"
-    if path.startswith(("/storage/v1", "/upload/storage/v1", "/download/storage/v1")):
+    if path.startswith(("/storage/v1", "/upload/storage/v1", "/download/storage/v1", "/storage/website/")):
         return "gcp-gcs"
     if path.startswith("/v2/entries"):   # Cloud Logging: entries:write / entries:list
         return "gcp-logging"
@@ -123,7 +123,7 @@ def _gcp_service(path):
         # anything with a sub-resource after the project id is Cloud Monitoring
         # (alertPolicies, metricDescriptors, timeSeries, …).
         return "gcp-monitoring" if m.group(1) else "gcp-resourcemanager"
-    if path.startswith("/v3/tagKeys"):
+    if path.startswith(("/v3/tagKeys", "/v3/tagValues", "/v3/tagBindings")):
         return "gcp-resourcemanager"
     # Deny policies (IAM Deny API): /v2/policies/{attachmentPoint}/denypolicies[/…]
     if re.match(r"^/v2/policies/[^/]+/denypolicies(/.*)?$", path):
@@ -543,6 +543,7 @@ class AwsWireRouter:
         self.gcp_logging = s.get("gcp_logging") or gcp_logging.LoggingStore()   # Cloud Logging
         self.gcp_logging.mon_store = self.gcp_mon   # Logs Storage "Create usage alert" mirrors live byte/entry counts into Monitoring
         self.gcp_msg.mon_store = self.gcp_mon   # Pub/Sub topic/subscription Metrics tabs mirror live publish/backlog counts into Monitoring
+        self.gcs.mon_store = self.gcp_mon   # Cloud Storage request-count metering (storage.googleapis.com/api/request_count)
         self.gcp_compute = s.get("gcp_compute") or gcp_compute.ComputeStore()   # VPC: networks, subnets, firewalls, routes, addresses
         self.gcp_compute_vm = s.get("gcp_compute_vm") or gcp_compute_vm.ComputeStore()   # Compute Engine VMs, disks, images, templates
         self.gcp_mon.compute_vm_store = self.gcp_compute_vm   # Overview "VMs with Ops Agent" + uptime checks targeting a GCE instance read real Compute Engine state
