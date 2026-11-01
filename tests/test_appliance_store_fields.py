@@ -87,3 +87,30 @@ def test_core_slot_store_covers_every_field(name, cls):
     # the seeded slot survives the state codec (one bad object breaks every save)
     assert aps._state_json_safe(dict(cls._DEFAULTS))
     json.dumps(sorted(cls._FIELDS))
+
+
+# _SlotStore adapters skip the base store's __init__ (their dicts ARE the space slot), so every
+# field the base store's __init__ creates must be declared in _KEYS + a slot attr — otherwise
+# the shared core hits AttributeError OFFLINE only (the in-memory dev server/Nano never see it).
+# Seen: gcp_firestore_core's Query Insights / Key Visualizer counters (key_access, …).
+import pytest as _pytest
+
+_SLOT_ADAPTERS = [c for c in vars(aps).values()
+                  if isinstance(c, type) and issubclass(c, aps._SlotStore) and c is not aps._SlotStore
+                  and getattr(c, "_KEYS", None)]
+
+
+@_pytest.mark.parametrize("cls", _SLOT_ADAPTERS, ids=lambda c: c.__name__)
+def test_slot_adapter_covers_base_store_fields(cls):
+    base = next(b for b in cls.__mro__[1:] if b is not aps._SlotStore and not issubclass(b, aps._SlotStore)
+                and b is not object)
+    try:
+        inst = base()
+    except TypeError:
+        _pytest.skip(f"{base.__name__}() needs args")
+    own_init = inspect.getsource(cls.__init__) if "__init__" in vars(cls) else ""   # config the adapter sets itself
+    missing = sorted(k for k, v in vars(inst).items()
+                     if not k.startswith("_") and aps._state_json_safe(v)
+                     and k not in cls._KEYS and not isinstance(getattr(cls, k, None), property)
+                     and f"self.{k} =" not in own_init)
+    assert not missing, f"{cls.__name__} lacks durable slots for {base.__name__} fields {missing}"
