@@ -80,15 +80,17 @@
  "gcp.artifacts.encryption": {
   "title": "Encryption (customer-managed key)",
   "level": {
-   "nano": "config_only",
-   "offline": "config_only"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "A customer-managed key resource name is stored on the repository and returned by the API; Vyomi does not verify the key exists or encrypt stored data with it."
+   "kmsKeyName is validated against a real Cloud KMS CryptoKey (core/gcp_kms_core.py): repository creation fails if the key does not exist or its primary version is not ENABLED, the key is immutable after creation (patch rejects changing it), and every subsequent push re-checks the key's live state and genuinely wraps the new version's digest with it through the real KMS core — a key disabled or destroyed after creation makes new pushes fail, not just a cosmetic label. Vyomi still has no byte content to encrypt (Artifact Registry's data plane here is metadata — package/version/tag records, not stored file bytes), so the envelope crypto proves the key is live and usable rather than encrypting an actual artifact payload."
   ],
   "api": [
    "repositories.create (kmsKeyName)",
-   "repositories.get"
+   "repositories.patch",
+   "repositories.get",
+   "repositories.pushSample"
   ],
   "tests": [
    "tests/conformance/test_gcp_artifactregistry_core.py"

@@ -111,7 +111,7 @@ def _sync_registry() -> None:
                 h, man = get(f"{base}/{repo}/manifests/{tag}", accept)
                 size = sum(int(l.get("size", 0)) for l in man.get("layers", [])) + int((man.get("config") or {}).get("size", 0))
                 found.append({"path": path, "tag": tag, "digest": h.get("Docker-Content-Digest", ""), "size": size})
-        if ar.ingest_registry_images(_STORE, project, [f for f in found if f["digest"]]):
+        if ar.ingest_registry_images(_STORE, project, [f for f in found if f["digest"]], kms_store=_kms_store()):
             _usage("registry_push", project)
     except Exception:
         pass            # registry down / not started: control plane keeps working
@@ -125,13 +125,21 @@ def _usage(op: str, name: str) -> None:
         pass
 
 
+def _kms_store():
+    """The same Cloud KMS core/store the offline appliance's own KMS routes use (v4 C0b),
+    so a repository's CMEK key is checked/used against real key state, not just a stored
+    string — core/gcp_artifactregistry_core.py's cross-core seam into core/gcp_kms_core.py."""
+    from core import appliance_stores as aps
+    return aps.gcp_kms_store()
+
+
 def register(app: FastAPI) -> None:
     async def _wire(request: Request):
         body = await request.body()
         if request.method == "GET":
             await run_in_threadpool(_sync_registry)
         r = ar.dispatch(_STORE, request.method, request.url.path, dict(request.query_params),
-                        dict(request.headers), body)
+                        dict(request.headers), body, kms_store=_kms_store())
         if r.status == 404 and "/operations/" in request.url.path:
             # The /operations/{op} path is shared with Kubernetes Engine and Memorystore LROs.
             from core import gcp_container_core as _gke, gcp_redis_core as _redis
@@ -206,6 +214,6 @@ def register(app: FastAPI) -> None:
             await run_in_threadpool(_sync_registry)
             return {"ok": True, "items": ar.console_children(_STORE, name, op[4:].lower())}
         if op == "pushSample":
-            out = ar.console_push_sample(_STORE, name, await _json(request))
+            out = ar.console_push_sample(_STORE, name, await _json(request), kms_store=_kms_store())
             return JSONResponse(out, status_code=200 if out.get("ok") else 404)
         return JSONResponse({"ok": False, "code": "UnknownOperation", "name": op}, status_code=404)
