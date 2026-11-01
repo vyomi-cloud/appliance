@@ -45,7 +45,7 @@ from __future__ import annotations
 
 import re
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 NAMESPACE = "Microsoft.Insights"
 API_VERSION = "2018-03-01"                    # primary catalog type (metricAlerts)
@@ -61,6 +61,8 @@ TYPES = {
     "datacollectionrules": ("dataCollectionRules", "2023-03-11"),
     "datacollectionendpoints": ("dataCollectionEndpoints", "2023-03-11"),
     "privatelinkscopes": ("privateLinkScopes", "2021-07-01-preview"),
+    "healthmodels": ("healthModels", "2023-04-01-preview"),
+    "pipelinegroups": ("pipelineGroups", "2023-10-01-preview"),
 }
 # ARM echoes these type strings back (autoscale is lower-cased in the real service)
 TYPE_STRINGS = {"actiongroups": "Microsoft.Insights/actionGroups", "metricalerts": "Microsoft.Insights/metricAlerts",
@@ -69,7 +71,9 @@ TYPE_STRINGS = {"actiongroups": "Microsoft.Insights/actionGroups", "metricalerts
                 "workbooks": "Microsoft.Insights/workbooks",
                 "datacollectionrules": "Microsoft.Insights/dataCollectionRules",
                 "datacollectionendpoints": "Microsoft.Insights/dataCollectionEndpoints",
-                "privatelinkscopes": "Microsoft.Insights/privateLinkScopes"}
+                "privatelinkscopes": "Microsoft.Insights/privateLinkScopes",
+                "healthmodels": "Microsoft.Insights/healthModels",
+                "pipelinegroups": "Microsoft.Insights/pipelineGroups"}
 
 EVAL_FREQUENCIES = ("PT1M", "PT5M", "PT15M", "PT30M", "PT1H")
 WINDOW_SIZES = ("PT1M", "PT5M", "PT15M", "PT30M", "PT1H", "PT6H", "PT12H", "P1D")
@@ -516,6 +520,39 @@ def _plscope_props(props, old=None):
             "provisioningState": "Succeeded"}
 
 
+# ═══════════════════════════ health models (preview) ═════════════════════════════
+# Microsoft.Insights/healthModels: a named collection of member resource ids. Modelled as a
+# plain generic-catalog resource (same CRUD shape as workbooks) — the rollup health per member
+# is NOT stored here (it is computed at read time by the console from the real Activity log's
+# status field, see core/azure_arm_core.py's deployment-failure status="Failed" rows), so a
+# model's health can never go stale relative to what actually happened.
+def _health_model_props(props, old=None):
+    p = dict(old or {})
+    p.update(props)
+    out = {"displayName": _str(p.get("displayName") or p.get("name") or "", "displayName"),
+           "resources": _scopes(p, "resources"), "provisioningState": "Succeeded"}
+    return out
+
+
+# ═══════════════════════════ Azure Monitor pipelines (preview) ════════════════════
+# Microsoft.Insights/pipelineGroups: an OpenTelemetry-collector-fleet configuration (platform +
+# the collector endpoints it forwards to). Stored and validated exactly like the real resource;
+# nothing is ever actually collected or forwarded (there is no on-premises collector fleet to
+# run), the same "config real, data flow not" shape as dataCollectionRules/Endpoints above.
+PIPELINE_PLATFORMS = ("Linux", "Windows")
+
+
+def _pipeline_props(props, old=None):
+    p = dict(old or {})
+    p.update(props)
+    platform = _enum(p.get("platform") or "Linux", "platform", PIPELINE_PLATFORMS)
+    endpoints = p.get("collectorEndpoints")
+    if endpoints is not None and not isinstance(endpoints, list):
+        raise _bad("The property 'collectorEndpoints' must be an array.")
+    return {"platform": platform, "collectorEndpoints": [str(e) for e in (endpoints or [])],
+            "provisioningState": "Succeeded"}
+
+
 _BUILDERS = {"actiongroups": lambda pr, old, nm: _action_group_props(pr, old),
              "metricalerts": lambda pr, old, nm: _metric_alert_props(pr, old),
              "activitylogalerts": lambda pr, old, nm: _activity_props(pr, old),
@@ -523,7 +560,9 @@ _BUILDERS = {"actiongroups": lambda pr, old, nm: _action_group_props(pr, old),
              "workbooks": lambda pr, old, nm: _workbook_props(pr, old),
              "datacollectionrules": lambda pr, old, nm: _dcr_props(pr, old),
              "datacollectionendpoints": _dce_props,
-             "privatelinkscopes": lambda pr, old, nm: _plscope_props(pr, old)}
+             "privatelinkscopes": lambda pr, old, nm: _plscope_props(pr, old),
+             "healthmodels": lambda pr, old, nm: _health_model_props(pr, old),
+             "pipelinegroups": lambda pr, old, nm: _pipeline_props(pr, old)}
 
 
 # ═══════════════════ private link scopes — scoped resources (child resource) ═════
@@ -671,6 +710,193 @@ def upsert_diagnostic_setting(state, scope_rid, name, payload):
 
 def remove_diagnostic_setting(state, scope_rid, name):
     rec = state.pop(f"{_diag_base(scope_rid)}/{name}".lower(), None)
+    return _ok(None, 200 if rec is not None else 204)
+
+
+# ═══════════ metrics data plane (Microsoft.Insights/metricDefinitions, metrics) ══════
+# Resource-scoped extension APIs (chain re-enters "providers", same shape as diagnostic
+# settings above) — the real Azure Monitor metrics pass-through. Vyomi has exactly ONE real
+# metric: "ActivityOperations", a genuine count of this resource's own Activity log rows
+# (core/azure_arm_core.py's _record_activity / azure_webapp_core._record_event writes),
+# bucketed over the requested interval — never synthetic/random values. Metric definitions and
+# the metrics endpoint are both 404 for a resource id that doesn't exist, matching real ARM.
+_METRIC_NAME = "ActivityOperations"
+_METRIC_DISPLAY = "Activity operations"
+_METRIC_UNIT = "Count"
+_METRIC_AGGS = ("Total", "Count", "Average", "Minimum", "Maximum")
+
+
+def find_metrics_marker(chain):
+    """Index of the ['providers','Microsoft.Insights','metricDefinitions'|'metrics'] marker."""
+    for i in range(len(chain) - 2):
+        if (chain[i].lower() == "providers" and chain[i + 1].lower() == "microsoft.insights"
+                and chain[i + 2].lower() in ("metricdefinitions", "metrics")):
+            return i
+    return None
+
+
+def list_metric_definitions(state, scope_rid):
+    if scope_rid.lower() not in state:
+        return _err(404, "ResourceNotFound", f"The Resource '{scope_rid}' was not found.")
+    return _ok({"value": [{
+        "id": f"{scope_rid}/providers/{NAMESPACE}/metricDefinitions/{_METRIC_NAME}",
+        "resourceId": scope_rid, "name": {"value": _METRIC_NAME, "localizedValue": _METRIC_DISPLAY},
+        "namespace": "Platform", "unit": _METRIC_UNIT, "primaryAggregationType": "Total",
+        "supportedAggregationTypes": list(_METRIC_AGGS),
+        "metricAvailabilities": [{"timeGrain": g, "retention": "P30D"} for g in WINDOW_SIZES],
+    }]})
+
+
+def _parse_metric_iso(s):
+    if not s:
+        return None
+    try:
+        return datetime.fromisoformat(str(s).strip().replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def get_metrics(state, scope_rid, query):
+    if scope_rid.lower() not in state:
+        return _err(404, "ResourceNotFound", f"The Resource '{scope_rid}' was not found.")
+    query = query or {}
+    names = [n.strip() for n in str(query.get("metricnames") or _METRIC_NAME).split(",") if n.strip()]
+    for n in names:
+        if n.lower() != _METRIC_NAME.lower():
+            return _err(400, "BadRequest",
+                        f"Failed to find metric configuration for provider: microsoft.insights, "
+                        f"metric name: {n}, metric namespace: Platform.")
+    interval = query.get("interval") or "PT1H"
+    if interval not in WINDOW_SIZES:
+        return _err(400, "BadRequest",
+                    f"The property 'interval' has invalid value '{interval}'. Allowed values: {', '.join(WINDOW_SIZES)}.")
+    aggs = [a.strip() for a in str(query.get("aggregation") or "Total").split(",") if a.strip()]
+    for a in aggs:
+        if a not in _METRIC_AGGS:
+            return _err(400, "BadRequest",
+                        f"The property 'aggregation' has invalid value '{a}'. Allowed values: {', '.join(_METRIC_AGGS)}.")
+    now = datetime.now(timezone.utc)
+    timespan = query.get("timespan")
+    if timespan:
+        parts = str(timespan).split("/")
+        start, end = (_parse_metric_iso(parts[0]), _parse_metric_iso(parts[1])) if len(parts) == 2 else (None, None)
+        if start is None or end is None:
+            return _err(400, "BadRequest", "The property 'timespan' must be '<start>/<end>' ISO 8601.")
+        if start.tzinfo is None:
+            start = start.replace(tzinfo=timezone.utc)
+        if end.tzinfo is None:
+            end = end.replace(tzinfo=timezone.utc)
+        if end <= start:
+            return _err(400, "BadRequest", "The property 'timespan' end must be after start.")
+    else:
+        start, end = now - timedelta(hours=24), now
+    step_min = _DUR_MIN[interval]
+    n_buckets = int((end - start).total_seconds() // (step_min * 60)) + 1
+    if n_buckets < 1 or n_buckets > 500:
+        return _err(400, "BadRequest", "The requested timespan/interval produces too many data points (max 500).")
+    scope_key = scope_rid.lower()
+    timestamps = []
+    for r in state.values():
+        if str(r.get("_type", "")).lower() != "microsoft.insights/eventtypes":
+            continue
+        if str(r.get("resourceId", "")).lower() != scope_key:
+            continue
+        ts = _parse_metric_iso(r.get("eventTimestamp"))
+        if ts is not None:
+            timestamps.append(ts)
+    step = timedelta(minutes=step_min)
+    buckets = [start + step * i for i in range(n_buckets)]
+    counts = [0] * len(buckets)
+    for ts in timestamps:
+        if ts < start or ts > end:
+            continue
+        idx = min(int((ts - start).total_seconds() // (step_min * 60)), len(buckets) - 1)
+        counts[idx] += 1
+    data = []
+    for t, c in zip(buckets, counts):
+        point = {"timeStamp": t.strftime("%Y-%m-%dT%H:%M:%SZ")}
+        if "Total" in aggs:
+            point["total"] = c
+        if "Count" in aggs:
+            point["count"] = c
+        if "Average" in aggs:
+            point["average"] = c
+        if "Minimum" in aggs:
+            point["minimum"] = c
+        if "Maximum" in aggs:
+            point["maximum"] = c
+        data.append(point)
+    value = [{
+        "id": f"{scope_rid}/providers/{NAMESPACE}/metrics/{n}",
+        "type": "Microsoft.Insights/metrics",
+        "name": {"value": n, "localizedValue": _METRIC_DISPLAY},
+        "displayDescription": "Count of real Azure Resource Manager write/delete operations Vyomi "
+                               "recorded against this resource (from its own Activity log).",
+        "unit": _METRIC_UNIT,
+        "timeseries": [{"metadatavalues": [], "data": data}],
+    } for n in names]
+    return _ok({"cost": 0, "timespan": f"{start.strftime('%Y-%m-%dT%H:%M:%SZ')}/{end.strftime('%Y-%m-%dT%H:%M:%SZ')}",
+                "interval": interval, "namespace": "Platform", "resourceregion": "", "value": value})
+
+
+# ═══ data collection rule associations (ARM extension resource, preview Observability agents) ═
+# Microsoft.Insights/dataCollectionRuleAssociations: links a target resource (a VM today) to a
+# REAL, already-existing Data Collection Rule — the real Azure mechanic behind "Observability
+# agents (preview)" / VM insights data collection, modelled the same way scopedResources above
+# links a workspace into a Private Link Scope: validated against the shared ARM store, not a
+# stored-but-inert setting. No agent process actually runs or ships data.
+_DCRA_TYPE = f"{NAMESPACE}/dataCollectionRuleAssociations"
+DCRA_API_VERSION = "2023-03-11"
+
+
+def find_dcra_marker(chain):
+    for i in range(len(chain) - 2):
+        if (chain[i].lower() == "providers" and chain[i + 1].lower() == "microsoft.insights"
+                and chain[i + 2].lower() == "datacollectionruleassociations"):
+            return i
+    return None
+
+
+def _dcra_base(scope_rid):
+    return f"{scope_rid}/providers/{NAMESPACE}/dataCollectionRuleAssociations"
+
+
+def list_dcr_associations(state, scope_rid):
+    items = [r for r in state.values() if r.get("_dcra_scope") == scope_rid.lower()]
+    items.sort(key=lambda r: r["name"].lower())
+    return _ok({"value": [_view(r) for r in items]})
+
+
+def get_dcr_association(state, scope_rid, name):
+    rec = state.get(f"{_dcra_base(scope_rid)}/{name}".lower())
+    if rec is None:
+        return _err(404, "ResourceNotFound", f"The association '{name}' was not found.")
+    return _ok(_view(rec))
+
+
+def upsert_dcr_association(state, scope_rid, name, payload):
+    prob = _name_problem(name)
+    if prob:
+        return _err(400, "BadRequest", prob)
+    props_in = (payload or {}).get("properties") or {}
+    dcr_id = str(props_in.get("dataCollectionRuleId") or "").strip()
+    if not dcr_id:
+        return _err(400, "BadRequest", "The property 'properties.dataCollectionRuleId' is required.")
+    target = state.get(dcr_id.lower())
+    if target is None or str(target.get("_type", "")).lower() != TYPE_STRINGS["datacollectionrules"].lower():
+        return _err(400, "ResourceNotFound", f"The data collection rule '{dcr_id}' was not found.")
+    rid = f"{_dcra_base(scope_rid)}/{name}"
+    key = rid.lower()
+    existed = key in state
+    rec = {"id": rid, "name": name, "type": _DCRA_TYPE,
+           "properties": {"dataCollectionRuleId": dcr_id, "provisioningState": "Succeeded"},
+           "_type": _DCRA_TYPE.lower(), "_dcra_scope": scope_rid.lower()}
+    state[key] = rec
+    return _ok(_view(rec), 201 if not existed else 200, rid=rid, verb="put")
+
+
+def remove_dcr_association(state, scope_rid, name):
+    rec = state.pop(f"{_dcra_base(scope_rid)}/{name}".lower(), None)
     return _ok(None, 200 if rec is not None else 204)
 
 

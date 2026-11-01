@@ -77,11 +77,14 @@
   },
   "azure.monitor.metrics_charts": {
     "title": "Metrics charts (metric definitions and time-series values)",
-    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "level": { "nano": "limited", "offline": "limited" },
     "limitations": [
-      "Metric definitions and metric values are not modelled — there is no time-series store to chart.",
-      "Not simulated: Scope, Metric Namespace, Metric, Aggregation, Add metric, Add filter, Apply splitting, Line chart, Drill into Logs, New alert rule, Save to dashboard."
-    ]
+      "Exactly one real metric exists per resource — \"Activity operations\", a genuine count of that resource's own Activity log rows (never synthetic/random data), bucketed over the requested interval.",
+      "Average/Minimum/Maximum report the same per-bucket count as Total/Count (there is only one real sample per bucket) — Azure's richer resource-specific metric catalogs (CPU, requests, throughput, …) are not reproduced.",
+      "Not simulated: Add filter, Apply splitting, Save to dashboard — Vyomi has no metric dimensions and no custom-dashboard resource to save a chart into."
+    ],
+    "api": ["Resources.List", "Metrics.ListDefinitions", "Metrics.List"],
+    "tests": ["tests/conformance/test_azure_monitor_core.py", "tests/conformance/test_azure_arm_core.py"]
   },
   "azure.monitor.log_query": {
     "title": "Log Analytics query (KQL)",
@@ -97,18 +100,32 @@
   },
   "azure.monitor.observability_agents": {
     "title": "Observability agents (preview)",
-    "level": { "nano": "not_simulated", "offline": "not_simulated" },
-    "limitations": ["Agent-based collector management is out of scope for a simulator."]
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": [
+      "Modelled as the real mechanic behind it — a Microsoft.Insights/dataCollectionRuleAssociations extension resource linking a VM to an existing Data Collection Rule, validated against the shared ARM store — rather than a cosmetic \"agent installed\" flag.",
+      "No agent process actually runs on the VM and no telemetry is ever collected or shipped; only Virtual Machines are offered (Arc-connected servers are not modelled)."
+    ],
+    "api": ["DataCollectionRuleAssociations.CreateOrUpdate", "DataCollectionRuleAssociations.List", "DataCollectionRuleAssociations.Delete"],
+    "tests": ["tests/conformance/test_azure_monitor_core.py"]
   },
   "azure.monitor.issues": {
     "title": "Issues",
-    "level": { "nano": "not_simulated", "offline": "not_simulated" },
-    "limitations": ["Cross-signal issue correlation is not modelled."]
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": [
+      "Vyomi has no cross-signal (metrics + logs + availability) ML correlation engine; this groups the one real failure signal the backend produces — Activity log rows whose status isn't Succeeded — by resource.",
+      "Today the only path that ever logs a non-Succeeded row is a real ARM template deployment whose template evaluation fails (core/azure_arm_core.py); most other operations fail before being accepted and so never appear here, matching real Azure deployment semantics but not its broader anomaly detection."
+    ],
+    "api": ["ActivityLogs.List"],
+    "tests": ["tests/conformance/test_azure_arm_core.py"]
   },
   "azure.monitor.health_models": {
     "title": "Health models",
-    "level": { "nano": "not_simulated", "offline": "not_simulated" },
-    "limitations": ["Health model authoring and evaluation is not modelled."]
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": [
+      "A health model is real CRUD (Microsoft.Insights/healthModels: a named collection of member resource ids); the rollup health per member is computed from the same real Activity-log failure signal Issues uses, not authored dependency/signal graphs with weighted health criteria the real feature supports."
+    ],
+    "api": ["HealthModels.CreateOrUpdate", "HealthModels.List", "HealthModels.Delete"],
+    "tests": ["tests/conformance/test_azure_monitor_core.py"]
   },
   "azure.monitor.change_analysis": {
     "title": "Change Analysis (derived from the real Activity log)",
@@ -122,8 +139,12 @@
   },
   "azure.monitor.service_health": {
     "title": "Service health",
-    "level": { "nano": "not_simulated", "offline": "not_simulated" },
-    "limitations": ["There is no Azure service-health incident feed to mirror; every simulated service is always healthy."]
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": [
+      "There is no real Azure platform behind Vyomi to go down, so a fabricated incident feed would be dishonest. Instead this lists the REAL resource provider namespaces this subscription has registered (GET /subscriptions/{sub}/providers) — every one Available, which is a true statement about this environment (no fault injection), not a canned incident list."
+    ],
+    "api": ["Providers.List"],
+    "tests": ["tests/conformance/test_azure_arm_core.py"]
   },
   "azure.monitor.workbooks": {
     "title": "Workbooks (Gallery): create, list, delete",
@@ -145,18 +166,30 @@
   },
   "azure.monitor.containers_insights": {
     "title": "Container insights",
-    "level": { "nano": "not_simulated", "offline": "not_simulated" },
-    "limitations": ["AKS/ACI are not modelled by any Vyomi core, so there is no container inventory to show."]
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": [
+      "Shows Vyomi's real AKS cluster inventory (Microsoft.ContainerService/managedClusters, the same core/azure_arm_core.py store the AKS console reads); there is no container/pod-level telemetry or log collection — that needs an agent-based collection pipeline Vyomi does not run."
+    ],
+    "api": ["Resources.List"],
+    "tests": ["tests/conformance/test_azure_arm_core.py"]
   },
   "azure.monitor.redis_insights": {
     "title": "Azure Cache for Redis insights",
-    "level": { "nano": "not_simulated", "offline": "not_simulated" },
-    "limitations": ["Azure Cache for Redis is not modelled by any Vyomi core."]
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": [
+      "Microsoft.Cache/redis is a real, generic-catalog ARM resource (control plane only — the cache instance, SKU and access keys behave like Azure); this page shows that real inventory, not a telemetry rollup (there is no Redis data-plane protocol server behind it)."
+    ],
+    "api": ["Resources.List"],
+    "tests": ["tests/conformance/test_azure_arm_core.py"]
   },
   "azure.monitor.data_explorer_insights": {
     "title": "Azure Data Explorer Clusters insights",
-    "level": { "nano": "not_simulated", "offline": "not_simulated" },
-    "limitations": ["Azure Data Explorer is not modelled by any Vyomi core."]
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": [
+      "Microsoft.Kusto/clusters is a real, generic-catalog ARM resource (control plane only — the cluster resource, SKU and state behave like Azure); this page shows that real inventory, not a telemetry rollup (there is no Kusto query engine behind it)."
+    ],
+    "api": ["Resources.List"],
+    "tests": ["tests/conformance/test_azure_arm_core.py"]
   },
   "azure.monitor.azure_local_insights": {
     "title": "Azure Local insights",
@@ -211,9 +244,13 @@
     "tests": ["tests/conformance/test_azure_monitor_core.py", "tests/conformance/test_azure_arm_core.py"]
   },
   "azure.monitor.pipelines": {
-    "title": "Azure Monitor pipelines",
-    "level": { "nano": "not_simulated", "offline": "not_simulated" },
-    "limitations": ["Azure Monitor pipelines (on-premises collector fleet management) are out of scope for a simulator."]
+    "title": "Azure Monitor pipelines (create, list, delete)",
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": [
+      "A pipeline group's platform and collector endpoints are stored and validated exactly as the real resource requires (Microsoft.Insights/pipelineGroups); no on-premises OpenTelemetry collector fleet actually runs, so nothing is ever collected or forwarded — the same \"config real, data flow not\" shape as Data Collection Endpoints."
+    ],
+    "api": ["PipelineGroups.CreateOrUpdate", "PipelineGroups.List", "PipelineGroups.Delete"],
+    "tests": ["tests/conformance/test_azure_monitor_core.py"]
   },
   "azure.monitor.private_link_scopes": {
     "title": "Azure Monitor Private Link Scopes (create, list, delete, access mode settings, Azure Monitor Resources)",

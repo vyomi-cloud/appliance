@@ -26,6 +26,11 @@ import CreatePrivateLinkScope from "./CreatePrivateLinkScope.jsx";
 import PrivateLinkScopeResources from "./PrivateLinkScopeResources.jsx";
 import DiagnosticSettings from "./DiagnosticSettings.jsx";
 import DiagnosticSettingsResource from "./DiagnosticSettingsResource.jsx";
+import ObservabilityAgents from "./ObservabilityAgents.jsx";
+import Issues from "./Issues.jsx";
+import HealthModels from "./HealthModels.jsx";
+import ServiceHealth from "./ServiceHealth.jsx";
+import Pipelines from "./Pipelines.jsx";
 import { RESOURCE_TYPES } from "./api.js";
 import { gapRoutes, DashboardsWithGrafana, ManagedPrometheus } from "./StaticPages.jsx";
 
@@ -33,7 +38,8 @@ const crumb = (text, href) => [{ text, href: `#/monitor/${href}` }];
 const rt = (provider, type) => RESOURCE_TYPES.find((r) => r.provider === provider && r.type === type);
 
 /** Applications / Virtual Machines / Storage accounts / Networks / Azure Cosmos DB / Key Vaults /
- * Service Bus (preview): real per-type inventory (Insights submenu). */
+ * Service Bus (preview) / Containers / Azure Cache for Redis / Azure Data Explorer Clusters:
+ * real per-type inventory (Insights submenu), over the generic ARM store. */
 const INSIGHTS_RESOURCE_PAGES = [
   ["insights-applications", "Applications", "Microsoft.Web", "sites", "#/functionapp/create", false],
   ["insights-vms", "Virtual Machines", "Microsoft.Compute", "virtualMachines", null, false],
@@ -42,6 +48,9 @@ const INSIGHTS_RESOURCE_PAGES = [
   ["insights-cosmosdb", "Azure Cosmos DB", "Microsoft.DocumentDB", "databaseAccounts", null, false],
   ["insights-keyvaults", "Key Vaults", "Microsoft.KeyVault", "vaults", "#/keyvaults/create", true],
   ["insights-servicebus", "Service Bus (preview)", "Microsoft.ServiceBus", "namespaces", null, false],
+  ["insights-containers", "Containers", "Microsoft.ContainerService", "managedClusters", null, false],
+  ["insights-redis", "Azure Cache for Redis", "Microsoft.Cache", "redis", null, false],
+  ["insights-dataexplorer", "Azure Data Explorer Clusters", "Microsoft.Kusto", "clusters", null, false],
 ];
 
 export default {
@@ -76,6 +85,11 @@ export default {
     { pattern: "/monitor/privatelinkscoperesources", component: PrivateLinkScopeResources, crumbs: () => crumb("Azure Monitor Resources", "privatelinkscopes") },
     { pattern: "/monitor/diagnosticsettings", component: DiagnosticSettings, crumbs: () => crumb("Diagnostic settings", "diagnosticsettings") },
     { pattern: "/monitor/diagnosticsettingsresource", component: DiagnosticSettingsResource, crumbs: () => crumb("Diagnostic settings", "diagnosticsettings") },
+    { pattern: "/monitor/observabilityagents", component: ObservabilityAgents, crumbs: () => crumb("Observability agents (preview)", "observabilityagents") },
+    { pattern: "/monitor/issues", component: Issues, crumbs: () => crumb("Issues", "issues") },
+    { pattern: "/monitor/healthmodels", component: HealthModels, crumbs: () => crumb("Health models", "healthmodels") },
+    { pattern: "/monitor/servicehealth", component: ServiceHealth, crumbs: () => crumb("Service health", "servicehealth") },
+    { pattern: "/monitor/pipelines", component: Pipelines, crumbs: () => crumb("Azure Monitor pipelines", "pipelines") },
     ...INSIGHTS_RESOURCE_PAGES.map(([id, label, provider, type, createHref, withFilters]) => ({
       pattern: `/monitor/${id}`,
       component: () => <ResourceInsights active={id} pageTitle={label} resourceType={rt(provider, type)} createHref={createHref} withFilters={withFilters} />,

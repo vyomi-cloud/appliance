@@ -18,6 +18,8 @@ export const WORKBOOKS = armType("Microsoft.Insights", "workbooks", "2022-04-01"
 export const DATA_COLLECTION_RULES = armType("Microsoft.Insights", "dataCollectionRules", "2023-03-11");
 export const DATA_COLLECTION_ENDPOINTS = armType("Microsoft.Insights", "dataCollectionEndpoints", "2023-03-11");
 export const PRIVATE_LINK_SCOPES = armType("Microsoft.Insights", "privateLinkScopes", "2021-07-01-preview");
+export const HEALTH_MODELS = armType("Microsoft.Insights", "healthModels", "2023-04-01-preview");
+export const PIPELINE_GROUPS = armType("Microsoft.Insights", "pipelineGroups", "2023-10-01-preview");
 
 const withRg = (a) => ({ ...a, resourceGroup: parseId(a.id).resourceGroup });
 
@@ -136,8 +138,8 @@ export const deleteDiagnosticSetting = (resourceId, name) =>
     { query: { "api-version": DIAGNOSTIC_SETTINGS_API_VERSION } });
 
 // ── generic resource inventory (Insights per-resource-type dashboards, Metrics scope) ──
-// Microsoft.Insights has no metric-VALUE data plane in Vyomi (not modelled); these dashboards
-// show the real inventory of each resource type instead of a telemetry rollup.
+// Microsoft.Insights has no per-resource-type telemetry rollup in Vyomi (not modelled); these
+// dashboards show the real inventory of each resource type instead.
 export const RESOURCE_TYPES = [
   { provider: "Microsoft.Compute", type: "virtualMachines", apiVersion: "2023-09-01", label: "Virtual machine" },
   { provider: "Microsoft.Storage", type: "storageAccounts", apiVersion: "2023-01-01", label: "Storage account" },
@@ -146,6 +148,9 @@ export const RESOURCE_TYPES = [
   { provider: "Microsoft.DocumentDB", type: "databaseAccounts", apiVersion: "2024-05-15", label: "Azure Cosmos DB account" },
   { provider: "Microsoft.KeyVault", type: "vaults", apiVersion: "2023-07-01", label: "Key vault" },
   { provider: "Microsoft.ServiceBus", type: "namespaces", apiVersion: "2022-10-01-preview", label: "Service Bus namespace" },
+  { provider: "Microsoft.ContainerService", type: "managedClusters", apiVersion: "2024-09-02-preview", label: "Kubernetes service" },
+  { provider: "Microsoft.Cache", type: "redis", apiVersion: "2024-03-01", label: "Azure Cache for Redis" },
+  { provider: "Microsoft.Kusto", type: "clusters", apiVersion: "2023-08-15", label: "Azure Data Explorer cluster" },
 ];
 export async function listResourcesOfType(rt) {
   const items = await armType(rt.provider, rt.type, rt.apiVersion).list();
@@ -157,3 +162,49 @@ export async function listAllResources() {
   return RESOURCE_TYPES.flatMap((rt, i) => lists[i].map((r) => ({ ...r, resourceType: `${rt.provider}/${rt.type}`, typeLabel: rt.label })));
 }
 export const LOCATIONS_OF = (resources) => [...new Set(resources.map((r) => r.location).filter(Boolean))].sort();
+
+// ── metrics data plane (Microsoft.Insights/metricDefinitions, metrics) — a real resource-
+// scoped extension API, same re-entrant "providers" shape diagnostic settings uses. Vyomi has
+// exactly one real metric: a count of the resource's own Activity log rows, never synthetic data.
+export const METRICS_API_VERSION = "2018-01-01";
+export const listMetricDefinitions = async (resourceId) =>
+  (await restJson("GET", `${resourceId}/providers/Microsoft.Insights/metricDefinitions`,
+    { query: { "api-version": METRICS_API_VERSION } })).value || [];
+export const getMetrics = (resourceId, { metricnames, aggregation = "Total", interval = "PT1H", timespan } = {}) =>
+  restJson("GET", `${resourceId}/providers/Microsoft.Insights/metrics`,
+    { query: { "api-version": METRICS_API_VERSION, metricnames, aggregation, interval, ...(timespan ? { timespan } : {}) } });
+
+// ── data collection rule associations (Microsoft.Insights/dataCollectionRuleAssociations) —
+// the real extension resource behind "Observability agents (preview)": links a target resource
+// to an existing Data Collection Rule, validated against the shared ARM store.
+export const DCRA_API_VERSION = "2023-03-11";
+export const listDcrAssociations = async (resourceId) =>
+  (await restJson("GET", `${resourceId}/providers/Microsoft.Insights/dataCollectionRuleAssociations`,
+    { query: { "api-version": DCRA_API_VERSION } })).value || [];
+export const putDcrAssociation = (resourceId, name, dataCollectionRuleId) =>
+  restJson("PUT", `${resourceId}/providers/Microsoft.Insights/dataCollectionRuleAssociations/${encodeURIComponent(name)}`,
+    { query: { "api-version": DCRA_API_VERSION }, body: { properties: { dataCollectionRuleId } } });
+export const deleteDcrAssociation = (resourceId, name) =>
+  restJson("DELETE", `${resourceId}/providers/Microsoft.Insights/dataCollectionRuleAssociations/${encodeURIComponent(name)}`,
+    { query: { "api-version": DCRA_API_VERSION } });
+
+// ── health models (Microsoft.Insights/healthModels) — a named collection of member resource
+// ids; rollup health is computed client-side from the real Activity log (status field), never
+// stored or fabricated.
+export const listHealthModels = async () => (await HEALTH_MODELS.list()).map(withRg);
+export const putHealthModel = (rg, name, body) => HEALTH_MODELS.put(rg, name, body);
+export const deleteHealthModel = (rg, name) => HEALTH_MODELS.remove(rg, name);
+
+// ── Azure Monitor pipelines (Microsoft.Insights/pipelineGroups) — collector fleet config:
+// stored and validated exactly like the real resource; nothing is ever actually collected.
+export const listPipelineGroups = async () => (await PIPELINE_GROUPS.list()).map(withRg);
+export const putPipelineGroup = (rg, name, body) => PIPELINE_GROUPS.put(rg, name, body);
+export const deletePipelineGroup = (rg, name) => PIPELINE_GROUPS.remove(rg, name);
+
+/** Every Activity log row across the whole subscription whose status isn't Succeeded — the
+ *  real (never fabricated) signal behind "Issues" and the Health models rollup. Today the only
+ *  path that logs a non-Succeeded row is a failed ARM template deployment (core/azure_arm_core.py). */
+export async function listFailedActivity() {
+  const rows = await listActivityLog();
+  return rows.filter((r) => r.status?.value && r.status.value !== "Succeeded");
+}

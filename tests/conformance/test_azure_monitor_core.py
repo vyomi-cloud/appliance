@@ -156,6 +156,60 @@ r = arm.handle("PUT", "/subscriptions/sub1/resourceGroups/rg1/providers/Microsof
 check("ARM dispatcher routes Microsoft.Insights to the engine", r["status"] == 200, r)
 r = arm.handle("GET", "/subscriptions/sub1/providers/Microsoft.Insights/metricAlerts", {"api-version": "2018-03-01"})
 check("ARM dispatcher lists at subscription scope", r["status"] == 200 and len(r["body"]["value"]) == 1, r)
+
+# Metrics data plane (Microsoft.Insights/metricDefinitions, metrics) — resource-scoped, chain
+# re-enters "providers" like diagnostic settings. Exactly one real metric, derived from the
+# resource's own real Activity log rows (never synthetic/random data).
+mvm = "/subscriptions/sub1/resourceGroups/rg1/providers/Microsoft.Compute/virtualMachines/mvm1"
+r = arm.handle("PUT", mvm, {"api-version": "2023-09-01"}, {"location": "eastus", "properties": {}})
+check("metrics test VM created", r["status"] == 200, r)
+r = arm.handle("GET", mvm + "/providers/Microsoft.Insights/metricDefinitions", {"api-version": "2018-01-01"})
+check("metric definitions lists the one real metric", r["status"] == 200
+      and r["body"]["value"][0]["name"]["value"] == "ActivityOperations", r["body"])
+r = arm.handle("GET", mvm + "/providers/Microsoft.Insights/metrics", {"api-version": "2018-01-01", "interval": "PT1H"})
+check("metrics data has one real operation (the VM create) somewhere in its series", r["status"] == 200
+      and sum(p["total"] for p in r["body"]["value"][0]["timeseries"][0]["data"]) == 1, r["body"])
+r = arm.handle("GET", mvm + "/providers/Microsoft.Insights/metrics", {"api-version": "2018-01-01", "metricnames": "NotReal"})
+check("unknown metric name → 400", r["status"] == 400, r["body"])
+r = arm.handle("GET", "/subscriptions/sub1/resourceGroups/rg1/providers/Microsoft.Compute/virtualMachines/nope/providers/Microsoft.Insights/metrics",
+               {"api-version": "2018-01-01"})
+check("metrics for an unknown resource → 404", r["status"] == 404, r["body"])
+
+# Data collection rule associations (Microsoft.Insights/dataCollectionRuleAssociations) — the
+# real extension resource behind "Observability agents (preview)", validated against an
+# actually-existing Data Collection Rule.
+mdcr = "/subscriptions/sub1/resourceGroups/rg1/providers/Microsoft.Insights/dataCollectionRules/mdcr1"
+arm.handle("PUT", mdcr, {"api-version": "2023-03-11"}, dcr)
+r = arm.handle("PUT", mvm + "/providers/Microsoft.Insights/dataCollectionRuleAssociations/assoc1",
+               {"api-version": "2023-03-11"}, {"properties": {"dataCollectionRuleId": mdcr}})
+check("DCR association create → 201, linked to a real rule", r["status"] == 201
+      and r["body"]["properties"]["dataCollectionRuleId"] == mdcr, r["body"])
+r = arm.handle("PUT", mvm + "/providers/Microsoft.Insights/dataCollectionRuleAssociations/assoc2",
+               {"api-version": "2023-03-11"}, {"properties": {"dataCollectionRuleId": mdcr + "nope"}})
+check("DCR association to an unknown rule → 400", r["status"] == 400, r["body"])
+r = arm.handle("GET", mvm + "/providers/Microsoft.Insights/dataCollectionRuleAssociations", {"api-version": "2023-03-11"})
+check("list DCR associations", [a["name"] for a in r["body"]["value"]] == ["assoc1"], r["body"])
+r = arm.handle("DELETE", mvm + "/providers/Microsoft.Insights/dataCollectionRuleAssociations/assoc1", {"api-version": "2023-03-11"})
+check("delete DCR association → 200 then 204", r["status"] == 200
+      and arm.handle("DELETE", mvm + "/providers/Microsoft.Insights/dataCollectionRuleAssociations/assoc1", {"api-version": "2023-03-11"})["status"] == 204)
+
+# Health models (Microsoft.Insights/healthModels) — generic-catalog CRUD, a named collection of
+# member resource ids (format-validated like metric alert scopes, same _scopes helper).
+r = arm.handle("PUT", "/subscriptions/sub1/resourceGroups/rg1/providers/Microsoft.Insights/healthModels/hm1",
+               {"api-version": "2023-04-01-preview"}, {"location": "global", "properties": {"displayName": "Prod", "resources": [mvm]}})
+check("health model create → 201", r["status"] == 201 and r["body"]["properties"]["resources"] == [mvm], r["body"])
+check("health model missing displayName → 400", arm.handle("PUT",
+      "/subscriptions/sub1/resourceGroups/rg1/providers/Microsoft.Insights/healthModels/hm2",
+      {"api-version": "2023-04-01-preview"}, {"properties": {"resources": [mvm]}})["status"] == 400)
+
+# Azure Monitor pipelines (Microsoft.Insights/pipelineGroups) — config real, nothing delivered.
+r = arm.handle("PUT", "/subscriptions/sub1/resourceGroups/rg1/providers/Microsoft.Insights/pipelineGroups/pg1",
+               {"api-version": "2023-10-01-preview"}, {"location": "eastus", "properties": {"platform": "Linux", "collectorEndpoints": ["https://x"]}})
+check("pipeline group create → 201", r["status"] == 201 and r["body"]["properties"]["platform"] == "Linux", r["body"])
+check("pipeline group bad platform → 400", arm.handle("PUT",
+      "/subscriptions/sub1/resourceGroups/rg1/providers/Microsoft.Insights/pipelineGroups/pg2",
+      {"api-version": "2023-10-01-preview"}, {"properties": {"platform": "Solaris"}})["status"] == 400)
+
 print(f"\n{PASS} passed, {FAIL} failed")
 
 

@@ -583,6 +583,53 @@ RESOURCE_CATALOG: list[dict] = [
         },
     },
     {
+        "key": "rediscache", "label": "Azure Cache for Redis", "icon": "memory",
+        "namespace": "Microsoft.Cache", "type": "redis",
+        "api_version": "2024-03-01", "scope": "rg",
+        "banner": "Azure Cache for Redis (Microsoft.Cache/redis). Control plane only: the cache instance, its SKU and access keys behave like Azure; there is no real Redis data-plane protocol server behind it.",
+        "columns": [["name", "Name"], ["location", "Location"],
+                    ["sku.name", "Pricing tier"],
+                    ["properties.hostName", "Host name"],
+                    ["properties.provisioningState", "Status"]],
+        "create_fields": [
+            {"name": "name", "label": "DNS name", "default": "cloudlearn-redis"},
+            {"name": "sku.name", "label": "SKU", "type": "select", "options": ["Basic", "Standard", "Premium"], "default": "Basic"},
+            {"name": "sku.family", "label": "SKU family", "type": "select", "options": ["C", "P"], "default": "C"},
+            {"name": "sku.capacity", "label": "SKU capacity", "default": "0"},
+        ],
+        "defaults": {
+            "sku": {"name": "Basic", "family": "C", "capacity": 0},
+            "properties": {
+                "provisioningState": "Succeeded", "redisVersion": "6.0", "enableNonSslPort": False,
+                "hostName": "__NAME__.redis.cache.windows.net", "sslPort": 6380, "port": 6379,
+                "publicNetworkAccess": "Enabled",
+            },
+        },
+    },
+    {
+        "key": "dataexplorer", "label": "Azure Data Explorer cluster", "icon": "hub",
+        "namespace": "Microsoft.Kusto", "type": "clusters",
+        "api_version": "2023-08-15", "scope": "rg",
+        "banner": "Azure Data Explorer clusters (Microsoft.Kusto/clusters). Control plane only: the cluster resource, its SKU and state behave like Azure; there is no real Kusto query engine behind it.",
+        "columns": [["name", "Name"], ["location", "Location"],
+                    ["sku.name", "SKU"], ["properties.state", "State"],
+                    ["properties.uri", "Query URI"]],
+        "create_fields": [
+            {"name": "name", "label": "Cluster name", "default": "cloudlearnkusto"},
+            {"name": "sku.name", "label": "SKU", "default": "Standard_D11_v2"},
+            {"name": "sku.tier", "label": "Tier", "type": "select", "options": ["Basic", "Standard"], "default": "Standard"},
+            {"name": "sku.capacity", "label": "Instance count", "default": "2"},
+        ],
+        "defaults": {
+            "sku": {"name": "Standard_D11_v2", "tier": "Standard", "capacity": 2},
+            "properties": {
+                "state": "Running", "provisioningState": "Succeeded",
+                "uri": "https://__NAME__.kusto.windows.net",
+                "dataIngestionUri": "https://ingest-__NAME__.kusto.windows.net",
+            },
+        },
+    },
+    {
         "key": "rbac", "label": "Entra ID / RBAC", "icon": "admin_panel_settings",
         "namespace": "Microsoft.Authorization", "type": "roleAssignments",
         "api_version": "2022-04-01", "scope": "rg",
