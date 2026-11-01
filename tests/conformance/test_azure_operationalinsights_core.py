@@ -101,6 +101,19 @@ check("ARM dispatcher routes Microsoft.OperationalInsights (201 + async header)"
 resp = arm.handle("GET", "/subscriptions/sub1/providers/Microsoft.OperationalInsights/workspaces", {"api-version": "2022-10-01"})
 check("ARM subscription list sees the workspace", any(w["name"] == "law-arm" for w in resp["body"]["value"]), str(resp)[:200])
 
+# ── workspace writes land on the Activity log (the generic eventtypes feed every resource's
+# own Activity log blade reads) and a resource lock blocks nothing by itself but round-trips ──
+act = arm.handle("GET", "/subscriptions/sub1/providers/Microsoft.Insights/eventtypes/management/values", {"api-version": "2015-04-01"})
+ops = [e["operationName"]["value"] for e in act["body"]["value"]]
+check("workspace create recorded on the Activity log", "Microsoft.OperationalInsights/workspaces/write" in ops, ops)
+lock = arm.handle("PUT", "/subscriptions/sub1/resourceGroups/rg1/providers/Microsoft.OperationalInsights/workspaces/law-arm/providers/Microsoft.Authorization/locks/lk1",
+                  {"api-version": "2016-09-01"}, {"properties": {"level": "CanNotDelete"}})
+check("Microsoft.Authorization/locks (generic extension resource) round-trips for a workspace", lock["status"] == 201, str(lock)[:200])
+arm.handle("DELETE", "/subscriptions/sub1/resourceGroups/rg1/providers/Microsoft.OperationalInsights/workspaces/law-arm", {"api-version": "2022-10-01"})
+act2 = arm.handle("GET", "/subscriptions/sub1/providers/Microsoft.Insights/eventtypes/management/values", {"api-version": "2015-04-01"})
+ops2 = [e["operationName"]["value"] for e in act2["body"]["value"]]
+check("workspace delete recorded on the Activity log", "Microsoft.OperationalInsights/workspaces/delete" in ops2, ops2)
+
 print(f"{PASS} passed, {FAIL} failed")
 
 

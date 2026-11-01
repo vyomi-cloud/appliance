@@ -64,6 +64,8 @@ export const AZURE_ICONS = {
   dns: `<circle cx="9.5" cy="12" r="7" fill="${A}"/><path d="M9.5 5a7 7 0 0 0 0 14 7 7 0 0 0 0-14z" fill="none" stroke="${L}" stroke-width="1" opacity=".6"/>${line("M2.5 12h14M9.5 5c1.8 1.9 2.7 4.3 2.7 7s-.9 5.1-2.7 7M9.5 5c-1.8 1.9-2.7 4.3-2.7 7s.9 5.1 2.7 7", L, 1)}<rect x="13.5" y="13.5" width="9" height="6.5" rx="1.3" fill="${C}"/>${line("M16 16.7h4.5M16 18.4h3", W, 1.1)}`,
   // Cognitive Services / Azure AI services: a stylised brain node network
   cognitiveservices: `<path d="M12 3.4c-3 0-5 2-5 4.4 0 .9.3 1.7.8 2.3-1 .8-1.6 2-1.6 3.4 0 2.6 2.1 4.6 4.8 4.9v1.6h-2.4v2h7v-2h-2.4v-1.6c2.6-.3 4.7-2.3 4.7-4.9 0-1.4-.6-2.6-1.6-3.4.5-.6.8-1.4.8-2.3 0-2.4-2.2-4.4-5.1-4.4z" fill="${A}"/><circle cx="9.4" cy="9.6" r="1.1" fill="${L}"/><circle cx="14.6" cy="9.6" r="1.1" fill="${L}"/><circle cx="12" cy="13.4" r="1.1" fill="${W}"/>${line("M9.4 9.6l2.6 3.8M14.6 9.6l-2.6 3.8", M, 1)}`,
+  // Log Analytics: a log sheet (ruled lines) with a magnifying glass running a query over it
+  loganalytics: `<rect x="3" y="3.5" width="13" height="17" rx="1.6" fill="${A}"/>${line("M5.6 7.4h7.8M5.6 10.6h7.8M5.6 13.8h4.6", L, 1.3)}<circle cx="16.3" cy="16.3" r="3.6" fill="${C}" stroke="${W}" stroke-width="1.1"/><path d="M18.9 18.9l2.4 2.4" stroke="${W}" stroke-width="1.8" stroke-linecap="round"/>`,
 };
 
 const FALLBACK = `<rect x="3" y="3" width="18" height="18" rx="2.4" fill="${A}"/><rect x="6.5" y="6.5" width="4.5" height="4.5" rx=".8" fill="${L}"/><rect x="13" y="6.5" width="4.5" height="4.5" rx=".8" fill="${M}"/><rect x="6.5" y="13" width="4.5" height="4.5" rx=".8" fill="${M}"/><rect x="13" y="13" width="4.5" height="4.5" rx=".8" fill="${L}"/>`;

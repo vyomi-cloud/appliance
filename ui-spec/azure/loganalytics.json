@@ -1,0 +1,220 @@
+{
+  "$schema": "../schema.json",
+  "cloud": "azure",
+  "service": "loganalytics",
+  "console_path": "#browse/Microsoft.OperationalInsights%2Fworkspaces",
+  "status": "authored",
+  "captured_at": "2026-11-01",
+  "note": "No live captures were available for this service (private captures repo not checked out for this run). Authored from the real Microsoft.OperationalInsights/workspaces ARM surface (core/azure_operationalinsights_core.py) and the Azure Log Analytics workspace blade's well-known nav shape, following the same nav/page/spec-map contract as the servicebus and storage pilots.",
+  "nav": [
+    { "label": "Overview", "page_id": "loganalytics-workspace-overview" },
+    { "label": "Activity log", "page_id": "loganalytics-workspace-activity-log" },
+    { "label": "Access control (IAM)", "page_id": "loganalytics-workspace-iam" },
+    { "label": "Tags", "page_id": "loganalytics-workspace-tags" },
+    { "label": "Diagnose and solve problems", "page_id": "loganalytics-workspace-diagnose" },
+    {
+      "label": "Settings", "expandable": true,
+      "children": [
+        { "label": "Agents management", "page_id": "loganalytics-workspace-agents" },
+        { "label": "Computer groups (classic)", "page_id": "loganalytics-workspace-computer-groups" },
+        { "label": "Data export", "page_id": "loganalytics-workspace-data-export" },
+        { "label": "Linked storage accounts", "page_id": "loganalytics-workspace-linked-storage" },
+        { "label": "Locks", "page_id": "loganalytics-workspace-locks" },
+        { "label": "Properties", "page_id": "loganalytics-workspace-properties" },
+        { "label": "Usage and estimated costs", "page_id": "loganalytics-workspace-usage" }
+      ]
+    },
+    {
+      "label": "General", "expandable": true,
+      "children": [
+        { "label": "Logs", "page_id": "loganalytics-workspace-logs" },
+        { "label": "Saved searches", "page_id": "loganalytics-workspace-saved-searches" },
+        { "label": "Tables", "page_id": "loganalytics-workspace-tables" },
+        { "label": "Data sources", "page_id": "loganalytics-workspace-data-sources" }
+      ]
+    },
+    {
+      "label": "Classic solutions", "expandable": true,
+      "children": [
+        { "label": "Legacy solutions", "page_id": "loganalytics-workspace-legacy-solutions" }
+      ]
+    },
+    {
+      "label": "Monitoring", "expandable": true,
+      "children": [
+        { "label": "Alerts", "page_id": "loganalytics-workspace-alerts" },
+        { "label": "Metrics", "page_id": "loganalytics-workspace-metrics" },
+        { "label": "Diagnostic settings", "page_id": "loganalytics-workspace-diagnostic-settings" },
+        { "label": "Workbooks", "page_id": "loganalytics-workspace-workbooks" }
+      ]
+    },
+    {
+      "label": "Automation", "expandable": true,
+      "children": [
+        { "label": "Export template", "page_id": "loganalytics-workspace-export-template" }
+      ]
+    },
+    {
+      "label": "Help", "expandable": true,
+      "children": [
+        { "label": "Resource health", "page_id": "loganalytics-workspace-resource-health" },
+        { "label": "Support + Troubleshooting", "page_id": "loganalytics-workspace-support" }
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "id": "loganalytics-workspaces",
+      "kind": "list",
+      "title": "Log Analytics workspaces",
+      "route": "#browse/Microsoft.OperationalInsights%2Fworkspaces",
+      "breadcrumbs": ["Home"],
+      "provenance": "authored",
+      "confidence": "medium",
+      "table": {
+        "columns": ["Name", "Subscription", "Resource group", "Location", "Pricing tier", "Retention (days)", "Provisioning state"],
+        "selection": "multi",
+        "header_actions": ["Create", "Manage view", "Refresh", "Export to CSV", "Assign tags", "Delete"],
+        "filter_placeholder": "Filter for any field...",
+        "filters": ["Subscription equals all", "Resource group equals all", "Location equals all", "Add filter"],
+        "empty_state": "No Log Analytics workspaces to display",
+        "empty_state_action": "Create Log Analytics workspace",
+        "pagination": true,
+        "provenance": "authored",
+        "confidence": "medium"
+      }
+    },
+    {
+      "id": "create-loganalytics-workspace",
+      "kind": "create",
+      "title": "Create Log Analytics workspace",
+      "route": "#create/Microsoft.OperationalInsights",
+      "breadcrumbs": ["Home", "Log Analytics workspaces", "Create Log Analytics workspace"],
+      "provenance": "authored",
+      "confidence": "medium",
+      "steps": [
+        {
+          "title": "Basics",
+          "sections": [
+            {
+              "title": "Project details",
+              "fields": [
+                { "label": "Subscription", "type": "select" },
+                { "label": "Resource group", "type": "select" }
+              ]
+            },
+            {
+              "title": "Instance details",
+              "fields": [
+                { "label": "Name", "type": "text" },
+                { "label": "Region", "type": "select" },
+                { "label": "Pricing tier", "type": "select" }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Networking",
+          "sections": [
+            {
+              "title": "Network access",
+              "fields": [
+                { "label": "Public access to data ingestion", "type": "radio" },
+                { "label": "Public access to query", "type": "radio" }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Tags",
+          "sections": [
+            { "title": "Tags", "fields": [{ "label": "Name", "type": "text" }, { "label": "Value", "type": "text" }] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "loganalytics-workspace-overview", "kind": "detail", "title": "{resource-name}",
+      "route": "#/loganalytics/uic-rg/{live}", "provenance": "authored", "confidence": "medium",
+      "tabs": ["Overview", "Activity log", "Access control (IAM)", "Tags", "Diagnose and solve problems"],
+      "sections": [
+        { "title": "Essentials", "fields": [
+          { "label": "Resource group", "type": "readonly" }, { "label": "Status", "type": "readonly" },
+          { "label": "Location", "type": "readonly" }, { "label": "Subscription", "type": "readonly" },
+          { "label": "Workspace ID", "type": "readonly" }, { "label": "Pricing tier", "type": "readonly" },
+          { "label": "Retention (days)", "type": "readonly" }, { "label": "Daily cap", "type": "readonly" }
+        ] }
+      ]
+    },
+    { "id": "loganalytics-workspace-activity-log", "kind": "detail", "title": "{resource-name} | Activity log",
+      "route": "#/loganalytics/uic-rg/uiclaw/activitylog", "provenance": "authored", "confidence": "medium",
+      "table": { "columns": ["Operation name", "Status", "Time", "Subscription", "Event initiated by"],
+        "header_actions": ["Refresh", "Export Activity Logs", "Download as CSV"], "filter_placeholder": "Filter by operation, status or caller..." } },
+    { "id": "loganalytics-workspace-iam", "kind": "detail", "title": "{resource-name} | Access control (IAM)",
+      "route": "#/loganalytics/uic-rg/uiclaw/iam", "provenance": "authored", "confidence": "medium",
+      "tabs": ["Check access", "Role assignments", "Roles", "Deny assignments", "Classic administrators"] },
+    { "id": "loganalytics-workspace-tags", "kind": "detail", "title": "{resource-name} | Tags",
+      "route": "#/loganalytics/uic-rg/uiclaw/tags", "provenance": "authored", "confidence": "medium",
+      "sections": [{ "title": "Tags", "fields": [{ "label": "Name", "type": "text" }, { "label": "Value", "type": "text" }] }] },
+    { "id": "loganalytics-workspace-diagnose", "kind": "detail", "title": "{resource-name} | Diagnose and solve problems",
+      "route": "#/loganalytics/uic-rg/uiclaw/diagnose", "provenance": "authored", "confidence": "low" },
+    { "id": "loganalytics-workspace-agents", "kind": "detail", "title": "{resource-name} | Agents management",
+      "route": "#/loganalytics/uic-rg/uiclaw/agents", "provenance": "authored", "confidence": "medium",
+      "sections": [{ "title": "Log Analytics agent instructions", "fields": [
+        { "label": "Workspace ID", "type": "readonly" }, { "label": "Primary key", "type": "readonly" }, { "label": "Secondary key", "type": "readonly" }
+      ] }], "table": { "header_actions": ["Regenerate"] } },
+    { "id": "loganalytics-workspace-computer-groups", "kind": "detail", "title": "{resource-name} | Computer groups (classic)",
+      "route": "#/loganalytics/uic-rg/uiclaw/computergroups", "provenance": "authored", "confidence": "low" },
+    { "id": "loganalytics-workspace-data-export", "kind": "detail", "title": "{resource-name} | Data export",
+      "route": "#/loganalytics/uic-rg/uiclaw/dataexport", "provenance": "authored", "confidence": "low" },
+    { "id": "loganalytics-workspace-linked-storage", "kind": "detail", "title": "{resource-name} | Linked storage accounts",
+      "route": "#/loganalytics/uic-rg/uiclaw/linkedstorage", "provenance": "authored", "confidence": "low" },
+    { "id": "loganalytics-workspace-locks", "kind": "detail", "title": "{resource-name} | Locks",
+      "route": "#/loganalytics/uic-rg/uiclaw/locks", "provenance": "authored", "confidence": "medium",
+      "table": { "columns": ["Lock name", "Lock type", "Scope", "Notes"], "header_actions": ["Add", "Subscription", "Resource group", "Feedback"], "filter_placeholder": "Search to filter items..." } },
+    { "id": "loganalytics-workspace-properties", "kind": "detail", "title": "{resource-name} | Properties",
+      "route": "#/loganalytics/uic-rg/uiclaw/properties", "provenance": "authored", "confidence": "medium",
+      "sections": [{ "title": "Properties", "fields": [
+        { "label": "Resource ID", "type": "readonly" }, { "label": "Workspace ID", "type": "readonly" },
+        { "label": "Pricing tier", "type": "readonly" }, { "label": "Location", "type": "readonly" },
+        { "label": "Created", "type": "readonly" }, { "label": "Updated", "type": "readonly" }
+      ] }] },
+    { "id": "loganalytics-workspace-usage", "kind": "detail", "title": "{resource-name} | Usage and estimated costs",
+      "route": "#/loganalytics/uic-rg/uiclaw/usage", "provenance": "authored", "confidence": "medium",
+      "sections": [{ "title": "Usage and estimated costs", "fields": [
+        { "label": "Data analyzed", "type": "readonly" }, { "label": "Tables", "type": "readonly" },
+        { "label": "Saved searches", "type": "readonly" }, { "label": "Daily cap (GB)", "type": "text" }
+      ] }] },
+    { "id": "loganalytics-workspace-logs", "kind": "detail", "title": "{resource-name} | Logs",
+      "route": "#/loganalytics/uic-rg/uiclaw/logs", "provenance": "authored", "confidence": "high",
+      "sections": [{ "title": "Query editor", "fields": [{ "label": "Query", "type": "textarea" }] }],
+      "table": { "header_actions": ["Run", "Save"], "columns": [] } },
+    { "id": "loganalytics-workspace-saved-searches", "kind": "detail", "title": "{resource-name} | Saved searches",
+      "route": "#/loganalytics/uic-rg/uiclaw/savedsearches", "provenance": "authored", "confidence": "medium",
+      "table": { "columns": ["Display name", "Category", "Query"], "header_actions": ["Add saved search", "Refresh"], "filter_placeholder": "Search to filter items..." } },
+    { "id": "loganalytics-workspace-tables", "kind": "detail", "title": "{resource-name} | Tables",
+      "route": "#/loganalytics/uic-rg/uiclaw/tables", "provenance": "authored", "confidence": "medium",
+      "table": { "columns": ["Table name", "Plan", "Retention (days)", "Total retention (days)", "Source"], "header_actions": ["Add table", "Refresh"], "filter_placeholder": "Search to filter items..." } },
+    { "id": "loganalytics-workspace-data-sources", "kind": "detail", "title": "{resource-name} | Data sources",
+      "route": "#/loganalytics/uic-rg/uiclaw/datasources", "provenance": "authored", "confidence": "medium",
+      "table": { "columns": ["Name", "Kind"], "header_actions": ["Add data source", "Refresh"], "filter_placeholder": "Search to filter items..." } },
+    { "id": "loganalytics-workspace-legacy-solutions", "kind": "detail", "title": "{resource-name} | Legacy solutions",
+      "route": "#/loganalytics/uic-rg/uiclaw/legacysolutions", "provenance": "authored", "confidence": "medium",
+      "table": { "columns": ["Solution", "Enabled"], "header_actions": ["Enable", "Disable", "Refresh"] } },
+    { "id": "loganalytics-workspace-alerts", "kind": "detail", "title": "{resource-name} | Alerts",
+      "route": "#/loganalytics/uic-rg/uiclaw/alerts", "provenance": "authored", "confidence": "low" },
+    { "id": "loganalytics-workspace-metrics", "kind": "detail", "title": "{resource-name} | Metrics",
+      "route": "#/loganalytics/uic-rg/uiclaw/metrics", "provenance": "authored", "confidence": "low" },
+    { "id": "loganalytics-workspace-diagnostic-settings", "kind": "detail", "title": "{resource-name} | Diagnostic settings",
+      "route": "#/loganalytics/uic-rg/uiclaw/diagnosticsettings", "provenance": "authored", "confidence": "low" },
+    { "id": "loganalytics-workspace-workbooks", "kind": "detail", "title": "{resource-name} | Workbooks",
+      "route": "#/loganalytics/uic-rg/uiclaw/workbooks", "provenance": "authored", "confidence": "low" },
+    { "id": "loganalytics-workspace-export-template", "kind": "detail", "title": "{resource-name} | Export template",
+      "route": "#/loganalytics/uic-rg/uiclaw/exporttemplate", "provenance": "authored", "confidence": "medium",
+      "tabs": ["ARM Template", "Bicep", "Terraform"], "table": { "header_actions": ["Download"] } },
+    { "id": "loganalytics-workspace-resource-health", "kind": "detail", "title": "{resource-name} | Resource health",
+      "route": "#/loganalytics/uic-rg/uiclaw/resourcehealth", "provenance": "authored", "confidence": "low" },
+    { "id": "loganalytics-workspace-support", "kind": "detail", "title": "{resource-name} | Support + Troubleshooting",
+      "route": "#/loganalytics/uic-rg/uiclaw/support", "provenance": "authored", "confidence": "low" }
+  ]
+}
