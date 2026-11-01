@@ -94,6 +94,8 @@ def test_vm_blades():
     s, h = call(arm, "GET", vm + "/providers/Microsoft.ResourceHealth/availabilityStatuses/current", av="2023-07-01-preview")
     _check("health Unavailable (Customer Initiated) after power off",
            h["properties"]["availabilityState"] == "Unavailable" and h["properties"]["reasonType"] == "Customer Initiated")
+    s, b = call(arm, "POST", vm + "/runCommand", {"commandId": "RunShellScript", "script": ["id"]}, "2024-03-01")
+    _check("runCommand action refused while the VM is stopped", s == 409 and b["error"]["code"] == "OperationNotAllowed", b)
     s, b = call(arm, "PUT", vm + "/runCommands/r0", {"location": "eastus", "properties": {"source": {"script": "id"}}}, "2024-03-01")
     _check("run command refused while the VM is stopped", s == 409 and b["error"]["code"] == "OperationNotAllowed")
     call(arm, "POST", vm + "/start", {}, "2023-09-01")
@@ -103,6 +105,11 @@ def test_vm_blades():
            s == 201 and ivr["executionState"] == "Failed" and ivr["output"] == "" and "guest" in ivr["executionMessage"], ivr)
     s, lst = call(arm, "GET", vm + "/runCommands", av="2024-03-01")
     _check("run history lists the run", [x["name"] for x in lst["value"]] == ["r1"])
+    s, b = call(arm, "POST", vm + "/runCommand", {"commandId": "RunShellScript"}, "2024-03-01")
+    _check("runCommand action requires a script", s == 400 and b["error"]["code"] == "InvalidParameter", b)
+    s, b = call(arm, "POST", vm + "/runCommand", {"commandId": "RunShellScript", "script": ["id"]}, "2024-03-01")
+    _check("runCommand action returns a status with no invented output without a guest runtime",
+           s == 200 and b["value"][0]["code"] == "ProvisioningState/failed", b)
     executed = []
     ok = __import__("core.azure_arm_ext_core", fromlist=["x"])
     st = arm.state
