@@ -51,12 +51,14 @@ _CORE_USERS = {
     "AppStateMonitoringStore": ("gcp_monitoring_core",), "AppStateResourceManagerStore": ("gcp_resourcemanager_core",),
     "AppStateGcpIamStore": ("gcp_iam_core",), "AppStateAzureRbacStore": ("azure_iam_core",),
     "AppStateAzureSqlStore": ("azure_sql_core",),
+    "AppStateRdsStore": ("rds_core",), "AppStateCloudSqlRowsStore": ("gcp_cloudsql_core",),
 }
 
 
 def _core_slot_stores():
     return [(n, c) for n, c in vars(aps).items()
-            if inspect.isclass(c) and issubclass(c, aps._CoreSlotStore) and c is not aps._CoreSlotStore]
+            if inspect.isclass(c) and issubclass(c, aps._CoreSlotStore) and c is not aps._CoreSlotStore
+            and getattr(c, "_SLOT", "")]   # abstract mixins (e.g. _FileRowsSqlStore) bind no slot
 
 
 def test_every_core_slot_store_is_listed():

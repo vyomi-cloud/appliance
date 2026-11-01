@@ -427,3 +427,99 @@ def dispatch(store: SqlStore, method: str, path: str,
             return _json(200, {"applied": True})
 
     return _err(404, "NotFound", f"Unknown path: {path}")
+
+
+# ── database export / import (.bacpac) — into / out of the SIMULATOR's own Azure
+# Blob store. The storageUri host (`<account>.blob.core.windows.net`) is only parsed:
+# the account must exist in the simulator (an ARM storage account, an account the
+# blob store already holds containers for, or the emulator's devstoreaccount1) —
+# it is never resolved or contacted. The .bacpac is a zip carrying the database as
+# a replayable SQL script (model.sql) + Origin.json; SqlPackage's DACPAC model XML
+# is not produced, so only simulator-written bacpacs import. ───────────────────
+BACPAC_MODEL = "model.sql"
+
+
+def _blob_target(blob_store, arm_state: dict | None, uri: str):
+    """(account_arg, container_key, path_prefix, blob, error) for a storageUri."""
+    from core import sql_store as sq
+    try:
+        account, container, blob = sq.parse_blob_uri(uri)
+    except ValueError as e:
+        return None, None, None, None, ("InvalidStorageUri", str(e))
+    if account == "devstoreaccount1":
+        acct_arg, key, prefix = None, container, "/devstoreaccount1"
+    else:
+        acct_arg, key, prefix = account, f"{account}/{container}", ""
+        known = any(k.lower().endswith(f"/storageaccounts/{account}") for k in (arm_state or {})) or \
+            any(str(c).startswith(account + "/") for c in getattr(blob_store, "containers", {}) or {})
+        if not known:
+            return None, None, None, None, ("StorageAccountNotFound",
+                                            f"The storage account '{account}' does not exist in this simulator.")
+    if not blob_store.container_exists(key):
+        return None, None, None, None, ("ContainerNotFound",
+                                        f"The container '{container}' does not exist in storage account '{account}'.")
+    return acct_arg, key, prefix, f"{container}/{blob}", None
+
+
+def export_database(store: SqlStore, server: str, database: str, blob_store, storage_uri: str,
+                    arm_state: dict | None = None) -> tuple:
+    """Write the database as a .bacpac blob. Returns (ok, error_code, message, size)."""
+    import io
+    import zipfile
+    from core import sql_store as sq
+    from core import azure_blob_core as blob
+    if blob_store is None:
+        return False, "StorageUnavailable", "No Blob store is attached to this Azure SQL engine.", 0
+    acct, _key, prefix, path, err = _blob_target(blob_store, arm_state, storage_uri)
+    if err:
+        return False, err[0], err[1], 0
+    db_id = _db_id(server, database)
+    if not store.instance_exists(db_id):
+        _create_database(store, server, database)
+    if sq.is_async_engine(store):
+        return False, "EngineUnavailable", "This database engine only answers asynchronously.", 0
+    tables = sq.dump_tables(store, db_id)
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("Origin.json", json.dumps({"server": server, "database": database,
+                                              "tables": [t["name"] for t in tables],
+                                              "format": "vyomi-bacpac/1 (SQL script)"}, indent=2))
+        z.writestr(BACPAC_MODEL, sq.sql_dump(tables, sq.engine_dialect(store),
+                                             f"Azure SQL export of {server}/{database}"))
+    data = buf.getvalue()
+    r = blob.dispatch(blob_store, "PUT", f"{prefix}/{path}", {}, {"x-ms-blob-type": "BlockBlob",
+                      "content-type": "application/octet-stream"}, data, account=acct)
+    if r.status >= 300:
+        return False, "BlobWriteFailed", f"Writing {storage_uri} failed ({r.status}).", 0
+    return True, "", "", len(data)
+
+
+def import_database(store: SqlStore, server: str, database: str, blob_store, storage_uri: str,
+                    arm_state: dict | None = None) -> tuple:
+    """Load a simulator .bacpac into the database. Returns (ok, error_code, message)."""
+    import io
+    import zipfile
+    from core import sql_store as sq
+    from core import azure_blob_core as blob
+    if blob_store is None:
+        return False, "StorageUnavailable", "No Blob store is attached to this Azure SQL engine."
+    acct, _key, prefix, path, err = _blob_target(blob_store, arm_state, storage_uri)
+    if err:
+        return False, err[0], err[1]
+    r = blob.dispatch(blob_store, "GET", f"{prefix}/{path}", {}, {}, b"", account=acct)
+    if r.status != 200:
+        return False, "BlobNotFound", f"The blob {storage_uri} does not exist."
+    try:
+        with zipfile.ZipFile(io.BytesIO(r.body)) as z:
+            script = z.read(BACPAC_MODEL).decode("utf-8")
+    except Exception:
+        return False, "InvalidBacpac", ("The file is not a bacpac this simulator wrote (no model.sql); "
+                                        "SqlPackage DACPAC models are not supported.")
+    _create_database(store, server, database)
+    db_id = _db_id(server, database)
+    try:
+        for stmt in sq.split_sql(script):
+            store.execute_sql(db_id, stmt)
+    except Exception as e:  # noqa: BLE001
+        return False, "ImportFailed", f"Import failed: {e}"
+    return True, "", ""

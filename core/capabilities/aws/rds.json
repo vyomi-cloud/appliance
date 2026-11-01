@@ -271,14 +271,19 @@
  "rds.exports-to-s3": {
   "title": "Exports to Amazon S3",
   "level": {
-   "nano": "limited",
-   "offline": "limited"
+   "nano": "full",
+   "offline": "full"
   },
   "limitations": [
-   "StartExportTask/CancelExportTask/DescribeExportTasks is real, stateful metadata CRUD that now writes a real manifest object into the named S3 bucket (through the same s3_object_core.put_object every S3 PutObject uses) — a bucket that doesn't exist makes the task genuinely FAIL (Status=FAILED + FailureCause), not silently succeed. Nano has no provisioning lag so a started export completes immediately, and the manifest doesn't carry the snapshot's actual table data — no per-table Parquet dump is produced."
+   "StartExportTask writes the snapshot's real table data as gzip-compressed Apache Parquet into the simulator's OWN S3 store (never AWS) in AWS's layout — <prefix>/<task>/<database>/<schema>.<table>/part-00000-<id>.gz.parquet plus export_info_<task>.json and export_tables_info_<task>_from_1_to_<N>.json. Offline the Parquet writer is pyarrow; in Nano it is the vendored parquet-wasm 0.7.1 + apache-arrow 18.1.0 (lazy-loaded on the first export). If the Parquet engine is unavailable or fails, or the bucket doesn't exist, the task FAILS with a FailureCause — there is no fallback format.",
+   "Column types are mapped approximately to five Arrow types (int64, float64, bool, string, binary): dates/timestamps, decimals/numeric, JSON and other engine types are exported as strings, and a sqlite column whose stored values don't fit its declared type is exported as a string column.",
+   "One Parquet file (one partition) per table; IamRoleArn and KmsKeyId are recorded but not enforced (the files are not KMS-encrypted). Exports complete synchronously (STARTING/IN_PROGRESS are never observed). A snapshot taken before the engine captured snapshot contents (or adopted from the pre-v4 offline handler) carries no table data — exporting it fails with that cause."
   ],
   "tests": [
-   "tests/conformance/test_rds_console_v4_core.py"
+   "tests/conformance/test_rds_console_v4_core.py",
+   "tests/conformance/test_db_exports_local.py",
+   "tests/conformance/test_rds_parquet_nano.py",
+   "tests/conformance/test_no_cloud_egress.py"
   ]
  },
  "rds.certificate-rotation": {

@@ -491,3 +491,318 @@ class PGliteSqlStore(SqlStore):
 
     async def arollback_transaction(self, tx_id: str) -> bool:
         return await self._aend_transaction(tx_id, commit=False)
+
+
+# ── engine-neutral table dumps (snapshots / exports / imports) ─────────────────
+# Shared by the RDS snapshot export (Parquet into S3), Cloud SQL instances.export /
+# .import (sqlFile / csvFile in GCS) and Azure SQL database export / import (.bacpac
+# in Blob). Every byte goes to / comes from the SIMULATOR's own object store — these
+# helpers only read and write the instance's engine through the SqlStore seam, and
+# never open a connection anywhere else.
+#
+# A dump is a list of tables: {"name", "ddl", "columns": [{"name", "decl"}], "rows"}
+# with JSON-safe cells (bytes → {"$b64": …}) so it can live in a snapshot record
+# inside the persisted state. The steps are written ONCE as a generator that yields
+# (sql, params) and receives each result, then driven synchronously (sqlite3 / real
+# Postgres) or asynchronously (PGlite in the browser).
+import base64 as _b64
+import csv as _csv
+import io as _io
+
+_SQLITE_TABLES = ("SELECT name, sql FROM sqlite_master WHERE type='table' "
+                  "AND name NOT LIKE 'sqlite_%' ORDER BY name")
+_PG_TABLES = ("SELECT table_name FROM information_schema.tables WHERE table_schema = current_schema() "
+              "AND table_type = 'BASE TABLE' ORDER BY table_name")
+_PG_COLUMNS = ("SELECT column_name, data_type FROM information_schema.columns WHERE "
+               "table_schema = current_schema() AND table_name = {ph} ORDER BY ordinal_position")
+
+
+def engine_dialect(store: "SqlStore") -> str:
+    """"sqlite" (stdlib sqlite3 engine) or "postgres" (PGlite / a real Postgres)."""
+    try:
+        return "sqlite" if store.param_placeholder(1) == "?" else "postgres"
+    except Exception:
+        return "sqlite"
+
+
+def default_schema(dialect: str) -> str:
+    return "main" if dialect == "sqlite" else "public"
+
+
+def quote_ident(name: str) -> str:
+    return '"' + str(name).replace('"', '""') + '"'
+
+
+def json_cell(v):
+    """An engine value → a JSON-safe cell (bytes are tagged base64)."""
+    if v is None or isinstance(v, (bool, int, float, str)):
+        return v
+    if isinstance(v, (bytes, bytearray, memoryview)):
+        return {"$b64": _b64.b64encode(bytes(v)).decode()}
+    return str(v)
+
+
+def cell_value(v):
+    """Inverse of json_cell."""
+    if isinstance(v, dict) and "$b64" in v:
+        return _b64.b64decode(v["$b64"])
+    return v
+
+
+def _dump_steps(dialect: str, ph: str):
+    tables = []
+    if dialect == "sqlite":
+        listing = yield (_SQLITE_TABLES, [])
+        for name, ddl in [(r[0], r[1]) for r in listing.get("rows", [])]:
+            info = yield (f"PRAGMA table_info({quote_ident(name)})", [])
+            cols = [{"name": c[1], "decl": str(c[2] or "")} for c in info.get("rows", [])]
+            data = yield (f"SELECT * FROM {quote_ident(name)}", [])
+            tables.append({"name": name, "ddl": ddl or "", "columns": cols,
+                           "rows": [[json_cell(v) for v in row] for row in data.get("rows", [])]})
+    else:
+        listing = yield (_PG_TABLES, [])
+        for name in [r[0] for r in listing.get("rows", [])]:
+            info = yield (_PG_COLUMNS.format(ph=ph), [name])
+            cols = [{"name": c[0], "decl": str(c[1] or "")} for c in info.get("rows", [])]
+            data = yield (f"SELECT * FROM {quote_ident(name)}", [])
+            ddl = ("CREATE TABLE " + quote_ident(name) + " ("
+                   + ", ".join(f"{quote_ident(c['name'])} {c['decl'] or 'text'}" for c in cols) + ")")
+            tables.append({"name": name, "ddl": ddl, "columns": cols,
+                           "rows": [[json_cell(v) for v in row] for row in data.get("rows", [])]})
+    return tables
+
+
+def dump_tables(store: "SqlStore", db_id: str) -> list:
+    """Every user table of one database (sync engines: sqlite3 / real Postgres)."""
+    gen = _dump_steps(engine_dialect(store), store.param_placeholder(1))
+    try:
+        step = next(gen)
+        while True:
+            step = gen.send(store.execute_sql(db_id, step[0], step[1]))
+    except StopIteration as done:
+        return done.value or []
+
+
+async def adump_tables(store: "SqlStore", db_id: str) -> list:
+    """Async twin of dump_tables (PGlite awaits its engine)."""
+    gen = _dump_steps(engine_dialect(store), store.param_placeholder(1))
+    try:
+        step = next(gen)
+        while True:
+            step = gen.send(await store.aexecute_sql(db_id, step[0], step[1]))
+    except StopIteration as done:
+        return done.value or []
+
+
+def is_async_engine(store: "SqlStore") -> bool:
+    """True when the store's data plane only answers on the async path (PGlite)."""
+    return type(store).aexecute_sql is not SqlStore.aexecute_sql
+
+
+# ── Arrow / Parquet column typing (the RDS export writes real Parquet through a
+#    platform-supplied writer: pyarrow offline, parquet-wasm in the browser) ──
+ARROW_TYPES = ("int64", "float64", "bool", "string", "binary")
+
+
+def arrow_type(decl: str, dialect: str = "sqlite") -> str:
+    """Engine column type → one of ARROW_TYPES (sqlite affinity rules / Postgres
+    data_type names). Anything else (dates, timestamps, json, numeric with scale…)
+    maps to a string column — an approximation AWS's own exporter doesn't make."""
+    d = (decl or "").strip().lower()
+    if not d:
+        return "string"
+    if d.startswith("bool"):
+        return "bool"
+    if dialect != "sqlite":
+        if d in ("smallint", "integer", "bigint", "int", "int2", "int4", "int8", "serial", "bigserial"):
+            return "int64"
+        if d in ("real", "double precision", "float4", "float8"):
+            return "float64"
+        if d == "bytea":
+            return "binary"
+        return "string"
+    if "int" in d:
+        return "int64"
+    if any(t in d for t in ("char", "clob", "text")):
+        return "string"
+    if "blob" in d:
+        return "binary"
+    if any(t in d for t in ("real", "floa", "doub")):
+        return "float64"
+    return "string"
+
+
+def _coerce(v, typ: str):
+    if v is None:
+        return None
+    v = cell_value(v)
+    if typ == "int64":
+        if isinstance(v, bool) or not isinstance(v, int):
+            if isinstance(v, float) and v.is_integer():
+                return int(v)
+            if isinstance(v, str) and v.strip().lstrip("-").isdigit():
+                return int(v.strip())
+            raise ValueError
+        return v
+    if typ == "float64":
+        if isinstance(v, bool):
+            raise ValueError
+        return float(v)
+    if typ == "bool":
+        if isinstance(v, bool):
+            return v
+        if isinstance(v, int) and v in (0, 1):
+            return bool(v)
+        if isinstance(v, str) and v.lower() in ("t", "f", "true", "false"):
+            return v.lower() in ("t", "true")
+        raise ValueError
+    if typ == "binary":
+        if isinstance(v, (bytes, bytearray)):
+            return bytes(v)
+        raise ValueError
+    if isinstance(v, (bytes, bytearray)):
+        return _b64.b64encode(bytes(v)).decode()
+    return v if isinstance(v, str) else (str(v).lower() if isinstance(v, bool) else str(v))
+
+
+def parquet_columns(table: dict, dialect: str = "sqlite") -> tuple:
+    """(schema, columns) for one dumped table: schema = [{"name", "type"}] (ARROW_TYPES),
+    columns = column-major lists of Python values. sqlite is dynamically typed, so a
+    column whose stored values don't fit its declared type becomes a string column."""
+    schema, columns = [], []
+    rows = table.get("rows") or []
+    for i, col in enumerate(table.get("columns") or []):
+        typ = arrow_type(col.get("decl", ""), dialect)
+        raw = [row[i] if i < len(row) else None for row in rows]
+        try:
+            vals = [_coerce(v, typ) for v in raw]
+        except (ValueError, TypeError):
+            typ = "string"
+            vals = [_coerce(v, "string") for v in raw]
+        schema.append({"name": col.get("name", f"col{i}"), "type": typ})
+        columns.append(vals)
+    return schema, columns
+
+
+# ── SQL dump / CSV (Cloud SQL sqlFile/csvFile, Azure SQL .bacpac payload) ──
+def sql_literal(v, dialect: str = "sqlite") -> str:
+    v = cell_value(v)
+    if v is None:
+        return "NULL"
+    if isinstance(v, bool):
+        return "TRUE" if v else "FALSE"
+    if isinstance(v, (int, float)):
+        return repr(v)
+    if isinstance(v, (bytes, bytearray)):
+        return f"X'{bytes(v).hex()}'" if dialect == "sqlite" else f"'\\x{bytes(v).hex()}'::bytea"
+    return "'" + str(v).replace("'", "''") + "'"
+
+
+def sql_dump(tables: list, dialect: str = "sqlite", header: str = "") -> str:
+    """A plain-SQL dump (DDL + one INSERT per row) that split_sql() / any SQL client
+    can replay."""
+    out = []
+    if header:
+        out.extend(f"-- {line}" for line in header.splitlines())
+    for t in tables:
+        name = quote_ident(t["name"])
+        out.append(f"DROP TABLE IF EXISTS {name};")
+        out.append((t.get("ddl") or f"CREATE TABLE {name} ()").rstrip().rstrip(";") + ";")
+        cols = ", ".join(quote_ident(c["name"]) for c in t.get("columns") or [])
+        for row in t.get("rows") or []:
+            out.append(f"INSERT INTO {name} ({cols}) VALUES ("
+                       + ", ".join(sql_literal(v, dialect) for v in row) + ");")
+    return "\n".join(out) + "\n"
+
+
+def split_sql(text: str) -> list:
+    """Split a SQL script into statements on `;`, honouring quotes and comments."""
+    stmts, buf, i, n = [], [], 0, len(text or "")
+    quote = None
+    while i < n:
+        ch = text[i]
+        if quote:
+            buf.append(ch)
+            if ch == quote:
+                if i + 1 < n and text[i + 1] == quote:
+                    buf.append(text[i + 1])
+                    i += 1
+                else:
+                    quote = None
+        elif ch in ("'", '"'):
+            quote = ch
+            buf.append(ch)
+        elif ch == "-" and text[i:i + 2] == "--":
+            j = text.find("\n", i)
+            i = n if j < 0 else j
+            continue
+        elif ch == "/" and text[i:i + 2] == "/*":
+            j = text.find("*/", i + 2)
+            i = n if j < 0 else j + 2
+            continue
+        elif ch == ";":
+            s = "".join(buf).strip()
+            if s:
+                stmts.append(s)
+            buf = []
+        else:
+            buf.append(ch)
+        i += 1
+    s = "".join(buf).strip()
+    if s:
+        stmts.append(s)
+    return stmts
+
+
+def to_csv(rows: list, columns: list | None = None) -> str:
+    out = _io.StringIO()
+    w = _csv.writer(out, lineterminator="\n")
+    if columns:
+        w.writerow(columns)
+    for row in rows:
+        w.writerow(["\\N" if v is None else (_b64.b64encode(bytes(cell_value(v))).decode()
+                    if isinstance(cell_value(v), (bytes, bytearray)) else cell_value(v)) for v in row])
+    return out.getvalue()
+
+
+def parse_csv(text: str) -> list:
+    return [[None if c == "\\N" else c for c in row] for row in _csv.reader(_io.StringIO(text or "")) if row]
+
+
+# ── destination URIs: ALWAYS resolved to the simulator's own object stores ──
+def parse_gs_uri(uri: str) -> tuple:
+    """`gs://bucket/path/obj` → (bucket, object). Raises ValueError otherwise."""
+    u = str(uri or "").strip()
+    if not u.startswith("gs://"):
+        raise ValueError(f"The URI {u!r} is not a gs:// Cloud Storage URI.")
+    bucket, _, obj = u[5:].partition("/")
+    if not bucket or not obj:
+        raise ValueError(f"The URI {u!r} must name a bucket and an object (gs://bucket/object).")
+    return bucket, obj
+
+
+_LOCAL_HOSTS = ("localhost", "127.0.0.1", "0.0.0.0", "azurite", "host.docker.internal")
+
+
+def parse_blob_uri(uri: str) -> tuple:
+    """`https://<account>.blob.core.windows.net/<container>/<blob>` (or the Azurite
+    path style `http://127.0.0.1:10000/<account>/<container>/<blob>`) → (account,
+    container, blob). The host is only PARSED — it is never resolved or contacted:
+    the account is looked up in the simulator. Raises ValueError otherwise."""
+    u = str(uri or "").strip()
+    scheme, sep, rest = u.partition("://")
+    if not sep or scheme.lower() not in ("http", "https"):
+        raise ValueError(f"The storage URI {u!r} is not an http(s) Blob URI.")
+    host, _, path = rest.partition("/")
+    host = host.split("@")[-1].split(":")[0].lower()
+    path = path.split("?", 1)[0]
+    segs = [s for s in path.split("/") if s]
+    if host.endswith(".blob.core.windows.net"):
+        account = host[: -len(".blob.core.windows.net")]
+    elif host in _LOCAL_HOSTS and segs:
+        account, segs = segs[0], segs[1:]
+    else:
+        raise ValueError(f"The storage URI host {host!r} is not an Azure Blob endpoint.")
+    if not account or len(segs) < 2:
+        raise ValueError(f"The storage URI {u!r} must name an account, a container and a blob.")
+    return account.lower(), segs[0], "/".join(segs[1:])

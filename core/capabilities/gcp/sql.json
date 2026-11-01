@@ -70,5 +70,15 @@
     "limitations": [
       "Vyomi collects no CPU/memory/query telemetry for Cloud SQL instances and has no in-console SQL editor backed by the native Admin API, so these dashboards cannot be rendered from real data."
     ]
+  },
+  "gcp.sql.export-import": {
+    "title": "Export / import (instances.export, instances.import — SQL and CSV files in Cloud Storage)",
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": [
+      "Files are written to / read from the simulator's OWN Cloud Storage (a gs:// URI is only parsed, never fetched from Google); a missing bucket or object fails the operation (the Operation carries an error). Each operation completes synchronously.",
+      "A SQL export is a plain DDL + INSERT script of the instance's SQL engine (Vyomi's sqlite3/PGlite engine in Nano and for engine-less offline instances, the real Postgres database for offline instances backed by the shared engine container) — not a pg_dump/mysqldump archive; exportContext.databases is recorded but the instance's engine is exported as one database. CSV export requires csvExportOptions.selectQuery and writes no header row.",
+      "Offline instances backed by the shared MySQL engine are not supported (the operation fails with that reason); serverless exports, offload, BAK (SQL Server) files and encryption options are not simulated."
+    ],
+    "tests": ["tests/conformance/test_db_exports_local.py", "tests/conformance/test_no_cloud_egress.py"]
   }
 }

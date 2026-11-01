@@ -75,6 +75,8 @@ TARGETS = [
     "api_gcp_sql_get_backup_run",
     "api_gcp_sql_delete_backup_run",
     "api_gcp_sql_restore_backup",
+    "api_gcp_sql_export_instance",
+    "api_gcp_sql_import_instance",
     "api_gcp_pubsub_list_topics",
     "api_gcp_pubsub_create_topic",
     "api_gcp_pubsub_get_topic",
@@ -645,6 +647,85 @@ async def api_gcp_sql_restore_backup(project: str, instance: str, request: Reque
         if rep is not None:
             rep["databases"] = [dict(d) for d in rec["databases"]]
     return s._gcp_sql_make_operation(project, instance, "RESTORE_VOLUME")
+
+
+class _PhysicalPgRows:
+    """SqlStore over an offline Cloud SQL instance's REAL Postgres database (the shared
+    engine container core/gcp_sql_engine provisioned — local, never a cloud endpoint)."""
+
+    def __new__(cls, cfg: dict, dbname: str):
+        from core.sql_store import SqlStore
+
+        class _Store(SqlStore):
+            def param_placeholder(self, index: int) -> str:
+                return "%s"
+
+            def _connect(self, db_id: str):
+                import psycopg2
+                conn = psycopg2.connect(host=cfg["host"], port=cfg["port"], user=cfg["admin_user"],
+                                        password=cfg["admin_password"], dbname=dbname)
+                conn.autocommit = True
+                return conn
+        return _Store()
+
+
+def _sql_rows_for(project: str, instance: str, rec: dict):
+    """(rows_store, db_id, error) for an offline Cloud SQL instance's data."""
+    backend = rec.get("_backend") or None
+    db_id = f"cloudsql:{project}/{instance}"
+    if isinstance(backend, dict) and backend.get("database"):
+        if str(backend.get("engine", "")).upper() != "POSTGRES":
+            return None, db_id, ("Export/import of a MySQL-engine instance is not supported by the "
+                                 "simulator; only PostgreSQL instances are.")
+        from core import gcp_sql_engine
+        return _PhysicalPgRows(gcp_sql_engine._engine_config("postgres"), backend["database"]), db_id, ""
+    from core.appliance_stores import cloudsql_rows_store
+    return cloudsql_rows_store(), db_id, ""
+
+
+async def _gcp_sql_export_import(project: str, instance: str, request: Request, kind: str):
+    from core import gcp_cloudsql_core as _csql
+    from core import sql_store as _sq
+    from core.appliance_stores import gcs_store
+    s = _server()
+    project = _gcp_project_name(project)
+    rec = _sql_instance_or_404(s, project, instance)
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    key = "exportContext" if kind == "EXPORT" else "importContext"
+    ctx = (payload or {}).get(key) or {}
+    try:
+        _sq.parse_gs_uri(ctx.get("uri"))
+    except ValueError as e:
+        raise HTTPException(400, detail=f"INVALID_ARGUMENT: {e}")
+    rows, db_id, msg = _sql_rows_for(project, instance, rec)
+    if not msg:
+        try:
+            msg = (_csql.run_export(rows, db_id, gcs_store(), ctx, label=f"{project}:{instance}")
+                   if kind == "EXPORT" else _csql.run_import(rows, db_id, gcs_store(), ctx))
+        except Exception as e:  # noqa: BLE001 — e.g. the engine container went away
+            msg = f"{kind.title()} failed: {e}"
+    op = s._gcp_sql_make_operation(project, instance, kind)
+    op[key] = {"kind": f"sql#{key}", **ctx}
+    if msg:
+        op["error"] = {"kind": "sql#operationErrors",
+                       "errors": [{"kind": "sql#operationError",
+                                   "code": "ERROR_RDBMS" if kind == "IMPORT" else "INTERNAL_ERROR",
+                                   "message": msg}]}
+    return op
+
+
+async def api_gcp_sql_export_instance(project: str, instance: str, request: Request):
+    """instances.export → sqlFile/csvFile into the appliance's OWN GCS store (gs:// is never
+    resolved to Google). Missing bucket → the operation carries an error."""
+    return await _gcp_sql_export_import(project, instance, request, "EXPORT")
+
+
+async def api_gcp_sql_import_instance(project: str, instance: str, request: Request):
+    """instances.import ← sqlFile/csvFile from the appliance's OWN GCS store."""
+    return await _gcp_sql_export_import(project, instance, request, "IMPORT")
 
 
 def _pubsub_mirror(s, kind: str, project: str, rid: str, payload: dict | None = None, delete: bool = False) -> None:

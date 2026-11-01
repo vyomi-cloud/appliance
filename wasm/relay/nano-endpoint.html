@@ -21,6 +21,7 @@
 <pre id="log">booting…</pre>
 <script type="module">
 import { installPGlite } from "../pglite-loader.js";   // RDS real-Postgres engine (optional)
+import { installParquet } from "../parquet/parquet-loader.js";   // RDS exports: real Parquet (lazy)
 // Same-origin BroadcastChannel so the launch dashboard can MIRROR our splash
 // logs + status (the endpoint runs in its own tab — surviving dashboard→console
 // navigation — while the dashboard drawer shows what's happening in-page).
@@ -90,6 +91,7 @@ async function boot() {
   // else keep the sqlite3 default. Both run behind the same SqlStore seam.
   const hasPg = await installPGlite();
   py.globals.set("_USE_PGLITE", hasPg);
+  try { installParquet(new URL("../parquet/", location.href).href); } catch (e) { /* exports then fail with a clear cause */ }
   try {   // Kubescape (OPA-wasm) evaluator for Defender for Cloud's Kubernetes posture — optional
     const { installKubescape } = await import(new URL("../kubescape/ks-eval.mjs", location.href).href);
     await installKubescape(new URL("../kubescape/", location.href).href);

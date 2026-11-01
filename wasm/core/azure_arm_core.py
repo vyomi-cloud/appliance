@@ -496,6 +496,8 @@ class AzureArm:
         self.sub_tags: dict = {}                # subscription id (lower) -> tags (Microsoft.Resources/tags/default)
         self.providers: dict = {}               # namespace (lower) -> "Registered" | "NotRegistered"
         self.kv_secrets_store = None             # set by aws_wire_router.py: this space's Key Vault secrets store (APIM named-value listValue)
+        self.sql_store = None                    # set by the platform: the Azure SQL data plane's SqlStore (database export/import)
+        self.blob_store = None                   # set by the platform: the simulator's Azure Blob store (.bacpac target/source)
 
     # ── per-resource ARM activity entries (Microsoft.Insights/eventtypes rows) ──
     # Kept IN self.state (so they persist with the rest of ARM, offline and Nano alike) by the one
@@ -1694,6 +1696,8 @@ class AzureArm:
                 {"name": "password", "value": creds["password"]},
                 {"name": "password2", "value": creds["password2"]},
             ]})
+        if ns == "microsoft.sql" and typ == "servers" and action in ("export", "import"):
+            return self._sql_import_export(action, type_chain, parent_rid, payload or {}, sub, rg)
         if ns == "microsoft.containerservice" and typ == "managedclusters":
             return self._aks_action(action, resource_name, parent_rid, payload or {})
         if ns == "microsoft.documentdb" and typ == "databaseaccounts" and action in (
@@ -1725,6 +1729,52 @@ class AzureArm:
         if action == "listsecrets":
             return _ok({})
         return _ok({})
+
+    def _sql_import_export(self, action, type_chain, parent_rid, payload, sub, rg):
+        """Microsoft.Sql database export (POST .../databases/{db}/export) and import
+        (POST .../databases/{db}/import, or .../servers/{s}/import for a new database):
+        the .bacpac goes to / comes from the SIMULATOR's Azure Blob store at storageUri
+        (core/azure_sql_core.export_database / import_database) — never the internet."""
+        from core import azure_sql_core as az_sql
+        on_database = len(type_chain) >= 4 and type_chain[2].lower() == "databases"
+        parts = parent_rid.split("/")
+        low = [x.lower() for x in parts]
+        server = parts[low.index("servers") + 1] if "servers" in low else ""
+        if not self.state.get(parent_rid.lower()):
+            what = "Database" if on_database else "Server"
+            return _err(404, "ResourceNotFound", f"{what} '{parts[-1]}' not found.")
+        uri = str(payload.get("storageUri") or "").strip()
+        if not uri:
+            return _err(400, "InvalidParameterValue", "storageUri is required.")
+        if on_database:
+            database = parts[-1]
+        else:
+            database = str(payload.get("databaseName") or "").strip()
+            if not database:
+                return _err(400, "InvalidParameterValue", "databaseName is required to import a new database.")
+        if self.sql_store is None or self.blob_store is None:
+            return _err(503, "ServiceUnavailable", "Database import/export is not wired on this platform.")
+        if action == "export":
+            ok, code, message, _size = az_sql.export_database(self.sql_store, server, database, self.blob_store,
+                                                             uri, arm_state=self.state)
+        else:
+            ok, code, message = az_sql.import_database(self.sql_store, server, database, self.blob_store,
+                                                       uri, arm_state=self.state)
+        if not ok:
+            return _err(404 if code.endswith("NotFound") else 400, code, message)
+        db_rid = (parent_rid if on_database else
+                  f"{parent_rid}/databases/{database}")
+        if not on_database and not self.state.get(db_rid.lower()):
+            server_rec = self.state.get(parent_rid.lower()) or {}
+            self.handle("PUT", db_rid, {"api-version": "2021-11-01"},
+                        {"location": server_rec.get("location", "eastus"), "properties": {}})
+        self._record_activity(db_rid, f"Microsoft.Sql/servers/databases/{action}/action", sub)
+        return _ok({"id": f"{db_rid}/importExportOperationResults/{uuid.uuid4()}",
+                    "type": "Microsoft.Sql/servers/databases/importExportOperationResults",
+                    "properties": {"requestType": "Export" if action == "export" else "Import",
+                                   "serverName": server, "databaseName": database, "status": "Succeeded",
+                                   "lastModifiedTime": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                                   "blobUri": uri, "errorMessage": None}})
 
     def _cosmos_keys_action(self, action, account_name, parent_rid, payload):
         """Microsoft.DocumentDB/databaseAccounts listKeys / listReadOnlyKeys /

@@ -97,12 +97,12 @@ def _cfg(key: str, default: str) -> str:
 _DEFAULT_SERVICES = ("s3,dynamodb,gcs,azure_blob,gcp_secrets,gcp_kms,kms,secretsmanager,"
                      "gcp_firestore,gcp_compute,sqs,sns,events,scheduler,"
                      "lambda,azure_keyvault,azure_acr,azure_servicebus,gcp_pubsub,azure_graph,azure_cosmos,iam,"
-                     "azure_table")
+                     "azure_table,rds")
 _KNOWN_SERVICES = ("s3", "dynamodb", "gcs", "azure_blob", "gcp_secrets", "gcp_kms",
                    "kms", "secretsmanager", "gcp_firestore", "gcp_compute",
                    "sqs", "sns", "events", "scheduler",
                    "lambda", "azure_keyvault", "azure_acr", "azure_servicebus", "gcp_pubsub",
-                   "azure_graph", "azure_cosmos", "iam", "azure_table")
+                   "azure_graph", "azure_cosmos", "iam", "azure_table", "rds")
 
 
 def unified_services() -> frozenset:
@@ -140,6 +140,7 @@ def appliance_stores() -> dict:
             "az_acr": aps.acr_store(), "az_sb": aps.az_servicebus_store(),
             "gcp_msg": aps.gcp_pubsub_store(), "az_graph": aps.graph_store(),
             "az_cosmos": aps.cosmos_store(), "iam": aps.iam_store(), "az_table": aps.table_store(),
+            "rds": aps.rds_store(),
             **_gcp_logging_store(), **_azure_arm_store()}
 
 
@@ -174,7 +175,7 @@ STORE_SERVICE = {"s3": "s3", "gcs": "gcs", "ddb": "dynamodb", "az_blob": "azure_
                  "az_kvsec": "azure_keyvault", "az_kvkeys": "azure_keyvault",
                  "az_kvcerts": "azure_keyvault", "az_acr": "azure_acr", "az_sb": "azure_servicebus",
                  "gcp_msg": "gcp_pubsub", "az_graph": "azure_graph", "az_cosmos": "azure_cosmos",
-                 "iam": "iam", "az_table": "azure_table",
+                 "iam": "iam", "az_table": "azure_table", "rds": "rds",
                  "gcp_logging": "gcp_secrets", "az_arm": "azure_keyvault"}   # Secret Manager writes its audit entries here
 
 
@@ -369,7 +370,54 @@ def dispatch_service(service: str, method: str, path: str, query: dict, headers:
         hdrs = dict(resp.headers or {})
         hdrs.setdefault("content-type", "text/xml")
         return {"status": resp.status, "headers": hdrs, "body": resp.body.encode()}
+    if service == "rds":
+        # v4 C0h — AWS RDS (Query protocol) on core/rds_core.py over the space-scoped slot;
+        # exports land in THIS router's S3 store (aps.s3_store(), what `aws s3 ls` reads).
+        from core import rds_core
+        if hasattr(r.rds, "adopt"):
+            r.rds.adopt()                 # pre-v4 instances/snapshots/groups (once per space)
+        resp = rds_core.dispatch(r.rds, r._query_params(query, body), msg_store=r.msg, s3_store=r.s3)
+        return _rds_out(resp)
     raise ValueError(f"not a unified service: {service}")
+
+
+def _rds_out(resp) -> dict:
+    import uuid as _uuid
+    hdrs = {"x-amzn-requestid": str(_uuid.uuid4()), **dict(resp.headers or {})}
+    hdrs.setdefault("content-type", "text/xml")
+    b = resp.body if isinstance(resp.body, (bytes, bytearray)) else str(resp.body).encode()
+    return {"status": resp.status, "headers": hdrs, "body": b}
+
+
+async def adispatch_rds(method: str, path: str, query: dict, headers: dict, body: bytes,
+                        router: AwsWireRouter | None = None) -> dict:
+    """Async RDS front door (the offline route uses this): the native Query wire through
+    rds_core.adispatch, or — for `/Execute`, `/BeginTransaction`, … — the RDS Data API
+    (core/rds_data_core.py) over the SAME store, so rows written through the Data API are
+    the ones a snapshot captures and an export writes."""
+    import json as _json
+    from core import rds_core, rds_data_core
+    r = router or appliance_router()
+    if hasattr(r.rds, "adopt"):
+        r.rds.adopt()
+    if rds_data_core.is_data_api_path(path):
+        try:
+            payload = _json.loads(body or b"{}")
+        except Exception:
+            payload = {}
+        resp = await rds_data_core.dispatch(r.rds, path, payload if isinstance(payload, dict) else {})
+        hdrs = dict(resp.headers or {})
+        hdrs.setdefault("content-type", "application/json")
+        return {"status": resp.status, "headers": hdrs, "body": _json.dumps(resp.body).encode()}
+    resp = await rds_core.adispatch(r.rds, r._query_params(query, body), msg_store=r.msg, s3_store=r.s3)
+    return _rds_out(resp)
+
+
+async def serve_rds(request, path: str | None = None):
+    body = await request.body()
+    out = await adispatch_rds(request.method, path or request.url.path, dict(request.query_params),
+                              dict(request.headers), body)
+    return to_response(out)
 
 
 _KV_HOST = "https://vault.vault.azure.net"

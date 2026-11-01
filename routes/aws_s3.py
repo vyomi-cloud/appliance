@@ -1181,6 +1181,10 @@ def _register_unified_s3(app: FastAPI) -> None:
         if _is_reserved_bucket(bucket):
             raise HTTPException(status_code=404, detail="Not found")
         path = request.scope.get("path") or request.url.path
+        if request.method == "POST" and _wi.is_unified("rds"):
+            from core import rds_data_core as _rdc
+            if _rdc.is_data_api_path(path):   # RDS Data API (/Execute, /BeginTransaction, …) — never a bucket
+                return await _wi.serve_rds(request, path=path)
         if request.method == "GET" and "/" in path.lstrip("/"):
             # pre-v4 parity: a GCS XML-API style download (`/<gcs-bucket>/<object>`) of a
             # bucket that is not an S3 bucket is answered from the GCS state.
@@ -1280,6 +1284,12 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
         if service == "sns":
             from routes.aws_sns import sns_query as _sns_wire
             return await _sns_wire(request)
+        if service == "rds" and _wi.is_unified("rds"):
+            # v4 C0h — AWS RDS on the shared core (core/rds_core.py) over the space-scoped
+            # appliance state, like Nano: every action rds_core serves (export tasks → the
+            # simulator's own S3, event subscriptions, certificates, …). The pre-v4 handler
+            # stays reachable with VYOMI_UNIFIED_INGRESS_SERVICES excluding "rds".
+            return await _wi.serve_rds(request)
         if service == "rds":
             return await _srv().api_rds_query(request)
         if service == "dynamodb":

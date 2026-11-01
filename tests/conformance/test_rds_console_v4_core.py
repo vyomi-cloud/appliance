@@ -186,25 +186,62 @@ def run() -> int:
     list_ri = rds.dispatch(st, {"Action": "DescribeReservedDBInstances"})
     _check("describe lists the purchased reservation", "v4-ri" in list_ri.body)
 
-    # 12. S3 export tasks: a real object lands in the named bucket — a bucket that
-    # doesn't exist makes the task genuinely FAIL, not silently "succeed".
+    # 12. S3 export tasks: the snapshot's REAL table data lands in the named bucket as
+    # Parquet (AWS layout) — a bucket that doesn't exist, a missing snapshot, or no
+    # Parquet engine makes the task genuinely FAIL, never silently "succeed".
+    import io as _io
     s3_store = InMemoryObjectStore()
+    st.execute_sql("v4db", "CREATE TABLE orders (id INTEGER, item TEXT)")
+    st.execute_sql("v4db", "INSERT INTO orders VALUES (1, 'apple'), (2, 'pear')")
+    rds.dispatch(st, {"Action": "CreateDBSnapshot", "DBInstanceIdentifier": "v4db",
+                      "DBSnapshotIdentifier": "v4db-export-snap"})
+    src = f"arn:aws:rds:us-east-1:{st.account_id}:snapshot:v4db-export-snap"
+    missing = rds.dispatch(st, {"Action": "StartExportTask", "ExportTaskIdentifier": "v4-export-nosnap",
+                                "SourceArn": f"arn:aws:rds:us-east-1:{st.account_id}:snapshot:nope",
+                                "S3BucketName": "v4-exports"}, s3_store=s3_store)
+    _check("export of a snapshot that doesn't exist is DBSnapshotNotFound", missing.status == 404
+           and "DBSnapshotNotFound" in missing.body)
     no_bucket = rds.dispatch(st, {"Action": "StartExportTask", "ExportTaskIdentifier": "v4-export-nobucket",
-                                  "SourceArn": f"arn:aws:rds:us-east-1:{st.account_id}:snapshot:v4db-snap",
-                                  "S3BucketName": "v4-exports"}, s3_store=s3_store)
+                                  "SourceArn": src, "S3BucketName": "v4-exports"}, s3_store=s3_store)
     _check("export into a bucket that doesn't exist really fails",
            no_bucket.status == 200 and "<Status>FAILED</Status>" in no_bucket.body
            and "<FailureCause>" in no_bucket.body)
     s3_store.create_bucket("v4-exports")
-    exp = rds.dispatch(st, {"Action": "StartExportTask", "ExportTaskIdentifier": "v4-export",
-                            "SourceArn": f"arn:aws:rds:us-east-1:{st.account_id}:snapshot:v4db-snap",
-                            "S3BucketName": "v4-exports"}, s3_store=s3_store)
-    _check("start export task 200", exp.status == 200 and "<Status>COMPLETE</Status>" in exp.body)
-    _check("a real manifest object landed in the named bucket",
-           "v4-export/export_manifest.json" in s3_store.bucket_objects("v4-exports"))
-    rds.dispatch(st, {"Action": "CancelExportTask", "ExportTaskIdentifier": "v4-export"})
-    gone_exp = rds.dispatch(st, {"Action": "DescribeExportTasks", "ExportTaskIdentifier": "v4-export"})
-    _check("cancelled export task 404s", gone_exp.status == 404)
+    prev_writer = rds._PARQUET_WRITER
+    rds.set_parquet_writer(None)
+    no_engine = rds.dispatch(st, {"Action": "StartExportTask", "ExportTaskIdentifier": "v4-export-noengine",
+                                  "SourceArn": src, "S3BucketName": "v4-exports"}, s3_store=s3_store)
+    _check("no Parquet engine -> the task FAILS (no fallback format)",
+           "<Status>FAILED</Status>" in no_engine.body and "Parquet engine" in no_engine.body
+           and not s3_store.bucket_objects("v4-exports"))
+    try:
+        from core import parquet_pyarrow
+        have_pyarrow = parquet_pyarrow.install()
+    except Exception:
+        have_pyarrow = False
+    if have_pyarrow:
+        import pyarrow.parquet as _pq
+        from core import s3_object_core as _s3c
+        exp = rds.dispatch(st, {"Action": "StartExportTask", "ExportTaskIdentifier": "v4-export",
+                                "SourceArn": src, "S3BucketName": "v4-exports", "S3Prefix": "rds"},
+                           s3_store=s3_store)
+        _check("start export task 200 COMPLETE", exp.status == 200 and "<Status>COMPLETE</Status>" in exp.body)
+        keys = list(s3_store.bucket_objects("v4-exports"))
+        part = [k for k in keys if k.startswith("rds/v4-export/v4db/main.orders/part-00000-")
+                and k.endswith(".gz.parquet")]
+        _check("AWS layout: <prefix>/<task>/<db>/<schema>.<table>/part-00000-*.gz.parquet + export_info",
+               len(part) == 1 and "rds/v4-export/export_info_v4-export.json" in keys
+               and "rds/v4-export/export_tables_info_v4-export_from_1_to_1.json" in keys)
+        body = _s3c.dispatch(s3_store, "GET", f"/v4-exports/{part[0]}", {}, {}, b"").body
+        rows = _pq.read_table(_io.BytesIO(body)).to_pylist()
+        _check("the Parquet file round-trips the snapshot's rows",
+               rows == [{"id": 1, "item": "apple"}, {"id": 2, "item": "pear"}])
+        rds.dispatch(st, {"Action": "CancelExportTask", "ExportTaskIdentifier": "v4-export"})
+        gone_exp = rds.dispatch(st, {"Action": "DescribeExportTasks", "ExportTaskIdentifier": "v4-export"})
+        _check("cancelled export task 404s", gone_exp.status == 404)
+    else:
+        print("  SKIP  Parquet round-trip (pyarrow not installed in this interpreter)")
+    rds.set_parquet_writer(prev_writer)
 
     # 12b. Custom DB engine versions: metadata CRUD.
     cev = rds.dispatch(st, {"Action": "CreateCustomDBEngineVersion", "Engine": "custom-oracle-ee",

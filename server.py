@@ -22313,6 +22313,9 @@ async def aws_query_root(request: Request) -> Response:
     if service == "sqs":
         return await api_sqs_query(request)
     if service == "rds":
+        from core import wire_ingress as _wi_rds
+        if _wi_rds.is_unified("rds"):   # v4 C0h — the shared RDS core (see routes/aws_s3.py)
+            return await _wi_rds.serve_rds(request)
         return await api_rds_query(request)
     if service == "dynamodb":
         return await api_dynamodb_aws(request)
