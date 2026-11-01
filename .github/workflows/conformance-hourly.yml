@@ -59,8 +59,18 @@ jobs:
           if git ls-remote --exit-code origin "$B" >/dev/null 2>&1; then
             git fetch -q origin "$B"
             git checkout -q -B "$B" FETCH_HEAD
-            # Pick up anything merged to main since the branch was cut.
-            git merge -q --no-edit origin/main || git merge --abort
+            # Pick up anything merged to main since the branch was cut. A conflict here
+            # means the branch re-fixed something main already shipped (e.g. it was cut
+            # before the previous daily PR merged): main holds the released, verified
+            # code, so main wins the conflicting hunks and the branch keeps everything
+            # else. Never abort silently — that left the branch drifting all day.
+            if ! git merge -q --no-edit origin/main; then
+              CONFLICTS=$(git diff --name-only --diff-filter=U | tr '\n' ' ')
+              git merge --abort
+              git merge -q --no-edit -X theirs origin/main \
+                -m "Merge main into $B (main wins conflicting hunks: $CONFLICTS)"
+              echo "::warning title=Daily branch conflicted with main::main won the conflicting hunks in: $CONFLICTS"
+            fi
           else
             git checkout -q -B "$B"
           fi
