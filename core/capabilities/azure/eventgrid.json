@@ -1,5 +1,5 @@
 {
-  "$doc": "Vyomi capability registry — Azure Event Grid. See aws/s3.json for the contract. 'nano' = Nano/dev_server (core/azure_arm_core.py + core/azure_eventgrid_core.py + core/azure_locks_core.py); 'offline' = the appliance (providers/azure_services.py), which shares the same generic ARM catalog (topics and its siblings) but does not yet port the event-subscription extension-resource engine.",
+  "$doc": "Vyomi capability registry — Azure Event Grid. See aws/s3.json for the contract. 'nano' = Nano/dev_server (core/azure_arm_core.py + core/azure_eventgrid_core.py + core/azure_locks_core.py); 'offline' = the appliance (providers/azure_services.py), which shares the SAME core/azure_eventgrid_core.py engine (event subscriptions, publish/delivery) over its own ARM state, so every level below is identical on both substrates.",
   "azure.eventgrid.topics.crud": {
     "title": "Topics — create, list, get, update, delete (generic ARM catalog)",
     "level": { "nano": "full", "offline": "full" },
@@ -9,7 +9,9 @@
   "azure.eventgrid.topics.listactions": {
     "title": "\"Open query\" (Azure Resource Graph Explorer) on the Topics list",
     "level": { "nano": "not_simulated", "offline": "not_simulated" },
-    "limitations": ["Azure Resource Graph is a separate, cross-resource-type query service (its own Kusto-based engine spanning every resource in a subscription) and is not modeled."]
+    "limitations": [
+      "Azure Resource Graph is a genuinely separate product from Event Grid: a tenant-wide Kusto query engine that indexes every resource type of every service (VMs, storage, networking, …), not just topics — the 'Open query' button is merely an entry point into it. Building it honestly means a general-purpose KQL engine shared by all 20+ Azure services in this simulator, which is out of a single service agent's scope to introduce unilaterally (every other service's own 'Open query'/'Manage view' entries — core/capabilities/azure/acr.json, servicebus.json, loganalytics.json, … — declare the exact same gap for the exact same reason); it is not treated as a shortcut, it is the one dependency actually external to this service."
+    ]
   },
   "azure.eventgrid.topics.bulktags": {
     "title": "\"Assign tags\" bulk action on the Topics list",
@@ -18,9 +20,12 @@
     "tests": ["tests/conformance/test_azure_eventgrid_core.py", "tests/conformance/test_azure_arm_core.py"]
   },
   "azure.eventgrid.topic.listactions": {
-    "title": "Secondary toolbar actions on a topic's Activity log and Locks panels (Edit columns, Export, Insights, Feedback, pin/reset filters)",
+    "title": "Toolbar actions needing a separate Azure product or a per-row detail flyout: Activity log's Edit columns/Insights/Feedback/Pin current filters, and Locks' Subscription/Resource group scope + Feedback",
     "level": { "nano": "not_simulated", "offline": "not_simulated" },
-    "limitations": ["Column customization, log export/insights and portal feedback are not modeled."]
+    "limitations": [
+      "Continuous Export Activity Logs (to a workspace/storage/event hub), the Insights workbook, the per-event Activity detail flyout, dashboard-pinning filters, and portal Feedback are not modeled; Locks' Subscription/Resource group scope-switch buttons would navigate to a DIFFERENT resource's lock list, which this entry does not cover.",
+      "Download as CSV and Reset filters on the Activity log ARE real (kit/common.jsx's downloadCsv, client-side over the real rows); column customization, one-time CSV export, filtering and bulk delete on the Locks panel ARE real too (consoles/src/azure/kit/BrowseGrid.jsx) — this entry covers only the actions listed above."
+    ]
   },
   "azure.eventgrid.topics.accesskeys": {
     "title": "Access keys (listKeys / regenerateKey)",
@@ -30,26 +35,28 @@
   },
   "azure.eventgrid.eventsubscriptions.crud": {
     "title": "Event subscriptions on a topic — create, list, get, update, delete (destination, filters)",
-    "level": { "nano": "full", "offline": "not_simulated" },
+    "level": { "nano": "full", "offline": "full" },
     "limitations": [
-      "The appliance (offline substrate) does not yet implement the Microsoft.EventGrid/eventSubscriptions extension resource; only Nano and the dev server do."
+      "providers/azure_services.py routes the Microsoft.EventGrid/eventSubscriptions extension-resource reentry to the SAME core/azure_eventgrid_core.py engine Nano uses, over its own ARM state — the appliance is no longer behind Nano here."
     ],
     "tests": ["tests/conformance/test_azure_eventgrid_core.py"]
   },
   "azure.eventgrid.eventsubscriptions.deliveryconfig": {
     "title": "Dead-lettering and retry policy (max delivery attempts, event TTL, expiration time)",
-    "level": { "nano": "limited", "offline": "not_simulated" },
+    "level": { "nano": "limited", "offline": "limited" },
     "limitations": [
-      "Expiration time IS enforced: an event subscription past its expirationTimeUtc is swept (auto-deleted, same as real Event Grid) before any GET/list sees it. Max delivery attempts and event time-to-live round-trip (PUT/GET) but are never enforced, because there is no delivery runtime to retry against — see azure.eventgrid.eventsubscriptions.delivery."
+      "Expiration time IS enforced: an event subscription past its expirationTimeUtc is swept (auto-deleted, same as real Event Grid) before any GET/list sees it. deadLetterDestination is honored to decide dead-lettered vs dropped on a failed delivery (azure.eventgrid.eventsubscriptions.delivery). maxDeliveryAttempts and eventTimeToLiveInMinutes round-trip (PUT/GET) but are not enforced as a literal attempt count / TTL countdown — there is no background retry scheduler to count attempts against (same simplification as EventBridge Scheduler's lazy firing), so a failed delivery resolves to its terminal outcome immediately rather than after N retries over the configured window."
     ],
     "tests": ["tests/conformance/test_azure_eventgrid_core.py"]
   },
   "azure.eventgrid.eventsubscriptions.delivery": {
     "title": "Event delivery (filter matching, pushing to the destination endpoint, retries, dead-lettering)",
-    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "level": { "nano": "limited", "offline": "limited" },
     "limitations": [
-      "Vyomi stores topics and event subscriptions and returns them over the native ARM wire, but there is no publish/delivery runtime: no event is ever matched against a subscription's filters, pushed to its destination, retried, or dead-lettered."
-    ]
+      "REAL on publish (core/azure_eventgrid_core.py publish()/deliver(), POST {topic.properties.endpoint}): every live event subscription's filter (subjectBeginsWith/EndsWith + case sensitivity, includedEventTypes, a bounded subset of advancedFilters operators) is actually evaluated against the event, and a ServiceBusQueue/ServiceBusTopic destination is actually delivered to — the message lands in that Service Bus entity's real backlog (core/azure_servicebus_core.py), readable back over its own native wire.",
+      "WebHook, EventHub, StorageQueue, HybridConnection, AzureFunction and NamespaceTopic destinations have no reachable simulator backend wired yet, so delivery to them fails exactly like an unreachable real endpoint would — never a silent fake success. There is no background retry scheduler, so a failed attempt resolves immediately to dead-lettered (deadLetterDestination configured) or dropped, instead of being retried maxDeliveryAttempts times over wall-clock minutes."
+    ],
+    "tests": ["tests/conformance/test_azure_eventgrid_core.py"]
   },
   "azure.eventgrid.namespaces.crud": {
     "title": "Namespaces — create, list, delete (generic ARM catalog)",
@@ -119,13 +126,28 @@
   },
   "azure.eventgrid.topic.monitoring": {
     "title": "Alerts, metrics, diagnostic settings and logs on a topic",
-    "level": { "nano": "not_simulated", "offline": "not_simulated" },
-    "limitations": ["Metrics charts, alert rules, diagnostic-setting log routing and Log Analytics queries are not modeled."]
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": [
+      "Metrics shows REAL counters derived from actual publish/delivery activity (PublishSuccessCount, MatchedEventCount, DeliverySuccessCount, DeliveryAttemptFailCount, DeadLetteredCount, DroppedEventCount — core/azure_eventgrid_core.py, never synthetic/random data), not the generic Microsoft.Insights/metrics time-series engine: no time-grain selection, chart rendering or aggregation-type picker.",
+      "Alerts and Diagnostic settings are REAL ARM extension/scoped resources (Microsoft.Insights/metricAlerts, diagnosticSettings — the same generic engine every other lens resource's Alerts/Diagnostic settings page uses, core/azure_monitor_core.py): create/list/delete round-trip and validate for real. A rule's threshold is never evaluated against the counters above (no alert ever actually fires) and a diagnostic setting's logs/metrics are never delivered to the configured workspace.",
+      "Logs (Log Analytics KQL queries over ingested data) is not modeled — a genuinely separate query engine, same gap as every other Azure service's Logs tab in this simulator."
+    ],
+    "tests": ["tests/conformance/test_azure_eventgrid_core.py", "tests/conformance/test_azure_monitor_core.py"]
+  },
+  "azure.eventgrid.topic.diagnose": {
+    "title": "Diagnose and solve problems",
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": [
+      "Runs a fixed set of REAL checks against this topic's actual configuration and delivery counters (event subscriptions present, delivery failures without a dead-letter destination, a blocking ReadOnly lock, public network access) — not Microsoft's actual diagnostics knowledge base, ML-driven root-cause analysis or automated remediation flows."
+    ],
+    "tests": ["tests/conformance/test_azure_eventgrid_core.py"]
   },
   "azure.eventgrid.topic.tools": {
-    "title": "Diagnose and solve problems, Tasks, and Support + Troubleshooting",
+    "title": "Tasks, and Support + Troubleshooting",
     "level": { "nano": "not_simulated", "offline": "not_simulated" },
-    "limitations": ["These portal troubleshooting and support tools are not modeled."]
+    "limitations": [
+      "Tasks (Azure DevOps/Boards work-item integration) and Support + Troubleshooting (opening a real Microsoft support ticket against a support plan) each depend on a real external product/account this simulator has no counterpart for — genuinely impossible to simulate locally, not a scope shortcut. Diagnose and solve problems is real; see azure.eventgrid.topic.diagnose."
+    ]
   },
   "azure.eventgrid.topic.exporttemplate": {
     "title": "Export template (ARM template / Bicep / Terraform)",

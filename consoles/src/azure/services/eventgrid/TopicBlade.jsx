@@ -18,7 +18,7 @@ import BrowseGrid from "../../kit/BrowseGrid.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
 import ResourceBlade from "../../kit/ResourceBlade.jsx";
-import { Essentials, fmtDate, Glyph, InfoBar, KV, Loading, ErrorBar, NotSimulated, NotSimulatedContainer } from "../../kit/common.jsx";
+import { downloadCsv, Essentials, fmtDate, Glyph, InfoBar, KV, Loading, ErrorBar, NotSimulated, NotSimulatedContainer } from "../../kit/common.jsx";
 import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 import { TagRows } from "./TagRows.jsx";
@@ -62,12 +62,12 @@ export default function TopicBlade({ params, query }) {
       activitylog: () => <ActivityLog t={t} name={name} />,
       accesscontrol: () => <Iam name={name} />,
       locks: () => <Locks rg={rg} topic={name} />,
-      diagnose: () => <CapabilityContainer id="azure.eventgrid.topic.tools" title={`${name} | Diagnose and solve problems`} />,
+      diagnose: () => <Diagnose t={t} rg={rg} name={name} />,
       tasks: () => <CapabilityContainer id="azure.eventgrid.topic.tools" title={`${name} | Tasks`} />,
       support: () => <CapabilityContainer id="azure.eventgrid.topic.tools" title={`${name} | Support + Troubleshooting`} />,
-      alerts: () => <CapabilityContainer id="azure.eventgrid.topic.monitoring" title={`${name} | Alerts`} />,
-      metrics: () => <CapabilityContainer id="azure.eventgrid.topic.monitoring" title={`${name} | Metrics`} />,
-      diagnosticsettings: () => <CapabilityContainer id="azure.eventgrid.topic.monitoring" title={`${name} | Diagnostic settings`} />,
+      alerts: () => <Alerts t={t} />,
+      metrics: () => <Metrics t={t} />,
+      diagnosticsettings: () => <DiagnosticSettings t={t} />,
       logs: () => <CapabilityContainer id="azure.eventgrid.topic.monitoring" title={`${name} | Logs`} />,
       exporttemplate: () => <ExportTemplate t={t} />,
     }[panel];
@@ -376,14 +376,25 @@ function Properties({ t }) {
 }
 
 // ── Activity log (CapabilityContainer wraps it so the "generic feed, not the real Insights
-// audit trail" limitation still surfaces as a badge; the portal's Edit columns / Export /
-// Insights toolbar is honestly out of scope — a declared gap, not a dead button) ───────────
+// audit trail" limitation still surfaces as a badge). Download as CSV and Reset filters are
+// REAL (client-side over the real rows, same mechanism as BrowseGrid's Export to CSV);
+// Export Activity Logs (continuous export to a workspace/storage/event hub), Insights and
+// Feedback stay an honest gap (azure.eventgrid.topic.listactions). ─────────────────────────
+const ACTIVITY_LOG_COLUMNS = [
+  { key: "operation", label: "Operation name", value: (e) => e.operationName?.localizedValue || e.operationName?.value },
+  { key: "status", label: "Status", value: (e) => e.status?.value },
+  { key: "time", label: "Time", value: (e) => (e.eventTimestamp ? fmtDate(e.eventTimestamp) : ""), csv: (e) => e.eventTimestamp },
+  { key: "timestamp", label: "Time stamp", value: (e) => e.eventTimestamp },
+  { key: "subscription", label: "Subscription", value: (e) => e.subscriptionId },
+  { key: "caller", label: "Event initiated by", value: (e) => e.caller },
+];
+
 function ActivityLog({ t, name }) {
   const log = useAsync(() => api.listActivityLog(t.id), [t.id]);
   const [filter, setFilter] = useState("");
   const [gap, setGap] = useState(null);
   const f = filter.trim().toLowerCase();
-  const rows = (log.data || []).filter((e) => !f || (e.operationName?.localizedValue || "").toLowerCase().includes(f));
+  const rows = (log.data || []).filter((e) => !f || (ACTIVITY_LOG_COLUMNS.some((c) => String(c.value(e) ?? "").toLowerCase().includes(f))));
   return (
     <CapabilityContainer id="azure.eventgrid.topic.activitylog" title={`${name} | Activity log`}>
       <div className="vy-cmdbar" role="toolbar" aria-label="Activity log commands">
@@ -391,27 +402,20 @@ function ActivityLog({ t, name }) {
         <ToolbarButton onClick={() => setGap("Edit columns")}>Edit columns</ToolbarButton>
         <ToolbarButton icon={<ArrowClockwise20Regular />} onClick={log.reload}>Refresh</ToolbarButton>
         <ToolbarButton onClick={() => setGap("Export Activity Logs")}>Export Activity Logs</ToolbarButton>
-        <ToolbarButton onClick={() => setGap("Download as CSV")}>Download as CSV</ToolbarButton>
+        <ToolbarButton icon={<ArrowDownload20Regular />} disabled={!rows.length} onClick={() => downloadCsv("activity-log.csv", ACTIVITY_LOG_COLUMNS, rows)}>Download as CSV</ToolbarButton>
         <ToolbarButton onClick={() => setGap("Insights")}>Insights</ToolbarButton>
         <ToolbarButton onClick={() => setGap("Feedback")}>Feedback</ToolbarButton>
         <ToolbarButton onClick={() => setGap("Pin current filters")}>Pin current filters</ToolbarButton>
-        <ToolbarButton onClick={() => setGap("Reset filters")}>Reset filters</ToolbarButton>
+        <ToolbarButton onClick={() => setFilter("")}>Reset filters</ToolbarButton>
       </div>
       <Input size="small" style={{ width: 260, margin: "8px 0" }} placeholder="Filter by operation..." value={filter} onChange={(_, d) => setFilter(d.value)} aria-label="Filter by operation" />
       <ErrorBar error={log.error} />
       {log.loading ? <Loading /> : (
         <table className="vy-grid" style={{ width: "100%" }}>
-          <thead><tr><th>Operation name</th><th>Status</th><th>Time</th><th>Time stamp</th><th>Subscription</th><th>Event initiated by</th></tr></thead>
+          <thead><tr>{ACTIVITY_LOG_COLUMNS.map((c) => <th key={c.key}>{c.label}</th>)}</tr></thead>
           <tbody>
             {rows.map((e) => (
-              <tr key={e.id}>
-                <td>{e.operationName?.localizedValue || e.operationName?.value}</td>
-                <td>{e.status?.value}</td>
-                <td>{e.eventTimestamp ? fmtDate(e.eventTimestamp) : ""}</td>
-                <td>{e.eventTimestamp}</td>
-                <td>{e.subscriptionId}</td>
-                <td>{e.caller}</td>
-              </tr>
+              <tr key={e.id}>{ACTIVITY_LOG_COLUMNS.map((c) => <td key={c.key}>{c.value(e)}</td>)}</tr>
             ))}
           </tbody>
         </table>
@@ -540,12 +544,9 @@ function Locks({ rg, topic }) {
   const notify = useNotify();
   const locks = useAsync(() => api.listLocks(rg, topic), [rg, topic]);
   const [adding, setAdding] = useState(false);
-  const [del, setDel] = useState(null);
   const [f, setF] = useState({ name: "", type: "Delete", notes: "" });
   const [busy, setBusy] = useState(false);
-  const [filter, setFilter] = useState("");
   const [gap, setGap] = useState(null);
-  const shown = locks.data?.filter((l) => !filter.trim() || l.name.toLowerCase().includes(filter.trim().toLowerCase())) || [];
 
   const add = async () => {
     setBusy(true);
@@ -562,32 +563,28 @@ function Locks({ rg, topic }) {
   return (
     <>
       <CapabilityContainer id="azure.eventgrid.topic.locks" title={`${topic} | Locks`}>
-        <div className="vy-cmdbar" role="toolbar" aria-label="Locks commands">
-          <ToolbarButton icon={<Add20Regular />} onClick={() => setAdding(true)}>Add</ToolbarButton>
-          <ToolbarButton onClick={() => setGap("Subscription")}>Subscription</ToolbarButton>
-          <ToolbarButton onClick={() => setGap("Resource group")}>Resource group</ToolbarButton>
-          <ToolbarButton icon={<ArrowClockwise20Regular />} onClick={locks.reload}>Refresh</ToolbarButton>
-          <ToolbarButton onClick={() => setGap("Feedback")}>Feedback</ToolbarButton>
-        </div>
-        <Input size="small" style={{ width: 260, margin: "8px 0" }} placeholder="Search to filter items..." value={filter} onChange={(_, d) => setFilter(d.value)} aria-label="Search to filter items" />
-        <ErrorBar error={locks.error} />
-        {locks.loading ? <Loading /> : (
-          <table className="vy-grid" style={{ width: "100%" }}>
-            <thead><tr><th>Lock name</th><th>Lock type</th><th>Scope</th><th>Notes</th><th /></tr></thead>
-            <tbody>
-              {shown.map((l) => (
-                <tr key={l.name}>
-                  <td>{l.name}</td>
-                  <td>{LOCK_TYPE_LABEL[l.properties?.level] || l.properties?.level}</td>
-                  <td>{topic}</td>
-                  <td>{l.properties?.notes}</td>
-                  <td><Button appearance="subtle" size="small" icon={<Delete20Regular />} aria-label={`Delete ${l.name}`} onClick={() => setDel(l.name)} /></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-        {!locks.loading && !shown.length && <div className="vy-empty"><h3>This resource has no locks.</h3></div>}
+        <BrowseGrid
+          resourceName="lock" rowKey={(r) => r.name} filterPlaceholder="Search to filter items..."
+          items={locks.data || []} loading={locks.loading} error={locks.error} onRefresh={locks.reload}
+          extraCommands={<>
+            <ToolbarButton icon={<Add20Regular />} onClick={() => setAdding(true)}>Add</ToolbarButton>
+            <ToolbarButton onClick={() => setGap("Subscription")}>Subscription</ToolbarButton>
+            <ToolbarButton onClick={() => setGap("Resource group")}>Resource group</ToolbarButton>
+            <ToolbarButton onClick={() => setGap("Feedback")}>Feedback</ToolbarButton>
+          </>}
+          onDelete={async (sel) => {
+            for (const l of sel) await api.deleteLock(rg, topic, l.name);
+            notify.success(`Deleted ${sel.length} lock${sel.length === 1 ? "" : "s"}.`, "Delete succeeded");
+            locks.reload();
+          }}
+          csvName="locks.csv"
+          columns={[
+            { key: "name", label: "Lock name" },
+            { key: "type", label: "Lock type", value: (l) => LOCK_TYPE_LABEL[l.properties?.level] || l.properties?.level },
+            { key: "scope", label: "Scope", value: () => topic },
+            { key: "notes", label: "Notes", value: (l) => l.properties?.notes || "--" },
+          ]}
+        />
       </CapabilityContainer>
 
       <Dialog open={adding} onOpenChange={(_, d) => setAdding(d.open)}>
@@ -611,18 +608,229 @@ function Locks({ rg, topic }) {
         </DialogSurface>
       </Dialog>
 
-      <DeleteDialog open={!!del} onClose={() => setDel(null)} resourceType="lock" names={del ? [del] : []}
-        onConfirm={async () => {
-          await api.deleteLock(rg, topic, del);
-          notify.success(`Lock '${del}' was deleted.`, "Delete succeeded");
-          locks.reload();
-        }} />
-
       <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
         <DialogSurface aria-label={gap || ""}>
           <DialogBody><CapabilityContainer id="azure.eventgrid.topic.listactions" title={gap || ""} /></DialogBody>
         </DialogSurface>
       </Dialog>
     </>
+  );
+}
+
+// ── Metrics: the topic's REAL, activity-derived counters (core/azure_eventgrid_core.py
+// publish/deliver) — not the generic Microsoft.Insights/metrics time-series engine (no
+// time-grain charting or aggregation types), see azure.eventgrid.topic.monitoring. ────────
+const METRIC_LABEL = {
+  PublishSuccessCount: "Published Events", PublishFailCount: "Publish Failures",
+  MatchedEventCount: "Matched Events", DeliverySuccessCount: "Delivered Events",
+  DeliveryAttemptFailCount: "Delivery Attempt Failures", DeadLetteredCount: "Dead-Lettered Events",
+  DroppedEventCount: "Dropped Events",
+};
+
+function Metrics({ t }) {
+  const metrics = useAsync(() => api.listTopicMetrics(t.resourceGroup, t.name), [t.id]);
+  return (
+    <CapabilityContainer id="azure.eventgrid.topic.monitoring" title={`${t.name} | Metrics`}>
+      <ErrorBar error={metrics.error} />
+      {metrics.loading ? <Loading /> : (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 16 }}>
+          {Object.entries(metrics.data || {}).map(([k, v]) => (
+            <div key={k} className="vy-section" style={{ minWidth: 180 }}>
+              <div style={{ fontSize: 28, fontWeight: 600 }}>{v}</div>
+              <div>{METRIC_LABEL[k] || k}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </CapabilityContainer>
+  );
+}
+
+// ── Alerts (Microsoft.Insights/metricAlerts, real ARM resources scoped to this topic via
+// `properties.scopes` — same generic engine the Monitor service's own Alerts pages use).
+// Threshold evaluation against the metrics above is not modelled: creating/listing/deleting
+// the rule is real, it firing is not (azure.eventgrid.topic.monitoring). ───────────────────
+const ALERT_METRICS = Object.keys(METRIC_LABEL);
+const ALERT_ID_RE = /^[a-zA-Z0-9][a-zA-Z0-9-._]{0,255}$/;
+
+function Alerts({ t }) {
+  const notify = useNotify();
+  const alerts = useAsync(() => api.listMetricAlerts(t.id), [t.id]);
+  const [add, setAdd] = useState(false);
+  const [f, setF] = useState({ name: "", metric: ALERT_METRICS[0], threshold: 0, severity: "3" });
+  const [busy, setBusy] = useState(false);
+  const create = async () => {
+    setBusy(true);
+    try {
+      await api.putMetricAlert(f.name, {
+        location: "global",
+        properties: {
+          severity: Number(f.severity), enabled: true, scopes: [t.id],
+          evaluationFrequency: "PT1M", windowSize: "PT5M",
+          criteria: {
+            "odata.type": "Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria",
+            allOf: [{ name: "c1", metricName: f.metric, operator: "GreaterThan", threshold: Number(f.threshold), timeAggregation: "Total" }],
+          },
+        },
+      });
+      notify.success(`Alert rule '${f.name}' was created.`, "Create succeeded");
+      setAdd(false); setF({ name: "", metric: ALERT_METRICS[0], threshold: 0, severity: "3" });
+      alerts.reload();
+    } catch (e) { notify.error(e, "Creating the alert rule failed"); }
+    finally { setBusy(false); }
+  };
+  return (
+    <CapabilityContainer id="azure.eventgrid.topic.monitoring" title={`${t.name} | Alerts`}>
+      <BrowseGrid
+        resourceName="alert rule" rowKey={(r) => r.name} filterPlaceholder="Search alert rules"
+        items={alerts.data || []} loading={alerts.loading} error={alerts.error} onRefresh={alerts.reload}
+        extraCommands={<ToolbarButton icon={<Add20Regular />} onClick={() => setAdd(true)}>New alert rule</ToolbarButton>}
+        onDelete={async (sel) => {
+          for (const r of sel) await api.deleteMetricAlert(r.name);
+          notify.success(`Deleted ${sel.length} alert rule${sel.length === 1 ? "" : "s"}.`, "Delete succeeded");
+          alerts.reload();
+        }}
+        csvName="alert-rules.csv"
+        columns={[
+          { key: "name", label: "Name" },
+          { key: "condition", label: "Condition", value: (r) => r.properties?.criteria?.allOf?.[0]?.metricName },
+          { key: "threshold", label: "Threshold", value: (r) => r.properties?.criteria?.allOf?.[0]?.threshold },
+          { key: "severity", label: "Severity", value: (r) => `Sev${r.properties?.severity}` },
+          { key: "enabled", label: "Enabled", value: (r) => (r.properties?.enabled ? "Yes" : "No") },
+        ]}
+      />
+      <Dialog open={add} onOpenChange={(_, d) => setAdd(d.open)}>
+        <DialogSurface aria-label="New alert rule">
+          <DialogBody>
+            <DialogTitle>New alert rule</DialogTitle>
+            <DialogContent style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <Field label="Rule name" required><Input value={f.name} onChange={(_, d) => setF((x) => ({ ...x, name: d.value }))} aria-label="Rule name" autoFocus /></Field>
+              <Field label="Signal (metric)">
+                <Select value={f.metric} onChange={(_, d) => setF((x) => ({ ...x, metric: d.value }))} aria-label="Signal">
+                  {ALERT_METRICS.map((m) => <option key={m} value={m}>{METRIC_LABEL[m]}</option>)}
+                </Select>
+              </Field>
+              <Field label="Threshold value (greater than)"><Input type="number" value={String(f.threshold)} onChange={(_, d) => setF((x) => ({ ...x, threshold: d.value }))} aria-label="Threshold value" /></Field>
+              <Field label="Severity">
+                <Select value={f.severity} onChange={(_, d) => setF((x) => ({ ...x, severity: d.value }))} aria-label="Severity">
+                  <option value="0">0 - Critical</option><option value="1">1 - Error</option><option value="2">2 - Warning</option><option value="3">3 - Informational</option><option value="4">4 - Verbose</option>
+                </Select>
+              </Field>
+            </DialogContent>
+            <DialogActions>
+              <Button appearance="primary" disabled={!ALERT_ID_RE.test(f.name) || busy} onClick={create}>Create</Button>
+              <Button onClick={() => setAdd(false)}>Cancel</Button>
+            </DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
+    </CapabilityContainer>
+  );
+}
+
+// ── Diagnostic settings (Microsoft.Insights/diagnosticSettings, a real ARM extension
+// resource scoped to this topic — same generic mechanism every other lens resource's
+// Diagnostic settings page uses). Logs/metrics are stored and validated exactly as the real
+// resource requires, but never delivered anywhere (azure.eventgrid.topic.monitoring). ─────
+const DIAG_ID_RE = /^[a-zA-Z0-9][a-zA-Z0-9-._]{0,255}$/;
+
+function DiagnosticSettings({ t }) {
+  const notify = useNotify();
+  const diag = useAsync(() => api.listDiagnosticSettings(t.id), [t.id]);
+  const workspaces = useAsync(() => api.listWorkspaces(), []);
+  const [add, setAdd] = useState(false);
+  const [name, setName] = useState("");
+  const [workspace, setWorkspace] = useState("");
+  const ws = workspaces.data || [];
+  return (
+    <CapabilityContainer id="azure.eventgrid.topic.monitoring" title={`${t.name} | Diagnostic settings`}>
+      <BrowseGrid
+        resourceName="diagnostic setting" rowKey={(r) => r.name} filterPlaceholder="Search diagnostic settings"
+        items={diag.data || []} loading={diag.loading} error={diag.error} onRefresh={diag.reload}
+        extraCommands={<ToolbarButton icon={<Add20Regular />} onClick={() => { setAdd(true); setWorkspace(ws[0]?.id || ""); }}>Add diagnostic setting</ToolbarButton>}
+        onDelete={async (sel) => {
+          for (const r of sel) await api.deleteDiagnosticSetting(t.id, r.name);
+          notify.success(`Deleted ${sel.length} diagnostic setting${sel.length === 1 ? "" : "s"}.`, "Delete succeeded");
+          diag.reload();
+        }}
+        csvName="diagnostic-settings.csv"
+        columns={[
+          { key: "name", label: "Diagnostic setting name" },
+          { key: "dest", label: "Destination details", value: (r) => (r.properties?.workspaceId ? "Log Analytics workspace" : "--") },
+          { key: "logs", label: "Log categories", value: (r) => (r.properties?.logs || []).filter((l) => l.enabled).length },
+          { key: "metrics", label: "Metric categories", value: (r) => (r.properties?.metrics || []).filter((m) => m.enabled).length },
+        ]}
+      />
+      {add && (
+        <section className="vy-section" style={{ marginTop: 16 }}>
+          <h3>Add diagnostic setting</h3>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 480 }}>
+            <Field label="Diagnostic setting name" required><Input value={name} onChange={(_, d) => setName(d.value)} aria-label="Diagnostic setting name" /></Field>
+            <Field label="Log Analytics workspace">
+              {ws.length ? (
+                <Select value={workspace} onChange={(_, d) => setWorkspace(d.value)} aria-label="Log Analytics workspace">
+                  {ws.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+                </Select>
+              ) : <p style={{ margin: 0 }}>No Log Analytics workspace yet. Create one in the Monitor service first.</p>}
+            </Field>
+          </div>
+          <div className="vy-cmdbar" style={{ marginTop: 12 }}>
+            <Button appearance="primary" disabled={!DIAG_ID_RE.test(name) || !workspace} onClick={async () => {
+              await api.putDiagnosticSetting(t.id, name, {
+                properties: { workspaceId: workspace, logs: [{ categoryGroup: "allLogs", enabled: true }], metrics: [{ category: "AllMetrics", enabled: true }] },
+              });
+              notify.success(`Diagnostic setting '${name}' was created.`, "Create succeeded");
+              setAdd(false); setName(""); diag.reload();
+            }}>Save</Button>
+            <Button onClick={() => setAdd(false)}>Cancel</Button>
+          </div>
+        </section>
+      )}
+    </CapabilityContainer>
+  );
+}
+
+// ── Diagnose and solve problems: a fixed set of REAL checks against this topic's actual
+// configuration and delivery counters — not Microsoft's diagnostics knowledge base or
+// automated remediation flows (azure.eventgrid.topic.tools). ──────────────────────────────
+function Diagnose({ t, rg, name }) {
+  const data = useAsync(async () => {
+    const [subs, locksList] = await Promise.all([api.listEventSubscriptions(rg, name), api.listLocks(rg, name)]);
+    const delivery = await Promise.all(subs.map((s) => api.getDeliveryStatus(rg, name, s.name)));
+    return { subs: subs.map((s, i) => ({ ...s, _delivery: delivery[i] })), locks: locksList };
+  }, [rg, name]);
+  const loading = data.loading;
+  const checks = [];
+  if (!loading && data.data) {
+    const subs = data.data.subs;
+    checks.push(subs.length
+      ? { level: "success", text: `${subs.length} event subscription${subs.length === 1 ? "" : "s"} configured on this topic.` }
+      : { level: "warning", text: "No event subscriptions are configured on this topic — published events have nowhere to go." });
+    const failing = subs.filter((s) => (s._delivery?.failed || 0) > 0 && !s.properties?.deadLetterDestination);
+    if (failing.length) {
+      checks.push({ level: "warning", text: `${failing.length} event subscription${failing.length === 1 ? "" : "s"} (${failing.map((s) => s.name).join(", ")}) ` +
+        "had delivery failures with no dead-letter destination configured — those events were dropped." });
+    }
+    const roLock = (data.data.locks || []).find((l) => l.properties?.level === "ReadOnly");
+    checks.push(roLock
+      ? { level: "warning", text: `A ReadOnly lock ('${roLock.name}') blocks any change to this topic until it's removed.` }
+      : { level: "success", text: "No ReadOnly lock is blocking changes to this topic." });
+    const p = t.properties || {};
+    checks.push({ level: p.publicNetworkAccess === "Disabled" ? "warning" : "success",
+      text: `Public network access is ${p.publicNetworkAccess || "Enabled"}.` });
+  }
+  return (
+    <CapabilityContainer id="azure.eventgrid.topic.diagnose" title={`${name} | Diagnose and solve problems`}>
+      <ErrorBar error={data.error} />
+      {loading ? <Loading /> : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {checks.map((c, i) => (
+            <div key={i} className="vy-section" style={{ borderLeft: `4px solid ${c.level === "warning" ? "var(--colorPaletteYellowBorder2)" : "var(--colorPaletteGreenBorder2)"}` }}>
+              {c.level === "warning" ? "⚠ " : "✓ "}{c.text}
+            </div>
+          ))}
+        </div>
+      )}
+    </CapabilityContainer>
   );
 }

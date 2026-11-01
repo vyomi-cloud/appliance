@@ -350,14 +350,16 @@ def _register_eventbridge_rest(app: FastAPI) -> None:
 
 
 # ============================================================================
-# Azure Event Grid — REST under /azure-data/eventgrid/{topic}/...
+# Azure Event Grid — REST under /azure-data/eventgrid/{topic}/api/events (the exact path
+# every topic's properties.endpoint advertises — providers/azure_services.py RESOURCE_CATALOG
+# eventgrid entries, core/azure_arm_data.CATALOG's 'eventgrid' entry).
 # ============================================================================
 def _register_azure(app: FastAPI) -> None:
-    @app.post("/azure-data/eventgrid/{topic}/events")
+    @app.post("/azure-data/eventgrid/{topic}/api/events")
     async def az_eventgrid_publish(topic: str, request: Request):
         body = await request.json()
         events = body if isinstance(body, list) else [body]
-        published = 0
+        norm = []
         for ev in events:
             subject = f"azure.eventgrid.{topic}"
             payload = {
@@ -370,10 +372,16 @@ def _register_azure(app: FastAPI) -> None:
                 "dataVersion": ev.get("dataVersion", "1.0"),
                 "metadataVersion": "1",
             }
-            if nc.publish(subject, payload):
-                published += 1
+            nc.publish(subject, payload)   # tooling inbox (GET /__nats/inbox) — unrelated to delivery below
+            norm.append(payload)
+        # REAL publish + delivery: match every event against each live event subscription's
+        # filter and attempt delivery (core/azure_eventgrid_core.py) — not just a NATS echo.
+        from core import azure_eventgrid_core as _eg
+        from core.appliance_stores import az_servicebus_store
+        from providers import azure_services as _az
+        result = _eg.publish(_az._state, _az.DEFAULT_SUBSCRIPTION, topic, norm, sb_store=az_servicebus_store())
         # Real Event Grid returns 200 with no body on success.
-        return JSONResponse({"published": published, "count": len(events)}, status_code=200)
+        return JSONResponse({"published": result.get("published", 0), "count": len(events)}, status_code=200)
 
 
 # ============================================================================

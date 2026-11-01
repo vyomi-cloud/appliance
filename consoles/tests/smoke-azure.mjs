@@ -651,7 +651,7 @@ try {
 
   // ── Locks: real extension resource (Microsoft.Authorization/locks), scoped to the topic ──
   await openPanel("Locks");
-  await page.getByRole("toolbar", { name: "Locks commands" }).getByRole("button", { name: "Add" }).click();
+  await page.getByRole("toolbar", { name: "Command bar" }).getByRole("button", { name: "Add" }).click();
   await page.getByLabel("Lock name", { exact: true }).fill(LOCK);
   await page.getByRole("button", { name: "OK" }).click();
   await page.getByText(LOCK).first().waitFor({ timeout: 10000 });
@@ -706,10 +706,11 @@ try {
 
   // ── Remove the lock, then delete through the topic overview → gone over ARM ────────────
   await page.goto(UI + `#/eventgrid/topics/${RG}/${EGT}/locks`);
-  await page.getByRole("button", { name: `Delete ${LOCK}` }).click();
+  await page.getByLabel(`Select ${LOCK}`, { exact: true }).check();
+  await page.getByRole("toolbar", { name: "Command bar" }).getByRole("button", { name: "Delete" }).click();
   await page.getByLabel("Confirm deletion").fill(LOCK);
   await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
-  await page.getByRole("button", { name: `Delete ${LOCK}` }).waitFor({ state: "detached", timeout: 10000 });   // the lock's own row (its name also appears in activity/notifications)
+  await page.getByLabel(`Select ${LOCK}`, { exact: true }).waitFor({ state: "detached", timeout: 10000 });   // the lock's own row (its name also appears in activity/notifications)
   await page.goto(UI + `#/eventgrid/topics/${RG}/${EGT}`);
   await page.getByRole("toolbar", { name: "Overview commands" }).getByRole("button", { name: "Delete" }).click();
   await page.getByLabel("Confirm deletion").fill(EGT);

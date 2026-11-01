@@ -56,6 +56,39 @@ export const listActivityLog = async (resourceId) =>
   (await restJson("GET", `/subscriptions/${getSubscription()}/providers/Microsoft.Insights/eventtypes/management/values`,
     { query: { "api-version": "2015-04-01", "$filter": `resourceUri eq '${resourceId}'` } })).value || [];
 
+// ── Metrics: the topic's REAL, activity-derived counters (core/azure_eventgrid_core.py
+// publish/deliver) — a simulator-internal read over the listKeys-style action-verb
+// mechanism, not the generic Microsoft.Insights/metrics time-series API (out of scope,
+// see azure.eventgrid.topic.monitoring). ────────────────────────────────────────────────
+export const listTopicMetrics = async (rg, name) => (await ARM.action(rg, name, "listEventGridMetrics")).metrics || {};
+export const getDeliveryStatus = async (rg, topic, name) =>
+  restJson("POST", `${esPath(rg, topic, name)}/deliveryStatus`, { query: esQuery });
+
+// ── Diagnostic settings (Microsoft.Insights/diagnosticSettings, a real ARM extension
+// resource scoped to this topic's own id — same generic mechanism every other lens
+// resource's Diagnostic settings page uses). Logs/metrics are stored and validated exactly
+// as the real resource requires, but never delivered anywhere (azure.eventgrid.topic.monitoring). ──
+const ARM_WORKSPACES = armType("Microsoft.OperationalInsights", "workspaces", "2022-10-01");
+const DIAG_API_VERSION = "2021-05-01-preview";
+const diagPath = (topicId, setting) => `${topicId}/providers/Microsoft.Insights/diagnosticSettings${setting ? `/${encodeURIComponent(setting)}` : ""}`;
+export const listDiagnosticSettings = async (topicId) => (await restJson("GET", diagPath(topicId), { query: { "api-version": DIAG_API_VERSION } })).value || [];
+export const putDiagnosticSetting = (topicId, setting, body) => restJson("PUT", diagPath(topicId, setting), { query: { "api-version": DIAG_API_VERSION }, body });
+export const deleteDiagnosticSetting = (topicId, setting) => restJson("DELETE", diagPath(topicId, setting), { query: { "api-version": DIAG_API_VERSION } });
+export const listWorkspaces = async () => (await ARM_WORKSPACES.list()).map((w) => ({ id: w.id, name: w.name }));
+
+// ── Alert rules (Microsoft.Insights/metricAlerts, subscription-scoped real ARM resources
+// referencing this topic's id in `properties.scopes` — same generic engine the Monitor
+// service's own Alerts pages use, filtered to this one resource). Evaluation against the
+// real counters above is not modelled — creating/listing/deleting the rule is real,
+// a threshold ever actually firing is not (azure.eventgrid.topic.monitoring). ──────────
+const ALERT_API_VERSION = "2018-03-01";
+const alertPath = (name) => `/subscriptions/${getSubscription()}/providers/Microsoft.Insights/metricAlerts${name ? `/${encodeURIComponent(name)}` : ""}`;
+export const listMetricAlerts = async (topicId) =>
+  ((await restJson("GET", alertPath(), { query: { "api-version": ALERT_API_VERSION } })).value || [])
+    .filter((a) => (a.properties?.scopes || []).includes(topicId));
+export const putMetricAlert = (name, body) => restJson("PUT", alertPath(name), { query: { "api-version": ALERT_API_VERSION }, body });
+export const deleteMetricAlert = (name) => restJson("DELETE", alertPath(name), { query: { "api-version": ALERT_API_VERSION } });
+
 // ── Access control (IAM): real ARM resources, subscription-wide (see capabilities.json,
 // same honest scoping as the Cosmos DB account blade) ───────────────────────────────────
 const AUTHZ_API = "2022-04-01";

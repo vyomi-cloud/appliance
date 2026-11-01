@@ -1725,6 +1725,16 @@ class AzureArm:
             props["powerState"] = f"PowerState/{new_status}"
             return _ok({"status": "Succeeded", "action": action, "containerStatus": new_status,
                         "note": "metadata-only (no runtime backing in-browser); logical state updated"})
+        if ns == "microsoft.eventgrid" and typ == "topics" and action == "listeventgridmetrics":
+            # Simulator-internal read of the topic's REAL, activity-derived counters
+            # (core/azure_eventgrid_core.py publish/deliver) — not the generic
+            # Microsoft.Insights/metrics time-series API (out of scope; see
+            # azure.eventgrid.topic.monitoring), so it rides the same listKeys-style
+            # action-verb mechanism instead of pretending to be that API.
+            rec = self.state.get(parent_rid.lower()) if parent_rid else None
+            if not rec:
+                return _err(404, "ResourceNotFound", f"Topic '{resource_name}' not found.")
+            return _ok({"metrics": {k: rec.get("_metrics", {}).get(k, 0) for k in eventgrid_engine.METRIC_NAMES}})
         if action in ("listkeys", "regeneratekey"):
             return _ok({"keys": [{"keyName": "key1", "value": "c2ltdWxhdGVk", "permissions": "FULL"},
                                  {"keyName": "key2", "value": "c2ltdWxhdGVk", "permissions": "FULL"}]})
