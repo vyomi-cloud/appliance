@@ -155,6 +155,10 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
   /* ============================================================
      BREADCRUMB BAR (above content)
      ============================================================ */
+  .crumbs-inline{font-size:12px;color:var(--sub);display:flex;align-items:center;gap:6px;margin-bottom:6px}
+  .crumbs-inline a{color:var(--blue);cursor:pointer}
+  .crumbs-inline .sep{color:var(--hint)}
+  .crumbs-inline .current{color:var(--ink);font-weight:500}
   .crumbs-bar{background:#fff;border-bottom:1px solid var(--line);padding:10px 24px;font-size:12px;color:var(--sub);display:flex;align-items:center;gap:6px}
   .crumbs-bar a{color:var(--blue);cursor:pointer}
   .crumbs-bar .sep{color:var(--hint)}
@@ -451,9 +455,6 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
   <div class="body" id="notifBody"></div>
 </div>
 
-<!-- ==================== BREADCRUMB ==================== -->
-<div class="crumbs-bar" id="crumbs"></div>
-
 <!-- ==================== PAGE BODY ==================== -->
 <div class="body">
   <aside id="rail"></aside>
@@ -665,12 +666,13 @@ function render(){
   main.append(el("div",{class:"empty"}, "Unknown view: "+STATE.view));
 }
 
-function renderCrumbs(){
-  const c = document.getElementById("crumbs"); c.innerHTML = "";
+function renderCrumbs(){}   // breadcrumbs now live inside each page's title card (crumbsEl)
+function crumbsEl(){
+  const c = el("div",{class:"crumbs-inline"});
   c.append(el("a",{onclick:()=>navigate({view:"home", service:null, item:null})}, PROJECT));
-  if (!STATE.service) return;
+  if (!STATE.service) return c;
   const svc = svcByKey(STATE.service);
-  if (!svc) return;
+  if (!svc) return c;
   c.append(el("span",{class:"sep"}, "›"),
     el("a",{onclick:()=>navigate({view:"list", item:null})}, svc.label));
   if (STATE.view === "detail" && STATE.item) {
@@ -680,6 +682,7 @@ function renderCrumbs(){
     c.append(el("span",{class:"sep"}, "›"),
       el("span",{class:"current"}, "Create " + svc.label.replace(/s$/,"").toLowerCase()));
   }
+  return c;
 }
 
 // Left rail — GCP classic design: one flat list of products, no group headings
@@ -936,6 +939,7 @@ function buildConnectCard(){
 function renderHome(main){
   main.innerHTML = "";  // self-clear (same pattern as list/detail/create)
   const wrap = el("div",{class:"wrap"});
+  wrap.append(crumbsEl());
   wrap.append(el("div",{class:"page-head"},
     el("h1",{}, "Dashboard")));
   wrap.append(el("div",{class:"sub",style:"margin-bottom:16px"},
@@ -982,6 +986,7 @@ async function renderList(main){
   const svc = svcByKey(STATE.service);
   if (!svc) { main.append(el("div",{class:"empty"}, "Service not found")); return; }
   const wrap = el("div",{class:"wrap"});
+  wrap.append(crumbsEl());
   const head = el("div",{class:"page-head"});
   head.append(el("h1",{}, svc.label, el("span",{class:"count",id:"countChip"}, "")));
   wrap.append(head);
@@ -1177,6 +1182,7 @@ async function renderDetail(main){
   const item = STATE.item || {};
   const name = String(getPath(item, svc.name_field) || item.name || "");
   const top = el("div",{class:"detail-top"});
+  top.append(crumbsEl());
   top.append(el("div",{class:"id-row"},
     el("div",{style:"flex:1"},
       el("h1",{}, name),
@@ -3615,6 +3621,7 @@ function renderCreate(main){
   const svc = svcByKey(STATE.service);
   if (!svc) { main.append(el("div",{class:"empty"}, "Service not found")); return; }
   const wrap = el("div",{class:"wizard-page"});
+  wrap.append(crumbsEl());
   wrap.append(el("div",{class:"page-head"}, el("h1",{},
     svc.key === "compute" ? "Create an instance" : "Create " + svc.label.replace(/s$/,"").toLowerCase())));
   if (svc.wizard && Array.isArray(svc.wizard.tabs)) {
