@@ -23800,6 +23800,13 @@ try:
 except Exception as _e:   # never let this break appliance boot
     print(f"[azure-loganalytics] routes skipped: {_e}")
 
+# Azure OpenAI inference data plane (SIMULATED: /azure-data/openai/{account}/openai/deployments/{dep}/chat/completions ...).
+try:
+    from providers import azure_openai_routes as _azure_openai_routes
+    _azure_openai_routes.register(app)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[azure-openai] routes skipped: {_e}")
+
 # Azure DNS resolution (/azure-data/dns/query); the ARM control plane (dnsZones) is in azure_services.
 try:
     from providers import azure_dns_routes as _azure_dns_routes
