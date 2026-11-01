@@ -2008,6 +2008,14 @@
       "kind": "sdk-python",
       "cmd": "python3 tests/conformance/post_create/probes/sweep_aws.py {ENDPOINT}",
       "timeout": 300
+    },
+    {
+      "id": "offline-sweepA-gcp",
+      "target": "offline",
+      "cloud": "gcp",
+      "kind": "api",
+      "cmd": "python3 tests/conformance/post_create/probes/sweep_gcp.py {ENDPOINT}",
+      "timeout": 300
     }
   ]
 }

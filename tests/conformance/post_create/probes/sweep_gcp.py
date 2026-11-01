@@ -56,7 +56,34 @@ def vpc():
     check(not left, "no orphan subnetwork after network delete")
 
 
+def firestore():
+    docs = f"/firestore/v1/projects/{P}/databases/(default)/documents"
+    coll = f"{tag}c"
+    for i, (n, v) in enumerate([("alice", 30), ("bob", 25), ("carol", 35)], 1):
+        st, _ = call("POST", f"{docs}/{coll}?documentId=d{i}", {"fields": {"name": {"stringValue": n}, "age": {"integerValue": str(v)}}})
+        check(st < 300, f"create document d{i}", f"HTTP {st}")
+    st, rows = call("POST", f"{docs}:runQuery", {"structuredQuery": {"from": [{"collectionId": coll}]}})
+    got = [r["document"]["name"].rsplit("/", 1)[-1] for r in rows if isinstance(r, dict) and "document" in r] if isinstance(rows, list) else []
+    check(st == 200 and sorted(got) == ["d1", "d2", "d3"], "runQuery (no filter) returns all documents", f"HTTP {st} {str(rows)[:160]}")
+    check(isinstance(rows, list) and all("readTime" in r for r in rows), "runQuery rows carry readTime (REST shape)")
+    f = {"fieldFilter": {"field": {"fieldPath": "age"}, "op": "GREATER_THAN", "value": {"integerValue": "26"}}}
+    st, rows = call("POST", f"{docs}:runQuery", {"structuredQuery": {"from": [{"collectionId": coll}], "where": f,
+                    "orderBy": [{"field": {"fieldPath": "age"}, "direction": "DESCENDING"}]}})
+    got = [r["document"]["fields"]["name"]["stringValue"] for r in rows if isinstance(r, dict) and "document" in r] if isinstance(rows, list) else []
+    check(got == ["carol", "alice"], "runQuery where age>26 orderBy age DESC", str(got))
+    st, rows = call("POST", f"{docs}:runQuery", {"structuredQuery": {"from": [{"collectionId": coll}], "limit": 1,
+                    "orderBy": [{"field": {"fieldPath": "age"}}]}})
+    got = [r["document"]["fields"]["name"]["stringValue"] for r in rows if isinstance(r, dict) and "document" in r] if isinstance(rows, list) else []
+    check(got == ["bob"], "runQuery orderBy age limit 1", str(got))
+    st, rows = call("POST", f"{docs}:runQuery", {"structuredQuery": {"from": [{"collectionId": coll}], "where": {"fieldFilter": {
+        "field": {"fieldPath": "name"}, "op": "EQUAL", "value": {"stringValue": "nobody"}}}}})
+    check(isinstance(rows, list) and len(rows) == 1 and "document" not in rows[0] and "readTime" in rows[0], "runQuery with no match returns one readTime-only row", str(rows)[:120])
+    for i in (1, 2, 3):
+        call("DELETE", f"{docs}/{coll}/d{i}")
+
+
 def main():
+    firestore()
     vpc()
     sys.exit(1 if fails else 0)
 

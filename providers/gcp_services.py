@@ -1298,6 +1298,12 @@ async def api_gcp_firestore_doc_put(project: str, database: str, fs_path: str, r
 
 
 async def api_gcp_firestore_run_query(project: str, database: str, request: Request, collection: str = ""):
+    """POST .../documents[/parent]:runQuery. Documents live in the Firestore emulator when it is
+    up (the same place create/get/list use) else in the platform engine; the structuredQuery itself
+    (where / compositeFilter / unaryFilter / orderBy / offset / limit) is evaluated by the SAME
+    shared core Nano runs (core/gcp_firestore_core._run_query), so offline and Nano answer alike
+    and in the real REST shape: [{"document":..., "readTime":...}] or [{"readTime":...}]."""
+    from core import gcp_firestore_core as _fcore
     s = _server()
     project = _gcp_project_name(project)
     database = str(database or "(default)")
@@ -1306,49 +1312,42 @@ async def api_gcp_firestore_run_query(project: str, database: str, request: Requ
     query = payload.get("structuredQuery", {}) if isinstance(payload, dict) else {}
     query = query if isinstance(query, dict) else {}
     selectors = query.get("from", [])
-    if collection:
-        collection_id = collection
-    elif isinstance(selectors, list) and selectors and isinstance(selectors[0], dict):
-        collection_id = str(selectors[0].get("collectionId") or "")
-    else:
-        collection_id = ""
-    limit = int(query.get("limit") or payload.get("limit") or 50)
+    parent = str(collection or "").strip("/")
+    coll_id = str(selectors[0].get("collectionId") or "") if isinstance(selectors, list) and selectors and isinstance(selectors[0], dict) else ""
+    if not coll_id and parent:        # legacy form: the path itself names the collection
+        parent, coll_id = "", parent
+    coll_path = f"{parent}/{coll_id}".strip("/")
+    base = f"projects/{project}/databases/{database}/documents"
+    store = _fcore.FirestoreStore()
+    if coll_path:
+        if _fs_emu.available():
+            docs = await asyncio.to_thread(_fs_emu.list_collection, project, database, coll_path)
+        else:
+            docs = s._gcp_firestore_engine().list_documents(project, database, coll_path)
+        for d in docs:
+            name = str(d.get("name") or "")
+            rel = name.split("/documents/", 1)[1] if "/documents/" in name else f"{coll_path}/{d.get('doc_id') or d.get('id') or ''}"
+            store.put(rel, {"fields": d.get("fields", {}), "createTime": d.get("createTime"), "updateTime": d.get("updateTime")})
+    # the core resolves collectionId relative to the query parent
+    qpayload = dict(payload)
+    sq = dict(query)
+    sq["from"] = [dict(f) for f in (selectors if isinstance(selectors, list) else [])] or [{"collectionId": coll_id}]
+    qpayload["structuredQuery"] = sq
+    if parent:
+        qpayload["structuredQuery"]["from"][0]["collectionId"] = coll_id
+    resp = _fcore._run_query(store, base, parent, qpayload)
+    result = json.loads(resp.body.decode("utf-8"))
+    field_name = ""
     where = query.get("where") if isinstance(query.get("where"), dict) else {}
-    filters: list = []
-
-    def _add_field_filter(ff):
-        if not isinstance(ff, dict):
-            return
-        field = ff.get("field") if isinstance(ff.get("field"), dict) else {}
-        fpath = str(field.get("fieldPath") or "")
-        if not fpath:
-            return
-        filters.append({"field": fpath, "op": str(ff.get("op") or "EQUAL"),
-                        "value": s._gcp_firestore_plain_value(ff.get("value"))})
-
-    if isinstance(where, dict):
-        _add_field_filter(where.get("fieldFilter"))
-        composite = where.get("compositeFilter") if isinstance(where.get("compositeFilter"), dict) else {}
-        for sub in (composite.get("filters") or []):
-            if isinstance(sub, dict):
-                _add_field_filter(sub.get("fieldFilter"))
-    order_by = None
-    order_dir = "ASCENDING"
-    order_specs = query.get("orderBy")
-    if isinstance(order_specs, list) and order_specs and isinstance(order_specs[0], dict):
-        of = order_specs[0].get("field") if isinstance(order_specs[0].get("field"), dict) else {}
-        order_by = str(of.get("fieldPath") or "") or None
-        order_dir = str(order_specs[0].get("direction") or "ASCENDING")
-    field_name = filters[0]["field"] if filters else ""
-    result = s._gcp_firestore_engine().run_query(project, database, collection_id, limit=limit,
-                                                 filters=filters, order_by=order_by, order_dir=order_dir)
-    if collection_id and field_name:
-        index_key = f"{project}:{database}:{collection_id}:{field_name}:{query.get('orderBy', 'ASCENDING')}"
-        gcp_firestore_state.setdefault("indexes", {}).setdefault(index_key, s._gcp_firestore_index_record(project, database, collection_id, {
+    ff = where.get("fieldFilter") if isinstance(where.get("fieldFilter"), dict) else {}
+    field_name = str((ff.get("field") or {}).get("fieldPath") or "")
+    if coll_id and field_name:
+        index_key = f"{project}:{database}:{coll_id}:{field_name}:{query.get('orderBy', 'ASCENDING')}"
+        gcp_firestore_state.setdefault("indexes", {}).setdefault(index_key, s._gcp_firestore_index_record(project, database, coll_id, {
             "name": index_key.split(":")[-1],
             "fields": [{"fieldPath": field_name, "order": str(query.get("orderBy") or "ASCENDING")}],
             "queryScope": "COLLECTION",
-            "description": f"Auto-generated from query on {collection_id}.{field_name}",
+            "description": f"Auto-generated from query on {coll_id}.{field_name}",
         }))
     return result
 
