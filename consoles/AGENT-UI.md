@@ -116,3 +116,12 @@ The runner invokes you with `claude -p`: the job ends the moment you end your tu
 command in the background (`&`, `nohup`, `run_in_background`) and never end a message with "waiting
 for …" — run builds, gates and smokes in the foreground (split long suites into parts), read their
 results, and only send your final message once the work is committed.
+
+## Nothing leaves the simulator (hard rule)
+Every export, backup, snapshot export, replication target, log/metric sink, notification and
+delivery destination resolves to the simulator's OWN stores: AWS → simulator S3/SQS/SNS/…,
+GCP → simulator GCS/Pub/Sub/…, Azure → simulator Blob/queues/…, on Nano and offline alike.
+A destination that doesn't exist in the simulator (an unknown bucket, a real `*.amazonaws.com` /
+`*.googleapis.com` / `*.windows.net` host) makes the operation FAIL with the native error; it is
+never resolved on the internet. Shared cores never import urllib.request / http.client / socket /
+requests / httpx / boto3 / aiohttp (tests/conformance/test_no_cloud_egress.py enforces this).
