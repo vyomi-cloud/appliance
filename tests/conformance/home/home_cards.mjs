@@ -41,7 +41,14 @@ page.on("response", (r) => { if (r.status() >= 500 && r.url().includes("/api/"))
 try {
   await page.goto(`${BASE}/console/${CLOUD}`, { waitUntil: "domcontentloaded" });
   await page.waitForFunction(() => /Cost savings/i.test((document.querySelector("#main") || {}).innerText || ""), null, { timeout: 60000 });
-  await page.waitForTimeout(2500);   // the card fills from /api/spaces after it renders
+  // The card fills from /api/spaces after it renders; on a busy appliance that answer can take
+  // several seconds, so wait for the headline to turn into a number rather than a fixed sleep.
+  await page.waitForFunction(() => {
+    const t = (document.querySelector("#main") || {}).innerText || "";
+    const i = t.search(/Cost savings/i);
+    return i >= 0 && !/Loading savings/i.test(t.slice(i, i + 600)) && /\$\s*[\d,]+\.\d{2}/.test(t.slice(i, i + 600));
+  }, null, { timeout: 30000 }).catch(() => {});
+  await page.waitForTimeout(500);
 
   const card = await page.evaluate(() => {
     const main = document.querySelector("#main");
@@ -63,8 +70,19 @@ try {
   check(shown !== null && Math.abs(shown - wantUsd) < 0.02 + wantUsd * 0.005,
     `card headline equals the API's ${LABEL} savings`, `card=$${shown} api=$${wantUsd.toFixed(2)}`);
   check(!/spin up .* services/i.test(card.text) || wantUsd === 0, "card is not stuck on its empty-state text while the API has savings");
-  const svcMissing = wantSvcs.filter(([k]) => !card.text.toLowerCase().includes(k.split(".")[1].replace(/_/g, " ").slice(0, 4).toLowerCase())).map(([k]) => k);
-  check(wantSvcs.length === 0 || svcMissing.length === 0, "every service the API credits appears as a row", `missing: ${svcMissing.join(", ")}`);
+  // The card ranks paid services and shows the top 4 by name; any further ones fold into one
+  // "Other (n)" row (vySavingsBody). So: every service ranked above the 5th appears by name, and
+  // when there are more than 4 the Other row counts exactly the rest. (Services tied with the
+  // 5th may land either side of the cut, so only strictly-higher ones are required by name.)
+  const ranked = [...wantSvcs].sort((a, b) => Number(b[1]) - Number(a[1]));
+  const cut = ranked.length > 4 ? Number(ranked[4][1]) : -Infinity;
+  const named = ranked.filter(([, v]) => Number(v) > cut);
+  const flat = card.text.toLowerCase().replace(/[^a-z0-9]+/g, "");   // "Pub/Sub" -> "pubsub"
+  const svcMissing = named.filter(([k]) => !flat.includes(k.split(".")[1].replace(/[^a-z0-9]+/gi, "").slice(0, 4).toLowerCase())).map(([k]) => k);
+  check(svcMissing.length === 0, "every top-ranked service the API credits appears as a row", `missing: ${svcMissing.join(", ")}`);
+  if (ranked.length > 4)
+    check(card.text.includes(`Other (${ranked.length - 4})`), "the remaining credited services fold into one Other row",
+      `want "Other (${ranked.length - 4})"; card: ${card.text.slice(0, 200).replace(/\n+/g, " | ")}`);
   check(/\/\s*mo|per month|\/mo/i.test(card.text), "card states the period (per month)");
   check(card.connect.length > 0 && /export|az |gcloud|aws /i.test(card.connect), "Connect your SDK or CLI card shows its snippet", card.connect.slice(0, 60));
   check(card.h > 0 && Math.abs(card.h - card.connectH) <= 3, "cost and connect cards share the row height", `${Math.round(card.h)}px vs ${Math.round(card.connectH)}px`);
