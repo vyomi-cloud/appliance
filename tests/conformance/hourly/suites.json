@@ -1013,7 +1013,7 @@
       "target": "nano",
       "cloud": "gcp",
       "kind": "api",
-      "cmd": "python3 tests/conformance/test_nano_triggers.py",
+      "cmd": "set -o pipefail; PYTHONPATH=. python3 tests/conformance/test_nano_triggers.py 2>&1 | sed -E 's/^  ok  /[PASS] /; s/^  (FAIL|fail)  /[FAIL] /'",
       "timeout": 300
     },
     {
