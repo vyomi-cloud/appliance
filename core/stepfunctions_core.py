@@ -54,6 +54,16 @@ def shared_store() -> StepFunctionsStore:
     return _SHARED
 
 
+_LAMBDA_INVOKER = None
+
+
+def set_lambda_invoker(fn) -> None:
+    """Offline hook: fn(name, payload) -> {"found": bool, "error": {...}?, "payload": any}, backed by the
+    appliance's own Lambda registry (Nano uses the lambda_core store instead)."""
+    global _LAMBDA_INVOKER
+    _LAMBDA_INVOKER = fn
+
+
 def set_lambda_store(store) -> None:
     global _LAMBDA_STORE
     _LAMBDA_STORE = store
@@ -595,6 +605,14 @@ class _Run:
         if isinstance(payload, dict) and token:
             payload = dict(payload)
             payload["TaskToken"] = token
+        if _LAMBDA_INVOKER is not None:
+            r = _LAMBDA_INVOKER(fn_name, payload if payload is not None else {})
+            if not r.get("found"):
+                raise _Fail("Lambda.ResourceNotFoundException",
+                            f"Function not found: arn:aws:lambda:{REGION}:{ACCOUNT}:function:{fn_name}")
+            if r.get("error"):
+                raise _Fail(r["error"].get("errorType", "Lambda.Unknown"), _dumps(r["error"]))
+            return r.get("payload")
         out = lambda_core.dispatch(store, "POST", f"/2015-03-31/functions/{fn_name}/invocations", {}, {},
                                    _dumps(payload if payload is not None else {}).encode())
         if out.status == 404:

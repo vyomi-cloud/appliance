@@ -85,8 +85,9 @@ def _persist(store):
             pass
 
 
-def _extract_source(code: dict) -> str:
-    """Function source from Code.ZipFile (base64) or Code.Source (plain string)."""
+def _extract_source(code: dict, handler: str = "index.handler") -> str:
+    """Function source from Code.ZipFile (a base64 zip of the handler module, or — for
+    simulator convenience — base64 plain source) or Code.Source (plain string)."""
     if not isinstance(code, dict):
         return ""
     if code.get("Source"):
@@ -94,12 +95,24 @@ def _extract_source(code: dict) -> str:
     zf = code.get("ZipFile")
     if zf:
         try:
-            return base64.b64decode(zf).decode("utf-8")
+            raw = base64.b64decode(zf) if isinstance(zf, (str, bytes, bytearray)) else b""
         except Exception:
+            raw = zf if isinstance(zf, (bytes, bytearray)) else str(zf).encode("utf-8")
+        if raw[:2] == b"PK":   # a real zip archive, as the official SDKs send it
+            import io
+            import zipfile
             try:
-                return zf.decode("utf-8") if isinstance(zf, (bytes, bytearray)) else str(zf)
+                with zipfile.ZipFile(io.BytesIO(raw)) as z:
+                    names = z.namelist()
+                    mod = (handler.rsplit(".", 1)[0] if "." in handler else handler).replace(".", "/") + ".py"
+                    pick = mod if mod in names else next((n for n in names if n.endswith(".py")), "")
+                    return z.read(pick).decode("utf-8") if pick else ""
             except Exception:
                 return ""
+        try:
+            return raw.decode("utf-8")
+        except Exception:
+            return ""
     return ""
 
 
@@ -127,7 +140,7 @@ def _create_function(store, body):
     fn = {"name": name, "arn": f"arn:aws:lambda:us-east-1:123456789012:function:{name}",
           "runtime": str(body.get("Runtime", "python3.12")),
           "handler": str(body.get("Handler", "index.handler")),
-          "source": _extract_source(body.get("Code") or {}),
+          "source": _extract_source(body.get("Code") or {}, str(body.get("Handler", "index.handler"))),
           "env": (body.get("Environment") or {}).get("Variables") or {},
           "memory_size": int(body.get("MemorySize") or 128), "timeout": int(body.get("Timeout") or 3),
           "role": str(body.get("Role") or "arn:aws:iam::123456789012:role/service-role/lambda-basic-execution"),
@@ -142,7 +155,7 @@ def _update_function_code(store, name, body):
     fn = _functions(store).get(name)
     if not fn:
         return _err(404, "ResourceNotFoundException", f"Function not found: {name}")
-    fn["source"] = _extract_source(body) or fn["source"]
+    fn["source"] = _extract_source(body, fn.get("handler", "index.handler")) or fn["source"]
     _persist(store)
     return _json(200, _fn_view(fn))
 
@@ -166,18 +179,33 @@ def _delete_function(store, name):
 
 
 # ── data plane: synchronous Invoke ─────────────────────────────────────────
-def _invoke(store, name, body):
+class _Ctx(dict):
+    """Lambda context: attribute access (context.function_name) AND the dict form older handlers use."""
+    __getattr__ = dict.get
+
+
+def _invoke(store, name, body, headers=None):
+    name = name.split(":function:")[-1].split(":")[0] if ":function:" in name else name
     fn = _functions(store).get(name)
     if not fn:
         return _err(404, "ResourceNotFoundException", f"Function not found: {name}")
+    hdr = {str(k).lower(): v for k, v in (headers or {}).items()}
     try:
         event = json.loads(body.decode("utf-8")) if body else {}
     except Exception:
         event = {}
     source = fn.get("source", "")
-    sandbox_globals = {"__builtins__": dict(_SAFE_BUILTINS), "json": json}
-    context = {"function_name": name, "aws_request_id": uuid.uuid4().hex,
-               "invoked_function_arn": fn["arn"]}
+    logs = []
+
+    def _print(*a, **k):   # captured as the invocation's log (LogType=Tail)
+        logs.append(" ".join(str(x) for x in a))
+    safe = dict(_SAFE_BUILTINS)
+    safe["print"] = _print
+    sandbox_globals = {"__builtins__": safe, "json": json}
+    context = _Ctx(function_name=name, aws_request_id=uuid.uuid4().hex, invoked_function_arn=fn["arn"],
+                   function_version="$LATEST", memory_limit_in_mb=fn.get("memory_size", 128),
+                   log_group_name=f"/aws/lambda/{name}")
+    out_headers = {"X-Amz-Executed-Version": "$LATEST"}
     try:
         exec(compile(source, f"<lambda:{name}>", "exec"), sandbox_globals)
         handler = sandbox_globals.get(fn.get("handler", "index.handler").split(".")[-1]) \
@@ -185,13 +213,18 @@ def _invoke(store, name, body):
         if not callable(handler):
             raise RuntimeError("handler is not defined")
         result = handler(event, context)
-        return LambdaResponse(status=200, body=json.dumps(result).encode(),
-                              headers={"X-Amz-Executed-Version": "$LATEST"})
+        resp = LambdaResponse(status=200, body=json.dumps(result).encode(), headers=out_headers)
     except Exception as e:
         # Handled-error response: 200 with X-Amz-Function-Error, like real Lambda.
         payload = {"errorType": type(e).__name__, "errorMessage": str(e)}
-        return LambdaResponse(status=200, body=json.dumps(payload).encode(),
-                              headers={"X-Amz-Function-Error": "Unhandled"})
+        out_headers["X-Amz-Function-Error"] = "Unhandled"
+        resp = LambdaResponse(status=200, body=json.dumps(payload).encode(), headers=out_headers)
+    if str(hdr.get("x-amz-log-type", "")).lower() == "tail":
+        resp.headers["X-Amz-Log-Result"] = base64.b64encode("\n".join(logs).encode("utf-8")[-4096:]).decode("ascii")
+    fn.setdefault("logs", []).extend(logs)
+    if str(hdr.get("x-amz-invocation-type", "")).lower() == "event":
+        return LambdaResponse(status=202, body=b"", headers={})
+    return resp
 
 
 # ── dispatch ────────────────────────────────────────────────────────────────
@@ -230,7 +263,7 @@ def dispatch(store, method: str, path: str,
             return _delete_function(store, name)
         return _err(405, "MethodNotAllowed", f"Unsupported {method} on function")
     if len(tail) == 2 and tail[1] == "invocations" and method == "POST":
-        return _invoke(store, name, body)
+        return _invoke(store, name, body, headers)
     if len(tail) == 2 and tail[1] == "code" and method in ("PUT", "POST"):
         return _update_function_code(store, name, _parse(body))
     return _err(404, "ResourceNotFoundException", f"Unknown path: {path}")

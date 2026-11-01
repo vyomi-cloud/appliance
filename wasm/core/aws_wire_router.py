@@ -790,7 +790,7 @@ class AwsWireRouter:
             elif svc == "secretsmanager":
                 r = secrets.dispatch(self.sec, target, payload)
             elif svc == "events":
-                r = events.dispatch(self.events, target, payload)
+                r = events.dispatch(self.events, target, payload, lambda_store=self.lam)
             elif svc == "kinesis":
                 r = kinesis.dispatch(self.kinesis, target, payload)
             elif svc == "logs":
