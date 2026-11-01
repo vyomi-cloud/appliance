@@ -301,8 +301,10 @@ async function createWithDefaults(page, drain, cloud, backToList, service) {
   }
   f.push(...drain().map((x) => ({ ...x, detail: `during create: ${x.detail}` })));
   const s = await snap(page);
-  if (/\b(error|failed|invalid)\b/i.test(s.text.slice(0, 800))) {
-    f.push({ type: "CREATE_REJECTED", detail: `create with default values was rejected: "${(s.text.match(/[^\n]*(error|failed|invalid)[^\n]*/i) || [""])[0].slice(0, 140)}"` });
+  // a word, not a hostname label: GKE shows its control-plane-only endpoint as `….invalid` (RFC 2606)
+  const REJECT = /(?<!\w\.)\b(error|failed|invalid)\b(?!\.\w)/i;
+  if (REJECT.test(s.text.slice(0, 800))) {
+    f.push({ type: "CREATE_REJECTED", detail: `create with default values was rejected: "${(s.text.split("\n").find((l) => REJECT.test(l)) || "").slice(0, 140)}"` });
   }
   await backToList();
   const rowsAfter = await rowCount(page);
