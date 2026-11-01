@@ -492,6 +492,7 @@ class AwsWireRouter:
         self.asg = s.get("asg") or asg.AutoScalingStore()   # EC2 Auto Scaling groups + scaling policies
         self.asg.vpc_store = self.vpc   # scaling really launches/terminates real EC2 instances
         self.cw.asg_store = self.asg    # real Auto Scaling alarm actions (aws.cloudwatch.alarms.actions.compute)
+        self.rds.cw_store = self.cw   # real DatabaseConnections/ReadIOPS/WriteIOPS metrics (rds.monitoring)
         self.logs = s.get("logs") or logs.LogsStore()         # CloudWatch Logs
         self.logs.lam_store, self.logs.kinesis_store = self.lam, self.kinesis   # real subscription-filter delivery
         self.cw.logs_store = self.logs            # real log-based Contributor Insights rules

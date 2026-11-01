@@ -9,6 +9,8 @@ Run on host:    PYTHONPATH=. python3 tests/conformance/test_rds_console_v4_core.
 Run in Pyodide: loaded by the wasm/ harness (same file).
 """
 
+import asyncio
+
 try:
     from core.sql_store import InMemorySqlStore
     from core import rds_core as rds
@@ -16,6 +18,7 @@ try:
     from core import sqs_core as sqs, sns_core as sns
     from core.object_store import InMemoryObjectStore
     from core import s3_object_core as s3c
+    from core import cloudwatch_core as cw
 except ImportError:  # pragma: no cover - Pyodide flat layout
     from sql_store import InMemorySqlStore  # type: ignore
     import rds_core as rds  # type: ignore
@@ -24,6 +27,7 @@ except ImportError:  # pragma: no cover - Pyodide flat layout
     import sns_core as sns  # type: ignore
     from object_store import InMemoryObjectStore  # type: ignore
     import s3_object_core as s3c  # type: ignore
+    import cloudwatch_core as cw  # type: ignore
 
 
 def _check(name, cond):
@@ -261,6 +265,76 @@ def run() -> int:
                                    "CACertificateIdentifier": "not-a-real-ca"})
     _check("an unknown CA is rejected on modify too",
            bad_modify.status == 404 and "CertificateNotFound" in bad_modify.body)
+
+    # 16. rds.monitoring: real CloudWatch datapoints derived from genuine Data
+    # API activity (ExecuteStatement) — never synthetic.
+    st.cw_store = cw.CloudWatchStore()
+    rds.dispatch(st, {"Action": "CreateDBInstance", "DBInstanceIdentifier": "v4-mon", "Engine": "postgres"})
+    asyncio.run(rds.aexecute_sql(st, "v4-mon", "CREATE TABLE t (id int)"))
+    asyncio.run(rds.aexecute_sql(st, "v4-mon", "INSERT INTO t VALUES (1)"))
+    asyncio.run(rds.aexecute_sql(st, "v4-mon", "SELECT * FROM t"))
+    tx = asyncio.run(rds.abegin_transaction(st, "v4-mon"))
+    dims = [{"Name": "DBInstanceIdentifier", "Value": "v4-mon"}]
+    write_series = cw._series(st.cw_store, "AWS/RDS", "WriteIOPS", dims)
+    read_series = cw._series(st.cw_store, "AWS/RDS", "ReadIOPS", dims)
+    conn_series = cw._series(st.cw_store, "AWS/RDS", "DatabaseConnections", dims)
+    _check("WriteIOPS got a real datapoint per write statement", len(write_series["points"]) == 2)
+    _check("ReadIOPS got a real datapoint for the SELECT", len(read_series["points"]) == 1)
+    _check("DatabaseConnections reflects the open explicit transaction",
+           conn_series["points"][-1][1] == 1.0)
+    asyncio.run(rds.acommit_transaction(st, tx["transactionId"]))
+    _check("DatabaseConnections drops back to 0 after commit", conn_series["points"][-1][1] == 0.0)
+
+    # 17. rds.logs: a genuine failed statement (not a fabricated line) lands in
+    # DescribeDBLogFiles/DownloadDBLogFilePortion.
+    rds.dispatch(st, {"Action": "CreateDBInstance", "DBInstanceIdentifier": "v4-logs", "Engine": "postgres"})
+    empty_logs = rds.dispatch(st, {"Action": "DescribeDBLogFiles", "DBInstanceIdentifier": "v4-logs"})
+    _check("a quiet instance has an empty (zero-size) log file", "<Size>0</Size>" in empty_logs.body)
+    asyncio.run(rds.aexecute_sql(st, "v4-logs", "SELECT * FROM nope"))
+    full_logs = rds.dispatch(st, {"Action": "DescribeDBLogFiles", "DBInstanceIdentifier": "v4-logs"})
+    _check("the failed statement grew the log file", "<Size>0</Size>" not in full_logs.body)
+    portion = rds.dispatch(st, {"Action": "DownloadDBLogFilePortion", "DBInstanceIdentifier": "v4-logs"})
+    _check("the downloaded portion carries the real error message", "no such table: nope" in portion.body)
+    _check("the downloaded portion carries the real failed statement", "SELECT * FROM nope" in portion.body)
+
+    # 18. rds.replication: a read replica is a real, independently-linked DB
+    # instance that genuinely receives the source's post-creation writes.
+    rds.dispatch(st, {"Action": "CreateDBInstance", "DBInstanceIdentifier": "v4-src", "Engine": "postgres"})
+    replica = rds.dispatch(st, {"Action": "CreateDBInstanceReadReplica",
+                                "DBInstanceIdentifier": "v4-src-ro", "SourceDBInstanceIdentifier": "v4-src"})
+    _check("CreateDBInstanceReadReplica 200", replica.status == 200)
+    _check("replica carries its source identifier", "<ReadReplicaSourceDBInstanceIdentifier>v4-src</ReadReplicaSourceDBInstanceIdentifier>" in replica.body)
+    source_desc = rds.dispatch(st, {"Action": "DescribeDBInstances", "DBInstanceIdentifier": "v4-src"})
+    _check("source lists the replica", "<ReadReplicaDBInstanceIdentifier>v4-src-ro</ReadReplicaDBInstanceIdentifier>" in source_desc.body)
+    asyncio.run(rds.aexecute_sql(st, "v4-src", "CREATE TABLE t (id int)"))
+    asyncio.run(rds.aexecute_sql(st, "v4-src", "INSERT INTO t VALUES (1)"))
+    replica_read = asyncio.run(rds.aexecute_sql(st, "v4-src-ro", "SELECT * FROM t"))
+    _check("the replica's own engine really received the source's writes",
+           replica_read["ok"] and replica_read["rows"] == [[1]])
+    blocked = rds.dispatch(st, {"Action": "DeleteDBInstance", "DBInstanceIdentifier": "v4-src"})
+    _check("a source with live replicas can't be deleted", blocked.status == 400 and "InvalidDBInstanceState" in blocked.body)
+    promoted = rds.dispatch(st, {"Action": "PromoteReadReplica", "DBInstanceIdentifier": "v4-src-ro"})
+    _check("PromoteReadReplica 200", promoted.status == 200)
+    source_desc2 = rds.dispatch(st, {"Action": "DescribeDBInstances", "DBInstanceIdentifier": "v4-src"})
+    _check("promoted replica no longer listed on the source", "v4-src-ro" not in source_desc2.body)
+    unblocked = rds.dispatch(st, {"Action": "DeleteDBInstance", "DBInstanceIdentifier": "v4-src"})
+    _check("source can now be deleted", unblocked.status == 200)
+
+    # 19. rds.replication: Multi-AZ failover genuinely swaps the live AZ.
+    rds.dispatch(st, {"Action": "CreateDBInstance", "DBInstanceIdentifier": "v4-singleaz2", "Engine": "postgres"})
+    no_failover = rds.dispatch(st, {"Action": "RebootDBInstance", "DBInstanceIdentifier": "v4-singleaz2", "ForceFailover": "true"})
+    _check("ForceFailover on a non-Multi-AZ instance is rejected",
+           no_failover.status == 400 and "InvalidParameterCombination" in no_failover.body)
+    rds.dispatch(st, {"Action": "CreateDBInstance", "DBInstanceIdentifier": "v4-maz", "Engine": "postgres", "MultiAZ": "true"})
+    before = rds.dispatch(st, {"Action": "DescribeDBInstances", "DBInstanceIdentifier": "v4-maz"})
+    before_az = before.body.split("<AvailabilityZone>")[1].split("</AvailabilityZone>")[0]
+    rds.dispatch(st, {"Action": "RebootDBInstance", "DBInstanceIdentifier": "v4-maz", "ForceFailover": "true"})
+    after = rds.dispatch(st, {"Action": "DescribeDBInstances", "DBInstanceIdentifier": "v4-maz"})
+    after_az = after.body.split("<AvailabilityZone>")[1].split("</AvailabilityZone>")[0]
+    _check("failover actually swapped the live Availability Zone", before_az != after_az)
+    events = rds.dispatch(st, {"Action": "DescribeEvents", "SourceIdentifier": "v4-maz"})
+    _check("failover start/completion are real logged events",
+           "failover started" in events.body and "failover completed" in events.body)
 
     print("\nRESULT: PASS — RDS v4-console additions conform (native Query-protocol wire) on this substrate.")
     return 0

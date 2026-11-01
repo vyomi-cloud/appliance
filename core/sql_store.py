@@ -25,8 +25,11 @@ State shapes:
 from __future__ import annotations
 
 import threading
+import time
 import uuid
 from typing import Any
+
+LOG_LINES_KEPT = 500  # per-instance ring buffer cap (rds.logs honest error log)
 
 DEFAULT_ACCOUNT_ID = "123456789012"  # matches core.app_context.AWS_ACCOUNT_ID
 
@@ -65,6 +68,7 @@ class SqlStore:
         self._tx_conns: dict[str, Any] = {}   # transaction_id -> its own held-open connection
         self._tx_db: dict[str, str] = {}      # transaction_id -> instance id
         self._tx_count: dict[str, int] = {}   # instance id -> count of open explicit transactions
+        self._log_lines: dict[str, list[tuple[float, str]]] = {}   # instance id -> [(ts, line), ...]
 
     # ── instance metadata accessors ───────────────────────────────────
     def instance_exists(self, db_id: str) -> bool:
@@ -381,6 +385,24 @@ class SqlStore:
 
     async def arollback_transaction(self, tx_id: str) -> bool:
         return self.rollback_transaction(tx_id)
+
+    # ── cross-call introspection (rds_core's activity-derived metrics/logs:
+    # rds.monitoring pushes a real DatabaseConnections point off open_transaction_count,
+    # rds.logs appends a real error-log line on a failed statement) ───────────
+    def open_transaction_count(self, db_id: str) -> int:
+        return self._tx_count.get(db_id, 0)
+
+    def transaction_db_id(self, tx_id: str) -> str | None:
+        return self._tx_db.get(tx_id)
+
+    def append_log_line(self, db_id: str, line: str, ts: float | None = None) -> None:
+        lines = self._log_lines.setdefault(db_id, [])
+        lines.append((ts if ts is not None else time.time(), line))
+        if len(lines) > LOG_LINES_KEPT:
+            del lines[: len(lines) - LOG_LINES_KEPT]
+
+    def log_lines(self, db_id: str) -> list[tuple[float, str]]:
+        return list(self._log_lines.get(db_id, []))
 
     # ── optional hooks (no-ops in the base) ───────────────────────────
     def persist(self) -> None:
