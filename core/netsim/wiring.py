@@ -191,6 +191,44 @@ def _enforcer(space: str) -> _enf.DockerEnforcer:
 _ENFORCERS: dict = {}
 
 
+def _gcp_flow_and_mirror_logs(space: str) -> None:
+    """Real per-packet events (nft counters, see DockerEnforcer.flow_sets) → GCP VPC Flow
+    Logs + packet-mirroring records, written as real Cloud Logging entries. Best-effort:
+    any failure here must never break enforcement. No-op without a GCP topology or traffic."""
+    try:
+        from core import appliance_stores as aps
+        from core import gcp_compute_core as gcc
+        from routes.gcp_logging import _STORE as log_store
+        from core.gcp_logging_core import write_entries
+
+        enf = _ENFORCERS.get(space)
+        if enf is None:
+            return
+        accepted, rejected = enf.flow_sets()
+        if not accepted and not rejected:
+            return
+        vpc_store = aps.gcp_compute_vpc_store()
+        topo = from_gcp.from_gcp(vpc_store, aps.gcp_compute_vm_store(), None)
+        projects = {p.split("/")[0] for p in vpc_store.networks}
+        for project in projects:
+            flows = gcc.gcp_flow_log_records(vpc_store, project, accepted, rejected, topo)
+            if flows:
+                write_entries(log_store, project, {
+                    "logName": f"projects/{project}/logs/compute.googleapis.com%2Fvpc_flows",
+                    "resource": {"type": "gce_subnetwork", "labels": {"project_id": project}},
+                    "entries": [{"jsonPayload": f, "severity": "INFO"} for f in flows],
+                })
+            mirrored = gcc.mirrored_packet_log_entries(vpc_store, project, accepted, topo)
+            if mirrored:
+                write_entries(log_store, project, {
+                    "logName": f"projects/{project}/logs/vyomi.dev%2Fpacket_mirroring",
+                    "resource": {"type": "gce_subnetwork", "labels": {"project_id": project}},
+                    "entries": [{"jsonPayload": m, "severity": "INFO"} for m in mirrored],
+                })
+    except Exception as exc:
+        _warn_once(f"flowlogs:{type(exc).__name__}", f"flow/mirror log collection skipped: {exc}")
+
+
 def apply_now(reason: str = "") -> dict | None:
     if not enabled():
         return None
@@ -202,6 +240,7 @@ def apply_now(reason: str = "") -> dict | None:
             plan = enf.apply(netsim_topology(space))
             res = {"ok": True, "space": space, "reason": reason, "table": plan.table, "networks": len(plan.networks),
                    "warnings": plan.warnings[:20], "ms": int((time.time() - t0) * 1000), "at": time.time()}
+            _gcp_flow_and_mirror_logs(space)
         except Exception as exc:          # never propagate: enforcement is best-effort
             res = {"ok": False, "space": space, "reason": reason, "error": str(exc)[:500], "at": time.time()}
             _warn_once(f"apply:{type(exc).__name__}", f"apply failed ({reason}): {exc}")

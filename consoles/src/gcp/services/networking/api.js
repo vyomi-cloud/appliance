@@ -121,3 +121,105 @@ const CT_STATE_LABEL = {
   APPLY_ROUTE: "Route", NAT: "NAT", FORWARD: "Forward", DELIVER: "Deliver", DROP: "Drop",
 };
 export const ctStepLabel = (s) => CT_STATE_LABEL[s.state] || s.state;
+
+// ── internal ranges (networkconnectivity.googleapis.com v1) ────────────────────────────
+const ncBase = (loc = "global") => `/v1/projects/${e(getProject())}/locations/${e(loc)}/internalRanges`;
+export async function listInternalRanges() {
+  const r = await restJson("GET", ncBase());
+  return r.internalRanges || [];
+}
+export async function insertInternalRange(body) {
+  const r = await restJson("POST", ncBase(), { query: { internalRangeId: body.name }, body });
+  return r.response;
+}
+export const deleteInternalRange = (name) => restJson("DELETE", `${ncBase()}/${e(name)}`);
+
+// ── Serverless VPC Access connectors (vpcaccess.googleapis.com v1) ─────────────────────
+const connectorsBase = (region) => `/v1/projects/${e(getProject())}/locations/${e(region)}/connectors`;
+export async function listConnectors(region) {
+  const r = await restJson("GET", connectorsBase(region));
+  return r.connectors || [];
+}
+export async function listAllConnectors() {
+  const lists = await Promise.all(REGIONS.map((r) => listConnectors(r).then((items) => items.map((c) => ({ ...c, _region: r }))).catch(() => [])));
+  return lists.flat();
+}
+export async function insertConnector(region, body) {
+  const r = await restJson("POST", connectorsBase(region), { query: { connectorId: body.name }, body });
+  return r.response;
+}
+export const deleteConnector = (region, name) => restJson("DELETE", `${connectorsBase(region)}/${e(name)}`);
+
+// ── Private Service Connection (servicenetworking.googleapis.com v1) ───────────────────
+const pscBase = "/v1/services/servicenetworking.googleapis.com/connections";
+export async function listPscConnections(networkName) {
+  const r = await restJson("GET", pscBase, { query: { network: `projects/${e(getProject())}/global/networks/${e(networkName)}` } });
+  return r.connections || [];
+}
+export async function createPscConnection(networkName, reservedPeeringRanges) {
+  const r = await restJson("POST", pscBase, { body: { network: `projects/${getProject()}/global/networks/${networkName}`, reservedPeeringRanges } });
+  return r.response;
+}
+export const deletePscConnection = (networkName) => restJson(
+  "POST", `${pscBase}/servicenetworking.googleapis.com:deleteConnection`, { body: { network: `projects/${getProject()}/global/networks/${networkName}` } },
+);
+export const reservePeeringRange = (body) => restJson("POST", `${base()}/global/addresses`, {
+  body: { ...body, purpose: "VPC_PEERING", addressType: "INTERNAL" },
+});
+export async function listPeeringRanges(networkName) {
+  const all = await listAllAddresses();
+  return all.filter((a) => a.purpose === "VPC_PEERING" && nameOf(a.network) === networkName);
+}
+
+// ── Shared VPC / XPN (compute.googleapis.com v1 projects.*) ────────────────────────────
+export const enableXpnHost = () => restJson("POST", `${base()}/enableXpnHost`, { body: {} });
+export const disableXpnHost = () => restJson("POST", `${base()}/disableXpnHost`, { body: {} });
+export const enableXpnResource = (serviceProjectId) => restJson("POST", `${base()}/enableXpnResource`, { body: { xpnResource: { id: serviceProjectId, type: "PROJECT" } } });
+export const disableXpnResource = (serviceProjectId) => restJson("POST", `${base()}/disableXpnResource`, { body: { xpnResource: { id: serviceProjectId, type: "PROJECT" } } });
+export async function getXpnResources() {
+  const r = await restJson("GET", `${base()}/getXpnResources`);
+  return r.resources || [];
+}
+export async function listUsableSubnetworks() {
+  const r = await restJson("GET", `${base()}/aggregated/usableSubnetworks`);
+  return r.items || [];
+}
+
+// ── Network firewall policies (regional, compute.googleapis.com v1) ────────────────────
+const nfpBase = (region) => `${base()}/regions/${e(region)}/firewallPolicies`;
+export async function listFirewallPolicies(region) {
+  const r = await restJson("GET", nfpBase(region));
+  return r.items || [];
+}
+export async function listAllFirewallPolicies() {
+  const lists = await Promise.all(REGIONS.map((r) => listFirewallPolicies(r).then((items) => items.map((p) => ({ ...p, _region: r }))).catch(() => [])));
+  return lists.flat();
+}
+export const insertFirewallPolicy = (region, body) => restJson("POST", nfpBase(region), { body });
+export const deleteFirewallPolicy = (region, name) => restJson("DELETE", `${nfpBase(region)}/${e(name)}`);
+export const addPolicyRule = (region, name, rule) => restJson("POST", `${nfpBase(region)}/${e(name)}/addRule`, { body: { firewallPolicyRule: rule } });
+export const addPolicyAssociation = (region, name, network) => restJson("POST", `${nfpBase(region)}/${e(name)}/addAssociation`, { body: { association: { name: `${network}-assoc`, attachmentTarget: network } } });
+
+// ── Packet mirroring (regional, compute.googleapis.com v1) ─────────────────────────────
+const pmBase = (region) => `${base()}/regions/${e(region)}/packetMirrorings`;
+export async function listPacketMirrorings(region) {
+  const r = await restJson("GET", pmBase(region));
+  return r.items || [];
+}
+export async function listAllPacketMirrorings() {
+  const lists = await Promise.all(REGIONS.map((r) => listPacketMirrorings(r).then((items) => items.map((p) => ({ ...p, _region: r }))).catch(() => [])));
+  return lists.flat();
+}
+export const insertPacketMirroring = (region, body) => restJson("POST", pmBase(region), { body });
+export const deletePacketMirroring = (region, name) => restJson("DELETE", `${pmBase(region)}/${e(name)}`);
+
+// ── Cloud Logging read-back (real entries from netsim's per-packet counters, offline-only —
+// empty unless VYOMI_NETSIM_ENFORCE is on and real traffic has crossed the enforcer) ────────
+async function listLogEntries(logId) {
+  const r = await restJson("POST", "/v2/entries:list", {
+    body: { resourceNames: [`projects/${getProject()}`], filter: `logName="projects/${getProject()}/logs/${logId}"`, pageSize: 50 },
+  });
+  return r.entries || [];
+}
+export const listFlowLogEntries = () => listLogEntries("compute.googleapis.com%2Fvpc_flows");
+export const listMirroredPacketLogEntries = () => listLogEntries("vyomi.dev%2Fpacket_mirroring");

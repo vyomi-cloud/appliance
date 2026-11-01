@@ -80,6 +80,40 @@ def _fw_rules(fw: dict) -> list:
     return out
 
 
+def _policy_match_peers(match: dict) -> list:
+    ranges = match.get("srcIpRanges") or match.get("destIpRanges") or []
+    peers = [Peer.cidr(c) for c in ranges]
+    return peers or [Peer("any")]
+
+
+def _policy_rules(pol: dict) -> list:
+    """Regional network firewall policy rules → netsim Rule objects. Evaluated at a priority
+    far below any classic VPC firewall rule's range so they ALWAYS win the tier (hierarchical
+    policies evaluate before the network's own firewall rules in real GCP), while keeping their
+    relative order among themselves. `goto_next` rules are not modelled as a fallthrough (no
+    Rule.goto_next field yet) — stored/returned faithfully but evaluated as an implicit allow,
+    the closest safe approximation; see the capability's documented limitation."""
+    out = []
+    for r in pol["rules"]:
+        if r.get("disabled"):
+            continue
+        action = r["action"] if r["action"] in ("allow", "deny") else "allow"
+        direction = INGRESS if r.get("direction", "INGRESS") == "INGRESS" else EGRESS
+        match = r.get("match") or {}
+        proto_ports = match.get("layer4Configs") or [{}]
+        for pp in proto_ports:
+            proto = str(pp.get("ipProtocol", "all"))
+            ports = pp.get("ports") or []
+            pr = None
+            if ports:
+                p0 = str(ports[0])
+                pr = tuple(int(x) for x in p0.split("-", 1)) if "-" in p0 else (int(p0), int(p0))
+            out.append(Rule(direction=direction, action=action, protocol=proto, ports=pr,
+                            peers=_policy_match_peers(match), priority=r["priority"] - 10_000_000,
+                            name=f"policy:{pol['name']}:{r['priority']}"))
+    return out
+
+
 def from_gcp(net_store, inst_store=None, project: str | None = None, cloud_nats=None, peerings=None) -> Topology:
     """`cloud_nats`: [{"network": n, "region": r, "subnets": [names] | "ALL"}] (Cloud Router NAT is
     not in the core yet). `peerings`: [{"name", "network", "peerNetwork", "state"}] likewise."""
@@ -119,6 +153,19 @@ def from_gcp(net_store, inst_store=None, project: str | None = None, cloud_nats=
         t.rulesets[f"{nid}/firewall"].rules.extend(_fw_rules(fw))
         if fw.get("logEnable"):
             t.rulesets[f"{nid}/firewall"].log = True
+
+    # Regional network firewall policies: a tier that evaluates before classic VPC firewall
+    # rules on every network it's associated with (see _policy_rules for the priority trick).
+    for pol in (getattr(net_store, "firewall_policies", None) or {}).values():
+        if project and pol["project"] != project:
+            continue
+        rules = _policy_rules(pol)
+        if not rules:
+            continue
+        for assoc in pol.get("associations") or []:
+            nid = f"{pol['project']}/{assoc['network']}"
+            if nid in t.networks:
+                t.rulesets[f"{nid}/firewall"].rules.extend(rules)
 
     # Cloud Router NAT configs + network peerings straight from the core (params override/extend)
     cloud_nats = list(cloud_nats or [])

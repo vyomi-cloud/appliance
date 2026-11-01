@@ -100,9 +100,16 @@ def _gcp_service(path):
     if path.startswith(("/compute/v1", "/compute/beta")):
         # VPC resources → the networking core; everything else (instances, disks, images,
         # templates, groups, health checks…) → the VM core.
-        if re.search(r"/(networks|subnetworks|firewalls|routes|addresses|routers)(/|$|\?|:)", path):
+        if re.search(r"/(networks|subnetworks|firewalls|routes|addresses|routers|firewallPolicies|packetMirrorings|usableSubnetworks)(/|$|\?|:)", path):
+            return "gcp-compute"
+        # Shared VPC (XPN) project-level custom methods: /compute/v1/projects/{p}/enableXpnHost etc.
+        if re.search(r"/projects/[^/]+/(enableXpnHost|disableXpnHost|enableXpnResource|disableXpnResource|listXpnHosts|getXpnResources)$", path):
             return "gcp-compute"
         return "gcp-compute-vm"
+    # Private Service Connection (servicenetworking.googleapis.com): no /projects/ segment —
+    # the project is resolved from the `network` link in the body/query.
+    if path.startswith("/v1/services/servicenetworking.googleapis.com/connections"):
+        return "gcp-compute"
     if path.startswith(("/sql/v1beta4", "/sql/v1")):
         return "gcp-cloudsql"
     if path == "/v3/uptimeCheckIps":   # Cloud Monitoring API v3 (global, no project)
@@ -126,6 +133,10 @@ def _gcp_service(path):
         return "gcp-iam"
     if re.match(r"^/v1/projects/[^/]+/locations/global/connectivityTests([/:?]|$)", path):
         return "gcp-compute"   # Network Intelligence Center Connectivity Tests → netsim via the VPC core
+    if re.search(r"^/v1/projects/[^/]+/locations/[^/]+/internalRanges([/:?]|$)", path):
+        return "gcp-compute"   # networkconnectivity.googleapis.com Internal Range Allocator
+    if re.search(r"^/v1/projects/[^/]+/locations/[^/]+/connectors([/:?]|$)", path):
+        return "gcp-compute"   # vpcaccess.googleapis.com Serverless VPC Access connectors
     if re.search(r"^/v1/projects/[^/]+/(dashboards|snoozes)([/:]|$)", path):   # Dashboards / Snoozes APIs (v1)
         return "gcp-monitoring"
     # The /v1/projects/* family — gate on /projects/ so Azure's root /secrets,

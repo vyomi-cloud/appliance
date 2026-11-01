@@ -120,41 +120,65 @@
  "gcp.networking.private-service-connection": {
   "title": "Private service connection",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Allocating ranges for Google-managed services and the private-services-access connection to them is not modeled."
+   "Real resource lifecycle: reserving an internal range (globalAddresses, purpose VPC_PEERING) is rejected if it overlaps an existing subnet or reservation on the network, and a servicenetworking.googleapis.com Connection can only reference ranges that are actually reserved. There is no real Google-managed service producer VPC behind the connection, so traffic to a private service endpoint (e.g. a Cloud SQL private IP) does not route across it in Connectivity Tests."
+  ],
+  "api": [
+   "globalAddresses.insert (purpose=VPC_PEERING)",
+   "services.connections.create", "services.connections.list", "services.connections.patch", "services.connections.deleteConnection"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_networking_depth_core.py"
   ]
  },
  "gcp.networking.network-firewall-policies": {
   "title": "Network firewall policies (hierarchical / regional policy resources)",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Vyomi models the classic per-network VPC firewall rule, not the newer Network Firewall Policy resource (its own rule evaluation order and org/folder attachment)."
+   "Regional network firewall policies only (no organization/folder hierarchy — Vyomi is single-project). Rules are evaluated for real: an associated policy's rules are checked BEFORE the network's classic VPC firewall rules (the real tier precedence), first match by priority wins, and Connectivity Tests trace through them. `goto_next` rules are stored and returned faithfully but evaluated as an implicit allow rather than deferring to the next tier."
+  ],
+  "api": [
+   "firewallPolicies.insert", "firewallPolicies.get", "firewallPolicies.list", "firewallPolicies.delete",
+   "firewallPolicies.addRule", "firewallPolicies.removeRule", "firewallPolicies.addAssociation", "firewallPolicies.removeAssociation"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_networking_depth_core.py"
   ]
  },
  "gcp.networking.vpc-flow-logs": {
   "title": "VPC Flow Logs (Subnets / VLAN attachments / Cloud VPN tunnels)",
   "level": {
    "nano": "not_simulated",
-   "offline": "not_simulated"
+   "offline": "limited"
   },
   "limitations": [
-   "No VPC Flow Logs export. Offline with netsim enforcement on, real per-flow counters exist and core/netsim/flowlogs.py renders GCP flow records from them, but nothing writes them to Cloud Logging yet."
+   "Offline only, and only with netsim enforcement on (VYOMI_NETSIM_ENFORCE=1|auto, Docker compute backend): core/netsim/wiring.py reads the enforcer's real per-flow nft counters, renders GCP VPC Flow Log records (core/gcp_compute_core.py:gcp_flow_log_records, gated on each subnet's own flowLogs flag) and writes them as real Cloud Logging entries (logName compute.googleapis.com%2Fvpc_flows) — console Logs views read the same store. Nano has no data plane at all (no VMs produce real packets), so there is nothing to export there; VLAN attachments and Cloud VPN tunnels aren't modeled."
+  ],
+  "api": [
+   "entries:write", "entries:list"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_networking_depth_core.py"
   ]
  },
  "gcp.networking.internal-ranges": {
   "title": "Internal ranges",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "full",
+   "offline": "full"
   },
-  "limitations": [
-   "The Internal Range Allocator (planning/reserving CIDR blocks across an org before they're assigned to subnets) is not modeled."
+  "limitations": [],
+  "api": [
+   "internalRanges.create", "internalRanges.list", "internalRanges.get", "internalRanges.delete"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_networking_depth_core.py"
   ]
  },
  "gcp.networking.byoip": {
@@ -180,31 +204,50 @@
  "gcp.networking.shared-vpc": {
   "title": "Shared VPC (host/service project attachment)",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Vyomi's Compute core is single-project; cross-project host/service VPC sharing and its IAM delegation are not modeled."
+   "Host/service project attachment is real and enforced: projects.enableXpnHost/disableXpnHost/enableXpnResource/disableXpnResource track state with the real constraints (a host can't be disabled while service projects are attached, a project can't serve two hosts, a host can't itself be a service project), and aggregated/usableSubnetworks genuinely returns the host's subnets to an attached service project. Vyomi's Compute core has no real cross-project IAM delegation, and a VM created in a service project cannot actually be placed on the host's shared subnet (gcp_compute_instances_core is single-project)."
+  ],
+  "api": [
+   "projects.enableXpnHost", "projects.disableXpnHost", "projects.enableXpnResource",
+   "projects.disableXpnResource", "projects.listXpnHosts", "projects.getXpnResources", "subnetworks.listUsable"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_networking_depth_core.py"
   ]
  },
  "gcp.networking.serverless-vpc-access": {
   "title": "Serverless VPC Access connectors",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Connectors bridge serverless products (Cloud Run/Functions) into a VPC; Vyomi does not run a serverless data plane that would use one."
+   "Connector resources are real: create/list/get/delete, with the real /28 and throughput-range validation and a check that the range doesn't collide with existing subnets/reservations on the network. Vyomi does not run a serverless data plane (Cloud Run/Functions), so no simulated traffic is ever actually routed through a connector."
+  ],
+  "api": [
+   "connectors.create", "connectors.list", "connectors.get", "connectors.delete"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_networking_depth_core.py"
   ]
  },
  "gcp.networking.packet-mirroring": {
   "title": "Packet mirroring",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Mirroring clones live packets to a collector; Vyomi has no data plane producing real packets to mirror."
+   "Policy resources are real: create/list/get/delete, with real validation (mirrored subnetworks must exist on the policy's network, a collector forwarding rule name is required). Offline with netsim enforcement on, real per-packet traffic that matches an enabled policy's mirrored resources + filter is rendered as structured records (core/gcp_compute_core.py:mirrored_packet_log_entries) and written to Cloud Logging — not replicated onto a live collector NIC, since Vyomi has no second network interface to receive a GRE-encapsulated copy."
+  ],
+  "api": [
+   "packetMirrorings.insert", "packetMirrorings.list", "packetMirrorings.get", "packetMirrorings.patch", "packetMirrorings.delete"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_networking_depth_core.py"
   ]
  },
  "gcp.networking.cloud-nat": {
