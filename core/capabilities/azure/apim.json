@@ -20,9 +20,9 @@
  },
  "azure.apim.service.protocols": {
   "title": "Protocol settings / Protocols + ciphers (properties.customProperties)",
-  "level": { "nano": "config_only", "offline": "config_only" },
+  "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "TLS/SSL protocol and cipher flags round-trip through ARM exactly as configured, but Vyomi's gateway never negotiates TLS, so disabling a protocol here has no effect on anything."
+   "ENFORCED against the service's own \"Test connection\" action (apis/{id}/testConnect): a client connecting with a legacy protocol (TLS 1.0/1.1, SSL 3.0) this service has disabled is rejected exactly as the real gateway would refuse the handshake; TLS 1.2+ is always accepted (not independently toggle-able). Vyomi has no real TLS stack, so this is checked at the console's Test action rather than during an actual TLS negotiation, and cipher suite selection itself is still not modeled."
   ],
   "tests": ["tests/conformance/test_azure_arm_core.py"]
  },
@@ -104,8 +104,12 @@
  },
  "azure.apim.developerportal": {
   "title": "Developer portal (overview, settings, Users, Groups, Identities, Delegation)",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["The developer portal CMS, its user/group/identity-provider directory, and delegation are not modeled."]
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Users, Groups and Identity providers are real ARM sub-resources (service/users, service/groups, service/identityProviders) — create/list/delete round-trip exactly like Products or Backends. Delegation is a real portalsettings/delegation singleton (URL + validation key + the two delegate switches).",
+   "The developer portal CMS itself (its pages, theming, the live preview) and sign-in/sign-up self-service (registering as the portal's own visitor) are not modeled — there is no rendered portal site in Vyomi, only the ARM-level directory and settings that would drive one."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
  },
  "azure.apim.diagnosticsettings": {
   "title": "Diagnostic settings (Microsoft.Insights/diagnosticSettings, scoped to this service)",
@@ -116,10 +120,29 @@
   ],
   "tests": ["tests/conformance/test_azure_monitor_core.py", "tests/conformance/test_azure_arm_core.py"]
  },
+ "azure.apim.monitoring.appinsights": {
+  "title": "Application Insights (the logger that links an Application Insights/Event Hub target)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "The logger link (Microsoft.ApiManagement/service/loggers) is a real ARM sub-resource — create, list, delete round-trip exactly like Backends. Vyomi never actually emits request telemetry to the linked Application Insights resource or Event Hub (same gap as Diagnostic settings: azure.apim.diagnosticsettings)."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.apim.monitoring.alerts": {
+  "title": "Alerts (metric alert rules scoped to this service)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "Alert rules are real Microsoft.Insights/metricAlerts resources scoped (properties.scopes) to this service — create/list/delete round-trip through ARM like any other alert rule (azure.monitor.alert_rules). They never actually fire: Vyomi has no APIM request/latency metric time-series for a rule to evaluate against."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
  "azure.apim.monitoring": {
-  "title": "Application Insights, Alerts, Metrics, Logs, Analytics",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["Metrics charts, alert rules, Log Analytics queries and API analytics are not modeled."]
+  "title": "Metrics, Logs, Analytics",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "These three dashboards are real — built over this service's actual stored data (API/product/subscription counts, active-subscription counts, and the real Activity log's management-plane write events) — but they are NOT the real APIM gateway metrics (Requests, Duration, Capacity). Vyomi's APIs never carry live gateway traffic, so there is no request/latency/capacity time-series to chart; Analytics likewise reports on real configuration (APIs by type, subscriptions by product) rather than real call volume."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
  },
  "azure.apim.scaletier": {
   "title": "Scale out and up, Pricing tier (post-creation sku.name/sku.capacity over ARM)",
@@ -138,8 +161,13 @@
  },
  "azure.apim.deployment": {
   "title": "Network, Custom domains, Locations, Managed identities (user-assigned), Certificates, Gateways, Self-hosted gateways",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["Multi-region deployment, VNet/custom-domain/certificate configuration, and managed/self-hosted gateways are not modeled."]
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Network (virtualNetworkType), Custom domains (hostnameConfigurations) and Locations (additionalLocations) are real properties.* fields on the service, written through the same PATCH the create wizard uses — ENFORCED for Locations: the Consumption and Developer tiers cannot add a region, same as real APIM (azure.apim.scaletier). 'Gateways' shows the resulting managed-gateway regions (primary + additional locations) read back from that same real data.",
+   "Certificates and Self-hosted gateways are real ARM sub-resources (service/certificates, service/gateways) — create/list/delete round-trip exactly like Backends.",
+   "Managed identities (user-assigned) are not modeled — Microsoft.ManagedIdentity/userAssignedIdentities isn't catalogued in Vyomi, consistent with every other service (VMs, Cognitive Services, …). Actual VNet connectivity, custom-domain TLS termination, and a self-hosted gateway's real connection back to the cloud service are not simulated — only their ARM-level configuration is."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
  },
  "azure.apim.apitags.crud": {
   "title": "API Tags (Microsoft.ApiManagement/service/tags) — create, get, list, delete",
@@ -157,10 +185,36 @@
   ],
   "tests": ["tests/conformance/test_azure_arm_core.py"]
  },
+ "azure.apim.workspaces": {
+  "title": "Workspaces",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "Workspaces are a real ARM sub-resource (service/workspaces) — create/list/delete round-trip exactly like Products. Per-workspace delegated RBAC and a workspace's own scoped APIs/products/subscriptions sub-tree are not modeled; a workspace here is a flat named record."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.apim.credentialmanager": {
+  "title": "Credential manager (authorization providers)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Authorization providers are a real ARM sub-resource (service/authorizationProviders) — create/list/delete round-trip exactly like Backends. The nested per-provider Authorizations (the actual OAuth2 token exchange with the third-party identity provider) and the \"Login\" consent flow are not modeled — there is no third party to authorize against."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.apim.mcpservers": {
+  "title": "MCP Servers",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "An MCP server is modeled as a real API (service/apis) with apiType \"mcp\" — it is created, listed and deleted through the exact same ARM sub-resource as any other API (azure.apim.apis.crud), just filtered to that type. The actual Model Context Protocol surface (tool discovery, tool invocation over the gateway) is not implemented — Vyomi's gateway does not run an MCP server."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
  "azure.apim.tools": {
-  "title": "Diagnose and solve problems, Events, MCP Servers, Workspaces, Credential manager, Tasks, Support + Troubleshooting",
+  "title": "Diagnose and solve problems, Events, Tasks, Support + Troubleshooting",
   "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["These portal troubleshooting, catalog and support tools are not modeled."]
+  "limitations": [
+   "Diagnose and solve problems runs Azure's own fleet-wide diagnostics heuristics against telemetry Vyomi never collects. Events and Tasks route to Azure's real multi-tenant notification/automation backends, and Support + Troubleshooting opens a real Azure support ticket against Microsoft — all infrastructure outside any local simulator, consistent with every other Vyomi service (Storage, Service Bus, AKS, ACR, App Service, VMs, …)."
+  ]
  },
  "azure.apim.exporttemplate": {
   "title": "Export template",

@@ -896,6 +896,12 @@ class AzureArm:
             blocked = self._apim_tier_block(type_chain, names, payload, sub, rg)
             if blocked:
                 return blocked
+            blocked = self._apim_locations_block(type_chain, names, payload, sub, rg)
+            if blocked:
+                return blocked
+            blocked = self._apim_protocol_value_block(type_chain, payload)
+            if blocked:
+                return blocked
             if full_type.lower() == "microsoft.authorization/roleassignments":
                 # Real ARM derives a role assignment's scope from the resource ID it was PUT
                 # under — not from a client-supplied properties.scope — so checkAccess and the
@@ -1030,6 +1036,43 @@ class AzureArm:
             return _err(400, "BadRequest", "The Consumption tier has no scale units — sku.capacity must be 0.")
         if tier == "Developer" and capacity not in (None, 1):
             return _err(400, "BadRequest", "The Developer tier is capped at exactly 1 unit (no scale-out, no SLA).")
+        return None
+
+    def _apim_locations_block(self, type_chain, names, payload, sub, rg):
+        """Microsoft.ApiManagement/service properties.additionalLocations — real APIM only
+        offers multi-region deployment on the Basic/Standard/Premium (v1 and v2) tiers; the
+        serverless Consumption tier and the single-unit Developer tier have no "Add region"
+        button at all. Vyomi now ENFORCES that instead of silently storing extra locations a
+        Consumption/Developer service could never actually have (azure.apim.deployment),
+        checked against the EFFECTIVE sku (payload over existing) like _apim_tier_block."""
+        if type_chain[0].lower() != "microsoft.apimanagement" or type_chain[1].lower() != "service" or len(type_chain) != 2:
+            return None
+        props = (payload or {}).get("properties") or {}
+        locations = props.get("additionalLocations")
+        if not locations:
+            return None
+        sku = (payload or {}).get("sku") or {}
+        existing = self.state.get(_canonical_id(sub, rg, type_chain, names).lower()) or {}
+        tier = sku.get("name", (existing.get("sku") or {}).get("name"))
+        if tier in ("Consumption", "Developer"):
+            return _err(400, "BadRequest",
+                        f"The {tier} tier does not support additional locations (multi-region deployment).")
+        return None
+
+    # The portal's "Protocols + ciphers" legacy-protocol toggles (azure.apim.service.protocols)
+    # are the literal strings "True"/"False", same as real APIM's customProperties — Vyomi now
+    # validates that shape instead of round-tripping whatever value the caller sends.
+    _APIM_PROTOCOL_PREFIX = "microsoft.windowsazure.apimanagement.gateway.security."
+
+    def _apim_protocol_value_block(self, type_chain, payload):
+        if type_chain[0].lower() != "microsoft.apimanagement" or type_chain[1].lower() != "service" or len(type_chain) != 2:
+            return None
+        custom = ((payload or {}).get("properties") or {}).get("customProperties")
+        if not isinstance(custom, dict):
+            return None
+        for k, v in custom.items():
+            if k.lower().startswith(self._APIM_PROTOCOL_PREFIX) and v not in ("True", "False"):
+                return _err(400, "BadRequest", f"customProperties['{k}'] must be the string 'True' or 'False'.")
         return None
 
     def _aks_stopped_block(self, type_chain, names, sub, rg):
@@ -1711,6 +1754,8 @@ class AzureArm:
             return self._cosmos_failover_action(resource_name, parent_rid, payload or {})
         if ns == "microsoft.apimanagement" and typ == "service" and len(type_chain) > 2 and type_chain[2].lower() == "namedvalues" and action == "listvalue":
             return self._apim_namedvalue_listvalue(resource_name, parent_rid)
+        if ns == "microsoft.apimanagement" and typ == "service" and len(type_chain) > 2 and type_chain[2].lower() == "apis" and action == "testconnect":
+            return self._apim_test_connect(resource_name, parent_rid, payload or {})
         if action in ("start", "poweroff", "restart", "deallocate"):
             if ns != "microsoft.compute" or typ != "virtualmachines":
                 return _err(400, "ActionNotSupported",
@@ -1882,6 +1927,56 @@ class AzureArm:
             return _err(400, "KeyVaultErrorSecretNotFound",
                         f"Named value '{nv_name}' references a version of '{secret_name}' that was not found.")
         return _ok({"value": ver.get("value") or ""})
+
+    # Client-side legacy-protocol customProperties keys that gate a test connection's
+    # `protocol`, keyed by the same short name the console's dialog sends.
+    _APIM_CLIENT_PROTOCOL_KEYS = {
+        "tls10": "Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Protocols.Tls10",
+        "tls11": "Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Protocols.Tls11",
+        "ssl30": "Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Protocols.Ssl30",
+    }
+
+    def _apim_test_connect(self, api_name, parent_rid, payload):
+        """Microsoft.ApiManagement/service/apis/{name}/testConnect — a Vyomi-only action (real
+        Azure's "Test" console tab makes a live HTTPS call to the managed gateway, which this
+        simulator never does — see "Nothing leaves the simulator"). It instead replays the two
+        checks the real gateway performs before it would ever forward a request, so toggling
+        either setting has a genuine, observable effect instead of being pure stored config:
+
+        1. The client TLS protocol (`protocol`, one of tls10/tls11/ssl30/tls12) against this
+           service's own Protocols + ciphers customProperties (azure.apim.service.protocols) —
+           tls12 is always accepted (Vyomi doesn't model disabling the modern default).
+        2. The subscription key (`subscriptionKey`) against this service's real Subscriptions
+           (azure.apim.subscriptions.crud) — any ACTIVE subscription grants access, since
+           product<->API association isn't modeled (azure.apim.apis.crud limitation)."""
+        api_rec = self.state.get(parent_rid.lower()) if parent_rid else None
+        if not api_rec:
+            return _err(404, "ResourceNotFound", f"API '{api_name}' not found.")
+        svc_rid = "/".join(parent_rid.split("/")[:-2])
+        svc_rec = self.state.get(svc_rid.lower())
+        if not svc_rec:
+            return _err(404, "ResourceNotFound", "API Management service not found.")
+
+        protocol = str(payload.get("protocol") or "tls12").lower()
+        custom = (svc_rec.get("properties") or {}).get("customProperties") or {}
+        prop_key = self._APIM_CLIENT_PROTOCOL_KEYS.get(protocol)
+        if prop_key and custom.get(prop_key) != "True":
+            return _err(400, "TlsVersionNotSupported",
+                        f"The gateway does not accept {protocol.upper()} client connections — "
+                        f"it is disabled under Protocols + ciphers.")
+
+        sub_key = payload.get("subscriptionKey") or ""
+        if not sub_key:
+            return _err(401, "AccessDenied",
+                        "Access denied due to missing subscription key. Include a subscription key.")
+        sub_prefix = (svc_rid + "/subscriptions/").lower()
+        matched = next((r for k, r in self.state.items()
+                         if k.startswith(sub_prefix)
+                         and sub_key in ((r.get("properties") or {}).get("primaryKey"), (r.get("properties") or {}).get("secondaryKey"))), None)
+        if not matched or (matched.get("properties") or {}).get("state", "active") != "active":
+            return _err(401, "AccessDenied", "Access denied due to invalid subscription key.")
+        return _ok({"status": 200, "message": "Connection accepted", "api": api_name,
+                    "subscriptionId": matched.get("name"), "protocol": protocol})
 
     def _aks_action(self, action, cluster_name, parent_rid, payload):
         """POST actions on Microsoft.ContainerService/managedClusters/{name}/<action> — start/stop

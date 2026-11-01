@@ -308,6 +308,59 @@ def run() -> int:
     _check("apim Developer tier still rejects a capacity-only PATCH to 2", r["status"] == 400)
     arm.handle("PATCH", apim, {"api-version": "2023-05-01-preview"}, {"sku": {"name": "Standard", "capacity": 2}})
 
+    # 17c0. Protocols + ciphers customProperties values must be the literal strings "True"/
+    # "False", same as real APIM (azure.apim.service.protocols).
+    r = arm.handle("PATCH", apim, {"api-version": "2023-05-01-preview"},
+                   {"properties": {"customProperties": {
+                       "Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Protocols.Ssl30": "nope"}}})
+    _check("apim protocol customProperties rejects a non True/False value", r["status"] == 400)
+    r = arm.handle("PATCH", apim, {"api-version": "2023-05-01-preview"},
+                   {"properties": {"customProperties": {
+                       "Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Protocols.Ssl30": "True"}}})
+    _check("apim protocol customProperties accepts True", r["status"] == 200
+           and r["body"]["properties"]["customProperties"]["Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Protocols.Ssl30"] == "True")
+
+    # 17c1. Locations: additionalLocations (multi-region) is only allowed on tiers that
+    # support it — Consumption and Developer are rejected, same as real APIM (azure.apim.deployment).
+    r = arm.handle("PATCH", apim, {"api-version": "2023-05-01-preview"},
+                   {"properties": {"additionalLocations": [{"location": "westus", "sku": {"name": "Standard", "capacity": 1}}]}})
+    _check("apim Standard tier accepts an additional location", r["status"] == 200
+           and len(r["body"]["properties"]["additionalLocations"]) == 1)
+    arm.handle("PATCH", apim, {"api-version": "2023-05-01-preview"}, {"sku": {"name": "Developer", "capacity": 1}})
+    r = arm.handle("PATCH", apim, {"api-version": "2023-05-01-preview"},
+                   {"properties": {"additionalLocations": [{"location": "westus", "sku": {"name": "Developer", "capacity": 1}}]}})
+    _check("apim Developer tier rejects an additional location", r["status"] == 400)
+    arm.handle("PATCH", apim, {"api-version": "2023-05-01-preview"},
+              {"sku": {"name": "Standard", "capacity": 2}, "properties": {"additionalLocations": []}})
+
+    # 17c2. Test connection (apis/{id}/testConnect — azure.apim.service.protocols,
+    # azure.apim.subscriptions.crud): replays the gateway's client-TLS and subscription-key
+    # admission checks for real instead of being pure stored config.
+    tc_api = apim + "/apis/tc-api"
+    arm.handle("PUT", tc_api, {"api-version": "2023-05-01-preview"},
+              {"properties": {"displayName": "tc-api", "path": "tc", "protocols": ["https"]}})
+    tc_sub = apim + "/subscriptions/tc-sub"
+    arm.handle("PUT", tc_sub, {"api-version": "2023-05-01-preview"},
+              {"properties": {"displayName": "tc-sub", "scope": "/apis", "state": "active",
+                               "primaryKey": "tc-primary-key", "secondaryKey": "tc-secondary-key"}})
+    r = arm.handle("POST", tc_api + "/testConnect", {"api-version": "2023-05-01-preview"}, {"subscriptionKey": "tc-primary-key"})
+    _check("testConnect accepts a valid active subscription key (tls12 default)", r["status"] == 200)
+    r = arm.handle("POST", tc_api + "/testConnect", {"api-version": "2023-05-01-preview"}, {"subscriptionKey": "not-a-real-key"})
+    _check("testConnect rejects an invalid subscription key (401)", r["status"] == 401)
+    r = arm.handle("POST", tc_api + "/testConnect", {"api-version": "2023-05-01-preview"}, {})
+    _check("testConnect rejects a missing subscription key (401)", r["status"] == 401)
+    # TLS 1.0 is disabled by default (azure.apim.service.protocols) — the test connection
+    # must be rejected until the client-side flag is explicitly enabled.
+    r = arm.handle("POST", tc_api + "/testConnect", {"api-version": "2023-05-01-preview"},
+                   {"subscriptionKey": "tc-primary-key", "protocol": "tls10"})
+    _check("testConnect rejects TLS 1.0 while it's disabled", r["status"] == 400)
+    arm.handle("PATCH", apim, {"api-version": "2023-05-01-preview"},
+              {"properties": {"customProperties": {
+                  "Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Protocols.Tls10": "True"}}})
+    r = arm.handle("POST", tc_api + "/testConnect", {"api-version": "2023-05-01-preview"},
+                   {"subscriptionKey": "tc-primary-key", "protocol": "tls10"})
+    _check("testConnect accepts TLS 1.0 once enabled — the setting has a real, observable effect", r["status"] == 200)
+
     # 17d. Activity log Timespan picker: eventTimestamp ge/le $filter predicates actually
     # narrow the feed (core/azure_arm_core._filter_by_timespan + azure_monitor_core's own copy).
     feed = f"/subscriptions/{SUB}/providers/Microsoft.Insights/eventtypes/management/values"

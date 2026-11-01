@@ -47,6 +47,8 @@ const APIMROLE = `00000000-0000-4000-9000-${String(n).padStart(12, "0")}`;  // r
 const APIMTAG = `vyapimtag${n}`;   // API Tag created through the UI
 const APIMFRAG = `vyapimfrag${n}`; // Policy fragment created through the UI
 const APIMDIAG = `vyapimdiag${n}`; // diagnostic setting created over the wire, read back in the UI (CLI → UI direction)
+const APIMWS = `vyapimws${n}`;     // workspace created through the UI (wave-5b: azure.apim.workspaces)
+const APIMCERT = `vyapimcert${n}`; // certificate created over the wire, read back in the UI (wave-5b: azure.apim.deployment)
 const AKS = `vysmokeaks${n}`;      // AKS cluster created through the UI
 const AKS2 = `vywireaks${n}`;      // AKS cluster created over the wire
 const POOL = `pool${n}`;           // node pool created through the UI (AKS pool names are short: <=12 chars)
@@ -923,6 +925,39 @@ try {
   check("UI create policy fragment → visible over native ARM, XML round-trips",
     apimFragGot.status === 200 && JSON.parse(apimFragGot.text).properties?.value?.includes("<fragment>"), `HTTP ${apimFragGot.status}`);
   await shot("28c-apim-policyfragments");
+
+  // ── Workspace created through the UI → visible over native ARM (nested sub-resource,
+  // wave-5b gap sweep: azure.apim.workspaces) ─────────────────────────────────────────────
+  await openPanel("Workspaces");
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  await page.getByLabel("Id", { exact: true }).fill(APIMWS);
+  await page.getByLabel("Display name", { exact: true }).fill(APIMWS);
+  await page.getByRole("dialog").getByRole("button", { name: "Create" }).click();
+  await page.getByText(APIMWS, { exact: true }).waitFor({ timeout: 10000 });
+  const apimWsGot = await apimWire("GET", `/resourceGroups/${RG}/providers/Microsoft.ApiManagement/service/${APIM}/workspaces/${APIMWS}`);
+  check("UI create workspace → visible over native ARM", apimWsGot.status === 200, `HTTP ${apimWsGot.status}`);
+  await shot("28cb-apim-workspaces");
+
+  // ── Certificate created over the wire → visible in the UI (CLI → UI direction, wave-5b:
+  // azure.apim.deployment) ────────────────────────────────────────────────────────────────
+  const apimCertRes = await apimWire("PUT", `/resourceGroups/${RG}/providers/Microsoft.ApiManagement/service/${APIM}/certificates/${APIMCERT}`,
+    { properties: { subject: `CN=${APIMCERT}`, thumbprint: "AABBCCDDEEFF00112233445566778899AABBCCDD", expirationDate: "2030-01-01T00:00:00Z" } });
+  check("ARM PUT certificate over wire", apimCertRes.status === 200 || apimCertRes.status === 201, `HTTP ${apimCertRes.status}`);
+  await openPanel("Certificates");
+  await page.getByText(APIMCERT, { exact: true }).waitFor({ timeout: 10000 });
+  check("UI Certificates shows the wire-created certificate", true);
+  await shot("28cc-apim-certificates");
+
+  // ── Test connection: the gateway's real client-TLS + subscription-key admission checks
+  // (wave-5b: azure.apim.service.protocols enforced for real) ────────────────────────────
+  await openPanel("APIs");
+  await page.getByRole("button", { name: `Test smoke-api` }).click();
+  await page.getByLabel("Subscription key", { exact: true }).selectOption({ label: "Smoke Subscription" });
+  await page.getByRole("dialog").getByRole("button", { name: "Send" }).click();
+  await page.getByText("Connection accepted", { exact: false }).waitFor({ timeout: 10000 });
+  check("Test connection accepts a real, active subscription key", true);
+  await page.getByRole("dialog").getByRole("button", { name: "Close" }).click();
+  await shot("28cd-apim-testconnect");
 
   // ── Named value created through the UI, type Key Vault → "Show value" resolves against
   // the REAL secret created earlier over the Key Vault Secrets wire (azure.apim.namedvalues.keyvaultref) ──
