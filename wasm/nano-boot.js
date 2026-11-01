@@ -315,7 +315,14 @@ import builtins; builtins._disp = _disp
         try { restoreStores(await nbMetaGet(STORE_KEY)); } catch (_) {} finally { _restoring = false; }
       }
       const [prov, svc, op, params] = ev.data.tuple;
-      const out = dispatch(prov, svc, op, params || {});
+      // In-browser VM compute (wasm/vm): connect-info / key / exec are answered by
+      // the VM host; any other mutating op may have created/stopped/deleted an
+      // instance, so the host reconciles its VMs against the stores right after.
+      const out = svc === "_vm"
+        ? (window.NanoVM ? await window.NanoVM.handle(prov, op, params || {})
+                         : { __http: { status: 409, body: { detail: { error: "NoRuntime", hint: "In-browser VM compute is not loaded in this view." } } } })
+        : dispatch(prov, svc, op, params || {});
+      if (window.NanoVM && svc !== "_vm" && !/^(GET|HEAD|List|Get|Describe|Query|Scan)/.test(op)) window.NanoVM.kick();
       scheduleCensus();       // any op may have mutated state — refresh the footprint
       // Persist + notify the other contexts BEFORE answering: when the console sees the
       // response, the change is already in the shared snapshot, so a CLI call right after
@@ -325,6 +332,25 @@ import builtins; builtins._disp = _disp
     } catch (e) {
       port.postMessage({ ok: false, error: String(e) });
     }
+  });
+
+  // In-browser VM compute: the host is ~15 KB and inert unless the nano_vm_compute
+  // flag is on; the engine + image load inside the VM workers on first launch only.
+  await new Promise((res) => {
+    const sc = document.createElement("script");
+    sc.src = BASE + "/vm/nano-vm-host.js"; sc.onload = res; sc.onerror = res;
+    document.head.appendChild(sc);
+  });
+  if (window.NanoVM) window.NanoVM.init({
+    listDesired: async () => {
+      if (!_restoring && !_storeTimer) {
+        _restoring = true;
+        try { restoreStores(await nbMetaGet(STORE_KEY)); } catch (_) {} finally { _restoring = false; }
+      }
+      const r = dispatch("aws", "_vms", "List", {});
+      return r && r.ok ? r.items : null;
+    },
+    annotate: (cloud, ref, runtime) => { try { dispatch(cloud, "_vms", "Annotate", { cloud, ref, runtime }); scheduleStoresSave(); } catch (_) {} },
   });
 
   writeCensus();                              // initial (heap + any seeded state)

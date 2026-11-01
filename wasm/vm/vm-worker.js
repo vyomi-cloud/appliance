@@ -271,8 +271,28 @@ function openStream(ws, sid, port) {
   conn.on("close", closed);
 }
 
+// ── checkpoints ───────────────────────────────────────────────────────────
+// A running VM saves its state every CHECKPOINT_MS, so if every Nano page goes away
+// (browser closed, or a browser without SharedWorker extendedLifetime navigating
+// between consoles) the next page resumes it from there instead of a fresh image.
+const CHECKPOINT_MS = 5 * 60 * 1000;
+setInterval(() => {
+  if (state !== "running" || !emu || !inst) return;
+  serial(async () => {
+    if (state !== "running" || !emu) return;
+    const t0 = performance.now();
+    try {
+      emu.stop();
+      const raw = await emu.save_state();
+      emu.run();
+      await idb("put", "state:" + inst.id, await gzip(raw));
+      timings.checkpoint_ms = Math.round(performance.now() - t0); timings.checkpoint_at = Date.now();
+    } catch (_) { try { emu.run(); } catch (_) {} }
+  });
+}, CHECKPOINT_MS);
+
 // ── lifecycle ─────────────────────────────────────────────────────────────
-let busy = Promise.resolve();
+let busy = Promise.resolve(), launching = false;
 function serial(fn) { const p = busy.then(fn, fn); busy = p.catch(() => {}); return p; }
 
 async function doLaunch(m) {
@@ -281,7 +301,10 @@ async function doLaunch(m) {
   const saved = await idb("get", "state:" + inst.id).catch(() => null);
   try {
     setState("booting", saved ? "resuming saved state" : "restoring VM image");
-    if (saved) { await bootFrom(saved); }
+    if (saved) {
+      await bootFrom(saved);
+      await agentExec(`date -s @${Math.floor(Date.now() / 1000)} >/dev/null 2>&1`, "root", 20000).catch(() => {});
+    }
     else { const g = await golden(); setState("booting", "provisioning"); await bootFrom(g); await provision(); }
     setState("running", "");
     relayWanted = true; if (!relay) relayConnect();
@@ -339,8 +362,10 @@ self.onconnect = (ev) => {
         return reply({ ok: true, ...r });
       }
       if (m.type === "launch") {
-        if (inst && (state === "running" || state === "booting")) return reply({ ok: true, ...statusObj() });
-        await serial(() => doLaunch(m)); return reply({ ok: true, ...statusObj() });
+        if (launching || (inst && (state === "running" || state === "booting"))) return reply({ ok: true, ...statusObj() });
+        launching = true;
+        try { await serial(() => doLaunch(m)); } finally { launching = false; }
+        return reply({ ok: true, ...statusObj() });
       }
       if (m.type === "relay") { if (inst) { inst.relay = m.relay; relayWanted = state === "running"; if (relay) relay.close(); else relayConnect(); } return reply({ ok: true }); }
       if (m.type === "stop") { await serial(doStop); return reply({ ok: true, ...statusObj() }); }

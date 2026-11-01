@@ -1,0 +1,248 @@
+/* Vyomi Nano — page-side host for in-browser VMs (EC2 / Compute Engine / Azure VMs).
+ *
+ * One backend for all three clouds: every instance record in the stores (EC2
+ * instance, GCE instance, ARM virtualMachine) gets a real v86 VM, run by a
+ * SharedWorker named "vm-<id>" (./vm-worker.js). Only the cloud-specific bits
+ * differ: the login user (ec2-user|ubuntu / the GCE ssh-keys user / the Azure
+ * adminUsername), the ids and the API paths.
+ *
+ *   console page (Pyodide stores) ──reconcile──▶ SharedWorker vm-<id> (v86)
+ *                                                  └─WS─▶ vyomi-tunnel ◀─ssh─ laptop
+ *
+ * Feature flag: localStorage nano_vm_compute = "1" (or ?nano_vm=1 once). Off by
+ * default: nothing here loads the engine (2 MB) or the image (21 MB) until the
+ * flag is on AND an instance exists. With the flag off the Connect endpoints keep
+ * answering 409 NoRuntime, exactly as before.
+ *
+ * API (window.NanoVM):
+ *   init({listDesired, annotate})  console pages: reconcile against the stores
+ *   resume()                       any Nano page: keep known running VMs alive
+ *   kick()                         reconcile soon (after a compute mutation)
+ *   handle(cloud, op, params)      SW tuples [cloud, "_vm", op, {ref, body}]
+ */
+(function () {
+  if (window.NanoVM) return;
+  const SCRIPT = document.currentScript && document.currentScript.src;
+  const VM_BASE = SCRIPT ? new URL("./", SCRIPT).href : new URL("vm/", location.href).href;
+  const REG_KEY = "nano_vm_registry", KEY_KEY = "nano_vm_account_key";
+
+  try { if (/[?&]nano_vm=1\b/.test(location.search)) localStorage.setItem("nano_vm_compute", "1"); } catch (_) {}
+  const enabled = () => { try { return localStorage.getItem("nano_vm_compute") === "1"; } catch (_) { return false; } };
+  const relayBase = () => { try { return (localStorage.getItem("nano_local_ext") || "http://127.0.0.1:8090").replace(/\/$/, ""); } catch (_) { return "http://127.0.0.1:8090"; } };
+
+  const vmId = (cloud, ref) => cloud === "aws" ? String(ref) : (cloud === "gcp" ? "gce-" : "az-") + ref;
+  const readReg = () => { try { return JSON.parse(localStorage.getItem(REG_KEY) || "{}"); } catch (_) { return {}; } };
+  const writeReg = (r) => { try { localStorage.setItem(REG_KEY, JSON.stringify(r)); } catch (_) {} };
+
+  // ── the Nano account SSH key (one per browser profile, like the appliance's shared instance key) ──
+  function b64u2bytes(s) { s = s.replace(/-/g, "+").replace(/_/g, "/"); while (s.length % 4) s += "="; return Uint8Array.from(atob(s), (c) => c.charCodeAt(0)); }
+  function sshString(bytes) { const o = new Uint8Array(4 + bytes.length); new DataView(o.buffer).setUint32(0, bytes.length); o.set(bytes, 4); return o; }
+  function mpint(bytes) { let i = 0; while (i < bytes.length - 1 && bytes[i] === 0) i++; bytes = bytes.slice(i); if (bytes[0] & 0x80) { const p = new Uint8Array(bytes.length + 1); p.set(bytes, 1); bytes = p; } return sshString(bytes); }
+  function concat(...a) { const n = a.reduce((s, x) => s + x.length, 0), o = new Uint8Array(n); let k = 0; for (const x of a) { o.set(x, k); k += x.length; } return o; }
+  function b64(bytes) { let s = ""; for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000)); return btoa(s); }
+  let keyPromise = null;
+  function accountKey() {
+    if (keyPromise) return keyPromise;
+    const make = async () => {
+      try { const k = JSON.parse(localStorage.getItem(KEY_KEY) || "null"); if (k && k.pub && k.pem) return k; } catch (_) {}
+      const kp = await crypto.subtle.generateKey({ name: "RSASSA-PKCS1-v1_5", modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" }, true, ["sign", "verify"]);
+      const jwk = await crypto.subtle.exportKey("jwk", kp.publicKey);
+      const blob = concat(sshString(new TextEncoder().encode("ssh-rsa")), mpint(b64u2bytes(jwk.e)), mpint(b64u2bytes(jwk.n)));
+      const pkcs8 = new Uint8Array(await crypto.subtle.exportKey("pkcs8", kp.privateKey));
+      const pem = "-----BEGIN PRIVATE KEY-----\n" + b64(pkcs8).replace(/(.{64})/g, "$1\n").replace(/\n$/, "") + "\n-----END PRIVATE KEY-----\n";
+      const k = { pub: "ssh-rsa " + b64(blob) + " vyomi-nano", pem, created: new Date().toISOString() };
+      try { localStorage.setItem(KEY_KEY, JSON.stringify(k)); } catch (_) {}
+      return k;
+    };
+    keyPromise = (navigator.locks ? navigator.locks.request("nano-vm-account-key", make) : make());
+    return keyPromise;
+  }
+
+  // ── SharedWorker handles ────────────────────────────────────────────────
+  const handles = new Map();   // vm id -> {port, status, waits}
+  let ridSeq = 0;
+  function attach(id) {
+    let h = handles.get(id);
+    if (h) return h;
+    // extendedLifetime (Chrome 13x+): the VM worker outlives the page while you navigate
+    // between consoles; elsewhere it restarts from its last checkpoint (vm-worker.js).
+    const w = new SharedWorker(VM_BASE + "vm-worker.js", { name: "vm-" + id, extendedLifetime: true });
+    h = { port: w.port, status: null, waits: new Map() };
+    w.port.onmessage = (e) => {
+      const m = e.data || {};
+      if (m.rid && h.waits.has(m.rid)) { const r = h.waits.get(m.rid); h.waits.delete(m.rid); r(m); }
+      if (m.type === "vm-status" || (m.rid && m.state)) { h.status = { ...m }; onStatus(id, h.status); }
+      if (m.type === "serial-out") for (const f of serialSubs) { try { f(id, m.data); } catch (_) {} }
+    };
+    w.port.start();
+    handles.set(id, h);
+    addEventListener("pagehide", () => { try { w.port.postMessage({ type: "bye" }); } catch (_) {} });
+    return h;
+  }
+  function call(id, msg, timeoutMs = 300000) {
+    const h = attach(id), rid = "p" + (++ridSeq);
+    return new Promise((resolve) => {
+      const t = setTimeout(() => { h.waits.delete(rid); resolve({ ok: false, error: "timeout", state: h.status && h.status.state }); }, timeoutMs);
+      h.waits.set(rid, (m) => { clearTimeout(t); resolve(m); });
+      h.port.postMessage({ ...msg, rid });
+    });
+  }
+  const serialSubs = new Set();
+
+  // Runtime facts → the instance record (grid / describe show launch status + ssh port).
+  let annotateFn = null;
+  const lastAnn = new Map();
+  function onStatus(id, st) {
+    const reg = readReg(), it = reg[id];
+    if (!it || !annotateFn) return;
+    const ann = { launch_status: st.state === "running" ? "ready" : st.state, nano_vm: { engine: "v86", state: st.state, host_port: st.host_port || null, image: st.image } };
+    if (st.state === "running" && st.host_port) ann.ssh_command = sshCommand(it, st.host_port);
+    const sig = JSON.stringify(ann);
+    if (lastAnn.get(id) === sig) return;
+    lastAnn.set(id, sig);
+    try { annotateFn(it.cloud, it.ref, ann); } catch (_) {}
+  }
+  const keyFile = (it) => `~/.ssh/vyomi-${it.ref}.pem`;
+  const sshCommand = (it, port) => `ssh -i ${keyFile(it)} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p ${port} ${it.user}@127.0.0.1`;
+
+  async function launch(it) {
+    const k = await accountKey();
+    const keys = [k.pub, ...(it.keys || [])].join("\n");
+    return call(it.id, { type: "launch", id: it.id, cloud: it.cloud, user: it.user, pubkey: keys, hostname: it.name || it.ref,
+                         mem_mb: it.mem_mb || 256, relay: relayBase() });
+  }
+
+  // ── reconcile: stores → VMs ─────────────────────────────────────────────
+  let listDesired = null, recTimer = null, reconciling = null;
+  const missing = new Map();
+  async function reconcile() {
+    if (!enabled() || !listDesired) return;
+    if (reconciling) return reconciling;
+    reconciling = (async () => {
+      let items;
+      try { items = await listDesired(); } catch (_) { return; }
+      if (!Array.isArray(items)) return;
+      const reg = readReg(), seen = new Set();
+      for (const it of items) {
+        seen.add(it.id); missing.delete(it.id);
+        const prev = reg[it.id] || {};
+        reg[it.id] = { ...prev, ...it };
+        if (it.desired === "terminate") { await call(it.id, { type: "terminate" }, 60000); delete reg[it.id]; handles.delete(it.id); continue; }
+        const st = (handles.get(it.id) || {}).status || (await call(it.id, { type: "status" }, 10000));
+        const s = st && st.state;
+        if (it.desired === "run" && !["running", "booting"].includes(s)) {
+          if (s === "stopped" || s === "stopping") call(it.id, { type: "start" });
+          else launch(reg[it.id]);
+        } else if (it.desired === "stop" && ["running", "booting"].includes(s)) {
+          call(it.id, { type: "stop" });
+        }
+      }
+      // An instance whose record is gone (deleted/terminated) — after two looks, so a
+      // store that has not caught up with another context yet never kills a live VM.
+      for (const id of Object.keys(reg)) {
+        if (seen.has(id)) continue;
+        const n = (missing.get(id) || 0) + 1; missing.set(id, n);
+        if (n >= 2) { await call(id, { type: "terminate" }, 60000); delete reg[id]; handles.delete(id); missing.delete(id); }
+      }
+      writeReg(reg);
+    })().finally(() => { reconciling = null; });
+    return reconciling;
+  }
+  function kick() {
+    if (!enabled()) return;
+    clearTimeout(recTimer);
+    recTimer = setTimeout(async () => { await reconcile(); setTimeout(reconcile, 1500); }, 50);
+  }
+
+  // Any Nano page: re-attach to the VMs that should be running, so they survive
+  // moving between consoles (and come back from saved state after a browser restart).
+  function resume() {
+    if (!enabled()) return;
+    const reg = readReg();
+    for (const it of Object.values(reg)) {
+      if (it.desired !== "run") continue;
+      call(it.id, { type: "status" }, 10000).then((st) => {
+        if (st && st.state === "stopped") call(it.id, { type: "start" });
+        else if (!st || !["running", "booting"].includes(st.state)) launch(it);
+      });
+    }
+  }
+
+  // ── Connect / exec / key endpoints (SW tuples [cloud, "_vm", op, {ref, body}]) ──
+  const http = (status, body, headers) => ({ __http: { status, body, headers: headers || {} } });
+  async function tunnelHealth() {
+    try { const r = await fetch(relayBase() + "/health", { cache: "no-store" }); return await r.json(); } catch (_) { return null; }
+  }
+  async function handle(cloud, op, params) {
+    const ref = String((params && params.ref) || "");
+    if (!enabled()) {
+      return http(409, { detail: { error: "NoRuntime", hint: "In-browser VM compute is off in this Nano. Turn it on with localStorage.nano_vm_compute = '1' (or open the console with ?nano_vm=1), then launch the instance again." } });
+    }
+    let it = readReg()[vmId(cloud, ref)];
+    if (!it) { await reconcile(); it = readReg()[vmId(cloud, ref)]; }
+    if (!it) return http(404, { detail: { error: "InstanceNotFound", hint: `No ${cloud} instance '${ref}' in this Nano.` } });
+    if (op === "PrivateKey") {
+      const k = await accountKey();
+      return { __raw: { status: 200, body: k.pem, headers: { "content-type": "application/x-pem-file", "content-disposition": `attachment; filename="vyomi-${ref}.pem"` } } };
+    }
+    const st = await call(it.id, { type: "status" }, 10000);
+    if (op === "Status") return { ok: true, instance_id: ref, ...st, rid: undefined };
+    if (op === "Exec") {
+      const body = (params && params.body) || {};
+      const command = String(body.command || body.data || "");
+      if (!st || st.state !== "running") return http(409, { detail: "InstanceNotRunning", state: st && st.state, hint: st && st.detail });
+      const r = await call(it.id, { type: "exec", command, user: body.user || it.user, timeout_ms: 12000 }, 14000);
+      if (!r.ok) return http(r.error === "timeout" || /timed out/.test(r.error || "") ? 504 : 409, { detail: r.error || "exec failed" });
+      return { ok: true, message: "Console command executed", instance_id: ref, stdout: r.stdout, stderr: "", exit_code: r.exit_code, output: r.stdout };
+    }
+    if (op === "ConnectInfo") {
+      if (!st || st.state !== "running") {
+        return http(409, { detail: { error: st && st.state === "error" ? "VmFailed" : "InstanceNotReady",
+          hint: st && st.state === "error" ? `The in-browser VM failed: ${st.detail}` :
+                `The in-browser VM is ${st ? st.state : "starting"}${st && st.detail ? " (" + st.detail + ")" : ""}; retry in a few seconds.` } });
+      }
+      const ext = relayBase();
+      if (!st.host_port) {
+        const h = await tunnelHealth();
+        const old = h && !(h.features || []).includes("vm-tcp");
+        return http(409, { detail: { error: "TunnelRequired",
+          hint: h ? (old ? `vyomi-tunnel ${h.version} at ${ext} cannot carry SSH yet; update it to 1.1.0 or newer (brew upgrade vyomi-tunnel), then retry.`
+                         : `vyomi-tunnel at ${ext} is up; the VM is registering with it, retry in a few seconds.`)
+                  : `SSH to an in-browser VM goes through the local tunnel. Start it on this machine: brew install vyomi-cloud/tap/vyomi-tunnel && vyomi-tunnel (expects ${ext}). The in-browser terminal works without it.` } });
+      }
+      const port = st.host_port, key = keyFile(it);
+      const keyUrl = { aws: `/api/aws/ec2/instances/${ref}/private-key.pem`, gcp: `/api/gcp/compute/instances/${ref}/private-key.pem`,
+                       azure: `/api/azure/vm/${ref}/private-key.pem` }[cloud];
+      const cmd = sshCommand(it, port);
+      return {
+        ok: true, instance_id: ref, provisioned: true, backend: "nano-v86", auth_mode: "nano_account_key",
+        ssh: {
+          command: cmd, user: it.user, host: "127.0.0.1", port,
+          setup_command: null, jump_host: null,
+          key_download_url: keyUrl, key_local_filename: `vyomi-${ref}.pem`, host_identity_path: key,
+          // The key comes from this browser (it never leaves it otherwise): download it, then move it into place.
+          key_fetch_command: null,
+          key_setup_command: `mkdir -p ~/.ssh && mv ~/Downloads/vyomi-${ref}.pem ${key} && chmod 600 ${key}`,
+        },
+        alternatives: [],
+        lxc: null,
+        runtime: { engine: "v86", os: "Alpine Linux 3.21 (i386, 32-bit)", arch: "i686", mem_mb: it.mem_mb, image: st.image,
+                   where: "this browser tab (in-browser VM)", tunnel: ext },
+        note: `This instance is a real Linux VM running inside your browser (v86, 32-bit x86, ${it.mem_mb} MB RAM). ` +
+              `vyomi-tunnel forwards ${"127.0.0.1"}:${port} on this machine to its SSH port, so the command works from your terminal while this Nano tab is open. ` +
+              `Egress from the VM is limited (plain HTTP via the browser; no HTTPS git clone / apt).`,
+      };
+    }
+    return http(400, { detail: "unknown op " + op });
+  }
+
+  function onSerial(fn) { serialSubs.add(fn); return () => serialSubs.delete(fn); }
+  function serialSend(cloud, ref, data) { const it = readReg()[vmId(cloud, ref)]; if (it) attach(it.id).port.postMessage({ type: "serial-in", data }); }
+
+  window.NanoVM = {
+    enabled, kick, resume, handle, onSerial, serialSend, accountKey, vmId,
+    registry: readReg,
+    status: (cloud, ref) => call(vmId(cloud, ref), { type: "status" }, 10000),
+    init(o) { listDesired = o.listDesired; annotateFn = o.annotate || null; if (enabled()) { resume(); reconcile(); setInterval(reconcile, 5000); } },
+  };
+})();
