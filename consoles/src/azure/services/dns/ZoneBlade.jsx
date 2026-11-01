@@ -16,6 +16,7 @@ import { CapabilityContainer } from "../../kit/Capability.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
 import ResourceBlade from "../../kit/ResourceBlade.jsx";
 import { Essentials, ErrorBar, fmtDate, Glyph, InfoBar, Loading, NotSimulatedContainer } from "../../kit/common.jsx";
+import ResourceIam from "../../kit/ResourceIam.jsx";
 import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 import { TagRows } from "./TagRows.jsx";
@@ -474,8 +475,7 @@ function ActivityLog({ z, rg }) {
   );
 }
 
-// ── Access control (IAM) — honest gap (menu item; title only, like the storage pilot's
-// Diagnose and solve problems) ──────────────────────────────────────────────────────────
-function Iam({ z }) {
-  return <CapabilityContainer id="azure.dns.iam" title={`${z.name} | Access control (IAM)`} />;
-}
+// ── Access control (IAM) — shared real RBAC panel (core/azure_iam_core.py) ─────────────
+const DNS_ACTIONS = ["Microsoft.Network/dnsZones/read", "Microsoft.Network/dnsZones/write", "Microsoft.Network/dnsZones/delete",
+  "Microsoft.Network/dnsZones/A/write", "Microsoft.Network/dnsZones/CNAME/write", "Microsoft.Network/dnsZones/recordsets/read"];
+function Iam({ z }) { return <ResourceIam a={z} capId="azure.dns.iam" actions={DNS_ACTIONS} />; }

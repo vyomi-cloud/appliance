@@ -2759,6 +2759,19 @@ try {
   const dnsLockGet = await wire(`/subscriptions/${SUB}/resourceGroups/${DEFAULT_RG}/providers/Microsoft.Network/dnsZones/${DNSZONE}/providers/Microsoft.Authorization/locks/${DNSLOCK}?api-version=2020-05-01`);
   check("UI add DNS zone lock → visible over native ARM", dnsLockGet.status === 200, `HTTP ${dnsLockGet.status}`);
 
+  // ── DNS zone Access control (IAM): UI role assignment scoped to the zone → real RBAC + checkAccess ──
+  const dnsPrincipal = `vydnsprincipal${n}`;
+  const dnsRid = `/subscriptions/${SUB}/resourceGroups/${DEFAULT_RG}/providers/Microsoft.Network/dnsZones/${DNSZONE}`;
+  await page.goto(UI + `#/dns/${DEFAULT_RG}/${DNSZONE}/iam`);
+  await page.getByRole("tab", { name: "Role assignments" }).click();
+  await page.getByRole("button", { name: "Add" }).first().click();
+  await page.getByLabel("Principal ID").fill(dnsPrincipal);
+  await page.getByRole("dialog").getByRole("button", { name: "Review + assign" }).click();
+  await page.getByText(dnsPrincipal).first().waitFor({ timeout: 10000 });
+  const dnsRa = await wire(`/subscriptions/${SUB}/providers/Microsoft.Authorization/roleAssignments?api-version=2022-04-01`);
+  const dnsRaHit = (JSON.parse(dnsRa.text).value || []).find((r) => r.properties?.principalId === dnsPrincipal);
+  check("UI DNS-zone role assignment → scoped to the zone over native RBAC", !!dnsRaHit && dnsRaHit.properties.scope.toLowerCase() === dnsRid.toLowerCase(), JSON.stringify(dnsRaHit?.properties?.scope));
+
   // ── Private zone created through the wizard → visible over native ARM, no name servers ─
   await page.goto(UI + "#/dns/create");
   await page.getByLabel("Name", { exact: true }).fill(DNSPRIV);

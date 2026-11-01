@@ -97,8 +97,11 @@
   },
   "azure.loganalytics.workspace.iam": {
     "title": "Access control (IAM) on a workspace",
-    "level": { "nano": "not_simulated", "offline": "not_simulated" },
-    "limitations": ["Role assignments scoped to an individual resource are not modeled."]
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": [
+   "Check access, Role assignments and Deny assignments are REAL and scoped to this workspace's resource id: Check access runs core/azure_iam_core.py's evaluator (explicit-deny-wins, scope inheritance from the subscription/resource group), the lists filter the shared RBAC store to assignments whose scope covers it, and new assignments are created scoped to it. Principal IDs are free text (Vyomi has no real directory); 'My access' and Classic administrators stay honest gaps."
+  ],
+  "tests": ["tests/conformance/test_azure_rbac_core.py"]
   },
   "azure.loganalytics.workspace.networking": {
     "title": "Public network access for ingestion/query (set at create time and from Properties)",
