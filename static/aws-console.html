@@ -821,7 +821,7 @@ function renderRail(){
 
   if (!STATE.service) {
     // Home: services grouped by category
-    head("Console Home", ()=>navigate({view:"home", service:null}));
+    head("Dashboard", ()=>navigate({view:"home", service:null}));
     const groups = [
       ["Compute", ["ec2", "lambda"]],
       ["Storage", ["s3"]],
@@ -896,7 +896,7 @@ function renderRail(){
   // Footer: back to all services
   body = rail;
   rail.append(el("hr",{class:"nav-div"}));
-  link("Console Home", ()=>navigate({view:"home", service:null}));
+  link("Dashboard", ()=>navigate({view:"home", service:null}));
 }
 
 // =====================================================================
@@ -1149,9 +1149,9 @@ function renderHome(main){
   // Page header — real AWS uses "Console Home" + "Info" link + an "Actions" menu.
   const h = el("div",{class:"detail-top"});
   const idCol = el("div",{class:"id"});
-  idCol.append(el("h1",{class:"page-h"}, "Console Home",
+  idCol.append(el("h1",{class:"page-h"}, "Dashboard",
     el("a",{class:"info",style:"font-size:12px;font-weight:500;color:var(--link);cursor:pointer;margin-left:8px",
-      onclick:()=>toast("Console Home shows widgets you can customize.","ok")}, "Info")));
+      onclick:()=>toast("Dashboard shows widgets you can customize.","ok")}, "Info")));
   idCol.append(el("div",{class:"meta"}, `Account: ${ACCOUNT}  ·  Region: ${REGION} (${friendlyRegion(REGION)})`));
   h.append(idCol);
   main.append(h);
