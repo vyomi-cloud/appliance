@@ -47,14 +47,14 @@ from dataclasses import dataclass, field
 
 try:
     from core.netsim import evaluate as ev
-    from core.netsim.model import (EGRESS, IGW, INGRESS, INSTANCE, LOCAL, NAT, PEERING, RFC1918, AZURE_LB_IP,
-                                   STATEFUL_ALLOW, STATEFUL_PRIORITY, STATELESS_ORDERED, Topology, cidr_covers,
-                                   ip_in, prefix_len)
+    from core.netsim.model import (EGRESS, GATEWAY_ENDPOINT, IGW, INGRESS, INSTANCE, LOCAL, NAT, PEERING,
+                                   RFC1918, AZURE_LB_IP, STATEFUL_ALLOW, STATEFUL_PRIORITY,
+                                   STATELESS_ORDERED, Topology, cidr_covers, ip_in, prefix_len)
 except ImportError:
     import evaluate as ev  # type: ignore
-    from model import (EGRESS, IGW, INGRESS, INSTANCE, LOCAL, NAT, PEERING, RFC1918, AZURE_LB_IP,  # type: ignore
-                       STATEFUL_ALLOW, STATEFUL_PRIORITY, STATELESS_ORDERED, Topology, cidr_covers,
-                       ip_in, prefix_len)
+    from model import (EGRESS, GATEWAY_ENDPOINT, IGW, INGRESS, INSTANCE, LOCAL, NAT, PEERING,  # type: ignore
+                       RFC1918, AZURE_LB_IP, STATEFUL_ALLOW, STATEFUL_PRIORITY,
+                       STATELESS_ORDERED, Topology, cidr_covers, ip_in, prefix_len)
 
 FLOW_KEY = "ip saddr . ip daddr . meta l4proto . th sport . th dport"
 PUBLIC_MARK = "0x00007653"      # conntrack mark: connection entered through an interface's public IP
@@ -214,7 +214,7 @@ class _Compiler:
             routes.sort(key=lambda r: (-prefix_len(r.dest), r.priority, 0 if r.origin == "user" else 1))
         for r in routes:
             c = f"{S.route_table}: {r.dest} → {r.kind} {r.target}"
-            if r.kind == LOCAL:
+            if r.kind in (LOCAL, GATEWAY_ENDPOINT):
                 lines.append(f"{_dst(r.dest)}return comment {_q(c)}")
             elif r.kind == PEERING:
                 p = t.peerings.get(r.target)
