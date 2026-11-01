@@ -90,4 +90,41 @@ export default {
     }));
     return xid(body, "networkInsightsPathId");
   },
+  "live-vpc-endpoint": async (wire) => {
+    const { vpcId } = await vpcAndSubnet(wire, "10.86.0.0/16", "10.86.1.0/24");
+    const rt = await wire("POST", "/", Q("CreateRouteTable", { VpcId: vpcId }));
+    const body = await wire("POST", "/", Q("CreateVpcEndpoint", {
+      VpcId: vpcId, ServiceName: "com.amazonaws.us-east-1.s3", VpcEndpointType: "Gateway", "RouteTableId.1": xid(rt, "routeTableId"),
+    }));
+    return xid(body, "vpcEndpointId");
+  },
+  "live-vpc-endpoint-service": async (wire) => {
+    const body = await wire("POST", "/", Q("CreateVpcEndpointServiceConfiguration", {
+      "NetworkLoadBalancerArn.1": "arn:aws:elasticloadbalancing:us-east-1:123456789012:loadbalancer/net/uic-nlb/abc",
+    }));
+    return xid(body, "serviceId");
+  },
+  "live-access-scope": async (wire) => {
+    const body = await wire("POST", "/", Q("CreateNetworkInsightsAccessScope"));
+    return xid(body, "networkInsightsAccessScopeId");
+  },
+  "live-verified-access-instance": async (wire, uniq) => {
+    const body = await wire("POST", "/", Q("CreateVerifiedAccessInstance", { Description: `uic-va-${uniq}` }));
+    return xid(body, "verifiedAccessInstanceId");
+  },
+  "live-verified-access-group": async (wire, uniq) => {
+    const inst = await wire("POST", "/", Q("CreateVerifiedAccessInstance", { Description: `uic-va-group-${uniq}` }));
+    const body = await wire("POST", "/", Q("CreateVerifiedAccessGroup", { VerifiedAccessInstanceId: xid(inst, "verifiedAccessInstanceId"), Description: uniq }));
+    return xid(body, "verifiedAccessGroupId");
+  },
+  "live-verified-access-trust-provider": async (wire, uniq) => {
+    const body = await wire("POST", "/", Q("CreateVerifiedAccessTrustProvider", { TrustProviderType: "user", PolicyReferenceName: `uic-${uniq}` }));
+    return xid(body, "verifiedAccessTrustProviderId");
+  },
+  "live-verified-access-endpoint": async (wire, uniq) => {
+    const inst = await wire("POST", "/", Q("CreateVerifiedAccessInstance", { Description: `uic-va-ep-${uniq}` }));
+    const grp = await wire("POST", "/", Q("CreateVerifiedAccessGroup", { VerifiedAccessInstanceId: xid(inst, "verifiedAccessInstanceId") }));
+    const body = await wire("POST", "/", Q("CreateVerifiedAccessEndpoint", { VerifiedAccessGroupId: xid(grp, "verifiedAccessGroupId"), ApplicationDomain: `${uniq}.internal` }));
+    return xid(body, "verifiedAccessEndpointId");
+  },
 };

@@ -18,7 +18,7 @@ import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import * as api from "./api.js";
 
-function ResourceList({ title, resourceName, trackBy, list, create, del, columns, createLabel, deleteLabel, CreateForm }) {
+function ResourceList({ title, resourceName, trackBy, list, create, del, columns, createLabel, deleteLabel, CreateForm, extra }) {
   const notify = useNotify();
   const [sel, setSel] = useState([]);
   const [showDel, setShowDel] = useState(false);
@@ -27,6 +27,7 @@ function ResourceList({ title, resourceName, trackBy, list, create, del, columns
   const rows = t.data || [];
   return (
     <ContentLayout header={<Header variant="h1">{title}</Header>}>
+      {extra}
       <ResourceTable
         resourceName={resourceName}
         items={rows}
@@ -103,12 +104,51 @@ export function EgressOnlyInternetGateways() {
   );
 }
 
+function DnsResolutionTester() {
+  const vpcs = useAsync(() => api.describeVpcs(), []);
+  const [vpcId, setVpcId] = useState("");
+  const [result, setResult] = useState(null);
+  const [reach, setReach] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const run = async () => {
+    setBusy(true); setReach(null);
+    try {
+      const r = await api.describeVpcDnsResolution(vpcId);
+      setResult(r);
+      if (r.dnsSupportEnabled !== false && r.DnsServers?.length) {
+        const rr = await api.analyzeReachability({ ip: (vpcs.data || []).find((v) => v.VpcId === vpcId)?.CidrBlock?.replace(/0\/\d+$/, "10") }, { ip: r.DnsServers[0] }, 53, "udp");
+        setReach(rr);
+      }
+    } finally { setBusy(false); }
+  };
+  return (
+    <Box padding={{ bottom: "l" }}>
+      <Header variant="h2" description="The resolver address(es) instances in this VPC actually get, computed live from its DHCP option set + enableDnsSupport attribute — not a stored value.">Test DNS resolution</Header>
+      <SpaceBetween direction="horizontal" size="xs" alignItems="center">
+        <Select selectedOption={vpcId ? { value: vpcId, label: vpcId } : null} placeholder="Select a VPC"
+          options={(vpcs.data || []).map((v) => ({ value: v.VpcId, label: v.VpcId }))} onChange={({ detail }) => { setVpcId(detail.selectedOption.value); setResult(null); }} />
+        <Button disabled={!vpcId} loading={busy} onClick={run}>Test</Button>
+      </SpaceBetween>
+      {result && (
+        <Box padding={{ top: "s" }}>
+          <div>DNS support enabled: <b>{String(result.DnsSupportEnabled)}</b></div>
+          <div>Amazon-provided DNS: <b>{String(result.AmazonProvidedDns)}</b></div>
+          <div>Domain name: <b>{result.DomainName || "-"}</b></div>
+          <div>Effective DNS server(s): <b>{result.DnsServers.join(", ") || "none (DNS support disabled)"}</b></div>
+          {reach && <div>A representative instance in this VPC reaching that resolver on port 53: <b>{reach.reachable ? "Reachable" : `Blocked — ${reach.reason}`}</b></div>}
+        </Box>
+      )}
+    </Box>
+  );
+}
+
 export function DhcpOptionSets() {
   return (
     <ResourceList
       title="DHCP option sets" resourceName="DHCP option sets" trackBy="DhcpOptionsId"
       list={() => api.describeDhcpOptions()} del={api.deleteDhcpOptions}
       createLabel="Create DHCP option set" deleteLabel="Delete DHCP option set"
+      extra={<DnsResolutionTester />}
       columns={[
         { id: "name", header: "Name", isRowHeader: true, cell: (d) => d.Tags?.Name || "-" },
         { id: "id", header: "DHCP options set ID", cell: (d) => d.DhcpOptionsId },

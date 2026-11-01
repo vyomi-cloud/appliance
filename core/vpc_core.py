@@ -66,7 +66,16 @@ def _model(store) -> dict:
              "instances": {}, "images": {}, "volumes": {}, "snapshots": {},
              "key_pairs": {}, "addresses": {}, "enis": {}, "placement_groups": {},
              "launch_templates": {}, "tags": {},
-             "account": {"ebs_encryption_by_default": False, "ebs_default_kms_key_id": "alias/aws/ebs"},
+             "account": {"ebs_encryption_by_default": False, "ebs_default_kms_key_id": "alias/aws/ebs",
+                         "vpc_block_public_access": {"internet_gateway_block_mode": "off"},
+                         "vpc_block_public_access_exclusions": {}, "local_zones_opt_in": False,
+                         "console_experiments": {}},
+             # PrivateLink
+             "vpc_endpoints": {}, "vpc_endpoint_services": {}, "vpc_endpoint_connections": {},
+             # Network Access Analyzer
+             "access_scopes": {}, "access_scope_analyses": {},
+             # AWS Verified Access
+             "va_instances": {}, "va_trust_providers": {}, "va_groups": {}, "va_endpoints": {},
              "seeded_amis": False}
         store._vpc_model = m
     return m
@@ -270,6 +279,20 @@ def _create_subnet(store, params):
                                      f"<state>available</state></subnet>")
 
 
+def _ram_arn(kind: str, rid: str) -> str:
+    return f"arn:aws:ec2:us-east-1:{OWNER_ID}:{kind}/{rid}"
+
+
+def _check_no_active_share(store, kind: str, rid: str) -> None:
+    ram = getattr(store, "ram_store", None)
+    if ram is None:
+        return
+    from core import ram_core as _ram
+    if _ram.has_active_share(ram, _ram_arn(kind, rid)):
+        raise VpcError("DependencyViolation", f"The {kind} '{rid}' is shared via AWS RAM and cannot be deleted "
+                                              f"until its resource share association is removed.")
+
+
 def _delete_subnet(store, params):
     m = _model(store)
     subnet_id = str(params.get("SubnetId", ""))
@@ -278,6 +301,7 @@ def _delete_subnet(store, params):
         raise VpcError("InvalidSubnetID.NotFound", f"The subnet '{subnet_id}' does not exist.")
     if any(i.get("subnet_id") == subnet_id and i.get("state") != "terminated" for i in m["instances"].values()):
         raise VpcError("DependencyViolation", f"The subnet '{subnet_id}' has dependencies and cannot be deleted.")
+    _check_no_active_share(store, "subnet", subnet_id)
     rt = m["route_tables"].get(sn.get("route_table"))
     if rt and subnet_id in rt["subnets"]:
         rt["subnets"].remove(subnet_id)
@@ -810,6 +834,47 @@ def _delete_dhcp_options(store, params):
     return _envelope("DeleteDhcpOptions", "<return>true</return>")
 
 
+def _effective_dns_servers(m: dict, vpc_id: str) -> list:
+    """The resolver address(es) instances in this VPC actually get: real once enforced — flip
+    enableDnsSupport off, or associate a DHCP option set naming real server IPs instead of
+    AmazonProvidedDNS, and DescribeVpcDnsResolution (+ whatever reaches those IPs through the
+    normal route-table/SG/NACL path) changes with it; this is no longer stored-and-ignored."""
+    v = m["vpcs"].get(vpc_id)
+    if v is None or not v.get("enable_dns_support", True):
+        return []
+    dopt = m["dhcp_options"].get(v.get("dhcp_options_id") or "")
+    raw = (dopt or {}).get("options", {}).get("domain-name-servers", "AmazonProvidedDNS")
+    servers = [s.strip() for s in str(raw).split(",") if s.strip()]
+    if not servers or servers == ["AmazonProvidedDNS"]:
+        try:
+            net = ipaddress.ip_network(v["cidr"], strict=False)
+            return [str(net.network_address + 2)] if net.num_addresses > 2 else []
+        except (ValueError, IndexError):
+            return []
+    return [s for s in servers if s != "AmazonProvidedDNS"]
+
+
+def _describe_vpc_dns_resolution(store, params):
+    """Simulator data-plane verb (not a real EC2 action): the effective DNS configuration a
+    VPC's DHCP option set + enableDnsSupport attribute actually produce — domain-name-servers
+    that are not AmazonProvidedDNS name REAL IPs an instance must route to, so pair this with
+    AnalyzeReachability(DestinationIp=<one of dnsServerSet>, Port=53) to check it actually works."""
+    m = _model(store)
+    vpc_id = str(params.get("VpcId", ""))
+    v = m["vpcs"].get(vpc_id)
+    if v is None:
+        raise VpcError("InvalidVpcID.NotFound", f"VPC {vpc_id} not found.")
+    dopt = m["dhcp_options"].get(v.get("dhcp_options_id") or "", {})
+    servers = _effective_dns_servers(m, vpc_id)
+    amazon_provided = str(dopt.get("options", {}).get("domain-name-servers", "AmazonProvidedDNS")) == "AmazonProvidedDNS"
+    servers_xml = "".join(f"<item>{_xml_escape(s)}</item>" for s in servers)
+    return _envelope("DescribeVpcDnsResolution",
+                     f"<dnsSupportEnabled>{str(v.get('enable_dns_support', True)).lower()}</dnsSupportEnabled>"
+                     f"<amazonProvidedDns>{str(amazon_provided).lower()}</amazonProvidedDns>"
+                     f"<domainName>{_xml_escape(dopt.get('options', {}).get('domain-name', ''))}</domainName>"
+                     f"<dnsServerSet>{servers_xml}</dnsServerSet>")
+
+
 def _associate_dhcp_options(store, params):
     m = _model(store)
     vpc_id = str(params.get("VpcId", ""))
@@ -1099,6 +1164,7 @@ _CODE_TEXT = {
     "SOURCE_DEST_CHECK": "appliance has source/destination check enabled",
     "NOT_PUBLIC": "destination has no public IPv4 address", "NO_DESTINATION": "no network interface at the destination",
     "UNSUPPORTED_TARGET": "route target type is not simulated",
+    "BLOCKED_PUBLIC_ACCESS": "VPC Block Public Access blocks this internet gateway path",
 }
 # Reachability Analyzer explanation codes (closest native code; others pass the netsim code through)
 _EXPLANATION_CODE = {
@@ -1133,6 +1199,20 @@ def _endpoint_ref(m, topo, ep: dict, nm):
     return ip
 
 
+def _push_nat_metrics(store, nat_id: str, now: float) -> None:
+    """The one CloudWatch metric family Vyomi can honestly derive for a NAT gateway: each time
+    the shared reachability evaluator actually traverses it with a passing verdict is a real,
+    non-synthetic unit of activity (AnalyzeReachability / Reachability Analyzer / Network Access
+    Analyzer all funnel through reach() below) — never a random background series."""
+    cw = getattr(store, "cw_store", None)
+    if cw is None:
+        return
+    dims = [{"Name": "NatGatewayId", "Value": nat_id}]
+    for name, val, unit in (("ActiveConnectionCount", 1.0, "Count"), ("ConnectionEstablishedCount", 1.0, "Count"),
+                            ("BytesOutToDestination", 84.0, "Bytes"), ("PacketsOutToDestination", 1.0, "Count")):
+        _cw_core.ingest_internal_metric(cw, "AWS/NATGateway", name, dims, val, unit=unit, ts=now)
+
+
 def reach(store, source: dict, dest: dict, port, protocol: str = "tcp", src_port=None):
     """netsim Verdict for two analyzer endpoints (dicts, see _endpoint_ref)."""
     ev, fa, nm = _netsim()
@@ -1140,7 +1220,12 @@ def reach(store, source: dict, dest: dict, port, protocol: str = "tcp", src_port
     topo = fa.from_aws(m)
     src = _endpoint_ref(m, topo, source, nm)
     dst = _endpoint_ref(m, topo, dest, nm)
-    return ev.reach(topo, src, dst, protocol, int(port) if port not in (None, "") else None, src_port)
+    v = ev.reach(topo, src, dst, protocol, int(port) if port not in (None, "") else None, src_port)
+    now = time.time()
+    for h in v.hops:
+        if h.component == "nat-gateway" and h.decision == "pass" and h.id in m["nat_gateways"]:
+            _push_nat_metrics(store, h.id, now)
+    return v
 
 
 def analyze_reachability(store, source: dict, dest: dict, port: int, protocol: str = "tcp") -> dict:
@@ -1375,6 +1460,644 @@ def _delete_flow_logs(store, params):
         f"<item><resourceId>{fid}</resourceId><error><code>InvalidFlowLogId.NotFound</code><message>FlowLog '{fid}' does not exist</message></error></item>"
         for fid in unsuccessful) + "</unsuccessful>"
     return _envelope("DeleteFlowLogs", body)
+
+
+# ── PrivateLink: VPC endpoints + endpoint services ──────────────────────
+# Gateway endpoints (S3/DynamoDB) are REAL: CreateVpcEndpoint adds a route (dest = the
+# service's prefix list CIDRs, target = the vpce- id) to every specified route table, and
+# core/netsim (see GATEWAY_ENDPOINT in model.py/evaluate.py/enforce.py) treats that route as
+# a live hop — the Reachability Analyzer and the offline packet enforcer both honor it.
+# Interface endpoints get a real ENI + a resolvable private DNS name but no L7 proxying to a
+# real target service (there is no second account/service running behind them) — "limited".
+_GATEWAY_ENDPOINT_SERVICES = {
+    "com.amazonaws.us-east-1.s3": {"pl": "pl-63a5400a", "cidrs": ["52.216.0.0/15", "3.5.0.0/19"]},
+    "com.amazonaws.us-east-1.dynamodb": {"pl": "pl-02cd2c6b", "cidrs": ["3.218.182.0/24", "3.218.180.0/23"]},
+}
+
+
+def _vpce_xml(ep: dict) -> str:
+    assocs = "".join(f"<item>{_xml_escape(rid)}</item>" for rid in ep.get("route_table_ids", []))
+    subnets = "".join(f"<item>{_xml_escape(sid)}</item>" for sid in ep.get("subnet_ids", []))
+    enis = "".join(f"<item>{_xml_escape(eid)}</item>" for eid in ep.get("eni_ids", []))
+    dns = "".join(f"<item><dnsName>{_xml_escape(n)}</dnsName><hostedZoneId>Z1HUB23</hostedZoneId></item>" for n in ep.get("dns_names", []))
+    return ("<item>"
+            f"<vpcEndpointId>{_xml_escape(ep['id'])}</vpcEndpointId><vpcEndpointType>{_xml_escape(ep['type'])}</vpcEndpointType>"
+            f"<vpcId>{_xml_escape(ep['vpc_id'])}</vpcId><serviceName>{_xml_escape(ep['service_name'])}</serviceName>"
+            f"<state>{_xml_escape(ep['state'])}</state><privateDnsEnabled>{str(ep.get('private_dns_enabled', False)).lower()}</privateDnsEnabled>"
+            f"<routeTableIdSet>{assocs}</routeTableIdSet><subnetIdSet>{subnets}</subnetIdSet>"
+            f"<networkInterfaceIdSet>{enis}</networkInterfaceIdSet><dnsEntrySet>{dns}</dnsEntrySet>"
+            f"<creationTimestamp>{_xml_escape(ep['created'])}</creationTimestamp>"
+            f"<ownerId>{OWNER_ID}</ownerId>{_tags_xml(ep.get('tags', {}))}"
+            "</item>")
+
+
+def _create_vpc_endpoint(store, params):
+    m = _model(store)
+    vpc_id = str(params.get("VpcId", ""))
+    if vpc_id not in m["vpcs"]:
+        raise VpcError("InvalidVpcID.NotFound", f"VPC {vpc_id} not found.")
+    service_name = str(params.get("ServiceName", ""))
+    ep_type = str(params.get("VpcEndpointType") or "Gateway")
+    ep_id = _rid("vpce")
+    ep = {"id": ep_id, "vpc_id": vpc_id, "service_name": service_name, "type": ep_type, "state": "available",
+          "created": _now(), "private_dns_enabled": str(params.get("PrivateDnsEnabled", "true")).lower() != "false",
+          "tags": _parse_tag_specifications(params).get("vpc-endpoint", {}), "route_table_ids": [], "subnet_ids": [],
+          "eni_ids": [], "dns_names": [], "policy_document": str(params.get("PolicyDocument") or "")}
+    if ep_type == "Gateway":
+        rt_ids = [v for k, v in sorted(params.items()) if k.startswith("RouteTableId.")]
+        if not rt_ids:
+            raise VpcError("MissingParameter", "A gateway endpoint needs at least one route table.")
+        for rtid in rt_ids:
+            if rtid not in m["route_tables"] or m["route_tables"][rtid]["vpc_id"] != vpc_id:
+                raise VpcError("InvalidRouteTableID.NotFound", f"Route table {rtid} not found in {vpc_id}.")
+        svc = _GATEWAY_ENDPOINT_SERVICES.get(service_name)
+        cidrs = svc["cidrs"] if svc else ["0.0.0.0/32"]       # unknown service: harmless no-op CIDR
+        ep["prefix_list_id"] = svc["pl"] if svc else _rid("pl")
+        ep["route_table_ids"] = rt_ids
+        for rtid in rt_ids:
+            rt = m["route_tables"][rtid]
+            for cidr in cidrs:
+                if not any(r["dest"] == cidr for r in rt["routes"]):
+                    rt["routes"].append({"dest": cidr, "target": ep_id})
+    else:   # Interface (and GatewayLoadBalancer, modeled the same minimal way)
+        sn_ids = [v for k, v in sorted(params.items()) if k.startswith("SubnetId.")]
+        for sid in sn_ids:
+            if sid not in m["subnets"] or m["subnets"][sid]["vpc_id"] != vpc_id:
+                raise VpcError("InvalidSubnetID.NotFound", f"Subnet {sid} not found in {vpc_id}.")
+            eni_id = _rid("eni")
+            m["enis"][eni_id] = {"id": eni_id, "subnet_id": sid, "vpc_id": vpc_id,
+                                 "private_ip": _allocate_private_ip(m, sid, ""), "sg_ids": [], "description": f"VPC Endpoint {ep_id}",
+                                 "attachment": {}, "tags": {}}
+            ep["eni_ids"].append(eni_id)
+        ep["subnet_ids"] = sn_ids
+        short = service_name.rsplit(".", 1)[-1]
+        ep["dns_names"] = [f"{short}.{m['vpcs'][vpc_id].get('region', 'us-east-1')}.vpce.amazonaws.com"] if ep["private_dns_enabled"] else []
+        svc_id = next((s["id"] for s in m["vpc_endpoint_services"].values() if s["service_name"] == service_name), None)
+        if svc_id:
+            conn_id = _rid("vpce-conn", 10)
+            accept = not m["vpc_endpoint_services"][svc_id].get("acceptance_required", True)
+            m["vpc_endpoint_connections"][conn_id] = {"id": conn_id, "service_id": svc_id, "endpoint_id": ep_id,
+                                                      "state": "available" if accept else "pendingAcceptance"}
+            ep["state"] = "available" if accept else "pendingAcceptance"
+    m["vpc_endpoints"][ep_id] = ep
+    return _envelope("CreateVpcEndpoint", f"<vpcEndpoint>{_vpce_xml(ep)[len('<item>'):-len('</item>')]}</vpcEndpoint>")
+
+
+def _describe_vpc_endpoints(store, params):
+    m = _model(store)
+    ids = [v for k, v in params.items() if k.startswith("VpcEndpointId.")]
+    rows = list(m["vpc_endpoints"].values())
+    if ids:
+        rows = [e for e in rows if e["id"] in ids]
+    return _envelope("DescribeVpcEndpoints", f"<vpcEndpointSet>{''.join(_vpce_xml(e) for e in rows)}</vpcEndpointSet>")
+
+
+def _delete_vpc_endpoints(store, params):
+    m = _model(store)
+    ids = [v for k, v in params.items() if k.startswith("VpcEndpointId.")]
+    unsuccessful = []
+    for eid in ids:
+        ep = m["vpc_endpoints"].get(eid)
+        if ep is None:
+            unsuccessful.append((eid, "InvalidVpcEndpointId.NotFound", f"The VpcEndpoint ID '{eid}' does not exist"))
+            continue
+        for rtid in ep.get("route_table_ids", []):
+            rt = m["route_tables"].get(rtid)
+            if rt:
+                rt["routes"] = [r for r in rt["routes"] if r.get("target") != eid]
+        for eni_id in ep.get("eni_ids", []):
+            m["enis"].pop(eni_id, None)
+        for cid in [k for k, c in m["vpc_endpoint_connections"].items() if c["endpoint_id"] == eid]:
+            m["vpc_endpoint_connections"].pop(cid)
+        m["vpc_endpoints"].pop(eid)
+    body = "<unsuccessful>" + "".join(
+        f"<item><resourceId>{_xml_escape(rid)}</resourceId><error><code>{code}</code><message>{_xml_escape(msg)}</message></error></item>"
+        for rid, code, msg in unsuccessful) + "</unsuccessful>"
+    return _envelope("DeleteVpcEndpoints", body)
+
+
+def _vpces_xml(svc: dict) -> str:
+    princ = "".join(f"<item>{_xml_escape(p)}</item>" for p in svc.get("allowed_principals", []))
+    return ("<item>"
+            f"<serviceId>{_xml_escape(svc['id'])}</serviceId><serviceName>{_xml_escape(svc['service_name'])}</serviceName>"
+            f"<serviceState>{_xml_escape(svc['state'])}</serviceState>"
+            f"<acceptanceRequired>{str(svc.get('acceptance_required', True)).lower()}</acceptanceRequired>"
+            f"<managesVpcEndpoints>false</managesVpcEndpoints>"
+            f"<baseEndpointDnsNameSet><item>{_xml_escape(svc['service_name'])}</item></baseEndpointDnsNameSet>"
+            f"<allowedPrincipalSet>{princ}</allowedPrincipalSet>"
+            f"{_tags_xml(svc.get('tags', {}))}"
+            "</item>")
+
+
+def _create_vpc_endpoint_service_configuration(store, params):
+    m = _model(store)
+    nlb_arns = [v for k, v in sorted(params.items()) if k.startswith("NetworkLoadBalancerArn.") or k.startswith("GatewayLoadBalancerArn.")]
+    if not nlb_arns:
+        raise VpcError("MissingParameter", "An endpoint service needs at least one load balancer ARN.")
+    svc_id = _rid("vpce-svc", 10)
+    service_name = f"com.amazonaws.vpce.us-east-1.{svc_id}"
+    svc = {"id": svc_id, "service_name": service_name, "state": "Available",
+          "acceptance_required": str(params.get("AcceptanceRequired", "true")).lower() != "false",
+          "load_balancer_arns": nlb_arns, "allowed_principals": [],
+          "tags": _parse_tag_specifications(params).get("vpc-endpoint-service", {})}
+    m["vpc_endpoint_services"][svc_id] = svc
+    return _envelope("CreateVpcEndpointServiceConfiguration", f"<serviceConfiguration>{_vpces_xml(svc)[len('<item>'):-len('</item>')]}</serviceConfiguration>")
+
+
+def _describe_vpc_endpoint_service_configurations(store, params):
+    m = _model(store)
+    ids = [v for k, v in params.items() if k.startswith("ServiceId.")]
+    rows = list(m["vpc_endpoint_services"].values())
+    if ids:
+        rows = [s for s in rows if s["id"] in ids]
+    return _envelope("DescribeVpcEndpointServiceConfigurations", f"<serviceConfigurationSet>{''.join(_vpces_xml(s) for s in rows)}</serviceConfigurationSet>")
+
+
+def _delete_vpc_endpoint_service_configurations(store, params):
+    m = _model(store)
+    ids = [v for k, v in params.items() if k.startswith("ServiceId.")]
+    unsuccessful = []
+    for sid in ids:
+        if sid in m["vpc_endpoint_services"]:
+            m["vpc_endpoint_services"].pop(sid)
+            for cid in [k for k, c in m["vpc_endpoint_connections"].items() if c["service_id"] == sid]:
+                m["vpc_endpoint_connections"].pop(cid)
+        else:
+            unsuccessful.append(sid)
+    body = "<unsuccessful>" + "".join(
+        f"<item><resourceId>{_xml_escape(sid)}</resourceId><error><code>InvalidVpcEndpointServiceId.NotFound</code>"
+        f"<message>The VpcEndpointService Id '{_xml_escape(sid)}' does not exist</message></error></item>" for sid in unsuccessful) + "</unsuccessful>"
+    return _envelope("DeleteVpcEndpointServiceConfigurations", body)
+
+
+def _modify_vpc_endpoint_service_permissions(store, params):
+    m = _model(store)
+    svc_id = str(params.get("ServiceId", ""))
+    svc = m["vpc_endpoint_services"].get(svc_id)
+    if svc is None:
+        raise VpcError("InvalidVpcEndpointServiceId.NotFound", f"The VpcEndpointService Id '{svc_id}' does not exist")
+    add = [v for k, v in params.items() if k.startswith("AddAllowedPrincipals.")]
+    remove = [v for k, v in params.items() if k.startswith("RemoveAllowedPrincipals.")]
+    for p in add:
+        if p not in svc["allowed_principals"]:
+            svc["allowed_principals"].append(p)
+    svc["allowed_principals"] = [p for p in svc["allowed_principals"] if p not in remove]
+    return _envelope("ModifyVpcEndpointServicePermissions", "<return>true</return>")
+
+
+def _vpce_conn_xml(c: dict, m: dict) -> str:
+    svc = m["vpc_endpoint_services"].get(c["service_id"], {})
+    return ("<item>"
+            f"<serviceId>{_xml_escape(c['service_id'])}</serviceId><vpcEndpointId>{_xml_escape(c['endpoint_id'])}</vpcEndpointId>"
+            f"<vpcEndpointState>{_xml_escape(c['state'])}</vpcEndpointState>"
+            f"<serviceName>{_xml_escape(svc.get('service_name', ''))}</serviceName>"
+            "</item>")
+
+
+def _describe_vpc_endpoint_connections(store, params):
+    m = _model(store)
+    return _envelope("DescribeVpcEndpointConnections",
+                     f"<connectionSet>{''.join(_vpce_conn_xml(c, m) for c in m['vpc_endpoint_connections'].values())}</connectionSet>")
+
+
+def _accept_vpc_endpoint_connections(store, params):
+    m = _model(store)
+    svc_id = str(params.get("ServiceId", ""))
+    ep_ids = [v for k, v in params.items() if k.startswith("VpcEndpointId.")]
+    unsuccessful = []
+    for eid in ep_ids:
+        conn = next((c for c in m["vpc_endpoint_connections"].values() if c["service_id"] == svc_id and c["endpoint_id"] == eid), None)
+        if conn is None:
+            unsuccessful.append(eid)
+            continue
+        conn["state"] = "available"
+        if eid in m["vpc_endpoints"]:
+            m["vpc_endpoints"][eid]["state"] = "available"
+    body = "<unsuccessful>" + "".join(f"<item><resourceId>{_xml_escape(eid)}</resourceId></item>" for eid in unsuccessful) + "</unsuccessful>"
+    return _envelope("AcceptVpcEndpointConnections", body)
+
+
+def _reject_vpc_endpoint_connections(store, params):
+    m = _model(store)
+    svc_id = str(params.get("ServiceId", ""))
+    ep_ids = [v for k, v in params.items() if k.startswith("VpcEndpointId.")]
+    for eid in ep_ids:
+        conn = next((c for c in m["vpc_endpoint_connections"].values() if c["service_id"] == svc_id and c["endpoint_id"] == eid), None)
+        if conn is not None:
+            conn["state"] = "rejected"
+            m["vpc_endpoints"].pop(eid, None)
+    return _envelope("RejectVpcEndpointConnections", "<unsuccessful></unsuccessful>")
+
+
+# ── Network Access Analyzer ──────────────────────────────────────────────
+# A real, bounded analyzer: a scope's match paths name source/destination resource ids (or
+# leave either side empty = "every ENI" / "the internet"); StartNetworkInsightsAccessScopeAnalysis
+# runs the SAME netsim evaluator as Reachability Analyzer over the resolved pairs, protocol=tcp
+# port=None ("is there an UNRESTRICTED path" — the question real Network Access Analyzer answers
+# for its built-in "internet-accessible resources" scope). Simplified vs. real AWS: match paths
+# are resource-id lists, not the full path-statement language (resource-type/port-range filters).
+def _parse_match_paths(params: dict) -> list:
+    paths = []
+    idxs = sorted({k.split(".")[1] for k in params if k.startswith("MatchPaths.") and len(k.split(".")) >= 3}, key=int)
+    for i in idxs:
+        src = [v for k, v in params.items() if k.startswith(f"MatchPaths.{i}.Source.ResourceStatement.Resources.")]
+        dst = [v for k, v in params.items() if k.startswith(f"MatchPaths.{i}.Destination.ResourceStatement.Resources.")]
+        paths.append({"source": src, "destination": dst})
+    if not paths:
+        paths = [{"source": [], "destination": []}]   # default: every ENI → the internet, unrestricted
+    return paths
+
+
+def _nias_xml(s: dict) -> str:
+    return ("<item>"
+            f"<networkInsightsAccessScopeId>{s['id']}</networkInsightsAccessScopeId>"
+            f"<networkInsightsAccessScopeArn>arn:aws:ec2:us-east-1:{OWNER_ID}:network-insights-access-scope/{s['id']}</networkInsightsAccessScopeArn>"
+            f"<createdDate>{s['created']}</createdDate>{_tags_xml(s.get('tags', {}))}</item>")
+
+
+def _create_network_insights_access_scope(store, params):
+    m = _model(store)
+    sid = _rid("nis", 17)
+    m["access_scopes"][sid] = {"id": sid, "created": _now(), "match_paths": _parse_match_paths(params),
+                               "tags": _parse_tag_specifications(params).get("network-insights-access-scope", {})}
+    s = m["access_scopes"][sid]
+    return _envelope("CreateNetworkInsightsAccessScope",
+                     f"<networkInsightsAccessScope>{_nias_xml(s)[6:-7]}</networkInsightsAccessScope>"
+                     f"<networkInsightsAccessScopeContent><networkInsightsAccessScopeId>{sid}</networkInsightsAccessScopeId></networkInsightsAccessScopeContent>")
+
+
+def _describe_network_insights_access_scopes(store, params):
+    m = _model(store)
+    ids = [v for k, v in params.items() if k.startswith("NetworkInsightsAccessScopeId.")]
+    rows = [s for s in m["access_scopes"].values() if not ids or s["id"] in ids]
+    return _envelope("DescribeNetworkInsightsAccessScopes", f"<networkInsightsAccessScopeSet>{''.join(_nias_xml(s) for s in rows)}</networkInsightsAccessScopeSet>")
+
+
+def _delete_network_insights_access_scope(store, params):
+    m = _model(store)
+    sid = str(params.get("NetworkInsightsAccessScopeId", ""))
+    if sid not in m["access_scopes"]:
+        raise VpcError("InvalidParameterValue", f"The network insights access scope '{sid}' does not exist")
+    m["access_scopes"].pop(sid)
+    for aid in [k for k, a in m["access_scope_analyses"].items() if a["scope_id"] == sid]:
+        m["access_scope_analyses"].pop(aid)
+    return _envelope("DeleteNetworkInsightsAccessScope", f"<networkInsightsAccessScopeId>{sid}</networkInsightsAccessScopeId>")
+
+
+def _all_enis(m: dict) -> list:
+    """Every live interface id in the account — instances' primary ENIs + standalone ENIs."""
+    ids = [_netsim()[1].primary_eni(i["id"]) for i in m["instances"].values() if i.get("state") in ("running", "pending")]
+    ids += [e for e in m["enis"] if e not in ids]
+    return ids
+
+
+def _nia_analysis_xml(a: dict) -> str:
+    return ("<item>"
+            f"<networkInsightsAccessScopeAnalysisId>{a['id']}</networkInsightsAccessScopeAnalysisId>"
+            f"<networkInsightsAccessScopeId>{a['scope_id']}</networkInsightsAccessScopeId>"
+            f"<status>{a['status']}</status><startDate>{a['start']}</startDate><endDate>{a['start']}</endDate>"
+            f"<findingsFound>{'true' if a['findings'] else 'false'}</findingsFound>{_tags_xml(a.get('tags', {}))}</item>")
+
+
+def _start_network_insights_access_scope_analysis(store, params):
+    m = _model(store)
+    sid = str(params.get("NetworkInsightsAccessScopeId", ""))
+    scope = m["access_scopes"].get(sid)
+    if scope is None:
+        raise VpcError("InvalidParameterValue", f"The network insights access scope '{sid}' does not exist")
+    findings = []
+    for path in scope["match_paths"]:
+        sources = path["source"] or _all_enis(m)
+        dests = path["destination"] or ["__internet__"]
+        for src in sources[:100]:
+            for dst in dests[:100]:
+                try:
+                    src_ep = _insights_endpoint(m, src, "")
+                    dst_ep = {"ip": "198.51.100.1"} if dst == "__internet__" else _insights_endpoint(m, dst, "")
+                except VpcError:
+                    continue
+                v = reach(store, src_ep, dst_ep, None, "tcp")
+                if v.reachable:
+                    findings.append({"id": _rid("nisf", 10), "source": src, "destination": dst,
+                                     "hops": [h.__dict__ for h in v.hops]})
+    aid = _rid("nisa", 17)
+    m["access_scope_analyses"][aid] = {"id": aid, "scope_id": sid, "start": _now(), "status": "succeeded",
+                                       "findings": findings, "tags": _parse_tag_specifications(params).get("network-insights-access-scope-analysis", {})}
+    return _envelope("StartNetworkInsightsAccessScopeAnalysis",
+                     f"<networkInsightsAccessScopeAnalysis>{_nia_analysis_xml(m['access_scope_analyses'][aid])[6:-7]}</networkInsightsAccessScopeAnalysis>")
+
+
+def _describe_network_insights_access_scope_analyses(store, params):
+    m = _model(store)
+    ids = [v for k, v in params.items() if k.startswith("NetworkInsightsAccessScopeAnalysisId.")]
+    sid = params.get("NetworkInsightsAccessScopeId")
+    rows = [a for a in m["access_scope_analyses"].values() if (not ids or a["id"] in ids) and (not sid or a["scope_id"] == sid)]
+    return _envelope("DescribeNetworkInsightsAccessScopeAnalyses",
+                     f"<networkInsightsAccessScopeAnalysisSet>{''.join(_nia_analysis_xml(a) for a in rows)}</networkInsightsAccessScopeAnalysisSet>")
+
+
+def _describe_network_insights_access_scope_analysis_findings(store, params):
+    m = _model(store)
+    aid = str(params.get("NetworkInsightsAccessScopeAnalysisId", ""))
+    a = m["access_scope_analyses"].get(aid)
+    if a is None:
+        raise VpcError("InvalidParameterValue", f"The network insights access scope analysis '{aid}' does not exist")
+    items = "".join(
+        "<item>"
+        f"<networkInsightsAccessScopeAnalysisId>{aid}</networkInsightsAccessScopeAnalysisId><findingId>{f['id']}</findingId>"
+        "<findingComponentSet>"
+        + "".join(f"<item><component><id>{_xml_escape(h['id'])}</id></component></item>" for h in f["hops"] if h["decision"] != "deny")
+        + "</findingComponentSet></item>" for f in a["findings"])
+    return _envelope("DescribeNetworkInsightsAccessScopeAnalysisFindings",
+                     f"<analysisStatus>{a['status']}</analysisStatus><analysisFindingSet>{items}</analysisFindingSet>")
+
+
+# ── AWS Verified Access ───────────────────────────────────────────────────
+# Instances/trust-providers/groups/endpoints are real objects with a real policy EVALUATOR
+# (VerifyAccessEndpointPolicy mirrors the actual AWS console's "Test policy" tool: it runs the
+# Cedar-style policy text against user-supplied context attributes and returns allow/deny with
+# the matched statement). What is NOT simulated: federating to a real external IdP or device-trust
+# provider (Okta / Azure AD / IAM Identity Center / Jamf / CrowdStrike) — that needs a real third
+# party, so trust providers here store their declared type but issue no real identity.
+def _va_xml(tag: str, obj: dict, extra: str = "") -> str:
+    return f"<item><{tag}>{_xml_escape(obj['id'])}</{tag}><creationTime>{_xml_escape(obj['created'])}</creationTime>{extra}{_tags_xml(obj.get('tags', {}))}</item>"
+
+
+def _create_verified_access_instance(store, params):
+    m = _model(store)
+    vai_id = _rid("vai", 17)
+    inst = {"id": vai_id, "created": _now(), "description": str(params.get("Description", "")),
+           "trust_provider_ids": [], "tags": _parse_tag_specifications(params).get("verified-access-instance", {})}
+    m["va_instances"][vai_id] = inst
+    extra = f"<description>{_xml_escape(inst['description'])}</description><verifiedAccessTrustProviders/>"
+    return _envelope("CreateVerifiedAccessInstance", f"<verifiedAccessInstance>{_va_xml('verifiedAccessInstanceId', inst, extra)[6:-7]}</verifiedAccessInstance>")
+
+
+def _describe_verified_access_instances(store, params):
+    m = _model(store)
+    ids = [v for k, v in params.items() if k.startswith("VerifiedAccessInstanceId.")]
+    rows = [i for i in m["va_instances"].values() if not ids or i["id"] in ids]
+    items = "".join(_va_xml("verifiedAccessInstanceId", i,
+                            f"<description>{_xml_escape(i['description'])}</description>"
+                            f"<verifiedAccessTrustProviders>{''.join(f'<item><trustProviderId>{t}</trustProviderId></item>' for t in i['trust_provider_ids'])}</verifiedAccessTrustProviders>")
+                    for i in rows)
+    return _envelope("DescribeVerifiedAccessInstances", f"<verifiedAccessInstanceSet>{items}</verifiedAccessInstanceSet>")
+
+
+def _delete_verified_access_instance(store, params):
+    m = _model(store)
+    vai_id = str(params.get("VerifiedAccessInstanceId", ""))
+    if vai_id not in m["va_instances"]:
+        raise VpcError("InvalidParameterValue", f"The Verified Access instance '{vai_id}' does not exist")
+    if any(e["instance_id"] == vai_id for e in m["va_endpoints"].values()):
+        raise VpcError("DependencyViolation", f"Verified Access instance '{vai_id}' has dependent endpoints")
+    m["va_instances"].pop(vai_id)
+    return _envelope("DeleteVerifiedAccessInstance", f"<verifiedAccessInstance><verifiedAccessInstanceId>{vai_id}</verifiedAccessInstanceId></verifiedAccessInstance>")
+
+
+_VA_TRUST_TYPES = {"user", "device"}   # real AWS: user (IdP/OIDC/IAM Identity Center) | device (CrowdStrike/Jamf/custom)
+
+
+def _create_verified_access_trust_provider(store, params):
+    m = _model(store)
+    ttype = str(params.get("TrustProviderType") or "user")
+    if ttype not in _VA_TRUST_TYPES:
+        raise VpcError("InvalidParameterValue", f"TrustProviderType must be one of {_VA_TRUST_TYPES}")
+    tp_id = _rid("vatp", 17)
+    tp = {"id": tp_id, "created": _now(), "trust_provider_type": ttype,
+         "user_trust_provider_type": str(params.get("UserTrustProviderType", "")),
+         "device_trust_provider_type": str(params.get("DeviceTrustProviderType", "")),
+         "policy_reference_name": str(params.get("PolicyReferenceName", "")),
+         "description": str(params.get("Description", "")), "tags": _parse_tag_specifications(params).get("verified-access-trust-provider", {})}
+    m["va_trust_providers"][tp_id] = tp
+    extra = (f"<trustProviderType>{ttype}</trustProviderType><description>{_xml_escape(tp['description'])}</description>"
+            f"<policyReferenceName>{_xml_escape(tp['policy_reference_name'])}</policyReferenceName>")
+    return _envelope("CreateVerifiedAccessTrustProvider", f"<verifiedAccessTrustProvider>{_va_xml('verifiedAccessTrustProviderId', tp, extra)[6:-7]}</verifiedAccessTrustProvider>")
+
+
+def _describe_verified_access_trust_providers(store, params):
+    m = _model(store)
+    ids = [v for k, v in params.items() if k.startswith("VerifiedAccessTrustProviderId.")]
+    rows = [t for t in m["va_trust_providers"].values() if not ids or t["id"] in ids]
+    items = "".join(_va_xml("verifiedAccessTrustProviderId", t,
+                            f"<trustProviderType>{t['trust_provider_type']}</trustProviderType>"
+                            f"<description>{_xml_escape(t['description'])}</description>") for t in rows)
+    return _envelope("DescribeVerifiedAccessTrustProviders", f"<verifiedAccessTrustProviderSet>{items}</verifiedAccessTrustProviderSet>")
+
+
+def _delete_verified_access_trust_provider(store, params):
+    m = _model(store)
+    tp_id = str(params.get("VerifiedAccessTrustProviderId", ""))
+    if tp_id not in m["va_trust_providers"]:
+        raise VpcError("InvalidParameterValue", f"The Verified Access trust provider '{tp_id}' does not exist")
+    if any(tp_id in i["trust_provider_ids"] for i in m["va_instances"].values()):
+        raise VpcError("DependencyViolation", f"Trust provider '{tp_id}' is attached to an instance")
+    m["va_trust_providers"].pop(tp_id)
+    return _envelope("DeleteVerifiedAccessTrustProvider", f"<verifiedAccessTrustProvider><verifiedAccessTrustProviderId>{tp_id}</verifiedAccessTrustProviderId></verifiedAccessTrustProvider>")
+
+
+def _attach_verified_access_trust_provider(store, params):
+    m = _model(store)
+    vai_id = str(params.get("VerifiedAccessInstanceId", ""))
+    tp_id = str(params.get("VerifiedAccessTrustProviderId", ""))
+    inst = m["va_instances"].get(vai_id)
+    if inst is None or tp_id not in m["va_trust_providers"]:
+        raise VpcError("InvalidParameterValue", "Verified Access instance or trust provider not found.")
+    if tp_id not in inst["trust_provider_ids"]:
+        inst["trust_provider_ids"].append(tp_id)
+    return _envelope("AttachVerifiedAccessTrustProvider", "<return>true</return>")
+
+
+def _detach_verified_access_trust_provider(store, params):
+    m = _model(store)
+    vai_id = str(params.get("VerifiedAccessInstanceId", ""))
+    tp_id = str(params.get("VerifiedAccessTrustProviderId", ""))
+    inst = m["va_instances"].get(vai_id)
+    if inst is None:
+        raise VpcError("InvalidParameterValue", "Verified Access instance not found.")
+    inst["trust_provider_ids"] = [t for t in inst["trust_provider_ids"] if t != tp_id]
+    return _envelope("DetachVerifiedAccessTrustProvider", "<return>true</return>")
+
+
+def _create_verified_access_group(store, params):
+    m = _model(store)
+    vai_id = str(params.get("VerifiedAccessInstanceId", ""))
+    if vai_id not in m["va_instances"]:
+        raise VpcError("InvalidParameterValue", f"The Verified Access instance '{vai_id}' does not exist")
+    g_id = _rid("vagr", 17)
+    g = {"id": g_id, "created": _now(), "instance_id": vai_id, "description": str(params.get("Description", "")),
+        "policy_document": str(params.get("PolicyDocument") or ""), "tags": _parse_tag_specifications(params).get("verified-access-group", {})}
+    m["va_groups"][g_id] = g
+    extra = f"<verifiedAccessInstanceId>{vai_id}</verifiedAccessInstanceId><description>{_xml_escape(g['description'])}</description>"
+    return _envelope("CreateVerifiedAccessGroup", f"<verifiedAccessGroup>{_va_xml('verifiedAccessGroupId', g, extra)[6:-7]}</verifiedAccessGroup>")
+
+
+def _describe_verified_access_groups(store, params):
+    m = _model(store)
+    ids = [v for k, v in params.items() if k.startswith("VerifiedAccessGroupId.")]
+    rows = [g for g in m["va_groups"].values() if not ids or g["id"] in ids]
+    items = "".join(_va_xml("verifiedAccessGroupId", g,
+                           f"<verifiedAccessInstanceId>{g['instance_id']}</verifiedAccessInstanceId>"
+                           f"<description>{_xml_escape(g['description'])}</description>") for g in rows)
+    return _envelope("DescribeVerifiedAccessGroups", f"<verifiedAccessGroupSet>{items}</verifiedAccessGroupSet>")
+
+
+def _delete_verified_access_group(store, params):
+    m = _model(store)
+    g_id = str(params.get("VerifiedAccessGroupId", ""))
+    if g_id not in m["va_groups"]:
+        raise VpcError("InvalidParameterValue", f"The Verified Access group '{g_id}' does not exist")
+    if any(e["group_id"] == g_id for e in m["va_endpoints"].values()):
+        raise VpcError("DependencyViolation", f"Verified Access group '{g_id}' has dependent endpoints")
+    m["va_groups"].pop(g_id)
+    return _envelope("DeleteVerifiedAccessGroup", f"<verifiedAccessGroup><verifiedAccessGroupId>{g_id}</verifiedAccessGroupId></verifiedAccessGroup>")
+
+
+def _create_verified_access_endpoint(store, params):
+    m = _model(store)
+    g_id = str(params.get("VerifiedAccessGroupId", ""))
+    g = m["va_groups"].get(g_id)
+    if g is None:
+        raise VpcError("InvalidParameterValue", f"The Verified Access group '{g_id}' does not exist")
+    e_id = _rid("vae", 17)
+    domain = str(params.get("ApplicationDomain") or f"{e_id}.verified-access.aws")
+    e = {"id": e_id, "created": _now(), "group_id": g_id, "instance_id": g["instance_id"],
+        "endpoint_type": str(params.get("EndpointType") or "network-interface"),
+        "application_domain": domain, "domain_certificate_arn": str(params.get("DomainCertificateArn", "")),
+        "endpoint_domain": f"{e_id}.edge.verified-access.aws", "status": "active",
+        "policy_document": str(params.get("PolicyDocument") or ""),
+        "tags": _parse_tag_specifications(params).get("verified-access-endpoint", {})}
+    m["va_endpoints"][e_id] = e
+    extra = (f"<verifiedAccessGroupId>{g_id}</verifiedAccessGroupId><endpointType>{_xml_escape(e['endpoint_type'])}</endpointType>"
+            f"<applicationDomain>{_xml_escape(domain)}</applicationDomain><endpointDomain>{_xml_escape(e['endpoint_domain'])}</endpointDomain>"
+            f"<status><code>{e['status']}</code></status>")
+    return _envelope("CreateVerifiedAccessEndpoint", f"<verifiedAccessEndpoint>{_va_xml('verifiedAccessEndpointId', e, extra)[6:-7]}</verifiedAccessEndpoint>")
+
+
+def _describe_verified_access_endpoints(store, params):
+    m = _model(store)
+    ids = [v for k, v in params.items() if k.startswith("VerifiedAccessEndpointId.")]
+    rows = [e for e in m["va_endpoints"].values() if not ids or e["id"] in ids]
+    items = "".join(_va_xml("verifiedAccessEndpointId", e,
+                           f"<verifiedAccessGroupId>{e['group_id']}</verifiedAccessGroupId><endpointType>{_xml_escape(e['endpoint_type'])}</endpointType>"
+                           f"<applicationDomain>{_xml_escape(e['application_domain'])}</applicationDomain>"
+                           f"<endpointDomain>{_xml_escape(e['endpoint_domain'])}</endpointDomain><status><code>{e['status']}</code></status>") for e in rows)
+    return _envelope("DescribeVerifiedAccessEndpoints", f"<verifiedAccessEndpointSet>{items}</verifiedAccessEndpointSet>")
+
+
+def _delete_verified_access_endpoint(store, params):
+    m = _model(store)
+    e_id = str(params.get("VerifiedAccessEndpointId", ""))
+    if e_id not in m["va_endpoints"]:
+        raise VpcError("InvalidParameterValue", f"The Verified Access endpoint '{e_id}' does not exist")
+    m["va_endpoints"].pop(e_id)
+    return _envelope("DeleteVerifiedAccessEndpoint", f"<verifiedAccessEndpoint><verifiedAccessEndpointId>{e_id}</verifiedAccessEndpointId></verifiedAccessEndpoint>")
+
+
+def _eval_va_policy(policy_document: str, context: dict) -> tuple[bool, str]:
+    """A bounded Cedar-ish evaluator for the simulator's own policy tester (mirrors the real
+    AWS console's "Test policy" action): the policy is a newline-separated list of statements
+    `permit(context.<path> <op> <value>)`; op in (==, !=, has). No policy / blank = permit all
+    (matches real Verified Access default of allow when a group has no restricting policy)."""
+    stmts = [s.strip() for s in (policy_document or "").splitlines() if s.strip() and not s.strip().startswith("//")]
+    if not stmts:
+        return True, "no policy statements — default permit"
+    import re as _re
+    for stmt in stmts:
+        mt = _re.match(r"^(permit|forbid)\s*\(\s*context\.([\w.]+)\s*(==|!=|has)\s*\"?([^)\"]*)\"?\s*\)\s*;?$", stmt)
+        if not mt:
+            continue
+        action, path, op, val = mt.groups()
+        cur = context
+        for part in path.split("."):
+            cur = cur.get(part) if isinstance(cur, dict) else None
+        matched = (op == "has" and cur is not None) or (op == "==" and str(cur) == val) or (op == "!=" and str(cur) != val)
+        if matched:
+            return action == "permit", stmt
+    return False, "no statement matched — default deny"
+
+
+def _verify_access_endpoint_policy(store, params):
+    m = _model(store)
+    e_id = str(params.get("VerifiedAccessEndpointId", ""))
+    e = m["va_endpoints"].get(e_id)
+    if e is None:
+        raise VpcError("InvalidParameterValue", f"The Verified Access endpoint '{e_id}' does not exist")
+    g = m["va_groups"].get(e["group_id"], {})
+    ctx_json = str(params.get("Context") or "{}")
+    import json as _json
+    try:
+        context = _json.loads(ctx_json)
+    except ValueError:
+        context = {}
+    policy = e.get("policy_document") or g.get("policy_document") or ""
+    allowed, matched = _eval_va_policy(policy, context)
+    return _envelope("VerifyAccessEndpointPolicy",
+                     f"<policyAllowed>{str(allowed).lower()}</policyAllowed><evaluatedStatementSet>"
+                     f"<item><statement>{_xml_escape(matched)}</statement></item></evaluatedStatementSet>")
+
+
+# ── VPC console settings: Block Public Access + Local Zones opt-in ──────────
+# Block Public Access is REAL: once internet_gateway_block_mode is bidirectional/ingress, netsim's
+# internet_egress() (see the BPA check added there) refuses IGW routes for any VPC not in the
+# exclusion list — an actual behaviour change, not stored config. Encryption-by-default already
+# has a real implementation above (GetEbsEncryptionByDefault/…). "Console experiments" are, as in
+# real AWS, display-only toggles with no backend effect — stored for parity, nothing more.
+def _get_vpc_block_public_access_options(store, params):
+    m = _model(store)
+    bpa = m["account"]["vpc_block_public_access"]
+    return _envelope("GetVpcBlockPublicAccessOptions",
+                     f"<vpcBlockPublicAccessOptions><internetGatewayBlockMode>{_xml_escape(bpa['internet_gateway_block_mode'])}</internetGatewayBlockMode>"
+                     f"<state>{'enabled' if bpa['internet_gateway_block_mode'] != 'off' else 'disabled'}</state></vpcBlockPublicAccessOptions>")
+
+
+_BPA_MODES = {"off", "block-bidirectional", "block-ingress"}
+
+
+def _modify_vpc_block_public_access_options(store, params):
+    m = _model(store)
+    mode = str(params.get("InternetGatewayBlockMode") or "off")
+    if mode not in _BPA_MODES:
+        raise VpcError("InvalidParameterValue", f"InternetGatewayBlockMode must be one of {_BPA_MODES}")
+    m["account"]["vpc_block_public_access"]["internet_gateway_block_mode"] = mode
+    return _envelope(
+        "ModifyVpcBlockPublicAccessOptions",
+        f"<vpcBlockPublicAccessOptions><internetGatewayBlockMode>{_xml_escape(mode)}</internetGatewayBlockMode>"
+        f"<state>{'enabled' if mode != 'off' else 'disabled'}</state></vpcBlockPublicAccessOptions>")
+
+
+def _bpa_excl_xml(x: dict) -> str:
+    return (f"<item><resourceArn>{_xml_escape(x['resource_arn'])}</resourceArn>"
+            f"<internetGatewayExclusionMode>{_xml_escape(x['mode'])}</internetGatewayExclusionMode>"
+            f"<state>create-complete</state>{_tags_xml(x.get('tags', {}))}</item>")
+
+
+def _create_vpc_block_public_access_exclusion(store, params):
+    m = _model(store)
+    rid = str(params.get("SubnetId") or params.get("VpcId") or "")
+    if rid not in m["subnets"] and rid not in m["vpcs"]:
+        raise VpcError("InvalidParameterValue", "SubnetId or VpcId must name an existing resource.")
+    mode = str(params.get("InternetGatewayExclusionMode") or "allow-bidirectional")
+    excl_id = _rid("vpcbpa-exclusion", 10)
+    m["account"]["vpc_block_public_access_exclusions"][excl_id] = {
+        "id": excl_id, "resource_arn": rid, "mode": mode, "tags": _parse_tag_specifications(params).get("vpc-block-public-access-exclusion", {})}
+    x = m["account"]["vpc_block_public_access_exclusions"][excl_id]
+    return _envelope("CreateVpcBlockPublicAccessExclusion", f"<vpcBlockPublicAccessExclusion>{_bpa_excl_xml(x)[6:-7]}</vpcBlockPublicAccessExclusion>")
+
+
+def _describe_vpc_block_public_access_exclusions(store, params):
+    m = _model(store)
+    rows = list(m["account"]["vpc_block_public_access_exclusions"].values())
+    return _envelope("DescribeVpcBlockPublicAccessExclusions", f"<vpcBlockPublicAccessExclusionSet>{''.join(_bpa_excl_xml(x) for x in rows)}</vpcBlockPublicAccessExclusionSet>")
+
+
+def _delete_vpc_block_public_access_exclusion(store, params):
+    m = _model(store)
+    excl_id = str(params.get("ExclusionId", ""))
+    x = m["account"]["vpc_block_public_access_exclusions"].pop(excl_id, None)
+    if x is None:
+        raise VpcError("InvalidParameterValue", f"The exclusion '{excl_id}' does not exist")
+    return _envelope("DeleteVpcBlockPublicAccessExclusion", f"<vpcBlockPublicAccessExclusion>{_bpa_excl_xml(x)[6:-7]}</vpcBlockPublicAccessExclusion>")
 
 
 OWNER_ID = "123456789012"
@@ -2439,6 +3162,7 @@ def _delete_security_group(store, params):
     for inst in m["instances"].values():
         if sg["id"] in inst.get("sg_ids", []):
             raise VpcError("DependencyViolation", f"resource {sg['id']} has a dependent object (in use by {inst['id']}).")
+    _check_no_active_share(store, "security-group", sg["id"])
     m["sgs"].pop(sg["id"])
     return _envelope("DeleteSecurityGroup", "<return>true</return>")
 
@@ -2790,6 +3514,7 @@ _OPS = {
     "DeleteEgressOnlyInternetGateway": _delete_egress_only_internet_gateway,
     "CreateDhcpOptions": _create_dhcp_options, "DescribeDhcpOptions": _describe_dhcp_options,
     "DeleteDhcpOptions": _delete_dhcp_options, "AssociateDhcpOptions": _associate_dhcp_options,
+    "DescribeVpcDnsResolution": _describe_vpc_dns_resolution,
     "CreateManagedPrefixList": _create_managed_prefix_list,
     "DescribeManagedPrefixLists": _describe_managed_prefix_lists,
     "DeleteManagedPrefixList": _delete_managed_prefix_list,
@@ -2860,6 +3585,45 @@ _OPS = {
     "GetEbsDefaultKmsKeyId": _get_ebs_default_kms_key_id,
     "ModifyEbsDefaultKmsKeyId": _modify_ebs_default_kms_key_id,
     "ResetEbsDefaultKmsKeyId": _reset_ebs_default_kms_key_id,
+    # PrivateLink: VPC endpoints + endpoint services
+    "CreateVpcEndpoint": _create_vpc_endpoint, "DescribeVpcEndpoints": _describe_vpc_endpoints,
+    "DeleteVpcEndpoints": _delete_vpc_endpoints,
+    "CreateVpcEndpointServiceConfiguration": _create_vpc_endpoint_service_configuration,
+    "DescribeVpcEndpointServiceConfigurations": _describe_vpc_endpoint_service_configurations,
+    "DeleteVpcEndpointServiceConfigurations": _delete_vpc_endpoint_service_configurations,
+    "ModifyVpcEndpointServicePermissions": _modify_vpc_endpoint_service_permissions,
+    "DescribeVpcEndpointConnections": _describe_vpc_endpoint_connections,
+    "AcceptVpcEndpointConnections": _accept_vpc_endpoint_connections,
+    "RejectVpcEndpointConnections": _reject_vpc_endpoint_connections,
+    # Network Access Analyzer
+    "CreateNetworkInsightsAccessScope": _create_network_insights_access_scope,
+    "DescribeNetworkInsightsAccessScopes": _describe_network_insights_access_scopes,
+    "DeleteNetworkInsightsAccessScope": _delete_network_insights_access_scope,
+    "StartNetworkInsightsAccessScopeAnalysis": _start_network_insights_access_scope_analysis,
+    "DescribeNetworkInsightsAccessScopeAnalyses": _describe_network_insights_access_scope_analyses,
+    "DescribeNetworkInsightsAccessScopeAnalysisFindings": _describe_network_insights_access_scope_analysis_findings,
+    # AWS Verified Access
+    "CreateVerifiedAccessInstance": _create_verified_access_instance,
+    "DescribeVerifiedAccessInstances": _describe_verified_access_instances,
+    "DeleteVerifiedAccessInstance": _delete_verified_access_instance,
+    "CreateVerifiedAccessTrustProvider": _create_verified_access_trust_provider,
+    "DescribeVerifiedAccessTrustProviders": _describe_verified_access_trust_providers,
+    "DeleteVerifiedAccessTrustProvider": _delete_verified_access_trust_provider,
+    "AttachVerifiedAccessTrustProvider": _attach_verified_access_trust_provider,
+    "DetachVerifiedAccessTrustProvider": _detach_verified_access_trust_provider,
+    "CreateVerifiedAccessGroup": _create_verified_access_group,
+    "DescribeVerifiedAccessGroups": _describe_verified_access_groups,
+    "DeleteVerifiedAccessGroup": _delete_verified_access_group,
+    "CreateVerifiedAccessEndpoint": _create_verified_access_endpoint,
+    "DescribeVerifiedAccessEndpoints": _describe_verified_access_endpoints,
+    "DeleteVerifiedAccessEndpoint": _delete_verified_access_endpoint,
+    "VerifyAccessEndpointPolicy": _verify_access_endpoint_policy,
+    # VPC console settings: Block Public Access + Local Zones opt-in
+    "GetVpcBlockPublicAccessOptions": _get_vpc_block_public_access_options,
+    "ModifyVpcBlockPublicAccessOptions": _modify_vpc_block_public_access_options,
+    "CreateVpcBlockPublicAccessExclusion": _create_vpc_block_public_access_exclusion,
+    "DescribeVpcBlockPublicAccessExclusions": _describe_vpc_block_public_access_exclusions,
+    "DeleteVpcBlockPublicAccessExclusion": _delete_vpc_block_public_access_exclusion,
 }
 
 

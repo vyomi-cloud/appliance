@@ -908,6 +908,32 @@ try {
   if (SCRID) await ec2("DeleteSubnetCidrReservation", { SubnetCidrReservationId: SCRID });
   if (SCRSUBNET) await ec2("DeleteSubnet", { SubnetId: SCRSUBNET });
 
+  // VPC PrivateLink: create a gateway VPC endpoint through the UI wizard (UI → CLI direction),
+  // verify the real route it adds over the native wire, then delete it through the UI.
+  const vpceSubnetXml = vpcId ? await ec2("CreateSubnet", { VpcId: vpcId, CidrBlock: "10.0.10.0/24" }) : "";
+  const VPCESUBNET = xtag(vpceSubnetXml, "subnetId");
+  const vpceRtXml = vpcId ? await ec2("CreateRouteTable", { VpcId: vpcId }) : "";
+  const VPCERT = xtag(vpceRtXml, "routeTableId");
+  await page.goto(UI + "#/vpc/endpoints");
+  await page.getByRole("button", { name: "Create endpoint" }).click();
+  const vpceDialog = page.getByRole("dialog");
+  await vpceDialog.getByRole("button", { name: "Select a VPC" }).click();
+  await page.getByRole("option", { name: vpcId }).click();
+  await vpceDialog.getByPlaceholder("Select route tables").click();
+  await page.getByRole("option", { name: VPCERT }).click();
+  await page.keyboard.press("Escape");
+  await vpceDialog.getByRole("button", { name: "Create endpoint" }).click();
+  await page.getByText(/vpce-/).first().waitFor({ timeout: 10000 });
+  const vpceXml = await ec2("DescribeVpcEndpoints", {});
+  const VPCEID = (vpceXml.match(/<vpcEndpointId>(.*?)<\/vpcEndpointId>/) || [])[1];
+  const rtAfterVpce = VPCERT ? await ec2("DescribeRouteTables", { "RouteTableId.1": VPCERT }) : "";
+  check("VPC PrivateLink gateway endpoint (UI) → real S3 route visible over native wire",
+        !!VPCEID && rtAfterVpce.includes(VPCEID), rtAfterVpce.slice(0, 200));
+  await shot("19e-vpc-endpoints");
+  if (VPCEID) await ec2("DeleteVpcEndpoints", { "VpcEndpointId.1": VPCEID });
+  if (VPCERT) await ec2("DeleteRouteTable", { RouteTableId: VPCERT });
+  if (VPCESUBNET) await ec2("DeleteSubnet", { SubnetId: VPCESUBNET });
+
   // VPC: clean up over the wire.
   if (rtId) await ec2("DeleteRouteTable", { RouteTableId: rtId });
   if (vpcId) await ec2("DeleteVpc", { VpcId: vpcId });

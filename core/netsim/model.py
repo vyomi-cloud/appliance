@@ -42,6 +42,9 @@ EGRESS = "egress"
 # Route target kinds
 LOCAL, IGW, NAT, PEERING, BLACKHOLE, INSTANCE, UNSUPPORTED = (
     "local", "igw", "nat", "peering", "blackhole", "instance", "unsupported")
+# AWS Gateway VPC Endpoint (S3/DynamoDB): a route target that is reachable like a local route
+# (no public IP needed, no destination interface) as long as the endpoint exists and is available.
+GATEWAY_ENDPOINT = "gateway_endpoint"
 
 # Linux default ephemeral range (net.ipv4.ip_local_port_range) — what a client's source
 # port really is on a Vyomi instance, and therefore what a stateless NACL must let back in.
@@ -202,6 +205,7 @@ class Subnet:
     rulesets: list = field(default_factory=list)    # AWS NACL (stateless) / Azure subnet NSG
     nat: str | None = None              # implicit NAT gateway id (GCP Cloud NAT / Azure NAT GW)
     default_outbound: bool = False      # Azure "default outbound access"
+    bpa_block: str = "off"              # AWS VPC Block Public Access, resolved per-subnet: off | ingress | both
     name: str = ""
 
 

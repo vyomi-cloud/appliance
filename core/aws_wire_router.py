@@ -189,6 +189,7 @@ from core import apigatewayv2_core as apigw2
 from core import ssm_core as ssm
 from core import stepfunctions_core as sfn
 from core import vpc_core as vpc
+from core import ram_core as ram
 from core import kinesis_core as kinesis
 from core import cloudwatch_core as cw
 from core import azure_sql_core as az_sql
@@ -281,7 +282,7 @@ _SIGNING = {
     "events": "events", "lambda": "lambda", "ec2": "vpc", "kinesis": "kinesis", "monitoring": "cloudwatch", "logs": "logs", "states": "stepfunctions",
     "elasticloadbalancing": "elbv2",
     "cloudformation": "cloudformation",
-    "ssm": "ssm", "scheduler": "scheduler",
+    "ssm": "ssm", "scheduler": "scheduler", "ram": "ram",
     "apigateway": "apigateway",   # v1 REST control plane paths with no "/restapis" segment (apikeys, usageplans, clientcertificates, account)
 }
 
@@ -293,6 +294,7 @@ _TARGET_PREFIX = {
     "Logs_20140328": "logs",
     "AmazonSSM": "ssm",
     "AWSStepFunctions": "stepfunctions",
+    "AWSRAMFrontendService": "ram",
 }
 
 # Native JSON content-types the real SDK expects back per service.
@@ -302,6 +304,7 @@ _JSON_CT = {
     "events": "application/x-amz-json-1.1", "logs": "application/x-amz-json-1.1",
     "ssm": "application/x-amz-json-1.1",
     "stepfunctions": "application/x-amz-json-1.0",
+    "ram": "application/x-amz-json-1.1",
 }
 
 # Query-protocol Action → service, for UNSIGNED query requests (signed ones route
@@ -345,6 +348,7 @@ _QUERY_ACTION = {
     "CreateEgressOnlyInternetGateway": "vpc", "DescribeEgressOnlyInternetGateways": "vpc",
     "DeleteEgressOnlyInternetGateway": "vpc",
     "CreateDhcpOptions": "vpc", "DescribeDhcpOptions": "vpc", "DeleteDhcpOptions": "vpc", "AssociateDhcpOptions": "vpc",
+    "DescribeVpcDnsResolution": "vpc",
     "CreateManagedPrefixList": "vpc", "DescribeManagedPrefixLists": "vpc", "DeleteManagedPrefixList": "vpc",
     "CreateVpcPeeringConnection": "vpc", "DescribeVpcPeeringConnections": "vpc",
     "AcceptVpcPeeringConnection": "vpc", "DeleteVpcPeeringConnection": "vpc",
@@ -370,6 +374,27 @@ _QUERY_ACTION = {
     "GetEbsEncryptionByDefault": "vpc", "EnableEbsEncryptionByDefault": "vpc",
     "DisableEbsEncryptionByDefault": "vpc", "GetEbsDefaultKmsKeyId": "vpc",
     "ModifyEbsDefaultKmsKeyId": "vpc", "ResetEbsDefaultKmsKeyId": "vpc",
+    # PrivateLink
+    "CreateVpcEndpoint": "vpc", "DescribeVpcEndpoints": "vpc", "DeleteVpcEndpoints": "vpc",
+    "CreateVpcEndpointServiceConfiguration": "vpc", "DescribeVpcEndpointServiceConfigurations": "vpc",
+    "DeleteVpcEndpointServiceConfigurations": "vpc", "ModifyVpcEndpointServicePermissions": "vpc",
+    "DescribeVpcEndpointConnections": "vpc", "AcceptVpcEndpointConnections": "vpc",
+    "RejectVpcEndpointConnections": "vpc",
+    # Network Access Analyzer
+    "CreateNetworkInsightsAccessScope": "vpc", "DescribeNetworkInsightsAccessScopes": "vpc",
+    "DeleteNetworkInsightsAccessScope": "vpc", "StartNetworkInsightsAccessScopeAnalysis": "vpc",
+    "DescribeNetworkInsightsAccessScopeAnalyses": "vpc", "DescribeNetworkInsightsAccessScopeAnalysisFindings": "vpc",
+    # AWS Verified Access
+    "CreateVerifiedAccessInstance": "vpc", "DescribeVerifiedAccessInstances": "vpc", "DeleteVerifiedAccessInstance": "vpc",
+    "CreateVerifiedAccessTrustProvider": "vpc", "DescribeVerifiedAccessTrustProviders": "vpc",
+    "DeleteVerifiedAccessTrustProvider": "vpc", "AttachVerifiedAccessTrustProvider": "vpc",
+    "DetachVerifiedAccessTrustProvider": "vpc", "CreateVerifiedAccessGroup": "vpc", "DescribeVerifiedAccessGroups": "vpc",
+    "DeleteVerifiedAccessGroup": "vpc", "CreateVerifiedAccessEndpoint": "vpc", "DescribeVerifiedAccessEndpoints": "vpc",
+    "DeleteVerifiedAccessEndpoint": "vpc", "VerifyAccessEndpointPolicy": "vpc",
+    # VPC console settings
+    "GetVpcBlockPublicAccessOptions": "vpc", "ModifyVpcBlockPublicAccessOptions": "vpc",
+    "CreateVpcBlockPublicAccessExclusion": "vpc", "DescribeVpcBlockPublicAccessExclusions": "vpc",
+    "DeleteVpcBlockPublicAccessExclusion": "vpc",
     # CloudFormation
     "CreateStack": "cloudformation", "UpdateStack": "cloudformation", "DeleteStack": "cloudformation",
     "DescribeStacks": "cloudformation", "ListStacks": "cloudformation",
@@ -482,6 +507,9 @@ class AwsWireRouter:
         self.vpc = s.get("vpc") or s.get("vpc_net") or _types.SimpleNamespace()   # EC2/VPC network model
         self.vpc.cw_store = self.cw   # real StatusCheckFailed metrics (ec2.instances.monitoring / .alarms-metrics)
         self.cw.vpc_store = self.vpc  # real EC2 alarm actions (aws.cloudwatch.alarms.actions.ec2)
+        self.ram = s.get("ram") or _types.SimpleNamespace()   # Resource Access Manager (subnet/SG sharing)
+        self.vpc.ram_store = self.ram   # DeleteSubnet/DeleteSecurityGroup refuse while actively shared
+        self.ram.vpc_store = self.vpc   # AssociateResourceShare validates the subnet/SG exists
         self.logs = s.get("logs") or logs.LogsStore()         # CloudWatch Logs
         self.logs.lam_store, self.logs.kinesis_store = self.lam, self.kinesis   # real subscription-filter delivery
         self.cw.logs_store = self.logs            # real log-based Contributor Insights rules
@@ -888,6 +916,8 @@ class AwsWireRouter:
                 r = ssm.dispatch(self.ssm, target, payload)
             elif svc == "stepfunctions":
                 r = sfn.dispatch(self.sfn, target, payload, lambda_store=self.lam)
+            elif svc == "ram":
+                r = ram.dispatch(self.ram, target, payload, vpc_store=self.vpc)
             else:  # sqs
                 r = sqs.dispatch(self.msg, target, payload)
             hdrs = dict(r.headers or {})

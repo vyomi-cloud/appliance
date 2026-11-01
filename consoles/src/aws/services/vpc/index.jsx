@@ -9,6 +9,9 @@ import { SecurityGroups, SecurityGroupDetail, CreateSecurityGroup, EditInboundRu
 import { ElasticIps, AllocateElasticIp } from "./ElasticIps.jsx";
 import { EgressOnlyInternetGateways, DhcpOptionSets, ManagedPrefixLists, PeeringConnections, RouteServers } from "./MiscResources.jsx";
 import { ReachabilityAnalyzer, ReachabilityAnalyzerDetail } from "./ReachabilityAnalyzer.jsx";
+import { NetworkAccessAnalyzer } from "./NetworkAccessAnalyzer.jsx";
+import { Endpoints, EndpointServices, PrivatelinkGettingStarted } from "./Endpoints.jsx";
+import { VerifiedAccessInstances, VerifiedAccessTrustProviders, VerifiedAccessGroups, VerifiedAccessEndpoints } from "./VerifiedAccess.jsx";
 import Settings from "./Settings.jsx";
 import * as Honest from "./HonestPages.jsx";
 
@@ -139,11 +142,11 @@ export default {
 
     { pattern: "/vpc/reachability-analyzer", component: ReachabilityAnalyzer, crumbs: () => [crumb("VPC", ""), crumb("Reachability Analyzer", "reachability-analyzer")] },
     { pattern: "/vpc/reachability-analyzer/:id", component: ReachabilityAnalyzerDetail, crumbs: (p) => [crumb("VPC", ""), crumb("Reachability Analyzer", "reachability-analyzer"), crumb(p.id, "reachability-analyzer", p.id)] },
-    { pattern: "/vpc/network-access-analyzer", component: Honest.NetworkAccessAnalyzer, crumbs: () => [crumb("VPC", ""), crumb("Network Access Analyzer", "network-access-analyzer")] },
+    { pattern: "/vpc/network-access-analyzer", component: NetworkAccessAnalyzer, crumbs: () => [crumb("VPC", ""), crumb("Network Access Analyzer", "network-access-analyzer")] },
 
-    { pattern: "/vpc/privatelink-getting-started", component: Honest.PrivatelinkGettingStarted, crumbs: () => [crumb("VPC", ""), crumb("Getting started", "privatelink-getting-started")] },
-    { pattern: "/vpc/endpoints", component: Honest.Endpoints, crumbs: () => [crumb("VPC", ""), crumb("Endpoints", "endpoints")] },
-    { pattern: "/vpc/endpoint-services", component: Honest.EndpointServices, crumbs: () => [crumb("VPC", ""), crumb("Endpoint services", "endpoint-services")] },
+    { pattern: "/vpc/privatelink-getting-started", component: PrivatelinkGettingStarted, crumbs: () => [crumb("VPC", ""), crumb("Getting started", "privatelink-getting-started")] },
+    { pattern: "/vpc/endpoints", component: Endpoints, crumbs: () => [crumb("VPC", ""), crumb("Endpoints", "endpoints")] },
+    { pattern: "/vpc/endpoint-services", component: EndpointServices, crumbs: () => [crumb("VPC", ""), crumb("Endpoint services", "endpoint-services")] },
     { pattern: "/vpc/service-networks", component: Honest.ServiceNetworks, crumbs: () => [crumb("VPC", ""), crumb("Service networks", "service-networks")] },
     { pattern: "/vpc/lattice-services", component: Honest.LatticeServices, crumbs: () => [crumb("VPC", ""), crumb("Lattice services", "lattice-services")] },
     { pattern: "/vpc/resource-configurations", component: Honest.ResourceConfigurations, crumbs: () => [crumb("VPC", ""), crumb("Resource configurations", "resource-configurations")] },
@@ -168,10 +171,10 @@ export default {
     { pattern: "/vpc/vpn-connections", component: Honest.VpnConnections, crumbs: () => [crumb("VPC", ""), crumb("Site-to-Site VPN connections", "vpn-connections")] },
     { pattern: "/vpc/client-vpn-endpoints", component: Honest.ClientVpnEndpoints, crumbs: () => [crumb("VPC", ""), crumb("Client VPN endpoints", "client-vpn-endpoints")] },
 
-    { pattern: "/vpc/verified-access-instances", component: Honest.VerifiedAccessInstances, crumbs: () => [crumb("VPC", ""), crumb("Verified Access instances", "verified-access-instances")] },
-    { pattern: "/vpc/verified-access-trust-providers", component: Honest.VerifiedAccessTrustProviders, crumbs: () => [crumb("VPC", ""), crumb("Verified Access trust providers", "verified-access-trust-providers")] },
-    { pattern: "/vpc/verified-access-groups", component: Honest.VerifiedAccessGroups, crumbs: () => [crumb("VPC", ""), crumb("Verified Access groups", "verified-access-groups")] },
-    { pattern: "/vpc/verified-access-endpoints", component: Honest.VerifiedAccessEndpoints, crumbs: () => [crumb("VPC", ""), crumb("Verified Access endpoints", "verified-access-endpoints")] },
+    { pattern: "/vpc/verified-access-instances", component: VerifiedAccessInstances, crumbs: () => [crumb("VPC", ""), crumb("Verified Access instances", "verified-access-instances")] },
+    { pattern: "/vpc/verified-access-trust-providers", component: VerifiedAccessTrustProviders, crumbs: () => [crumb("VPC", ""), crumb("Verified Access trust providers", "verified-access-trust-providers")] },
+    { pattern: "/vpc/verified-access-groups", component: VerifiedAccessGroups, crumbs: () => [crumb("VPC", ""), crumb("Verified Access groups", "verified-access-groups")] },
+    { pattern: "/vpc/verified-access-endpoints", component: VerifiedAccessEndpoints, crumbs: () => [crumb("VPC", ""), crumb("Verified Access endpoints", "verified-access-endpoints")] },
 
     { pattern: "/vpc/transit-gateways", component: Honest.TransitGateways, crumbs: () => [crumb("VPC", ""), crumb("Transit gateways", "transit-gateways")] },
     { pattern: "/vpc/transit-gateway-attachments", component: Honest.TransitGatewayAttachments, crumbs: () => [crumb("VPC", ""), crumb("Transit gateway attachments", "transit-gateway-attachments")] },

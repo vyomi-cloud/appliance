@@ -25,6 +25,7 @@ import { follow, href, navigate } from "../../../common/router.js";
 import { ErrorAlert, KeyValue } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { FlowLogsTab } from "./FlowLogs.jsx";
+import { ResourceSharingTab } from "./ResourceSharing.jsx";
 import { TagsModal } from "./Vpcs.jsx";
 import GapButton from "./GapButton.jsx";
 import { TAG_I18N } from "./tagI18n.js";
@@ -172,9 +173,13 @@ export function SubnetDetail({ params }) {
   const rt = useAsync(() => (t.data?.RouteTableId ? api.describeRouteTable(t.data.RouteTableId) : null), [t.data?.RouteTableId]);
   const nacl = useAsync(() => (t.data?.NetworkAclId ? api.describeNetworkAcl(t.data.NetworkAclId) : null), [t.data?.NetworkAclId]);
   const [tags, setTags] = useState(false);
+  const bpa = useAsync(() => api.getVpcBlockPublicAccessOptions(), []);
+  const bpaExclusions = useAsync(() => api.describeVpcBlockPublicAccessExclusions(), []);
   if (t.loading) return <Box textAlign="center" padding="xxl"><Spinner size="large" /></Box>;
   if (!t.data) return <ErrorAlert error={{ message: "Subnet not found" }} />;
   const s = t.data;
+  const excluded = (bpaExclusions.data || []).some((x) => x.ResourceArn === s.SubnetId || x.ResourceArn === s.VpcId);
+  const bpaState = excluded ? "Off (excluded)" : (bpa.data?.InternetGatewayBlockMode || "off");
   return (
     <ContentLayout header={<Header variant="h1" actions={<ButtonDropdown items={[{ id: "delete", text: "Delete subnet" }]} onItemClick={async () => {
       if (confirm(`Delete ${s.SubnetId}?`)) { await api.deleteSubnet(s.SubnetId); notify.success("Subnet deleted."); navigate("vpc", "subnets"); }
@@ -182,7 +187,7 @@ export function SubnetDetail({ params }) {
       <SpaceBetween size="l">
         <KeyValue title="Details" columns={4} items={[
           ["Subnet ID", s.SubnetId], ["Subnet ARN", `arn:aws:ec2:us-east-1:123456789012:subnet/${s.SubnetId}`], ["State", s.State],
-          ["Block Public Access", "Off"], ["IPv4 CIDR", s.CidrBlock], ["Available IPv4 addresses", s.AvailableIpAddressCount],
+          ["Block Public Access", bpaState], ["IPv4 CIDR", s.CidrBlock], ["Available IPv4 addresses", s.AvailableIpAddressCount],
           ["IPv6 CIDR", "-"], ["Availability Zone", s.AvailabilityZone], ["Availability Zone ID", "-"], ["Network border group", "us-east-1"],
           ["VPC", s.VpcId], ["Route table", s.RouteTableId || "-"], ["Network ACL", s.NetworkAclId || "-"], ["Default subnet", s.DefaultForAz ? "Yes" : "No"],
           ["Auto-assign public IPv4 address", s.MapPublicIpOnLaunch ? "Yes" : "No"], ["Auto-assign IPv6 address", "No"],
@@ -204,7 +209,7 @@ export function SubnetDetail({ params }) {
               empty={<Box textAlign="center" color="inherit">Default network ACL (allow all)</Box>} />
           ) },
           { id: "cidr", label: "CIDR reservations", content: <CidrReservationsTab subnetId={s.SubnetId} /> },
-          { id: "share", label: "Sharing", content: <CapabilityContainer id="aws.vpc.resource-sharing" title="Sharing" /> },
+          { id: "share", label: "Sharing", content: <ResourceSharingTab resourceId={s.SubnetId} resourceKind="subnet" capabilityId="aws.vpc.resource-sharing" title="Sharing" /> },
           { id: "tags", label: "Tags", content: (
             <Table variant="container" items={Object.entries(s.Tags || {}).map(([k, v]) => ({ k, v }))}
               header={<Header variant="h2" counter={`(${Object.keys(s.Tags || {}).length})`} actions={<Button onClick={() => setTags(true)}>Manage tags</Button>}>Tags</Header>}

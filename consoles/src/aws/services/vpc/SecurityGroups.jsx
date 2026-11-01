@@ -25,8 +25,10 @@ import { useNotify } from "../../../common/notify.jsx";
 import { follow, href, navigate } from "../../../common/router.js";
 import { ErrorAlert, KeyValue } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
+import { ResourceSharingTab } from "./ResourceSharing.jsx";
 import { TAG_I18N } from "./tagI18n.js";
 import * as api from "./api.js";
+import { describeInstances as ec2DescribeInstances } from "../ec2/api.js";
 
 const opt = (v) => ({ value: v, label: v });
 const TYPES = [
@@ -119,13 +121,38 @@ export function SecurityGroupDetail({ params }) {
         <Tabs tabs={[
           { id: "in", label: "Inbound rules", content: <RulesTable g={g} direction="ingress" reload={t.reload} /> },
           { id: "out", label: "Outbound rules", content: <RulesTable g={g} direction="egress" reload={t.reload} /> },
-          { id: "share", label: "Sharing", content: <CapabilityContainer id="aws.vpc.security-group-sharing" title="Sharing" /> },
-          { id: "vpc", label: "VPC associations", content: <CapabilityContainer id="aws.vpc.security-group-sharing" title="VPC associations" /> },
-          { id: "rel", label: "Related resources - new", content: <CapabilityContainer id="aws.vpc.security-group-sharing" title="Related resources" /> },
+          { id: "share", label: "Sharing", content: <ResourceSharingTab resourceId={g.GroupId} resourceKind="security-group" capabilityId="aws.vpc.security-group-sharing" title="Sharing" /> },
+          { id: "vpc", label: "VPC associations", content: <VpcAssociationsTab g={g} /> },
+          { id: "rel", label: "Related resources - new", content: <RelatedResourcesTab g={g} /> },
           { id: "tags", label: "Tags", content: <TagsTable resourceId={g.GroupId} tags={g.Tags} onSave={saveTags} /> },
         ]} />
       </SpaceBetween>
     </ContentLayout>
+  );
+}
+
+function VpcAssociationsTab({ g }) {
+  return (
+    <CapabilityContainer id="aws.vpc.security-group-sharing" title="VPC associations">
+      <Table items={[{ vpc: g.VpcId }]} columnDefinitions={[{ id: "vpc", header: "VPC", cell: (r) => r.vpc }, { id: "s", header: "Association state", cell: () => "Associated (owning account)" }]}
+        empty={<Box textAlign="center" color="inherit">Not associated with any VPC.</Box>} />
+    </CapabilityContainer>
+  );
+}
+
+function RelatedResourcesTab({ g }) {
+  const enis = useAsync(() => api.describeNetworkInterfaces(), [g.GroupId]);
+  const instances = useAsync(() => ec2DescribeInstances(), [g.GroupId]);
+  const eniRows = (enis.data || []).filter((e) => e.GroupIds.includes(g.GroupId));
+  const instRows = (instances.data || []).filter((i) => (i.GroupSet || []).some((s) => s.groupId === g.GroupId));
+  return (
+    <CapabilityContainer id="aws.vpc.security-group-sharing" title="Related resources" counter={`(${eniRows.length + instRows.length})`}>
+      <Table items={[
+        ...instRows.map((i) => ({ id: i.instanceId, type: "Instance" })),
+        ...eniRows.map((e) => ({ id: e.NetworkInterfaceId, type: "Network interface" })),
+      ]} columnDefinitions={[{ id: "id", header: "Resource", cell: (r) => r.id }, { id: "type", header: "Type", cell: (r) => r.type }]}
+        empty={<Box textAlign="center" color="inherit">No resources use this security group.</Box>} />
+    </CapabilityContainer>
   );
 }
 

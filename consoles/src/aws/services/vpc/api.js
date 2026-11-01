@@ -1,7 +1,7 @@
 /* VPC over the native EC2 Query protocol (form-encoded Action=.../XML responses).
  * EC2 and VPC share one AWS service ("ec2" credential scope) and one backend
  * core (core/vpc_core.py) — see ../ec2/api.js for the compute/storage resource surface. */
-import { awsQuery, asList } from "../../../common/wire.js";
+import { awsQuery, awsJson, asList } from "../../../common/wire.js";
 
 /** Flatten a JS object/array into the Query wire's dotted-index form (see ../ec2/api.js). */
 function flatten(value, prefix = "", out = {}) {
@@ -170,6 +170,17 @@ export const authorizeEgress = (groupId, perms) => call("AuthorizeSecurityGroupE
 export const revokeIngress = (groupId, ruleIds) => call("RevokeSecurityGroupIngress", { GroupId: groupId, SecurityGroupRuleId: ruleIds });
 export const revokeEgress = (groupId, ruleIds) => call("RevokeSecurityGroupEgress", { GroupId: groupId, SecurityGroupRuleId: ruleIds });
 
+// ── network interfaces (for Security group "Related resources") ──────────
+const eniFromXml = (x) => ({
+  NetworkInterfaceId: x.networkInterfaceId, SubnetId: x.subnetId, VpcId: x.vpcId, Status: x.status,
+  PrivateIpAddress: x.privateIpAddress, GroupIds: asList(x.groupSet?.item).map((g) => g.groupId),
+  InstanceId: x.attachment?.instanceId || "",
+});
+export async function describeNetworkInterfaces() {
+  const r = await call("DescribeNetworkInterfaces");
+  return asList(r.networkInterfaceSet?.item).map(eniFromXml);
+}
+
 // ── elastic IPs ───────────────────────────────────────────────────────────
 const addressFromXml = (x) => ({
   PublicIp: x.publicIp, AllocationId: x.allocationId, Domain: x.domain, InstanceId: x.instanceId,
@@ -313,3 +324,185 @@ export async function describeNetworkInsightsAnalyses(pathId) {
   return asList(r.networkInsightsAnalysisSet?.item).map(niaFromXml);
 }
 export const deleteNetworkInsightsAnalysis = (id) => call("DeleteNetworkInsightsAnalysis", { NetworkInsightsAnalysisId: id });
+
+// ── PrivateLink: VPC endpoints + endpoint services ─────────────────────────
+const vpceFromXml = (x) => ({
+  VpcEndpointId: x.vpcEndpointId, VpcEndpointType: x.vpcEndpointType, VpcId: x.vpcId, ServiceName: x.serviceName,
+  State: x.state, PrivateDnsEnabled: x.privateDnsEnabled === "true",
+  RouteTableIds: asList(x.routeTableIdSet?.item), SubnetIds: asList(x.subnetIdSet?.item),
+  NetworkInterfaceIds: asList(x.networkInterfaceIdSet?.item), DnsEntries: asList(x.dnsEntrySet?.item).map((d) => d.dnsName),
+  CreationTimestamp: x.creationTimestamp, Tags: tagsFromXml(x.tagSet),
+});
+export const createVpcEndpoint = (vpcId, serviceName, type, opts = {}) => call("CreateVpcEndpoint", {
+  VpcId: vpcId, ServiceName: serviceName, VpcEndpointType: type, RouteTableId: opts.routeTableIds,
+  SubnetId: opts.subnetIds, PrivateDnsEnabled: opts.privateDnsEnabled, TagSpecification: tagSpec("vpc-endpoint", opts.tags),
+}).then((r) => vpceFromXml(r.vpcEndpoint));
+export async function describeVpcEndpoints(filter = {}) {
+  const r = await call("DescribeVpcEndpoints", filter);
+  return asList(r.vpcEndpointSet?.item).map(vpceFromXml);
+}
+export const deleteVpcEndpoints = (ids) => call("DeleteVpcEndpoints", { VpcEndpointId: ids });
+
+const vpcesFromXml = (x) => ({
+  ServiceId: x.serviceId, ServiceName: x.serviceName, ServiceState: x.serviceState,
+  AcceptanceRequired: x.acceptanceRequired === "true", AllowedPrincipals: asList(x.allowedPrincipalSet?.item),
+  Tags: tagsFromXml(x.tagSet),
+});
+export const createVpcEndpointServiceConfiguration = (nlbArns, acceptanceRequired, tags) => call("CreateVpcEndpointServiceConfiguration", {
+  NetworkLoadBalancerArn: nlbArns, AcceptanceRequired: acceptanceRequired, TagSpecification: tagSpec("vpc-endpoint-service", tags),
+}).then((r) => vpcesFromXml(r.serviceConfiguration));
+export async function describeVpcEndpointServiceConfigurations() {
+  const r = await call("DescribeVpcEndpointServiceConfigurations");
+  return asList(r.serviceConfigurationSet?.item).map(vpcesFromXml);
+}
+export const deleteVpcEndpointServiceConfigurations = (ids) => call("DeleteVpcEndpointServiceConfigurations", { ServiceId: ids });
+export const modifyVpcEndpointServicePermissions = (serviceId, addPrincipals, removePrincipals) => call("ModifyVpcEndpointServicePermissions", {
+  ServiceId: serviceId, AddAllowedPrincipals: addPrincipals, RemoveAllowedPrincipals: removePrincipals,
+});
+export async function describeVpcEndpointConnections() {
+  const r = await call("DescribeVpcEndpointConnections");
+  return asList(r.connectionSet?.item).map((x) => ({ ServiceId: x.serviceId, VpcEndpointId: x.vpcEndpointId, VpcEndpointState: x.vpcEndpointState, ServiceName: x.serviceName }));
+}
+export const acceptVpcEndpointConnections = (serviceId, endpointIds) => call("AcceptVpcEndpointConnections", { ServiceId: serviceId, VpcEndpointId: endpointIds });
+export const rejectVpcEndpointConnections = (serviceId, endpointIds) => call("RejectVpcEndpointConnections", { ServiceId: serviceId, VpcEndpointId: endpointIds });
+
+// ── Network Access Analyzer ────────────────────────────────────────────────
+export const createNetworkInsightsAccessScope = (matchPaths = [], tags) => call("CreateNetworkInsightsAccessScope", {
+  MatchPaths: matchPaths.map((p) => ({ Source: { ResourceStatement: { Resources: p.source } }, Destination: { ResourceStatement: { Resources: p.destination } } })),
+  TagSpecification: tagSpec("network-insights-access-scope", tags),
+}).then((r) => r.networkInsightsAccessScope);
+export async function describeNetworkInsightsAccessScopes() {
+  const r = await call("DescribeNetworkInsightsAccessScopes");
+  return asList(r.networkInsightsAccessScopeSet?.item).map((x) => ({ NetworkInsightsAccessScopeId: x.networkInsightsAccessScopeId, CreatedDate: x.createdDate, Tags: tagsFromXml(x.tagSet) }));
+}
+export const deleteNetworkInsightsAccessScope = (id) => call("DeleteNetworkInsightsAccessScope", { NetworkInsightsAccessScopeId: id });
+export async function startNetworkInsightsAccessScopeAnalysis(scopeId) {
+  const r = await call("StartNetworkInsightsAccessScopeAnalysis", { NetworkInsightsAccessScopeId: scopeId });
+  const x = r.networkInsightsAccessScopeAnalysis;
+  return { NetworkInsightsAccessScopeAnalysisId: x.networkInsightsAccessScopeAnalysisId, Status: x.status, FindingsFound: x.findingsFound };
+}
+export async function describeNetworkInsightsAccessScopeAnalyses(scopeId) {
+  const r = await call("DescribeNetworkInsightsAccessScopeAnalyses", { NetworkInsightsAccessScopeId: scopeId });
+  return asList(r.networkInsightsAccessScopeAnalysisSet?.item).map((x) => ({
+    NetworkInsightsAccessScopeAnalysisId: x.networkInsightsAccessScopeAnalysisId, NetworkInsightsAccessScopeId: x.networkInsightsAccessScopeId,
+    Status: x.status, StartDate: x.startDate, FindingsFound: x.findingsFound === "true",
+  }));
+}
+export async function describeNetworkInsightsAccessScopeAnalysisFindings(analysisId) {
+  const r = await call("DescribeNetworkInsightsAccessScopeAnalysisFindings", { NetworkInsightsAccessScopeAnalysisId: analysisId });
+  return { AnalysisStatus: r.analysisStatus, Findings: asList(r.analysisFindingSet?.item).map((f) => ({ FindingId: f.findingId, FindingComponents: asList(f.findingComponentSet?.item).map((c) => c.component?.id) })) };
+}
+
+// ── AWS Verified Access ────────────────────────────────────────────────────
+export const createVerifiedAccessInstance = (description, tags) => call("CreateVerifiedAccessInstance", { Description: description, TagSpecification: tagSpec("verified-access-instance", tags) })
+  .then((r) => ({ VerifiedAccessInstanceId: r.verifiedAccessInstance.verifiedAccessInstanceId, Description: r.verifiedAccessInstance.description }));
+export async function describeVerifiedAccessInstances() {
+  const r = await call("DescribeVerifiedAccessInstances");
+  return asList(r.verifiedAccessInstanceSet?.item).map((x) => ({
+    VerifiedAccessInstanceId: x.verifiedAccessInstanceId, Description: x.description, CreationTime: x.creationTime,
+    TrustProviderIds: asList(x.verifiedAccessTrustProviders?.item).map((t) => t.trustProviderId), Tags: tagsFromXml(x.tagSet),
+  }));
+}
+export const deleteVerifiedAccessInstance = (id) => call("DeleteVerifiedAccessInstance", { VerifiedAccessInstanceId: id });
+export const createVerifiedAccessTrustProvider = (trustProviderType, policyReferenceName, description, tags) => call("CreateVerifiedAccessTrustProvider", {
+  TrustProviderType: trustProviderType, PolicyReferenceName: policyReferenceName, Description: description, TagSpecification: tagSpec("verified-access-trust-provider", tags),
+}).then((r) => ({ VerifiedAccessTrustProviderId: r.verifiedAccessTrustProvider.verifiedAccessTrustProviderId, TrustProviderType: r.verifiedAccessTrustProvider.trustProviderType, Description: r.verifiedAccessTrustProvider.description }));
+export async function describeVerifiedAccessTrustProviders() {
+  const r = await call("DescribeVerifiedAccessTrustProviders");
+  return asList(r.verifiedAccessTrustProviderSet?.item).map((x) => ({
+    VerifiedAccessTrustProviderId: x.verifiedAccessTrustProviderId, TrustProviderType: x.trustProviderType,
+    Description: x.description, CreationTime: x.creationTime, Tags: tagsFromXml(x.tagSet),
+  }));
+}
+export const deleteVerifiedAccessTrustProvider = (id) => call("DeleteVerifiedAccessTrustProvider", { VerifiedAccessTrustProviderId: id });
+export const attachVerifiedAccessTrustProvider = (instanceId, trustProviderId) => call("AttachVerifiedAccessTrustProvider", { VerifiedAccessInstanceId: instanceId, VerifiedAccessTrustProviderId: trustProviderId });
+export const detachVerifiedAccessTrustProvider = (instanceId, trustProviderId) => call("DetachVerifiedAccessTrustProvider", { VerifiedAccessInstanceId: instanceId, VerifiedAccessTrustProviderId: trustProviderId });
+export const createVerifiedAccessGroup = (instanceId, description, policyDocument, tags) => call("CreateVerifiedAccessGroup", {
+  VerifiedAccessInstanceId: instanceId, Description: description, PolicyDocument: policyDocument, TagSpecification: tagSpec("verified-access-group", tags),
+}).then((r) => ({ VerifiedAccessGroupId: r.verifiedAccessGroup.verifiedAccessGroupId, VerifiedAccessInstanceId: r.verifiedAccessGroup.verifiedAccessInstanceId, Description: r.verifiedAccessGroup.description }));
+export async function describeVerifiedAccessGroups() {
+  const r = await call("DescribeVerifiedAccessGroups");
+  return asList(r.verifiedAccessGroupSet?.item).map((x) => ({
+    VerifiedAccessGroupId: x.verifiedAccessGroupId, VerifiedAccessInstanceId: x.verifiedAccessInstanceId,
+    Description: x.description, CreationTime: x.creationTime, Tags: tagsFromXml(x.tagSet),
+  }));
+}
+export const deleteVerifiedAccessGroup = (id) => call("DeleteVerifiedAccessGroup", { VerifiedAccessGroupId: id });
+export const createVerifiedAccessEndpoint = (groupId, applicationDomain, endpointType, policyDocument, tags) => call("CreateVerifiedAccessEndpoint", {
+  VerifiedAccessGroupId: groupId, ApplicationDomain: applicationDomain, EndpointType: endpointType,
+  PolicyDocument: policyDocument, TagSpecification: tagSpec("verified-access-endpoint", tags),
+}).then((r) => ({
+  VerifiedAccessEndpointId: r.verifiedAccessEndpoint.verifiedAccessEndpointId, VerifiedAccessGroupId: r.verifiedAccessEndpoint.verifiedAccessGroupId,
+  EndpointType: r.verifiedAccessEndpoint.endpointType, ApplicationDomain: r.verifiedAccessEndpoint.applicationDomain,
+  EndpointDomain: r.verifiedAccessEndpoint.endpointDomain, Status: r.verifiedAccessEndpoint.status?.code,
+}));
+export async function describeVerifiedAccessEndpoints() {
+  const r = await call("DescribeVerifiedAccessEndpoints");
+  return asList(r.verifiedAccessEndpointSet?.item).map((x) => ({
+    VerifiedAccessEndpointId: x.verifiedAccessEndpointId, VerifiedAccessGroupId: x.verifiedAccessGroupId,
+    EndpointType: x.endpointType, ApplicationDomain: x.applicationDomain, EndpointDomain: x.endpointDomain,
+    Status: x.status?.code, CreationTime: x.creationTime, Tags: tagsFromXml(x.tagSet),
+  }));
+}
+export const deleteVerifiedAccessEndpoint = (id) => call("DeleteVerifiedAccessEndpoint", { VerifiedAccessEndpointId: id });
+export async function verifyAccessEndpointPolicy(endpointId, context) {
+  const r = await call("VerifyAccessEndpointPolicy", { VerifiedAccessEndpointId: endpointId, Context: JSON.stringify(context || {}) });
+  return { Allowed: r.policyAllowed === "true", Statements: asList(r.evaluatedStatementSet?.item).map((s) => s.statement) };
+}
+
+// ── VPC console settings: Block Public Access + Local Zones opt-in ────────
+export async function getVpcBlockPublicAccessOptions() {
+  const r = await call("GetVpcBlockPublicAccessOptions");
+  return { InternetGatewayBlockMode: r.vpcBlockPublicAccessOptions?.internetGatewayBlockMode, State: r.vpcBlockPublicAccessOptions?.state };
+}
+export const modifyVpcBlockPublicAccessOptions = (mode) => call("ModifyVpcBlockPublicAccessOptions", { InternetGatewayBlockMode: mode });
+export const createVpcBlockPublicAccessExclusion = (resourceId, mode, tags) => {
+  const key = resourceId.startsWith("subnet-") ? "SubnetId" : "VpcId";
+  return call("CreateVpcBlockPublicAccessExclusion", { [key]: resourceId, InternetGatewayExclusionMode: mode, TagSpecification: tagSpec("vpc-block-public-access-exclusion", tags) })
+    .then((r) => r.vpcBlockPublicAccessExclusion);
+};
+export async function describeVpcBlockPublicAccessExclusions() {
+  const r = await call("DescribeVpcBlockPublicAccessExclusions");
+  return asList(r.vpcBlockPublicAccessExclusionSet?.item).map((x) => ({ ResourceArn: x.resourceArn, Mode: x.internetGatewayExclusionMode, State: x.state, Tags: tagsFromXml(x.tagSet) }));
+}
+export const deleteVpcBlockPublicAccessExclusion = (exclusionId) => call("DeleteVpcBlockPublicAccessExclusion", { ExclusionId: exclusionId });
+
+// ── DHCP DNS resolution (simulator data-plane verb) ────────────────────────
+export async function describeVpcDnsResolution(vpcId) {
+  const r = await call("DescribeVpcDnsResolution", { VpcId: vpcId });
+  return { DnsSupportEnabled: r.dnsSupportEnabled === "true", AmazonProvidedDns: r.amazonProvidedDns === "true", DomainName: r.domainName || "", DnsServers: asList(r.dnsServerSet?.item) };
+}
+
+// ── AWS RAM: resource sharing for subnets + security groups ───────────────
+const ramCall = (action, body = {}) => awsJson("ram", `AWSRAMFrontendService.${action}`, body, { version: "1.1" });
+const resourceArn = (kind, id) => `arn:aws:ec2:us-east-1:123456789012:${kind}/${id}`;
+export { resourceArn as ramResourceArn };
+export const createResourceShare = (name, resourceArns, principals, allowExternalPrincipals) => ramCall("CreateResourceShare", {
+  name, resourceArns, principals, allowExternalPrincipals,
+}).then((r) => r.resourceShare);
+export async function getResourceShares(resourceOwner = "SELF") {
+  const r = await ramCall("GetResourceShares", { resourceOwner });
+  return r.resourceShares || [];
+}
+export const deleteResourceShare = (resourceShareArn) => ramCall("DeleteResourceShare", { resourceShareArn });
+export const associateResourceShare = (resourceShareArn, resourceArns, principals) => ramCall("AssociateResourceShare", { resourceShareArn, resourceArns, principals })
+  .then((r) => r.resourceShareAssociations);
+export const disassociateResourceShare = (resourceShareArn, resourceArns, principals) => ramCall("DisassociateResourceShare", { resourceShareArn, resourceArns, principals })
+  .then((r) => r.resourceShareAssociations);
+export async function getResourceShareAssociations(associationType, filter = {}) {
+  const r = await ramCall("GetResourceShareAssociations", { associationType, ...filter });
+  return r.resourceShareAssociations || [];
+}
+
+// ── CloudWatch: NAT gateway metrics (AWS/NATGateway, real activity-derived — see
+// vpc_core._push_nat_metrics) ───────────────────────────────────────────────
+const cwCall = (op, payload = {}) => awsJson("monitoring", `GraniteServiceVersion20100801.${op}`, payload);
+export async function getNatGatewayMetrics(natGatewayId, metricName, hours = 3) {
+  const end = new Date();
+  const start = new Date(end.getTime() - hours * 3600 * 1000);
+  const r = await cwCall("GetMetricStatistics", {
+    Namespace: "AWS/NATGateway", MetricName: metricName, Dimensions: [{ Name: "NatGatewayId", Value: natGatewayId }],
+    StartTime: start.toISOString(), EndTime: end.toISOString(), Period: 300, Statistics: ["Sum"],
+  });
+  return r.Datapoints || [];
+}
