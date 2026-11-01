@@ -156,8 +156,21 @@ const PLACEHOLDER_CELLS = (page) => page.evaluate(() => {
   return out;
 });
 
+// Columns the real cloud console ALSO shows as "-"/blank when the optional field
+// was not set. The crawler creates resources with defaults only, so these are
+// faithful, not missing data. Keyed by cloud/service so a real placeholder in any
+// other column of the same service is still a finding. `why` is required.
+const BLANK_LIKE_REAL = [
+  { cloud: "aws", service: "DynamoDB", column: /^sort key$/i, why: "table created with a partition key only; real AWS shows - for Sort key" },
+  { cloud: "aws", service: "API Gateway", column: /^description$/i, why: "Description is optional; real AWS shows - when unset" },
+  { cloud: "aws", service: "EventBridge", column: /^description$/i, why: "rule Description is optional; real AWS shows - when unset" },
+  { cloud: "aws", service: "VPC", column: /^name$/i, why: "Name is just the Name tag; untagged VPCs/subnets/route tables show - in real AWS" },
+];
+let CURRENT = { cloud: "", service: "" };
+const blankLikeReal = (col) => BLANK_LIKE_REAL.some((e) => e.why && e.cloud === CURRENT.cloud && e.service === CURRENT.service && e.column.test(col));
+
 async function placeholderFindings(page, where) {
-  const cells = await PLACEHOLDER_CELLS(page).catch(() => []);
+  const cells = (await PLACEHOLDER_CELLS(page).catch(() => [])).filter((c) => !blankLikeReal(c.col));
   // One finding per column, not per cell, to keep the inventory readable.
   const byCol = new Map();
   for (const c of cells) byCol.set(c.col, (byCol.get(c.col) || 0) + 1);
@@ -401,6 +414,7 @@ async function crawlConsole(browser, base, con, needsSW) {
       if (seen.has(svc.label) || seen.size >= MAX_SERVICES || (ONLY && !ONLY.test(svc.label))) continue;
       seen.add(svc.label);
       const row = { target: TARGET, cloud: con.cloud, service: svc.label, tabs: [], findings: [], surfaces: [] };
+      CURRENT = { cloud: con.cloud, service: svc.label };
       // A tab / resource detail classified "static" (no API call, nothing about this
       // resource) is a finding, not just a label: it reaches the fixers. An editable,
       // empty collection (a Labels/Tags editor with an Add control) is real UI.
