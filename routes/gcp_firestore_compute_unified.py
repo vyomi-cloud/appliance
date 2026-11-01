@@ -477,6 +477,11 @@ def register(app) -> list:
         # them with the shared netsim evaluator (same engine as Nano)
         app.add_route("/v1/projects/{project}/locations/global/connectivityTests", _compute_native, methods=_METHODS)
         app.add_route("/v1/projects/{project}/locations/global/connectivityTests/{rest:path}", _compute_native, methods=_METHODS)
+        # Internal Range Allocator (networkconnectivity) + Serverless VPC Access connectors (vpcaccess):
+        # REST families outside /compute/ that the same VPC core serves
+        for fam in ("internalRanges", "connectors"):
+            app.add_route(f"/v1/projects/{{project}}/locations/{{location}}/{fam}", _compute_native, methods=_METHODS)
+            app.add_route(f"/v1/projects/{{project}}/locations/{{location}}/{fam}/{{rest:path}}", _compute_native, methods=_METHODS)
         mounted.append("gcp_compute")
     return mounted
 

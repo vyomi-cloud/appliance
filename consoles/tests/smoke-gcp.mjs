@@ -1384,7 +1384,7 @@ try {
   check("delete service via UI → gone over native wire", (await wire(`/v2/projects/vyomi-project/locations/us-central1/services/${RUNSVC}`)).status === 404);
 
   // Not-simulated gaps carry the conformance attribute
-  await page.goto(UI + "#/storage/monitoring");
+  await page.goto(UI + "#/storage/object-enrichments");
   await page.locator("[data-vyomi-not-simulated]").first().waitFor({ timeout: 5000 });
   check("honest gap page carries data-vyomi-not-simulated", true);
 

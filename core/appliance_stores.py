@@ -181,10 +181,11 @@ class AppStateObjectStore(ObjectStore):
 class AppStateNoSqlStore(NoSqlStore):
     """NoSqlStore whose `tables` map is the appliance's space-scoped ddb_state["tables"]."""
 
-    def __init__(self, tables, account_id: str, backups=None, exports=None):
+    def __init__(self, tables, account_id: str, backups=None, exports=None, imports=None):
         self._t = tables
         self._b = backups if backups is not None else {}
         self._e = exports if exports is not None else {}
+        self._i = imports if imports is not None else {}
         self.account_id = account_id
 
     tables = property(lambda self: self._t)
@@ -193,6 +194,7 @@ class AppStateNoSqlStore(NoSqlStore):
     backups = property(lambda self: self._b)
     # ExportTableToPointInTime job records — same persisted ddb_state, keyed by export ARN.
     exports = property(lambda self: self._e)
+    imports = property(lambda self: self._i)   # ImportTable jobs (aws.dynamodb.imports)
 
 
 def _active_space_id() -> str:
@@ -209,6 +211,10 @@ def _http_date() -> str:
     return email.utils.formatdate(usegmt=True)
 
 
+def _azure_blob_factory() -> dict:
+    return {"containers": {}, "blobs": {}}
+
+
 class AppStateAzureBlobStore(AzureBlobStore):
     """azure_blob_core store over the appliance's space-scoped Azure state."""
 
@@ -220,6 +226,14 @@ class AppStateAzureBlobStore(AzureBlobStore):
 
     containers = property(lambda self: self._c)
     blobs = property(lambda self: self._bl)
+    # Soft delete, versioning, change feed and request metrics (the core's depth state): durable
+    # in the Azure space, like containers/blobs — not skipped because __init__ doesn't run.
+    deleted_containers = property(lambda self: _proxy("azure_blob", _azure_blob_factory, "deleted_containers"))
+    deleted_blobs = property(lambda self: _proxy("azure_blob", _azure_blob_factory, "deleted_blobs"))
+    blob_versions = property(lambda self: _proxy("azure_blob", _azure_blob_factory, "blob_versions"))
+    change_feed = property(lambda self: _proxy("azure_blob", _azure_blob_factory, "change_feed"))
+    request_counters = property(lambda self: _proxy("azure_blob", _azure_blob_factory, "request_counters"))
+    request_log = property(lambda self: _proxy("azure_blob", _azure_blob_factory, "request_log"))
 
     @staticmethod
     def _split(container_key: str) -> tuple[str, str]:
@@ -1554,14 +1568,15 @@ def ddb_store() -> AppStateNoSqlStore:
         _DDB = AppStateNoSqlStore(_proxy("dynamodb", ctx.ddb_state.default_factory, "tables"),
                                   account_id=ctx.AWS_ACCOUNT_ID,
                                   backups=_proxy("dynamodb", ctx.ddb_state.default_factory, "backups"),
-                                  exports=_proxy("dynamodb", ctx.ddb_state.default_factory, "exports"))
+                                  exports=_proxy("dynamodb", ctx.ddb_state.default_factory, "exports"),
+                                  imports=_proxy("dynamodb", ctx.ddb_state.default_factory, "imports"))
     return _DDB
 
 
 def az_blob_store() -> AppStateAzureBlobStore:
     global _AZB
     if _AZB is None:
-        factory = lambda: {"containers": {}, "blobs": {}}   # noqa: E731
+        factory = _azure_blob_factory
         try:
             from core import azure_blob_store as azurite
         except Exception:

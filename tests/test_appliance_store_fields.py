@@ -154,3 +154,35 @@ def test_route_space_store_covers_base_fields(mod, cls_name):
                      and k not in _ROUTE_STORE_NOT_OWNED.get(cls_name, set()) and k != "seq"
                      and not isinstance(getattr(cls, k, None), property))   # must be a slot-backed property
     assert not missing, f"{mod}.{cls_name} doesn't persist {base.__name__} fields {missing} (add to _KEYS)"
+
+
+# The same gap on the remaining hand-written adapters (AppState* classes outside the two families
+# above that skip the base __init__). Seen: Azure Blob's soft-delete/metrics state — every blob call
+# 500'd offline with AttributeError request_counters.
+# Fields on a store base SHARED across clouds that this adapter's cloud doesn't use.
+_ADAPTER_NOT_OWNED = {
+    "AppStateKeyStore": {"custom_key_stores"},       # AWS KMS only (AppStateAwsKeyStore has it); this one is Cloud KMS / Key Vault
+    "AppStateMessagingStore": {"pubsub"},            # AWS SQS/SNS: no GCP Pub/Sub state
+    "AppStateServiceBusStore": {"pubsub", "queues", "sns"},   # Azure Service Bus keeps its own entities
+    "AppStatePubsubStore": {"sns"},                  # GCP Pub/Sub: no AWS SNS state
+}
+_OTHER_ADAPTERS = [c for n, c in vars(aps).items()
+                   if isinstance(c, type) and n.startswith("AppState") and not issubclass(c, (aps._SlotStore, aps._CoreSlotStore))
+                   and "__init__" in vars(c) and "super().__init__" not in inspect.getsource(c.__init__).replace("no super().__init__", "")]
+
+
+@_pytest.mark.parametrize("cls", _OTHER_ADAPTERS, ids=lambda c: c.__name__)
+def test_other_adapters_expose_base_store_fields(cls):
+    base = next((b for b in cls.__mro__[1:] if b is not object and not b.__name__.startswith("_")), None)
+    if base is None:
+        _pytest.skip("no base store")
+    try:
+        inst = base()
+    except TypeError:
+        _pytest.skip(f"{base.__name__}() needs args")
+    own_init = inspect.getsource(cls.__init__)
+    missing = sorted(k for k, v in vars(inst).items()
+                     if not k.startswith("_") and isinstance(v, (dict, list, set))
+                     and k not in _ADAPTER_NOT_OWNED.get(cls.__name__, set())
+                     and not isinstance(getattr(cls, k, None), property) and f"self.{k} =" not in own_init)
+    assert not missing, f"{cls.__name__} lacks {base.__name__} fields {missing}"
