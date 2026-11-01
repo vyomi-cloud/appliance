@@ -2423,7 +2423,7 @@ function renderCollapsibleForm(svc, main){
     if (r.ok) { toast(name + " created", "ok"); recordNotif("ok", "Launched " + name);
       navigate({view:"list", item:null}); }
     else {
-      const m = (r.json && (r.json.detail || (r.json.error && r.json.error.message))) || "";
+      const m = apiErrorText(r);   // detail, message, or a string / {code,message} error
       toast("Launch failed (" + r.status + "): " + m, "err");
       recordNotif("err", "Launch failed (" + r.status + ")");
     }
@@ -2737,7 +2737,7 @@ function renderSteppedWizard(svc, main){
       toast(name + " created", "ok"); recordNotif("ok", "Created " + name);
       navigate({view:"list", item:null});
     } else {
-      const m = (r.json && (r.json.detail || (r.json.error && r.json.error.message))) || "";
+      const m = apiErrorText(r);   // detail, message, or a string / {code,message} error
       toast("Create failed (" + r.status + "): " + m, "err");
     }
   }
