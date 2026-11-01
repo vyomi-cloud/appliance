@@ -872,19 +872,52 @@ _PUSH_PROTOCOLS = ("http", "https", "lambda", "email", "email-json")
 def _retry_policy(topic: dict, sub: dict) -> dict:
     """Effective retry policy for a subscription: the subscription's DeliveryPolicy
     (healthyRetryPolicy) wins, then the topic's (http.defaultHealthyRetryPolicy), then
-    SNS's defaults (3 retries, 20 s)."""
+    SNS's defaults (3 retries, 20 s) — unless the topic sets
+    http.disableSubscriptionOverrides, in which case the subscription's own policy is
+    ignored and the topic's default always applies, exactly as real SNS does."""
     out = dict(_DEFAULT_DELIVERY_POLICY["http"]["defaultHealthyRetryPolicy"])
-    for raw, path in ((topic.get("attributes", {}).get("DeliveryPolicy"), ("http", "defaultHealthyRetryPolicy")),
-                      (sub.get("attributes", {}).get("DeliveryPolicy"), ("healthyRetryPolicy",))):
+    try:
+        topic_http = json.loads(topic.get("attributes", {}).get("DeliveryPolicy") or "{}").get("http", {})
+    except Exception:
+        topic_http = {}
+    if not isinstance(topic_http, dict):
+        topic_http = {}
+    if isinstance(topic_http.get("defaultHealthyRetryPolicy"), dict):
+        out.update({k: v for k, v in topic_http["defaultHealthyRetryPolicy"].items() if v is not None})
+    if not topic_http.get("disableSubscriptionOverrides"):
         try:
-            doc = json.loads(raw) if raw else {}
-            for k in path:
-                doc = doc.get(k, {})
-            if isinstance(doc, dict):
-                out.update({k: v for k, v in doc.items() if v is not None})
+            sub_policy = json.loads(sub.get("attributes", {}).get("DeliveryPolicy") or "{}").get("healthyRetryPolicy", {})
         except Exception:
-            pass
+            sub_policy = {}
+        if isinstance(sub_policy, dict):
+            out.update({k: v for k, v in sub_policy.items() if v is not None})
     return out
+
+
+def retry_delay(policy: dict, retry: int) -> float:
+    """Seconds to wait before retry number `retry` (1-based) under an SNS healthyRetryPolicy:
+    no-delay retries, then min-delay retries, then the backoff curve, then max-delay retries.
+    Shared by the offline appliance's real delivery worker (core/sns_delivery.py) so both the
+    Nano/dev_server simulation below and the real retry loop use the exact same schedule."""
+    total = int(policy.get("numRetries", 3))
+    lo, hi = float(policy.get("minDelayTarget", 20)), float(policy.get("maxDelayTarget", 20))
+    n_none = int(policy.get("numNoDelayRetries", 0))
+    n_min = int(policy.get("numMinDelayRetries", 0))
+    n_max = int(policy.get("numMaxDelayRetries", 0))
+    if retry <= n_none:
+        return 0.0
+    if retry <= n_none + n_min:
+        return lo
+    if retry > total - n_max:
+        return hi
+    k = retry - n_none - n_min                         # 1-based position on the backoff curve
+    span = max(1, total - n_none - n_min - n_max)
+    fn = str(policy.get("backoffFunction", "linear")).lower()
+    if fn in ("exponential", "geometric"):
+        return min(hi, lo * (2 ** (k - 1)) if fn == "geometric" else lo * (2 ** k))
+    if fn == "arithmetic":
+        return min(hi, lo * k)
+    return lo + (hi - lo) * (k - 1) / max(1, span - 1) if span > 1 else lo   # linear
 
 
 def _redrive_target(sub: dict) -> str:
@@ -892,6 +925,36 @@ def _redrive_target(sub: dict) -> str:
         return str(json.loads(sub.get("attributes", {}).get("RedrivePolicy") or "{}").get("deadLetterTargetArn", ""))
     except Exception:
         return ""
+
+
+def _simulate_http_retry_exhaustion(store, topic: dict, sub: dict, *, message_id: str, subject: str,
+                                    message: str, envelope: dict) -> None:
+    """Nano / dev_server have no durable delivery worker (no background thread, no real
+    socket to retry an HTTP/S endpoint against), so a push can never actually succeed there —
+    see sns.publish.other-protocols. What CAN be made real on this substrate is the
+    healthyRetryPolicy itself: run its exact attempt count and backoff schedule to completion
+    synchronously (same math as core/sns_delivery.py's real worker uses on the offline
+    appliance) and land the message in the subscription's dead-letter queue when one is
+    configured — so the policy's numRetries/backoff/redrive settings have the SAME observable
+    effect here as they do for real, instead of being inert stored configuration."""
+    policy = _retry_policy(topic, sub)
+    total = max(0, int(policy.get("numRetries", 3)))
+    arn, sub_arn, endpoint, protocol = topic["topic_arn"], sub["subscription_arn"], sub["endpoint"], sub["protocol"]
+    for attempt in range(1, total + 2):             # 1 initial attempt + `total` configured retries
+        if attempt <= total:
+            delay = retry_delay(policy, attempt)
+            note = (f"attempt {attempt} failed (no delivery worker on this substrate); "
+                    f"retry {attempt} of {total} in {delay:g}s per healthyRetryPolicy")
+        else:
+            note = f"gave up after {attempt} attempts per healthyRetryPolicy"
+        _log_delivery(store, kind="DeliveryFailure", topic_arn=arn, protocol=protocol, endpoint=endpoint,
+                      subscription_arn=sub_arn, subject=subject, message=message, message_id=message_id,
+                      error=note)
+    target = _redrive_target(sub)
+    if target and _deliver_sqs(store, target, json.dumps(envelope), None, None, message_id):
+        _log_delivery(store, kind="DeadLetter", topic_arn=arn, protocol=protocol, endpoint=target,
+                      subscription_arn=sub_arn, subject=subject, message=message, message_id=message_id,
+                      error="", note=f"moved to dead-letter queue {target}")
 
 
 def _enqueue_delivery(store, topic: dict, sub: dict, **job) -> bool:
@@ -989,7 +1052,10 @@ def _publish_to_topic(store, topic: dict, msg: dict) -> tuple[str, str]:
                     store, topic, sub, kind="Notification", subject=msg.get("Subject") or "", message=text,
                     message_id=message_id, raw=raw, envelope=env, group=msg.get("group") or "",
                     attributes=attrs or {})
-            if not queued:
+            if not queued and sub["protocol"] in ("http", "https"):
+                _simulate_http_retry_exhaustion(store, topic, sub, message_id=message_id,
+                                                subject=msg.get("Subject") or "", message=text, envelope=env)
+            elif not queued:
                 _log_delivery(store, kind="Notification", topic_arn=arn, protocol=sub["protocol"],
                               endpoint=sub["endpoint"], subscription_arn=sub["subscription_arn"],
                               subject=msg.get("Subject") or "", message=text, message_id=message_id)

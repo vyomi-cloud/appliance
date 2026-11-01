@@ -145,6 +145,47 @@ def run(store=None):
     _check("data protection audit records a finding without blocking", any(d["kind"] == "DataProtectionAudit" for d in st.sns["deliveries"]))
     call("PutDataProtectionPolicy", ResourceArn=arn, DataProtectionPolicy=json.dumps({"Name": "p", "Version": "2021-06-01", "Statement": []}))
 
+    # delivery policy (HTTP/S healthyRetryPolicy) — really retried, not just stored. This
+    # substrate (Nano/dev_server) has no durable delivery worker so an HTTP/S push can never
+    # truly succeed here (see sns.publish.other-protocols), but the retry policy's own attempt
+    # count / backoff / redrive settings must still have a real, observable effect.
+    sqs.dispatch(st, SQS + "CreateQueue", {"QueueName": "dlq"})
+    dlq_arn = st.get_queue("dlq")["queue_arn"]
+    dlq_url = sqs.dispatch(st, SQS + "GetQueueUrl", {"QueueName": "dlq"}).body["QueueUrl"]
+    call("Subscribe", TopicArn=arn, Protocol="https", Endpoint="https://example.invalid/hook")
+    htok = next(d["token"] for d in st.sns["deliveries"]
+                if d["kind"] == "SubscriptionConfirmation" and d["endpoint"] == "https://example.invalid/hook")
+    hsub = _v(call("ConfirmSubscription", TopicArn=arn, Token=htok).body, "SubscriptionArn")
+    call("SetSubscriptionAttributes", SubscriptionArn=hsub, AttributeName="RedrivePolicy",
+         AttributeValue=json.dumps({"deadLetterTargetArn": dlq_arn}))
+    call("SetSubscriptionAttributes", SubscriptionArn=hsub, AttributeName="DeliveryPolicy",
+         AttributeValue=json.dumps({"healthyRetryPolicy": {"numRetries": 2, "minDelayTarget": 1, "maxDelayTarget": 1}}))
+    before = len(st.sns["deliveries"])
+    call("Publish", TopicArn=arn, Message="will not be delivered")
+    fails = [d for d in st.sns["deliveries"][before:] if d["kind"] == "DeliveryFailure" and d["subscription_arn"] == hsub]
+    _check("http delivery retried per policy (numRetries=2 -> 3 attempts)", len(fails) == 3)
+    _check("http delivery gives up after exhausting retries", "gave up after 3 attempts" in fails[-1]["error"])
+    dead = sqs.dispatch(st, SQS + "ReceiveMessage", {"QueueUrl": dlq_url}).body["Messages"]
+    _check("exhausted http delivery lands in the dead-letter queue", len(dead) == 1 and "will not be delivered" in dead[0]["Body"])
+
+    # changing numRetries changes the observed attempt count — proves it's enforced, not stored
+    call("SetSubscriptionAttributes", SubscriptionArn=hsub, AttributeName="DeliveryPolicy",
+         AttributeValue=json.dumps({"healthyRetryPolicy": {"numRetries": 0}}))
+    before = len(st.sns["deliveries"])
+    call("Publish", TopicArn=arn, Message="zero retries")
+    fails0 = [d for d in st.sns["deliveries"][before:] if d["kind"] == "DeliveryFailure" and d["subscription_arn"] == hsub]
+    _check("numRetries=0 gives up after a single attempt", len(fails0) == 1 and "gave up after 1 attempts" in fails0[0]["error"])
+
+    # a topic's disableSubscriptionOverrides pins the effective policy to the topic default
+    call("SetTopicAttributes", TopicArn=arn, AttributeName="DeliveryPolicy", AttributeValue=json.dumps(
+        {"http": {"defaultHealthyRetryPolicy": {"numRetries": 1}, "disableSubscriptionOverrides": True}}))
+    before = len(st.sns["deliveries"])
+    call("Publish", TopicArn=arn, Message="topic policy wins")
+    fails1 = [d for d in st.sns["deliveries"][before:] if d["kind"] == "DeliveryFailure" and d["subscription_arn"] == hsub]
+    _check("disableSubscriptionOverrides ignores the subscription's own policy", len(fails1) == 2 and "gave up after 2 attempts" in fails1[-1]["error"])
+    call("SetTopicAttributes", TopicArn=arn, AttributeName="DeliveryPolicy", AttributeValue="")
+    call("SetSubscriptionAttributes", SubscriptionArn=hsub, AttributeName="RedrivePolicy", AttributeValue="")
+
     # batch
     b = call("PublishBatch", TopicArn=arn, **{
         "PublishBatchRequestEntries.member.1.Id": "a", "PublishBatchRequestEntries.member.1.Message": "m1",

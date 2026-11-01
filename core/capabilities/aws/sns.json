@@ -30,11 +30,11 @@
   },
   "sns.topic.delivery-policy": {
     "title": "Delivery policy (HTTP/S retry policy)",
-    "level": { "nano": "config_only", "offline": "config_only" },
+    "level": { "nano": "limited", "offline": "full" },
     "limitations": [
-      "The per-topic/per-subscription HTTP/S retry policy (healthyRetryPolicy) round-trips through SetTopicAttributes/SetSubscriptionAttributes/GetTopicAttributes exactly as set, but Vyomi never actually retries a push delivery against it — see sns.publish.other-protocols for what Vyomi does deliver."
+      "The per-topic/per-subscription HTTP/S retry policy (healthyRetryPolicy — numRetries, min/maxDelayTarget, backoffFunction, numNoDelayRetries/numMinDelayRetries/numMaxDelayRetries, disableSubscriptionOverrides) is really enforced: the offline appliance's delivery worker retries a failing HTTP/S endpoint over the real network exactly that many times on that backoff curve before redriving the message to the subscription's RedrivePolicy dead-letter queue. On Nano/dev_server there is no durable delivery worker, so an HTTP/S push is never actually sent (see sns.publish.other-protocols) — but the same policy still drives how many DeliveryFailure attempts are recorded and whether the exhausted message lands in the dead-letter queue, computed synchronously instead of over real elapsed time."
     ],
-    "tests": ["tests/conformance/test_sns_core.py"]
+    "tests": ["tests/conformance/test_sns_core.py", "tests/conformance/test_sns_delivery_core.py"]
   },
   "sns.topic.delivery-status-logging": {
     "title": "Delivery status logging (CloudWatch Logs feedback for successful/failed deliveries)",
@@ -74,7 +74,7 @@
     "title": "Redrive policy (dead-letter queue)",
     "level": { "nano": "limited", "offline": "full" },
     "limitations": [
-      "The RedrivePolicy attribute round-trips and is honoured for SQS/HTTP/Lambda/email push failures, but on Nano (no durable delivery workers) only SQS subscriptions can actually exhaust retries and land in the dead-letter queue within a single session; HTTP/Lambda/email redrive requires the offline appliance's delivery workers."
+      "The RedrivePolicy attribute round-trips and is honoured for SQS/HTTP/Lambda/email push failures, but on Nano (no durable delivery workers) only SQS and HTTP/S subscriptions can actually exhaust retries and land in the dead-letter queue within a single session (HTTP/S synchronously, running the subscription's own healthyRetryPolicy schedule to completion — see sns.topic.delivery-policy); Lambda/email redrive still requires the offline appliance's delivery workers."
     ],
     "tests": ["tests/conformance/test_sns_core.py"]
   },
