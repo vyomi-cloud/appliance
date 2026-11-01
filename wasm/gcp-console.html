@@ -172,6 +172,8 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
   .wrap,.wizard-page{background:#fff;border:1px solid var(--line);border-radius:12px;margin:16px 24px;padding:20px 24px;max-width:1600px}
   .wrap .card,.wrap .kv-card,.wrap .col-card,.wizard-page .card,.wizard-page .kv-card,.wizard-page .col-card{border:none}
   .wizard-page .summary-card{border:none;background:var(--bg)}
+  /* Dashboard panels keep their rounded border. */
+  .wrap.home .card{border:1px solid var(--line);border-radius:8px}
   /* Grids keep their rounded border; the rules inside (toolbar, header, rows) run edge to edge of the grid. */
   .wrap .table-wrap{border:1px solid var(--line);border-radius:8px;overflow:hidden}
   .page-head{display:flex;align-items:center;gap:14px;margin-bottom:18px}
@@ -943,7 +945,7 @@ function buildConnectCard(){
 
 function renderHome(main){
   main.innerHTML = "";  // self-clear (same pattern as list/detail/create)
-  const wrap = el("div",{class:"wrap"});
+  const wrap = el("div",{class:"wrap home"});
   wrap.append(crumbsEl());
   wrap.append(el("div",{class:"page-head"},
     el("h1",{}, "Dashboard")));
