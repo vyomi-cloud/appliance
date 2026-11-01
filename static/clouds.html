@@ -1560,51 +1560,6 @@
       <p>Per-cloud workload distribution, live host utilization, and backend service status.</p>
     </header>
 
-    <!-- ── STATS surface card — pies + live host metrics ────────────── -->
-    <div class="surface-card" id="stats-card">
-      <div class="sc-head">
-        <div class="sc-title">
-          <h2><span class="material-icons">monitor_heart</span>Appliance health</h2>
-        </div>
-      </div>
-      <p class="sc-desc">Per-cloud workload distribution across your clouds (CPU / RAM / Disk).</p>
-
-    <!-- ── Per-provider distribution (3 donut pies) ────────────────── -->
-    <div class="provider-pies" id="provider-pies">
-      <div class="pie-card empty" data-metric="cpu">
-        <div class="pie-label"><span class="material-icons">developer_board</span> CPU distribution</div>
-        <div class="pie-svg-wrap">
-          <svg viewBox="0 0 36 36">
-            <circle class="seg" cx="18" cy="18" r="15.91549" fill="transparent" stroke="#e7e7e9" stroke-width="3.5"></circle>
-          </svg>
-          <div class="pie-center"><div class="pc-val">—</div><div class="pc-sub">vCPU</div></div>
-        </div>
-        <div class="pie-legend"></div>
-      </div>
-      <div class="pie-card empty" data-metric="ram">
-        <div class="pie-label"><span class="material-icons">memory</span> RAM distribution</div>
-        <div class="pie-svg-wrap">
-          <svg viewBox="0 0 36 36">
-            <circle class="seg" cx="18" cy="18" r="15.91549" fill="transparent" stroke="#e7e7e9" stroke-width="3.5"></circle>
-          </svg>
-          <div class="pie-center"><div class="pc-val">—</div><div class="pc-sub">RAM</div></div>
-        </div>
-        <div class="pie-legend"></div>
-      </div>
-      <div class="pie-card empty" data-metric="disk">
-        <div class="pie-label"><span class="material-icons">storage</span> Disk distribution</div>
-        <div class="pie-svg-wrap">
-          <svg viewBox="0 0 36 36">
-            <circle class="seg" cx="18" cy="18" r="15.91549" fill="transparent" stroke="#e7e7e9" stroke-width="3.5"></circle>
-          </svg>
-          <div class="pie-center"><div class="pc-val">—</div><div class="pc-sub">Disk</div></div>
-        </div>
-        <div class="pie-legend"></div>
-      </div>
-    </div>
-
-    </div><!-- /appliance-health surface card (pies only) -->
-
     <!-- ── Host utilization — split into its own surface card ───────── -->
     <div class="surface-card" id="host-util-card">
       <div class="sc-head">
@@ -1650,6 +1605,51 @@
     </div>
 
     </div><!-- /host-utilization surface card -->
+
+    <!-- ── STATS surface card — pies + live host metrics ────────────── -->
+    <div class="surface-card" id="stats-card">
+      <div class="sc-head">
+        <div class="sc-title">
+          <h2><span class="material-icons">monitor_heart</span>Appliance health</h2>
+        </div>
+      </div>
+      <p class="sc-desc">Per-cloud workload distribution across your clouds (CPU / RAM / Disk).</p>
+
+    <!-- ── Per-provider distribution (3 donut pies) ────────────────── -->
+    <div class="provider-pies" id="provider-pies">
+      <div class="pie-card empty" data-metric="cpu">
+        <div class="pie-label"><span class="material-icons">developer_board</span> CPU distribution</div>
+        <div class="pie-svg-wrap">
+          <svg viewBox="0 0 36 36">
+            <circle class="seg" cx="18" cy="18" r="15.91549" fill="transparent" stroke="#e7e7e9" stroke-width="3.5"></circle>
+          </svg>
+          <div class="pie-center"><div class="pc-val">—</div><div class="pc-sub">vCPU</div></div>
+        </div>
+        <div class="pie-legend"></div>
+      </div>
+      <div class="pie-card empty" data-metric="ram">
+        <div class="pie-label"><span class="material-icons">memory</span> RAM distribution</div>
+        <div class="pie-svg-wrap">
+          <svg viewBox="0 0 36 36">
+            <circle class="seg" cx="18" cy="18" r="15.91549" fill="transparent" stroke="#e7e7e9" stroke-width="3.5"></circle>
+          </svg>
+          <div class="pie-center"><div class="pc-val">—</div><div class="pc-sub">RAM</div></div>
+        </div>
+        <div class="pie-legend"></div>
+      </div>
+      <div class="pie-card empty" data-metric="disk">
+        <div class="pie-label"><span class="material-icons">storage</span> Disk distribution</div>
+        <div class="pie-svg-wrap">
+          <svg viewBox="0 0 36 36">
+            <circle class="seg" cx="18" cy="18" r="15.91549" fill="transparent" stroke="#e7e7e9" stroke-width="3.5"></circle>
+          </svg>
+          <div class="pie-center"><div class="pc-val">—</div><div class="pc-sub">Disk</div></div>
+        </div>
+        <div class="pie-legend"></div>
+      </div>
+    </div>
+
+    </div><!-- /appliance-health surface card (pies only) -->
 
     <!-- ── Service status surface card — detailed per-service status, relocated
          out of the top readiness strip. The strip keeps the green/in-progress
