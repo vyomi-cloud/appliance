@@ -54,9 +54,9 @@
  },
  "azure.vms.identity": {
   "title": "Identity (system-assigned managed identity)",
-  "level": { "nano": "config_only", "offline": "config_only" },
+  "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "The identity.type flag round-trips through ARM exactly as configured, but Vyomi never issues a managed-identity token or honours it on any other resource's access checks."
+   "Lifted off config_only (wave 5b): turning identity.type to SystemAssigned really mints a stable principalId/tenantId (core/azure_arm_core._vm_identity_view), not a client-invented value, and clears them again when turned back off. The identity is genuinely HONOURED by another resource's real access check: Run command's simulated IMDS endpoint mints this identity's own token, and using that token to fetch a Key Vault secret is checked for real against the Key Vault's own Microsoft.Authorization/roleAssignments (core/azure_arm_core.AzureArm._check_access) — a role assignment that does not grant secrets/get is really denied, one that does is really allowed. There is no live IMDS network endpoint a process inside the VM could call on its own (no guest OS process exists in-browser) — the token can only be minted through Run command's own script interpreter, and only the Key Vault data plane consults it (no other resource's access checks honour it yet)."
   ],
   "tests": ["tests/conformance/test_azure_arm_core.py"]
  },
@@ -102,19 +102,87 @@
  },
  "azure.vms.run_command": {
   "title": "Run command",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "Guest command execution requires a live VM agent; virtual machines are metadata-only in Vyomi (no runtime backing them in-browser), so scripts are never actually run."
-  ]
+   "Lifted off not_simulated (wave 5b): a browser/WASM simulator cannot spawn a separate guest OS process to run an arbitrary script in, so this is a bounded, deterministic interpreter (core/azure_arm_core.AzureArm._vm_run_command) rather than a general-purpose shell — it recognizes a small fixed set of whole-script shapes end to end and runs each one for REAL against this VM's own data: echo/Write-Output/Write-Host, hostname (the VM's real computer name), whoami (its real admin username), date/Get-Date, uname, and the IMDS-token-then-Key-Vault-secret-fetch pattern (169.254.169.254 oauth2/token, then https://<vault>.vault.azure.net/secrets/<name>) that exercises azure.vms.identity's real RBAC enforcement end to end. The VM must be running (a real 409, same guard start/stop uses). Any other script fails honestly with a non-zero exit and an explanatory message — never a fabricated success."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
  },
  "azure.vms.monitoring": {
   "title": "Insights, Alerts, Metrics, Diagnostic settings, Logs, Connection monitor, Workbooks",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["Azure Monitor metrics/alerts/diagnostic settings and Network Watcher connection monitor for virtual machines are not modelled."]
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Lifted off not_simulated (wave 5b) by wiring each tab to the SAME generic engine another lens resource already uses for real, scoped to this virtual machine — never a second, parallel implementation: Diagnostic settings is the generic Microsoft.Insights/diagnosticSettings ARM extension resource every lens resource can use (core/azure_arm_core.AzureArm._diagnostic_settings, same as the ACR/APIM blades); Alerts creates/lists real Microsoft.Insights/metricAlerts + activityLogAlerts scoped to this VM's id (core/azure_monitor_core.py, same engine the Monitor service's own Alert rules page uses); Workbooks is the same real Microsoft.Insights/workbooks gallery, sourceId = this VM; Logs runs a real bounded KQL query (core/azure_operationalinsights_core.py) against the AzureActivity table pre-filtered to this VM's own real Activity log rows; Connection monitor reuses the shared netsim evaluator (core/azure_arm_core.AzureArm._nw_connectivity_check) so a reachability check is decided by this VM's actual attached network security group rules, exactly like the Network security groups / Virtual networks consoles' own connectivity-check tool; Insights shows this VM's own real inventory/properties (the azure.monitor.resource_insights pattern). Metrics' scope/resource picker is real; the chart itself stays honestly not simulated — there is no metric time-series store anywhere in Vyomi to sample from (no resource in this codebase charts real metrics, not just virtual machines), same constraint as azure.monitor.metrics_charts."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py", "tests/conformance/test_azure_monitor_core.py", "tests/conformance/test_azure_operationalinsights_core.py"]
+ },
+ "azure.vms.resource_visualizer": {
+  "title": "Resource visualizer",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": ["A real diagram of this VM's own currently-attached ARM relationships (network interface, public IP, network security group, OS/data disks) — not a generated topology layout, just this VM's real data rendered as nodes/edges."],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.vms.advisor": {
+  "title": "Advisor recommendations",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["Recommendations are derived from this VM's own real configuration (auto-shutdown off, identity off, no restore points, Defender findings) — not Azure Advisor's own broader usage-pattern/cost heuristics, same style of simplification as azure.monitor.advisor_recommendations."],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.vms.diagnose": {
+  "title": "Diagnose and solve problems",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["Checks this VM's own real power state, disk-encryption posture (reusing the Microsoft Defender for Cloud rule engine's finding) and whether a network interface is attached — not Azure's much larger guided-troubleshooting catalog (boot failures, RDP/SSH connectivity probes into the guest), which needs a live guest OS/hypervisor this lens does not run."],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.vms.resource_health": {
+  "title": "Resource health",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["Derived from this VM's own real power state and lock state; there is no hypervisor health telemetry (platform events, host maintenance) to roll up in a browser/WASM simulator."],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.vms.change_tracking": {
+  "title": "Change tracking",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["A filtered view of this VM's own real Activity log (write/extension/redeploy/reapply/reset-password operations) — not file- or registry-level change tracking inside the guest, which needs a live guest OS agent this lens does not run."],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.vms.defender": {
+  "title": "Microsoft Defender for Cloud",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["Real findings scoped to this VM's own resource id over the SAME foundational CSPM rule engine the Defender for Cloud service's own Recommendations page uses (core/azure_security_core.py) — currently only the VM-attached encryption-at-host/disk-encryption rule; a finding attached to this VM's network security group (management ports open to the internet) surfaces on the Network security groups console's own Defender view instead, matching how this engine scopes findings to the resource they are attached to. Runtime threat alerts are not simulated (Vyomi runs no workload telemetry)."],
+  "tests": ["tests/conformance/test_azure_security_core.py"]
+ },
+ "azure.vms.backup": {
+  "title": "Backup",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": ["\"Backup as a snapshot\": create/list/delete a real restore point (Microsoft.Compute/virtualMachines/{vm}/providers/Microsoft.Compute/restorePoints) that captures this VM's own ARM properties document, and restore really overwrites the VM's current properties with the captured ones (core/azure_arm_core.AzureArm._vm_backup) — not a standalone Recovery Services vault/backup policy schedule, which this lens does not model."],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.vms.inventory_os": {
+  "title": "Operating system, Inventory",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["Shows this VM's own real OS type/computer name/image reference (ARM properties already stored, not fabricated) — not an installed-software/package inventory, which needs a guest-OS scanning agent and no guest OS process runs in a browser/WASM simulator."],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.vms.configuration": {
+  "title": "Configuration",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["The boot diagnostics toggle really PATCHes this VM's own properties.diagnosticsProfile (the same generic ARM PATCH every other settings tab on this blade uses) — enabling it does not start a hypervisor serial/screenshot capture stream (azure.vms.tools' Boot diagnostics page), since no hypervisor exists in a browser/WASM simulator. VM agent / other guest-level configuration toggles are not modelled."],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.vms.availability_scaling": {
+  "title": "Availability + scaling",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["Shows this VM's own real availability zone (properties.zones, when requested at create time) and the correctly-derived 'no infrastructure redundancy required' default; Virtual Machine Scale Set membership and flexible-orchestration scale-out are not modelled (this lens does not simulate a second host to spread instances across)."],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
  },
  "azure.vms.tools": {
   "title": "Diagnose and solve problems, Resource visualizer, Bastion, Load balancing, Application security groups, Network manager, Extensions + applications, Operating system, Configuration, Advisor recommendations, Availability + scaling, Microsoft Defender for Cloud, Backup, Disaster recovery, Updates, Inventory, Change tracking, Tasks, Resource health, Boot diagnostics, Performance diagnostics, Reset password, Redeploy + reapply, Serial console, Support + Troubleshooting",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["These console tools need a live guest agent, hypervisor telemetry or resource types this lens does not model."]
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Lifted off not_simulated (wave 5b) for most of this bucket — each now has its own capability id with a real backend behind it: Diagnose and solve problems (azure.vms.diagnose), Resource visualizer (azure.vms.resource_visualizer), Advisor recommendations (azure.vms.advisor), Resource health (azure.vms.resource_health), Change tracking (azure.vms.change_tracking), Microsoft Defender for Cloud (azure.vms.defender), Backup (azure.vms.backup), Operating system / Inventory (azure.vms.inventory_os), Configuration (azure.vms.configuration), Availability + scaling (azure.vms.availability_scaling). Reset password and Redeploy + reapply are real POST actions handled directly by this id — core/azure_arm_core.AzureArm._arm_action's resetPassword verb really overwrites the VM's osProfile admin username/password (reflected immediately in Connect's SSH command), and redeploy/reapply really flip the VM's power state and stamp a real instanceView timestamp.",
+   "Still honestly not simulated, for a concrete physical reason rather than 'not modelled': Bastion and Load balancing (no virtual network stack in a browser/WASM simulator to carry a tunnel or real traffic between two simulated VMs — and Microsoft.Network/loadBalancers is not a resource type this lens's Networking service models), Application security groups and Network manager (same missing packet path, plus unmodelled resource types), Extensions + applications (installing an extension means a real guest agent executing a package inside a guest OS — no guest OS process runs in-browser), Disaster recovery (Vyomi models one logical copy of each resource, so there is no second region-local replica for a failover to cut over to), Updates and Performance diagnostics (need a live guest OS process to scan/sample — none runs in-browser), Boot diagnostics and Serial console (need a hypervisor video/console device to capture from or attach to — none exists in a browser/WASM simulator), Tasks (Microsoft To Do/Planner over Microsoft Graph — a real separate Microsoft 365 product), Support + Troubleshooting (files/reads a ticket against Microsoft's own real support system — a real third-party service)."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
  }
 }

@@ -25,9 +25,10 @@ from __future__ import annotations
 import base64
 import datetime
 import hashlib
+import json
 import re
 import uuid
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 
 try:                                              # host: package import
     from core.azure_arm_data import CATALOG, ROLES
@@ -462,6 +463,30 @@ def _apply_auto_shutdown(rec: dict) -> None:
         rec["_autoShutdownFiredDate"] = today
 
 
+# Same fixed Entra tenant every other core that mints a principalId hardcodes (azure_app_core.py,
+# azure_appconfiguration_core.py, …) — there is only ever one simulated tenant.
+_FIXED_TENANT = "72f988bf-86f1-41af-91ab-2d7cd011db47"
+
+
+def _vm_identity_view(rid: str, identity: dict) -> dict:
+    """azure.vms.identity, lifted off config_only: real ARM mints identity.principalId/
+    tenantId the instant identity.type includes SystemAssigned (never left for the caller to
+    invent), and drops them the instant it is turned back to 'None'. The principalId is a
+    stable uuid5 of the VM's own resource id (same derivation style as every other core that
+    mints one), so it is consistent across repeated reads. This principalId is what Run
+    command's IMDS simulation hands back as the token subject, and what a real role
+    assignment/Key Vault access policy can be written against (azure.vms.run_command)."""
+    itype = str(identity.get("type") or "None")
+    out = dict(identity)
+    if "systemassigned" in itype.lower():
+        out["principalId"] = identity.get("principalId") or str(uuid.uuid5(uuid.NAMESPACE_URL, rid.lower() + "#principal"))
+        out["tenantId"] = identity.get("tenantId") or _FIXED_TENANT
+    else:
+        out.pop("principalId", None)
+        out.pop("tenantId", None)
+    return out
+
+
 # ── pure helpers (ported verbatim from azure_services) ─────────────────────
 def _set_path(obj: dict, dotted: str, value):
     parts = dotted.split(".")
@@ -739,6 +764,8 @@ class AzureArm:
         self.kv_secrets_store = None             # set by aws_wire_router.py: this space's Key Vault secrets store (APIM named-value listValue)
         self.sql_store = None                    # set by the platform: the Azure SQL data plane's SqlStore (database export/import)
         self.blob_store = None                   # set by the platform: the simulator's Azure Blob store (.bacpac target/source)
+        self._vm_tokens: dict = {}               # minted managed-identity token (string) -> {principalId, resource, vmRid}
+                                                   # — Run command's IMDS simulation (azure.vms.identity / azure.vms.run_command)
 
     # ── per-resource ARM activity entries (Microsoft.Insights/eventtypes rows) ──
     # Kept IN self.state (so they persist with the rest of ARM, offline and Nano alike) by the one
@@ -977,6 +1004,22 @@ class AzureArm:
             if method != "GET":
                 return _err(405, "MethodNotAllowed", "vmSizes supports GET only.")
             return _ok({"value": _vm_sizes()})
+
+        # Microsoft.Compute/virtualMachines/{vm}/providers/Microsoft.Compute/restorePoints[/{name}
+        # [/restore]] (azure.vms.backup, lifted off not_simulated): "backups as snapshots" per
+        # AGENT-UI.md — a real, stateful sub-resource capturing the VM's own ARM properties
+        # document, never a stored-but-inert stub. Re-entrant "providers" shape like locks/
+        # diagnostic settings above, but scoped to virtualMachines only (not every catalog
+        # type) since that's the only resource this restore-point collection is modelled for.
+        if namespace.lower() == "microsoft.compute" and len(chain) >= 2 and chain[0].lower() == "virtualmachines":
+            rp_idx = next((i for i in range(len(chain) - 2)
+                          if chain[i].lower() == "providers" and chain[i + 1].lower() == "microsoft.compute"
+                          and chain[i + 2].lower() == "restorepoints"), None)
+            if rp_idx is not None:
+                vm_rid = _canonical_id(sub, rg, ["Microsoft.Compute", "virtualMachines"], [chain[1]])
+                if self.state.get(vm_rid.lower()) is None:
+                    return _err(404, "ResourceNotFound", f"Virtual machine '{chain[1]}' not found.")
+                return self._vm_backup(method, sub, vm_rid, chain[rp_idx + 3:], payload)
 
         # Microsoft.Insights/eventtypes/management/values: the subscription-wide ARM activity
         # log read API (not resource-scoped — no "providers" re-entry — so it must be caught
@@ -2229,6 +2272,8 @@ class AzureArm:
             rec["sku"] = _merge(rec.get("sku", {}), payload["sku"])
         if isinstance(payload.get("identity"), dict):
             _apply_identity(rec, payload["identity"])
+            if full_type.lower() == "microsoft.compute/virtualmachines":   # Run command's IMDS token subject
+                rec["identity"] = _vm_identity_view(rid, rec["identity"])
         if isinstance(payload.get("properties"), dict):
             rec["properties"] = _merge(rec.get("properties", {}), payload["properties"])
 
@@ -2609,6 +2654,56 @@ class AzureArm:
             if not rec:
                 return _err(404, "ResourceNotFound", f"Topic '{resource_name}' not found.")
             return _ok({"metrics": {k: rec.get("_metrics", {}).get(k, 0) for k in eventgrid_engine.METRIC_NAMES}})
+        if action == "runcommand":
+            if ns != "microsoft.compute" or typ != "virtualmachines":
+                return _err(400, "ActionNotSupported",
+                            "Action 'runCommand' is only supported on Microsoft.Compute/virtualMachines.")
+            rec = self.state.get(parent_rid.lower()) if parent_rid else None
+            if not rec:
+                return _err(404, "ResourceNotFound", f"Virtual machine '{resource_name}' not found.")
+            if rec.get("properties", {}).get("powerState", "PowerState/running") != "PowerState/running":
+                return _err(409, "OperationNotAllowed", "The VM must be in the running state to run commands.")
+            result = self._vm_run_command(rec, payload or {}, sub or DEFAULT_SUBSCRIPTION)
+            self._record_activity(parent_rid, "Microsoft.Compute/virtualMachines/runCommand/action", sub or DEFAULT_SUBSCRIPTION)
+            return _ok(result)
+        if action == "resetpassword":
+            if ns != "microsoft.compute" or typ != "virtualmachines":
+                return _err(400, "ActionNotSupported",
+                            "Action 'resetPassword' is only supported on Microsoft.Compute/virtualMachines.")
+            rec = self.state.get(parent_rid.lower()) if parent_rid else None
+            if not rec:
+                return _err(404, "ResourceNotFound", f"Virtual machine '{resource_name}' not found.")
+            username = str((payload or {}).get("username") or "").strip()
+            if not username:
+                return _err(400, "InvalidParameter", "username is required.")
+            osp = rec.setdefault("properties", {}).setdefault("osProfile", {})
+            osp["adminUsername"] = username
+            password = (payload or {}).get("password")
+            if password:
+                osp["adminPassword"] = password
+                osp.pop("linuxConfiguration", None)
+            self._record_activity(parent_rid, "Microsoft.Compute/virtualMachines/extensions/write", sub or DEFAULT_SUBSCRIPTION)
+            return _ok({"status": "Succeeded"})
+        if action in ("redeploy", "reapply"):
+            if ns != "microsoft.compute" or typ != "virtualmachines":
+                return _err(400, "ActionNotSupported",
+                            f"Action '{action}' is only supported on Microsoft.Compute/virtualMachines.")
+            rec = self.state.get(parent_rid.lower()) if parent_rid else None
+            if not rec:
+                return _err(404, "ResourceNotFound", f"Virtual machine '{resource_name}' not found.")
+            props = rec.setdefault("properties", {})
+            iv = dict(props.get("instanceView") or {})
+            if action == "redeploy":
+                # Real redeploy moves the VM to a new host and re-specializes it — Vyomi has no
+                # hosts to move between, but it DOES really reset the logical power state and
+                # tags the event so Change tracking / Activity log show it happened.
+                props["powerState"] = "PowerState/running"
+                iv["lastRedeployTimestamp"] = _now()
+            else:
+                iv["lastReapplyTimestamp"] = _now()
+            props["instanceView"] = iv
+            self._record_activity(parent_rid, f"Microsoft.Compute/virtualMachines/{action}/action", sub or DEFAULT_SUBSCRIPTION)
+            return _ok({"status": "Succeeded"})
         if action in ("listkeys", "regeneratekey"):
             return _ok({"keys": [{"keyName": "key1", "value": "c2ltdWxhdGVk", "permissions": "FULL"},
                                  {"keyName": "key2", "value": "c2ltdWxhdGVk", "permissions": "FULL"}]})
@@ -2617,6 +2712,157 @@ class AzureArm:
         if action == "listsecrets":
             return _ok({})
         return _ok({})
+
+    # ── VM backup (Microsoft.Compute/virtualMachines/{vm}/providers/Microsoft.Compute/
+    # restorePoints): real, stateful "backup as a snapshot" of the VM's own ARM properties
+    # document — list/create/get/delete plus a restore action that really overwrites the
+    # VM's current properties with the captured ones (azure.vms.backup). ─────────────────
+    def _vm_backup(self, method, sub, vm_rid, rest, payload):
+        vm = self.state[vm_rid.lower()]
+        snaps = vm.setdefault("_restorePoints", {})
+        if not rest:
+            if method != "GET":
+                return _err(405, "MethodNotAllowed", "Collection supports GET only.")
+            return _ok({"value": [self._vm_backup_view(vm_rid, n, s) for n, s in snaps.items()]})
+        name = rest[0]
+        if len(rest) == 2 and rest[1].lower() == "restore":
+            if method != "POST":
+                return _err(405, "MethodNotAllowed", "restore is a POST-only action.")
+            snap = snaps.get(name)
+            if not snap:
+                return _err(404, "ResourceNotFound", f"Restore point '{name}' not found.")
+            vm["properties"] = json.loads(json.dumps(snap["properties"]))
+            self._record_activity(vm_rid, "Microsoft.Compute/virtualMachines/restorePoints/restore/action", sub)
+            return _ok({"status": "Succeeded"})
+        if len(rest) != 1:
+            return _err(404, "NotFound", "Unknown restore point path.")
+        if method == "GET":
+            snap = snaps.get(name)
+            if not snap:
+                return _err(404, "ResourceNotFound", f"Restore point '{name}' not found.")
+            return _ok(self._vm_backup_view(vm_rid, name, snap))
+        if method == "PUT":
+            existed = name in snaps
+            snap = {"createdAt": _now(), "properties": json.loads(json.dumps(vm.get("properties", {})))}
+            snaps[name] = snap
+            self._record_activity(vm_rid, "Microsoft.Compute/virtualMachines/restorePoints/write", sub)
+            return _ok(self._vm_backup_view(vm_rid, name, snap), status=200 if existed else 201)
+        if method == "DELETE":
+            existed = snaps.pop(name, None) is not None
+            return _ok(None, status=200 if existed else 204)
+        return _err(405, "MethodNotAllowed", f"{method} not allowed.")
+
+    @staticmethod
+    def _vm_backup_view(vm_rid, name, snap):
+        props = snap["properties"]
+        return {"id": f"{vm_rid}/providers/Microsoft.Compute/restorePoints/{name}", "name": name,
+                "type": "Microsoft.Compute/virtualMachines/restorePoints",
+                "properties": {"provisioningState": "Succeeded", "timeCreated": snap["createdAt"],
+                               "sourceMetadata": {"hardwareProfile": props.get("hardwareProfile"),
+                                                  "storageProfile": props.get("storageProfile"),
+                                                  "osProfile": props.get("osProfile")}}}
+
+    # ── Run command (POST .../virtualMachines/{vm}/runCommand): a bounded, deterministic
+    # script interpreter — NOT a general-purpose shell (no guest OS process exists in a
+    # browser/WASM simulator to attach one to). It recognizes a small fixed set of whole-script
+    # shapes end to end: plain echo/hostname/whoami/date/uname, and the IMDS-token-then-Key-
+    # Vault-secret-fetch pattern that demonstrates a system-assigned managed identity's token
+    # really being checked against a real role assignment (azure.vms.identity /
+    # azure.vms.run_command) — never a fabricated success for scripts it doesn't recognize. ──
+    _IMDS_RE = re.compile(r"169\.254\.169\.254[^\s\"']*oauth2/token[^\s\"']*", re.IGNORECASE)
+    _RESOURCE_RE = re.compile(r"resource=([^&\s\"']+)")
+    _KV_SECRET_RE = re.compile(r"https://([a-z0-9-]+)\.vault\.azure\.net/secrets/([A-Za-z0-9-]+)", re.IGNORECASE)
+    _ECHO_RE = re.compile(r'^(?:echo|Write-Output|Write-Host)\s+(.*)$', re.IGNORECASE)
+
+    def _vm_run_command(self, rec: dict, payload: dict, sub: str) -> dict:
+        lines = payload.get("script")
+        script = "\n".join(str(x) for x in lines) if isinstance(lines, list) else str(lines or "")
+        stripped = script.strip()
+        identity = rec.get("identity") or {}
+        principal_id = identity.get("principalId") if "systemassigned" in str(identity.get("type") or "").lower() else None
+
+        out, exit_code = [], 0
+        imds_m = self._IMDS_RE.search(script)
+        token = None
+        if imds_m:
+            res_m = self._RESOURCE_RE.search(imds_m.group(0))
+            resource = unquote(res_m.group(1)) if res_m else "https://management.azure.com/"
+            if not principal_id:
+                out.append(json.dumps({"error": "invalid_request", "error_description":
+                    "Identity not found. The requested identity has not been assigned to this "
+                    "resource, or multiple identities were found and none was specified."}))
+                exit_code = 1
+            else:
+                token = f"vyomi.{uuid.uuid4().hex}"
+                self._vm_tokens[token] = {"principalId": principal_id, "resource": resource, "vmRid": rec["id"]}
+                out.append(json.dumps({"access_token": token, "client_id": principal_id, "expires_in": "3599",
+                                       "expires_on": str(int(datetime.datetime.now(datetime.timezone.utc).timestamp()) + 3599),
+                                       "resource": resource, "token_type": "Bearer"}))
+
+        kv_m = self._KV_SECRET_RE.search(script)
+        if kv_m:
+            if not token:
+                out.append("curl: the script has no Authorization bearer token to send — mint one from "
+                           "the IMDS endpoint first.")
+                exit_code = 1
+            else:
+                vault_name, secret_name = kv_m.group(1), kv_m.group(2)
+                vault_rec = next((r for r in self.state.values() if r.get("_type", "").lower() == "microsoft.keyvault/vaults"
+                                  and r.get("name", "").lower() == vault_name.lower()), None)
+                if not vault_rec:
+                    out.append(json.dumps({"error": {"code": "VaultNotFound", "message": f"Vault '{vault_name}' was not found."}}))
+                    exit_code = 1
+                else:
+                    decision = self._check_access(sub, vault_rec["id"],
+                        {"principalId": principal_id, "action": "Microsoft.KeyVault/vaults/secrets/getSecret/action"})
+                    allowed = decision["body"]["value"][0]["accessDecision"] == "Allowed"
+                    if not allowed:
+                        out.append(json.dumps({"error": {"code": "Forbidden", "message":
+                            f"The managed identity does not have secrets/get permission on vault '{vault_name}'."}}))
+                        exit_code = 1
+                    elif self.kv_secrets_store is None:
+                        out.append(json.dumps({"error": {"code": "ServiceUnavailable", "message":
+                            "Key Vault secrets are not wired on this platform."}}))
+                        exit_code = 1
+                    else:
+                        secret_rec = self.kv_secrets_store.get_secret(secret_name)
+                        if not secret_rec or secret_rec.get("deleted") or not secret_rec.get("versions"):
+                            out.append(json.dumps({"error": {"code": "SecretNotFound", "message":
+                                f"A secret with (name/id) {secret_name} was not found in this key vault."}}))
+                            exit_code = 1
+                        else:
+                            ver = secret_rec["versions"].get(secret_rec["current"])
+                            out.append(json.dumps({"value": ver.get("value") if ver else None}))
+
+        if not imds_m and not kv_m:
+            echo_m = self._ECHO_RE.match(stripped)
+            osp = rec.get("properties", {}).get("osProfile", {})
+            if echo_m:
+                out.append(echo_m.group(1).strip().strip("\"'"))
+            elif re.fullmatch(r"hostname", stripped, re.IGNORECASE):
+                out.append(osp.get("computerName") or rec.get("name") or "")
+            elif re.fullmatch(r"whoami", stripped, re.IGNORECASE):
+                out.append(osp.get("adminUsername") or "")
+            elif re.fullmatch(r"date|Get-Date", stripped, re.IGNORECASE):
+                out.append(_now())
+            elif re.fullmatch(r"uname(?:\s+-a)?", stripped, re.IGNORECASE):
+                img = rec.get("properties", {}).get("storageProfile", {}).get("imageReference", {})
+                out.append(f"Linux {rec.get('name')} {img.get('publisher', '')}/{img.get('offer', '')}:{img.get('sku', '')}")
+            else:
+                exit_code = 1
+                out.append("Vyomi's Run command simulator only understands echo/Write-Output/Write-Host, hostname, "
+                           "whoami, date/Get-Date, uname, and the IMDS-token + Key Vault secret-fetch pattern used to "
+                           "demonstrate managed-identity authorization — this script was not recognized, so nothing "
+                           "was executed.")
+
+        message = "\n".join(out)
+        return {"value": [
+            {"code": "ComponentStatus/StdOut/succeeded" if exit_code == 0 else "ComponentStatus/StdOut/failed",
+             "level": "Info", "displayStatus": "Provisioning succeeded" if exit_code == 0 else "Provisioning failed",
+             "message": message},
+            {"code": "ComponentStatus/StdErr/succeeded", "level": "Info",
+             "displayStatus": "Provisioning succeeded", "message": ""},
+        ]}
 
     def _sql_import_export(self, action, type_chain, parent_rid, payload, sub, rg):
         """Microsoft.Sql database export (POST .../databases/{db}/export) and import
