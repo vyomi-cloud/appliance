@@ -366,6 +366,20 @@ class AwsWireRouter:
         self.cw = s.get("cw") or cw.CloudWatchStore()          # CloudWatch metrics / alarms / dashboards
         self.vpc = s.get("vpc") or _types.SimpleNamespace()   # EC2/VPC network model
         self.logs = s.get("logs") or logs.LogsStore()         # CloudWatch Logs
+        # Lambda invocations land in CloudWatch Logs (/aws/lambda/<fn>) like real Lambda.
+        if getattr(self.lam, "_log_sink", None) is None:
+            def _lambda_log_sink(group, stream, lines, _logs=self.logs):
+                import time as _tm
+                hdr = "Logs_20140328."
+                logs.dispatch(_logs, hdr + "CreateLogGroup", {"logGroupName": group})
+                logs.dispatch(_logs, hdr + "CreateLogStream", {"logGroupName": group, "logStreamName": stream})
+                now = int(_tm.time() * 1000)
+                logs.dispatch(_logs, hdr + "PutLogEvents", {"logGroupName": group, "logStreamName": stream,
+                              "logEvents": [{"timestamp": now + i, "message": ln + "\n"} for i, ln in enumerate(lines)]})
+            try:
+                self.lam._log_sink = _lambda_log_sink
+            except Exception:
+                pass
         self.elbv2 = s.get("elbv2") or elbv2.Elbv2Store()
         self.sfn = s.get("sfn") or sfn.StepFunctionsStore()   # Step Functions (state machines + executions)
 
@@ -430,7 +444,9 @@ class AwsWireRouter:
             return "az-servicebus"
         if _execute_api_id(path, lheaders):   # HTTP API invoke URL ({id}.execute-api.* or /apigw/{id}/…)
             return "apigw-invoke"
-        if "/2015-03-31/functions" in path:   # Lambda REST (native boto3 lambda wire)
+        if "/2015-03-31/functions" in path or "/2021-10-31/functions" in path:   # Lambda REST (native boto3 lambda wire)
+            return "lambda"
+        if path.startswith("/lambda-url/"):   # a Function URL's public invoke path
             return "lambda"
         if path.startswith("/v2/") and path[4:].split("/", 1)[0] in (   # API Gateway V2 control plane
                 "apis", "domainnames", "vpclinks", "tags", "portals", "portalproducts"):
@@ -628,7 +644,11 @@ class AwsWireRouter:
             return cw.wire(self.cw, method, path, headers or {}, bytes(body), query or {})
 
         if svc == "lambda":   # native Lambda REST (function mgmt + sandboxed invoke)
-            r = lam.dispatch(self.lam, method, path, query or {}, headers or {}, bytes(body))
+            if path.startswith("/lambda-url/"):
+                _id, _, _rest = path[len("/lambda-url/"):].partition("/")
+                r = lam.url_invoke(self.lam, _id, method, _rest.split("?", 1)[0], query or {}, headers or {}, bytes(body))
+            else:
+                r = lam.dispatch(self.lam, method, path, query or {}, headers or {}, bytes(body))
             hdrs = dict(r.headers or {})
             if r.media_type and not any(k.lower() == "content-type" for k in hdrs):
                 hdrs["content-type"] = r.media_type

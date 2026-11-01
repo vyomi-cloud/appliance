@@ -57,6 +57,32 @@ def run(store=None):
     _check("base64 ZipFile code path",
            json.loads(call("POST", f"{API}/b64/invocations", {"nums": [5, 5]}).body)["sum"] == 10)
 
+    # LogType=Tail → LogResult; invocation lines reach the CloudWatch Logs sink (/aws/lambda/<fn>)
+    sunk = []
+    s._log_sink = lambda g, st, lines: sunk.append((g, lines))
+    logsrc = "def handler(e, c):\n    print('LOGLINE-ABC')\n    return {'statusCode': 200, 'headers': {'content-type': 'text/plain'}, 'body': 'hello url'}\n"
+    call("POST", API, {"FunctionName": "logger", "Code": {"Source": logsrc}})
+    r = lam.dispatch(s, "POST", f"{API}/logger/invocations", {}, {"X-Amz-Log-Type": "Tail"}, b"{}")
+    tail = base64.b64decode(r.headers.get("X-Amz-Log-Result", "")).decode()
+    _check("LogType=Tail returns START/stdout/REPORT in X-Amz-Log-Result",
+           "START RequestId" in tail and "LOGLINE-ABC" in tail and "REPORT RequestId" in tail)
+    _check("invocation lines are sunk to /aws/lambda/<fn>",
+           sunk and sunk[-1][0] == "/aws/lambda/logger" and any("LOGLINE-ABC" in ln for ln in sunk[-1][1]))
+
+    # Function URL config + public invoke path
+    U = "/2021-10-31/functions/logger/url"
+    mk = lam.dispatch(s, "POST", U, {}, {"Host": "h.example:9000"}, json.dumps({"AuthType": "NONE"}).encode())
+    cfg = json.loads(mk.body)
+    _check("CreateFunctionUrlConfig 201 with a FunctionUrl on the caller's origin",
+           mk.status == 201 and cfg["FunctionUrl"].startswith("http://h.example:9000/lambda-url/") and cfg["AuthType"] == "NONE")
+    _check("duplicate CreateFunctionUrlConfig 409", lam.dispatch(s, "POST", U, {}, {}, b'{"AuthType":"NONE"}').status == 409)
+    _check("GetFunctionUrlConfig round-trips", json.loads(lam.dispatch(s, "GET", U, {}, {"Host": "h.example:9000"}, b"").body)["FunctionUrl"] == cfg["FunctionUrl"])
+    uid = cfg["FunctionUrl"].rstrip("/").rsplit("/", 1)[-1]
+    ur = lam.url_invoke(s, uid, "GET", "", {}, {}, b"")
+    _check("Function URL invoke maps {statusCode, body} to HTTP", ur.status == 200 and ur.body == b"hello url" and ur.media_type == "text/plain")
+    _check("DeleteFunctionUrlConfig 204", lam.dispatch(s, "DELETE", U, {}, {}, b"").status == 204)
+    _check("deleted Function URL no longer invokes", lam.url_invoke(s, uid, "GET", "", {}, {}, b"").status == 404)
+
     _check("DeleteFunction 204", call("DELETE", f"{API}/adder").status == 204)
 
     print("\nLambda serverless-invoke conformance: ALL GREEN")

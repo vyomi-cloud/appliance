@@ -2000,6 +2000,14 @@
       "kind": "ui",
       "cmd": "NANO_DIR=$PWD/wasm node wasm/ui-tests/validate-sweepA-nano.mjs",
       "timeout": 300
+    },
+    {
+      "id": "offline-sweepA-aws",
+      "target": "offline",
+      "cloud": "aws",
+      "kind": "sdk-python",
+      "cmd": "python3 tests/conformance/post_create/probes/sweep_aws.py {ENDPOINT}",
+      "timeout": 300
     }
   ]
 }
