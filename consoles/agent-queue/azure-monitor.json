@@ -1,213 +1,100 @@
 {
  "cloud": "azure",
  "service": "monitor",
- "goal": "WAVE 5: finish every buildable gap with real backend integration on Nano + offline (config_only enforced, buildable not_simulated built, engine-coverage limits lifted)",
- "must_build": [
-  "Every page in ui-spec/azure/monitor.json (38 pages; nav: Overview, Activity log, Alerts, Metrics, Observability agents (preview), Issues, Logs, Health models, Change Analysis, Service health, Workbooks, Dashboards with Grafana, Insights, Managed Services)",
-  "Backend: core azure monitor (test_azure_monitor_core.py, test_azure_operationalinsights_core.py): metrics, activity log, alerts, Log Analytics query if modeled",
-  "List / create / detail / edit / delete round-trips through the native API the SDK and CLI use"
- ],
- "always": [
-  "Every page wired to the native API on /_wire (no static data); liveness fixtures for every list/detail page",
-  "core/capabilities/azure/monitor.json: one entry per console section with an honest level + tests; tests/conformance/test_capabilities.py must pass",
-  "Capability feature ids MUST start with 'azure.' (e.g. 'azure.monitor.<section>') — ids share one namespace with the AWS registry",
-  "Read the 'Cloud lenses' section of consoles/AGENT-UI.md first — use this cloud's kit, not Cloudscape"
- ],
- "attempt": 4,
  "phase": "depth",
+ "attempt": 1,
+ "goal": "GAP SWEEP (wave 5b): every listed depth_target is currently not_simulated/config_only in the shipped console. Build each one on a REAL backend (Nano + offline) and lift its capability level to full or limited. 'Out of Vyomi's scope', 'separate product', 'single-account' or 'not modeled' are NOT acceptable reasons: model it in the shared core (Python core/*_core.py, vendored to wasm), wire it through the native wire, enforce behaviour (not stored config), and make the console section live. Only leave a target not_simulated if it needs something physically impossible in a local simulator (real external hardware, real money, a real third-party service) \u2014 and then write that concrete reason. config_only targets must become enforced (the setting changes observable behaviour). Update core/capabilities, tests/conformance, ui-spec mapping and smoke where relevant.",
+ "note": "WAVE 5b gap sweep (orchestrator). Approved by the user: finish all the gaps with real backends.",
  "depth_targets": [
-  {
-   "id": "azure.monitor.resource_insights",
-   "title": "Per-resource-type Insights dashboards (Applications, Virtual Machines, Storage accounts, Networks, Azure Cosmos DB, Key Vaults, Service Bus)",
-   "level": "limited",
-   "limitations": [
-    "Shows Vyomi's real resource inventory for the type; there is no request/exception/dependency telemetry, VM guest metrics, or health rollup — those need an agent-based collection pipeline Vyomi does not run."
-   ]
-  },
-  {
-   "id": "azure.monitor.metrics_scope",
-   "title": "Metrics — scope picker (resource types, locations)",
-   "level": "limited",
-   "limitations": [
-    "Scope, resource-type and location pickers are real (drawn from your inventory); the chart itself is not — metric definitions/values are not modelled."
-   ]
-  },
-  {
-   "id": "azure.monitor.monitoring_coverage",
-   "title": "Monitoring Coverage (resources with vs. without an alert rule)",
-   "level": "limited",
-   "limitations": [
-    "Coverage is approximated as \"referenced by at least one alert rule's scopes\"; Azure's own per-signal telemetry coverage model is not reproduced."
-   ]
-  },
-  {
-   "id": "azure.monitor.advisor_recommendations",
-   "title": "Advisor recommendations (resources with no alert rule, derived from real inventory)",
-   "level": "limited",
-   "limitations": [
-    "Recommendations are \"this resource has no alert rule\", not Azure Advisor's own usage-pattern heuristics."
-   ]
-  },
   {
    "id": "azure.monitor.metrics_charts",
    "title": "Metrics charts (metric definitions and time-series values)",
-   "level": "not_simulated",
-   "limitations": [
-    "Metric definitions and metric values are not modelled — there is no time-series store to chart.",
-    "Not simulated: Scope, Metric Namespace, Metric, Aggregation, Add metric, Add filter, Apply splitting, Line chart, Drill into Logs, New alert rule, Save to dashboard."
-   ]
-  },
-  {
-   "id": "azure.monitor.log_query",
-   "title": "Log Analytics query (KQL)",
-   "level": "limited",
-   "limitations": [
-    "Only a small KQL subset is understood: a table name, then any of where (==/!=/contains/startswith), project, sort by/order by, take/limit and count — unsupported syntax returns a real error instead of succeeding silently.",
-    "Only the built-in AzureActivity table has rows, and they are the subscription's real Activity log (the same Microsoft.Insights/eventtypes feed the Activity log page reads) — every other table (Heartbeat, Perf, Syslog, Event, Usage, AzureDiagnostics, any custom _CL/_RST table) is always empty: there is no agent/telemetry ingestion pipeline.",
-    "AzureActivity is not gated by a per-workspace Activity Log export / diagnostic setting (Vyomi does not model one at subscription scope) — every workspace's AzureActivity table sees the whole subscription feed.",
-    "The api.loganalytics.io data-plane host itself (azure-monitor-query / LogsQueryClient) is not modelled; the query runs over the same ARM pass-through path (.../workspaces/{ws}/api/query) the Azure Portal's Logs blade uses."
-   ]
+   "now": {
+    "offline": "not_simulated",
+    "nano": "not_simulated"
+   },
+   "current_reason": "Metric definitions and metric values are not modelled \u2014 there is no time-series store to chart. Not simulated: Scope, Metric Namespace, Metric, Aggregation, Add metric, Add filter, Apply splitting, Line chart, Drill into Logs, New alert rule, Save to dashboard.",
+   "hint": "telemetry: emit real metrics/logs from the simulated engine (wave-6 Prometheus/OTel are the offline sinks once landed; until then derive real series from actual API activity in the core) \u2014 never synthetic random data"
   },
   {
    "id": "azure.monitor.observability_agents",
    "title": "Observability agents (preview)",
-   "level": "not_simulated",
-   "limitations": [
-    "Agent-based collector management is out of scope for a simulator."
-   ]
+   "now": {
+    "offline": "not_simulated",
+    "nano": "not_simulated"
+   },
+   "current_reason": "Agent-based collector management is out of scope for a simulator.",
+   "hint": "telemetry: emit real metrics/logs from the simulated engine (wave-6 Prometheus/OTel are the offline sinks once landed; until then derive real series from actual API activity in the core) \u2014 never synthetic random data"
   },
   {
    "id": "azure.monitor.issues",
    "title": "Issues",
-   "level": "not_simulated",
-   "limitations": [
-    "Cross-signal issue correlation is not modelled."
-   ]
+   "now": {
+    "offline": "not_simulated",
+    "nano": "not_simulated"
+   },
+   "current_reason": "Cross-signal issue correlation is not modelled.",
+   "hint": "telemetry: emit real metrics/logs from the simulated engine (wave-6 Prometheus/OTel are the offline sinks once landed; until then derive real series from actual API activity in the core) \u2014 never synthetic random data"
   },
   {
    "id": "azure.monitor.health_models",
    "title": "Health models",
-   "level": "not_simulated",
-   "limitations": [
-    "Health model authoring and evaluation is not modelled."
-   ]
-  },
-  {
-   "id": "azure.monitor.change_analysis",
-   "title": "Change Analysis (derived from the real Activity log)",
-   "level": "limited",
-   "limitations": [
-    "Change type/Name/Resource type are derived from the Activity log feed (real ARM writes), not from Azure Resource Graph's property-level snapshots — there is no before/after diff of individual properties.",
-    "Toolbar actions not simulated: Open query, Group by none."
-   ]
+   "now": {
+    "offline": "not_simulated",
+    "nano": "not_simulated"
+   },
+   "current_reason": "Health model authoring and evaluation is not modelled.",
+   "hint": "telemetry: emit real metrics/logs from the simulated engine (wave-6 Prometheus/OTel are the offline sinks once landed; until then derive real series from actual API activity in the core) \u2014 never synthetic random data"
   },
   {
    "id": "azure.monitor.service_health",
    "title": "Service health",
-   "level": "not_simulated",
-   "limitations": [
-    "There is no Azure service-health incident feed to mirror; every simulated service is always healthy."
-   ]
-  },
-  {
-   "id": "azure.monitor.grafana_dashboards",
-   "title": "Dashboards with Grafana",
-   "level": "not_simulated",
-   "limitations": [
-    "Azure Managed Grafana is a separate managed service Vyomi does not run.",
-    "Toolbar actions would be New, Explore, Browse Grafana dashboards Gallery, Browse Saved dashboards, Help, Feedback, Group by."
-   ]
+   "now": {
+    "offline": "not_simulated",
+    "nano": "not_simulated"
+   },
+   "current_reason": "There is no Azure service-health incident feed to mirror; every simulated service is always healthy.",
+   "hint": "telemetry: emit real metrics/logs from the simulated engine (wave-6 Prometheus/OTel are the offline sinks once landed; until then derive real series from actual API activity in the core) \u2014 never synthetic random data"
   },
   {
    "id": "azure.monitor.containers_insights",
    "title": "Container insights",
-   "level": "not_simulated",
-   "limitations": [
-    "AKS/ACI are not modelled by any Vyomi core, so there is no container inventory to show."
-   ]
+   "now": {
+    "offline": "not_simulated",
+    "nano": "not_simulated"
+   },
+   "current_reason": "AKS/ACI are not modelled by any Vyomi core, so there is no container inventory to show.",
+   "hint": "telemetry: emit real metrics/logs from the simulated engine (wave-6 Prometheus/OTel are the offline sinks once landed; until then derive real series from actual API activity in the core) \u2014 never synthetic random data"
   },
   {
    "id": "azure.monitor.redis_insights",
    "title": "Azure Cache for Redis insights",
-   "level": "not_simulated",
-   "limitations": [
-    "Azure Cache for Redis is not modelled by any Vyomi core."
-   ]
+   "now": {
+    "offline": "not_simulated",
+    "nano": "not_simulated"
+   },
+   "current_reason": "Azure Cache for Redis is not modelled by any Vyomi core.",
+   "hint": "telemetry: emit real metrics/logs from the simulated engine (wave-6 Prometheus/OTel are the offline sinks once landed; until then derive real series from actual API activity in the core) \u2014 never synthetic random data"
   },
   {
    "id": "azure.monitor.data_explorer_insights",
    "title": "Azure Data Explorer Clusters insights",
-   "level": "not_simulated",
-   "limitations": [
-    "Azure Data Explorer is not modelled by any Vyomi core."
-   ]
-  },
-  {
-   "id": "azure.monitor.azure_local_insights",
-   "title": "Azure Local insights",
-   "level": "not_simulated",
-   "limitations": [
-    "Azure Local (hybrid hardware) is out of scope for a cloud simulator."
-   ]
-  },
-  {
-   "id": "azure.monitor.managed_prometheus",
-   "title": "Managed Prometheus",
-   "level": "not_simulated",
-   "limitations": [
-    "Azure Kubernetes Service and the managed Prometheus add-on are not modelled.",
-    "Grid columns would be Name, Resource group, Metrics collection; toolbar actions would be View manual setup, Feedback."
-   ]
-  },
-  {
-   "id": "azure.monitor.managed_grafana",
-   "title": "Azure Managed Grafana",
-   "level": "not_simulated",
-   "limitations": [
-    "Azure Managed Grafana is a separate managed service Vyomi does not run."
-   ]
-  },
-  {
-   "id": "azure.monitor.scom_managed_instance",
-   "title": "Azure Monitor SCOM managed instance",
-   "level": "not_simulated",
-   "limitations": [
-    "SCOM managed instance is out of scope for a simulator."
-   ]
-  },
-  {
-   "id": "azure.monitor.diagnostic_settings",
-   "title": "Diagnostic settings (per-resource logs/metrics routing: resource picker + create/list/delete)",
-   "level": "limited",
-   "limitations": [
-    "Logs/metrics are never actually delivered to the configured destination (workspace, storage account or event hub) — there is no agent/telemetry pipeline, so the setting is stored and validated exactly as the real resource requires but nothing flows.",
-    "Vyomi has no catalog of a resource type's real log/metric category names (GET .../diagnosticSettingsCategories is not modelled) — the create form offers the 'allLogs' category group and 'AllMetrics' rather than a resource-specific category picker."
-   ]
+   "now": {
+    "offline": "not_simulated",
+    "nano": "not_simulated"
+   },
+   "current_reason": "Azure Data Explorer is not modelled by any Vyomi core.",
+   "hint": "telemetry: emit real metrics/logs from the simulated engine (wave-6 Prometheus/OTel are the offline sinks once landed; until then derive real series from actual API activity in the core) \u2014 never synthetic random data"
   },
   {
    "id": "azure.monitor.pipelines",
    "title": "Azure Monitor pipelines",
-   "level": "not_simulated",
-   "limitations": [
-    "Azure Monitor pipelines (on-premises collector fleet management) are out of scope for a simulator."
-   ]
-  },
-  {
-   "id": "azure.monitor.private_link_scopes",
-   "title": "Azure Monitor Private Link Scopes (create, list, delete, access mode settings)",
-   "level": "limited",
-   "limitations": [
-    "The scope resource and its query/ingestion access-mode settings are real and round-trip exactly as configured; private endpoint connections and scoped-resource associations (linking workspaces/App Insights components into the scope) are not modelled — Vyomi has no private networking stack."
-   ]
-  },
-  {
-   "id": "azure.monitor.new_support_request",
-   "title": "New support request (file a Microsoft support ticket)",
-   "level": "not_simulated",
-   "limitations": [
-    "Vyomi does not file real Microsoft support tickets."
-   ]
+   "now": {
+    "offline": "not_simulated",
+    "nano": "not_simulated"
+   },
+   "current_reason": "Azure Monitor pipelines (on-premises collector fleet management) are out of scope for a simulator.",
+   "hint": "telemetry: emit real metrics/logs from the simulated engine (wave-6 Prometheus/OTel are the offline sinks once landed; until then derive real series from actual API activity in the core) \u2014 never synthetic random data"
   }
- ],
- "note": "DEPTH PASS (the base console is merged). Goal: turn this service's sub-sections and config sections into REAL backend integrations. For EACH capability entry listed in `depth_targets` decide:\n  BUILD — Vyomi can model it in the shared core (state + native API semantics): implement it in core/<svc>_core.py (and the offline route if offline lacks it), add conformance checks in tests/conformance/, raise the entry's level in core/capabilities/<cloud>/<svc>.json (not_simulated→limited/full, config_only→limited/full where now ENFORCED, limited→full where a limitation is removed), wire the console section to it with a UI↔native-API round trip in consoles/tests/smoke-<cloud>.mjs and a \"live\" fixture for any list/detail page.\n  KEEP HONEST — only if it needs something a local simulator cannot run (a separate product, real hardware/network, billing, third-party identity): leave it NotSimulated and put the concrete reason in the entry's `limitations`.\nPrefer behaviour that is ENFORCED (e.g. lifecycle rules actually expire objects, a DLQ really receives, a policy really denies) over config that is only stored. Real coverage must go UP; nothing may regress: fidelity ≥ 90%, every capability claim true on nano AND offline, smokes green. Do not edit consoles/honest-allowlist.json or .github/.\nHouse rules: keep consoles/src/<cloud>/kit/Capability.jsx as on base (add JSON imports only), list the service ONCE in registry.js, register any NEW core in wasm/build_cores.py + wasm/nano-boot.js (own line, never inside a // comment) + core/nano_registry.py + core/nano_persist.py (tests/conformance/test_nano_core_manifest.py), unique variable names in the smoke files, 'Vyomi' as plain text, re-vendor with python3 wasm/build_cores.py, rebuild bundles, COMMIT your source.\n\nWAVE 5 — FINISH THE GAPS (orchestrator). Work through EVERY entry in depth_targets in this order:\n  1. config_only → make the stored setting TAKE EFFECT (e.g. encryption really uses our KMS / Key Vault cores; access logging really writes log objects; org-policy constraints really reject violating calls; tiering/lifecycle really moves objects; replication really copies within the simulator). Raise to limited/full.\n  2. not_simulated that a simulator CAN model → build it in the shared core (state + native API + console + smoke round-trip + conformance test). Networking behaviour MUST use core/netsim (never a second evaluator).\n  3. limited whose limit is only missing engine coverage (query grammar, per-request policy evaluation, missing sub-resources) → lift it.\n  KEEP HONEST only: separate products (Grafana, Prometheus, Defender, Bastion, VPN/TGW/ExpressRoute, PrivateLink, Firehose without a core…), billing/payment/support, physical hardware, AI-generated insights — with the concrete reason in `limitations`.\nBoth substrates: every change must work on Nano (wasm cores) AND offline (check the offline route serves it — offline sometimes uses legacy provider handlers; route to the core or implement there; see core/wire_ingress.py, providers/*, routes/*). New offline state must be durable (core/appliance_stores._CoreSlotStore) and JSON-safe. Run the gate, the cloud's smoke, and the conformance tests in the FOREGROUND before your final message; commit source."
+ ]
 }

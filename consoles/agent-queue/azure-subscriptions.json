@@ -1,69 +1,28 @@
 {
  "cloud": "azure",
  "service": "subscriptions",
- "goal": "WAVE 5: finish every buildable gap with real backend integration on Nano + offline (config_only enforced, buildable not_simulated built, engine-coverage limits lifted)",
- "must_build": [
-  "Every page in ui-spec/azure/subscriptions.json (29 pages; nav: Overview, Activity log, Access control (IAM), Tags, Diagnose and solve problems, Security, Events, Cost Management, Billing, Settings, Help)",
-  "Backend: ARM subscription (DEFAULT_SUBSCRIPTION in azure/kit/arm.js): overview, resource providers, IAM role assignments (test_azure_rbac_core.py)",
-  "List / create / detail / edit / delete round-trips through the native API the SDK and CLI use"
- ],
- "always": [
-  "Every page wired to the native API on /_wire (no static data); liveness fixtures for every list/detail page",
-  "core/capabilities/azure/subscriptions.json: one entry per console section with an honest level + tests; tests/conformance/test_capabilities.py must pass",
-  "Capability feature ids MUST start with 'azure.' (e.g. 'azure.subscriptions.<section>') — ids share one namespace with the AWS registry",
-  "Read the 'Cloud lenses' section of consoles/AGENT-UI.md first — use this cloud's kit, not Cloudscape"
- ],
- "attempt": 5,
  "phase": "depth",
+ "attempt": 1,
+ "goal": "GAP SWEEP (wave 5b): every listed depth_target is currently not_simulated/config_only in the shipped console. Build each one on a REAL backend (Nano + offline) and lift its capability level to full or limited. 'Out of Vyomi's scope', 'separate product', 'single-account' or 'not modeled' are NOT acceptable reasons: model it in the shared core (Python core/*_core.py, vendored to wasm), wire it through the native wire, enforce behaviour (not stored config), and make the console section live. Only leave a target not_simulated if it needs something physically impossible in a local simulator (real external hardware, real money, a real third-party service) \u2014 and then write that concrete reason. config_only targets must become enforced (the setting changes observable behaviour). Update core/capabilities, tests/conformance, ui-spec mapping and smoke where relevant.",
+ "note": "WAVE 5b gap sweep (orchestrator). Approved by the user: finish all the gaps with real backends.",
  "depth_targets": [
-  {
-   "id": "azure.subscriptions.overview",
-   "title": "Subscription overview (get, rename) over ARM",
-   "level": "limited",
-   "limitations": [
-    "Vyomi simulates exactly one subscription — renaming it changes the one simulated subscription's display name rather than creating or listing an independent additional subscription. Offer/Offer ID are a fixed Pay-As-You-Go quotaId (subscriptionPolicies), matching how the real portal looks them up; Parent management group and Secure score are not modeled (no management-group hierarchy or Microsoft Defender scoring exist in Vyomi)."
-   ]
-  },
-  {
-   "id": "azure.subscriptions.activity_log",
-   "title": "Activity log",
-   "level": "limited",
-   "limitations": [
-    "Only console/SDK-triggered mutations made since the simulation booted are recorded, and `caller` is a fixed placeholder identity."
-   ]
-  },
-  {
-   "id": "azure.subscriptions.access_control_iam",
-   "title": "Access control (IAM) — role assignments, roles and checkAccess",
-   "level": "limited",
-   "limitations": [
-    "Role assignments are real ARM resources scoped to the subscription they were created under (list + checkAccess only see assignments at that scope, with the same wildcard, scope-inheritance and explicit-deny-wins semantics as the Entra RBAC engine), and the Roles tab + checkAccess cover the built-in Owner/Contributor/Reader/… roles plus any custom role definitions. But checkAccess is a standalone decision tool: no other ARM call in Vyomi consults it, so every other data-plane/control-plane operation still succeeds regardless of what is assigned. Deny assignments and classic administrators are always empty."
-   ]
-  },
-  {
-   "id": "azure.subscriptions.deployments",
-   "title": "Deployments (Microsoft.Resources/deployments) history, subscription scope",
-   "level": "limited",
-   "limitations": [
-    "Deployment creation resolves `[parameters(...)]`/`[variables(...)]` to literal values and actually PUTs every resource listed in properties.template.resources through the same ARM dispatcher, so a deployment really provisions something — but no other ARM template function (concat/resourceId/reference/copy loops) or dependsOn ordering is evaluated, so templates using them fail at the dependent resource's own validation. Cancel always returns a conflict because every deployment completes synchronously before a Cancel call can arrive (the same conflict a real deployment that finished first returns); Redeploy re-runs the same stored template for real."
-   ]
-  },
   {
    "id": "azure.subscriptions.usage_quotas",
    "title": "Usage + quotas",
-   "level": "not_simulated",
-   "limitations": [
-    "Per-resource-type, per-location compute/network quota (Microsoft.Compute usages) is not modeled — Vyomi has no fixed quantity caps to report against."
-   ]
+   "now": {
+    "offline": "not_simulated",
+    "nano": "not_simulated"
+   },
+   "current_reason": "Per-resource-type, per-location compute/network quota (Microsoft.Compute usages) is not modeled \u2014 Vyomi has no fixed quantity caps to report against."
   },
   {
    "id": "azure.subscriptions.menu_gaps",
    "title": "Diagnose and solve problems, Security, Events, Advisor recommendations, Invoices, Partner information, Programmatic deployment, Billing properties, Preview features, Policies, Management certificates, My permissions, Deployment stacks, Support + Troubleshooting",
-   "level": "not_simulated",
-   "limitations": [
-    "These subscription blade menu items are billing-account, Microsoft Defender, Azure Policy, Microsoft Entra or classic Service Management features with no Vyomi backend."
-   ]
+   "now": {
+    "offline": "not_simulated",
+    "nano": "not_simulated"
+   },
+   "current_reason": "These subscription blade menu items are billing-account, Microsoft Defender, Azure Policy, Microsoft Entra or classic Service Management features with no Vyomi backend."
   }
- ],
- "note": "DEPTH PASS (the base console is merged). Goal: turn this service's sub-sections and config sections into REAL backend integrations. For EACH capability entry listed in `depth_targets` decide:\n  BUILD — Vyomi can model it in the shared core (state + native API semantics): implement it in core/<svc>_core.py (and the offline route if offline lacks it), add conformance checks in tests/conformance/, raise the entry's level in core/capabilities/<cloud>/<svc>.json (not_simulated→limited/full, config_only→limited/full where now ENFORCED, limited→full where a limitation is removed), wire the console section to it with a UI↔native-API round trip in consoles/tests/smoke-<cloud>.mjs and a \"live\" fixture for any list/detail page.\n  KEEP HONEST — only if it needs something a local simulator cannot run (a separate product, real hardware/network, billing, third-party identity): leave it NotSimulated and put the concrete reason in the entry's `limitations`.\nPrefer behaviour that is ENFORCED (e.g. lifecycle rules actually expire objects, a DLQ really receives, a policy really denies) over config that is only stored. Real coverage must go UP; nothing may regress: fidelity ≥ 90%, every capability claim true on nano AND offline, smokes green. Do not edit consoles/honest-allowlist.json or .github/.\nHouse rules: keep consoles/src/<cloud>/kit/Capability.jsx as on base (add JSON imports only), list the service ONCE in registry.js, register any NEW core in wasm/build_cores.py + wasm/nano-boot.js (own line, never inside a // comment) + core/nano_registry.py + core/nano_persist.py (tests/conformance/test_nano_core_manifest.py), unique variable names in the smoke files, 'Vyomi' as plain text, re-vendor with python3 wasm/build_cores.py, rebuild bundles, COMMIT your source.\n\nWAVE 5 — FINISH THE GAPS (orchestrator). Work through EVERY entry in depth_targets in this order:\n  1. config_only → make the stored setting TAKE EFFECT (e.g. encryption really uses our KMS / Key Vault cores; access logging really writes log objects; org-policy constraints really reject violating calls; tiering/lifecycle really moves objects; replication really copies within the simulator). Raise to limited/full.\n  2. not_simulated that a simulator CAN model → build it in the shared core (state + native API + console + smoke round-trip + conformance test). Networking behaviour MUST use core/netsim (never a second evaluator).\n  3. limited whose limit is only missing engine coverage (query grammar, per-request policy evaluation, missing sub-resources) → lift it.\n  KEEP HONEST only: separate products (Grafana, Prometheus, Defender, Bastion, VPN/TGW/ExpressRoute, PrivateLink, Firehose without a core…), billing/payment/support, physical hardware, AI-generated insights — with the concrete reason in `limitations`.\nBoth substrates: every change must work on Nano (wasm cores) AND offline (check the offline route serves it — offline sometimes uses legacy provider handlers; route to the core or implement there; see core/wire_ingress.py, providers/*, routes/*). New offline state must be durable (core/appliance_stores._CoreSlotStore) and JSON-safe. Run the gate, the cloud's smoke, and the conformance tests in the FOREGROUND before your final message; commit source."
+ ]
 }

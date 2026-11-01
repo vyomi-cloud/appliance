@@ -1,63 +1,28 @@
 {
  "cloud": "azure",
  "service": "keyvaults",
- "goal": "WAVE 5: finish every buildable gap with real backend integration on Nano + offline (config_only enforced, buildable not_simulated built, engine-coverage limits lifted)",
- "must_build": [
-  "Every page in ui-spec/azure/keyvaults.json (31 pages; nav: Overview, Activity log, Access control (IAM), Tags, Diagnose and solve problems, Access policies, Events, Objects, Settings, Monitoring, Automation, Help)",
-  "Backend: ARM vaults (core/azure_arm_core.py) + data planes keyvault keys/secrets (test_azure_keyvault_keys_core.py, test_azure_keyvault_secrets_core.py, test_azure_kv_crypto_core.py): vault blade, keys, secrets, versions, access policies/RBAC as config",
-  "List / create / detail / edit / delete round-trips through the native API the SDK and CLI use"
- ],
- "always": [
-  "Every page wired to the native API on /_wire (no static data); liveness fixtures for every list/detail page",
-  "core/capabilities/azure/keyvaults.json: one entry per console section with an honest level + tests; tests/conformance/test_capabilities.py must pass",
-  "Capability feature ids MUST start with 'azure.' (e.g. 'azure.keyvaults.<section>') — ids share one namespace with the AWS registry",
-  "Read the 'Cloud lenses' section of consoles/AGENT-UI.md first — use this cloud's kit, not Cloudscape"
- ],
- "attempt": 6,
- "note": "DEPTH PASS (the base console is merged). Goal: turn this service's sub-sections and config sections into REAL backend integrations. For EACH capability entry listed in `depth_targets` decide:\n  BUILD — Vyomi can model it in the shared core (state + native API semantics): implement it in core/<svc>_core.py (and the offline route if offline lacks it), add conformance checks in tests/conformance/, raise the entry's level in core/capabilities/<cloud>/<svc>.json (not_simulated→limited/full, config_only→limited/full where now ENFORCED, limited→full where a limitation is removed), wire the console section to it with a UI↔native-API round trip in consoles/tests/smoke-<cloud>.mjs and a \"live\" fixture for any list/detail page.\n  KEEP HONEST — only if it needs something a local simulator cannot run (a separate product, real hardware/network, billing, third-party identity): leave it NotSimulated and put the concrete reason in the entry's `limitations`.\nPrefer behaviour that is ENFORCED (e.g. lifecycle rules actually expire objects, a DLQ really receives, a policy really denies) over config that is only stored. Real coverage must go UP; nothing may regress: fidelity ≥ 90%, every capability claim true on nano AND offline, smokes green. Do not edit consoles/honest-allowlist.json or .github/.\nHouse rules: keep consoles/src/<cloud>/kit/Capability.jsx as on base (add JSON imports only), list the service ONCE in registry.js, register any NEW core in wasm/build_cores.py + wasm/nano-boot.js (own line, never inside a // comment) + core/nano_registry.py + core/nano_persist.py (tests/conformance/test_nano_core_manifest.py), unique variable names in the smoke files, 'Vyomi' as plain text, re-vendor with python3 wasm/build_cores.py, rebuild bundles, COMMIT your source.\n\nWAVE 5 — FINISH THE GAPS (orchestrator). Work through EVERY entry in depth_targets in this order:\n  1. config_only → make the stored setting TAKE EFFECT (e.g. encryption really uses our KMS / Key Vault cores; access logging really writes log objects; org-policy constraints really reject violating calls; tiering/lifecycle really moves objects; replication really copies within the simulator). Raise to limited/full.\n  2. not_simulated that a simulator CAN model → build it in the shared core (state + native API + console + smoke round-trip + conformance test). Networking behaviour MUST use core/netsim (never a second evaluator).\n  3. limited whose limit is only missing engine coverage (query grammar, per-request policy evaluation, missing sub-resources) → lift it.\n  KEEP HONEST only: separate products (Grafana, Prometheus, Defender, Bastion, VPN/TGW/ExpressRoute, PrivateLink, Firehose without a core…), billing/payment/support, physical hardware, AI-generated insights — with the concrete reason in `limitations`.\nBoth substrates: every change must work on Nano (wasm cores) AND offline (check the offline route serves it — offline sometimes uses legacy provider handlers; route to the core or implement there; see core/wire_ingress.py, providers/*, routes/*). New offline state must be durable (core/appliance_stores._CoreSlotStore) and JSON-safe. Run the gate, the cloud's smoke, and the conformance tests in the FOREGROUND before your final message; commit source.",
  "phase": "depth",
+ "attempt": 1,
+ "goal": "GAP SWEEP (wave 5b): every listed depth_target is currently not_simulated/config_only in the shipped console. Build each one on a REAL backend (Nano + offline) and lift its capability level to full or limited. 'Out of Vyomi's scope', 'separate product', 'single-account' or 'not modeled' are NOT acceptable reasons: model it in the shared core (Python core/*_core.py, vendored to wasm), wire it through the native wire, enforce behaviour (not stored config), and make the console section live. Only leave a target not_simulated if it needs something physically impossible in a local simulator (real external hardware, real money, a real third-party service) \u2014 and then write that concrete reason. config_only targets must become enforced (the setting changes observable behaviour). Update core/capabilities, tests/conformance, ui-spec mapping and smoke where relevant.",
+ "note": "WAVE 5b gap sweep (orchestrator). Approved by the user: finish all the gaps with real backends.",
  "depth_targets": [
   {
    "id": "azure.keyvaults.access_configuration",
    "title": "Access configuration (RBAC vs vault access policy, resource access flags)",
-   "level": "config_only",
-   "limitations": [
-    "enableRbacAuthorization and the resource-access flags are stored and returned exactly as written, but Vyomi does not enforce them. Real Key Vault data-plane calls are routed by the vault's own hostname ({vault}.vault.azure.net); Vyomi's Key Vault Keys/Secrets/Certificates REST data planes sit behind one shared, vault-agnostic relay (same simplification the AWS lens makes for KMS/Secrets Manager key policies), so a keys/secrets call carries no wire signal identifying which vault's access model should apply — enforcing against a guessed vault would deny or allow calls incorrectly rather than modelling the real control."
-   ]
+   "now": {
+    "offline": "config_only",
+    "nano": "config_only"
+   },
+   "current_reason": "enableRbacAuthorization and the resource-access flags are stored and returned exactly as written, but Vyomi does not enforce them. The console now tags every Keys/Secrets/Certificates call with the vault it's showing (x-vyomi-vault, the same signal azure.keyvaults.networking enforces against) \u2014 the remaining gap isn't 'which vault' but 'which caller': Vyomi has no signed-in-identity/session-princi"
   },
   {
    "id": "azure.keyvaults.access_policies",
    "title": "Vault access policies (properties.accessPolicies)",
-   "level": "config_only",
-   "limitations": [
-    "Access policy entries round-trip through ARM exactly as written, but Vyomi never evaluates them — every data-plane key/secret call succeeds regardless of the configured permissions. Same root cause as azure.keyvaults.access_configuration: the data-plane relay is shared across every vault (no per-vault hostname), so a call has no wire signal saying which vault's access-policy list to check."
-   ]
-  },
-  {
-   "id": "azure.keyvaults.networking",
-   "title": "Networking (public network access / firewall default action)",
-   "level": "config_only",
-   "limitations": [
-    "publicNetworkAccess and networkAcls round-trip through ARM, but the Key Vault Keys/Secrets REST data planes never enforce them — a call from a 'denied' network still succeeds. Same root cause as azure.keyvaults.access_configuration: the data-plane relay has no per-vault hostname, so it cannot tell which vault's firewall config a given call should be checked against."
-   ]
-  },
-  {
-   "id": "azure.keyvaults.certificates",
-   "title": "Certificates (generate self-signed, import, get, list, delete) over the Key Vault Certificates REST API",
-   "level": "limited",
-   "limitations": [
-    "Generated (self-signed) certificate creation completes synchronously, and GET .../pending always reports the operation already 'completed' — there is no real multi-step issuance to poll. The `cer`/`x5t` on a GENERATED certificate are deterministic cosmetic bytes, not real X.509 DER.",
-    "Importing a PEM certificate is real: the `-----BEGIN CERTIFICATE-----` block is decoded and its actual DER becomes `cer`, with `x5t` the real SHA-1 thumbprint of that DER. A password-protected PFX (PKCS#12) `value` is accepted but not parsed — this substrate has no ASN.1/PKCS#12 library, so it falls back to the same cosmetic bytes as a generated certificate. Either way the expiration attribute is derived from the request policy's validity_in_months, not read from the certificate's own ASN.1 validity period.",
-    "CA-issued certificates (a real external certificate authority) are not simulated on any substrate."
-   ]
-  },
-  {
-   "id": "azure.keyvaults.activity_log",
-   "title": "Activity log",
-   "level": "limited",
-   "limitations": [
-    "Only console/SDK-triggered mutations made since the simulation booted are recorded (no historical backfill); severity/category filtering and the 7/30/90-day timespan picker are not modelled, and `caller` is a fixed placeholder identity rather than the real signed-in principal."
-   ]
+   "now": {
+    "offline": "config_only",
+    "nano": "config_only"
+   },
+   "current_reason": "Access policy entries round-trip through ARM exactly as written, but Vyomi never evaluates them \u2014 every data-plane key/secret call succeeds regardless of the configured permissions. Same root cause as azure.keyvaults.access_configuration: evaluating a policy needs a caller identity to check it against, and Vyomi has no signed-in-identity/session-principal concept behind a data-plane call anywhere "
   }
  ]
 }

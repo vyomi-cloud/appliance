@@ -1,61 +1,19 @@
 {
  "cloud": "azure",
  "service": "nsgs",
- "goal": "WAVE 5: finish every buildable gap with real backend integration on Nano + offline (config_only enforced, buildable not_simulated built, engine-coverage limits lifted)",
- "must_build": [
-  "Every page in ui-spec/azure/nsgs.json (21 pages; nav: Overview, Activity log, Access control (IAM), Tags, Diagnose and solve problems, Settings, Monitoring, Automation, Help)",
-  "Backend: ARM networkSecurityGroups + security rules (test_azure_subresource_core.py)",
-  "List / create / detail / edit / delete round-trips through the native API the SDK and CLI use"
- ],
- "always": [
-  "Every page wired to the native API on /_wire (no static data); liveness fixtures for every list/detail page",
-  "core/capabilities/azure/nsgs.json: one entry per console section with an honest level + tests; tests/conformance/test_capabilities.py must pass",
-  "Capability feature ids MUST start with 'azure.' (e.g. 'azure.nsgs.<section>') — ids share one namespace with the AWS registry",
-  "Read the 'Cloud lenses' section of consoles/AGENT-UI.md first — use this cloud's kit, not Cloudscape"
- ],
- "attempt": 5,
- "note": "DEPTH PASS (the base console is merged). Goal: turn this service's sub-sections and config sections into REAL backend integrations. For EACH capability entry listed in `depth_targets` decide:\n  BUILD — Vyomi can model it in the shared core (state + native API semantics): implement it in core/<svc>_core.py (and the offline route if offline lacks it), add conformance checks in tests/conformance/, raise the entry's level in core/capabilities/<cloud>/<svc>.json (not_simulated→limited/full, config_only→limited/full where now ENFORCED, limited→full where a limitation is removed), wire the console section to it with a UI↔native-API round trip in consoles/tests/smoke-<cloud>.mjs and a \"live\" fixture for any list/detail page.\n  KEEP HONEST — only if it needs something a local simulator cannot run (a separate product, real hardware/network, billing, third-party identity): leave it NotSimulated and put the concrete reason in the entry's `limitations`.\nPrefer behaviour that is ENFORCED (e.g. lifecycle rules actually expire objects, a DLQ really receives, a policy really denies) over config that is only stored. Real coverage must go UP; nothing may regress: fidelity ≥ 90%, every capability claim true on nano AND offline, smokes green. Do not edit consoles/honest-allowlist.json or .github/.\nHouse rules: keep consoles/src/<cloud>/kit/Capability.jsx as on base (add JSON imports only), list the service ONCE in registry.js, register any NEW core in wasm/build_cores.py + wasm/nano-boot.js (own line, never inside a // comment) + core/nano_registry.py + core/nano_persist.py (tests/conformance/test_nano_core_manifest.py), unique variable names in the smoke files, 'Vyomi' as plain text, re-vendor with python3 wasm/build_cores.py, rebuild bundles, COMMIT your source.\n\nWAVE 5 — FINISH THE GAPS (orchestrator). Work through EVERY entry in depth_targets in this order:\n  1. config_only → make the stored setting TAKE EFFECT (e.g. encryption really uses our KMS / Key Vault cores; access logging really writes log objects; org-policy constraints really reject violating calls; tiering/lifecycle really moves objects; replication really copies within the simulator). Raise to limited/full.\n  2. not_simulated that a simulator CAN model → build it in the shared core (state + native API + console + smoke round-trip + conformance test). Networking behaviour MUST use core/netsim (never a second evaluator).\n  3. limited whose limit is only missing engine coverage (query grammar, per-request policy evaluation, missing sub-resources) → lift it.\n  KEEP HONEST only: separate products (Grafana, Prometheus, Defender, Bastion, VPN/TGW/ExpressRoute, PrivateLink, Firehose without a core…), billing/payment/support, physical hardware, AI-generated insights — with the concrete reason in `limitations`.\nBoth substrates: every change must work on Nano (wasm cores) AND offline (check the offline route serves it — offline sometimes uses legacy provider handlers; route to the core or implement there; see core/wire_ingress.py, providers/*, routes/*). New offline state must be durable (core/appliance_stores._CoreSlotStore) and JSON-safe. Run the gate, the cloud's smoke, and the conformance tests in the FOREGROUND before your final message; commit source.",
  "phase": "depth",
+ "attempt": 1,
+ "goal": "GAP SWEEP (wave 5b): every listed depth_target is currently not_simulated/config_only in the shipped console. Build each one on a REAL backend (Nano + offline) and lift its capability level to full or limited. 'Out of Vyomi's scope', 'separate product', 'single-account' or 'not modeled' are NOT acceptable reasons: model it in the shared core (Python core/*_core.py, vendored to wasm), wire it through the native wire, enforce behaviour (not stored config), and make the console section live. Only leave a target not_simulated if it needs something physically impossible in a local simulator (real external hardware, real money, a real third-party service) \u2014 and then write that concrete reason. config_only targets must become enforced (the setting changes observable behaviour). Update core/capabilities, tests/conformance, ui-spec mapping and smoke where relevant.",
+ "note": "WAVE 5b gap sweep (orchestrator). Approved by the user: finish all the gaps with real backends.",
  "depth_targets": [
   {
-   "id": "azure.nsgs.activity_log",
-   "title": "Activity log",
-   "level": "limited",
-   "limitations": [
-    "Only console/SDK-triggered mutations made since the simulation booted are recorded (no historical backfill); severity/category filtering and the 7/30/90-day timespan picker are not modelled, and `caller` is a fixed placeholder identity rather than the real signed-in principal."
-   ]
-  },
-  {
-   "id": "azure.nsgs.export_template",
-   "title": "Export template",
-   "level": "limited",
-   "limitations": [
-    "Only the ARM Template tab is generated from the live resource; Bicep and Terraform export are not modelled."
-   ]
-  },
-  {
-   "id": "azure.nsgs.iam",
-   "title": "Access control (IAM)",
-   "level": "limited",
-   "limitations": [
-    "Role assignments and role definitions are real ARM resources (Microsoft.Authorization/roleAssignments, roleDefinitions), and Check access / My access run the real wildcard + scope-inheritance + notActions + explicit-deny decision — all ENFORCED scoped to this network security group (plus its subscription/resource-group ancestors, matching real Azure's inherited-access view); Roles stays subscription-wide, which matches real Azure (built-in role definitions are listed tenant-wide too). Deny assignments and Classic administrators remain an honest gap — Microsoft Entra Privileged Identity Management and the legacy Azure Service Management administrator list are not modelled."
-   ]
-  },
-  {
    "id": "azure.nsgs.tools",
-   "title": "Diagnose and solve problems (remaining tiles), Tasks, Effective security rules, Support + Troubleshooting",
-   "level": "not_simulated",
-   "limitations": [
-    "Tasks, Effective security rules and Support + Troubleshooting are not built, and Diagnose and solve problems' other diagnostic tiles (VM connectivity issue, Network configuration diagnostics, …) remain an honest gap. Its IP flow verify and Next hop tiles ARE built — see azure.nsgs.network_watcher."
-   ]
-  },
-  {
-   "id": "azure.nsgs.monitoring",
-   "title": "Alerts, Diagnostic settings, Logs, NSG flow logs",
-   "level": "limited",
-   "limitations": [
-    "Diagnostic settings (Microsoft.Insights/diagnosticSettings) is a real ARM extension resource scoped to this network security group: logs/metrics are stored and validated exactly as the real resource requires, but never actually delivered to the configured destination (workspace, storage account or event hub) — there is no agent/telemetry pipeline. Alerts, Logs and NSG flow logs for network security groups remain an honest gap."
-   ]
+   "title": "Diagnose and solve problems (remaining tiles), Tasks, Support + Troubleshooting",
+   "now": {
+    "offline": "not_simulated",
+    "nano": "not_simulated"
+   },
+   "current_reason": "Tasks and Support + Troubleshooting are not built, and Diagnose and solve problems' other diagnostic tiles (VM connectivity issue, Network configuration diagnostics, \u2026) remain an honest gap \u2014 Tasks is a cross-resource Azure Resource Graph/tagging feature and Support + Troubleshooting opens a Microsoft support request, neither specific to network security groups. Its IP flow verify and Next hop til"
   }
  ]
 }
