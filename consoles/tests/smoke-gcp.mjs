@@ -950,6 +950,49 @@ try {
   await page.getByRole("cell", { name: "wire-pool", exact: true }).waitFor({ timeout: 10000 });
   check("cluster + node pool created over wire → shown in UI", true);
   await shot("13-cluster-nodes");
+
+  // Kubernetes data plane: deploy a real Workload (+ a Service, via "Expose as a new
+  // service") through the UI Deploy dialog, cross-check over the native Kubernetes wire
+  // (clusters/{c}/k8s/{real Kubernetes REST path} — core/gcp_gke_dataplane_core.py).
+  const WK = `v4-gcp-smoke-wk-${Date.now() % 100000}`;
+  await page.goto(UI + "#/kubernetes/workloads");
+  await page.getByRole("button", { name: "Deploy", exact: true }).click();
+  const deployDialog = page.getByRole("dialog");
+  await deployDialog.getByLabel("Cluster").click();
+  await page.getByRole("option", { name: new RegExp(`^${K2} `) }).click();
+  await deployDialog.getByLabel("Name", { exact: true }).fill(WK);
+  await deployDialog.getByLabel("Replicas").fill("2");
+  await deployDialog.getByRole("checkbox", { name: "Expose as a new service" }).check();
+  await deployDialog.getByRole("button", { name: "Deploy" }).click();
+  await deployDialog.waitFor({ state: "detached", timeout: 10000 });
+  await page.getByRole("cell", { name: WK, exact: true }).waitFor({ timeout: 10000 });
+  const deployWire = await wjson(`${KL}/clusters/${K2}/k8s/apis/apps/v1/namespaces/default/deployments/${WK}`);
+  check("deploy workload via UI → visible over native Kubernetes wire with 2 ready replicas",
+    deployWire.spec?.replicas === 2 && deployWire.status?.readyReplicas === 2);
+  const podsWire = await wjson(`${KL}/clusters/${K2}/k8s/api/v1/namespaces/default/pods`);
+  check("deployment materializes 2 real Pod objects",
+    (podsWire.items || []).filter((p) => (p.metadata.ownerReferences || [])[0]?.name === WK && p.status.phase === "Running").length === 2);
+  const k8sSvcWire = await wjson(`${KL}/clusters/${K2}/k8s/api/v1/namespaces/default/services/${WK}-svc`);
+  check("\"Expose as a new service\" checkbox → real Service created over native wire", k8sSvcWire.spec?.selector?.app === WK);
+  await shot("13c-deploy-workload");
+
+  // Reverse direction: create a ConfigMap over the native wire, see it in the UI.
+  const CM = `v4-gcp-smoke-cm-${Date.now() % 100000}`;
+  await wire(`${KL}/clusters/${K2}/k8s/api/v1/namespaces/default/configmaps`,
+    { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ metadata: { name: CM }, data: { k: "v" } }) });
+  await page.goto(UI + "#/kubernetes/secrets-configmaps");
+  await page.getByRole("cell", { name: CM, exact: true }).waitFor({ timeout: 10000 });
+  check("configmap created over native wire → shown in Secrets & ConfigMaps UI", true);
+
+  // Nodes tab: real Node objects derived from the real node pool (wire-pool, 2 nodes).
+  await page.goto(UI + `#/kubernetes/clusters/us-central1/${K2}`, { waitUntil: "networkidle" });
+  await page.getByRole("tab", { name: "Nodes" }).click();
+  await page.getByRole("heading", { name: "Nodes", exact: true }).waitFor({ timeout: 10000 });
+  await page.waitForTimeout(500);
+  const nodeRows = await page.getByRole("row", { name: /gke-/ }).count();
+  check("Nodes tab shows one real Node per node-pool slot", nodeRows === 2, `rows=${nodeRows}`);
+  await shot("13d-cluster-nodes-tab");
+
   await wire(`${KL}/clusters/${K2}`, { method: "DELETE" });
 
   // Backup for GKE: create a backup plan + an on-demand backup through the UI, cross-check

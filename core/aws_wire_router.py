@@ -156,7 +156,7 @@ def _gcp_service(path):
             return "gcp-pam"
         if "workloadIdentityPools" in path:
             return "gcp-iam"
-        if re.search(r"^/v1(beta1)?/projects/[^/]+/(locations|zones)/[^/]+/(clusters|operations|serverConfig|backupPlans)([/:]|$)", path):
+        if re.search(r"^/v1(beta1)?/projects/[^/]+/(locations|zones)/[^/]+/(clusters|operations|serverConfig|backupPlans|memberships)([/:]|$)", path):
             return "gcp-container"
         if re.search(r"/locations/[^/]+/jobs([/:]|$)", path) or re.search(r"^/v1(beta1)?/projects/[^/]+/locations/?$", path):
             return "gcp-cloudscheduler"

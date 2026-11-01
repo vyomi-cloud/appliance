@@ -1,6 +1,6 @@
 /* Create an Autopilot cluster — the console's numbered-step form. Every real setting goes
- * into ONE native clusters.create body; fleet registration is a separate product Vyomi
- * doesn't model, so it's a declared gap, not a control. */
+ * into ONE native clusters.create body; checking "Register to the fleet" makes a real
+ * follow-up gkehub.googleapis.com Membership call (core/gcp_container_core.py). */
 import { useState } from "react";
 import {
   Box, Button, Checkbox, Divider, FormControl, FormControlLabel, IconButton, InputLabel, MenuItem,
@@ -36,6 +36,7 @@ export default function CreateCluster({ query = {} }) {
   const [channel, setChannel] = useState(query.channel || "REGULAR");
   const [dnsAccess, setDnsAccess] = useState(true);
   const [ipv4Access, setIpv4Access] = useState(true);
+  const [fleet, setFleet] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
 
@@ -52,6 +53,7 @@ export default function CreateCluster({ query = {} }) {
         name, autopilot: { enabled: true }, network, subnetwork: subnet, releaseChannel: { channel },
         controlPlaneEndpointsConfig: { dnsEndpointConfig: { allowExternalTraffic: dnsAccess }, ipEndpointsConfig: { enabled: ipv4Access } },
       });
+      if (fleet) await api.createMembership(`${name}-member`, region, name);
       notify.success(`Creating cluster "${name}"…`);
       location.hash = hashHref("kubernetes", "clusters", region, name).slice(1);
     } catch (e) { setError(e); }
@@ -77,7 +79,7 @@ export default function CreateCluster({ query = {} }) {
       <Divider />
 
       <Step n={2} title="Fleet registration">
-        <CapabilityContainer id="gcp.kubernetes.fleet-registration" title="Register to the fleet" />
+        <FormControlLabel control={<Checkbox checked={fleet} onChange={(e) => setFleet(e.target.checked)} inputProps={{ "aria-label": "Register to the fleet" }} />} label="Register to the fleet" />
       </Step>
       <Divider />
 
@@ -119,6 +121,7 @@ export default function CreateCluster({ query = {} }) {
           <Typography variant="body2"><b>Network:</b> {network} / {subnet}</Typography>
           <Typography variant="body2"><b>Control plane access:</b> {[dnsAccess && "DNS", ipv4Access && "IPv4"].filter(Boolean).join(" + ") || "None"}</Typography>
           <Typography variant="body2"><b>Release channel:</b> {api.channelLabel(channel)}</Typography>
+          <Typography variant="body2"><b>Fleet registration:</b> {fleet ? "Register to the fleet" : "Not registered"}</Typography>
           <Typography variant="body2"><b>Project:</b> {getProject()}</Typography>
         </Stack>
       </Step>

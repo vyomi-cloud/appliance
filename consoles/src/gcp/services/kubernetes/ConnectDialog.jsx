@@ -31,7 +31,7 @@ export default function ConnectDialog({ open, onClose, cluster }) {
             <Cmd cmd={gcloud} />
           </Box>
           <Typography variant="caption" color="text.secondary">
-            This command points kubectl at the cluster's real endpoint and credentials, but no Kubernetes API server runs behind it in Vyomi — kubectl commands against the cluster will fail.
+            This command points kubectl at the cluster's real endpoint and credentials, but Vyomi doesn't run a real network listener at that literal address, so pasting it into a real terminal fails. Vyomi's own console — Workloads, Services, Secrets, Storage, Object Browser — reaches the SAME Kubernetes objects through its native wire instead.
           </Typography>
         </Stack>
       </DialogContent>
