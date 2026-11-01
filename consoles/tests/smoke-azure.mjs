@@ -106,6 +106,7 @@ const armAks = (method, path, body) => wire(`/subscriptions/${SUB}${path}${path.
 const armDns = (method, path, body) => wire(`/subscriptions/${SUB}${path}${path.includes("?") ? "&" : "?"}api-version=2018-05-01`,
   { method, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
 const armCogs = (method, path, body) => wire(`/subscriptions/${SUB}${path}${path.includes("?") ? "&" : "?"}api-version=2024-10-01`,
+  { method, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
 const armApp = (method, path, body) => wire(`/subscriptions/${SUB}${path}${path.includes("?") ? "&" : "?"}api-version=2024-03-01`,
   { method, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
 const graph = (method, path, body) => wire(`/v1.0${path}`, { method, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
