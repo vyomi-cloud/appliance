@@ -1188,6 +1188,89 @@ try {
   const wireColl = await page.getByText("wire-coll", { exact: true }).waitFor({ timeout: 20000 }).then(() => true, () => false);
   check("document created over wire → collection shown in Studio UI", wireColl);
 
+  // Firestore DEPTH (wave 5b): vector indexes — create one via the Vector tab, then a
+  // real findNearest over the native wire genuinely requires it and ranks by real distance.
+  const vec = (vals) => ({ mapValue: { fields: { __type__: { stringValue: "__vector__" },
+    value: { arrayValue: { values: vals.map((v) => ({ doubleValue: v })) } } } } });
+  const VC = `smoke-vec-${Date.now() % 100000}`;
+  await page.goto(UI + `#/firestore/databases/${FSDB}/indexes?tab=vector`);
+  await page.getByRole("button", { name: "Create vector index" }).click();
+  await page.getByLabel("Collection ID").fill(VC);
+  await page.getByLabel("Vector field path").fill("embedding");
+  await page.getByLabel("Dimensions").fill("3");
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByText(VC, { exact: true }).first().waitFor({ timeout: 10000 });
+  check("create vector index via UI → shown in Vector tab", true);
+
+  await wire(`/v1/projects/vyomi-project/databases/${FSDB}/documents/${VC}?documentId=near`, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ fields: { embedding: vec([1, 0, 0]) } }),
+  });
+  await wire(`/v1/projects/vyomi-project/databases/${FSDB}/documents/${VC}?documentId=far`, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ fields: { embedding: vec([0, 1, 0]) } }),
+  });
+  const nearest = await wjson(`/v1/projects/vyomi-project/databases/${FSDB}/documents:runQuery`, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ structuredQuery: { from: [{ collectionId: VC }], findNearest: {
+      vectorField: { fieldPath: "embedding" }, queryVector: vec([1, 0, 0]), distanceMeasure: "EUCLIDEAN", limit: 1,
+    } } }),
+  });
+  check("findNearest over native wire ranks by real vector distance",
+    Array.isArray(nearest) && nearest[0]?.document?.name?.endsWith("/near"));
+  await shot("22-firestore-vector-index");
+
+  // Firestore DEPTH: security rules — publish a ruleset via the UI, then the Development &
+  // test tab genuinely parses + evaluates it (not a decorative textarea).
+  await page.goto(UI + `#/firestore/databases/${FSDB}/rules`);
+  await page.getByLabel("Rules editor").fill(
+    "service cloud.firestore {\n  match /databases/{database}/documents {\n    match /secrets/{id} {\n      allow read: if request.auth != null;\n    }\n  }\n}");
+  await page.getByRole("button", { name: "Publish" }).click();
+  await page.getByText("Rules published.").waitFor({ timeout: 10000 });
+  await page.getByRole("tab", { name: "Development & test" }).click();
+  await page.getByLabel("Location").fill("secrets/s1");
+  await page.getByRole("button", { name: "Run" }).click();
+  await page.getByText("Simulated read/write denied").waitFor({ timeout: 10000 });
+  check("unauthenticated Rules Playground simulate on an auth-gated rule → denied", true);
+  await page.getByLabel("Authenticated").check();
+  await page.getByRole("button", { name: "Run" }).click();
+  await page.getByText("Simulated read/write allowed").waitFor({ timeout: 10000 });
+  check("authenticated Rules Playground simulate on the same rule → allowed", true);
+  await shot("23-firestore-rules-playground");
+
+  // Firestore DEPTH: insights — a real missing-index query failure surfaces as a
+  // recommendation; "Create index" from the UI makes a real composite index over the wire.
+  const IC = `smoke-insight-${Date.now() % 100000}`;
+  await wire(`/v1/projects/vyomi-project/databases/${FSDB}/documents/${IC}?documentId=i1`, {
+    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ fields: { score: { integerValue: "1" } } }),
+  });
+  await wire(`/v1/projects/vyomi-project/databases/${FSDB}/collectionGroups/${IC}/fields/score`, {
+    method: "PATCH", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ indexConfig: { indexes: [], usesAncestorConfig: false } }),
+  });
+  await wire(`/v1/projects/vyomi-project/databases/${FSDB}/documents:runQuery`, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ structuredQuery: { from: [{ collectionId: IC }],
+      where: { fieldFilter: { field: { fieldPath: "score" }, op: "GREATER_THAN", value: { integerValue: "0" } } } } }),
+  });
+  await page.goto(UI + `#/firestore/databases/${FSDB}/insights`);
+  await page.getByText(IC, { exact: false }).first().waitFor({ timeout: 10000 });
+  check("a real missing-index query failure shows up as an Insights recommendation", true);
+  await page.getByRole("button", { name: "Create index" }).click();
+  await page.waitForFunction(
+    async ([url, cg]) => (await (await fetch(url)).json()).indexes?.some((i) => i.collectionGroup === cg),
+    [`${WIRE}/v1/projects/vyomi-project/databases/${FSDB}/collectionGroups/-/indexes`, IC], { timeout: 10000 },
+  );
+  check("Insights \"Create index\" via UI → a real composite index over the native wire", true);
+  await shot("24-firestore-insights");
+
+  // Firestore DEPTH: Key Visualizer — the heatmap/hottest-keys list reflects real access
+  // to the "wire-coll" document created earlier over the native wire (never random data).
+  await page.goto(UI + `#/firestore/databases/${FSDB}/key-visualizer`);
+  await page.getByText("wire-coll", { exact: false }).first().waitFor({ timeout: 10000 });
+  check("Key Visualizer shows real per-document access for a collection written over the wire", true);
+  await shot("25-firestore-key-visualizer");
+
   await page.goto(UI + "#/firestore/databases");
   await page.getByRole("link", { name: FSDB }).waitFor({ timeout: 10000 });
   await page.getByRole("checkbox", { name: `Select ${FSDB}` }).check();

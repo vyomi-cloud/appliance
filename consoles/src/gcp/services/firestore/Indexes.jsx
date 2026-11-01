@@ -1,6 +1,7 @@
 /* Indexes — Composite (real CRUD), Single field (exemption overrides are really enforced:
  * a query needing a removed automatic index now fails unless a composite index covers it)
- * and Vector (not simulated) tabs, as in the console's Indexes page. */
+ * and Vector (real vector-index CRUD; findNearest genuinely requires one) tabs, as in the
+ * console's Indexes page. */
 import { useState } from "react";
 import { Box, Button, Chip, FormControl, InputLabel, MenuItem, Select, Stack, Tab, Tabs, TextField, Typography } from "@mui/material";
 import AddIcon from "@mui/icons-material/esm/Add.js";
@@ -10,7 +11,7 @@ import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import ResourceTable from "../../kit/ResourceTable.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
-import { PageHeader } from "../../kit/common.jsx";
+import { ErrorAlert, PageHeader } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import * as api from "./api.js";
 
@@ -28,7 +29,7 @@ export default function Indexes({ params, query }) {
       </Tabs>
       {tab === "composite" && <Composite db={db} />}
       {tab === "single-field" && <SingleField db={db} />}
-      {tab === "vector" && <CapabilityContainer id="gcp.firestore.vector-indexes" title="Vector indexes" />}
+      {tab === "vector" && <Vector db={db} />}
     </>
   );
 }
@@ -132,6 +133,91 @@ function ExemptionDialog({ group, path, mode, onGroup, onPath, onMode, onClose, 
         </FormControl>
         <Stack direction="row" spacing={1}>
           <Button variant="contained" disabled={busy || !group || !path} onClick={go}>{busy ? "Saving…" : "Save"}</Button>
+          <Button onClick={onClose} disabled={busy}>Cancel</Button>
+        </Stack>
+      </Stack>
+    </Box>
+  );
+}
+
+function Vector({ db }) {
+  const notify = useNotify();
+  const [sel, setSel] = useState([]);
+  const [del, setDel] = useState(false);
+  const [open, setOpen] = useState(false);
+  const { data = [], loading, error, reload } = useAsync(() => api.listIndexes(db, "-"), [db]);
+  const vectorIndexes = data.filter((i) => i.fields.some((f) => f.vectorConfig));
+
+  return (
+    <CapabilityContainer id="gcp.firestore.vector-indexes" title="Vector indexes"
+      actions={<Button size="small" startIcon={<AddIcon />} onClick={() => setOpen(true)}>Create vector index</Button>}>
+      <Stack direction="row" spacing={1} sx={{ mb: 1.5 }}>
+        <Button startIcon={<RefreshIcon />} onClick={reload}>Refresh</Button>
+        <Button startIcon={<DeleteIcon />} disabled={!sel.length} onClick={() => setDel(true)}>Delete</Button>
+      </Stack>
+      <ResourceTable
+        resourceName="vector indexes"
+        items={vectorIndexes}
+        rowKey={(i) => i.name}
+        loading={loading}
+        error={error}
+        onRetry={reload}
+        selectable
+        selected={sel}
+        onSelectedChange={setSel}
+        filterPlaceholder="Filter indexes"
+        columns={[
+          { id: "collection", header: "Collection ID", sortField: "collectionGroup", cell: (i) => i.collectionGroup },
+          { id: "field", header: "Vector field", cell: (i) => i.fields.find((f) => f.vectorConfig)?.fieldPath },
+          { id: "dim", header: "Dimensions", cell: (i) => i.fields.find((f) => f.vectorConfig)?.vectorConfig?.dimension },
+          { id: "id", header: "Index ID", cell: (i) => i.name.split("/").pop() },
+          { id: "status", header: "Status", cell: () => <Chip size="small" color="success" label="Enabled" /> },
+        ]}
+        empty={<Typography variant="body2" color="text.secondary">No vector indexes yet.</Typography>}
+      />
+      {open && (
+        <CreateVectorIndexDialog db={db} onClose={() => setOpen(false)}
+          onCreated={(collectionId) => { notify.success(`Created vector index for "${collectionId}"`); reload(); setOpen(false); }} />
+      )}
+      <DeleteDialog open={del} onClose={() => setDel(false)} title={`Delete ${sel.length} index${sel.length === 1 ? "" : "es"}?`} confirmText="DELETE"
+        onConfirm={async () => {
+          for (const name of sel) { const [, , , , , , cid, , iid] = name.split("/"); await api.deleteIndex(db, cid, iid); }
+          notify.success(`Deleted ${sel.length} index${sel.length === 1 ? "" : "es"}`);
+          setSel([]); reload();
+        }}>
+        <Typography variant="body2">{sel.map((n) => n.split("/").pop()).join(", ")}</Typography>
+      </DeleteDialog>
+    </CapabilityContainer>
+  );
+}
+
+function CreateVectorIndexDialog({ db, onClose, onCreated }) {
+  const [collectionId, setCollectionId] = useState("");
+  const [fieldPath, setFieldPath] = useState("embedding");
+  const [dimension, setDimension] = useState("768");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const valid = collectionId.trim() && fieldPath.trim() && Number(dimension) > 0;
+
+  const save = async () => {
+    setBusy(true); setError(null);
+    try {
+      await api.createIndex(db, collectionId.trim(), { queryScope: "COLLECTION",
+        fields: [{ fieldPath: fieldPath.trim(), vectorConfig: { dimension: Number(dimension), flat: {} } }] });
+      onCreated(collectionId.trim());
+    } catch (e) { setError(e); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <Box sx={{ mt: 2, p: 2, border: 1, borderColor: "divider", borderRadius: 2 }}>
+      {error && <ErrorAlert error={error} title="Failed to create vector index" />}
+      <Stack spacing={2} sx={{ maxWidth: 420 }}>
+        <TextField label="Collection ID" value={collectionId} onChange={(e) => setCollectionId(e.target.value.trim())} />
+        <TextField label="Vector field path" value={fieldPath} onChange={(e) => setFieldPath(e.target.value.trim())} />
+        <TextField label="Dimensions" type="number" value={dimension} onChange={(e) => setDimension(e.target.value)} />
+        <Stack direction="row" spacing={1}>
+          <Button variant="contained" disabled={busy || !valid} onClick={save}>{busy ? "Creating…" : "Create"}</Button>
           <Button onClick={onClose} disabled={busy}>Cancel</Button>
         </Stack>
       </Stack>
