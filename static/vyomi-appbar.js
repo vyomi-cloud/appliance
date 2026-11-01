@@ -17,16 +17,17 @@
     ['api', 'API reference', 'M16 18l6-6-6-6M8 6l-6 6 6 6']
   ];
   var css = '' +
-    '#vy-appbar{position:relative;z-index:70;height:44px;background:#0f121c;border-bottom:1px solid rgba(255,255,255,.10);display:flex;justify-content:center;font-family:Inter,system-ui,sans-serif}' +
-    '#vy-appbar .vy-cloud{position:absolute;left:14px;top:0;height:30px;display:flex;align-items:center;gap:6px;font-size:12px;color:#9aa0b4}' +
-    '#vy-appbar .vy-cloud b{color:#e4e4e7;font-weight:600}' +
-    '#vy-appbar .vy-notch{height:44px;padding:0 38px;display:flex;align-items:center;gap:2px;position:relative;isolation:isolate}' +
-    '#vy-appbar .vy-notch::before{content:"";position:absolute;inset:0;z-index:-1;background:#0f121c;clip-path:polygon(0 0,100% 0,calc(100% - 22px) 100%,22px 100%);border-bottom:2px solid #4d8cf3}' +
+    '#vy-appbar{position:relative;z-index:70;height:44px;background:#fff;display:flex;justify-content:center;font-family:Inter,system-ui,sans-serif}' +
+    '#vy-appbar::before{content:"";position:absolute;left:0;right:0;top:0;height:2px;background:#4d8cf3}' +   /* the line:  ------ */
+    '#vy-appbar .vy-cloud{position:absolute;left:14px;top:10px;display:flex;align-items:center;gap:6px;font-size:12px;color:#667085}' +
+    '#vy-appbar .vy-cloud b{color:#101828;font-weight:600}' +
+    '#vy-appbar .vy-notch{height:44px;padding:0 44px;display:flex;align-items:center;gap:2px;position:relative;isolation:isolate}' +   /* the dip:  \\____/ */
+    '#vy-appbar .vy-notch::before{content:"";position:absolute;inset:0;z-index:-1;background:#0f121c;clip-path:polygon(0 0,100% 0,calc(100% - 30px) 100%,30px 100%)}' +
     '#vy-appbar .vy-notch .vy-sep{width:1px;height:20px;background:rgba(255,255,255,.18);margin:0 6px}' +
     '#vy-appbar #disk-widget-slot{position:relative !important;top:auto !important;right:auto !important;left:auto !important;z-index:5 !important;display:inline-block}' +
     '#vy-appbar #disk-widget-slot .disk-chip{height:28px;padding:0 10px;font-size:12px;border-radius:8px;border-width:1px}' +
     '#vy-appbar #disk-widget-slot .disk-popover{top:calc(100% + 14px) !important;right:auto !important;left:50% !important;transform:translateX(-50%)}' +
-'#vy-appbar .vy-notch a{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 10px;border-radius:8px;color:#b4b8cc;font-size:12px;text-decoration:none;white-space:nowrap}' +
+    '#vy-appbar .vy-notch a{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 10px;border-radius:8px;color:#b4b8cc;font-size:12px;text-decoration:none;white-space:nowrap}' +
     '#vy-appbar .vy-notch a:hover{background:rgba(255,255,255,.08);color:#fff}' +
     '#vy-appbar .vy-notch a svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}' +
     '#vy-appbar .vy-notch a.on{background:rgba(77,140,243,.18);color:#fff}' +
