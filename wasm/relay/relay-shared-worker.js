@@ -14,6 +14,7 @@
 //   relay → worker : {id, method, path, query, headers, body(base64)}
 //   worker → relay : {id, status, headers, body(base64)}
 import { installPGlite } from "../pglite-loader.js";
+import { installParquet } from "../parquet/parquet-loader.js";   // RDS exports: real Parquet (lazy)
 
 // Same-origin runtime first (wasm/fetch_pyodide.py vendors it at <bundle>/vendor/pyodide/),
 // the public CDN as fallback — a CDN stall would otherwise leave the relay unable to boot.
@@ -122,6 +123,7 @@ async function bootPyodide() {
     try { await py.loadPackage("sqlite3"); } catch (e) { log("sqlite3 load skipped: " + e, "dim"); }
     const hasPg = await installPGlite();
     py.globals.set("_USE_PGLITE", hasPg);
+  try { installParquet(new URL("../parquet/", import.meta.url).href); } catch (e) { /* exports then fail with a clear cause */ }
     try {   // Kubescape (OPA-wasm) evaluator for Defender for Cloud's Kubernetes posture — optional
       const { installKubescape } = await import(new URL("../kubescape/ks-eval.mjs", import.meta.url).href);
       await installKubescape(new URL("../kubescape/", import.meta.url).href);

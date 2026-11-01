@@ -556,12 +556,139 @@ def _restore_backup(store: SqlStore, project: str, instance: str, body: dict) ->
     return _json(200, _operation_view(op, project, instance))
 
 
+# ── instances.export / instances.import — sqlFile / csvFile in the SIMULATOR's
+# own Cloud Storage (gcs_store: the store the GCS console / gsutil / the
+# google-cloud-storage SDK read). A gs:// URI is only parsed, never fetched from
+# Google; a bucket that doesn't exist fails the operation. The rows are the
+# instance's SQL engine behind the SqlStore seam (`rows_store` / `db_id`). ──────
+def _gcs_put(gcs_store, bucket: str, obj: str, data: bytes, ctype: str) -> str:
+    try:
+        from core import gcp_storage_core as gcs
+    except ImportError:  # pragma: no cover - Pyodide flat layout
+        import gcp_storage_core as gcs  # type: ignore
+    r = gcs.dispatch(gcs_store, "POST", f"/upload/storage/v1/b/{bucket}/o",
+                     {"uploadType": "media", "name": obj}, {"content-type": ctype}, data)
+    if r.status != 200:
+        return f"The bucket gs://{bucket} does not exist or the object could not be written."
+    return ""
+
+
+def _gcs_get(gcs_store, bucket: str, obj: str):
+    try:
+        from core import gcp_storage_core as gcs
+    except ImportError:  # pragma: no cover
+        import gcp_storage_core as gcs  # type: ignore
+    from urllib.parse import quote
+    r = gcs.dispatch(gcs_store, "GET", f"/storage/v1/b/{bucket}/o/{quote(obj, safe='')}",
+                     {"alt": "media"}, {}, b"")
+    return r.body if r.status == 200 else None
+
+
+def run_export(rows_store: SqlStore, db_id: str, gcs_store, ctx: dict, label: str = "") -> str:
+    """Write one exportContext's file. Returns "" or the operation error message."""
+    from core import sql_store as sq
+    file_type = str(ctx.get("fileType") or "SQL").upper()
+    bucket, obj = sq.parse_gs_uri(ctx.get("uri"))
+    if gcs_store is None:
+        return "No Cloud Storage store is attached to this Cloud SQL engine."
+    if not gcs_store.bucket_exists(bucket):
+        return f"The bucket gs://{bucket} does not exist."
+    if sq.is_async_engine(rows_store):
+        return "This instance's SQL engine only answers asynchronously; export is unavailable here."
+    dialect = sq.engine_dialect(rows_store)
+    if file_type == "CSV":
+        query = str((ctx.get("csvExportOptions") or {}).get("selectQuery") or "").strip()
+        if not query:
+            return "csvExportOptions.selectQuery is required for a CSV export."
+        try:
+            res = rows_store.execute_sql(db_id, query)
+        except Exception as e:  # noqa: BLE001 — a bad query fails the operation
+            return f"The select query failed: {e}"
+        data = sq.to_csv([[sq.json_cell(v) for v in r] for r in res.get("rows", [])]).encode()
+        return _gcs_put(gcs_store, bucket, obj, data, "text/csv")
+    if file_type != "SQL":
+        return f"Unsupported fileType {file_type!r} (SQL or CSV)."
+    tables = sq.dump_tables(rows_store, db_id)
+    wanted = [str(t) for t in ((ctx.get("sqlExportOptions") or {}).get("tables") or [])]
+    if wanted:
+        tables = [t for t in tables if t["name"] in wanted]
+    header = (f"Cloud SQL export of {label or db_id}\nDatabases: "
+              f"{', '.join(ctx.get('databases') or []) or '(all)'}\nTables: {len(tables)}")
+    return _gcs_put(gcs_store, bucket, obj, sq.sql_dump(tables, dialect, header).encode(), "application/sql")
+
+
+def run_import(rows_store: SqlStore, db_id: str, gcs_store, ctx: dict) -> str:
+    """Load one importContext's file into the instance's engine. Returns "" or an error."""
+    from core import sql_store as sq
+    file_type = str(ctx.get("fileType") or "SQL").upper()
+    bucket, obj = sq.parse_gs_uri(ctx.get("uri"))
+    if gcs_store is None:
+        return "No Cloud Storage store is attached to this Cloud SQL engine."
+    if not gcs_store.bucket_exists(bucket):
+        return f"The bucket gs://{bucket} does not exist."
+    data = _gcs_get(gcs_store, bucket, obj)
+    if data is None:
+        return f"The object gs://{bucket}/{obj} does not exist."
+    if sq.is_async_engine(rows_store):
+        return "This instance's SQL engine only answers asynchronously; import is unavailable here."
+    text = data.decode("utf-8", "replace")
+    try:
+        if file_type == "CSV":
+            opts = ctx.get("csvImportOptions") or {}
+            table = str(opts.get("table") or "").strip()
+            if not table:
+                return "csvImportOptions.table is required for a CSV import."
+            cols = [str(c) for c in opts.get("columns") or []]
+            for row in sq.parse_csv(text):
+                names = cols or None
+                ph = ", ".join(rows_store.param_placeholder(i + 1) for i in range(len(row)))
+                col_sql = f" ({', '.join(sq.quote_ident(c) for c in names)})" if names else ""
+                rows_store.execute_sql(db_id, f"INSERT INTO {sq.quote_ident(table)}{col_sql} VALUES ({ph})", row)
+            return ""
+        if file_type != "SQL":
+            return f"Unsupported fileType {file_type!r} (SQL or CSV)."
+        for stmt in sq.split_sql(text):
+            rows_store.execute_sql(db_id, stmt)
+    except Exception as e:  # noqa: BLE001 — the failing statement fails the operation
+        return f"Import failed: {e}"
+    return ""
+
+
+def _op_error(op: dict, code: str, message: str) -> dict:
+    op["error"] = {"kind": "sql#operationErrors",
+                   "errors": [{"kind": "sql#operationError", "code": code, "message": message}]}
+    return op
+
+
+def _export_import(store: SqlStore, project: str, instance: str, body: dict, kind: str,
+                   gcs_store=None) -> CloudSqlResponse:
+    rec = _get_instance(store, project, instance)
+    if not rec:
+        return _not_found(f"The Cloud SQL instance does not exist. Instance: {instance}")
+    ctx_key = "exportContext" if kind == "EXPORT" else "importContext"
+    ctx = body.get(ctx_key) or {}
+    from core import sql_store as sq
+    try:
+        sq.parse_gs_uri(ctx.get("uri"))
+    except ValueError as e:
+        return _err(400, "INVALID_ARGUMENT", str(e))
+    db_id = _key(project, instance)
+    msg = (run_export(store, db_id, gcs_store, ctx, label=f"{project}:{instance}") if kind == "EXPORT"
+           else run_import(store, db_id, gcs_store, ctx))
+    op = _log_op(rec, kind)
+    op[ctx_key] = {"kind": f"sql#{ctx_key}", **ctx}
+    if msg:
+        _op_error(op, "ERROR_RDBMS" if kind == "IMPORT" else "INTERNAL_ERROR", msg)
+    store.persist()
+    return _json(200, _operation_view(op, project, instance))
+
+
 # ── native-wire dispatcher (REST path + method → operation) ────────────────
 # Single routing point for the native Cloud SQL Admin REST API — what an
 # unmodified google-cloud-sql-admin / gcloud sql client speaks.
 def dispatch(store: SqlStore, method: str, path: str,
              query: dict | None = None, headers: dict | None = None,
-             body: bytes = b"") -> CloudSqlResponse:
+             body: bytes = b"", gcs_store=None) -> CloudSqlResponse:
     method = method.upper()
 
     # Strip the API prefix; keep only the resource path.
@@ -615,7 +742,8 @@ def dispatch(store: SqlStore, method: str, path: str,
 
     # Native Admin API RPCs are path segments: POST .../instances/{i}/restart|restoreBackup
     # (what gcloud / the client libraries send; the colon form is kept for older callers).
-    if len(segs) == 5 and verb is None and method == "POST" and segs[4] in ("restart", "restoreBackup"):
+    if len(segs) == 5 and verb is None and method == "POST" and segs[4] in ("restart", "restoreBackup",
+                                                                            "export", "import"):
         verb = segs[4]
         segs = segs[:4]
 
@@ -625,6 +753,8 @@ def dispatch(store: SqlStore, method: str, path: str,
             return _restart_instance(store, project, instance)
         if verb == "restoreBackup" and method == "POST":
             return _restore_backup(store, project, instance, payload)
+        if verb in ("export", "import") and method == "POST":
+            return _export_import(store, project, instance, payload, verb.upper(), gcs_store=gcs_store)
         if method == "GET":
             return _get_instance_resp(store, project, instance)
         if method == "PATCH":

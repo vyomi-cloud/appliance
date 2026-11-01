@@ -15,3 +15,5 @@ cedarpy>=4.8.0       # Cedar policy engine (real AWS IAM eval; reused for GCP IA
 docker>=7.0.0        # Lazy backend provisioner (core/backend_provisioner.py) — talks to
                      #   /var/run/docker.sock to pull + run sibling containers on demand.
                      #   Default install ships 4 services; the rest provision on first use.
+pyarrow>=22.0.0      # Apache Parquet writer for RDS StartExportTask (snapshot → .gz.parquet in the
+                     #   simulator's own S3 — core/parquet_pyarrow.py; Nano uses vendored parquet-wasm)

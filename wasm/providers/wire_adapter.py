@@ -34,6 +34,28 @@ def router():
     return _ROUTER
 
 
+def _out(r: dict) -> dict:
+    out = r.get("body") or b""
+    if isinstance(out, str):
+        out = out.encode("utf-8")
+    return {"status": int(r.get("status") or 200),
+            "headers": {str(k): str(v) for k, v in (r.get("headers") or {}).items()},
+            "body_b64": base64.b64encode(bytes(out)).decode()}
+
+
+async def ahandle(p: dict) -> dict:
+    """Async twin of handle(): AwsWireRouter.ahandle (RDS snapshots / Parquet exports
+    and the RDS Data API await their engines)."""
+    try:
+        body = base64.b64decode(p.get("body_b64") or "")
+        return _out(await router().ahandle(str(p.get("method") or "GET").upper(), p.get("path") or "/",
+                                           p.get("query") or {}, p.get("headers") or {}, body))
+    except Exception as e:  # surface, never crash the bridge
+        msg = json.dumps({"__type": "InternalFailure", "message": f"nano /_wire: {type(e).__name__}: {e}"})
+        return {"status": 500, "headers": {"content-type": "application/json"},
+                "body_b64": base64.b64encode(msg.encode("utf-8", "replace")).decode()}
+
+
 def handle(p: dict) -> dict:
     """One native-wire request → {status, headers, body_b64}."""
     try:

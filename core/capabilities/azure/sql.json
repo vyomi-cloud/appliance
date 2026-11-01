@@ -99,5 +99,14 @@
   "level": { "nano": "full", "offline": "full" },
   "limitations": [],
   "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.sql.export_import": {
+  "title": "Database export / import (.bacpac to and from Blob storage)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "POST .../databases/{db}/export and .../databases/{db}/import or .../servers/{server}/import write / read the .bacpac in the simulator's OWN Azure Blob store. The storageUri host (<account>.blob.core.windows.net) is only parsed — the account must exist in the simulator (an ARM storage account or the emulator's devstoreaccount1) and the container must exist, otherwise the request fails; nothing is ever resolved on the internet.",
+   "The .bacpac is a zip carrying the database as a replayable SQL script (model.sql) plus Origin.json, not SqlPackage's DACPAC model, so only simulator-written bacpacs import; the storage key / SAS and administrator credentials are recorded but not checked. The operation completes synchronously (no importExportOperationResults polling) and the console's Export button is not wired yet."
+  ],
+  "tests": ["tests/conformance/test_db_exports_local.py", "tests/conformance/test_no_cloud_egress.py"]
  }
 }

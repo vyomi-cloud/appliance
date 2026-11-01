@@ -425,6 +425,9 @@ def _export_task_xml(et: dict) -> str:
         _el("TaskStartTime", et.get("created", "")),
         _el("TaskEndTime", et.get("task_end_time", "")),
         _el("FailureCause", et.get("failure_cause", "")) if et.get("failure_cause") else "",
+        ("<ExportOnly>" + "".join(_el("member", x) for x in et.get("export_only") or []) + "</ExportOnly>")
+        if et.get("export_only") else "",
+        _el("TotalExtractedDataInGB", et.get("total_extracted_data_in_gb", 0)),
         "</ExportTask>",
     ])
 
@@ -539,6 +542,7 @@ def _create_db_instance(store: SqlStore, params: dict, msg_store=None) -> RdsRes
         "db_instance_class": str(params.get("DBInstanceClass", "db.t3.micro")),
         "engine": engine,
         "engine_version": str(params.get("EngineVersion", "16.4")),
+        "db_name": str(params.get("DBName", "")),
         "db_instance_status": "available",  # Nano: no provisioning lag, ready at once
         "master_username": str(params.get("MasterUsername", "admin")),
         "master_user_password": str(params.get("MasterUserPassword", "")),
@@ -652,7 +656,7 @@ def _delete_db_instance(store: SqlStore, params: dict, msg_store=None) -> RdsRes
                        f"{', '.join(db['read_replica_db_instance_identifiers'])}.", 400)
     if str(params.get("SkipFinalSnapshot", "true")).lower() != "true":
         snap_id = str(params.get("FinalDBSnapshotIdentifier", f"{db_id}-final"))
-        _make_snapshot(store, db, snap_id, snapshot_type="automated")
+        _make_snapshot(store, db, snap_id, snapshot_type="automated", captured=params.get(_SNAPSHOT_DATA))
     source_id = db.get("read_replica_source_db_instance_identifier")
     if source_id:
         source = store.get_instance(source_id)
@@ -668,7 +672,35 @@ def _delete_db_instance(store: SqlStore, params: dict, msg_store=None) -> RdsRes
     return _success("DeleteDBInstance", _db_instance_xml(db))
 
 
-def _make_snapshot(store: SqlStore, db: dict, snap_id: str, snapshot_type: str = "manual") -> dict:
+_SNAPSHOT_DATA = "__vyomi_snapshot_data"   # adispatch() pre-captures async engines' tables under this key
+
+
+def _capture_snapshot_data(store: SqlStore, db: dict, captured=None) -> dict:
+    """The instance's tables at snapshot time (what StartExportTask exports). Sync
+    engines are read here; an async engine (PGlite) is read by adispatch() first and
+    handed in as `captured` — the sync path can't await it, so it records why not."""
+    try:
+        from core import sql_store as _sq
+    except ImportError:  # pragma: no cover - Pyodide flat layout
+        import sql_store as _sq  # type: ignore
+    dialect = _sq.engine_dialect(store)
+    out = {"dialect": dialect, "schema": _sq.default_schema(dialect),
+           "database": db.get("db_name") or db["db_instance_identifier"]}
+    if captured is not None:
+        out["tables"] = captured
+        return out
+    if _sq.is_async_engine(store):
+        return {}
+    try:
+        out["tables"] = _sq.dump_tables(store, db["db_instance_identifier"])
+    except Exception:   # no engine available (e.g. sqlite3 not loaded) — no data to snapshot
+        return {}
+    return out
+
+
+def _make_snapshot(store: SqlStore, db: dict, snap_id: str, snapshot_type: str = "manual",
+                   captured=None) -> dict:
+    data = _capture_snapshot_data(store, db, captured)
     snap = {
         "db_snapshot_identifier": snap_id,
         "db_instance_identifier": db["db_instance_identifier"],
@@ -679,6 +711,8 @@ def _make_snapshot(store: SqlStore, db: dict, snap_id: str, snapshot_type: str =
         "snapshot_type": snapshot_type,
         "created": _now(),
     }
+    if data:
+        snap["data"] = data
     store.put_snapshot(snap_id, snap)
     return snap
 
@@ -690,7 +724,7 @@ def _create_db_snapshot(store: SqlStore, params: dict, msg_store=None) -> RdsRes
         raise RdsError("InvalidParameterValue", "DBSnapshotIdentifier is required.", 400)
     if store.get_snapshot(snap_id):
         raise RdsError("DBSnapshotAlreadyExists", f"Snapshot {snap_id} already exists.", 400)
-    snap = _make_snapshot(store, db, snap_id, snapshot_type="manual")
+    snap = _make_snapshot(store, db, snap_id, snapshot_type="manual", captured=params.get(_SNAPSHOT_DATA))
     tags = _tags_from_params(params)
     if tags:
         store.set_tags(_snapshot_arn(store, snap_id), tags)
@@ -1114,40 +1148,91 @@ def _describe_db_instance_automated_backups(store: SqlStore, params: dict) -> Rd
     return _success("DescribeDBInstanceAutomatedBackups", inner)
 
 
-# ── exports to S3 (a snapshot export is a status record; Nano has no
-# provisioning lag so it completes immediately) — REAL bytes land in the named
-# bucket (a manifest describing the export), so a bucket that doesn't exist
-# makes the task genuinely FAIL, the way a bad IAM role / bucket does in AWS. ─
-def _export_manifest_key(task_id: str, prefix: str) -> str:
-    key_prefix = f"{prefix.rstrip('/')}/" if prefix else ""
-    return f"{key_prefix}{task_id}/export_manifest.json"
+# ── exports to S3 — the snapshot's REAL table data, as Apache Parquet, written into
+# the SIMULATOR's own S3 store (the same s3_object_core.put_object every PutObject
+# uses — nothing leaves the simulator), in AWS's layout:
+#
+#   <prefix>/<task>/export_info_<task>.json
+#   <prefix>/<task>/export_tables_info_<task>_from_1_to_<N>.json
+#   <prefix>/<task>/<database>/<schema>.<table>/part-00000-<n>.gz.parquet
+#
+# The Parquet bytes come from a PLATFORM-supplied writer `parquet_writer(schema,
+# columns) -> bytes` (this core stays Pyodide-pure): pyarrow offline
+# (core/parquet_pyarrow.py, installed by the appliance), parquet-wasm in the browser
+# (wasm/parquet-loader.js, bridged below). No writer, or a writer that fails, makes
+# the task FAIL with a FailureCause — never a silent fallback to another format. A
+# bucket that doesn't exist fails the task the same way. ─
+_PARQUET_WRITER = None
 
 
-def _write_export_manifest(s3_store, task_id: str, source_arn: str, bucket: str, prefix: str) -> str:
-    """Returns "" on success, else a human-readable FailureCause."""
-    try:
-        from core import s3_object_core as s3c
-    except ImportError:  # pragma: no cover - Pyodide flat layout
-        import s3_object_core as s3c  # type: ignore
-    manifest = {"exportTaskIdentifier": task_id, "sourceArn": source_arn, "exportTime": _now()}
-    body = json.dumps(manifest, indent=2).encode()
-    key = _export_manifest_key(task_id, prefix)
-    r = s3c.put_object(s3_store, bucket, key, body, {"content-type": "application/json"})
-    if r.status != 200:
-        return f"Unable to write to s3://{bucket}/{key}: the bucket does not exist."
-    return ""
+def set_parquet_writer(fn) -> None:
+    """Install the platform's Parquet writer: fn(schema, columns) -> bytes (or an
+    awaitable of bytes). schema = [{"name", "type"}] with types from
+    core.sql_store.ARROW_TYPES; columns = column-major value lists."""
+    global _PARQUET_WRITER
+    _PARQUET_WRITER = fn
 
 
-def _start_export_task(store: SqlStore, params: dict, s3_store=None) -> RdsResponse:
+def parquet_spec_json(schema: list, columns: list) -> str:
+    """The JSON the browser Parquet engine takes (binary cells tagged base64)."""
+    import base64 as _b64
+    cols = [[({"$b64": _b64.b64encode(v).decode()} if isinstance(v, (bytes, bytearray)) else v) for v in col]
+            for col in columns]
+    return json.dumps({"schema": schema, "columns": cols})
+
+
+async def _pyodide_parquet_writer(schema: list, columns: list) -> bytes:
+    """Browser writer: globalThis.__nano_parquet_write (wasm/parquet/parquet-loader.js —
+    vendored parquet-wasm + apache-arrow, lazy-loaded on the first export)."""
+    from js import globalThis  # lazy: Pyodide-only
+    fn = getattr(globalThis, "__nano_parquet_write", None)
+    if fn is None:
+        raise RuntimeError("the in-browser Parquet engine (parquet-wasm) is not installed in this context")
+    out = await fn(parquet_spec_json(schema, columns))
+    return bytes(out.to_py()) if hasattr(out, "to_py") else bytes(out)
+
+
+def _resolve_parquet_writer():
+    if _PARQUET_WRITER is not None:
+        return _PARQUET_WRITER
+    import sys
+    if sys.platform == "emscripten":
+        return _pyodide_parquet_writer
+    return None
+
+
+def _snapshot_id_of(source_arn: str) -> str:
+    return source_arn.rsplit(":", 1)[-1] if ":snapshot:" in source_arn else ""
+
+
+def _export_only_match(filters: list, database: str, schema: str, table: str) -> bool:
+    if not filters:
+        return True
+    names = {database, f"{database}.{schema}", f"{database}.{schema}.{table}", f"{schema}.{table}", table}
+    return any(f in names for f in filters)
+
+
+def _export_begin(store: SqlStore, params: dict, s3_store) -> tuple:
+    """Validate + build the task record and the list of files to write.
+    Returns (record, files, failure_cause); files = [(key, kind, payload)] with kind
+    "parquet" (payload = (schema, columns)) or "json" (payload = bytes)."""
     task_id = str(params.get("ExportTaskIdentifier", "")).strip()
     if not task_id:
         raise RdsError("InvalidParameterValue", "ExportTaskIdentifier is required.", 400)
     if store.get_export_task(task_id):
         raise RdsError("ExportTaskAlreadyExistsFault", f"Export task {task_id} already exists.", 400)
-    source_arn = str(params.get("SourceArn", ""))
-    bucket = str(params.get("S3BucketName", ""))
-    prefix = str(params.get("S3Prefix", ""))
-    failure_cause = _write_export_manifest(s3_store, task_id, source_arn, bucket, prefix) if s3_store is not None else ""
+    source_arn = str(params.get("SourceArn", "")).strip()
+    bucket = str(params.get("S3BucketName", "")).strip()
+    if not source_arn:
+        raise RdsError("InvalidParameterValue", "SourceArn is required.", 400)
+    if not bucket:
+        raise RdsError("InvalidParameterValue", "S3BucketName is required.", 400)
+    snap_id = _snapshot_id_of(source_arn)
+    snap = store.get_snapshot(snap_id) if snap_id else None
+    if snap is None:
+        raise RdsError("DBSnapshotNotFound", f"DBSnapshot {snap_id or source_arn} not found.", 404)
+    prefix = str(params.get("S3Prefix", "")).strip().strip("/")
+    export_only = _members(params, "ExportOnly")
     record = {
         "export_task_identifier": task_id,
         "source_arn": source_arn,
@@ -1156,15 +1241,147 @@ def _start_export_task(store: SqlStore, params: dict, s3_store=None) -> RdsRespo
         "s3_prefix": prefix,
         "iam_role_arn": str(params.get("IamRoleArn", "")),
         "kms_key_id": str(params.get("KmsKeyId", "")),
-        "status": "FAILED" if failure_cause else "COMPLETE",
-        "failure_cause": failure_cause,
+        "export_only": export_only,
+        "snapshot_time": snap.get("created", ""),
+        "status": "COMPLETE",
+        "failure_cause": "",
         "percent_progress": 100,
+        "total_extracted_data_in_gb": 0,
         "created": _now(),
         "task_end_time": _now(),
     }
-    store.put_export_task(task_id, record)
+    if s3_store is None:
+        return record, [], "No S3 store is attached to this RDS engine; nothing can be exported."
+    if not s3_store.bucket_exists(bucket):
+        return record, [], f"Unable to write to s3://{bucket}/: the bucket does not exist."
+    data = snap.get("data")
+    if not isinstance(data, dict):
+        return record, [], (f"DB snapshot {snap_id} carries no table data (it was taken before this "
+                            "engine captured snapshot contents); take a new snapshot and export that.")
+    try:
+        from core import sql_store as _sq
+    except ImportError:  # pragma: no cover - Pyodide flat layout
+        import sql_store as _sq  # type: ignore
+    dialect = data.get("dialect", "sqlite")
+    database = data.get("database") or snap.get("db_instance_identifier", "db")
+    schema_name = data.get("schema") or _sq.default_schema(dialect)
+    base = f"{prefix}/{task_id}" if prefix else task_id
+    files, tables_info = [], []
+    for t in data.get("tables") or []:
+        if not _export_only_match(export_only, database, schema_name, t["name"]):
+            continue
+        schema, columns = _sq.parquet_columns(t, dialect)
+        part = uuid.uuid4().hex[:8]
+        target = f"{database}/{schema_name}.{t['name']}"
+        files.append((f"{base}/{target}/part-00000-{part}.gz.parquet", "parquet", (schema, columns)))
+        tables_info.append({"tableStatistics": {"extractionStartTime": record["created"],
+                                                "extractionEndTime": record["task_end_time"],
+                                                "partitioningInfo": {"numberOfPartitions": 1,
+                                                                     "numberOfCompletedPartitions": 1}},
+                            "schemaMetadata": {"originalTypeMappings": [
+                                {"columnName": c["name"], "originalType": c.get("decl", ""),
+                                 "expectedExportedType": s["type"], "originalCharMaxLength": 0,
+                                 "originalNumPrecision": 0, "originalDateTimePrecision": 0}
+                                for c, s in zip(t.get("columns") or [], schema)]},
+                            "status": "COMPLETE", "sizeGB": 0.0, "target": target,
+                            "rows": len(t.get("rows") or [])})
+    n = max(1, len(tables_info))
+    info = {"exportTaskIdentifier": task_id, "sourceArn": source_arn, "exportOnly": export_only,
+            "snapshotTime": record["snapshot_time"], "taskStartTime": record["created"],
+            "taskEndTime": record["task_end_time"], "s3Bucket": bucket, "s3Prefix": prefix,
+            "exportedFilesPath": base, "iamRoleArn": record["iam_role_arn"], "kmsKeyId": record["kms_key_id"],
+            "status": "COMPLETE", "percentProgress": 100, "totalExportedDataInGB": 0.0,
+            "format": "parquet", "compression": "gzip"}
+    files.append((f"{base}/export_info_{task_id}.json", "json", json.dumps(info, indent=2).encode()))
+    files.append((f"{base}/export_tables_info_{task_id}_from_1_to_{n}.json", "json",
+                  json.dumps({"perTableStatus": tables_info}, indent=2).encode()))
+    return record, files, ""
+
+
+def _put_export_object(s3_store, bucket: str, key: str, body: bytes, ctype: str) -> str:
+    try:
+        from core import s3_object_core as s3c
+    except ImportError:  # pragma: no cover - Pyodide flat layout
+        import s3_object_core as s3c  # type: ignore
+    r = s3c.put_object(s3_store, bucket, key, body, {"content-type": ctype})
+    if r.status != 200:
+        return f"Unable to write to s3://{bucket}/{key}: the bucket does not exist."
+    return ""
+
+
+def _export_finish(store: SqlStore, record: dict, failure_cause: str, written: int) -> RdsResponse:
+    if failure_cause:
+        record["status"] = "FAILED"
+        record["failure_cause"] = failure_cause
+    record["total_extracted_data_in_gb"] = int(written // (1024 ** 3))   # AWS reports whole GB
+    record["exported_bytes"] = written
+    record["task_end_time"] = _now()
+    store.put_export_task(record["export_task_identifier"], record)
     store.persist()
-    return _success("StartExportTask", _export_task_xml(record))
+    return _success("StartExportTask", _export_task_members(record))
+
+
+def _export_task_members(record: dict) -> str:
+    """StartExportTask / CancelExportTask return the ExportTask's members DIRECTLY in
+    the Result element (botocore's shape), unlike DescribeExportTasks' <ExportTask> list."""
+    xml = _export_task_xml(record)
+    return xml[len("<ExportTask>"):-len("</ExportTask>")]
+
+
+def _start_export_task(store: SqlStore, params: dict, s3_store=None) -> RdsResponse:
+    """Sync path (offline: pyarrow). An async-only writer (the browser's parquet-wasm)
+    needs adispatch(); here it fails the task instead of blocking."""
+    record, files, cause = _export_begin(store, params, s3_store)
+    written = 0
+    writer = _resolve_parquet_writer() if not cause else None
+    if not cause and writer is None and any(k == "parquet" for _, k, _ in files):
+        cause = "The Parquet engine is not available on this platform; the export was not written."
+    for key, kind, payload in ([] if cause else files):
+        if kind == "parquet":
+            try:
+                body = writer(*payload)
+                if hasattr(body, "__await__"):
+                    if hasattr(body, "close"):
+                        body.close()
+                    raise RuntimeError("the Parquet engine here is asynchronous; use the async dispatch path")
+                body = bytes(body)
+            except Exception as e:  # noqa: BLE001 — surfaced as the task's FailureCause
+                cause = f"Parquet engine failed: {e}"
+                break
+            ctype = "application/vnd.apache.parquet"
+        else:
+            body, ctype = payload, "application/json"
+        cause = _put_export_object(s3_store, record["s3_bucket"], key, body, ctype)
+        if cause:
+            break
+        written += len(body)
+    return _export_finish(store, record, cause, written)
+
+
+async def _astart_export_task(store: SqlStore, params: dict, s3_store=None) -> RdsResponse:
+    record, files, cause = _export_begin(store, params, s3_store)
+    written = 0
+    writer = _resolve_parquet_writer() if not cause else None
+    if not cause and writer is None and any(k == "parquet" for _, k, _ in files):
+        cause = "The Parquet engine is not available on this platform; the export was not written."
+    for key, kind, payload in ([] if cause else files):
+        if kind == "parquet":
+            try:
+                body = writer(*payload)
+                if hasattr(body, "__await__"):
+                    body = await body
+                body = bytes(body)
+            except Exception as e:  # noqa: BLE001
+                cause = f"Parquet engine failed: {e}"
+                break
+            ctype = "application/vnd.apache.parquet"
+        else:
+            body, ctype = payload, "application/json"
+        cause = _put_export_object(s3_store, record["s3_bucket"], key, body, ctype)
+        if cause:
+            break
+        written += len(body)
+    return _export_finish(store, record, cause, written)
 
 
 def _cancel_export_task(store: SqlStore, params: dict) -> RdsResponse:
@@ -1176,7 +1393,7 @@ def _cancel_export_task(store: SqlStore, params: dict) -> RdsResponse:
     task["status"] = "CANCELED"
     store.drop_export_task(task_id)
     store.persist()
-    return _success("CancelExportTask", _export_task_xml(task))
+    return _success("CancelExportTask", _export_task_members(task))
 
 
 def _describe_export_tasks(store: SqlStore, params: dict) -> RdsResponse:
@@ -1448,13 +1665,16 @@ def _promote_read_replica(store: SqlStore, params: dict, msg_store=None) -> RdsR
 # The single routing point for the native AWS RDS Query protocol — what an
 # unmodified aws-cli / boto3 RDS client speaks. `params` is the parsed
 # form-encoded body ({"Action": "CreateDBInstance", "DBInstanceIdentifier": ...}).
-def dispatch(store: SqlStore, params: dict | None = None, msg_store=None, s3_store=None) -> RdsResponse:
+def dispatch(store: SqlStore, params: dict | None = None, msg_store=None, s3_store=None,
+             _internal: bool = False) -> RdsResponse:
     """`msg_store` (the shared SNS/SQS store) delivers real event-subscription
     notifications; `s3_store` lets StartExportTask write a real object. Both
     optional — omitting them keeps every action working, just without that
     cross-service fan-out (e.g. the conformance tests that construct a bare
     SqlStore)."""
     params = params if isinstance(params, dict) else {}
+    if not _internal and _SNAPSHOT_DATA in params:   # only adispatch() may hand in captured tables
+        params = {k: v for k, v in params.items() if k != _SNAPSHOT_DATA}
     action = str(params.get("Action", "")).strip()
     if not action:
         return _error("MissingAction", "The request must include an Action.", 400)
@@ -1562,6 +1782,35 @@ def dispatch(store: SqlStore, params: dict | None = None, msg_store=None, s3_sto
         return _error("InvalidAction", f"The action {action} is not implemented.", 400)
     except RdsError as e:
         return _error(e.code, e.message, e.status)
+
+
+async def adispatch(store: SqlStore, params: dict | None = None, msg_store=None, s3_store=None) -> RdsResponse:
+    """Async front door (AwsWireRouter.ahandle — the Nano relay / console and the
+    offline appliance). Same actions as dispatch(); the ones that read the engine's
+    DATA await it, so an async engine (PGlite) is snapshotted for real and the
+    browser's async Parquet writer (parquet-wasm) can run for StartExportTask."""
+    params = dict(params) if isinstance(params, dict) else {}
+    params.pop(_SNAPSHOT_DATA, None)   # never accepted from the wire
+    action = str(params.get("Action", "")).strip()
+    try:
+        if action == "StartExportTask":
+            return await _astart_export_task(store, params, s3_store)
+        snapshotting = (action == "CreateDBSnapshot" or (
+            action == "DeleteDBInstance" and str(params.get("SkipFinalSnapshot", "true")).lower() != "true"))
+        if snapshotting:
+            try:
+                from core import sql_store as _sq
+            except ImportError:  # pragma: no cover - Pyodide flat layout
+                import sql_store as _sq  # type: ignore
+            db_id = str(params.get("DBInstanceIdentifier", "")).strip()
+            if _sq.is_async_engine(store) and store.get_instance(db_id):
+                try:
+                    params[_SNAPSHOT_DATA] = await _sq.adump_tables(store, db_id)
+                except Exception:
+                    pass
+    except RdsError as e:
+        return _error(e.code, e.message, e.status)
+    return dispatch(store, params, msg_store=msg_store, s3_store=s3_store, _internal=True)
 
 
 # ── data plane (NOT a native RDS action — the in-tab SQL bridge) ───────────

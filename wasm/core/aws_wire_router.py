@@ -480,6 +480,10 @@ class AwsWireRouter:
         self.az_table = s.get("az_table") or AzureTableStore()
         self.az_arm = s.get("az_arm") or AzureArm()   # ARM control plane — read by the blob core for CORS/lifecycle/static-website enforcement
         self.az_arm.kv_secrets_store = self.az_kvsec   # APIM named values: Key Vault-type listValue resolves against this SAME space's KV secrets
+        if getattr(self.az_arm, "sql_store", None) is None:   # Azure SQL export/import: this router's SQL data plane + Blob store
+            self.az_arm.sql_store = self.rds
+        if getattr(self.az_arm, "blob_store", None) is None:
+            self.az_arm.blob_store = self.az_blob
         self.az_sb = s.get("az_sb") or InMemoryMessagingStore()   # Service Bus topics (fan-out)
         self.az_acr = s.get("az_acr") or AcrRegistryStore()   # Container Registry repositories/tags/manifests
         self.az_graph = s.get("az_graph") or az_graph.GraphStore()   # Microsoft Graph (Entra ID)
@@ -725,11 +729,16 @@ class AwsWireRouter:
         b = body if isinstance(body, (bytes, bytearray)) else (body or b"")
         if isinstance(b, str):
             b = b.encode("utf-8")
-        if self.service_of(method, path, lheaders, b, query) == "rds-data":
+        svc = self.service_of(method, path, lheaders, b, query)
+        if svc == "rds-data":
             r = await rds_data.dispatch(self.rds, path, self._json_body(b))
             hdrs = dict(r.headers or {})
             hdrs.setdefault("content-type", "application/json")
             return {"status": r.status, "headers": hdrs, "body": json.dumps(r.body).encode()}
+        if svc == "rds":   # snapshots read the (possibly async) engine; exports await the Parquet writer
+            r = await rds.adispatch(self.rds, self._query_params(query, b), msg_store=self.msg, s3_store=self.s3)
+            return {"status": r.status, "headers": {"content-type": r.media_type, **dict(r.headers or {})},
+                    "body": r.body.encode() if isinstance(r.body, str) else r.body}
         return self.handle(method, path, query, headers, body)
 
     def handle(self, method, path, query, headers, body):
@@ -827,6 +836,8 @@ class AwsWireRouter:
             elif svc == "gcp-container" and re.search(r"/operations([/:]|$)", path):   # operations are shared with Memorystore
                 r = gcp_redis.dispatch_shared_operations(
                     self.gcp_redis, lambda *a: gcp_gke.dispatch(self.gcp_gke, *a), method, path, query or {}, headers or {}, bytes(body))
+            elif svc == "gcp-cloudsql":   # instances.export/import read/write the simulator's GCS objects
+                r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), gcs_store=self.gcs)
             elif svc == "gcp-firestore":   # exportDocuments/importDocuments read/write real GCS objects
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), gcs_store=self.gcs)
             elif svc == "gcp-compute":   # Connectivity Tests evaluate against the VMs too

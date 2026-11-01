@@ -183,6 +183,12 @@ async function bootBackend() {
     const { installKubescape } = await import(BASE + "/kubescape/ks-eval.mjs");
     await installKubescape(new URL(BASE + "/kubescape/", location.origin).href);
   } catch (e) { console.warn("[nano] Kubescape evaluator unavailable:", e); }
+  // RDS StartExportTask writes real Parquet: vendored parquet-wasm + apache-arrow
+  // (wasm/parquet/), lazy-loaded on the first export (this only installs the bridge).
+  try {
+    const { installParquet } = await import(BASE + "/parquet/parquet-loader.js");
+    installParquet(new URL(BASE + "/parquet/", location.origin).href);
+  } catch (e) { console.warn("[nano] Parquet bridge unavailable (RDS exports will fail):", e); }
   st = K.step("fs", "mounting /wasm: " + MODULES.length + " console modules");
   py.FS.mkdir("/wasm"); py.FS.mkdir("/wasm/backends"); py.FS.mkdir("/wasm/providers");
   py.FS.writeFile("/wasm/__init__.py", "");
@@ -227,7 +233,15 @@ def _disp(payload_json):
         return json.dumps(_W.handle(d.get("params") or {}))
     return json.dumps(P.dispatch(_B, prov, d["service"], d["op"],
                                  params=d.get("params") or {}))
-import builtins; builtins._disp = _disp
+async def _adisp(payload_json):
+    # The native wire on the ASYNC router path (AwsWireRouter.ahandle): RDS snapshots
+    # read the engine and StartExportTask awaits the browser's Parquet writer.
+    d = json.loads(payload_json)
+    if d["provider"] == "_wire":
+        from wasm.providers import wire_adapter as _W
+        return json.dumps(await _W.ahandle(d.get("params") or {}))
+    return _disp(payload_json)
+import builtins; builtins._disp = _disp; builtins._adisp = _adisp
 `);
   st.ok();
   // ── Live engine status (Dashboard > Service status) ─────────────────
@@ -248,6 +262,11 @@ import builtins; builtins._disp = _disp
   const dispatch = (prov, svc, op, params) =>
     JSON.parse(py.runPython(
       `_disp(${JSON.stringify(JSON.stringify({ provider: prov, service: svc, op, params: params || {} }))})`));
+  // `_wire` (v4 native-wire consoles) runs on the async router so awaiting engines
+  // (PGlite snapshots, the Parquet writer for RDS exports) work from the console too.
+  const adispatch = async (prov, svc, op, params) => prov !== "_wire" ? dispatch(prov, svc, op, params)
+    : JSON.parse(await py.runPythonAsync(
+      `await _adisp(${JSON.stringify(JSON.stringify({ provider: prov, service: svc, op, params: params || {} }))})`));
 
   // ── Live resource census ──────────────────────────────────────────
   // The dashboard page has no Pyodide, so it can't see the resources THIS
@@ -340,7 +359,7 @@ import builtins; builtins._disp = _disp
         try { restoreStores(await nbMetaGet(STORE_KEY)); } catch (_) {} finally { _restoring = false; }
       }
       const [prov, svc, op, params] = ev.data.tuple;
-      port.postMessage(dispatch(prov, svc, op, params || {}));
+      port.postMessage(await adispatch(prov, svc, op, params || {}));
       scheduleCensus();       // any op may have mutated state — refresh the footprint
       scheduleStoresSave(isWrite(ev.data.tuple));   // …and persist + notify the other context (Fix #1/#2)
     } catch (e) {

@@ -955,7 +955,9 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
         # cancel/redeploy are the shared core engine's (what Nano serves); VM power actions
         # stay here (they drive the real runtime).
         if type_chain[0].lower() in ("microsoft.documentdb", "microsoft.containerregistry", "microsoft.resources",
-                                     "microsoft.apimanagement"):
+                                     "microsoft.apimanagement") or (
+                type_chain[0].lower() == "microsoft.sql" and type_chain[-1].lower() in ("export", "import")):
+            # (Microsoft.Sql database export/import: the .bacpac goes to the appliance's OWN Blob store)
             payload = await _safe_json(request)
             out = core_arm()._arm_action(type_chain[-1].lower(), type_chain, names[-1], parent_rid,
                                          payload, sub=sub, rg=rg)
@@ -1267,6 +1269,12 @@ def core_arm():
     try:   # APIM Key Vault named values (listValue) resolve against this space's Key Vault secrets
         from core.appliance_stores import az_kv_secrets_store
         arm.kv_secrets_store = az_kv_secrets_store()
+    except Exception:
+        pass
+    try:   # Azure SQL database export/import: the Azure SQL data plane (/azure-sql) + the Blob store
+        from core.appliance_stores import az_blob_store, net_new_core_stores
+        arm.sql_store = net_new_core_stores()["rds"]
+        arm.blob_store = az_blob_store()
     except Exception:
         pass
     try:                                          # Defender for Cloud's Kubernetes posture: the real Kubescape

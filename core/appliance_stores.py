@@ -2720,12 +2720,12 @@ def azure_sql_data_dir() -> str:
     return os.path.join(base, "vyomi-azure-sql")
 
 
-class AppStateAzureSqlStore(_CoreSlotStore, _SqlMem):
-    """Azure SQL data plane (core/azure_sql_core.py). Servers / databases / query log in the
-    Azure space's slot; each database's ROWS in its own SQLite file (per space) instead of a
-    shared-cache in-memory database, so a restart keeps the data, not just the catalog."""
-    _BASE, _SLOT, _PROVIDER = _SqlMem, "sql_core", "azure"
-    _EXTRA = ("_azure_sql_servers", "_azure_sql_query_log", "_azure_sql_applied_recs")
+class _FileRowsSqlStore(_CoreSlotStore, _SqlMem):
+    """Mixin: a SqlStore whose catalog lives in a space slot (_CoreSlotStore) and whose
+    ROWS live in one SQLite file per database per space under `_data_dir()`."""
+
+    def _data_dir(self) -> str:
+        return azure_sql_data_dir()
 
     @property
     def _conns(self) -> dict:      # live connections, per space (same db id in two spaces = two DBs)
@@ -2740,7 +2740,7 @@ class AppStateAzureSqlStore(_CoreSlotStore, _SqlMem):
         import re
         safe = re.sub(r"[^A-Za-z0-9_.-]+", "_", db_id)
         space = re.sub(r"[^A-Za-z0-9_.-]+", "_", self._space())
-        d = os.path.join(azure_sql_data_dir(), space)
+        d = os.path.join(self._data_dir(), space)
         os.makedirs(d, exist_ok=True)
         return os.path.join(d, safe + ".sqlite")
 
@@ -2757,6 +2757,188 @@ class AppStateAzureSqlStore(_CoreSlotStore, _SqlMem):
             os.remove(self._db_file(db_id))
         except OSError:
             pass
+
+
+class AppStateAzureSqlStore(_FileRowsSqlStore):
+    """Azure SQL data plane (core/azure_sql_core.py). Servers / databases / query log in the
+    Azure space's slot; each database's ROWS in its own SQLite file (per space) instead of a
+    shared-cache in-memory database, so a restart keeps the data, not just the catalog."""
+    _BASE, _SLOT, _PROVIDER = _SqlMem, "sql_core", "azure"
+    _EXTRA = ("_azure_sql_servers", "_azure_sql_query_log", "_azure_sql_applied_recs")
+
+
+# ── v4 C0h: AWS RDS (native Query wire + RDS Data API on core/rds_core.py) ──────────
+#
+#   RDS   DB instances / snapshots (+ their captured table data) / subnet + parameter +
+#         option groups / proxies / event subscriptions / export tasks / tags / events
+#                                            -> service_states["rds_core"]["store"]{…}
+#         rows of each DB instance           -> <state dir>/vyomi-rds/<space>/<db>.sqlite
+#   The pre-v4 handler (server.py `_rds_*`, slot "rds") stays the classic console's
+#   (/api/rds/* REST). Its instances / snapshots / subnet groups / parameter groups / tags
+#   are adopted ONCE per space into this slot, so an upgrade keeps what was created; the
+#   native wire (aws rds …, boto3, the v4 console) is this slot's from then on. (Kept apart
+#   from the Azure SQL store, which net_new_core_stores() still serves as "rds".)
+def rds_data_dir() -> str:
+    import os
+    explicit = os.environ.get("VYOMI_RDS_DATA_DIR", "").strip()
+    if explicit:
+        return explicit
+    state = os.environ.get("CLOUDLEARN_STATE_FILE", "").strip()
+    base = os.path.dirname(os.path.abspath(state)) if state else "/tmp"
+    return os.path.join(base, "vyomi-rds")
+
+
+class AppStateRdsStore(_FileRowsSqlStore):
+    _BASE, _SLOT, _PROVIDER = _SqlMem, "rds_core", "aws"
+    _EXTRA = ("_vyomi_adopted",)
+
+    def _data_dir(self) -> str:
+        return rds_data_dir()
+
+    def adopt(self) -> None:
+        """Pre-v4 server.py RDS state (core.app_context.rds_state) -> this slot, once per space."""
+        try:
+            if getattr(self, "_vyomi_adopted", None):
+                return
+        except AttributeError:
+            pass
+        self._vyomi_adopted = _http_date()
+        try:
+            from core.app_context import rds_state as legacy
+            n = adopt_legacy_rds(self, legacy)
+            if n:
+                _log.info("rds: adopted %d pre-v4 instances/snapshots/groups", n)
+        except Exception as exc:   # never break the data plane over a migration
+            _log.warning("rds: pre-v4 adoption skipped: %s", exc)
+
+
+def _legacy_rds_tags(rec: dict) -> dict:
+    out = {}
+    for t in rec.get("tags") or []:
+        if isinstance(t, dict):
+            k = t.get("key", t.get("Key"))
+            if k:
+                out[str(k)] = str(t.get("value", t.get("Value", "")))
+    return out
+
+
+def adopt_legacy_rds(store, legacy) -> int:
+    """Convert the pre-v4 RDS records of one space (server.py `_rds_*` shape) into the
+    core/rds_core.py shape IN the store. Existing core records win. Returns the count.
+    The legacy engine's physical rows (a shared Postgres/MySQL container) are NOT copied:
+    adopted instances start with an empty SQL engine here."""
+    from core import rds_core
+    get = (lambda k: legacy.get(k) or {}) if hasattr(legacy, "get") else (lambda k: {})
+    n = 0
+    for name, g in list(get("db_subnet_groups").items()):
+        if not isinstance(g, dict) or store.get_subnet_group(name):
+            continue
+        azs = ["us-east-1a", "us-east-1b", "us-east-1c"]
+        store.put_subnet_group(name, {
+            "db_subnet_group_name": g.get("db_subnet_group_name", name),
+            "db_subnet_group_description": g.get("db_subnet_group_description", ""),
+            "vpc_id": g.get("vpc_id") or "vpc-default", "subnet_group_status": "Complete",
+            "subnets": [{"subnet_identifier": sid, "availability_zone": azs[i % 3]}
+                        for i, sid in enumerate(g.get("subnet_ids") or [])],
+            "db_subnet_group_arn": g.get("arn") or rds_core._subnet_group_arn(store, name),
+            "created": g.get("created") or rds_core._now()})
+        if _legacy_rds_tags(g):
+            store.set_tags(rds_core._subnet_group_arn(store, name), _legacy_rds_tags(g))
+        n += 1
+    for name, g in list(get("db_parameter_groups").items()):
+        if not isinstance(g, dict) or store.get_parameter_group(name):
+            continue
+        family = g.get("db_parameter_group_family") or "postgres16"
+        store.put_parameter_group(name, {
+            "db_parameter_group_name": g.get("db_parameter_group_name", name),
+            "db_parameter_group_family": family, "description": g.get("description", ""),
+            "type": "DB Parameter Group",
+            "db_parameter_group_arn": g.get("arn") or rds_core._parameter_group_arn(store, name),
+            "parameters": rds_core._default_parameters(family)})
+        if _legacy_rds_tags(g):
+            store.set_tags(rds_core._parameter_group_arn(store, name), _legacy_rds_tags(g))
+        n += 1
+    for db_id, d in list(get("db_instances").items()):
+        if not isinstance(d, dict) or store.instance_exists(db_id):
+            continue
+        engine = str(d.get("engine") or "postgres").lower()
+        rec = {
+            "db_instance_identifier": d.get("db_instance_identifier", db_id),
+            "db_instance_class": d.get("db_instance_class", "db.t3.micro"), "engine": engine,
+            "engine_version": d.get("engine_version") or "16.4", "db_name": d.get("db_name", ""),
+            "db_instance_status": d.get("db_instance_status", "available"),
+            "master_username": d.get("master_username", "admin"), "master_user_password": "",
+            "allocated_storage": int(d.get("allocated_storage") or 20),
+            "storage_type": d.get("storage_type", "gp3"),
+            "availability_zone": d.get("availability_zone") or "us-east-1a",
+            "multi_az": bool(d.get("multi_az")), "publicly_accessible": bool(d.get("publicly_accessible")),
+            "backup_retention_period": int(d.get("backup_retention_period") or 7),
+            "endpoint_address": d.get("endpoint_address") or f"{db_id}.nano-rds.local",
+            "endpoint_port": int(d.get("endpoint_port") or rds_core._engine_port(engine)),
+            "db_instance_arn": rds_core._instance_arn(store, db_id),
+            "db_subnet_group_name": d.get("db_subnet_group_name") or "default",
+            "db_parameter_group_name": d.get("db_parameter_group_name") or "default",
+            "vpc_security_group_ids": list(d.get("security_group_ids") or []) or ["sg-default"],
+            "deletion_protection": bool(d.get("deletion_protection")),
+            "ca_certificate_identifier": rds_core.DEFAULT_CA,
+            "created": d.get("created") or rds_core._now(), "updated": d.get("updated") or rds_core._now(),
+            "runtime_backend": "sqlite", "adopted_from": "pre-v4",
+        }
+        store.put_instance(db_id, rec)
+        if _legacy_rds_tags(d):
+            store.set_tags(rec["db_instance_arn"], _legacy_rds_tags(d))
+        n += 1
+    for sid, sn in list(get("db_snapshots").items()):
+        if not isinstance(sn, dict) or store.get_snapshot(sid):
+            continue
+        store.put_snapshot(sid, {   # no "data": the legacy engine's rows weren't captured
+            "db_snapshot_identifier": sn.get("db_snapshot_identifier", sid),
+            "db_instance_identifier": sn.get("db_instance_identifier", ""), "status": "available",
+            "engine": sn.get("engine", "postgres"), "engine_version": sn.get("engine_version") or "16.4",
+            "allocated_storage": int(sn.get("allocated_storage") or 20),
+            "snapshot_type": sn.get("snapshot_type", "manual"), "created": sn.get("created") or rds_core._now()})
+        if _legacy_rds_tags(sn):
+            store.set_tags(rds_core._snapshot_arn(store, sid), _legacy_rds_tags(sn))
+        n += 1
+    return n
+
+
+class AppStateCloudSqlRowsStore(_FileRowsSqlStore):
+    """Offline Cloud SQL rows for an instance with NO physical engine (the legacy handler
+    degrades to metadata-only when the shared Postgres/MySQL container is unreachable):
+    instances.import loads into, and instances.export reads from, one SQLite file per
+    instance per GCP space. Keyed like core/gcp_cloudsql_core (`cloudsql:{project}/{name}`)."""
+    _BASE, _SLOT, _PROVIDER = _SqlMem, "cloudsql_rows_core", "gcp"
+
+    def _data_dir(self) -> str:
+        return rds_data_dir().replace("vyomi-rds", "vyomi-cloudsql")
+
+
+_CLOUDSQL_ROWS = None
+
+
+def cloudsql_rows_store() -> AppStateCloudSqlRowsStore:
+    global _CLOUDSQL_ROWS
+    if _CLOUDSQL_ROWS is None:
+        _CLOUDSQL_ROWS = AppStateCloudSqlRowsStore()
+    return _CLOUDSQL_ROWS
+
+
+_RDS = None
+
+
+def rds_store() -> AppStateRdsStore:
+    """The offline AWS RDS store (also installs the pyarrow Parquet writer for exports)."""
+    global _RDS
+    if _RDS is None:
+        _RDS = AppStateRdsStore()
+        try:
+            from core import parquet_pyarrow
+            if not parquet_pyarrow.install():
+                _log.warning("rds: pyarrow missing — StartExportTask will fail (no Parquet engine)")
+        except Exception as exc:
+            _log.warning("rds: Parquet writer not installed: %s", exc)
+    return _RDS
 
 
 # core module → its durable store (installed as the module's `shared_store()` singleton)
