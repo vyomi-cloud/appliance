@@ -52,6 +52,9 @@ _CORE_USERS = {
     "AppStateGcpIamStore": ("gcp_iam_core",), "AppStateAzureRbacStore": ("azure_iam_core",),
     "AppStateAzureSqlStore": ("azure_sql_core",),
     "AppStateRdsStore": ("rds_core",), "AppStateCloudSqlRowsStore": ("gcp_cloudsql_core",),
+    "AppStateDaxStore": ("dax_core",), "AppStateDlmStore": ("dlm_core",), "AppStateRamStore": ("ram_core",),
+    "AppStateCloudFormationStore": ("cloudformation_core",),
+    "AppStateAzureQueueSlot": (),   # JSON form of AppStateAzureQueueStore's live queues (no lazy core attrs)
 }
 
 
@@ -71,6 +74,9 @@ def test_core_slot_store_covers_every_field(name, cls):
     inst = cls()
     for k, v in vars(base).items():
         if k in cls._FIELDS:
+            continue
+        if k in cls._LINKS:   # a runtime link the wire router sets: a class attribute, never slot data
+            assert k in vars(cls) and k not in cls._FIELDS, f"{name}.{k} link must be a class attribute"
             continue
         # not slot state: must be private or not JSON-safe (an engine / lock / connection) …
         assert k.startswith("_") or not aps._state_json_safe(v), f"{name}.{k} is data but not a slot field"

@@ -831,6 +831,8 @@ try {
   await taDialog.getByLabel("Name").fill(TA);
   await taDialog.locator("textarea").fill("-----BEGIN CERTIFICATE-----\nMIIFAKECERTDATAFORSMOKETESTSONLYNOTREAL\n-----END CERTIFICATE-----");
   await taDialog.getByRole("button", { name: "Create trust anchor" }).click();
+  // wait for the create to land (on Nano the list below could otherwise overtake it in the worker)
+  await page.getByText(`Trust anchor "${TA}" created.`).waitFor({ timeout: 10000 });
   const taXml = await iamXml({ Action: "ListTrustAnchors" });
   check("IAM Roles Anywhere: trust anchor created (UI) → visible over native wire", taXml.includes(`<Name>${TA}</Name>`), taXml.slice(0, 200));
 
@@ -1085,7 +1087,7 @@ try {
   const vpceDialog = page.getByRole("dialog");
   await vpceDialog.getByRole("button", { name: "Select a VPC" }).click();
   await page.getByRole("option", { name: vpcId }).click();
-  await vpceDialog.getByPlaceholder("Select route tables").click();
+  await vpceDialog.getByRole("button", { name: /Select route tables/ }).click();
   await page.getByRole("option", { name: VPCERT }).click();
   await page.keyboard.press("Escape");
   await vpceDialog.getByRole("button", { name: "Create endpoint" }).click();

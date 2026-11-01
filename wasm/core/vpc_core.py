@@ -2560,7 +2560,14 @@ def apply_alarm_action(store, instance_id: str, action: str) -> bool:
     aws.cloudwatch.alarms.actions.ec2). Reuses the same state-change path RunInstances'
     StopInstances/TerminateInstances/RebootInstances go through, so stop/termination
     protection is honoured exactly as it is for a direct API call: a protected instance's
-    action fails, which the alarm records as a failed action, same as real AWS."""
+    action fails, which the alarm records as a failed action, same as real AWS.
+    A store may own instances outside this model (the offline appliance's EC2 runtime): its
+    `runtime_alarm_action(instance_id, action)` hook answers for those (None = not one of them)."""
+    hook = getattr(store, "runtime_alarm_action", None)
+    if callable(hook):
+        res = hook(instance_id, action)
+        if res is not None:
+            return bool(res)
     m = _model(store)
     if instance_id not in m["instances"]:
         return False

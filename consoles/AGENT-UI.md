@@ -140,6 +140,12 @@ store or wire surface you add:
    give the store a DURABLE appliance store (`core/appliance_stores.py`, space-scoped slot) —
    never the router's in-memory default. Declare runtime links (`cw_store`, `vpc_store`, …) as
    class attributes, not persisted fields (`tests/test_appliance_store_fields.py`).
+   Both offline routers (`appliance_router()` and `mount_new_services`) take every router key
+   from `core/wire_ingress.appliance_stores()` / `offline_runtime_stores()` — add a NEW router key
+   there (with its durable store) or it silently falls back to the in-memory default offline.
+   A JSON/Query service the router recognises by SigV4 scope / X-Amz-Target is served by it on
+   `POST /` automatically (routes/aws_s3.py fallback); a REST one whose paths would hit the S3
+   catch-all needs its scope in `_ROUTER_REST_SERVICES` there or an explicit mount.
 3. **Verify offline for real:** `CLOUDLEARN_STATE_FILE=/tmp/vyomi-agent/state.json python3 -m
    uvicorn server:app --port 8791 &` then run your cloud's smoke with
    `BASE=http://127.0.0.1:8791 UI_PATH=/v4/<cloud>/ node consoles/tests/smoke-<cloud>.mjs`.

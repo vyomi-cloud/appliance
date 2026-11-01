@@ -403,6 +403,17 @@ async def azure_blob_dispatch_middleware(request, call_next):
         elif (request.headers.get("x-ms-version") and not passthrough
                 and path not in ("/",)):
             new_path = "/azure-data/blob" + path
+            # The ROOT Storage Queue wire (the v4 console's / Nano's: `/{queue}`, `/{queue}/messages`,
+            # unauthenticated `/{account}?comp=list`) — told apart from blob exactly as Nano's router
+            # does — goes to the queue core over the Azure space's durable slot (routes/
+            # azure_queue_unified via core/wire_ingress), not into a blob container.
+            try:
+                from core.aws_wire_router import _azure_service, _lower_headers
+                if _azure_service(path, _lower_headers(dict(request.headers)),
+                                  dict(request.query_params)) == "az-queue":
+                    new_path = "/azure-data/queue-core" + path
+            except Exception:
+                pass
             request.scope["path"] = new_path
             request.scope["raw_path"] = new_path.encode("utf-8")
     except Exception:
