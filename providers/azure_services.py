@@ -906,6 +906,16 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
         if _oi_probe.handles(chain):
             return await _handle_operationalinsights(request, method, sub, rg, chain, names, base)
 
+    # Microsoft.EventGrid/topics/{t}/providers/Microsoft.EventGrid/eventSubscriptions/{name}:
+    # a real ARM extension resource (re-enters "providers" instead of alternating type/name,
+    # same shape as the Authorization/Security reentry above) — the shared core ARM engine's
+    # azure_eventgrid_core.py owns it, over this SAME offline _state, so event subscriptions
+    # round-trip offline too, not just on Nano/dev_server.
+    if namespace.lower() == "microsoft.eventgrid":
+        from core import azure_eventgrid_core as _eg_probe
+        if _eg_probe.handles(chain):
+            return await _handle_core_arm(request, method, rest, base)
+
     if namespace.lower() == "microsoft.cognitiveservices":
         return await _handle_cognitiveservices(request, method, sub, rg, chain, names, base)
 
@@ -1281,6 +1291,11 @@ def core_arm():
         from core.appliance_stores import az_blob_store, net_new_core_stores
         arm.sql_store = net_new_core_stores()["rds"]
         arm.blob_store = az_blob_store()
+    except Exception:
+        pass
+    try:   # Event Grid event-subscription delivery to a Service Bus queue/topic destination
+        from core.appliance_stores import az_servicebus_store
+        arm.sb_store = az_servicebus_store()
     except Exception:
         pass
     try:                                          # Defender for Cloud's Kubernetes posture: the real Kubescape

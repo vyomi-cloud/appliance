@@ -5,8 +5,14 @@ Run: PYTHONPATH=. python3 tests/conformance/test_azure_eventgrid_core.py
 """
 try:
     from core.azure_arm_core import AzureArm, DEFAULT_SUBSCRIPTION
+    from core import azure_eventgrid_core as eg
+    from core import azure_servicebus_core as sb
+    from core.messaging_store import InMemoryMessagingStore
 except ImportError:  # pragma: no cover - Pyodide flat layout
     from azure_arm_core import AzureArm, DEFAULT_SUBSCRIPTION  # type: ignore
+    import azure_eventgrid_core as eg  # type: ignore
+    import azure_servicebus_core as sb  # type: ignore
+    from messaging_store import InMemoryMessagingStore  # type: ignore
 
 SUB = DEFAULT_SUBSCRIPTION
 RG = "cloudlearn-rg"
@@ -181,6 +187,62 @@ def run() -> int:
     names = sorted(x["name"] for x in r["body"]["value"])
     check("list sweeps the expired subscription but keeps the future one and the unexpiring one",
           names == ["es-future", "es1"], names)
+
+    # ── Publish / delivery (data plane): filter matching + REAL delivery to a Service Bus
+    # queue destination, metrics derived from actual activity (never synthetic) ───────────
+    arm.handle("PUT", topic_path("t4"), {"api-version": AV}, {"location": "eastus"})
+    sbstore = InMemoryMessagingStore()
+    sb.dispatch(sbstore, "PUT", "eg-dest-q")   # provision the Service Bus queue entity first
+
+    arm.handle("PUT", sub_path("t4", "deliverable"), {"api-version": ESAV}, {"properties": {
+        "destination": {"endpointType": "ServiceBusQueue", "properties": {"queueName": "eg-dest-q"}},
+        "filter": {"subjectBeginsWith": "/blobServices"},
+    }})
+    arm.handle("PUT", sub_path("t4", "nomatch"), {"api-version": ESAV}, {"properties": {
+        "destination": {"endpointType": "ServiceBusQueue", "properties": {"queueName": "does-not-exist-q"}},
+        "filter": {"subjectBeginsWith": "/completely/different"},
+    }})
+    arm.handle("PUT", sub_path("t4", "undeliverable"), {"api-version": ESAV}, {"properties": {
+        "destination": {"endpointType": "WebHook", "properties": {"endpointUrl": "https://example.com/hook"}},
+        "deadLetterDestination": {"endpointType": "StorageBlob"},
+    }})
+    arm.handle("PUT", sub_path("t4", "dropped"), {"api-version": ESAV}, {"properties": {
+        "destination": {"endpointType": "WebHook", "properties": {"endpointUrl": "https://example.com/hook2"}},
+    }})
+
+    event = {"id": "ev1", "subject": "/blobServices/default/containers/c1/blobs/f.txt",
+             "eventType": "Microsoft.Storage.BlobCreated", "data": {"url": "https://x/f.txt"}}
+    r = eg.publish(arm.state, SUB, "t4", [event], sb_store=sbstore)
+    check("publish -> 1 event accepted", r["published"] == 1, r)
+    outcomes = {o["subscription"]: o["result"] for o in r["results"][0]["deliveries"]}
+    check("matching ServiceBusQueue subscription -> delivered", outcomes.get("deliverable") == "delivered", outcomes)
+    check("non-matching filter -> not in outcomes (never evaluated past the filter)", "nomatch" not in outcomes, outcomes)
+    check("WebHook + dead-letter configured -> dead-lettered (no reachable simulator backend)", outcomes.get("undeliverable") == "dead-lettered", outcomes)
+    check("WebHook with no dead-letter -> dropped", outcomes.get("dropped") == "dropped", outcomes)
+
+    peek = sb.dispatch(sbstore, "GET", "eg-dest-q/messages")
+    import json as _json
+    msgs = _json.loads(peek.body or b"{}").get("messages", [])
+    check("the event really landed in the Service Bus queue's backlog", len(msgs) == 1 and "BlobCreated" in msgs[0]["Body"], msgs)
+
+    t4 = arm.state[topic_path("t4").lower()]
+    metrics = t4.get("_metrics", {})
+    check("PublishSuccessCount bumped once", metrics.get("PublishSuccessCount") == 1, metrics)
+    check("MatchedEventCount counts only the 3 subscriptions whose filter actually matched", metrics.get("MatchedEventCount") == 3, metrics)
+    check("DeliverySuccessCount reflects the one real delivery", metrics.get("DeliverySuccessCount") == 1, metrics)
+    check("DeadLetteredCount + DroppedEventCount reflect the two unreachable destinations",
+          metrics.get("DeadLetteredCount") == 1 and metrics.get("DroppedEventCount") == 1, metrics)
+
+    r = eg.publish(arm.state, SUB, "ghost-topic", [event], sb_store=sbstore)
+    check("publish to an unknown topic -> honest 0-published error, not a silent success", r["published"] == 0 and r.get("error") == "TopicNotFound", r)
+
+    # ── listEventGridMetrics / deliveryStatus action verbs: the UI's read of the above,
+    # over the real counters (not a second synthetic source) ───────────────────────────
+    r = arm.handle("POST", topic_path("t4") + "/listEventGridMetrics", {"api-version": AV})
+    check("listEventGridMetrics -> the same real counters", r["status"] == 200 and r["body"]["metrics"]["PublishSuccessCount"] == 1
+          and r["body"]["metrics"]["MatchedEventCount"] == 3, r)
+    r = arm.handle("POST", sub_path("t4", "deliverable") + "/deliveryStatus", {"api-version": ESAV})
+    check("deliveryStatus on the delivered subscription", r["status"] == 200 and r["body"]["delivered"] == 1, r)
 
     # ── Activity log: every PUT/DELETE above left a real event behind ──────────────────
     r = arm.handle("GET", f"/subscriptions/{SUB}/providers/Microsoft.Insights/eventtypes/management/values",
