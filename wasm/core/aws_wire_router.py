@@ -964,6 +964,8 @@ class AwsWireRouter:
             elif svc == "gcp-iam":   # org policy enforcement + Data Access audit log emission
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body),
                                   rm_store=self.gcp_rm, logger=self._iam_audit_log)
+            elif svc == "gcp-artifactregistry":   # a repository's CMEK key is checked/used through the real KMS core
+                r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), kms_store=self.gcp_kms)
             else:
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body))
             hdrs = dict(r.headers or {})

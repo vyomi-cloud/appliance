@@ -2,19 +2,35 @@
 
 Run:  PYTHONPATH=. python3 tests/conformance/test_gcp_artifactregistry_core.py
 """
+import base64
 import json
 import sys
 
 from core import gcp_artifactregistry_core as ar
+from core import gcp_kms_core as gkms
 from core.aws_wire_router import AwsWireRouter
+from core.kms_keystore import InMemoryKeyStore
 
 B = "/v1/projects/p/locations/us-central1/repositories"
 R = "projects/p/locations/us-central1/repositories/r1"
 
 
-def call(st, method, path, query=None, body=None, headers=None):
-    r = ar.dispatch(st, method, path, query or {}, headers or {}, json.dumps(body).encode() if body is not None else b"")
+def call(st, method, path, query=None, body=None, headers=None, kms_store=None):
+    r = ar.dispatch(st, method, path, query or {}, headers or {},
+                    json.dumps(body).encode() if body is not None else b"", kms_store=kms_store)
     return r.status, json.loads(r.body)
+
+
+def _kms_key(key_id="repo-key"):
+    """A real, ENABLED CryptoKey through the GCP KMS core — the resource the
+    artifact registry core must validate/use, not a bare string."""
+    kms = InMemoryKeyStore()
+    loc = "/v1/projects/p/locations/us-central1"
+    gkms.dispatch(kms, "POST", f"{loc}/keyRings", {"keyRingId": "ring1"}, {}, b"{}")
+    gkms.dispatch(kms, "POST", f"{loc}/keyRings/ring1/cryptoKeys", {"cryptoKeyId": key_id}, {},
+                  json.dumps({"purpose": "ENCRYPT_DECRYPT"}).encode())
+    key_name = f"projects/p/locations/us-central1/keyRings/ring1/cryptoKeys/{key_id}"
+    return kms, key_name
 
 
 def test_repository_lifecycle_and_lro():
@@ -227,6 +243,76 @@ def test_virtual_repository_aggregates_upstreams_read_only():
     assert call(st, "POST", B, {"repositoryId": "virt3"}, {
         "format": "DOCKER", "mode": "VIRTUAL_REPOSITORY",
         "virtualRepositoryConfig": {"upstreamPolicies": [{"id": "a", "repository": "projects/p/locations/us-central1/repositories/virt1", "priority": 1}]}})[0] == 400
+
+
+def test_cmek_validated_against_real_kms_core_at_create():
+    kms, key_name = _kms_key()
+    st = ar.ArtifactRegistryStore()
+    # malformed resource name
+    code, err = call(st, "POST", B, {"repositoryId": "bad1"}, {"format": "DOCKER", "kmsKeyName": "not-a-key"}, kms_store=kms)
+    assert code == 400 and "kmsKeyName" in err["error"]["message"]
+    assert "bad1" not in {n.rsplit("/", 1)[-1] for n in st.repos}
+    # well-formed but no such CryptoKey
+    nope = "projects/p/locations/us-central1/keyRings/ring1/cryptoKeys/nope"
+    code, err = call(st, "POST", B, {"repositoryId": "bad2"}, {"format": "DOCKER", "kmsKeyName": nope}, kms_store=kms)
+    assert code == 400 and "could not be used" in err["error"]["message"]
+    # a real, ENABLED key: creation succeeds and the key name round-trips on GET
+    code, repo = call(st, "POST", B, {"repositoryId": "r1"}, {"format": "DOCKER", "kmsKeyName": key_name}, kms_store=kms)
+    assert code == 200 and repo["response"]["kmsKeyName"] == key_name
+    assert call(st, "GET", B + "/r1", kms_store=kms)[1]["kmsKeyName"] == key_name
+    # without a kms_store wired in (a bare unit test exercising this core alone) the
+    # format is still checked, but existence can't be — degrades like AWS secrets_core.py
+    code, repo = call(st, "POST", B, {"repositoryId": "r2"},
+                      {"format": "DOCKER", "kmsKeyName": key_name})
+    assert code == 200
+    code, err = call(st, "POST", B, {"repositoryId": "r3"}, {"format": "DOCKER", "kmsKeyName": "nope"})
+    assert code == 400
+
+
+def test_cmek_key_immutable_on_patch():
+    kms, key_name = _kms_key()
+    st = ar.ArtifactRegistryStore()
+    call(st, "POST", B, {"repositoryId": "r1"}, {"format": "DOCKER", "kmsKeyName": key_name}, kms_store=kms)
+    other = "projects/p/locations/us-central1/keyRings/ring1/cryptoKeys/other"
+    code, err = call(st, "PATCH", B + "/r1", {"updateMask": "kmsKeyName"}, {"kmsKeyName": other}, kms_store=kms)
+    assert code == 400 and err["error"]["status"] == "FAILED_PRECONDITION"
+    assert call(st, "GET", B + "/r1", kms_store=kms)[1]["kmsKeyName"] == key_name
+    # other fields remain patchable
+    code, repo = call(st, "PATCH", B + "/r1", {"updateMask": "description"}, {"description": "d2"}, kms_store=kms)
+    assert code == 200 and repo["kmsKeyName"] == key_name and repo["description"] == "d2"
+
+
+def test_cmek_enforced_live_not_just_stored():
+    kms, key_name = _kms_key()
+    st = ar.ArtifactRegistryStore()
+    call(st, "POST", B, {"repositoryId": "r1"}, {"format": "DOCKER", "kmsKeyName": key_name}, kms_store=kms)
+
+    # pushing while the key is enabled genuinely wraps the new version's digest with
+    # the real Cloud KMS core (not a stored label) — prove the ciphertext round-trips
+    # through gcp_kms_core's own :decrypt and is tied to THIS key.
+    code, out = call(st, "POST", B + "/r1:pushSample", None, {"image": "app", "tag": "v1"}, kms_store=kms)
+    assert code == 200
+    ver = next(iter(st.repos[R]["packages"]["app"]["versions"].values()))
+    blob = ver["_kms"]["encryptedDigest"]
+    assert ver["_kms"]["keyName"] == key_name
+    dr = gkms.dispatch(kms, "POST", f"/v1/{key_name}:decrypt", {}, {}, json.dumps({"ciphertext": blob}).encode())
+    assert dr.status == 200
+    assert base64.b64decode(json.loads(dr.body)["plaintext"]) == ver["name"].rsplit("/", 1)[-1].encode()
+
+    # disable the key's primary version through the REAL KMS core: the setting now
+    # has a live, continuously-checked effect — pushing new content fails, control
+    # plane (repo GET) is unaffected.
+    gkms.dispatch(kms, "PATCH", f"/v1/{key_name}/cryptoKeyVersions/1", {}, {},
+                  json.dumps({"state": "DISABLED"}).encode())
+    code, out = call(st, "POST", B + "/r1:pushSample", None, {"image": "app", "tag": "v2"}, kms_store=kms)
+    assert code == 400 and out["error"]["status"] == "FAILED_PRECONDITION"
+    assert call(st, "GET", B + "/r1", kms_store=kms)[0] == 200
+
+    # ingest_registry_images (the real `docker push` sync path) skips images it can't encrypt
+    # instead of recording them, rather than silently succeeding.
+    n = ar.ingest_registry_images(st, "p", [{"path": "r1/app2", "tag": "v1", "digest": "sha256:deadbeef", "size": 1}],
+                                  kms_store=kms)
+    assert n == 0 and "app2" not in st.repos[R]["packages"]
 
 
 if __name__ == "__main__":

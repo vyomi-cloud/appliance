@@ -31,11 +31,15 @@ JSON-safe dicts (so nano_persist and the offline space slot can snapshot them).
 """
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
+import re
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+
+from core import gcp_kms_core as _gcp_kms
 
 FORMATS = ("DOCKER", "MAVEN", "NPM", "PYTHON", "APT", "YUM", "KFP", "GO", "GENERIC", "GOOGET")
 MODES = ("STANDARD_REPOSITORY", "VIRTUAL_REPOSITORY", "REMOTE_REPOSITORY")
@@ -98,6 +102,70 @@ def _repo_name(project: str, loc: str, repo: str) -> str:
     return f"projects/{project}/locations/{loc}/repositories/{repo}"
 
 
+# ── CMEK — ENFORCED against the real Cloud KMS core (the same cross-core seam
+# core/secrets_core.py uses for AWS KMS): a repository's kmsKeyName must name a
+# CryptoKey that actually exists and whose primary version is ENABLED, checked
+# again (not just at creation) every time new content is pushed — and pushing new
+# content genuinely wraps a digest with that key, through real envelope crypto, so
+# a disabled/destroyed key really does stop working rather than being a stored label. ─
+_KMS_KEY_RE = re.compile(r"^projects/[^/]+/locations/[^/]+/keyRings/[^/]+/cryptoKeys/[^/]+$")
+
+
+class CmekKeyUnavailable(Exception):
+    """Raised when a repository's CMEK key cannot presently encrypt new content."""
+
+
+def _kms_crypto_key(kms_store, key_name: str, headers=None) -> tuple[dict | None, str | None]:
+    """GET the CryptoKey through the real GCP KMS core. (view, None) or (None, error)."""
+    r = _gcp_kms.dispatch(kms_store, "GET", f"/v1/{key_name}", {}, headers or {}, b"")
+    if r.status != 200:
+        try:
+            return None, json.loads(r.body)["error"]["message"]
+        except Exception:
+            return None, f"CryptoKey \"{key_name}\" not found."
+    return json.loads(r.body), None
+
+
+def _kms_usable(kms_store, key_name: str, headers=None) -> str | None:
+    """None if `key_name` can right now encrypt new content; else the reason it
+    can't. kms_store is None (no KMS core wired in — e.g. a bare unit test
+    exercising this core in isolation) passes through unchecked, matching the
+    AWS secrets_core.py precedent of degrading gracefully with no kms_store."""
+    if kms_store is None:
+        return None
+    view, err = _kms_crypto_key(kms_store, key_name, headers)
+    if err:
+        return f"Cloud KMS CryptoKey \"{key_name}\" could not be used: {err}"
+    state = (view.get("primary") or {}).get("state", "ENABLED")
+    if state != "ENABLED":
+        return (f"Cloud KMS CryptoKey \"{key_name}\" cannot encrypt new content: its primary "
+                f"version is {state}, not ENABLED.")
+    return None
+
+
+def _validate_kms_key(kms_store, key_name, headers=None) -> str | None:
+    """Repository create-time validation: well-formed resource name AND a real,
+    usable key behind it."""
+    if not isinstance(key_name, str) or not _KMS_KEY_RE.match(key_name):
+        return (f"Invalid kmsKeyName \"{key_name}\": must be a full Cloud KMS CryptoKey "
+                "resource name (projects/P/locations/L/keyRings/R/cryptoKeys/K).")
+    return _kms_usable(kms_store, key_name, headers)
+
+
+def _kms_wrap(kms_store, key_name: str, plaintext: bytes, headers=None) -> str | None:
+    """Actually encrypt `plaintext` with the repository's CMEK key through the real
+    Cloud KMS core, returning the base64 ciphertext — genuine envelope crypto, not a
+    stored label. None if there's no kms_store wired in (bare unit test) or the key
+    just became unusable (caller already re-checked with _kms_usable before writing)."""
+    if kms_store is None:
+        return None
+    r = _gcp_kms.dispatch(kms_store, "POST", f"/v1/{key_name}:encrypt", {}, headers or {},
+                          json.dumps({"plaintext": base64.b64encode(plaintext).decode()}).encode())
+    if r.status != 200:
+        return None
+    return json.loads(r.body)["ciphertext"]
+
+
 def _page(items: list, query: dict) -> tuple[list, str]:
     """Offset pagination with the real pageSize / pageToken / nextPageToken contract."""
     try:
@@ -128,10 +196,13 @@ def configure_data_plane(host, port=5000):
     DATA_PLANE["host"], DATA_PLANE["port"] = (host or None), int(port or 5000)
 
 
-def ingest_registry_images(store: ArtifactRegistryStore, project: str, images: list) -> int:
+def ingest_registry_images(store: ArtifactRegistryStore, project: str, images: list, kms_store=None) -> int:
     """Fold what a real `docker push` left in the registry into the engine.
     Each item: {"path": "{repo}/{image...}", "tag", "digest", "size"} (registry path minus the
     project segment). Docker repositories only; unknown repositories and known tags are skipped.
+    A repository whose CMEK key cannot presently encrypt new content (not found, disabled,
+    destroyed) skips that image too — the closest honest analogue of the real push failing
+    upstream, since this is a best-effort sync of a push that already happened on the wire.
     Returns the number of versions/tags newly recorded."""
     n = 0
     for im in images:
@@ -147,7 +218,11 @@ def ingest_registry_images(store: ArtifactRegistryStore, project: str, images: l
         ver = ((pkg or {}).get("versions") or {}).get(im["digest"])
         if ver is not None and any(t["name"].rsplit("/", 1)[-1] == im["tag"] for t in ver["_tags"]):
             continue
-        ingest_package(store, full, image, im["digest"], int(im.get("size") or 0), [im["tag"]])
+        try:
+            ingest_package(store, full, image, im["digest"], int(im.get("size") or 0), [im["tag"]],
+                           kms_store=kms_store)
+        except CmekKeyUnavailable:
+            continue
         n += 1
     return n
 
@@ -363,7 +438,7 @@ def _virtual_merge(store, repo: dict) -> dict:
     return merged
 
 
-def _create_repo(store, project, loc, query, body) -> GcpResponse:
+def _create_repo(store, project, loc, query, body, kms_store=None) -> GcpResponse:
     rid = query.get("repositoryId") or query.get("repository_id") or ""
     if not rid:
         return _err(400, "repositoryId is required (query parameter).")
@@ -398,6 +473,10 @@ def _create_repo(store, project, loc, query, body) -> GcpResponse:
                     return _err(400, err)
             if k == "virtualRepositoryConfig":
                 err = _validate_virtual_config(store, project, loc, body[k], name)
+                if err:
+                    return _err(400, err)
+            if k == "kmsKeyName":
+                err = _validate_kms_key(kms_store, body[k])
                 if err:
                     return _err(400, err)
             repo[k] = body[k]
@@ -443,6 +522,9 @@ def _patch_repo(store, name, query, body, headers=None) -> GcpResponse:
     fields = [m.split(".")[0] for m in mask] if mask else [k for k in _MUTABLE if k in body]
     project, loc = _pl(name)
     for f in fields:
+        if f == "kmsKeyName":
+            return _err(400, "kmsKeyName is immutable: the Cloud KMS key can only be set when the "
+                             "repository is created.", "FAILED_PRECONDITION")
         if f not in _MUTABLE:
             return _err(400, f"Invalid field mask path: \"{f}\" is not an updatable field of Repository.")
         if f in body:
@@ -576,12 +658,24 @@ def _pkg_key(display: str) -> str:
 
 
 def ingest_package(store: ArtifactRegistryStore, repo_name: str, package: str, version: str,
-                   size_bytes: int = 0, tags: list | None = None, files: list | None = None) -> dict:
+                   size_bytes: int = 0, tags: list | None = None, files: list | None = None,
+                   kms_store=None, headers=None) -> dict:
     """Record a package version (and tags) in a repository — the data-plane hook.
-    `version` is the version id (a sha256 digest for Docker). Returns the version."""
+    `version` is the version id (a sha256 digest for Docker). Returns the version.
+    Raises CmekKeyUnavailable if the repository has a kmsKeyName that cannot right now
+    encrypt new content (not found, disabled, destroyed) — re-checked here, on every
+    push, not just once at repository creation. A new version is then genuinely wrapped
+    with that key (real envelope crypto through the Cloud KMS core), stored internally
+    (ver["_kms"]) — not on the public Version/DockerImage view, which the real API
+    doesn't expose either; it only proves Vyomi actually used the key, not a label."""
     repo = store.repos.get(repo_name)
     if repo is None:
         raise KeyError(repo_name)
+    key_name = repo.get("kmsKeyName")
+    if key_name:
+        err = _kms_usable(kms_store, key_name, headers)
+        if err:
+            raise CmekKeyUnavailable(err)
     now = _now()
     pkey = _pkg_key(package)
     pkg = repo["packages"].setdefault(pkey, {
@@ -594,6 +688,10 @@ def ingest_package(store: ArtifactRegistryStore, repo_name: str, package: str, v
             "name": f"{pkg['name']}/versions/{version}", "createTime": now, "updateTime": now,
             "sizeBytes": int(size_bytes), "_tags": [],
             "files": {}}
+        if key_name:
+            ciphertext = _kms_wrap(kms_store, key_name, version.encode(), headers)
+            if ciphertext:
+                ver["_kms"] = {"keyName": key_name, "encryptedDigest": ciphertext}
     for fname in (files or [f"{package}/{version}"]):
         fid = fname.replace("/", "%2F")
         ver["files"][fid] = {"name": f"{repo_name}/files/{fid}", "sizeBytes": str(int(size_bytes)),
@@ -609,10 +707,11 @@ def ingest_package(store: ArtifactRegistryStore, repo_name: str, package: str, v
 
 
 def ingest_image(store: ArtifactRegistryStore, repo_name: str, image: str = "sample-app",
-                 tag: str = "latest", size_bytes: int = 5 * 1024 * 1024) -> dict:
+                 tag: str = "latest", size_bytes: int = 5 * 1024 * 1024,
+                 kms_store=None, headers=None) -> dict:
     """A `docker push {loc}-docker.pkg.dev/{p}/{repo}/{image}:{tag}` as the engine sees it."""
     digest = "sha256:" + hashlib.sha256(f"{repo_name}/{image}:{tag}:{_now()}".encode()).hexdigest()
-    return ingest_package(store, repo_name, image, digest, size_bytes, [tag])
+    return ingest_package(store, repo_name, image, digest, size_bytes, [tag], kms_store=kms_store, headers=headers)
 
 
 def _set_tag(pkg: dict, tag_id: str, ver: dict) -> dict:
@@ -972,7 +1071,8 @@ def console_children(store: ArtifactRegistryStore, name: str, kind: str) -> list
     return out
 
 
-def console_push_sample(store: ArtifactRegistryStore, name: str, body: dict | None = None, headers=None) -> dict:
+def console_push_sample(store: ArtifactRegistryStore, name: str, body: dict | None = None, headers=None,
+                        kms_store=None) -> dict:
     full, repo = console_find(store, name)
     if repo is None:
         return {"ok": False, "code": "NotFound", "name": name}
@@ -984,11 +1084,16 @@ def console_push_sample(store: ArtifactRegistryStore, name: str, body: dict | No
         return {"ok": False, "code": "PermissionDenied", "name": name,
                 "message": json.loads(denied.body)["error"]["message"]}
     body = body or {}
-    if repo["format"] == "DOCKER":
-        ver = ingest_image(store, full, str(body.get("image") or "sample-app"), str(body.get("tag") or "latest"))
-    else:
-        ver = ingest_package(store, full, str(body.get("image") or "sample-package"),
-                             str(body.get("tag") or "1.0.0"), 1024 * 1024, [])
+    try:
+        if repo["format"] == "DOCKER":
+            ver = ingest_image(store, full, str(body.get("image") or "sample-app"), str(body.get("tag") or "latest"),
+                               kms_store=kms_store, headers=headers)
+        else:
+            ver = ingest_package(store, full, str(body.get("image") or "sample-package"),
+                                 str(body.get("tag") or "1.0.0"), 1024 * 1024, [],
+                                 kms_store=kms_store, headers=headers)
+    except CmekKeyUnavailable as e:
+        return {"ok": False, "code": "FailedPrecondition", "name": name, "message": str(e)}
     return {"ok": True, "name": name, "version": ver["name"]}
 
 
@@ -1001,7 +1106,7 @@ _VERBS = ("getIamPolicy", "setIamPolicy", "testIamPermissions", "batchDelete", "
 # ── dispatch ──────────────────────────────────────────────────────────────
 def dispatch(store: ArtifactRegistryStore, method: str, path: str,
              query: dict | None = None, headers: dict | None = None,
-             body: bytes = b"") -> GcpResponse:
+             body: bytes = b"", kms_store=None) -> GcpResponse:
     query = query or {}
     method = method.upper()
     for k, v in (headers or {}).items():     # Java's HttpURLConnection has no PATCH: gax overrides POST
@@ -1055,7 +1160,7 @@ def dispatch(store: ArtifactRegistryStore, method: str, path: str,
         return _err(404, f"Unknown path: {path}")
     if len(segs) == 5:
         if method == "POST":
-            return _create_repo(store, project, loc, query, payload)
+            return _create_repo(store, project, loc, query, payload, kms_store=kms_store)
         if method == "GET":
             return _list_repos(store, project, loc, query)
         return _err(400, f"Unsupported method {method} on repositories.")
@@ -1065,7 +1170,7 @@ def dispatch(store: ArtifactRegistryStore, method: str, path: str,
         if verb in ("getIamPolicy", "setIamPolicy", "testIamPermissions"):
             return _iam(store, method, rname, verb, payload, headers)
         if verb == "pushSample":
-            res = console_push_sample(store, rname, payload, headers)
+            res = console_push_sample(store, rname, payload, headers, kms_store=kms_store)
             if not res["ok"]:
                 if res["code"] == "FailedPrecondition":
                     return _err(400, res["message"], "FAILED_PRECONDITION")
