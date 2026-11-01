@@ -2,16 +2,24 @@
 (botocore `apigatewayv2`, 2018-11-29, rest-json).
 
 Speaks the native **API Gateway V2 control-plane wire** (`/v2/apis`, `/v2/domainnames`,
-`/v2/vpclinks`, `/v2/tags/{arn}`; JSON, lowerCamelCase members) so an unmodified
-aws-sdk-java-v2 / aws-sdk-go-v2 / aws CLI `apigatewayv2` client manages APIs. A
-deployed HTTP API can also be INVOKED (`invoke`): route-key matching (`GET /x/{id}`,
-`ANY /y`, `{proxy+}`, `$default`) → integration (Lambda proxy payload v2.0 through
-`lambda_core`, or a MOCK-style static response). NO fastapi / boto3 / socket imports →
+`/v2/vpclinks`, `/v2/tags/{arn}`, `/v2/portals`, `/v2/portalproducts`; JSON, lowerCamelCase
+members) so an unmodified aws-sdk-java-v2 / aws-sdk-go-v2 / aws CLI `apigatewayv2` client
+manages APIs. A deployed HTTP API can also be INVOKED (`invoke`): route-key matching
+(`GET /x/{id}`, `ANY /y`, `{proxy+}`, `$default`) → integration (Lambda proxy payload v2.0
+through `lambda_core`, or a MOCK-style static response). NO fastapi / boto3 / socket imports →
 loads under Pyodide; state lives on a plain store object (`ApiGwV2Store`) so
 nano_persist captures it like every other store.
 
 Resources: Api · Route · RouteResponse · Integration · IntegrationResponse · Stage ·
-Deployment · Authorizer · Model · VpcLink · DomainName · ApiMapping · Tags.
+Deployment · Authorizer · Model · VpcLink · DomainName · ApiMapping · Tags · Portal ·
+PortalProduct.
+
+Portal / PortalProduct are the real (undocumented-by-console-UI, but fully public in the
+`apigatewayv2` botocore model) developer-portal control plane: `CreatePortal`,
+`UpdatePortal`, `DeletePortal`, `GetPortal`/`ListPortals`, `PreviewPortal`, `PublishPortal`
+(DisablePortal is a DELETE on the same `/publish` path), and the matching `*PortalProduct`
+CRUD + sharing-policy calls. Publishing/disabling actually flips `publishStatus` and
+`lastPublished`; `includedPortalProductArns` is validated against real PortalProduct ARNs.
 """
 from __future__ import annotations
 
@@ -36,6 +44,8 @@ class ApiGwV2Store:
         self.domains: dict = {}
         self.vpclinks: dict = {}
         self.domain_associations: dict = {}
+        self.portals: dict = {}
+        self.portal_products: dict = {}
 
 
 _SHARED: ApiGwV2Store | None = None
@@ -480,6 +490,150 @@ def _aid_from_arn(arn):
     return arn.rsplit("/", 1)[-1]
 
 
+# ── Portal / PortalProduct (developer portal control plane) ──────────────────
+def _portal(store, pid):
+    p = store.portals.get(pid)
+    if not p:
+        raise NotFound(f"Invalid portal identifier specified {pid}")
+    return p
+
+
+def _portal_product(store, ppid):
+    p = store.portal_products.get(ppid)
+    if not p:
+        raise NotFound(f"Invalid portal product identifier specified {ppid}")
+    return p
+
+
+def _endpoint_config(portal_id, req):
+    acm = (req or {}).get("acmManaged") or {}
+    return {
+        "certificateArn": acm.get("certificateArn"), "domainName": acm.get("domainName"),
+        "portalDefaultDomainName": f"{portal_id}.portal.execute-api.{REGION}.localhost",
+        "portalDomainHostedZoneId": "Z1UJRXOUMOOFQ8",
+    }
+
+
+def _check_portal_products(store, arns):
+    for arn in arns or []:
+        if not any(p["portalProductArn"] == arn for p in store.portal_products.values()):
+            raise NotFound(f"Invalid portal product ARN specified {arn}")
+
+
+def _require_portal_content(pc):
+    if not pc or not pc.get("displayName"):
+        raise BadRequest("portalContent.displayName is required")
+    if not (pc.get("theme") or {}).get("customColors"):
+        raise BadRequest("portalContent.theme.customColors is required")
+
+
+def _create_portal(store, b):
+    _require(b, ["authorization", "endpointConfiguration", "portalContent"])
+    _require_portal_content(b["portalContent"])
+    _check_portal_products(store, b.get("includedPortalProductArns"))
+    pid = _new_id()
+    p = {
+        "portalId": pid, "portalArn": f"arn:aws:apigateway:{REGION}::/portals/{pid}",
+        "authorization": b["authorization"], "endpointConfiguration": _endpoint_config(pid, b["endpointConfiguration"]),
+        "includedPortalProductArns": list(b.get("includedPortalProductArns") or []),
+        "lastModified": _now(), "lastPublished": None, "lastPublishedDescription": None,
+        "portalContent": b["portalContent"], "publishStatus": "DISABLED", "preview": None,
+        "rumAppMonitorName": b.get("rumAppMonitorName"), "statusException": None, "tags": dict(b.get("tags") or {}),
+    }
+    store.portals[pid] = p
+    return _json(201, _out(p))
+
+
+def _update_portal(store, pid, b):
+    p = _portal(store, pid)
+    if "includedPortalProductArns" in b:
+        _check_portal_products(store, b["includedPortalProductArns"])
+    if "portalContent" in b:
+        _require_portal_content(b["portalContent"])
+    if "endpointConfiguration" in b:
+        b = dict(b, endpointConfiguration=_endpoint_config(pid, b["endpointConfiguration"]))
+    _merge(p, b, {"portalId", "portalArn", "publishStatus", "lastPublished", "lastPublishedDescription", "preview", "statusException", "tags"})
+    p["lastModified"] = _now()
+    return _json(200, _out(p))
+
+
+def _delete_portal(store, pid):
+    _portal(store, pid)
+    del store.portals[pid]
+    return _json(204)
+
+
+def _preview_portal(store, pid):
+    p = _portal(store, pid)
+    p["preview"] = {"previewStatus": "PREVIEW_READY",
+                    "previewUrl": f"https://{pid}-preview.portal.execute-api.{REGION}.localhost",
+                    "statusException": None}
+    return _json(202, {})
+
+
+def _publish_portal(store, pid, b):
+    p = _portal(store, pid)
+    p["publishStatus"] = "PUBLISHED"
+    p["lastPublished"] = _now()
+    p["lastPublishedDescription"] = b.get("description")
+    p["statusException"] = None
+    return _json(202, {})
+
+
+def _disable_portal(store, pid):
+    p = _portal(store, pid)
+    p["publishStatus"] = "DISABLED"
+    return _json(204)
+
+
+def _create_portal_product(store, b):
+    _require(b, ["displayName"])
+    ppid = _new_id()
+    pp = {
+        "portalProductId": ppid, "portalProductArn": f"arn:aws:apigateway:{REGION}::/portalproducts/{ppid}",
+        "description": b.get("description"), "displayName": b["displayName"],
+        "displayOrder": {"contents": [], "overviewPageArn": None, "productPageArns": []},
+        "lastModified": _now(), "tags": dict(b.get("tags") or {}), "_sharingPolicy": None,
+    }
+    store.portal_products[ppid] = pp
+    return _json(201, _out(pp))
+
+
+def _update_portal_product(store, ppid, b):
+    pp = _portal_product(store, ppid)
+    _merge(pp, b, {"portalProductId", "portalProductArn", "tags"})
+    pp["lastModified"] = _now()
+    return _json(200, _out(pp))
+
+
+def _delete_portal_product(store, ppid):
+    pp = _portal_product(store, ppid)
+    if any(arn == pp["portalProductArn"] for p in store.portals.values() for arn in p["includedPortalProductArns"]):
+        raise Conflict(f"Portal product {ppid} is included in a portal")
+    del store.portal_products[ppid]
+    return _json(204)
+
+
+def _get_sharing_policy(store, ppid):
+    pp = _portal_product(store, ppid)
+    if pp.get("_sharingPolicy") is None:
+        raise NotFound(f"No sharing policy for portal product {ppid}")
+    return _json(200, {"portalProductId": ppid, "policyDocument": pp["_sharingPolicy"]})
+
+
+def _put_sharing_policy(store, ppid, b):
+    pp = _portal_product(store, ppid)
+    _require(b, ["policyDocument"])
+    pp["_sharingPolicy"] = b["policyDocument"]
+    return _json(200, {})
+
+
+def _delete_sharing_policy(store, ppid):
+    pp = _portal_product(store, ppid)
+    pp["_sharingPolicy"] = None
+    return _json(204)
+
+
 # ── tags ─────────────────────────────────────────────────────────────────────
 def _tag_target(store, arn):
     m = re.fullmatch(r"arn:aws:apigateway:[^:]*::/(.+)", arn)
@@ -494,6 +648,10 @@ def _tag_target(store, arn):
         return _domain(store, parts[1])
     if parts[0] == "vpclinks" and len(parts) == 2:
         return _vpclink(store, parts[1])
+    if parts[0] == "portals" and len(parts) == 2:
+        return _portal(store, parts[1])
+    if parts[0] == "portalproducts" and len(parts) == 2:
+        return _portal_product(store, parts[1])
     raise NotFound(f"Invalid resource ARN: {arn}")
 
 
@@ -584,6 +742,24 @@ def _routes():
     add("DELETE", r"domainnameaccessassociations/([^/]+)",
         lambda s, q, b, aid: (_domain_association(s, _aid_from_arn(unquote(aid))),
                               s.domain_associations.pop(_aid_from_arn(unquote(aid))), _json(202))[2])
+    # portals (developer portal control plane)
+    add("POST", r"portals", lambda s, q, b: _create_portal(s, b))
+    add("GET", r"portals", lambda s, q, b: _json(200, _page(list(s.portals.values()), q)))
+    add("GET", r"portals/([^/]+)", lambda s, q, b, p: _json(200, _out(_portal(s, p))))
+    add("PATCH", r"portals/([^/]+)", lambda s, q, b, p: _update_portal(s, p, b))
+    add("DELETE", r"portals/([^/]+)", lambda s, q, b, p: _delete_portal(s, p))
+    add("POST", r"portals/([^/]+)/preview", lambda s, q, b, p: _preview_portal(s, p))
+    add("POST", r"portals/([^/]+)/publish", lambda s, q, b, p: _publish_portal(s, p, b))
+    add("DELETE", r"portals/([^/]+)/publish", lambda s, q, b, p: _disable_portal(s, p))
+    # portal products
+    add("POST", r"portalproducts", lambda s, q, b: _create_portal_product(s, b))
+    add("GET", r"portalproducts", lambda s, q, b: _json(200, _page(list(s.portal_products.values()), q)))
+    add("GET", r"portalproducts/([^/]+)", lambda s, q, b, p: _json(200, _out(_portal_product(s, p))))
+    add("PATCH", r"portalproducts/([^/]+)", lambda s, q, b, p: _update_portal_product(s, p, b))
+    add("DELETE", r"portalproducts/([^/]+)", lambda s, q, b, p: _delete_portal_product(s, p))
+    add("GET", r"portalproducts/([^/]+)/sharingpolicy", lambda s, q, b, p: _get_sharing_policy(s, p))
+    add("PUT", r"portalproducts/([^/]+)/sharingpolicy", lambda s, q, b, p: _put_sharing_policy(s, p, b))
+    add("DELETE", r"portalproducts/([^/]+)/sharingpolicy", lambda s, q, b, p: _delete_sharing_policy(s, p))
     # tags
     add("GET", r"tags/(.+)", lambda s, q, b, arn: _json(200, {"tags": dict(_tag_target(s, unquote(arn)).get("tags") or {})}))
     add("POST", r"tags/(.+)", lambda s, q, b, arn: _tag(s, unquote(arn), b))

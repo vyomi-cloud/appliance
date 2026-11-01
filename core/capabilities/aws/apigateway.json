@@ -105,9 +105,10 @@
  },
  "apigateway.developer-portals": {
   "title": "Developer portals and portal products",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "level": { "nano": "full", "offline": "full" },
   "limitations": [
-   "The API Gateway developer portal is a separate hosted product Vyomi does not implement; declared in the nav for completeness only."
-  ]
+   "Publishing a portal (PublishPortal) flips publishStatus to PUBLISHED and the portal/preview URLs are well-formed, but — like the execute-api invoke host — they aren't reachable by DNS from outside Vyomi; there is no real Cognito user pool behind a Cognito-authorized portal."
+  ],
+  "tests": ["tests/conformance/test_apigatewayv2_core.py"]
  }
 }

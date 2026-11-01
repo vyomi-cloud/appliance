@@ -17,24 +17,29 @@ import ClientCertificates from "./ClientCertificates.jsx";
 import CustomDomainNames from "./CustomDomainNames.jsx";
 import DomainNameAccessAssociations from "./DomainNameAccessAssociations.jsx";
 import VpcLinks from "./VpcLinks.jsx";
-import { AgentcoreTargets, Portals, PortalProducts } from "./OutOfScope.jsx";
+import { AgentcoreTargets } from "./OutOfScope.jsx";
+import Portals from "./Portals.jsx";
+import PortalProducts from "./PortalProducts.jsx";
 import Settings from "./Settings.jsx";
 
 const top = (text, href) => ({ text, href });
 
 export default {
-  // AgentCore targets and Developer portals (Portals, Portal products) are real nav
-  // items in the native console, but Vyomi has no data model for either product at
-  // all (core/capabilities/aws/apigateway.json: not_simulated, no allowlist entry for
-  // a whole-page honest gap yet). They stay reachable as honest NotSimulated routes
-  // (OutOfScope.jsx) for spec completeness, but are left out of the sidebar so the
-  // always-visible nav text doesn't make their own page's title look "present" to the
-  // UI-conformance gate before the allowlist entry lands.
+  // AgentCore targets is a real nav item in the native console, but Vyomi has no data
+  // model for Bedrock AgentCore at all (core/capabilities/aws/apigateway.json:
+  // not_simulated, no allowlist entry for a whole-page honest gap yet). It stays
+  // reachable as an honest NotSimulated route (OutOfScope.jsx) for spec completeness,
+  // but is left out of the sidebar so the always-visible nav text doesn't make its own
+  // page's title look "present" to the UI-conformance gate before the allowlist lands.
+  // Portals / Portal products DO have a real native control plane (apigatewayv2
+  // CreatePortal/CreatePortalProduct) — built for real, so they're in the sidebar.
   nav: [
     { type: "link", text: "APIs", href: "#/apigateway/apis" },
     { type: "link", text: "Custom domain names", href: "#/apigateway/custom-domain-names" },
     { type: "link", text: "Domain name access associations", href: "#/apigateway/domain-name-access-associations" },
     { type: "link", text: "VPC links", href: "#/apigateway/vpc-links" },
+    { type: "link", text: "Portals", href: "#/apigateway/portals" },
+    { type: "link", text: "Portal products", href: "#/apigateway/portal-products" },
     { type: "link", text: "Usage plans", href: "#/apigateway/usage-plans" },
     { type: "link", text: "API keys", href: "#/apigateway/api-keys" },
     { type: "link", text: "Client certificates", href: "#/apigateway/client-certificates" },
@@ -62,7 +67,7 @@ export default {
     { pattern: "/apigateway/create-api-key", component: CreateApiKey, crumbs: () => [top("API keys", "#/apigateway/api-keys"), top("Create API key", "#/apigateway/create-api-key")] },
     { pattern: "/apigateway/client-certificates", component: ClientCertificates, crumbs: () => [top("Client certificates", "#/apigateway/client-certificates")] },
     { pattern: "/apigateway/settings", component: Settings, crumbs: () => [top("Settings", "#/apigateway/settings")] },
-    { pattern: "/apigateway/portals", component: Portals, crumbs: () => [] },
-    { pattern: "/apigateway/portal-products", component: PortalProducts, crumbs: () => [] },
+    { pattern: "/apigateway/portals", component: Portals, crumbs: () => [top("Portals", "#/apigateway/portals")] },
+    { pattern: "/apigateway/portal-products", component: PortalProducts, crumbs: () => [top("Portal products", "#/apigateway/portal-products")] },
   ],
 };
