@@ -92,29 +92,9 @@ def sign_envelope(env: dict, version: str) -> dict:
     return env
 
 
-# ── retry timing ────────────────────────────────────────────────────────────────────────────
-def retry_delay(policy: dict, retry: int) -> float:
-    """Seconds to wait before retry number `retry` (1-based) under an SNS delivery policy:
-    no-delay retries, then min-delay retries, then the backoff curve, then max-delay retries."""
-    total = int(policy.get("numRetries", 3))
-    lo, hi = float(policy.get("minDelayTarget", 20)), float(policy.get("maxDelayTarget", 20))
-    n_none = int(policy.get("numNoDelayRetries", 0))
-    n_min = int(policy.get("numMinDelayRetries", 0))
-    n_max = int(policy.get("numMaxDelayRetries", 0))
-    if retry <= n_none:
-        return 0.0
-    if retry <= n_none + n_min:
-        return lo
-    if retry > total - n_max:
-        return hi
-    k = retry - n_none - n_min                         # 1-based position on the backoff curve
-    span = max(1, total - n_none - n_min - n_max)
-    fn = str(policy.get("backoffFunction", "linear")).lower()
-    if fn in ("exponential", "geometric"):
-        return min(hi, lo * (2 ** (k - 1)) if fn == "geometric" else lo * (2 ** k))
-    if fn == "arithmetic":
-        return min(hi, lo * k)
-    return lo + (hi - lo) * (k - 1) / max(1, span - 1) if span > 1 else lo   # linear
+# ── retry timing (shared with the Nano/dev_server synchronous simulation, so both
+# substrates honour the exact same healthyRetryPolicy schedule) ──────────────────────────────
+retry_delay = sns_core.retry_delay
 
 
 # ── one delivery attempt (blocking; runs in a worker thread) ────────────────────────────────
