@@ -32,6 +32,7 @@ from core.azure_queue_core import AzureQueueStore
 from core.azure_table_core import AzureTableStore
 from core.nano_events import EventStore
 from core.kinesis_core import KinesisStore
+from core.dax_core import DaxStore
 from core.apigatewayv2_core import ApiGwV2Store
 from core.logs_core import LogsStore
 from core.elbv2_core import Elbv2Store
@@ -77,6 +78,7 @@ def get() -> dict:
             "iam": InMemoryIamStore(),
             "msg": InMemoryMessagingStore(),   # SHARED by sqs + sns (fan-out)
             "kinesis": KinesisStore(),         # Kinesis Data Streams
+            "dax": DaxStore(),                 # DynamoDB Accelerator (clusters + cache engine)
             "apigwv2": ApiGwV2Store(),
             # Console compute/network models: Lambda + API Gateway share ONE namespace
             # (AWS_PROXY reaches the registered functions); VPC has its own. They
@@ -136,6 +138,8 @@ def get() -> dict:
         _REG["rds"].cw_store = _REG["cw"]   # real DatabaseConnections/ReadIOPS/WriteIOPS metrics (rds.monitoring)
         _REG["vpc_net"].ram_store = _REG["ram"]   # DeleteSubnet/DeleteSecurityGroup refuse while actively shared
         _REG["ram"].vpc_store = _REG["vpc_net"]   # AssociateResourceShare validates the subnet/SG exists
+        _REG["dax"].ddb_store = _REG["ddb"]   # real read-through/write-through into the fronted table
+        _REG["dax"].cw_store = _REG["cw"]     # real AWS/DAX ItemCache/QueryCache hit/miss metrics
         _REG["logs"].lam_store, _REG["logs"].kinesis_store = _REG["compute"], _REG["kinesis"]   # real subscription-filter delivery
         _REG["cw"].logs_store = _REG["logs"]   # real log-based Contributor Insights rules
         _REG["msg"].logs_store = _REG["logs"]   # real SNS delivery-status logging (SQSSuccessFeedbackRoleArn/…)
