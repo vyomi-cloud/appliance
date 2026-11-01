@@ -12,6 +12,12 @@ const KEY_BODY = { purpose: "ENCRYPT_DECRYPT", versionTemplate: { algorithm: "GO
 async function ensureRing(wire) { await wire("POST", ringPath(RING), { svc: null, body: {} }).catch(() => {}); }
 async function ensureKey(wire) { await ensureRing(wire); await wire("POST", keyPath(RING, KEY), { svc: null, body: KEY_BODY }).catch(() => {}); }
 
+const AUTOKEY_CFG_PATH = `${base}/autokeyConfig?updateMask=keyProject,state`;
+async function ensureAutokey(wire) {
+  await wire("PATCH", AUTOKEY_CFG_PATH, { svc: null, headers: { "content-type": "application/json" }, body: { keyProject: PROJECT, state: "ACTIVE" } });
+}
+const keyHandlePath = (id) => `${base}/locations/${LOC}/keyHandles?keyHandleId=${id}`;
+
 export default {
   "kms-keyring": async (wire) => { await ensureRing(wire); return RING; },
   "kms-key": async (wire) => { await ensureKey(wire); return KEY; },
@@ -19,6 +25,12 @@ export default {
   "live-key-ring": async (wire, uniq) => { await wire("POST", ringPath(uniq), { svc: null, body: {} }); return uniq; },
 
   "live-key": async (wire, uniq) => { await ensureRing(wire); await wire("POST", keyPath(RING, uniq), { svc: null, body: KEY_BODY }); return uniq; },
+
+  "live-key-handle": async (wire, uniq) => {
+    await ensureAutokey(wire);
+    await wire("POST", keyHandlePath(uniq), { svc: null, headers: { "content-type": "application/json" }, body: { resourceTypeSelector: "compute.googleapis.com/Disk" } });
+    return uniq;
+  },
 
   // Key detail page proof: a unique label value shows up on the Overview tab (which the
   // conformance checker reaches by clicking through every tab on the page).

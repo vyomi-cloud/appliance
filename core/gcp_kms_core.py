@@ -42,12 +42,28 @@ per-secret enforcement in gcp_secretmanager_core.py): :encrypt/:decrypt and
 X-Cloudlearn-Principal header; an owner/root principal or an unconfigured
 policy always passes). get/list/:getIamPolicy stay open. Rotation and
 key-version lifecycle reuse the same helpers and slot in next.
+
+v4 GAP SWEEP (wave 5b) — Autokey: automatic per-resource key ring/key provisioning.
+The real AutokeyAdmin API configures a singleton AutokeyConfig on a FOLDER (state +
+a dedicated keyProject) and derives each project's "effective" config from its
+ancestry; Vyomi's Resource Manager core models projects only (no folders/orgs —
+see gcp_resourcemanager_core.py), so AutokeyConfig collapses to one singleton per
+PROJECT at `projects/{p}/autokeyConfig` (GET/PATCH) — same fields (keyProject,
+state), same enforcement, one less level of indirection. Once a project's config
+is ACTIVE, POSTing a KeyHandle (`projects/{p}/locations/{l}/keyHandles`) really
+provisions: it creates (or reuses) an `autokey-{location}` key ring in the
+configured key project and mints a brand-new CryptoKey in it with its own key
+material, through the SAME create-key path :encrypt/:decrypt/rotation already
+exercise — not bookkeeping. Creating a KeyHandle before Autokey is ACTIVE is
+refused (FAILED_PRECONDITION), matching the real API.
 """
 from __future__ import annotations
 
 import base64
 import json
 import os
+import re
+import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
@@ -96,6 +112,124 @@ def _rings(store: KeyStore) -> dict:
     if rings is None:
         rings = store.__dict__.setdefault("gcp_key_rings", {})
     return rings
+
+
+# ── Autokey bookkeeping (same seam as _rings: attached to the store instance) ─
+def _autokey_configs(store: KeyStore) -> dict:
+    cfgs = getattr(store, "gcp_autokey_configs", None)
+    if cfgs is None:
+        cfgs = store.__dict__.setdefault("gcp_autokey_configs", {})
+    return cfgs
+
+
+def _key_handles(store: KeyStore) -> dict:
+    handles = getattr(store, "gcp_key_handles", None)
+    if handles is None:
+        handles = store.__dict__.setdefault("gcp_key_handles", {})
+    return handles
+
+
+_PROJECT_ID_RE = re.compile(r"^[a-z][a-z0-9-]{4,28}[a-z0-9]$")
+_RESOURCE_TYPE_SELECTOR_RE = re.compile(r"^[a-z][a-z0-9.-]*\.googleapis\.com/[A-Za-z][A-Za-z0-9]*$")
+
+
+def _autokey_config_view(name: str, cfg: dict) -> dict:
+    return {"name": name, "keyProject": cfg.get("keyProject", ""), "state": cfg.get("state", "DISABLED")}
+
+
+def _key_handle_view(name: str, h: dict) -> dict:
+    view = {"name": name, "resourceTypeSelector": h.get("resourceTypeSelector", ""), "createTime": h.get("createTime", _now())}
+    if h.get("kmsKey"):
+        view["kmsKey"] = h["kmsKey"]
+    return view
+
+
+def _autokey_provision(store: KeyStore, key_project: str, location: str) -> str:
+    """Real provisioning: ensure the project's Autokey key ring exists, then mint a
+    brand-new CryptoKey with its OWN key material in it — the exact same steps
+    CreateCryptoKey takes over the wire, just invoked internally so a KeyHandle's
+    kmsKey is backed by a genuine, immediately usable key (not a stored reference)."""
+    rings = _rings(store)
+    ring_name = f"projects/{key_project}/locations/{location}/keyRings/autokey-{location}"
+    if ring_name not in rings:
+        rings[ring_name] = {"createTime": _now()}
+    key_name = f"{ring_name}/cryptoKeys/autokey-{uuid.uuid4().hex[:16]}"
+    now = _now()
+    meta = {
+        "purpose": "ENCRYPT_DECRYPT",
+        "algorithm": "GOOGLE_SYMMETRIC_ENCRYPTION",
+        "createTime": now,
+        "primary": "1",
+        "versions": {"1": {"state": "ENABLED", "createTime": now}},
+    }
+    material = store.engine.new_key_material()
+    store.put_key(key_name, meta, material)
+    store.material[_version_name(key_name, "1")] = material
+    return key_name
+
+
+def _autokey_config_dispatch(store: KeyStore, project: str, method: str, payload: dict, query: dict) -> GcpKmsResponse:
+    name = f"projects/{project}/autokeyConfig"
+    cfgs = _autokey_configs(store)
+    cfg = cfgs.setdefault(name, {"keyProject": "", "state": "DISABLED"})
+    if method == "GET":
+        return _json(200, _autokey_config_view(name, cfg))
+    if method == "PATCH":
+        mask = [m for m in str(query.get("updateMask") or query.get("update_mask") or "").split(",") if m]
+        fields = mask or [f for f in ("keyProject", "state") if f in payload]
+        if "keyProject" in fields:
+            kp = str(payload.get("keyProject") or "").strip()
+            kp = kp.rsplit("/", 1)[-1] if kp else kp
+            if kp and not _PROJECT_ID_RE.match(kp):
+                return _err(400, "INVALID_ARGUMENT", "keyProject must be a valid project ID.")
+            cfg["keyProject"] = kp
+        if "state" in fields:
+            state = str(payload.get("state") or "").upper()
+            if state not in ("ACTIVE", "DISABLED"):
+                return _err(400, "INVALID_ARGUMENT", "state must be ACTIVE or DISABLED.")
+            if state == "ACTIVE" and not cfg.get("keyProject"):
+                return _err(400, "FAILED_PRECONDITION", "Autokey requires a keyProject before it can be set to ACTIVE.")
+            cfg["state"] = state
+        store.persist()
+        return _json(200, _autokey_config_view(name, cfg))
+    return _err(400, "INVALID_ARGUMENT", f"Unsupported method {method} on autokeyConfig")
+
+
+def _key_handles_dispatch(store: KeyStore, segs: list, verb: str | None, method: str, payload: dict, query: dict) -> GcpKmsResponse:
+    project, location = segs[1], segs[3]
+    handles = _key_handles(store)
+    if len(segs) == 5:   # .../keyHandles collection
+        if method == "POST":
+            cfg = _autokey_configs(store).get(f"projects/{project}/autokeyConfig") or {}
+            if cfg.get("state") != "ACTIVE":
+                return _err(400, "FAILED_PRECONDITION",
+                            f"Autokey is not enabled for project {project}. Set up Autokey before creating a key handle.")
+            selector = str(payload.get("resourceTypeSelector") or "").strip()
+            if not _RESOURCE_TYPE_SELECTOR_RE.match(selector):
+                return _err(400, "INVALID_ARGUMENT",
+                            "resourceTypeSelector must look like '<service>.googleapis.com/<Type>'.")
+            hid = str(query.get("keyHandleId") or payload.get("keyHandleId") or "").strip() or f"autokey-{uuid.uuid4().hex[:16]}"
+            name = f"projects/{project}/locations/{location}/keyHandles/{hid}"
+            if name in handles:
+                return _err(409, "ALREADY_EXISTS", f"KeyHandle {name} already exists.")
+            kms_key = _autokey_provision(store, cfg["keyProject"], location)
+            handles[name] = {"resourceTypeSelector": selector, "createTime": _now(), "kmsKey": kms_key}
+            store.persist()
+            opname = f"projects/{project}/locations/{location}/operations/autokey-{uuid.uuid4().hex[:12]}"
+            return _json(200, {"name": opname, "done": True,
+                                "response": {"@type": "type.googleapis.com/google.cloud.kms.v1.KeyHandle",
+                                             **_key_handle_view(name, handles[name])}})
+        if method == "GET":
+            items = [_key_handle_view(n, h) for n, h in sorted(handles.items())
+                     if n.startswith(f"projects/{project}/locations/") and (location == "-" or n.split("/")[3] == location)]
+            return _json(200, {"keyHandles": items})
+        return _err(400, "INVALID_ARGUMENT", f"Unsupported method {method} on keyHandles")
+    if len(segs) == 6 and method == "GET" and not verb:   # single keyHandle
+        name = "/".join(segs)
+        if name not in handles:
+            return _err(404, "NOT_FOUND", f"KeyHandle {name} not found.")
+        return _json(200, _key_handle_view(name, handles[name]))
+    return _err(400, "INVALID_ARGUMENT", "Unsupported request on keyHandles")
 
 
 # ── CRC32C (Castagnoli) — the checksum the Cloud KMS wire carries ──────────
@@ -318,6 +452,12 @@ def dispatch(store: KeyStore, method: str, path: str,
             payload = {}
     except Exception:
         payload = {}
+
+    # ── Autokey: projects/{p}/autokeyConfig and projects/{p}/locations/{l}/keyHandles[/{id}] ──
+    if len(segs) == 3 and segs[0] == "projects" and segs[2] == "autokeyConfig" and not verb:
+        return _autokey_config_dispatch(store, segs[1], method, payload, query)
+    if len(segs) >= 5 and segs[0] == "projects" and segs[2] == "locations" and segs[4] == "keyHandles":
+        return _key_handles_dispatch(store, segs, verb, method, payload, query)
 
     if len(segs) < 5 or segs[0] != "projects" or segs[2] != "locations" or segs[4] != "keyRings":
         return _err(404, "NOT_FOUND", f"Unknown resource path: {path}")

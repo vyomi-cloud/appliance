@@ -86,11 +86,16 @@
  "gcp.kms.autokey": {
   "title": "Autokey (automatic per-resource key ring/key provisioning)",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Autokey provisions key rings and keys automatically when a resource is created, gated by an organization/folder policy and a dedicated key project. Vyomi doesn't model org policy or cross-project key provisioning, so there is nothing to wire this to."
+   "AutokeyConfig (enable + key project) and CreateKeyHandle are real and enforced: a KeyHandle can only be created once Autokey is ACTIVE for the project, and creating one really provisions an \"autokey-{location}\" key ring and a brand-new CryptoKey (own key material) in the configured key project — not a stored reference.",
+   "The real API configures Autokey on a folder/organization and derives each project's effective config from its ancestry; Vyomi models projects only (no folder/org hierarchy — see core/gcp_resourcemanager_core.py), so AutokeyConfig is a project-scoped singleton instead.",
+   "Other Vyomi services' create flows (Compute disks, Cloud SQL instances, …) don't yet call CreateKeyHandle automatically when a CMEK option is chosen; provision the key handle explicitly via this page or the API first."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_kms_core.py"
   ]
  }
 }

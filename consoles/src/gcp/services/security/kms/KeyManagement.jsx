@@ -1,7 +1,6 @@
 /* Key management: the console's three top tabs (Key rings / Key inventory / Autokey) all
  * live on one page, same route family. */
-import { useState } from "react";
-import { Box, Button, Stack, Tab, Tabs, Typography } from "@mui/material";
+import { Button, Stack, Tab, Tabs, Typography } from "@mui/material";
 import AddIcon from "@mui/icons-material/esm/Add.js";
 import RefreshIcon from "@mui/icons-material/esm/Refresh.js";
 import { useAsync } from "../../../../common/useAsync.js";
@@ -10,6 +9,7 @@ import ResourceTable from "../../../kit/ResourceTable.jsx";
 import { CapabilityContainer } from "../../../kit/Capability.jsx";
 import { fmtDate, PageHeader } from "../../../kit/common.jsx";
 import { Link, hashHref } from "../../../link.jsx";
+import Autokey from "./Autokey.jsx";
 import * as api from "./api.js";
 
 const TABS = [["rings", "Key rings", "#/security/kms/keyrings"], ["inventory", "Key inventory", "#/security/kms/key-inventory"], ["autokey", "Autokey", "#/security/kms/autokey"]];
@@ -90,16 +90,5 @@ function KeyInventory() {
         empty={<Typography variant="body2" color="text.secondary">There are no keys in this project.</Typography>}
       />
     </CapabilityContainer>
-  );
-}
-
-function Autokey() {
-  return (
-    <Box>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Autokey automatically provisions a key ring and key the first time a resource that supports CMEK is created in a project, folder or organization.
-      </Typography>
-      <CapabilityContainer id="gcp.kms.autokey" title="Autokey" />
-    </Box>
   );
 }

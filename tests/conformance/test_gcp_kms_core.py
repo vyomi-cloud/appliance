@@ -280,6 +280,73 @@ def run() -> int:
     aggrings = gkms.dispatch(st, "GET", "/v1/projects/demo/locations/-/keyRings", {}, {}, b"")
     _check("aggregated keyRings list includes the ring", any(k["name"] == ring_name for k in _jbody(aggrings)["keyRings"]))
 
+    # 11. Autokey (v4 GAP SWEEP wave 5b): AutokeyConfig starts DISABLED; creating a KeyHandle
+    #     before it's ACTIVE is refused; setting ACTIVE without a keyProject is refused;
+    #     once ACTIVE, creating a KeyHandle really provisions a key ring + a brand-new
+    #     CryptoKey (with its own key material) in the configured key project.
+    cfg0 = gkms.dispatch(st, "GET", "/v1/projects/demo/autokeyConfig", {}, {}, b"")
+    _check("autokeyConfig default DISABLED", cfg0.status == 200 and _jbody(cfg0)["state"] == "DISABLED")
+
+    kh_too_early = gkms.dispatch(st, "POST", "/v1/projects/demo/locations/us-central1/keyHandles", {},
+                                 {"content-type": "application/json"},
+                                 json.dumps({"resourceTypeSelector": "compute.googleapis.com/Disk"}).encode())
+    _check("createKeyHandle before Autokey is ACTIVE -> 400 FAILED_PRECONDITION",
+           kh_too_early.status == 400 and _jbody(kh_too_early)["error"]["status"] == "FAILED_PRECONDITION")
+
+    bad_active = gkms.dispatch(st, "PATCH", "/v1/projects/demo/autokeyConfig", {"updateMask": "state"},
+                               {"content-type": "application/json"}, json.dumps({"state": "ACTIVE"}).encode())
+    _check("set ACTIVE without a keyProject -> 400 FAILED_PRECONDITION",
+           bad_active.status == 400 and _jbody(bad_active)["error"]["status"] == "FAILED_PRECONDITION")
+
+    set_kp = gkms.dispatch(st, "PATCH", "/v1/projects/demo/autokeyConfig", {"updateMask": "keyProject,state"},
+                           {"content-type": "application/json"},
+                           json.dumps({"keyProject": "demo-keys", "state": "ACTIVE"}).encode())
+    _check("set keyProject + ACTIVE 200", set_kp.status == 200)
+    _check("autokeyConfig now ACTIVE with keyProject", _jbody(set_kp) == {
+        "name": "projects/demo/autokeyConfig", "keyProject": "demo-keys", "state": "ACTIVE"})
+
+    bad_selector = gkms.dispatch(st, "POST", "/v1/projects/demo/locations/us-central1/keyHandles", {},
+                                 {"content-type": "application/json"},
+                                 json.dumps({"resourceTypeSelector": "not-a-selector"}).encode())
+    _check("createKeyHandle with a bad resourceTypeSelector -> 400 INVALID_ARGUMENT", bad_selector.status == 400)
+
+    kh = gkms.dispatch(st, "POST", "/v1/projects/demo/locations/us-central1/keyHandles", {"keyHandleId": "disk-1"},
+                       {"content-type": "application/json"},
+                       json.dumps({"resourceTypeSelector": "compute.googleapis.com/Disk"}).encode())
+    _check("createKeyHandle 200", kh.status == 200)
+    khbody = _jbody(kh)
+    _check("createKeyHandle returns a done Operation", khbody["done"] is True)
+    khview = khbody["response"]
+    kh_name = "projects/demo/locations/us-central1/keyHandles/disk-1"
+    _check("KeyHandle name", khview["name"] == kh_name)
+    kms_key = khview.get("kmsKey", "")
+    _check("KeyHandle kmsKey is provisioned in the configured key project",
+           kms_key.startswith("projects/demo-keys/locations/us-central1/keyRings/autokey-us-central1/cryptoKeys/"))
+
+    # The provisioned key is a REAL, usable CryptoKey — not a bookkeeping reference.
+    prov_enc = gkms.dispatch(st, "POST", f"/v1/{kms_key}:encrypt", {}, {"content-type": "application/json"},
+                             json.dumps({"plaintext": base64.b64encode(b"autokey works").decode()}).encode())
+    _check("Autokey-provisioned CryptoKey really encrypts", prov_enc.status == 200)
+
+    dup_kh = gkms.dispatch(st, "POST", "/v1/projects/demo/locations/us-central1/keyHandles", {"keyHandleId": "disk-1"},
+                           {"content-type": "application/json"},
+                           json.dumps({"resourceTypeSelector": "compute.googleapis.com/Disk"}).encode())
+    _check("duplicate keyHandleId -> 409 ALREADY_EXISTS", dup_kh.status == 409)
+
+    get_kh = gkms.dispatch(st, "GET", f"/v1/{kh_name}", {}, {}, b"")
+    _check("getKeyHandle 200", get_kh.status == 200 and _jbody(get_kh)["name"] == kh_name)
+
+    list_kh = gkms.dispatch(st, "GET", "/v1/projects/demo/locations/us-central1/keyHandles", {}, {}, b"")
+    _check("listKeyHandles includes it", any(h["name"] == kh_name for h in _jbody(list_kh)["keyHandles"]))
+
+    disable_again = gkms.dispatch(st, "PATCH", "/v1/projects/demo/autokeyConfig", {"updateMask": "state"},
+                                  {"content-type": "application/json"}, json.dumps({"state": "DISABLED"}).encode())
+    _check("disable Autokey 200", disable_again.status == 200 and _jbody(disable_again)["state"] == "DISABLED")
+    kh_after_disable = gkms.dispatch(st, "POST", "/v1/projects/demo/locations/us-central1/keyHandles", {"keyHandleId": "disk-2"},
+                                     {"content-type": "application/json"},
+                                     json.dumps({"resourceTypeSelector": "compute.googleapis.com/Disk"}).encode())
+    _check("createKeyHandle refused once Autokey is disabled again -> 400", kh_after_disable.status == 400)
+
     print("\nGCP Cloud KMS core conformance: ALL GREEN")
     return 0
 

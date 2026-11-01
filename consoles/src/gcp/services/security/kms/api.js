@@ -63,3 +63,22 @@ export const STATE_LABEL = {
   ENABLED: "Enabled", DISABLED: "Disabled", DESTROY_SCHEDULED: "Scheduled for destruction", DESTROYED: "Destroyed",
 };
 export const primaryState = (ck) => STATE_LABEL[ck.primary?.state] || ck.primary?.state || "—";
+
+// Autokey: AutokeyConfig is a singleton per project; a KeyHandle automatically provisions a
+// key ring + key in the configured key project the first time a resource needs one.
+export const getAutokeyConfig = () => restJson("GET", `${base()}/autokeyConfig`);
+export const setAutokeyConfig = (fields, mask) => restJson("PATCH", `${base()}/autokeyConfig`, { query: { updateMask: mask.join(",") }, body: fields });
+
+export const listKeyHandles = (loc = "-") => restJson("GET", `${base()}/locations/${e(loc)}/keyHandles`).then((r) => r.keyHandles || []);
+export const createKeyHandle = (loc, resourceTypeSelector, id) =>
+  restJson("POST", `${base()}/locations/${e(loc)}/keyHandles`, { query: id ? { keyHandleId: id } : undefined, body: { resourceTypeSelector } });
+export const parseKeyHandleName = (name) => {
+  const m = /^projects\/([^/]+)\/locations\/([^/]+)\/keyHandles\/([^/]+)$/.exec(name) || [];
+  return { project: m[1], location: m[2], id: m[3] };
+};
+
+export const RESOURCE_TYPE_SELECTORS = [
+  "compute.googleapis.com/Disk", "compute.googleapis.com/Image", "compute.googleapis.com/Snapshot",
+  "compute.googleapis.com/MachineImage", "sqladmin.googleapis.com/Instance", "storage.googleapis.com/Bucket",
+  "bigquery.googleapis.com/Dataset", "container.googleapis.com/Cluster",
+];
