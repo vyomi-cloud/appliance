@@ -398,7 +398,7 @@ def test_key_vault_blades():
     kv = f"{P}/Microsoft.KeyVault/vaults/kvb"
     s, v = call(arm, "PUT", kv, {"location": "eastus", "properties": {"sku": {"name": "standard"}, "enableRbacAuthorization": False}}, av)
     _check("vault reports network ACLs and its URI", v["properties"]["networkAcls"]["defaultAction"] == "Allow"
-           and v["properties"]["vaultUri"].startswith("https://kvb."))
+           and v["properties"]["vaultUri"].endswith("/azure-data/keyvault/kvb/"))
     s, v = call(arm, "PATCH", kv, {"properties": {"enableRbacAuthorization": True, "enabledForDeployment": True}}, av)
     _check("access configuration persists", v["properties"]["enableRbacAuthorization"] is True and v["properties"]["enabledForDeployment"] is True)
     ra = f"/subscriptions/{SUB}/resourceGroups/{RG}/providers/Microsoft.Authorization/roleAssignments/11111111-2222-3333-4444-555555555555"
