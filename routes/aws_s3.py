@@ -1187,7 +1187,7 @@ def _register_unified_s3(app: FastAPI) -> None:
     excluding "s3" (or VYOMI_LEGACY_WIRE=1)."""
     from core import wire_ingress as _wi
 
-    methods = ["GET", "PUT", "POST", "DELETE", "HEAD"]
+    methods = ["GET", "PUT", "POST", "DELETE", "HEAD", "PATCH"]   # PATCH: only the GCP REST fallback in _serve
 
     async def _serve(bucket: str, request: Request) -> Response:
         from routes import aws_messaging_unified as _amu
@@ -1212,6 +1212,8 @@ def _register_unified_s3(app: FastAPI) -> None:
                     return await _wi.serve(_wi.new_services_router() or _wi.appliance_router(), request, path=path)
                 finally:
                     _ctx.REQUEST_PROVIDER.reset(_tok)
+        if request.method == "PATCH":
+            raise HTTPException(status_code=405, detail="Method Not Allowed")   # S3 has no PATCH
         if _is_reserved_bucket(bucket):
             raise HTTPException(status_code=404, detail="Not found")
         if request.method == "POST" and _wi.is_unified("rds"):

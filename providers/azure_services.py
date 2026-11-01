@@ -993,9 +993,10 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
         # over this same space-scoped `_state`, so offline never drifts behind Nano again.
         return await _handle_core_arm(request, method, rest, base)
     if top is None:
-        return _error(404, "ResourceTypeNotSupported",
-                      f"Type '{namespace}/{type_chain[1]}' is not simulated. "
-                      f"Supported: {', '.join(sorted(c['namespace']+'/'+c['type'] for c in RESOURCE_CATALOG))}.")
+        # Not a catalog type: the core engine also serves paths that aren't resource types at all
+        # (Microsoft.Features, Microsoft.PolicyInsights, Microsoft.Billing, locations/*/usages, …),
+        # and answers with the native error when it doesn't know one either. One ARM engine.
+        return await _handle_core_arm(request, method, rest, base)
 
     # Microsoft.App (Container Apps): a dedicated engine (core/azure_app_core.py) owns the
     # environment/app/revision/job semantics; the ARM store below is its resource map.

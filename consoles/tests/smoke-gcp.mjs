@@ -770,8 +770,10 @@ try {
   await page.getByText(SA_EMAIL).first().waitFor({ timeout: 10000 });
   const entriesAfter = (await wjson("/v2/entries:list", { method: "POST", body: JSON.stringify({ resourceNames: ["projects/vyomi-project"] }) })).entries || [];
   check("Data Access audit log Admin Read toggle enabled → a real Cloud Logging entry for an iam.googleapis.com read",
-    entriesAfter.filter((e) => (e.logName || "").includes("iam.googleapis.com%2Fdata_access")).length >
-    entriesBefore.filter((e) => (e.logName || "").includes("iam.googleapis.com%2Fdata_access")).length);
+    // entries:list is a newest-first page, so counts stop growing once it's full (durable offline
+    // state): what proves it is an entry that wasn't there before.
+    entriesAfter.some((e) => (e.logName || "").includes("iam.googleapis.com%2Fdata_access")
+      && !entriesBefore.some((b) => b.insertId === e.insertId)));
 
   // Privileged Access Manager: requesting a grant on an auto-approved entitlement via the
   // UI activates it immediately and really adds the IAM binding (cross-checked over the
