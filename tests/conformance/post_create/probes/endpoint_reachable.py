@@ -11,6 +11,9 @@ import json, os, shutil, socket, subprocess, sys, time, urllib.error, urllib.req
 
 WHAT = sys.argv[1] if len(sys.argv) > 1 and not sys.argv[1].startswith("http") else "redis"
 BASE = (sys.argv[-1] if sys.argv[-1].startswith("http") else os.environ.get("VYOMI_ENDPOINT", "http://localhost:9000")).rstrip("/")
+# An HTTP upstream the APPLIANCE (container) can reach, for HTTP-integration checks; set
+# VYOMI_PROBE_UPSTREAM=http://host.docker.internal:<port>/healthz. Unset -> those checks are skipped, not faked.
+UPSTREAM = os.environ.get("VYOMI_PROBE_UPSTREAM", "")
 fails = 0
 SFX = str(int(time.time()) % 100000)
 
@@ -202,7 +205,7 @@ def aws_apigateway():
     # HTTP -> the simulator's own health endpoint
     s, r2 = jcall("POST", f"/restapis/{aid}/resources/{root}", {"pathPart": "http"})
     jcall("PUT", f"/restapis/{aid}/resources/{r2['id']}/methods/GET", {"authorizationType": "NONE"})
-    jcall("PUT", f"/restapis/{aid}/resources/{r2['id']}/methods/GET/integration", {"type": "HTTP", "httpMethod": "GET", "uri": "http://host.docker.internal:9420/healthz"})   # an upstream the appliance container can reach (the unpatched sim on :9420)
+    jcall("PUT", f"/restapis/{aid}/resources/{r2['id']}/methods/GET/integration", {"type": "HTTP", "httpMethod": "GET", "uri": UPSTREAM})
     # Lambda proxy
     fn = f"pcfn{SFX}"
     s, _ = jcall("POST", "/api/lambda/functions", {"function_name": fn, "runtime": "python3.12", "handler": "lambda_function.lambda_handler",
@@ -215,6 +218,9 @@ def aws_apigateway():
     check(s in (200, 201), "create_deployment", f"{s} {str(d)[:120]}")
     u = f"{BASE}/restapis/{aid}/prod/_user_request_"
     for path, want, label in (("/mock", b"mock-ok", "MOCK"), ("/http", b"", "HTTP"), ("/lam", b"lambda-ok", "Lambda proxy")):
+        if label == "HTTP" and not UPSTREAM:
+            print("[SKIP] HTTP integration (set VYOMI_PROBE_UPSTREAM)")
+            continue
         st, body, _ = http("GET", u + path)
         check(st == 200 and want in body, f"GET {u.replace(BASE, '<origin>')}{path} ({label} integration)", f"{st} {body[:100]}")
     jcall("DELETE", f"/restapis/{aid}")
@@ -226,13 +232,58 @@ def aws_apigatewayv2():
     ep = api.get("apiEndpoint", "")
     check(s in (200, 201) and ep.startswith(BASE), "create_api shows an ApiEndpoint on the simulator origin", f"{s} {ep}")
     aid = api.get("apiId")
-    s, ig = jcall("POST", f"/v2/apis/{aid}/integrations", {"integrationType": "HTTP_PROXY", "integrationMethod": "GET", "integrationUri": "http://host.docker.internal:9420/healthz", "payloadFormatVersion": "1.0"})
+    s, ig = jcall("POST", f"/v2/apis/{aid}/integrations", {"integrationType": "HTTP_PROXY", "integrationMethod": "GET", "integrationUri": UPSTREAM, "payloadFormatVersion": "1.0"})
     s, rt = jcall("POST", f"/v2/apis/{aid}/routes", {"routeKey": "GET /hi", "target": f"integrations/{ig.get('integrationId')}"})
     s, st = jcall("POST", f"/v2/apis/{aid}/stages", {"stageName": "$default", "autoDeploy": True})
     time.sleep(1)
+    if not UPSTREAM:
+        print("[SKIP] ApiEndpoint -> HTTP_PROXY integration (set VYOMI_PROBE_UPSTREAM)")
+        jcall("DELETE", f"/v2/apis/{aid}")
+        return
     code, body, _ = http("GET", ep + "/hi")
     check(code == 200, "GET <shown ApiEndpoint>/hi reaches the integration", f"{code} {body[:100]}")
     jcall("DELETE", f"/v2/apis/{aid}")
+
+
+def aws_elb():
+    import re, urllib.parse
+    if not shutil.which("docker"):
+        check(False, "docker available for the helper web target")
+        return
+    web = f"pc-elb-web-{SFX}"
+    net = os.environ.get("VYOMI_PROBE_NETWORK", "vyomi-net")
+    subprocess.run(["docker", "run", "-d", "--name", web, "--network", net, "registry:2.8.3"], capture_output=True)
+    try:
+        ip = subprocess.run(["docker", "inspect", "-f", "{{(index .NetworkSettings.Networks \"%s\").IPAddress}}" % net, web],
+                            capture_output=True, text=True).stdout.strip()
+        time.sleep(2)
+
+        def q(**p):
+            body = urllib.parse.urlencode({"Version": "2015-12-01", **p}).encode()
+            st, d, _ = http("POST", BASE + "/", body, {"content-type": "application/x-www-form-urlencoded",
+                            "Authorization": "AWS4-HMAC-SHA256 Credential=A/20260101/us-east-1/elasticloadbalancing/aws4_request, SignedHeaders=host, Signature=x"})
+            return st, d.decode()
+        nm = f"pc-lb-{SFX}"
+        st, x = q(Action="CreateTargetGroup", Name=f"pc-tg-{SFX}", Protocol="HTTP", Port="5000", VpcId="vpc-0123456789abcdef0", TargetType="ip")
+        tg = re.search(r"<TargetGroupArn>(.*?)</TargetGroupArn>", x).group(1)
+        q(Action="RegisterTargets", TargetGroupArn=tg, **{"Targets.member.1.Id": ip, "Targets.member.1.Port": "5000"})
+        st, x = q(Action="CreateLoadBalancer", Name=nm, **{"Subnets.member.1": "subnet-0aaaaaaaaaaaaaaa1", "Subnets.member.2": "subnet-0bbbbbbbbbbbbbbb2"})
+        check(st == 200, "create_load_balancer", x[:200])
+        lb = re.search(r"<LoadBalancerArn>(.*?)</LoadBalancerArn>", x).group(1)
+        q(Action="CreateListener", LoadBalancerArn=lb, Protocol="HTTP", Port="80", **{"DefaultActions.member.1.Type": "forward", "DefaultActions.member.1.TargetGroupArn": tg})
+        st, x = q(Action="DescribeLoadBalancers", **{"Names.member.1": nm})
+        check("<Code>active</Code>" in x, "describe_load_balancers reports the LB active", re.sub(r"\s+", " ", x)[-300:])
+        s, row = jcall("GET", "/api/aws/elbv2/load-balancers/" + nm)
+        url = row.get("local_url", "")
+        if not url:
+            check(False, "console/API show a local URL on the simulator origin", str(row)[:200])
+            return
+        check(url.startswith(BASE), "console/API show a local URL on the simulator origin", str(row)[:200])
+        st, body, _ = http("GET", url + "v2/")
+        check(st == 200, "GET <local_url>v2/ is forwarded to the registered target", f"{st} {body[:100]}")
+        jcall("DELETE", "/api/aws/elbv2/load-balancers/" + nm)
+    finally:
+        subprocess.run(["docker", "rm", "-f", web], capture_output=True)
 
 
 if __name__ == "__main__":
