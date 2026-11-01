@@ -65,7 +65,9 @@ def run(store=None, cw_store=None):
         "StartTime": now - 300, "EndTime": now + 1, "Period": 300, "Statistics": ["Sum"],
     })
     total_read = sum(dp["Sum"] or 0 for dp in read_stats["Datapoints"])
-    _check("GetItem + Scan consumed real read units", total_read >= 2.0)
+    # GetItem + Scan of tiny items, both eventually consistent (the default) → 0.5 RCU each,
+    # the real AWS-accurate minimum (see test_dynamodb_capacity_core.py for the full math).
+    _check("GetItem + Scan consumed real read units", total_read >= 1.0)
 
     op_stats = cw.op_get_metric_statistics(cws, {
         "Namespace": "AWS/DynamoDB", "MetricName": "ConsumedWriteCapacityUnits",

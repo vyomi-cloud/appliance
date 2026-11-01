@@ -109,30 +109,39 @@
   },
   "dax-clusters": {
     "route": "#/dynamodb/dax/clusters",
-    "honest_page": true
+    "live": "live-dax-cluster"
   },
   "dax-create-cluster": {
     "route": "#/dynamodb/dax/clusters",
-    "honest_page": true
+    "expand": [
+      "text=Create cluster"
+    ]
   },
   "dax-subnet-groups": {
     "route": "#/dynamodb/dax/subnet-groups",
-    "honest_page": true
+    "live": "live-dax-subnet-group"
   },
   "dax-create-subnet-group": {
     "route": "#/dynamodb/dax/subnet-groups",
-    "honest_page": true
+    "expand": [
+      "text=Create subnet group"
+    ]
   },
   "dax-parameter-groups": {
     "route": "#/dynamodb/dax/parameter-groups",
-    "honest_page": true
+    "live": "live-dax-parameter-group"
   },
   "dax-create-parameter-group": {
     "route": "#/dynamodb/dax/parameter-groups",
-    "honest_page": true
+    "expand": [
+      "text=Create parameter group"
+    ]
   },
   "dax-events": {
     "route": "#/dynamodb/dax/events",
-    "honest_page": true
+    "fixtures": [
+      "dax-cluster"
+    ],
+    "live": "live-dax-event"
   }
 }

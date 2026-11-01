@@ -1,5 +1,5 @@
 /* DynamoDB over the native JSON wire (X-Amz-Target DynamoDB_20120810.*). */
-import { awsJson } from "../../../common/wire.js";
+import { awsJson, awsQuery, asList } from "../../../common/wire.js";
 
 const call = (op, body) => awsJson("dynamodb", `DynamoDB_20120810.${op}`, body, { version: "1.0" });
 
@@ -87,6 +87,52 @@ export const putTableAlarm = (tableName, { alarmName, metricName, statistic, com
     Threshold: threshold, ComparisonOperator: comparison, AlarmActions: snsArn ? [snsArn] : [],
   });
 export const deleteTableAlarms = (names) => CW("DeleteAlarms", { AlarmNames: names });
+
+// ── DAX (AmazonDAXV3 JSON protocol — native wire, control plane) ─────────
+const dax = (op, body = {}) => awsJson("dax", `AmazonDAXV3.${op}`, body, { version: "1.1" });
+
+export const createDaxCluster = (input) => dax("CreateCluster", input).then((r) => r.Cluster);
+export const describeDaxClusters = async (names) => (await dax("DescribeClusters", names ? { ClusterNames: names } : {})).Clusters || [];
+export const updateDaxCluster = (input) => dax("UpdateCluster", input).then((r) => r.Cluster);
+export const deleteDaxCluster = (clusterName) => dax("DeleteCluster", { ClusterName: clusterName }).then((r) => r.Cluster);
+export const increaseDaxReplicationFactor = (clusterName, newReplicationFactor, availabilityZones) =>
+  dax("IncreaseReplicationFactor", { ClusterName: clusterName, NewReplicationFactor: newReplicationFactor,
+    ...(availabilityZones ? { AvailabilityZones: availabilityZones } : {}) }).then((r) => r.Cluster);
+export const decreaseDaxReplicationFactor = (clusterName, newReplicationFactor, nodeIdsToRemove) =>
+  dax("DecreaseReplicationFactor", { ClusterName: clusterName, NewReplicationFactor: newReplicationFactor,
+    ...(nodeIdsToRemove ? { NodeIdsToRemove: nodeIdsToRemove } : {}) }).then((r) => r.Cluster);
+export const rebootDaxNode = (clusterName, nodeId) => dax("RebootNode", { ClusterName: clusterName, NodeId: nodeId }).then((r) => r.Cluster);
+
+// DAX subnet groups are drawn from real EC2 VPCs/subnets (same account, "ec2" signing name).
+const ec2Call = (action, params = {}) => awsQuery("ec2", action, params).then((r) => r[`${action}Response`] || {});
+export async function listVpcsForDax() {
+  const r = await ec2Call("DescribeVpcs");
+  return asList(r.vpcSet?.item).map((x) => ({ VpcId: x.vpcId, CidrBlock: x.cidrBlock }));
+}
+export async function listSubnetsForDax(vpcId) {
+  const r = await ec2Call("DescribeSubnets", vpcId ? { "Filter.1.Name": "vpc-id", "Filter.1.Value.1": vpcId } : {});
+  return asList(r.subnetSet?.item).map((x) => ({
+    SubnetId: x.subnetId, VpcId: x.vpcId, AvailabilityZone: x.availabilityZone,
+    CidrBlock: x.cidrBlock, Ipv6CidrBlock: x.ipv6CidrBlockAssociationSet?.item?.ipv6CidrBlock || "",
+  }));
+}
+
+export const createDaxSubnetGroup = (input) => dax("CreateSubnetGroup", input).then((r) => r.SubnetGroup);
+export const describeDaxSubnetGroups = async () => (await dax("DescribeSubnetGroups", {})).SubnetGroups || [];
+export const updateDaxSubnetGroup = (input) => dax("UpdateSubnetGroup", input).then((r) => r.SubnetGroup);
+export const deleteDaxSubnetGroup = (subnetGroupName) => dax("DeleteSubnetGroup", { SubnetGroupName: subnetGroupName });
+
+export const createDaxParameterGroup = (input) => dax("CreateParameterGroup", input).then((r) => r.ParameterGroup);
+export const describeDaxParameterGroups = async () => (await dax("DescribeParameterGroups", {})).ParameterGroups || [];
+export const describeDaxParameters = async (parameterGroupName) =>
+  (await dax("DescribeParameters", { ParameterGroupName: parameterGroupName })).Parameters || [];
+export const updateDaxParameterGroup = (parameterGroupName, parameterNameValues) =>
+  dax("UpdateParameterGroup", { ParameterGroupName: parameterGroupName, ParameterNameValues: parameterNameValues }).then((r) => r.ParameterGroup);
+export const deleteDaxParameterGroup = (parameterGroupName) => dax("DeleteParameterGroup", { ParameterGroupName: parameterGroupName });
+
+export const describeDaxEvents = async (sourceName) => (await dax("DescribeEvents", sourceName ? { SourceName: sourceName } : {})).Events || [];
+export const listDaxTags = async (resourceName) => (await dax("ListTags", { ResourceName: resourceName })).Tags || [];
+export const tagDaxResource = (resourceName, tags) => dax("TagResource", { ResourceName: resourceName, Tags: tags });
 
 /** DynamoDB attribute-value JSON → plain JS, and back. */
 export function unmarshal(av) {

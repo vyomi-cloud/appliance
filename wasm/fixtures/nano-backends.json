@@ -45,6 +45,11 @@
   "category": "aws"
  },
  {
+  "name": "dax",
+  "label": "dax \u00b7 DaxStore",
+  "category": "aws"
+ },
+ {
   "name": "apigwv2",
   "label": "apigwv2 \u00b7 ApiGwV2Store",
   "category": "aws"
@@ -62,6 +67,11 @@
  {
   "name": "ssm",
   "label": "ssm \u00b7 SsmStore",
+  "category": "aws"
+ },
+ {
+  "name": "asg",
+  "label": "asg \u00b7 AutoScalingStore",
   "category": "aws"
  },
  {

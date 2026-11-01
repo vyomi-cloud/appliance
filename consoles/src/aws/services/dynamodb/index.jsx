@@ -12,12 +12,15 @@ import Exports from "./Exports.jsx";
 import ExportToS3 from "./ExportToS3.jsx";
 import Imports from "./Imports.jsx";
 import ImportFromS3 from "./ImportFromS3.jsx";
+import DaxClusters from "./DaxClusters.jsx";
+import DaxSubnetGroups from "./DaxSubnetGroups.jsx";
+import DaxParameterGroups from "./DaxParameterGroups.jsx";
+import DaxEvents from "./DaxEvents.jsx";
 import { NotSimulatedContainer } from "../../kit/common.jsx";
 import { getLayoutSettings } from "./prefs.js";
 
 const ns = (title) => () => <NotSimulatedContainer title={title} />;
-const NS = [["update-settings", "Update settings"], ["integrations", "Integrations"], ["reserved-capacity", "Reserved capacity"],
-  ["dax/clusters", "DAX Clusters"], ["dax/subnet-groups", "DAX Subnet groups"], ["dax/parameter-groups", "DAX Parameter groups"], ["dax/events", "DAX Events"]];
+const NS = [["update-settings", "Update settings"], ["integrations", "Integrations"], ["reserved-capacity", "Reserved capacity"]];
 
 // The bare "/dynamodb" entry route honours the "Default entry page" console preference
 // (Dashboard / Tables / Explore items) — Tables.jsx renders both the Tables and Explore
@@ -62,6 +65,10 @@ export default {
     { pattern: "/dynamodb/exports/create", component: ExportToS3, crumbs: () => [{ text: "Exports to S3", href: "#/dynamodb/exports" }, { text: "Export table to Amazon S3", href: "#/dynamodb/exports/create" }] },
     { pattern: "/dynamodb/imports", component: Imports, crumbs: () => [{ text: "Imports from S3", href: "#/dynamodb/imports" }] },
     { pattern: "/dynamodb/imports/create", component: ImportFromS3, crumbs: () => [{ text: "Imports from S3", href: "#/dynamodb/imports" }, { text: "Import from S3", href: "#/dynamodb/imports/create" }] },
+    { pattern: "/dynamodb/dax/clusters", component: DaxClusters, crumbs: () => [{ text: "DAX", href: "#/dynamodb/dax/clusters" }, { text: "Clusters", href: "#/dynamodb/dax/clusters" }] },
+    { pattern: "/dynamodb/dax/subnet-groups", component: DaxSubnetGroups, crumbs: () => [{ text: "DAX", href: "#/dynamodb/dax/clusters" }, { text: "Subnet groups", href: "#/dynamodb/dax/subnet-groups" }] },
+    { pattern: "/dynamodb/dax/parameter-groups", component: DaxParameterGroups, crumbs: () => [{ text: "DAX", href: "#/dynamodb/dax/clusters" }, { text: "Parameter groups", href: "#/dynamodb/dax/parameter-groups" }] },
+    { pattern: "/dynamodb/dax/events", component: DaxEvents, crumbs: () => [{ text: "DAX", href: "#/dynamodb/dax/clusters" }, { text: "Events", href: "#/dynamodb/dax/events" }] },
     ...NS.map(([p, t]) => ({ pattern: `/dynamodb/${p}`, component: ns(t), crumbs: () => [{ text: t, href: `#/dynamodb/${p}` }] })),
   ],
 };

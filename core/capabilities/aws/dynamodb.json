@@ -37,7 +37,7 @@
    "Differential parity vs DynamoDB Local (tests/parity/ddb_differential.py, report in tests/parity/reports/): 149 of 152 hand-written cases (658 of 661 responses) and 400 of 400 random 30-operation sequences match; the 3 deviating cases are the TTL and CreateTable leniencies documented in this file.",
    "Scan returns items in key order, not DynamoDB's storage-hash order, so Scan page boundaries and Segment membership differ (the union of all pages/segments is identical).",
    "The 1 MB page limit is not applied to Query/Scan, and BatchGetItem/BatchWriteItem never return Unprocessed keys/items.",
-   "ConsumedCapacity is not reported (ReturnConsumedCapacity is ignored) and capacity is never throttled.",
+   "ConsumedCapacity (ReturnConsumedCapacity TOTAL/INDEXES) and provisioned-throughput throttling are real — see dynamodb.monitor.",
    "TransactWriteItems ClientRequestToken idempotency is not tracked.",
    "Maximum nesting depth (32) of maps/lists is not enforced."
   ],
@@ -236,11 +236,13 @@
    "offline": "limited"
   },
   "limitations": [
-   "Every PutItem/GetItem/UpdateItem/DeleteItem/Query/Scan/BatchGetItem/BatchWriteItem/TransactWriteItems/TransactGetItems call pushes a real AWS/DynamoDB ConsumedRead-/ConsumedWriteCapacityUnits and SuccessfulRequestLatency datapoint (derived from the actual request, never synthetic) into the shared CloudWatch core, on both the TableName and the TableName+Operation dimension sets — the same engine core/vpc_core.py's EC2 status-check metrics use. Alarms set on these metrics evaluate and fire for real.",
-   "Consumed capacity is approximated as 1 unit per item/key per call (no item-size rounding, no distinction between eventually- and strongly-consistent reads) and latency reflects simulator processing time, not real network/service time. ThrottledRequests, SystemErrors and UserErrors are not published (Vyomi never throttles and item-level validation errors fail the call before any metric would be recorded)."
+   "Every PutItem/GetItem/UpdateItem/DeleteItem/Query/Scan/BatchGetItem/BatchWriteItem/TransactWriteItems/TransactGetItems call pushes real AWS/DynamoDB ConsumedRead-/ConsumedWriteCapacityUnits, SuccessfulRequestLatency, ReturnedItemCount, ItemCount and TableSizeBytes datapoints (derived from the actual request, never synthetic) into the shared CloudWatch core, on both the TableName and the TableName+Operation dimension sets — the same engine core/vpc_core.py's EC2 status-check metrics use. Alarms set on these metrics evaluate and fire for real; 'Create alarm' pre-fills the TableName dimension and alarm actions publish to the simulator's own SNS.",
+   "Consumed capacity is computed the AWS way: 1 RCU per 4 KB (eventually-consistent reads cost half), 1 WCU per 1 KB, transactions at 2x; ReturnConsumedCapacity TOTAL/INDEXES is honoured. Provisioned tables enforce it with a real per-table/GSI token bucket (burst = 300s of capacity) and raise ProvisionedThroughputExceededException, pushing ThrottledRequests/Read-/WriteThrottleEvents; on-demand tables never throttle. Every failed call pushes UserErrors (4xx) or SystemErrors (5xx).",
+   "GSI write capacity is approximated as the base item's WCU charged to every GSI it projects onto (no separate per-index item-size accounting), and Query/Scan RCU is billed once for the whole page rather than per evaluated item — both close enough for the Monitor tab and throttling to be real, not AWS-exact to the unit. Latency reflects simulator processing time, not real network/service time."
   ],
   "tests": [
-   "tests/conformance/test_dynamodb_monitor_core.py"
+   "tests/conformance/test_dynamodb_monitor_core.py",
+   "tests/conformance/test_dynamodb_capacity_core.py"
   ]
  },
  "dynamodb.global-tables": {
@@ -255,6 +257,66 @@
   ],
   "tests": [
    "tests/conformance/test_dynamodb_global_tables_core.py"
+  ]
+ },
+ "dynamodb.dax.clusters": {
+  "title": "DAX clusters",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "A rebooted node drops that cluster's whole item cache rather than just its own share (Vyomi models one shared cache per cluster, not per-node partitions)."
+  ],
+  "tests": [
+   "tests/conformance/test_dax_core.py"
+  ]
+ },
+ "dynamodb.dax.subnet-groups": {
+  "title": "DAX subnet groups",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_dax_core.py"
+  ]
+ },
+ "dynamodb.dax.parameter-groups": {
+  "title": "DAX parameter groups",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_dax_core.py"
+  ]
+ },
+ "dynamodb.dax.events": {
+  "title": "DAX events",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_dax_core.py"
+  ]
+ },
+ "dynamodb.dax.cache": {
+  "title": "DAX cache engine (item cache + query cache)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "The cache engine itself is real: read-through/write-through in front of the DynamoDB store (core/nosql_store.py) with record-ttl-millis/query-ttl-millis TTLs from the cluster's parameter group, LRU eviction sized by node type, and strongly-consistent reads genuinely bypassing the cache — proven in tests/conformance/test_dax_core.py by mutating the underlying table directly and showing a cache hit serves the stale value while ConsistentRead doesn't.",
+   "DAX's real client speaks a binary protocol over a persistent TCP connection to the cluster's discovery endpoint; that wire isn't exposed yet (planned: a wave-6 tunnel TCP relay), so the cache engine is reachable only through these conformance hooks (get_item/put_item/delete_item/query/put_query_result), not from an unmodified DAX SDK pointed at the simulated endpoint."
+  ],
+  "tests": [
+   "tests/conformance/test_dax_core.py"
   ]
  }
 }
