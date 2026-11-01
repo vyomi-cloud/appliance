@@ -142,8 +142,10 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
   /* The whole feature area (breadcrumb, title, actions, content) is ONE white rounded bordered card;
      the panels and tables inside it carry no border of their own. */
   .wrap,.wizard-page{background:#fff;border:1px solid var(--line);border-radius:12px;margin:16px 24px;padding:20px 24px;max-width:1600px}
-  .wrap .card,.wrap .table-wrap,.wrap .kv-card,.wrap .col-card,.wizard-page .card,.wizard-page .kv-card,.wizard-page .col-card{border:none}
+  .wrap .card,.wrap .kv-card,.wrap .col-card,.wizard-page .card,.wizard-page .kv-card,.wizard-page .col-card{border:none}
   .wizard-page .summary-card{border:none;background:var(--bg)}
+  /* Grids keep their rounded border; the rules inside (toolbar, header, rows) run edge to edge of the grid. */
+  .wrap .table-wrap{border:1px solid var(--line);border-radius:8px;overflow:hidden}
   .page-head{display:flex;align-items:center;gap:14px;margin-bottom:18px}
   .page-head h1{font-size:24px;font-weight:400;font-family:'Google Sans',sans-serif;flex:1}
   .page-head h1 .count{color:var(--sub);font-weight:400;margin-left:6px;font-size:18px}
