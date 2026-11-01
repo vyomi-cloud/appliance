@@ -836,6 +836,12 @@ def _get_service_account_metrics(store, resource: str, iamc_store=None) -> GcpIa
     email = ident if "@" in ident else _sa_email(ident, project)
     if email not in sas or sas[email]["projectId"] != project:
         return _err(404, f"Unknown service account: {ident}", "NOT_FOUND")
+    return _json(200, service_account_metrics(email, iamc_store))
+
+
+def service_account_metrics(email: str, iamc_store=None) -> dict:
+    """The metrics document for one service account's issued credentials (also the offline
+    console route's, whose service accounts live in the pre-v4 IAM state)."""
     issued = list(getattr(iamc_store, "issued", {}).values()) if iamc_store is not None else []
     rows = [r for r in issued if r.get("serviceAccount") == email]
     by_method: dict[str, int] = {}
@@ -848,13 +854,13 @@ def _get_service_account_metrics(store, resource: str, iamc_store=None) -> GcpIa
             by_day[day] = by_day.get(day, 0) + 1
         if (r.get("issueTime") or "") > last_call:
             last_call = r["issueTime"]
-    return _json(200, {
+    return {
         "serviceAccount": email,
         "totalRequests": len(rows),
         "byMethod": [{"method": m, "count": c} for m, c in sorted(by_method.items())],
         "series": [{"date": d, "count": c} for d, c in sorted(by_day.items())],
         "lastCallTime": last_call,
-    })
+    }
 
 
 # ── Managed Workload Identities (nested under a workload identity pool) ─────

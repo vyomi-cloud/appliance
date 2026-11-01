@@ -1104,6 +1104,9 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
         blocked = _core_lock_block(rid, full_type, for_delete=False)   # ReadOnly locks (same types as the core)
         if blocked is not None:
             return blocked
+        blocked = _core_create_block(sub, rg, full_type, key, payload)   # assigned policies + quotas
+        if blocked is not None:
+            return blocked
         _new_vault = full_type.lower() == "microsoft.keyvault/vaults" and key not in _state
         resp = _upsert(rid, key, full_type, leaf_name, top, payload, base, patch=(method == "PATCH"))
         if _new_vault and key in _state:   # the creator gets data-plane access, as on the core engine + Nano
@@ -1315,6 +1318,19 @@ def _core_lock_block(rid: str, full_type: str, for_delete: bool):
     if not out:
         return None
     return JSONResponse(status_code=out.get("status", 409), content=out.get("body"))
+
+
+def _core_create_block(sub: str, rg, full_type: str, key: str, payload: dict):
+    """Assigned Azure Policy (allowed locations, …) and subscription quotas for writes served by
+    this offline catalog: the core ARM engine's own checks, so they behave the same as on Nano."""
+    try:
+        arm = core_arm()
+        out = arm._policy_block(sub, rg, full_type, payload) or arm._quota_block(sub, full_type, key, payload)
+    except Exception:
+        return None
+    if not out:
+        return None
+    return JSONResponse(status_code=out.get("status", 403), content=out.get("body"))
 
 
 def _record_arm_activity(rid: str, operation_name: str, sub: str) -> None:

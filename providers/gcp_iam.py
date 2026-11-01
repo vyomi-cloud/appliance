@@ -161,6 +161,14 @@ def api_gcp_iam_get_service_account(project: str, account: str):
     project = _gcp_project_name(project)
     s = _server()
     accounts = gcp_iam_state.setdefault("service_accounts", {}).setdefault(project, {})
+    if account.endswith(":metrics"):   # the console's Metrics tab ({account}:metrics custom verb)
+        from core.gcp_iam_core import service_account_metrics
+        from core.gcp_iamcredentials_core import shared_store as _iamc_store
+        ident = account[: -len(":metrics")]
+        for key, rec in accounts.items():
+            if ident in {key, rec.get("email", ""), rec.get("name", "")}:
+                return service_account_metrics(rec["email"], _iamc_store())
+        raise HTTPException(404, detail=f"Unknown service account: {ident}")
     for key, rec in accounts.items():
         if account in {key, rec.get("email", ""), rec.get("name", "")}:
             _iam_audit_log(project, "ADMIN_READ", f"iam.googleapis.com serviceAccounts.get {rec.get('email', account)}")
