@@ -254,6 +254,15 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
   .sub-content{flex:1;padding:20px 24px;overflow-y:auto;min-width:0}
 
   .sub-h{font-size:18px;font-weight:500;font-family:'Google Sans',sans-serif;margin:0 0 12px;color:var(--ink)}
+  /* Tab bodies (bucket Objects/Lifecycle/Permissions/Labels/Activity, ...): lists and empty states are
+     rounded bordered panels like the rest of the sections. */
+  .sub-content .empty{border:1px solid var(--line);border-radius:8px;background:#fff}
+  .sub-content table.gc{border-collapse:separate;border-spacing:0;border:1px solid var(--line);border-radius:8px}
+  .sub-content table.gc tr:first-child th:first-child{border-top-left-radius:7px}
+  .sub-content table.gc tr:first-child th:last-child{border-top-right-radius:7px}
+  .sub-content table.gc tbody tr:last-child td{border-bottom:none}
+  .sub-content table.gc tbody tr:last-child td:first-child{border-bottom-left-radius:7px}
+  .sub-content table.gc tbody tr:last-child td:last-child{border-bottom-right-radius:7px}
 
   .kv-card{background:#fff;border:1px solid var(--line);border-radius:8px;padding:16px 20px;margin-bottom:14px}
   .kv-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px 24px}
