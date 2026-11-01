@@ -931,6 +931,11 @@ def mount_new_services(app, router: AwsWireRouter | None = None) -> None:
     _ns = {**appliance_stores(), **_aps.net_new_core_stores()}
     if not is_unified("lambda"):
         _ns.pop("lam", None)
+    # Cloud Monitoring's Overview "VMs with Ops Agent", uptime checks targeting a GCE instance and
+    # Cost Explorer's Cloud Storage line read other C0 stores' REAL state — the same durable objects.
+    if _ns.get("gcp_mon") is not None:
+        _ns["gcp_mon"].compute_vm_store = _ns.get("gcp_compute_vm")
+        _ns["gcp_mon"].gcs_store = _ns.get("gcs")
     try:   # the Azure SQL data plane enforces the server's ARM settings (publicNetworkAccess, …):
         from providers.azure_services import core_arm as _core_arm   # read the appliance's OWN ARM state
         _ns["az_arm"] = _core_arm()

@@ -2713,6 +2713,7 @@ class AppStateIamCredentialsStore(_CoreSlotStore, _giamcc.IamCredentialsStore):
 
 class AppStateMonitoringStore(_CoreSlotStore, _gmonc.MonitoringStore):
     _BASE, _SLOT, _PROVIDER = _gmonc.MonitoringStore, "monitoring_core", "gcp"
+    _LINKS = ("compute_vm_store", "gcs_store")   # Ops Agent / uptime targets / Cost Explorer read these (runtime)
 
 
 class AppStateResourceManagerStore(_CoreSlotStore, _grmc.ResourceManagerStore):

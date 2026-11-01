@@ -64,11 +64,14 @@
  "gcp.monitoring.uptime-checks.probing": {
   "title": "Uptime check results (pass/fail per region)",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Vyomi never dispatches the configured probe from any region, so there is no real up/down result to report — configured checks are never shown as failing."
+   "Every check is actually probed (run_uptime_probes), writing a real monitoring.googleapis.com/uptime_check/check_passed point per region — the same metric the console's own alert-policy wizard already filters on. A check whose monitored resource is a Compute Engine instance reflects that instance's real RUNNING/stopped status. Vyomi has no outbound network access (see 'Nothing leaves the simulator' in AGENT-UI.md), so a check against an arbitrary external host — what the create wizard always builds — deterministically fails closed instead of reaching the real internet; the verdict doesn't vary by region, since Vyomi runs one simulated network, not six real checker fleets."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_monitoring_core.py"
   ]
  },
  "gcp.monitoring.synthetic-monitors": {
@@ -187,11 +190,14 @@
  "gcp.monitoring.cost-explorer": {
   "title": "Cost Explorer",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Cost Explorer reads from Cloud Billing export data, a separate product Vyomi doesn't simulate."
+   "Real Cost Explorer reads a Cloud Billing BigQuery export Vyomi doesn't generate, but real GCP also exposes project spend as a Cloud Monitoring metric (billing.googleapis.com/billing/total_cost, the same series a Billing Budget alert evaluates) — that's the native-wire path this appliance uses instead. The month-to-date cost per service is computed for real from the project's actual resource inventory (on-demand pricing x real uptime/usage, the same engine core/cost_model.py gives Azure Cost Management), today for Compute Engine instances and Cloud Storage bucket bytes only — other services aren't priced into the total yet."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_monitoring_core.py"
   ]
  },
  "gcp.monitoring.trace-explorer": {
@@ -230,21 +236,47 @@
  "gcp.monitoring.ops-agent": {
   "title": "VMs with Ops Agent",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Ops Agent inventory comes from Compute Engine VMs reporting a running agent. Vyomi doesn't model Compute Engine instances or agent check-ins."
+   "Compute Engine instances are real (core/gcp_compute_instances_core.py). Vyomi has no agent process to run inside a simulated VM, so the agent.googleapis.com/agent/uptime heartbeat a real Ops Agent reports is instead derived from the same real, operator-set signal OS Config uses to decide a VM is managed by an Ops Agent policy: instance metadata enable-osconfig=TRUE (gcloud compute instances create --metadata=enable-osconfig=TRUE) on a RUNNING instance. A VM without that metadata key is correctly never counted."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_monitoring_core.py"
+  ]
+ },
+ "gcp.monitoring.settings.metric-scope": {
+  "title": "Metric Scope (Settings tab)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "A metrics scope's monitored projects are real resources (the Metrics Scopes API's locations/global/metricsScopes/{project}/projects create/get/delete). Once a project is added, Metrics Explorer, dashboards, the Cost Explorer and the Ops Agent/uptime panels genuinely aggregate that project's time series too (list_time_series reads every project in scope_projects()) — real cross-project aggregation, not a stored-but-unused list. Alert policies stay single-project, matching the real product: a policy only ever evaluates its own project's data."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_monitoring_core.py"
   ]
  },
  "gcp.monitoring.settings.log-scopes": {
-  "title": "Log scopes / Metric scope / Trace scopes (Settings tabs)",
+  "title": "Log Scopes (Settings tab)",
   "level": {
    "nano": "not_simulated",
    "offline": "not_simulated"
   },
   "limitations": [
-   "Scopes link a monitoring workspace to other projects' logs/metrics/traces for multi-project observability. Vyomi is single-project and doesn't model cross-project scoping."
+   "Log scopes let a Monitoring workspace search log buckets from other projects in Log Explorer. Vyomi's Log Explorer is itself a separate, unbuilt product in this console (an external link in the nav, like Log router and Logs storage), so there is nothing for a log scope to extend."
+  ]
+ },
+ "gcp.monitoring.settings.trace-scopes": {
+  "title": "Trace Scopes (Settings tab)",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Trace scopes extend Trace Explorer to other projects' spans. Vyomi has no span-ingestion engine at all (see gcp.monitoring.trace-explorer), so there is nothing for a scope to aggregate."
   ]
  }
 }

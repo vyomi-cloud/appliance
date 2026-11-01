@@ -82,6 +82,12 @@ export const createDashboard = (body) => restJson("POST", `${v1()}/dashboards`, 
 export const patchDashboard = (id, body) => restJson("PATCH", `${v1()}/dashboards/${e(id)}`, { body });
 export const deleteDashboard = (id) => restJson("DELETE", `${v1()}/dashboards/${e(id)}`);
 
+// ── metrics scope (Settings > Metric Scope; real cross-project aggregation, Metrics Scopes API v1) ──
+export const getMetricsScope = () => restJson("GET", `/v1/locations/global/metricsScopes/${e(getProject())}`);
+export const addMonitoredProject = (projectId) => restJson("POST", `/v1/locations/global/metricsScopes/${e(getProject())}/projects`,
+  { body: { name: `locations/global/metricsScopes/${getProject()}/projects/${projectId}` } });
+export const removeMonitoredProject = (projectId) => restJson("DELETE", `/v1/locations/global/metricsScopes/${e(getProject())}/projects/${e(projectId)}`);
+
 // ── snoozes (v1) ──────────────────────────────────────────────────────────────
 export const listSnoozes = async () => (await restJson("GET", `${v1()}/snoozes`)).snoozes || [];
 export const createSnooze = (body) => restJson("POST", `${v1()}/snoozes`, { body });

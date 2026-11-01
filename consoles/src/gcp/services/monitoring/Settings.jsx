@@ -1,5 +1,7 @@
-/* Settings — Notification channels (real CRUD), Log/Metric/Trace scopes (cross-project
- * observability scoping; Vyomi is single-project, so these are an honest gap). */
+/* Settings — Notification channels (real CRUD). Metric Scope is real cross-project
+ * aggregation (Metrics Scopes API v1; see gcp.monitoring.settings.metric-scope). Log/Trace
+ * Scopes stay an honest gap: they'd extend Log Explorer / Trace Explorer, both separate,
+ * unbuilt products in this console. */
 import { useState } from "react";
 import { Button, Dialog, DialogActions, DialogContent, DialogTitle, FormControl, IconButton, InputLabel, MenuItem, Menu, Select, Stack, Tab, Tabs, TextField, Typography } from "@mui/material";
 import AddIcon from "@mui/icons-material/esm/Add.js";
@@ -8,7 +10,7 @@ import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import ResourceTable from "../../kit/ResourceTable.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
-import { PageHeader, Section } from "../../kit/common.jsx";
+import { PageHeader } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { useProject } from "../../project.js";
 import * as api from "./api.js";
@@ -69,6 +71,59 @@ function ChannelRowMenu({ chan, onDeleted }) {
   );
 }
 
+function MetricScopeTab() {
+  const project = useProject();
+  const notify = useNotify();
+  const [addOpen, setAddOpen] = useState(false);
+  const [pid, setPid] = useState("");
+  const { data, loading, error, reload } = useAsync(() => api.getMetricsScope(), [project]);
+  const monitored = (data?.monitoredProjects || []).filter((p) => p.name.split("/").pop() !== project);
+  return (
+    <>
+      <Typography variant="body2" sx={{ mb: 2 }}>
+        This project's metric scope includes <b>{project}</b> and every project added below — Metrics Explorer,
+        dashboards, Cost Explorer and the Overview panels read all of their time series.
+      </Typography>
+      <Stack direction="row" justifyContent="flex-end" sx={{ mb: 1 }}>
+        <Button startIcon={<AddIcon />} onClick={() => setAddOpen(true)}>Add a project</Button>
+      </Stack>
+      <ResourceTable
+        resourceName="monitored projects"
+        items={monitored}
+        loading={loading}
+        error={error}
+        onRetry={reload}
+        rowKey={(p) => p.name}
+        columns={[
+          { id: "name", header: "Project ID", cell: (p) => p.name.split("/").pop() },
+          { id: "actions", header: "", cell: (p) => (
+            <Button size="small" onClick={async () => {
+              await api.removeMonitoredProject(p.name.split("/").pop());
+              notify.success("Removed monitored project");
+              reload();
+            }}>Remove</Button>
+          ) },
+        ]}
+        empty={<Typography variant="body2" color="text.secondary">No other projects are monitored from this workspace.</Typography>}
+      />
+      <Dialog open={addOpen} onClose={() => setAddOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Add a monitored project</DialogTitle>
+        <DialogContent>
+          <TextField autoFocus fullWidth label="Project ID" value={pid} onChange={(e) => setPid(e.target.value)} sx={{ mt: 1 }} inputProps={{ "aria-label": "Project ID" }} />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setAddOpen(false)}>Cancel</Button>
+          <Button variant="contained" disabled={!pid.trim()} onClick={async () => {
+            await api.addMonitoredProject(pid.trim());
+            notify.success(`Added "${pid.trim()}" to this project's metric scope`);
+            setPid(""); setAddOpen(false); reload();
+          }}>Add</Button>
+        </DialogActions>
+      </Dialog>
+    </>
+  );
+}
+
 function ChannelsTab() {
   const project = useProject();
   const [createOpen, setCreateOpen] = useState(false);
@@ -109,17 +164,13 @@ export default function Settings({ query }) {
         <Tab value="tracescopes" label="Trace Scopes" />
       </Tabs>
       {tab === "channels" && <ChannelsTab />}
-      {tab === "logscopes" && (
-        <Section title="Log scopes" actions={<Button size="small" disabled>Create log scope</Button>}>
-          <CapabilityContainer id="gcp.monitoring.settings.log-scopes" title="Cross-project log scopes" />
-        </Section>
-      )}
+      {tab === "logscopes" && <CapabilityContainer id="gcp.monitoring.settings.log-scopes" title="Log scopes" />}
       {tab === "metricscope" && (
-        <Section title="Metric scope">
-          <Typography variant="body2">This project's metric scope includes only <b>{useProject()}</b> — Vyomi is single-project, so there are no monitored projects to add.</Typography>
-        </Section>
+        <CapabilityContainer id="gcp.monitoring.settings.metric-scope" title="Metric scope">
+          <MetricScopeTab />
+        </CapabilityContainer>
       )}
-      {tab === "tracescopes" && <CapabilityContainer id="gcp.monitoring.settings.log-scopes" title="Trace scopes" />}
+      {tab === "tracescopes" && <CapabilityContainer id="gcp.monitoring.settings.trace-scopes" title="Trace scopes" />}
     </>
   );
 }
