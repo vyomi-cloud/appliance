@@ -275,6 +275,7 @@
       wrap.innerHTML = "";
       wrap.append(h("div", { style: S.box },
         h("div", { style: S.title }, "In-browser VM"),
+        h("div", { style: S.sub }, { aws: "Instance ID", gcp: "Instance", azure: "Virtual machine" }[cloud] + ": " + ref),
         h("div", { style: S.sub }, "In Vyomi Nano this instance is a real Linux VM running inside this browser tab (v86, 32-bit x86, Alpine Linux). " +
           "The cloud's image is not booted: the OS is Alpine, the login user follows the cloud (" + userHint + ").")));
       let r, j = null;
