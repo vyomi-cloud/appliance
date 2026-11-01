@@ -205,6 +205,70 @@ def run(store=None):
     _check("UpdateCodeSigningConfig", j(call("PUT", f"/2015-03-31/code-signing-configs/{cscid}", {"Description": "d2"}))["Description"] == "d2")
     _check("DeleteCodeSigningConfig", call("DELETE", f"/2015-03-31/code-signing-configs/{cscid}").status == 200)
 
+    # Code signing — deploy-time enforcement (lambda.code-signing): a function's attached
+    # config really gates CreateFunction/UpdateFunctionCode against a declared
+    # SigningProfileVersionArn, per the config's Enforce/Warn policy.
+    good_profile = "arn:aws:signer:us-east-1:123456789012:/signing-profiles/good/1"
+    bad_profile = "arn:aws:signer:us-east-1:123456789012:/signing-profiles/bad/1"
+    r = call("POST", "/2015-03-31/code-signing-configs",
+            {"Description": "enforce", "AllowedPublishers": {"SigningProfileVersionArns": [good_profile]},
+             "CodeSigningPolicies": {"UntrustedArtifactOnDeployment": "Enforce"}})
+    enforce_arn = j(r)["CodeSigningConfigArn"]
+    r = call("POST", "/2015-03-31/code-signing-configs",
+            {"Description": "warn", "AllowedPublishers": {"SigningProfileVersionArns": [good_profile]},
+             "CodeSigningPolicies": {"UntrustedArtifactOnDeployment": "Warn"}})
+    warn_arn = j(r)["CodeSigningConfigArn"]
+
+    r = call("POST", F, {"FunctionName": "sigfn-create", "Code": {"Source": "def handler(e, c):\n    return {}\n"},
+                         "CodeSigningConfigArn": enforce_arn})
+    _check("CreateFunction rejects unsigned code under an Enforce config",
+          r.status == 400 and j(r)["error"]["code"] == "CodeVerificationFailedException")
+    _check("rejected CreateFunction left no function behind", call("GET", f"{F}/sigfn-create").status == 404)
+    r = call("POST", F, {"FunctionName": "sigfn-create",
+                         "Code": {"Source": "def handler(e, c):\n    return {}\n", "SigningProfileVersionArn": good_profile},
+                         "CodeSigningConfigArn": enforce_arn})
+    _check("CreateFunction accepts signed code under an Enforce config", r.status == 201)
+    _check("GetFunctionCodeSigningConfig reflects the create-time association",
+          j(call("GET", f"{F}/sigfn-create/code-signing-config"))["CodeSigningConfigArn"] == enforce_arn)
+
+    sigfn = "sigfn"
+    call("POST", F, {"FunctionName": sigfn, "Code": {"Source": "def handler(e, c):\n    return {'v': 1}\n"}})
+    _check("PutFunctionCodeSigningConfig 404s on an unknown config",
+          call("PUT", f"{F}/{sigfn}/code-signing-config",
+               {"CodeSigningConfigArn": "arn:aws:lambda:us-east-1:123456789012:code-signing-config:csc-nope"}).status == 404)
+    r = call("PUT", f"{F}/{sigfn}/code-signing-config", {"CodeSigningConfigArn": enforce_arn})
+    _check("PutFunctionCodeSigningConfig", r.status == 200 and j(r)["CodeSigningConfigArn"] == enforce_arn)
+    _check("GetFunctionCodeSigningConfig", j(call("GET", f"{F}/{sigfn}/code-signing-config"))["CodeSigningConfigArn"] == enforce_arn)
+
+    r = call("PUT", f"{F}/{sigfn}/code", {"Source": "def handler(e, c):\n    return {'v': 2}\n"})
+    _check("UpdateFunctionCode rejects an unsigned deploy under Enforce",
+          r.status == 400 and j(r)["error"]["code"] == "CodeVerificationFailedException")
+    r = call("PUT", f"{F}/{sigfn}/code", {"Source": "def handler(e, c):\n    return {'v': 2}\n", "SigningProfileVersionArn": bad_profile})
+    _check("UpdateFunctionCode rejects an untrusted signing profile under Enforce", r.status == 400)
+    r = call("PUT", f"{F}/{sigfn}/code", {"Source": "def handler(e, c):\n    return {'v': 2}\n", "SigningProfileVersionArn": good_profile})
+    _check("UpdateFunctionCode accepts a trusted signed deploy under Enforce",
+          r.status == 200 and j(r)["CodeSha256"])
+
+    _check("DeleteCodeSigningConfig conflicts while attached to a function",
+          call("DELETE", f"/2015-03-31/code-signing-configs/{enforce_arn.rsplit(':', 1)[-1]}").status == 409)
+
+    _check("DeleteFunctionCodeSigningConfig", call("DELETE", f"{F}/{sigfn}/code-signing-config").status == 204)
+    _check("GetFunctionCodeSigningConfig 404s once detached", call("GET", f"{F}/{sigfn}/code-signing-config").status == 404)
+    r = call("PUT", f"{F}/{sigfn}/code", {"Source": "def handler(e, c):\n    return {'v': 3}\n"})
+    _check("UpdateFunctionCode allowed again once detached", r.status == 200)
+
+    _check("PutFunctionCodeSigningConfig (warn)", call("PUT", f"{F}/{sigfn}/code-signing-config", {"CodeSigningConfigArn": warn_arn}).status == 200)
+    r = call("PUT", f"{F}/{sigfn}/code", {"Source": "def handler(e, c):\n    return {'v': 4}\n"})
+    _check("UpdateFunctionCode allows an unsigned deploy under Warn (matches real Lambda)", r.status == 200)
+
+    _check("DeleteFunctionCodeSigningConfig (warn)", call("DELETE", f"{F}/{sigfn}/code-signing-config").status == 204)
+    _check("DeleteFunctionCodeSigningConfig (create-time fn)", call("DELETE", f"{F}/sigfn-create/code-signing-config").status == 204)
+    _check("DeleteCodeSigningConfig (enforce) now succeeds once detached",
+          call("DELETE", f"/2015-03-31/code-signing-configs/{enforce_arn.rsplit(':', 1)[-1]}").status == 200)
+    _check("DeleteCodeSigningConfig (warn)", call("DELETE", f"/2015-03-31/code-signing-configs/{warn_arn.rsplit(':', 1)[-1]}").status == 200)
+    _check("DeleteFunction sigfn", call("DELETE", f"{F}/{sigfn}").status == 204)
+    _check("DeleteFunction sigfn-create", call("DELETE", f"{F}/sigfn-create").status == 204)
+
     r = call("POST", "/2015-03-31/network-connectors", {"Name": "uictest-nc", "VpcId": "vpc-1", "NetworkProtocol": "TCP"})
     _check("CreateNetworkConnector", r.status == 201 and j(r)["NetworkProtocol"] == "TCP")
     _check("ListNetworkConnectors", any(x["Name"] == "uictest-nc" for x in j(call("GET", "/2015-03-31/network-connectors"))["NetworkConnectors"]))

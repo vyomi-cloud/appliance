@@ -76,10 +76,18 @@ function CodeTab({ name, cfg, source, reload }) {
   const [addLayer, setAddLayer] = useState(false);
   const layers = useAsync(() => api.listLayers(), []);
   const [layerChoice, setLayerChoice] = useState(null);
+  const csc = useAsync(() => api.getFunctionCodeSigningConfig(name), [name, cfg.RevisionId]);
+  const cscs = useAsync(() => api.listCodeSigningConfigs(), [name, cfg.RevisionId]);
+  const attachedCsc = (cscs.data || []).find((c) => c.CodeSigningConfigArn === csc.data?.CodeSigningConfigArn);
+  const enforceSigning = attachedCsc?.CodeSigningPolicies?.UntrustedArtifactOnDeployment === "Enforce";
+  const [signingProfile, setSigningProfile] = useState(null);
 
   const deploy = async () => {
     setBusy(true);
-    try { await api.updateFunctionCode(name, { Source: code }); notify.success("Code deployed."); reload(); }
+    try {
+      await api.updateFunctionCode(name, { Source: code, ...(signingProfile ? { SigningProfileVersionArn: signingProfile.value } : {}) });
+      notify.success("Code deployed."); reload();
+    }
     catch (e) { notify.error(e); } finally { setBusy(false); }
   };
 
@@ -95,6 +103,13 @@ function CodeTab({ name, cfg, source, reload }) {
         <FormField label="Code editor" description="Upload from: .zip file / Amazon S3 location">
           <Textarea value={code} onChange={({ detail }) => setCode(detail.value)} rows={12} spellcheck={false} />
         </FormField>
+        {enforceSigning && (
+          <FormField label="Signing profile version ARN" description={`This function's code signing configuration (${attachedCsc.CodeSigningConfigId}) enforces signature validation — deploys must declare one of its allowed signing profiles or Vyomi rejects them.`}>
+            <Select selectedOption={signingProfile} onChange={({ detail }) => setSigningProfile(detail.selectedOption)}
+              placeholder="Choose a signing profile"
+              options={(attachedCsc.AllowedPublishers?.SigningProfileVersionArns || []).map((p) => ({ value: p, label: p }))} />
+          </FormField>
+        )}
       </CapabilityContainer>
 
       <KeyValue title="Code properties" columns={3} items={[
@@ -269,6 +284,8 @@ function ConfigurationTab({ name, cfg, reload }) {
   const policy = useAsync(() => api.getPolicy(name), [name, cfg.RevisionId]);
   const concurrency = useAsync(() => api.recentInvocations(name).then(() => cfg.ReservedConcurrentExecutions), [name, cfg.RevisionId]);
   const eic = useAsync(() => api.getFunctionEventInvokeConfig(name), [name, cfg.RevisionId]);
+  const csc = useAsync(() => api.getFunctionCodeSigningConfig(name), [name, cfg.RevisionId]);
+  const cscs = useAsync(() => api.listCodeSigningConfigs(), [name, cfg.RevisionId]);
 
   const [editGeneral, setEditGeneral] = useState(false);
   const [desc, setDesc] = useState(cfg.Description || "");
@@ -309,6 +326,10 @@ function ConfigurationTab({ name, cfg, reload }) {
   const [apArn, setApArn] = useState(""); const [mount, setMount] = useState("/mnt/efs");
 
   const [delTrigger, setDelTrigger] = useState(null);
+
+  const [editCsc, setEditCsc] = useState(false);
+  const [cscChoice, setCscChoice] = useState(null);
+  const attachedCsc = (cscs.data || []).find((c) => c.CodeSigningConfigArn === csc.data?.CodeSigningConfigArn);
 
   return (
     <SpaceBetween size="l">
@@ -462,9 +483,32 @@ function ConfigurationTab({ name, cfg, reload }) {
         <FormField label="Dead-letter queue ARN - optional"><Input value={dlq} onChange={({ detail }) => setDlq(detail.value)} placeholder="arn:aws:sqs:..." /></FormField>
       </EditModal>
 
-      <CapabilityContainer id="lambda.code-signing" title="Code signing">
-        <KeyValue items={[["Code signing configuration", "Not configured"]]} />
+      <CapabilityContainer id="lambda.code-signing" title="Code signing" actions={
+        <Button onClick={() => {
+          setCscChoice(attachedCsc ? { value: attachedCsc.CodeSigningConfigArn, label: attachedCsc.CodeSigningConfigId } : { value: "", label: "No code signing configuration" });
+          setEditCsc(true);
+        }}>Edit</Button>
+      }>
+        <KeyValue items={[
+          ["Code signing configuration", attachedCsc ? attachedCsc.CodeSigningConfigId : "Not configured"],
+          ...(attachedCsc ? [["Signature validation policy", attachedCsc.CodeSigningPolicies?.UntrustedArtifactOnDeployment]] : []),
+        ]} />
       </CapabilityContainer>
+      <Modal visible={editCsc} onDismiss={() => setEditCsc(false)} header="Edit code signing configuration"
+        footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs">
+          <Button variant="link" onClick={() => setEditCsc(false)}>Cancel</Button>
+          <Button variant="primary" onClick={async () => {
+            if (cscChoice?.value) await api.putFunctionCodeSigningConfig(name, cscChoice.value);
+            else await api.deleteFunctionCodeSigningConfig(name);
+            notify.success("Code signing configuration updated."); setEditCsc(false); csc.reload(); reload();
+          }}>Save</Button>
+        </SpaceBetween></Box>}>
+        <FormField label="Code signing configuration">
+          <Select selectedOption={cscChoice} onChange={({ detail }) => setCscChoice(detail.selectedOption)}
+            options={[{ value: "", label: "No code signing configuration" },
+              ...(cscs.data || []).map((c) => ({ value: c.CodeSigningConfigArn, label: c.CodeSigningConfigId }))]} />
+        </FormField>
+      </Modal>
 
       <Table variant="container" header={<Header variant="h2" actions={<Button onClick={() => setAddFs(true)}>Add file system</Button>}>File systems</Header>}
         items={cfg.FileSystemConfigs || []}
