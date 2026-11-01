@@ -74,7 +74,7 @@
   "limitations": [
    "\"Save and redeploy\" is enforced, not just stored: a source/runtime/entry-point edit changes the revision's image fingerprint, so the same revision-diff logic the Admin API uses for any template change cuts a real new revision (visible on the Revisions tab, traffic following it) exactly as a redeploy would.",
    "For Python sources, Vyomi parses the code on create/update and rejects it the way a real build would fail: a syntax error or an entry point the source doesn't define returns a 400 instead of saving. Other runtimes are stored and returned as configured but not parsed.",
-   "Vyomi does not build a container image or run the code; there is no invocation (see Observability for the metrics/logs gap)."
+   "Vyomi actually runs Python function sources on invoke (see Observability); it does not build or run an arbitrary container image, so container-deployed services and non-Python function sources are metered but not executed."
   ],
   "api": [
    "projects.locations.services.create",
@@ -103,31 +103,54 @@
  "gcp.functions.services.continuous_deployment": {
   "title": "Continuously deploy from a repository (Cloud Build / GitHub)",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Vyomi has no Cloud Build or source-repository integration."
+   "Vyomi has no real GitHub/Cloud Source Repositories integration: \"connect a repository\" just names an owner/repo + branch against the service, and a \"push\" is the console's own build action rather than a real webhook.",
+   "The build step is real, not cosmetic: it parses/validates the pushed source the same way a Cloud Build step would, and only lands a new revision (visible on the Revisions tab) when that build succeeds — a broken push fails the build and leaves the service untouched, same as Source tab redeploys.",
+   "Build history (status, logs, which revision it deployed) is real per-service state, not a static list."
+  ],
+  "api": [
+   "projects.locations.services.patch"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_run_depth_core.py"
   ]
  },
  "gcp.functions.services.triggers": {
   "title": "Event triggers (Eventarc) and Cloud Build source deploys",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Vyomi has no Eventarc or Cloud Build backend; only HTTP-style services are modelled."
+   "Vyomi only has a real event source for Pub/Sub-sourced (\"Custom event\") triggers: creating one validates the topic exists and wires a real Pub/Sub push subscription that invokes the destination service whenever a message is published.",
+   "Eventarc providers Vyomi cannot source for real (Cloud Storage, Cloud Audit Logs, Cloud Scheduler-via-Eventarc, third-party) are rejected at trigger-create time rather than accepted and silently never firing."
+  ],
+  "api": [
+   "projects.locations.services.patch"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_run_depth_core.py"
   ]
  },
  "gcp.functions.services.observability": {
   "title": "Observability (request metrics, container instance count, logs)",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Vyomi does not meter real request traffic against deployed services, so there is no metrics or log data to show."
+   "Metrics (request count, request latency, container instance count) and Logs are fed by real activity — the console's own invoke calls and real Eventarc trigger deliveries — never random/synthetic data; a service nobody has called shows zeros.",
+   "Container instance count is derived from the service's minimum-instance setting and recent request activity, not a real multi-instance scheduler (Vyomi serves every request synchronously, in-process).",
+   "Request latency reflects the actual time Vyomi's sandbox spent running the function; for non-Python/container-image services (which Vyomi cannot execute) the request is still metered and logged but latency is near-zero."
+  ],
+  "api": [
+   "projects.locations.services.revisions.get"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_run_depth_core.py"
   ]
  },
  "gcp.functions.jobs.crud": {

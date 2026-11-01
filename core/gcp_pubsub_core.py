@@ -458,6 +458,24 @@ def _delete_topic(store, name: str) -> PubsubResponse:
     return _json(200, {})
 
 
+def _deliver_eventarc(store, et: dict, record: dict) -> None:
+    """A Eventarc Pub/Sub-sourced trigger firing for real: deliver the message to its
+    destination Cloud Run service — an in-process cross-core call (never outbound network),
+    the same pattern core/lambda_core.py's _deliver_to_arn uses for EventBridge targets.
+    `store.run_store` is set once by the wire router (core/aws_wire_router.py)."""
+    run_store = getattr(store, "run_store", None)
+    if run_store is None:
+        return
+    from core import gcp_run_core as gcp_run   # local: gcp_run_core imports this module at top level
+    event = {"specversion": "1.0", "type": "google.cloud.pubsub.topic.v1.messagePublished",
+             "data": {"message": {"data": record.get("data", ""), "attributes": record.get("attributes") or {},
+                                   "messageId": record.get("messageId", "")}}}
+    try:
+        gcp_run.invoke_service(run_store, et["project"], et["location"], et["service"], event)
+    except Exception:
+        pass
+
+
 def _fanout(store, topic: dict, record: dict) -> None:
     """Deliver a prepared message record into every subscription attached to `topic`
     whose filter (if any) matches the message's attributes."""
@@ -466,6 +484,9 @@ def _fanout(store, topic: dict, record: dict) -> None:
         if sub is None or not _message_matches(sub.get("filter"), record.get("attributes")):
             continue
         sub.setdefault("messages", []).append({"_id": uuid.uuid4().hex, "_publish_at": store.now(), **record})
+        et = sub.get("_eventarc_trigger")
+        if et:
+            _deliver_eventarc(store, et, record)
 
 
 def _prune_topic_retention(store, topic: dict) -> None:

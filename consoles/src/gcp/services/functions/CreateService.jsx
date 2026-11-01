@@ -25,8 +25,10 @@ const SourceOpt = ({ title, children }) => (
 
 export default function CreateService({ query }) {
   const notify = useNotify();
-  const [source, setSource] = useState(query?.source === "container" ? "image" : "function");
+  const [source, setSource] = useState(query?.source === "container" ? "image" : query?.source === "repo" ? "repo" : "function");
   const [runtime, setRuntime] = useState(api.RUNTIMES[0]);
+  const [repository, setRepository] = useState("");
+  const [branch, setBranch] = useState("main");
   const [name, setName] = useState("");
   const [touched, setTouched] = useState(false);
   const [region, setRegion] = useState(api.getRegion());
@@ -58,11 +60,11 @@ export default function CreateService({ query }) {
   const submit = async (ev) => {
     ev.preventDefault();
     setTouched(true);
-    if (api.validServiceName(name) || source === "repo") return;
+    if (api.validServiceName(name) || (source === "repo" && !repository.includes("/"))) return;
     setBusy(true); setError(null);
     try {
       const container = {
-        image: source === "function" ? api.functionImage(runtime, "handler", api.DEFAULT_FUNCTION_SOURCE[runtime] || "") : image,
+        image: source !== "image" ? api.functionImage(runtime, "handler", api.DEFAULT_FUNCTION_SOURCE[runtime] || "") : image,
         ports: [{ containerPort: Number(port) || 8080 }],
         resources: { limits: { cpu, memory }, cpuIdle: billing === "request", startupCpuBoost: cpuBoost },
       };
@@ -82,11 +84,12 @@ export default function CreateService({ query }) {
         ingress: ingress === "internal" ? (allowAlb ? "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER" : "INGRESS_TRAFFIC_INTERNAL_ONLY") : "INGRESS_TRAFFIC_ALL",
       };
       if (serviceAccount.trim()) body.template.serviceAccount = serviceAccount.trim();
-      if (source === "function") {
+      if (source === "function" || source === "repo") {
         body.annotations = api.functionAnnotations(runtime, "handler", api.DEFAULT_FUNCTION_SOURCE[runtime] || "");
       }
       await api.createService(region, name, body);
       if (authMode === "public") await api.setPublic(region, name, true);
+      if (source === "repo") await api.connectRepo(region, name, repository.trim(), branch.trim() || "main");
       api.setRegion(region);
       notify.success(`Deployed service "${name}"`);
       location.hash = `/functions/detail/${region}/${name}`;
@@ -105,14 +108,21 @@ export default function CreateService({ query }) {
           <FormControlLabel value="repo" control={<Radio size="small" />} label="Continuously deploy from a repository (source or function)" />
           <FormControlLabel value="function" control={<Radio size="small" />} label="Use an inline editor to create a function" />
         </RadioGroup>
-        {source === "repo" && <NotSimulated compact feature="Continuously deploy from a repository" note="Vyomi has no Cloud Build or source-repository integration." />}
+        {source === "repo" && (
+          <Stack spacing={2} sx={{ maxWidth: 420 }}>
+            <TextField label="Repository" placeholder="owner/repo" required value={repository}
+              onChange={(e) => setRepository(e.target.value.trim())} onBlur={() => setTouched(true)}
+              error={touched && !repository.includes("/")} helperText="Vyomi has no real GitHub integration: this names the connection. Build/deploy is enforced for real — a broken push fails the build, not the service." />
+            <TextField label="Branch" required value={branch} onChange={(e) => setBranch(e.target.value)} />
+          </Stack>
+        )}
         {source === "image" && (
           <TextField label="Container image URL" required value={image} onChange={(e) => setImage(e.target.value)} sx={{ maxWidth: 560 }} />
         )}
       </SourceOpt>
       <Divider />
 
-      {source === "function" && (
+      {(source === "function" || source === "repo") && (
         <>
           <SourceOpt title="Function">
             <FormControl sx={{ maxWidth: 320 }}>
@@ -122,7 +132,7 @@ export default function CreateService({ query }) {
               </Select>
             </FormControl>
             <Typography variant="body2" color="text.secondary">Use an inline editor to create a function. You can edit the entry point and source after the service is created, from the Source tab.</Typography>
-            <NotSimulated compact feature="Trigger (optional)" note="Vyomi has no Eventarc backend; every service is reachable over HTTPS only." />
+            <Typography variant="body2" color="text.secondary">Trigger (optional): add a Pub/Sub-sourced Eventarc trigger after the service is created, from its Triggers tab.</Typography>
           </SourceOpt>
           <Divider />
         </>
@@ -255,7 +265,7 @@ export default function CreateService({ query }) {
       </Accordion>
 
       <Stack direction="row" spacing={1} sx={{ pt: 3 }}>
-        <Button type="submit" variant="contained" disabled={busy || source === "repo"}>{busy ? "Creating…" : "Create"}</Button>
+        <Button type="submit" variant="contained" disabled={busy}>{busy ? "Creating…" : "Create"}</Button>
         <Button href="#/functions/services">Cancel</Button>
       </Stack>
     </Box>
