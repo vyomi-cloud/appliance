@@ -50,11 +50,16 @@ MAX_REPLICAS_LIMIT = 1000
 # Offline container runtime (set by the server on the Pro/Max Docker backend).
 # RUNTIME["start"](app_id, revision, image, env, port) -> {"id","host","port"} | None
 # RUNTIME["stop"](handle) -> None.  None → control plane only.
-RUNTIME: dict = {"start": None, "stop": None}
+RUNTIME: dict = {"start": None, "stop": None, "status": None}
 
 
-def configure_runtime(start=None, stop=None):
-    RUNTIME["start"], RUNTIME["stop"] = start, stop
+NO_RUNTIME_NOTE = ("Control plane only: this environment (e.g. Vyomi Nano in the browser, or no Docker) cannot run "
+                   "containers, so the app's ingress FQDN is not served and no replica is actually executing. "
+                   "Use the offline appliance with the Docker compute backend for a real container.")
+
+
+def configure_runtime(start=None, stop=None, status=None):
+    RUNTIME["start"], RUNTIME["stop"], RUNTIME["status"] = start, stop, status
 
 
 class _E(Exception):
@@ -330,6 +335,7 @@ def _sync_runtime(app):
     """Run / stop real containers for the active revisions when a runtime is attached."""
     st, stp = RUNTIME.get("start"), RUNTIME.get("stop")
     if not st:
+        app["properties"]["vyomiRuntime"] = {"backend": "none", "note": NO_RUNTIME_NOTE}
         return
     handles = app.setdefault("_runtime", {})
     for name, rev in app["_revisions"].items():
@@ -342,8 +348,14 @@ def _sync_runtime(app):
                 h = st(app["id"], name, c["image"], {e.get("name"): e.get("value") for e in c.get("env", []) if e.get("name")}, port)
             except Exception:
                 h = None
-            if h:
+            if h and h.get("error"):                  # runtime is on but the container did not start: say so
+                app["properties"]["runningStatus"] = "Failed"
+                app["properties"]["vyomiRuntime"] = {"backend": "docker", "error": h["error"]}
+            elif h:
                 handles[name] = h
+                if h.get("port"):                     # real published loopback endpoint (honest, works from the host)
+                    app["properties"]["vyomiEndpoint"] = f"http://{h.get('host', '127.0.0.1')}:{h['port']}"
+                    app["properties"]["vyomiRuntime"] = {"backend": "docker", "container": h.get("id"), "network": h.get("network")}
         elif not want and name in handles and stp:
             try:
                 stp(handles.pop(name))
@@ -353,6 +365,8 @@ def _sync_runtime(app):
 
 def _stop_runtime(app):
     stp = RUNTIME.get("stop")
+    app["properties"].pop("vyomiEndpoint", None)
+    app["properties"].pop("vyomiRuntime", None)
     for h in list((app.get("_runtime") or {}).values()):
         if stp:
             try:
@@ -490,15 +504,26 @@ def _replicas(rec, rev_name):
     n = rev["properties"]["replicas"]
     base = f"{rev_name}-{_h(rev_name, n=9)}"
     cs = rev["properties"]["template"]["containers"]
+    h = (rec.get("_runtime") or {}).get(rev_name)
+    real = RUNTIME.get("status")
+    st = "Running"
+    detail = ""
+    if not RUNTIME.get("start"):
+        detail = NO_RUNTIME_NOTE
+    if h and real:
+        try:
+            st = real(h) or "Running"
+        except Exception:
+            st = "Running"
     out = []
     for i in range(n):
         rn = f"{base}-{_h(rev_name, i, n=5)}"
         out.append({"id": f"{rev['id']}/replicas/{rn}", "name": rn, "type": f"{NAMESPACE}/containerApps/revisions/replicas",
-                    "properties": {"createdTime": rev["properties"]["createdTime"], "runningState": "Running",
-                                   "runningStateDetails": "Running",
+                    "properties": {"createdTime": rev["properties"]["createdTime"], "runningState": st,
+                                   "runningStateDetails": detail or st,
                                    "containers": [{"name": c["name"], "containerId": _h(rn, c["name"], n=32),
-                                                   "ready": True, "started": True, "restartCount": 0,
-                                                   "runningState": "Running", "runningStateDetails": ""} for c in cs]}})
+                                                   "ready": st == "Running", "started": st == "Running", "restartCount": 0,
+                                                   "runningState": st, "runningStateDetails": detail} for c in cs]}})
     return out
 
 

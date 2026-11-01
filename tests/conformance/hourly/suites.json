@@ -2140,6 +2140,43 @@
       "cloud": "aws",
       "kind": "api",
       "cmd": "python3 tests/conformance/post_create/probes/endpoint_reachable.py aws_elb {ENDPOINT}",
+      "id": "offline-post-create-azure-container-app",
+      "target": "offline",
+      "cloud": "azure",
+      "kind": "api",
+      "cmd": "python3 tests/conformance/post_create/probes/azure_container_app.py {ENDPOINT}",
+      "timeout": 300
+    },
+    {
+      "id": "offline-post-create-azure-loganalytics",
+      "target": "offline",
+      "cloud": "azure",
+      "kind": "api",
+      "cmd": "python3 tests/conformance/post_create/probes/azure_loganalytics.py {ENDPOINT}",
+      "timeout": 300
+    },
+    {
+      "id": "offline-post-create-azure-openai",
+      "target": "offline",
+      "cloud": "azure",
+      "kind": "api",
+      "cmd": "python3 tests/conformance/post_create/probes/azure_openai.py {ENDPOINT}",
+      "timeout": 300
+    },
+    {
+      "id": "offline-post-create-aws-iam-actions",
+      "target": "offline",
+      "cloud": "aws",
+      "kind": "api",
+      "cmd": "python3 tests/conformance/post_create/probes/aws_iam_actions.py {ENDPOINT}",
+      "timeout": 300
+    },
+    {
+      "id": "offline-post-create-azure-rbac-checkaccess",
+      "target": "offline",
+      "cloud": "azure",
+      "kind": "api",
+      "cmd": "python3 tests/conformance/post_create/probes/azure_rbac.py {ENDPOINT}",
       "timeout": 300
     }
   ]

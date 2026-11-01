@@ -135,9 +135,16 @@ def shape(machine_type):
     return (n, n * (3.75 if machine_type.startswith("n1-") else 4))
 
 
+# No Kubernetes API server runs behind a cluster here, so the endpoint must not be a plausible public IP
+# (that sent clients to a random address). ".invalid" is reserved (RFC 2606): it never resolves, and the
+# name says why. A real data plane (k3s) would replace this with a loopback address.
+CONTROL_PLANE_ONLY_ENDPOINT = "kubernetes-api-not-running.control-plane-only.invalid"
+CONTROL_PLANE_ONLY_MESSAGE = ("Vyomi simulates the GKE control plane only (clusters, node pools, operations). "
+                              "No Kubernetes API server or nodes are running behind this cluster, so kubectl cannot connect.")
+
+
 def _endpoint(name):
-    h = hashlib.sha256(name.encode()).digest()
-    return "34.%d.%d.%d" % (h[0] % 200 + 20, h[1], h[2] % 253 + 1)
+    return CONTROL_PLANE_ONLY_ENDPOINT
 
 
 def _check_labels(labels, what="resourceLabels"):
@@ -345,7 +352,9 @@ def create_cluster(store, project, location, payload):
         "nodePools": pools,
         "locations": spec.get("locations") or [zone_like if _ZONE.match(location) else location + "-a"],
         "endpoint": _endpoint(full),
-        "masterAuth": {"clusterCaCertificate": hashlib.sha256(full.encode()).hexdigest()},
+        "masterAuth": {},
+        "statusMessage": CONTROL_PLANE_ONLY_MESSAGE,
+        "conditions": [{"code": "UNKNOWN", "message": CONTROL_PLANE_ONLY_MESSAGE}],
         "currentMasterVersion": version, "currentNodeVersion": version,
         "initialClusterVersion": version,
         "status": RUNNING, "createTime": _ts(),

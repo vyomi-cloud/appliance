@@ -1207,6 +1207,7 @@ def _iam_resolve_identity(principal: str) -> dict:
                     policy_ids.extend(list(group.get("policies", [])))
             policy_ids = list(dict.fromkeys(policy_ids))
             policies = [state.get("policies", {}).get(pid) for pid in policy_ids if state.get("policies", {}).get(pid)]
+            policies += [{"policy_name": n, "document": d} for n, d in (user.get("inline_policies") or {}).items()]   # PutUserPolicy
             return {
                 "principal": principal,
                 "type": "user",
@@ -22054,6 +22055,10 @@ async def api_iam_query(request: Request) -> Response:
         return _iam_query_error(code, detail, exc.status_code if exc.status_code >= 400 else 400)
     if not action:
         return _iam_query_error("MissingAction", "The request must contain the parameter Action.")
+    from providers import aws_iam_query_ext as _iam_ext   # Attach/PutUserPolicy, access keys, Simulate*
+    _ext = _iam_ext.handle(action, params)
+    if _ext is not None:
+        return _ext
     return _iam_query_error("InvalidAction", f"The action '{action}' is not implemented by the simulator.")
 
 
@@ -23953,6 +23958,20 @@ try:
     _azure_appconfig_routes.register(app)
 except Exception as _e:   # never let this break appliance boot
     print(f"[azure-appconfig] routes skipped: {_e}")
+
+# Azure Log Analytics data plane (/azure-data/loganalytics/...: ingest + KQL subset); ARM control plane is in azure_services.
+try:
+    from providers import azure_loganalytics_routes as _azure_la_routes
+    _azure_la_routes.register(app)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[azure-loganalytics] routes skipped: {_e}")
+
+# Azure OpenAI inference data plane (SIMULATED: /azure-data/openai/{account}/openai/deployments/{dep}/chat/completions ...).
+try:
+    from providers import azure_openai_routes as _azure_openai_routes
+    _azure_openai_routes.register(app)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[azure-openai] routes skipped: {_e}")
 
 # Azure DNS resolution (/azure-data/dns/query); the ARM control plane (dnsZones) is in azure_services.
 try:

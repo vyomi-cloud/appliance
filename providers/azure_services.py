@@ -1039,7 +1039,16 @@ async def _handle_operationalinsights(request: Request, method: str, sub: str, r
                                       names: list[str], base: str) -> JSONResponse:
     from core import azure_operationalinsights_core as _oi
     payload = await _safe_json(request) if method in ("PUT", "PATCH", "POST") else {}
-    r = _oi.dispatch(_state, method, sub, rg, chain, names, payload, dict(request.query_params), base=base)
+    q = dict(request.query_params)
+    if method == "POST" and len(chain) >= 3 and chain[2].lower() in ("api", "datacollectionrules"):
+        try:                                  # data plane bodies are JSON arrays; Log-Type is a header
+            payload = await request.json()
+        except Exception:
+            payload = {}
+        for hk, qk in (("log-type", "logType"), ("time-generated-field", "time-generated-field")):
+            if request.headers.get(hk) and qk not in q:
+                q[qk] = request.headers[hk]
+    r = _oi.dispatch(_state, method, sub, rg, chain, names, payload, q, base=base)
     api_version = request.query_params.get("api-version") or _oi.API_VERSION
     resp = JSONResponse(status_code=r["status"], content=r["body"]) if r["body"] is not None \
         else Response(status_code=r["status"])

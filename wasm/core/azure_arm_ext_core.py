@@ -337,6 +337,30 @@ def _role_assignments(state, method, scope, rest, payload):
     return _err(405, "MethodNotAllowed", f"{method} not allowed.")
 
 
+# ── RBAC: checkAccess + built-in role definitions, fed by the ARM role assignments ──
+try:
+    from core import azure_iam_core as _az_iam
+except ImportError:                                # pragma: no cover - Pyodide flat layout
+    import azure_iam_core as _az_iam               # type: ignore
+
+
+def _arm_check_access(state, scope, payload):
+    body = dict(payload or {})
+    body.setdefault("scope", (body.get("resource") or {}).get("id") or scope)
+    return _ok(_az_iam.arm_check_access_request(state, None, body))
+
+
+def _role_definitions(state, sub, after):
+    """GET roleDefinitions: the built-in roles (Owner, Contributor, Reader + common data-plane ones) plus custom roles."""
+    builtin = _az_iam.builtin_role_definitions(sub)
+    custom = [_view(r) for r in _of_type(state, "Microsoft.Authorization/roleDefinitions")]
+    if len(after) == 3:
+        key = after[2].lower()
+        hit = next((r for r in builtin + custom if r["name"].lower() == key), None)
+        return _ok(hit) if hit else None          # None -> the generic handler answers (404 / custom)
+    return _ok({"value": builtin + custom})
+
+
 # ── generic extension resources (diagnosticSettings, …) ─────────────────────
 def _generic_ext(state, method, scope, ns, rest, payload):
     typ = ns + "/" + rest[0]
@@ -2208,11 +2232,17 @@ def route(state, method, sub, rg, after, payload=None, query=None, executor=None
             return _locks(state, method, scope, rest, payload)
         if nsl == "microsoft.authorization" and t0 == "roleassignments":
             return _role_assignments(state, method, scope, rest, payload)
+        if nsl == "microsoft.authorization" and t0 == "checkaccess" and method == "POST":
+            return _arm_check_access(state, scope, payload)
         if nsl == "microsoft.resourcehealth" and t0 == "availabilitystatuses":
             return _health(parent, scope, rest) if method == "GET" else _err(405, "MethodNotAllowed", "GET only.")
         if nsl == "microsoft.managedidentity" and t0 == "identities":
             return _identity_default(parent, scope) if method == "GET" else _err(405, "MethodNotAllowed", "GET only.")
         return _generic_ext(state, method, scope, ns, rest, payload)
+    if low[0] == "microsoft.authorization" and low[1] == "checkaccess" and method == "POST":
+        return _arm_check_access(state, scope_id(sub, rg, []), payload)
+    if low[0] == "microsoft.authorization" and low[1] == "roledefinitions" and method == "GET" and len(after) <= 3:
+        return _role_definitions(state, sub, after)
     # Locks at subscription / resource-group scope.
     if low[0] == "microsoft.authorization" and low[1] == "locks":
         return _locks(state, method, scope_id(sub, rg, []), after[1:], payload)

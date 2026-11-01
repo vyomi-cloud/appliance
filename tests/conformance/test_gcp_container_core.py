@@ -29,6 +29,8 @@ check("create returns a DONE CREATE_CLUSTER operation", s == 200 and op["status"
 s, c = call(st, "GET", L + "/clusters/c1")
 check("get: RUNNING, default-pool, endpoint, version", s == 200 and c["status"] == "RUNNING" and c["nodePools"][0]["name"] == "default-pool"
       and c["endpoint"] and c["currentMasterVersion"] == gk.DEFAULT_VERSION and c["currentNodeCount"] == 2, c)
+check("honest: endpoint is not a fake public IP and the cluster says control plane only",
+      c["endpoint"].endswith(".invalid") and "control plane only" in c["statusMessage"] and c["conditions"], c.get("endpoint"))
 check("duplicate -> 409 ALREADY_EXISTS", call(st, "POST", L + "/clusters", {"cluster": {"name": "c1"}})[0] == 409)
 check("bad name -> 400", call(st, "POST", L + "/clusters", {"cluster": {"name": "Bad_Name"}})[0] == 400)
 check("bad location -> 400", call(st, "POST", "/v1/projects/p1/locations/mars-1/clusters", {"cluster": {"name": "x"}})[0] == 400)
