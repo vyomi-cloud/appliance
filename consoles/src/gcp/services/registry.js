@@ -18,6 +18,7 @@ import IamIcon from "@mui/icons-material/esm/AdminPanelSettingsOutlined.js";
 import ArtifactIcon from "@mui/icons-material/esm/ViewInArOutlined.js";
 import ChartIcon from "@mui/icons-material/esm/BarChartOutlined.js";
 import LogIcon from "@mui/icons-material/esm/ArticleOutlined.js";
+import MemorystoreIcon from "@mui/icons-material/esm/CachedOutlined.js";
 import { classicUrl } from "../../common/classic.js";
 
 export const CATEGORIES = ["Compute", "Storage", "Databases", "Networking", "Serverless", "Integration Services", "Security", "Management", "CI/CD", "Observability"];
@@ -28,6 +29,7 @@ export const PRODUCTS = [
   { id: "kubernetes", title: "Kubernetes Engine", description: "Managed Kubernetes clusters", category: "Compute", icon: ClusterIcon, load: () => import("./kubernetes/index.jsx") },
   { id: "sql", title: "Cloud SQL", description: "Managed MySQL, PostgreSQL, SQL Server", category: "Databases", icon: SqlIcon, load: () => import("./sql/index.jsx") },
   { id: "firestore", title: "Firestore", description: "Serverless NoSQL document database", category: "Databases", icon: DocumentIcon, load: () => import("./firestore/index.jsx") },
+  { id: "memorystore", title: "Memorystore", description: "Fully managed Redis for caching and real-time data", category: "Databases", icon: MemorystoreIcon, load: () => import("./memorystore/index.jsx") },
   { id: "networking", title: "VPC network", description: "Networks, subnets, firewall rules", category: "Networking", icon: NetworkIcon, load: () => import("./networking/index.jsx") },
   { id: "run", title: "Cloud Run", description: "Fully managed container platform", category: "Serverless", icon: RunIcon, load: () => import("./run/index.jsx") },
   { id: "functions", title: "Cloud Functions", description: "Event-driven serverless functions", category: "Serverless", icon: FunctionsIcon, load: () => import("./functions/index.jsx") },

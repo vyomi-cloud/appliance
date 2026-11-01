@@ -1,0 +1,73 @@
+{
+  "$doc": "Vyomi capability registry — GCP Memorystore for Redis. See aws/s3.json for the contract. Feature ids share one namespace with the AWS registry, so they are prefixed gcp.memorystore.*",
+  "gcp.memorystore.instances": {
+    "title": "Instances (create, list, get, patch, delete)",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": [
+      "Instances are READY immediately; Vyomi has no provisioning delay (CREATING) to model."
+    ],
+    "tests": ["tests/conformance/test_gcp_redis_core.py"]
+  },
+  "gcp.memorystore.failover": {
+    "title": "Failover (Standard tier)",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": [
+      "Failover swaps the current/alternative zone instantly; Vyomi has no replication lag or brief unavailability window to model."
+    ],
+    "tests": ["tests/conformance/test_gcp_redis_core.py"]
+  },
+  "gcp.memorystore.upgrade": {
+    "title": "Upgrade Redis version",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": [],
+    "tests": ["tests/conformance/test_gcp_redis_core.py"]
+  },
+  "gcp.memorystore.import-export": {
+    "title": "Import / export (Cloud Storage RDB)",
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": [
+      "Vyomi validates the gs:// destination/source shape and returns a completed operation, but does not read or write an actual RDB file in Cloud Storage — the data plane content is unchanged by import/export."
+    ],
+    "tests": ["tests/conformance/test_gcp_redis_core.py"]
+  },
+  "gcp.memorystore.maintenance": {
+    "title": "Maintenance window and reschedule",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": [
+      "Vyomi never runs maintenance in the background; rescheduleMaintenance only records the requested schedule on the instance."
+    ],
+    "tests": ["tests/conformance/test_gcp_redis_core.py"]
+  },
+  "gcp.memorystore.connections": {
+    "title": "Connections (endpoint, AUTH string, in-transit encryption)",
+    "level": { "nano": "limited", "offline": "full" },
+    "limitations": [
+      "The host:port shown is a real Redis-protocol endpoint only when the appliance's shared Valkey data plane is configured (offline); otherwise (Nano, no data plane) it is a deterministic address and the console says so.",
+      "serverCaCerts are synthetic placeholders — Vyomi does not run a real TLS CA, so a client cannot actually negotiate TLS against the returned certificate."
+    ],
+    "tests": ["tests/conformance/test_gcp_redis_core.py"]
+  },
+  "gcp.memorystore.read-replicas": {
+    "title": "Read replicas (replica count, read endpoint)",
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": [
+      "Read replicas are modeled as a replica count and a read endpoint on the SAME instance (matching the control-plane shape of Instance.readReplicasMode/replicaCount); Vyomi does not run separate replica processes, so the read endpoint serves the same data plane as the primary endpoint."
+    ],
+    "tests": ["tests/conformance/test_gcp_redis_core.py"]
+  },
+  "gcp.memorystore.nodes": {
+    "title": "Nodes",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": [
+      "Node ids and the primary/replica role are derived client-side from the instance's tier and node count, not a dedicated API field (the native NodeInfo message only carries id and zone); there is no per-node telemetry (CPU, memory, connections) behind them."
+    ],
+    "tests": ["tests/conformance/test_gcp_redis_core.py"]
+  },
+  "gcp.memorystore.monitoring": {
+    "title": "Overview: Monitoring (memory usage, connected clients)",
+    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "limitations": [
+      "Vyomi collects no Redis runtime metrics (memory usage, connected clients, ops/sec) for Memorystore instances."
+    ]
+  }
+}
