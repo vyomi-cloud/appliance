@@ -371,6 +371,16 @@ def _app_views(app):
     return out
 
 
+def _identity(rid, raw):
+    """System-assigned identities mint a stable principalId/tenantId (usable as the subject
+    of a role assignment on Access control (IAM)), the same on PUT and PATCH."""
+    ident = dict(raw)
+    if "SystemAssigned" in str(ident.get("type")):
+        ident.setdefault("principalId", str(uuid.uuid5(uuid.NAMESPACE_URL, rid + "#p")))
+        ident.setdefault("tenantId", "72f988bf-86f1-41af-91ab-2d7cd011db47")
+    return ident
+
+
 def _put_app(state, sub, rg, rid, name, payload, method):
     existed = state.get(rid.lower())
     pay = payload.get("properties") or {}
@@ -380,7 +390,7 @@ def _put_app(state, sub, rg, rid, name, payload, method):
         if isinstance(payload.get("tags"), dict):
             existed["tags"] = payload["tags"]
         if payload.get("identity"):
-            existed["identity"] = payload["identity"]
+            existed["identity"] = _identity(rid, payload["identity"])
         return existed
     loc = payload.get("location") or (existed or {}).get("location")
     if not loc:
@@ -427,11 +437,7 @@ def _put_app(state, sub, rg, rid, name, payload, method):
     if isinstance(payload.get("tags"), dict):
         rec["tags"] = payload["tags"]
     if payload.get("identity"):
-        ident = dict(payload["identity"])
-        if "SystemAssigned" in str(ident.get("type")):
-            ident.setdefault("principalId", str(uuid.uuid5(uuid.NAMESPACE_URL, rid + "#p")))
-            ident.setdefault("tenantId", "72f988bf-86f1-41af-91ab-2d7cd011db47")
-        rec["identity"] = ident
+        rec["identity"] = _identity(rid, payload["identity"])
     p = rec["properties"]
     p["managedEnvironmentId"] = env["id"]
     p["environmentId"] = env["id"]

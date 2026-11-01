@@ -70,6 +70,10 @@ const DENYRULE = `deny-smoke-${n}`;  // inbound Deny rule the Diagnose and solve
 const VNETVM = `vysmokevnetvm${n}`;  // VM pointed at the vnet's own NIC, for the vnet's Diagnose and solve problems Next hop check
 const VNETROLE = `00000000-0000-4000-c000-${String(n).padStart(12, "0")}`;  // role assignment GUID created over the wire, EXPLICITLY scoped to the vnet resource
 const VNETPRINCIPAL = `vyvnetprincipal${n}`;  // principal of the vnet-scoped role assignment above
+const CAE = `vysmokecae${n}`;      // Container Apps Environment created through the UI
+const CA = `vysmokeca${n}`;        // Container App created through the UI
+const CA2 = `vywireca${n}`;        // Container App created over the wire (CLI → UI direction)
+const CAJ = `vysmokecaj${n}`;      // Container Apps Job created through the UI
 const results = [];
 const check = (name, ok, detail = "") => { results.push({ name, ok, detail }); console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? " — " + detail : ""}`); };
 let page;
@@ -85,6 +89,8 @@ const arm = (method, path, body) => wire(`/subscriptions/${SUB}${path}${path.inc
 const armWeb = (method, path, body) => wire(`/subscriptions/${SUB}${path}${path.includes("?") ? "&" : "?"}api-version=2023-12-01`,
   { method, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
 const armAks = (method, path, body) => wire(`/subscriptions/${SUB}${path}${path.includes("?") ? "&" : "?"}api-version=2024-09-02-preview`,
+  { method, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
+const armApp = (method, path, body) => wire(`/subscriptions/${SUB}${path}${path.includes("?") ? "&" : "?"}api-version=2024-03-01`,
   { method, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
 const graph = (method, path, body) => wire(`/v1.0${path}`, { method, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
 const blobHdr = (acct) => ({ "x-ms-version": "2021-12-02", authorization: `SharedKey ${acct}:c21va2U=` });
@@ -2451,6 +2457,108 @@ try {
   await page.getByRole("heading", { name: "Virtual machines", exact: true }).waitFor({ timeout: 10000 });
   const vmGone = await arm("GET", `/resourceGroups/${DEFAULT_RG}/providers/Microsoft.Compute/virtualMachines/${VM2}`);
   check("UI delete virtual machine → ARM GET 404", vmGone.status === 404, `HTTP ${vmGone.status}`);
+
+  // ── Container Apps Environment created through the wizard → visible over native ARM ───
+  await page.goto(UI + "#/containerapps/environments/create");
+  await page.getByLabel("Environment name", { exact: true }).fill(CAE);
+  await page.getByRole("link", { name: "Create new" }).or(page.getByRole("button", { name: "Create new" })).first().click();
+  await page.getByLabel("New resource group name").fill(RG);
+  await shot("33-cae-create-basics");
+  await page.getByRole("button", { name: "Review + create" }).click();
+  await page.getByText("Validation passed").waitFor({ timeout: 5000 });
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("heading", { name: CAE, exact: true }).waitFor({ timeout: 10000 });
+  const caeGet = await armApp("GET", `/resourceGroups/${RG}/providers/Microsoft.App/managedEnvironments/${CAE}`);
+  check("UI create Container Apps Environment → visible over native ARM", caeGet.status === 200, `HTTP ${caeGet.status}`);
+  await shot("34-cae-overview");
+
+  // ── Container App created through the wizard (existing environment) → visible over native ARM ──
+  await page.goto(UI + "#/containerapps/create");
+  await page.getByLabel("Container app name", { exact: true }).fill(CA);
+  await page.getByRole("link", { name: "Create new" }).or(page.getByRole("button", { name: "Create new" })).first().click();
+  await page.getByLabel("New resource group name").fill(RG);
+  await page.getByLabel("Container Apps Environment", { exact: true }).selectOption({ label: CAE });
+  await shot("35-ca-create-basics");
+  await page.getByRole("button", { name: "Review + create" }).click();
+  await page.getByText("Validation passed").waitFor({ timeout: 5000 });
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("heading", { name: CA, exact: true }).waitFor({ timeout: 10000 });
+  const caGet = await armApp("GET", `/resourceGroups/${RG}/providers/Microsoft.App/containerApps/${CA}`);
+  const caBody = caGet.status === 200 ? JSON.parse(caGet.text) : {};
+  check("UI create Container App → visible over native ARM", caGet.status === 200, `HTTP ${caGet.status}`);
+  check("wizard wired the chosen environment + ingress reached ARM",
+    (caBody.properties?.managedEnvironmentId || "").toLowerCase().includes(CAE.toLowerCase())
+    && caBody.properties?.configuration?.ingress?.external === true && caBody.properties?.configuration?.ingress?.targetPort === 80,
+    JSON.stringify(caBody.properties?.configuration));
+  await shot("36-ca-overview");
+
+  // ── Revisions: the create wizard's template produced a real first revision ────────────
+  await page.goto(UI + `#/containerapps/${RG}/${CA}/revisions`);
+  await page.getByRole("cell", { name: new RegExp(`^${CA}--`) }).first().waitFor({ timeout: 10000 });
+  check("Revisions tab shows the real first revision", true);
+  await shot("37-ca-revisions");
+
+  // ── Secrets: added through the UI → readable over listSecrets (native ARM action) ─────
+  const CASECRET = `smokesecret${n}`;
+  await page.goto(UI + `#/containerapps/${RG}/${CA}/secrets`);
+  await page.getByRole("toolbar", { name: "Command bar" }).getByRole("button", { name: "Create" }).click();
+  await page.getByLabel("Key", { exact: true }).fill(CASECRET);
+  await page.getByLabel("Value", { exact: true }).fill("smokevalue");
+  await page.getByRole("dialog").getByRole("button", { name: "Add", exact: true }).click();
+  await page.getByRole("cell", { name: CASECRET, exact: true }).waitFor({ timeout: 10000 });
+  const secretsWire = JSON.parse((await armApp("POST", `/resourceGroups/${RG}/providers/Microsoft.App/containerApps/${CA}/listSecrets`)).text);
+  check("UI add secret → readable over native ARM listSecrets", (secretsWire.value || []).some((s) => s.name === CASECRET && s.value === "smokevalue"), JSON.stringify(secretsWire.value));
+  await shot("38-ca-secrets");
+
+  // ── Identity: System assigned → ARM principalId/tenantId minted for real ──────────────
+  await page.goto(UI + `#/containerapps/${RG}/${CA}/identity`);
+  await page.getByRole("radio", { name: "On", exact: true }).click();
+  await page.getByText("Object (principal) ID").waitFor({ timeout: 10000 });
+  const identGet = JSON.parse((await armApp("GET", `/resourceGroups/${RG}/providers/Microsoft.App/containerApps/${CA}`)).text);
+  check("UI enable system-assigned identity → ARM principalId/tenantId", /systemassigned/i.test(identGet.identity?.type || "") && !!identGet.identity?.principalId, JSON.stringify(identGet.identity));
+  await shot("39-ca-identity");
+
+  // ── Container Apps Job created through the wizard (same environment) → visible over native ARM ──
+  await page.goto(UI + "#/containerapps/jobs/create");
+  await page.getByLabel("Job name", { exact: true }).fill(CAJ);
+  await page.getByRole("link", { name: "Create new" }).or(page.getByRole("button", { name: "Create new" })).first().click();
+  await page.getByLabel("New resource group name").fill(RG);
+  await page.getByLabel("Container Apps Environment", { exact: true }).selectOption({ label: CAE });
+  await page.getByRole("button", { name: "Review + create" }).click();
+  await page.getByText("Validation passed").waitFor({ timeout: 5000 });
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("heading", { name: CAJ, exact: true }).waitFor({ timeout: 10000 });
+  const cajGet = await armApp("GET", `/resourceGroups/${RG}/providers/Microsoft.App/jobs/${CAJ}`);
+  check("UI create Container Apps Job → visible over native ARM", cajGet.status === 200, `HTTP ${cajGet.status}`);
+  await shot("40-caj-overview");
+
+  // ── Run now (Overview) → a real execution, listed over native ARM ─────────────────────
+  await page.getByRole("toolbar", { name: "Overview commands" }).getByRole("button", { name: "Run now" }).click();
+  await page.waitForTimeout(800);
+  const execWire = JSON.parse((await armApp("GET", `/resourceGroups/${RG}/providers/Microsoft.App/jobs/${CAJ}/executions`)).text);
+  check("UI Run now → execution listed over native ARM", (execWire.value || []).length > 0, JSON.stringify(execWire.value));
+  await page.reload();
+  await page.getByText(new RegExp(`^${CAJ}-`)).first().waitFor({ timeout: 10000 });
+  check("execution shown in the job's Execution history", true);
+  await shot("41-caj-execution");
+
+  // ── Container App created over the wire → visible in the UI (CLI → UI) ────────────────
+  await armApp("PUT", `/resourceGroups/${RG}/providers/Microsoft.App/containerApps/${CA2}`,
+    { location: "eastus", properties: { template: { containers: [{ image: "nginx" }] } } });
+  await page.goto(UI + "#/containerapps");
+  await page.getByRole("link", { name: CA2, exact: true }).waitFor({ timeout: 10000 });
+  check("wire-created container app shown in browse grid", true);
+  await shot("42-ca-browse");
+
+  // ── Delete through the Overview command bar → gone over native ARM ────────────────────
+  await page.goto(UI + `#/containerapps/${RG}/${CA}`);
+  await page.getByRole("toolbar", { name: "Overview commands" }).getByRole("button", { name: "Delete" }).click();
+  await page.getByLabel("Confirm deletion").fill(CA);
+  await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await page.getByRole("dialog", { name: /^Delete / }).waitFor({ state: "detached", timeout: 30000 });
+  await page.getByRole("heading", { name: "Container Apps", exact: true }).waitFor({ timeout: 10000 });
+  const caGone = await armApp("GET", `/resourceGroups/${RG}/providers/Microsoft.App/containerApps/${CA}`);
+  check("UI delete Container App → ARM GET 404", caGone.status === 404, `HTTP ${caGone.status}`);
 } catch (e) {
   const at = ((e.stack || "").match(/(?:smoke|dbg)-[a-z]+\.mjs:(\d+)/) || [])[1];   // the failing step's line
   check("smoke run", false, e.message.split("\n")[0] + (at ? ` (smoke line ${at})` : ""));

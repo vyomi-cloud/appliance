@@ -1,0 +1,542 @@
+{
+ "_doc": "ui-spec page id -> v4 route (same contract as consoles/src/aws/services/*/spec-map.json). fixtures/live run consoles/src/azure/services/containerapps/fixtures.mjs over the native ARM wire (svc: null).",
+ "container-apps-environments": {
+  "route": "#/containerapps/environments",
+  "fixtures": [
+   "az-cae"
+  ],
+  "live": "live-env"
+ },
+ "create-container-apps-environment": {
+  "route": "#/containerapps/environments/create",
+  "fixtures": [
+   "az-cae"
+  ]
+ },
+ "container-app-environment-overview": {
+  "route": "#/containerapps/environments/uic-rg/uiccae",
+  "fixtures": [
+   "az-cae"
+  ],
+  "vars": {
+   "resource-name": "uiccae"
+  }
+ },
+ "container-app-environment-activity-log": {
+  "route": "#/containerapps/environments/uic-rg/uiccae/activitylog",
+  "fixtures": [
+   "az-cae"
+  ],
+  "vars": {
+   "resource-name": "uiccae"
+  }
+ },
+ "container-app-environment-access-control-iam": {
+  "route": "#/containerapps/environments/uic-rg/uiccae/iam",
+  "fixtures": [
+   "az-cae"
+  ],
+  "vars": {
+   "resource-name": "uiccae"
+  }
+ },
+ "container-app-environment-tags": {
+  "route": "#/containerapps/environments/uic-rg/uiccae/tags",
+  "fixtures": [
+   "az-cae"
+  ],
+  "vars": {
+   "resource-name": "uiccae"
+  }
+ },
+ "container-app-environment-diagnose-and-solve-problems": {
+  "route": "#/containerapps/environments/uic-rg/uiccae/diagnose",
+  "fixtures": [
+   "az-cae"
+  ],
+  "vars": {
+   "resource-name": "uiccae"
+  }
+ },
+ "container-app-environment-dapr-components": {
+  "route": "#/containerapps/environments/uic-rg/uiccae/daprcomponents",
+  "fixtures": [
+   "az-cae"
+  ],
+  "vars": {
+   "resource-name": "uiccae"
+  }
+ },
+ "container-app-environment-certificates": {
+  "route": "#/containerapps/environments/uic-rg/uiccae/certificates",
+  "fixtures": [
+   "az-cae"
+  ],
+  "vars": {
+   "resource-name": "uiccae"
+  }
+ },
+ "container-app-environment-workload-profiles": {
+  "route": "#/containerapps/environments/uic-rg/uiccae/workloadprofiles",
+  "fixtures": [
+   "az-cae"
+  ],
+  "vars": {
+   "resource-name": "uiccae"
+  }
+ },
+ "container-app-environment-networking": {
+  "route": "#/containerapps/environments/uic-rg/uiccae/networking",
+  "fixtures": [
+   "az-cae"
+  ],
+  "vars": {
+   "resource-name": "uiccae"
+  }
+ },
+ "container-app-environment-logs": {
+  "route": "#/containerapps/environments/uic-rg/uiccae/logs",
+  "fixtures": [
+   "az-cae"
+  ],
+  "vars": {
+   "resource-name": "uiccae"
+  }
+ },
+ "container-app-environment-diagnostic-settings": {
+  "route": "#/containerapps/environments/uic-rg/uiccae/diagnosticsettings",
+  "fixtures": [
+   "az-cae"
+  ],
+  "vars": {
+   "resource-name": "uiccae"
+  }
+ },
+ "container-app-environment-export-template": {
+  "route": "#/containerapps/environments/uic-rg/uiccae/exporttemplate",
+  "fixtures": [
+   "az-cae"
+  ],
+  "vars": {
+   "resource-name": "uiccae"
+  }
+ },
+ "container-app-environment-locks": {
+  "route": "#/containerapps/environments/uic-rg/uiccae/locks",
+  "fixtures": [
+   "az-cae"
+  ],
+  "vars": {
+   "resource-name": "uiccae"
+  }
+ },
+ "container-apps": {
+  "route": "#/containerapps",
+  "fixtures": [
+   "az-cae"
+  ],
+  "live": "live-app"
+ },
+ "create-container-app": {
+  "route": "#/containerapps/create",
+  "fixtures": [
+   "az-cae"
+  ]
+ },
+ "container-app-overview": {
+  "route": "#/containerapps/uic-rg/uicapp",
+  "fixtures": [
+   "az-cae"
+  ],
+  "vars": {
+   "resource-name": "uicapp"
+  },
+  "live": "live-tag-app"
+ },
+ "container-app-activity-log": {
+  "route": "#/containerapps/uic-rg/uicapp/activitylog",
+  "fixtures": [
+   "az-cae"
+  ],
+  "vars": {
+   "resource-name": "uicapp"
+  }
+ },
+ "container-app-access-control-iam": {
+  "route": "#/containerapps/uic-rg/uicapp/iam",
+  "fixtures": [
+   "az-cae"
+  ],
+  "vars": {
+   "resource-name": "uicapp"
+  }
+ },
+ "container-app-tags": {
+  "route": "#/containerapps/uic-rg/uicapp/tags",
+  "fixtures": [
+   "az-cae"
+  ],
+  "vars": {
+   "resource-name": "uicapp"
+  }
+ },
+ "container-app-diagnose-and-solve-problems": {
+  "route": "#/containerapps/uic-rg/uicapp/diagnose",
+  "fixtures": [
+   "az-cae"
+  ],
+  "vars": {
+   "resource-name": "uicapp"
+  }
+ },
+ "container-app-events": {
+  "route": "#/containerapps/uic-rg/uicapp/events",
+  "fixtures": [
+   "az-cae"
+  ],
+  "vars": {
+   "resource-name": "uicapp"
+  }
+ },
+ "container-app-containers": {
+  "route": "#/containerapps/uic-rg/uicapp/containers",
+  "fixtures": [
+   "az-cae"
+  ],
+  "vars": {
+   "resource-name": "uicapp"
+  }
+ },
+ "container-app-revisions": {
+  "route": "#/containerapps/uic-rg/uicapp/revisions",
+  "fixtures": [
+   "az-cae"
+  ],
+  "vars": {
+   "resource-name": "uicapp"
+  }
+ },
+ "container-app-revision-management": {
+  "route": "#/containerapps/uic-rg/uicapp/revisionmanagement",
+  "fixtures": [
+   "az-cae"
+  ],
+  "vars": {
+   "resource-name": "uicapp"
+  }
+ },
+ "container-app-scale": {
+  "route": "#/containerapps/uic-rg/uicapp/scale",
+  "fixtures": [
+   "az-cae"
+  ],
+  "vars": {
+   "resource-name": "uicapp"
+  }
+ },
+ "container-app-ingress": {
+  "route": "#/containerapps/uic-rg/uicapp/ingress",
+  "fixtures": [
+   "az-cae"
+  ],
+  "vars": {
+   "resource-name": "uicapp"
+  }
+ },
+ "container-app-custom-domains": {
+  "route": "#/containerapps/uic-rg/uicapp/customdomains",
+  "fixtures": [
+   "az-cae"
+  ],
+  "vars": {
+   "resource-name": "uicapp"
+  }
+ },
+ "container-app-networking": {
+  "route": "#/containerapps/uic-rg/uicapp/networking",
+  "fixtures": [
+   "az-cae"
+  ],
+  "vars": {
+   "resource-name": "uicapp"
+  }
+ },
+ "container-app-secrets": {
+  "route": "#/containerapps/uic-rg/uicapp/secrets",
+  "fixtures": [
+   "az-cae"
+  ],
+  "vars": {
+   "resource-name": "uicapp"
+  },
+  "live": "live-secret"
+ },
+ "container-app-authentication": {
+  "route": "#/containerapps/uic-rg/uicapp/authentication",
+  "fixtures": [
+   "az-cae"
+  ],
+  "vars": {
+   "resource-name": "uicapp"
+  }
+ },
+ "container-app-identity": {
+  "route": "#/containerapps/uic-rg/uicapp/identity",
+  "fixtures": [
+   "az-cae"
+  ],
+  "vars": {
+   "resource-name": "uicapp"
+  }
+ },
+ "container-app-dapr-configuration": {
+  "route": "#/containerapps/uic-rg/uicapp/dapr",
+  "fixtures": [
+   "az-cae"
+  ],
+  "vars": {
+   "resource-name": "uicapp"
+  }
+ },
+ "container-app-service-connector": {
+  "route": "#/containerapps/uic-rg/uicapp/serviceconnector",
+  "fixtures": [
+   "az-cae"
+  ],
+  "vars": {
+   "resource-name": "uicapp"
+  }
+ },
+ "container-app-console": {
+  "route": "#/containerapps/uic-rg/uicapp/console",
+  "fixtures": [
+   "az-cae"
+  ],
+  "vars": {
+   "resource-name": "uicapp"
+  }
+ },
+ "container-app-continuous-deployment": {
+  "route": "#/containerapps/uic-rg/uicapp/continuousdeployment",
+  "fixtures": [
+   "az-cae"
+  ],
+  "vars": {
+   "resource-name": "uicapp"
+  }
+ },
+ "container-app-locks": {
+  "route": "#/containerapps/uic-rg/uicapp/locks",
+  "fixtures": [
+   "az-cae"
+  ],
+  "vars": {
+   "resource-name": "uicapp"
+  },
+  "live": "live-lock-app"
+ },
+ "container-app-metrics": {
+  "route": "#/containerapps/uic-rg/uicapp/metrics",
+  "fixtures": [
+   "az-cae"
+  ],
+  "vars": {
+   "resource-name": "uicapp"
+  }
+ },
+ "container-app-alerts": {
+  "route": "#/containerapps/uic-rg/uicapp/alerts",
+  "fixtures": [
+   "az-cae"
+  ],
+  "vars": {
+   "resource-name": "uicapp"
+  }
+ },
+ "container-app-log-stream": {
+  "route": "#/containerapps/uic-rg/uicapp/logstream",
+  "fixtures": [
+   "az-cae"
+  ],
+  "vars": {
+   "resource-name": "uicapp"
+  }
+ },
+ "container-app-diagnostic-settings": {
+  "route": "#/containerapps/uic-rg/uicapp/diagnosticsettings",
+  "fixtures": [
+   "az-cae"
+  ],
+  "vars": {
+   "resource-name": "uicapp"
+  }
+ },
+ "container-app-export-template": {
+  "route": "#/containerapps/uic-rg/uicapp/exporttemplate",
+  "fixtures": [
+   "az-cae"
+  ],
+  "vars": {
+   "resource-name": "uicapp"
+  }
+ },
+ "container-app-resource-health": {
+  "route": "#/containerapps/uic-rg/uicapp/resourcehealth",
+  "fixtures": [
+   "az-cae"
+  ],
+  "vars": {
+   "resource-name": "uicapp"
+  }
+ },
+ "container-app-new-support-request": {
+  "route": "#/containerapps/uic-rg/uicapp/supportrequest",
+  "fixtures": [
+   "az-cae"
+  ],
+  "vars": {
+   "resource-name": "uicapp"
+  }
+ },
+ "container-apps-jobs": {
+  "route": "#/containerapps/jobs",
+  "fixtures": [
+   "az-cae"
+  ],
+  "live": "live-job"
+ },
+ "create-container-apps-job": {
+  "route": "#/containerapps/jobs/create",
+  "fixtures": [
+   "az-cae"
+  ]
+ },
+ "container-apps-job-overview": {
+  "route": "#/containerapps/jobs/uic-rg/uicjob",
+  "fixtures": [
+   "az-cae"
+  ],
+  "vars": {
+   "resource-name": "uicjob"
+  },
+  "live": "live-tag-job"
+ },
+ "container-apps-job-activity-log": {
+  "route": "#/containerapps/jobs/uic-rg/uicjob/activitylog",
+  "fixtures": [
+   "az-cae"
+  ],
+  "vars": {
+   "resource-name": "uicjob"
+  }
+ },
+ "container-apps-job-access-control-iam": {
+  "route": "#/containerapps/jobs/uic-rg/uicjob/iam",
+  "fixtures": [
+   "az-cae"
+  ],
+  "vars": {
+   "resource-name": "uicjob"
+  }
+ },
+ "container-apps-job-tags": {
+  "route": "#/containerapps/jobs/uic-rg/uicjob/tags",
+  "fixtures": [
+   "az-cae"
+  ],
+  "vars": {
+   "resource-name": "uicjob"
+  }
+ },
+ "container-apps-job-diagnose-and-solve-problems": {
+  "route": "#/containerapps/jobs/uic-rg/uicjob/diagnose",
+  "fixtures": [
+   "az-cae"
+  ],
+  "vars": {
+   "resource-name": "uicjob"
+  }
+ },
+ "container-apps-job-containers": {
+  "route": "#/containerapps/jobs/uic-rg/uicjob/containers",
+  "fixtures": [
+   "az-cae"
+  ],
+  "vars": {
+   "resource-name": "uicjob"
+  }
+ },
+ "container-apps-job-secrets": {
+  "route": "#/containerapps/jobs/uic-rg/uicjob/secrets",
+  "fixtures": [
+   "az-cae"
+  ],
+  "vars": {
+   "resource-name": "uicjob"
+  }
+ },
+ "container-apps-job-triggers": {
+  "route": "#/containerapps/jobs/uic-rg/uicjob/triggers",
+  "fixtures": [
+   "az-cae"
+  ],
+  "vars": {
+   "resource-name": "uicjob"
+  }
+ },
+ "container-apps-job-identity": {
+  "route": "#/containerapps/jobs/uic-rg/uicjob/identity",
+  "fixtures": [
+   "az-cae"
+  ],
+  "vars": {
+   "resource-name": "uicjob"
+  }
+ },
+ "container-apps-job-execution-history": {
+  "route": "#/containerapps/jobs/uic-rg/uicjob/executionhistory",
+  "fixtures": [
+   "az-cae"
+  ],
+  "vars": {
+   "resource-name": "uicjob"
+  }
+ },
+ "container-apps-job-log-stream": {
+  "route": "#/containerapps/jobs/uic-rg/uicjob/logstream",
+  "fixtures": [
+   "az-cae"
+  ],
+  "vars": {
+   "resource-name": "uicjob"
+  }
+ },
+ "container-apps-job-diagnostic-settings": {
+  "route": "#/containerapps/jobs/uic-rg/uicjob/diagnosticsettings",
+  "fixtures": [
+   "az-cae"
+  ],
+  "vars": {
+   "resource-name": "uicjob"
+  }
+ },
+ "container-apps-job-export-template": {
+  "route": "#/containerapps/jobs/uic-rg/uicjob/exporttemplate",
+  "fixtures": [
+   "az-cae"
+  ],
+  "vars": {
+   "resource-name": "uicjob"
+  }
+ },
+ "container-apps-job-locks": {
+  "route": "#/containerapps/jobs/uic-rg/uicjob/locks",
+  "fixtures": [
+   "az-cae"
+  ],
+  "vars": {
+   "resource-name": "uicjob"
+  },
+  "live": "live-lock-job"
+ }
+}

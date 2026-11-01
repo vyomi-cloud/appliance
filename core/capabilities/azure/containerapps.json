@@ -1,0 +1,120 @@
+{
+ "$doc": "Vyomi capability registry — Azure Container Apps (Microsoft.App). One entry per console section; level per substrate (nano = shared core, also dev_server/unified ingress; offline = appliance). Proven by tests/conformance/test_capabilities.py. core/azure_app_core.py is substrate-free so nano and offline share the same engine.",
+ "azure.containerapps.environment.crud": {
+  "title": "Container Apps Environments (create, list, get, delete)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": ["The environment's own virtual network, static IP and default domain are generated; there is no real network fabric behind them."],
+  "api": ["managedEnvironments CreateOrUpdate", "managedEnvironments Get", "managedEnvironments List", "managedEnvironments Delete"],
+  "tests": ["tests/conformance/test_azure_app_core.py"]
+ },
+ "azure.containerapps.environment.children": {
+  "title": "Dapr components, certificates and workload profiles",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": ["Dapr components are stored and returned to the azure-mgmt-appcontainers SDK / az CLI exactly as configured; there is no running Dapr sidecar to actually invoke state/pub-sub/binding calls through them. Certificates and workload profile counts are likewise stored, not provisioned against real compute capacity."],
+  "api": ["managedEnvironments/daprComponents CreateOrUpdate/List/Delete", "managedEnvironments/certificates CreateOrUpdate/List/Delete", "managedEnvironments Update (workloadProfiles)", "managedEnvironments/workloadProfileStates List"],
+  "tests": ["tests/conformance/test_azure_app_core.py"]
+ },
+ "azure.containerapps.environment.tools": {
+  "title": "Diagnose and solve problems, Logs",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["No diagnostics engine or Log Analytics query pipeline for this environment."],
+  "api": []
+ },
+ "azure.containerapps.app.crud": {
+  "title": "Container Apps (create, list, get, delete, start/stop)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": ["Replica execution is simulated bookkeeping (minReplicas when active, 0 when stopped/inactive) unless the offline appliance's Docker runtime hook is attached, in which case the active revision's image really runs as a container."],
+  "api": ["containerApps CreateOrUpdate", "containerApps Get", "containerApps List", "containerApps Delete", "containerApps start/stop"],
+  "tests": ["tests/conformance/test_azure_app_core.py"]
+ },
+ "azure.containerapps.app.revisions": {
+  "title": "Revisions and replicas (list, activate, deactivate, restart)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": ["A changed container template creates a real new revision with its own name/FQDN; health state and running state are reported, not probed from a live process (unless the offline Docker runtime hook is attached)."],
+  "api": ["containerApps/revisions List/Get/activate/deactivate/restart", "containerApps/revisions/replicas List/Get"],
+  "tests": ["tests/conformance/test_azure_app_core.py"]
+ },
+ "azure.containerapps.app.ingress": {
+  "title": "Ingress and traffic splitting (revision management)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": ["FQDNs are generated and traffic weights are validated to sum to 100 and stored for real; there is no real reverse proxy routing HTTP traffic by weight between revisions."],
+  "api": ["containerApps Update (configuration.ingress)", "containerApps/revisions (trafficWeight)"],
+  "tests": ["tests/conformance/test_azure_app_core.py"]
+ },
+ "azure.containerapps.app.scale": {
+  "title": "Scale (min/max replicas, scale rules)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["minReplicas/maxReplicas really bound the replica count Vyomi reports and (with the Docker runtime hook) runs; custom scale rules (HTTP concurrency, CPU, custom) are stored and returned but never evaluated — Vyomi does not scale a revision in response to real load."],
+  "api": ["containerApps Update (template.scale)"],
+  "tests": ["tests/conformance/test_azure_app_core.py"]
+ },
+ "azure.containerapps.app.secrets": {
+  "title": "Secrets (add, remove, list values)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": ["Secret values never leave a GET/List (matching real ARM); listSecrets reveals them for real, and a container's env var secretRef is validated against the app's own secret set."],
+  "api": ["containerApps Update (configuration.secrets)", "containerApps listSecrets"],
+  "tests": ["tests/conformance/test_azure_app_core.py"]
+ },
+ "azure.containerapps.app.authentication": {
+  "title": "Authentication (require authentication / allow unauthenticated)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["The platform-enabled flag and unauthenticated-request action are stored and returned to az containerapp auth show/update for real; there is no running ingress to actually redirect a request to a login page, and identity provider configuration (Entra ID, Google, Facebook, GitHub, Apple, X, OpenID Connect) is not modelled."],
+  "api": ["containerApps/authConfigs CreateOrUpdate/List"],
+  "tests": ["tests/conformance/test_azure_app_core.py"]
+ },
+ "azure.containerapps.app.customdomains": {
+  "title": "Custom domains (hostname validation)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["listCustomHostNameAnalysis is a real call that returns the CNAME record Vyomi expects; Vyomi does not persist a bound custom domain or managed certificate against the app (there is no hostNameBindings-style sub-resource for Container Apps, unlike App Service)."],
+  "api": ["containerApps listCustomHostNameAnalysis"],
+  "tests": ["tests/conformance/test_azure_app_core.py"]
+ },
+ "azure.containerapps.app.identity": {
+  "title": "Identity (system-assigned managed identity)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": ["Enabling a system-assigned identity mints a stable principalId/tenantId that can be the subject of a role assignment on Access control (IAM); user-assigned identities are not modelled."],
+  "api": ["containerApps Update (identity)"],
+  "tests": ["tests/conformance/test_azure_app_core.py"]
+ },
+ "azure.containerapps.app.networking": {
+  "title": "Networking, Dapr configuration, Service Connector, Console, Continuous deployment",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["No per-app VNet/private endpoint configuration beyond the environment's own network, app-level Dapr sidecar enablement, Service Connector linkage, an in-browser exec console, or a CI/CD source-to-image pipeline."],
+  "api": []
+ },
+ "azure.containerapps.app.monitoring": {
+  "title": "Metrics, Alerts, Log stream",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["No metrics pipeline, alert evaluation or live log streaming behind a Container App (Diagnostic settings are real — see Automation/Monitoring's generic ARM extension-resource engine)."],
+  "api": []
+ },
+ "azure.containerapps.app.tools": {
+  "title": "Diagnose and solve problems, Events, Resource health, New support request",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["No diagnostics engine, Event Grid wiring, resource-health telemetry or support-ticket flow."],
+  "api": []
+ },
+ "azure.containerapps.job.crud": {
+  "title": "Container Apps Jobs (create, delete, run, stop, secrets, execution history)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": ["An execution's status is reported Succeeded immediately (no real workload runs the job's container); Manual/Schedule trigger configuration is validated and stored for real, including the cron expression."],
+  "api": ["jobs CreateOrUpdate", "jobs Get", "jobs List", "jobs Delete", "jobs start/stop", "jobs listSecrets", "jobs/executions List/Get/stop"],
+  "tests": ["tests/conformance/test_azure_app_core.py"]
+ },
+ "azure.containerapps.job.tools": {
+  "title": "Diagnose and solve problems, Identity, Log stream",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["No diagnostics engine, managed identity (jobs don't model the identity field) or live log streaming for a Container Apps Job."],
+  "api": []
+ },
+ "azure.containerapps.iam": {
+  "title": "Access control (IAM): role assignments and built-in role definitions over ARM",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Role assignments and role definitions are real ARM resources (Microsoft.Authorization/roleAssignments, roleDefinitions). The Role assignments list is ENFORCED scoped to this resource (plus its subscription/resource-group ancestors, matching real Azure's inherited-access view) instead of the whole subscription — the same engine the App Service/Cosmos DB/VM blades use; Roles stays subscription-wide, which matches real Azure.",
+   "Assignments are still created at the subscription scope; 'Check access' / 'My access' evaluation and Deny assignments / Classic administrators remain an honest gap."
+  ],
+  "api": ["RoleAssignments_ListForScope (resource-scoped)", "RoleDefinitions_List"],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ }
+}
