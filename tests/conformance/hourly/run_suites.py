@@ -90,8 +90,30 @@ def for_shard(s: dict, cloud: str) -> dict:
     return s
 
 
+_PROJECT = {}
+
+
+def gcp_project(endpoint: str) -> str:
+    """The GCP space's project id. Only it (or its number) reaches the project:
+    any other id (gcp-dev, cloudlearn, a suite's own default) is "project not
+    found", as on real GCP. Suites read it from $PROJECT."""
+    if endpoint not in _PROJECT:
+        try:
+            import urllib.request
+            with urllib.request.urlopen(endpoint + "/v1/projects", timeout=10) as r:
+                _PROJECT[endpoint] = json.load(r)["projects"][0]["projectId"]
+        except Exception:
+            _PROJECT[endpoint] = ""
+    return _PROJECT[endpoint]
+
+
 def run_suite(s: dict, subs: dict) -> dict:
     cmd = s["cmd"]
+    env = dict(os.environ)
+    if s.get("cloud") == "gcp" and s.get("target") == "offline" and subs.get("ENDPOINT"):
+        proj = gcp_project(subs["ENDPOINT"])
+        if proj:
+            env.setdefault("PROJECT", proj)
     for k, v in subs.items():
         cmd = cmd.replace("{" + k + "}", v)
     cwd = os.path.join(ROOT, s.get("cwd", ""))
@@ -100,7 +122,7 @@ def run_suite(s: dict, subs: dict) -> dict:
     t0 = time.time()
     try:
         p = subprocess.run(cmd, shell=True, cwd=cwd, capture_output=True, text=True,
-                           timeout=s.get("timeout", 600), executable="/bin/bash")
+                           timeout=s.get("timeout", 600), executable="/bin/bash", env=env)
         log, code = (p.stdout or "") + (p.stderr or ""), p.returncode
     except subprocess.TimeoutExpired as e:
         log = ((e.stdout or b"").decode(errors="replace") if isinstance(e.stdout, bytes) else (e.stdout or "")) + "\nTIMEOUT"

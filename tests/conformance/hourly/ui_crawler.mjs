@@ -85,7 +85,7 @@ const snap = (page) => page.evaluate(() => {
   // Azure shows resource detail (and its tabs) in the #blade side pane, outside #main.
   const bl = document.querySelector("#blade.open");
   const text = ((m?.innerText || "") + (bl ? "\n" + bl.innerText : "")).trim();
-  return { text: text.slice(0, 4000), len: text.length, html: (m?.innerHTML || "").length + (bl ? bl.innerHTML.length : 0) };
+  return { text: text.slice(0, 20000), len: text.length, html: (m?.innerHTML || "").length + (bl ? bl.innerHTML.length : 0) };
 });
 
 // How implemented each console surface is (service page, create, resource
@@ -497,7 +497,12 @@ async function crawlConsole(browser, base, con, needsSW) {
           const tagEditor = /^tags$/i.test(label) && (await page.locator(".tags-grid input").count().catch(() => 0)) >= 2 ? 1 : 0;
           const editable = /^(labels|tags)$/i.test(label) &&
             (await page.locator("#main button, #blade button").filter({ hasText: /add|edit/i }).count().catch(() => 0)) > 0;
-          surface("tab", label, tf, calls() + tagEditor, added, tokens, editable);
+          // A tab that opens the same panel as the live tab before it (Azure Insights → Metrics both
+          // draw the resource's measured series; the repeat fetch is deduped as "background") shows
+          // that tab's real data: it inherits its liveness rather than reading as static.
+          const prevLive = row.surfaces.at(-1)?.state === "live" && row.surfaces.at(-1)?.kind === "tab";
+          const samePanel = t > 0 && prevLive && added.trim() === "" && !tf.some((f) => f.type === "DEAD_TAB");
+          surface("tab", label, tf, calls() + tagEditor + (samePanel ? 1 : 0), added, tokens, editable);
           if (process.env.DEBUG_CRAWL && row.surfaces.at(-1).state === "static") console.log(`[debug] ${svc.label}/${label} static: ${JSON.stringify(added.slice(0, 160))}`);
         }
       } catch (e) {
