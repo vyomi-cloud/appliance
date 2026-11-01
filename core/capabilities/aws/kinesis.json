@@ -1,0 +1,114 @@
+{
+ "$doc": "Vyomi capability registry — Kinesis Data Streams. See s3.json for the contract.",
+ "kinesis.stream.crud": {
+  "title": "Data streams (create, describe, list, delete)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_kinesis_core.py"
+  ]
+ },
+ "kinesis.stream.shards": {
+  "title": "Shards (list, split, merge, scale)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_kinesis_core.py"
+  ]
+ },
+ "kinesis.stream.records": {
+  "title": "Records (PutRecord/PutRecords, GetShardIterator/GetRecords)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_kinesis_core.py"
+  ]
+ },
+ "kinesis.stream.retention": {
+  "title": "Retention period",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_kinesis_core.py"
+  ]
+ },
+ "kinesis.stream.encryption": {
+  "title": "Server-side encryption (KMS)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_kinesis_core.py"
+  ]
+ },
+ "kinesis.stream.resource-policy": {
+  "title": "Resource policy",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "The resource policy document is stored and returned exactly as written, but Vyomi does not evaluate it — it never denies or allows a Kinesis call based on policy content."
+  ],
+  "tests": [
+   "tests/conformance/test_kinesis_core.py"
+  ]
+ },
+ "kinesis.stream.tags": {
+  "title": "Tags",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_kinesis_core.py"
+  ]
+ },
+ "kinesis.stream.enhanced-fanout": {
+  "title": "Enhanced fan-out consumers",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_kinesis_core.py"
+  ]
+ },
+ "kinesis.stream.enhanced-monitoring": {
+  "title": "Enhanced (shard-level) CloudWatch metrics — enable/disable flag",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_kinesis_core.py"
+  ]
+ },
+ "kinesis.stream.monitoring-metrics": {
+  "title": "CloudWatch metric graphs (IncomingBytes, IncomingRecords, …)",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Vyomi records which shard-level metrics are enabled/disabled (a real, stateful flag an SDK can read back), but has no metrics-aggregation engine for Kinesis, so the CloudWatch graphs themselves aren't rendered."
+  ]
+ }
+}

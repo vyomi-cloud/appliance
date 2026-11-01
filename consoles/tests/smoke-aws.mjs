@@ -984,6 +984,28 @@ try {
         genTplXml.includes(ROLE4) && genTplXml.includes("AWS::IAM::Role"), genTplXml.slice(0, 300));
   await shot("23-cloudformation-iac-generator");
 
+  // Kinesis: create a data stream through the UI (UI → CLI direction)
+  const KS = `v4-smoke-stream-${Date.now() % 100000}`;
+  await page.goto(UI + "#/kinesis/streams/create");
+  await page.getByLabel("Data stream name").fill(KS);
+  await page.getByRole("radio", { name: "Provisioned" }).check();
+  await page.getByLabel("Number of open shards").fill("1");
+  await page.getByRole("button", { name: "Create data stream" }).last().click();
+  await page.getByRole("heading", { name: KS }).waitFor({ timeout: 10000 });
+  const kinStreams = await kinesis("ListStreams", {});
+  check("Kinesis create data stream (UI) → visible over native wire", (kinStreams.StreamNames || []).includes(KS), JSON.stringify(kinStreams.StreamNames));
+  await shot("24-kinesis-streams");
+
+  // Kinesis: PutRecord over the wire (CLI direction), read it back through the Data viewer (UI direction)
+  await kinesis("PutRecord", { StreamName: KS, Data: Buffer.from("hello-kinesis").toString("base64"), PartitionKey: "pk1" });
+  await page.goto(UI + `#/kinesis/streams/${KS}`);
+  await page.getByRole("tab", { name: "Data viewer" }).click();
+  await page.waitForTimeout(800);
+  await page.getByRole("button", { name: "Get records" }).click();
+  await page.getByText("hello-kinesis").first().waitFor({ timeout: 10000 });
+  check("Kinesis PutRecord over wire → shown in Data viewer (Get records)", true);
+  await shot("25-kinesis-data-viewer");
+
   // Dark mode
   await page.evaluate(() => localStorage.setItem("vyomi.v4.mode", "dark"));
   await page.reload();

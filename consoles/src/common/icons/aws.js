@@ -50,6 +50,8 @@ export const AWS_ICONS = {
   cloudwatch: ["management", '<circle cx="12" cy="12" r="7"/><path d="M8 13.8l2.4-2.7 2 1.6 3.6-4"/>'],
   // templates/stacks: three layers
   cloudformation: ["management", '<path d="M12 5 19 8.7 12 12.4 5 8.7z"/><path d="M5 12.3l7 3.7 7-3.7M5 15.7l7 3.7 7-3.7"/>'],
+  // data stream: records flowing through shards
+  kinesis: ["integration", '<path d="M4.6 8.5h3.6M4.6 12h3.6M4.6 15.5h3.6"/><path d="M9.5 8.5h3.6M9.5 12h3.6M9.5 15.5h3.6"/><path d="M15.5 12h3.9M17.6 10.1l1.9 1.9-1.9 1.9"/>'],
 };
 
 const FALLBACK = ["other", '<rect x="6" y="6" width="5" height="5" rx="1"/><rect x="13" y="6" width="5" height="5" rx="1"/><rect x="6" y="13" width="5" height="5" rx="1"/><rect x="13" y="13" width="5" height="5" rx="1"/>'];
