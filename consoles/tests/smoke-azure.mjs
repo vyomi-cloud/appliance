@@ -77,6 +77,9 @@ const DNSREC2 = `dnswirerec${n}`;        // A record set created over the wire (
 const DNSPRIV = `vysmokednspriv${n}.net`;  // private DNS zone created through the UI, for VNet links
 const DNSVNET = `vysmokednsvnet${n}`;    // vnet linked to the private zone as a registration link
 const DNSLOCK = `vysmokednslock${n}`;    // lock created through the UI, scoped to the DNS zone
+const COGS = `vysmokecogs${n}`;    // Azure AI services account created through the UI
+const COGS2 = `vywirecogs${n}`;    // Azure AI services account created over the wire (CLI → UI direction)
+const DEPLOY = `vysmokedeploy${n}`;  // model deployment created through the UI, read back over ARM
 const results = [];
 const check = (name, ok, detail = "") => { results.push({ name, ok, detail }); console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? " — " + detail : ""}`); };
 let page;
@@ -94,6 +97,7 @@ const armWeb = (method, path, body) => wire(`/subscriptions/${SUB}${path}${path.
 const armAks = (method, path, body) => wire(`/subscriptions/${SUB}${path}${path.includes("?") ? "&" : "?"}api-version=2024-09-02-preview`,
   { method, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
 const armDns = (method, path, body) => wire(`/subscriptions/${SUB}${path}${path.includes("?") ? "&" : "?"}api-version=2018-05-01`,
+const armCogs = (method, path, body) => wire(`/subscriptions/${SUB}${path}${path.includes("?") ? "&" : "?"}api-version=2024-10-01`,
   { method, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
 const graph = (method, path, body) => wire(`/v1.0${path}`, { method, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
 const blobHdr = (acct) => ({ "x-ms-version": "2021-12-02", authorization: `SharedKey ${acct}:c21va2U=` });
@@ -2542,6 +2546,47 @@ try {
   await page.getByRole("heading", { name: "DNS zones", exact: true }).waitFor({ timeout: 10000 });
   const dnsZoneGone = await armDns("GET", `/resourceGroups/${DEFAULT_RG}/providers/Microsoft.Network/dnsZones/${DNSZONE}`);
   check("UI delete DNS zone → ARM GET 404", dnsZoneGone.status === 404, `HTTP ${dnsZoneGone.status}`);
+  // ── Azure AI services account created through the wizard → visible over native ARM ────
+  await page.goto(UI + "#/cognitiveservices/create");
+  await page.getByLabel("Name", { exact: true }).fill(COGS);
+  await page.getByLabel("Resource group", { exact: true }).selectOption(RG);
+  await shot("33-create-cognitiveservices-basics");
+  await page.getByRole("button", { name: "Review + create" }).click();
+  await page.getByText("Validation passed").waitFor({ timeout: 5000 });
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("heading", { name: COGS, exact: true }).waitFor({ timeout: 10000 });
+  const gotCogs = await armCogs("GET", `/resourceGroups/${RG}/providers/Microsoft.CognitiveServices/accounts/${COGS}`);
+  check("UI create Azure AI services account → visible over native ARM", gotCogs.status === 200 && JSON.parse(gotCogs.text).kind === "OpenAI", `HTTP ${gotCogs.status}`);
+  await shot("34-cognitiveservices-overview");
+
+  // ── Model deployment created in the blade → readable over native ARM ───────────────────
+  await openPanel("Model deployments");
+  await page.getByRole("toolbar", { name: "Command bar" }).getByRole("button", { name: "Create new deployment" }).click();
+  await page.getByLabel("Deployment name", { exact: true }).fill(DEPLOY);
+  await page.getByRole("dialog").getByRole("button", { name: "Deploy" }).click();
+  await page.getByText(DEPLOY, { exact: true }).first().waitFor({ timeout: 10000 });
+  const depGet = await armCogs("GET", `/resourceGroups/${RG}/providers/Microsoft.CognitiveServices/accounts/${COGS}/deployments/${DEPLOY}`);
+  check("UI create model deployment → readable over native ARM", depGet.status === 200 && JSON.parse(depGet.text).properties?.model?.name === "gpt-4o", `HTTP ${depGet.status}`);
+  await shot("35-cognitiveservices-deployments");
+
+  // ── Account created over the wire → visible in the UI browse grid (CLI → UI) ───────────
+  const cogsPut = await armCogs("PUT", `/resourceGroups/${RG}/providers/Microsoft.CognitiveServices/accounts/${COGS2}`,
+    { kind: "OpenAI", sku: { name: "S0" }, location: "eastus" });
+  check("ARM PUT Azure AI services account over wire", cogsPut.status === 200 || cogsPut.status === 201, `HTTP ${cogsPut.status}`);
+  await page.goto(UI + "#/cognitiveservices");
+  await page.getByRole("link", { name: COGS2, exact: true }).waitFor({ timeout: 10000 });
+  check("wire-created account shown in browse grid", true);
+  await shot("36-cognitiveservices-browse");
+
+  // ── Delete through the Overview command bar → gone over native ARM (soft-deleted) ──────
+  await page.goto(UI + `#/cognitiveservices/${RG}/${COGS2}`);
+  await page.getByRole("toolbar", { name: "Overview commands" }).getByRole("button", { name: "Delete" }).click();
+  await page.getByLabel("Confirm deletion").fill(COGS2);
+  await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await page.getByRole("dialog", { name: /^Delete / }).waitFor({ state: "detached", timeout: 30000 });
+  await page.getByRole("heading", { name: "Azure AI services", exact: true }).waitFor({ timeout: 10000 });
+  const cogsGone = await armCogs("GET", `/resourceGroups/${RG}/providers/Microsoft.CognitiveServices/accounts/${COGS2}`);
+  check("UI delete Azure AI services account → ARM GET 404", cogsGone.status === 404, `HTTP ${cogsGone.status}`);
 } catch (e) {
   const at = ((e.stack || "").match(/(?:smoke|dbg)-[a-z]+\.mjs:(\d+)/) || [])[1];   // the failing step's line
   check("smoke run", false, e.message.split("\n")[0] + (at ? ` (smoke line ${at})` : ""));

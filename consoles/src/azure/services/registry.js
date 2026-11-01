@@ -4,7 +4,7 @@
  * `icon` names Vyomi's own original glyph (common/icons/azure.js) — no Microsoft service icons. */
 import { classicUrl } from "../../common/classic.js";
 
-export const CATEGORIES = ["Compute", "Containers", "Databases", "Storage", "Networking", "Integration", "Security", "Identity", "Management and governance"];
+export const CATEGORIES = ["Compute", "Containers", "Databases", "Storage", "Networking", "Integration", "Security", "Identity", "AI + machine learning", "Management and governance"];
 
 export const SERVICES = [
   { id: "storage", title: "Storage accounts", type: "Microsoft.Storage/storageAccounts", category: "Storage", icon: "storage", load: () => import("./storage/index.jsx") },
@@ -28,6 +28,7 @@ export const SERVICES = [
   { id: "entra", title: "Microsoft Entra ID", type: "Identity", category: "Identity", icon: "entra", load: () => import("./entra/index.jsx") },
   { id: "subscriptions", title: "Subscriptions", type: "Microsoft.Resources/subscriptions", category: "Management and governance", icon: "subscriptions", load: () => import("./subscriptions/index.jsx") },
   { id: "cost", title: "Cost Management", type: "Microsoft.CostManagement", category: "Management and governance", icon: "cost", load: () => import("./cost/index.jsx") },
+  { id: "cognitiveservices", title: "Azure AI services", type: "Microsoft.CognitiveServices/accounts", category: "AI + machine learning", icon: "cognitiveservices", load: () => import("./cognitiveservices/index.jsx") },
 ];
 
 export const byId = Object.fromEntries(SERVICES.map((s) => [s.id, s]));
