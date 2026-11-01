@@ -3019,6 +3019,18 @@ try {
   check("UI add replica → visible over native ARM", replGet.status === 200, `HTTP ${replGet.status}`);
   await shot("38-geo-replication");
 
+  // ── Access control (IAM): role assignment added in the UI is scoped to the store over native RBAC ──
+  const acPrincipal = `vyacprincipal${n}`;
+  await page.goto(UI + `#/appconfiguration/${RG}/${AC}/iam`);
+  await page.getByRole("tab", { name: "Role assignments" }).click();
+  await page.getByRole("button", { name: "Add" }).first().click();
+  await page.getByLabel("Principal ID").fill(acPrincipal);
+  await page.getByRole("dialog").getByRole("button", { name: "Review + assign" }).click();
+  await page.getByText(acPrincipal).first().waitFor({ timeout: 10000 });
+  const acRa = JSON.parse((await wire(`/subscriptions/${SUB}/providers/Microsoft.Authorization/roleAssignments?api-version=2022-04-01`)).text).value || [];
+  const acRaHit = acRa.find((r) => r.properties?.principalId === acPrincipal);
+  check("UI App Configuration role assignment → scoped to the store over native RBAC", !!acRaHit && /configurationstores\//i.test(acRaHit.properties.scope), acRaHit?.properties?.scope);
+
   // ── Delete through the Overview command bar → gone over native ARM ─────────────────────
   await page.goto(UI + `#/appconfiguration/${RG}/${AC}`);
   await page.getByRole("toolbar", { name: "Overview commands" }).getByRole("button", { name: "Delete" }).click();

@@ -76,5 +76,13 @@
    "There is a fixed soft-delete retention window applied by the engine rather than a configurable per-account retention policy (Cognitive Services accounts have no 'purge protection' toggle in real Azure either, unlike Key vaults)."
   ],
   "tests": ["tests/conformance/test_azure_cognitiveservices_core.py"]
+ },
+ "azure.cognitiveservices.iam": {
+  "title": "Access control (IAM)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Check access, Role assignments and Deny assignments are REAL and scoped to this Cognitive Services account's resource id: Check access runs core/azure_iam_core.py's evaluator (explicit-deny-wins, scope inheritance from the subscription/resource group), the lists filter the shared RBAC store to assignments whose scope covers it, and new assignments are created scoped to it. Principal IDs are free text (Vyomi has no real directory); 'My access' and Classic administrators stay honest gaps."
+  ],
+  "tests": ["tests/conformance/test_azure_rbac_core.py"]
  }
 }

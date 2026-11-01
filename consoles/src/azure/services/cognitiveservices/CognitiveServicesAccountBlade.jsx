@@ -16,6 +16,7 @@ import BrowseGrid from "../../kit/BrowseGrid.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
 import ResourceBlade from "../../kit/ResourceBlade.jsx";
 import { Essentials, ErrorBar, Glyph, KV, Loading, NotSimulated, NotSimulatedContainer, downloadCsv, fmtDate } from "../../kit/common.jsx";
+import ResourceIam from "../../kit/ResourceIam.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { remember, forget } from "../../kit/recent.js";
 import * as api from "./api.js";
@@ -135,47 +136,9 @@ function Overview({ a, reload, self }) {
   );
 }
 
-// ── Access control (IAM) ──────────────────────────────────────────────────────────────
-function AccessControlIam({ a }) {
-  const [tab, setTab] = useState("check");
-  const [dlg, setDlg] = useState(null);
-  return (
-    <>
-      <div className="vy-panel-title">Access control (IAM)</div>
-      <TabList selectedValue={tab} onTabSelect={(_, d) => setTab(d.value)} aria-label="Access control (IAM) tabs">
-        <Tab value="check">Check access</Tab>
-        <Tab value="assignments">Role assignments</Tab>
-        <Tab value="roles">Roles</Tab>
-        <Tab value="deny">Deny assignments</Tab>
-        <Tab value="classic">Classic administrators</Tab>
-      </TabList>
-      {tab === "check" && (
-        <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 16 }}>
-          <section className="vy-section"><h3>My access</h3><Button onClick={() => setDlg("mine")}>View my access</Button></section>
-          <section className="vy-section"><h3>Check access</h3><Button onClick={() => setDlg("check")}>Check access</Button></section>
-        </div>
-      )}
-      {tab === "assignments" && (
-        <div style={{ marginTop: 12 }}>
-          <div className="vy-panel-title">Role assignments</div>
-          <NotSimulatedContainer feature="Role assignments scoped to this resource (Microsoft.Authorization/roleAssignments is simulated at subscription scope only)" />
-        </div>
-      )}
-      {tab === "roles" && <div style={{ marginTop: 12 }}><div className="vy-panel-title">Roles</div><NotSimulatedContainer feature="The built-in and custom role catalog" /></div>}
-      {tab === "deny" && <div style={{ marginTop: 12 }}><div className="vy-panel-title">Deny assignments</div><NotSimulatedContainer feature="Deny assignments" /></div>}
-      {tab === "classic" && <div style={{ marginTop: 12 }}><NotSimulatedContainer title="Classic administrators" feature="Classic administrators (co-administrators)" /></div>}
-      <Dialog open={!!dlg} onOpenChange={(_, d) => !d.open && setDlg(null)}>
-        <DialogSurface aria-label="Access check">
-          <DialogBody>
-            <DialogTitle>{dlg === "mine" ? "My access" : "Check access"}</DialogTitle>
-            <DialogContent><NotSimulated feature="Per-identity role-assignment resolution for this resource" note={`The account's resource id is ${a.id}.`} /></DialogContent>
-            <DialogActions><Button onClick={() => setDlg(null)}>Close</Button></DialogActions>
-          </DialogBody>
-        </DialogSurface>
-      </Dialog>
-    </>
-  );
-}
+// ── Access control (IAM) — shared real RBAC panel (core/azure_iam_core.py) ─────────────
+const COGNITIVESERVICES_ACTIONS = ["Microsoft.CognitiveServices/accounts/read", "Microsoft.CognitiveServices/accounts/write", "Microsoft.CognitiveServices/accounts/delete", "Microsoft.CognitiveServices/accounts/listKeys/action", "Microsoft.CognitiveServices/accounts/deployments/write"];
+function AccessControlIam({ a }) { return <ResourceIam a={a} capId="azure.cognitiveservices.iam" actions={COGNITIVESERVICES_ACTIONS} />; }
 
 // ── Tags ───────────────────────────────────────────────────────────────────────────────
 export function TagRows({ tags, onChange, resource }) {
