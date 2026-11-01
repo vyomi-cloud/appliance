@@ -15,7 +15,7 @@ def check(name, ok, detail=""):
     print(f"[{'PASS' if ok else 'FAIL'}] {name}{' — ' + str(detail) if detail and not ok else ''}")
 
 
-arm = AzureArm({}) if True else None
+arm = AzureArm()
 W = "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/rg1/providers/Microsoft.OperationalInsights/workspaces/law-dp"
 V = {"api-version": "2022-10-01"}
 arm.handle("PUT", "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourcegroups/rg1", {"api-version": "2021-04-01"}, {"location": "eastus"})

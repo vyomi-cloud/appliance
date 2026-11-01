@@ -2016,6 +2016,14 @@
       "kind": "api",
       "cmd": "python3 tests/conformance/post_create/probes/aws_iam_actions.py {ENDPOINT}",
       "timeout": 300
+    },
+    {
+      "id": "offline-post-create-azure-rbac-checkaccess",
+      "target": "offline",
+      "cloud": "azure",
+      "kind": "api",
+      "cmd": "python3 tests/conformance/post_create/probes/azure_rbac.py {ENDPOINT}",
+      "timeout": 300
     }
   ]
 }

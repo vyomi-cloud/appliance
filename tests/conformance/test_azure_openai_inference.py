@@ -15,7 +15,7 @@ def check(name, ok, detail=""):
     print(f"[{'PASS' if ok else 'FAIL'}] {name}{' — ' + str(detail)[:300] if detail and not ok else ''}")
 
 
-arm = AzureArm({})
+arm = AzureArm()
 SUB = "/subscriptions/00000000-0000-0000-0000-cloudlearn01"
 arm.handle("PUT", SUB + "/resourcegroups/rg1", {"api-version": "2021-04-01"}, {"location": "eastus"})
 A = SUB + "/resourceGroups/rg1/providers/Microsoft.CognitiveServices/accounts/aoai1"
