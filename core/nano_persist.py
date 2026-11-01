@@ -46,6 +46,7 @@ STORE_ATTRS = [
     "az_acr",  # Azure Container Registry (core/azure_acr_core.AcrRegistryStore)
     "sched",  # EventBridge Scheduler (core/scheduler_core.SchedulerStore)
     "gcp_logging",  # Cloud Logging (core/gcp_logging_core.LoggingStore)
+    "ram",      # Resource Access Manager (core/ram_core — subnet/SG resource shares)
     "gcp_rm", "gcp_pam",  # IAM & Admin: Resource Manager + Privileged Access Manager
     "gcp_compute_vm",  # Compute Engine VMs/disks/images/templates (core/gcp_compute_instances_core.ComputeStore)
     "gcp_compute",  # VPC network: networks/subnets/firewalls/routes/addresses (core/gcp_compute_core.ComputeStore)
@@ -95,7 +96,7 @@ def _dec(v):
 # the next reload. Add a core's attr here when it keeps state this way.
 _DURABLE_PRIVATE = ("_lambda_functions", "_lambda_layers", "_lambda_esms", "_apigateway_apis", "_vpc_model",
                      "_lambda_capacity_providers", "_lambda_code_signing_configs", "_lambda_network_connectors",
-                     "_lambda_microvm_images", "_lambda_microvms", "_lambda_applications")
+                     "_lambda_microvm_images", "_lambda_microvms", "_lambda_applications", "_ram_model")
 
 
 def _public_state(store) -> dict:

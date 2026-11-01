@@ -76,9 +76,10 @@
  },
  "aws.vpc.dhcp-option-sets": {
   "title": "DHCP option sets (create, describe, delete, associate)",
-  "level": { "nano": "config_only", "offline": "config_only" },
+  "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "Vyomi stores and returns DHCP configuration exactly as set, but has no real DHCP server — subnets don't actually receive these options over a simulated network stack."
+   "Enforced, not stored config: DescribeVpcDnsResolution computes the VPC's effective DNS server(s) live from its DHCP option set + enableDnsSupport attribute (AmazonProvidedDNS → the VPC's reserved resolver address; a custom domain-name-servers value → those real IPs) — changing either really changes the answer, and whether a subnet can actually reach a custom resolver is a normal Reachability Analyzer check (route table + SG/NACL).",
+   "There is still no real DHCP server handing out leases over a simulated network stack — domain-name / ntp-servers / netbios-* are stored and returned but not consumed."
   ],
   "tests": ["tests/conformance/test_vpc_core.py"]
  },
@@ -118,15 +119,16 @@
   "title": "VPC console third-party integrations (e.g. Transit Gateway Network Manager tiles)",
   "level": { "nano": "not_simulated", "offline": "not_simulated" },
   "limitations": [
-   "No third-party integrations are modeled."
+   "These dashboard tiles link out to genuinely separate things Vyomi cannot stand in for: AWS Network Manager (its own control plane over Transit Gateways) and real third-party network/observability partners (e.g. Aviatrix, Kentik) advertised in the console — not a resource this core could model, real external services."
   ]
  },
  "aws.vpc.create-vpc-and-more": {
   "title": "\"VPC and more\" wizard (auto-generated subnets/route tables/NAT gateways/endpoints)",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "level": { "nano": "full", "offline": "full" },
   "limitations": [
-   "Use \"VPC only\" and then create subnets, route tables, and NAT gateways individually — the guided multi-resource wizard isn't modeled, including its Name tag auto-generation, Number of Availability Zones (AZs), Number of public subnets, Number of private subnets, NAT gateways ($), VPC endpoints, and DNS options fields."
-  ]
+   "Pure orchestration over primitives that are each already full (CreateVpc/CreateSubnet/CreateRouteTable/CreateInternetGateway/CreateNatGateway/CreateVpcEndpoint) — Name tag auto-generation, AZ/public/private subnet counts, NAT gateways ($) and the S3 Gateway VPC endpoint option all run real calls in sequence. IPAM-allocated CIDRs and the VPC encryption control ($) field are not modeled (same gaps as plain CreateVpc)."
+  ],
+  "tests": ["tests/conformance/test_vpc_core.py"]
  },
  "aws.vpc.cidr-reservations": {
   "title": "Subnet CIDR reservations",
@@ -138,16 +140,18 @@
  },
  "aws.vpc.resource-sharing": {
   "title": "Subnet sharing (AWS RAM)",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "Cross-account resource sharing via AWS Resource Access Manager isn't modeled."
-  ]
+   "core/ram_core.py models the real RAM object: resource shares, resource/principal associations and their state machine, with real validation (only subnet/security-group ARNs, must exist) and real owner-side enforcement (a shared subnet cannot be deleted while an association is ASSOCIATED — vpc_core._delete_subnet checks ram_store).",
+   "Vyomi is a single-account simulator: there is no second account to observe RAM's other half from (the invited principal's own Describe calls showing the resource) — only the owning account's object model and constraints are real."
+  ],
+  "tests": ["tests/conformance/test_ram_core.py"]
  },
  "aws.vpc.edge-associations": {
   "title": "Route table edge associations (Outposts / Local Gateway)",
   "level": { "nano": "not_simulated", "offline": "not_simulated" },
   "limitations": [
-   "Edge associations to Outposts or Local Gateways aren't modeled."
+   "An AWS Outpost or Local Gateway is real physical hardware (an Outposts rack/server shipped to a customer site, or an on-prem gateway appliance) that Vyomi, a software-only simulator, cannot stand up — there is no local/offline substitute for the hardware itself, so edge routing targets have nothing to attach to."
   ]
  },
  "aws.vpc.route-propagation": {
@@ -159,38 +163,48 @@
  },
  "aws.vpc.network-access-analyzer": {
   "title": "Network Access Analyzer (scopes, findings)",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "A separate analysis engine from Reachability Analyzer: it evaluates a whole network's configuration against access scopes (e.g. \"internet-accessible resources\") and reports findings, rather than one source/destination path — not modeled; see aws.vpc.reachability-analyzer for the single-path analyzer Vyomi does run."
-  ]
+   "Reuses the same netsim evaluator as Reachability Analyzer: an access scope's match paths name source/destination resource ids (empty = every ENI / the internet); StartNetworkInsightsAccessScopeAnalysis runs reach() over every resolved pair with protocol=tcp, port=None — \"is there an UNRESTRICTED path\" (the question the real built-in \"internet-accessible resources\" scope answers) — and records a finding per reachable pair.",
+   "Simplified vs. real AWS: match paths are resource-id lists, not the full path-statement language (resource-type filters, port ranges, exclude-paths)."
+  ],
+  "tests": ["tests/conformance/test_vpc_core.py"]
  },
  "aws.vpc.security-group-sharing": {
   "title": "Security group sharing (AWS RAM), VPC associations, related resources",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "Cross-account sharing via AWS Resource Access Manager isn't modeled; every security group stays scoped to this account."
-  ]
+   "Same real RAM object model as aws.vpc.resource-sharing, scoped to security-group ARNs: a shared SG cannot be deleted while an association is ASSOCIATED (vpc_core._delete_security_group checks ram_store). \"Related resources\" lists real ENIs/instances using the group; \"VPC associations\" shows the owning VPC.",
+   "Vyomi is a single-account simulator: the invited principal's own view of the shared group can't be observed — only the owning account's object model and constraints are real."
+  ],
+  "tests": ["tests/conformance/test_ram_core.py"]
  },
  "aws.vpc.nat-gateway-monitoring": {
   "title": "NAT gateway CloudWatch monitoring",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "No CloudWatch metrics pipeline backs NAT gateways."
-  ]
+   "AWS/NATGateway metrics (ActiveConnectionCount, ConnectionEstablishedCount, BytesOutToDestination, PacketsOutToDestination) are real CloudWatch datapoints pushed by vpc_core._push_nat_metrics every time the shared reachability evaluator actually traverses this NAT gateway with a passing verdict (AnalyzeReachability / Reachability Analyzer / Network Access Analyzer) — never synthetic background data.",
+   "Byte/packet counts are a fixed per-check unit (one evaluated connection), not real per-flow payload sizes — there is no packet-level data plane in Nano, and offline enforcement's real nftables counters are not wired into this metric yet."
+  ],
+  "tests": ["tests/conformance/test_vpc_core.py"]
  },
  "aws.vpc.console-settings": {
   "title": "VPC console preferences",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "Console display preferences aren't modeled; they have no effect in Vyomi."
-  ]
+   "VPC Block Public Access is real and enforced: ModifyVpcBlockPublicAccessOptions changes netsim's internet_egress()/_reach_from_external() decisions directly (block-bidirectional blocks IGW egress AND ingress, block-ingress blocks only inbound), honored by Reachability Analyzer and the offline packet enforcer alike; exclusions (CreateVpcBlockPublicAccessExclusion) really exempt a VPC/subnet.",
+   "Local Zones opt-in only changes what the AZ picker shows (no Local Zone compute/network substrate exists to opt into). Console Experiments are, as in real AWS, display-only toggles with no backend effect. Default EBS encryption is a separate, already-full capability surfaced on the EC2 console's Settings page, not duplicated here."
+  ],
+  "tests": ["tests/conformance/test_vpc_core.py"]
  },
  "aws.vpc.privatelink": {
   "title": "PrivateLink (VPC endpoints, endpoint services)",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "AWS PrivateLink is a separate, large AWS service surfaced under the VPC nav — not in scope for vpc_core.py's VPC/subnet/route-table/SG/NACL network-simulation model."
-  ]
+   "Gateway endpoints (S3/DynamoDB) are real: CreateVpcEndpoint adds a route (dest = the service's address ranges, target = the vpce- id) to every chosen route table, and core/netsim's GATEWAY_ENDPOINT route kind makes Reachability Analyzer and the offline packet enforcer both honor it as a live hop.",
+   "Interface endpoints get a real ENI + a resolvable private DNS name, and endpoint services get a real connection/acceptance state machine, but neither proxies real L7 traffic to a target service — there is no second account/service running behind them to connect to."
+  ],
+  "tests": ["tests/conformance/test_vpc_core.py"]
  },
  "aws.vpc.lattice": {
   "title": "VPC Lattice (service networks, services, resource configurations/gateways, target groups, domain verifications)",
@@ -222,10 +236,12 @@
  },
  "aws.vpc.verified-access": {
   "title": "AWS Verified Access (instances, trust providers, groups, endpoints)",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "AWS Verified Access is a separate AWS service surfaced under the VPC nav — not simulated."
-  ]
+   "Instances/trust providers/groups/endpoints are real objects over the native EC2 API (the same protocol real Verified Access uses), and VerifyAccessEndpointPolicy really evaluates the endpoint's/group's policy document against user-supplied context — the same thing the AWS console's own \"Test policy\" tool does, so policy logic is genuinely exercised.",
+   "Federating to a real external identity provider or device-trust provider (Okta, Azure AD, IAM Identity Center, Jamf, CrowdStrike) needs a real third party and is not simulated — trust providers store their declared type but issue no real identity; only the policy evaluator against test context is real."
+  ],
+  "tests": ["tests/conformance/test_vpc_core.py"]
  },
  "aws.vpc.transit-gateway": {
   "title": "Transit Gateway (gateways, attachments, policy/route tables, multicast, metering policies)",

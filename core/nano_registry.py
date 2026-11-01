@@ -81,6 +81,7 @@ def get() -> dict:
             # live here (not as module singletons) so nano_persist snapshots them.
             "compute": types.SimpleNamespace(),
             "vpc_net": types.SimpleNamespace(),
+            "ram": types.SimpleNamespace(),    # Resource Access Manager (subnet/SG resource shares)
             "extras": types.SimpleNamespace(items={}, cfg={}),   # console EC2/VPC/EventBridge sub-resource CRUD
             "logs": LogsStore(),               # CloudWatch Logs (core/logs_core.py)
             "elbv2": Elbv2Store(),             # ELBv2 load balancers / target groups / listeners (control plane)
@@ -131,6 +132,8 @@ def get() -> dict:
         _REG["cw"].vpc_store = _REG["vpc_net"]   # real EC2 alarm actions (aws.cloudwatch.alarms.actions.ec2)
         _REG["vpc_net"].cw_store = _REG["cw"]   # real StatusCheckFailed metrics (ec2.instances.monitoring / .alarms-metrics)
         _REG["rds"].cw_store = _REG["cw"]   # real DatabaseConnections/ReadIOPS/WriteIOPS metrics (rds.monitoring)
+        _REG["vpc_net"].ram_store = _REG["ram"]   # DeleteSubnet/DeleteSecurityGroup refuse while actively shared
+        _REG["ram"].vpc_store = _REG["vpc_net"]   # AssociateResourceShare validates the subnet/SG exists
         _REG["logs"].lam_store, _REG["logs"].kinesis_store = _REG["compute"], _REG["kinesis"]   # real subscription-filter delivery
         _REG["cw"].logs_store = _REG["logs"]   # real log-based Contributor Insights rules
         _REG["msg"].logs_store = _REG["logs"]   # real SNS delivery-status logging (SQSSuccessFeedbackRoleArn/…)

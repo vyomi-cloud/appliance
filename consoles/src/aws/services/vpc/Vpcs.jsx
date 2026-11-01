@@ -224,6 +224,65 @@ function EditVpcSettingsForm({ vpcId, initial }) {
   );
 }
 
+const AZ_POOL = ["us-east-1a", "us-east-1b", "us-east-1c"];
+
+/** Carve the Nth /24 off a base CIDR by bumping its 3rd octet — the same scheme the real
+ * "VPC and more" wizard uses for a /16 input; good enough for any CIDR a demo wizard sees. */
+function carveSubnetCidr(baseCidr, index) {
+  const [addr] = baseCidr.split("/");
+  const parts = addr.split(".").map(Number);
+  parts[2] = (parts[2] + index) % 256;
+  return `${parts[0]}.${parts[1]}.${parts[2]}.0/24`;
+}
+
+/** Real orchestration over the already-fully-built primitives (CreateVpc/CreateSubnet/
+ * CreateRouteTable/CreateInternetGateway/CreateNatGateway/CreateVpcEndpoint) — no new backend
+ * state, just the sequence of calls "VPC and more" performs on your behalf. */
+async function createVpcAndMore({ cidr, tagMap, tenancy, numAzs, numPublic, numPrivate, natOption, endpointOption, dnsHostnames, dnsSupport }) {
+  const vpc = await api.createVpc(cidr, tagMap, tenancy);
+  await api.modifyVpcAttribute(vpc.VpcId, { "EnableDnsSupport.Value": dnsSupport });
+  await api.modifyVpcAttribute(vpc.VpcId, { "EnableDnsHostnames.Value": dnsHostnames });
+  const azs = AZ_POOL.slice(0, numAzs);
+  let cidrIndex = 0;
+  const publicSubnets = [];
+  const privateSubnets = [];
+  for (let i = 0; i < numPublic; i++) {
+    const az = azs[i % azs.length];
+    const sn = await api.createSubnet(vpc.VpcId, carveSubnetCidr(cidr, cidrIndex++), az, { Name: `${tagMap.Name || vpc.VpcId}-public-${az}` });
+    publicSubnets.push(sn);
+  }
+  for (let i = 0; i < numPrivate; i++) {
+    const az = azs[i % azs.length];
+    const sn = await api.createSubnet(vpc.VpcId, carveSubnetCidr(cidr, cidrIndex++), az, { Name: `${tagMap.Name || vpc.VpcId}-private-${az}` });
+    privateSubnets.push(sn);
+  }
+  let igw = null;
+  if (publicSubnets.length) {
+    igw = await api.createInternetGateway({ Name: `${tagMap.Name || vpc.VpcId}-igw` });
+    await api.attachInternetGateway(igw.InternetGatewayId, vpc.VpcId);
+    const mainRt = (await api.describeRouteTables()).find((r) => r.VpcId === vpc.VpcId && r.Associations.some((a) => a.Main));
+    await api.createRoute(mainRt.RouteTableId, "0.0.0.0/0", igw.InternetGatewayId);
+    for (const sn of publicSubnets) await api.associateRouteTable(mainRt.RouteTableId, sn.SubnetId);
+  }
+  const natGateways = [];
+  if (natOption !== "None" && publicSubnets.length) {
+    const natCount = natOption === "1 per AZ" ? publicSubnets.length : 1;
+    for (let i = 0; i < natCount; i++) natGateways.push(await api.createNatGateway(publicSubnets[i].SubnetId, "public", { Name: `${tagMap.Name || vpc.VpcId}-nat-${i + 1}` }));
+  }
+  if (privateSubnets.length) {
+    for (let i = 0; i < privateSubnets.length; i++) {
+      const rt = await api.createRouteTable(vpc.VpcId, { Name: `${tagMap.Name || vpc.VpcId}-private-rt-${i + 1}` });
+      await api.associateRouteTable(rt.RouteTableId, privateSubnets[i].SubnetId);
+      if (natGateways.length) await api.createRoute(rt.RouteTableId, "0.0.0.0/0", natGateways[i % natGateways.length].NatGatewayId);
+    }
+  }
+  if (endpointOption === "S3 Gateway") {
+    const allRts = (await api.describeRouteTables()).filter((r) => r.VpcId === vpc.VpcId);
+    await api.createVpcEndpoint(vpc.VpcId, "com.amazonaws.us-east-1.s3", "Gateway", { routeTableIds: allRts.map((r) => r.RouteTableId) });
+  }
+  return vpc;
+}
+
 export function CreateVpc() {
   const notify = useNotify();
   const [resources, setResources] = useState("VPC only");
@@ -232,6 +291,13 @@ export function CreateVpc() {
   const [cidr, setCidr] = useState("10.0.0.0/16");
   const [tenancy, setTenancy] = useState("Default");
   const [tags, setTags] = useState([]);
+  const [numAzs, setNumAzs] = useState("2");
+  const [numPublic, setNumPublic] = useState("2");
+  const [numPrivate, setNumPrivate] = useState("2");
+  const [natOption, setNatOption] = useState("None");
+  const [endpointOption, setEndpointOption] = useState("None");
+  const [dnsHostnames, setDnsHostnames] = useState(true);
+  const [dnsSupport, setDnsSupport] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
 
@@ -240,6 +306,15 @@ export function CreateVpc() {
     try {
       const tagMap = Object.fromEntries(tags.filter((t) => !t.markedForRemoval && t.key).map((t) => [t.key, t.value]));
       if (name) tagMap.Name = name;
+      if (resources === "VPC and more") {
+        const vpc = await createVpcAndMore({
+          cidr, tagMap, tenancy, numAzs: Number(numAzs), numPublic: Number(numPublic), numPrivate: Number(numPrivate),
+          natOption, endpointOption, dnsHostnames, dnsSupport,
+        });
+        notify.success(`VPC "${vpc.VpcId}" and its subnets/route tables/gateways created.`);
+        navigate("vpc", "vpcs", vpc.VpcId);
+        return;
+      }
       const vpc = await api.createVpc(cidr, tagMap, tenancy);
       notify.success(`VPC "${vpc.VpcId}" created.`);
       navigate("vpc", "vpcs", vpc.VpcId);
@@ -260,13 +335,43 @@ export function CreateVpc() {
               <FormField label="Resources to create" description="Create only the VPC resource or the VPC and other networking resources.">
                 <RadioGroup value={resources} onChange={({ detail }) => setResources(detail.value)} items={[{ value: "VPC only", label: "VPC only" }, { value: "VPC and more", label: "VPC and more" }]} />
               </FormField>
-              {resources === "VPC only" && (
-                <FormField label="Name tag - optional" description="Creates a tag with a key of 'Name' and a value that you specify.">
-                  <Input value={name} onChange={({ detail }) => setName(detail.value)} placeholder="my-vpc-01" />
-                </FormField>
-              )}
+              <FormField label="Name tag - optional" description="Auto-generates Name tags for every resource this wizard creates (vpcName-public-az, vpcName-nat-1, …), same as the real console.">
+                <Input value={name} onChange={({ detail }) => setName(detail.value)} placeholder="my-vpc-01" />
+              </FormField>
               {resources === "VPC and more" && (
-                <CapabilityContainer id="aws.vpc.create-vpc-and-more" title="VPC and more" />
+                <CapabilityContainer id="aws.vpc.create-vpc-and-more" title="VPC and more">
+                  <SpaceBetween size="l">
+                    <FormField label="Name tag auto-generation" description="Automatically generates Name tags for the resources this wizard creates, derived from the Name tag above.">
+                      <Checkbox checked readOnly>Auto-generate</Checkbox>
+                    </FormField>
+                    <FormField label="Number of Availability Zones (AZs)">
+                      <Select selectedOption={{ value: numAzs, label: numAzs }} options={["1", "2", "3"].map((v) => ({ value: v, label: v }))}
+                        onChange={({ detail }) => setNumAzs(detail.selectedOption.value)} />
+                    </FormField>
+                    <FormField label="Number of public subnets">
+                      <Select selectedOption={{ value: numPublic, label: numPublic }} options={["0", "1", "2", "3"].map((v) => ({ value: v, label: v }))}
+                        onChange={({ detail }) => setNumPublic(detail.selectedOption.value)} />
+                    </FormField>
+                    <FormField label="Number of private subnets">
+                      <Select selectedOption={{ value: numPrivate, label: numPrivate }} options={["0", "1", "2", "3"].map((v) => ({ value: v, label: v }))}
+                        onChange={({ detail }) => setNumPrivate(detail.selectedOption.value)} />
+                    </FormField>
+                    <FormField label="NAT gateways ($)" description="Creates a real NAT gateway (billed-with-$ in real AWS) per selection, and routes every private subnet's table through it.">
+                      <Select selectedOption={{ value: natOption, label: natOption }} options={["None", "1 per AZ", "In 1 AZ"].map((v) => ({ value: v, label: v }))}
+                        onChange={({ detail }) => setNatOption(detail.selectedOption.value)} />
+                    </FormField>
+                    <FormField label="VPC endpoints" description="S3 Gateway adds a real route (target = the endpoint) to every route table this wizard creates.">
+                      <Select selectedOption={{ value: endpointOption, label: endpointOption }} options={["None", "S3 Gateway"].map((v) => ({ value: v, label: v }))}
+                        onChange={({ detail }) => setEndpointOption(detail.selectedOption.value)} />
+                    </FormField>
+                    <FormField label="DNS options">
+                      <SpaceBetween size="xs">
+                        <Checkbox checked={dnsHostnames} onChange={({ detail }) => setDnsHostnames(detail.checked)}>Enable DNS hostnames</Checkbox>
+                        <Checkbox checked={dnsSupport} onChange={({ detail }) => setDnsSupport(detail.checked)}>Enable DNS resolution</Checkbox>
+                      </SpaceBetween>
+                    </FormField>
+                  </SpaceBetween>
+                </CapabilityContainer>
               )}
               <FormField label="IPv4 CIDR block">
                 <RadioGroup value={cidrSource} onChange={({ detail }) => setCidrSource(detail.value)}

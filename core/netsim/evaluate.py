@@ -30,15 +30,15 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 
 try:
-    from core.netsim.model import (BLACKHOLE, EGRESS, IGW, INGRESS, INSTANCE, LINUX_EPHEMERAL, LOCAL,
-                                   NAT, PEERING, RFC1918, STATEFUL_ALLOW, STATEFUL_PRIORITY,
-                                   STATELESS_ORDERED, UNSUPPORTED, AZURE_LB_IP, Interface, Route,
-                                   Topology, ip_in, norm_proto, prefix_len)
+    from core.netsim.model import (BLACKHOLE, EGRESS, GATEWAY_ENDPOINT, IGW, INGRESS, INSTANCE,
+                                   LINUX_EPHEMERAL, LOCAL, NAT, PEERING, RFC1918, STATEFUL_ALLOW,
+                                   STATEFUL_PRIORITY, STATELESS_ORDERED, UNSUPPORTED, AZURE_LB_IP,
+                                   Interface, Route, Topology, ip_in, norm_proto, prefix_len)
 except ImportError:                                   # Pyodide: cores are flat on sys.path
-    from model import (BLACKHOLE, EGRESS, IGW, INGRESS, INSTANCE, LINUX_EPHEMERAL, LOCAL,  # type: ignore
-                       NAT, PEERING, RFC1918, STATEFUL_ALLOW, STATEFUL_PRIORITY,
-                       STATELESS_ORDERED, UNSUPPORTED, AZURE_LB_IP, Interface, Route,
-                       Topology, ip_in, norm_proto, prefix_len)
+    from model import (BLACKHOLE, EGRESS, GATEWAY_ENDPOINT, IGW, INGRESS, INSTANCE,  # type: ignore
+                       LINUX_EPHEMERAL, LOCAL, NAT, PEERING, RFC1918, STATEFUL_ALLOW,
+                       STATEFUL_PRIORITY, STATELESS_ORDERED, UNSUPPORTED, AZURE_LB_IP,
+                       Interface, Route, Topology, ip_in, norm_proto, prefix_len)
 
 
 @dataclass
@@ -258,6 +258,9 @@ def internet_egress(topo: Topology, iface: Interface, route, dst_ip: str):
     sub = topo.subnet_of(iface)
     net = topo.network_of(iface)
     if route.kind == IGW:
+        if sub.bpa_block == "both":
+            return (False, "", "BLOCKED_PUBLIC_ACCESS",
+                    f"VPC Block Public Access blocks internet gateway traffic for {sub.id}", None)
         if not _igw_ok(topo, route.target, net.id):
             return False, "", "IGW_DETACHED", f"internet gateway {route.target} is not attached to {net.id} (blackhole)", None
         if iface.public_ip:
@@ -438,6 +441,12 @@ def reach(topo: Topology, src, dst, protocol: str = "tcp", port=None, src_port=N
             return v.block(code, why, route.target)
         v.path = path
         d = None
+    elif route.kind == GATEWAY_ENDPOINT:
+        # AWS Gateway VPC Endpoint (S3/DynamoDB): routed over the AWS backbone, never the
+        # internet/NAT — no public IP needed, no destination interface, SG/NACL still evaluated.
+        v.add("vpc-endpoint", route.target, "pass", f"gateway endpoint {route.target}")
+        v.path = "via-gateway-endpoint"
+        d = None
     elif route.kind == BLACKHOLE:
         return v.block("BLACKHOLE_ROUTE", f"route {route.dest} is a blackhole ({route.name or route.target or 'None'})",
                        S.route_table or "")
@@ -519,6 +528,8 @@ def _reach_from_external(topo, src_ip, dst, proto, port, eph, src_port, v):
     if dst_ip == d.ip:
         return v.block("NOT_PUBLIC", f"{dst_ip} is private; address the public IP {d.public_ip}", d.id)
     sub, net = topo.subnet_of(d), topo.network_of(d)
+    if sub.bpa_block in ("both", "ingress"):
+        return v.block("BLOCKED_PUBLIC_ACCESS", f"VPC Block Public Access blocks inbound internet gateway traffic for {sub.id}", sub.id)
     back = route_lookup(topo, sub, src_ip, d)
     if back is None or back.kind != IGW or not _igw_ok(topo, back.target, net.id):
         v.add("route-table", sub.route_table or "-", "deny", f"no internet-gateway route back to {src_ip}")

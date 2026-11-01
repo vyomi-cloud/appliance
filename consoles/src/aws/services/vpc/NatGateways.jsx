@@ -84,6 +84,34 @@ export function NatGateways() {
   );
 }
 
+function NatGatewayMonitoring({ natGatewayId }) {
+  const m = useAsync(() => Promise.all([
+    api.getNatGatewayMetrics(natGatewayId, "ActiveConnectionCount"),
+    api.getNatGatewayMetrics(natGatewayId, "BytesOutToDestination"),
+    api.getNatGatewayMetrics(natGatewayId, "PacketsOutToDestination"),
+  ]), [natGatewayId]);
+  const [conn, bytes, packets] = m.data || [[], [], []];
+  const byTs = new Map();
+  for (const [label, pts] of [["ActiveConnectionCount", conn], ["BytesOutToDestination", bytes], ["PacketsOutToDestination", packets]]) {
+    for (const p of pts) {
+      const row = byTs.get(p.Timestamp) || { ts: p.Timestamp };
+      row[label] = p.Sum;
+      byTs.set(p.Timestamp, row);
+    }
+  }
+  const rows = [...byTs.values()].sort((a, b) => new Date(a.ts) - new Date(b.ts));
+  return (
+    <Table loading={m.loading} items={rows}
+      columnDefinitions={[
+        { id: "ts", header: "Timestamp", cell: (r) => r.ts },
+        { id: "conn", header: "ActiveConnectionCount (Sum)", cell: (r) => r.ActiveConnectionCount ?? "-" },
+        { id: "bytes", header: "BytesOutToDestination (Sum)", cell: (r) => r.BytesOutToDestination ?? "-" },
+        { id: "packets", header: "PacketsOutToDestination (Sum)", cell: (r) => r.PacketsOutToDestination ?? "-" },
+      ]}
+      empty={<Box textAlign="center" color="inherit">No datapoints yet — run Reachability Analyzer or Network Access Analyzer across a path through this gateway to generate activity.</Box>} />
+  );
+}
+
 export function NatGatewayDetail({ params }) {
   const notify = useNotify();
   const t = useAsync(() => api.describeNatGateway(params.id), [params.id]);
@@ -110,7 +138,12 @@ export function NatGatewayDetail({ params }) {
               columnDefinitions={[{ id: "p", header: "Private IPv4 address" }, { id: "pub", header: "Public IPv4 address" }, { id: "a", header: "Allocation ID" }, { id: "as", header: "Association ID" }, { id: "s", header: "Status" }]}
               empty={<Box textAlign="center" color="inherit">No secondary IPv4 addresses</Box>} />
           ) },
-          { id: "mon", label: "Monitoring", content: <CapabilityContainer id="aws.vpc.nat-gateway-monitoring" title="Monitoring" /> },
+          { id: "mon", label: "Monitoring", content: (
+            <CapabilityContainer id="aws.vpc.nat-gateway-monitoring" title="Monitoring"
+              description="AWS/NATGateway — real datapoints, one per reachability check that actually traversed this gateway (not synthetic background activity).">
+              <NatGatewayMonitoring natGatewayId={g.NatGatewayId} />
+            </CapabilityContainer>
+          ) },
           { id: "tags", label: "Tags", content: (
             <Table variant="container" items={Object.entries(g.Tags || {}).map(([k, v]) => ({ k, v }))}
               header={<Header variant="h2" counter={`(${Object.keys(g.Tags || {}).length})`} actions={<Button onClick={() => setTags(true)}>Manage tags</Button>}>Tags</Header>}

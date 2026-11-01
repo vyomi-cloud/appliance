@@ -17,13 +17,13 @@ Mapping:
 from __future__ import annotations
 
 try:
-    from core.netsim.model import (BLACKHOLE, EGRESS, IGW, INGRESS, INSTANCE, LOCAL, NAT, PEERING,
-                                   STATEFUL_ALLOW, STATELESS_ORDERED, Gateway, Interface, Network, Peer,
-                                   Peering, Route, RouteTable, Rule, RuleSet, Subnet, Topology, ip_in)
+    from core.netsim.model import (BLACKHOLE, EGRESS, GATEWAY_ENDPOINT, IGW, INGRESS, INSTANCE, LOCAL, NAT,
+                                   PEERING, STATEFUL_ALLOW, STATELESS_ORDERED, Gateway, Interface, Network,
+                                   Peer, Peering, Route, RouteTable, Rule, RuleSet, Subnet, Topology, ip_in)
 except ImportError:
-    from model import (BLACKHOLE, EGRESS, IGW, INGRESS, INSTANCE, LOCAL, NAT, PEERING,  # type: ignore
-                       STATEFUL_ALLOW, STATELESS_ORDERED, Gateway, Interface, Network, Peer,
-                       Peering, Route, RouteTable, Rule, RuleSet, Subnet, Topology, ip_in)
+    from model import (BLACKHOLE, EGRESS, GATEWAY_ENDPOINT, IGW, INGRESS, INSTANCE, LOCAL, NAT,  # type: ignore
+                       PEERING, STATEFUL_ALLOW, STATELESS_ORDERED, Gateway, Interface, Network,
+                       Peer, Peering, Route, RouteTable, Rule, RuleSet, Subnet, Topology, ip_in)
 
 
 def primary_eni(instance_id: str) -> str:
@@ -83,9 +83,12 @@ def _route_kind(m: dict, target: str):
     if t.startswith("i-"):
         inst = m.get("instances", {}).get(t)
         return (INSTANCE, primary_eni(t)) if inst else (BLACKHOLE, t)
+    if t.startswith("vpce-"):
+        ep = m.get("vpc_endpoints", {}).get(t)
+        return (GATEWAY_ENDPOINT, t) if ep and ep.get("type") == "Gateway" and ep.get("state") == "available" else (BLACKHOLE, t)
     if t == "blackhole":
         return BLACKHOLE, ""
-    return None, t                    # tgw-/vgw-/eigw-/vpce- … not simulated yet
+    return None, t                    # tgw-/vgw-/eigw- … not simulated yet
 
 
 def from_aws(store_or_model) -> Topology:
@@ -134,9 +137,20 @@ def from_aws(store_or_model) -> Topology:
     for nid, n in m.get("nacls", {}).items():
         t.add(_nacl_ruleset(n))
 
+    bpa_mode = m.get("account", {}).get("vpc_block_public_access", {}).get("internet_gateway_block_mode", "off")
+    bpa_exclusions = m.get("account", {}).get("vpc_block_public_access_exclusions", {})
+
+    def _bpa_block(sid: str, vid: str) -> str:
+        if bpa_mode == "off":
+            return "off"
+        if any(x.get("resource_arn") in (sid, vid) for x in bpa_exclusions.values()):
+            return "off"
+        return "both" if bpa_mode == "block-bidirectional" else "ingress"
+
     for sid, s in m.get("subnets", {}).items():
         t.add(Subnet(id=sid, network=s["vpc_id"], cidr=s["cidr"], zone=s.get("az", ""),
                      route_table=s.get("route_table"), rulesets=[s["nacl"]] if s.get("nacl") else [],
+                     bpa_block=_bpa_block(sid, s["vpc_id"]),
                      name=(s.get("tags") or {}).get("Name", "")))
 
     eips = {a.get("instance_id"): a.get("public_ip") for a in m.get("addresses", {}).values() if a.get("instance_id")}

@@ -1,5 +1,5 @@
 {
-  "_doc": "ui-spec page id -> v4 route. honest_page = the whole page is a declared 'Not simulated in Vyomi' gap — NOT on consoles/honest-allowlist.json yet (aws.vpc isn't listed); these 37 pages are each a separate, large AWS service (PrivateLink/Lattice, DNS firewall, Network Firewall, Site-to-Site VPN, Verified Access, Transit Gateway, Traffic Mirroring, Network Access Analyzer) surfaced under the VPC nav but out of scope for vpc_core.py's VPC/subnet/route-table/SG/NACL model — flagged here for orchestrator allowlist review, per AGENT-UI.md. Unlisted spec pages count as missing.",
+  "_doc": "ui-spec page id -> v4 route. honest_page = the whole page is a declared 'Not simulated in Vyomi' gap — NOT on consoles/honest-allowlist.json yet (aws.vpc isn't listed); these pages are each a separate, large AWS service (Lattice, DNS firewall, Network Firewall, Site-to-Site VPN, Transit Gateway, Traffic Mirroring) surfaced under the VPC nav but out of scope for vpc_core.py's VPC/subnet/route-table/SG/NACL model — flagged here for orchestrator allowlist review, per AGENT-UI.md. PrivateLink, Network Access Analyzer and Verified Access are built (wave 5b gap sweep) — real objects + the shared netsim evaluator / a real policy tester, see core/capabilities/aws/vpc.json. Unlisted spec pages count as missing.",
 
   "dashboard": { "route": "#/vpc/dashboard" },
 
@@ -41,11 +41,11 @@
 
   "reachability-analyzer": { "route": "#/vpc/reachability-analyzer", "live": "live-insights-path" },
   "reachability-analyzer-detail": { "route": "#/vpc/reachability-analyzer/{live}", "live": "live-insights-path" },
-  "network-access-analyzer": { "route": "#/vpc/network-access-analyzer", "honest_page": true },
+  "network-access-analyzer": { "route": "#/vpc/network-access-analyzer", "live": "live-access-scope" },
 
-  "privatelink-getting-started": { "route": "#/vpc/privatelink-getting-started", "honest_page": true },
-  "endpoints": { "route": "#/vpc/endpoints", "honest_page": true },
-  "endpoint-services": { "route": "#/vpc/endpoint-services", "honest_page": true },
+  "privatelink-getting-started": { "route": "#/vpc/privatelink-getting-started" },
+  "endpoints": { "route": "#/vpc/endpoints", "live": "live-vpc-endpoint" },
+  "endpoint-services": { "route": "#/vpc/endpoint-services", "live": "live-vpc-endpoint-service" },
   "service-networks": { "route": "#/vpc/service-networks", "honest_page": true },
   "lattice-services": { "route": "#/vpc/lattice-services", "honest_page": true },
   "resource-configurations": { "route": "#/vpc/resource-configurations", "honest_page": true },
@@ -70,10 +70,10 @@
   "vpn-connections": { "route": "#/vpc/vpn-connections", "honest_page": true },
   "client-vpn-endpoints": { "route": "#/vpc/client-vpn-endpoints", "honest_page": true },
 
-  "verified-access-instances": { "route": "#/vpc/verified-access-instances", "honest_page": true },
-  "verified-access-trust-providers": { "route": "#/vpc/verified-access-trust-providers", "honest_page": true },
-  "verified-access-groups": { "route": "#/vpc/verified-access-groups", "honest_page": true },
-  "verified-access-endpoints": { "route": "#/vpc/verified-access-endpoints", "honest_page": true },
+  "verified-access-instances": { "route": "#/vpc/verified-access-instances", "live": "live-verified-access-instance" },
+  "verified-access-trust-providers": { "route": "#/vpc/verified-access-trust-providers", "live": "live-verified-access-trust-provider" },
+  "verified-access-groups": { "route": "#/vpc/verified-access-groups", "live": "live-verified-access-group" },
+  "verified-access-endpoints": { "route": "#/vpc/verified-access-endpoints", "live": "live-verified-access-endpoint" },
 
   "transit-gateways": { "route": "#/vpc/transit-gateways", "honest_page": true },
   "transit-gateway-attachments": { "route": "#/vpc/transit-gateway-attachments", "honest_page": true },
