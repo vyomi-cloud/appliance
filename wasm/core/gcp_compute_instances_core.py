@@ -7,9 +7,13 @@ clients and `gcloud compute ...` work unchanged against it (point them at the re
 NO fastapi / docker / subprocess / socket imports → loads under Pyodide, so the SAME file
 runs offline and in Nano, like every other core. This models the Compute Engine *control
 plane* only: instance/disk/image/template/group/health-check lifecycle, state and metadata.
-No guest OS boots behind an instance — there is nothing to SSH into (that data plane is not
-modeled at any tier, exactly like Kubernetes Engine's cluster endpoint in gcp_container_core);
-the console says so via the "Connect" column / SSH action.
+No guest OS boots behind an instance — there is nothing to SSH into, no framebuffer to
+screenshot and no guest agent to report OS info (that slice of the data plane is not modeled
+at any tier, exactly like Kubernetes Engine's cluster endpoint in gcp_container_core); the
+console says so via the "Connect" column / SSH action, the Screenshot and OS info tabs.
+getSerialPortOutput IS modeled: it replays the instance's own real lifecycle operations
+(insert/start/stop/...) as console lines, so Serial port output is live, honestly labeled as
+Vyomi's own activity record rather than a guest kernel's boot log.
 
 Resources (v1 discovery doc, subset the v4 console needs):
     projects/{p}/zones/{z}/instances/{i}            projects/{p}/zones/{z}/disks/{d}
@@ -407,6 +411,45 @@ def set_instance_status(store, project, zone, name, action):
     if action in ("stop", "suspend"):
         inst["lastStopTimestamp"] = _ts()
     return _operation(store, project, zone, action, name, _selflink(full))
+
+
+# ── data plane (serial console, screenshot, guest attributes) ───────────────
+# Vyomi boots no guest OS behind an instance, so there is no real framebuffer to screenshot
+# and no guest agent to report OS info back through the metadata server — those stay
+# not_simulated (gcp.compute.instances.data_plane). Serial port output IS buildable without a
+# guest: it is rebuilt on every read from the instance's own REAL lifecycle operations (the
+# same ones the Operations page shows), formatted as console lines at their real timestamps —
+# honest Vyomi activity, not a fabricated guest kernel boot log.
+_SERIAL_VERB = {
+    "insert": "created", "start": "started", "resume": "resumed", "stop": "stopped",
+    "suspend": "suspended", "reset": "reset", "delete": "deleted",
+    "setLabels": "labels updated", "setMetadata": "metadata updated", "setTags": "tags updated",
+    "setMachineType": "machine type changed", "setDeletionProtection": "deletion protection changed",
+}
+
+
+def _instance_operations(store, project, zone, name):
+    full = _selflink("projects/%s/zones/%s/instances/%s" % (project, zone, name))
+    ops = [op for op in store.operations.values() if op.get("targetLink") == full]
+    ops.sort(key=lambda o: int(o["id"]))
+    return ops
+
+
+def get_serial_port_output(store, project, zone, name, query):
+    full, _ = _instance(store, project, zone, name)
+    lines = ["%s  Instance %s %s." % (op["insertTime"], name, _SERIAL_VERB.get(op["operationType"], op["operationType"]))
+             for op in _instance_operations(store, project, zone, name)]
+    try:
+        start = int((query or {}).get("start") or 0)
+    except (TypeError, ValueError):
+        start = 0
+    start = max(0, min(start, len(lines)))
+    chunk = lines[start:]
+    return {
+        "kind": "compute#serialPortOutput", "selfLink": _selflink(full),
+        "contents": ("\n".join(chunk) + "\n") if chunk else "",
+        "start": str(start), "next": str(start + len(chunk)),
+    }
 
 
 def delete_instance(store, project, zone, name):
@@ -1265,6 +1308,14 @@ def _zonal(store, method, project, zone, rest, verb, payload, query=None):
                     flag = str((query or {}).get("deletionProtection", "true")).lower()
                     payload = dict(payload, deletionProtection=flag not in ("false", "0"))
                 return _json(200, set_instance_field(store, project, zone, name, verb, payload))
+            if verb == "serialPort" and method == "GET":
+                return _json(200, get_serial_port_output(store, project, zone, name, query))
+            if verb == "screenshot" and method == "GET":
+                _instance(store, project, zone, name)
+                raise _E(400, "FAILED_PRECONDITION", "Screenshots aren't available: no virtual display runs behind an instance in Vyomi.")
+            if verb == "getGuestAttributes" and method == "GET":
+                _instance(store, project, zone, name)
+                raise _E(400, "FAILED_PRECONDITION", "Guest attributes aren't available: no guest OS or agent runs behind an instance in Vyomi.")
     elif coll == "disks":
         if not rest2:
             if method == "POST":

@@ -76,6 +76,7 @@ export const setInstanceLabels = (zone, name, labels) => restJson("POST", `${bas
 export const setInstanceDeletionProtection = (zone, name, enabled) =>
   restJson("POST", `${base()}/zones/${e(zone)}/instances/${e(name)}:setDeletionProtection`, { query: { deletionProtection: enabled }, body: {} });
 export const setInstanceMachineType = (zone, name, machineType) => restJson("POST", `${base()}/zones/${e(zone)}/instances/${e(name)}:setMachineType`, { body: { machineType } });
+export const getSerialPortOutput = (zone, name) => restJson("GET", `${base()}/zones/${e(zone)}/instances/${e(name)}/serialPort`);
 
 // ── disks ─────────────────────────────────────────────────────────────────────
 export async function listDisksAllZones() {
