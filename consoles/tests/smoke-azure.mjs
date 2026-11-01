@@ -70,6 +70,9 @@ const DENYRULE = `deny-smoke-${n}`;  // inbound Deny rule the Diagnose and solve
 const VNETVM = `vysmokevnetvm${n}`;  // VM pointed at the vnet's own NIC, for the vnet's Diagnose and solve problems Next hop check
 const VNETROLE = `00000000-0000-4000-c000-${String(n).padStart(12, "0")}`;  // role assignment GUID created over the wire, EXPLICITLY scoped to the vnet resource
 const VNETPRINCIPAL = `vyvnetprincipal${n}`;  // principal of the vnet-scoped role assignment above
+const LAW = `vysmokelaw${n}`;       // Log Analytics workspace created through the UI
+const LAW2 = `vywirelaw${n}`;       // Log Analytics workspace created over the wire (CLI → UI direction)
+const LAWTABLE = `vysmoke${n}_CL`;  // custom table added in the blade
 const results = [];
 const check = (name, ok, detail = "") => { results.push({ name, ok, detail }); console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? " — " + detail : ""}`); };
 let page;
@@ -2451,6 +2454,95 @@ try {
   await page.getByRole("heading", { name: "Virtual machines", exact: true }).waitFor({ timeout: 10000 });
   const vmGone = await arm("GET", `/resourceGroups/${DEFAULT_RG}/providers/Microsoft.Compute/virtualMachines/${VM2}`);
   check("UI delete virtual machine → ARM GET 404", vmGone.status === 404, `HTTP ${vmGone.status}`);
+
+  // ── Log Analytics workspace created through the wizard → visible over native ARM ──────
+  const lawArm = (path) => arm("GET", `/resourceGroups/${DEFAULT_RG}${path}`);
+  await page.goto(UI + "#/loganalytics/create");
+  await page.getByLabel("Name", { exact: true }).fill(LAW);
+  await page.getByRole("button", { name: "Review + create" }).click();
+  await page.getByText("Validation passed").waitFor({ timeout: 5000 });
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("heading", { name: LAW, exact: true }).waitFor({ timeout: 10000 });
+  const lawGet = await arm("GET", `/resourceGroups/${DEFAULT_RG}/providers/Microsoft.OperationalInsights/workspaces/${LAW}`);
+  check("UI create Log Analytics workspace → visible over native ARM", lawGet.status === 200, `HTTP ${lawGet.status}`);
+  await shot("33-loganalytics-overview");
+
+  // ── Agents management shows the real workspace ID + shared keys ───────────────────────
+  await openPanel("Agents management");
+  await page.getByText("Workspace ID").waitFor({ timeout: 5000 });
+  const primaryBefore = await page.getByLabel("Primary key").inputValue();
+  check("Agents management shows a real primary key", primaryBefore.length > 10, primaryBefore);
+  await page.getByRole("button", { name: "Regenerate" }).first().click();
+  await page.waitForTimeout(500);
+  const primaryAfter = await page.getByLabel("Primary key").inputValue();
+  check("Regenerate primary key → key actually changes", primaryAfter !== primaryBefore && primaryAfter.length > 10);
+  await shot("34-loganalytics-agents");
+
+  // ── Saved search + custom table added in the blade → readable over native ARM ─────────
+  await openPanel("Saved searches");
+  await page.getByRole("button", { name: "Add saved search" }).click();
+  await page.getByLabel("ID", { exact: true }).fill("smoke-search");
+  await page.getByLabel("Display name", { exact: true }).fill("Smoke search");
+  await page.getByLabel("Query", { exact: true }).fill("Heartbeat | take 5");
+  await page.getByRole("dialog").getByRole("button", { name: "OK" }).click();
+  await page.getByText("Smoke search", { exact: true }).first().waitFor({ timeout: 10000 });
+  const savedSearchGet = await lawArm(`/providers/Microsoft.OperationalInsights/workspaces/${LAW}/savedSearches/smoke-search?api-version=2022-10-01`);
+  check("UI add saved search → visible over native ARM", savedSearchGet.status === 200, `HTTP ${savedSearchGet.status}`);
+
+  await openPanel("Tables");
+  await page.getByRole("button", { name: "Add table" }).click();
+  await page.getByLabel("Table name", { exact: true }).fill(LAWTABLE);
+  await page.getByRole("dialog").getByRole("button", { name: "OK" }).click();
+  await page.getByRole("cell", { name: LAWTABLE, exact: true }).waitFor({ timeout: 10000 });
+  const tableGet = await lawArm(`/providers/Microsoft.OperationalInsights/workspaces/${LAW}/tables/${LAWTABLE}?api-version=2022-10-01`);
+  check("UI add custom table → visible over native ARM", tableGet.status === 200, `HTTP ${tableGet.status}`);
+  await shot("35-loganalytics-tables");
+
+  // ── Logs: the real KQL subset runs over AzureActivity (this subscription's own Activity log feed) ──
+  await openPanel("Logs");
+  await page.getByLabel("Query", { exact: true }).fill("AzureActivity | where OperationName == 'Microsoft.OperationalInsights/workspaces/write' | project OperationName | take 5");
+  await page.getByRole("button", { name: "Run", exact: true }).click();
+  await page.getByText("Microsoft.OperationalInsights/workspaces/write").first().waitFor({ timeout: 10000 });
+  check("Logs query editor runs a real KQL query over the AzureActivity feed", true);
+  await shot("36-loganalytics-logs");
+
+  // ── Locks: added through the UI → visible over native ARM extension resource ──────────
+  const LAWLOCK = `vylawlock${n}`;
+  await openPanel("Locks");
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  await page.getByLabel("Lock name").fill(LAWLOCK);
+  await page.getByRole("button", { name: "OK" }).click();
+  await page.getByRole("cell", { name: LAWLOCK, exact: true }).waitFor({ timeout: 10000 });
+  const lawLockGet = await wire(`/subscriptions/${SUB}/resourceGroups/${DEFAULT_RG}/providers/Microsoft.OperationalInsights/workspaces/${LAW}/providers/Microsoft.Authorization/locks/${LAWLOCK}?api-version=2020-05-01`);
+  check("UI add lock → visible over native ARM extension resource", lawLockGet.status === 200, `HTTP ${lawLockGet.status}`);
+  await page.getByRole("row", { name: new RegExp(LAWLOCK) }).getByRole("checkbox").check();
+  await page.getByRole("button", { name: "Delete", exact: true }).click();
+  await page.getByLabel("Confirm deletion").fill(LAWLOCK);
+  await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await page.getByRole("cell", { name: LAWLOCK, exact: true }).waitFor({ state: "detached", timeout: 10000 });
+
+  // ── Activity log: the workspace's own create/lock writes land on the generic eventtypes feed ──
+  await openPanel("Activity log");
+  await page.getByText("Microsoft.OperationalInsights/workspaces/write").first().waitFor({ timeout: 10000 });
+  check("UI Activity log shows this workspace's own ARM writes", true);
+
+  // ── Workspace created over the wire → visible in the UI (CLI → UI) ────────────────────
+  const lawPut = await arm("PUT", `/resourceGroups/${DEFAULT_RG}/providers/Microsoft.OperationalInsights/workspaces/${LAW2}`, { location: "eastus" });
+  check("ARM PUT Log Analytics workspace over wire", lawPut.status === 200 || lawPut.status === 201, `HTTP ${lawPut.status}`);
+  await page.goto(UI + "#/loganalytics");
+  await page.getByRole("link", { name: LAW2, exact: true }).waitFor({ timeout: 10000 });
+  check("wire-created workspace shown in browse grid", true);
+  await shot("37-loganalytics-browse");
+
+  // ── Delete through the Overview command bar → gone over native ARM ───────────────────
+  await page.goto(UI + `#/loganalytics/${DEFAULT_RG}/${LAW}`);
+  await page.getByRole("toolbar", { name: "Overview commands" }).getByRole("button", { name: "Delete" }).click();
+  await page.getByLabel("Confirm deletion").fill(LAW);
+  await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await page.getByRole("dialog", { name: /^Delete / }).waitFor({ state: "detached", timeout: 30000 });   // open until the (async) delete returns; its modal hides the page
+  await page.getByRole("heading", { name: "Log Analytics workspaces", exact: true }).waitFor({ timeout: 10000 });
+  const lawGone = await arm("GET", `/resourceGroups/${DEFAULT_RG}/providers/Microsoft.OperationalInsights/workspaces/${LAW}`);
+  check("UI delete Log Analytics workspace → ARM GET 404", lawGone.status === 404, `HTTP ${lawGone.status}`);
 } catch (e) {
   const at = ((e.stack || "").match(/(?:smoke|dbg)-[a-z]+\.mjs:(\d+)/) || [])[1];   // the failing step's line
   check("smoke run", false, e.message.split("\n")[0] + (at ? ` (smoke line ${at})` : ""));

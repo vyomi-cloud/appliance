@@ -1369,6 +1369,12 @@ class AzureArm:
             op_id = self._make_operation(r["rid"], method)
             url = f"{self._base}/api/azure/operations/{op_id}?api-version={query.get('api-version') or oi_engine.API_VERSION}"
             resp["headers"].update({"Azure-AsyncOperation": url, "Location": url, "Retry-After": "0"})
+        # oi_engine owns workspace CRUD itself (unlike the generic alternating-type path above,
+        # which stamps every write/delete via self._record_activity at the call site) — stamp the
+        # SAME eventtypes row here so a workspace's own Activity log panel (and the generic
+        # subscription-wide feed the KQL AzureActivity table reads) see workspace mutations too.
+        if r.get("rid") and r["status"] < 300:
+            self._record_activity(r["rid"], f"{oi_engine.WS_TYPE}/{'delete' if r['verb'] == 'delete' else 'write'}", sub)
         return resp
 
     def _cogs(self, method, sub, rg, chain, payload, query):
