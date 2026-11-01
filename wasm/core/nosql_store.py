@@ -31,6 +31,8 @@ State shapes (unchanged from providers/aws_services.py's ddb_state["tables"]):
                 source_table: <deep copy of table, including items, at snapshot time> }
     exports : { arn -> export }  (ExportTableToPointInTime job records; the bytes
                 themselves land in the S3 store, not here)
+    imports : { arn -> import }  (ImportTable job records; the source bytes are read
+                from the S3 store, not here)
 """
 from __future__ import annotations
 
@@ -46,6 +48,7 @@ class NoSqlStore:
         self.tables: dict[str, dict[str, Any]] = {}
         self.backups: dict[str, dict[str, Any]] = {}
         self.exports: dict[str, dict[str, Any]] = {}
+        self.imports: dict[str, dict[str, Any]] = {}
         self.account_id = account_id
 
     # ── table map accessors (the {name -> table} dict) ────────────────
@@ -89,6 +92,17 @@ class NoSqlStore:
 
     def list_exports(self) -> list[dict]:
         return list(self.exports.values())
+
+    # ── import map accessors (the {arn -> import} dict; ImportTable) ───────
+    def get_import(self, arn: str) -> dict | None:
+        i = self.imports.get(arn)
+        return i if isinstance(i, dict) else None
+
+    def put_import(self, arn: str, imp: dict) -> None:
+        self.imports[arn] = imp
+
+    def list_imports(self) -> list[dict]:
+        return list(self.imports.values())
 
     # ── optional hooks (no-ops in the base) ───────────────────────────
     def persist(self) -> None:
