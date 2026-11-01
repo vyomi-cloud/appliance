@@ -50,7 +50,7 @@
     var links = ITEMS.map(function (i) {
       return '<a href="/ui#' + i[0] + '" data-v="' + i[0] + '" title="' + i[1] + '"><svg viewBox="0 0 24 24"><path d="' + i[2] + '"/></svg><span>' + i[1] + '</span></a>';
     }).join('');
-    bar.innerHTML = '<div class="vy-cloud">Cloud: <b>' + (NAMES[cloud] || cloud) + '</b></div><nav class="vy-notch" aria-label="Appliance">' + links + '</nav>';
+    bar.innerHTML = '<nav class="vy-notch" aria-label="Appliance">' + links + '</nav>';
     document.body.insertBefore(bar, document.body.firstChild);
     var disk = document.getElementById('disk-widget-slot');          // the disk-usage chip lives in the drawer too
     if (disk) { var nav = bar.querySelector('.vy-notch'); var sp = document.createElement('span'); sp.className = 'vy-sep'; nav.appendChild(sp); nav.appendChild(disk); }
