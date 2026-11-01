@@ -368,6 +368,8 @@ def _arm_dispatch(backends: Backends, method: str, params: dict) -> dict:
         arm.blob_hook = _NanoBlobHook()
     if getattr(arm, "on_child_delete", None) is None:
         arm.on_child_delete = _arm_child_deleted
+    if params.get("origin"):
+        arm._public_base = params["origin"]      # shown endpoints point at THIS Nano origin
     resp = arm.handle(method, params.get("path", ""),
                       params.get("query") or {}, params.get("body"))
     return {"ok": resp["status"] < 400, "__http": resp}

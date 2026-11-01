@@ -112,6 +112,28 @@ def register(app, lambda_invoke):
             return {"_error": True}
         return rec.get("response_payload")
 
+    # Path-style invoke on the main port: http://<origin>/apigw/<id>[/<stage>]/<path> (what the API's
+    # ApiEndpoint shows; the host-style https://<id>.execute-api.localhost:9443 name needs the Caddy gateway).
+    @app.api_route("/apigw/{api_id}", include_in_schema=False,
+                   methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"])
+    @app.api_route("/apigw/{api_id}/{path:path}", include_in_schema=False,
+                   methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"])
+    async def _apigw_pathstyle(api_id: str, request: Request, path: str = ""):
+        store = core.shared_store()
+        api = store.apis.get(api_id)
+        if not api:
+            return Response(content=b'{"message":"Not Found"}', status_code=404, media_type="application/json")
+        first = path.split("/", 1)[0]
+        if first and first != "$default" and first in (api.get("stages") or {}):
+            stage, path = first, path[len(first):].lstrip("/")
+        else:
+            stage = "$default"
+        body = await request.body()
+        res = gw.handle(store, api_id, stage, request.method, path, dict(request.headers),
+                        dict(request.query_params), body, invoker=invoker, http_fetch=_http_fetch,
+                        verify_sig=_verify_sig, source_ip=request.client.host if request.client else "127.0.0.1")
+        return Response(content=res.body, status_code=res.status, headers=res.headers)
+
     @app.api_route("/_apigw/{api_id}/{stage}", include_in_schema=False,
                    methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"])
     @app.api_route("/_apigw/{api_id}/{stage}/{path:path}", include_in_schema=False,

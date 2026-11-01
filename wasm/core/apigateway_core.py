@@ -226,6 +226,27 @@ def invoke(store, api_id, stage, method, path, headers=None, query=None,
         out_body = out_body.encode() if isinstance(out_body, str) else (out_body or b"")
         return ApiGwResponse(status=status, body=out_body, headers=out_headers)
 
+    if integ["type"] in ("HTTP", "HTTP_PROXY"):
+        # Upstream call (needs sockets: offline appliance only; the in-browser build has none).
+        try:
+            import urllib.request as _ur, urllib.error as _ue
+            url = str(integ.get("uri") or "")
+            for k, v in (path_params or {}).items():
+                url = url.replace("{%s}" % k, v).replace("{%s+}" % k, v)
+            if query:
+                url += ("&" if "?" in url else "?") + "&".join("%s=%s" % kv for kv in query.items())
+            data = body if isinstance(body, (bytes, bytearray)) and body else None
+            rq = _ur.Request(url, data=data, method=(method or "GET").upper(),
+                             headers={k: v for k, v in (headers or {}).items() if k.lower() in ("content-type", "accept", "authorization")})
+            try:
+                with _ur.urlopen(rq, timeout=15) as up:
+                    return ApiGwResponse(status=up.status, body=up.read(),
+                                         headers={"Content-Type": up.headers.get("Content-Type", "application/json")})
+            except _ue.HTTPError as he:
+                return ApiGwResponse(status=he.code, body=he.read() or b"", headers={})
+        except Exception as e:
+            return _err(502, "BadGatewayException", "Network error communicating with endpoint: %s" % str(e)[:120])
+
     return _err(500, "InternalServerError", f"Unsupported integration type {integ['type']}")
 
 

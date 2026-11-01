@@ -2015,6 +2015,83 @@
       "cloud": "gcp",
       "kind": "api",
       "cmd": "python3 tests/conformance/post_create/probes/sweep_gcp.py {ENDPOINT}",
+      "id": "offline-post-create-gcp-memorystore-reachable",
+      "target": "offline",
+      "cloud": "gcp",
+      "kind": "api",
+      "cmd": "python3 tests/conformance/post_create/probes/endpoint_reachable.py redis {ENDPOINT}",
+      "timeout": 300
+    },
+    {
+      "id": "offline-post-create-gcp-artifactregistry-reachable",
+      "target": "offline",
+      "cloud": "gcp",
+      "kind": "api",
+      "cmd": "python3 tests/conformance/post_create/probes/endpoint_reachable.py registry {ENDPOINT}",
+      "timeout": 300
+    },
+    {
+      "id": "offline-post-create-gcp-apigateway-invoke",
+      "target": "offline",
+      "cloud": "gcp",
+      "kind": "api",
+      "cmd": "python3 tests/conformance/post_create/probes/endpoint_reachable.py gcp_apigateway {ENDPOINT}",
+      "timeout": 300
+    },
+    {
+      "id": "offline-post-create-azure-keyvault-uri",
+      "target": "offline",
+      "cloud": "azure",
+      "kind": "api",
+      "cmd": "python3 tests/conformance/post_create/probes/endpoint_reachable.py azure_keyvault {ENDPOINT}",
+      "timeout": 300
+    },
+    {
+      "id": "offline-post-create-azure-eventgrid-endpoint",
+      "target": "offline",
+      "cloud": "azure",
+      "kind": "api",
+      "cmd": "python3 tests/conformance/post_create/probes/endpoint_reachable.py azure_eventgrid {ENDPOINT}",
+      "timeout": 300
+    },
+    {
+      "id": "offline-post-create-azure-servicebus-endpoint",
+      "target": "offline",
+      "cloud": "azure",
+      "kind": "api",
+      "cmd": "python3 tests/conformance/post_create/probes/endpoint_reachable.py azure_servicebus {ENDPOINT}",
+      "timeout": 300
+    },
+    {
+      "id": "offline-post-create-azure-sql-fqdn",
+      "target": "offline",
+      "cloud": "azure",
+      "kind": "api",
+      "cmd": "python3 tests/conformance/post_create/probes/endpoint_reachable.py azure_sql {ENDPOINT}",
+      "timeout": 300
+    },
+    {
+      "id": "offline-post-create-aws-apigateway-invoke",
+      "target": "offline",
+      "cloud": "aws",
+      "kind": "api",
+      "cmd": "python3 tests/conformance/post_create/probes/endpoint_reachable.py aws_apigateway {ENDPOINT}",
+      "timeout": 300
+    },
+    {
+      "id": "offline-post-create-aws-apigatewayv2-invoke",
+      "target": "offline",
+      "cloud": "aws",
+      "kind": "api",
+      "cmd": "python3 tests/conformance/post_create/probes/endpoint_reachable.py aws_apigatewayv2 {ENDPOINT}",
+      "timeout": 300
+    },
+    {
+      "id": "offline-post-create-aws-elb-local-url",
+      "target": "offline",
+      "cloud": "aws",
+      "kind": "api",
+      "cmd": "python3 tests/conformance/post_create/probes/endpoint_reachable.py aws_elb {ENDPOINT}",
       "timeout": 300
     }
   ]

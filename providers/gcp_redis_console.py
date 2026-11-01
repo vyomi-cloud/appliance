@@ -46,7 +46,14 @@ def register(app, on_change=None):
     store = core.shared_store
     host = os.environ.get("CLOUDLEARN_VALKEY_HOST", "").strip()
     if host:
-        core.configure_data_plane(host, os.environ.get("CLOUDLEARN_VALKEY_PORT", "6379"))
+        # The shown host:port must work from the USER's machine: when the compose publishes the
+        # valkey container on loopback, advertise that (localhost:<public port>), not the
+        # Docker-internal name.
+        pub = os.environ.get("CLOUDLEARN_VALKEY_PUBLIC_PORT", "").strip()
+        if pub:
+            core.configure_data_plane(os.environ.get("CLOUDLEARN_VALKEY_PUBLIC_HOST", "localhost").strip() or "localhost", pub)
+        else:
+            core.configure_data_plane(host, os.environ.get("CLOUDLEARN_VALKEY_PORT", "6379"))
 
     def changed(action, payload):
         if on_change:

@@ -174,6 +174,10 @@ def _match_resource(api: dict, path: str):
     return None, {}
 
 
+# Set by the offline server: fn(name, event) -> the function's response payload dict (or {"_error": True}).
+LAMBDA_INVOKER = None
+
+
 def invoke(store, api_id, stage, method, path, headers=None, query=None,
            body=b"", lambda_store=None):
     """Route a request through a deployed API: match resource → method → integration
@@ -208,21 +212,50 @@ def invoke(store, api_id, stage, method, path, headers=None, query=None,
             "headers": dict(headers or {}), "queryStringParameters": dict(query or {}) or None,
             "pathParameters": path_params or None, "body": req_body, "isBase64Encoded": False,
         }
-        lam_out = lambda_core.dispatch(
-            lambda_store if lambda_store is not None else store, "POST",
-            f"/2015-03-31/functions/{fn}/invocations", {}, {}, json.dumps(event).encode())
-        if lam_out.headers.get("X-Amz-Function-Error"):
-            return _err(502, "BadGateway", "Internal server error")
-        try:
-            result = json.loads(lam_out.body.decode("utf-8"))
-        except Exception:
-            result = {}
+        if LAMBDA_INVOKER is not None:      # offline appliance: the Lambdas the console/boto3 created
+            try:
+                result = LAMBDA_INVOKER(fn, event)
+            except Exception:
+                result = {"_error": True}
+            if not isinstance(result, dict) or result.get("_error"):
+                return _err(502, "BadGateway", "Internal server error")
+        else:
+            lam_out = lambda_core.dispatch(
+                lambda_store if lambda_store is not None else store, "POST",
+                f"/2015-03-31/functions/{fn}/invocations", {}, {}, json.dumps(event).encode())
+            if lam_out.headers.get("X-Amz-Function-Error"):
+                return _err(502, "BadGateway", "Internal server error")
+            try:
+                result = json.loads(lam_out.body.decode("utf-8"))
+            except Exception:
+                result = {}
         # Proxy contract: the function returns {statusCode, headers, body}.
         status = int(result.get("statusCode", 200))
         out_headers = {str(k): str(v) for k, v in (result.get("headers") or {}).items()}
         out_body = result.get("body", "")
         out_body = out_body.encode() if isinstance(out_body, str) else (out_body or b"")
         return ApiGwResponse(status=status, body=out_body, headers=out_headers)
+
+    if integ["type"] in ("HTTP", "HTTP_PROXY"):
+        # Upstream call (needs sockets: offline appliance only; the in-browser build has none).
+        try:
+            import urllib.request as _ur, urllib.error as _ue
+            url = str(integ.get("uri") or "")
+            for k, v in (path_params or {}).items():
+                url = url.replace("{%s}" % k, v).replace("{%s+}" % k, v)
+            if query:
+                url += ("&" if "?" in url else "?") + "&".join("%s=%s" % kv for kv in query.items())
+            data = body if isinstance(body, (bytes, bytearray)) and body else None
+            rq = _ur.Request(url, data=data, method=(method or "GET").upper(),
+                             headers={k: v for k, v in (headers or {}).items() if k.lower() in ("content-type", "accept", "authorization")})
+            try:
+                with _ur.urlopen(rq, timeout=15) as up:
+                    return ApiGwResponse(status=up.status, body=up.read(),
+                                         headers={"Content-Type": up.headers.get("Content-Type", "application/json")})
+            except _ue.HTTPError as he:
+                return ApiGwResponse(status=he.code, body=he.read() or b"", headers={})
+        except Exception as e:
+            return _err(502, "BadGatewayException", "Network error communicating with endpoint: %s" % str(e)[:120])
 
     return _err(500, "InternalServerError", f"Unsupported integration type {integ['type']}")
 

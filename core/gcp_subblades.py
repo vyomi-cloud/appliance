@@ -439,6 +439,8 @@ _REDIS_SUB = [
 _ARTIFACTREGISTRY_SUB = [
     {"key": "overview",    "label": "Overview",      "icon": "dashboard",   "type": "overview"},
     {"group": "Artifacts", "items": [
+        {"key": "pushpull", "label": "Push / pull", "icon": "cable", "type": "schedkv",
+         "fields": [["push_host", "Registry host (works from this machine)"], ["push_example", "Push with"]]},
         {"key": "images",   "label": "Images",   "icon": "deployed_code", "type": "sublist",
          "source": "images", "empty": "No images yet. Push one with docker, or use Push sample image.",
          "columns": [["name", "Image"], ["digest", "Digest"], ["tags", "Tags"], ["size", "Size"], ["uploaded", "Uploaded"]],

@@ -685,9 +685,24 @@ class AwsWireRouter:
             hdrs = dict(r.headers or {})
             if r.media_type and r.body and not any(k.lower() == "content-type" for k in hdrs):
                 hdrs["content-type"] = r.media_type
-            return {"status": r.status, "headers": hdrs, "body": r.body or b""}
+            out = r.body or b""
+            if lheaders.get("host") and b".execute-api.localhost:" in out:
+                # The shown ApiEndpoint must work from where the client is: the simulator origin's
+                # path-style invoke form (<origin>/apigw/<id>), not a host-style name on the gateway port.
+                _o = f"{lheaders.get('x-forwarded-proto', 'http')}://{lheaders['host']}"
+                out = re.sub(rb"https://([a-z0-9]+)\.execute-api\.localhost:\d+", lambda m: (_o + "/apigw/").encode() + m.group(1), out)
+            return {"status": r.status, "headers": hdrs, "body": out}
 
-        if svc == "apigateway":   # native API Gateway v1 control plane (/restapis)
+        if svc == "apigateway":   # native API Gateway v1 control plane (/restapis) + the local invoke URL
+            _m = re.match(r"^/restapis/([^/]+)/([^/]+)/_user_request_(/[^?]*)?", path)
+            if _m:   # http://<host>/restapis/<id>/<stage>/_user_request_/<path>  (the standard local invoke form)
+                r = apigw.invoke(self.apigw, _m.group(1), _m.group(2), method, _m.group(3) or "/", lheaders,
+                                 {k: (v[0] if isinstance(v, list) else v) for k, v in (query or {}).items()},
+                                 bytes(body), lambda_store=self.lam)
+                hdrs = dict(r.headers or {})
+                if r.media_type and not any(k.lower() == "content-type" for k in hdrs):
+                    hdrs["content-type"] = r.media_type
+                return {"status": r.status, "headers": hdrs, "body": r.body or b""}
             r = apigw.dispatch(self.apigw, method, path, query or {}, headers or {}, bytes(body))
             hdrs = dict(r.headers or {})
             if r.media_type and not any(k.lower() == "content-type" for k in hdrs):
