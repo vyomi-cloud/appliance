@@ -1727,6 +1727,11 @@ SUB_RENDERERS.overview = function(svc, full, host){
   ];
   if (full.sku && full.sku.name) rows.push(["SKU", full.sku.name]);
   if (full.kind) rows.push(["Kind", full.kind]);
+  // Honest runtime state: the API keeps a valid status so SDKs/Terraform work, but where nothing
+  // actually runs (Nano has no container runtime) say so instead of letting "Running" imply it.
+  const vr = getPath(full, "properties.vyomiRuntime");
+  if (vr && vr.backend === "none") rows.push(["Runtime", "Control plane only — " + (vr.note || "no container is running for this resource")]);
+  else if (vr && vr.error) rows.push(["Runtime", "Container failed to start: " + vr.error]);
   for (const ep of ["properties.primaryEndpoints.blob","properties.serviceBusEndpoint",
                     "properties.documentEndpoint","properties.fullyQualifiedDomainName",
                     "properties.gatewayUrl","properties.defaultHostName"]) {
