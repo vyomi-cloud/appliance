@@ -1328,6 +1328,37 @@ try {
   check("grant access via UI → native wire denies an ungranted principal on :encrypt", kmsDeniedResp.status === 403);
   check("grant access via UI → native wire allows the granted principal on :encrypt", kmsAllowedResp.status === 200);
 
+  // Autokey (v4 GAP SWEEP wave 5b): set up via the UI → AutokeyConfig is enforced over the
+  // native wire (KeyHandle creation refused before this), then create a key handle via the
+  // UI → it really provisions a key ring + key in the configured key project.
+  const AK_PROJECT = `v4-gcp-autokey-keys-${Date.now() % 100000}`;
+  // Reset first: an earlier run (e.g. ui-conformance.mjs against the same dev_server) may
+  // have already left Autokey ACTIVE for this project.
+  await wjson("/v1/projects/vyomi-project/autokeyConfig?updateMask=state", {
+    method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ state: "DISABLED" }),
+  });
+  await page.goto(UI + "#/security/kms/autokey");
+  await page.getByRole("button", { name: "Set up Autokey" }).first().click();
+  await page.getByLabel("Key project").fill(AK_PROJECT);
+  await page.getByRole("button", { name: "Enable" }).click();
+  await page.getByText(AK_PROJECT).waitFor({ timeout: 10000 });
+  const akCfg = await wjson("/v1/projects/vyomi-project/autokeyConfig");
+  check("set up Autokey via UI → autokeyConfig.get shows ACTIVE + keyProject",
+    akCfg.state === "ACTIVE" && akCfg.keyProject === AK_PROJECT);
+
+  await page.getByRole("button", { name: "Create key handle" }).click();
+  await page.getByLabel("Resource type selector").fill("compute.googleapis.com/Disk");
+  await page.keyboard.press("Escape");   // close the Autocomplete dropdown so it doesn't cover the Save button
+  await page.getByRole("button", { name: "Save" }).click();
+  await page.getByText("compute.googleapis.com/Disk").first().waitFor({ timeout: 10000 });
+  const akHandles = await wjson("/v1/projects/vyomi-project/locations/-/keyHandles");
+  const akHandle = (akHandles.keyHandles || []).find((h) => h.kmsKey?.startsWith(`projects/${AK_PROJECT}/locations/`));
+  check("create key handle via UI → listKeyHandles shows it with a provisioned kmsKey",
+    akHandle?.resourceTypeSelector === "compute.googleapis.com/Disk");
+  const akKey = await wjson(`/v1/${akHandle.kmsKey}`);
+  check("Autokey-provisioned CryptoKey is real (visible over native wire)", akKey.name === akHandle.kmsKey);
+  await shot("21b-kms-autokey");
+
   // Secret Manager: create a secret (with an initial value) via the UI → visible over the
   // native wire; add a version from the detail page; a version added over the wire shows up
   // in the UI; delete from the list → gone over the native wire.

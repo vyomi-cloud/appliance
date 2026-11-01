@@ -6,5 +6,5 @@
   "key-ring-details": { "route": "#/security/kms/keyring/manage/us-central1/uic-keyring", "fixtures": ["kms-keyring"], "vars": { "resource-name": "uic-keyring" }, "live": "live-key" },
   "key-details": { "route": "#/security/kms/key/manage/us-central1/uic-keyring/uic-key", "fixtures": ["kms-key"], "vars": { "resource-name": "uic-key" }, "live": "live-key-label" },
   "key-inventory": { "route": "#/security/kms/key-inventory", "fixtures": ["kms-key"], "live": "live-key" },
-  "autokey": { "route": "#/security/kms/autokey" }
+  "autokey": { "route": "#/security/kms/autokey", "live": "live-key-handle" }
 }
