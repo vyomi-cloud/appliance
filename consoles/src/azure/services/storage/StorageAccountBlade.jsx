@@ -1,6 +1,10 @@
-/* Storage account resource blade: left resource menu + panels. Overview, Tags, Containers,
- * Access keys, Configuration, Endpoints, Redundancy, Networking and Encryption are backed by
- * native ARM / Blob calls; everything else in the menu is an honest NotSimulated panel. */
+/* Storage account resource blade: left resource menu + panels. Most panels are backed by
+ * native ARM / Blob calls (including, since the v4 WAVE 5b gap sweep, Redundancy's RA
+ * secondary endpoint, Encryption's CMK validation, Data protection's soft delete/
+ * versioning/change feed, Access control (IAM), Blob inventory, Data Lake Gen2 upgrade and
+ * the Monitoring group — Metrics/Insights/Alerts/Diagnostic settings/Logs/Workbooks); a
+ * remaining handful (separate products, or genuinely unmodellable telemetry/hardware) are
+ * honest NotSimulated panels — see NS_NOTES. */
 import { useEffect, useState } from "react";
 import {
   Button, Checkbox, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, Field, Input, Link,
@@ -46,7 +50,6 @@ export const MENU = [
 const LABEL = Object.fromEntries(MENU.flatMap((m) => (m.group ? m.items : [m])).map((i) => [i.id, i.label]));
 const NS_NOTES = {
   diagnose: "Diagnose and solve problems",
-  iam: "Role assignments scoped to a storage account (Access control (IAM))",
   datamigration: "Data migration tools",
   events: "Event Grid subscriptions on storage events",
   storagemover: "Storage Mover",
@@ -56,19 +59,11 @@ const NS_NOTES = {
   sas: "Shared access signature (SAS) generation",
   defender: "Microsoft Defender for Cloud",
   objectreplication: "Object replication",
-  inventory: "Blob inventory",
   staticwebsite: "Static website hosting",
   lifecycle: "Lifecycle management policies",
   azureaisearch: "Azure AI Search",
-  datalakegen2upgrade: "Data Lake Gen2 upgrade",
   cors: "Resource sharing (CORS) rules",
   advisor: "Advisor recommendations",
-  insights: "Storage insights",
-  alerts: "Alert rules",
-  metrics: "Storage metrics",
-  workbooks: "Workbooks",
-  diagnostics: "Diagnostic settings",
-  logs: "Log Analytics queries",
   tasks: "Tasks",
   exporttemplate: "Export template",
   support: "Support + Troubleshooting",
@@ -95,7 +90,7 @@ export default function StorageAccountBlade({ params, query }) {
       endpoints: () => <Endpoints a={a} />,
       redundancy: () => <Redundancy a={a} self={self} />,
       networking: () => <Networking a={a} />,
-      encryption: () => <Encryption a={a} />,
+      encryption: () => <Encryption a={a} reload={reload} />,
       dataprotection: () => <DataProtection a={a} />,
       staticwebsite: () => <StaticWebsite a={a} />,
       exporttemplate: () => <ExportTemplate a={a} />,
@@ -108,6 +103,14 @@ export default function StorageAccountBlade({ params, query }) {
       queues: () => (query.queue ? <QueueDetail name={query.queue} self={self} /> : <Queues self={self} />),
       tables: () => (query.table ? <TableDetail name={query.table} self={self} /> : <Tables self={self} />),
       storagebrowser: () => <StorageBrowser account={name} self={self} />,
+      inventory: () => <Inventory a={a} />,
+      datalakegen2upgrade: () => <DataLakeGen2Upgrade a={a} reload={reload} />,
+      metrics: () => <Metrics a={a} />,
+      insights: () => <Insights a={a} />,
+      alerts: () => <Alerts a={a} />,
+      diagnostics: () => <Diagnostics a={a} />,
+      logs: () => <LogsPage a={a} />,
+      workbooks: () => <Workbooks a={a} />,
     }[panel];
     body = P ? P() : <NotSimulatedContainer title={`${a.name} | ${LABEL[panel] || panel}`} feature={NS_NOTES[panel] || `The ${LABEL[panel] || panel} panel`} />;
   }
@@ -362,10 +365,61 @@ function NewContainer({ open, onClose, account, onCreated }) {
   );
 }
 
+function DeletedBlobsDialog({ open, onClose, account, container, onChanged }) {
+  const notify = useNotify();
+  const { data, loading, error, reload } = useAsync(() => (open ? api.listDeletedBlobs(account, container) : Promise.resolve([])), [open, account, container]);
+  return (
+    <Dialog open={open} onOpenChange={(_, d) => !d.open && onClose()}>
+      <DialogSurface style={{ maxWidth: 640 }} aria-label="Deleted blobs">
+        <DialogBody>
+          <DialogTitle>Deleted blobs (soft delete)</DialogTitle>
+          <DialogContent>
+            <ErrorBar error={error} />
+            {loading ? <Loading /> : (data || []).length ? (
+              <table className="vy-grid">
+                <thead><tr><th>Name</th><th>Deleted at</th><th /></tr></thead>
+                <tbody>{data.map((b) => <tr key={b.name}><td>{b.name}</td><td>{fmtDate(b.modified)}</td>
+                  <td><Button size="small" onClick={async () => { await api.undeleteBlob(account, container, b.name); notify.success(`Blob '${b.name}' was restored.`, "Undelete succeeded"); reload(); onChanged(); }}>Undelete</Button></td></tr>)}</tbody>
+              </table>
+            ) : <p className="vy-muted">No soft-deleted blobs within the retention window.</p>}
+          </DialogContent>
+          <DialogActions><Button onClick={onClose}>Close</Button></DialogActions>
+        </DialogBody>
+      </DialogSurface>
+    </Dialog>
+  );
+}
+
+function VersionsDialog({ open, onClose, account, container, name }) {
+  const { data, loading, error } = useAsync(() => (open && name ? api.listBlobVersions(account, container, name) : Promise.resolve([])), [open, account, container, name]);
+  return (
+    <Dialog open={open} onOpenChange={(_, d) => !d.open && onClose()}>
+      <DialogSurface style={{ maxWidth: 640 }} aria-label="Versions">
+        <DialogBody>
+          <DialogTitle>Versions — {name}</DialogTitle>
+          <DialogContent>
+            <ErrorBar error={error} />
+            {loading ? <Loading /> : (data || []).length ? (
+              <table className="vy-grid">
+                <thead><tr><th>Last modified</th><th>Size</th><th>Current</th><th /></tr></thead>
+                <tbody>{data.map((v) => <tr key={v.versionId}><td>{fmtDate(v.modified)}</td><td>{fmtBytes(v.size)}</td><td>{v.isCurrent ? "Yes" : ""}</td>
+                  <td><Button size="small" onClick={() => api.downloadBlobVersion(account, container, name, v.versionId)}>Download</Button></td></tr>)}</tbody>
+              </table>
+            ) : <p className="vy-muted">No prior versions — enable Versioning in Data protection.</p>}
+          </DialogContent>
+          <DialogActions><Button onClick={onClose}>Close</Button></DialogActions>
+        </DialogBody>
+      </DialogSurface>
+    </Dialog>
+  );
+}
+
 function Container({ account, container, self }) {
   const notify = useNotify();
   const { data, loading, error, reload } = useAsync(() => api.listBlobs(account, container), [account, container]);
   const [upload, setUpload] = useState(false);
+  const [deleted, setDeleted] = useState(false);
+  const [versionsOf, setVersionsOf] = useState(null);
   return (
     <>
       <div style={{ fontSize: 13, marginTop: 12 }}><Link href={`${self}/containers`}>Containers</Link> <span className="vy-muted">&gt;</span> {container}</div>
@@ -376,7 +430,10 @@ function Container({ account, container, self }) {
       <BrowseGrid
         resourceName="blob" rowKey={(r) => r.name} filterPlaceholder="Search blobs by prefix (case-sensitive)"
         items={data || []} loading={loading} error={error} onRefresh={reload}
-        extraCommands={<ToolbarButton icon={<ArrowUpload20Regular />} onClick={() => setUpload(true)}>Upload</ToolbarButton>}
+        extraCommands={<>
+          <ToolbarButton icon={<ArrowUpload20Regular />} onClick={() => setUpload(true)}>Upload</ToolbarButton>
+          <ToolbarButton onClick={() => setDeleted(true)}>Show deleted blobs</ToolbarButton>
+        </>}
         onDelete={async (rows) => {
           for (const r of rows) await api.deleteBlob(account, container, r.name);
           notify.success(`Deleted ${rows.length} blob${rows.length === 1 ? "" : "s"}.`, "Delete succeeded");
@@ -391,11 +448,14 @@ function Container({ account, container, self }) {
           { key: "type", label: "Blob type" },
           { key: "size", label: "Size", value: (r) => fmtBytes(r.size) },
           { key: "leaseState", label: "Lease state", value: () => "Available" },
+          { key: "versions", label: "Versions", value: () => "", render: (r) => <Link as="button" onClick={() => setVersionsOf(r.name)}>Versions</Link> },
           { key: "contentType", label: "Content type", hidden: true },
           { key: "md5", label: "Content-MD5", hidden: true },
         ]}
       />
       <UploadBlob open={upload} onClose={() => setUpload(false)} account={account} container={container} existing={(data || []).map((b) => b.name)} onDone={reload} />
+      <DeletedBlobsDialog open={deleted} onClose={() => setDeleted(false)} account={account} container={container} onChanged={reload} />
+      <VersionsDialog open={!!versionsOf} onClose={() => setVersionsOf(null)} account={account} container={container} name={versionsOf} />
     </>
   );
 }
@@ -585,17 +645,26 @@ function Endpoints({ a }) {
 }
 
 function Redundancy({ a, self }) {
+  const ra = api.isReadAccessSku(a.sku?.name);
+  const sec = useAsync(() => (ra ? api.listContainersSecondary(a.name) : Promise.resolve(null)), [a.sku?.name, ra]);
   return (
-    <>
-      <div className="vy-panel-title">{a.name} | Redundancy</div>
+    <CapabilityContainer id="azure.storage.redundancy" title={`${a.name} | Redundancy`}>
       <KV label="Redundancy" value={api.skuLabel(a.sku?.name)} />
       <KV label="Primary location" value={locationLabel(a.location)} />
       <p style={{ fontSize: 13 }}>Change redundancy in <Link href={`${self}/configuration`}>Configuration</Link>.</p>
       <section className="vy-section"><h3>Storage endpoints</h3>
         <p style={{ fontSize: 13 }}>See <Link href={`${self}/endpoints`}>Endpoints</Link> for this account's service URLs.</p>
       </section>
-      <NotSimulatedContainer title="Geo-replication" feature="Geo-replication, the secondary region and customer-managed failover" note="Vyomi stores data once, locally." />
-    </>
+      <section className="vy-section"><h3>Secondary (read-access) endpoint</h3>
+        <KV label="Read access to data in the secondary region" value={ra ? "Enabled" : "Disabled"} />
+        {ra ? <>
+          <KV label="Secondary Blob endpoint" value={api.secondaryBlobEndpoint(a.name)} />
+          <p style={{ fontSize: 13 }}>A real, read-only alias of this account's own data (Vyomi stores data once, locally — there is no second region).
+            {" "}{sec.loading ? "Checking the secondary endpoint…" : sec.error ? `Secondary endpoint error: ${sec.error.message}` : `Secondary endpoint reachable — ${sec.data?.length ?? 0} container(s) visible.`}</p>
+        </> : <p style={{ fontSize: 13 }}>Enable RA-GRS or RA-GZRS in Configuration to turn this on.</p>}
+      </section>
+      <NotSimulatedContainer title="Geo-replication" feature="Geo-replication lag, the secondary region's own storage and customer-managed failover" note="Vyomi stores data once, locally — only the read-only secondary ENDPOINT above is real." />
+    </CapabilityContainer>
   );
 }
 
@@ -634,16 +703,48 @@ function Networking({ a }) {
   );
 }
 
-function Encryption({ a }) {
+function Encryption({ a, reload }) {
+  const notify = useNotify();
+  const enc = a.properties?.encryption || {};
+  const init = () => ({
+    cmk: enc.keySource === "Microsoft.Keyvault",
+    keyvaulturi: enc.keyvaultproperties?.keyvaulturi || "", keyname: enc.keyvaultproperties?.keyname || "",
+  });
+  const [f, setF] = useState(init);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => setF(init()), [a]);
+  const dirty = JSON.stringify(f) !== JSON.stringify(init());
+  const save = async () => {
+    setBusy(true);
+    try {
+      await api.updateStorageAccount(a.resourceGroup, a.name, { properties: { encryption: f.cmk
+        ? { keySource: "Microsoft.Keyvault", keyvaultproperties: { keyvaulturi: f.keyvaulturi, keyname: f.keyname } }
+        : { keySource: "Microsoft.Storage" } } });
+      notify.success(`Encryption settings on '${a.name}' were saved.`, "Saved");
+      reload();
+    } catch (e) { notify.error(e, "Saving encryption settings failed"); }
+    finally { setBusy(false); }
+  };
   return (
-    <>
-      <div className="vy-panel-title">{a.name} | Encryption</div>
+    <CapabilityContainer id="azure.storage.encryption" title={`${a.name} | Encryption`}
+      actions={<>
+        <ToolbarButton icon={<Save20Regular />} disabled={!dirty || busy} onClick={save}>Save</ToolbarButton>
+        <ToolbarButton icon={<Dismiss20Regular />} disabled={!dirty} onClick={() => setF(init())}>Discard</ToolbarButton>
+      </>}>
       <section className="vy-section"><h3>Encryption selection</h3>
-        <KV label="Encryption type" value={a.properties?.encryption?.keySource === "Microsoft.Keyvault" ? "Customer-managed keys" : "Microsoft-managed keys (MMK)"} />
+        <div className="vy-form-row"><span className="vy-label">Encryption type</span>
+          <RadioGroup layout="horizontal" value={f.cmk ? "cmk" : "mmk"} onChange={(_, d) => setF((x) => ({ ...x, cmk: d.value === "cmk" }))} aria-label="Encryption type">
+            <Radio value="mmk" label="Microsoft-managed keys" /><Radio value="cmk" label="Customer-managed keys" />
+          </RadioGroup>
+        </div>
+        {f.cmk && <>
+          <Field label="Key vault URI" hint="https://{vault-name}.vault.azure.net/ — must be a Key Vault that exists in this subscription.">
+            <Input value={f.keyvaulturi} onChange={(_, d) => setF((x) => ({ ...x, keyvaulturi: d.value }))} /></Field>
+          <Field label="Key name"><Input value={f.keyname} onChange={(_, d) => setF((x) => ({ ...x, keyname: d.value }))} /></Field>
+        </>}
       </section>
-      <NotSimulatedContainer title="Customer-managed keys" feature="Customer-managed keys and encryption scopes" />
-      <NotSimulatedContainer title="Infrastructure encryption" feature="Infrastructure (double) encryption" />
-    </>
+      <NotSimulatedContainer title="Infrastructure encryption" feature="Infrastructure (double) encryption and encryption scopes" note="The named key's own existence/enabled state inside the vault is not checked — only that the vault itself exists." />
+    </CapabilityContainer>
   );
 }
 
@@ -765,11 +866,152 @@ function AddRuleDialog({ open, onClose, onCreate }) {
   );
 }
 
+const COMMON_STORAGE_ACTIONS = [
+  "Microsoft.Storage/storageAccounts/read", "Microsoft.Storage/storageAccounts/write", "Microsoft.Storage/storageAccounts/delete",
+  "Microsoft.Storage/storageAccounts/listKeys/action", "Microsoft.Storage/storageAccounts/blobServices/containers/read",
+  "Microsoft.Storage/storageAccounts/blobServices/containers/write", "Microsoft.Storage/storageAccounts/blobServices/containers/delete",
+];
+
+function CheckAccess({ a }) {
+  const notify = useNotify();
+  const [principalId, setPrincipalId] = useState("");
+  const [action, setAction] = useState(COMMON_STORAGE_ACTIONS[0]);
+  const [result, setResult] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const go = async () => {
+    setBusy(true);
+    try { setResult(await api.checkAccess(principalId, action, a.id)); }
+    catch (e) { notify.error(e, "Check access failed"); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16, marginTop: 12 }}>
+      <NotSimulatedContainer title="My access" feature="View my access" note="There is no real signed-in principal in Vyomi to view the access of — use Check access with any principal ID instead." />
+      <section className="vy-section" style={{ maxWidth: 640 }}><h3>Check access</h3>
+        <p style={{ fontSize: 13 }}>Evaluated for real against this account's role assignments by core/azure_iam_core.py (explicit-deny-wins, scope inheritance).</p>
+        <Field label="Principal ID" hint="Any identifier — Vyomi has no real directory to validate it against."><Input value={principalId} onChange={(_, d) => setPrincipalId(d.value)} /></Field>
+        <Field label="Action">
+          <Select value={action} onChange={(_, d) => setAction(d.value)}>
+            {COMMON_STORAGE_ACTIONS.map((act) => <option key={act} value={act}>{act}</option>)}
+          </Select>
+        </Field>
+        <div style={{ marginTop: 8 }}><Button appearance="primary" disabled={!principalId || busy} onClick={go}>Check access</Button></div>
+        {result && <div style={{ marginTop: 12 }}>
+          <KV label="Access decision" value={result.value?.[0]?.accessDecision} />
+          <KV label="Granting role(s)" value={result.value?.[0]?.roles?.join(", ") || "--"} />
+        </div>}
+      </section>
+    </div>
+  );
+}
+
+function RoleAssignments({ a }) {
+  const notify = useNotify();
+  const { data, loading, error, reload } = useAsync(api.listRoleAssignments, []);
+  const roles = useAsync(api.listRoleDefinitions, []);
+  const [add, setAdd] = useState(false);
+  const scoped = (data || []).filter((r) => api.scopeCovers(r.properties?.scope, a.id) && (r.properties?.kind || "allow") !== "deny");
+  return (
+    <>
+      <BrowseGrid
+        resourceName="role assignment" rowKey={(r) => r.name} items={scoped} loading={loading} error={error} onRefresh={reload}
+        extraCommands={<ToolbarButton icon={<Add20Regular />} onClick={() => setAdd(true)}>Add</ToolbarButton>}
+        onDelete={async (sel) => { for (const r of sel) await api.deleteRoleAssignment(r.name); notify.success(`Removed ${sel.length} assignment${sel.length === 1 ? "" : "s"}.`, "Remove succeeded"); reload(); }}
+        csvName="role-assignments.csv"
+        columns={[
+          { key: "name", label: "Name", value: (r) => r.properties?.principalId },
+          { key: "type", label: "Type", value: () => "User/Group/SP (unverified)" },
+          { key: "role", label: "Role", value: (r) => r.properties?.roleDefinitionId },
+          { key: "scope", label: "Scope", value: (r) => (r.properties?.scope === a.id ? "This resource" : r.properties?.scope) },
+          { key: "condition", label: "Condition", value: () => "None" },
+        ]}
+      />
+      <Dialog open={add} onOpenChange={(_, d) => !d.open && setAdd(false)}>
+        <DialogSurface aria-label="Add role assignment">
+          <AddRoleAssignmentBody a={a} roleDefs={roles.data || []} onClose={() => setAdd(false)} onAdded={reload} />
+        </DialogSurface>
+      </Dialog>
+    </>
+  );
+}
+
+function AddRoleAssignmentBody({ a, roleDefs, onClose, onAdded }) {
+  const notify = useNotify();
+  const [principalId, setPrincipalId] = useState("");
+  const [role, setRole] = useState("Reader");
+  const [busy, setBusy] = useState(false);
+  const go = async () => {
+    setBusy(true);
+    try {
+      await api.putRoleAssignment(`${a.name}-${principalId}-${role}`.replace(/[^a-zA-Z0-9-]/g, ""), {
+        properties: { principalId, roleName: role, scope: a.id, kind: "allow" },
+      });
+      notify.success(`Role assignment added for '${principalId}'.`, "Add succeeded");
+      setPrincipalId(""); onClose(); onAdded();
+    } catch (e) { notify.error(e, "Failed to add role assignment"); }
+    finally { setBusy(false); }
+  };
+  return (
+    <DialogBody>
+      <DialogTitle action={<Button appearance="subtle" icon={<Dismiss20Regular />} aria-label="Close" onClick={onClose} />}>Add role assignment</DialogTitle>
+      <DialogContent>
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <Field label="Scope"><Input readOnly value={`This resource (${a.name})`} /></Field>
+          <Field label="Role">
+            <Select value={role} onChange={(_, d) => setRole(d.value)}>
+              {roleDefs.map((r) => <option key={r.name} value={r.properties.roleName}>{r.properties.roleName}</option>)}
+            </Select>
+          </Field>
+          <Field label="Principal ID" hint="Any identifier — Vyomi has no real directory to pick a member from.">
+            <Input value={principalId} onChange={(_, d) => setPrincipalId(d.value)} aria-label="Principal ID" /></Field>
+        </div>
+      </DialogContent>
+      <DialogActions>
+        <Button appearance="primary" disabled={!principalId || busy} onClick={go}>Review + assign</Button>
+        <Button onClick={onClose}>Cancel</Button>
+      </DialogActions>
+    </DialogBody>
+  );
+}
+
+function Roles() {
+  const { data, loading, error, reload } = useAsync(api.listRoleDefinitions, []);
+  return (
+    <BrowseGrid
+      resourceName="role" rowKey={(r) => r.name} items={data || []} loading={loading} error={error} onRefresh={reload}
+      csvName="roles.csv"
+      columns={[
+        { key: "name", label: "Name", value: (r) => r.properties?.roleName },
+        { key: "description", label: "Description", value: (r) => r.properties?.description || "--" },
+        { key: "type", label: "Type", value: (r) => r.properties?.type },
+        { key: "category", label: "Category", value: () => "General" },
+        { key: "details", label: "Details", value: (r) => (r.properties?.permissions?.[0]?.actions || []).join(", ") },
+      ]}
+    />
+  );
+}
+
+function DenyAssignments({ a }) {
+  const { data, loading, error } = useAsync(api.listRoleAssignments, []);
+  const scoped = (data || []).filter((r) => r.properties?.kind === "deny" && api.scopeCovers(r.properties?.scope, a.id));
+  return (
+    <BrowseGrid
+      resourceName="deny assignment" rowKey={(r) => r.name} items={scoped} loading={loading} error={error}
+      csvName="deny-assignments.csv"
+      columns={[
+        { key: "name", label: "Name", value: (r) => r.properties?.principalId },
+        { key: "description", label: "Description", value: () => "--" },
+        { key: "principal", label: "Principal", value: (r) => r.properties?.principalId },
+        { key: "scope", label: "Scope", value: (r) => (r.properties?.scope === a.id ? "This resource" : r.properties?.scope) },
+      ]}
+    />
+  );
+}
+
 function Iam({ a }) {
   const [tab, setTab] = useState("check");
   return (
-    <>
-      <div className="vy-panel-title">{a.name} | Access control (IAM)</div>
+    <CapabilityContainer id="azure.storage.iam" title={`${a.name} | Access control (IAM)`}>
       <TabList selectedValue={tab} onTabSelect={(_, d) => setTab(d.value)} aria-label="Access control (IAM) tabs">
         <Tab value="check">Check access</Tab>
         <Tab value="assignments">Role assignments</Tab>
@@ -777,15 +1019,12 @@ function Iam({ a }) {
         <Tab value="deny">Deny assignments</Tab>
         <Tab value="classic">Classic administrators</Tab>
       </TabList>
-      {tab === "check" && <div style={{ display: "flex", flexDirection: "column", gap: 16, marginTop: 12 }}>
-        <NotSimulatedContainer title="My access" feature="View my access" />
-        <NotSimulatedContainer title="Check access" feature="Check access" />
-      </div>}
-      {tab === "assignments" && <NotSimulatedContainer title="Role assignments" feature="Role assignments scoped to a storage account" />}
-      {tab === "roles" && <NotSimulatedContainer title="Roles" feature="The built-in and custom role catalog" />}
-      {tab === "deny" && <NotSimulatedContainer title="Deny assignments" feature="Deny assignments" />}
-      {tab === "classic" && <NotSimulatedContainer title="Classic administrators" feature="Classic administrators" />}
-    </>
+      {tab === "check" && <CheckAccess a={a} />}
+      {tab === "assignments" && <RoleAssignments a={a} />}
+      {tab === "roles" && <Roles />}
+      {tab === "deny" && <DenyAssignments a={a} />}
+      {tab === "classic" && <NotSimulatedContainer title="Classic administrators" feature="Classic administrators" note="A legacy (pre-RBAC) co-administrator model Azure itself is retiring — not modelled." />}
+    </CapabilityContainer>
   );
 }
 
@@ -1075,6 +1314,35 @@ function ExportTemplate({ a }) {
 }
 
 // ── Data protection (Microsoft.Storage/storageAccounts/blobServices/default) ───────────
+function DeletedContainers({ a }) {
+  const notify = useNotify();
+  const { data, loading, error, reload } = useAsync(() => api.listDeletedContainers(a.name), [a.name]);
+  return (
+    <BrowseGrid
+      resourceName="deleted container" rowKey={(r) => r.name} items={data || []} loading={loading} error={error} onRefresh={reload}
+      csvName="deleted-containers.csv"
+      columns={[{ key: "name", label: "Name" }, { key: "modified", label: "Last modified (before delete)", value: (r) => fmtDate(r.modified) },
+        { key: "undelete", label: "", render: (r) => <Button size="small" onClick={async () => { await api.undeleteContainer(a.name, r.name); notify.success(`Container '${r.name}' was restored.`, "Undelete succeeded"); reload(); }}>Undelete</Button> }]}
+    />
+  );
+}
+
+function ChangeFeedView({ a }) {
+  const { data, loading, error } = useAsync(() => api.getChangeFeed(a.name), [a.name]);
+  const rows = data || [];
+  return (
+    <>
+      <ErrorBar error={error} />
+      {loading ? <Loading /> : rows.length ? (
+        <table className="vy-grid">
+          <thead><tr><th>Time</th><th>Event</th><th>Container</th><th>Blob</th></tr></thead>
+          <tbody>{rows.slice().reverse().map((e, i) => <tr key={i}><td>{fmtDate(e.time)}</td><td>{e.event}</td><td>{e.container}</td><td>{e.blob || "--"}</td></tr>)}</tbody>
+        </table>
+      ) : <p className="vy-muted" style={{ fontSize: 13 }}>No change feed events yet — upload or delete a blob.</p>}
+    </>
+  );
+}
+
 function DataProtection({ a }) {
   const notify = useNotify();
   const svc = useAsync(() => api.getBlobServiceProperties(a.resourceGroup, a.name), [a.id]);
@@ -1121,30 +1389,36 @@ function DataProtection({ a }) {
       <div style={{ display: "flex", flexDirection: "column", gap: 16, marginTop: 8 }}>
         <section className="vy-section"><h3>Recovery</h3>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {cb("backup", "Enable operational backup with Azure Backup")}
-            {cb("pitr", "Enable point-in-time restore for containers")}
-            {cb("softDeleteBlobs", "Enable soft delete for blobs")}
+            {cb("backup", "Enable operational backup with Azure Backup", "not enforced — no backup engine")}
+            {cb("pitr", "Enable point-in-time restore for containers", "not enforced")}
+            {cb("softDeleteBlobs", "Enable soft delete for blobs", "ENFORCED — deleted blobs are recoverable, see Containers")}
             <Field label="Keep deleted blobs for (in days)" style={{ maxWidth: 220, marginLeft: 24 }}>
               <Input type="number" value={String(f.softDeleteBlobDays)} onChange={(_, d) => setF((x) => ({ ...x, softDeleteBlobDays: d.value }))} /></Field>
-            {cb("softDeleteContainers", "Enable soft delete for containers")}
+            {cb("softDeleteContainers", "Enable soft delete for containers", "ENFORCED — deleted containers are recoverable below")}
             <Field label="Keep deleted containers for (in days)" style={{ maxWidth: 220, marginLeft: 24 }}>
               <Input type="number" value={String(f.softDeleteContainerDays)} onChange={(_, d) => setF((x) => ({ ...x, softDeleteContainerDays: d.value }))} /></Field>
-            {cb("permanentDelete", "Enable permanent delete for soft deleted items")}
-            {cb("softDeleteShares", "Enable soft delete for file shares")}
+            {cb("permanentDelete", "Enable permanent delete for soft deleted items", "not enforced")}
+            {cb("softDeleteShares", "Enable soft delete for file shares", "Azure Files has no core in this repo")}
             <Field label="Keep deleted file shares for (in days)" style={{ maxWidth: 220, marginLeft: 24 }}>
               <Input type="number" value={String(f.softDeleteShareDays)} onChange={(_, d) => setF((x) => ({ ...x, softDeleteShareDays: d.value }))} /></Field>
           </div>
         </section>
         <section className="vy-section"><h3>Tracking</h3>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {cb("versioning", "Enable versioning for blobs")}
-            {cb("changeFeed", "Enable blob change feed")}
+            {cb("versioning", "Enable versioning for blobs", "ENFORCED — overwriting a blob keeps the prior body as a real version")}
+            {cb("changeFeed", "Enable blob change feed", "ENFORCED — real BlobCreated/BlobDeleted events, see below")}
           </div>
         </section>
         <section className="vy-section"><h3>Access control</h3>
-          {cb("immutability", "Enable version-level immutability support")}
+          {cb("immutability", "Enable version-level immutability support", "not enforced")}
         </section>
       </div>
+      {f.softDeleteContainers && <section className="vy-section" style={{ marginTop: 16 }}><h3>Deleted containers</h3>
+        <DeletedContainers a={a} />
+      </section>}
+      {f.changeFeed && <section className="vy-section" style={{ marginTop: 16 }}><h3>Change feed events</h3>
+        <ChangeFeedView a={a} />
+      </section>}
     </CapabilityContainer>
   );
 }
@@ -1625,5 +1899,346 @@ function StorageBrowser({ account, self }) {
       </div>
       <p style={{ fontSize: 13, marginTop: 12 }}>For uploads, access tiers and SAS, use <Link href={`${self}/containers`}>Containers</Link>.</p>
     </CapabilityContainer>
+  );
+}
+
+// ── Blob inventory — on-demand (not daily-scheduled) real CSV report blob ─────────────
+function Inventory({ a }) {
+  const notify = useNotify();
+  const [dest, setDest] = useState("inventory-reports");
+  const [busy, setBusy] = useState(false);
+  const { data, loading, error, reload } = useAsync(() => api.listBlobs(a.name, dest).catch(() => []), [a.name, dest]);
+  const run = async () => {
+    setBusy(true);
+    try {
+      const r = await api.runInventoryNow(a.name, dest);
+      notify.success(`Wrote '${r.blobName}' with ${r.rowCount} row(s) to '${dest}'.`, "Inventory run completed");
+      reload();
+    } catch (e) { notify.error(e, "Inventory run failed"); }
+    finally { setBusy(false); }
+  };
+  return (
+    <CapabilityContainer id="azure.storage.inventory" title={`${a.name} | Blob inventory`}
+      actions={<ToolbarButton icon={<ArrowClockwise20Regular />} onClick={reload}>Refresh</ToolbarButton>}>
+      <p style={{ fontSize: 13 }}>Vyomi has no job scheduler, so "Run inventory now" below runs the real listing on demand instead of the real feature's daily background job — the report blob it writes is real.</p>
+      <Field label="Destination container" style={{ maxWidth: 320 }}><Input value={dest} onChange={(_, d) => setDest(d.value)} /></Field>
+      <div style={{ marginTop: 8 }}><Button appearance="primary" disabled={busy} onClick={run}>Run inventory now</Button></div>
+      <section className="vy-section" style={{ marginTop: 16 }}><h3>Inventory reports</h3>
+        <ErrorBar error={error} />
+        {loading ? <Loading /> : (data || []).length ? (
+          <table className="vy-grid">
+            <thead><tr><th>Report</th><th>Size</th><th>Generated</th><th /></tr></thead>
+            <tbody>{data.map((b) => <tr key={b.name}><td>{b.name}</td><td>{fmtBytes(b.size)}</td><td>{fmtDate(b.modified)}</td>
+              <td><Button size="small" onClick={() => api.downloadBlob(a.name, dest, b.name)}>Download</Button></td></tr>)}</tbody>
+          </table>
+        ) : <p className="vy-muted">No inventory reports yet — click "Run inventory now".</p>}
+      </section>
+    </CapabilityContainer>
+  );
+}
+
+// ── Data Lake Gen2 upgrade — a real, one-way ARM PATCH (core/azure_arm_core.py rejects an
+// ineligible kind or a downgrade attempt — see _storage_hns_block) ────────────────────
+function DataLakeGen2Upgrade({ a, reload }) {
+  const notify = useNotify();
+  const [busy, setBusy] = useState(false);
+  const enabled = !!a.properties?.isHnsEnabled;
+  const eligible = ["StorageV2", "BlockBlobStorage"].includes(a.kind);
+  const go = async () => {
+    setBusy(true);
+    try {
+      await api.upgradeToDataLakeGen2(a.resourceGroup, a.name);
+      notify.success(`'${a.name}' was upgraded to support a hierarchical namespace.`, "Upgrade succeeded");
+      reload();
+    } catch (e) { notify.error(e, "Upgrade failed"); }
+    finally { setBusy(false); }
+  };
+  return (
+    <CapabilityContainer id="azure.storage.datalakegen2upgrade" title={`${a.name} | Data Lake Gen2 upgrade`}>
+      <KV label="Hierarchical namespace" value={enabled ? "Enabled" : "Disabled"} />
+      <KV label="Account kind" value={a.kind} />
+      {enabled ? <InfoBar>This account already has a hierarchical namespace — the upgrade is one-way and already applied.</InfoBar>
+        : eligible ? <>
+          <p style={{ fontSize: 13 }}>Upgrading enables a real hierarchical namespace flag on this account. This is irreversible — core/azure_arm_core.py rejects turning it back off.</p>
+          <Button appearance="primary" disabled={busy} onClick={go}>Upgrade</Button>
+        </> : <InfoBar intent="warning">Hierarchical namespace requires a general-purpose v2 or premium block blob account — change the account kind first.</InfoBar>}
+      <NotSimulatedContainer title="Metadata rewrite" feature="The full-container metadata rewrite a real upgrade job performs" note="Vyomi's blob core has no directory/path metadata to rewrite — containers stay flat either way." />
+    </CapabilityContainer>
+  );
+}
+
+// ── Metrics / Insights (Microsoft.Insights/metrics — real numbers, see api.getMetrics) ──
+const METRIC_LABEL = { UsedCapacity: "Used capacity", BlobCount: "Blob count", ContainerCount: "Container count", Transactions: "Transactions", Ingress: "Ingress", Egress: "Egress" };
+function fmtMetric(name, value) {
+  return name === "UsedCapacity" || name === "Ingress" || name === "Egress" ? fmtBytes(value) : String(value);
+}
+
+function Metrics({ a }) {
+  const { data, loading, error, reload } = useAsync(() => api.getMetrics(a.resourceGroup, a.name), [a.id]);
+  return (
+    <CapabilityContainer id="azure.storage.metrics" title={`${a.name} | Metrics`}
+      actions={<ToolbarButton icon={<ArrowClockwise20Regular />} onClick={reload}>Refresh</ToolbarButton>}>
+      <p style={{ fontSize: 13 }}>Real numbers derived from this account's own activity (core/azure_blob_core.py) over the native `Microsoft.Insights/metrics` wire — a single current value, not a persisted historical time series.</p>
+      <ErrorBar error={error} />
+      {loading ? <Loading /> : (
+        <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginTop: 8 }}>
+          {api.STORAGE_METRICS.map((m) => (
+            <section className="vy-section" key={m} style={{ minWidth: 160 }}>
+              <h3>{METRIC_LABEL[m]}</h3>
+              <div style={{ fontSize: 22 }}>{fmtMetric(m, data?.[m]?.value ?? 0)}</div>
+            </section>
+          ))}
+        </div>
+      )}
+      <NotSimulatedContainer title="Availability / latency" feature="Availability and SuccessE2ELatency metrics" note="Vyomi always serves successfully with no transient failures to measure." />
+    </CapabilityContainer>
+  );
+}
+
+function Insights({ a }) {
+  const { data, loading, error } = useAsync(() => api.getMetrics(a.resourceGroup, a.name), [a.id]);
+  return (
+    <CapabilityContainer id="azure.storage.insights" title={`${a.name} | Insights`}>
+      <p style={{ fontSize: 13 }}>The same real metrics as <Link href="#">Metrics</Link>, laid out as an at-a-glance dashboard.</p>
+      <ErrorBar error={error} />
+      {loading ? <Loading /> : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 8, maxWidth: 480 }}>
+          {api.STORAGE_METRICS.map((m) => (
+            <div key={m} className="vy-kv"><span>{METRIC_LABEL[m]}</span><span>{fmtMetric(m, data?.[m]?.value ?? 0)}</span></div>
+          ))}
+        </div>
+      )}
+    </CapabilityContainer>
+  );
+}
+
+// ── Alerts (Microsoft.Insights/metricAlerts, scoped via properties.scopes) ─────────────
+function Alerts({ a }) {
+  const notify = useNotify();
+  const { data, loading, error, reload } = useAsync(() => api.listMetricAlerts(a.resourceGroup, a.id), [a.id]);
+  const metrics = useAsync(() => api.getMetrics(a.resourceGroup, a.name), [a.id]);
+  const [add, setAdd] = useState(false);
+  return (
+    <CapabilityContainer id="azure.storage.alerts" title={`${a.name} | Alerts`}
+      actions={<>
+        <ToolbarButton icon={<Add20Regular />} onClick={() => setAdd(true)}>Create alert rule</ToolbarButton>
+        <ToolbarButton icon={<ArrowClockwise20Regular />} onClick={reload}>Refresh</ToolbarButton>
+      </>}>
+      <BrowseGrid
+        resourceName="alert rule" rowKey={(r) => r.name} items={data || []} loading={loading} error={error}
+        onDelete={async (sel) => { for (const r of sel) await api.deleteMetricAlert(a.resourceGroup, r.name); notify.success(`Deleted ${sel.length} rule${sel.length === 1 ? "" : "s"}.`, "Delete succeeded"); reload(); }}
+        csvName="alert-rules.csv"
+        columns={[
+          { key: "name", label: "Name" },
+          { key: "condition", label: "Condition", value: (r) => { const c = r.properties?.criteria?.allOf?.[0]; return c ? `${c.metricName} ${c.operator} ${c.threshold}` : "--"; } },
+          { key: "severity", label: "Severity", value: (r) => r.properties?.severity },
+          { key: "status", label: "Status", render: (r) => (metrics.data ? (api.alertFired(r, metrics.data) ? <span style={{ color: "var(--colorPaletteRedForeground1)" }}>Fired</span> : "OK") : "--") },
+        ]}
+      />
+      <Dialog open={add} onOpenChange={(_, d) => !d.open && setAdd(false)}>
+        <DialogSurface aria-label="Create alert rule"><CreateAlertRuleBody a={a} onClose={() => setAdd(false)} onCreated={reload} /></DialogSurface>
+      </Dialog>
+    </CapabilityContainer>
+  );
+}
+
+function CreateAlertRuleBody({ a, onClose, onCreated }) {
+  const notify = useNotify();
+  const [name, setName] = useState("");
+  const [metricName, setMetricName] = useState("UsedCapacity");
+  const [operator, setOperator] = useState("GreaterThan");
+  const [threshold, setThreshold] = useState("1000000");
+  const [busy, setBusy] = useState(false);
+  const go = async () => {
+    setBusy(true);
+    try {
+      await api.putMetricAlert(a.resourceGroup, name, a.id, { metricName, operator, threshold: Number(threshold) });
+      notify.success(`Alert rule '${name}' was created.`, "Create succeeded");
+      onClose(); onCreated();
+    } catch (e) { notify.error(e, "Failed to create alert rule"); }
+    finally { setBusy(false); }
+  };
+  return (
+    <DialogBody>
+      <DialogTitle action={<Button appearance="subtle" icon={<Dismiss20Regular />} aria-label="Close" onClick={onClose} />}>Create alert rule</DialogTitle>
+      <DialogContent>
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <Field label="Alert rule name" required><Input value={name} onChange={(_, d) => setName(d.value)} /></Field>
+          <Field label="Signal (metric)"><Select value={metricName} onChange={(_, d) => setMetricName(d.value)}>
+            {api.STORAGE_METRICS.map((m) => <option key={m} value={m}>{METRIC_LABEL[m]}</option>)}
+          </Select></Field>
+          <Field label="Operator"><Select value={operator} onChange={(_, d) => setOperator(d.value)}>
+            <option value="GreaterThan">Greater than</option><option value="GreaterThanOrEqual">Greater than or equal to</option>
+            <option value="LessThan">Less than</option><option value="LessThanOrEqual">Less than or equal to</option>
+          </Select></Field>
+          <Field label="Threshold value"><Input type="number" value={threshold} onChange={(_, d) => setThreshold(d.value)} /></Field>
+        </div>
+      </DialogContent>
+      <DialogActions>
+        <Button appearance="primary" disabled={!name || busy} onClick={go}>Create alert rule</Button>
+        <Button onClick={onClose}>Cancel</Button>
+      </DialogActions>
+    </DialogBody>
+  );
+}
+
+// ── Diagnostic settings (Microsoft.Insights/diagnosticSettings, a real ARM extension
+// resource) + Logs (gated read-back of the real request log — see api.getDiagnosticLog) ──
+const LOG_CATEGORIES = ["StorageRead", "StorageWrite", "StorageDelete"];
+
+function Diagnostics({ a }) {
+  const notify = useNotify();
+  const { data, loading, error, reload } = useAsync(() => api.listDiagnosticSettings(a.resourceGroup, a.name), [a.id]);
+  const [add, setAdd] = useState(false);
+  return (
+    <CapabilityContainer id="azure.storage.diagnostics" title={`${a.name} | Diagnostic settings`}
+      actions={<ToolbarButton icon={<Add20Regular />} onClick={() => setAdd(true)}>Add diagnostic setting</ToolbarButton>}>
+      <p style={{ fontSize: 13 }}>Enabling a log category here really gates what the <Link href="#">Logs</Link> page shows for this account — it is not delivered to the configured destination (no Log Analytics/Event Hub ingestion engine exists in Vyomi).</p>
+      <BrowseGrid
+        resourceName="diagnostic setting" rowKey={(r) => r.name} items={data || []} loading={loading} error={error} onRefresh={reload}
+        onDelete={async (sel) => { for (const r of sel) await api.deleteDiagnosticSetting(a.resourceGroup, a.name, r.name); notify.success(`Deleted ${sel.length} setting${sel.length === 1 ? "" : "s"}.`, "Delete succeeded"); reload(); }}
+        csvName="diagnostic-settings.csv"
+        columns={[
+          { key: "name", label: "Name" },
+          { key: "destination", label: "Destination", value: (r) => r.properties?.storageAccountId || r.properties?.workspaceId || r.properties?.eventHubName || "--" },
+          { key: "categories", label: "Log categories", value: (r) => (r.properties?.logs || []).filter((c) => c.enabled).map((c) => c.category).join(", ") || "--" },
+        ]}
+      />
+      <Dialog open={add} onOpenChange={(_, d) => !d.open && setAdd(false)}>
+        <DialogSurface aria-label="Add diagnostic setting"><AddDiagnosticSettingBody a={a} onClose={() => setAdd(false)} onAdded={reload} /></DialogSurface>
+      </Dialog>
+    </CapabilityContainer>
+  );
+}
+
+function AddDiagnosticSettingBody({ a, onClose, onAdded }) {
+  const notify = useNotify();
+  const [name, setName] = useState("");
+  const [destAccount, setDestAccount] = useState(a.name);
+  const [cats, setCats] = useState(["StorageWrite"]);
+  const [busy, setBusy] = useState(false);
+  const go = async () => {
+    setBusy(true);
+    try {
+      const destId = `/subscriptions/${a.id.split("/")[2]}/resourceGroups/${a.resourceGroup}/providers/Microsoft.Storage/storageAccounts/${destAccount}`;
+      await api.putDiagnosticSetting(a.resourceGroup, a.name, name, {
+        storageAccountId: destId, logs: LOG_CATEGORIES.map((c) => ({ category: c, enabled: cats.includes(c) })),
+      });
+      notify.success(`Diagnostic setting '${name}' was created.`, "Create succeeded");
+      onClose(); onAdded();
+    } catch (e) { notify.error(e, "Failed to create diagnostic setting"); }
+    finally { setBusy(false); }
+  };
+  return (
+    <DialogBody>
+      <DialogTitle action={<Button appearance="subtle" icon={<Dismiss20Regular />} aria-label="Close" onClick={onClose} />}>Add diagnostic setting</DialogTitle>
+      <DialogContent>
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <Field label="Diagnostic setting name" required><Input value={name} onChange={(_, d) => setName(d.value)} /></Field>
+          <Field label="Destination storage account" hint="Must be a real storage account in this subscription."><Input value={destAccount} onChange={(_, d) => setDestAccount(d.value)} /></Field>
+          <CheckboxRow label="Log categories" options={LOG_CATEGORIES} checked={cats} onChange={setCats} />
+        </div>
+      </DialogContent>
+      <DialogActions>
+        <Button appearance="primary" disabled={!name || !cats.length || busy} onClick={go}>Save</Button>
+        <Button onClick={onClose}>Cancel</Button>
+      </DialogActions>
+    </DialogBody>
+  );
+}
+
+function LogsPage({ a }) {
+  const { data, loading, error, reload } = useAsync(() => api.getDiagnosticLog(a.name), [a.name]);
+  const [filter, setFilter] = useState("");
+  const rows = (data?.value || []).filter((r) => !filter || JSON.stringify(r).toLowerCase().includes(filter.toLowerCase()));
+  return (
+    <CapabilityContainer id="azure.storage.logs" title={`${a.name} | Logs`}
+      actions={<ToolbarButton icon={<ArrowClockwise20Regular />} onClick={reload}>Run</ToolbarButton>}>
+      <p style={{ fontSize: 13 }}>A simple field filter over this account's real, in-memory request log — not a KQL/Log Analytics workspace query engine.</p>
+      <Field label="Filter" style={{ maxWidth: 360 }}><Input value={filter} onChange={(_, d) => setFilter(d.value)} placeholder="Filter rows..." /></Field>
+      <ErrorBar error={error} />
+      {!loading && data && data.enabledCategories?.length === 0 && (
+        <InfoBar intent="warning">No <Link href="#">Diagnostic setting</Link> on this account has an enabled log category yet — nothing is being captured.</InfoBar>
+      )}
+      {loading ? <Loading /> : rows.length ? (
+        <table className="vy-grid">
+          <thead><tr><th>Time</th><th>Category</th><th>Operation</th><th>Status</th><th>URI</th></tr></thead>
+          <tbody>{rows.slice().reverse().map((r, i) => <tr key={i}><td>{fmtDate(r.time)}</td><td>{r.category}</td><td>{r.operation}</td><td>{r.status}</td><td>{r.uri}</td></tr>)}</tbody>
+        </table>
+      ) : <p className="vy-muted">No log rows to show.</p>}
+    </CapabilityContainer>
+  );
+}
+
+// ── Workbooks (Microsoft.Insights/workbooks) — real ARM-backed saved views pinned to a
+// metric this account actually reports ─────────────────────────────────────────────────
+function WorkbookPreview({ a, metricName }) {
+  const { data, loading } = useAsync(() => api.getMetrics(a.resourceGroup, a.name), [a.id, metricName]);
+  return loading ? <Loading /> : <div style={{ fontSize: 20 }}>{METRIC_LABEL[metricName] || metricName}: {fmtMetric(metricName, data?.[metricName]?.value ?? 0)}</div>;
+}
+
+function Workbooks({ a }) {
+  const notify = useNotify();
+  const { data, loading, error, reload } = useAsync(() => api.listWorkbooks(a.resourceGroup, a.id), [a.id]);
+  const [add, setAdd] = useState(false);
+  const [open, setOpen] = useState(null);
+  return (
+    <CapabilityContainer id="azure.storage.workbooks" title={`${a.name} | Workbooks`}
+      actions={<ToolbarButton icon={<Add20Regular />} onClick={() => setAdd(true)}>New</ToolbarButton>}>
+      <BrowseGrid
+        resourceName="workbook" rowKey={(r) => r.name} items={data || []} loading={loading} error={error} onRefresh={reload}
+        onDelete={async (sel) => { for (const r of sel) await api.deleteWorkbook(a.resourceGroup, r.name); notify.success(`Deleted ${sel.length} workbook${sel.length === 1 ? "" : "s"}.`, "Delete succeeded"); reload(); }}
+        csvName="workbooks.csv"
+        columns={[
+          { key: "name", label: "Name", render: (r) => <Link as="button" onClick={() => setOpen(r)}>{r.properties?.displayName || r.name}</Link> },
+          { key: "category", label: "Category", value: (r) => r.properties?.category },
+        ]}
+      />
+      <Dialog open={add} onOpenChange={(_, d) => !d.open && setAdd(false)}>
+        <DialogSurface aria-label="New workbook"><CreateWorkbookBody a={a} onClose={() => setAdd(false)} onCreated={reload} /></DialogSurface>
+      </Dialog>
+      <Dialog open={!!open} onOpenChange={(_, d) => !d.open && setOpen(null)}>
+        <DialogSurface aria-label={open?.properties?.displayName || "Workbook"}>
+          <DialogBody>
+            <DialogTitle>{open?.properties?.displayName}</DialogTitle>
+            <DialogContent>{open && <WorkbookPreview a={a} metricName={JSON.parse(open.properties.serializedData || "{}").metric} />}</DialogContent>
+            <DialogActions><Button onClick={() => setOpen(null)}>Close</Button></DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
+    </CapabilityContainer>
+  );
+}
+
+function CreateWorkbookBody({ a, onClose, onCreated }) {
+  const notify = useNotify();
+  const [name, setName] = useState("");
+  const [metricName, setMetricName] = useState("UsedCapacity");
+  const [busy, setBusy] = useState(false);
+  const go = async () => {
+    setBusy(true);
+    try {
+      await api.putWorkbook(a.resourceGroup, `${a.name}-${name}`.replace(/[^a-zA-Z0-9-]/g, ""), a.id, name, metricName);
+      notify.success(`Workbook '${name}' was created.`, "Create succeeded");
+      onClose(); onCreated();
+    } catch (e) { notify.error(e, "Failed to create workbook"); }
+    finally { setBusy(false); }
+  };
+  return (
+    <DialogBody>
+      <DialogTitle action={<Button appearance="subtle" icon={<Dismiss20Regular />} aria-label="Close" onClick={onClose} />}>New workbook</DialogTitle>
+      <DialogContent>
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <Field label="Title" required><Input value={name} onChange={(_, d) => setName(d.value)} /></Field>
+          <Field label="Pinned metric"><Select value={metricName} onChange={(_, d) => setMetricName(d.value)}>
+            {api.STORAGE_METRICS.map((m) => <option key={m} value={m}>{METRIC_LABEL[m]}</option>)}
+          </Select></Field>
+        </div>
+      </DialogContent>
+      <DialogActions>
+        <Button appearance="primary" disabled={!name || busy} onClick={go}>Create</Button>
+        <Button onClick={onClose}>Cancel</Button>
+      </DialogActions>
+    </DialogBody>
   );
 }

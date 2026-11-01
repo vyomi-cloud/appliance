@@ -232,3 +232,130 @@ export function toArmBody(f) {
     },
   };
 }
+
+// ── Redundancy (Microsoft.Storage/storageAccounts sku.name) — a RA-* sku really exposes a
+// read-only secondary endpoint (core/azure_blob_core.py: `{account}-secondary`) ───────────
+export const isReadAccessSku = (skuName = "") => /^(standard|premium)_ra/i.test(skuName);
+export const secondaryBlobEndpoint = (account) => `${location.origin}${WIRE_BASE}/${account}-secondary`;
+export const listContainersSecondary = (account) => listContainers(`${account}-secondary`);
+
+// ── Soft delete / versioning / change feed — real ops over the Blob data plane ─────────
+export const listDeletedBlobs = async (account, container) => {
+  const { text } = await blob(account, "GET", `/${encodeURIComponent(container)}`, { query: { restype: "container", comp: "list", include: "deleted" } });
+  return asList(xml(text).Blobs?.Blob).filter((b) => b.Deleted === "true").map((b) => ({ name: b.Name, modified: b.Properties?.["Last-Modified"] }));
+};
+export const undeleteBlob = (account, container, name) => blob(account, "PUT", bpath(container, name), { query: { comp: "undelete" } });
+export const listDeletedContainers = async (account) => {
+  const { text } = await blob(account, "GET", "", { query: { comp: "list", include: "deleted" } });
+  return asList(xml(text).Containers?.Container).filter((c) => c.Deleted === "true").map((c) => ({ name: c.Name, modified: c.Properties?.["Last-Modified"] }));
+};
+export const undeleteContainer = (account, name) => blob(account, "PUT", `/${encodeURIComponent(name)}`, { query: { restype: "container", comp: "undelete" } });
+export async function listBlobVersions(account, container, name) {
+  const { text } = await blob(account, "GET", `/${encodeURIComponent(container)}`, { query: { restype: "container", comp: "list", include: "versions", prefix: name } });
+  return asList(xml(text).Blobs?.Blob).filter((b) => b.Name === name)
+    .map((b) => ({ versionId: b.VersionId, isCurrent: b.IsCurrentVersion === "true", modified: b.Properties?.["Last-Modified"], size: Number(b.Properties?.["Content-Length"] || 0) }))
+    .sort((x, y) => (x.isCurrent ? 1 : y.isCurrent ? -1 : 0));
+}
+export async function downloadBlobVersion(account, container, name, versionId) {
+  const res = await fetch(`${WIRE_BASE}/${account}${bpath(container, name)}?versionid=${encodeURIComponent(versionId)}`, { headers: { "x-ms-version": X_MS_VERSION, authorization: `SharedKey ${account}:vyomi-console` } });
+  if (!res.ok) throw new WireError(res.status, res.headers.get("x-ms-error-code"), `Download failed (${res.status})`);
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(await res.blob());
+  a.download = `${name.split("/").pop()}.${versionId.replace(/[^a-z0-9]/gi, "")}`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+export const getChangeFeed = async (account) => (await blobJson(account, "GET", "", { query: { comp: "changefeed" } })).value || [];
+
+// ── Blob inventory — "Run inventory now" writes a REAL CSV report blob listing the
+// account's actual containers/blobs (core/azure_blob_core.py has no job scheduler, so this
+// is on-demand rather than the real feature's daily run — same honest simplification
+// Lifecycle's lazy evaluation makes) ─────────────────────────────────────────────────────
+export async function runInventoryNow(account, destContainer) {
+  const containers = await listContainers(account);
+  const rows = [["Container", "Name", "Content-Length", "Content-Type", "Last-Modified", "Etag"]];
+  for (const c of containers) {
+    if (c.name === destContainer) continue;
+    for (const b of await listBlobs(account, c.name)) rows.push([c.name, b.name, b.size, b.contentType || "", b.modified || "", ""]);
+  }
+  const csv = rows.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
+  await createContainer(account, destContainer).catch((e) => { if (e.code !== "ContainerAlreadyExists") throw e; });
+  const ts = new Date().toISOString().replace(/[:.]/g, "-");
+  const blobName = `${ts}_inventory.csv`;
+  await uploadBlob(account, destContainer, blobName, new File([csv], blobName, { type: "text/csv" }));
+  return { blobName, rowCount: rows.length - 1 };
+}
+
+// ── Data protection / diagnostics synthetic reads (comp=diagnosticlog, comp=changefeed —
+// Vyomi-only; see core/azure_blob_core.py's module docstring) ──────────────────────────
+async function blobJson(account, method, path, opts) {
+  const { text } = await blob(account, method, path, opts);
+  return text ? JSON.parse(text) : {};
+}
+export const getDiagnosticLog = async (account) => blobJson(account, "GET", "", { query: { comp: "diagnosticlog" } });
+
+// ── Access control (IAM) scoped to this storage account (core/azure_iam_core.py) ───────
+const AUTHZ_API = "2022-04-01";
+const authzPath = (p) => `/subscriptions/${getSubscription()}/providers/Microsoft.Authorization/${p}`;
+export const listRoleAssignments = async () => (await restJson("GET", authzPath("roleAssignments"), { query: { "api-version": AUTHZ_API } })).value || [];
+export const listRoleDefinitions = async () => (await restJson("GET", authzPath("roleDefinitions"), { query: { "api-version": AUTHZ_API } })).value || [];
+export const putRoleAssignment = (name, body) => restJson("PUT", authzPath(`roleAssignments/${encodeURIComponent(name)}`), { query: { "api-version": AUTHZ_API }, body });
+export const deleteRoleAssignment = (name) => restJson("DELETE", authzPath(`roleAssignments/${encodeURIComponent(name)}`), { query: { "api-version": AUTHZ_API } });
+export const checkAccess = (principalId, action, scope) =>
+  restJson("POST", authzPath("checkAccess"), { query: { "api-version": AUTHZ_API }, body: { principalId, actions: [{ id: action }], resource: { id: scope } } });
+/** Scope inheritance (mirrors core/azure_iam_core.py's `_scope_covers`): an assignment at a
+ * broader scope (subscription/resource group) covers this account too. */
+export const scopeCovers = (assignmentScope, resourceId) => {
+  const a = (assignmentScope || "/").replace(/\/$/, "") || "/";
+  const r = (resourceId || "/").replace(/\/$/, "") || "/";
+  return a === "/" || a === r || r.startsWith(a + "/");
+};
+
+// ── Data Lake Gen2 upgrade (Microsoft.Storage/storageAccounts.properties.isHnsEnabled) —
+// a real, one-way PATCH; core/azure_arm_core.py rejects it off an ineligible kind or a
+// downgrade attempt (see _storage_hns_block) ───────────────────────────────────────────
+export const upgradeToDataLakeGen2 = (rg, name) => ARM.patch(rg, name, { properties: { isHnsEnabled: true } });
+
+// ── Metrics / Insights (Microsoft.Insights/metrics, read-only — core/azure_monitor_core.py
+// derives real numbers from the Blob core's own request counters/state) ────────────────
+export const STORAGE_METRICS = ["UsedCapacity", "BlobCount", "ContainerCount", "Transactions", "Ingress", "Egress"];
+export async function getMetrics(rg, name, metricNames = STORAGE_METRICS) {
+  const r = await restJson("GET", `${ARM.path(rg, name)}/providers/Microsoft.Insights/metrics`,
+    { query: { "api-version": "2018-01-01", metricnames: metricNames.join(",") } });
+  return Object.fromEntries((r.value || []).map((m) => [m.name.value, { unit: m.unit, value: m.timeseries?.[0]?.data?.[0]?.total ?? 0 }]));
+}
+
+// ── Diagnostic settings (Microsoft.Insights/diagnosticSettings, a real ARM extension
+// resource scoped to this account — core/azure_arm_core.py._diagnostic_settings) ───────
+const DIAG_API = "2021-05-01-preview";
+const diagPath = (rg, name, setting) => `${ARM.path(rg, name)}/providers/Microsoft.Insights/diagnosticSettings${setting ? `/${encodeURIComponent(setting)}` : ""}`;
+export const listDiagnosticSettings = async (rg, name) => (await restJson("GET", diagPath(rg, name), { query: { "api-version": DIAG_API } })).value || [];
+export const putDiagnosticSetting = (rg, name, setting, properties) => restJson("PUT", diagPath(rg, name, setting), { query: { "api-version": DIAG_API }, body: { properties } });
+export const deleteDiagnosticSetting = (rg, name, setting) => restJson("DELETE", diagPath(rg, name, setting), { query: { "api-version": DIAG_API } });
+
+// ── Alerts (Microsoft.Insights/metricAlerts) scoped to this account via properties.scopes ──
+export const MetricAlerts = armType("Microsoft.Insights", "metricAlerts", "2018-03-01");
+export const listMetricAlerts = async (rg, accountId) => (await MetricAlerts.list(rg)).filter((a) => (a.properties?.scopes || []).includes(accountId));
+export const putMetricAlert = (rg, alertName, accountId, { metricName, operator, threshold, severity = 3 }) =>
+  MetricAlerts.put(rg, alertName, { location: "global", properties: {
+    severity, enabled: true, scopes: [accountId], evaluationFrequency: "PT1M", windowSize: "PT5M",
+    criteria: { "odata.type": "Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria",
+      allOf: [{ name: "c1", metricName, operator, threshold, timeAggregation: "Average" }] },
+  } });
+export const deleteMetricAlert = (rg, alertName) => MetricAlerts.remove(rg, alertName);
+const OPS = { GreaterThan: (v, t) => v > t, GreaterThanOrEqual: (v, t) => v >= t, LessThan: (v, t) => v < t, LessThanOrEqual: (v, t) => v <= t, Equals: (v, t) => v === t };
+/** Real evaluation of an alert's criteria against the account's REAL current metric values. */
+export function alertFired(alert, metrics) {
+  const criteria = (alert.properties?.criteria?.allOf || []);
+  return criteria.some((c) => OPS[c.operator]?.(metrics[c.metricName]?.value ?? 0, c.threshold));
+}
+
+// ── Workbooks (Microsoft.Insights/workbooks) — real ARM-backed saved views pinned to a
+// metric this account actually reports ─────────────────────────────────────────────────
+export const Workbooks = armType("Microsoft.Insights", "workbooks", "2022-04-01");
+export const listWorkbooks = async (rg, accountId) => (await Workbooks.list(rg)).filter((w) => w.properties?.sourceId === accountId);
+export const putWorkbook = (rg, workbookName, accountId, displayName, metricName) =>
+  Workbooks.put(rg, workbookName, { location: "global", kind: "shared", properties: {
+    displayName, category: "storage", sourceId: accountId, serializedData: JSON.stringify({ metric: metricName }),
+  } });
+export const deleteWorkbook = (rg, workbookName) => Workbooks.remove(rg, workbookName);

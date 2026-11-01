@@ -72,6 +72,10 @@ export default {
 
   "live-diagnosticsetting": async (wire, uniq) => {
     await ensureService(wire);
+    // The destination storage account must really exist (core/azure_monitor_core.py
+    // validates it, v4 WAVE 5b) — create it for real first.
+    await wire("PUT", `/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Storage/storageAccounts/uicdiagsa?api-version=2023-01-01`,
+      { svc: null, body: { location: "eastus" } }).catch(() => {});
     await wire("PUT", `${servicePath(SVC).split("?")[0]}/providers/Microsoft.Insights/diagnosticSettings/${uniq}?api-version=2021-05-01-preview`,
       { svc: null, body: { properties: {
         storageAccountId: `/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Storage/storageAccounts/uicdiagsa`,

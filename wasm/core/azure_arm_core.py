@@ -1084,7 +1084,8 @@ class AzureArm:
 
         # Microsoft.Insights/metricDefinitions and metrics: the real Azure Monitor metrics
         # data-plane pass-through, resource-scoped (same re-entrant "providers" shape as
-        # diagnostic settings) — generic over every catalog type.
+        # diagnostic settings) — generic over every catalog type; storage accounts also expose
+        # their real storage metrics (v4 WAVE 5b, monitor_engine.get_metrics + self.blob_store).
         metrics_marker = monitor_engine.find_metrics_marker(chain)
         if metrics_marker is not None:
             return self._metrics(method, sub, rg, namespace, chain, metrics_marker, query)
@@ -1244,6 +1245,12 @@ class AzureArm:
             if blocked:
                 return blocked
             blocked = self._aks_namespace_block(type_chain, names, payload, sub, rg)
+            if blocked:
+                return blocked
+            blocked = self._storage_encryption_block(type_chain, names, payload, sub, rg)
+            if blocked:
+                return blocked
+            blocked = self._storage_hns_block(type_chain, names, payload, sub, rg)
             if blocked:
                 return blocked
             blocked = self._cosmos_validate_block(type_chain, names, payload, sub, rg)
@@ -1709,6 +1716,68 @@ class AzureArm:
                             "The cluster is stopped. Start the cluster before creating or deleting namespaces.")
         return None
 
+    _VAULT_URI_RE = re.compile(r"^https?://([a-z0-9-]+)\.vault\.azure\.net/?$", re.I)
+
+    def _storage_encryption_block(self, type_chain, names, payload, sub, rg):
+        # v4 WAVE 5b (azure.storage.encryption): real Azure rejects a customer-managed-key
+        # selection that doesn't actually name a Key Vault key — Vyomi now ENFORCES the
+        # structural shape (keyvaulturi + keyname required) and that the vault URI resolves
+        # to a REAL Key Vault in this subscription, instead of round-tripping whatever
+        # encryption.keySource/keyvaultproperties the caller sends. The named KEY's own
+        # existence/enabled state inside that vault is still not checked (core/azure_arm_core.py
+        # has no reference to the Key Vault keys data-plane store) — an honest, narrower gap.
+        if type_chain[0].lower() != "microsoft.storage" or type_chain[1].lower() != "storageaccounts" \
+                or len(type_chain) != 2:
+            return None
+        props = (payload or {}).get("properties") or {}
+        enc = props.get("encryption")
+        if not isinstance(enc, dict) or enc.get("keySource") != "Microsoft.Keyvault":
+            return None
+        kv = enc.get("keyvaultproperties") or {}
+        uri, key_name = kv.get("keyvaulturi"), kv.get("keyname")
+        if not uri or not key_name:
+            return _err(400, "BadRequest",
+                        "encryption.keyvaultproperties.keyvaulturi and .keyname are required "
+                        "when encryption.keySource is 'Microsoft.Keyvault'.")
+        m = self._VAULT_URI_RE.match(uri)
+        vault_exists = bool(m) and any(
+            r.get("_type", "").lower() == "microsoft.keyvault/vaults"
+            and r.get("id", "").lower().endswith(f"/vaults/{m.group(1).lower()}")
+            for r in self.state.values())
+        if not vault_exists:
+            return _err(400, "BadRequest",
+                        f"The Key Vault referenced by encryption.keyvaultproperties.keyvaulturi "
+                        f"('{uri}') does not exist in this subscription.")
+        return None
+
+    def _storage_hns_block(self, type_chain, names, payload, sub, rg):
+        # v4 WAVE 5b (azure.storage.datalakegen2upgrade): the Data Lake Gen2 upgrade flips
+        # isHnsEnabled false -> true on an EXISTING account — a one-way migration real Azure
+        # only allows from a general-purpose v2 (or Premium block blob) account. Vyomi now
+        # ENFORCES both the eligibility and the one-way-ness instead of round-tripping
+        # whatever isHnsEnabled the caller sends.
+        if type_chain[0].lower() != "microsoft.storage" or type_chain[1].lower() != "storageaccounts" \
+                or len(type_chain) != 2:
+            return None
+        props = (payload or {}).get("properties") or {}
+        if "isHnsEnabled" not in props:
+            return None
+        existing = self.state.get(_canonical_id(sub, rg, type_chain, names).lower())
+        was = bool((existing or {}).get("properties", {}).get("isHnsEnabled"))
+        now = bool(props["isHnsEnabled"])
+        if was == now:
+            return None
+        if was and not now:
+            return _err(400, "BadRequest",
+                        "Hierarchical namespace cannot be disabled once enabled (Data Lake "
+                        "Gen2 upgrade is one-way).")
+        kind = (payload or {}).get("kind") or (existing or {}).get("kind")
+        if existing is not None and kind not in ("StorageV2", "BlockBlobStorage"):
+            return _err(400, "BadRequest",
+                        "Hierarchical namespace (Data Lake Gen2) requires a general-purpose v2 "
+                        "or premium block blob storage account.")
+        return None
+
     def _cosmos_validate_block(self, type_chain, names, payload, sub, rg):
         # Real Cosmos DB ARM rejects an invalid consistencyPolicy / backupPolicy / locations
         # shape outright — Vyomi now ENFORCES that contract instead of round-tripping whatever
@@ -1991,8 +2060,8 @@ class AzureArm:
             (stc if n % 2 == 0 else snames).append(token)
         scope_rid = _canonical_id(sub, rg, stc, snames)
         kind = chain[marker + 2].lower()
-        r = (monitor_engine.list_metric_definitions(self.state, scope_rid) if kind == "metricdefinitions"
-             else monitor_engine.get_metrics(self.state, scope_rid, query))
+        r = (monitor_engine.list_metric_definitions(self.state, scope_rid, self.blob_store) if kind == "metricdefinitions"
+             else monitor_engine.get_metrics(self.state, scope_rid, query, self.blob_store))
         return {"status": r["status"], "headers": dict(r["headers"]), "body": r["body"]}
 
     def _dcr_associations(self, method, sub, rg, namespace, chain, marker, payload):

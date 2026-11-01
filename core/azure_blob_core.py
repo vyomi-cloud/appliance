@@ -79,11 +79,42 @@ module reads config out of the ONE place it is written, no duplicate store:
     single-origin relay has no distinct per-account public hostname) serves the `$web`
     container's blobs, falling back to `indexDocument` for `/` and `errorDocument404Path`
     for a miss, when `staticWebsite.enabled` is set.
+
+v4 WAVE 5b gap sweep — redundancy / data protection / request telemetry, ENFORCED:
+  - Redundancy: a request whose SharedKey account names `{account}-secondary` is a real,
+    separate, READ-ONLY alias of the primary account's own data (Vyomi stores data once,
+    locally — there is no second region to actually replicate to). It 404s
+    `ResourceNotFound` unless the account's sku is RA-GRS/RA-GZRS (`skuLabel` "read-access
+    ...") and 403s `OperationNotAllowedOnSecondary` for anything but a read. Geo-replication
+    lag / regional failover itself is still not simulated.
+  - Soft delete (`deleteRetentionPolicy` / `containerDeleteRetentionPolicy`): when enabled on
+    the account, DELETE blob/container moves the entry into a separate recoverable store
+    instead of erasing it — invisible to normal listings/gets, visible with
+    `?include=deleted`, recoverable with `?comp=undelete`, and lazily purged once the
+    configured retention window has actually elapsed (same lazy-evaluation style as
+    Lifecycle). Disabled (the default) keeps today's immediate hard delete.
+  - Versioning (`isVersioningEnabled`): when enabled, overwriting a blob keeps the prior
+    body as a real, separately fetchable version (`?versionid=`) instead of discarding it;
+    `?include=versions` lists them.
+  - Change feed (`changeFeed.enabled`): a real, append-only BlobCreated/BlobDeleted event
+    log per account, derived from actual PUT/DELETE blob calls (never synthetic), read back
+    with the Vyomi-only `?comp=changefeed` (this is NOT the real `$blobchangefeed`
+    Avro-segment format — there is no Avro writer here, just the real events).
+  - Request telemetry: every request bumps a real per-account transaction/ingress/egress
+    counter (`azure_monitor_core.get_storage_metrics` reads it for the Metrics/Insights
+    panels — Availability is always reported 100%, latency is not modelled) and appends a
+    real request-log line, filtered at read time by which log categories (StorageRead/
+    StorageWrite/StorageDelete) a `Microsoft.Insights/diagnosticSettings` on this account
+    actually has enabled — read back with the Vyomi-only `?comp=diagnosticlog` (logs are
+    captured in-memory and gated by the diagnostic setting; they are not actually delivered
+    to the configured workspace/storage account/event hub destination, since no Log
+    Analytics/Event Hub ingestion engine exists here).
 """
 from __future__ import annotations
 
 import base64
 import hashlib
+import json
 import re
 import uuid
 from dataclasses import dataclass, field
@@ -111,6 +142,13 @@ class AzureBlobStore:
     def __init__(self) -> None:
         self.containers: dict[str, dict] = {}
         self.blobs: dict[str, dict[str, dict]] = {}
+        # v4 WAVE 5b — soft delete / versioning / change feed / telemetry (see module docstring).
+        self.deleted_containers: dict[str, dict] = {}            # container -> {meta, blobs, deleted_at}
+        self.deleted_blobs: dict[str, dict[str, dict]] = {}      # container -> blob -> {entry, deleted_at}
+        self.blob_versions: dict[str, dict[str, list]] = {}      # container -> blob -> [older entries, oldest..newest-but-current]
+        self.change_feed: dict[str, list] = {}                   # acct ("" = default namespace) -> [event, ...]
+        self.request_counters: dict[str, dict] = {}              # acct -> {transactions, ingress, egress}
+        self.request_log: dict[str, list] = {}                  # acct -> [{time, category, operation, status, uri}, ...]
 
     def container_exists(self, name: str) -> bool:
         return name in self.containers
@@ -190,6 +228,12 @@ def _xml(status: int, body: str) -> Response:
     return Response(status=status, headers=h, body=body.encode())
 
 
+def _json_response(status: int, obj: dict) -> Response:
+    h = _base_headers()
+    h["content-type"] = "application/json"
+    return Response(status=status, headers=h, body=json.dumps(obj).encode(), media_type="application/json")
+
+
 # ── path handling ──────────────────────────────────────────────────────────
 def _strip_account(p: str) -> str:
     """Tolerate an optional leading /{account} segment (Azurite style).
@@ -201,7 +245,7 @@ def _strip_account(p: str) -> str:
     return p
 
 
-_SHAREDKEY_RE = re.compile(r"^\s*SharedKey(?:Lite)?\s+([a-z0-9]{1,64}):", re.I)
+_SHAREDKEY_RE = re.compile(r"^\s*SharedKey(?:Lite)?\s+([a-z0-9][a-z0-9-]{0,78}):", re.I)
 
 
 def _account_scope(p: str, headers: dict) -> tuple[str, str]:
@@ -239,6 +283,81 @@ def _arm_properties(arm_state: dict | None, acct: str, suffix: str) -> dict:
     return {}
 
 
+def _account_sku(arm_state: dict | None, acct: str) -> str:
+    """The storage account's `sku.name` (sibling of `properties`, not inside it) — same
+    account-name suffix match `_account_properties` uses."""
+    if not arm_state or not acct:
+        return ""
+    want = f"/storageaccounts/{acct.lower()}"
+    for key, rec in arm_state.items():
+        if key.lower().endswith(want):
+            return ((rec or {}).get("sku") or {}).get("name", "") or ""
+    return ""
+
+
+_RA_SKU_RE = re.compile(r"^(?:standard|premium)_ra", re.I)
+
+
+def _diag_settings_for_account(arm_state: dict | None, acct: str) -> list[dict]:
+    """`Microsoft.Insights/diagnosticSettings` records (core/azure_monitor_core.py, stored
+    by core/azure_arm_core.AzureArm._diagnostic_settings under `_diag_scope`) whose scope is
+    THIS storage account — looked up by account-name suffix match, same reasoning as
+    `_account_properties`: the data plane never learns the subscription/resource group."""
+    if not arm_state or not acct:
+        return []
+    want = f"/storageaccounts/{acct.lower()}"
+    return [rec for rec in arm_state.values()
+            if str((rec or {}).get("_diag_scope", "")).lower().endswith(want)]
+
+
+def _diag_enabled_log_categories(arm_state: dict | None, acct: str) -> set[str]:
+    cats: set[str] = set()
+    for rec in _diag_settings_for_account(arm_state, acct):
+        for c in (rec.get("properties", {}) or {}).get("logs", []) or []:
+            if c.get("enabled") and c.get("category"):
+                cats.add(c["category"])
+    return cats
+
+
+def _bump(store: AzureBlobStore, acct: str, ingress: int = 0, egress: int = 0) -> None:
+    c = store.request_counters.setdefault(acct, {"transactions": 0, "ingress": 0, "egress": 0})
+    c["transactions"] += 1
+    c["ingress"] += ingress
+    c["egress"] += egress
+
+
+_LOG_CAP = 200
+
+
+def _reqlog(store: AzureBlobStore, acct: str, category: str, operation: str, status: int, uri: str) -> None:
+    lst = store.request_log.setdefault(acct, [])
+    lst.append({"time": _now_http(), "category": category, "operation": operation, "status": status, "uri": uri})
+    if len(lst) > _LOG_CAP:
+        del lst[: len(lst) - _LOG_CAP]
+
+
+def _feed(store: AzureBlobStore, acct: str, event: str, container: str, blob: str = "") -> None:
+    lst = store.change_feed.setdefault(acct, [])
+    lst.append({"time": _now_http(), "event": event, "container": container, "blob": blob})
+    if len(lst) > _LOG_CAP:
+        del lst[: len(lst) - _LOG_CAP]
+
+
+def account_metrics(store: AzureBlobStore, acct: str) -> dict:
+    """Real numbers derived from this account's actual state/activity (never synthetic) —
+    read by core/azure_monitor_core.py's `get_storage_metrics` for the Metrics/Insights
+    panels. `acct` is the lower-cased account name (""  = default namespace)."""
+    prefix = f"{acct}/" if acct else None
+    containers = [k for k in store.containers if (k.startswith(prefix) if prefix else "/" not in k)]
+    blob_count = sum(len(store.blobs.get(c, {})) for c in containers)
+    used_capacity = sum(e.get("size", 0) for c in containers for e in store.blobs.get(c, {}).values())
+    counters = store.request_counters.get(acct, {"transactions": 0, "ingress": 0, "egress": 0})
+    return {
+        "usedCapacity": used_capacity, "blobCount": blob_count, "containerCount": len(containers),
+        "transactions": counters["transactions"], "ingress": counters["ingress"], "egress": counters["egress"],
+    }
+
+
 def _account_properties(arm_state: dict | None, acct: str) -> dict:
     """The storage account resource's OWN `properties` (allowSharedKeyAccess,
     allowBlobPublicAccess, publicNetworkAccess, accessTier, …) — as written by
@@ -265,6 +384,30 @@ def _static_website(arm_state: dict | None, acct: str) -> dict:
 def _lifecycle_rules(arm_state: dict | None, acct: str) -> list:
     policy = _arm_properties(arm_state, acct, "managementpolicies/default").get("policy", {}) or {}
     return policy.get("rules", []) or []
+
+
+def _blobservices_props(arm_state: dict | None, acct: str) -> dict:
+    return _arm_properties(arm_state, acct, "blobservices/default")
+
+
+def _delete_retention_days(arm_state: dict | None, acct: str, key: str) -> int | None:
+    """`key`: "deleteRetentionPolicy" (blobs) or "containerDeleteRetentionPolicy" (containers).
+    None when soft delete is disabled for that scope."""
+    p = _blobservices_props(arm_state, acct).get(key) or {}
+    if not p.get("enabled"):
+        return None
+    try:
+        return max(1, int(p.get("days", 7)))
+    except (TypeError, ValueError):
+        return 7
+
+
+def _versioning_enabled(arm_state: dict | None, acct: str) -> bool:
+    return bool(_blobservices_props(arm_state, acct).get("isVersioningEnabled"))
+
+
+def _changefeed_enabled(arm_state: dict | None, acct: str) -> bool:
+    return bool((_blobservices_props(arm_state, acct).get("changeFeed") or {}).get("enabled"))
 
 
 # ── CORS (Set/Get Blob Service Properties → corsRules, enforced on preflight) ──────────
@@ -357,6 +500,35 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+# ── Soft delete (deleteRetentionPolicy / containerDeleteRetentionPolicy), ENFORCED lazily ──
+def _purge_expired_containers(store: AzureBlobStore, acct: str, arm_state: dict | None) -> None:
+    days = _delete_retention_days(arm_state, acct, "containerDeleteRetentionPolicy")
+    now = _now()
+    prefix = f"{acct}/" if acct else None
+    for name in list(store.deleted_containers):
+        if prefix is not None and not name.startswith(prefix):
+            continue
+        if prefix is None and "/" in name:
+            continue
+        rec = store.deleted_containers[name]
+        deleted_at = rec.get("deleted_at")
+        if days is None or deleted_at is None or (now - deleted_at).total_seconds() / 86400.0 > days:
+            # Soft delete turned off, or the retention window has actually elapsed: purge for real.
+            store.deleted_containers.pop(name, None)
+
+
+def _purge_expired_blobs(store: AzureBlobStore, container: str, arm_state: dict | None, acct: str) -> None:
+    days = _delete_retention_days(arm_state, acct, "deleteRetentionPolicy")
+    now = _now()
+    deleted = store.deleted_blobs.get(container)
+    if not deleted:
+        return
+    for name in list(deleted):
+        deleted_at = deleted[name].get("deleted_at")
+        if days is None or deleted_at is None or (now - deleted_at).total_seconds() / 86400.0 > days:
+            deleted.pop(name, None)
+
+
 # ── Static website ($web container, served at the synthetic /__website__/ path) ────────
 def _serve_website(store: AzureBlobStore, acct: str, tail: str, arm_state: dict | None) -> Response:
     site = _static_website(arm_state, acct)
@@ -399,6 +571,11 @@ def dispatch(store: AzureBlobStore, method: str, path: str,
     else:
         p = _strip_account(p)
         acct, p = _account_scope(p, headers)
+    # v4 WAVE 5b — redundancy: `{account}-secondary` is a real, read-only alias of the
+    # primary account, gated by whether its sku is RA-GRS/RA-GZRS (see module docstring).
+    secondary = account is None and acct.endswith("-secondary")
+    if secondary:
+        acct = acct[: -len("-secondary")]
     p = p.rstrip("/") if p != "/" else p
     segs = [unquote(s) for s in p.split("/") if s != ""]
 
@@ -411,6 +588,14 @@ def dispatch(store: AzureBlobStore, method: str, path: str,
     if _SHAREDKEY_RE.match(auth_header) and props.get("allowSharedKeyAccess") is False:
         return _err(403, "KeyBasedAuthenticationNotPermitted",
                     "Key based authentication is not permitted on this storage account.")
+    if secondary:
+        if not _RA_SKU_RE.match(_account_sku(arm_state, acct)):
+            return _err(404, "ResourceNotFound",
+                        "The secondary (read-access) endpoint is not enabled for this storage "
+                        "account — enable RA-GRS or RA-GZRS redundancy first.")
+        if method not in ("GET", "HEAD", "OPTIONS"):
+            return _err(403, "OperationNotAllowedOnSecondary",
+                        "The secondary endpoint of a read-access geo-redundant account is read-only.")
 
     # ---- CORS preflight: any OPTIONS carrying an Origin header ----
     if method == "OPTIONS":
@@ -426,11 +611,24 @@ def dispatch(store: AzureBlobStore, method: str, path: str,
 
     comp = query.get("comp", "")
     restype = query.get("restype", "")
+    include = {s for s in (query.get("include") or "").split(",") if s}
 
     # ---- account-level: list containers  GET /?comp=list ----
     if not segs:
         if method == "GET" and comp == "list":
-            return _list_containers(store, acct)
+            _purge_expired_containers(store, acct, arm_state)
+            return _list_containers(store, acct, include)
+        # v4 WAVE 5b — Vyomi-only synthetic reads (no real Azure wire shape — see module
+        # docstring): the real request-telemetry/change-feed data behind Diagnostic
+        # settings/Logs and Change feed, gated by what's actually enabled for this account.
+        if method == "GET" and comp == "diagnosticlog":
+            cats = _diag_enabled_log_categories(arm_state, acct)
+            rows = [r for r in store.request_log.get(acct, []) if r["category"] in cats]
+            return _json_response(200, {"value": rows, "enabledCategories": sorted(cats)})
+        if method == "GET" and comp == "changefeed":
+            enabled = _changefeed_enabled(arm_state, acct)
+            rows = store.change_feed.get(acct, []) if enabled else []
+            return _json_response(200, {"value": rows, "enabled": enabled})
         return _err(400, "InvalidUri", f"Unsupported account operation {method}")
 
     display = segs[0]
@@ -441,6 +639,14 @@ def dispatch(store: AzureBlobStore, method: str, path: str,
     # ---- container-level: /{container} ----
     if len(segs) == 1:
         if restype == "container":
+            if method == "PUT" and comp == "undelete":   # v4 WAVE 5b — restore a soft-deleted container
+                rec = store.deleted_containers.pop(container, None)
+                if rec is None:
+                    return _err(404, "ContainerNotFound", "The specified container does not exist.")
+                store.containers[container] = rec["meta"]
+                store.blobs[container] = rec["blobs"]
+                store.persist()
+                return Response(status=201, headers=_base_headers(), body=b"", media_type=None)
             if method == "PUT":                       # create container
                 if store.container_exists(container):
                     return _err(409, "ContainerAlreadyExists",
@@ -448,6 +654,8 @@ def dispatch(store: AzureBlobStore, method: str, path: str,
                 pa = (headers.get("x-ms-blob-public-access") or "").strip().lower()
                 store.create_container(container, pa if pa in ("blob", "container") else "")
                 store.persist()
+                _bump(store, acct)
+                _reqlog(store, acct, "StorageWrite", "PutContainer", 201, f"/{display}")
                 h = _base_headers()
                 h["etag"] = _etag()
                 h["last-modified"] = _now_http()
@@ -456,9 +664,17 @@ def dispatch(store: AzureBlobStore, method: str, path: str,
                 if not store.container_exists(container):
                     return _err(404, "ContainerNotFound",
                                 "The specified container does not exist.")
+                days = _delete_retention_days(arm_state, acct, "containerDeleteRetentionPolicy")
+                if days is not None:                  # v4 WAVE 5b — soft delete: recoverable, not erased
+                    store.deleted_containers[container] = {
+                        "meta": store.containers[container], "blobs": store.blobs.get(container, {}),
+                        "deleted_at": _now(),
+                    }
                 store.delete_container(container)
                 store.persist()
                 store.mirror_delete_container(container)
+                _bump(store, acct)
+                _reqlog(store, acct, "StorageDelete", "DeleteContainer", 202, f"/{display}")
                 return Response(status=202, headers=_base_headers(),
                                 body=b"", media_type=None)
             if method == "GET" and comp == "list":    # list blobs
@@ -466,7 +682,10 @@ def dispatch(store: AzureBlobStore, method: str, path: str,
                     return _err(404, "ContainerNotFound",
                                 "The specified container does not exist.")
                 _apply_lifecycle(store, container, acct, arm_state)
-                return _list_blobs(store, container, query, display)
+                _purge_expired_blobs(store, container, arm_state, acct)
+                _bump(store, acct)
+                _reqlog(store, acct, "StorageRead", "ListBlobs", 200, f"/{display}")
+                return _list_blobs(store, container, query, display, include)
             if method in ("GET", "HEAD"):             # get container props
                 if not store.container_exists(container):
                     return _err(404, "ContainerNotFound",
@@ -483,6 +702,16 @@ def dispatch(store: AzureBlobStore, method: str, path: str,
 
     # ---- blob-level: /{container}/{blob...} ----
     blob = "/".join(segs[1:])
+
+    if method == "PUT" and comp == "undelete":            # v4 WAVE 5b — restore a soft-deleted blob
+        if not store.container_exists(container):
+            return _err(404, "ContainerNotFound", "The specified container does not exist.")
+        rec = store.deleted_blobs.get(container, {}).pop(blob, None)
+        if rec is None:
+            return _err(404, "BlobNotFound", "The specified blob does not exist.")
+        store.container_blobs(container)[blob] = rec["entry"]
+        store.persist()
+        return Response(status=200, headers=_base_headers(), body=b"", media_type=None)
 
     if method == "PUT":                               # put block blob
         if not store.container_exists(container):
@@ -510,9 +739,16 @@ def dispatch(store: AzureBlobStore, method: str, path: str,
             "metadata": {k[len("x-ms-meta-"):]: v for k, v in headers.items()
                          if k.startswith("x-ms-meta-")},
         }
+        if prev and _versioning_enabled(arm_state, acct):     # v4 WAVE 5b — keep the overwritten body as a real version
+            versions = store.blob_versions.setdefault(container, {}).setdefault(blob, [])
+            versions.append({**prev, "_version_id": prev["etag"]})
         store.container_blobs(container)[blob] = entry
         store.persist()
         store.mirror_put(container, blob, entry)
+        _bump(store, acct, ingress=len(body))
+        _reqlog(store, acct, "StorageWrite", "PutBlob", 201, f"/{display}/{blob}")
+        if _changefeed_enabled(arm_state, acct):
+            _feed(store, acct, "BlobCreated", display, blob)
         h = _base_headers()
         h["etag"] = entry["etag"]
         h["last-modified"] = entry["last_modified"]
@@ -524,6 +760,13 @@ def dispatch(store: AzureBlobStore, method: str, path: str,
         _apply_lifecycle(store, container, acct, arm_state)
     blobs = store.container_blobs(container) if store.container_exists(container) else {}
     entry = blobs.get(blob)
+    version_id = query.get("versionid")
+    if entry is not None and version_id and entry.get("etag") != version_id:
+        # v4 WAVE 5b — `?versionid=` fetches a specific historical version, not the current
+        # one. The version id is the version's own ETag (unique per write; real Azure uses a
+        # microsecond timestamp instead, which this simulator's second-resolution clock can't).
+        entry = next((v for v in store.blob_versions.get(container, {}).get(blob, [])
+                      if v.get("_version_id") == version_id), None)
 
     if method in ("GET", "HEAD"):                      # get / head blob
         if not store.container_exists(container):
@@ -531,6 +774,8 @@ def dispatch(store: AzureBlobStore, method: str, path: str,
                         "The specified container does not exist.")
         if entry is None:
             return _err(404, "BlobNotFound", "The specified blob does not exist.")
+        _bump(store, acct, egress=entry.get("size", 0) if method == "GET" else 0)
+        _reqlog(store, acct, "StorageRead", "GetBlob" if method == "GET" else "HeadBlob", 200, f"/{display}/{blob}")
         h = _base_headers()
         h["etag"] = entry["etag"]
         h["last-modified"] = entry["last_modified"]
@@ -576,11 +821,19 @@ def dispatch(store: AzureBlobStore, method: str, path: str,
         if not store.container_exists(container):
             return _err(404, "ContainerNotFound",
                         "The specified container does not exist.")
-        if entry is None:
+        live = blobs.get(blob)                         # the current entry, not a `?versionid=` lookup
+        if live is None:
             return _err(404, "BlobNotFound", "The specified blob does not exist.")
         blobs.pop(blob, None)
+        days = _delete_retention_days(arm_state, acct, "deleteRetentionPolicy")
+        if days is not None:                            # v4 WAVE 5b — soft delete: recoverable, not erased
+            store.deleted_blobs.setdefault(container, {})[blob] = {"entry": live, "deleted_at": _now()}
         store.persist()
         store.mirror_delete(container, blob)
+        _bump(store, acct)
+        _reqlog(store, acct, "StorageDelete", "DeleteBlob", 202, f"/{display}/{blob}")
+        if _changefeed_enabled(arm_state, acct):
+            _feed(store, acct, "BlobDeleted", display, blob)
         return Response(status=202, headers=_base_headers(), body=b"", media_type=None)
 
     return _err(400, "UnsupportedHttpVerb", f"Unsupported blob operation {method}")
@@ -597,7 +850,8 @@ def _entry_bytes(store: AzureBlobStore, container: str, blob: str, entry: dict) 
 
 
 # ── XML builders ────────────────────────────────────────────────────────────
-def _list_containers(store: AzureBlobStore, acct: str = "") -> Response:
+def _list_containers(store: AzureBlobStore, acct: str = "", include: set | None = None) -> Response:
+    include = include or set()
     parts = ['<?xml version="1.0" encoding="utf-8"?>',
              '<EnumerationResults><Containers>']
     for key in sorted(store.containers):
@@ -623,11 +877,57 @@ def _list_containers(store: AzureBlobStore, acct: str = "") -> Response:
             "</Properties>"
             "</Container>"
         )
+    if "deleted" in include:              # v4 WAVE 5b — soft-deleted containers, recoverable
+        for key in sorted(store.deleted_containers):
+            if acct:
+                if not key.startswith(acct + "/"):
+                    continue
+                name = key[len(acct) + 1:]
+            elif "/" in key:
+                continue
+            else:
+                name = key
+            rec = store.deleted_containers[key]
+            parts.append(
+                "<Container>"
+                f"<Name>{escape(name)}</Name>"
+                "<Deleted>true</Deleted>"
+                "<Properties>"
+                f"<Last-Modified>{escape(rec['meta'].get('created', _now_http()))}</Last-Modified>"
+                f"<Etag>{escape(_etag())}</Etag>"
+                "<LeaseStatus>unlocked</LeaseStatus><LeaseState>available</LeaseState>"
+                "</Properties>"
+                "</Container>"
+            )
     parts.append("</Containers><NextMarker /></EnumerationResults>")
     return _xml(200, "".join(parts))
 
 
-def _list_blobs(store: AzureBlobStore, container: str, query: dict, display: str | None = None) -> Response:
+def _blob_xml(name: str, e: dict, deleted: bool = False, is_current: bool | None = None) -> str:
+    return (
+        "<Blob>"
+        f"<Name>{escape(name)}</Name>"
+        + (f"<VersionId>{escape(e['_version_id'])}</VersionId>" if e.get("_version_id") else "")
+        + (f"<IsCurrentVersion>{'true' if is_current else 'false'}</IsCurrentVersion>" if is_current is not None else "")
+        + ("<Deleted>true</Deleted>" if deleted else "") +
+        "<Properties>"
+        f"<Last-Modified>{escape(e['last_modified'])}</Last-Modified>"
+        f"<Etag>{escape(e['etag'])}</Etag>"
+        f"<Content-Length>{e['size']}</Content-Length>"
+        f"<Content-Type>{escape(e['content_type'])}</Content-Type>"
+        + (f"<Content-MD5>{escape(e['md5'])}</Content-MD5>" if e.get("md5") else "") +
+        f"<BlobType>{escape(e['blob_type'])}</BlobType>"
+        f"<AccessTier>{escape(e.get('access_tier', 'Hot'))}</AccessTier>"
+        "<LeaseStatus>unlocked</LeaseStatus><LeaseState>available</LeaseState>"
+        f"<Creation-Time>{escape(e.get('created') or e['last_modified'])}</Creation-Time>"
+        "</Properties>"
+        "</Blob>"
+    )
+
+
+def _list_blobs(store: AzureBlobStore, container: str, query: dict, display: str | None = None,
+                include: set | None = None) -> Response:
+    include = include or set()
     prefix = query.get("prefix", "") or ""
     blobs = store.container_blobs(container)
     parts = ['<?xml version="1.0" encoding="utf-8"?>',
@@ -636,21 +936,13 @@ def _list_blobs(store: AzureBlobStore, container: str, query: dict, display: str
         if not name.startswith(prefix):
             continue
         e = blobs[name]
-        parts.append(
-            "<Blob>"
-            f"<Name>{escape(name)}</Name>"
-            "<Properties>"
-            f"<Last-Modified>{escape(e['last_modified'])}</Last-Modified>"
-            f"<Etag>{escape(e['etag'])}</Etag>"
-            f"<Content-Length>{e['size']}</Content-Length>"
-            f"<Content-Type>{escape(e['content_type'])}</Content-Type>"
-            + (f"<Content-MD5>{escape(e['md5'])}</Content-MD5>" if e.get("md5") else "") +
-            f"<BlobType>{escape(e['blob_type'])}</BlobType>"
-            f"<AccessTier>{escape(e.get('access_tier', 'Hot'))}</AccessTier>"
-            "<LeaseStatus>unlocked</LeaseStatus><LeaseState>available</LeaseState>"
-            f"<Creation-Time>{escape(e.get('created') or e['last_modified'])}</Creation-Time>"
-            "</Properties>"
-            "</Blob>"
-        )
+        parts.append(_blob_xml(name, e, is_current=True if "versions" in include else None))
+        if "versions" in include:         # v4 WAVE 5b — prior versions kept by Versioning
+            for v in store.blob_versions.get(container, {}).get(name, []):
+                parts.append(_blob_xml(name, v, is_current=False))
+    if "deleted" in include:              # v4 WAVE 5b — soft-deleted blobs, recoverable
+        for name, rec in sorted(store.deleted_blobs.get(container, {}).items()):
+            if name.startswith(prefix):
+                parts.append(_blob_xml(name, rec["entry"], deleted=True))
     parts.append("</Blobs><NextMarker /></EnumerationResults>")
     return _xml(200, "".join(parts))

@@ -47,6 +47,11 @@ import re
 import uuid
 from datetime import datetime, timedelta, timezone
 
+try:
+    from core import azure_blob_core as blob_engine
+except ImportError:  # pragma: no cover - Pyodide flat layout
+    import azure_blob_core as blob_engine  # type: ignore
+
 NAMESPACE = "Microsoft.Insights"
 API_VERSION = "2018-03-01"                    # primary catalog type (metricAlerts)
 DEFAULT_LOCATION = "global"
@@ -702,6 +707,12 @@ def upsert_diagnostic_setting(state, scope_rid, name, payload):
         props = _diag_props((payload or {}).get("properties") or {}, rec["properties"] if rec else None)
     except _E as e:
         return _err(e.status, e.code, e.message)
+    # v4 WAVE 5b — a storageAccountId destination must name a real resource (real ARM
+    # validates the destination exists too); workspaceId/eventHub destinations are left
+    # unchecked since no Log Analytics/Event Hub core exists here to validate against.
+    dest = props.get("storageAccountId")
+    if dest and dest.lower() not in state:
+        return _err(400, "BadRequest", f"The destination storage account '{dest}' does not exist.")
     rec = {"id": rid, "name": name, "type": _DIAG_TYPE, "properties": props,
            "_type": _DIAG_TYPE.lower(), "_diag_scope": scope_rid.lower()}
     state[key] = rec
@@ -720,10 +731,24 @@ def remove_diagnostic_setting(state, scope_rid, name):
 # (core/azure_arm_core.py's _record_activity / azure_webapp_core._record_event writes),
 # bucketed over the requested interval — never synthetic/random values. Metric definitions and
 # the metrics endpoint are both 404 for a resource id that doesn't exist, matching real ARM.
+# v4 WAVE 5b: a Microsoft.Storage/storageAccounts scope ALSO exposes six real storage metrics
+# (UsedCapacity/BlobCount/ContainerCount/Transactions/Ingress/Egress) derived from
+# core/azure_blob_core.py's own counters/state (`account_metrics`) when the platform wired a
+# blob store — a single current-value data point each (no persisted metric history).
 _METRIC_NAME = "ActivityOperations"
 _METRIC_DISPLAY = "Activity operations"
 _METRIC_UNIT = "Count"
 _METRIC_AGGS = ("Total", "Count", "Average", "Minimum", "Maximum")
+METRICS_API_VERSION = "2018-01-01"
+STORAGE_METRIC_UNITS = {
+    "UsedCapacity": "Bytes", "BlobCount": "Count", "ContainerCount": "Count",
+    "Transactions": "Count", "Ingress": "Bytes", "Egress": "Bytes",
+}
+_STORAGE_METRIC_FIELD = {
+    "UsedCapacity": "usedCapacity", "BlobCount": "blobCount", "ContainerCount": "containerCount",
+    "Transactions": "transactions", "Ingress": "ingress", "Egress": "egress",
+}
+_STORAGE_TYPE = "microsoft.storage/storageaccounts"
 
 
 def find_metrics_marker(chain):
@@ -735,16 +760,34 @@ def find_metrics_marker(chain):
     return None
 
 
-def list_metric_definitions(state, scope_rid):
-    if scope_rid.lower() not in state:
-        return _err(404, "ResourceNotFound", f"The Resource '{scope_rid}' was not found.")
-    return _ok({"value": [{
-        "id": f"{scope_rid}/providers/{NAMESPACE}/metricDefinitions/{_METRIC_NAME}",
-        "resourceId": scope_rid, "name": {"value": _METRIC_NAME, "localizedValue": _METRIC_DISPLAY},
-        "namespace": "Platform", "unit": _METRIC_UNIT, "primaryAggregationType": "Total",
+def _storage_account(state, scope_rid, blob_store):
+    """The (lower-cased) storage account name when `scope_rid` is a storage account AND a blob
+    store is wired (so its real metrics can be computed), else None."""
+    if blob_store is None:
+        return None
+    rec = state.get(scope_rid.lower()) or {}
+    if str(rec.get("_type", "")).lower() != _STORAGE_TYPE:
+        return None
+    return scope_rid.rstrip("/").rsplit("/", 1)[-1].lower()
+
+
+def _metric_definition(scope_rid, name, display, unit):
+    return {
+        "id": f"{scope_rid}/providers/{NAMESPACE}/metricDefinitions/{name}",
+        "resourceId": scope_rid, "name": {"value": name, "localizedValue": display},
+        "namespace": "Platform", "unit": unit, "primaryAggregationType": "Total",
         "supportedAggregationTypes": list(_METRIC_AGGS),
         "metricAvailabilities": [{"timeGrain": g, "retention": "P30D"} for g in WINDOW_SIZES],
-    }]})
+    }
+
+
+def list_metric_definitions(state, scope_rid, blob_store=None):
+    if scope_rid.lower() not in state:
+        return _err(404, "ResourceNotFound", f"The Resource '{scope_rid}' was not found.")
+    defs = [_metric_definition(scope_rid, _METRIC_NAME, _METRIC_DISPLAY, _METRIC_UNIT)]
+    if _storage_account(state, scope_rid, blob_store) is not None:
+        defs += [_metric_definition(scope_rid, n, n, u) for n, u in STORAGE_METRIC_UNITS.items()]
+    return _ok({"value": defs})
 
 
 def _parse_metric_iso(s):
@@ -756,13 +799,15 @@ def _parse_metric_iso(s):
         return None
 
 
-def get_metrics(state, scope_rid, query):
+def get_metrics(state, scope_rid, query, blob_store=None):
     if scope_rid.lower() not in state:
         return _err(404, "ResourceNotFound", f"The Resource '{scope_rid}' was not found.")
     query = query or {}
     names = [n.strip() for n in str(query.get("metricnames") or _METRIC_NAME).split(",") if n.strip()]
+    acct = _storage_account(state, scope_rid, blob_store)
+    storage_by_lower = {k.lower(): k for k in STORAGE_METRIC_UNITS} if acct is not None else {}
     for n in names:
-        if n.lower() != _METRIC_NAME.lower():
+        if n.lower() != _METRIC_NAME.lower() and n.lower() not in storage_by_lower:
             return _err(400, "BadRequest",
                         f"Failed to find metric configuration for provider: microsoft.insights, "
                         f"metric name: {n}, metric namespace: Platform.")
@@ -826,17 +871,51 @@ def get_metrics(state, scope_rid, query):
         if "Maximum" in aggs:
             point["maximum"] = c
         data.append(point)
-    value = [{
-        "id": f"{scope_rid}/providers/{NAMESPACE}/metrics/{n}",
-        "type": "Microsoft.Insights/metrics",
-        "name": {"value": n, "localizedValue": _METRIC_DISPLAY},
-        "displayDescription": "Count of real Azure Resource Manager write/delete operations Vyomi "
-                               "recorded against this resource (from its own Activity log).",
-        "unit": _METRIC_UNIT,
-        "timeseries": [{"metadatavalues": [], "data": data}],
-    } for n in names]
+    stats = blob_engine.account_metrics(blob_store, acct) if any(n.lower() in storage_by_lower for n in names) else None
+    value = []
+    for n in names:
+        if n.lower() in storage_by_lower:
+            value.append(_storage_metric_entry(scope_rid, storage_by_lower[n.lower()], stats, aggs, now))
+            continue
+        value.append({
+            "id": f"{scope_rid}/providers/{NAMESPACE}/metrics/{_METRIC_NAME}",
+            "type": "Microsoft.Insights/metrics",
+            "name": {"value": _METRIC_NAME, "localizedValue": _METRIC_DISPLAY},
+            "displayDescription": "Count of real Azure Resource Manager write/delete operations Vyomi "
+                                   "recorded against this resource (from its own Activity log).",
+            "unit": _METRIC_UNIT,
+            "timeseries": [{"metadatavalues": [], "data": data}],
+        })
     return _ok({"cost": 0, "timespan": f"{start.strftime('%Y-%m-%dT%H:%M:%SZ')}/{end.strftime('%Y-%m-%dT%H:%M:%SZ')}",
                 "interval": interval, "namespace": "Platform", "resourceregion": "", "value": value})
+
+
+def _storage_metric_entry(scope_rid, name, stats, aggs, now):
+    """One storage metric: a single current-value point (no persisted history), every requested
+    aggregation carrying that same real value."""
+    v = stats[_STORAGE_METRIC_FIELD[name]]
+    point = {"timeStamp": now.strftime("%Y-%m-%dT%H:%M:%SZ")}
+    for a in aggs:
+        point[a.lower()] = v
+    return {
+        "id": f"{scope_rid}/providers/{NAMESPACE}/metrics/{name}", "type": "Microsoft.Insights/metrics",
+        "name": {"value": name, "localizedValue": name}, "unit": STORAGE_METRIC_UNITS[name],
+        "timeseries": [{"metadatavalues": [], "data": [point]}],
+    }
+
+
+def get_storage_metrics(blob_store, acct: str, query: dict, scope_rid: str = "") -> dict:
+    """`blob_store`: core/azure_blob_core.AzureBlobStore. `acct`: the storage account's
+    (lower-cased) name. Storage metrics only (no ARM state needed) — a single current-value data
+    point per requested metric; unknown names are skipped. The ARM `metrics` endpoint goes
+    through get_metrics, which also validates names and mixes in ActivityOperations."""
+    query = query or {}
+    names = [n for n in (query.get("metricnames") or "").split(",") if n] or list(STORAGE_METRIC_UNITS)
+    stats = blob_engine.account_metrics(blob_store, acct)
+    now = datetime.now(timezone.utc)
+    value = [_storage_metric_entry(scope_rid, n, stats, ["Total"], now)
+             for n in names if n in _STORAGE_METRIC_FIELD]
+    return _ok({"cost": 0, "timespan": query.get("timespan", ""), "interval": "PT1H", "value": value})
 
 
 # ═══ data collection rule associations (ARM extension resource, preview Observability agents) ═
