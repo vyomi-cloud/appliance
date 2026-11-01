@@ -34,6 +34,16 @@ simulator can model, lift `limited` labels that are only missing engine coverage
   Operations console and the Windows agent stay honestly labelled.
 - (Vyomi Copilot moved to wave 9 — see below.)
 
+- **Tunnel TCP relay (shared infra, approved 2026-11-01).** vyomi-tunnel 1.1 adds raw TCP
+  listeners (127.0.0.1 only, opened on request from the tab), relaying connection
+  open/data/close frames over the existing WebSocket to the Nano tab; offline hosts the same
+  protocol servers in-process on real ports. First protocol: the **DAX wire protocol** (CBOR,
+  handshake/auth, `endpoints` discovery → the tunnel address, item/query/batch/transact) on
+  dax_core's cache, so unmodified DAX SDK clients work on Nano and offline. Local tunnel only
+  (the Cloudflare relay cannot accept inbound TCP). Follow-ups on the same relay: Postgres
+  wire (RDS/Cloud SQL → PGlite), Redis RESP (ElastiCache/Memorystore/Azure Cache), AMQP
+  (Service Bus), Kafka (Event Hubs). Publishing tunnel 1.1 needs the user's npm OTP.
+
 ## Wave 7 — consoles for services whose backend already exists
 AWS: Kinesis Data Streams, Step Functions, Systems Manager (Parameter Store), EC2 Load
 Balancing (ALB/NLB, target groups). GCP: Memorystore, Resource Manager. Azure: Container Apps,
