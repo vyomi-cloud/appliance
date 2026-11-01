@@ -80,4 +80,15 @@ export default {
     await wire("POST", "/clientcertificates", { ...A, body: { description: uniq } });
     return uniq;
   },
+  "live-portal-product": async (wire, uniq) => {
+    await wire("POST", "/v2/portalproducts", { ...A, body: { displayName: uniq } });
+    return uniq;
+  },
+  "live-portal": async (wire, uniq) => {
+    await wire("POST", "/v2/portals", { ...A, body: {
+      authorization: { none: {} }, endpointConfiguration: { none: {} },
+      portalContent: { displayName: uniq, theme: { customColors: { accentColor: "#0972d3" } } },
+    } });
+    return uniq;
+  },
 };

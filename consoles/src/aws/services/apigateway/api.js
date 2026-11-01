@@ -154,6 +154,22 @@ export const listDomainAccessAssociationsV2 = (domainNameArn) =>
   v2("GET", "/domainnameaccessassociations", { query: domainNameArn ? { domainNameArn } : {} }).then((r) => r.items || []);
 export const deleteDomainAccessAssociationV2 = (arn) => v2("DELETE", `/domainnameaccessassociations/${encodeURIComponent(arn)}`);
 
+// ── v2: Portal / PortalProduct (developer portal control plane) ─────────────
+export const createPortal = (input) => v2("POST", "/portals", { body: input });
+export const listPortals = () => v2("GET", "/portals").then((r) => r.items || []);
+export const getPortal = (id) => v2("GET", `/portals/${id}`);
+export const updatePortal = (id, input) => v2("PATCH", `/portals/${id}`, { body: input });
+export const deletePortal = (id) => v2("DELETE", `/portals/${id}`);
+export const publishPortal = (id, description) => v2("POST", `/portals/${id}/publish`, { body: { description } });
+export const disablePortal = (id) => v2("DELETE", `/portals/${id}/publish`);
+export const previewPortal = (id) => v2("POST", `/portals/${id}/preview`);
+
+export const createPortalProduct = (input) => v2("POST", "/portalproducts", { body: input });
+export const listPortalProducts = () => v2("GET", "/portalproducts").then((r) => r.items || []);
+export const getPortalProduct = (id) => v2("GET", `/portalproducts/${id}`);
+export const updatePortalProduct = (id, input) => v2("PATCH", `/portalproducts/${id}`, { body: input });
+export const deletePortalProduct = (id) => v2("DELETE", `/portalproducts/${id}`);
+
 // ── cross-service: Lambda functions (for the method-integration picker) ──────
 export async function listLambdaFunctions() {
   const r = await awsRest("lambda", "GET", "/2015-03-31/functions");

@@ -467,7 +467,7 @@
           "title": "How portals work"
         }
       ],
-      "notes": "Out of Vyomi scope; declared for nav completeness."
+      "notes": "Backed by the real apigatewayv2 Portal control plane (CreatePortal/UpdatePortal/DeletePortal, PublishPortal/DisablePortal)."
     },
     {
       "id": "portal-products",
@@ -504,7 +504,7 @@
           "title": "How products work"
         }
       ],
-      "notes": "Out of Vyomi scope; declared for nav completeness."
+      "notes": "Backed by the real apigatewayv2 PortalProduct control plane (CreatePortalProduct/UpdatePortalProduct/DeletePortalProduct)."
     },
     {
       "id": "create-api",
@@ -1380,5 +1380,5 @@
       "submit": "Create usage plan"
     }
   ],
-  "gaps_note": "Create API type picker and all nav list pages are from captures. API detail pages (REST resources/methods/stages, HTTP API detail), the per-type create forms, Create API key and Create usage plan are provenance=reference: the account had no APIs and the crawl did not click Build. AgentCore targets and Developer portals are out of Vyomi scope. Filter placeholders seen only on APIs and VPC links."
+  "gaps_note": "Create API type picker and all nav list pages are from captures. API detail pages (REST resources/methods/stages, HTTP API detail), the per-type create forms, Create API key and Create usage plan are provenance=reference: the account had no APIs and the crawl did not click Build. AgentCore targets is out of Vyomi scope (Bedrock AgentCore). Developer portals (Portals, Portal products) are built for real on the native apigatewayv2 Portal/PortalProduct control plane. Filter placeholders seen only on APIs and VPC links."
 }

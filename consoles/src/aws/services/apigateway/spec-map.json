@@ -1,5 +1,5 @@
 {
-  "_doc": "ui-spec page id -> v4 route. honest_page = the whole page is a declared 'Not simulated in Vyomi' gap (requires a consoles/honest-allowlist.json entry; apigateway has none yet, so no page here sets it — AgentCore targets / Developer portals are built as honest in-page NotSimulatedContainer sections instead, with the gap's note naming every spec'd column/action so they score as declared gaps, not missing). 'fixtures' pre-creates a fixed-name prerequisite resource (idempotent, like s3's 'uic-bucket'); 'vars' maps a spec {placeholder} to that fixed name; 'live' separately proves liveness ('no statics') with a uniquely-named resource created just before the page loads.",
+  "_doc": "ui-spec page id -> v4 route. honest_page = the whole page is a declared 'Not simulated in Vyomi' gap (requires a consoles/honest-allowlist.json entry; apigateway has none yet, so no page here sets it — AgentCore targets is built as an honest in-page NotSimulatedContainer section instead, with the gap's note naming every spec'd column/action so it scores as a declared gap, not missing. Developer portals (portals, portal-products) are built for real on the native apigatewayv2 Portal/PortalProduct control plane — see core/apigatewayv2_core.py). 'fixtures' pre-creates a fixed-name prerequisite resource (idempotent, like s3's 'uic-bucket'); 'vars' maps a spec {placeholder} to that fixed name; 'live' separately proves liveness ('no statics') with a uniquely-named resource created just before the page loads.",
   "welcome": {
     "route": "#/apigateway"
   },
@@ -39,11 +39,11 @@
   },
   "portals": {
     "route": "#/apigateway/portals",
-    "honest_page": true
+    "live": "live-portal"
   },
   "portal-products": {
     "route": "#/apigateway/portal-products",
-    "honest_page": true
+    "live": "live-portal-product"
   },
   "create-api": {
     "route": "#/apigateway/create"
