@@ -1,44 +1,45 @@
-/* Nano post-create probe (PLAN: tests/conformance/post_create/PLAN.md): a launched EC2
- * instance must be USABLE from the console, not just listed. In Nano the instance lives in
- * the browser, so "usable" means an in-browser terminal, not a real ssh.
- *
- * Contract this probe holds Nano to (the offline twin is tests/conformance/post_create/probes/aws/ec2_ssh.py):
- *   GET  /api/aws/ec2/instances/<id>/connect-info  -> 200 {ok:true, ...}      (today: 409 NoRuntime)
- *   POST /api/aws/ec2/instances/<id>/exec {command} -> {stdout, exit_code}    (runs in the instance VM)
- * Checks: launch via the console, connect info available, `whoami` runs, a file written is read back.
- * Registered `pending` in suites.json until Nano has in-browser compute (v86); remove the key then. */
-import { startServer, bootConsole, chromium, sleep } from "./lib.mjs";
-const { server, base } = await startServer();
-const browser = await chromium.launch();
-const ctx = await browser.newContext();
-await ctx.addInitScript(() => { try { localStorage.setItem("nano_tunnel_on", "1"); } catch (_) {} });
-const page = await ctx.newPage();
-const results = [];
-const check = (name, ok, note = "") => results.push({ name, ok, note });
-const call = (method, path, body) => page.evaluate(async ([m, p, b]) => {
-  const r = await fetch(p, { method: m, headers: { "content-type": "application/json" }, body: b ? JSON.stringify(b) : undefined });
-  return { status: r.status, body: await r.json().catch(() => null) };
-}, [method, path, body]);
+/* Nano post-create probe, AWS EC2 (PLAN: tests/conformance/post_create/PLAN.md; offline twin:
+ * tests/conformance/post_create/probes/vm_ssh.py aws). Launch through the console's EC2 wizard,
+ * then hold the instance to the offline contract: connect-info -> key -> REAL `ssh` from this
+ * machine through vyomi-tunnel -> whoami / uname / file round trip / python http.server ->
+ * console exec -> stop/start keeps files -> terminate closes the port. The instance is a real
+ * v86 VM in the browser (wasm/vm). Needs RELAY_HTTP = a vyomi-tunnel >= 1.1.0. */
+import { openNano, probeVm, reporter } from "./vm-ssh-lib.mjs";
+import { sleep } from "./lib.mjs";
+const { check, finish } = reporter();
+let nano;
 try {
-  await bootConsole(page, base, "/aws-console.html");
+  nano = await openNano("/aws-console.html");
+  const { page, call } = nano;
   await page.locator("#rail >> text=EC2").first().click();
   await sleep(1500);
   await page.locator("#main button").filter({ hasText: /launch instances/i }).first().click();
   await sleep(1200);
   await page.locator("#main button").filter({ hasText: /^\s*(rocket_launch)?\s*Launch instance\s*$/i }).last().click();
   await sleep(3000);
-  const list = await page.evaluate(async () => (await (await fetch("/api/ec2/instances")).json()).items || []);
-  const id = (list[list.length - 1] || {}).instance_id;
+  const list = (await call("GET", "/api/ec2/instances")).body;
+  const items = (list && list.items) || [];
+  const id = (items[items.length - 1] || {}).instance_id;
   check("instance launched through the console", /^i-/.test(id || ""), JSON.stringify(list).slice(0, 160));
-  const ci = await call("GET", `/api/aws/ec2/instances/${id}/connect-info`);
-  check("connect info available (CONNECT_INFO_MISSING)", ci.status === 200 && ci.body && ci.body.ok !== false,
-        `status ${ci.status} ${JSON.stringify(ci.body).slice(0, 160)}`);
-  const who = await call("POST", `/api/aws/ec2/instances/${id}/exec`, { command: "whoami" });
-  check("command runs in the instance (POST_CREATE_UNUSABLE)", who.status === 200 && /\S/.test((who.body && who.body.stdout) || ""),
-        `status ${who.status} ${JSON.stringify(who.body).slice(0, 120)}`);
-  const w = await call("POST", `/api/aws/ec2/instances/${id}/exec`, { command: "echo vyomi > /tmp/pc.txt; cat /tmp/pc.txt" });
-  check("file write + read back on the instance", w.status === 200 && /vyomi/.test((w.body && w.body.stdout) || ""), `status ${w.status}`);
-} catch (e) { check("boot", false, String(e).split("\n")[0]); }
-await browser.close(); server.close();
-for (const r of results) console.log(`[${r.ok ? "PASS" : "FAIL"}] ${r.name} ${r.note}`);
-process.exit(results.every((r) => r.ok) ? 0 : 1);
+  if (id) {
+    const user = (await call("GET", `/api/ec2/instances/${id}`)).body;
+    const img = String((user && (user.image_id || (user.instance || {}).image_id)) || "");
+    await probeVm(nano, {
+      cloud: "aws", user: /ubuntu/i.test(img) ? "ubuntu" : "ec2-user",
+      ciPath: `/api/aws/ec2/instances/${id}/connect-info`,
+      execPath: `/api/aws/ec2/instances/${id}/exec`,
+      stop: () => call("POST", `/api/ec2/instances/${id}/stop`),
+      start: () => call("POST", `/api/ec2/instances/${id}/start`),
+      del: () => call("POST", `/api/ec2/instances/${id}/terminate`),
+      openConnect: async (page) => {   // EC2 list -> the instance -> Connect tab
+        await page.locator("#rail >> text=EC2").first().click();
+        await sleep(1500);
+        await page.locator("#main tr", { hasText: id }).first().locator("a.id").first().click({ timeout: 15000 });
+        await sleep(1500);
+        await page.locator(".top-tabs button", { hasText: /^\s*Connect\s*$/ }).first().click();
+      },
+    }, check);
+  }
+} catch (e) { check("probe ran without error", false, String(e && e.stack || e).split("\n").slice(0, 3).join(" ")); }
+if (nano) await nano.close();
+finish();

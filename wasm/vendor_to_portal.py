@@ -43,7 +43,7 @@ EXCLUDE_DIRS = {"ui-tests", "console-next", "__pycache__"}
 EXCLUDE_FILES = {
     "console-next.html", "build_cores.py", "build_fixtures.py", "make_pages.py",
     "test_conformance.py", "e2e.mjs", "README.md", "NANO-ARCHITECTURE.md",
-    "vendor_to_portal.py",
+    "vendor_to_portal.py", "vm/build-image.sh",
 }
 # Suffixes never vendored (screenshots, compiled python). Images under assets/ ARE the
 # bundle (the pages load assets/brand/*.png), so they are vendored like any other file.

@@ -1765,9 +1765,24 @@
       "target": "nano",
       "cloud": "aws",
       "kind": "ui",
-      "pending": "Nano in-browser compute (v86 instance VM + exec) not built: connect-info is 409 NoRuntime, /exec is 501",
       "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-aws-post-create-ec2.mjs",
-      "timeout": 300
+      "timeout": 600
+    },
+    {
+      "id": "nano-post-create-gcp-gce-ssh",
+      "target": "nano",
+      "cloud": "gcp",
+      "kind": "ui",
+      "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-gcp-post-create-gce.mjs",
+      "timeout": 600
+    },
+    {
+      "id": "nano-post-create-azure-vm-ssh",
+      "target": "nano",
+      "cloud": "azure",
+      "kind": "ui",
+      "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-azure-post-create-vm.mjs",
+      "timeout": 600
     },
     {
       "id": "offline-ui-console-home",

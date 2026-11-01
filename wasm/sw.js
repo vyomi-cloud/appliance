@@ -380,6 +380,12 @@ async function runInPage(tuple) {
   });
 }
 
+function vmTuple(cloud, ref, what, method, body) {
+  const op = { "connect-info": "ConnectInfo", "private-key.pem": "PrivateKey", exec: "Exec", "vm-status": "Status" }[what];
+  if ((op === "Exec") !== (method === "POST")) return { response: json({ detail: "MethodNotAllowed" }, 405) };
+  return { tuple: [cloud, "_vm", op, { ref, body: body || {} }] };
+}
+
 // Map a console /api/* request to a dispatch tuple (or a direct Response for
 // fixtures/stubs). Returns {response} | {tuple} | {miss}.
 async function route(method, path, body, query) {
@@ -734,8 +740,19 @@ async function route(method, path, body, query) {
   // Connect tab: Nano runs in the browser and has no instance runtime to SSH into, so
   // answer with the same {detail:{error,hint}} shape the appliance uses for a
   // not-connectable instance (the Connect pane renders it) instead of a 501.
-  if (/^\/api\/aws\/ec2\/instances\/[^/]+\/connect-info$/.test(path) && method === "GET")
-    return { response: json({ detail: { error: "NoRuntime", hint: "Nano has no instance runtime to SSH into; use the Vyomi appliance for SSH/console access." } }, 409) };
+  // In-browser VM compute (wasm/vm): connect-info / private key / exec for EC2,
+  // Compute Engine and Azure VMs, answered by the page's VM host (nano-vm-host.js),
+  // which runs each instance as a real v86 VM. With the feature flag off it answers
+  // 409 NoRuntime, as before.
+  m = path.match(/^\/api\/aws\/ec2\/instances\/([^/]+)\/(connect-info|private-key\.pem|exec|vm-status)$/)
+   || path.match(/^\/api\/ec2\/instances\/([^/]+)\/console\/(exec)$/);
+  if (m) return vmTuple("aws", dec(m[1]), m[2], method, body);
+  m = path.match(/^\/api\/gcp\/compute\/instances\/([^/]+)\/(connect-info|private-key\.pem|exec|vm-status)$/)
+   || path.match(/^\/api\/console\/gce\/instances\/([^/]+)\/(exec)$/);
+  if (m) return vmTuple("gcp", dec(m[1]), m[2], method, body);
+  m = path.match(/^\/api\/azure\/vm\/([^/]+)\/(connect-info|private-key\.pem|exec|vm-status)$/)
+   || path.match(/^\/api\/console\/azurevm\/instances\/([^/]+)\/(exec)$/);
+  if (m) return vmTuple("azure", dec(m[1]), m[2], method, body);
   if (path === "/api/ec2/amis" && method === "GET") return { response: json({ ok: true, amis: [] }) };
   // EC2 instance detail tabs (core/aws_console_detail.py, same engine as offline).
   m = path.match(/^\/api\/ec2\/instances\/([^/]+)\/(details|network-interfaces|security|storage|user-data|iam-instance-profile|console-output)$/);
@@ -1019,7 +1036,8 @@ self.addEventListener("fetch", (event) => {
         const res = await runInPage(["_console", "capabilities", "capabilities", { lens, substrate }]);
         return json(res, 200);
       }
-      if (apiPath.startsWith("/api/console/")) {
+      if (apiPath.startsWith("/api/console/") && !/^\/api\/console\/(gce|azurevm)\/instances\/[^/]+\/exec$/.test(apiPath)) {
+        // (VM exec — the in-browser VM terminal — is routed below like the other VM endpoints.)
         // Slice-1 stub for the facade data plane. Clear 501 + a TODO marker so the
         // SPA's widgets render their empty/degraded state without erroring the shell.
         return json({
@@ -1364,6 +1382,10 @@ self.addEventListener("fetch", (event) => {
       const res = await runInPage(r.tuple);
       // Native ARM responses carry a raw HTTP envelope — honour its real status
       // code + headers (Azure-AsyncOperation/Location) and emit the body verbatim.
+      if (res && res.__raw) {   // non-JSON body (e.g. the VM private key .pem)
+        const h = res.__raw;
+        return new Response(h.body, { status: h.status || 200, headers: h.headers || {} });
+      }
       if (res && res.__http) {
         const h = res.__http;
         return json(h.body === undefined ? null : h.body, h.status, h.headers);

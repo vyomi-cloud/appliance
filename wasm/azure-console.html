@@ -680,6 +680,13 @@ toast = function(msg, kind){ _origToast(msg, kind); recordNotif(kind==="err"?"er
 function openConnectModal(rec){
   const body = document.getElementById("connectBody");
   body.innerHTML = "";
+  // Nano: the VM is an in-browser VM; the VM host renders what really works
+  // (ssh through vyomi-tunnel as the adminUsername + a browser terminal).
+  if (window.NanoVM && window.NanoVM.renderConnect) {
+    window.NanoVM.renderConnect(body, "azure", rec.name || "");
+    document.getElementById("connectModal").classList.add("open");
+    return;
+  }
   const rt = (rec.properties || {}).runtime || {};
   if (!rt.containerName) {
     // v2.0.6 — compact metadata-only modal. Three vertical sections
