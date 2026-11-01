@@ -11,9 +11,15 @@ NO fastapi / boto3 / socket imports → loads under Pyodide (Nano) and on host C
 State lives on a plain store object (`SsmStore`, public dict attrs only) so
 core/nano_persist captures it like every other store.
 
-Simulation notes: SecureString values are kept in the store and returned as an opaque
-`kms:<key>:<base64>` blob unless WithDecryption is set. Run Command has no SSM agent
-behind it offline, so a command completes immediately as `Success` per instance.
+Simulation notes: when the router hands dispatch() a KMS KeyStore (every caller since the
+v4 depth pass below), SecureString values are genuinely encrypted at rest with
+core/kms_core.py's real Encrypt under the parameter's KeyId (the AWS-managed `alias/aws/ssm`
+key auto-provisions on first use, exactly like KMS's other AWS-managed keys) and
+GetParameter(WithDecryption=true)/GetParameterHistory run the stored ciphertext back
+through Decrypt. Without a kms_store (no caller omits one anymore, but tests may) a
+parameter falls back to the pre-v4-depth simulation: the plaintext is kept in the store and
+masked as an opaque `kms:<key>:<base64>` blob unless WithDecryption is set. Run Command has
+no SSM agent behind it offline, so a command completes immediately as `Success` per instance.
 """
 from __future__ import annotations
 
@@ -24,6 +30,8 @@ import re
 import time
 import uuid
 from dataclasses import dataclass, field
+
+from core import kms_core
 
 REGION = "us-east-1"
 ACCOUNT = "000000000000"
@@ -182,21 +190,44 @@ def _get_version(store: SsmStore, raw_name: str) -> tuple[str, dict, dict]:
     raise SsmError("ParameterVersionNotFound", f"Systems Manager could not find version {sel} of {name}. Verify the version and try again.")
 
 
-def _value_out(v: dict, decrypt: bool) -> str:
-    if v["type"] == "SecureString" and not decrypt:
+def _kms_call(kms_store, action: str, body: dict) -> dict:
+    resp = kms_core.dispatch(kms_store, f"TrentService.{action}", body)
+    if resp.status != 200:
+        raise SsmError("InternalServerError" if action == "Encrypt" else "InvalidKeyId",
+                       f"Systems Manager can't {action.lower()} the SecureString value using the provided "
+                       f"KMS key: {resp.body.get('message') or resp.body.get('__type', 'KMS error')}", 400)
+    return resp.body
+
+
+def _kms_encrypt(kms_store, key_id: str, value: str) -> str:
+    return _kms_call(kms_store, "Encrypt", {"KeyId": key_id, "Plaintext": base64.b64encode(value.encode()).decode()})["CiphertextBlob"]
+
+
+def _kms_decrypt(kms_store, blob_b64: str) -> str:
+    return base64.b64decode(_kms_call(kms_store, "Decrypt", {"CiphertextBlob": blob_b64})["Plaintext"]).decode()
+
+
+def _value_out(v: dict, decrypt: bool, kms_store=None) -> str:
+    if v["type"] != "SecureString":
+        return v["value"]
+    if v.get("enc"):   # stored value is a real KMS CiphertextBlob (v4 depth pass)
+        if decrypt and kms_store is not None:
+            return _kms_decrypt(kms_store, v["value"])
+        return v["value"]
+    if not decrypt:   # legacy simulation: plaintext in the store, masked on the way out
         return f"kms:{v.get('key_id') or DEFAULT_KEY}:" + base64.b64encode(v["value"].encode()).decode()
     return v["value"]
 
 
-def _parameter(name: str, v: dict, decrypt: bool, sel: str | None = None) -> dict:
-    out = {"Name": name, "Type": v["type"], "Value": _value_out(v, decrypt), "Version": v["version"],
+def _parameter(name: str, v: dict, decrypt: bool, kms_store=None, sel: str | None = None) -> dict:
+    out = {"Name": name, "Type": v["type"], "Value": _value_out(v, decrypt, kms_store), "Version": v["version"],
            "LastModifiedDate": v["last_modified"], "ARN": _param_arn(name), "DataType": v.get("data_type", "text")}
     if sel:
         out["Selector"] = ":" + sel
     return out
 
 
-def _put_parameter(store: SsmStore, b: dict) -> dict:
+def _put_parameter(store: SsmStore, b: dict, kms_store=None) -> dict:
     _need(b, "Name", "Value")
     name = _norm_name(b["Name"])
     _validate_name(name)
@@ -245,8 +276,10 @@ def _put_parameter(store: SsmStore, b: dict) -> dict:
         raise SsmError("ValidationException", f"The following data type is not supported: {dtype} (Data type names are all lowercase.)")
     version = (prev.get("version", 0)) + 1
     labels = []
-    entry = {"version": version, "value": value, "type": ptype,
-             "key_id": (b.get("KeyId") or prev.get("key_id") or DEFAULT_KEY) if ptype == "SecureString" else "",
+    key_id = (b.get("KeyId") or prev.get("key_id") or DEFAULT_KEY) if ptype == "SecureString" else ""
+    enc = ptype == "SecureString" and kms_store is not None
+    stored_value = _kms_encrypt(kms_store, key_id, value) if enc else value
+    entry = {"version": version, "value": stored_value, "type": ptype, "key_id": key_id, "enc": enc,
              "description": b.get("Description", prev.get("description", "")) or "",
              "allowed_pattern": pattern or "", "tier": tier, "data_type": dtype,
              "last_modified": _now(), "last_modified_user": f"arn:aws:iam::{ACCOUNT}:root", "labels": labels}
@@ -263,14 +296,14 @@ def _put_parameter(store: SsmStore, b: dict) -> dict:
     return {"Version": version, "Tier": tier}
 
 
-def _get_parameter(store: SsmStore, b: dict) -> dict:
+def _get_parameter(store: SsmStore, b: dict, kms_store=None) -> dict:
     _need(b, "Name")
     name, _rec, v = _get_version(store, b["Name"])
     sel = _parse_selector(b["Name"])[1]
-    return {"Parameter": _parameter(name, v, bool(b.get("WithDecryption")), sel)}
+    return {"Parameter": _parameter(name, v, bool(b.get("WithDecryption")), kms_store, sel)}
 
 
-def _get_parameters(store: SsmStore, b: dict) -> dict:
+def _get_parameters(store: SsmStore, b: dict, kms_store=None) -> dict:
     names = b.get("Names")
     if not names:
         _need(b, "Names")
@@ -280,7 +313,7 @@ def _get_parameters(store: SsmStore, b: dict) -> dict:
     for n in names:
         try:
             name, _r, v = _get_version(store, n)
-            found.append(_parameter(name, v, bool(b.get("WithDecryption")), _parse_selector(n)[1]))
+            found.append(_parameter(name, v, bool(b.get("WithDecryption")), kms_store, _parse_selector(n)[1]))
         except SsmError:
             invalid.append(n)
     return {"Parameters": found, "InvalidParameters": invalid}
@@ -320,7 +353,7 @@ def _filter_match(name: str, rec: dict, f: dict) -> bool:
     return True
 
 
-def _get_by_path(store: SsmStore, b: dict) -> dict:
+def _get_by_path(store: SsmStore, b: dict, kms_store=None) -> dict:
     _need(b, "Path")
     path = b["Path"]
     if not path.startswith("/") or not _NAME_RE.match(path):
@@ -330,7 +363,7 @@ def _get_by_path(store: SsmStore, b: dict) -> dict:
     names = sorted(n for n, r in store.parameters.items()
                    if _in_path(n, path, recursive) and all(_filter_match(n, r, f) for f in filters))
     dec = bool(b.get("WithDecryption"))
-    items = [_parameter(n, _current(store.parameters[n]), dec) for n in names]
+    items = [_parameter(n, _current(store.parameters[n]), dec, kms_store) for n in names]
     return _page(items, b, "Parameters", default_max=10, hard_max=10)
 
 
@@ -383,7 +416,7 @@ def _delete_parameters(store: SsmStore, b: dict) -> dict:
     return {"DeletedParameters": deleted, "InvalidParameters": invalid}
 
 
-def _parameter_history(store: SsmStore, b: dict) -> dict:
+def _parameter_history(store: SsmStore, b: dict, kms_store=None) -> dict:
     _need(b, "Name")
     name = _norm_name(b["Name"])
     rec = store.parameters.get(name)
@@ -393,7 +426,7 @@ def _parameter_history(store: SsmStore, b: dict) -> dict:
     items = []
     for v in rec["versions"]:
         h = {"Name": name, "Type": v["type"], "LastModifiedDate": v["last_modified"], "LastModifiedUser": v["last_modified_user"],
-             "Value": _value_out(v, dec), "Version": v["version"], "Labels": list(v.get("labels", [])), "Tier": v["tier"],
+             "Value": _value_out(v, dec, kms_store), "Version": v["version"], "Labels": list(v.get("labels", [])), "Tier": v["tier"],
              "Policies": [], "DataType": v.get("data_type", "text")}
         if v.get("description"):
             h["Description"] = v["description"]
@@ -1066,8 +1099,11 @@ _OPS = {
 }
 OPERATIONS = sorted(_OPS)
 
+# Operations whose SecureString handling needs the shared KMS KeyStore.
+_KMS_OPS = {"PutParameter", "GetParameter", "GetParameters", "GetParametersByPath", "GetParameterHistory"}
 
-def dispatch(store: SsmStore, target: str, payload: dict | None = None) -> SsmResponse:
+
+def dispatch(store: SsmStore, target: str, payload: dict | None = None, kms_store=None) -> SsmResponse:
     body = payload if isinstance(payload, dict) else {}
     action = target.rsplit(".", 1)[-1] if target else ""
     if not action:
@@ -1077,6 +1113,8 @@ def dispatch(store: SsmStore, target: str, payload: dict | None = None) -> SsmRe
         return _error("UnknownOperationException", f"The action {action} is not implemented.", 400)
     _seed(store)
     try:
+        if action in _KMS_OPS:
+            return _ok(fn(store, body, kms_store))
         return _ok(fn(store, body))
     except SsmError as e:
         return _error(e.code, e.message, e.status)

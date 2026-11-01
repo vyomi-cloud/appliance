@@ -1,0 +1,507 @@
+{
+  "$schema": "../schema.json",
+  "cloud": "aws",
+  "service": "ssm",
+  "console_path": "/systems-manager/",
+  "status": "draft",
+  "captured_at": "2026-11-01",
+  "gaps_note": "Authored from AWS product knowledge, not a console capture (this run's private captures checkout did not run). Scoped to the sections core/ssm_core.py backs with real, stateful operations: Parameter Store, Documents, Run Command, State Manager (associations), Maintenance Windows, Patch Manager (baselines). Sections that need a real SSM Agent / managed-instance fleet Vyomi doesn't have (Fleet Manager, Session Manager, Inventory, Hybrid Activations, Distributor, Automation execution, Change Manager, Change Calendar, OpsCenter, Explorer, Application Manager, AppConfig, Compliance, Quick Setup) are left out of nav and pages entirely rather than declared honest_page, since they were never captured and are not in consoles/honest-allowlist.json.",
+  "nav": [
+    {"label": "Parameter Store", "page_id": "parameters"},
+    {"label": "Documents", "page_id": "documents"},
+    {"label": "Run Command", "expandable": true, "children": [
+      {"label": "Command history", "page_id": "commands"},
+      {"label": "Run command", "page_id": "run-command"}
+    ]},
+    {"label": "State Manager", "page_id": "associations"},
+    {"label": "Maintenance Windows", "page_id": "maintenance-windows"},
+    {"label": "Patch Manager", "page_id": "patch-baselines"}
+  ],
+  "pages": [
+    {
+      "id": "parameters",
+      "kind": "list",
+      "title": "Parameters",
+      "route": "/systems-manager/parameters",
+      "breadcrumbs": ["Systems Manager", "Parameter Store"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "table": {
+        "resource_label": "Parameters",
+        "counter": true,
+        "selection": "multi",
+        "columns": ["Name", "Description", "Type", "Tier", "Last modified"],
+        "header_actions": ["Refresh", "Delete", "Create parameter"],
+        "filter_placeholder": "Search parameters by name, description, or value",
+        "empty_state": "You don't have any parameters",
+        "empty_state_action": "Create parameter",
+        "pagination": true,
+        "preferences": true,
+        "confidence": "medium"
+      }
+    },
+    {
+      "id": "create-parameter",
+      "kind": "create",
+      "title": "Create parameter",
+      "route": "/systems-manager/parameters/create",
+      "breadcrumbs": ["Systems Manager", "Parameter Store", "Create parameter"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "submit": "Create parameter",
+      "header_actions": ["Cancel", "Create parameter"],
+      "sections": [
+        {
+          "title": "Parameter details",
+          "fields": [
+            {"label": "Name", "type": "text", "required": true, "placeholder": "/vyomi/app/config", "constraints": "A-z 0-9 and _ . - / only. Up to 15 hierarchy levels; can't start with aws or ssm."},
+            {"label": "Description - optional", "type": "textarea"},
+            {"label": "Tier", "type": "radio", "default": "Standard", "options": ["Standard", "Advanced", "Intelligent-Tiering"]}
+          ]
+        },
+        {
+          "title": "Value",
+          "fields": [
+            {"label": "Type", "type": "radio", "default": "String", "options": ["String", "StringList", "SecureString"]},
+            {"label": "KMS key source", "type": "text", "visible_when": "Type = SecureString", "help": "The key protecting this parameter's value. Encrypted for real through the KMS core."},
+            {"label": "Allowed pattern - optional", "type": "text", "placeholder": "^[a-zA-Z0-9]+$"},
+            {"label": "Value", "type": "textarea", "required": true}
+          ]
+        },
+        {
+          "title": "Tags - optional",
+          "fields": [
+            {"label": "Tags", "type": "tags"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "parameter-detail",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "route": "/systems-manager/parameters/view?name={resource-name}",
+      "breadcrumbs": ["Systems Manager", "Parameter Store", "{resource-name}"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": ["Actions"],
+      "sections": [
+        {
+          "title": "General configuration",
+          "fields": [
+            {"label": "ARN", "type": "readonly"},
+            {"label": "Type", "type": "readonly"},
+            {"label": "Tier", "type": "readonly"},
+            {"label": "Data type", "type": "readonly"},
+            {"label": "Version", "type": "readonly"},
+            {"label": "Last modified", "type": "readonly"}
+          ]
+        },
+        {
+          "title": "Value",
+          "actions": ["Edit"]
+        }
+      ],
+      "tabs": ["History", "Tags"],
+      "tab_panels": [
+        {"label": "History", "sections": [
+          {"title": "Version history", "table": {"resource_label": "Version history", "counter": true, "columns": ["Version", "Label(s)", "Last modified", "Description", "Value"]}}
+        ]},
+        {"label": "Tags", "sections": [
+          {"title": "Tags", "table": {"resource_label": "Tags", "counter": true, "header_actions": ["Edit"], "columns": ["Key", "Value"], "empty_state": "No tags"}}
+        ]}
+      ]
+    },
+    {
+      "id": "documents",
+      "kind": "list",
+      "title": "Documents",
+      "route": "/systems-manager/documents",
+      "breadcrumbs": ["Systems Manager", "Documents"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "table": {
+        "resource_label": "Documents",
+        "counter": true,
+        "selection": "multi",
+        "columns": ["Name", "Owner", "Document type", "Document format", "Default version"],
+        "header_actions": ["Refresh", "Delete", "Create document"],
+        "filter_placeholder": "Search documents by name",
+        "empty_state": "No documents",
+        "empty_state_action": "Create document",
+        "pagination": true,
+        "preferences": true,
+        "confidence": "medium"
+      }
+    },
+    {
+      "id": "create-document",
+      "kind": "create",
+      "title": "Create document",
+      "route": "/systems-manager/documents/create",
+      "breadcrumbs": ["Systems Manager", "Documents", "Create document"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "submit": "Create document",
+      "header_actions": ["Cancel", "Create document"],
+      "sections": [
+        {
+          "title": "Document details",
+          "fields": [
+            {"label": "Name", "type": "text", "required": true, "constraints": "3-128 characters: a-zA-Z0-9_-.:/. Can't start with aws or amazon."},
+            {"label": "Document type", "type": "select", "default": "Command", "options": ["Command", "Automation", "Policy", "Session", "Package", "ApplicationConfiguration", "ChangeCalendar"]},
+            {"label": "Document format", "type": "radio", "default": "JSON", "options": ["JSON", "YAML", "TEXT"]}
+          ]
+        },
+        {
+          "title": "Content",
+          "fields": [
+            {"label": "Content", "type": "textarea", "required": true, "help": "Must include schemaVersion."}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "document-detail",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "route": "/systems-manager/documents/view?name={resource-name}",
+      "breadcrumbs": ["Systems Manager", "Documents", "{resource-name}"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": ["Actions"],
+      "sections": [
+        {
+          "title": "Document details",
+          "fields": [
+            {"label": "Owner", "type": "readonly"},
+            {"label": "Document type", "type": "readonly"},
+            {"label": "Document format", "type": "readonly"},
+            {"label": "Default version", "type": "readonly"},
+            {"label": "Latest version", "type": "readonly"},
+            {"label": "Schema version", "type": "readonly"},
+            {"label": "Created date", "type": "readonly"},
+            {"label": "Description", "type": "readonly"}
+          ]
+        }
+      ],
+      "tabs": ["Content", "Document versions", "Tags"],
+      "tab_panels": [
+        {"label": "Content", "sections": [
+          {"title": "Content", "actions": ["Update document"]}
+        ]},
+        {"label": "Document versions", "sections": [
+          {"title": "Document versions", "table": {"resource_label": "Document versions", "counter": true, "columns": ["Version", "Version name", "Created date", "Default version"]}}
+        ]},
+        {"label": "Tags", "sections": [
+          {"title": "Tags", "table": {"resource_label": "Tags", "counter": true, "header_actions": ["Edit"], "columns": ["Key", "Value"], "empty_state": "No tags"}}
+        ]}
+      ]
+    },
+    {
+      "id": "commands",
+      "kind": "list",
+      "title": "Commands",
+      "route": "/systems-manager/run-command/commands",
+      "breadcrumbs": ["Systems Manager", "Run Command", "Command history"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "table": {
+        "resource_label": "Commands",
+        "counter": true,
+        "selection": "none",
+        "columns": ["Command ID", "Document name", "Status", "Targets", "Comment", "Requested at"],
+        "header_actions": ["Refresh", "Run command"],
+        "filter_placeholder": "Search commands",
+        "empty_state": "No commands",
+        "empty_state_action": "Run command",
+        "pagination": true,
+        "preferences": true,
+        "confidence": "medium"
+      }
+    },
+    {
+      "id": "run-command",
+      "kind": "create",
+      "title": "Run a command",
+      "route": "/systems-manager/run-command/send",
+      "breadcrumbs": ["Systems Manager", "Run Command", "Run a command"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "submit": "Run",
+      "header_actions": ["Cancel", "Run"],
+      "notes": "Vyomi has no SSM Agent fleet behind this: every instance ID you name completes immediately as Success, the same shape Run Command always reports back (core/capabilities/aws/ssm.json: ssm.runcommand, limited).",
+      "sections": [
+        {
+          "title": "Command document",
+          "fields": [
+            {"label": "Document", "type": "select", "required": true, "default": "AWS-RunShellScript"}
+          ]
+        },
+        {"title": "Command parameters"},
+        {
+          "title": "Targets",
+          "fields": [
+            {"label": "Instance IDs", "type": "text", "required": true, "constraints": "Comma-separated (i-xxxxxxxxxxxxxxxxx or mi-xxxxxxxxxxxxxxxxx)."}
+          ]
+        },
+        {
+          "title": "Other parameters",
+          "fields": [
+            {"label": "Comment - optional", "type": "text"},
+            {"label": "Timeout (seconds)", "type": "number", "default": "600"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "command-detail",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "route": "/systems-manager/run-command/commands/{resource-name}",
+      "breadcrumbs": ["Systems Manager", "Run Command", "Command history", "{resource-name}"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": ["Cancel command"],
+      "sections": [
+        {
+          "title": "Command details",
+          "fields": [
+            {"label": "Document name", "type": "readonly"},
+            {"label": "Status", "type": "readonly"},
+            {"label": "Target count", "type": "readonly"},
+            {"label": "Completed count", "type": "readonly"},
+            {"label": "Requested at", "type": "readonly"},
+            {"label": "Comment", "type": "readonly"},
+            {"label": "Timeout (seconds)", "type": "readonly"}
+          ]
+        },
+        {
+          "title": "Targets and outputs",
+          "table": {"resource_label": "Targets and outputs", "counter": true, "columns": ["Instance ID", "Status", "Output"]}
+        }
+      ]
+    },
+    {
+      "id": "associations",
+      "kind": "list",
+      "title": "Associations",
+      "route": "/systems-manager/state-manager",
+      "breadcrumbs": ["Systems Manager", "State Manager"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "table": {
+        "resource_label": "Associations",
+        "counter": true,
+        "selection": "multi",
+        "columns": ["Association ID", "Name", "Association name", "Schedule", "Status"],
+        "header_actions": ["Refresh", "Delete", "Create association"],
+        "filter_placeholder": "Search associations",
+        "empty_state": "No associations",
+        "empty_state_action": "Create association",
+        "pagination": true,
+        "preferences": true,
+        "confidence": "medium"
+      }
+    },
+    {
+      "id": "create-association",
+      "kind": "create",
+      "title": "Create association",
+      "route": "/systems-manager/state-manager/create",
+      "breadcrumbs": ["Systems Manager", "State Manager", "Create association"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "submit": "Create association",
+      "header_actions": ["Cancel", "Create association"],
+      "sections": [
+        {
+          "title": "Document",
+          "fields": [
+            {"label": "Document", "type": "select", "required": true},
+            {"label": "Association name - optional", "type": "text"}
+          ]
+        },
+        {
+          "title": "Targets",
+          "fields": [
+            {"label": "Instance IDs", "type": "text", "required": true, "constraints": "Comma-separated."}
+          ]
+        },
+        {
+          "title": "Specify schedule",
+          "fields": [
+            {"label": "Schedule - optional", "type": "text", "constraints": "A rate() or cron() expression. Leave blank to run only when targets change."}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "association-detail",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "route": "/systems-manager/state-manager/association/{resource-name}",
+      "breadcrumbs": ["Systems Manager", "State Manager", "{resource-name}"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": ["Delete association"],
+      "sections": [
+        {
+          "title": "Association details",
+          "fields": [
+            {"label": "Document name", "type": "readonly"},
+            {"label": "Association name", "type": "readonly"},
+            {"label": "Status", "type": "readonly"},
+            {"label": "Targets", "type": "readonly"},
+            {"label": "Schedule", "type": "readonly"},
+            {"label": "Document version", "type": "readonly"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "maintenance-windows",
+      "kind": "list",
+      "title": "Maintenance Windows",
+      "route": "/systems-manager/maintenance-windows",
+      "breadcrumbs": ["Systems Manager", "Maintenance Windows"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "table": {
+        "resource_label": "Maintenance Windows",
+        "counter": true,
+        "selection": "multi",
+        "columns": ["Name", "Maintenance window ID", "Enabled", "Duration", "Next execution"],
+        "header_actions": ["Refresh", "Delete", "Create maintenance window"],
+        "filter_placeholder": "Search maintenance windows",
+        "empty_state": "No maintenance windows",
+        "empty_state_action": "Create maintenance window",
+        "pagination": true,
+        "preferences": true,
+        "confidence": "medium"
+      }
+    },
+    {
+      "id": "create-maintenance-window",
+      "kind": "create",
+      "title": "Create maintenance window",
+      "route": "/systems-manager/maintenance-windows/create",
+      "breadcrumbs": ["Systems Manager", "Maintenance Windows", "Create maintenance window"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "submit": "Create maintenance window",
+      "header_actions": ["Cancel", "Create maintenance window"],
+      "sections": [
+        {
+          "title": "Provide window details",
+          "fields": [
+            {"label": "Name", "type": "text", "required": true},
+            {"label": "Description - optional", "type": "textarea"},
+            {"label": "Specify schedule", "type": "text", "constraints": "A cron(), rate() or at() expression."},
+            {"label": "Duration (hours)", "type": "number", "default": "4"},
+            {"label": "Stop initiating tasks (hours before the end of the window)", "type": "number", "default": "1"},
+            {"label": "Allow unassociated targets", "type": "toggle", "default": true}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "maintenance-window-detail",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "route": "/systems-manager/maintenance-windows/{resource-name}",
+      "breadcrumbs": ["Systems Manager", "Maintenance Windows", "{resource-name}"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": ["Enable/Disable", "Delete"],
+      "sections": [
+        {
+          "title": "Maintenance window details",
+          "fields": [
+            {"label": "Maintenance window ID", "type": "readonly"},
+            {"label": "Enabled", "type": "readonly"},
+            {"label": "Schedule", "type": "readonly"},
+            {"label": "Schedule timezone", "type": "readonly"},
+            {"label": "Duration", "type": "readonly"},
+            {"label": "Cutoff", "type": "readonly"},
+            {"label": "Allow unassociated targets", "type": "readonly"},
+            {"label": "Next execution", "type": "readonly"}
+          ]
+        }
+      ],
+      "tabs": ["Targets"],
+      "tab_panels": [
+        {"label": "Targets", "sections": [
+          {"title": "Targets", "actions": ["Register target", "Deregister target"], "table": {"resource_label": "Targets", "counter": true, "columns": ["Target ID", "Resource type", "Targets"]}}
+        ]}
+      ]
+    },
+    {
+      "id": "patch-baselines",
+      "kind": "list",
+      "title": "Patch baselines",
+      "route": "/systems-manager/patch-manager/baselines",
+      "breadcrumbs": ["Systems Manager", "Patch Manager", "Patch baselines"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "table": {
+        "resource_label": "Patch baselines",
+        "counter": true,
+        "selection": "multi",
+        "columns": ["Baseline name", "Baseline ID", "Operating system", "Default baseline"],
+        "header_actions": ["Refresh", "Delete", "Create patch baseline"],
+        "filter_placeholder": "Search patch baselines",
+        "empty_state": "No patch baselines",
+        "empty_state_action": "Create patch baseline",
+        "pagination": true,
+        "preferences": true,
+        "confidence": "medium"
+      }
+    },
+    {
+      "id": "create-patch-baseline",
+      "kind": "create",
+      "title": "Create patch baseline",
+      "route": "/systems-manager/patch-manager/baselines/create",
+      "breadcrumbs": ["Systems Manager", "Patch Manager", "Patch baselines", "Create patch baseline"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "submit": "Create patch baseline",
+      "header_actions": ["Cancel", "Create patch baseline"],
+      "sections": [
+        {
+          "title": "Baseline details",
+          "fields": [
+            {"label": "Name", "type": "text", "required": true},
+            {"label": "Description - optional", "type": "textarea"},
+            {"label": "Operating system", "type": "select", "default": "AMAZON_LINUX_2023"},
+            {"label": "Approved patches - optional", "type": "textarea", "constraints": "Comma-separated patch IDs."},
+            {"label": "Rejected patches - optional", "type": "textarea", "constraints": "Comma-separated patch IDs."}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "patch-baseline-detail",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "route": "/systems-manager/patch-manager/baselines/{resource-name}",
+      "breadcrumbs": ["Systems Manager", "Patch Manager", "Patch baselines", "{resource-name}"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": ["Delete"],
+      "sections": [
+        {
+          "title": "Baseline details",
+          "fields": [
+            {"label": "Baseline ID", "type": "readonly"},
+            {"label": "Operating system", "type": "readonly"},
+            {"label": "Description", "type": "readonly"},
+            {"label": "Approved patches", "type": "readonly"},
+            {"label": "Rejected patches", "type": "readonly"}
+          ]
+        }
+      ]
+    }
+  ]
+}

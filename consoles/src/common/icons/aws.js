@@ -54,6 +54,8 @@ export const AWS_ICONS = {
   kinesis: ["integration", '<path d="M4.6 8.5h3.6M4.6 12h3.6M4.6 15.5h3.6"/><path d="M9.5 8.5h3.6M9.5 12h3.6M9.5 15.5h3.6"/><path d="M15.5 12h3.9M17.6 10.1l1.9 1.9-1.9 1.9"/>'],
   // workflow: linked state nodes with a branch
   states: ["integration", '<circle cx="6.2" cy="8" r="2"/><circle cx="12" cy="17" r="2"/><circle cx="17.8" cy="8" r="2"/><path d="M7.4 9.6 10.8 15.4M16.6 9.6 13.2 15.4"/>'],
+  // fleet control: a checklist clipboard with a gear, managing many resources at once
+  ssm: ["management", '<rect x="5.5" y="5" width="9" height="14" rx="1.3"/><path d="M8 5V4.3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1V5"/><path d="M7.6 10h3.8M7.6 13.3h3.8"/><circle cx="17.3" cy="14.8" r="2.1"/><path d="M17.3 11.4v1.1M17.3 17v1.1M14.6 14.8h1.1M19.9 14.8h1.1M15.5 12.9l.8.8M18.3 16.6l.8.8M15.5 16.6l.8-.8M18.3 12.9l.8-.8"/>'],
 };
 
 const FALLBACK = ["other", '<rect x="6" y="6" width="5" height="5" rx="1"/><rect x="13" y="6" width="5" height="5" rx="1"/><rect x="6" y="13" width="5" height="5" rx="1"/><rect x="13" y="13" width="5" height="5" rx="1"/>'];

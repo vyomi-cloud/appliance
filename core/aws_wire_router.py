@@ -884,8 +884,8 @@ class AwsWireRouter:
                 r = kinesis.dispatch(self.kinesis, target, payload)
             elif svc == "logs":
                 r = logs.dispatch(self.logs, target, payload)
-            elif svc == "ssm":
-                r = ssm.dispatch(self.ssm, target, payload)
+            elif svc == "ssm":   # SecureString parameters are really encrypted/decrypted through the KMS core
+                r = ssm.dispatch(self.ssm, target, payload, kms_store=self.kms)
             elif svc == "stepfunctions":
                 r = sfn.dispatch(self.sfn, target, payload, lambda_store=self.lam)
             else:  # sqs
