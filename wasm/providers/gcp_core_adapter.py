@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import base64
 import json
+import types
 
 from core import gcp_storage_core as _gcs
 from core.object_store import InMemoryObjectStore
@@ -77,6 +78,14 @@ def _call(svc, method, path, query=None, body=b""):
         body = body.encode()
     r = _MOD[svc].dispatch(_STORES[svc], method, path, query or {},
                            {"content-type": "application/json"}, body or b"")
+    if svc in ("storage", "pubsub") and method in ("POST", "PUT") and r.status < 300:
+        # Console-side uploads / publishes fire Eventarc triggers exactly like wire-side ones (core/nano_triggers).
+        try:
+            from core import nano_triggers as _nt
+            _nt.after_gcp(types.SimpleNamespace(_stores=_R), "gcp-gcs" if svc == "storage" else "gcp-pubsub",
+                          method, path, query or {}, body or b"", r)
+        except Exception:
+            pass
     try:
         parsed = json.loads(r.body.decode("utf-8")) if r.body else {}
     except Exception:
@@ -506,6 +515,13 @@ def _resource_op(service, operation, name="", body=None):
             r = _MOD["storage"].dispatch(_STORES["storage"], "POST",
                 f"/upload/storage/v1/b/{bucket}/o", {"uploadType": "media", "name": key},
                 {"content-type": body.get("content_type", "application/octet-stream")}, raw)
+            if r.status < 300:   # a console upload fires Eventarc triggers like a wire upload (core/nano_triggers)
+                try:
+                    from core import nano_triggers as _nt
+                    _nt.after_gcp(types.SimpleNamespace(_stores=_R), "gcp-gcs", "POST",
+                                  f"/upload/storage/v1/b/{bucket}/o", {"name": key}, raw, r)
+                except Exception:
+                    pass
             return {"ok": r.status < 300, "key": key, "size": len(raw)} if r.status < 300 \
                 else {"ok": False, "code": "UploadFailed", "key": key, "status": r.status}
         if operation == "DeleteObject":

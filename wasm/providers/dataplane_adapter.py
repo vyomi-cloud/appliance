@@ -56,7 +56,7 @@ def _fn_row(fn):
             "handler": fn.get("handler", "index.handler"), "codeSize": len(fn.get("source", "")),
             "function_name": fn["name"], "function_arn": fn.get("arn", ""),
             "memory_size": fn.get("memory_size", 128), "timeout": fn.get("timeout", 3),
-            "state": "Active", "package_type": "Zip",
+            "state": "Active", "package_type": "Zip", "invocation_count": fn.get("invocation_count", 0),
             "created": fn.get("created") or fn.get("last_modified") or "",
             "last_modified": fn.get("last_modified") or fn.get("created") or ""}
 
@@ -342,7 +342,7 @@ def vpc_analyze(p):
 
 # ── EventBridge (rules → SQS delivery) ─────────────────────────────────────
 def _eb(action, body):
-    return eventbridge_core.dispatch(MSG, "AWSEvents." + action, body)
+    return eventbridge_core.dispatch(MSG, "AWSEvents." + action, body, lambda_store=_COMPUTE)
 
 
 def eb_list(p=None):
@@ -364,6 +364,10 @@ def eb_create(p):
         q = MSG.get_queue(str(p["targetQueue"]))
         if q:
             _eb("PutTargets", {"Rule": name, "Targets": [{"Id": "t1", "Arn": q["queue_arn"]}]})
+    if p.get("targetLambda"):
+        fn = getattr(_COMPUTE, "_lambda_functions", {}).get(str(p["targetLambda"]))
+        if fn:
+            _eb("PutTargets", {"Rule": name, "Targets": [{"Id": "t2", "Arn": fn["arn"]}]})
     return {"ok": True, "name": name}
 
 

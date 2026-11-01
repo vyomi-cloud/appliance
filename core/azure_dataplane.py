@@ -604,95 +604,123 @@ def _cos_query(docs: dict, body: dict) -> list:
 # ----------------------------------------------------------------------------
 # Function Apps (serverless execution via gcp_function_runtime)
 # ----------------------------------------------------------------------------
+def _find_function_app(app_name: str):
+    """The function app's ARM record, looked up across ALL spaces (the data plane must not depend on which
+    space is active - an app created while another space was active used to 404)."""
+    from core import azure_eventgrid_delivery as egd
+    for rec in egd._all_arm_resources():
+        if str(rec.get("_type", "")).lower() == "microsoft.web/sites" and str(rec.get("name", "")).lower() == app_name.lower():
+            return rec
+    return None
+
+
+def _uses_azure_functions(code: str) -> bool:
+    return "azure.functions" in code or "azure import functions" in code
+
+
 async def _function_app_handle(app_name: str, function_name: str, request: Request) -> Response:
-    """Invoke an Azure Function App by executing its deployed code."""
-    sid = _sid()
-    # Look up the Function App ARM resource from the active space.
-    try:
-        import server
-        spaces_state = server._spaces_state()
-        active_id = spaces_state.get("active_space_id", "")
-        space = (spaces_state.get("spaces") or {}).get(active_id) or {}
-        svc = space.get("service_states") or {}
-        azure_resources = (svc.get("azure_arm") or {}).get("resources") or {}
-    except Exception:
-        return JSONResponse(status_code=500, content={"error": "Unable to access space state"})
-
-    # Find the function app resource by name (type microsoft.web/sites, kind functionapp)
-    func_rec = None
-    for rec in azure_resources.values():
-        if not isinstance(rec, dict):
-            continue
-        if str(rec.get("_type", "")).lower() == "microsoft.web/sites" and rec.get("name", "").lower() == app_name.lower():
-            func_rec = rec
-            break
-
+    """Invoke an Azure Function App by executing its deployed code (zip deploy or properties.code)."""
+    func_rec = _find_function_app(app_name)
     if not func_rec:
-        return JSONResponse(status_code=404, content={"error": f"Function App '{app_name}' not found"})
-
+        return JSONResponse(status_code=404, content={"error": f"Function App '{app_name}' not found in any space"})
     props = func_rec.get("properties") or {}
     code = props.get("code") or props.get("sourceCode") or ""
     entry = props.get("entryPoint") or "main"
     runtime = props.get("runtime") or "python"
     timeout = int(props.get("timeout") or 30)
-
-    # Parse request payload
-    payload = {}
-    try:
-        payload = await request.json()
-    except Exception:
-        payload = {}
-
-    # Record usage event
+    body = await request.body()
+    if not code.strip():
+        return JSONResponse(status_code=404, content={"error": {
+            "code": "FunctionNotFound",
+            "message": f"Function '{function_name}' does not exist on app '{app_name}': no code is deployed. "
+                       f"Deploy a zip with POST /azure-data/functions/{app_name}/api/zipdeploy."}})
     try:
         from core.app_context import record_usage
         record_usage("azure.functionapp.invoke", {"app": app_name, "function": function_name})
     except Exception:
         pass
-
-    # Execute the function code
-    if not code.strip():
-        return JSONResponse(content={
-            "invocationId": uuid.uuid4().hex,
-            "result": {"message": f"Hello from {app_name}/{function_name}", "input": payload},
-            "status": "FALLBACK",
-        })
-
     try:
         from core import azure_arm_ext_core as _ext
         _ext.site_log(func_rec, f"Executing 'Functions.{function_name}' (Reason='This function was programmatically called via the host APIs.')")
     except Exception:
-        pass
-    try:
-        from core import gcp_function_runtime
-        out = gcp_function_runtime.execute(code, entry, runtime, payload, timeout=timeout)
+        _ext = None
+    import asyncio
+    from core import gcp_function_runtime
+    loop = asyncio.get_running_loop()
+    if _uses_azure_functions(code):
+        # The real programming model: the handler gets an azure.functions HttpRequest and its
+        # HttpResponse is the HTTP response.
+        req = {"method": request.method, "path": "/" + function_name, "query": request.url.query,
+               "headers": {k: v for k, v in request.headers.items()}, "url": str(request.url),
+               "body_b64": __import__("base64").b64encode(body).decode(), "route_params": {}}
+        out = await loop.run_in_executor(None, lambda: gcp_function_runtime.execute_http(
+            code, function_name if props.get("entryPoint") in (None, "", "main") and "FunctionApp" in code else entry,
+            runtime, req, timeout=timeout, flavor="azure"))
         try:
-            _ext.site_log(func_rec, f"Executed 'Functions.{function_name}' ({'Succeeded' if out.get('status') == 'SUCCESS' else 'Failed'})"
-                          + (": " + str(out.get("logs"))[:500] if out.get("logs") else ""),
-                          "Information" if out.get("status") == "SUCCESS" else "Error")
+            _ext.site_log(func_rec, f"Executed 'Functions.{function_name}' ({'Succeeded' if out.get('ok') else 'Failed'})"
+                          + (": " + str(out.get("logs"))[:500] if out.get("logs") else ""), "Information" if out.get("ok") else "Error")
         except Exception:
             pass
-        if out.get("status") == "SUCCESS":
-            return JSONResponse(content={
-                "invocationId": uuid.uuid4().hex,
-                "result": out.get("result"),
-                "logs": out.get("logs", ""),
-                "status": "SUCCESS",
-            })
-        return JSONResponse(status_code=500, content={
-            "invocationId": uuid.uuid4().hex,
-            "error": out.get("error"),
-            "logs": out.get("logs", ""),
-            "status": "ERROR",
-        })
-    except Exception as exc:
-        # Fallback to canned response if runtime unavailable
-        return JSONResponse(content={
-            "invocationId": uuid.uuid4().hex,
-            "result": {"message": f"Hello from {app_name}/{function_name}", "input": payload},
-            "status": "FALLBACK",
-            "note": str(exc)[:200],
-        })
+        hdrs = {k: str(v) for k, v in (out.get("headers") or {}).items() if k.lower() not in ("content-length", "content-type")}
+        ct = next((v for k, v in (out.get("headers") or {}).items() if k.lower() == "content-type"), None)
+        return Response(content=out.get("body", b""), status_code=int(out.get("status", 200)), headers=hdrs, media_type=ct)
+    try:
+        payload = json.loads(body) if body else {}
+    except Exception:
+        payload = {}
+    out = await loop.run_in_executor(None, lambda: gcp_function_runtime.execute(code, entry, runtime, payload, timeout=timeout))
+    try:
+        _ext.site_log(func_rec, f"Executed 'Functions.{function_name}' ({'Succeeded' if out.get('status') == 'SUCCESS' else 'Failed'})"
+                      + (": " + str(out.get("logs"))[:500] if out.get("logs") else ""),
+                      "Information" if out.get("status") == "SUCCESS" else "Error")
+    except Exception:
+        pass
+    if out.get("status") == "SUCCESS":
+        return JSONResponse(content={"invocationId": uuid.uuid4().hex, "result": out.get("result"),
+                                     "logs": out.get("logs", ""), "status": "SUCCESS"})
+    return JSONResponse(status_code=500, content={"invocationId": uuid.uuid4().hex, "error": out.get("error"),
+                                                   "logs": out.get("logs", ""), "status": "ERROR"})
+
+
+def run_function_sync(app_name: str, function_name: str, method: str, payload) -> dict:
+    """Invoke a function app's code directly (Event Grid AzureFunction destination)."""
+    rec = _find_function_app(app_name)
+    props = (rec or {}).get("properties") or {}
+    code = props.get("code") or ""
+    if not code.strip():
+        return {"ok": False}
+    from core import gcp_function_runtime
+    if _uses_azure_functions(code):
+        return gcp_function_runtime.execute_http(code, function_name, props.get("runtime") or "python", {
+            "method": method, "path": "/" + function_name, "query": "", "headers": {"content-type": "application/json"},
+            "body_b64": __import__("base64").b64encode(json.dumps(payload).encode()).decode(), "url": ""}, flavor="azure")
+    return gcp_function_runtime.execute(code, props.get("entryPoint") or "main", props.get("runtime") or "python",
+                                        payload if isinstance(payload, dict) else {"events": payload})
+
+
+async def _function_app_zipdeploy(app_name: str, request: Request) -> Response:
+    """Kudu-style zip deploy: POST/PUT a zip of the function app (python). Stores the app's entry module as its code."""
+    import io
+    import zipfile
+    rec = _find_function_app(app_name)
+    if not rec:
+        return JSONResponse(status_code=404, content={"error": f"Function App '{app_name}' not found in any space"})
+    data = await request.body()
+    try:
+        z = zipfile.ZipFile(io.BytesIO(data))
+    except Exception:
+        return JSONResponse(status_code=400, content={"error": "Body is not a zip archive"})
+    names = z.namelist()
+    pick = next((n for n in ("function_app.py", "main.py", "__init__.py") if n in names), None) \
+        or next((n for n in names if n.endswith("/__init__.py") and n.count("/") == 1), None) \
+        or next((n for n in names if n.endswith(".py") and "/" not in n), None)
+    if not pick:
+        return JSONResponse(status_code=400, content={"error": "No python entry module found (function_app.py, main.py or <fn>/__init__.py)"})
+    props = rec.setdefault("properties", {})
+    props["code"] = z.read(pick).decode("utf-8")
+    props["entryPoint"] = "main"
+    props["runtime"] = "python"
+    return Response(content="Deployment successful.", status_code=200, media_type="text/plain")
 
 
 # ----------------------------------------------------------------------------
@@ -1233,7 +1261,14 @@ def register(app) -> None:
     async def cosmos_dispatch(account: str, request: Request, rest: str = ""):
         return await _cosmos_handle(account, rest, request)
 
-    @app.post("/azure-data/functions/{app_name}/{function_name}", include_in_schema=False)
+    @app.api_route("/azure-data/functions/{app_name}/api/zipdeploy", methods=["POST", "PUT"], include_in_schema=False)
+    async def function_app_zipdeploy(app_name: str, request: Request):
+        return await _function_app_zipdeploy(app_name, request)
+
+    FN_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]
+
+    @app.api_route("/azure-data/functions/{app_name}/api/{function_name}", methods=FN_METHODS, include_in_schema=False)
+    @app.api_route("/azure-data/functions/{app_name}/{function_name}", methods=FN_METHODS, include_in_schema=False)
     async def function_app_invoke(app_name: str, function_name: str, request: Request):
         return await _function_app_handle(app_name, function_name, request)
 

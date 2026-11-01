@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, Field, AliasChoices
+from pydantic import BaseModel, Field, AliasChoices, model_validator
 
 
 # ---------------------------------------------------------------------------
@@ -426,6 +426,49 @@ class LambdaFunctionRequest(BaseModel):
     # Same dual-shape we applied to RDS.
     tags: list[dict[str, str]] | dict[str, str] | None = None
     layers: list[str] = []
+    extra_files: dict[str, str] = {}
+
+    @model_validator(mode="before")
+    @classmethod
+    def _from_aws_wire(cls, data):
+        """Official-SDK CreateFunction body (Runtime/Handler/Role/Code{ZipFile}/Environment{Variables}/
+        MemorySize/Timeout) -> this model. The uploaded zip's handler module becomes `code`
+        (it used to be dropped, so every SDK-created function ran the canned template)."""
+        if not isinstance(data, dict):
+            return data
+        d = dict(data)
+        for aws, own in (("Runtime", "runtime"), ("Handler", "handler"), ("Role", "role"),
+                         ("Description", "description"), ("Timeout", "timeout"),
+                         ("MemorySize", "memory_size"), ("Layers", "layers")):
+            if aws in d and own not in d:
+                d[own] = d.pop(aws)
+        env = d.get("Environment")
+        if isinstance(env, dict) and "environment" not in d:
+            d["environment"] = env.get("Variables") or {}
+        if isinstance(d.get("Tags"), dict) and "tags" not in d:
+            d["tags"] = d.pop("Tags")
+        code = d.get("Code")
+        if isinstance(code, dict) and not d.get("code"):
+            import base64, io, zipfile
+            if code.get("ZipFile"):
+                try:
+                    zf = zipfile.ZipFile(io.BytesIO(base64.b64decode(code["ZipFile"])))
+                    handler = str(d.get("handler") or "lambda_function.lambda_handler")
+                    mod = handler.rsplit(".", 1)[0].replace(".", "/") + ".py"
+                    names = zf.namelist()
+                    pick = mod if mod in names else next((n for n in names if n.endswith(".py")), "")
+                    if pick:
+                        d["code"] = zf.read(pick).decode("utf-8")
+                        if "." in handler and pick != mod:   # handler module named differently from the file
+                            d["handler"] = pick[:-3].replace("/", ".") + "." + handler.rsplit(".", 1)[1]
+                    d["extra_files"] = {n: zf.read(n).decode("utf-8") for n in names
+                                        if n.endswith(".py") and n != pick and not n.endswith("/") and ".." not in n and not n.startswith("/")}
+                except Exception:
+                    pass
+            elif code.get("Source"):
+                d["code"] = str(code["Source"])
+        d.pop("Code", None)
+        return d
 
 
 class LambdaFunctionUpdateRequest(BaseModel):

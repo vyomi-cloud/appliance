@@ -44,6 +44,7 @@ CORES = [
     "gcp_iam_core.py",                              # GCP: Cloud IAM REST (SA + policy eval)
     "gcp_cloudsql_core.py",                         # GCP: Cloud SQL Admin REST (control plane)
     "gcp_artifactregistry_core.py",                 # GCP: Artifact Registry REST v1 (repositories, packages, versions, tags, docker images)
+    "function_shims.py",                            # flask / functions_framework / azure.functions shims + request plumbing for function code
     "gcp_console_tabs.py",                          # GCP console resource-detail tabs (validation + records no engine models)
     "instance_catalog.py",                          # machine-type catalog (vCPU/RAM per GCE/EC2/Azure size)
     "azure_blob_core.py",                           # Azure: Blob REST (native azure-storage-blob)
@@ -75,6 +76,7 @@ CORES = [
     "aws_console_detail.py",                       # AWS console resource-detail tab model (shared with offline routes/aws_console_detail.py)
     "logs_core.py",                                # expansion AWS: CloudWatch Logs (log groups/streams/events/insights) — vendored VERBATIM
     "persistent_store.py",                          # v2.4.0: file-backed (sqlite) substrate — the anti-drift gate
+    "nano_triggers.py",                             # Nano: Eventarc / Event Grid delivery + /gcf and function-app data planes (in-browser)
     "aws_wire_router.py",                            # native-wire front door (relay/bridge)
     "azure_cognitiveservices_core.py",             # expansion Azure: AI services (Microsoft.CognitiveServices accounts, deployments, keys) — vendored VERBATIM
     "azure_monitor_core.py",                      # expansion Azure: Monitor (Microsoft.Insights action groups, alerts, autoscale) — vendored VERBATIM

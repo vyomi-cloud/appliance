@@ -37,8 +37,13 @@ _eventbridge_targets: dict[str, list] = {}
 # ============================================================================
 # AWS EventBridge — JSON-RPC at "/" dispatched by X-Amz-Target
 # ============================================================================
+# Delivery hooks the appliance installs (server.py): real SQS enqueue + Lambda invoke.
+EB_HOOKS: dict = {"sqs": None, "lambda": None}
+
+
 def _eventbridge_match_event(rule: dict, event: dict) -> bool:
-    """Check if an event matches a rule's EventPattern (simple field matching)."""
+    """Match an event against a rule's EventPattern with the full EventBridge pattern
+    language (shared with the Nano wire: core/eventbridge_core)."""
     pattern = rule.get("EventPattern")
     if not pattern:
         return False
@@ -49,20 +54,23 @@ def _eventbridge_match_event(rule: dict, event: dict) -> bool:
             return False
     if not isinstance(pattern, dict):
         return False
-    for field, expected_values in pattern.items():
-        if not isinstance(expected_values, list):
-            expected_values = [expected_values]
-        event_value = event.get(field) or event.get(field.replace("-", "_"))
-        if event_value is None:
-            # Try detail sub-fields for nested patterns
-            detail = event.get("detail", {})
-            if isinstance(detail, dict):
-                event_value = detail.get(field)
-        if event_value is None:
-            return False
-        if event_value not in expected_values:
-            return False
-    return True
+    from core import eventbridge_core as ebc
+    return ebc._match_pattern(pattern, event)
+
+
+def _eventbridge_deliver(rule_name: str, rule: dict, payload: dict) -> None:
+    """Deliver a matched event to the rule's SQS / Lambda targets (Input/InputPath/InputTransformer honoured)."""
+    from core import eventbridge_core as ebc
+    for tgt in _eventbridge_targets.get(rule_name, []):
+        arn = str(tgt.get("Arn", ""))
+        body_str = ebc._target_input(tgt, payload, json.dumps(payload))
+        try:
+            if ":sqs:" in arn and EB_HOOKS["sqs"]:
+                EB_HOOKS["sqs"](arn, body_str)
+            elif (":lambda:" in arn or ":function:" in arn) and EB_HOOKS["lambda"]:
+                EB_HOOKS["lambda"](ebc._fn_name(arn), body_str)
+        except Exception:
+            pass   # EventBridge swallows target failures (retry/DLQ), never fails PutEvents
 
 
 async def _aws_eventbridge_dispatch(target: str, body: dict, space: str) -> dict | None:
@@ -81,7 +89,7 @@ async def _aws_eventbridge_dispatch(target: str, body: dict, space: str) -> dict
                 "id": uuid.uuid4().hex,
                 "detail-type": entry.get("DetailType", ""),
                 "source": source,
-                "account": "000000000000",
+                "account": "123456789012",
                 "time": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                 "region": "us-east-1",
                 "resources": entry.get("Resources", []),
@@ -96,6 +104,7 @@ async def _aws_eventbridge_dispatch(target: str, body: dict, space: str) -> dict
                 if rule_bus != bus:
                     continue
                 if _eventbridge_match_event(rule, payload):
+                    _eventbridge_deliver(rule_name, rule, payload)
                     targets = _eventbridge_targets.get(rule_name, [])
                     for tgt in targets:
                         tgt_subject = f"aws.eventbridge.rule.{rule_name}.{tgt.get('Id', 'default')}"
@@ -225,7 +234,9 @@ def _register_gcp(app: FastAPI) -> None:
     @app.post("/v1/projects/{project}/locations/{loc}/triggers")
     async def gcp_eventarc_create_trigger(project: str, loc: str, request: Request):
         body = await request.json()
-        name = body.get("name") or body.get("triggerId") or f"trigger-{uuid.uuid4().hex[:8]}"
+        # triggerId is a QUERY parameter in the real API; the body forms stay accepted for the console.
+        name = (request.query_params.get("triggerId") or body.get("triggerId")
+                or str(body.get("name") or "").rsplit("/", 1)[-1] or f"trigger-{uuid.uuid4().hex[:8]}")
         trigger = {
             "name": f"projects/{project}/locations/{loc}/triggers/{name}",
             "uid": uuid.uuid4().hex,
@@ -356,26 +367,19 @@ def _register_azure(app: FastAPI) -> None:
     # The topic `endpoint` ARM shows ends in /api/events (that is what the SDK posts to); /events is the short form.
     @app.post("/azure-data/eventgrid/{topic}/api/events")
     @app.post("/azure-data/eventgrid/{topic}/events")
+    @app.post("/azure-data/eventgrid/{topic}/api/events")   # the endpoint ARM shows on the topic (properties.endpoint)
     async def az_eventgrid_publish(topic: str, request: Request):
+        from core import azure_eventgrid_delivery as egd
         body = await request.json()
-        events = body if isinstance(body, list) else [body]
+        events = egd.normalize_published(body, request.headers.get("content-type", ""), topic)
         published = 0
-        for ev in events:
-            subject = f"azure.eventgrid.{topic}"
-            payload = {
-                "id": ev.get("id") or uuid.uuid4().hex,
-                "topic": ev.get("topic", topic),
-                "subject": ev.get("subject", ""),
-                "eventType": ev.get("eventType", "Default"),
-                "eventTime": ev.get("eventTime") or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-                "data": ev.get("data", {}),
-                "dataVersion": ev.get("dataVersion", "1.0"),
-                "metadataVersion": "1",
-            }
-            if nc.publish(subject, payload):
+        for payload in events:
+            if nc.publish(f"azure.eventgrid.{topic}", payload):
                 published += 1
+        # Deliver to the topic's event subscriptions (webhook / storage queue / function).
+        delivered = egd.deliver(topic, events)
         # Real Event Grid returns 200 with no body on success.
-        return JSONResponse({"published": published, "count": len(events)}, status_code=200)
+        return JSONResponse({"published": published, "count": len(events), "subscriptions": delivered}, status_code=200)
 
 
 # ============================================================================

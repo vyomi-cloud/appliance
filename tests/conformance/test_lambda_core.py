@@ -82,6 +82,20 @@ def run(store=None):
     _check("Function URL invoke maps {statusCode, body} to HTTP", ur.status == 200 and ur.body == b"hello url" and ur.media_type == "text/plain")
     _check("DeleteFunctionUrlConfig 204", lam.dispatch(s, "DELETE", U, {}, {}, b"").status == 204)
     _check("deleted Function URL no longer invokes", lam.url_invoke(s, uid, "GET", "", {}, {}, b"").status == 404)
+    # A REAL zip archive (what boto3 sends), custom handler module, context attributes, captured logs.
+    import io, zipfile
+    zb = io.BytesIO()
+    with zipfile.ZipFile(zb, "w") as z:
+        z.writestr("app.py", "def h(event, context):\n    print('LOGLINE', event['n'])\n"
+                             "    return {'n2': event['n'] * 2, 'fn': context.function_name}\n")
+    call("POST", API, {"FunctionName": "zipfn", "Handler": "app.h",
+                       "Code": {"ZipFile": base64.b64encode(zb.getvalue()).decode()}})
+    r = lam.dispatch(s, "POST", f"{API}/zipfn/invocations", {}, {"x-amz-log-type": "Tail"}, b'{"n": 21}')
+    _check("real zip: uploaded handler runs", json.loads(r.body) == {"n2": 42, "fn": "zipfn"})
+    _check("LogType=Tail returns the captured print",
+           "LOGLINE 21" in base64.b64decode(r.headers["X-Amz-Log-Result"]).decode())
+    _check("InvocationType=Event -> 202",
+           lam.dispatch(s, "POST", f"{API}/zipfn/invocations", {}, {"x-amz-invocation-type": "Event"}, b'{"n": 1}').status == 202)
 
     _check("DeleteFunction 204", call("DELETE", f"{API}/adder").status == 204)
 

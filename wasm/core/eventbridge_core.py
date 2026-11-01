@@ -51,28 +51,82 @@ def _rule_arn(store, bus: str, name: str) -> str:
     return f"arn:aws:events:{REGION}:{store.account_id}:rule/{name}"
 
 
-# ── event-pattern matching (a faithful subset) ─────────────────────────────
-def _match_value(cond, value) -> bool:
+# ── event-pattern matching (the standard EventBridge pattern language) ─────
+def _num_ok(cond, value) -> bool:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return False
+    c = list(cond) if isinstance(cond, (list, tuple)) else []
+    if not c or len(c) % 2:
+        return False
+    for i in range(0, len(c), 2):
+        op, ref = c[i], c[i + 1]
+        if isinstance(ref, bool) or not isinstance(ref, (int, float)):
+            return False
+        if not ((op == "=" and value == ref) or (op == ">" and value > ref) or (op == ">=" and value >= ref)
+                or (op == "<" and value < ref) or (op == "<=" and value <= ref)):
+            return False
+    return True
+
+
+def _wild(pat: str, value) -> bool:
+    return isinstance(value, str) and re.fullmatch(".*".join(re.escape(x) for x in pat.split("*")), value, re.S) is not None
+
+
+def _match_leaf(cond, value) -> bool:
+    """One leaf condition against ONE scalar event value."""
     if isinstance(cond, dict):
         if "prefix" in cond:
-            return isinstance(value, str) and value.startswith(str(cond["prefix"]))
+            p = cond["prefix"]
+            if isinstance(p, dict) and "equals-ignore-case" in p:
+                return isinstance(value, str) and value.lower().startswith(str(p["equals-ignore-case"]).lower())
+            return isinstance(value, str) and value.startswith(str(p))
+        if "suffix" in cond:
+            return isinstance(value, str) and value.endswith(str(cond["suffix"]))
+        if "equals-ignore-case" in cond:
+            return isinstance(value, str) and value.lower() == str(cond["equals-ignore-case"]).lower()
+        if "wildcard" in cond:
+            return _wild(str(cond["wildcard"]), value)
+        if "numeric" in cond:
+            return _num_ok(cond["numeric"], value)
         if "anything-but" in cond:
             ab = cond["anything-but"]
+            if isinstance(ab, dict):                      # {"anything-but": {"prefix": "x"}}
+                return value is not None and not _match_leaf(ab, value)
             ab = ab if isinstance(ab, list) else [ab]
-            return value not in ab
-        if "exists" in cond:
-            return (value is not None) == bool(cond["exists"])
+            return value is not None and value not in ab
         return False
     return cond == value
 
 
+def _match_value(cond, value) -> bool:
+    if isinstance(cond, dict) and "exists" in cond:
+        return (value is not None) == bool(cond["exists"])
+    if isinstance(cond, dict) and "anything-but" in cond and isinstance(value, list):
+        return all(_match_leaf(cond, v) for v in value) and bool(value)
+    if isinstance(value, list):                            # an array event value matches if ANY element does
+        return any(_match_leaf(cond, v) for v in value)
+    return _match_leaf(cond, value)
+
+
+_LEAF_OPS = ("prefix", "suffix", "anything-but", "exists", "numeric", "equals-ignore-case", "wildcard")
+
+
 def _match_pattern(pattern: dict, event: dict) -> bool:
-    """Every key in the pattern must match; a key matches if the event's value is
-    in the listed set (OR). Nested dicts (e.g. `detail`) recurse."""
+    """Every key in the pattern must match (AND); a leaf array is an OR of its values;
+    nested dicts (e.g. `detail`) recurse; `$or` is a list of alternative sub-patterns."""
+    if not isinstance(pattern, dict):
+        return False
     for key, expected in pattern.items():
-        actual = event.get(key)
-        if isinstance(expected, dict) and not any(k in expected for k in ("prefix", "anything-but", "exists")):
-            if not isinstance(actual, dict) or not _match_pattern(expected, actual):
+        if key == "$or":
+            if not any(_match_pattern(alt, event) for alt in (expected or [])):
+                return False
+            continue
+        actual = event.get(key) if isinstance(event, dict) else None
+        if isinstance(expected, dict) and not any(k in expected for k in _LEAF_OPS):
+            if isinstance(actual, list):                   # arrays of objects: any element
+                if not any(isinstance(el, dict) and _match_pattern(expected, el) for el in actual):
+                    return False
+            elif not isinstance(actual, dict) or not _match_pattern(expected, actual):
                 return False
             continue
         options = expected if isinstance(expected, list) else [expected]
@@ -203,7 +257,66 @@ def _deliver_sns(store, topic_arn, body_str):
         pass
 
 
-def _put_events(store, body):
+# Offline hook: the appliance's own Lambda registry (server.py) is not an `lambda_core` store.
+_LAMBDA_INVOKER = None
+
+
+def set_lambda_invoker(fn) -> None:
+    """fn(function_name, payload_json_str) -> None. Installed by the offline appliance so
+    EventBridge Lambda targets run the appliance's real functions."""
+    global _LAMBDA_INVOKER
+    _LAMBDA_INVOKER = fn
+
+
+def _fn_name(arn: str) -> str:
+    return arn.split(":function:", 1)[-1].split(":", 1)[0] if ":function:" in arn else arn
+
+
+def _deliver_lambda(lambda_store, arn, body_str):
+    """Lambda rule target: asynchronous invoke with the (transformed) event as the payload.
+    A failed delivery is swallowed (EventBridge retries then DLQs), never a PutEvents error."""
+    try:
+        name = _fn_name(arn)
+        if _LAMBDA_INVOKER is not None:
+            _LAMBDA_INVOKER(name, body_str)
+        elif lambda_store is not None:
+            try:
+                from core import lambda_core
+            except ImportError:  # Pyodide flat layout
+                import lambda_core  # type: ignore
+            lambda_core.dispatch(lambda_store, "POST", f"/2015-03-31/functions/{name}/invocations", {}, {},
+                                 body_str.encode("utf-8"))
+    except Exception:
+        pass
+
+
+def route_event(rules, bus, event_obj, envelope, send_sqs, invoke_lambda, publish_sns):
+    """Match `event_obj` against every ENABLED rule on `bus` and hand each matching target
+    its (Input/InputPath/InputTransformer-shaped) body via the three delivery callbacks.
+    Shared by the Nano wire (eventbridge_core) and the offline appliance. Returns #deliveries."""
+    base_str = json.dumps(envelope)
+    n = 0
+    for rule in rules:
+        if rule.get("bus", "default") != bus or rule.get("state") != "ENABLED":
+            continue
+        if not _match_pattern(rule.get("pattern", {}), event_obj):
+            continue
+        for tgt in rule["targets"].values():
+            arn = tgt["Arn"]
+            body_str = _target_input(tgt, envelope, base_str)
+            if ":sqs:" in arn:
+                send_sqs(arn, body_str)
+            elif ":sns:" in arn:
+                publish_sns(arn, body_str)
+            elif ":lambda:" in arn or ":function:" in arn:
+                invoke_lambda(arn, body_str)
+            else:
+                continue
+            n += 1
+    return n
+
+
+def _put_events(store, body, lambda_store=None):
     entries_out = []
     for entry in body.get("Entries") or []:
         source = entry.get("Source", "")
@@ -214,25 +327,22 @@ def _put_events(store, body):
             detail = {}
         bus = str(entry.get("EventBusName", "default") or "default")
         event_id = uuid.uuid4().hex
+        resources = entry.get("Resources") or []
         # The event object rules are matched against (EventBridge's flat shape).
         event_obj = {"source": source, "detail-type": detail_type, "detail": detail,
-                     "account": store.account_id, "region": REGION}
-        envelope = {"version": "0", "id": event_id, "source": source,
-                    "detail-type": detail_type, "detail": detail, "time": _now_iso()}
-        base_str = json.dumps(envelope)
-        for rule in _rules(store).values():
-            if rule.get("bus", "default") != bus or rule.get("state") != "ENABLED":
-                continue
-            if not _match_pattern(rule.get("pattern", {}), event_obj):
-                continue
-            for tgt in rule["targets"].values():
-                arn = tgt["Arn"]
-                body_str = _target_input(tgt, envelope, base_str)
-                queue = store.get_queue_by_arn(arn)
-                if queue is not None:
-                    sqs_core.enqueue(store, queue, body_str)
-                elif ":sns:" in arn:
-                    _deliver_sns(store, arn, body_str)
+                     "account": store.account_id, "region": REGION, "resources": resources}
+        envelope = {"version": "0", "id": event_id, "detail-type": detail_type, "source": source,
+                    "account": store.account_id, "time": _now_iso(), "region": REGION,
+                    "resources": resources, "detail": detail}
+
+        def send_sqs(arn, body_str):
+            queue = store.get_queue_by_arn(arn)
+            if queue is not None:
+                sqs_core.enqueue(store, queue, body_str)
+
+        route_event(_rules(store).values(), bus, event_obj, envelope, send_sqs,
+                    lambda arn, b: _deliver_lambda(lambda_store, arn, b),
+                    lambda arn, b: _deliver_sns(store, arn, b))
         entries_out.append({"EventId": event_id})
     store.persist()
     return EventsResponse(body={"FailedEntryCount": 0, "Entries": entries_out})
@@ -252,7 +362,7 @@ _OPS = {
 }
 
 
-def dispatch(store: MessagingStore, target: str, payload: dict | None = None) -> EventsResponse:
+def dispatch(store: MessagingStore, target: str, payload: dict | None = None, lambda_store=None) -> EventsResponse:
     """Native EventBridge JSON router. `target` is the X-Amz-Target header,
     e.g. "AWSEvents.PutEvents"."""
     body = payload if isinstance(payload, dict) else {}
@@ -262,6 +372,8 @@ def dispatch(store: MessagingStore, target: str, payload: dict | None = None) ->
         return EventsResponse(status=400, body={"__type": "UnknownOperationException",
                                                 "message": f"Unknown operation {action}."})
     try:
+        if action == "PutEvents":
+            return _put_events(store, body, lambda_store)
         return op(store, body)
     except _E as e:
         return EventsResponse(status=400, body={"__type": e.code, "message": e.message})

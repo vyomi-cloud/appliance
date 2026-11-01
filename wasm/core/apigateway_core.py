@@ -176,6 +176,10 @@ def _match_resource(api: dict, path: str):
     return None, {}
 
 
+# Set by the offline server: fn(name, event) -> the function's response payload dict (or {"_error": True}).
+LAMBDA_INVOKER = None
+
+
 def invoke(store, api_id, stage, method, path, headers=None, query=None,
            body=b"", lambda_store=None):
     """Route a request through a deployed API: match resource → method → integration
@@ -210,15 +214,23 @@ def invoke(store, api_id, stage, method, path, headers=None, query=None,
             "headers": dict(headers or {}), "queryStringParameters": dict(query or {}) or None,
             "pathParameters": path_params or None, "body": req_body, "isBase64Encoded": False,
         }
-        lam_out = lambda_core.dispatch(
-            lambda_store if lambda_store is not None else store, "POST",
-            f"/2015-03-31/functions/{fn}/invocations", {}, {}, json.dumps(event).encode())
-        if lam_out.headers.get("X-Amz-Function-Error"):
-            return _err(502, "BadGateway", "Internal server error")
-        try:
-            result = json.loads(lam_out.body.decode("utf-8"))
-        except Exception:
-            result = {}
+        if LAMBDA_INVOKER is not None:      # offline appliance: the Lambdas the console/boto3 created
+            try:
+                result = LAMBDA_INVOKER(fn, event)
+            except Exception:
+                result = {"_error": True}
+            if not isinstance(result, dict) or result.get("_error"):
+                return _err(502, "BadGateway", "Internal server error")
+        else:
+            lam_out = lambda_core.dispatch(
+                lambda_store if lambda_store is not None else store, "POST",
+                f"/2015-03-31/functions/{fn}/invocations", {}, {}, json.dumps(event).encode())
+            if lam_out.headers.get("X-Amz-Function-Error"):
+                return _err(502, "BadGateway", "Internal server error")
+            try:
+                result = json.loads(lam_out.body.decode("utf-8"))
+            except Exception:
+                result = {}
         # Proxy contract: the function returns {statusCode, headers, body}.
         status = int(result.get("statusCode", 200))
         out_headers = {str(k): str(v) for k, v in (result.get("headers") or {}).items()}

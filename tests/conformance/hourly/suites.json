@@ -993,6 +993,30 @@
       "timeout": 600
     },
     {
+      "id": "nano-ui-aws-event-delivery",
+      "target": "nano",
+      "cloud": "aws",
+      "kind": "ui",
+      "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-nano-event-delivery.mjs",
+      "timeout": 600
+    },
+    {
+      "id": "nano-ui-gcp-eventarc-delivery",
+      "target": "nano",
+      "cloud": "gcp",
+      "kind": "ui",
+      "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-nano-gcp-azure-triggers.mjs",
+      "timeout": 600
+    },
+    {
+      "id": "nano-core-triggers",
+      "target": "nano",
+      "cloud": "gcp",
+      "kind": "api",
+      "cmd": "python3 tests/conformance/test_nano_triggers.py",
+      "timeout": 300
+    },
+    {
       "id": "nano-ui-aws-stepfunctions",
       "target": "nano",
       "cloud": "aws",
@@ -1671,6 +1695,30 @@
       "kind": "ui",
       "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/roundtrip/ui-sdk-roundtrip.mjs",
       "timeout": 600
+    },
+    {
+      "id": "offline-post-create-aws-event-delivery",
+      "target": "offline",
+      "cloud": "aws",
+      "kind": "api",
+      "cmd": "python3 tests/conformance/post_create/probes/event_delivery.py aws {ENDPOINT}",
+      "timeout": 300
+    },
+    {
+      "id": "offline-post-create-gcp-event-delivery",
+      "target": "offline",
+      "cloud": "gcp",
+      "kind": "api",
+      "cmd": "python3 tests/conformance/post_create/probes/event_delivery.py gcp {ENDPOINT}",
+      "timeout": 300
+    },
+    {
+      "id": "offline-post-create-azure-event-delivery",
+      "target": "offline",
+      "cloud": "azure",
+      "kind": "api",
+      "cmd": "python3 tests/conformance/post_create/probes/event_delivery.py azure {ENDPOINT}",
+      "timeout": 300
     },
     {
       "id": "offline-post-create-aws-ec2-ssh",

@@ -176,6 +176,12 @@ try:
 except Exception:
     pass
 try:
+    from core import gcp_eventing as _gcp_eventing
+    _gcp_eventing.register(app)
+    app.add_middleware(_gcp_eventing.EventTap)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[gcp-eventing] skipped: {_e}")
+try:
     from core import cedar_routes as _cedar_routes
     _cedar_routes.register(app)
 except Exception:
@@ -3586,6 +3592,11 @@ def _lambda_sync_code_artifact(function: dict) -> None:
     code_path = function_dir / f"{module_name}.py"
     code = function.get("code") or _lambda_default_code(function["function_name"])
     code_path.write_text(code, encoding="utf-8")
+    for rel, text in (function.get("extra_files") or {}).items():   # other modules from the uploaded zip
+        dest = (function_dir / rel).resolve()
+        if function_dir.resolve() in dest.parents:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_text(text, encoding="utf-8")
     function["code_path"] = str(code_path)
     function["workdir"] = str(function_dir)
 
@@ -3753,6 +3764,7 @@ def _lambda_create_function_record(req: LambdaFunctionRequest) -> dict:
         "permissions": [],
         "tags": copy.deepcopy(req.tags or []),
         "layers": list(req.layers) if req.layers else [],
+        "extra_files": dict(getattr(req, "extra_files", None) or {}),
     }
     function["code_sha256"] = base64.b64encode(hashlib.sha256(function["code"].encode("utf-8")).digest()).decode("ascii")
     _lambda_sync_code_artifact(function)
@@ -3973,10 +3985,15 @@ def _lambda_run_handler(function: dict, event_payload: Any) -> dict:
         handler = getattr(module, handler_name)
 
         class Context:
-            function_name = ""
-            memory_limit_in_mb = 0
-            invoked_function_arn = ""
-            aws_request_id = ""
+            function_name = os.environ.get("AWS_LAMBDA_FUNCTION_NAME", "")
+            function_version = "$LATEST"
+            memory_limit_in_mb = int(os.environ.get("AWS_LAMBDA_FUNCTION_MEMORY_SIZE", "128") or 128)
+            invoked_function_arn = os.environ.get("VYOMI_LAMBDA_ARN", "")
+            aws_request_id = os.environ.get("VYOMI_LAMBDA_REQUEST_ID", "")
+            log_group_name = "/aws/lambda/" + function_name
+            log_stream_name = ""
+            def get_remaining_time_in_millis(self):
+                return 3000
 
         stdout = io.StringIO()
         stderr = io.StringIO()
@@ -4009,6 +4026,10 @@ def _lambda_run_handler(function: dict, event_payload: Any) -> dict:
         env={
             **os.environ,
             **(function.get("environment") or {}),
+            "AWS_LAMBDA_FUNCTION_NAME": function.get("function_name", ""),
+            "AWS_LAMBDA_FUNCTION_MEMORY_SIZE": str(function.get("memory_size", 128)),
+            "VYOMI_LAMBDA_ARN": function.get("function_arn", ""),
+            "VYOMI_LAMBDA_REQUEST_ID": str(uuid.uuid4()),
             "PYTHONPATH": str(workdir) + (os.pathsep + os.environ.get("PYTHONPATH", "") if os.environ.get("PYTHONPATH") else ""),
         },
     )
@@ -17317,7 +17338,9 @@ def _gcp_functions_make_operation(project: str, location: str, fn_view: dict, op
 def _gcp_functions_view(project: str, location: str, function: dict) -> dict:
     name = str(function.get("name") or "")
     # Trigger URL points at the simulator (this is where the function actually runs).
-    uri = f"{_gcp_public_base()}/v1/projects/{project}/locations/{location}/functions/{name}:call"
+    # The HTTPS trigger URL: the handler gets a real request and returns the real response here
+    # (the `:call` management route keeps the {executionId,status,result} envelope).
+    uri = f"{_gcp_public_base()}/gcf/{project}/{location}/{name}"
     service_config = dict(function.get("serviceConfig") or {})
     service_config["uri"] = uri
     service_config.setdefault("availableMemory", "256M")
@@ -23775,6 +23798,44 @@ async def api_console_azurevm_exec(instance_id: str, request: Request):
     })
     return {"message": "Console command executed", "instance_id": instance_id, **result}
 
+
+# ── Event delivery hooks: EventBridge targets + Step Functions Lambda tasks use the appliance's REAL
+# SQS queues and Lambda functions (the shared cores otherwise look in their own, empty stores).
+def _eb_send_sqs(arn: str, body: str) -> None:
+    queue = _sqs_find_queue(arn.rsplit(":", 1)[-1])
+    if queue is not None:
+        _sqs_enqueue_message(queue, body, source="eventbridge")
+        _persist_state()
+
+
+def _eb_invoke_lambda(name: str, body: str) -> None:
+    try:
+        payload = json.loads(body) if body else {}
+    except Exception:
+        payload = {"raw": body}
+    _lambda_invoke_function(name, payload, invocation_type="Event", source="events.amazonaws.com")
+
+
+def _sfn_invoke_lambda(name: str, payload: Any) -> dict:
+    """Synchronous Lambda call for a Step Functions Task: {found, error, payload}."""
+    if _lambda_find_function(name) is None:
+        return {"found": False}
+    rec = _lambda_invoke_function(name, payload if payload is not None else {}, source="states.amazonaws.com")
+    if rec.get("status") == "error":
+        tb = (rec.get("traceback") or "").strip().splitlines()
+        last = tb[-1] if tb else ""
+        etype = (last.split(":", 1)[0].strip().rsplit(".", 1)[-1]) if ":" in last else "Error"
+        return {"found": True, "error": {"errorType": etype, "errorMessage": rec.get("error", "")}}
+    return {"found": True, "payload": rec.get("response_payload")}
+
+
+try:
+    from core import nats_routes as _nr_hooks, stepfunctions_core as _sfn_hooks
+    _nr_hooks.EB_HOOKS["sqs"] = _eb_send_sqs
+    _nr_hooks.EB_HOOKS["lambda"] = _eb_invoke_lambda
+    _sfn_hooks.set_lambda_invoker(_sfn_invoke_lambda)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[eventing] delivery hooks skipped: {_e}")
 
 # ── v2.4.0 unified wire ingress (opt-in) ────────────────────────────
 # When VYOMI_UNIFIED_INGRESS is set, native cloud-wire requests are served by

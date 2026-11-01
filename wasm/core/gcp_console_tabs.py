@@ -899,7 +899,7 @@ _FN_SAFE_MODULES = {"json", "math", "datetime", "base64", "re", "random", "uuid"
                     "functools", "collections", "string", "decimal", "statistics", "textwrap", "time"}
 
 
-def run_python_function(code: str, entry: str, event, env: dict | None = None) -> dict:
+def run_python_function(code: str, entry: str, event, env: dict | None = None, invoke=None) -> dict:
     """Run a Python function's source in-process (Nano: Pyodide) with a restricted sandbox:
     computational stdlib only, `os.environ` = the function's runtime variables, print → logs.
     Same contract as core/gcp_function_runtime.execute: {status, result, logs[, error]}."""
@@ -916,10 +916,18 @@ def run_python_function(code: str, entry: str, event, env: dict | None = None) -
         def getenv(k, d=None):
             return _Os.environ.get(k, d)
 
+    try:
+        from core import function_shims as _fs
+    except ImportError:   # pragma: no cover - flat layout
+        import function_shims as _fs  # type: ignore
+    _mods = _fs.make_modules()   # flask / functions_framework / azure.functions shims (same code as the offline runtime)
+
     def _imp(name, globals=None, locals=None, fromlist=(), level=0):
         root = name.split(".")[0]
         if root == "os":
             return _Os
+        if root in _mods:
+            return _mods[name] if (fromlist and name in _mods) else _mods[root]
         if root not in _FN_SAFE_MODULES:
             raise ImportError("module '%s' is not available in the function sandbox" % name)
         return importlib.import_module(name)
@@ -939,19 +947,72 @@ def run_python_function(code: str, entry: str, event, env: dict | None = None) -
     try:
         exec(compile(code, "main.py", "exec"), g)
         fn = g.get(entry)
+        _app = g.get("app")
+        if not callable(fn) and _app is not None and hasattr(_app, "fns"):   # azure.functions v2 model
+            fn = _app.fns.get(entry) or next((f for f in _app.fns.values() if getattr(f, "_route", None) == entry), None) \
+                or (list(_app.fns.values())[0] if len(_app.fns) == 1 else None)
         if not callable(fn):
             raise RuntimeError("Entry point %r not found in function source" % entry)
-        result = fn(event)
-        try:
-            _json.dumps(result)
-        except TypeError:
-            result = str(result)
+        if invoke is not None:
+            result = invoke(fn, _mods)
+        else:
+            result = fn(event)
+        if invoke is None:
+            try:
+                _json.dumps(result)
+            except TypeError:
+                result = str(result)
         return {"status": "SUCCESS", "result": result, "logs": "\n".join(logs)[:4000],
                 "durationMs": int((time.time() - started) * 1000)}
     except Exception as e:
         tb = traceback.format_exception_only(type(e), e)[-1].strip()
         return {"status": "ERROR", "result": None, "error": tb[:2000], "logs": "\n".join(logs)[:4000],
                 "durationMs": int((time.time() - started) * 1000)}
+
+
+def run_http_function(code: str, entry: str, request: dict, flavor: str = "gcp", env: dict | None = None) -> dict:
+    """HTTP-triggered function in the in-browser sandbox: the handler gets a Flask-like request (GCP) or an
+    azure.functions HttpRequest, and its return value IS the HTTP response -> {ok, status, headers, body(bytes), logs}."""
+    import base64 as _b64
+    try:
+        from core import function_shims as _fs
+    except ImportError:   # pragma: no cover
+        import function_shims as _fs  # type: ignore
+
+    def _call(fn, mods):
+        ns = _fs.support_namespace(mods)
+        r = ns["Request"](dict(request, body_b64=_b64.b64encode(request.get("body", b"") or b"").decode(),
+                               query=request.get("query", ""), headers=request.get("headers", {})))
+        if flavor == "azure":
+            import urllib.parse as _up
+            q = {k: v[0] for k, v in _up.parse_qs(request.get("query", ""), keep_blank_values=True).items()}
+            r = mods["azure.functions"].HttpRequest(r.method, request.get("url", ""), dict(r.headers), q, {}, r.data)
+        try:
+            return ns["_norm"](fn(r))
+        except mods["flask"]._Abort as a:
+            return (a.code, {"Content-Type": "text/html; charset=utf-8"}, str(a.description or a.code).encode())
+
+    out = run_python_function(code, entry, None, env, invoke=_call)
+    if out["status"] != "SUCCESS":
+        return {"ok": False, "status": 500, "headers": {"Content-Type": "text/plain"},
+                "body": ("Error: " + str(out.get("error"))).encode(), "logs": out.get("logs", ""), "error": out.get("error")}
+    status, headers, body = out["result"]
+    return {"ok": True, "status": status, "headers": headers, "body": body, "logs": out.get("logs", "")}
+
+
+def run_cloud_event_function(code: str, entry: str, event: dict, env: dict | None = None) -> dict:
+    """Event-triggered function in the in-browser sandbox: the handler gets a CloudEvent (attributes + .data)."""
+    try:
+        from core import function_shims as _fs
+    except ImportError:   # pragma: no cover
+        import function_shims as _fs  # type: ignore
+
+    def _call(fn, mods):
+        ns = _fs.support_namespace(mods)
+        attrs = {k: v for k, v in event.items() if k != "data"}
+        return fn(ns["CloudEvent"](attrs, event.get("data")))
+
+    return run_python_function(code, entry, None, env, invoke=_call)
 
 
 def functions_op(be, op: str, body: dict):
