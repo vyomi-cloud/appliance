@@ -39,6 +39,8 @@ const rds = async (action, body = {}) => wire("/", { method: "POST", headers: { 
 const iamXml = async (body) => wire("/", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded; charset=utf-8", authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/iam/aws4_request, SignedHeaders=host, Signature=0" }, body: new URLSearchParams(body).toString() });
 // EC2 Query protocol: form-encoded Action=..., XML response — extract tags with a small regex (no DOMParser in this context).
 const ec2 = async (action, params = {}) => wire("/", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded; charset=utf-8", authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/ec2/aws4_request, SignedHeaders=host, Signature=0" }, body: new URLSearchParams({ Action: action, ...params }).toString() });
+// ELBv2 is a separate AWS service ("elasticloadbalancing") sharing the same /_wire endpoint.
+const elbv2 = async (action, params = {}) => wire("/", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded; charset=utf-8", authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/elasticloadbalancing/aws4_request, SignedHeaders=host, Signature=0" }, body: new URLSearchParams({ Action: action, ...params }).toString() });
 const cw = async (op, body) => JSON.parse(await wire("/", { method: "POST", headers: { "x-amz-target": `GraniteServiceVersion20100801.${op}`, "content-type": "application/x-amz-json-1.0", authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/monitoring/aws4_request, SignedHeaders=host, Signature=0" }, body: JSON.stringify(body) }));
 const cwlogs = async (op, body) => JSON.parse(await wire("/", { method: "POST", headers: { "x-amz-target": `Logs_20140328.${op}`, "content-type": "application/x-amz-json-1.1", authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/logs/aws4_request, SignedHeaders=host, Signature=0" }, body: JSON.stringify(body) }));
 const cfn = async (action, params = {}) => wire("/", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded; charset=utf-8", authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/cloudformation/aws4_request, SignedHeaders=host, Signature=0" }, body: new URLSearchParams({ Action: action, ...params }).toString() });
@@ -785,6 +787,51 @@ try {
   // EC2: terminate the smoke instance and clean up the security group over the wire.
   if (instanceId) await ec2("TerminateInstances", { "InstanceId.1": instanceId });
   await ec2("DeleteSecurityGroup", { GroupId: sgId });
+
+  // EC2 Load Balancing (core/elbv2_core.py, a separate "elasticloadbalancing" AWS service):
+  // create a target group and load balancer through the UI wizards (UI → CLI direction),
+  // then prove a target registered directly over the native wire shows up in the UI (CLI → UI).
+  const TGN = `v4-smoke-tg-${Date.now() % 100000}`;
+  await page.goto(UI + "#/ec2/create-target-group");
+  await page.getByLabel("Target group name").fill(TGN);
+  await page.getByLabel("VPC", { exact: true }).first().click();
+  await page.getByRole("option").first().click();
+  await page.getByRole("button", { name: "Create target group", exact: true }).click();
+  await page.getByRole("heading", { name: TGN }).waitFor({ timeout: 10000 });
+  const tgXml = await elbv2("DescribeTargetGroups", { "Names.member.1": TGN });
+  const tgArn = xtag(tgXml, "TargetGroupArn");
+  check("EC2 create target group (UI) → visible over native ELBv2 wire", !!tgArn, tgXml.slice(0, 200));
+  await shot("18-ec2-target-group");
+
+  const LBN = `v4-smoke-lb-${Date.now() % 100000}`;
+  await page.goto(UI + "#/ec2/create-load-balancer");
+  await page.getByLabel("Load balancer name").fill(LBN);
+  const vpcSelect = page.getByLabel("VPC", { exact: true }).first();
+  await vpcSelect.click();
+  await page.getByRole("option").first().click();
+  const mappings = page.getByLabel("Subnet mappings").first();
+  await mappings.click();
+  await page.getByRole("option").first().click();
+  await page.getByRole("option").nth(1).click();
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "Create load balancer", exact: true }).click();
+  await page.getByRole("heading", { name: LBN }).waitFor({ timeout: 10000 });
+  const lbXml = await elbv2("DescribeLoadBalancers", { "Names.member.1": LBN });
+  const lbArn = xtag(lbXml, "LoadBalancerArn");
+  check("EC2 create load balancer (UI wizard) → visible over native ELBv2 wire", !!lbArn, lbXml.slice(0, 200));
+  await shot("19-ec2-load-balancer");
+
+  if (tgArn) {
+    await elbv2("RegisterTargets", { TargetGroupArn: tgArn, "Targets.member.1.Id": "i-0123456789abcdef0" });
+    await page.goto(UI + `#/ec2/target-groups/${TGN}`);
+    await page.getByRole("tab", { name: "Targets" }).click();
+    await page.getByText("i-0123456789abcdef0").waitFor({ timeout: 10000 });
+    check("ELBv2 target registered over native wire (CLI) → visible in UI", true, "i-0123456789abcdef0");
+    await shot("19b-ec2-target-group-targets");
+  }
+
+  if (lbArn) await elbv2("DeleteLoadBalancer", { LoadBalancerArn: lbArn });
+  if (tgArn) await elbv2("DeleteTargetGroup", { TargetGroupArn: tgArn });
 
   // CloudWatch: create an alarm through the UI wizard, verify over native wire (UI → CLI direction)
   const CWA = `v4-smoke-alarm-${Date.now() % 100000}`;

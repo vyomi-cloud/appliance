@@ -3495,7 +3495,7 @@
     },
     {
       "id": "load-balancers",
-      "kind": "other",
+      "kind": "list",
       "title": "Load balancers",
       "route": "/ec2/home#LoadBalancers:",
       "breadcrumbs": [
@@ -3505,13 +3505,282 @@
       "captures": [
         "A-ec2/025-L2-load-balancers"
       ],
-      "provenance": "capture",
-      "confidence": "high",
-      "notes": "Outside Vyomi's EC2 simulation scope; console declares the page only."
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Refresh",
+        "Actions",
+        "Create load balancer"
+      ],
+      "notes": "Vyomi builds Application and Network Load Balancers on core/elbv2_core.py; Gateway Load Balancer creation is out of scope.",
+      "table": {
+        "columns": [
+          "Name",
+          "DNS name",
+          "State",
+          "VPC ID",
+          "Availability Zones",
+          "Type",
+          "Date created"
+        ],
+        "resource_label": "Load Balancers",
+        "counter": true,
+        "selection": "multi",
+        "header_actions": [
+          "Refresh",
+          "Actions",
+          "Create load balancer"
+        ],
+        "actions": [
+          "View details",
+          "Delete"
+        ],
+        "filter_placeholder": "Find load balancers by attribute or tag",
+        "empty_state": "No load balancers",
+        "pagination": true,
+        "preferences": true
+      }
+    },
+    {
+      "id": "load-balancer-detail",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "route": "/ec2/home#LoadBalancer:loadBalancerArn={resource-name}",
+      "breadcrumbs": [
+        "EC2",
+        "Load balancers",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Actions"
+      ],
+      "sections": [
+        {
+          "title": "Details",
+          "fields": [
+            {
+              "label": "DNS name",
+              "type": "readonly"
+            },
+            {
+              "label": "State",
+              "type": "readonly"
+            },
+            {
+              "label": "Type",
+              "type": "readonly"
+            },
+            {
+              "label": "Scheme",
+              "type": "readonly"
+            },
+            {
+              "label": "VPC ID",
+              "type": "readonly"
+            },
+            {
+              "label": "Availability Zones",
+              "type": "readonly"
+            },
+            {
+              "label": "Subnets",
+              "type": "readonly"
+            },
+            {
+              "label": "IP address type",
+              "type": "readonly"
+            },
+            {
+              "label": "Hosted zone",
+              "type": "readonly"
+            },
+            {
+              "label": "Date created",
+              "type": "readonly"
+            }
+          ]
+        }
+      ],
+      "tabs": [
+        "Listeners and rules",
+        "Monitoring",
+        "Security",
+        "Attributes",
+        "Tags"
+      ],
+      "tab_panels": [
+        {
+          "label": "Listeners and rules",
+          "sections": [
+            {
+              "title": "Listeners",
+              "table": {
+                "columns": [
+                  "Listener",
+                  "Default action",
+                  "SSL policy"
+                ],
+                "header_actions": [
+                  "Delete",
+                  "View/edit rules",
+                  "Add listener"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "label": "Monitoring",
+          "sections": [
+            {
+              "title": "CloudWatch metrics"
+            }
+          ]
+        },
+        {
+          "label": "Security",
+          "sections": [
+            {
+              "title": "Security groups",
+              "actions": [
+                "Edit security groups"
+              ]
+            }
+          ]
+        },
+        {
+          "label": "Attributes",
+          "sections": [
+            {
+              "title": "Attributes",
+              "actions": [
+                "Edit"
+              ]
+            }
+          ]
+        },
+        {
+          "label": "Tags",
+          "sections": [
+            {
+              "title": "Tags",
+              "table": {
+                "columns": [
+                  "Key",
+                  "Value"
+                ],
+                "header_actions": [
+                  "Manage tags"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "create-load-balancer",
+      "kind": "create",
+      "title": "Create load balancer",
+      "route": "/ec2/home#CreateLoadBalancer:",
+      "breadcrumbs": [
+        "EC2",
+        "Load balancers",
+        "Create load balancer"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Vyomi's wizard covers Application and Network Load Balancers; Gateway Load Balancer is out of scope.",
+      "sections": [
+        {
+          "title": "Load balancer type",
+          "fields": [
+            {
+              "label": "Application Load Balancer",
+              "type": "radio"
+            },
+            {
+              "label": "Network Load Balancer",
+              "type": "radio"
+            }
+          ]
+        },
+        {
+          "title": "Basic configuration",
+          "fields": [
+            {
+              "label": "Load balancer name",
+              "type": "text",
+              "required": true
+            },
+            {
+              "label": "Scheme",
+              "type": "radio"
+            },
+            {
+              "label": "IP address type",
+              "type": "radio"
+            }
+          ]
+        },
+        {
+          "title": "Network mapping",
+          "fields": [
+            {
+              "label": "VPC",
+              "type": "select",
+              "required": true
+            },
+            {
+              "label": "Mappings",
+              "type": "multiselect",
+              "required": true
+            }
+          ]
+        },
+        {
+          "title": "Security groups",
+          "fields": [
+            {
+              "label": "Security groups",
+              "type": "multiselect"
+            }
+          ]
+        },
+        {
+          "title": "Listeners and routing",
+          "fields": [
+            {
+              "label": "Protocol",
+              "type": "select"
+            },
+            {
+              "label": "Port",
+              "type": "number"
+            },
+            {
+              "label": "Default action",
+              "type": "select"
+            }
+          ]
+        },
+        {
+          "title": "Tags - optional",
+          "fields": [
+            {
+              "label": "Tags",
+              "type": "tags"
+            }
+          ]
+        }
+      ],
+      "submit": "Create load balancer"
     },
     {
       "id": "target-groups",
-      "kind": "other",
+      "kind": "list",
       "title": "Target groups",
       "route": "/ec2/home#TargetGroups:",
       "breadcrumbs": [
@@ -3521,9 +3790,241 @@
       "captures": [
         "A-ec2/026-L2-target-groups"
       ],
-      "provenance": "capture",
-      "confidence": "high",
-      "notes": "Outside Vyomi's EC2 simulation scope; console declares the page only."
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Refresh",
+        "Actions",
+        "Create target group"
+      ],
+      "table": {
+        "columns": [
+          "Name",
+          "Protocol : Port",
+          "Target type",
+          "Load balancer",
+          "VPC ID"
+        ],
+        "resource_label": "Target Groups",
+        "counter": true,
+        "selection": "multi",
+        "header_actions": [
+          "Refresh",
+          "Actions",
+          "Create target group"
+        ],
+        "actions": [
+          "View details",
+          "Delete"
+        ],
+        "filter_placeholder": "Find target groups by attribute or tag",
+        "pagination": true,
+        "preferences": true
+      }
+    },
+    {
+      "id": "target-group-detail",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "route": "/ec2/home#TargetGroup:targetGroupArn={resource-name}",
+      "breadcrumbs": [
+        "EC2",
+        "Target groups",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Actions"
+      ],
+      "sections": [
+        {
+          "title": "Details",
+          "fields": [
+            {
+              "label": "Protocol",
+              "type": "readonly"
+            },
+            {
+              "label": "Port",
+              "type": "readonly"
+            },
+            {
+              "label": "Target type",
+              "type": "readonly"
+            },
+            {
+              "label": "VPC ID",
+              "type": "readonly"
+            },
+            {
+              "label": "IP address type",
+              "type": "readonly"
+            },
+            {
+              "label": "Protocol version",
+              "type": "readonly"
+            },
+            {
+              "label": "Load balancer",
+              "type": "readonly"
+            }
+          ]
+        }
+      ],
+      "tabs": [
+        "Targets",
+        "Health checks",
+        "Monitoring",
+        "Attributes",
+        "Tags"
+      ],
+      "tab_panels": [
+        {
+          "label": "Targets",
+          "sections": [
+            {
+              "title": "Registered targets",
+              "table": {
+                "columns": [
+                  "Target",
+                  "Port",
+                  "Availability Zone",
+                  "Health status",
+                  "Health status details"
+                ],
+                "header_actions": [
+                  "Deregister",
+                  "Register targets"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "label": "Health checks",
+          "sections": [
+            {
+              "title": "Health checks",
+              "actions": [
+                "Edit"
+              ]
+            }
+          ]
+        },
+        {
+          "label": "Monitoring",
+          "sections": [
+            {
+              "title": "CloudWatch metrics"
+            }
+          ]
+        },
+        {
+          "label": "Attributes",
+          "sections": [
+            {
+              "title": "Attributes",
+              "actions": [
+                "Edit"
+              ]
+            }
+          ]
+        },
+        {
+          "label": "Tags",
+          "sections": [
+            {
+              "title": "Tags",
+              "table": {
+                "columns": [
+                  "Key",
+                  "Value"
+                ],
+                "header_actions": [
+                  "Manage tags"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "create-target-group",
+      "kind": "create",
+      "title": "Create target group",
+      "route": "/ec2/home#CreateTargetGroup:",
+      "breadcrumbs": [
+        "EC2",
+        "Target groups",
+        "Create target group"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "sections": [
+        {
+          "title": "Basic configuration",
+          "fields": [
+            {
+              "label": "Choose a target type",
+              "type": "radio"
+            },
+            {
+              "label": "Instances",
+              "type": "radio"
+            },
+            {
+              "label": "IP addresses",
+              "type": "radio"
+            },
+            {
+              "label": "Lambda function",
+              "type": "radio"
+            },
+            {
+              "label": "Target group name",
+              "type": "text",
+              "required": true
+            },
+            {
+              "label": "Protocol",
+              "type": "select"
+            },
+            {
+              "label": "Port",
+              "type": "number"
+            },
+            {
+              "label": "VPC",
+              "type": "select"
+            }
+          ]
+        },
+        {
+          "title": "Health checks",
+          "fields": [
+            {
+              "label": "Health check protocol",
+              "type": "select"
+            },
+            {
+              "label": "Health check path",
+              "type": "text"
+            }
+          ]
+        },
+        {
+          "title": "Tags - optional",
+          "fields": [
+            {
+              "label": "Tags",
+              "type": "tags"
+            }
+          ]
+        }
+      ],
+      "submit": "Create target group"
     },
     {
       "id": "trust-stores",

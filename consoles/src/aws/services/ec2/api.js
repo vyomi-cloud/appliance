@@ -229,3 +229,85 @@ export const putStatusCheckAlarm = (instanceId, { alarmName, metricName, compari
     Threshold: threshold, ComparisonOperator: comparison, AlarmActions: snsArn ? [snsArn] : [],
   });
 export const deleteStatusCheckAlarms = (names) => CW("DeleteAlarms", { AlarmNames: names });
+
+// ── VPCs (for the Load Balancer / Target Group network pickers) ─────────
+export async function describeVpcs() {
+  const r = await call("DescribeVpcs");
+  return asList(r.vpcSet?.item);
+}
+
+// ── Elastic Load Balancing v2 (ALB/NLB) — separate AWS service, signs as
+// "elasticloadbalancing"; routed by core/elbv2_core.py on the same /_wire. Field names in
+// its Query-protocol XML are already the SDK's PascalCase (no case translation needed). ──
+const ELB_SVC = "elasticloadbalancing";
+const elb = (action, params = {}) => awsQuery(ELB_SVC, action, flatten(params)).then((r) => r[`${action}Response`]?.[`${action}Result`] || {});
+
+const lbFromXml = (x) => ({ ...x, AvailabilityZones: asList(x.AvailabilityZones?.member), SecurityGroups: asList(x.SecurityGroups?.member) });
+export async function createLoadBalancer(input) {
+  const r = await elb("CreateLoadBalancer", input);
+  return lbFromXml(asList(r.LoadBalancers?.member)[0]);
+}
+export async function describeLoadBalancers(filter = {}) {
+  const r = await elb("DescribeLoadBalancers", filter);
+  return asList(r.LoadBalancers?.member).map(lbFromXml);
+}
+export const describeLoadBalancer = (arn) => describeLoadBalancers({ LoadBalancerArns: [arn] }).then((xs) => xs[0]);
+export const deleteLoadBalancer = (arn) => elb("DeleteLoadBalancer", { LoadBalancerArn: arn });
+export async function describeLoadBalancerAttributes(arn) {
+  const r = await elb("DescribeLoadBalancerAttributes", { LoadBalancerArn: arn });
+  return asList(r.Attributes?.member);
+}
+export const modifyLoadBalancerAttributes = (arn, attrs) => elb("ModifyLoadBalancerAttributes", { LoadBalancerArn: arn, Attributes: attrs });
+export const setSecurityGroups = (arn, sgs) => elb("SetSecurityGroups", { LoadBalancerArn: arn, SecurityGroups: sgs });
+
+const tgFromXml = (x) => ({ ...x, LoadBalancerArns: asList(x.LoadBalancerArns?.member) });
+export async function createTargetGroup(input) {
+  const r = await elb("CreateTargetGroup", input);
+  return tgFromXml(asList(r.TargetGroups?.member)[0]);
+}
+export async function describeTargetGroups(filter = {}) {
+  const r = await elb("DescribeTargetGroups", filter);
+  return asList(r.TargetGroups?.member).map(tgFromXml);
+}
+export const describeTargetGroup = (arn) => describeTargetGroups({ TargetGroupArns: [arn] }).then((xs) => xs[0]);
+export const deleteTargetGroup = (arn) => elb("DeleteTargetGroup", { TargetGroupArn: arn });
+export const modifyTargetGroup = (arn, input) => elb("ModifyTargetGroup", { TargetGroupArn: arn, ...input }).then((r) => tgFromXml(asList(r.TargetGroups?.member)[0]));
+export async function describeTargetGroupAttributes(arn) {
+  const r = await elb("DescribeTargetGroupAttributes", { TargetGroupArn: arn });
+  return asList(r.Attributes?.member);
+}
+export const modifyTargetGroupAttributes = (arn, attrs) => elb("ModifyTargetGroupAttributes", { TargetGroupArn: arn, Attributes: attrs });
+export const registerTargets = (arn, targets) => elb("RegisterTargets", { TargetGroupArn: arn, Targets: targets });
+export const deregisterTargets = (arn, targets) => elb("DeregisterTargets", { TargetGroupArn: arn, Targets: targets });
+export async function describeTargetHealth(arn, targets) {
+  const r = await elb("DescribeTargetHealth", { TargetGroupArn: arn, Targets: targets });
+  return asList(r.TargetHealthDescriptions?.member);
+}
+
+const lsFromXml = (x) => ({ ...x, DefaultActions: asList(x.DefaultActions?.member), Certificates: asList(x.Certificates?.member) });
+export async function createListener(input) {
+  const r = await elb("CreateListener", input);
+  return lsFromXml(asList(r.Listeners?.member)[0]);
+}
+export async function describeListeners(filter) {
+  const r = await elb("DescribeListeners", filter);
+  return asList(r.Listeners?.member).map(lsFromXml);
+}
+export const deleteListener = (arn) => elb("DeleteListener", { ListenerArn: arn });
+export const modifyListener = (arn, input) => elb("ModifyListener", { ListenerArn: arn, ...input }).then((r) => lsFromXml(asList(r.Listeners?.member)[0]));
+
+const ruleFromXml = (x) => ({ ...x, Conditions: asList(x.Conditions?.member), Actions: asList(x.Actions?.member) });
+export async function describeRules(filter) {
+  const r = await elb("DescribeRules", filter);
+  return asList(r.Rules?.member).map(ruleFromXml);
+}
+export const createRule = (input) => elb("CreateRule", input).then((r) => ruleFromXml(asList(r.Rules?.member)[0]));
+export const deleteRule = (arn) => elb("DeleteRule", { RuleArn: arn });
+
+export const addElbTags = (arns, tags) => elb("AddTags", { ResourceArns: arns, Tags: tagsToArray(tags) });
+export const removeElbTags = (arns, keys) => elb("RemoveTags", { ResourceArns: arns, TagKeys: keys });
+export async function describeElbTags(arn) {
+  const r = await elb("DescribeTags", { ResourceArns: [arn] });
+  const td = asList(r.TagDescriptions?.member)[0];
+  return Object.fromEntries(asList(td?.Tags?.member).map((t) => [t.Key, t.Value || ""]));
+}
