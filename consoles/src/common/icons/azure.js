@@ -60,6 +60,8 @@ export const AZURE_ICONS = {
   subscriptions: `<rect x="2.5" y="5" width="19" height="14" rx="2" fill="${A}"/><rect x="2.5" y="8" width="19" height="2.4" fill="${C}"/><rect x="5" y="12.6" width="4" height="3.2" rx=".6" fill="${G}"/>${line("M11.5 14.2h7", M, 1.4)}`,
   // Cost Management: a coin with rising bars
   cost: `<circle cx="12" cy="12" r="9" fill="${A}"/>${line("M8 16v-2.4M11 16v-4.6M14 16V9.6M17 16V7.6", L, 1.8)}`,
+  // DNS zones: a globe routing to a named record
+  dns: `<circle cx="9.5" cy="12" r="7" fill="${A}"/><path d="M9.5 5a7 7 0 0 0 0 14 7 7 0 0 0 0-14z" fill="none" stroke="${L}" stroke-width="1" opacity=".6"/>${line("M2.5 12h14M9.5 5c1.8 1.9 2.7 4.3 2.7 7s-.9 5.1-2.7 7M9.5 5c-1.8 1.9-2.7 4.3-2.7 7s.9 5.1 2.7 7", L, 1)}<rect x="13.5" y="13.5" width="9" height="6.5" rx="1.3" fill="${C}"/>${line("M16 16.7h4.5M16 18.4h3", W, 1.1)}`,
 };
 
 const FALLBACK = `<rect x="3" y="3" width="18" height="18" rx="2.4" fill="${A}"/><rect x="6.5" y="6.5" width="4.5" height="4.5" rx=".8" fill="${L}"/><rect x="13" y="6.5" width="4.5" height="4.5" rx=".8" fill="${M}"/><rect x="6.5" y="13" width="4.5" height="4.5" rx=".8" fill="${M}"/><rect x="13" y="13" width="4.5" height="4.5" rx=".8" fill="${L}"/>`;

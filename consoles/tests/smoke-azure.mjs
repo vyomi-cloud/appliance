@@ -70,6 +70,13 @@ const DENYRULE = `deny-smoke-${n}`;  // inbound Deny rule the Diagnose and solve
 const VNETVM = `vysmokevnetvm${n}`;  // VM pointed at the vnet's own NIC, for the vnet's Diagnose and solve problems Next hop check
 const VNETROLE = `00000000-0000-4000-c000-${String(n).padStart(12, "0")}`;  // role assignment GUID created over the wire, EXPLICITLY scoped to the vnet resource
 const VNETPRINCIPAL = `vyvnetprincipal${n}`;  // principal of the vnet-scoped role assignment above
+const DNSZONE = `vysmokedns${n}.com`;    // public DNS zone created through the UI wizard
+const DNSZONE2 = `vywiredns${n}.com`;    // DNS zone created over the wire (CLI → UI direction)
+const DNSREC = `dnsrec${n}`;             // A record set added through the UI
+const DNSREC2 = `dnswirerec${n}`;        // A record set created over the wire (CLI → UI direction)
+const DNSPRIV = `vysmokednspriv${n}.net`;  // private DNS zone created through the UI, for VNet links
+const DNSVNET = `vysmokednsvnet${n}`;    // vnet linked to the private zone as a registration link
+const DNSLOCK = `vysmokednslock${n}`;    // lock created through the UI, scoped to the DNS zone
 const results = [];
 const check = (name, ok, detail = "") => { results.push({ name, ok, detail }); console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? " — " + detail : ""}`); };
 let page;
@@ -85,6 +92,8 @@ const arm = (method, path, body) => wire(`/subscriptions/${SUB}${path}${path.inc
 const armWeb = (method, path, body) => wire(`/subscriptions/${SUB}${path}${path.includes("?") ? "&" : "?"}api-version=2023-12-01`,
   { method, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
 const armAks = (method, path, body) => wire(`/subscriptions/${SUB}${path}${path.includes("?") ? "&" : "?"}api-version=2024-09-02-preview`,
+  { method, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
+const armDns = (method, path, body) => wire(`/subscriptions/${SUB}${path}${path.includes("?") ? "&" : "?"}api-version=2018-05-01`,
   { method, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
 const graph = (method, path, body) => wire(`/v1.0${path}`, { method, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
 const blobHdr = (acct) => ({ "x-ms-version": "2021-12-02", authorization: `SharedKey ${acct}:c21va2U=` });
@@ -2451,6 +2460,88 @@ try {
   await page.getByRole("heading", { name: "Virtual machines", exact: true }).waitFor({ timeout: 10000 });
   const vmGone = await arm("GET", `/resourceGroups/${DEFAULT_RG}/providers/Microsoft.Compute/virtualMachines/${VM2}`);
   check("UI delete virtual machine → ARM GET 404", vmGone.status === 404, `HTTP ${vmGone.status}`);
+
+  // ── DNS: public zone created through the wizard → visible over native ARM ─────────────
+  await page.goto(UI + "#/dns/create");
+  await page.getByLabel("Name", { exact: true }).fill(DNSZONE);
+  await page.getByRole("button", { name: "Review + create" }).click();
+  await page.getByText("Validation passed").waitFor({ timeout: 5000 });
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("heading", { name: DNSZONE, exact: true }).waitFor({ timeout: 10000 });
+  const dnsZoneGet = await armDns("GET", `/resourceGroups/${DEFAULT_RG}/providers/Microsoft.Network/dnsZones/${DNSZONE}`);
+  check("UI create DNS zone → visible over native ARM", dnsZoneGet.status === 200, `HTTP ${dnsZoneGet.status}`);
+  await shot("33-dns-zone-overview");
+
+  // ── Record set added through the UI → visible over native ARM ──────────────────────────
+  await page.getByRole("button", { name: "Record set" }).click();
+  await page.getByLabel("Name", { exact: true }).fill(DNSREC);
+  await page.getByLabel("IP address", { exact: true }).fill("10.20.30.40");
+  await page.getByRole("dialog", { name: "Add record set" }).getByRole("button", { name: "OK" }).click();
+  await page.getByRole("dialog", { name: "Add record set" }).waitFor({ state: "detached", timeout: 10000 });
+  await page.getByRole("button", { name: DNSREC, exact: true }).waitFor({ timeout: 10000 });
+  const dnsRecGet = await armDns("GET", `/resourceGroups/${DEFAULT_RG}/providers/Microsoft.Network/dnsZones/${DNSZONE}/A/${DNSREC}`);
+  check("UI add A record set → visible over native ARM", dnsRecGet.status === 200 && JSON.parse(dnsRecGet.text).properties?.ARecords?.[0]?.ipv4Address === "10.20.30.40", dnsRecGet.text);
+  await shot("34-dns-zone-recordsets");
+
+  // ── Lock created through the UI, scoped to this zone → visible over native ARM ─────────
+  await openPanel("Locks");
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  await page.getByLabel("Lock name", { exact: true }).fill(DNSLOCK);
+  await page.getByRole("dialog", { name: "Add lock" }).getByRole("button", { name: "OK" }).click();
+  await page.getByRole("dialog", { name: "Add lock" }).waitFor({ state: "detached", timeout: 10000 });
+  await page.getByText(DNSLOCK, { exact: true }).waitFor({ timeout: 10000 });
+  const dnsLockGet = await wire(`/subscriptions/${SUB}/resourceGroups/${DEFAULT_RG}/providers/Microsoft.Network/dnsZones/${DNSZONE}/providers/Microsoft.Authorization/locks/${DNSLOCK}?api-version=2020-05-01`);
+  check("UI add DNS zone lock → visible over native ARM", dnsLockGet.status === 200, `HTTP ${dnsLockGet.status}`);
+
+  // ── Private zone created through the wizard → visible over native ARM, no name servers ─
+  await page.goto(UI + "#/dns/create");
+  await page.getByLabel("Name", { exact: true }).fill(DNSPRIV);
+  await page.getByRole("radio", { name: /^Private:/ }).check();
+  await page.getByRole("button", { name: "Review + create" }).click();
+  await page.getByText("Validation passed").waitFor({ timeout: 5000 });
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("heading", { name: DNSPRIV, exact: true }).waitFor({ timeout: 10000 });
+  const dnsPrivGet = await armDns("GET", `/resourceGroups/${DEFAULT_RG}/providers/Microsoft.Network/dnsZones/${DNSPRIV}`);
+  const dnsPrivBody = JSON.parse(dnsPrivGet.text);
+  check("UI create private DNS zone → visible over native ARM, no name servers",
+    dnsPrivGet.status === 200 && dnsPrivBody.properties?.zoneType === "Private" && (dnsPrivBody.properties?.nameServers || []).length === 0, dnsPrivGet.text);
+
+  // ── Virtual network link added through the UI → visible over native ARM ───────────────
+  const dnsVnetPut = await arm("PUT", `/resourceGroups/${DEFAULT_RG}/providers/Microsoft.Network/virtualNetworks/${DNSVNET}`,
+    { location: "eastus", properties: { addressSpace: { addressPrefixes: ["10.90.0.0/16"] } } });
+  check("ARM PUT virtual network over wire (for the DNS link)", dnsVnetPut.status === 200 || dnsVnetPut.status === 201, `HTTP ${dnsVnetPut.status}`);
+  await openPanel("Virtual network links");
+  await page.getByRole("button", { name: "Add registration link" }).click();
+  await page.getByLabel("Virtual network", { exact: true }).selectOption({ label: DNSVNET });
+  await page.getByRole("dialog", { name: "Add registration link" }).getByRole("button", { name: "Add", exact: true }).click();
+  await page.getByText(DNSVNET).first().waitFor({ timeout: 10000 });
+  const dnsPrivLinked = JSON.parse((await armDns("GET", `/resourceGroups/${DEFAULT_RG}/providers/Microsoft.Network/dnsZones/${DNSPRIV}`)).text);
+  check("UI add registration VNet link → visible over native ARM",
+    (dnsPrivLinked.properties?.registrationVirtualNetworks || []).some((v) => v.id.includes(DNSVNET)), JSON.stringify(dnsPrivLinked.properties));
+  await shot("35-dns-zone-vnetlinks");
+
+  // ── DNS zone + record set created over the wire → visible in the UI (CLI → UI) ─────────
+  const dnsZone2Put = await armDns("PUT", `/resourceGroups/${DEFAULT_RG}/providers/Microsoft.Network/dnsZones/${DNSZONE2}`, { location: "global" });
+  check("ARM PUT DNS zone over wire", dnsZone2Put.status === 200 || dnsZone2Put.status === 201, `HTTP ${dnsZone2Put.status}`);
+  const dnsRec2Put = await armDns("PUT", `/resourceGroups/${DEFAULT_RG}/providers/Microsoft.Network/dnsZones/${DNSZONE2}/TXT/${DNSREC2}`,
+    { properties: { TTL: 300, TXTRecords: [{ value: ["uic"] }] } });
+  check("ARM PUT TXT record set over wire", dnsRec2Put.status === 200 || dnsRec2Put.status === 201, `HTTP ${dnsRec2Put.status}`);
+  await page.goto(UI + "#/dns");
+  await page.getByRole("link", { name: DNSZONE2, exact: true }).waitFor({ timeout: 10000 });
+  check("wire-created DNS zone shown in browse grid", true);
+  await page.goto(UI + `#/dns/${DEFAULT_RG}/${DNSZONE2}`);
+  await page.getByRole("button", { name: DNSREC2, exact: true }).waitFor({ timeout: 10000 });
+  check("wire-created record set shown in the zone's record sets table", true);
+  await shot("36-dns-zones-browse");
+
+  // ── Delete through the Overview command bar → gone over native ARM ────────────────────
+  await page.goto(UI + `#/dns/${DEFAULT_RG}/${DNSZONE}`);
+  await page.getByRole("toolbar", { name: "Overview commands" }).getByRole("button", { name: "Delete" }).click();
+  await page.getByLabel("Confirm deletion").fill(DNSZONE);
+  await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await page.getByRole("heading", { name: "DNS zones", exact: true }).waitFor({ timeout: 10000 });
+  const dnsZoneGone = await armDns("GET", `/resourceGroups/${DEFAULT_RG}/providers/Microsoft.Network/dnsZones/${DNSZONE}`);
+  check("UI delete DNS zone → ARM GET 404", dnsZoneGone.status === 404, `HTTP ${dnsZoneGone.status}`);
 } catch (e) {
   const at = ((e.stack || "").match(/(?:smoke|dbg)-[a-z]+\.mjs:(\d+)/) || [])[1];   // the failing step's line
   check("smoke run", false, e.message.split("\n")[0] + (at ? ` (smoke line ${at})` : ""));

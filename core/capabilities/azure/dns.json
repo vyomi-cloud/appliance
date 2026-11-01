@@ -1,0 +1,77 @@
+{
+ "$doc": "Vyomi capability registry — Azure DNS zones. See aws/s3.json for the contract.",
+ "azure.dns.zone.crud": {
+  "title": "DNS zones (create, get, list, delete) over ARM",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_azure_dns_core.py"]
+ },
+ "azure.dns.zone.private": {
+  "title": "Private DNS zones (zoneType = Private, no public name servers)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "Vyomi models public and private zones as the SAME ARM resource (Microsoft.Network/dnszones) distinguished by properties.zoneType, matching this core's shape — real Azure exposes private zones as a separate resource type (Microsoft.Network/privateDnsZones) with its own API. A zone's type is fixed at creation."
+  ],
+  "tests": ["tests/conformance/test_azure_dns_core.py"]
+ },
+ "azure.dns.zone.tags": {
+  "title": "Tags",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_azure_dns_core.py"]
+ },
+ "azure.dns.recordset.crud": {
+  "title": "Record sets (A, AAAA, CAA, CNAME, MX, NS, PTR, SOA, SRV, TXT) — create, get, list, update, delete",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "DS, NAPTR and TLSA record sets round-trip over the native API/CLI (az network dns record-set ds|naptr|tlsa) but, matching the real portal, have no Record set type option in this console's Add/Edit dialog.",
+   "A, AAAA and CNAME record sets can alias another Azure resource (targetResource); Vyomi stores the alias target exactly as configured but does not resolve it to the target's current records the way real Azure DNS does."
+  ],
+  "tests": ["tests/conformance/test_azure_dns_core.py"]
+ },
+ "azure.dns.vnet_links": {
+  "title": "Virtual network links (registrationVirtualNetworks / resolutionVirtualNetworks)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "Vyomi stores each zone's registration and resolution virtual networks as the two plain ARM-ref lists this core models (same shape as the real zone resource's own properties), not as separate Microsoft.Network/privateDnsZones/virtualNetworkLinks child resources — so a link has no independent name, provisioning state or autoRegistration flag of its own, and DNS resolution/auto-registration from a linked virtual network's VMs is not modelled."
+  ],
+  "tests": ["tests/conformance/test_azure_dns_core.py"]
+ },
+ "azure.dns.locks": {
+  "title": "Resource locks (Microsoft.Authorization/locks), scoped to this DNS zone",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "Locks are only simulated at the resource scope (this zone); subscription- and resource-group-scoped lock lists are an honest 'Not simulated' gap, same as the real Subscription/Resource group scope-switch buttons."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.dns.activity_log": {
+  "title": "Activity log",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Only console/SDK-triggered mutations made since the simulation booted are recorded (no historical backfill); severity/category filtering and the 7/30/90-day timespan picker are not modelled, and `caller` is a fixed placeholder identity rather than the real signed-in principal."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.dns.iam": {
+  "title": "Access control (IAM)",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": [
+   "Role assignments scoped to an individual DNS zone are not modelled."
+  ]
+ },
+ "azure.dns.export_template": {
+  "title": "Export template",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": [
+   "ARM/Bicep/Terraform template export for a DNS zone is not built."
+  ]
+ },
+ "azure.dns.diagnose": {
+  "title": "Diagnose and solve problems",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": [
+   "The guided DNS diagnostic tiles are not modelled."
+  ]
+ }
+}
