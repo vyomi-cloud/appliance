@@ -760,6 +760,11 @@ def data_dispatch(state, store_name, method, path, query=None, headers=None, bod
     store = _find_store(state, store_name)
     if store is None:
         return _problem(404, "not-found", "The configuration store was not found.", f"No App Configuration store named '{store_name}'.", store_name)
+    if store["properties"].get("publicNetworkAccess") == "Disabled":
+        # ENFORCED: the data plane is only reachable over a private endpoint when public network
+        # access is Disabled. Vyomi has no private-link network path, so every caller is "public".
+        return _problem(403, "forbidden", "Public network access is disabled for this configuration store.",
+                        "Access from the public network is not allowed; connect through a private endpoint.", store_name)
     if str(headers.get("authorization", "")).startswith("HMAC-SHA256") and store["properties"].get("disableLocalAuth"):
         return _problem(403, "forbidden", "Access key authentication is disabled for this store.",
                         "Local authentication is disabled; use Microsoft Entra ID.", store_name)

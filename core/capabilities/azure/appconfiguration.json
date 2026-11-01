@@ -86,11 +86,11 @@
  "azure.appconfiguration.networking": {
   "title": "Networking (public network access)",
   "level": {
-   "nano": "config_only",
-   "offline": "config_only"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "publicNetworkAccess is stored and returned exactly as written, but Vyomi does not enforce it against the data plane — unlike the Key Vault lens's x-vyomi-vault based enforcement, App Configuration's data-plane relay has no caller-network concept to gate on."
+   "publicNetworkAccess=Disabled is ENFORCED: every data-plane request (read or write) returns 403 Forbidden while the control plane stays reachable. Vyomi has no private-link network path, so private endpoints are stored but cannot restore access — every caller counts as public."
   ],
   "tests": [
    "tests/conformance/test_azure_appconfiguration_core.py"

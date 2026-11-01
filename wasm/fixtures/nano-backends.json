@@ -75,6 +75,11 @@
   "category": "aws"
  },
  {
+  "name": "dlm",
+  "label": "dlm \u00b7 DlmStore",
+  "category": "aws"
+ },
+ {
   "name": "sfn",
   "label": "sfn \u00b7 StepFunctionsStore",
   "category": "aws"
