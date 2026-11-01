@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
   <script src="nano-rates.js"></script>
+  <script src="nano-video.js"></script>
   <script>
   (function(){
     var base = location.pathname.replace(/\/[^\/]*$/, "");
@@ -1254,7 +1255,7 @@ function renderHome(main){
   grid.append(conn);
 
 
-  main.append(grid);
+  main.append(vyVideoBanner("aws"), grid);
 
   // Resources: the AWS console's Resources widget (as on the EC2 Dashboard) — one container,
   // "You are using the following AWS resources…", and a grid of boxes, each the service as a
