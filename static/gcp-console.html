@@ -266,6 +266,12 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
 
   .kv-card{background:#fff;border:1px solid var(--line);border-radius:8px;padding:16px 20px;margin-bottom:14px}
   .kv-grid{display:block}
+  .kv-card > div:first-child:not(.kv-grid){font-weight:500;font-size:14px;margin-bottom:6px}
+  /* Overview: key-fact tiles above the Details card */
+  .ov-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:14px}
+  .ov-tile{background:#fff;border:1px solid var(--line);border-radius:8px;padding:14px 16px;min-width:0}
+  .ov-tile .ov-k{font-size:12px;color:var(--sub);margin-bottom:6px}
+  .ov-tile .ov-v{font-size:16px;font-weight:500;font-family:'Google Sans',sans-serif;color:var(--ink);overflow-wrap:anywhere}
   /* GCP classic detail list: label on the left, value on the right, one thin rule between rows. */
   .kv-grid > div{display:grid;grid-template-columns:minmax(140px,240px) minmax(0,1fr);gap:8px 24px;align-items:start;padding:11px 0;border-bottom:1px solid var(--line)}
   .kv-grid > div:first-child{padding-top:0}
@@ -1232,7 +1238,7 @@ async function renderDetail(main){
     // left never lands in the tab they switched to.
     const host = el("div",{}); content.append(host);
     if (GT[t]) return GT[t](host, svc, STATE.item, item);
-    if (t === "overview" || t === "properties") return freshItem(svc, STATE.item).then(it => renderOverviewTab(host, svc, it));
+    if (t === "overview" || t === "properties") return freshItem(svc, STATE.item).then(it => renderOverviewTab(host, svc, it, t));
     if (t === "secretvalue") return renderSecretValueTab(content, svc, STATE.item);
     if (t === "sublist")  return renderSublistTab(content, svc, STATE.item, item);
   if (t === "kmsconfig") return renderKmsConfigTab(content, svc, STATE.item);
@@ -1439,13 +1445,24 @@ async function renderObjectsTab(host, svc, item){
   listHost.append(t);
 }
 
-function renderOverviewTab(host, svc, item){
-  const card = el("div",{class:"kv-card"});
-  const g = el("div",{class:"kv-grid"});
+// mode "overview": key-fact tiles + a Details card; mode "properties": just the full list (so the two tabs differ).
+function renderOverviewTab(host, svc, item, mode){
   const rows = [["Project", PROJECT], ["Region", REGION]];
-  svc.columns.forEach(c => { const v = getPath(item, c[0]); if (v != null) rows.push([c[1], String(v)]); });
-  rows.forEach(([k,v]) => g.append(el("div",{}, el("div",{class:"k"}, k), el("div",{class:"v"}, v))));
-  card.append(g); host.append(card);
+  const facts = [];   // [label, value, isState] for the tiles: the state first, then the next columns
+  svc.columns.forEach((c, i) => {
+    const v = getPath(item, c[0]); if (v == null) return;
+    rows.push([c[1], String(v)]);
+    if (i === 0) return;   // the name is the page title
+    const isState = /(state|status)$/i.test(c[0]);
+    if (isState) facts.unshift([c[1], v, true]); else facts.push([c[1], v, false]);
+  });
+  if (mode !== "properties" && facts.length) {
+    const tiles = el("div",{class:"ov-tiles"});
+    facts.slice(0, 4).forEach(([label, v, isState]) => tiles.append(el("div",{class:"ov-tile"},
+      el("div",{class:"ov-k"}, label), el("div",{class:"ov-v"}, isState ? stateBadge(v) : fmtVal(v)))));
+    host.append(tiles);
+  }
+  host.append(kvCardOf(mode === "properties" ? null : "Details", rows));
   // Codespaces sandbox: reach this Cloud SQL instance from a remote laptop through
   // the jump host. Present only when in a Codespace with a real backend connection
   // (guarded — a no-op everywhere else).
