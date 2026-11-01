@@ -134,6 +134,27 @@ export const getManagementPolicy = async (rg, name) => {
 export const putManagementPolicy = (rg, name, rules) =>
   restJson("PUT", managementPolicyPath(rg, name), { query: { "api-version": "2023-01-01" }, body: { properties: { policy: { rules } } } });
 
+// ── Object replication (Microsoft.Storage/storageAccounts/objectReplicationPolicies) ─────
+// Like Azure, a policy is written to BOTH the destination and the source account; the blob
+// core reads it back (arm_state) and really copies/deletes matching blobs into the
+// destination container on every write to the source container.
+const orPath = (rg, name, id) => `${ARM.path(rg, name)}/objectReplicationPolicies/${id}`;
+export const listReplicationPolicies = async (rg, name) =>
+  (await restJson("GET", `${ARM.path(rg, name)}/objectReplicationPolicies`, { query: { "api-version": "2023-01-01" } })).value || [];
+export async function putReplicationPolicy(src, dst, rules) {
+  const body = { properties: { sourceAccount: src.name, destinationAccount: dst.name, rules } };
+  const id = "default";
+  await restJson("PUT", orPath(dst.resourceGroup, dst.name, id), { query: { "api-version": "2023-01-01" }, body });
+  await restJson("PUT", orPath(src.resourceGroup, src.name, id), { query: { "api-version": "2023-01-01" }, body });
+}
+export async function deleteReplicationPolicy(p) {
+  const { sourceAccount, destinationAccount } = p.properties || {};
+  for (const n of [destinationAccount, sourceAccount]) {
+    const acct = (await listStorageAccounts()).find((x) => x.name === n);
+    if (acct) await restJson("DELETE", orPath(acct.resourceGroup, acct.name, p.name), { query: { "api-version": "2023-01-01" } }).catch(() => {});
+  }
+}
+
 // ── Queues data plane (Azure Storage Queue REST) ────────────────────────────────────────
 // core/azure_queue_core.py keeps a single global queue namespace per Nano instance (the
 // same simplification the Key Vault keys/secrets stores make) — queues are not isolated

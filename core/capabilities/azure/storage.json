@@ -159,9 +159,9 @@
  },
  "azure.storage.objectreplication": {
   "title": "Object replication",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["NOT impossible, just not yet built this wave: two real storage accounts coexist fine in Vyomi (see Encryption's cross-account Key Vault check and Diagnostics' cross-account log destination), so a real async copy-on-write replication policy between a source and destination container is plausible future work in core/azure_blob_core.py — deliberately deferred rather than rushed in this pass, which prioritised the account-local Data protection/Redundancy/Encryption/IAM/Metrics gaps."],
-  "tests": []
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["Object replication policies (Microsoft.Storage/storageAccounts/objectReplicationPolicies, written to both accounts like Azure) are ENFORCED: a blob written to the source container that matches the rule's prefix filter is copied to the destination container, and deleting it removes the replica. Replication is synchronous (Azure's is asynchronous, minutes), only affects blobs written after the policy exists (no backfill), needs the destination container to exist, and does not require versioning/change feed or block writes to the destination container."],
+  "tests": ["tests/conformance/test_azure_storage_wave5b_core.py"]
  },
  "azure.storage.inventory": {
   "title": "Blob inventory",

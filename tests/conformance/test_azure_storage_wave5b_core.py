@@ -201,6 +201,34 @@ def run() -> int:
         "storageAccountId": rid_path, "logs": [{"category": "StorageWrite", "enabled": True}]}})
     _check("diagnostic setting accepts a real storageAccountId", good_dest["status"] == 201)
 
+    # ── Object replication: ENFORCED copy / delete into the destination container ─────
+    SRC, DST = "replsrc", "repldst"
+    rid = lambda a: f"/subscriptions/sub1/resourcegroups/uic-rg/providers/microsoft.storage/storageaccounts/{a}"
+    ra = AzureArm()
+    base = lambda a: f"/subscriptions/sub1/resourceGroups/uic-rg/providers/Microsoft.Storage/storageAccounts/{a}"
+    for a in (SRC, DST):
+        ra.handle("PUT", base(a), {"api-version": "2023-01-01"}, {"location": "eastus", "sku": {"name": "Standard_LRS"}, "kind": "StorageV2"})
+    for a, c in ((SRC, "docs"), (DST, "docs-copy")):
+        az.dispatch(st, "PUT", f"/{a}/{c}", {"restype": "container"}, sk(a), b"", arm_state=ra.state)
+    put = lambda a, c, n, b: az.dispatch(st, "PUT", f"/{a}/{c}/{n}", {}, {**sk(a), "x-ms-blob-type": "BlockBlob"}, b, arm_state=ra.state)
+    get = lambda a, c, n: az.dispatch(st, "GET", f"/{a}/{c}/{n}", {}, sk(a), b"", arm_state=ra.state)
+    put(SRC, "docs", "before.txt", b"pre-policy")
+    ra.handle("PUT", base(DST) + "/objectReplicationPolicies/default", {"api-version": "2023-01-01"}, {"properties": {
+        "sourceAccount": SRC, "destinationAccount": DST,
+        "rules": [{"ruleId": "r1", "sourceContainer": "docs", "destinationContainer": "docs-copy",
+                   "filters": {"prefixMatch": ["rep/"]}}]}})
+    put(SRC, "docs", "rep/a.txt", b"replicated")
+    put(SRC, "docs", "other/b.txt", b"not matched")
+    g = get(DST, "docs-copy", "rep/a.txt")
+    _check("object replication copies a matching blob to the destination", g.status == 200 and g.body == b"replicated")
+    _check("prefixMatch filter is honoured", get(DST, "docs-copy", "other/b.txt").status == 404)
+    _check("blobs written before the policy are not backfilled", get(DST, "docs-copy", "before.txt").status == 404)
+    az.dispatch(st, "DELETE", f"/{SRC}/docs/rep/a.txt", {}, sk(SRC), b"", arm_state=ra.state)
+    _check("deleting the source blob removes the replica", get(DST, "docs-copy", "rep/a.txt").status == 404)
+    ra.handle("DELETE", base(DST) + "/objectReplicationPolicies/default", {"api-version": "2023-01-01"})
+    put(SRC, "docs", "rep/c.txt", b"after policy removal")
+    _check("removing the policy stops replication", get(DST, "docs-copy", "rep/c.txt").status == 404)
+
     print("\nAzure Blob Storage WAVE 5b (redundancy / data protection / telemetry) conformance: ALL GREEN")
     return 0
 

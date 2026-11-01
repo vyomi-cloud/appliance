@@ -58,7 +58,6 @@ const NS_NOTES = {
   frontdoorcdn: "Front Door and CDN",
   sas: "Shared access signature (SAS) generation",
   defender: "Microsoft Defender for Cloud",
-  objectreplication: "Object replication",
   staticwebsite: "Static website hosting",
   lifecycle: "Lifecycle management policies",
   azureaisearch: "Azure AI Search",
@@ -92,6 +91,7 @@ export default function StorageAccountBlade({ params, query }) {
       networking: () => <Networking a={a} />,
       encryption: () => <Encryption a={a} reload={reload} />,
       dataprotection: () => <DataProtection a={a} />,
+      objectreplication: () => <ObjectReplication a={a} />,
       staticwebsite: () => <StaticWebsite a={a} />,
       exporttemplate: () => <ExportTemplate a={a} />,
       iam: () => <Iam a={a} />,
@@ -750,6 +750,94 @@ function Encryption({ a, reload }) {
 
 // ── Static website (Microsoft.Storage/storageAccounts/blobServices/default, properties.staticWebsite) ──
 // ── Access control (IAM) — tabs are real; every panel is an honest gap ────────────────
+// ── Object replication — ENFORCED by core/azure_blob_core.py: a blob written to the source
+// container (matching the prefix filter) is copied to the destination container, and deleting
+// it removes the replica. Synchronous here; Azure replicates asynchronously (minutes).
+function ObjectReplication({ a }) {
+  const notify = useNotify();
+  const [open, setOpen] = useState(false);
+  const { data, loading, error, reload } = useAsync(async () => {
+    const [own, accounts] = await Promise.all([api.listReplicationPolicies(a.resourceGroup, a.name), api.listStorageAccounts()]);
+    return { accounts, rules: own.flatMap((p) => (p.properties?.rules || []).map((r) => ({ ...r, policy: p, key: `${p.name}/${r.ruleId || r.sourceContainer}` }))) };
+  }, [a.id]);
+  const rules = data?.rules || [];
+  return (
+    <CapabilityContainer id="azure.storage.objectreplication" title={`${a.name} | Object replication`}
+      actions={<>
+        <ToolbarButton icon={<Add20Regular />} onClick={() => setOpen(true)}>Create replication rules</ToolbarButton>
+        <ToolbarButton icon={<ArrowClockwise20Regular />} onClick={reload}>Refresh</ToolbarButton>
+      </>}>
+      <ErrorBar error={error} />
+      <BrowseGrid
+        resourceName="replication rule" rowKey={(r) => r.key}
+        items={rules} loading={loading} onRefresh={reload}
+        onDelete={async (sel) => {
+          for (const pol of new Set(sel.map((r) => r.policy))) await api.deleteReplicationPolicy(pol);
+          notify.success(`Deleted ${sel.length} replication rule${sel.length === 1 ? "" : "s"}.`, "Delete succeeded");
+          reload();
+        }}
+        csvName="object-replication-rules.csv"
+        columns={[
+          { key: "source", label: "Source account", value: (r) => r.policy.properties.sourceAccount },
+          { key: "sc", label: "Source container", value: (r) => r.sourceContainer },
+          { key: "dest", label: "Destination account", value: (r) => r.policy.properties.destinationAccount },
+          { key: "dc", label: "Destination container", value: (r) => r.destinationContainer },
+          { key: "filter", label: "Prefix filter", value: (r) => (r.filters?.prefixMatch || []).join(", ") || "--" },
+        ]}
+      />
+      <NewReplicationDialog open={open} onClose={() => setOpen(false)} a={a} accounts={data?.accounts || []} onDone={() => { setOpen(false); reload(); }} />
+    </CapabilityContainer>
+  );
+}
+
+function NewReplicationDialog({ open, onClose, a, accounts, onDone }) {
+  const notify = useNotify();
+  const [dest, setDest] = useState("");
+  const [sc, setSc] = useState("");
+  const [dc, setDc] = useState("");
+  const [prefix, setPrefix] = useState("");
+  const [busy, setBusy] = useState(false);
+  const valid = dest && sc && dc;
+  const go = async () => {
+    setBusy(true);
+    try {
+      const dst = accounts.find((x) => x.name === dest);
+      const rule = { ruleId: `rule-${Date.now().toString(36)}`, sourceContainer: sc, destinationContainer: dc,
+        filters: { prefixMatch: prefix.split(",").map((s) => s.trim()).filter(Boolean) } };
+      await api.putReplicationPolicy(a, dst, [rule]);
+      notify.success(`Blobs written to '${sc}' now replicate to '${dest}/${dc}'.`, "Replication rule created");
+      setDest(""); setSc(""); setDc(""); setPrefix(""); onDone();
+    } catch (e) { notify.error(e, "Failed to create the replication rule"); }
+    finally { setBusy(false); }
+  };
+  return (
+    <Dialog open={open} onOpenChange={(_, d) => !d.open && onClose()}>
+      <DialogSurface aria-label="Create replication rules">
+        <DialogBody>
+          <DialogTitle action={<Button appearance="subtle" icon={<Dismiss20Regular />} aria-label="Close" onClick={onClose} />}>Create replication rules</DialogTitle>
+          <DialogContent>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <Field label="Destination storage account" required>
+                <Select value={dest} onChange={(_, d) => setDest(d.value)} aria-label="Destination storage account">
+                  <option value="">Select an account</option>
+                  {accounts.filter((x) => x.name !== a.name).map((x) => <option key={x.id} value={x.name}>{x.name}</option>)}
+                </Select>
+              </Field>
+              <Field label="Source container" required><Input value={sc} onChange={(_, d) => setSc(d.value)} aria-label="Source container" /></Field>
+              <Field label="Destination container" required hint="The container must already exist in the destination account."><Input value={dc} onChange={(_, d) => setDc(d.value)} aria-label="Destination container" /></Field>
+              <Field label="Prefix match (comma-separated)" hint="Leave blank to replicate every blob."><Input value={prefix} onChange={(_, d) => setPrefix(d.value)} aria-label="Prefix match" /></Field>
+            </div>
+          </DialogContent>
+          <DialogActions>
+            <Button appearance="primary" disabled={!valid || busy} onClick={go}>Create</Button>
+            <Button onClick={onClose}>Cancel</Button>
+          </DialogActions>
+        </DialogBody>
+      </DialogSurface>
+    </Dialog>
+  );
+}
+
 // ── Lifecycle management (Microsoft.Storage/storageAccounts/managementPolicies/default) —
 // ENFORCED lazily by core/azure_blob_core.py on every blob list/get (see its module
 // docstring): tierToCool/tierToArchive/delete really retier or expire a blob once it is

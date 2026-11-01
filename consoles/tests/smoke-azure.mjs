@@ -22,6 +22,7 @@ const SUB = "00000000-0000-0000-0000-cloudlearn01";
 const RG = "vyomi-smoke-rg";
 const n = Date.now() % 100000;
 const SA = `vysmoke${n}`;          // created through the UI
+const SAR = `vyrepl${n}`;        // object-replication destination account
 const SA2 = `vywire${n}`;          // created over the wire (CLI → UI direction)
 const C = `smoke-${n}`;
 const TBL = `vysmoketbl${n}`;      // Table created through the UI
@@ -193,6 +194,25 @@ try {
   const other = await blob("GET", SA2, `/${C}/hello.txt`);
   check("blob namespaces are per storage account", other.status === 404, `HTTP ${other.status}`);
   await shot("07-container-blobs");
+
+  // ── Object replication rule created in the UI → a real copy into the destination account ──
+  const RC = `replica-${n}`;
+  await arm("PUT", `/resourceGroups/${RG}/providers/Microsoft.Storage/storageAccounts/${SAR}`, { location: "eastus", sku: { name: "Standard_LRS" }, kind: "StorageV2" });
+  await blob("PUT", SAR, `/${RC}`, { query: "?restype=container" });
+  await page.goto(UI + `#/storage/${RG}/${SA}/objectreplication`);
+  await page.getByRole("button", { name: "Create replication rules" }).first().click();
+  await page.getByLabel("Destination storage account").selectOption(SAR);
+  await page.getByLabel("Source container").fill(C);
+  await page.getByLabel("Destination container").fill(RC);
+  await page.getByLabel("Prefix match").fill("rep/");
+  await page.getByRole("dialog").getByRole("button", { name: "Create" }).click();
+  await page.getByText(RC, { exact: true }).first().waitFor({ timeout: 10000 });
+  await blob("PUT", SA, `/${C}/rep/x.txt`, { headers: { "x-ms-blob-type": "BlockBlob" }, body: "replicated-by-policy" });
+  await blob("PUT", SA, `/${C}/skip/y.txt`, { headers: { "x-ms-blob-type": "BlockBlob" }, body: "outside-prefix" });
+  const rep = await blob("GET", SAR, `/${RC}/rep/x.txt`);
+  check("UI object-replication rule → blob replicated into the destination account", rep.status === 200 && rep.text === "replicated-by-policy", `HTTP ${rep.status}`);
+  check("object replication honours the prefix filter", (await blob("GET", SAR, `/${RC}/skip/y.txt`)).status === 404);
+  await shot("07b-object-replication");
 
   // ── Table created through the UI → visible over the native Table REST wire, and the reverse ──
   await openPanel("Tables");

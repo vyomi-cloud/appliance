@@ -338,6 +338,48 @@ def _reqlog(store: AzureBlobStore, acct: str, category: str, operation: str, sta
         del lst[: len(lst) - _LOG_CAP]
 
 
+def _replication_targets(arm_state: dict | None, acct: str, container: str, blob: str) -> list:
+    """OBJECT REPLICATION (ENFORCED): the `Microsoft.Storage/storageAccounts/{dst}/objectReplicationPolicies`
+    ARM children whose `sourceAccount` is this account and that have a rule for this source container
+    (honouring `filters.prefixMatch`) -> [(destination store key, rule), ...]."""
+    out = []
+    if not arm_state or not acct:
+        return out
+    for key, rec in arm_state.items():
+        if "/objectreplicationpolicies/" not in key.lower() or "/__event__" in key.lower():
+            continue
+        p = (rec or {}).get("properties") or {}
+        if str(p.get("sourceAccount", "")).lower() != acct.lower():
+            continue
+        dst = str(p.get("destinationAccount", "")).lower()
+        for rule in p.get("rules") or []:
+            if rule.get("sourceContainer") != container:
+                continue
+            prefixes = ((rule.get("filters") or {}).get("prefixMatch")) or []
+            if prefixes and not any(blob.startswith(x) for x in prefixes):
+                continue
+            if not any(o[0] == f"{dst}/{rule.get('destinationContainer')}" for o in out):   # the policy exists on both accounts
+                out.append((f"{dst}/{rule.get('destinationContainer')}", rule))
+    return out
+
+
+def _replicate(store: AzureBlobStore, arm_state, acct: str, container: str, blob: str, entry: dict | None) -> None:
+    """Copy (entry) or remove (None) the blob in every replication destination container that exists.
+    Synchronous here; real replication is asynchronous (minutes)."""
+    for dkey, _rule in _replication_targets(arm_state, acct, container, blob):
+        if dkey not in store.containers:
+            continue                                  # the destination container must exist, as in Azure
+        blobs = store.container_blobs(dkey)
+        if entry is None:
+            blobs.pop(blob, None)
+            store.mirror_delete(dkey, blob)
+        else:
+            blobs[blob] = {**entry, "etag": _etag(), "last_modified": _now_http(),
+                           "metadata": dict(entry.get("metadata") or {})}
+            store.mirror_put(dkey, blob, blobs[blob])
+    store.persist()
+
+
 def _feed(store: AzureBlobStore, acct: str, event: str, container: str, blob: str = "") -> None:
     lst = store.change_feed.setdefault(acct, [])
     lst.append({"time": _now_http(), "event": event, "container": container, "blob": blob})
@@ -747,6 +789,7 @@ def dispatch(store: AzureBlobStore, method: str, path: str,
         store.container_blobs(container)[blob] = entry
         store.persist()
         store.mirror_put(container, blob, entry)
+        _replicate(store, arm_state, acct, display, blob, entry)
         _bump(store, acct, ingress=len(body))
         _reqlog(store, acct, "StorageWrite", "PutBlob", 201, f"/{display}/{blob}")
         if _changefeed_enabled(arm_state, acct):
@@ -832,6 +875,7 @@ def dispatch(store: AzureBlobStore, method: str, path: str,
             store.deleted_blobs.setdefault(container, {})[blob] = {"entry": live, "deleted_at": _now()}
         store.persist()
         store.mirror_delete(container, blob)
+        _replicate(store, arm_state, acct, display, blob, None)
         _bump(store, acct)
         _reqlog(store, acct, "StorageDelete", "DeleteBlob", 202, f"/{display}/{blob}")
         if _changefeed_enabled(arm_state, acct):
