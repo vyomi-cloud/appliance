@@ -50,7 +50,34 @@ def kms_checks():
             pass
 
 
+def vpc_checks():
+    ec2 = boto3.client("ec2", **kw)
+    vpc = ec2.create_vpc(CidrBlock="10.77.0.0/16")["Vpc"]["VpcId"]
+    sn = ec2.create_subnet(VpcId=vpc, CidrBlock="10.77.1.0/24")["Subnet"]["SubnetId"]
+    sg = ec2.create_security_group(GroupName=f"{tag}-sg", Description="sweep", VpcId=vpc)["GroupId"]
+    ec2.authorize_security_group_ingress(GroupId=sg, IpPermissions=[{"IpProtocol": "tcp", "FromPort": 80, "ToPort": 80, "IpRanges": [{"CidrIp": "0.0.0.0/0"}]}])
+    try:
+        ec2.delete_vpc(VpcId=vpc)
+        check(False, "VPC delete refused while subnet/SG exist (DependencyViolation)", "delete_vpc succeeded")
+    except ClientError as ce:
+        check(ce.response["Error"]["Code"] == "DependencyViolation", "VPC delete refused while subnet/SG exist (DependencyViolation)", str(ce)[:160])
+    try:
+        ec2.delete_security_group(GroupId=sg)
+        gone = not [g for g in ec2.describe_security_groups(Filters=[{"Name": "vpc-id", "Values": [vpc]}])["SecurityGroups"] if g["GroupId"] == sg]
+        check(gone, "delete_security_group removes the group")
+    except ClientError as ce:
+        check(False, "delete_security_group removes the group", str(ce)[:160])
+    ec2.delete_subnet(SubnetId=sn)
+    try:
+        ec2.delete_vpc(VpcId=vpc)
+        left = [v for v in ec2.describe_vpcs()["Vpcs"] if v["VpcId"] == vpc]
+        check(not left, "delete_vpc (after subnet/SG removed) succeeds and the VPC is gone")
+    except ClientError as ce:
+        check(False, "delete_vpc (after subnet/SG removed) succeeds and the VPC is gone", str(ce)[:160])
+
+
 def main():
+    attempt("vpc", vpc_checks)
     attempt("kms", kms_checks)
     sys.exit(1 if fails else 0)
 

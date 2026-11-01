@@ -17469,9 +17469,10 @@ def api_vpc_delete(vpc_id: str, force: bool = False):
         if sg.get("vpc_id") == vpc_id:
             del vpc_state["security_groups"][sg_id]
 
-    for igw_id, igw in list(vpc_state["internet_gateways"].items()):
+    _igws = vpc_state.setdefault("internet_gateways", {})   # older persisted vpc state may lack the key
+    for igw_id, igw in list(_igws.items()):
         if igw.get("attached_vpc_id") == vpc_id:
-            del vpc_state["internet_gateways"][igw_id]
+            del _igws[igw_id]
 
     del vpc_state["vpcs"][vpc_id]
     _record_usage("vpc.delete_vpc", {"vpc_id": vpc_id, "force": force})
@@ -18511,6 +18512,30 @@ def _vpc_query_delete_subnet(params: dict[str, Any]) -> Response:
     return _ec2_success_response("DeleteSubnetResponse", build)
 
 
+def _vpc_query_delete_security_group(params: dict[str, Any]) -> Response:
+    group_id = str(params.get("GroupId", params.get("groupId", ""))).strip()
+    group_name = str(params.get("GroupName", params.get("groupName", ""))).strip()
+    if not group_id and group_name:
+        group_id = next((gid for gid, g in vpc_state["security_groups"].items() if g.get("group_name") == group_name), "")
+    if not group_id:
+        raise HTTPException(400, detail="MissingParameter: GroupId")
+    sg = vpc_state["security_groups"].get(group_id)
+    if not sg:
+        return _ec2_error_response("InvalidGroup.NotFound", f"The security group '{group_id}' does not exist", 400)
+    if sg.get("is_default") or sg.get("group_name") == "default":
+        return _ec2_error_response("CannotDelete", f"the specified group: \"{group_id}\" name: \"default\" cannot be deleted by a user", 400)
+    if any(group_id in (i.get("security_group_ids") or []) and i.get("state") not in {"terminated"}
+           for i in ec2_state["instances"].values()):
+        return _ec2_error_response("DependencyViolation", f"resource {group_id} has a dependent object", 400)
+    del vpc_state["security_groups"][group_id]
+    _record_usage("vpc.delete_security_group", {"security_group_id": group_id})
+
+    def build(root: ET.Element) -> None:
+        _ec2_sub(root, "return", "true")
+
+    return _ec2_success_response("DeleteSecurityGroupResponse", build)
+
+
 def _vpc_query_delete_route_table(params: dict[str, Any]) -> Response:
     route_table_id = str(params.get("RouteTableId", params.get("routeTableId", ""))).strip()
     if not route_table_id:
@@ -18572,6 +18597,17 @@ def _vpc_query_delete_vpc(params: dict[str, Any]) -> Response:
     vpc_id = str(params.get("VpcId", params.get("vpcId", ""))).strip()
     if not vpc_id:
         raise HTTPException(400, detail="MissingParameter: VpcId")
+    if vpc_id not in vpc_state["vpcs"]:
+        return _ec2_error_response("InvalidVpcID.NotFound", f"The vpc ID '{vpc_id}' does not exist", 400)
+    # Real EC2 refuses DeleteVpc while anything the caller created still lives in it; only the
+    # implicit main route table and default security group go with the VPC.
+    dep = (any(s.get("vpc_id") == vpc_id for s in vpc_state["subnets"].values())
+           or any(g.get("vpc_id") == vpc_id and not g.get("is_default") for g in vpc_state["security_groups"].values())
+           or any(r.get("vpc_id") == vpc_id and not r.get("is_main") for r in vpc_state["route_tables"].values())
+           or any(g.get("attached_vpc_id") == vpc_id for g in vpc_state.get("internet_gateways", {}).values())
+           or any(i.get("vpc_id") == vpc_id and i.get("state") not in {"terminated"} for i in ec2_state["instances"].values()))
+    if dep:
+        return _ec2_error_response("DependencyViolation", f"The vpc '{vpc_id}' has dependencies and cannot be deleted.", 400)
     api_vpc_delete(vpc_id, force=True)
 
     def build(root: ET.Element) -> None:
@@ -21338,6 +21374,8 @@ async def api_vpc_query(request: Request):
             return _vpc_query_describe_subnets(params)
         if action == "DeleteSubnet":
             return _vpc_query_delete_subnet(params)
+        if action == "DeleteSecurityGroup":
+            return _vpc_query_delete_security_group(params)
         if action == "CreateSecurityGroup":
             return _vpc_query_create_security_group(params)
         if action == "DescribeSecurityGroups":
@@ -21965,7 +22003,7 @@ async def api_sts_query(request: Request) -> Response:
 _EC2_VPC_ACTIONS = {
     "CreateVpc", "DescribeVpcs", "DeleteVpc",
     "CreateSubnet", "DescribeSubnets", "DeleteSubnet",
-    "CreateSecurityGroup", "AuthorizeSecurityGroupIngress", "AuthorizeSecurityGroupEgress",
+    "CreateSecurityGroup", "DeleteSecurityGroup", "AuthorizeSecurityGroupIngress", "AuthorizeSecurityGroupEgress",
     "CreateRouteTable", "DescribeRouteTables", "DeleteRouteTable",
     "CreateRoute", "AssociateRouteTable", "DisassociateRouteTable",
     "CreateInternetGateway", "DescribeInternetGateways", "AttachInternetGateway",

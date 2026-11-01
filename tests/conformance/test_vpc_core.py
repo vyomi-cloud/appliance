@@ -89,6 +89,10 @@ def run(store=None):
     call({"Action": "AttachInternetGateway", "InternetGatewayId": gw, "VpcId": v2})
     _check("DeleteVpc with a subnet + gateway → DependencyViolation", vpc.dispatch(s, {"Action": "DeleteVpc", "VpcId": v2}).status == 400 and "DependencyViolation" in vpc.dispatch(s, {"Action": "DeleteVpc", "VpcId": v2}).body)
     _check("DeleteInternetGateway while attached → DependencyViolation", "DependencyViolation" in vpc.dispatch(s, {"Action": "DeleteInternetGateway", "InternetGatewayId": gw}).body)
+    sg9 = xid(call({"Action": "CreateSecurityGroup", "GroupName": "sweep-del", "GroupDescription": "d", "VpcId": v2}), "groupId")
+    _check("DeleteVpc with a non-default security group → DependencyViolation", "DependencyViolation" in vpc.dispatch(s, {"Action": "DeleteVpc", "VpcId": v2}).body)
+    _check("DeleteSecurityGroup removes a user group", vpc.dispatch(s, {"Action": "DeleteSecurityGroup", "GroupId": sg9}).status == 200
+           and "InvalidGroup.NotFound" in vpc.dispatch(s, {"Action": "DescribeSecurityGroups", "GroupId.1": sg9}).body)
     call({"Action": "DeleteSubnet", "SubnetId": sn})
     call({"Action": "DetachInternetGateway", "InternetGatewayId": gw, "VpcId": v2})
     call({"Action": "DeleteInternetGateway", "InternetGatewayId": gw})

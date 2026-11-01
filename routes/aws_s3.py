@@ -1120,7 +1120,7 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
     _EC2_VPC_ACTIONS = {
         "CreateVpc", "DescribeVpcs", "DeleteVpc",
         "CreateSubnet", "DescribeSubnets", "DeleteSubnet",
-        "CreateSecurityGroup", "AuthorizeSecurityGroupIngress", "AuthorizeSecurityGroupEgress",
+        "CreateSecurityGroup", "DeleteSecurityGroup", "AuthorizeSecurityGroupIngress", "AuthorizeSecurityGroupEgress",
         "CreateRouteTable", "DescribeRouteTables", "DeleteRouteTable",
         "CreateRoute", "AssociateRouteTable", "DisassociateRouteTable",
         "CreateInternetGateway", "DescribeInternetGateways", "AttachInternetGateway",
