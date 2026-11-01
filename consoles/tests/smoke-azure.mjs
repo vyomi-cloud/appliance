@@ -1389,6 +1389,67 @@ try {
   check("UI create lock → visible over native ARM (extension resource)", aksLockGet.status === 200, `HTTP ${aksLockGet.status}`);
   await shot("29-aks-locks");
 
+  // ── Storage: PVC created through the UI dynamically provisions a PV, over native wire ──
+  const PVC = `smoke-pvc-${n}`;
+  await openPanel("Storage");
+  await page.getByRole("toolbar", { name: "Command bar" }).getByRole("button", { name: "Create" }).click();
+  await page.getByLabel("YAML", { exact: true }).fill(`apiVersion: v1\nkind: PersistentVolumeClaim\nmetadata:\n  name: ${PVC}\n  namespace: default\nspec:\n  accessModes: [ReadWriteOnce]\n  resources:\n    requests:\n      storage: 4Gi\n`);
+  await page.getByRole("dialog").getByRole("button", { name: "Apply", exact: true }).click();
+  await page.waitForFunction(() => document.querySelector('textarea[aria-label="kubectl output"]')?.value?.length > 0, null, { timeout: 15000 });
+  await page.getByRole("dialog").getByRole("button", { name: "Close", exact: true }).last().click();
+  await page.getByRole("cell", { name: PVC, exact: true }).waitFor({ timeout: 10000 });
+  const pvcGet = await armAks("POST", `/resourceGroups/${RG}/providers/Microsoft.ContainerService/managedClusters/${AKS}/runCommand`, { command: `kubectl get pvc ${PVC} -n default -o json` });
+  const pvcObj = pvcGet.status === 200 ? JSON.parse(JSON.parse(pvcGet.text).properties.logs) : {};
+  check("UI-created PVC dynamically provisioned + Bound over the native wire",
+    pvcObj.status?.phase === "Bound" && String(pvcObj.spec?.volumeName).startsWith("pvc-"), JSON.stringify(pvcObj.status || {}));
+  await page.getByRole("tab", { name: "Persistent volumes" }).click();
+  await page.getByRole("cell", { name: pvcObj.spec?.volumeName, exact: true }).waitFor({ timeout: 10000 });
+  check("Persistent volumes tab lists the volume the claim provisioned", true);
+  await shot("29a-aks-storage");
+
+  // ── Custom resources: a CRD applied through the UI registers a real Kind, instances too ─
+  const CRDNAME = `smoke-${n}`;
+  await openPanel("Custom resources");
+  await page.getByRole("tab", { name: "Definitions" }).click();
+  await page.getByRole("toolbar", { name: "Command bar" }).getByRole("button", { name: "Create" }).click();
+  await page.getByLabel("YAML", { exact: true }).fill(`apiVersion: apiextensions.k8s.io/v1\nkind: CustomResourceDefinition\nmetadata:\n  name: ${CRDNAME}s.smoke.vyomi.io\nspec:\n  group: smoke.vyomi.io\n  names:\n    plural: ${CRDNAME}s\n    singular: ${CRDNAME}\n    kind: Smoke${n}\n  scope: Namespaced\n  versions:\n  - name: v1\n    served: true\n    storage: true\n`);
+  await page.getByRole("dialog").getByRole("button", { name: "Apply", exact: true }).click();
+  await page.waitForFunction(() => document.querySelector('textarea[aria-label="kubectl output"]')?.value?.length > 0, null, { timeout: 15000 });
+  await page.getByRole("dialog").getByRole("button", { name: "Close", exact: true }).last().click();
+  await page.getByRole("cell", { name: `${CRDNAME}s.smoke.vyomi.io`, exact: true }).waitFor({ timeout: 10000 });
+  check("UI-applied CustomResourceDefinition lists in Definitions", true);
+  await page.getByRole("tab", { name: "Instances" }).click();
+  await page.getByLabel("Custom resource definition", { exact: true }).selectOption({ label: `${CRDNAME}s.smoke.vyomi.io` });
+  await page.getByRole("toolbar", { name: "Command bar" }).getByRole("button", { name: "Create" }).click();
+  await page.getByLabel("YAML", { exact: true }).fill(`apiVersion: smoke.vyomi.io/v1\nkind: Smoke${n}\nmetadata:\n  name: ${CRDNAME}-inst\n  namespace: default\nspec:\n  ok: true\n`);
+  await page.getByRole("dialog").getByRole("button", { name: "Apply", exact: true }).click();
+  await page.waitForFunction(() => document.querySelector('textarea[aria-label="kubectl output"]')?.value?.length > 0, null, { timeout: 15000 });
+  await page.getByRole("dialog").getByRole("button", { name: "Close", exact: true }).last().click();
+  await page.getByRole("cell", { name: `${CRDNAME}-inst`, exact: true }).waitFor({ timeout: 10000 });
+  const crGet = await armAks("POST", `/resourceGroups/${RG}/providers/Microsoft.ContainerService/managedClusters/${AKS}/runCommand`, { command: `kubectl get ${CRDNAME}s ${CRDNAME}-inst -n default -o json` });
+  check("the CRD's instance is readable over the native wire by its registered plural",
+    crGet.status === 200 && JSON.parse(JSON.parse(crGet.text).properties.logs).spec?.ok === true, crGet.text?.slice(0, 160));
+  await shot("29b-aks-custom-resources");
+
+  // ── Events: an unschedulable Pod applied through the UI emits a real Event, listed live ──
+  const EVPOD = `smoke-ev-${n}`;
+  await openPanel("Workloads");
+  await page.getByRole("toolbar", { name: "Command bar" }).getByRole("button", { name: "Create" }).click();
+  await page.getByLabel("YAML", { exact: true }).fill(`apiVersion: v1\nkind: Pod\nmetadata:\n  name: ${EVPOD}\n  namespace: default\nspec:\n  containers:\n  - name: c\n    image: nginx:1.25\n`);
+  await page.getByRole("dialog").getByRole("button", { name: "Apply", exact: true }).click();
+  await page.waitForFunction(() => document.querySelector('textarea[aria-label="kubectl output"]')?.value?.length > 0, null, { timeout: 15000 });
+  await page.getByRole("dialog").getByRole("button", { name: "Close", exact: true }).last().click();
+  await openPanel("Events");
+  await page.getByRole("cell", { name: `Pod/${EVPOD}`, exact: true }).waitFor({ timeout: 10000 });
+  check("UI-triggered Pod scheduling failure shows as a real Event in the Events panel", true);
+  const evGet = await armAks("POST", `/resourceGroups/${RG}/providers/Microsoft.ContainerService/managedClusters/${AKS}/runCommand`, { command: "kubectl get events -A -o json" });
+  const evItems = evGet.status === 200 ? JSON.parse(JSON.parse(evGet.text).properties.logs).items || [] : [];
+  check("the event is a real stored object over the native wire too",
+    evItems.some((e) => e.involvedObject?.name === EVPOD && e.reason === "FailedScheduling"), JSON.stringify(evItems.map((e) => e.reason)));
+  await shot("29c-aks-events");
+  await page.goto(UI + `#/aks/${RG}/${AKS}`);
+  await page.getByRole("navigation", { name: "Resource menu" }).waitFor({ timeout: 15000 });
+
   // ── Kubernetes service created over the wire → visible in the UI (CLI → UI) ───────────
   const aksPut = await armAks("PUT", `/resourceGroups/${RG}/providers/Microsoft.ContainerService/managedClusters/${AKS2}`, { location: "eastus" });
   check("ARM PUT kubernetes service over wire", aksPut.status === 200 || aksPut.status === 201, `HTTP ${aksPut.status}`);

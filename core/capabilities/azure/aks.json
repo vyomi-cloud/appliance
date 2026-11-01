@@ -119,11 +119,16 @@
  "azure.aks.kubernetes_objects": {
   "title": "Storage (persistent volumes, storage classes), Custom resources, Events",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Persistent volumes / claims / storage classes and custom resource definitions are not kinds Vyomi's Kubernetes object store holds, and with no controllers or kubelet running there are no Kubernetes events to show."
+   "StorageClasses, PersistentVolumes and PersistentVolumeClaims are real, stored kinds: the disk/file CSI driver add-ons seed the usual default StorageClasses on every new cluster, and a PVC is bound for real — statically to a PV named by spec.volumeName, or dynamically provisioned from its resolved StorageClass — with its reclaim policy enforced on delete (Delete cascades the PV, Retain releases it). No actual disks back a PV: capacity and access modes are bookkeeping, not an enforced quota.",
+   "CustomResourceDefinitions are stored objects too: once applied, the CRD's Kind is registered for the cluster and its custom resource instances apply/get/describe/delete like any built-in kind — but there is no validation webhook, conversion webhook, defaulting or OpenAPI schema enforcement, so any instance matching the registered apiVersion/kind is accepted.",
+   "Events are real objects emitted when Vyomi's \"controllers\" act on a real mutation (a Pod goes unschedulable, a LoadBalancer Service or Ingress can't get an address, a PVC is provisioned) — not a live kubelet/controller-manager feed, so there is no event for everything a real cluster would report (node conditions, image pulls, liveness probes, …) and events are never aggregated (count/lastTimestamp stay 1/first)."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_aks_k8s_core.py"
   ]
  },
  "azure.aks.locks": {
