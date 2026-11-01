@@ -1,7 +1,9 @@
 /* IAM user detail — Summary + 5 tabs, all backed by real native calls except the
- * declared gaps (CloudTrail policy generator, non-CodeCommit/Keyspaces/X.509
- * credential sections, Last Accessed). MFA devices are real (assignment + resync),
- * limited only by there being no console sign-in flow to challenge the code against. */
+ * declared gap (non-CodeCommit/Keyspaces/X.509 credential sections — see
+ * iam.security-credentials.codecommit). MFA devices are real (assignment + resync),
+ * limited only by there being no console sign-in flow to challenge the code against.
+ * Last Accessed and the CloudTrail policy generator are real too, mined from Vyomi's
+ * own native-wire activity log rather than CloudTrail (see LastAccessed.jsx). */
 import { useState } from "react";
 import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
@@ -29,6 +31,7 @@ import { navigate } from "../../../common/router.js";
 import { ErrorAlert, KeyValue, NotSimulatedContainer, fmtDate } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import DeleteModal from "../../kit/DeleteModal.jsx";
+import { LastAccessedTab, CloudTrailPolicyGenerator } from "./LastAccessed.jsx";
 import * as api from "./api.js";
 
 function PermissionsTab({ userName, reload }) {
@@ -71,7 +74,7 @@ function PermissionsTab({ userName, reload }) {
         </ExpandableSection>
       </CapabilityContainer>
 
-      <CapabilityContainer id="iam.cloudtrail-policy-generator" title="Generate policy based on CloudTrail events" />
+      <CloudTrailPolicyGenerator arn={user.data?.Arn} />
 
       <Modal visible={attachModal} onDismiss={() => setAttachModal(false)} header="Add permissions"
         footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs">
@@ -390,7 +393,7 @@ export default function UserDetail({ params }) {
           { id: "groups", label: "Groups", content: <GroupsTab userName={userName} /> },
           { id: "tags", label: "Tags", content: <TagsTab userName={userName} /> },
           { id: "security", label: "Security credentials", content: <SecurityCredentialsTab userName={userName} /> },
-          { id: "last-accessed", label: "Last Accessed", content: <CapabilityContainer id="iam.last-accessed" title="Last accessed" /> },
+          { id: "last-accessed", label: "Last Accessed", content: <LastAccessedTab arn={user.Arn} /> },
         ]} />
       </SpaceBetween>
       <DeleteModal visible={delModal} onDismiss={() => setDelModal(false)} resourceType="user" names={[userName]}

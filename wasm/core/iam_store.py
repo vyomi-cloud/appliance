@@ -36,6 +36,14 @@ State shapes (record shapes owned by iam_core):
     org_policies : { policy_id -> SCP/RCP }   (Vyomi-only — see iam_core's CreateOrgPolicy)
     access_requests : { request_id -> account-access request }  (Vyomi-only — see RequestAccountAccess)
     virtual_mfa_devices : { serial_number(arn) -> virtual MFA device, assigned or not }
+    activity : [ {principal_arn, service, action, time}, ... ]  (native-wire activity log —
+        every request signed with an IAM USER's own access key, AKID-attributed by
+        aws_wire_router.py; the console's own operator credential doesn't appear here.
+        Backs GenerateServiceLastAccessedDetails, the Vyomi-only policy-from-activity
+        generator, and Access Analyzer's unused-access findings — see iam_core.record_activity)
+    trust_anchors : { arn -> IAM Roles Anywhere trust anchor }      (Vyomi-only)
+    rolesanywhere_profiles : { arn -> IAM Roles Anywhere profile }  (Vyomi-only)
+    analyzers : { analyzer_name -> Access Analyzer analyzer }       (Vyomi-only)
 """
 from __future__ import annotations
 
@@ -168,6 +176,10 @@ class IamStore:
         self.org_policies: dict[str, dict[str, Any]] = {}       # keyed by PolicyId (SCP/RCP, Vyomi-only)
         self.access_requests: dict[str, dict[str, Any]] = {}    # keyed by RequestId (Vyomi-only)
         self.virtual_mfa_devices: dict[str, dict[str, Any]] = {}   # keyed by SerialNumber (ARN)
+        self.activity: list[dict[str, Any]] = []                   # native-wire activity log (Vyomi-only)
+        self.trust_anchors: dict[str, dict[str, Any]] = {}         # keyed by ARN (Roles Anywhere, Vyomi-only)
+        self.rolesanywhere_profiles: dict[str, dict[str, Any]] = {}   # keyed by ARN (Roles Anywhere, Vyomi-only)
+        self.analyzers: dict[str, dict[str, Any]] = {}             # keyed by analyzer name (Access Analyzer, Vyomi-only)
         self.engine: AuthzEngine = engine or NativeIamEvaluator()
         self.account_id = account_id
 

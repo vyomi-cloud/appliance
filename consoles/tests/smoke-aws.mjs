@@ -713,6 +713,50 @@ try {
   check("IAM assign MFA device (UI) → visible over native wire", mfaXml.includes(`mfa/${MFA}`), mfaXml.slice(0, 200));
   await shot("17b-iam-user-mfa");
 
+  // IAM Last Accessed + "Generate policy based on CloudTrail events": real, mined from
+  // Vyomi's own native-wire activity log (core/iam_core.py: record_activity /
+  // GetServiceLastAccessedDetails / GeneratePolicyFromActivity), not CloudTrail — only a
+  // request signed with the IAM user's OWN access key is attributable. Sign a real SQS
+  // call as this user, then check the console surfaces it (CLI → UI direction).
+  const akXml = await iamXml({ Action: "CreateAccessKey", UserName: U });
+  const akid = xtag(akXml, "AccessKeyId");
+  await wire("/", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded; charset=utf-8",
+    authorization: `AWS4-HMAC-SHA256 Credential=${akid}/20261030/us-east-1/sqs/aws4_request, SignedHeaders=host, Signature=0` },
+    body: new URLSearchParams({ Action: "CreateQueue", QueueName: `${U}-queue` }).toString() });
+  await page.goto(UI + `#/iam/users/${U}`);
+  await page.getByRole("tab", { name: "Last Accessed" }).click();
+  await page.getByText("Amazon Simple Queue Service (SQS)").waitFor({ timeout: 10000 });
+  check("IAM user's own signed SQS call → shown on Last Accessed tab (CLI → UI)", true);
+  await page.getByRole("tab", { name: "Permissions" }).click();
+  await page.getByRole("button", { name: "Generate policy" }).click();
+  await page.getByText(/sqs/).first().waitFor({ timeout: 10000 });
+  check("Generate policy based on CloudTrail events (UI) → policy mined from native-wire activity log", true);
+  await shot("17c-iam-last-accessed");
+
+  // IAM Access Analyzer: external-access findings are real, computed from IAM role trust
+  // policies naming a principal outside this account (core/iam_core.py: CreateAnalyzer /
+  // ListFindings) — a role created over the wire shows up as a finding (CLI → UI direction).
+  const ANALYZER = `v4smoke-analyzer-${Date.now() % 100000}`;
+  await iamXml({ Action: "CreateAnalyzer", AnalyzerName: ANALYZER, Type: "ACCOUNT" });
+  const EXT_ROLE = `v4smoke-ext-role-${Date.now() % 100000}`;
+  await iamXml({ Action: "CreateRole", RoleName: EXT_ROLE, AssumeRolePolicyDocument: JSON.stringify({ Version: "2012-10-17", Statement: [{ Effect: "Allow", Principal: { AWS: "arn:aws:iam::999999999999:root" }, Action: "sts:AssumeRole" }] }) });
+  await page.goto(UI + "#/iam/resource-analysis");
+  await page.getByText(EXT_ROLE).first().waitFor({ timeout: 10000 });
+  check("IAM Access Analyzer: external-trust role created over wire → shown as a finding (CLI → UI)", true);
+  await shot("17d-iam-access-analyzer");
+
+  // IAM Roles Anywhere: a trust anchor created through the console shows over the native
+  // wire (UI → CLI direction). The certificate is format-checked, never crypto-verified.
+  const TA = `v4smoke-trust-anchor-${Date.now() % 100000}`;
+  await page.goto(UI + "#/iam/roles");
+  await page.getByRole("button", { name: "Create trust anchor" }).click();
+  const taDialog = page.getByRole("dialog");
+  await taDialog.getByLabel("Name").fill(TA);
+  await taDialog.locator("textarea").fill("-----BEGIN CERTIFICATE-----\nMIIFAKECERTDATAFORSMOKETESTSONLYNOTREAL\n-----END CERTIFICATE-----");
+  await taDialog.getByRole("button", { name: "Create trust anchor" }).click();
+  const taXml = await iamXml({ Action: "ListTrustAnchors" });
+  check("IAM Roles Anywhere: trust anchor created (UI) → visible over native wire", taXml.includes(`<Name>${TA}</Name>`), taXml.slice(0, 200));
+
   // EC2: launch an instance through the wizard (UI → CLI direction)
   const EN = `v4-smoke-instance-${Date.now() % 100000}`;
   await page.goto(UI + "#/ec2/launch-instance");

@@ -272,6 +272,12 @@ def _azure_service(path, lheaders, query):
 
 # SigV4 credential scope: "Credential=AKID/20230626/us-east-1/<service>/aws4_request"
 _CRED_RE = re.compile(r"Credential=[^/]+/[^/]+/[^/]+/([^/,]+)/aws4_request")
+# The AKID itself — sent in clear in the Credential scope regardless of signature
+# verification (Vyomi doesn't verify SigV4). A real aws-cli/SDK caller configured with
+# an IAM user's OWN access key (CreateAccessKey) is attributable this way; the console's
+# fixed operator credential ("VYOMICONSOLE") and unsigned/placeholder test credentials are
+# not, since they don't match any store.iam.access_keys entry (see iam_core.record_activity).
+_AKID_RE = re.compile(r"Credential=([^/]+)/")
 
 # AWS signing-name → our core key. (S3 falls through as the default.)
 _SIGNING = {
@@ -691,6 +697,29 @@ class AwsWireRouter:
             params.update(dict(parse_qsl(txt, keep_blank_values=True)))
         return params
 
+    # ── activity log (Vyomi-only — see iam_core.record_activity) ───────
+    # Query/JSON-protocol services carry an explicit action name (Action= param or the
+    # X-Amz-Target header); REST services (S3, Lambda, API Gateway, …) don't, so only the
+    # service — not the action — is attributable for them.
+    _ACTION_FROM_QUERY = {"iam", "rds", "vpc", "elbv2", "cloudformation", "sns", "sqs"}
+
+    def _action_name(self, svc, lheaders, query, body):
+        target = lheaders.get("x-amz-target", "") or ""
+        if target:
+            return target.rsplit(".", 1)[-1]
+        if svc in self._ACTION_FROM_QUERY:
+            return self._query_params(query, body).get("Action") or None
+        return None
+
+    def _track_activity(self, svc, lheaders, query, body):
+        akid_m = _AKID_RE.search(lheaders.get("authorization", "") or "")
+        if not akid_m:
+            return
+        key = self.iam.access_keys.get(akid_m.group(1))
+        if not key:   # not an IAM user's own access key (console operator / unsigned / unknown)
+            return
+        iam.record_activity(self.iam, key["user_name"], svc, self._action_name(svc, lheaders, query, body))
+
     # ── dispatch ───────────────────────────────────────────────────────
     async def ahandle(self, method, path, query, headers, body):
         """Async front door: serves the RDS Data API (which must await the SQL
@@ -715,6 +744,7 @@ class AwsWireRouter:
         if isinstance(body, str):
             body = body.encode("utf-8")
         svc = self.service_of(method, path, lheaders, body, query)
+        self._track_activity(svc, lheaders, query, body)
 
         if svc == "rds-data":  # async-only — guard the sync path
             return {"status": 400, "headers": {"x-amzn-errortype": "BadRequestException"},
@@ -898,7 +928,7 @@ class AwsWireRouter:
         # Query-protocol / XML services
         params = self._query_params(query, body)
         if svc == "iam":
-            r = iam.dispatch(self.iam, params)
+            r = iam.dispatch(self.iam, params, s3_store=self.s3)
         elif svc == "rds":
             r = rds.dispatch(self.rds, params, msg_store=self.msg, s3_store=self.s3)
         elif svc == "vpc":

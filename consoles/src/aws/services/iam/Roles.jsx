@@ -1,5 +1,5 @@
-/* Roles list — real ListRoles/DeleteRole. "Roles Anywhere" is an out-of-scope
- * cross-account feature (no on-prem/X.509 workloads to issue credentials to). */
+/* Roles list — real ListRoles/DeleteRole + the Roles Anywhere trust-anchor/profile
+ * control plane (see RolesAnywhere.jsx). */
 import { useState } from "react";
 import Button from "@cloudscape-design/components/button";
 import Link from "@cloudscape-design/components/link";
@@ -9,7 +9,7 @@ import { useNotify } from "../../../common/notify.jsx";
 import { navigate, follow } from "../../../common/router.js";
 import ResourceTable from "../../kit/ResourceTable.jsx";
 import DeleteModal from "../../kit/DeleteModal.jsx";
-import { CapabilityContainer } from "../../kit/Capability.jsx";
+import RolesAnywherePanel from "./RolesAnywhere.jsx";
 import * as api from "./api.js";
 
 function trustedEntities(doc) {
@@ -58,7 +58,7 @@ export default function Roles() {
           { id: "last", header: "Last activity", cell: () => "-" },
         ]}
       />
-      <CapabilityContainer id="iam.roles-anywhere" title="Roles Anywhere" />
+      <RolesAnywherePanel roles={r.data || []} />
       <DeleteModal visible={del} onDismiss={() => setDel(false)} resourceType="role"
         names={sel.map((x) => x.RoleName)}
         onConfirm={async () => { for (const x of sel) await api.deleteRole(x.RoleName); notify.success("Role(s) deleted."); setSel([]); r.reload(); }} />

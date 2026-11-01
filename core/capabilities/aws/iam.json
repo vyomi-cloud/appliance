@@ -146,37 +146,46 @@
  },
  "iam.last-accessed": {
   "title": "Last Accessed (service last-accessed data)",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "Service last-accessed data requires long-term usage telemetry AWS aggregates in the background; Vyomi has no equivalent history to report."
-  ]
+   "Generated from Vyomi's own native-wire activity log, not AWS's background telemetry: only requests signed with an IAM USER's own access key (a real aws-cli/boto3/SDK caller configured with CreateAccessKey credentials) are attributable. The console's own operator session and roles (which get temporary AssumeRole credentials Vyomi does not mint) never show activity.",
+   "Service-level granularity only (Granularity=ACTION_LEVEL is not modeled)."
+  ],
+  "tests": ["tests/conformance/test_iam_core.py"]
  },
  "iam.cloudtrail-policy-generator": {
   "title": "Generate policy based on CloudTrail events",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "Vyomi does not simulate CloudTrail, so there are no recorded events to mine a least-privilege policy from."
-  ]
+   "Vyomi does not simulate CloudTrail; the generated policy is mined from the same real signal CloudTrail would have recorded for the principal — Vyomi's own native-wire activity log (see iam.last-accessed) — synchronously rather than through Access Analyzer's StartPolicyGeneration/GetGeneratedPolicy job.",
+   "Only activity attributable to an IAM user's own access key counts (see iam.last-accessed); for services where Vyomi only has service-level activity, the generated statement grants the whole service namespace (e.g. \"s3:*\") rather than the exact actions invoked."
+  ],
+  "tests": ["tests/conformance/test_iam_core.py"]
  },
  "iam.roles-anywhere": {
   "title": "IAM Roles Anywhere",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "Issuing short-term role credentials to on-premises/X.509-authenticated workloads is not modeled."
-  ]
+   "Trust anchors and profiles are real, stored resources on IAM's native wire. The certificate is format-checked (a well-formed PEM block), never cryptographically verified — the same limitation as the virtual-MFA code check (see iam.user.mfa).",
+   "CreateSession (exchanging a signed challenge for temporary role credentials) is not modeled; only the trust-anchor/profile control plane is."
+  ],
+  "tests": ["tests/conformance/test_iam_core.py"]
  },
  "iam.access-analyzer": {
   "title": "IAM Access Analyzer",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "Resource analysis, unused-access findings and analyzer settings require cross-account reachability analysis Vyomi (a single-account appliance) has no basis to compute."
-  ]
+   "External-access findings are real: computed from IAM role trust policies and S3 bucket policies that name a principal outside this account or \"*\". KMS key policies, SQS/SNS resource policies and Secrets Manager resource policies are not yet scanned.",
+   "Unused-access findings cover IAM user access keys only (an access key at least `unused_access_age` days old with zero entries in the activity log, see iam.last-accessed) — unused role permissions and unused console passwords are not modeled.",
+   "Vyomi simulates a single AWS account: organization-wide analyzers and cross-account zone-of-trust membership are not modeled (see iam.organizations)."
+  ],
+  "tests": ["tests/conformance/test_iam_core.py"]
  },
  "iam.organizations": {
   "title": "AWS Organizations multi-account features (root access management, organization activity, account access manager)",
   "level": { "nano": "not_simulated", "offline": "not_simulated" },
   "limitations": [
-   "Vyomi simulates a single AWS account; there is no organization of member accounts for these multi-account features to operate over."
+   "Vyomi is a single-tenant, single-account appliance: every resource, ARN and store in the simulator (not just IAM's) is scoped to one account with no concept of member accounts, cross-account trust or consolidated billing. Modeling AWS Organizations for real would mean giving every service's core a multi-account resource namespace and cross-account evaluation, not a self-contained IAM change — so, unlike the other IAM gaps above, this one is left not simulated rather than built on an activity log or a resource-policy scan."
   ]
  },
  "iam.organizations.policies": {

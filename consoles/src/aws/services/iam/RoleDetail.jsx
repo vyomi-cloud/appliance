@@ -24,6 +24,7 @@ import { navigate } from "../../../common/router.js";
 import { ErrorAlert, KeyValue, fmtDate } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import DeleteModal from "../../kit/DeleteModal.jsx";
+import { LastAccessedTab } from "./LastAccessed.jsx";
 import * as api from "./api.js";
 
 function RolePermissionsTab({ roleName }) {
@@ -177,7 +178,7 @@ export default function RoleDetail({ params }) {
           { id: "permissions", label: "Permissions", content: <RolePermissionsTab roleName={roleName} /> },
           { id: "trust", label: "Trust relationships", content: <TrustTab roleName={roleName} role={role} reload={r.reload} /> },
           { id: "tags", label: "Tags", content: <RoleTagsTab roleName={roleName} /> },
-          { id: "last-accessed", label: "Last Accessed", content: <CapabilityContainer id="iam.last-accessed" title="Last accessed" /> },
+          { id: "last-accessed", label: "Last Accessed", content: <LastAccessedTab arn={role.Arn} /> },
         ]} />
       </SpaceBetween>
       <DeleteModal visible={delModal} onDismiss={() => setDelModal(false)} resourceType="role" names={[roleName]}

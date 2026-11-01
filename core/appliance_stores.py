@@ -2318,11 +2318,13 @@ def cosmos_store() -> AppStateCosmosStore:
 # ── v4 C0g: AWS IAM ─────────────────────────────────────────────────────────────────
 #
 #   IAM   users / groups / roles / managed policies / access keys / SAML+OIDC providers /
-#         account alias+password policy / Vyomi-only org policies + access requests
+#         account alias+password policy / Vyomi-only org policies + access requests +
+#         activity log + Roles Anywhere + Access Analyzer
 #                                            -> service_states["iam_core"]{users,groups,roles,
 #                                               policies,access_keys,saml_providers,
 #                                               oidc_providers,account_aliases,password_policy,
-#                                               credential_report,org_policies,access_requests}
+#                                               credential_report,org_policies,access_requests,
+#                                               activity,trust_anchors,rolesanywhere_profiles,analyzers}
 #   The pre-v4 handler (server.py `_iam_*` + providers/aws_iam.py, records keyed by opaque
 #   ids with flat `policies: [policy_id]` lists) kept its own slot (core.app_context.iam_state,
 #   still the classic console's — /api/iam/* REST stays on it). Its users/groups/roles/
@@ -2337,6 +2339,7 @@ _IAM_KEYS = {
     "saml_providers": dict, "oidc_providers": dict, "account_aliases": list,
     "password_policy": lambda: None, "credential_report": lambda: None,
     "org_policies": dict, "access_requests": dict, "virtual_mfa_devices": dict,
+    "activity": list, "trust_anchors": dict, "rolesanywhere_profiles": dict, "analyzers": dict,
 }
 
 
@@ -2364,6 +2367,10 @@ class AppStateIamStore(_SlotStore, _IamStoreBase):
     org_policies = _slot_attr("org_policies")
     access_requests = _slot_attr("access_requests")
     virtual_mfa_devices = _slot_attr("virtual_mfa_devices")
+    activity = _slot_attr("activity")
+    trust_anchors = _slot_attr("trust_anchors")
+    rolesanywhere_profiles = _slot_attr("rolesanywhere_profiles")
+    analyzers = _slot_attr("analyzers")
 
     def adopt(self) -> None:
         """Pre-v4 server.py IAM state (core.app_context.iam_state) -> this slot, once per space."""

@@ -125,13 +125,16 @@
     "live": "live-rcp"
   },
   "access-analyzer": {
-    "route": "#/iam/access-analyzer"
+    "route": "#/iam/access-analyzer",
+    "live": "live-analyzer"
   },
   "resource-analysis": {
-    "route": "#/iam/resource-analysis"
+    "route": "#/iam/resource-analysis",
+    "live": "live-ext-finding"
   },
   "unused-access": {
-    "route": "#/iam/unused-access"
+    "route": "#/iam/unused-access",
+    "live": "live-unused-finding"
   },
   "analyzer-settings": {
     "route": "#/iam/analyzer-settings"
