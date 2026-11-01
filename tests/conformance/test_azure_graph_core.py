@@ -1,7 +1,9 @@
 """Microsoft Graph core conformance — the Entra ID (Azure AD) peer of the Azure RBAC
 and ARM conformance checks. Exercises users, groups (+members), app registrations
 (+ auto-created service principal + password credentials), domains, administrative
-units, organization, and the directory audit log over the native `/v1.0/...` wire.
+units, organization, devices (+ a user's registeredDevices), the directory audit log,
+and the oauth2/v2.0/token client-credentials grant (+ the sign-in logs it appends to)
+over the native `/v1.0/...` wire.
 """
 import json
 
@@ -114,10 +116,55 @@ def run(store=None):
     _check("security defaults setting round-trips",
            body(call("GET", "/v1.0/policies/identitySecurityDefaultsEnforcementPolicy"))["isEnabled"] is False)
 
+    # Devices — a user's own "Devices" tab registers/lists/deletes real device objects
+    # (azure.entra.devices: limited). No OS join client to drive this, so registration is
+    # a direct admin action, but the resulting object is real: listed via /v1.0/devices
+    # AND /v1.0/users/{id}/registeredDevices, gone from both once deleted.
+    _check("registering a device for an unknown user 404s",
+           call("POST", f"/v1.0/users/{{nonexistent}}/registeredDevices", {"displayName": "x", "operatingSystem": "Windows"}).status == 404)
+    dev = body(call("POST", f"/v1.0/users/{alice['id']}/registeredDevices", {"displayName": "Alice-Laptop", "operatingSystem": "Windows", "operatingSystemVersion": "11"}))
+    _check("register device -> 201 with a real deviceId", bool(dev.get("id")) and bool(dev.get("deviceId")))
+    _check("device defaults to unmanaged/noncompliant (no MDM policy engine)", dev["isManaged"] is False and dev["isCompliant"] is False)
+    _check("device listed under /v1.0/devices", any(d["id"] == dev["id"] for d in body(call("GET", "/v1.0/devices"))["value"]))
+    _check("device listed under the owning user's registeredDevices",
+           any(d["id"] == dev["id"] for d in body(call("GET", f"/v1.0/users/{alice['id']}/registeredDevices"))["value"]))
+    _check("missing displayName/operatingSystem rejected",
+           call("POST", f"/v1.0/users/{alice['id']}/registeredDevices", {"displayName": "no-os"}).status == 400)
+    _check("delete device", call("DELETE", f"/v1.0/devices/{dev['id']}").status == 204)
+    _check("deleted device gone from /v1.0/devices", not any(d["id"] == dev["id"] for d in body(call("GET", "/v1.0/devices"))["value"]))
+    _check("delete unknown device 404s", call("DELETE", f"/v1.0/devices/{dev['id']}").status == 404)
+
+    # oauth2/v2.0/token (client_credentials) — the one real authentication Vyomi models
+    # (azure.entra.sign_in_logs: limited). Build a fresh app + secret so this section
+    # doesn't depend on the earlier add/removePassword app already being deleted.
+    def token(form):
+        from urllib.parse import urlencode
+        return graph.dispatch(s, "POST", "/00000000-0000-0000-0000-000000000000/oauth2/v2.0/token", {}, {}, urlencode(form).encode())
+
+    sapp = body(call("POST", "/v1.0/applications", {"displayName": "uic-sp-app"}))
+    cred = body(call("POST", f"/v1.0/applications/{sapp['id']}/addPassword", {"passwordCredential": {"displayName": "ci"}}))
+    secret = cred["secretText"]
+
+    _check("unknown client_id rejected with invalid_client",
+           token({"grant_type": "client_credentials", "client_id": "not-a-real-app-id", "client_secret": "x"}).status == 400)
+    r = token({"grant_type": "client_credentials", "client_id": sapp["appId"], "client_secret": "totally-wrong"})
+    _check("wrong secret rejected with 401 invalid_client", r.status == 401 and body(r)["error"] == "invalid_client")
+    r = token({"grant_type": "client_credentials", "client_id": sapp["appId"], "client_secret": secret})
+    _check("real secret -> 200 with an access_token", r.status == 200 and bool(body(r).get("access_token")))
+    _check("unsupported grant_type rejected",
+           token({"grant_type": "authorization_code", "client_id": sapp["appId"], "client_secret": secret}).status == 400)
+
+    sign_ins = body(call("GET", "/v1.0/auditLogs/signIns"))["value"]
+    _check("successful sign-in logged for the real app", any(e["appId"] == sapp["appId"] and e["status"]["errorCode"] == 0 for e in sign_ins))
+    _check("failed sign-in logged with a non-zero errorCode", any(e["appId"] == sapp["appId"] and e["status"]["errorCode"] != 0 for e in sign_ins))
+
+    _check("removePassword revokes the secret", call("POST", f"/v1.0/applications/{sapp['id']}/removePassword", {"keyId": cred["keyId"]}).status == 204)
+    r = token({"grant_type": "client_credentials", "client_id": sapp["appId"], "client_secret": secret})
+    _check("revoked secret can no longer sign in", r.status == 401)
+
     # Directory audit log — every mutation above should have appended an entry.
     audits = body(call("GET", "/v1.0/auditLogs/directoryAudits"))["value"]
     _check("directory audit log recorded the mutations", len(audits) >= 8)
-    _check("sign-in logs are honestly empty (no sign-in flow simulated)", body(call("GET", "/v1.0/auditLogs/signIns"))["value"] == [])
 
     print("\nMicrosoft Graph core conformance: ALL GREEN")
     return s

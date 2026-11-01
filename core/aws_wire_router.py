@@ -208,8 +208,14 @@ def _azure_service(path, lheaders, query):
     so root `?comp=list` (list-containers vs list-queues) defaults to blob."""
     query = query or {}
     # Microsoft Graph (Entra ID): unambiguous `/v1.0/...` or `/beta/...` prefix, checked
-    # first so it never falls through to a data-plane guess below.
+    # first so it never falls through to a data-plane guess below. The oauth2/v2.0/token
+    # endpoint (real Azure AD hostname is login.microsoftonline.com, not graph.microsoft.com,
+    # but this relay has no per-host routing) is claimed the same way, by its unambiguous
+    # path shape, so Entra's client-credentials sign-in reaches az_graph.dispatch() too.
     if path.startswith("/v1.0/") or path.startswith("/beta/"):
+        return "az-graph"
+    p0 = path.split("?", 1)[0]
+    if re.search(r"/oauth2(/v2\.0)?/token$", p0):
         return "az-graph"
     p = path
     if p.startswith("/devstoreaccount1/"):     # Azurite account prefix

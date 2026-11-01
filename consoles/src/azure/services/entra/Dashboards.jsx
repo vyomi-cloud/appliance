@@ -1,12 +1,15 @@
 /* The Default Directory's small dashboard blades: Overview, Groups | Overview,
  * External Identities | Overview, Devices | Overview. Real counts over the live
- * directory; the quick-action buttons navigate to the real create flows. Device
- * management (MDM/BitLocker) genuinely isn't modelled — its Quick actions are an
- * honest declared gap, not a disabled stub. */
+ * directory; the quick-action buttons navigate to the real create flows. Devices |
+ * Overview reads the same real device inventory a user's own "Devices" tab registers
+ * into (UserBlade.jsx) — stale/noncompliant/unmanaged are computed from real device
+ * attributes, never sample numbers. BitLocker key escrow needs real disk encryption
+ * hardware the simulator doesn't have, so that one action stays an honest declared gap. */
 import { useState } from "react";
 import { Button, Tab, TabList } from "@fluentui/react-components";
 import EntraShell from "./EntraShell.jsx";
-import { NotSimulatedContainer } from "../../kit/common.jsx";
+import { CapabilityContainer } from "../../kit/Capability.jsx";
+import { NotSimulated } from "../../kit/common.jsx";
 import { useAsync } from "../../../common/useAsync.js";
 import * as api from "./api.js";
 
@@ -18,6 +21,7 @@ export function Overview() {
   const users = useAsync(() => api.listUsers(), []);
   const groups = useAsync(() => api.listGroups(), []);
   const apps = useAsync(() => api.listApplications(), []);
+  const devices = useAsync(() => api.listDevices(), []);
   const o = org.data;
   return (
     <EntraShell active="overview" title="Default Directory | Overview">
@@ -44,7 +48,7 @@ export function Overview() {
                   <KV label="Users" value={users.data?.length} />
                   <KV label="Groups" value={groups.data?.length} />
                   <KV label="Applications" value={apps.data?.length} />
-                  <KV label="Devices" value={0} />
+                  <KV label="Devices" value={devices.data?.length} />
                 </div>
               </div>
             </section>
@@ -136,8 +140,28 @@ export function ExternalIdentities() {
   );
 }
 
+const STALE_DAYS = 90;
+
+function downloadDevicesCsv(devices) {
+  const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const text = ["Name,Device ID,Enabled,OS,OS version,Join type,Owner,Compliant,Managed,Registered",
+    ...devices.map((d) => [d.displayName, d.deviceId, d.accountEnabled ? "Yes" : "No", d.operatingSystem, d.operatingSystemVersion,
+      d.trustType, d.registeredOwnerId, d.isCompliant ? "Yes" : "No", d.isManaged ? "Yes" : "No", d.registrationDateTime].map(esc).join(","))].join("\r\n");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([text], { type: "text/csv" }));
+  a.download = "devices.csv";
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
 export function DevicesOverview() {
   const [tab, setTab] = useState("overview");
+  const { data } = useAsync(() => api.listDevices(), []);
+  const devices = data || [];
+  const staleCutoff = Date.now() - STALE_DAYS * 86400000;
+  const stale = devices.filter((d) => new Date(d.approximateLastSignInDateTime).getTime() < staleCutoff).length;
+  const noncompliant = devices.filter((d) => !d.isCompliant).length;
+  const unmanaged = devices.filter((d) => !d.isManaged).length;
   return (
     <EntraShell active="devices" title="Devices | Overview">
       <div className="vy-page">
@@ -152,16 +176,20 @@ export function DevicesOverview() {
               <h3>Alerts</h3>
               <div className="vy-essentials-grid">
                 <div>
-                  <KV label="Stale devices" value={0} />
-                  <KV label="Noncompliant devices" value={0} />
+                  <KV label="Stale devices" value={stale} />
+                  <KV label="Noncompliant devices" value={noncompliant} />
                 </div>
                 <div>
-                  <KV label="Unmanaged devices" value={0} />
+                  <KV label="Unmanaged devices" value={unmanaged} />
                 </div>
               </div>
             </section>
-            <NotSimulatedContainer title="Quick actions" feature="Device management"
-              note="Download devices. BitLocker keys. Device registration (MDM/Intune) is a separate subsystem Vyomi does not model." />
+            <CapabilityContainer id="azure.entra.devices" title="Quick actions">
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <Button onClick={() => downloadDevicesCsv(devices)}>Download devices</Button>
+              </div>
+              <NotSimulated feature="BitLocker keys" note="BitLocker recovery key escrow needs real disk encryption on real hardware, which Vyomi's software simulator cannot provide." />
+            </CapabilityContainer>
           </>
         )}
         {tab !== "overview" && <div style={{ padding: "12px 0" }}>No device data to show.</div>}

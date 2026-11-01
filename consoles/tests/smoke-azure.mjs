@@ -53,6 +53,8 @@ const POOL = `pool${n}`;           // node pool created through the UI (AKS pool
 const EUSR = `vysmokeuser${n}`;    // Entra ID user created through the UI
 const EUSR2 = `vywireuser${n}`;    // Entra ID user created over the wire
 const EGRP = `vysmokegrp${n}`;     // Entra ID security group, created through the UI once the directory-settings toggle allows it
+const EDEV = `vysmokedevice${n}`;  // device registered through a user's own "Devices" tab
+const ESAPP = `vysigninapp${n}`;   // app registration whose real client secret signs in through oauth2/v2.0/token
 const SUBNAME = `Vyomi Smoke Subscription ${n}`;  // subscription renamed through the UI
 const SUBLOCK = `vysublock${n}`;   // subscription-scoped lock created through the UI
 const SUBRG = `vysubrg${n}`;       // resource group created over the wire (shown in the Subscription's Resource groups panel)
@@ -100,6 +102,7 @@ const armWeb = (method, path, body) => wire(`/subscriptions/${SUB}${path}${path.
 const armAks = (method, path, body) => wire(`/subscriptions/${SUB}${path}${path.includes("?") ? "&" : "?"}api-version=2024-09-02-preview`,
   { method, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
 const armDns = (method, path, body) => wire(`/subscriptions/${SUB}${path}${path.includes("?") ? "&" : "?"}api-version=2018-05-01`,
+  { method, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
 const armCogs = (method, path, body) => wire(`/subscriptions/${SUB}${path}${path.includes("?") ? "&" : "?"}api-version=2024-10-01`,
   { method, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
 const graph = (method, path, body) => wire(`/v1.0${path}`, { method, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
@@ -1980,6 +1983,42 @@ try {
   check("UI 'Manage security defaults' → Disabled stored over the native Graph policy endpoint",
     secDefaultsGet.status === 200 && JSON.parse(secDefaultsGet.text).isEnabled === false);
   await shot("25b-entra-security-defaults");
+
+  // ── Entra ID: register a device through a user's own "Devices" tab → visible over the
+  // native Microsoft Graph wire, gone from the UI once deleted over that same wire
+  // (azure.entra.devices is now "limited", not not_simulated) ───────────────────────────
+  await page.goto(UI + "#/entra/users");
+  await page.getByRole("link", { name: EUSR2, exact: true }).click();
+  await page.getByRole("tab", { name: "Devices" }).click();
+  await page.getByRole("button", { name: "Register device" }).click();
+  await page.getByLabel("Name", { exact: true }).fill(EDEV);
+  await page.getByRole("button", { name: "Register", exact: true }).click();
+  await page.getByRole("cell", { name: EDEV, exact: true }).waitFor({ timeout: 10000 });
+  const devicesOverWire = await graph("GET", "/devices");
+  const deviceRecord = (devicesOverWire.status === 200 ? JSON.parse(devicesOverWire.text).value : []).find((d) => d.displayName === EDEV);
+  check("UI register device → visible over native Microsoft Graph wire", !!deviceRecord, `HTTP ${devicesOverWire.status}`);
+  await shot("25c-entra-device-registered");
+
+  const deviceDel = await graph("DELETE", `/devices/${deviceRecord?.id}`);
+  check("Graph DELETE device over wire", deviceDel.status === 204, `HTTP ${deviceDel.status}`);
+  await page.reload();
+  await page.getByText(EDEV).waitFor({ state: "detached", timeout: 10000 });
+  check("wire-deleted device gone from the UI", true);
+
+  // ── Entra ID: "Test sign-in" with a REAL client secret (oauth2/v2.0/token) → a real row
+  // on Sign-in logs (azure.entra.sign_in_logs is now "limited" — service principal
+  // sign-ins are genuine client-secret validations, never sample data) ──────────────────
+  const esApp = await graph("POST", "/applications", { displayName: ESAPP, signInAudience: "AzureADMyOrg" });
+  const esAppId = JSON.parse(esApp.text).id;
+  await page.goto(UI + `#/entra/appregistrations/${esAppId}/certificatessecrets`);
+  await page.getByRole("button", { name: "New client secret" }).click();
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  await page.getByRole("button", { name: "Test sign-in" }).click();
+  await page.getByText(/Sign-in succeeded/).waitFor({ timeout: 10000 });
+  await page.goto(UI + "#/entra/signinlogs");
+  await page.getByText(ESAPP).first().waitFor({ timeout: 10000 });
+  check("UI 'Test sign-in' with a real client secret appends a real Sign-in logs row", true);
+  await shot("25d-entra-signin-logs");
 
   // ── Cosmos DB: account created through the wizard → visible over native ARM ───────────
   const cosmosArm = (method, path, body) => wire(`/subscriptions/${SUB}${path}${path.includes("?") ? "&" : "?"}api-version=2024-05-15`,
