@@ -1632,6 +1632,102 @@ try {
   check("subscription filter: the non-matching message never shows", (await page.getByText("drop-this").count()) === 0);
   await shot("20-pubsub-filter");
 
+  // Memorystore for Redis: create a Basic instance via UI (with a label and AUTH enabled)
+  // → visible over the native wire, AUTH string shown in Connections matches getAuthString.
+  const MS = `v4-gcp-ms-${Date.now() % 100000}`;
+  await page.goto(UI + "#/memorystore/create");
+  await page.getByLabel("Instance ID").fill(MS);
+  await page.getByRole("button", { name: "Add label" }).click();
+  await page.getByLabel("Name", { exact: true }).fill("env");
+  await page.getByLabel("Value", { exact: true }).fill("smoke");
+  await page.getByRole("checkbox", { name: "Enable AUTH" }).check();
+  await shot("21-memorystore-create-filled");
+  await page.getByRole("button", { name: "Create instance", exact: true }).click();
+  await page.getByRole("heading", { name: MS }).waitFor({ timeout: 10000 });
+  const msList = await wjson("/v1/projects/vyomi-project/locations/-/instances");
+  const msInst = (msList.instances || []).find((i) => i.name.endsWith(`/instances/${MS}`));
+  check("create instance via UI → visible over native wire (instances.list)", !!msInst);
+  check("create instance via UI → tier/version/capacity/labels/AUTH applied",
+    msInst?.tier === "BASIC" && msInst?.redisVersion === "REDIS_7_0" && msInst?.memorySizeGb === 1
+      && msInst?.labels?.env === "smoke" && msInst?.authEnabled === true, JSON.stringify(msInst || {}).slice(0, 200));
+  await shot("22-memorystore-instance-overview");
+
+  await page.getByRole("link", { name: "Connections" }).click();
+  await page.getByRole("button", { name: "Show" }).click();
+  const msAuth = await wjson(`/v1/projects/vyomi-project/locations/us-central1/instances/${MS}/authString`);
+  await page.getByText(msAuth.authString).waitFor({ timeout: 10000 });
+  check("Connections 'Show' → matches native getAuthString", !!msAuth.authString);
+  await shot("23-memorystore-connections");
+
+  // Configuration: edit via UI (maxmemory-policy + persistence) → patched over native wire
+  await page.getByRole("link", { name: "Configuration" }).click();
+  await page.getByRole("button", { name: "Edit configuration" }).click();
+  await page.getByRole("combobox", { name: "maxmemory-policy" }).click();
+  await page.getByRole("option", { name: "allkeys-lru", exact: true }).click();
+  await page.getByRole("radio", { name: "RDB snapshot" }).check();
+  await page.getByRole("dialog").getByRole("button", { name: "Save" }).click();
+  await page.getByRole("dialog").waitFor({ state: "detached", timeout: 10000 });
+  const msCfg = await wjson(`/v1/projects/vyomi-project/locations/us-central1/instances/${MS}`);
+  check("edit configuration via UI → patched over native wire",
+    msCfg.redisConfigs?.["maxmemory-policy"] === "allkeys-lru" && msCfg.persistenceConfig?.persistenceMode === "RDB");
+  await page.getByText("allkeys-lru").waitFor({ timeout: 10000 });
+  check("edited configuration shown in the UI", true);
+  await shot("24-memorystore-configuration");
+
+  // Maintenance: edit policy via UI → weeklyMaintenanceWindow over native wire, then
+  // reschedule the (now-pending) maintenance.
+  await page.getByRole("link", { name: "Maintenance" }).click();
+  await page.getByRole("button", { name: "Edit maintenance policy" }).click();
+  await page.getByRole("combobox", { name: "Day" }).click();
+  await page.getByRole("option", { name: "Monday" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Save" }).click();
+  await page.getByRole("dialog").waitFor({ state: "detached", timeout: 10000 });
+  const msMaint = await wjson(`/v1/projects/vyomi-project/locations/us-central1/instances/${MS}`);
+  check("edit maintenance policy via UI → weeklyMaintenanceWindow over native wire",
+    msMaint.maintenancePolicy?.weeklyMaintenanceWindow?.[0]?.day === "MONDAY");
+  await page.getByText("Monday").waitFor({ timeout: 10000 });
+  await page.getByRole("button", { name: "Reschedule" }).click();
+  await page.getByRole("radio", { name: "Immediate" }).check();
+  await page.getByRole("dialog").getByRole("button", { name: "Reschedule" }).click();
+  await page.getByRole("dialog").waitFor({ state: "detached", timeout: 10000 });
+  const msResched = await wjson(`/v1/projects/vyomi-project/locations/us-central1/instances/${MS}`);
+  check("reschedule maintenance via UI → maintenanceSchedule set over native wire", !!msResched.maintenanceSchedule);
+  await shot("25-memorystore-maintenance");
+
+  // Upgrade Redis version from the instance's Actions menu (list page), then export/import
+  // (Cloud Storage RDB) via the Overview header actions.
+  await page.goto(UI + "#/memorystore");
+  await page.getByRole("button", { name: `Actions for ${MS}` }).click();
+  await page.getByRole("menuitem", { name: "Upgrade" }).click();
+  await page.getByRole("combobox", { name: "Target version" }).click();
+  await page.getByRole("option", { name: "Redis 7.2" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Upgrade" }).click();
+  await page.getByRole("dialog").waitFor({ state: "detached", timeout: 10000 });
+  const msUpgraded = await wjson(`/v1/projects/vyomi-project/locations/us-central1/instances/${MS}`);
+  check("upgrade Redis version via UI (list row menu) → applied over native wire", msUpgraded.redisVersion === "REDIS_7_2");
+
+  await page.goto(UI + `#/memorystore/instances/us-central1/${MS}/overview`);
+  await page.getByRole("button", { name: "Export", exact: true }).click();
+  await page.getByLabel("Destination").fill(`gs://smoke-bucket/${MS}.rdb`);
+  await page.getByRole("dialog").getByRole("button", { name: "Export", exact: true }).click();
+  await page.getByText(`Exporting "${MS}"`).waitFor({ timeout: 10000 });
+  check("export via UI → native wire accepts the gs:// destination", true);
+
+  await page.getByRole("button", { name: "Import", exact: true }).click();
+  await page.getByLabel("Source").fill(`gs://smoke-bucket/${MS}.rdb`);
+  await page.getByRole("dialog").getByRole("button", { name: "Import", exact: true }).click();
+  await page.getByText(`Importing into "${MS}"`).waitFor({ timeout: 10000 });
+  check("import via UI → native wire accepts the gs:// source", true);
+  await shot("26-memorystore-export-import");
+
+  // Delete the instance from the Overview page → gone over the native wire
+  await page.getByRole("button", { name: "Delete", exact: true }).click();
+  await page.getByLabel("Confirm deletion").fill(MS);
+  await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await page.getByRole("heading", { name: "Instances" }).waitFor({ timeout: 10000 });
+  check("delete instance via UI → gone over native wire",
+    (await wire(`/v1/projects/vyomi-project/locations/us-central1/instances/${MS}`)).status === 404);
+
   // Dark mode
   await page.goto(UI + "#/storage/browser");
   await page.getByRole("button", { name: "More options" }).click();          // ⋮ menu, as in the native top bar
