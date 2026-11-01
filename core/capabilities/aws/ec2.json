@@ -380,11 +380,11 @@
  "ec2.target-groups.attributes": {
   "title": "Target group attributes",
   "level": {
-   "nano": "config_only",
-   "offline": "config_only"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Stickiness, slow start, deregistration delay and the load-balancing algorithm are stored and returned exactly as set, but there's no real data plane behind them to change traffic distribution."
+   "Attribute values are validated (ranges/enums) and the deregistration delay is ENFORCED: a deregistered target of an in-use group stays 'draining' (Target.DeregistrationInProgress) for the configured seconds before it disappears. Stickiness, slow start and the load-balancing algorithm are stored and returned but there is no request data plane behind the load balancer to change traffic distribution."
   ],
   "tests": [
    "tests/conformance/test_elbv2_core.py"

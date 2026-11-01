@@ -82,6 +82,18 @@ def run(store=None):
     row = elb.console_create(s, {"name": "ui"})
     _check("console create fills every field", all(v not in (None, "") for k, v in row.items() if k != "tags"))
     elb.console_child_create(s, "target-groups", {"name": "ui-tg"})
+    def attr(k, v):
+        return code(Action="ModifyTargetGroupAttributes", TargetGroupArn=tg, **{"Attributes.member.1.Key": k, "Attributes.member.1.Value": v})
+    _check("deregistration delay range is validated", attr("deregistration_delay.timeout_seconds", "99999")[1] == "ValidationError")
+    _check("slow start 1..29 is rejected", attr("slow_start.duration_seconds", "10")[1] == "ValidationError")
+    _check("bad algorithm is rejected", attr("load_balancing.algorithm.type", "random")[1] == "ValidationError")
+    ok(Action="ModifyTargetGroupAttributes", TargetGroupArn=tg, **{"Attributes.member.1.Key": "deregistration_delay.timeout_seconds", "Attributes.member.1.Value": "60"})
+    ok(Action="DeregisterTargets", TargetGroupArn=tg, **{"Targets.member.1.Id": "i-0123456789abcdef0"})
+    th = ok(Action="DescribeTargetHealth", TargetGroupArn=tg)
+    _check("deregistered target DRAINS for the delay", "<State>draining</State>" in th and "Target.DeregistrationInProgress" in th)
+    s.target_groups[tg]["_draining"][0]["_until"] = 0
+    _check("drain ends after the delay", "i-0123456789abcdef0" not in ok(Action="DescribeTargetHealth", TargetGroupArn=tg))
+    ok(Action="RegisterTargets", TargetGroupArn=tg, **{"Targets.member.1.Id": "i-0123456789abcdef0"})
     elb.console_child_create(s, "listeners", {"load_balancer": "ui", "port": 8080})
     _check("console child lists", len(elb.console_children(s, "target-groups")["items"]) == 2
            and len(elb.console_children(s, "listeners")["items"]) == 2)

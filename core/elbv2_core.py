@@ -32,6 +32,7 @@ from __future__ import annotations
 import hashlib
 import ipaddress
 import re
+import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -632,13 +633,37 @@ def _describe_target_group_attributes(store, req):
     return _envelope("DescribeTargetGroupAttributes", _ser("Attributes", _attrs_list(tg["_attrs"])))
 
 
+def _check_tg_attr(k: str, v) -> None:
+    """Target-group attribute values are VALIDATED like ELBv2 does (ranges / enums)."""
+    v = str(v)
+
+    def bad(msg):
+        raise Elbv2Error("ValidationError", f"Target group attribute '{k}' {msg}")
+    ints = {"deregistration_delay.timeout_seconds": (0, 3600), "stickiness.lb_cookie.duration_seconds": (1, 604800),
+            "stickiness.app_cookie.duration_seconds": (1, 604800)}
+    if k in ints:
+        if not v.isdigit() or not ints[k][0] <= int(v) <= ints[k][1]:
+            bad(f"must be an integer between {ints[k][0]} and {ints[k][1]}")
+    elif k == "slow_start.duration_seconds":
+        if not v.isdigit() or not (int(v) == 0 or 30 <= int(v) <= 900):
+            bad("must be 0 (disabled) or between 30 and 900")
+    elif k == "stickiness.enabled" and v not in ("true", "false"):
+        bad("must be 'true' or 'false'")
+    elif k == "stickiness.type" and v not in ("lb_cookie", "app_cookie", "source_ip", "source_ip_dest_ip", "source_ip_dest_ip_proto"):
+        bad("is not a supported stickiness type")
+    elif k == "load_balancing.algorithm.type" and v not in ("round_robin", "least_outstanding_requests", "weighted_random"):
+        bad("must be round_robin, least_outstanding_requests or weighted_random")
+
+
 def _modify_target_group_attributes(store, req):
     tg = _need_tg(store, req.get("TargetGroupArn"))
     for a in _lst(req.get("Attributes")):
         k = a.get("Key")
         if k not in tg["_attrs"]:
             raise Elbv2Error("ValidationError", f"Target group attribute key '{k}' is not recognized")
-        tg["_attrs"][k] = a.get("Value", "")
+        v = a.get("Value", "")
+        _check_tg_attr(k, v)
+        tg["_attrs"][k] = v
     store.persist()
     return _envelope("ModifyTargetGroupAttributes", _ser("Attributes", _attrs_list(tg["_attrs"])))
 
@@ -673,6 +698,7 @@ def _register_targets(store, req):
         if t.get("AvailabilityZone"):
             rec["AvailabilityZone"] = t["AvailabilityZone"]
         tg["_targets"] = [x for x in tg["_targets"] if _tkey(x) != _tkey(rec)] + [rec]
+        tg["_draining"] = [x for x in tg.get("_draining", []) if _tkey(x) != _tkey(rec)]   # re-registering cancels the drain
     store.persist()
     return _envelope("RegisterTargets")
 
@@ -685,7 +711,13 @@ def _deregister_targets(store, req):
         if not any(_tkey(x) == key for x in tg["_targets"]):
             if tg["TargetType"] != "lambda":
                 continue   # real ELBv2 silently ignores unregistered targets
+        gone = [x for x in tg["_targets"] if _tkey(x) == key]
         tg["_targets"] = [x for x in tg["_targets"] if _tkey(x) != key]
+        # ENFORCED deregistration delay: a target of an in-use group keeps DRAINING for
+        # deregistration_delay.timeout_seconds before it disappears from DescribeTargetHealth.
+        delay = int(tg["_attrs"].get("deregistration_delay.timeout_seconds") or 0)
+        if gone and delay > 0 and _tg_lb_arns(store, tg["TargetGroupArn"]):
+            tg.setdefault("_draining", []).append({**gone[0], "_until": time.time() + delay})
     store.persist()
     return _envelope("DeregisterTargets")
 
@@ -754,8 +786,18 @@ def _describe_target_health(store, req):
             continue
         out.append({"Target": dict(t), "HealthCheckPort": str(t["Port"] if tg["HealthCheckPort"] == "traffic-port" else tg["HealthCheckPort"]),
                     "TargetHealth": th})
+    now = time.time()
+    tg["_draining"] = [d for d in tg.get("_draining", []) if d["_until"] > now]
+    for d in tg["_draining"]:
+        unhealthy += 1
+        if wanted and _tkey(d) not in wanted:
+            continue
+        out.append({"Target": {k: v for k, v in d.items() if not k.startswith("_")},
+                    "HealthCheckPort": str(d["Port"]),
+                    "TargetHealth": {"State": "draining", "Reason": "Target.DeregistrationInProgress",
+                                     "Description": "Target deregistration is in progress"}})
     for w in wanted:
-        if not any(_tkey(t) == w for t in tg["_targets"]):
+        if not any(_tkey(t) == w for t in tg["_targets"]) and not any(_tkey(d) == w for d in tg["_draining"]):
             out.append({"Target": {"Id": w[0], "Port": w[1]}, "HealthCheckPort": str(w[1]),
                         "TargetHealth": {"State": "unused", "Reason": "Target.NotRegistered",
                                          "Description": "Target is not registered to the target group"}})
