@@ -277,7 +277,7 @@
       "target": "nano",
       "cloud": "aws",
       "kind": "core",
-      "cmd": "python3 tests/conformance/test_nano_persist_delete_sync.py",
+      "cmd": "PYTHONPATH=. python3 tests/conformance/test_nano_persist_delete_sync.py",
       "timeout": 120
     },
     {
