@@ -108,6 +108,9 @@ def _gcp_service(path):
         return "gcp-cloudsql"
     if path == "/v3/uptimeCheckIps":   # Cloud Monitoring API v3 (global, no project)
         return "gcp-monitoring"
+    # Resource Manager's projects.create / projects.search (no project id in the path yet).
+    if path == "/v3/projects" or path.startswith("/v3/projects:search"):
+        return "gcp-resourcemanager"
     m = re.match(r"^/v3/projects/[^/]+(/.*)?$", path)
     if m:
         # Bare "/v3/projects/{id}" is Resource Manager's GetProject/UpdateProject;

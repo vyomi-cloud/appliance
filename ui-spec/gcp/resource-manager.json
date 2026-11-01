@@ -1,0 +1,89 @@
+{
+  "$schema": "../schema.json",
+  "cloud": "gcp",
+  "service": "resource-manager",
+  "console_path": "/cloud-resource-manager/",
+  "status": "draft",
+  "gaps_note": "No private captures were available for this service; every page is hand-authored from product knowledge (provenance: reference, confidence: medium) rather than extracted from a screenshot. 'Manage resources' is reached from IAM & Admin's 'Manage Resources' nav link (ui-spec/gcp/iam-admin.json marks it external) and from the project picker; it has no org/folder hierarchy to show because Vyomi's GCP lens is project-scoped, so the native tree view is modeled as a flat project list.",
+  "nav": [
+    {
+      "label": "Manage resources",
+      "page_id": "manage-resources"
+    }
+  ],
+  "pages": [
+    {
+      "id": "manage-resources",
+      "kind": "list",
+      "title": "Manage resources",
+      "route": "/cloud-resource-manager/",
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Create Project",
+        "Refresh"
+      ],
+      "table": {
+        "selection": "multi",
+        "columns": [
+          "Name",
+          "ID"
+        ],
+        "actions": [
+          "Open",
+          "Settings",
+          "Rename",
+          "Move",
+          "Delete"
+        ],
+        "filter_placeholder": "Filter resources by name or ID",
+        "empty_state": "No rows to display"
+      },
+      "notes": "Native console shows a project/folder tree under the organization. Vyomi's GCP lens has no organizations or folders, so this renders the flat list of projects you've used."
+    },
+    {
+      "id": "create-project",
+      "kind": "create",
+      "title": "New Project",
+      "route": "/projectcreate",
+      "breadcrumbs": [
+        "Manage resources",
+        "New Project"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "submit": "Create",
+      "sections": [
+        {
+          "title": "Project details",
+          "fields": [
+            {
+              "label": "Project name",
+              "type": "text",
+              "help": "This is the name of your project, and it will help you identify it."
+            },
+            {
+              "label": "Project ID",
+              "type": "text",
+              "required": true,
+              "constraints": "6-30 characters: lowercase letters, digits and hyphens; must start with a letter and can't end with a hyphen. Can't be changed later.",
+              "help": "ID can't be changed later"
+            },
+            {
+              "label": "Location",
+              "type": "select",
+              "default": "No organization",
+              "options": [
+                "No organization"
+              ],
+              "actions": [
+                "Browse"
+              ],
+              "help": "Parent organization or folder for the new project."
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

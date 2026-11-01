@@ -9,8 +9,13 @@ NO fastapi / google-cloud / socket / subprocess imports -> loads under Pyodide.
 
 Wire shapes:
     Project
-      GET   /v3/projects/{projectId}                 -> Project
-      PATCH /v3/projects/{projectId}                  body {displayName?, labels?} -> Project
+      GET    /v3/projects/{projectId}                 -> Project
+      PATCH  /v3/projects/{projectId}                  body {displayName?, labels?} -> Project
+      POST   /v3/projects                              body {projectId,displayName?,parent?} -> Project
+      GET    /v3/projects:search?query=                -> {projects:[...]}  (name/ID substring match)
+      DELETE /v3/projects/{projectId}                  -> {}  (immediate delete; Vyomi has no
+                                                          30-day recoverable soft-delete / folders
+                                                          or organizations to move a project into)
     Tag keys
       POST   /v3/tagKeys          body {parent,shortName,description} -> TagKey
       GET    /v3/tagKeys?parent=projects/{p}          -> {tagKeys:[...]}
@@ -33,6 +38,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import re
 import uuid
 from dataclasses import dataclass, field
 from urllib.parse import unquote
@@ -100,6 +106,41 @@ def _patch_project(store, project_id, body) -> RmResponse:
         p["labels"] = dict(body["labels"] or {})
     p["etag"] = base64.b64encode(uuid.uuid4().bytes[:8]).decode()
     return _json(200, dict(p))
+
+
+_PROJECT_ID_RE = re.compile(r"^[a-z][a-z0-9-]{4,28}[a-z0-9]$")
+
+
+def _create_project(store, body) -> RmResponse:
+    project_id = str(body.get("projectId", "")).strip()
+    if not _PROJECT_ID_RE.match(project_id):
+        return _err(400, "projectId must be 6-30 characters: lowercase letters, digits and "
+                          "hyphens, starting with a letter and not ending with a hyphen.", "INVALID_ARGUMENT")
+    if project_id in store.projects:
+        return _err(409, f"Project {project_id} already exists.", "ALREADY_EXISTS")
+    p = _get_or_create_project(store, project_id)
+    if body.get("displayName"):
+        p["displayName"] = body["displayName"]
+    if body.get("parent"):
+        p["parent"] = body["parent"]
+    return _json(200, dict(p))
+
+
+def _search_projects(store, query_str) -> RmResponse:
+    q = (query_str or "").strip().lower()
+    out = []
+    for pid, p in sorted(store.projects.items()):
+        if q and q not in pid.lower() and q not in str(p.get("displayName", "")).lower():
+            continue
+        out.append(dict(p))
+    return _json(200, {"projects": out})
+
+
+def _delete_project(store, project_id) -> RmResponse:
+    if project_id not in store.projects:
+        return _err(404, f"Project {project_id} not found.", "NOT_FOUND")
+    del store.projects[project_id]
+    return _json(200, {})
 
 
 # ── tag keys ──────────────────────────────────────────────────────────────────
@@ -288,6 +329,15 @@ def dispatch(store: ResourceManagerStore, method: str, path: str,
             return _delete_org_policy(store, name)
         return _err(400, f"Unsupported method {method} on policy", "INVALID_ARGUMENT")
 
+    # ---- projects collection: POST creates, GET "projects:search" lists ----
+    if segs == ["projects"] and method == "POST":
+        return _create_project(store, _body())
+    if len(segs) == 1 and segs[0].startswith("projects:"):
+        verb = segs[0].split(":", 1)[1]
+        if verb == "search" and method == "GET":
+            return _search_projects(store, str(query.get("query", "")).strip())
+        return _err(400, f"Unsupported projects verb '{verb}'", "INVALID_ARGUMENT")
+
     # ---- project: projects/{id} ----
     if len(segs) == 2 and segs[0] == "projects":
         project_id = segs[1]
@@ -295,6 +345,8 @@ def dispatch(store: ResourceManagerStore, method: str, path: str,
             return _get_project(store, project_id)
         if method == "PATCH":
             return _patch_project(store, project_id, _body())
+        if method == "DELETE":
+            return _delete_project(store, project_id)
         return _err(400, f"Unsupported method {method} on project", "INVALID_ARGUMENT")
 
     return _err(404, f"Unknown path: {path}", "NOT_FOUND")

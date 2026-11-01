@@ -15,6 +15,7 @@ import ScheduleIcon from "@mui/icons-material/esm/ScheduleOutlined.js";
 import SecretIcon from "@mui/icons-material/esm/PasswordOutlined.js";
 import KeyIcon from "@mui/icons-material/esm/VpnKeyOutlined.js";
 import IamIcon from "@mui/icons-material/esm/AdminPanelSettingsOutlined.js";
+import ResourceManagerIcon from "@mui/icons-material/esm/AccountTreeOutlined.js";
 import ArtifactIcon from "@mui/icons-material/esm/ViewInArOutlined.js";
 import ChartIcon from "@mui/icons-material/esm/BarChartOutlined.js";
 import LogIcon from "@mui/icons-material/esm/ArticleOutlined.js";
@@ -38,6 +39,7 @@ export const PRODUCTS = [
   { id: "security/secret-manager", title: "Secret Manager", description: "Store API keys, passwords and other secrets", category: "Security", icon: SecretIcon, load: () => import("./security/secret-manager/index.jsx") },
   { id: "security/kms", title: "Cloud KMS", description: "Manage encryption keys", category: "Security", icon: KeyIcon, load: () => import("./security/kms/index.jsx") },
   { id: "iam-admin", title: "IAM & Admin", description: "Resource access control", category: "Management", icon: IamIcon, load: () => import("./iam-admin/index.jsx") },
+  { id: "resource-manager", title: "Manage resources", description: "Create, organize and administer projects", category: "Management", icon: ResourceManagerIcon, load: () => import("./resource-manager/index.jsx") },
   { id: "artifacts", title: "Artifact Registry", description: "Store, manage and secure container images and packages", category: "CI/CD", icon: ArtifactIcon, load: () => import("./artifacts/index.jsx") },
   { id: "monitoring", title: "Monitoring", description: "Metrics, dashboards, alerting, uptime checks", category: "Observability", icon: ChartIcon, load: () => import("./monitoring/index.jsx") },
   { id: "logs", title: "Logging", description: "Logs Explorer, routing and storage", category: "Observability", icon: LogIcon, load: () => import("./logs/index.jsx") },
