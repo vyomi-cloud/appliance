@@ -132,6 +132,46 @@ export const runJobTriggerNow = (region, triggerId) => restJson("POST", `${sched
 export const deleteJobTrigger = (region, triggerId) => restJson("DELETE", `${schedulerBase(region)}/${e(triggerId)}`);
 export const triggerId = (schedJob) => schedJob.name.split("/").pop();
 
+// ── service triggers (Eventarc-style; Pub/Sub transport, modelled as a service sub-resource
+// since Vyomi has no eventarc.googleapis.com) ──────────────────────────────────────────────
+// Publishing to the bound topic really invokes the destination service (core/gcp_run_core.py
+// deliver_event, wired from the Pub/Sub core's publish path) and writes a real Cloud Logging
+// entry — see listServiceLogs below.
+export async function listServiceTriggers(region, name) {
+  const r = await restJson("GET", `${base(region)}/services/${e(name)}/eventarcTriggers`);
+  return r.triggers || [];
+}
+export const createServiceTrigger = (region, name, triggerId2, topic) => restJson("POST",
+  `${base(region)}/services/${e(name)}/eventarcTriggers`,
+  { query: { eventarcTriggerId: triggerId2 }, body: { transport: { pubsub: { topic: `projects/${getProject()}/topics/${topic}` } } } });
+export const deleteServiceTrigger = (region, name, triggerId2) =>
+  restJson("DELETE", `${base(region)}/services/${e(name)}/eventarcTriggers/${e(triggerId2)}`);
+export const serviceTriggerId = (t) => t.name.split("/").pop();
+export const triggerTopicId = (t) => (t.transport?.pubsub?.topic || "").split("/").pop();
+
+export async function listTopicIds() {
+  const r = await restJson("GET", `/v1/projects/${e(getProject())}/topics`);
+  return (r.topics || []).map((t) => t.name.split("/").pop());
+}
+/** Publish a message on the trigger's topic — a real Pub/Sub call that, if a trigger is
+ * bound, really delivers to the destination service (see the Observability tab's Logs). */
+export const publishTestEvent = (topicId, text) => restJson("POST", `/v1/projects/${e(getProject())}/topics/${e(topicId)}:publish`, {
+  body: { messages: [{ data: btoa(unescape(encodeURIComponent(text || "test event"))) }] },
+});
+
+// ── Observability (real Cloud Logging entries for real Cloud Run activity: service/job
+// lifecycle mutations and Eventarc deliveries — never synthetic/random data) ──────────────
+async function listEntries(filter) {
+  const r = await restJson("POST", "/v2/entries:list", {
+    body: { resourceNames: [`projects/${getProject()}`], filter, orderBy: "timestamp desc", pageSize: 50 },
+  });
+  return r.entries || [];
+}
+export const listServiceLogs = (name) =>
+  listEntries(`resource.type="cloud_run_revision" AND resource.labels.service_name="${name}"`);
+export const listJobLogs = (name) =>
+  listEntries(`resource.type="cloud_run_job" AND resource.labels.job_name="${name}"`);
+
 // ── worker pools ───────────────────────────────────────────────────────────────────────
 export async function listWorkerPools(region) {
   const r = await restJson("GET", `${base(region)}/workerPools`);

@@ -104,7 +104,8 @@ export default function CreateService({ query }) {
           <FormControlLabel value="repo" control={<Radio size="small" />} label="Continuously deploy from a repository (source or function)" />
           <FormControlLabel value="function" control={<Radio size="small" />} label="Use an inline editor to create a function" />
         </RadioGroup>
-        {source === "repo" && <NotSimulated compact feature="Continuously deploy from a repository" note="Vyomi has no Cloud Build or source-repository integration." />}
+        {source === "repo" && <NotSimulated compact feature="Continuously deploy from a repository"
+          note="Needs a real GitHub/Cloud Source Repository connection and a real container build (Cloud Build); the simulator has no git-hosting service and forbids network egress from its cores." />}
         {source === "image" && (
           <TextField label="Container image URL" required value={image} onChange={(e) => setImage(e.target.value)} sx={{ maxWidth: 560 }} />
         )}

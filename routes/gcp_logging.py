@@ -56,6 +56,12 @@ from core import gcp_monitoring_core as _gmon   # noqa: E402
 _STORE.mon_store = _gmon.shared_store()   # Logs Storage "Create usage alert" mirrors live byte/entry counts into Monitoring
 
 
+def store() -> SpaceLoggingStore:
+    """The offline appliance's one Cloud Logging store, reached into by other routes
+    (Cloud Run, ...) that write real log entries for real activity."""
+    return _STORE
+
+
 def register(app: FastAPI) -> None:
     async def _wire(request: Request):
         r = lg.dispatch(_STORE, request.method, request.url.path, dict(request.query_params),

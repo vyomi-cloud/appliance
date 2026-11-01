@@ -609,7 +609,10 @@ class AwsWireRouter:
                 return True
             project, location, jid = m.groups()
             try:
-                gcp_run.run_job(self.gcp_run, project, location, jid, {})
+                op = gcp_run.run_job(self.gcp_run, project, location, jid, {})
+                eid = op["response"]["name"].rsplit("/", 1)[-1]
+                self._run_log("job", project, location, jid,
+                              "Execution %s started (%d task(s))" % (eid, op["response"]["taskCount"]))
             except gcp_run._E as e:
                 return e.message
             return True
@@ -617,7 +620,8 @@ class AwsWireRouter:
             return True
         topic = d["topicName"]
         msg = {"messages": [{"data": d.get("data", ""), "attributes": d.get("attributes") or {}}]}
-        r = gcp_ps.dispatch(self.gcp_msg, "POST", "/v1/%s:publish" % topic, {}, {}, json.dumps(msg).encode())
+        r = gcp_ps.dispatch(self.gcp_msg, "POST", "/v1/%s:publish" % topic, {}, {}, json.dumps(msg).encode(),
+                            on_publish=self._eventarc_deliver)
         return True if r.status < 300 else "Topic %s not found." % topic
 
     def _secrets_notify(self, topic, event_type, secret_name):
@@ -627,7 +631,8 @@ class AwsWireRouter:
             "data": base64.b64encode(json.dumps({"secretId": secret_name, "eventType": event_type}).encode()).decode(),
             "attributes": {"eventType": event_type, "secretId": secret_name},
         }]}
-        gcp_ps.dispatch(self.gcp_msg, "POST", "/v1/%s:publish" % topic, {}, {}, json.dumps(msg).encode())
+        gcp_ps.dispatch(self.gcp_msg, "POST", "/v1/%s:publish" % topic, {}, {}, json.dumps(msg).encode(),
+                        on_publish=self._eventarc_deliver)
 
     def _secrets_log(self, secret_name, event_type, message):
         """Secret Manager lifecycle event -> a real Cloud Logging entry (the Logs tab
@@ -659,6 +664,28 @@ class AwsWireRouter:
             "labels": {"logType": log_type},
         }
         gcp_logging.write_entries(self.gcp_logging, None, {"entries": [entry]})
+
+    def _run_log(self, kind, project, location, rid, message, severity="INFO"):
+        """A real Cloud Run mutation (or Eventarc delivery) -> a real Cloud Logging entry,
+        the same seam _secrets_log/_iam_audit_log use (the Observability tab's Logs section
+        reads these back via entries:list)."""
+        restype = "cloud_run_revision" if kind == "service" else "cloud_run_job"
+        label_key = "service_name" if kind == "service" else "job_name"
+        entry = {
+            "logName": "projects/%s/logs/run.googleapis.com%%2F%s" % (project, "requests" if kind == "service" else "executions"),
+            "resource": {"type": restype, "labels": {"project_id": project, "location": location, label_key: rid}},
+            "severity": severity,
+            "textPayload": message,
+        }
+        gcp_logging.write_entries(self.gcp_logging, None, {"entries": [entry]})
+
+    def _eventarc_deliver(self, topic_full, messages):
+        """A real Pub/Sub publish -> deliver to every Cloud Run Eventarc-style trigger
+        bound to that topic (see core/gcp_run_core.deliver_event)."""
+        gcp_run.deliver_event(self.gcp_run, topic_full, messages, log_fn=self._run_log)
+
+    def _run_topic_exists(self, topic_full):
+        return bool(self.gcp_msg.get_topic(topic_full))
 
     def _pam_grant(self, resource, role, member):
         """Privileged Access Manager activating a grant: add `member` to `role` on the
@@ -964,6 +991,11 @@ class AwsWireRouter:
                                   rm_store=self.gcp_rm, logger=self._iam_audit_log)
             elif svc == "gcp-artifactregistry":   # a repository's CMEK key is checked/used through the real KMS core
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), kms_store=self.gcp_kms)
+            elif svc == "gcp-pubsub":   # a message delivered to an Eventarc-style Cloud Run trigger
+                r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), on_publish=self._eventarc_deliver)
+            elif svc == "gcp-run":   # real mutations + Eventarc deliveries -> real Cloud Logging entries
+                r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body),
+                                  log_fn=self._run_log, topic_exists=self._run_topic_exists)
             else:
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body))
             hdrs = dict(r.headers or {})

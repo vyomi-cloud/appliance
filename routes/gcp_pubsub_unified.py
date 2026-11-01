@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from contextlib import contextmanager
 from urllib.parse import quote
 
@@ -42,6 +43,7 @@ from core import wire_ingress as _wi
 _log = logging.getLogger("vyomi.engine")
 _METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"]
 _COLLECTIONS = ("topics", "subscriptions", "snapshots", "schemas")
+_PUBLISH_RE = re.compile(r"^/?v1/projects/([^/]+)/topics/([^/:]+):publish$")
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
@@ -130,7 +132,24 @@ def ps(method: str, native: str, query: dict | None = None, body: bytes = b"") -
         if len(segs) == 5 and segs[0] == "v1" and segs[3] in ("topics", "subscriptions") and ":" not in segs[4]:
             kind = "topic" if segs[3] == "topics" else "subscription"
             _sync(kind, "/".join(segs[1:]), _load(out["body"]), delete=(method == "DELETE"))
+    if out["status"] == 200 and method == "POST":
+        m = _PUBLISH_RE.match(native.split("?", 1)[0])
+        if m:
+            _deliver_eventarc(f"projects/{m.group(1)}/topics/{m.group(2)}", _load(body).get("messages") or [])
     return out
+
+
+def _deliver_eventarc(topic_full: str, messages: list) -> None:
+    """A real publish on `topic_full` -> deliver to any Cloud Run Eventarc-style trigger
+    bound to it (see core/gcp_run_core.deliver_event / routes/gcp_run.py)."""
+    if not messages:
+        return
+    try:
+        from core import gcp_run_core as _run_core
+        from routes import gcp_run as _run_routes
+        _run_core.deliver_event(_run_routes.store(), topic_full, messages, log_fn=_run_routes._log_fn)
+    except Exception:
+        _log.debug("pubsub: eventarc delivery skipped", exc_info=True)
 
 
 def publish(project: str, topic: str, data: str, attributes: dict | None = None) -> int:

@@ -485,7 +485,7 @@ def _prune_topic_retention(store, topic: dict) -> None:
     topic["_retained"] = [m for m in topic.get("_retained", []) if now - m.get("_publish_at", now) <= retention]
 
 
-def _publish(store, name: str, body: dict) -> PubsubResponse:
+def _publish(store, name: str, body: dict, on_publish=None) -> PubsubResponse:
     topic = _require_topic(store, name)
     messages = body.get("messages") or []
     if not messages:
@@ -513,6 +513,8 @@ def _publish(store, name: str, body: dict) -> PubsubResponse:
     if retain:
         _prune_topic_retention(store, topic)
     store.persist()
+    if on_publish:
+        on_publish(name, prepared)
     return _json(200, {"messageIds": [r["messageId"] for r in prepared]})
 
 
@@ -998,9 +1000,13 @@ _IAM_VERBS = ("getIamPolicy", "setIamPolicy", "testIamPermissions")
 # ── dispatch ──────────────────────────────────────────────────────────────
 def dispatch(store: MessagingStore, method: str, path: str,
              query: dict | None = None, headers: dict | None = None,
-             body: bytes = b"") -> PubsubResponse:
+             body: bytes = b"", on_publish=None) -> PubsubResponse:
     """Native GCP Pub/Sub REST v1 router. Resource names are `projects/{p}/...`;
-    verbs (`:publish`, `:pull`, `:acknowledge`, `:seek`) are `:`-suffixed on the path."""
+    verbs (`:publish`, `:pull`, `:acknowledge`, `:seek`) are `:`-suffixed on the path.
+
+    *on_publish(topic_full_name, prepared_messages)*, when given, is called after a
+    successful publish — Cloud Run's Eventarc-style triggers hook in here (see
+    core/aws_wire_router.py / routes/gcp_pubsub_unified.py)."""
     method = (method or "GET").upper()
     query = query or {}
 
@@ -1049,7 +1055,7 @@ def dispatch(store: MessagingStore, method: str, path: str,
                 return _iam(store, collection, resource, verb, payload)
             # specific topic
             if verb == "publish" and method == "POST":
-                return _publish(store, resource, payload)
+                return _publish(store, resource, payload, on_publish=on_publish)
             if method == "PUT":
                 return _create_topic(store, resource, payload)
             if method == "PATCH":

@@ -107,27 +107,46 @@
    "offline": "not_simulated"
   },
   "limitations": [
-   "Vyomi has no Cloud Build or source-repository integration."
+   "Continuous deployment needs a real GitHub/Cloud Source Repository connection and a real container build (Cloud Build). The simulator has no git-hosting service to fetch source from, and shared cores forbid network egress (tests/conformance/test_no_cloud_egress.py) — there is nothing local to connect to or build, unlike a stateful sub-resource this appliance could model on its own."
   ]
  },
  "gcp.run.services.triggers": {
   "title": "Event triggers (Eventarc) and Cloud Build source deploys",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Vyomi has no Eventarc or Cloud Build backend; only HTTP-style services are modelled."
+   "Modelled as a Pub/Sub-transport Eventarc trigger (a service sub-resource, since Vyomi has no eventarc.googleapis.com): \"Add trigger\" binds the service to an existing Pub/Sub topic, and publishing on that topic — from the Pub/Sub console, the native wire, or any other trigger that publishes — really invokes the destination service (IAM invoker policy enforced) and writes a real Cloud Logging entry read back on the Observability tab.",
+   "Only Pub/Sub-sourced events are modelled; Vyomi has no Eventarc backend for Storage, Audit Log or direct Cloud Build source-deploy triggers, and \"Continuously deploy from a repository\" is not simulated (see continuous_deployment).",
+   "Vyomi does not run the destination's container image, so a delivered event cannot change the service's own behaviour — delivery and IAM enforcement are real, execution is not."
+  ],
+  "api": [
+   "projects.locations.services.eventarcTriggers.create (simulator-only sub-resource)",
+   "projects.locations.services.eventarcTriggers.list",
+   "projects.locations.services.eventarcTriggers.delete",
+   "pubsub.projects.topics.publish"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_run_core.py"
   ]
  },
  "gcp.run.services.observability": {
   "title": "Observability (request metrics, container instance count, logs)",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Vyomi does not meter real request traffic against deployed services, so there is no metrics or log data to show."
+   "Vyomi does not run the deployed container and does not meter real HTTP request traffic, so there are no request-count/latency time series or container instance metrics to show.",
+   "The Logs section is real, not synthetic: every service create/update (new revision)/delete, authentication change and Eventarc trigger delivery writes a real Cloud Logging entry (resource type cloud_run_revision), read back here over the native entries:list API — derived from actual API activity, never random."
+  ],
+  "api": [
+   "logging.entries.write",
+   "logging.entries.list"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_run_core.py"
   ]
  },
  "gcp.run.jobs.crud": {
@@ -167,11 +186,19 @@
  "gcp.run.jobs.observability": {
   "title": "Job observability (execution metrics, logs)",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Vyomi does not meter real container execution, so there is no metrics or log data to show."
+   "Metrics are real, derived from this job's own execution history (executions/succeeded/failed/task counts), not metered container resource usage — Vyomi runs each task to completion synchronously, so there are no per-task CPU/memory/duration series.",
+   "The Logs section is real: every execution start writes a real Cloud Logging entry (resource type cloud_run_job), read back over the native entries:list API — including executions started by a Cloud Scheduler trigger."
+  ],
+  "api": [
+   "logging.entries.write",
+   "logging.entries.list"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_run_core.py"
   ]
  },
  "gcp.run.jobs.triggers": {
