@@ -29,11 +29,11 @@
     "tests": ["tests/conformance/test_azure_arm_core.py"]
   },
   "azure.servicebus.namespace.locks": {
-    "title": "Resource locks (Microsoft.Authorization/locks), scoped to this namespace",
+    "title": "Resource locks (Microsoft.Authorization/locks), scoped to this namespace, plus the Locks panel's Subscription / Resource group scope-switcher buttons",
     "level": { "nano": "full", "offline": "full" },
     "limitations": [
       "Enforcement is scoped to the exact locked resource (the namespace, or a queue/topic locked directly over the ARM API) — a lock does not cascade to block writes/deletes on a namespace's queues or topics the way a resource-group-scoped lock would in real ARM.",
-      "Locks are only simulated at the resource scope (this namespace); subscription- and resource-group-scoped lock lists are an honest 'Not simulated' gap, same as the real Subscription/Resource group scope-switch buttons."
+      "The Subscription / Resource group scope-switcher buttons show the real locks at that wider scope (the same generic engine the Subscription/Resource group blades' own Locks panels use) but read-only here — creating or deleting a lock at that scope is done from those blades, not from a namespace's Locks panel."
     ],
     "tests": ["tests/conformance/test_azure_arm_core.py"]
   },
@@ -46,11 +46,11 @@
     "tests": ["tests/conformance/test_azure_arm_core.py"]
   },
   "azure.servicebus.namespace.listactions": {
-    "title": "Toolbar actions needing a separate Azure product or a per-row detail flyout: Activity log's Activity/Export Activity Logs/Insights/Feedback/Pin current filters, and Locks' Subscription/Resource group scope + Feedback",
+    "title": "Activity log toolbar actions that open a separate Azure product or portal chrome: Activity/Export Activity Logs/Insights/Pin current filters, and Locks'/Activity log's Feedback",
     "level": { "nano": "not_simulated", "offline": "not_simulated" },
     "limitations": [
-      "The per-event Activity detail flyout, continuous Export Activity Logs (to Storage/Event Hub/Log Analytics), the Insights workbook, dashboard filter-pinning and portal Feedback are not modeled.",
-      "Column customization, one-time CSV export, filtering and 'Reset to default' on both the Activity log and Locks panels ARE real (consoles/src/azure/kit/BrowseGrid.jsx, client-side over the real rows) — this entry covers only the actions listed above."
+      "'Activity' (the timespan picker's companion action) and 'Pin current filters' write to the signed-in user's Azure Dashboard, a separate resource type (Microsoft.Portal/dashboards) Vyomi does not model; 'Export Activity Logs' configures the SUBSCRIPTION's own continuous Activity Log export (a Microsoft.Insights/diagnosticSettings extension scoped to '/subscriptions/{sub}', not to this namespace — a different resource than the namespace's own Diagnostic settings page, which IS real, see azure.servicebus.namespace.diagnosticsettings) and is not wired up; 'Insights' opens the Service Bus Insights workbook (Microsoft.Insights/workbooks pre-authored by Microsoft, not user data) which is not modeled; 'Feedback' posts to a real Microsoft telemetry endpoint outside the simulator.",
+      "Column customization, one-time CSV export, filtering and 'Reset to default' on both the Activity log and Locks panels ARE real (consoles/src/azure/kit/BrowseGrid.jsx, client-side over the real rows) — this entry covers only the actions listed above. The Locks panel's Subscription/Resource group scope buttons are real too (azure.servicebus.namespace.locks)."
     ]
   },
   "azure.servicebus.namespace.properties": {
@@ -66,29 +66,80 @@
     "tests": ["tests/conformance/test_azure_arm_core.py"]
   },
   "azure.servicebus.namespace.iam": {
-    "title": "Access control (IAM) on a namespace",
-    "level": { "nano": "not_simulated", "offline": "not_simulated" },
-    "limitations": ["Role assignments scoped to an individual resource are not modeled."]
+    "title": "Access control (IAM) on a namespace: role assignments and built-in role definitions over ARM, plus Check access / My access",
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": [
+      "Role assignments and role definitions are real ARM resources (Microsoft.Authorization/roleAssignments, roleDefinitions), and Check access / My access run the real wildcard + scope-inheritance + notActions + explicit-deny decision — all ENFORCED scoped to this namespace (plus its subscription/resource-group ancestors, matching real Azure's inherited-access view); Roles stays subscription-wide, which matches real Azure (built-in role definitions are listed tenant-wide too). Deny assignments and Classic administrators remain an honest gap — Microsoft Entra Privileged Identity Management and the legacy Azure Service Management administrator list are not modelled."
+    ],
+    "tests": ["tests/conformance/test_azure_arm_core.py"]
+  },
+  "azure.servicebus.namespace.identity": {
+    "title": "Identity (system-assigned managed identity)",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": ["User-assigned managed identities are not modeled (this lens has no standalone Microsoft.ManagedIdentity/userAssignedIdentities resource to attach)."],
+    "tests": ["tests/conformance/test_azure_arm_core.py"]
   },
   "azure.servicebus.namespace.networking": {
-    "title": "Networking, Encryption and Identity",
+    "title": "Networking (private endpoints / public network access path)",
     "level": { "nano": "not_simulated", "offline": "not_simulated" },
-    "limitations": ["Private endpoints, customer-managed key encryption and managed identities are not modeled."]
+    "limitations": [
+      "Private endpoints (Microsoft.Network/privateEndpoints wired to Microsoft.ServiceBus/namespaces/privateEndpointConnections) are not modeled for ANY resource type in Vyomi — core/netsim only models VNets/NSGs/routing, not the PrivateLinkService/PrivateEndpoint resource pair a real private-link connection needs, so there is no network path to actually gate traffic on. properties.publicNetworkAccess itself already round-trips through ARM (see the create wizard's Connectivity method), but the Networking page's per-rule virtual network / IP firewall list and the private endpoint connection list stay an honest gap until a private-link engine exists."
+    ]
+  },
+  "azure.servicebus.namespace.encryption": {
+    "title": "Encryption (customer-managed key)",
+    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "limitations": [
+      "Customer-managed key encryption needs a system-assigned identity (real, see azure.servicebus.namespace.identity) PLUS a Key Vault key reference Vyomi would have to actually gate the namespace's read/write path on failure/revocation (as core/azure_sql_core.py does for SQL TDE) — not yet wired for Service Bus specifically, so the toggle would be config-only rather than enforced; left as an honest gap rather than ship a setting that looks enforced but isn't."
+    ]
   },
   "azure.servicebus.namespace.georecovery": {
-    "title": "Geo-disaster recovery (paired namespaces + failover)",
-    "level": { "nano": "not_simulated", "offline": "not_simulated" },
-    "limitations": ["Namespace pairing and alias failover are not modeled."]
+    "title": "Geo-disaster recovery (paired namespaces + alias failover)",
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": [
+      "Pairing (disasterRecoveryConfigs), role (Primary/Secondary) and FailOver are real ARM state, ENFORCED: both namespaces of a pairing must exist, differ, and be Premium tier, and FailOver must be invoked from the Secondary's own path — exactly like real Service Bus (core/azure_arm_core.AzureArm._servicebus_georecovery).",
+      "No message data actually moves on failover — Vyomi's Service Bus data plane is one store shared by every namespace (see azure.servicebus.queue.explorer), so there is nothing per-namespace for a real customer's queues/topics to lose or gain; pendingReplicationOperationsCount always reads 0."
+    ],
+    "tests": ["tests/conformance/test_azure_arm_core.py"]
+  },
+  "azure.servicebus.namespace.diagnosticsettings": {
+    "title": "Diagnostic settings (Microsoft.Insights/diagnosticSettings, scoped to this namespace)",
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": [
+      "Logs/metrics are never actually delivered to the configured destination (workspace, storage account or event hub) — there is no agent/telemetry pipeline, so the setting is stored and validated exactly as the real resource requires but nothing flows.",
+      "Vyomi has no catalog of Service Bus's real log/metric category names (GET .../diagnosticSettingsCategories is not modeled) — the create form offers the 'allLogs' category group and 'AllMetrics' rather than Service Bus's specific category picker."
+    ],
+    "tests": ["tests/conformance/test_azure_monitor_core.py", "tests/conformance/test_azure_arm_core.py"]
+  },
+  "azure.servicebus.namespace.alerts": {
+    "title": "Alert rules (Microsoft.Insights/metricAlerts, scoped to this namespace)",
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": [
+      "A metric alert rule is a real, resource-group-scoped ARM resource that round-trips (create/list/delete, enabled/disabled, condition, severity) exactly as configured, scoped to this namespace via properties.scopes — but there is no metrics pipeline to evaluate the condition against, so a rule never actually fires or notifies an action group."
+    ],
+    "tests": ["tests/conformance/test_azure_monitor_core.py"]
   },
   "azure.servicebus.namespace.monitoring": {
-    "title": "Insights, Alerts, Metrics, Diagnostic settings and Logs on a namespace",
+    "title": "Insights workbook and Metrics charts on a namespace",
     "level": { "nano": "not_simulated", "offline": "not_simulated" },
-    "limitations": ["Metrics charts, alert rules, diagnostic-setting log routing and Log Analytics queries are not modeled."]
+    "limitations": [
+      "No metric time-series storage/emission pipeline exists yet in the shared engine — metric values (e.g. incoming/outgoing message counts) aren't sampled or retained over time anywhere in Vyomi, only read as a live point-in-time count (see the Overview/Queues/Topics message-count columns); charting history requires that pipeline to land first. Diagnostic settings and Alert rules on this namespace ARE real (azure.servicebus.namespace.diagnosticsettings / .alerts); Logs is real too (azure.servicebus.namespace.logs). The Insights workbook itself is pre-authored Microsoft content (Microsoft.Insights/workbooks), not user data, and is not modeled."
+    ]
+  },
+  "azure.servicebus.namespace.logs": {
+    "title": "Logs (a Log Analytics query scoped to this namespace)",
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": [
+      "Runs the same real KQL pass-through (POST .../workspaces/{ws}/api/query) the Monitor service's own Logs page uses, defaulted to this namespace's own AzureActivity rows (ResourceId filter) — but only the built-in AzureActivity table returns real data (core/azure_operationalinsights_core.py); there is no Service Bus-specific resource-diagnostic table (e.g. OperationalLogs) to query even once a Diagnostic setting routes logs to a workspace, since nothing is actually delivered there (azure.servicebus.namespace.diagnosticsettings)."
+    ],
+    "tests": ["tests/conformance/test_azure_operationalinsights_core.py"]
   },
   "azure.servicebus.namespace.tools": {
     "title": "Diagnose and solve problems, Events, Tasks, and Support + Troubleshooting",
     "level": { "nano": "not_simulated", "offline": "not_simulated" },
-    "limitations": ["These portal troubleshooting, Event Grid integration and support tools are not modeled."]
+    "limitations": [
+      "'Diagnose and solve problems' runs Microsoft's own troubleshooting detectors against Azure's internal health-signal pipeline (Resource Health + Application Insights correlation) — there is no local analog to correlate against. 'Events' wires this namespace up as an Event Grid system-topic source (Microsoft.EventGrid/systemTopics with topicType Microsoft.ServiceBus.*), a cross-service subscription flow not modeled for Service Bus specifically. 'Tasks' links to Azure Automation runbooks and 'Support + Troubleshooting' opens a real Microsoft support-ticket flow — both need a live Microsoft backend with no local analog. (consoles/src/azure/services/nsgs/NsgBlade.jsx leaves the same four honest for the same reason, except its Diagnose panel's Network Watcher tiles, which ARE real because they ride the local netsim engine.)"
+    ]
   },
   "azure.servicebus.queue.crud": {
     "title": "Queues — create, list, get, update, delete (ARM sub-resource of the namespace)",
