@@ -39,8 +39,48 @@ export default function Jobs({ query }) {
       </Tabs>
       {tab === "jobs"
         ? <JobsTable data={data} loading={loading} error={error} reload={reload} />
-        : <CapabilityContainer id="gcp.cloudscheduler.cron-jobs" title="Cron jobs" />}
+        : <CronJobsTab />}
     </>
+  );
+}
+
+/** The "Cron jobs" tab: legacy App Engine cron.yaml jobs. Real console affordance is
+ * read-only (jobs arrive via `gcloud app deploy cron.yaml`, not a console form) plus
+ * "Run now" — no create/pause/delete here, matching the real UI. */
+function CronJobsTab() {
+  const project = useProject();
+  const { data = [], loading, error, reload } = useAsync(() => api.listLegacyCronJobs(), [project]);
+  const notify = useNotify();
+
+  const run = async (j) => {
+    try { await api.runJob(api.jobRegion(j), api.jobId(j)); notify.success(`Ran ${api.jobId(j)}`); }
+    catch { notify.error(`${api.jobId(j)} failed to run`); }
+    reload();
+  };
+
+  return (
+    <CapabilityContainer id="gcp.cloudscheduler.cron-jobs" title="Cron jobs">
+      <ResourceTable
+        resourceName="cron jobs"
+        items={data}
+        rowKey={(j) => j.name}
+        loading={loading}
+        error={error}
+        onRetry={reload}
+        filterPlaceholder="Filter cron jobs"
+        columns={[
+          { id: "description", header: "Description", sortValue: (j) => j.description || "", cell: (j) => j.description || "No description" },
+          { id: "target", header: "Target", cell: api.targetText },
+          { id: "schedule", header: "Schedule", cell: (j) => j.schedule },
+          { id: "timezone", header: "Time zone", cell: (j) => j.timeZone || "Etc/UTC" },
+          { id: "lastRun", header: "Last run", sortValue: api.lastRunText, cell: api.lastRunText },
+          { id: "lastResult", header: "Last run result", cell: api.lastResultText },
+          { id: "nextRun", header: "Next scheduled run", cell: api.nextRunText },
+          { id: "actions", header: "Actions", cell: (j) => <Button size="small" startIcon={<PlayArrowIcon />} onClick={() => run(j)}>Run now</Button> },
+        ]}
+        empty={<Typography variant="body2" color="text.secondary">There are no cron.yaml jobs deployed for this App Engine app.</Typography>}
+      />
+    </CapabilityContainer>
   );
 }
 

@@ -22,6 +22,13 @@ has passed (once — missed ticks are not replayed), stamps `lastAttemptTime` /
 caller passes to `dispatch()` (the Nano / wire router publishes into the Pub/Sub core);
 http / App Engine targets are recorded as attempted — this substrate-free core makes
 no network calls.
+
+Legacy App Engine `cron.yaml` jobs (the console's "Cron jobs" tab) are real Job records
+too, stored under the reserved `locations/appengine` pseudo-location: `gcloud app deploy
+cron.yaml` has no public create/list API of its own, but the jobs it deploys run, on real
+GCP, as Cloud Scheduler jobs with an appEngineHttpTarget — Vyomi models them the same way,
+scheduled with App Engine's "groc" English syntax (`parse_groc`/`next_run_groc`) rather
+than unix-cron.
 """
 from __future__ import annotations
 
@@ -43,6 +50,14 @@ LOCATIONS = ["us-central1", "us-east1", "us-east4", "us-west1", "us-west2", "eur
              "asia-southeast1", "australia-southeast1", "southamerica-east1"]
 DEFAULT_TIMEZONE = "Etc/UTC"
 MAX_JOBS_PER_LOCATION = 1000
+
+# Legacy App Engine `cron.yaml` jobs: `gcloud app deploy cron.yaml` has no public create/list
+# API of its own, but the jobs it deploys are, in real GCP, executed as Cloud Scheduler jobs
+# with an appEngineHttpTarget. Vyomi models them the same way: real Job records, stored under
+# this reserved pseudo-location (never returned by locations.list, never selectable when
+# creating an ordinary job), scheduled with the App Engine "groc" syntax cron.yaml actually
+# uses (not unix-cron) instead of the real locations.
+APPENGINE_LOCATION = "appengine"
 
 
 # ── store ──────────────────────────────────────────────────────────────────
@@ -160,6 +175,73 @@ def parse_cron(expr):
     return (*sets, parts[2].startswith("*"), parts[4].startswith("*"))
 
 
+# ── groc (App Engine cron.yaml schedule syntax) ─────────────────────────────
+# cron.yaml never uses unix-cron; it uses App Engine's "groc" English schedule format
+# (https://cloud.google.com/appengine/docs/standard/python3/scheduling-jobs-with-cron-yaml).
+# Vyomi supports the common subset: fixed intervals and specific-weekday/daily times.
+# Ordinal-of-month forms ("1st monday of month 09:00") are not supported — an unsupported
+# schedule string is a validation error, never a silently-accepted no-op.
+_GROC_WEEKDAYS = {"monday": 0, "mon": 0, "tuesday": 1, "tue": 1, "tues": 1, "wednesday": 2, "wed": 2,
+                  "thursday": 3, "thu": 3, "thurs": 3, "friday": 4, "fri": 4, "saturday": 5, "sat": 5,
+                  "sunday": 6, "sun": 6}
+_GROC_INTERVAL_RE = re.compile(r"^every\s+(\d+)\s*(minutes?|mins?|hours?|hrs?|days?)(\s+synchronized)?$")
+_GROC_CLOCK_RE = re.compile(r"^every\s+([a-z]+(?:\s*,\s*[a-z]+)*)\s+(\d{1,2}):(\d{2})$")
+
+
+def parse_groc(expr):
+    """App Engine cron.yaml schedule → ("interval", seconds, synchronized) or
+    ("weekly", {weekday-ints}, hour, minute)."""
+    s = (expr or "").strip().lower()
+    m = _GROC_INTERVAL_RE.match(s)
+    if m:
+        n, unit = int(m.group(1)), m.group(2)
+        if n <= 0:
+            raise ValueError("interval must be a positive number of minutes, hours or days")
+        secs = n * (60 if unit.startswith("min") else 86400 if unit.startswith("day") else 3600)
+        return ("interval", secs, bool(m.group(3)))
+    m = _GROC_CLOCK_RE.match(s)
+    if m:
+        hh, mm = int(m.group(2)), int(m.group(3))
+        if not (0 <= hh <= 23 and 0 <= mm <= 59):
+            raise ValueError("time of day must be HH:MM")
+        names = [d.strip() for d in m.group(1).split(",")]
+        if names in (["day"], ["days"], ["everyday"]):
+            days = set(range(7))
+        else:
+            days = set()
+            for d in names:
+                if d not in _GROC_WEEKDAYS:
+                    raise ValueError("unknown weekday %r" % d)
+                days.add(_GROC_WEEKDAYS[d])
+        return ("weekly", days, hh, mm)
+    raise ValueError(
+        "unsupported schedule syntax (Vyomi supports 'every N minutes|hours|days [synchronized]' "
+        "and 'every <day[,day...]|day> HH:MM')")
+
+
+def next_run_groc(schedule, tzname, after):
+    """First instant strictly after `after` matching a groc schedule, in tzname."""
+    kind, *rest = parse_groc(schedule)
+    tz = _tz(tzname)
+    if kind == "interval":
+        secs, synchronized = rest
+        if not synchronized:
+            return after + timedelta(seconds=secs)
+        midnight = after.astimezone(tz).replace(hour=0, minute=0, second=0, microsecond=0)
+        elapsed = (after.astimezone(tz) - midnight).total_seconds()
+        steps = int(elapsed // secs) + 1
+        return (midnight + timedelta(seconds=steps * secs)).astimezone(timezone.utc)
+    days, hh, mm = rest
+    t = after.astimezone(tz).replace(hour=hh, minute=mm, second=0, microsecond=0)
+    if t <= after.astimezone(tz):
+        t += timedelta(days=1)
+    for _ in range(8):
+        if t.weekday() in days:
+            return t.astimezone(timezone.utc)
+        t += timedelta(days=1)
+    raise ValueError("schedule never fires")
+
+
 def _tz(name):
     if not name or name.upper() in ("UTC", "ETC/UTC", "GMT", "Z"):
         return timezone.utc
@@ -216,13 +298,15 @@ def _validate_duration(field_name, v, lo=None, hi=None):
         raise _E(400, "INVALID_ARGUMENT", "%s must be between %ss and %ss." % (field_name, lo, hi))
 
 
-def _validate_target(job):
+def _validate_target(job, legacy=False):
     targets = [k for k in ("httpTarget", "pubsubTarget", "appEngineHttpTarget") if job.get(k)]
     if not targets:
         raise _E(400, "INVALID_ARGUMENT", "Job must have a target: one of httpTarget, pubsubTarget, appEngineHttpTarget.")
     if len(targets) > 1:
         raise _E(400, "INVALID_ARGUMENT", "Only one target may be set on a job (got %s)." % ", ".join(targets))
     t = targets[0]
+    if legacy and t != "appEngineHttpTarget":
+        raise _E(400, "INVALID_ARGUMENT", "A cron.yaml job may only target the App Engine app (appEngineHttpTarget).")
     body = job[t]
     if not isinstance(body, dict):
         raise _E(400, "INVALID_ARGUMENT", "Invalid %s." % t)
@@ -240,6 +324,12 @@ def _validate_target(job):
     elif t == "pubsubTarget":
         if not re.match(r"^projects/[^/]+/topics/[^/]+$", body.get("topicName", "") or ""):
             raise _E(400, "INVALID_ARGUMENT", "pubsubTarget.topicName must be of the form projects/{project}/topics/{topic}.")
+    elif t == "appEngineHttpTarget":
+        if not (body.get("relativeUri") or "/").startswith("/"):
+            raise _E(400, "INVALID_ARGUMENT", "appEngineHttpTarget.relativeUri must start with '/'.")
+        m = body.get("httpMethod") or "POST"
+        if m not in HTTP_METHODS and m != "HTTP_METHOD_UNSPECIFIED":
+            raise _E(400, "INVALID_ARGUMENT", "Invalid value at 'job.app_engine_http_target.http_method' (type.googleapis.com/google.cloud.scheduler.v1.HttpMethod), \"%s\"" % m)
     for k in ("body", "data"):
         if body.get(k):
             try:
@@ -266,17 +356,17 @@ def _validate_retry(rc):
         raise _E(400, "INVALID_ARGUMENT", "retryConfig.minBackoffDuration must be <= maxBackoffDuration.")
 
 
-def _validate_job(job):
+def _validate_job(job, legacy=False):
     if not (job.get("schedule") or "").strip():
         raise _E(400, "INVALID_ARGUMENT", "Job schedule is required.")
     try:
-        parse_cron(job["schedule"])
+        (parse_groc if legacy else parse_cron)(job["schedule"])
         _tz(job.get("timeZone") or DEFAULT_TIMEZONE)
     except ValueError as e:
         raise _E(400, "INVALID_ARGUMENT", "Invalid schedule or timeZone: %s." % e)
     if len(job.get("description", "") or "") > 500:
         raise _E(400, "INVALID_ARGUMENT", "description must be at most 500 characters.")
-    _validate_target(job)
+    _validate_target(job, legacy=legacy)
     if "retryConfig" in job:
         _validate_retry(job["retryConfig"])
     if "attemptDeadline" in job:
@@ -287,9 +377,16 @@ _WRITABLE = ("description", "schedule", "timeZone", "retryConfig", "attemptDeadl
              "httpTarget", "pubsubTarget", "appEngineHttpTarget")
 
 
+def _is_legacy(job):
+    """True if `job` lives under the reserved App Engine cron.yaml pseudo-location."""
+    parts = (job.get("name") or "").split("/")
+    return len(parts) > 3 and parts[3] == APPENGINE_LOCATION
+
+
 def _compute_next(job, after=None):
     try:
-        return _ts(next_run(job["schedule"], job.get("timeZone") or DEFAULT_TIMEZONE, after or _now_dt()))
+        fn = next_run_groc if _is_legacy(job) else next_run
+        return _ts(fn(job["schedule"], job.get("timeZone") or DEFAULT_TIMEZONE, after or _now_dt()))
     except ValueError:
         return None
 
@@ -379,6 +476,7 @@ def console_view(job):
         "description_text": job.get("description") or "No description",
         "attempt_deadline": job.get("attemptDeadline") or "180s",
         "created": job.get("userUpdateTime", ""),
+        "legacy_cron": _is_legacy(job),
     })
     return v
 
@@ -392,10 +490,11 @@ def _retry_summary(job):
 
 # ── operations ─────────────────────────────────────────────────────────────
 def create_job(store, project, location, payload):
-    if location not in LOCATIONS:
+    legacy = location == APPENGINE_LOCATION
+    if not legacy and location not in LOCATIONS:
         raise _E(404, "NOT_FOUND", "Location '%s' is not a valid location." % location)
     job = dict(payload or {})
-    _validate_job(job)
+    _validate_job(job, legacy=legacy)
     full = job.get("name") or ""
     if full:
         m = re.match(r"^projects/([^/]+)/locations/([^/]+)/jobs/([A-Za-z0-9_-]+)$", full)
@@ -455,7 +554,7 @@ def patch_job(store, project, location, job_id, payload, update_mask):
         for k in ("httpTarget", "pubsubTarget", "appEngineHttpTarget"):   # patching a target replaces the oneof
             if k not in {f.split(".")[0] for f in fields}:
                 merged.pop(k, None)
-    _validate_job(merged)
+    _validate_job(merged, legacy=location == APPENGINE_LOCATION)
     merged["userUpdateTime"] = _ts(_now_dt())
     if merged.get("state") == ENABLED:
         merged["scheduleTime"] = _compute_next(merged)
@@ -620,7 +719,7 @@ def _dispatch(store, method, path, query, headers, body, invoker):
             return _err(404, "NOT_FOUND", "Unknown path: %s" % path)
         location = segs[3]
         if len(segs) == 4 and method == "GET":
-            if location not in LOCATIONS:
+            if location != APPENGINE_LOCATION and location not in LOCATIONS:
                 return _err(404, "NOT_FOUND", "Location '%s' is not a valid location." % location)
             return _json(200, _location_view(project, location))
         if len(segs) < 5 or segs[4] != "jobs":
@@ -630,7 +729,7 @@ def _dispatch(store, method, path, query, headers, body, invoker):
             if method == "POST":
                 return _json(200, job_view(create_job(store, project, location, payload)))
             if method == "GET":
-                if location not in LOCATIONS:
+                if location != APPENGINE_LOCATION and location not in LOCATIONS:
                     return _err(404, "NOT_FOUND", "Location '%s' is not a valid location." % location)
                 return _json(200, list_jobs(store, project, location, query))
             return _err(405, "UNIMPLEMENTED", "Method %s not allowed on jobs collection." % method)
