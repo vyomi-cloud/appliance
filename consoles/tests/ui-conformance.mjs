@@ -84,7 +84,56 @@ function elements(page) {
 
 /** Everything a user can read on the page right now — split into text OUTSIDE any
  *  "Not simulated" panel (real UI) and text inside those panels (declared gaps). */
+// Optional grid-chrome audit (GRID_AUDIT=<file>): at every crawled view, record tables whose row
+// lines don't reach their card's edges, or that sit outside any rounded border. See tests/grid-audit-report.mjs.
+async function gridAudit(page) {
+  if (!process.env.GRID_AUDIT) return;
+  const rows = await page.evaluate(() => {
+    const out = [];
+    const visible = (e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0 && getComputedStyle(e).visibility !== "hidden"; };
+    const hasEdge = (e, pseudo) => {
+      const c = getComputedStyle(e, pseudo);
+      return (parseFloat(c.borderTopWidth) > 0 && c.borderTopStyle !== "none" && parseFloat(c.borderLeftWidth) > 0) || (c.boxShadow && c.boxShadow !== "none");
+    };
+    for (const t of document.querySelectorAll("table")) {
+      if (!visible(t)) continue;
+      let card = null;
+      for (let a = t.parentElement; a && a !== document.body; a = a.parentElement) {
+        if (parseFloat(getComputedStyle(a).borderTopLeftRadius) >= 4 && (hasEdge(a) || hasEdge(a, "::before") || hasEdge(a, "::after"))) { card = a; break; }
+      }
+      const tr = t.getBoundingClientRect();
+      let head = "";
+      for (let a = t; a && !head; a = a.parentElement) { const h = a.querySelector && a.querySelector("h1,h2,h3"); if (h) head = h.textContent.trim().slice(0, 60); }
+      const cols = [...t.querySelectorAll("thead th")].slice(0, 4).map((c) => c.textContent.trim().slice(0, 24)).join("|");
+      if (!card) { out.push({ issue: "no_rounded_border", head, cols, width: Math.round(tr.width) }); continue; }
+      const cr = card.getBoundingClientRect(), cs = getComputedStyle(card);
+      const scroller = t.parentElement && t.parentElement.scrollWidth > t.parentElement.clientWidth + 1;
+      const l = Math.round(tr.left - cr.left - parseFloat(cs.borderLeftWidth)), rt = Math.round(cr.right - tr.right - parseFloat(cs.borderRightWidth));
+      if (!scroller && (l > 1 || rt > 1)) out.push({ issue: "lines_not_edge_to_edge", head, cols, left: l, right: rt });
+    }
+    // Tab strips: a full divider, and page-level strips reach the content card's edges.
+    const main = document.querySelector("main");
+    for (const t of document.querySelectorAll(".MuiTabs-root")) {
+      if (!visible(t) || !main) continue;
+      const tabs = [...t.querySelectorAll("[role=tab]")].slice(0, 3).map((x) => x.textContent.trim().slice(0, 16)).join("|");
+      const line = (e) => parseFloat(getComputedStyle(e).borderBottomWidth) > 0;
+      if (!line(t) && !line(t.parentElement)) { out.push({ issue: "tabs_no_divider", cols: tabs }); continue; }
+      if (t.closest(".MuiPaper-root")) continue;
+      const box = line(t) ? t : t.parentElement, r = box.getBoundingClientRect(), m = main.getBoundingClientRect();
+      if (r.left - m.left > 1 || m.right - r.right > 1) out.push({ issue: "tabs_not_edge_to_edge", cols: tabs, left: Math.round(r.left - m.left), right: Math.round(m.right - r.right) });
+    }
+    return out;
+  });
+  if (rows.length) {
+    const { appendFileSync } = await import("node:fs");
+    const url = page.url().split("/v4/")[1] || page.url();
+    const tab = await page.locator('[role=tab][aria-selected="true"]').first().textContent({ timeout: 200 }).catch(() => "");
+    for (const r of rows) appendFileSync(process.env.GRID_AUDIT, JSON.stringify({ url, tab: (tab || "").trim(), ...r }) + "\n");
+  }
+}
+
 async function snapshot(page) {
+  await gridAudit(page);
   return page.evaluate(() => {
     const vis = (el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
     // A gap's boundary is the element marked data-vyomi-gap-box (the Not-simulated section),

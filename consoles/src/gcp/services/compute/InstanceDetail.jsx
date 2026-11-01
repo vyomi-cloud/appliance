@@ -12,7 +12,7 @@ import RefreshIcon from "@mui/icons-material/esm/Refresh.js";
 import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
-import { ErrorAlert, KeyValue, NotSimulated, PageHeader, Section, fmtDate, fmtDuration } from "../../kit/common.jsx";
+import { ErrorAlert, KeyValue, NotSimulated, PageHeader, Section, fmtDate, fmtDuration, SECTION_TABLE_BLEED } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { hashHref } from "../../link.jsx";
 import * as api from "./api.js";
@@ -39,7 +39,7 @@ function ObservabilityPanel({ zone, name, inst }) {
       <Box>
         <Typography variant="body2" sx={{ fontWeight: 500, mb: 0.5 }}>Recent activity</Typography>
         {loading ? <CircularProgress size={20} /> : (
-          <Box sx={{ overflowX: "auto" }}>
+          <Box sx={{ overflowX: "auto", ...SECTION_TABLE_BLEED }}>
             <table style={{ width: "100%", fontSize: 14, borderCollapse: "collapse" }}>
               <thead><tr>{["Operation", "Status", "Time"].map((h) => <th key={h} style={{ textAlign: "left", padding: 6, borderBottom: "1px solid #ddd" }}>{h}</th>)}</tr></thead>
               <tbody>
@@ -150,7 +150,7 @@ export default function InstanceDetail({ params }) {
           <Section title="Networking">
             <KeyValue items={[["Network tags", (inst.tags?.items || []).join(", ") || "—"]]} />
             <Typography variant="body2" sx={{ fontWeight: 500, mt: 1.5, mb: 0.5 }}>Network interfaces</Typography>
-            <Box sx={{ overflowX: "auto" }}>
+            <Box sx={{ overflowX: "auto", ...SECTION_TABLE_BLEED }}>
               <table style={{ width: "100%", fontSize: 14, borderCollapse: "collapse" }}>
                 <thead><tr>{["Name", "Network", "Subnetwork", "Primary internal IP address", "Alias IP ranges", "External IP address", "Network Tier", "IP forwarding"].map((h) => <th key={h} style={{ textAlign: "left", padding: 6, borderBottom: "1px solid #ddd" }}>{h}</th>)}</tr></thead>
                 <tbody><tr>
@@ -164,7 +164,7 @@ export default function InstanceDetail({ params }) {
           </Section>
           <Section title="Storage">
             <Typography variant="body2" sx={{ fontWeight: 500, mb: 0.5 }}>Boot disk</Typography>
-            <Box sx={{ overflowX: "auto" }}>
+            <Box sx={{ overflowX: "auto", ...SECTION_TABLE_BLEED }}>
               <table style={{ width: "100%", fontSize: 14, borderCollapse: "collapse" }}>
                 <thead><tr>{["Name", "Image", "Interface type", "Size (GB)", "Device name", "Type", "Encryption", "Mode", "When deleting instance"].map((h) => <th key={h} style={{ textAlign: "left", padding: 6, borderBottom: "1px solid #ddd" }}>{h}</th>)}</tr></thead>
                 <tbody><tr>

@@ -79,7 +79,7 @@ function HistoryTab({ name }) {
   const t = useAsync(() => api.describeAlarmHistory({ AlarmName: name, MaxRecords: 100 }), [name]);
   return (
     <Table
-      variant="embedded"
+      variant="container"
       loading={t.loading}
       items={t.data || []}
       columnDefinitions={[
@@ -97,7 +97,7 @@ function ParentAlarmsTab({ name }) {
   const rows = [...(t.data?.CompositeAlarms || [])];
   return (
     <Table
-      variant="embedded"
+      variant="container"
       loading={t.loading}
       items={rows}
       columnDefinitions={[

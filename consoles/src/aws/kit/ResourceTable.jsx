@@ -50,7 +50,7 @@ export default function ResourceTable({
 
   return (
     <Table
-      variant={variant}
+      variant={variant === "full-page" ? "container" : variant}   // the rounded card on every list page
       items={shown}
       loading={loading}
       loadingText={`Loading ${resourceName.toLowerCase()}`}
@@ -67,7 +67,7 @@ export default function ResourceTable({
       stickyHeader
       header={
         <Header
-          variant={variant === "full-page" ? "awsui-h1-sticky" : "h2"}
+          variant={variant === "full-page" ? "h1" : "h2"}
           counter={loading ? undefined : counter}
           description={description}
           info={info}
