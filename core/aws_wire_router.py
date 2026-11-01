@@ -475,6 +475,11 @@ class AwsWireRouter:
         # API Gateway shares the Lambda store so an AWS_PROXY integration can reach
         # the registered functions (the API-GW → Lambda synergy).
         self.apigw = s.get("apigw") or self.lam
+        # S3 event notifications: deliver for real into the SAME SQS/SNS/Lambda stores
+        # every other native-wire call reaches (the Nano/dev-server counterpart of the
+        # offline appliance's own delivery path, which wires its own AppStateObjectStore
+        # and never consults these — see object_store.ObjectStore.emit_event).
+        self.s3.msg_store, self.s3.lam_store = self.msg, self.lam
         self.kinesis = s.get("kinesis") or kinesis.KinesisStore()   # Kinesis Data Streams
         self.apigwv2 = s.get("apigwv2") or apigw2.ApiGwV2Store()   # API Gateway V2 (HTTP/WebSocket APIs)
         self.cw = s.get("cw") or cw.CloudWatchStore()          # CloudWatch metrics / alarms / dashboards
@@ -482,6 +487,7 @@ class AwsWireRouter:
         self.vpc = s.get("vpc") or s.get("vpc_net") or _types.SimpleNamespace()   # EC2/VPC network model
         self.vpc.cw_store = self.cw   # real StatusCheckFailed metrics (ec2.instances.monitoring / .alarms-metrics)
         self.cw.vpc_store = self.vpc  # real EC2 alarm actions (aws.cloudwatch.alarms.actions.ec2)
+        self.s3.cw_store = self.cw    # real AWS/S3 request metrics (s3.bucket.metrics), derived from actual activity
         self.logs = s.get("logs") or logs.LogsStore()         # CloudWatch Logs
         self.logs.lam_store, self.logs.kinesis_store = self.lam, self.kinesis   # real subscription-filter delivery
         self.cw.logs_store = self.logs            # real log-based Contributor Insights rules
@@ -601,6 +607,12 @@ class AwsWireRouter:
 
     # ── service detection ──────────────────────────────────────────────
     def service_of(self, method, path, lheaders, body, query=None):
+        # Static website hosting: real S3 serves this over its OWN unsigned HTTP(S) origin
+        # (bucket.s3-website-<region>.amazonaws.com), never the signed control+data API —
+        # route it first, unambiguously, by the distinct path prefix the relay/dev_server
+        # exposes that origin under.
+        if path.startswith("/__s3_website__/"):
+            return "s3-website"
         # GCP services are unambiguous by path (REST) and carry no SigV4 — route
         # them first so they never fall through to the S3 default.
         gcp = _gcp_service(path)
@@ -724,6 +736,15 @@ class AwsWireRouter:
             r = s3.dispatch(self.s3, method, path, query or {}, headers or {}, bytes(body))
             return {"status": r.status, "headers": dict(r.headers or {}),
                     "body": r.body or b""}
+
+        if svc == "s3-website":
+            rest = path[len("/__s3_website__/"):]
+            bucket, _, key = rest.partition("/")
+            r = s3.website_dispatch(self.s3, method, bucket, key, headers or {})
+            hdrs = dict(r.headers or {})
+            if r.media_type:
+                hdrs.setdefault("content-type", r.media_type)
+            return {"status": r.status, "headers": hdrs, "body": r.body or b""}
 
         if svc == "cloudwatch":   # CloudWatch: rpc-v2-cbor / JSON 1.0 / Query on one engine
             return cw.wire(self.cw, method, path, headers or {}, bytes(body), query or {})

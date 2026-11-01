@@ -22,6 +22,7 @@ import { ErrorAlert, fmtBytes, fmtDate, KeyValue, NotSimulated, NotSimulatedCont
 import * as api from "./api.js";
 import Permissions from "./Permissions.jsx";
 import { CapabilityContainer, saveNotice } from "../../kit/Capability.jsx";
+import { WIRE_BASE } from "../../../common/wire.js";
 
 const arn = (b) => `arn:aws:s3:::${b}`;
 
@@ -268,7 +269,11 @@ function WebsiteSection({ bucket }) {
       actions={<Button onClick={() => setEdit({ enabled: !!site.data?.config, indexDocument: site.data?.config?.indexDocument || "index.html", errorDocument: site.data?.config?.errorDocument || "" })}>Edit</Button>}>
       {site.loading ? <StatusIndicator type="loading">Loading</StatusIndicator>
         : site.data?.error ? <ErrorAlert error={site.data.error} />
-        : <div><Box variant="awsui-key-label">Static website hosting</Box><div>{site.data.config ? "Enabled" : "Disabled"}</div></div>}
+        : <SpaceBetween size="xs">
+            <div><Box variant="awsui-key-label">Static website hosting</Box><div>{site.data.config ? "Enabled" : "Disabled"}</div></div>
+            {site.data.config && <div><Box variant="awsui-key-label">Bucket website endpoint</Box>
+              <Link href={`${WIRE_BASE}/__s3_website__/${bucket}/`} external>{`${WIRE_BASE}/__s3_website__/${bucket}/`}</Link></div>}
+          </SpaceBetween>}
       <Modal visible={!!edit} onDismiss={() => setEdit(null)} header="Edit static website hosting"
         footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs">
           <Button variant="link" onClick={() => setEdit(null)}>Cancel</Button>

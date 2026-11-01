@@ -268,11 +268,11 @@
  "s3.bucket.website": {
   "title": "Static website hosting",
   "level": {
-   "nano": "config_only",
-   "offline": "config_only"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Put/Get/DeleteBucketWebsite store and return the index/error-document configuration verbatim, but static website hosting serves GET/HEAD over a separate bucket-name.s3-website-<region>.amazonaws.com HTTP origin; Vyomi's native wire is a single S3 control+data endpoint and does not run a per-bucket website origin, so that serving path does not exist."
+   "GET/HEAD are REALLY served over the bucket's own website origin (the relay/dev_server's unsigned /__s3_website__/<bucket>/<key> path, standing in for the real bucket-name.s3-website-<region>.amazonaws.com host): the configured IndexDocument resolves for '/' and any key ending in '/', the ErrorDocument's actual content is served with a 404 status for a missing key, RedirectAllRequestsTo issues a real redirect, and RoutingRules (KeyPrefixEquals, optionally HttpErrorCodeReturnedEquals) rewrite the key (ReplaceKeyWith/ReplaceKeyPrefixWith) and redirect for real. Vyomi has no per-request identity model (same documented gap as s3.bucket.public-access-block), so this never checks whether the object/bucket is actually publicly readable — it serves whatever the bucket's current content is regardless of ACL/policy/Block-Public-Access."
   ],
   "api": [
    "PutBucketWebsite",
@@ -284,7 +284,8 @@
    "doc": "<WebsiteConfiguration><IndexDocument><Suffix>index.html</Suffix></IndexDocument><ErrorDocument><Key>error.html</Key></ErrorDocument></WebsiteConfiguration>"
   },
   "tests": [
-   "tests/conformance/test_s3_depth2_core.py"
+   "tests/conformance/test_s3_depth2_core.py",
+   "tests/conformance/test_s3_depth4_core.py"
   ]
  },
  "s3.bucket.logging": {
@@ -312,12 +313,11 @@
  "s3.bucket.notification": {
   "title": "Event notifications",
   "level": {
-   "nano": "config_only",
+   "nano": "limited",
    "offline": "limited"
   },
   "limitations": [
-   "Offline appliance: events are delivered to the configured SQS queues, SNS topics and Lambda functions in this simulator (ObjectCreated, ObjectRemoved, DeleteMarkerCreated, TestEvent).",
-   "Nano: the configuration is stored and returned, but events are not delivered yet."
+   "Events (ObjectCreated, ObjectRemoved, DeleteMarkerCreated, TestEvent) are delivered to the configured SQS queues, SNS topics and Lambda functions in this simulator on both substrates — Nano/dev_server delivers through the same in-context SQS/SNS/Lambda stores the native wire itself reaches; the offline appliance delivers through its own appliance-wide stores. EventBridge delivery and delivery retries/DLQ on failure are not modeled."
   ],
   "api": [
    "PutBucketNotificationConfiguration",
@@ -328,7 +328,8 @@
    "doc": "<NotificationConfiguration></NotificationConfiguration>"
   },
   "tests": [
-   "tests/conformance/test_c0_legacy_parity_core.py"
+   "tests/conformance/test_c0_legacy_parity_core.py",
+   "tests/conformance/test_s3_depth4_core.py"
   ]
  },
  "s3.bucket.replication": {
@@ -371,11 +372,11 @@
  "s3.bucket.request-payment": {
   "title": "Requester pays",
   "level": {
-   "nano": "config_only",
-   "offline": "config_only"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Put/GetBucketRequestPayment store and return the Payer setting (BucketOwner/Requester), but Requester Pays changes who is billed for data transfer and requests; Vyomi has no request-identity or billing model, so there is no payer to attribute cost to and no billing behaviour changes."
+   "Requester Pays changes who is BILLED for data transfer and requests; Vyomi has no billing system, so it cannot attribute cost to a payer. What IS enforced is the one wire-visible contract a client actually observes: once Payer is Requester, GetObject/HeadObject reject a request that omits x-amz-request-payer:requester (403 AccessDenied) and echo x-amz-request-charged:requester on one that includes it, exactly like real S3. PutObject/ListObjects are not gated."
   ],
   "api": [
    "PutBucketRequestPayment",
@@ -386,17 +387,18 @@
    "doc": "<RequestPaymentConfiguration><Payer>Requester</Payer></RequestPaymentConfiguration>"
   },
   "tests": [
-   "tests/conformance/test_s3_depth2_core.py"
+   "tests/conformance/test_s3_depth2_core.py",
+   "tests/conformance/test_s3_depth4_core.py"
   ]
  },
  "s3.bucket.intelligent-tiering": {
   "title": "Intelligent-Tiering Archive configurations",
   "level": {
-   "nano": "config_only",
-   "offline": "config_only"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Put/Get/List/DeleteBucketIntelligentTieringConfiguration store and return each named configuration verbatim, but Intelligent-Tiering archive configurations move objects between access tiers automatically based on 30/90+ day access-pattern windows; Vyomi does not run a long-horizon storage-class scheduler, so no object ever actually transitions tier."
+   "Archive-tier transitions are enforced for objects explicitly uploaded with StorageClass INTELLIGENT_TIERING, evaluated lazily on HeadObject/GetObject like lifecycle Transition: once the elapsed real wall-clock time since the object's last-modified date passes a Tiering's Days threshold, matching Filter prefix, HeadObject/GetObject report it via x-amz-archive-status (ARCHIVE_ACCESS / DEEP_ARCHIVE_ACCESS) — the deepest tier whose threshold has fired. The automatic, config-free Frequent<->Infrequent-Access tiering every object gets after 30 days with no reads is not modeled (Vyomi doesn't track per-object read recency), and an archived object's bytes stay retrievable without a RestoreObject call (no restore-request/temporary-copy lifecycle)."
   ],
   "api": [
    "PutBucketIntelligentTieringConfiguration",
@@ -410,17 +412,18 @@
    "doc": "<IntelligentTieringConfiguration><Id>cap-cfg</Id><Status>Enabled</Status><Tierings><Tiering><AccessTier>ARCHIVE_ACCESS</AccessTier><Days>90</Days></Tiering></Tierings></IntelligentTieringConfiguration>"
   },
   "tests": [
-   "tests/conformance/test_s3_depth2_core.py"
+   "tests/conformance/test_s3_depth2_core.py",
+   "tests/conformance/test_s3_depth4_core.py"
   ]
  },
  "s3.bucket.inventory": {
   "title": "Inventory configurations",
   "level": {
-   "nano": "config_only",
-   "offline": "config_only"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Put/Get/List/DeleteBucketInventoryConfiguration store and return each named configuration verbatim, but inventory configurations run on a daily/weekly schedule and write a CSV/ORC/Parquet manifest of bucket contents to a destination bucket; Vyomi has no scheduler producing those exports."
+   "A real manifest.json + manifest.checksum + CSV data file, listing the source bucket's ACTUAL objects (sizes, ETags, storage classes, every version when IncludedObjectVersions=All), is written into the destination bucket — lazily evaluated (no background scheduler): the first access generates it immediately, later ones regenerate only once the configuration's real Schedule.Frequency (Daily/Weekly) has actually elapsed. Only Format=CSV produces a data file; ORC/Parquet configurations are accepted and stored but Vyomi has no ORC/Parquet encoder, so no data file is written for them (the manifest still lists the real object count, with a note in fileFormat). Only a destination bucket that exists in this same appliance is reachable."
   ],
   "api": [
    "PutBucketInventoryConfiguration",
@@ -434,17 +437,18 @@
    "doc": "<InventoryConfiguration><Id>cap-cfg</Id><IsEnabled>true</IsEnabled><IncludedObjectVersions>Current</IncludedObjectVersions><Schedule><Frequency>Daily</Frequency></Schedule><Destination><S3BucketDestination><Bucket>arn:aws:s3:::cap-inventory-dest</Bucket><Format>CSV</Format></S3BucketDestination></Destination></InventoryConfiguration>"
   },
   "tests": [
-   "tests/conformance/test_s3_depth2_core.py"
+   "tests/conformance/test_s3_depth2_core.py",
+   "tests/conformance/test_s3_depth4_core.py"
   ]
  },
  "s3.bucket.metrics": {
   "title": "Metrics",
   "level": {
-   "nano": "config_only",
-   "offline": "config_only"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Put/Get/List/DeleteBucketMetricsConfiguration store and return each named request-metrics filter verbatim, but request/storage filter metrics publish to CloudWatch on a recurring schedule; Vyomi does not run a CloudWatch metrics pipeline for S3, so no metric data points are ever produced."
+   "Every PutObject/GetObject/HeadObject/DeleteObject/ListObjects(V2) request that matches a configured filter's prefix publishes real AWS/S3 CloudWatch datapoints AS IT HAPPENS — AllRequests, GetRequests/PutRequests/HeadRequests/DeleteRequests/ListRequests, 4xxErrors, BytesDownloaded, BytesUploaded, dimensioned by BucketName + FilterId — derived from actual request activity, never synthetic. There is no recurring publish schedule (real CloudWatch batches on ~1-minute boundaries; here a point lands the instant the request is served) and PostRequests/5xxErrors/FirstByteLatency/TotalRequestLatency/storage metrics (BucketSizeBytes, NumberOfObjects) are not yet produced."
   ],
   "api": [
    "PutBucketMetricsConfiguration",
@@ -458,7 +462,8 @@
    "doc": "<MetricsConfiguration><Id>cap-cfg</Id><Filter><Prefix>logs/</Prefix></Filter></MetricsConfiguration>"
   },
   "tests": [
-   "tests/conformance/test_s3_depth2_core.py"
+   "tests/conformance/test_s3_depth2_core.py",
+   "tests/conformance/test_s3_depth4_core.py"
   ]
  }
 }
