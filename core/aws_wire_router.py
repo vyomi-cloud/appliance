@@ -618,6 +618,7 @@ class AwsWireRouter:
         self.elbv2.cw_store = self.cw      # real AWS/ApplicationELB + AWS/NetworkELB metrics
         self.elbv2.s3_store = self.s3      # trust-store CA bundles are read from Vyomi's own S3
         self.sfn = s.get("sfn") or sfn.StepFunctionsStore()   # Step Functions (state machines + executions)
+        self.sfn.logs_store = self.logs           # Step Functions loggingConfiguration -> CloudWatch Logs
         self.cfn = s.get("cfn") or cfn.CloudFormationStore()   # CloudFormation (stacks, change sets, stack sets)
 
     def _iamc_resolve(self, ident):

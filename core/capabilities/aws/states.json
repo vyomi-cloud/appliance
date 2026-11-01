@@ -34,9 +34,9 @@
   },
   "aws.states.state-machine.logging": {
     "title": "CloudWatch Logs configuration",
-    "level": { "nano": "config_only", "offline": "config_only" },
+    "level": { "nano": "limited", "offline": "limited" },
     "limitations": [
-      "The log level and 'include execution data' flag round-trip through Create/UpdateStateMachine and DescribeStateMachine exactly as set, but Vyomi never actually delivers execution logs to a CloudWatch Logs log group."
+      "loggingConfiguration is ENFORCED: when a CloudWatch Logs destination is set, a finished execution writes its history events to that log group (level ALL = every event, ERROR = failure events, FATAL = execution-level failure/abort/timeout only; includeExecutionData=false strips payloads). Events are delivered when the execution finishes, not as each state runs, and the log group is created on first write."
     ],
     "tests": ["tests/conformance/test_stepfunctions_core.py"]
   },

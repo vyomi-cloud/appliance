@@ -38,6 +38,8 @@ class StepFunctionsStore:
         self.tokens: dict = {}        # taskToken -> {executionArn, activityArn|None, ...}
         self.tags: dict = {}          # resource arn -> {key: value}
 
+    logs_store = None   # runtime link to the CloudWatch Logs store (set by the wire router / Nano) — never persisted
+
 
 _SHARED: StepFunctionsStore | None = None
 # Live (non-persisted) execution generators awaiting a task token.
@@ -639,6 +641,58 @@ def _iso8601(ts):
     return time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime(ts))
 
 
+_ERROR_EVENTS = ("Failed", "TimedOut", "Aborted")
+_DATA_KEYS = ("input", "output", "cause", "parameters", "resource")
+
+
+def _log_events(store, ex):
+    """loggingConfiguration is ENFORCED: when level != OFF and a CloudWatch Logs destination is set,
+    the finished execution's history events are written to that log group (ALL = every event,
+    ERROR = failure events, FATAL = only the execution-level failure/abort/timeout event);
+    includeExecutionData=false strips payloads. Best-effort, like AWS's asynchronous delivery."""
+    logs = getattr(store, "logs_store", None)
+    sm = store.machines.get(str(ex.get("stateMachineArn", "")).rsplit(":", 1)[-1])
+    cfg = (sm or {}).get("loggingConfiguration") or {}
+    level = cfg.get("level", "OFF")
+    if logs is None or level == "OFF":
+        return
+    group = None
+    for d in cfg.get("destinations") or []:
+        arn = ((d or {}).get("cloudWatchLogsLogGroup") or {}).get("logGroupArn", "")
+        if ":log-group:" in arn:
+            group = arn.split(":log-group:", 1)[1].split(":")[0]
+            break
+    if not group:
+        return
+    from core import logs_core
+    evs = []
+    for e in ex["_history"]:
+        t = e["type"]
+        if level == "ERROR" and not t.endswith(_ERROR_EVENTS):
+            continue
+        if level == "FATAL" and not (t.startswith("Execution") and t.endswith(_ERROR_EVENTS)):
+            continue
+        det = {k: v for k, v in e.items() if k.endswith("Details")}
+        if not cfg.get("includeExecutionData"):
+            det = {k: {a: b for a, b in (v or {}).items() if a not in _DATA_KEYS} for k, v in det.items()}
+        evs.append({"timestamp": int(float(e["timestamp"]) * 1000),
+                    "message": _dumps({"id": str(e["id"]), "type": t, "details": det,
+                                       "previous_event_id": str(e.get("previousEventId", 0)),
+                                       "event_timestamp": str(int(float(e["timestamp"]) * 1000)),
+                                       "execution_arn": ex["executionArn"]})})
+    if not evs:
+        return
+    stream = f"states/{sm['name']}/{time.strftime('%Y-%m-%d', time.gmtime())}/{uuid.uuid5(uuid.NAMESPACE_URL, ex['executionArn']).hex[:8]}"
+    try:
+        if group not in logs.log_groups:
+            logs_core._create_log_group(logs, {"logGroupName": group})
+        if stream not in logs.log_groups[group]["streams"]:
+            logs_core._create_log_stream(logs, {"logGroupName": group, "logStreamName": stream})
+        logs_core._put_log_events(logs, {"logGroupName": group, "logStreamName": stream, "logEvents": evs})
+    except Exception:
+        pass
+
+
 def _finish(store, ex, status, output=None, error=None, cause=None):
     ex["status"] = status
     ex["stopDate"] = _now()
@@ -649,6 +703,7 @@ def _finish(store, ex, status, output=None, error=None, cause=None):
     if cause is not None:
         ex["cause"] = cause
     _RUNNING.pop(ex["executionArn"], None)
+    _log_events(store, ex)
     for tok in [t for t, v in store.tokens.items() if v["executionArn"] == ex["executionArn"]]:
         store.tokens.pop(tok, None)
 

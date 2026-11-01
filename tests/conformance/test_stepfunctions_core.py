@@ -114,6 +114,35 @@ def main():
     check("TestState Pass", b["status"] == "SUCCEEDED" and json.loads(b["output"]) == {"x": 1}, b)
     check("DeleteStateMachine", call(st, "DeleteStateMachine", stateMachineArn=arn)[0] == 200
           and call(st, "DescribeStateMachine", stateMachineArn=arn)[1]["__type"] == "StateMachineDoesNotExist")
+    # loggingConfiguration is ENFORCED: executions write history events to the CloudWatch Logs group
+    from core import logs_core
+    lg = logs_core.LogsStore()
+    st2 = sf.StepFunctionsStore()
+    st2.logs_store = lg
+    G = "arn:aws:logs:us-east-1:000000000000:log-group:/aws/vendedlogs/states/m2:*"
+
+    def run_with(level, data, name):
+        cfg = {"level": level, "includeExecutionData": data, "destinations": [{"cloudWatchLogsLogGroup": {"logGroupArn": G}}]}
+        call(st2, "CreateStateMachine", name=name, definition=json.dumps(DEF), roleArn=ROLE, loggingConfiguration=cfg)
+        call(st2, "StartExecution", stateMachineArn=sf._sm_arn(name), input='{"n":1,"secret":"s3"}')
+
+    def msgs():
+        g = lg.log_groups.get("/aws/vendedlogs/states/m2")
+        return [json.loads(e["message"]) for st_ in (g["streams"].values() if g else []) for e in st_["events"]]
+    run_with("OFF", False, "m2")
+    check("level OFF writes no logs", msgs() == [])
+    call(st2, "DeleteStateMachine", stateMachineArn=sf._sm_arn("m2"))
+    run_with("ALL", False, "m2")
+    m = msgs()
+    types_ = {x["type"] for x in m}
+    check("level ALL logs every history event", {"ExecutionStarted", "ExecutionFailed"} <= types_ and len(m) > 2, types_)
+    check("includeExecutionData=false strips payloads", "s3" not in json.dumps(m) and all(x["execution_arn"] for x in m))
+    call(st2, "DeleteStateMachine", stateMachineArn=sf._sm_arn("m2"))
+    lg.log_groups.clear()
+    run_with("ERROR", True, "m2")
+    m = msgs()
+    check("level ERROR logs only failure events", m and all(x["type"].endswith("Failed") for x in m), [x["type"] for x in m])
+    check("includeExecutionData=true keeps the cause", "n<=5" in json.dumps(m))
     print(f"\n{PASS} passed, {FAIL} failed")
     return 1 if FAIL else 0
 
