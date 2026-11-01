@@ -122,6 +122,9 @@ def _usage(op: str, name: str) -> None:
 
 
 def register(app: FastAPI) -> None:
+    _pub = os.environ.get("CLOUDLEARN_REGISTRY_PUBLIC_PORT", "").strip()
+    if _pub:
+        ar.configure_public("%s:%s" % (os.environ.get("CLOUDLEARN_REGISTRY_PUBLIC_HOST", "localhost").strip() or "localhost", _pub))
     async def _wire(request: Request):
         body = await request.body()
         if request.method == "GET":
