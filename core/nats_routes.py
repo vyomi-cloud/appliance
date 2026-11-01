@@ -234,7 +234,9 @@ def _register_gcp(app: FastAPI) -> None:
     @app.post("/v1/projects/{project}/locations/{loc}/triggers")
     async def gcp_eventarc_create_trigger(project: str, loc: str, request: Request):
         body = await request.json()
-        name = body.get("name") or body.get("triggerId") or f"trigger-{uuid.uuid4().hex[:8]}"
+        # triggerId is a QUERY parameter in the real API; the body forms stay accepted for the console.
+        name = (request.query_params.get("triggerId") or body.get("triggerId")
+                or str(body.get("name") or "").rsplit("/", 1)[-1] or f"trigger-{uuid.uuid4().hex[:8]}")
         trigger = {
             "name": f"projects/{project}/locations/{loc}/triggers/{name}",
             "uid": uuid.uuid4().hex,

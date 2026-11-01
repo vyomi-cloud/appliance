@@ -176,6 +176,12 @@ try:
 except Exception:
     pass
 try:
+    from core import gcp_eventing as _gcp_eventing
+    _gcp_eventing.register(app)
+    app.add_middleware(_gcp_eventing.EventTap)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[gcp-eventing] skipped: {_e}")
+try:
     from core import cedar_routes as _cedar_routes
     _cedar_routes.register(app)
 except Exception:
@@ -17280,7 +17286,9 @@ def _gcp_functions_make_operation(project: str, location: str, fn_view: dict, op
 def _gcp_functions_view(project: str, location: str, function: dict) -> dict:
     name = str(function.get("name") or "")
     # Trigger URL points at the simulator (this is where the function actually runs).
-    uri = f"{_gcp_public_base()}/v1/projects/{project}/locations/{location}/functions/{name}:call"
+    # The HTTPS trigger URL: the handler gets a real request and returns the real response here
+    # (the `:call` management route keeps the {executionId,status,result} envelope).
+    uri = f"{_gcp_public_base()}/gcf/{project}/{location}/{name}"
     service_config = dict(function.get("serviceConfig") or {})
     service_config["uri"] = uri
     service_config.setdefault("availableMemory", "256M")

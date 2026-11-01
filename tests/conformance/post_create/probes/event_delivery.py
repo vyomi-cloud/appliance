@@ -125,6 +125,81 @@ def aws():
                 pass
 
 
+GP = "vyomi-project"
+GL = "us-central1"
+
+
+def gcp():
+    tag = f"pc{int(time.time()) % 100000}"
+    bucket, hfn, efn, trig, ptrig, topic = f"{tag}-b", f"{tag}-http", f"{tag}-evt", f"{tag}-trig", f"{tag}-ptrig", f"{tag}-topic"
+    fbase = f"/api/gcp/cloudfunctions/v2/projects/{GP}/locations/{GL}/functions"
+    http_src = ("import functions_framework\nfrom flask import jsonify\n\n@functions_framework.http\n"
+                "def h(request):\n    print('HTTPLOG')\n    if request.method == 'GET':\n        return 'hello ' + request.args.get('who', 'anon')\n"
+                "    body = request.get_json(silent=True) or {}\n"
+                "    return jsonify({'echo': body, 'method': request.method, 'ua': request.headers.get('X-Probe')}), 202\n")
+    # the event function returns what it received; the platform records it in the function's invocations
+    evt_src = ("import functions_framework\n\n@functions_framework.cloud_event\n"
+               "def e(ce):\n    d = ce.data or {}\n"
+               "    return {'type': ce['type'], 'subject': ce.get('subject'), 'bucket': d.get('bucket'), 'name': d.get('name'), 'msg': d.get('message')}\n")
+
+    def seen(kind):
+        for inv in (http("GET", fbase + "/" + efn)[1].get("invocations") or []):
+            try:
+                r = json.loads(inv.get("response") or "null")
+            except Exception:
+                continue
+            if isinstance(r, dict) and r.get("type") == kind:
+                return r
+        return None
+    try:
+        # ---- item 6: HTTP-triggered function behaves like the real one -------------------------
+        st, op = http("POST", fbase + f"?functionId={hfn}", {"name": hfn, "runtime": "python312", "entryPoint": "h", "code": http_src, "httpsTrigger": {}})
+        view = http("GET", fbase + "/" + hfn)[1]
+        url = (view.get("httpsTrigger") or {}).get("url") or (view.get("serviceConfig") or {}).get("uri") or ""
+        check(bool(url) and not url.endswith(":call"), "Cloud Functions: shown trigger URL is a plain invoke URL", url)
+        s1, b1 = http("GET", url + "?who=sam")
+        check(s1 == 200 and b1 == "hello sam", "Cloud Functions: GET on the trigger URL runs the handler (request.args)", (s1, b1))
+        s2, b2 = http("POST", url, {"a": 1}, {"X-Probe": "yes"})
+        check(s2 == 202 and b2 == {"echo": {"a": 1}, "method": "POST", "ua": "yes"},
+              "Cloud Functions: POST handler gets get_json()/headers; return value is the HTTP body+status (no envelope)", (s2, b2))
+        s3, b3 = http("POST", f"{fbase}/{hfn}:call", {"a": 1})
+        check(s3 == 200 and isinstance(b3, dict) and "executionId" in b3, "Cloud Functions: ':call' management route keeps the execution envelope", (s3, b3))
+
+        # ---- item 4: Eventarc storage-finalized + pubsub -> function --------------------------
+        http("POST", "/storage/v1/b", {"name": bucket})
+        http("POST", fbase + f"?functionId={efn}", {"name": efn, "runtime": "python312", "entryPoint": "e", "code": evt_src,
+                                                      "eventTrigger": {"eventType": STORAGE}})
+        efn_name = f"projects/{GP}/locations/{GL}/functions/{efn}"
+        s4, t = http("POST", f"/v1/projects/{GP}/locations/{GL}/triggers?triggerId={trig}", {
+            "eventFilters": [{"attribute": "type", "value": STORAGE}, {"attribute": "bucket", "value": bucket}],
+            "destination": {"cloudFunction": efn_name}})
+        check(s4 < 300 and str(t.get("name", "")).endswith("/triggers/" + trig), "Eventarc: triggerId is honoured on create", t)
+        http("POST", f"/upload/storage/v1/b/{bucket}/o?uploadType=media&name=dir%2Fhello.txt", b"hi there", {"content-type": "text/plain"})
+        got = until(lambda: seen(STORAGE), 20)
+        check(isinstance(got, dict) and got.get("type") == STORAGE and got.get("bucket") == bucket and got.get("name") == "dir/hello.txt",
+              "Eventarc: object upload fires the storage-finalized CloudEvent at the function", got)
+        # pubsub
+        http("PUT", f"/v1/projects/{GP}/topics/{topic}", {})
+        http("POST", f"/v1/projects/{GP}/locations/{GL}/triggers?triggerId={ptrig}", {
+            "eventFilters": [{"attribute": "type", "value": PUBSUB}], "transport": {"pubsub": {"topic": f"projects/{GP}/topics/{topic}"}},
+            "destination": {"cloudFunction": efn_name}})
+        http("POST", f"/v1/projects/{GP}/topics/{topic}:publish", {"messages": [{"data": base64.b64encode(b"ping").decode(), "attributes": {"k": "v"}}]})
+        got = until(lambda: seen(PUBSUB), 20)
+        check(isinstance(got, dict) and got.get("type") == PUBSUB and (got.get("msg") or {}).get("attributes") == {"k": "v"},
+              "Eventarc: Pub/Sub publish fires the messagePublished CloudEvent at the function", got)
+    finally:
+        for m, u in (("DELETE", f"/v1/projects/{GP}/locations/{GL}/triggers/{trig}"), ("DELETE", f"/v1/projects/{GP}/locations/{GL}/triggers/{ptrig}"),
+                     ("DELETE", fbase + "/" + hfn), ("DELETE", fbase + "/" + efn), ("DELETE", f"/v1/projects/{GP}/topics/{topic}")):
+            try:
+                http(m, u)
+            except Exception:
+                pass
+
+
+STORAGE = "google.cloud.storage.object.v1.finalized"
+PUBSUB = "google.cloud.pubsub.topic.v1.messagePublished"
+
+
 if __name__ == "__main__":
-    {"aws": aws}.get(CLOUD, lambda: check(False, f"{CLOUD} not implemented"))()
+    {"aws": aws, "gcp": gcp}.get(CLOUD, lambda: check(False, f"{CLOUD} not implemented"))()
     sys.exit(1 if fails else 0)

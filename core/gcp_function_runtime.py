@@ -108,3 +108,232 @@ def execute(code: str, entry_point: str, runtime: str, event: dict, timeout: int
                 "logs": "", "result": None}
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
+
+
+# ── HTTP / CloudEvent invocation (the real Cloud Functions contract) ─────────────────────────────
+# HTTP functions get a Flask-like `request` and their return value IS the HTTP response (body, status,
+# headers as the handler returned them); event functions get a CloudEvent. Runs in the same
+# subprocess-per-call sandbox as execute() (temp dir, timeout, no state kept between calls).
+_FLASK_SHIM = '''
+import json as _json
+class Response:
+    def __init__(self, response=b"", status=200, headers=None, mimetype=None, content_type=None):
+        self.data = response if isinstance(response, (bytes, bytearray)) else str(response).encode()
+        self.status_code = int(status)
+        self.headers = dict(headers or {})
+        ct = content_type or mimetype
+        if ct:
+            self.headers["Content-Type"] = ct
+    status = property(lambda s: s.status_code)
+def jsonify(*a, **kw):
+    obj = a[0] if len(a) == 1 and not kw else (list(a) if a else kw)
+    return Response(_json.dumps(obj), 200, mimetype="application/json")
+def make_response(*a):
+    if len(a) == 1 and isinstance(a[0], Response):
+        return a[0]
+    body = a[0] if a else ""
+    status = a[1] if len(a) > 1 and isinstance(a[1], int) else 200
+    hdrs = a[-1] if len(a) > 1 and isinstance(a[-1], dict) else None
+    if isinstance(body, (dict, list)):
+        return Response(_json.dumps(body), status, hdrs, mimetype="application/json")
+    return Response(body, status, hdrs, mimetype="text/html; charset=utf-8")
+def abort(code, description=None):
+    raise _Abort(code, description)
+class _Abort(Exception):
+    def __init__(self, code, description=None):
+        super().__init__(description or str(code)); self.code = code; self.description = description
+'''
+
+_FF_SHIM = '''
+def http(fn):
+    return fn
+def cloud_event(fn):
+    return fn
+'''
+
+_PY_HTTP_HARNESS = r'''
+import json, importlib.util, sys, os, base64, urllib.parse
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "_shim"))
+import flask as _flask
+spec = json.loads(sys.stdin.read())
+MARK = spec["marker"]
+sys.path.insert(0, os.path.dirname(__file__))
+
+class _Headers(dict):
+    def __init__(self, d):
+        super().__init__({k.title(): v for k, v in d.items()})
+    def get(self, k, default=None):
+        return dict.get(self, str(k).title(), default)
+    def __getitem__(self, k):
+        return dict.__getitem__(self, str(k).title())
+    def __contains__(self, k):
+        return dict.__contains__(self, str(k).title())
+
+class Request:
+    def __init__(self, r):
+        self.method = r["method"]; self.path = r["path"]
+        self.query_string = r["query"].encode(); self.full_path = r["path"] + "?" + r["query"]
+        self.url = r.get("url", ""); self.base_url = self.url.split("?")[0]
+        self.headers = _Headers(r["headers"])
+        self.data = base64.b64decode(r["body_b64"])
+        self.args = _Args(urllib.parse.parse_qs(r["query"], keep_blank_values=True))
+        self.content_type = self.headers.get("Content-Type", "")
+        self.mimetype = self.content_type.split(";")[0].strip()
+        self.is_json = self.mimetype == "application/json" or self.mimetype.endswith("+json")
+        self.remote_addr = r.get("remote_addr", "")
+        self.cookies = {}; self.files = {}
+        self.form = _Args(urllib.parse.parse_qs(self.data.decode("utf-8", "replace"), keep_blank_values=True)) \
+            if self.mimetype == "application/x-www-form-urlencoded" else _Args({})
+        self.values = _Args({**{k: v for k, v in self.args.lists()}, **{k: v for k, v in self.form.lists()}})
+    def get_data(self, as_text=False, cache=True, parse_form_data=False):
+        return self.data.decode("utf-8", "replace") if as_text else self.data
+    def get_json(self, force=False, silent=False, cache=True):
+        if not (force or self.is_json):
+            if silent: return None
+            raise _flask._Abort(415, "Content-Type was not 'application/json'")
+        try:
+            return json.loads(self.data.decode("utf-8")) if self.data else None
+        except Exception:
+            if silent: return None
+            raise _flask._Abort(400, "Failed to decode JSON object")
+    json = property(lambda s: s.get_json())
+    text = property(lambda s: s.data.decode("utf-8", "replace"))
+
+class _Args(dict):
+    def __init__(self, m):
+        super().__init__({k: v[0] if isinstance(v, list) and v else v for k, v in m.items()})
+        self._m = m
+    def getlist(self, k): return list(self._m.get(k, []))
+    def lists(self): return self._m.items()
+    def to_dict(self, flat=True): return dict(self)
+
+def _norm(rv):
+    status, headers = 200, {}
+    if isinstance(rv, tuple):
+        if len(rv) == 3: rv, status, headers = rv
+        elif len(rv) == 2:
+            rv, x = rv
+            if isinstance(x, dict): headers = x
+            else: status = x
+        else: rv = rv[0]
+    if isinstance(rv, _flask.Response):
+        h = dict(rv.headers); h.update(headers or {})
+        return rv.status_code if status == 200 else int(status), h, rv.data
+    if hasattr(rv, "status_code") and hasattr(rv, "data"):     # a real framework Response
+        return int(rv.status_code), dict(getattr(rv, "headers", {}) or {}), bytes(rv.data)
+    h = dict(headers or {})
+    if rv is None:
+        return 500, {"Content-Type": "text/html; charset=utf-8"}, b"The view function did not return a valid response."
+    if isinstance(rv, (dict, list)):
+        h.setdefault("Content-Type", "application/json"); body = json.dumps(rv).encode()
+    elif isinstance(rv, (bytes, bytearray)):
+        h.setdefault("Content-Type", "application/octet-stream"); body = bytes(rv)
+    else:
+        h.setdefault("Content-Type", "text/html; charset=utf-8"); body = str(rv).encode()
+    return int(status), h, body
+
+class CloudEvent(dict):
+    """functions_framework CloudEvent: dict of attributes + .data"""
+    def __init__(self, attributes, data=None):
+        super().__init__(attributes); self.data = data; self._attributes = dict(attributes)
+    def get_attributes(self): return dict(self._attributes)
+    def get_data(self): return self.data
+
+import traceback
+try:
+    p = os.path.join(os.path.dirname(__file__), "main.py")
+    s = importlib.util.spec_from_file_location("user_function", p)
+    mod = importlib.util.module_from_spec(s); s.loader.exec_module(mod)
+    fn = getattr(mod, spec["entry"], None)
+    if fn is None:
+        raise SystemExit("Entry point %r not found in function source" % spec["entry"])
+    if spec["mode"] == "http":
+        try:
+            rv = fn(Request(spec["request"]))
+            status, headers, body = _norm(rv)
+        except _flask._Abort as a:
+            status, headers, body = a.code, {"Content-Type": "text/html; charset=utf-8"}, str(a.description or a.code).encode()
+        out = {"status": status, "headers": headers, "body_b64": base64.b64encode(body).decode()}
+    else:
+        ev = spec["event"]
+        attrs = {k: v for k, v in ev.items() if k != "data"}
+        rv = fn(CloudEvent(attrs, ev.get("data")))
+        out = {"status": 200, "headers": {}, "body_b64": base64.b64encode(json.dumps(rv, default=str).encode()).decode()}
+    sys.stdout.write("\n" + MARK + json.dumps(out))
+except SystemExit:
+    raise
+except BaseException:
+    sys.stderr.write(traceback.format_exc()); sys.exit(1)
+'''
+
+
+def _http_result(proc_out: dict) -> dict:
+    """execute-style result -> {status, headers, body(bytes), logs, ok}."""
+    import base64
+    if proc_out.get("status") != "SUCCESS":
+        err = proc_out.get("error") or "execution failed"
+        return {"ok": False, "status": 500, "headers": {"Content-Type": "text/plain"}, "body": ("Error: " + err).encode(),
+                "logs": proc_out.get("logs", ""), "error": err}
+    r = proc_out.get("result") or {}
+    return {"ok": True, "status": int(r.get("status", 200)), "headers": r.get("headers") or {},
+            "body": base64.b64decode(r.get("body_b64", "")), "logs": proc_out.get("logs", "")}
+
+
+def _run_py_harness(code: str, spec: dict, timeout: int, env: dict | None, entry_files: dict | None = None) -> dict:
+    workdir = tempfile.mkdtemp(prefix="cl-fn-")
+    try:
+        with open(os.path.join(workdir, "main.py"), "w") as fh:
+            fh.write(code)
+        for rel, text in (entry_files or {}).items():
+            dest = os.path.normpath(os.path.join(workdir, rel))
+            if dest.startswith(workdir + os.sep):
+                os.makedirs(os.path.dirname(dest), exist_ok=True)
+                with open(dest, "w") as fh:
+                    fh.write(text)
+        os.makedirs(os.path.join(workdir, "_shim"))
+        with open(os.path.join(workdir, "_shim", "flask.py"), "w") as fh:
+            fh.write(_FLASK_SHIM)
+        with open(os.path.join(workdir, "_shim", "functions_framework.py"), "w") as fh:
+            fh.write(_FF_SHIM)
+        with open(os.path.join(workdir, "_run.py"), "w") as fh:
+            fh.write(_PY_HTTP_HARNESS)
+        run_env = dict(os.environ)
+        run_env.update(env or {})
+        spec = dict(spec, marker=_RESULT_MARKER)
+        try:
+            proc = subprocess.run([sys.executable, os.path.join(workdir, "_run.py")], cwd=workdir, input=json.dumps(spec),
+                                  capture_output=True, text=True, timeout=timeout, env=run_env)
+        except subprocess.TimeoutExpired:
+            return {"status": "ERROR", "error": f"Function timed out after {timeout}s", "logs": "", "result": None}
+        if proc.returncode != 0:
+            return {"status": "ERROR", "error": (proc.stderr or "execution failed").strip()[-2000:],
+                    "logs": (proc.stdout or "").strip()[:4000], "result": None}
+        result, logs = _parse(proc.stdout or "")
+        return {"status": "SUCCESS", "result": result, "logs": logs[:4000]}
+    finally:
+        shutil.rmtree(workdir, ignore_errors=True)
+
+
+def execute_http(code: str, entry_point: str, runtime: str, request: dict, timeout: int = 60,
+                 env: dict | None = None) -> dict:
+    """Invoke an HTTP function with a Flask-like request. `request`: {method, path, query, headers,
+    body_b64, url, remote_addr}. Returns {ok, status, headers, body(bytes), logs[, error]}: the
+    handler's own HTTP response, unwrapped. A crash is the platform's 500, like the real service."""
+    runtime = str(runtime or "python").lower()
+    if not (code or "").strip():
+        return _http_result({"status": "ERROR", "error": "No function source uploaded — deploy code to enable execution."})
+    if not runtime.startswith("python"):
+        return _http_result({"status": "ERROR", "error": f"HTTP invocation of runtime {runtime!r} is not supported yet (python only)."})
+    return _http_result(_run_py_harness(code, {"mode": "http", "entry": entry_point or "hello_http", "request": request},
+                                        timeout, env))
+
+
+def execute_cloud_event(code: str, entry_point: str, runtime: str, event: dict, timeout: int = 60,
+                        env: dict | None = None) -> dict:
+    """Invoke an event-driven function with a CloudEvent (attributes + .data)."""
+    runtime = str(runtime or "python").lower()
+    if not (code or "").strip():
+        return _http_result({"status": "ERROR", "error": "No function source uploaded — deploy code to enable execution."})
+    if not runtime.startswith("python"):
+        return _http_result({"status": "ERROR", "error": f"CloudEvent invocation of runtime {runtime!r} is not supported yet (python only)."})
+    return _http_result(_run_py_harness(code, {"mode": "event", "entry": entry_point or "handler", "event": event}, timeout, env))
