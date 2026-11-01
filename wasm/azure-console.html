@@ -932,7 +932,7 @@ function renderRail(){
     const it=el("div",{class:"navitem"+(CURRENT===key?" active":""),onclick});
     it.dataset.key=key; it.append(icon(ic), el("span",{class:"lbl"},label)); return it;
   };
-  c.append(mk("home","Home",selectHome,"__home__"));
+  c.append(mk("home","Dashboard",selectHome,"__home__"));
   c.append(mk("folder","Resource groups",selectRG,"__rg__"));
   for(const s of CATALOG.services){ c.append(mk(s.icon,s.label,()=>selectService(s.key),s.key)); }
 }
@@ -1167,7 +1167,7 @@ async function selectHome(){
   markActive("__home__");
   const main=document.getElementById("main");
   main.innerHTML="";
-  main.append(crumb(["Home"]), pageHead("dashboard","Azure (Vyomi simulator)","All resources in resource group "+RG));
+  main.append(crumb(["Dashboard"]), pageHead("dashboard","Dashboard","Azure (Vyomi simulator) · all resources in resource group "+RG));
   const wrap=el("div",{class:"wrap"});
   wrap.append(vyVideoBanner("azure"));
   wrap.append(el("div",{style:"display:grid;grid-template-columns:repeat(auto-fit,minmax(min(340px,100%),1fr));gap:14px;margin-bottom:16px;align-items:stretch"},   /* both cards share the row height */
@@ -1238,7 +1238,7 @@ async function selectHome(){
 async function selectRG(){
   markActive("__rg__");
   const main=document.getElementById("main"); main.innerHTML="";
-  main.append(crumb(["Home","Resource groups"]), pageHead("folder","Resource groups",""));
+  main.append(crumb(["Dashboard","Resource groups"]), pageHead("folder","Resource groups",""));
   main.append(el("div",{class:"empty",id:"rgLoading"},"Loading…"));
   const res=await arm("GET", `/subscriptions/${SUB}/resourcegroups`, undefined, "2021-04-01");
   if(CURRENT!=="__rg__") return;
@@ -1256,7 +1256,7 @@ async function selectRG(){
 // (GET .../resources), as the portal's Overview blade shows them.
 async function openRG(name){
   const main=document.getElementById("main"); main.innerHTML="";
-  main.append(crumb(["Home","Resource groups",name]), pageHead("folder",name,"Resource group"));
+  main.append(crumb(["Dashboard","Resource groups",name]), pageHead("folder",name,"Resource group"));
   const body=el("div",{class:"wrap",id:"rgDetail"},el("div",{class:"empty"},"Loading…")); main.append(body);
   const base=`/subscriptions/${SUB}/resourcegroups/${encodeURIComponent(name)}`;
   const [g,r]=await Promise.all([arm("GET",base,undefined,"2021-04-01"), arm("GET",base+"/resources",undefined,"2021-04-01")]);
@@ -1291,7 +1291,7 @@ async function selectService(key){
   const _sub = svc.dataPlane
     ? ("Data plane · " + (svc.dpLabel || ("GET /api/azure/" + svc.key)))
     : (svc.namespace + "/" + svc.type + " · api-version " + svc.apiVersion);
-  main.append(crumb(["Home",svc.label]), pageHead(svc.icon, svc.label, _sub));
+  main.append(crumb(["Dashboard",svc.label]), pageHead(svc.icon, svc.label, _sub));
   const tb=el("div",{class:"toolbar"});
   tb.append(
     el("button",{class:"tbtn",onclick:()=>openCreate(svc)}, icon("add_circle"),"Create"),

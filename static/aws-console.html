@@ -94,6 +94,10 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
   .notif-pop .empty{padding:36px 18px;text-align:center;color:var(--sub);font-size:13px}
 
   /* ---- Breadcrumb bar ---- */
+  .crumbs-inline{font-size:12.5px;color:var(--sub);display:flex;align-items:center;gap:4px;margin-bottom:6px;font-weight:400}
+  .crumbs-inline a{color:var(--link);cursor:pointer}
+  .crumbs-inline .sep{color:#aab7b8;margin:0 2px}
+  .crumbs-inline .current{color:var(--ink);font-weight:600}
   .crumbs-bar{background:#fff;border-bottom:1px solid var(--line);padding:8px 22px;font-size:12.5px;color:var(--sub);display:flex;align-items:center;gap:4px}
   .crumbs-bar a{color:var(--link);cursor:pointer}
   .crumbs-bar .sep{color:#aab7b8;margin:0 2px}
@@ -474,9 +478,6 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
   <div class="body" id="notifBody"></div>
 </div>
 
-<!-- ==================== BREADCRUMB BAR ==================== -->
-<div class="crumbs-bar" id="crumbs"></div>
-
 <!-- Disk-health widget — populated on load by initDiskWidget(). Persists
      across every view inside the console so the user always sees disk
      state without navigating back to a dashboard. -->
@@ -753,6 +754,7 @@ function render(){
   renderCrumbs();
   renderRail();
   const main = document.getElementById("main"); main.innerHTML = "";
+  if (!window._crumbObs) { window._crumbObs = new MutationObserver(placeCrumbs); window._crumbObs.observe(main, {childList:true, subtree:true}); }
   if (STATE.view === "home")      return renderHome(main);
   if (STATE.view === "list")      return renderList(main);
   if (STATE.view === "childList") return renderChildList(main);
@@ -765,14 +767,15 @@ function render(){
 // =====================================================================
 // Breadcrumb
 // =====================================================================
-function renderCrumbs(){
-  const c = document.getElementById("crumbs"); c.innerHTML = "";
+function renderCrumbs(){}   // breadcrumbs now sit above each page's feature header (see placeCrumbs)
+function crumbsEl(){
+  const c = el("div",{class:"crumbs-inline"});
   const link = (label, fn) => el("a",{onclick:fn}, label);
   const sep = () => el("span",{class:"sep"}, "›");
   c.append(link("Services", () => navigate({view:"home", service:null, item:null})));
-  if (!STATE.service) return;
+  if (!STATE.service) return c;
   const svc = svcByKey(STATE.service);
-  if (!svc) return;
+  if (!svc) return c;
   c.append(sep(), link(svc.label, () => navigate({view:"list", service:STATE.service, item:null})));
   if (STATE.view === "detail" && STATE.item) {
     const name = String(getPath(STATE.item, svc.name_field) || STATE.item.name || "");
@@ -787,6 +790,16 @@ function renderCrumbs(){
   } else {
     c.append(sep(), el("span",{class:"current"}, svc.label));
   }
+  return c;
+}
+// Put the breadcrumb directly above the page's feature header (h1.page-h). Views build their
+// headers at different times (some after an await), so watch #main instead of patching each view.
+function placeCrumbs(){
+  const main = document.getElementById("main"); if (!main) return;
+  const h = main.querySelector("h1.page-h"); if (!h) return;
+  const p = h.parentNode;
+  if (p.querySelector(":scope > .crumbs-inline")) return;
+  p.insertBefore(crumbsEl(), h);
 }
 
 // =====================================================================
@@ -821,7 +834,7 @@ function renderRail(){
 
   if (!STATE.service) {
     // Home: services grouped by category
-    head("Console Home", ()=>navigate({view:"home", service:null}));
+    head("Dashboard", ()=>navigate({view:"home", service:null}));
     const groups = [
       ["Compute", ["ec2", "lambda"]],
       ["Storage", ["s3"]],
@@ -896,7 +909,7 @@ function renderRail(){
   // Footer: back to all services
   body = rail;
   rail.append(el("hr",{class:"nav-div"}));
-  link("Console Home", ()=>navigate({view:"home", service:null}));
+  link("Dashboard", ()=>navigate({view:"home", service:null}));
 }
 
 // =====================================================================
@@ -1149,9 +1162,9 @@ function renderHome(main){
   // Page header — real AWS uses "Console Home" + "Info" link + an "Actions" menu.
   const h = el("div",{class:"detail-top"});
   const idCol = el("div",{class:"id"});
-  idCol.append(el("h1",{class:"page-h"}, "Console Home",
+  idCol.append(el("h1",{class:"page-h"}, "Dashboard",
     el("a",{class:"info",style:"font-size:12px;font-weight:500;color:var(--link);cursor:pointer;margin-left:8px",
-      onclick:()=>toast("Console Home shows widgets you can customize.","ok")}, "Info")));
+      onclick:()=>toast("Dashboard shows widgets you can customize.","ok")}, "Info")));
   idCol.append(el("div",{class:"meta"}, `Account: ${ACCOUNT}  ·  Region: ${REGION} (${friendlyRegion(REGION)})`));
   h.append(idCol);
   main.append(h);
@@ -5120,3 +5133,4 @@ boot();
 <script src="/assets/lazy_backends.js"></script>
 </body>
 </html>
+

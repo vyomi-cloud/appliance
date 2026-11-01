@@ -383,7 +383,7 @@ async function crawlConsole(browser, base, con, needsSW) {
       .map((e, i) => ({ e, i }))
       .filter(({ e }) => !chrome.split(" ").some((c) => e.classList.contains(c)))
       .map(({ e, i }) => ({ i, label: (e.innerText || e.title || e.getAttribute("data-key") || e.getAttribute("data-service") || "").trim().split("\n").pop() }))
-      .filter((x) => x.label && !/^home$/i.test(x.label)), [RAIL_SEL, NAV_CHROME]);
+      .filter((x) => x.label && !/^(home|dashboard)$/i.test(x.label)), [RAIL_SEL, NAV_CHROME]);
     // Opening a service swaps #rail for that service's own sidebar (EC2 →
     // Events, Instances, …), so the service list's indexes stop matching.
     // Go back to the console home whenever the rail entry isn't this service.
