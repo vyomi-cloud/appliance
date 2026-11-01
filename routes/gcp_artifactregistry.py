@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import os
 import time
+import urllib.parse
 import urllib.request
 
 from fastapi import FastAPI, Request, Response
@@ -89,28 +90,61 @@ def _sync_registry() -> None:
     _SYNC["at"] = time.time()
     ar.configure_data_plane(host, int(os.environ.get("CLOUDLEARN_REGISTRY_PORT", "5000") or 5000))
     base = f"http://{host}:{ar.DATA_PLANE['port']}/v2"
-    accept = {"Accept": "application/vnd.docker.distribution.manifest.v2+json,application/vnd.oci.image.manifest.v1+json"}
+    # Multi-arch pushes (docker buildx, containerd image store) are OCI indexes / manifest
+    # lists: the registry answers 404 MANIFEST_UNKNOWN unless the Accept header names them.
+    accept = {"Accept": ",".join((
+        "application/vnd.docker.distribution.manifest.v2+json",
+        "application/vnd.oci.image.manifest.v1+json",
+        "application/vnd.docker.distribution.manifest.list.v2+json",
+        "application/vnd.oci.image.index.v1+json"))}
 
     def get(url, headers=None):
         with urllib.request.urlopen(urllib.request.Request(url, headers=headers or {}), timeout=2) as r:
             return r.headers, json.loads(r.read() or b"{}")
 
+    def image_size(repo, man):
+        size = sum(int(l.get("size", 0)) for l in man.get("layers", [])) + int((man.get("config") or {}).get("size", 0))
+        for child in (man.get("manifests") or [])[:8]:        # index: sum the platform images
+            try:
+                size += image_size(repo, get(f"{base}/{repo}/manifests/{child['digest']}", accept)[1])
+            except Exception:
+                size += int(child.get("size", 0))
+        return size
+
     try:
         project = _project()
-        found = []
-        for repo in get(base + "/_catalog?n=1000")[1].get("repositories") or []:
-            proj, _, path = repo.partition("/")
-            # Images pushed under the project number / a legacy id are the same project.
-            if ctx.gcp_project_name(proj) != project or "/" not in path:
-                continue
-            for tag in get(f"{base}/{repo}/tags/list")[1].get("tags") or []:
+        repos, last = [], ""
+        for _ in range(20):                       # the catalog pages (n per page, `last=` cursor)
+            page = get(base + "/_catalog?n=1000" + ("&last=" + urllib.parse.quote(last) if last else ""))[1].get("repositories") or []
+            repos += page
+            if len(page) < 1000:
+                break
+            last = page[-1]
+    except Exception:
+        return          # registry down / not started: control plane keeps working
+    found = []
+    for repo in repos:
+        proj, _, path = repo.partition("/")
+        # Images pushed under the project number / a legacy id are the same project.
+        if ctx.gcp_project_name(proj) != project or "/" not in path:
+            continue
+        # One unreadable repository or tag (deleted manifest, odd media type, slow answer) must
+        # not stop every other push from showing up: skip just that entry.
+        try:
+            tags = get(f"{base}/{repo}/tags/list")[1].get("tags") or []
+        except Exception:
+            continue
+        for tag in tags:
+            try:
                 h, man = get(f"{base}/{repo}/manifests/{tag}", accept)
-                size = sum(int(l.get("size", 0)) for l in man.get("layers", [])) + int((man.get("config") or {}).get("size", 0))
-                found.append({"path": path, "tag": tag, "digest": h.get("Docker-Content-Digest", ""), "size": size})
+            except Exception:
+                continue
+            found.append({"path": path, "tag": tag, "digest": h.get("Docker-Content-Digest", ""), "size": image_size(repo, man)})
+    try:
         if ar.ingest_registry_images(_STORE, project, [f for f in found if f["digest"]]):
             _usage("registry_push", project)
     except Exception:
-        pass            # registry down / not started: control plane keeps working
+        pass
 
 
 def _usage(op: str, name: str) -> None:
