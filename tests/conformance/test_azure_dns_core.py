@@ -75,6 +75,22 @@ r = cp(st, "DELETE", ["dnsZones", "contoso.com"])
 check("delete zone → LRO", r["status"] == 200 and r["lro"] and cp(st, "GET", ["dnsZones", "contoso.com"])["status"] == 404)
 check("delete missing zone → 204", cp(st, "DELETE", ["dnsZones", "contoso.com"])["status"] == 204)
 
+# private zones + VNet links (registration/resolution), as the console's Virtual network links panel edits
+r = cp(st, "PUT", ["dnsZones", "priv.contoso.net"], {"location": "global", "properties": {"zoneType": "Private"}})
+check("create private zone → 201, no name servers", r["status"] == 201 and r["body"]["properties"]["zoneType"] == "Private"
+      and r["body"]["properties"]["nameServers"] == [], r["body"])
+VNET1 = "/subscriptions/sub1/resourceGroups/rg1/providers/Microsoft.Network/virtualNetworks/vnet1"
+VNET2 = "/subscriptions/sub1/resourceGroups/rg1/providers/Microsoft.Network/virtualNetworks/vnet2"
+r = cp(st, "PUT", ["dnsZones", "priv.contoso.net"], {"properties": {"registrationVirtualNetworks": [{"id": VNET1}]}})
+check("link registration vnet → 200", r["status"] == 200 and r["body"]["properties"]["registrationVirtualNetworks"] == [{"id": VNET1}], r["body"])
+r = cp(st, "PUT", ["dnsZones", "priv.contoso.net"], {"properties": {"resolutionVirtualNetworks": [{"id": VNET2}]}})
+check("link resolution vnet → 200, registration link retained", r["status"] == 200 and r["body"]["properties"]["resolutionVirtualNetworks"] == [{"id": VNET2}]
+      and r["body"]["properties"]["registrationVirtualNetworks"] == [{"id": VNET1}], r["body"])
+r = cp(st, "PUT", ["dnsZones", "priv.contoso.net"], {"properties": {"registrationVirtualNetworks": []}})
+check("unlink registration vnet → empty list, resolution link retained", r["status"] == 200 and r["body"]["properties"]["registrationVirtualNetworks"] == []
+      and r["body"]["properties"]["resolutionVirtualNetworks"] == [{"id": VNET2}], r["body"])
+check("delete private zone → LRO", cp(st, "DELETE", ["dnsZones", "priv.contoso.net"])["status"] == 200)
+
 # through the Nano ARM wire
 arm = AzureArm()
 P = "/subscriptions/s/resourceGroups/rg/providers/Microsoft.Network"

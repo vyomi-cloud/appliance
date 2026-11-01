@@ -1,0 +1,226 @@
+{
+  "$schema": "../schema.json",
+  "cloud": "azure",
+  "service": "dns",
+  "console_path": "#browse/Microsoft.Network%2Fdnszones",
+  "status": "reviewed",
+  "captured_at": "2026-11-01",
+  "nav": [
+    { "label": "Overview", "page_id": "dns-zone-overview" },
+    { "label": "Activity log", "page_id": "dns-zone-activity-log" },
+    { "label": "Access control (IAM)", "page_id": "dns-zone-access-control-iam" },
+    { "label": "Tags", "page_id": "dns-zone-tags" },
+    { "label": "Diagnose and solve problems", "page_id": "dns-zone-diagnose-and-solve-problems" },
+    {
+      "label": "Settings",
+      "expandable": true,
+      "children": [
+        { "label": "Virtual network links", "page_id": "dns-zone-virtual-network-links" },
+        { "label": "Locks", "page_id": "dns-zone-locks" }
+      ]
+    },
+    {
+      "label": "Automation",
+      "expandable": true,
+      "children": [
+        { "label": "Export template", "page_id": "dns-zone-export-template" }
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "id": "dns-zones",
+      "kind": "list",
+      "title": "DNS zones",
+      "route": "#browse/Microsoft.Network%2Fdnszones",
+      "breadcrumbs": ["Home"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "table": {
+        "columns": ["Name", "Resource group", "Location", "Subscription"],
+        "selection": "multi",
+        "header_actions": ["Create", "Manage view", "Refresh", "Export to CSV", "Open query", "Assign tags", "Delete"],
+        "filter_placeholder": "Filter for any field...",
+        "filters": ["Subscription equals all", "Resource group equals all", "Location equals all", "Add filter"],
+        "empty_state": "No DNS zones to display",
+        "empty_state_action": "Create DNS zone",
+        "pagination": true,
+        "provenance": "reference",
+        "confidence": "medium"
+      }
+    },
+    {
+      "id": "create-dns-zone",
+      "kind": "create",
+      "title": "Create DNS zone",
+      "route": "#create/Microsoft.Network-dnsZone",
+      "breadcrumbs": ["Home", "DNS zones", "Create DNS zone"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "steps": [
+        {
+          "title": "Basics",
+          "sections": [
+            {
+              "title": "Project details",
+              "fields": [
+                { "label": "Subscription", "type": "select", "required": true },
+                { "label": "Resource group", "type": "select", "required": true, "actions": ["Create new"] }
+              ]
+            },
+            {
+              "title": "Instance details",
+              "fields": [
+                { "label": "Name", "type": "text", "required": true },
+                { "label": "Resource group location", "type": "readonly" },
+                {
+                  "label": "Zone type",
+                  "type": "radio",
+                  "required": true,
+                  "options": [
+                    "Public: resolvable on the internet, with Vyomi-issued name servers",
+                    "Private: resolvable only from virtual networks you link to this zone"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Tags",
+          "sections": [
+            { "title": "Tags", "fields": [{ "label": "Tags", "type": "table", "columns": ["Name", "Value", "Resource"] }] }
+          ]
+        },
+        {
+          "title": "Review + create",
+          "sections": [{ "title": "Basics" }, { "title": "Tags" }]
+        }
+      ],
+      "submit": "Create",
+      "notes": "Vyomi unifies public/private zones under one resource (zoneType) — see azure.dns.zone.private."
+    },
+    {
+      "id": "dns-zone-overview",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "breadcrumbs": ["Home", "DNS zones", "{resource-name}"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": ["Delete", "Refresh"],
+      "table": {
+        "columns": ["Name", "Type", "TTL (seconds)", "Value"],
+        "selection": "multi",
+        "header_actions": ["Record set", "Manage view", "Refresh", "Export to CSV", "Delete"],
+        "filter_placeholder": "Search record sets",
+        "provenance": "reference",
+        "confidence": "medium"
+      },
+      "sections": [
+        {
+          "title": "Add record set",
+          "fields": [
+            { "label": "Name", "type": "text", "required": true },
+            { "label": "Type", "type": "select", "required": true, "options": ["A", "AAAA", "CAA", "CNAME", "MX", "NS", "PTR", "SRV", "TXT"] },
+            { "label": "Alias record set", "type": "radio", "options": ["No", "Yes"] },
+            { "label": "TTL", "type": "number", "required": true },
+            { "label": "IP address", "type": "text" }
+          ]
+        }
+      ],
+      "notes": "Record sets table is this page's main content, matching the real DNS zone Overview blade."
+    },
+    {
+      "id": "dns-zone-activity-log",
+      "kind": "list",
+      "title": "{resource-name} | Activity log",
+      "breadcrumbs": ["Home", "DNS zones", "{resource-name}"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": ["Refresh"],
+      "table": {
+        "columns": ["Operation name", "Status", "Time", "Time stamp", "Subscription", "Event initiated by"],
+        "empty_state": "No events to display",
+        "pagination": false
+      }
+    },
+    {
+      "id": "dns-zone-access-control-iam",
+      "kind": "other",
+      "title": "{resource-name} | Access control (IAM)",
+      "breadcrumbs": ["Home", "DNS zones", "{resource-name}"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "DNS zone blade menu item; title only — role assignments scoped to an individual zone are not modelled (azure.dns.iam)."
+    },
+    {
+      "id": "dns-zone-tags",
+      "kind": "settings",
+      "title": "{resource-name} | Tags",
+      "breadcrumbs": ["Home", "DNS zones", "{resource-name}"],
+      "provenance": "reference",
+      "confidence": "high",
+      "header_actions": ["Apply", "Discard changes"],
+      "sections": [
+        { "title": "Tags", "fields": [{ "label": "Tags", "type": "table", "columns": ["Name", "Value", "Resource"] }] }
+      ]
+    },
+    {
+      "id": "dns-zone-diagnose-and-solve-problems",
+      "kind": "other",
+      "title": "{resource-name} | Diagnose and solve problems",
+      "breadcrumbs": ["Home", "DNS zones", "{resource-name}"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "DNS zone blade menu item; title only"
+    },
+    {
+      "id": "dns-zone-virtual-network-links",
+      "kind": "list",
+      "title": "{resource-name} | Virtual network links",
+      "breadcrumbs": ["Home", "DNS zones", "{resource-name}"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": ["Add registration link", "Add resolution link"],
+      "table": {
+        "columns": ["Virtual network", "Link type"],
+        "empty_state": "No virtual network links."
+      },
+      "notes": "Vyomi models links as the zone's own ARM-ref lists, not separate link resources (azure.dns.vnet_links)."
+    },
+    {
+      "id": "dns-zone-locks",
+      "kind": "list",
+      "title": "{resource-name} | Locks",
+      "breadcrumbs": ["Home", "DNS zones", "{resource-name}"],
+      "provenance": "reference",
+      "confidence": "high",
+      "table": {
+        "columns": ["Lock name", "Lock type", "Scope", "Notes"],
+        "header_actions": ["Add", "Refresh"],
+        "filter_placeholder": "Search to filter items...",
+        "empty_state": "This resource has no locks."
+      },
+      "sections": [
+        {
+          "title": "Add lock",
+          "fields": [
+            { "label": "Lock name", "type": "text", "required": true },
+            { "label": "Lock type", "type": "select", "required": true, "options": ["Read-only", "Delete"] },
+            { "label": "Notes", "type": "textarea" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "dns-zone-export-template",
+      "kind": "other",
+      "title": "{resource-name} | Export template",
+      "breadcrumbs": ["Home", "DNS zones", "{resource-name}"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "DNS zone blade menu item; title only (azure.dns.export_template)"
+    }
+  ],
+  "gaps_note": "No native-console captures exist for this service yet (private checkout unavailable this run); every page is provenance=reference, built from product knowledge of the real DNS zone/Private DNS zone blades and this repo's existing core/azure_dns_core.py. Vyomi merges public and private zones into one resource (zoneType) and models VNet links as the zone's own ref lists rather than separate link resources — both called out per-page and in core/capabilities/azure/dns.json."
+}
