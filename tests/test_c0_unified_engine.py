@@ -57,7 +57,7 @@ def test_unified_services_parsing(monkeypatch):
                                                "kms", "secretsmanager", "gcp_firestore", "gcp_compute",
                                                "sqs", "sns", "events", "scheduler",
                                                "lambda", "azure_keyvault", "azure_acr", "azure_servicebus",
-                                               "gcp_pubsub", "azure_graph", "azure_cosmos", "iam", "azure_table", "rds"}
+                                               "gcp_pubsub", "azure_graph", "azure_cosmos", "iam", "azure_table", "rds", "gcp_iam"}
     monkeypatch.setenv("VYOMI_UNIFIED_INGRESS_SERVICES", "s3")
     assert wire_ingress.unified_services() == {"s3"}
     monkeypatch.setenv("VYOMI_UNIFIED_INGRESS_SERVICES", "none")
