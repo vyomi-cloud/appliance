@@ -1,10 +1,11 @@
 /* Store a new secret — 4-step wizard matching the native console. Secret type / credentials
  * / key-value-or-plaintext value / secret name & description / tags / resource policy /
- * rotation schedule are all real, including a live RDS database picker (DescribeDBInstances);
- * the "Managed external secret" type, the DocumentDB/Redshift instance picker and
- * cross-Region replication are declared gaps (core/capabilities/aws/secretsmanager.json).
- * Rotation really fires on its schedule (lazy, on access) but — with no Lambda runtime wired
- * to Secrets Manager — carries the current value forward rather than generating a new one. */
+ * rotation schedule / cross-Region replication are all real, including a live RDS database
+ * picker (DescribeDBInstances) and CreateSecret(AddReplicaRegions); the "Managed external
+ * secret" type and the DocumentDB/Redshift instance picker are declared gaps
+ * (core/capabilities/aws/secretsmanager.json). Rotation really fires on its schedule (lazy, on
+ * access) but — with no Lambda runtime wired to Secrets Manager — carries the current value
+ * forward rather than generating a new one. */
 import { useEffect, useState } from "react";
 import Wizard from "@cloudscape-design/components/wizard";
 import Container from "@cloudscape-design/components/container";
@@ -37,6 +38,11 @@ const DB_TYPES = [
   "Credentials for other database",
 ];
 const SECRET_TYPES = [...DB_TYPES, "Managed external secret", "Other type of secret"];
+const REPLICA_REGIONS = [
+  ["us-east-2", "US East (Ohio)"], ["us-west-2", "US West (Oregon)"], ["eu-west-1", "Europe (Ireland)"],
+  ["eu-central-1", "Europe (Frankfurt)"], ["ap-south-1", "Asia Pacific (Mumbai)"],
+  ["ap-southeast-1", "Asia Pacific (Singapore)"], ["ap-northeast-1", "Asia Pacific (Tokyo)"],
+];
 const SAMPLE = (name) => ({
   Java: `GetSecretValueRequest request = GetSecretValueRequest.builder().secretId("${name}").build();\nString secret = client.getSecretValue(request).secretString();`,
   JavaScript: `const data = await client.send(new GetSecretValueCommand({ SecretId: "${name}" }));\nconst secret = data.SecretString;`,
@@ -124,7 +130,7 @@ function SecretTypeStep({ s, set, dbAliases, dbInstances, dbInstancesLoading }) 
   );
 }
 
-function ConfigureSecretStep({ s, set, nameErr }) {
+function ConfigureSecretStep({ s, set, nameErr, dbAliases }) {
   return (
     <SpaceBetween size="l">
       <Container header={<Header variant="h2">Secret name and description</Header>}>
@@ -144,8 +150,25 @@ function ConfigureSecretStep({ s, set, nameErr }) {
         actions={<Button onClick={() => set({ editPolicy: true })}>Edit permissions</Button>}>
         {s.resourcePolicy ? <Box variant="code"><pre style={{ margin: 0, whiteSpace: "pre-wrap" }}>{s.resourcePolicy}</pre></Box> : <Box color="text-body-secondary">No resource policy attached.</Box>}
       </CapabilityContainer>
-      <NotSimulatedContainer title="Replicate secret - optional"
-        note="Creating read-only replicas of this secret in another AWS Region isn't modeled — there's no second Region's store to replicate into. Encryption key selection for a replica isn't applicable." />
+      <CapabilityContainer id="secretsmanager.secret.replication" title="Replicate secret - optional">
+        <SpaceBetween size="m">
+          <Toggle checked={s.replicate} onChange={({ detail }) => set({ replicate: detail.checked })}>Replicate secret</Toggle>
+          {s.replicate && (
+            <>
+              <FormField label="AWS Region">
+                <Select selectedOption={{ label: REPLICA_REGIONS.find(([v]) => v === s.replicateRegion)?.[1], value: s.replicateRegion }}
+                  onChange={({ detail }) => set({ replicateRegion: detail.selectedOption.value })}
+                  options={REPLICA_REGIONS.map(([value, label]) => ({ value, label }))} />
+              </FormField>
+              <FormField label="Encryption key">
+                <Select selectedOption={{ label: s.replicateKmsKeyId, value: s.replicateKmsKeyId }}
+                  onChange={({ detail }) => set({ replicateKmsKeyId: detail.selectedOption.value })}
+                  options={[{ label: "aws/secretsmanager", value: "aws/secretsmanager" }, ...dbAliases.map((a) => ({ label: a, value: a }))]} />
+              </FormField>
+            </>
+          )}
+        </SpaceBetween>
+      </CapabilityContainer>
       <Modal visible={!!s.editPolicy} onDismiss={() => set({ editPolicy: false })} size="large" header="Edit resource permissions"
         footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs">
           <Button variant="link" onClick={() => set({ editPolicy: false })}>Cancel</Button>
@@ -233,6 +256,7 @@ export default function StoreSecret() {
     valueTab: "keyvalue", kvPairs: [{ key: "", value: "" }], plaintext: "",
     kmsKeyId: "aws/secretsmanager",
     name: "", description: "", tags: [], resourcePolicy: "", editPolicy: false,
+    replicate: false, replicateRegion: REPLICA_REGIONS[0][0], replicateKmsKeyId: "aws/secretsmanager",
     rotation: false, rotationScheduleType: "builder", timeUnit: "Months", scheduleExpression: "", windowDuration: "", rotateImmediately: true,
   });
   const set = (patch) => setS((prev) => ({ ...prev, ...patch }));
@@ -274,6 +298,8 @@ export default function StoreSecret() {
         // customer-picked alias (resolved to its "alias/..." wire form) is sent.
         KmsKeyId: s.kmsKeyId === "aws/secretsmanager" ? undefined : `alias/${s.kmsKeyId}`,
         Tags: s.tags.filter((t) => !t.markedForRemoval && t.key).map((t) => ({ Key: t.key, Value: t.value || "" })),
+        AddReplicaRegions: s.replicate ? [{ Region: s.replicateRegion,
+          KmsKeyId: s.replicateKmsKeyId === "aws/secretsmanager" ? undefined : `alias/${s.replicateKmsKeyId}` }] : undefined,
       });
       if (s.resourcePolicy) await api.putResourcePolicy(s.name, s.resourcePolicy);
       if (s.rotation) {
@@ -290,7 +316,7 @@ export default function StoreSecret() {
 
   const steps = [
     { title: "Choose secret type", content: <SecretTypeStep s={s} set={set} dbAliases={dbAliases} dbInstances={dbInstances} dbInstancesLoading={dbInstancesLoading} /> },
-    { title: "Configure secret", content: <ConfigureSecretStep s={s} set={set} nameErr={nameErr} /> },
+    { title: "Configure secret", content: <ConfigureSecretStep s={s} set={set} nameErr={nameErr} dbAliases={dbAliases} /> },
     { title: "Configure rotation", content: <ConfigureRotationStep s={s} set={set} /> },
     { title: "Review", content: <ReviewStep s={s} goto={setIdx} name={s.name} /> },
   ];
