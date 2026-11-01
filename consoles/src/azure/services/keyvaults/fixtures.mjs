@@ -6,7 +6,12 @@ const VAULT = "uickv";
 const vaultPath = (name) => `/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.KeyVault/vaults/${name}?api-version=2023-07-01`;
 
 async function ensureVault(wire) {
-  await wire("PUT", vaultPath(VAULT), { svc: null, body: { location: "eastus" } }).catch(() => {});
+  // PATCH, not PUT: this runs once per page that needs "uickv" to exist, so after the first
+  // (real create) call every later call must be a no-op merge — a repeat PUT is ARM's own
+  // full-replace semantics and would reset properties (including the access_configuration /
+  // access_policies self-grant azure_arm_core.py's create hook makes) back to the bare
+  // defaults on every subsequent page, locking the vault's own data plane out from under it.
+  await wire("PATCH", vaultPath(VAULT), { svc: null, body: { location: "eastus" } }).catch(() => {});
 }
 async function ensureSecret(wire) {
   await ensureVault(wire);

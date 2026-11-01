@@ -448,7 +448,8 @@ def _dispatch_azure(service: str, r: AwsWireRouter, method: str, path: str, quer
             return {"status": resp.status, "headers": hdrs, "body": resp.body or b""}
         from core import (azure_keyvault_certificates_core as kvc, azure_keyvault_keys_core as kvk,
                           azure_keyvault_secrets_core as kvs)
-        from core.azure_arm_core import keyvault_network_denied
+        from core.azure_arm_core import (keyvault_network_denied, keyvault_access_denied,
+                                          classify_keyvault_operation, CALLER_PRINCIPAL_ID)
         if hasattr(r.az_kvkeys, "adopt"):
             r.az_kvkeys.adopt()          # pre-v4 Vault-backed secrets / RSA keys (once per space)
         p = kv_core_path(path)
@@ -468,6 +469,16 @@ def _dispatch_azure(service: str, r: AwsWireRouter, method: str, path: str, quer
             body_json = _json.dumps({"error": {"code": "Forbidden",
                 "message": f"Client address is not authorized and caller is not a trusted "
                            f"service. Client address not allowed to access vault '{vault0}'."}}).encode()
+            return {"status": 403, "headers": {"content-type": "application/json"}, "body": body_json}
+        # azure.keyvaults.access_configuration / azure.keyvaults.access_policies — same
+        # per-vault RBAC/access-policy enforcement as the Nano router (aws_wire_router.py),
+        # against the single simulated signed-in principal CALLER_PRINCIPAL_ID.
+        op0 = vault0 and classify_keyvault_operation(method, p)
+        if op0 and keyvault_access_denied(r.az_arm.state, vault0, op0[0], op0[1]):
+            import json as _json
+            body_json = _json.dumps({"error": {"code": "Forbidden",
+                "message": f"The user, group or application 'oid={CALLER_PRINCIPAL_ID}' does not have "
+                           f"{op0[0]} {op0[1]} permission on key vault '{vault0}'."}}).encode()
             return {"status": 403, "headers": {"content-type": "application/json"}, "body": body_json}
         resp = mod.dispatch(st, method, p, query or {}, headers or {}, body or b"")
         hdrs = dict(resp.headers or {})

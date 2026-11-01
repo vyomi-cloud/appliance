@@ -25,27 +25,48 @@
  "azure.keyvaults.access_configuration": {
   "title": "Access configuration (RBAC vs vault access policy, resource access flags)",
   "level": {
-   "nano": "config_only",
-   "offline": "config_only"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "enableRbacAuthorization and the resource-access flags are stored and returned exactly as written, but Vyomi does not enforce them. The console now tags every Keys/Secrets/Certificates call with the vault it's showing (x-vyomi-vault, the same signal azure.keyvaults.networking enforces against) — the remaining gap isn't 'which vault' but 'which caller': Vyomi has no signed-in-identity/session-principal concept behind a data-plane call anywhere in the product (the Azure RBAC decision engine, core/azure_iam_core.py checkAccess, is wired only as the Subscription/Resource group IAM blades' informational 'Check access' probe, never as a live gate on a real operation). Real Azure's own default-deny semantics — nobody has access to a freshly created vault until a role or access-policy entry is explicitly granted — would, if enforced only here, lock the data plane of every vault this console's own create wizard produces (it defaults to RBAC mode and never auto-grants a role), breaking the ordinary create-vault-then-add-a-secret path for a simplification no other Vyomi service makes."
+   "ENFORCED: Vyomi models the one thing the product was missing to make this real — a single simulated signed-in identity (core/azure_arm_core.py CALLER_PRINCIPAL_ID) every Keys/Secrets/Certificates call (tagged with its vault via x-vyomi-vault, the same signal azure.keyvaults.networking enforces against) is evaluated against. The permission-model radio really switches which store is checked: RBAC mode checks a real role assignment covering the vault (or an ancestor resource-group/subscription scope) whose role grants the matching Key Vault dataAction (core/azure_arm_data.py's 'Key Vault *' built-in roles — Administrator/Reader/Secrets Officer/Secrets User/Crypto Officer/Crypto User/Certificates Officer — a SEPARATE dataActions namespace from Owner/Contributor/Reader's actions, matching real Azure: being Owner does not, by itself, grant Key Vault data access once RBAC is on); Vault access policy mode checks the vault's own accessPolicies list (azure.keyvaults.access_policies).",
+   "A fresh vault self-grants CALLER_PRINCIPAL_ID full access at creation time (RBAC: a Key Vault Administrator role assignment at the vault's own scope; access policy: a self-granting entry) — exactly what `az keyvault create` already does by default — so this console's own create-vault-then-add-a-secret path keeps working. Clearing or narrowing that grant (the Access policies panel's Delete, or revoking the role) really locks the vault, same as real Azure's own 'you can lock yourself out'.",
+   "The 'Resource access' checkboxes (Azure Virtual Machines for deployment / ARM template deployment / Disk Encryption) round-trip through ARM but gate nothing — Vyomi doesn't model those OTHER services' own Key Vault integration (a VM extension or an ARM template secure parameter pulling a secret at deploy time), so there is no consumer call to check them against."
   ],
   "tests": [
-   "tests/conformance/test_azure_arm_core.py"
+   "tests/conformance/test_azure_arm_core.py",
+   "tests/conformance/test_azure_keyvault_access_core.py"
   ]
  },
  "azure.keyvaults.access_policies": {
   "title": "Vault access policies (properties.accessPolicies)",
   "level": {
-   "nano": "config_only",
-   "offline": "config_only"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Access policy entries round-trip through ARM exactly as written, but Vyomi never evaluates them — every data-plane key/secret call succeeds regardless of the configured permissions. Same root cause as azure.keyvaults.access_configuration: evaluating a policy needs a caller identity to check it against, and Vyomi has no signed-in-identity/session-principal concept behind a data-plane call anywhere in the product — enforcing it only here, with an empty accessPolicies list denying by default exactly as real Azure does, would lock every vault's data plane on creation (this console's own create wizard doesn't add a self-granting entry, matching a raw ARM/Bicep deploy, not the CLI's auto-grant)."
+   "ENFORCED (vault access policy mode only — azure.keyvaults.access_configuration): every Keys/Secrets/Certificates call checks the vault's own accessPolicies list for an entry matching the console's one simulated signed-in principal (CALLER_PRINCIPAL_ID), with the Get/List/Create/Delete bucket the entry's Key/Secret/Certificate Permissions checkboxes already show — Create covers set/update/import too (Vyomi's console exposes those four buckets, not real Key Vault's full per-operation permission set), and a cryptographic operation (encrypt/decrypt/sign/verify/wrap/unwrap) needs at least Get on keys.",
+   "Only CALLER_PRINCIPAL_ID's own entry is ever evaluated — Vyomi has no second signed-in identity to grant a DIFFERENT principal's entry against, so an access policy for any other objectId round-trips through ARM (visible in the table) but never gates a real call."
   ],
   "tests": [
-   "tests/conformance/test_azure_arm_core.py"
+   "tests/conformance/test_azure_arm_core.py",
+   "tests/conformance/test_azure_keyvault_access_core.py"
+  ]
+ },
+ "azure.keyvaults.iam": {
+  "title": "Access control (IAM)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Role assignments and role definitions are real ARM resources (Microsoft.Authorization/roleAssignments, roleDefinitions), and Check access / My access run the real wildcard + scope-inheritance + notActions + explicit-deny decision — all ENFORCED scoped to this vault (plus its subscription/resource-group ancestors, matching real Azure's inherited-access view); Roles stays subscription-wide, which matches real Azure. 'Check access' decides a management action (Microsoft.KeyVault/vaults/write by default) the same way every other resource's IAM blade does; 'My access' is a genuine upgrade over that pattern — since Vyomi has exactly one simulated signed-in principal, it shows THAT principal's real data-plane grant on this vault directly (the RBAC role or access-policy entry azure.keyvaults.access_configuration enforces), not a 'type a principal id' probe.",
+   "Deny assignments and Classic administrators remain an honest gap — Microsoft Entra Privileged Identity Management and the legacy Azure Service Management administrator list are not modelled.",
+   "Role assignments are still only PUT-able at the subscription or resource-group scope (real ARM's own constraint in this console — every resource's IAM blade shares it); a vault-scoped grant/revoke needs the Subscription or Resource group blade's 'Add role assignment', not a control on the vault itself."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py",
+   "tests/conformance/test_azure_keyvault_access_core.py"
   ]
  },
  "azure.keyvaults.networking": {
