@@ -46,4 +46,16 @@ export default {
       { svc: null, body: { properties: { amount: 100, notifications: {} } } });
     return name;
   },
+
+  // Settings > Usage + quotas: a real public IP, counted live off actual provisioned
+  // resources (core/azure_arm_core.py's Microsoft.Network/locations/{loc}/usages) — the
+  // page lists the resource names counted toward each quota, so this name renders verbatim.
+  "live-usage": async (wire, uniq) => {
+    const rg = `uic-quotarg-${uniq}`;
+    const name = `uic-pip-${uniq}`;
+    await wire("PUT", `${subPath()}/resourceGroups/${rg}?api-version=2021-04-01`, { svc: null, body: { location: "eastus" } });
+    await wire("PUT", `${subPath()}/resourceGroups/${rg}/providers/Microsoft.Network/publicIPAddresses/${name}?api-version=2023-11-01`,
+      { svc: null, body: { location: "eastus" } });
+    return name;
+  },
 };

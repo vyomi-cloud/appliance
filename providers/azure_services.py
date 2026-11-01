@@ -1329,6 +1329,11 @@ def core_arm():
     arm.sub_names = _subscription_meta("names")   # Microsoft.Subscription/rename
     arm.sub_tags = _subscription_meta("tags")     # Microsoft.Resources/tags/default at subscription scope
     arm.providers = _subscription_meta("providers")   # resource provider (un)registration
+    # Engine state that must outlive this per-request AzureArm — durable in the Azure space:
+    arm.feature_state = _subscription_meta("feature_state")                # Preview features
+    arm.deployment_credentials = _subscription_meta("deployment_credentials")   # Programmatic deployment
+    arm.billing_properties = _subscription_meta("billing_properties")      # Billing properties (account admin)
+    arm._vm_tokens = _subscription_meta("vm_tokens")                       # Run command IMDS tokens (validated on a later request)
     try:   # APIM Key Vault named values (listValue) resolve against this space's Key Vault secrets
         from core.appliance_stores import az_kv_secrets_store
         arm.kv_secrets_store = az_kv_secrets_store()
@@ -1357,7 +1362,9 @@ def _subscription_meta(key: str) -> dict:
     """Per-subscription display names / tags, persisted in the Azure space (not in the ARM
     resource map, whose values every consumer iterates as resources)."""
     from core.appliance_stores import _proxy
-    return _proxy("azure_subscription_meta", lambda: {"names": {}, "tags": {}, "providers": {}}, key)._target()
+    return _proxy("azure_subscription_meta", lambda: {"names": {}, "tags": {}, "providers": {}, "feature_state": {},
+                                                       "deployment_credentials": {}, "billing_properties": {},
+                                                       "vm_tokens": {}}, key)._target()
 
 
 async def _handle_core_arm(request: Request, method: str, rest: str, base: str):

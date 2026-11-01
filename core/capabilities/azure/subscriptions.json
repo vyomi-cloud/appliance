@@ -112,23 +112,193 @@
   ]
  },
  "azure.subscriptions.usage_quotas": {
-  "title": "Usage + quotas",
+  "title": "Usage + quotas (Microsoft.Compute/Microsoft.Network locations/{location}/usages)",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Per-resource-type, per-location compute/network quota (Microsoft.Compute usages) is not modeled — Vyomi has no fixed quantity caps to report against."
+   "Vyomi models a reduced subset of Azure's published default regional quotas — Total Regional vCPUs and Virtual Machines for compute, Public IP Addresses/Virtual Networks/Network Security Groups for network — rather than the full catalog of dozens of per-SKU-family compute quotas. Every count is live off actually-provisioned resources (not a static report) and ENFORCED: a create that would exceed a modeled limit fails with the real QuotaExceeded error, same as real Azure. The response additionally lists the resource names counted toward each quota, which real Azure's API does not return, so the live count is independently verifiable."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_subscriptions_ext_core.py"
   ]
  },
- "azure.subscriptions.menu_gaps": {
-  "title": "Diagnose and solve problems, Security, Events, Advisor recommendations, Invoices, Partner information, Programmatic deployment, Billing properties, Preview features, Policies, Management certificates, My permissions, Deployment stacks, Support + Troubleshooting",
+ "azure.subscriptions.security": {
+  "title": "Security (Microsoft Defender for Cloud secure score + recommendations, subscription scope)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "Reuses the same native rule engine as the dedicated Defender for Cloud console (core/azure_security_core.py) — see azure.defender.* in core/capabilities/azure/defender.json for its own limitations (Vyomi's own rule set, not Azure's full built-in catalogue; alerts need runtime workload telemetry Vyomi has none of)."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_security_core.py"
+  ]
+ },
+ "azure.subscriptions.diagnostics": {
+  "title": "Diagnose and solve problems",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "The real blade is an interactive catalog of hundreds of service-specific troubleshooting guides (most needing live telemetry Vyomi has none of). Vyomi instead runs concrete, live checks against this subscription's own real state — operations that failed (Activity log), this subscription having no resource lock, and quota usage at or above 80% — and links each finding to the real page that explains and fixes it."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py",
+   "tests/conformance/test_azure_subscriptions_ext_core.py"
+  ]
+ },
+ "azure.subscriptions.events": {
+  "title": "Events",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Real Azure's Events blade is Service Health (platform outages/planned maintenance) merged with the Activity log. Vyomi has no platform to have outages, so Events shows the same real, subscription-wide Activity log feed Activity log itself uses (core/azure_arm_core.py's Microsoft.Insights/eventtypes), not a separate data source."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py"
+  ]
+ },
+ "azure.subscriptions.advisor_recommendations": {
+  "title": "Advisor recommendations",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Real Azure Advisor evaluates hundreds of rules across Cost/Security/Reliability/Performance/Operational excellence using telemetry (utilization, logs) Vyomi doesn't collect. Vyomi's Advisor instead surfaces genuine findings over real state it DOES have: Security recommendations are the subscription's own Unhealthy Defender assessments (azure.subscriptions.security); Reliability flags critical resources (SQL servers, Cosmos accounts, Key Vaults) with no resource lock; Cost flags resource groups with real spend but no budget configured. No Performance recommendations are produced (no utilization metrics exist to base them on)."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_security_core.py",
+   "tests/conformance/test_azure_arm_core.py",
+   "tests/conformance/test_azure_cost_core.py"
+  ]
+ },
+ "azure.subscriptions.invoices": {
+  "title": "Invoices (Microsoft.Billing/invoices)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Vyomi keeps no historical cost ledger (every cost query recomputes live over current inventory, core/azure_cost_core.py), so only the current, still-accruing billing period exists, honestly marked 'InProgress' — there is no archive of past, finalized/PDF invoices to download, and no real billing-account hierarchy (invoice sections, payment methods)."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_subscriptions_ext_core.py"
+  ]
+ },
+ "azure.subscriptions.billing_properties": {
+  "title": "Billing properties (Microsoft.Billing/billingProperties)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Real ARM makes billingProperties a tenant-scoped singleton; Vyomi keeps it subscription-scoped instead, since it models exactly one subscription anyway. Only the Account admin field is a real, persisted PATCH/GET round-trip. Currency is fixed USD and the rest of the real billing-account hierarchy (billing accounts, invoice sections, agreement type beyond the fixed Pay-As-You-Go offer already on Overview) is not modeled."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_subscriptions_ext_core.py"
+  ]
+ },
+ "azure.subscriptions.preview_features": {
+  "title": "Preview features (Microsoft.Features/providers/{ns}/features)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Register/unregister persists exactly like real ARM, over a curated sample of real preview feature flag names (not the full live catalog, which changes continuously in real Azure). Toggling a flag doesn't change any OTHER Vyomi behavior — the same ceiling most real preview features have too, since they mostly unlock allow-listing on Microsoft's control plane rather than changing it locally."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_subscriptions_ext_core.py"
+  ]
+ },
+ "azure.subscriptions.my_permissions": {
+  "title": "My permissions (Microsoft.Authorization/permissions)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Derived live from the same role catalog/assignments checkAccess uses for the one simulated signed-in identity — inherits access_control_iam's limitations (single directory, deny assignments only as far as Vyomi's own RBAC engine models them)."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_subscriptions_ext_core.py",
+   "tests/conformance/test_azure_arm_core.py"
+  ]
+ },
+ "azure.subscriptions.policies": {
+  "title": "Policies (Microsoft.Authorization/policyDefinitions, policyAssignments, Microsoft.PolicyInsights/policyStates)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Definitions and assignments are real ARM resources (generic catalog CRUD). Of Azure's hundreds of built-ins, Vyomi evaluates and ENFORCES exactly one — the real 'Allowed locations' built-in (by its actual GUID, e56962a6-4747-49cd-b67b-bf8b01975c4c): an assignment referencing it denies any catalog resource create outside its listOfAllowedLocations, and the Compliance tab (policyStates) reports every existing resource against it. Custom policyRule JSON for any other definition is stored but never evaluated — it stays config_only."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_subscriptions_ext_core.py"
+  ]
+ },
+ "azure.subscriptions.deployment_stacks": {
+  "title": "Deployment stacks (Microsoft.Resources/deploymentStacks)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Inherits the deployments template evaluator's limitations (literal parameter/variable substitution only). What a plain deployment doesn't do: DELETE on a stack really cascade-deletes every resource it manages (actionOnUnmanage.resources: 'delete', the default) unless set to 'detach' — genuine lifecycle enforcement, not just metadata."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_subscriptions_ext_core.py"
+  ]
+ },
+ "azure.subscriptions.programmatic_deployment": {
+  "title": "Programmatic deployment credentials",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "This blade's exact real wire call was never captured (reference-only in the spec); Vyomi models its real effect instead — generating a service principal with a real Contributor roleAssignment at the current scope, observable in Access control (IAM) and genuinely enforced by checkAccess (verified by an explicit checkAccess call, not just stored config). The returned client secret cannot actually be redeemed for a token: Vyomi implements no Microsoft Entra OAuth token endpoint for a real SDK/CLI to authenticate against."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_subscriptions_ext_core.py"
+  ]
+ },
+ "azure.subscriptions.management_certificates": {
+  "title": "Management certificates",
   "level": {
    "nano": "not_simulated",
    "offline": "not_simulated"
   },
   "limitations": [
-   "These subscription blade menu items are billing-account, Microsoft Defender, Azure Policy, Microsoft Entra or classic Service Management features with no Vyomi backend."
+   "Classic Service Management API certificate authentication — the only real control-plane behavior a management certificate ever gated — was retired by Microsoft in 2024 along with the rest of the classic Azure Service Management API. There is no live Azure behavior left for Vyomi to enforce against; storing an uploaded certificate's bytes with nothing in Vyomi that ever authenticates against it would be inert config dressed up as a feature, which the registry does not allow for a 'full'/'limited' claim."
+  ]
+ },
+ "azure.subscriptions.partner_information": {
+  "title": "Partner information",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Requires a real Microsoft Cloud Solution Provider (CSP) partner organization with an actual MPN ID and billing-account linkage to that third party — a real external business relationship Vyomi cannot simulate a counterpart for."
+  ]
+ },
+ "azure.subscriptions.support_troubleshooting": {
+  "title": "Support + Troubleshooting",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Creating a support request routes to Microsoft's own human support engineers and real-time Azure service-health telemetry — a real third party outside Vyomi, with no simulated backend to stand in for it."
   ]
  },
  "azure.subscriptions.cost_management": {

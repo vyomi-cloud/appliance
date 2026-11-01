@@ -78,3 +78,57 @@ const costQ = { "api-version": COST_API_VERSION };
 export const costQuery = (s, body) => restJson("POST", `${sub(s)}/providers/Microsoft.CostManagement/query`, { query: costQ, body });
 export const listBudgets = async (s) => (await restJson("GET", `${sub(s)}/providers/Microsoft.Consumption/budgets`, { query: costQ })).value || [];
 export const listCostAlerts = async (s) => (await restJson("GET", `${sub(s)}/providers/Microsoft.CostManagement/alerts`, { query: costQ })).value || [];
+
+// ── Security (Microsoft.Security — Defender for Cloud, reused from the subscription scope) ──
+const SECURITY_API_VERSION = "2022-01-01";
+export const getSecureScore = (s) => restJson("GET", `${sub(s)}/providers/Microsoft.Security/secureScores/ascScore`, { query: { "api-version": SECURITY_API_VERSION } });
+export const listAssessments = async (s) => (await restJson("GET", `${sub(s)}/providers/Microsoft.Security/assessments`, { query: { "api-version": SECURITY_API_VERSION } })).value || [];
+
+// ── Usage + quotas (Microsoft.Compute|Network/locations/{location}/usages) ─────────────
+const USAGES_API_VERSION = "2024-07-01";
+export const listComputeUsages = async (s, location = "eastus") =>
+  (await restJson("GET", `${sub(s)}/providers/Microsoft.Compute/locations/${location}/usages`, { query: { "api-version": USAGES_API_VERSION } })).value || [];
+export const listNetworkUsages = async (s, location = "eastus") =>
+  (await restJson("GET", `${sub(s)}/providers/Microsoft.Network/locations/${location}/usages`, { query: { "api-version": "2023-11-01" } })).value || [];
+
+// ── Preview features (Microsoft.Features/providers/{ns}/features) ──────────────────────
+const FEATURES_API_VERSION = "2021-07-01";
+export const listPreviewFeatures = async (s) => (await restJson("GET", `${sub(s)}/providers/Microsoft.Features/features`, { query: { "api-version": FEATURES_API_VERSION } })).value || [];
+export const registerPreviewFeature = (s, full) => restJson("POST", `${sub(s)}/providers/Microsoft.Features/providers/${full.split("/")[0]}/features/${full.split("/")[1]}/register`, { query: { "api-version": FEATURES_API_VERSION } });
+export const unregisterPreviewFeature = (s, full) => restJson("POST", `${sub(s)}/providers/Microsoft.Features/providers/${full.split("/")[0]}/features/${full.split("/")[1]}/unregister`, { query: { "api-version": FEATURES_API_VERSION } });
+
+// ── My permissions (Microsoft.Authorization/permissions) ───────────────────────────────
+export const myPermissions = async (s) => (await restJson("GET", `${sub(s)}/providers/Microsoft.Authorization/permissions`, { query: { "api-version": IAM_API_VERSION } })).value || [];
+
+// ── Policies (Microsoft.Authorization/policyDefinitions|policyAssignments, Microsoft.PolicyInsights) ──
+const POLICY_API_VERSION = "2022-06-01";
+export const listPolicyAssignments = async (s) => (await restJson("GET", `${sub(s)}/providers/Microsoft.Authorization/policyAssignments`, { query: { "api-version": POLICY_API_VERSION } })).value || [];
+export const putPolicyAssignment = (s, name, body) => restJson("PUT", `${sub(s)}/providers/Microsoft.Authorization/policyAssignments/${encodeURIComponent(name)}`, { query: { "api-version": POLICY_API_VERSION }, body });
+export const deletePolicyAssignment = (s, name) => restJson("DELETE", `${sub(s)}/providers/Microsoft.Authorization/policyAssignments/${encodeURIComponent(name)}`, { query: { "api-version": POLICY_API_VERSION } });
+export const policyComplianceStates = async (s) => (await restJson("POST", `${sub(s)}/providers/Microsoft.PolicyInsights/policyStates/latest/queryResults`, { query: { "api-version": "2019-10-01" } })).value || [];
+export const ALLOWED_LOCATIONS_POLICY_ID = "/providers/Microsoft.Authorization/policyDefinitions/e56962a6-4747-49cd-b67b-bf8b01975c4c";
+
+// ── Deployment stacks (Microsoft.Resources/deploymentStacks) ───────────────────────────
+const STACK_API_VERSION = "2024-03-01";
+const stackPath = (s, name) => `${sub(s)}/providers/Microsoft.Resources/deploymentStacks${name ? `/${encodeURIComponent(name)}` : ""}`;
+export const listDeploymentStacks = async (s) => (await restJson("GET", stackPath(s), { query: { "api-version": STACK_API_VERSION } })).value || [];
+export const putDeploymentStack = (s, name, body) => restJson("PUT", stackPath(s, name), { query: { "api-version": STACK_API_VERSION }, body });
+export const deleteDeploymentStack = (s, name) => restJson("DELETE", stackPath(s, name), { query: { "api-version": STACK_API_VERSION } });
+
+// ── Invoices (Microsoft.Billing/invoices) ───────────────────────────────────────────────
+export const listInvoices = async (s) => (await restJson("GET", `${sub(s)}/providers/Microsoft.Billing/invoices`, { query: { "api-version": "2024-04-01" } })).value || [];
+
+// ── Billing properties (Microsoft.Billing/billingProperties, subscription-scoped in Vyomi) ──
+const BILLING_PROPS_API_VERSION = "2017-04-24-preview";
+export const getBillingProperties = (s) => restJson("GET", `${sub(s)}/providers/Microsoft.Billing/billingProperties`, { query: { "api-version": BILLING_PROPS_API_VERSION } });
+export const patchBillingProperties = (s, body) => restJson("PATCH", `${sub(s)}/providers/Microsoft.Billing/billingProperties`, { query: { "api-version": BILLING_PROPS_API_VERSION }, body });
+
+// ── Programmatic deployment credentials (Microsoft.Authorization/deploymentCredentials) ──
+const credPath = (s, name) => `${sub(s)}/providers/Microsoft.Authorization/deploymentCredentials${name ? `/${encodeURIComponent(name)}` : ""}`;
+export const listDeploymentCredentials = async (s) => (await restJson("GET", credPath(s), { query: {} })).value || [];
+export const createDeploymentCredential = (s) => restJson("POST", credPath(s), { query: {} });
+export const deleteDeploymentCredential = (s, name) => restJson("DELETE", credPath(s, name), { query: {} });
+
+// ── Diagnose and solve problems / Advisor recommendations: composed client-side from the
+// above real calls (resource providers, locks, quotas, activity log, security, budgets) —
+// see SubscriptionBlade.jsx's Diagnostics()/Advisor(). No separate wire calls of their own.

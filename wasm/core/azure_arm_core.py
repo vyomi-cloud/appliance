@@ -117,6 +117,48 @@ DEFAULT_LOCATION = "eastus"
 # "Offer"/"Offer ID" off quotaId through its own static offer-name catalog, not a separate field.
 SUBSCRIPTION_POLICIES = {"locationPlacementId": "Public_2014-09-01", "quotaId": "PayAsYouGo_2014-09-01", "spendingLimit": "Off"}
 
+# The one simulated signed-in identity (Overview's "My role: Owner", IAM's CURRENT_USER in the
+# console) — "My permissions" defaults to full access for it absent any explicit assignment,
+# same as the portal shows Owner with no role assignment needed for the account that created
+# the subscription.
+DEFAULT_PRINCIPAL = "admin@vyomi.local"
+
+# Real Azure built-in policy definition GUID for "Allowed locations" — the one built-in Vyomi's
+# policy engine actually evaluates and enforces (Microsoft.Authorization/policyAssignments ->
+# AzureArm._policy_block, called from every catalog resource PUT).
+POLICY_ALLOWED_LOCATIONS_ID = "e56962a6-4747-49cd-b67b-bf8b01975c4c"
+
+# Settings > Preview features (Microsoft.Features/providers/{ns}/features): a curated sample of
+# real preview feature flags, lifecycle-only (register/unregister persists like real ARM; Vyomi
+# has no second code path these flags gate, so registering one doesn't change other behavior —
+# same ceiling the portal's own flag has for most preview features, which only unlock allow-listing
+# on the real control plane rather than changing it locally).
+PREVIEW_FEATURES = [
+    ("Microsoft.Compute", "EncryptionAtHost"),
+    ("Microsoft.Compute", "LiveMigrationAcrossNUMANodes"),
+    ("Microsoft.ContainerService", "AKS-AzureKeyVaultSecretsProvider"),
+    ("Microsoft.ContainerService", "EnablePodIdentityPreview"),
+    ("Microsoft.Network", "AllowApplicationSecurityGroupOnAllProtocols"),
+    ("Microsoft.Sql", "AADSecurityAdminDisableFlag"),
+    ("Microsoft.Storage", "SkipCertainMgmtOperations"),
+    ("Microsoft.Web", "StaticSitesSSR"),
+]
+
+# Settings > Usage + quotas: a reduced subset of Azure's published default regional quotas
+# (real Azure ships dozens of per-SKU-family compute quotas and several network quotas; Vyomi
+# models the two most commonly hit compute ones plus three network ones), counted LIVE off real
+# provisioned resources and ENFORCED on create (AzureArm._quota_block — exceeding one fails the
+# PUT with a real QuotaExceeded error, not just a report).
+#
+# Limits are set well above anything a single test/demo session legitimately needs — Nano and
+# the offline appliance keep LIVE state across many runs with no automatic reset (deleting a
+# resource is the only thing that frees its quota, exactly like real Azure), so a limit tight
+# enough to matter in one sitting would eventually block ordinary cumulative VM-service usage
+# across unrelated services, not just a deliberate quota test.
+COMPUTE_QUOTA = [("cores", "Total Regional vCPUs", 100), ("virtualMachines", "Virtual Machines", 100)]
+NETWORK_QUOTA = [("PublicIPAddresses", "Public IP Addresses", 50), ("VirtualNetworks", "Virtual Networks", 100),
+                  ("NetworkSecurityGroups", "Network Security Groups", 100)]
+
 _BY_TYPE = {(c["namespace"].lower(), c["type"].lower()): c for c in CATALOG}
 
 
@@ -768,6 +810,9 @@ class AzureArm:
         self.blob_store = None                   # set by the platform: the simulator's Azure Blob store (.bacpac target/source)
         self._vm_tokens: dict = {}               # minted managed-identity token (string) -> {principalId, resource, vmRid}
                                                    # — Run command's IMDS simulation (azure.vms.identity / azure.vms.run_command)
+        self.billing_properties: dict = {}       # {"accountAdmin": …} — Settings > Billing properties (PATCH .../Microsoft.Billing/billingProperties)
+        self.feature_state: dict = {}            # sub (lower) -> "ns/featureName" (lower) -> "Registered"|"NotRegistered"
+        self.deployment_credentials: dict = {}   # sub (lower) -> credential name -> {appId, secret, scope, roleAssignmentName, ...}
 
     # ── per-resource ARM activity entries (Microsoft.Insights/eventtypes rows) ──
     # Kept IN self.state (so they persist with the rest of ARM, offline and Nano alike) by the one
@@ -1022,6 +1067,56 @@ class AzureArm:
                 if self.state.get(vm_rid.lower()) is None:
                     return _err(404, "ResourceNotFound", f"Virtual machine '{chain[1]}' not found.")
                 return self._vm_backup(method, sub, vm_rid, chain[rp_idx + 3:], payload)
+
+        # Microsoft.Compute|Network/locations/{location}/usages (Settings > Usage + quotas): a
+        # derived read, counted LIVE off real provisioned resources — caught here (same reason as
+        # vmSizes above) before the generic alternation would 404 "locations".
+        if (namespace.lower() in ("microsoft.compute", "microsoft.network") and chain
+                and chain[-1].lower() == "usages" and len(chain) >= 2 and chain[0].lower() == "locations"):
+            if method != "GET":
+                return _err(405, "MethodNotAllowed", "usages supports GET only.")
+            return self._usages(sub, namespace, chain[1])
+
+        # Microsoft.Authorization/permissions ("My permissions"): the actions/notActions
+        # DEFAULT_PRINCIPAL holds at this scope, derived from the SAME role assignments/roles
+        # checkAccess uses — not a separate store.
+        if namespace.lower() == "microsoft.authorization" and chain and chain[0].lower() == "permissions" and len(chain) == 1:
+            if method != "GET":
+                return _err(405, "MethodNotAllowed", "permissions supports GET only.")
+            scope_rid = f"/subscriptions/{sub}/resourceGroups/{rg}" if rg is not None else f"/subscriptions/{sub}"
+            return self._my_permissions(sub, scope_rid)
+
+        # Microsoft.Authorization/deploymentCredentials (Settings > Programmatic deployment):
+        # Vyomi's own name for this blade's API — generates a real Contributor roleAssignment
+        # for a simulated service principal (observable in Access control (IAM), enforced by
+        # checkAccess), not a literal mirror of an uncaptured real endpoint.
+        if namespace.lower() == "microsoft.authorization" and chain and chain[0].lower() == "deploymentcredentials":
+            return self._deployment_credentials(method, sub, rg, chain[1:], payload)
+
+        # Microsoft.Features (Settings > Preview features): feature-flag lifecycle, generic
+        # over every resource-provider namespace — not itself a catalog resource type.
+        if namespace.lower() == "microsoft.features":
+            return self._features(method, sub, chain)
+
+        # Microsoft.PolicyInsights/policyStates (Settings > Policies' Compliance tab): live
+        # compliance of every resource in this subscription against every policyAssignment
+        # (azure_arm_core._policy_block runs the SAME check at create time to actually enforce it).
+        if namespace.lower() == "microsoft.policyinsights":
+            return self._policy_states(method, sub, chain)
+
+        # Microsoft.Billing/invoices (Billing > Invoices): derived from the real cost engine —
+        # Vyomi keeps no historical cost ledger, so only the current, still-accruing period exists.
+        if namespace.lower() == "microsoft.billing" and chain and chain[0].lower() == "invoices":
+            if method != "GET":
+                return _err(405, "MethodNotAllowed", "invoices supports GET only.")
+            return self._invoices(sub)
+
+        # Microsoft.Billing/billingProperties (Settings > Billing properties): real ARM makes
+        # this a TENANT-scoped singleton (no /subscriptions/{sub} prefix) — Vyomi keeps it
+        # subscription-scoped instead, since it models exactly one subscription anyway and every
+        # other ARM entry point here already requires the /subscriptions/{sub} prefix to dispatch.
+        if namespace.lower() == "microsoft.billing" and chain and chain[0].lower() == "billingproperties":
+            return self._billing_properties(method, payload)
 
         # Microsoft.Insights/eventtypes/management/values: the subscription-wide ARM activity
         # log read API (not resource-scoped — no "providers" re-entry — so it must be caught
@@ -1309,6 +1404,10 @@ class AzureArm:
             if blocked:
                 return blocked
             blocked = self._acr_validate_block(type_chain, names, payload, sub, rg)
+            blocked = self._policy_block(sub, rg, full_type, payload)
+            if blocked:
+                return blocked
+            blocked = self._quota_block(sub, full_type, key, payload)
             if blocked:
                 return blocked
             if full_type.lower() == "microsoft.authorization/roleassignments":
@@ -1371,6 +1470,18 @@ class AzureArm:
                                        "certificates": ["Get", "List", "Create", "Delete"]},
                     }]
                 resp["body"] = _view(rec)
+            if full_type.lower() == "microsoft.resources/deploymentstacks":
+                # Same bounded template evaluator as a plain deployment — but a stack also
+                # tracks the resources it manages so DELETE can cascade-delete them for real
+                # (actionOnUnmanage.resources: "delete" by default, "detach" to leave them).
+                provisioned, errors = self._execute_deployment(sub, rg, self.state[key])
+                rec = self.state[key]
+                rec["properties"]["resources"] = provisioned
+                rec["properties"].setdefault("actionOnUnmanage", {"resources": "delete"})
+                if errors:
+                    rec["properties"]["provisioningState"] = "Failed"
+                    rec["properties"]["error"] = {"code": "DeploymentFailed", "details": errors}
+                resp["body"] = _view(rec)
             if lro:
                 resp["status"] = 200
                 op_id = self._make_operation(rid, method)
@@ -1392,6 +1503,14 @@ class AzureArm:
             blocked = self._aks_stopped_block(type_chain, names, sub, rg)
             if blocked:
                 return blocked
+            if full_type.lower() == "microsoft.resources/deploymentstacks":
+                stack = self.state.get(key)
+                action = ((stack or {}).get("properties") or {}).get("actionOnUnmanage", {}).get("resources", "delete")
+                if stack and action != "detach":
+                    for pr in (stack.get("properties") or {}).get("resources") or []:
+                        pid = (pr.get("id") or "").lower()
+                        if pid and pid != key:
+                            self.state.pop(pid, None)
             rec = self.state.pop(key, None)
             if rec is not None:
                 if rec.get("_ipam_alloc"):
@@ -1406,6 +1525,280 @@ class AzureArm:
                     del self.state[child_key]
                 self._record_activity(rid, f"{full_type}/delete", sub)
             return _ok(None, status=200 if rec is not None else 204)
+        return _err(405, "MethodNotAllowed", f"{method} not allowed.")
+
+    # ── Policy enforcement (Settings > Policies): the one built-in Vyomi actually evaluates,
+    # by its real GUID (POLICY_ALLOWED_LOCATIONS_ID) — a policyAssignment referencing it denies
+    # any catalog resource PUT whose location isn't in its listOfAllowedLocations parameter.
+    # Custom policyRule JSON is stored (generic catalog CRUD) but not evaluated — "limited". ──
+    def _policy_block(self, sub, rg, full_type, payload):
+        ft = full_type.lower()
+        if ft in ("microsoft.authorization/policyassignments", "microsoft.authorization/policydefinitions",
+                  "microsoft.resources/resourcegroups"):
+            return None
+        loc = str((payload or {}).get("location") or "").lower()
+        if not loc or loc == "global":
+            return None
+        for r in self.state.values():
+            if r.get("_type", "").lower() != "microsoft.authorization/policyassignments" or r.get("_sub") != sub:
+                continue
+            rec_rg = r.get("_rg")
+            if rec_rg is not None and (rg is None or rec_rg.lower() != rg.lower()):
+                continue
+            props = r.get("properties") or {}
+            if str(props.get("enforcementMode", "Default")).lower() == "donotenforce":
+                continue
+            defid = str(props.get("policyDefinitionId") or "")
+            if POLICY_ALLOWED_LOCATIONS_ID.lower() not in defid.lower():
+                continue
+            allowed = [str(x).lower() for x in ((props.get("parameters") or {}).get("listOfAllowedLocations") or {}).get("value") or []]
+            if allowed and loc not in allowed:
+                return _err(403, "RequestDisallowedByPolicy",
+                            f"Resource '{loc}' location is not permitted by the policy assignment "
+                            f"'{r.get('name')}'. Allowed locations: {', '.join(allowed)}.")
+        return None
+
+    # ── Quota enforcement (Settings > Usage + quotas): counted LIVE off real provisioned
+    # resources, on the same reduced subset (COMPUTE_QUOTA/NETWORK_QUOTA) the report shows. ──
+    def _vm_cores(self, rec_or_payload):
+        size = ((rec_or_payload or {}).get("properties") or {}).get("hardwareProfile", {}).get("vmSize") or "Standard_B1s"
+        return instance_catalog.lookup_azure(size).get("vcpu", 1)
+
+    def _quota_err(self, label, loc, limit):
+        return _err(403, "QuotaExceeded",
+                    f"Operation results in exceeding approved {label} quota (limit {limit}) in "
+                    f"location '{loc}'. Request an increase from Settings > Usage + quotas.")
+
+    def _quota_block(self, sub, full_type, key, payload):
+        if key in self.state:
+            return None   # an update, not a new allocation
+        ft = full_type.lower()
+        loc = str((payload or {}).get("location") or DEFAULT_LOCATION).lower()
+        if ft == "microsoft.compute/virtualmachines":
+            vms = [r for r in self.state.values() if r.get("_type", "").lower() == ft
+                   and r.get("_sub") == sub and str(r.get("location", "")).lower() == loc]
+            limit_vms = next(l for n, _, l in COMPUTE_QUOTA if n == "virtualMachines")
+            if len(vms) + 1 > limit_vms:
+                return self._quota_err("Virtual Machines", loc, limit_vms)
+            limit_cores = next(l for n, _, l in COMPUTE_QUOTA if n == "cores")
+            if sum(self._vm_cores(r) for r in vms) + self._vm_cores(payload) > limit_cores:
+                return self._quota_err("Total Regional vCPUs", loc, limit_cores)
+        elif ft == "microsoft.network/publicipaddresses":
+            cnt = sum(1 for r in self.state.values() if r.get("_type", "").lower() == ft
+                      and r.get("_sub") == sub and str(r.get("location", "")).lower() == loc)
+            limit = next(l for n, _, l in NETWORK_QUOTA if n == "PublicIPAddresses")
+            if cnt + 1 > limit:
+                return self._quota_err("Public IP Addresses", loc, limit)
+        return None
+
+    def _usage_row(self, name, label, used, limit, resource_names):
+        # "resources" isn't part of real Azure's usages shape — Vyomi adds it so the live count
+        # is independently verifiable (and the UI-conformance liveness probe has a resource
+        # name, created over the native wire, to look for).
+        return {"name": {"value": name, "localizedValue": label}, "unit": "Count",
+                "currentValue": used, "limit": limit, "resources": sorted(n for n in resource_names if n)}
+
+    def _usages(self, sub, namespace, location):
+        loc = str(location or DEFAULT_LOCATION).lower()
+        rows = []
+        if namespace.lower() == "microsoft.compute":
+            vms = [r for r in self.state.values() if r.get("_type", "").lower() == "microsoft.compute/virtualmachines"
+                   and r.get("_sub") == sub and str(r.get("location", "")).lower() == loc]
+            names = [r.get("name") for r in vms]
+            cores_used = sum(self._vm_cores(r) for r in vms)
+            for name, label, limit in COMPUTE_QUOTA:
+                used = cores_used if name == "cores" else len(vms)
+                rows.append(self._usage_row(name, label, used, limit, names))
+        else:
+            tmap = {"microsoft.network/publicipaddresses": "PublicIPAddresses",
+                    "microsoft.network/virtualnetworks": "VirtualNetworks",
+                    "microsoft.network/networksecuritygroups": "NetworkSecurityGroups"}
+            buckets = {label: [] for _, label, _ in [(0, v, 0) for v in tmap.values()]}
+            for r in self.state.values():
+                if r.get("_sub") != sub or str(r.get("location", "")).lower() != loc:
+                    continue
+                k = tmap.get(r.get("_type", "").lower())
+                if k:
+                    buckets[k].append(r.get("name"))
+            for name, label, limit in NETWORK_QUOTA:
+                rows.append(self._usage_row(name, label, len(buckets[name]), limit, buckets[name]))
+        return _ok({"value": rows})
+
+    # ── My permissions (Microsoft.Authorization/permissions): the actions/notActions
+    # DEFAULT_PRINCIPAL holds at a scope, derived from the SAME role catalog/assignments
+    # checkAccess uses — absent any explicit assignment it defaults to Owner, matching the
+    # Overview tab's hardcoded "My role: Owner". ──
+    def _my_permissions(self, sub, scope_rid):
+        roles = self._role_catalog(sub)
+        actions, not_actions, matched = set(), set(), False
+        for rec in self._role_assignments(sub):
+            props = rec.get("properties") or {}
+            if props.get("principalId") != DEFAULT_PRINCIPAL:
+                continue
+            if not iam_engine._scope_covers(props.get("scope", "/"), scope_rid):
+                continue
+            matched = True
+            if str(props.get("kind", "allow")).lower() == "deny":
+                continue
+            role_name = props.get("roleName") or (props.get("roleDefinitionId") or "").rsplit("/", 1)[-1]
+            role = roles.get(role_name)
+            if not role:
+                continue
+            actions.update(role["actions"])
+            not_actions.update(role["notActions"])
+        if not matched:
+            actions = {"*"}
+        return _ok({"value": [{"actions": sorted(actions), "notActions": sorted(not_actions),
+                               "dataActions": [], "notDataActions": []}]})
+
+    # ── Policies compliance (Microsoft.PolicyInsights/policyStates): re-runs the SAME
+    # allowed-locations check _policy_block enforces at create time, over every existing
+    # resource, for the Policies blade's Compliance tab. ──
+    def _policy_states(self, method, sub, chain):
+        low = [c.lower() for c in chain]
+        if not low or low[0] != "policystates":
+            return _err(404, "NotFound", "Only policyStates/latest/queryResults is simulated.")
+        if method != "POST":
+            return _err(405, "MethodNotAllowed", "Use POST for policyStates queryResults.")
+        assignments = [r for r in self.state.values()
+                       if r.get("_type", "").lower() == "microsoft.authorization/policyassignments" and r.get("_sub") == sub]
+        results = []
+        for key, rec in self.state.items():
+            rtype = rec.get("_type", "").lower()
+            loc = str(rec.get("location") or "").lower()
+            # "/__event__/" rows are Activity log entries, not resources (see the DELETE
+            # cascade's own exclusion above); a resource with no/global location (budgets,
+            # role catalog records, …) isn't region-scoped, so a locations policy never
+            # applies to it — _policy_block skips enforcement on these for the same reason.
+            if (rec.get("_sub") != sub or "/__event__/" in key or not loc or loc == "global"
+                    or rtype == "microsoft.resources/resourcegroups" or rtype.startswith("microsoft.authorization")):
+                continue
+            for a in assignments:
+                props = a.get("properties") or {}
+                defid = str(props.get("policyDefinitionId") or "")
+                compliant = True
+                if POLICY_ALLOWED_LOCATIONS_ID.lower() in defid.lower():
+                    allowed = [str(x).lower() for x in ((props.get("parameters") or {}).get("listOfAllowedLocations") or {}).get("value") or []]
+                    compliant = (not allowed) or str(rec.get("location") or "").lower() in allowed
+                results.append({"resourceId": rec.get("id"), "policyAssignmentId": a.get("id"),
+                                "policyDefinitionId": defid, "complianceState": "Compliant" if compliant else "NonCompliant"})
+        return _ok({"@odata.count": len(results), "value": results})
+
+    # ── Invoices (Microsoft.Billing/invoices): derived from the real cost engine — Vyomi keeps
+    # no historical cost ledger (every cost query recomputes live), so only the current,
+    # still-accruing period exists, honestly marked "InProgress" rather than a fabricated
+    # archive of past, finalized invoices. ──
+    def _invoices(self, sub):
+        q = cost_engine.run_cost_query(self.state, sub, None, {
+            "type": "ActualCost", "timeframe": "MonthToDate",
+            "dataset": {"aggregation": {"totalCost": {"name": "Cost", "function": "Sum"}}}})
+        rows = (q.get("properties") or {}).get("rows") or [[0]]
+        total = rows[0][0] if rows else 0
+        period = _now()[:7]
+        name = f"{period}-estimate"
+        return _ok({"value": [{
+            "id": f"/subscriptions/{sub}/providers/Microsoft.Billing/invoices/{name}", "name": name,
+            "type": "Microsoft.Billing/invoices",
+            "properties": {"invoicePeriodStartDate": f"{period}-01", "status": "InProgress",
+                           "amountDue": {"currency": "USD", "value": total},
+                           "billedAmount": {"currency": "USD", "value": total},
+                           "documentType": "Invoice"},
+        }]})
+
+    # ── Billing properties (Microsoft.Billing/billingProperties, kept subscription-scoped —
+    # see the PUT branch's comment): the one field real PATCH/GET round-trips here —
+    # "Account admin". ──
+    def _billing_properties(self, method, payload):
+        if method not in ("GET", "PATCH"):
+            return _err(405, "MethodNotAllowed", "billingProperties supports GET/PATCH.")
+        if method == "PATCH":
+            admin = (payload or {}).get("accountAdmin")
+            if admin:
+                self.billing_properties["accountAdmin"] = admin
+        return _ok({"id": "/providers/Microsoft.Billing/billingProperties", "name": "billingProperties",
+                   "type": "Microsoft.Billing/billingProperties", "accountAdmin": self.billing_properties.get("accountAdmin", DEFAULT_PRINCIPAL),
+                   "currency": "USD", "channel": "PayAsYouGo", "cloudType": "Public",
+                   "billingAccountId": DEFAULT_SUBSCRIPTION})
+
+    # ── Preview features (Microsoft.Features/providers/{ns}/features): register/unregister
+    # lifecycle, persisted exactly like real ARM. ──
+    def _features(self, method, sub, chain):
+        low = [c.lower() for c in chain]
+        store = self.feature_state.setdefault(sub.lower(), {})
+
+        def view(ns, name):
+            full = f"{ns}/{name}"
+            return {"id": f"/subscriptions/{sub}/providers/Microsoft.Features/providers/{ns}/features/{name}",
+                    "name": full, "type": "Microsoft.Features/providers/features",
+                    "properties": {"state": store.get(full.lower(), "NotRegistered")}}
+
+        if not low:
+            return _err(400, "BadRequest", "Missing Microsoft.Features resource.")
+        if low[0] == "features" and len(chain) == 1:
+            if method != "GET":
+                return _err(405, "MethodNotAllowed", "features supports GET only.")
+            return _ok({"value": [view(ns, nm) for ns, nm in PREVIEW_FEATURES]})
+        if low[0] == "providers" and len(chain) >= 2:
+            ns = chain[1]
+            avail = [nm for n2, nm in PREVIEW_FEATURES if n2.lower() == ns.lower()]
+            if len(chain) == 2 or (len(chain) == 3 and low[2] == "features"):
+                if method != "GET":
+                    return _err(405, "MethodNotAllowed", "features supports GET only.")
+                return _ok({"value": [view(ns, nm) for nm in avail]})
+            if len(chain) >= 4 and low[2] == "features":
+                name = chain[3]
+                if name not in avail:
+                    return _err(404, "NotFound", f"Feature '{ns}/{name}' is not simulated.")
+                if len(chain) == 4:
+                    if method != "GET":
+                        return _err(405, "MethodNotAllowed", "features supports GET only.")
+                    return _ok(view(ns, name))
+                if len(chain) == 5 and low[4] in ("register", "unregister"):
+                    if method != "POST":
+                        return _err(405, "MethodNotAllowed", "register/unregister is POST-only.")
+                    store[f"{ns}/{name}".lower()] = "Registered" if low[4] == "register" else "NotRegistered"
+                    return _ok(view(ns, name))
+        return _err(404, "NotFound", "Unknown Microsoft.Features path.")
+
+    # ── Programmatic deployment credentials (Settings > Programmatic deployment): generates a
+    # real Contributor roleAssignment for a simulated service principal — observable in Access
+    # control (IAM) and enforced by checkAccess, not inert stored config. Vyomi's own API shape
+    # (the real blade's exact wire call was never captured); no Entra token endpoint exists for
+    # the returned secret to actually redeem, which the capability registry's limitations note. ──
+    def _deployment_credentials(self, method, sub, rg, rest, payload):
+        scope_rid = f"/subscriptions/{sub}/resourceGroups/{rg}" if rg is not None else f"/subscriptions/{sub}"
+        store = self.deployment_credentials.setdefault(sub.lower(), {})
+        if not rest:
+            if method == "GET":
+                return _ok({"value": [{k: v for k, v in rec.items() if k != "secret"} for rec in store.values()]})
+            if method == "POST":
+                name = f"sp-{uuid.uuid4().hex[:8]}"
+                app_id, secret, ra_name = str(uuid.uuid4()), uuid.uuid4().hex, str(uuid.uuid4())
+                ra_key = f"{scope_rid}/providers/microsoft.authorization/roleassignments/{ra_name}".lower()
+                self.state[ra_key] = {
+                    "id": f"{scope_rid}/providers/Microsoft.Authorization/roleAssignments/{ra_name}", "name": ra_name,
+                    "type": "Microsoft.Authorization/roleAssignments", "_type": "microsoft.authorization/roleassignments",
+                    "_sub": sub, "_rg": rg, "tags": {},
+                    "properties": {"roleName": "Contributor", "principalId": app_id,
+                                   "principalType": "ServicePrincipal", "scope": scope_rid},
+                }
+                rec = {"name": name, "appId": app_id, "secret": secret,
+                       "tenantId": "00000000-0000-0000-0000-000000000000",
+                       "scope": scope_rid, "roleAssignmentName": ra_name, "createdAt": _now()}
+                store[name] = rec
+                return _ok(rec, status=201)
+            return _err(405, "MethodNotAllowed", f"{method} not allowed.")
+        name = rest[0]
+        if method == "DELETE":
+            rec = store.pop(name, None)
+            if rec:
+                self.state.pop(f"{rec['scope']}/providers/microsoft.authorization/roleassignments/{rec['roleAssignmentName']}".lower(), None)
+            return _ok(None, status=200 if rec else 204)
+        if method == "GET":
+            rec = store.get(name)
+            if not rec:
+                return _err(404, "NotFound", f"Deployment credential '{name}' not found.")
+            return _ok({k: v for k, v in rec.items() if k != "secret"})
         return _err(405, "MethodNotAllowed", f"{method} not allowed.")
 
     def _lock_block(self, rid, full_type, for_delete):

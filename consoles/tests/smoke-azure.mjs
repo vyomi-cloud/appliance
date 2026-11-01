@@ -63,6 +63,8 @@ const SUBRG = `vysubrg${n}`;       // resource group created over the wire (show
 const SUBSA = `vysubsa${n}`;       // storage account created over the wire, inside SUBRG (shown in the Subscription's Resources panel)
 const SUBDEP = `vysubdep${n}`;     // subscription-scoped deployment created over the wire
 const SUBPRINCIPAL = `vysubprincipal${n}@contoso.com`;  // role assignment added through the Subscription's own IAM page
+const SUBPOLICY = `vysubpolicy${n}`;           // "Allowed locations" policy assignment created through the UI
+const SUBPOLICYDENIED = `vysubpolicydenied${n}`;  // storage account PUT outside the allowed locations, expected to be denied
 const NSGROLE = `00000000-0000-4000-a000-${String(n).padStart(12, "0")}`;  // role assignment GUID created over the wire, EXPLICITLY scoped to the NSG resource
 const NSGPRINCIPAL = `vynsgprincipal${n}`;  // principal of the NSG-scoped role assignment above
 const NSGDIAG = `vynsgdiag${n}`;   // diagnostic setting created through the NSG's own UI tab
@@ -2539,6 +2541,51 @@ try {
   const subRaGone = await arm("GET", "/providers/Microsoft.Authorization/roleAssignments");
   check("UI Remove role assignment → gone over native ARM",
     !(JSON.parse(subRaGone.text).value || []).some((r) => r.properties?.principalId === SUBPRINCIPAL), subRaGone.text);
+
+  // ── Preview features: register/unregister through the UI → reflected over ARM ──────────
+  await openPanel("Preview features");
+  await page.getByRole("row", { name: /EncryptionAtHost/ }).getByRole("button", { name: "Register" }).click();
+  await page.waitForTimeout(500);
+  const featureRegistered = await wire(`/subscriptions/${SUB}/providers/Microsoft.Features/providers/Microsoft.Compute/features/EncryptionAtHost?api-version=2021-07-01`);
+  check("UI register preview feature → ARM reflects Registered", JSON.parse(featureRegistered.text).properties?.state === "Registered", featureRegistered.text);
+  await page.getByRole("row", { name: /EncryptionAtHost/ }).getByRole("button", { name: "Unregister" }).click();
+  await page.waitForTimeout(500);
+  const featureUnregistered = await wire(`/subscriptions/${SUB}/providers/Microsoft.Features/providers/Microsoft.Compute/features/EncryptionAtHost?api-version=2021-07-01`);
+  check("UI unregister preview feature → ARM reflects NotRegistered", JSON.parse(featureUnregistered.text).properties?.state === "NotRegistered", featureUnregistered.text);
+
+  // ── Programmatic deployment: a generated credential gets a REAL, enforced Contributor
+  // roleAssignment (checkAccess), not just stored config; revoking it really revokes access ──
+  await openPanel("Programmatic deployment");
+  await page.getByRole("button", { name: "Generate deployment credential" }).click();
+  await page.getByRole("dialog", { name: "Deployment credential created" }).waitFor({ timeout: 10000 });
+  const credAppId = (await page.locator(".vy-kv", { hasText: "App ID" }).locator("span").nth(1).innerText()).trim();
+  await page.getByRole("button", { name: "Close" }).click();
+  const credCheckAllowed = await wire(`/subscriptions/${SUB}/providers/Microsoft.Authorization/checkAccess?api-version=2022-04-01`,
+    { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ principalId: credAppId, action: "Microsoft.Storage/storageAccounts/write" }) });
+  check("UI generate deployment credential → real Contributor access (checkAccess, not stored config)",
+    JSON.parse(credCheckAllowed.text).value?.[0]?.accessDecision === "Allowed", credCheckAllowed.text);
+  await page.getByRole("button", { name: "Revoke" }).first().click();
+  await page.waitForTimeout(500);
+  const credCheckRevoked = await wire(`/subscriptions/${SUB}/providers/Microsoft.Authorization/checkAccess?api-version=2022-04-01`,
+    { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ principalId: credAppId, action: "Microsoft.Storage/storageAccounts/write" }) });
+  check("UI revoke deployment credential → access really revoked",
+    JSON.parse(credCheckRevoked.text).value?.[0]?.accessDecision === "NotAllowed", credCheckRevoked.text);
+
+  // ── Policies: an "Allowed locations" assignment through the UI really blocks a resource
+  // create outside it over native ARM (then compliance shows it), not just a stored rule ──
+  await openPanel("Policies");
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByLabel("Assignment name", { exact: true }).fill(SUBPOLICY);
+  await page.getByLabel("Allowed locations", { exact: true }).fill("eastus");
+  await page.getByRole("button", { name: "Assign", exact: true }).click();
+  await page.getByText(SUBPOLICY).first().waitFor({ timeout: 10000 });
+  const policyDenied = await wire(`/subscriptions/${SUB}/resourceGroups/${SUBRG}/providers/Microsoft.Storage/storageAccounts/${SUBPOLICYDENIED}`,
+    { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ location: "westus" }) });
+  check("UI-assigned policy really blocks a resource create outside its allowed locations",
+    policyDenied.status === 403 && policyDenied.text.includes("RequestDisallowedByPolicy"), `HTTP ${policyDenied.status} ${policyDenied.text}`);
+  await page.getByRole("tab", { name: "Compliance" }).click();
+  await page.getByText(SUBSA).first().waitFor({ timeout: 10000 });
+  check("Policies compliance tab shows the subscription's own resources evaluated against the live assignment", true);
 
   // ── Create a subscription (renames the one simulated subscription, the honest Vyomi gap) ──
   await page.goto(UI + "#/subscriptions/create");

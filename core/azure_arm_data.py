@@ -89,3 +89,16 @@ ROLES += [
                     'permissions': [{'actions': [], 'notActions': [],
                                      'dataActions': ['Microsoft.KeyVault/vaults/certificates/*'], 'notDataActions': []}]}},
 ]
+# v4 Subscriptions console gap sweep (hand-added): generic Microsoft.Authorization /
+# Microsoft.Resources extension types that need no engine of their own beyond the generic
+# CRUD this catalog already drives — policy definitions/assignments (azure_arm_core._policy_block
+# enforces the real "Allowed locations" built-in on PUT) and deployment stacks (a deployment
+# that cascade-deletes the resources it manages, azure_arm_core's PUT/DELETE deploymentStacks hooks).
+CATALOG += [
+    {'key': 'policydefinition', 'namespace': 'Microsoft.Authorization', 'type': 'policyDefinitions', 'api_version': '2021-06-01',
+     'defaults': {'properties': {'policyType': 'Custom', 'mode': 'Indexed'}}},
+    {'key': 'policyassignment', 'namespace': 'Microsoft.Authorization', 'type': 'policyAssignments', 'api_version': '2022-06-01',
+     'defaults': {'properties': {'enforcementMode': 'Default'}}},
+    {'key': 'deploymentstack', 'namespace': 'Microsoft.Resources', 'type': 'deploymentStacks', 'api_version': '2024-03-01',
+     'defaults': {'properties': {'provisioningState': 'Succeeded', 'actionOnUnmanage': {'resources': 'delete'}}}},
+]
