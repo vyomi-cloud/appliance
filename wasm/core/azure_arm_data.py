@@ -30,4 +30,11 @@ CATALOG += [
      'defaults': {'properties': {'provisioningState': 'Succeeded', 'resourceGuid': '__UUID__'}}},
     {'key': 'networkwatcher', 'namespace': 'Microsoft.Network', 'type': 'networkWatchers', 'api_version': '2023-11-01',
      'defaults': {'properties': {'provisioningState': 'Succeeded'}}},
+    # v4 vnets IP address management (hand-added): a Network Manager and its IPAM pools
+    # (Microsoft.Network/networkManagers/{nm}/ipamPools/{pool}, a nested child reached through
+    # the generic type/name alternation — same mechanic as registries/webhooks). Real allocation
+    # (carving a non-overlapping CIDR block out of a pool for a vnet's "Allocate using IP
+    # address pools" address space) is enforced in AzureArm._allocate_ipam_pool, not here.
+    {'key': 'networkmanager', 'namespace': 'Microsoft.Network', 'type': 'networkManagers', 'api_version': '2024-05-01',
+     'defaults': {'properties': {'provisioningState': 'Succeeded', 'networkManagerScopeAccesses': ['Connectivity', 'SecurityAdmin']}}},
 ]

@@ -86,10 +86,11 @@
  },
  "azure.vnets.tools": {
   "title": "Diagnose and solve problems (remaining tiles), Resource visualizer, Tasks, Support + Troubleshooting",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "Resource visualizer, Tasks and Support + Troubleshooting are not built, and Diagnose and solve problems' other diagnostic tiles remain an honest gap. Its IP flow verify, Next hop and Connection troubleshoot tiles ARE built — see azure.vnets.network_watcher."
-  ]
+   "Resource visualizer is real — the same ARM reads the Subnets/Connected devices/Peerings panels use, grouped into cards per subnet — rendered as cards rather than Azure's interactive canvas diagram. Tasks (preview) is built as a browser-local (localStorage) per-resource task list: real Azure's Tasks feature isn't a documented ARM resource provider Vyomi can model natively, and it's the same kind of console-local bookkeeping as 'Pin to dashboard'. Support + Troubleshooting is a real navigational hub (links to Diagnose and solve problems, a static 'Available' resource-health readout) except filing an actual support ticket, which needs Microsoft's own support ticketing service. Diagnose and solve problems' IP flow verify, Next hop and Connection troubleshoot tiles are real — see azure.vnets.network_watcher — but its remaining diagnostic tiles stay an honest gap: they run Azure's AI-driven troubleshooting recommendations (VPN/ExpressRoute/DNS) against Microsoft's own analytics backend, not a deterministic local ARM read."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
  },
  "azure.vnets.network_watcher": {
   "title": "Diagnose and solve problems / Monitoring: IP flow verify, Next hop, Connection troubleshoot (Network Watcher)",
@@ -109,16 +110,17 @@
  },
  "azure.vnets.monitoring": {
   "title": "Alerts, Metrics, Diagnostic settings, Logs",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "Azure Monitor alert rules/diagnostic settings/metrics for virtual networks are not modelled."
-  ]
+   "Diagnostic settings is real — the same Microsoft.Insights/diagnosticSettings extension-resource mechanism the NSG lens wires (core/azure_monitor_core.py); logs/metrics are stored and validated exactly as the real resource requires, but — same as every other resource in this lens — never delivered anywhere. Logs runs real KQL (core/azure_operationalinsights_core.py's small supported subset: where/project/sort by/take/count) against a chosen Log Analytics workspace's real AzureActivity table, the SAME rows this vnet's own Activity log tab reads; every other table is always empty (no agent/telemetry ingestion pipeline). Alerts lists real Microsoft.Insights/metricAlerts and activityLogAlerts rules whose own 'scopes' names this vnet (the generic alert-rule resources the Monitor service's Alerts page lists subscription-wide) — Vyomi stores alert rules but runs no live metric-evaluation loop, so none has ever fired, same honest limitation as azure.monitor.alert_rules. Metrics: Microsoft.Network/virtualNetworks publishes no real-time telemetry Vyomi can emulate (core/azure_monitor_core.py: 'Not modelled: metric definitions / metrics'), so instead of a stored/random chart this tile shows a REAL derived series — this vnet's own management-operation count per hour, read back from its Activity log — never synthetic data; it is a Vyomi-native substitute for the real ARM metric catalog, not that catalog itself."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py", "tests/conformance/test_azure_monitor_core.py", "tests/conformance/test_azure_operationalinsights_core.py"]
  },
  "azure.vnets.network_appliances": {
   "title": "Azure Bastion, DDoS protection, Azure Firewall, Microsoft Defender for Cloud, Network Manager, Private endpoints",
   "level": { "nano": "not_simulated", "offline": "not_simulated" },
   "limitations": [
-   "Each of these is a separate resource type (bastionHosts, ddosProtectionPlans, azureFirewalls, privateEndpoints, networkManagers) or a security service Vyomi does not model; the virtual network create wizard's Bastion/Firewall/DDoS checkboxes and the resource menu items are an honest gap, not provisioned."
+   "Each of these is a separate resource type (bastionHosts, ddosProtectionPlans, azureFirewalls, privateEndpoints) or a security service Vyomi does not model; the virtual network create wizard's Bastion/Firewall/DDoS checkboxes and the resource menu items are an honest gap, not provisioned. Microsoft.Network/networkManagers now exists as a bare, generically-CRUD-able ARM resource (so the Create VNet wizard's IP address pool picker has something real to create against — see azure.vnets.ip_address_management), but the VNet blade's own 'Network manager' menu item (which governs connectivity/security-admin configurations applied to this vnet) is still not built."
   ]
  },
  "azure.vnets.connected_devices": {
@@ -131,9 +133,10 @@
  },
  "azure.vnets.ip_address_management": {
   "title": "IP address pools (Allocate using IP address pools) and advertised address prefixes (BGP)",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "Azure IPAM pool allocation and custom BGP route advertisement are advanced features Vyomi doesn't model."
-  ]
+   "IP address pools are real: Microsoft.Network/networkManagers/{nm}/ipamPools is a genuine nested ARM resource (core/azure_arm_data.py CATALOG, reached through the generic type/name alternation — no dedicated code, same mechanic as a container registry's webhooks), and the Create VNet wizard's 'Allocate using IP address pools' checkbox ENFORCES a real, non-overlapping CIDR block carved out of the chosen pool's own address space (AzureArm._allocate_ipam_pool) — never a stored label; the block is released back to the pool when its vnet is deleted. Per-subnet pool allocation is not modelled: a pool-allocated vnet always gets one 'default' subnet spanning its full allocated range. Advertised address prefixes (custom BGP route advertisement) are not modelled: they only affect routing once this vnet peers with a real ExpressRoute circuit's carrier-network routers — hardware outside anything a local simulator can model — so Vyomi stores no advertised gateway prefixes."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
  }
 }

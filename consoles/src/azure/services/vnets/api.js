@@ -13,6 +13,10 @@ const ROUTE_TABLE_ARM = armType("Microsoft.Network", "routeTables", "2023-11-01"
 const NAT_GATEWAY_ARM = armType("Microsoft.Network", "natGateways", "2023-11-01");
 const VM_ARM = armType("Microsoft.Compute", "virtualMachines", "2023-09-01");
 const NW_ARM = armType("Microsoft.Network", "networkWatchers", "2023-11-01");
+const NETWORK_MANAGER_ARM = armType("Microsoft.Network", "networkManagers", "2024-05-01");
+const METRIC_ALERTS_ARM = armType("Microsoft.Insights", "metricAlerts", "2018-03-01");
+const ACTIVITY_LOG_ALERTS_ARM = armType("Microsoft.Insights", "activityLogAlerts", "2020-10-01");
+const ARM_WORKSPACES = armType("Microsoft.OperationalInsights", "workspaces", "2022-10-01");
 const CHILD_API_VERSION = "2023-11-01";
 
 const shape = (v) => ({ ...v, resourceGroup: parseId(v.id).resourceGroup });
@@ -146,13 +150,69 @@ export const ipFlowVerify = async (location, body) => NW_ARM.action(NETWORK_WATC
 export const nextHop = async (location, body) => NW_ARM.action(NETWORK_WATCHER_RG, await ensureNetworkWatcher(location), "nextHop", body);
 export const connectivityCheck = async (location, body) => NW_ARM.action(NETWORK_WATCHER_RG, await ensureNetworkWatcher(location), "connectivityCheck", body);
 
+// ── Diagnostic settings (Microsoft.Insights/diagnosticSettings, a real ARM extension
+// resource scoped to this vnet's own id — same generic mechanism core/azure_arm_core.py's
+// AzureArm._diagnostic_settings exposes for every lens resource). Logs/metrics are stored
+// and validated exactly as the real resource requires, but never delivered anywhere. ─────
+const DIAG_API = "2021-05-01-preview";
+const diagPath = (vnetId, setting) => `${vnetId}/providers/Microsoft.Insights/diagnosticSettings${setting ? `/${encodeURIComponent(setting)}` : ""}`;
+export const listDiagnosticSettings = async (vnetId) => (await restJson("GET", diagPath(vnetId), { query: { "api-version": DIAG_API } })).value || [];
+export const putDiagnosticSetting = (vnetId, setting, body) => restJson("PUT", diagPath(vnetId, setting), { query: { "api-version": DIAG_API }, body });
+export const deleteDiagnosticSetting = (vnetId, setting) => restJson("DELETE", diagPath(vnetId, setting), { query: { "api-version": DIAG_API } });
+export const listWorkspaces = async () => (await ARM_WORKSPACES.list()).map((w) => ({ id: w.id, name: w.name, resourceGroup: parseId(w.id).resourceGroup }));
+
+// ── Logs (Microsoft.OperationalInsights/workspaces/{ws}/api/query) — the same ARM
+// pass-through the Azure Portal's resource-scoped Logs blade uses, carrying a small real KQL
+// subset (core/azure_operationalinsights_core.py). AzureActivity rows are the real per-
+// resource Activity log entries this vnet's own Activity log tab reads. ──────────────────
+export const LOG_QUERY_API_VERSION = "2017-10-01";
+export const runLogQuery = (rg, name, query) =>
+  restJson("POST", `${ARM_WORKSPACES.path(rg, name)}/api/query`, { query: { "api-version": LOG_QUERY_API_VERSION }, body: { query } });
+
+// ── Alerts — metric alert / activity log alert rules (Microsoft.Insights/metricAlerts,
+// activityLogAlerts) whose own `scopes` names this vnet, same resources the Monitor service's
+// Alerts page lists subscription-wide (core/azure_monitor_core.py); Vyomi stores alert rules
+// but runs no live metric-evaluation loop, same honest limitation as azure.monitor.alert_rules. ─
+export async function listAlertsForResource(vnetId) {
+  const [metric, activity] = await Promise.all([METRIC_ALERTS_ARM.list(), ACTIVITY_LOG_ALERTS_ARM.list()]);
+  const scoped = (r) => (r.properties?.scopes || []).some((s) => String(s).toLowerCase() === vnetId.toLowerCase());
+  return [
+    ...metric.filter(scoped).map((r) => ({ id: r.id, name: r.name, kind: "Metric", severity: r.properties.severity, enabled: r.properties.enabled })),
+    ...activity.filter(scoped).map((r) => ({ id: r.id, name: r.name, kind: "Activity Log", severity: null, enabled: r.properties.enabled })),
+  ];
+}
+
+// ── IP address pools (Microsoft.Network/networkManagers/{nm}/ipamPools) — a nested ARM child
+// resource reached through the generic type/name alternation (core/azure_arm_core.py), same
+// mechanic as a container registry's webhooks. Allocating a block from a pool for a vnet's
+// address space (the "Allocate using IP address pools" checkbox) is ENFORCED server-side —
+// AzureArm._allocate_ipam_pool carves a real non-overlapping CIDR block, never a stored label. ─
+const IPAM_API_VERSION = "2024-05-01";
+export const listNetworkManagers = async () => (await NETWORK_MANAGER_ARM.list()).map(shape);
+export const putNetworkManager = (rg, name, body) => NETWORK_MANAGER_ARM.put(rg, name, body);
+const ipamPoolPath = (rg, nmName, poolName) => `${NETWORK_MANAGER_ARM.path(rg, nmName)}/ipamPools${poolName ? `/${encodeURIComponent(poolName)}` : ""}`;
+export const listIpamPools = async (rg, nmName) => (await restJson("GET", ipamPoolPath(rg, nmName), { query: { "api-version": IPAM_API_VERSION } })).value || [];
+export const putIpamPool = (rg, nmName, poolName, body) => restJson("PUT", ipamPoolPath(rg, nmName, poolName), { query: { "api-version": IPAM_API_VERSION }, body });
+/** Every IP address pool in the subscription, regardless of which network manager owns it —
+ *  there's no dedicated Network Manager console yet (same honest state NAT gateways/route
+ *  tables were in before this lens had a console for them): a pool created over ARM/CLI, or
+ *  through this wizard's own "Create new" shortcut, shows up in the Create VNet picker. */
+export async function listAllIpamPools() {
+  const nms = await listNetworkManagers();
+  const lists = await Promise.all(nms.map((nm) => listIpamPools(nm.resourceGroup, nm.name).catch(() => [])));
+  return nms.flatMap((nm, i) => lists[i].map((p) => ({ ...p, networkManagerName: nm.name, resourceGroup: nm.resourceGroup })));
+}
+
 // ── create-vnet form model → ARM body ───────────────────────────────────────────────────
 export function toArmBody(f) {
+  const addressSpace = f.ipamPool
+    ? { ipamPoolPrefixAllocations: [{ pool: { id: f.ipamPool }, numberOfIpAddresses: String(f.ipamPoolSize || 256) }] }
+    : { addressPrefixes: f.addressPrefixes.filter(Boolean) };
   return {
     location: f.location,
     tags: Object.fromEntries(f.tags.filter((t) => t.name).map((t) => [t.name, t.value])),
     properties: {
-      addressSpace: { addressPrefixes: f.addressPrefixes.filter(Boolean) },
+      addressSpace,
       encryption: { enabled: f.encryption, enforcement: "AllowUnencrypted" },
     },
   };

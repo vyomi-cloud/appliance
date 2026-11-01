@@ -944,6 +944,8 @@ class AzureArm:
                 return blocked
             rec = self.state.pop(key, None)
             if rec is not None:
+                if rec.get("_ipam_alloc"):
+                    self._release_ipam_pool(rec["_ipam_alloc"])
                 # Both extension resources (locks, … keyed "{parent id}/providers/<ext ns>/…")
                 # and plain nested children (e.g. managedClusters/{c}/agentPools/{p}, keyed
                 # "{parent id}/agentPools/{p}") cascade-delete with their parent in real ARM —
@@ -1508,9 +1510,93 @@ class AzureArm:
                     self.state.pop(key, None)
                 return bad
         if full_type.lower() == "microsoft.network/virtualnetworks":
+            bad = self._allocate_ipam_pool(rec)
+            if bad is not None:
+                if not existed:
+                    self.state.pop(key, None)
+                return bad
             self._sync_inline_subnets(rid, rec)
         self.state[key] = rec
         return _ok(_view(rec), status=200 if existed else 201)
+
+    # ── IPAM pool allocation (Microsoft.Network/networkManagers/{nm}/ipamPools/{pool}) ────
+    # A vnet created/updated with properties.addressSpace.ipamPoolPrefixAllocations (the real
+    # ARM shape the portal's "Allocate using IP address pools" checkbox produces, instead of a
+    # literal addressPrefixes list) gets a REAL non-overlapping CIDR block carved out of the
+    # named pool's own addressPrefixes — same enforcement style as _nic_ips allocating a NIC's
+    # private IP from its subnet. The pool tracks its outstanding allocations in `_allocated`
+    # (never serialised to ARM clients); a vnet remembers what it was given in `_ipam_alloc` so
+    # a later PATCH/delete can release the old block before taking a new one.
+    def _allocate_ipam_pool(self, rec):
+        import ipaddress
+        import math
+        props = rec.setdefault("properties", {})
+        addr_space = props.get("addressSpace") or {}
+        allocs_in = addr_space.get("ipamPoolPrefixAllocations")
+        old_allocs = rec.get("_ipam_alloc")
+        if not allocs_in:
+            if old_allocs:
+                self._release_ipam_pool(old_allocs)
+                rec.pop("_ipam_alloc", None)
+            return None
+        if not isinstance(allocs_in, list):
+            return _err(400, "BadRequest", "The property 'addressSpace.ipamPoolPrefixAllocations' must be an array.")
+        requested = []
+        for a in allocs_in:
+            pool_id = str(((a or {}).get("pool") or {}).get("id") or "").lower()
+            if not pool_id:
+                return _err(400, "BadRequest", "Each ipamPoolPrefixAllocations entry needs 'pool.id'.")
+            requested.append((pool_id, str((a or {}).get("numberOfIpAddresses") or "")))
+        if old_allocs and [(o["pool"], o["count"]) for o in old_allocs] == requested:
+            return None          # idempotent PATCH: same request as last time, keep the block
+        if old_allocs:
+            self._release_ipam_pool(old_allocs)
+            rec.pop("_ipam_alloc", None)
+        prefixes, new_allocs = [], []
+        for pool_key, count_s in requested:
+            pool = self.state.get(pool_key)
+            if pool is None or not pool.get("_type", "").lower().endswith("/ipampools"):
+                return _err(400, "ParentResourceNotFound", f"The IPAM pool '{pool_key}' was not found.")
+            try:
+                count = int(count_s)
+                if count <= 0:
+                    raise ValueError
+            except ValueError:
+                return _err(400, "BadRequest", "The property 'numberOfIpAddresses' must be a positive integer.")
+            prefixlen = 32 - max(0, math.ceil(math.log2(count)))
+            pool_prefixes = (pool.get("properties") or {}).get("addressPrefixes") or []
+            if not pool_prefixes:
+                return _err(400, "BadRequest", f"The IPAM pool '{pool.get('name')}' has no address prefixes to allocate from.")
+            allocated = pool.setdefault("_allocated", [])
+            used_nets = [ipaddress.ip_network(a) for a in allocated]
+            block = None
+            for prefix in pool_prefixes:
+                net = ipaddress.ip_network(prefix, strict=False)
+                if prefixlen < net.prefixlen:
+                    continue
+                for cand in net.subnets(new_prefix=prefixlen):
+                    if not any(cand.overlaps(u) for u in used_nets):
+                        block = cand
+                        break
+                if block:
+                    break
+            if block is None:
+                return _err(400, "AddressSpaceExhausted",
+                            f"The IPAM pool '{pool.get('name')}' does not have {count} contiguous free IP addresses left.")
+            allocated.append(str(block))
+            prefixes.append(str(block))
+            new_allocs.append({"pool": pool_key, "count": count_s, "prefix": str(block)})
+        addr_space["addressPrefixes"] = prefixes
+        props["addressSpace"] = addr_space
+        rec["_ipam_alloc"] = new_allocs
+        return None
+
+    def _release_ipam_pool(self, allocs):
+        for a in allocs:
+            pool = self.state.get(a["pool"])
+            allocated = (pool or {}).get("_allocated")
+            if allocated and a["prefix"] in allocated:
+                allocated.remove(a["prefix"])
 
     def _sync_inline_subnets(self, vnet_rid, vnet_rec):
         """A virtualNetwork PUT/PATCH may define its subnets inline (properties.subnets) —
