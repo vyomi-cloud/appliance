@@ -1474,6 +1474,11 @@ def tab_dispatch(svc, operation, name, body, resources=None, account="default"):
                 labels = _T.validate_labels(body.get("labels", {}))
                 _ar.dispatch(_STORES[svc], "PATCH", "/v1/" + full, {"updateMask": "labels"}, {}, json.dumps({"labels": labels}).encode())
             return {"ok": True, "item": {"name": name, "labels": dict(_STORES[svc].repos[full].get("labels") or {})}}
+        if svc == "artifactregistry" and operation == "GetPushpull":   # Push / pull tab: the row's push host
+            full, repo = _ar.console_find(_STORES[svc], name)
+            if repo is None:
+                return {"ok": False, "code": "NotFound", "name": name}
+            return {"ok": True, "item": _ar.console_row(repo)}
         # per-tab reads of the newer services: the resource's console view
         if svc in ("container", "redis", "cloudscheduler", "iamcredentials", "monitoring") \
                 and operation.startswith("Get") and len(operation) > 3:

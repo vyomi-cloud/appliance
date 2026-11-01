@@ -216,6 +216,11 @@ def register(app: FastAPI) -> None:
                 ar.dispatch(_STORE, "PATCH", "/v1/" + full, {"updateMask": "labels"}, {}, __import__("json").dumps({"labels": labels}).encode())
                 _usage("set_labels", name)
             return {"ok": True, "item": {"name": name, "labels": dict(_STORE.repos[full].get("labels") or {})}}
+        if op == "getPushpull":   # the repository's Push / pull tab: where `docker push` reaches it
+            full, repo = ar.console_find(_STORE, name)
+            if repo is None:
+                return JSONResponse({"ok": False, "code": "NotFound", "name": name}, status_code=404)
+            return {"ok": True, "item": ar.console_row(repo)}
         if op == "pushSample":
             out = ar.console_push_sample(_STORE, name, await _json(request))
             return JSONResponse(out, status_code=200 if out.get("ok") else 404)
