@@ -265,6 +265,14 @@
       "timeout": 900
     },
     {
+      "id": "nano-store-delete-sync",
+      "target": "nano",
+      "cloud": "aws",
+      "kind": "core",
+      "cmd": "python3 tests/conformance/test_nano_persist_delete_sync.py",
+      "timeout": 120
+    },
+    {
       "id": "nano-aws-iam-detail",
       "target": "nano",
       "cloud": "aws",

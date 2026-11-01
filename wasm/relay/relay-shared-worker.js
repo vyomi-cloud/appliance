@@ -79,6 +79,7 @@ let py = null, handle = null, booting = null, ws = null;
 let monitorTimer = null, localFails = 0, cloudFailStreak = 0;
 let scheduleStoresSave = () => {};   // real impl installed once Pyodide is up (store-sync in bootPyodide)
 let saveNow = async () => {};        // likewise: persist + notify now (awaited before each relayed response)
+let refreshStores = async () => {};  // likewise: re-read the shared snapshot (before each relayed request)
 
 // ── Tunnel selection: prefer the LOCAL relay when present, else CLOUD ─────────
 // A loopback fetch from an https tab is allowed (localhost is exempt from mixed
@@ -201,9 +202,10 @@ builtins._capture = _capture; builtins._restore = _restore
     // back a snapshot older than the console's latest change (it would undo it). Same as nano-boot.js.
     let _lastStores = null;
     const resStores = (j) => { if (!j) return; try { py.globals.set("_vy_blob", j); py.runPython("_restore(_vy_blob)"); _lastStores = capStores(); } catch (_) {} };
-    async function saveStores(notify) { try { const j = capStores(); if (!j || j === _lastStores) return; _lastStores = j; await idbPut(_SK, j); if (notify && _storesBC) { try { _storesBC.postMessage({ k: _SK, t: Date.now() }); } catch (_) {} } } catch (_) {} }
+    async function saveStores(notify) { try { const j = capStores(); if (!j || j === _lastStores) return; _lastStores = j; py.runPython("_persist.mark_saved_registry()"); await idbPut(_SK, j); if (notify && _storesBC) { try { _storesBC.postMessage({ k: _SK, t: Date.now() }); } catch (_) {} } } catch (_) {} }
     scheduleStoresSave = () => { if (_storeTimer) return; _storeTimer = setTimeout(() => { _storeTimer = null; saveStores(true); }, 400); };
     saveNow = () => saveStores(true);
+    refreshStores = async () => { if (_restoring) return; _restoring = true; try { resStores(await idbGet(_SK)); } catch (_) {} finally { _restoring = false; } };
     if (_storesBC) _storesBC.onmessage = async (e) => { if (!e.data || e.data.k !== _SK || _restoring) return; _restoring = true; try { resStores(await idbGet(_SK)); } finally { _restoring = false; } };
     try { resStores(await idbGet(_SK)); } catch (_) {}   // boot: rehydrate before serving
     // Live engine status for Dashboard > Service status (same check as nano-boot.js).
@@ -267,6 +269,7 @@ function connect() {
     let req; try { req = JSON.parse(ev.data); } catch { return; }
     if (req.type === "ping") { sock.send(JSON.stringify({ type: "pong" })); return; }
     try {
+      await refreshStores();   // serve the latest shared state: a save from a stale copy would undo other tabs' changes
       const resp = JSON.parse(await handle(JSON.stringify(req)));
       // Persist + notify the consoles BEFORE answering: when the CLI/SDK gets the response,
       // the change is already in the shared snapshot the console reads (parity, no race).

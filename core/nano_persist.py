@@ -117,22 +117,45 @@ def capture_store(store) -> dict:
     return snap
 
 
+def _persisted_dicts(store):
+    for k, v in vars(store).items():
+        if isinstance(v, dict) and (not k.startswith("_") or k in _DURABLE_PRIVATE):
+            yield k, v
+
+
+def mark_saved(store) -> None:
+    """This store's state just went into the shared snapshot: remember its keys, so a later
+    restore can tell a key someone deleted (was shared, now gone) from one not saved yet."""
+    try:
+        store._nano_synced = {k: {str(x) for x in v} for k, v in _persisted_dicts(store)}
+    except Exception:
+        pass
+
+
 def restore_store(store, snap: dict) -> None:
+    synced = getattr(store, "_nano_synced", None) or {}
+    now_synced = dict(synced)
     for k, v in (snap.get("state") or {}).items():
         try:
             dv = _dec(v)
             cur = getattr(store, k, None)
-            # MERGE dict state (union) instead of REPLACING it: a restore can only
-            # ADD resources from the other context, never wipe locally-held ones.
-            # This makes console<->SDK sync additive-safe (no destructive overwrite)
-            # and lets the console rehydrate before every op without losing unsaved
-            # local state. (Deletions don't cross contexts — acceptable vs data loss.)
+            # Three-way merge of dict state. A key in the snapshot wins. A key this context last
+            # synced that the snapshot no longer has was DELETED elsewhere: drop it, or our next
+            # save would bring it back. A key never synced is local and unsaved: keep it.
             if isinstance(cur, dict) and isinstance(dv, dict):
+                incoming = {str(x) for x in dv}
+                for key in [x for x in cur if str(x) in synced.get(k, ()) and str(x) not in incoming]:
+                    del cur[key]
                 cur.update(dv)
+                now_synced[k] = incoming
             else:
                 setattr(store, k, dv)
         except Exception:
             pass
+    try:
+        store._nano_synced = now_synced
+    except Exception:
+        pass
     for db_id, sqltext in (snap.get("sql") or {}).items():
         try:
             conn = store.open_engine(db_id)          # fresh connection for this DB
@@ -195,6 +218,16 @@ def capture_registry() -> dict:
     """Snapshot the shared in-context registry → JSON-safe dict (JS persists it)."""
     from core import nano_registry
     return capture(nano_registry.get())
+
+
+def mark_saved_registry() -> None:
+    """Call right after a snapshot from capture_registry() is saved (see mark_saved)."""
+    from core import nano_registry
+    obj = nano_registry.get()
+    for name in STORE_ATTRS:
+        st = _lookup(obj, name)
+        if st is not None:
+            mark_saved(st)
 
 
 def health_registry() -> dict:

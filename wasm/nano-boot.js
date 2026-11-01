@@ -277,6 +277,7 @@ import builtins; builtins._disp = _disp
     try {
       const j = captureStores(); if (!j || j === _lastStores) return;   // unchanged: nothing to publish
       _lastStores = j;
+      py.runPython("from core import nano_persist; nano_persist.mark_saved_registry()");
       await nbMetaPut(STORE_KEY, j);
       if (notify && _bc) { try { _bc.postMessage({ k: STORE_KEY, t: Date.now() }); } catch (_) {} }
     } catch (_) { /* best-effort */ }
