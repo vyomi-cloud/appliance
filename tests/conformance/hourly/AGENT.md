@@ -133,6 +133,14 @@ in the prompt and in `$SLICE`). Each has its own appliance stack and relay.
    sit on its empty state or `$0.00` while the API has savings, the Connect card must render,
    the two cards must share a row height, and Home must raise no page errors or 5xx. The Nano
    twin does not exist yet: build it on `wasm/ui-tests/lib.mjs` (`bootConsole`) with the same checks.
+   Also the **post-create "use it" checks** (plan: `tests/conformance/post_create/PLAN.md`, offline and
+   Nano). A resource that shows "running"/"available" but cannot be used the way the console says is a
+   product bug: e.g. EC2 SSH from the host with the console's own command, RDS connect + insert/select,
+   S3 put/get, Lambda invoke. Connect info the console shows must work from the user's machine (no
+   Docker-internal IPs or container-only key paths). Findings: `POST_CREATE_UNUSABLE`,
+   `CONNECT_INFO_MISSING`, `CONNECT_INFO_UNREACHABLE`. Every probe is required on BOTH offline and Nano: build
+   the Nano twin with the offline one; a Nano probe blocked on missing in-browser compute is `pending`
+   (reported, not green), never skipped. They run every cycle (and the slow ones daily), as normal suites. Not built yet: start with phase 1 (EC2 SSH).
 7. **New features** (`new_features.json` → `new`): a new SDK operation with
    `tested: false` gets a Java or Go test (official SDK, endpoint changed only); a
    new service/tab/action is crawled live — fix whatever the crawl finds and add a
