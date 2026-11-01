@@ -15,6 +15,9 @@ import time
 
 import requests
 
+# Line-buffered: the hourly runner kills a suite at its timeout, and a block-buffered stdout then
+# loses every line already printed (the log said only "TIMEOUT", not which section hung).
+sys.stdout.reconfigure(line_buffering=True)
 BASE = os.environ.get("VYOMI_BASE_URL", "http://localhost:9000").rstrip("/")
 failed = False
 
