@@ -7646,13 +7646,39 @@ def _port_publish_enabled() -> bool:
     return _instance_ssh_mode() in {"port", "both", "auto"}
 
 
+_DOCKER_DESKTOP_HOST: bool | None = None
+
+
+def _docker_desktop_host() -> bool:
+    """True when the Docker daemon runs inside Docker Desktop's VM (macOS/Windows).
+    Container bridge IPs (172.x) are NOT routable from the user's machine there,
+    even though the appliance itself (a Linux container) can reach them. Detected
+    from the daemon, not from sys.platform, because the appliance is a Linux
+    container in that case. Cached; False if the daemon can't be asked."""
+    global _DOCKER_DESKTOP_HOST
+    if _DOCKER_DESKTOP_HOST is None:
+        try:
+            out = subprocess.run(["docker", "info", "--format", "{{.OperatingSystem}}"],
+                                 capture_output=True, text=True, timeout=8).stdout
+            _DOCKER_DESKTOP_HOST = "desktop" in out.lower()
+        except Exception:
+            return False   # transient failure: don't cache
+    return _DOCKER_DESKTOP_HOST
+
+
+def _appliance_containerized() -> bool:
+    return os.path.exists("/.dockerenv")
+
+
 def _routable_ip_enabled() -> bool:
     mode = _instance_ssh_mode()
     if mode in {"routable", "both"}:
         return True
     if mode == "port":
         return False
-    return sys.platform.startswith("linux")   # auto
+    # auto: bridge IPs are reachable from the user's machine only on a native Linux
+    # Docker host, never through Docker Desktop's VM.
+    return sys.platform.startswith("linux") and not _docker_desktop_host()
 
 
 def _ensure_vpc_network() -> str | None:
@@ -7752,6 +7778,11 @@ def _docker_connect_info(instance: dict, provider: str) -> dict:
     published_port = info.get("published_port") or instance.get("ssh_host_port")
     opts = "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
     iid = str(instance.get("instance_id") or "")
+    # The appliance runs in a container: its key dir (/root/.vyomi/...) is not a path
+    # the user can read. Show the path where they save the downloaded key instead.
+    local_key = f"~/.ssh/vyomi-{iid}.pem"
+    if _appliance_containerized():
+        key_path = local_key
 
     primary = None
     alternatives: list[dict] = []
@@ -7842,6 +7873,11 @@ def _docker_connect_info(instance: dict, provider: str) -> dict:
             "key_download_url": key_url,
             "key_local_filename": f"vyomi-{iid}.pem",
             "host_identity_path": key_path,
+            # One paste that fetches the key from THIS appliance and locks its mode,
+            # so the ssh command above works from the user's own machine.
+            "key_fetch_command": (
+                f"curl -fsSo {local_key} {_gcp_public_base()}{key_url} && chmod 600 {local_key}"
+                if _appliance_containerized() else None),
         },
         "alternatives": alternatives,
         # Shell fallback (works on the appliance host itself, always) — the

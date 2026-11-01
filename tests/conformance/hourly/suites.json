@@ -1673,6 +1673,14 @@
       "timeout": 600
     },
     {
+      "id": "offline-post-create-aws-ec2-ssh",
+      "target": "offline",
+      "cloud": "aws",
+      "kind": "api",
+      "cmd": "python3 tests/conformance/post_create/probes/aws/ec2_ssh.py {ENDPOINT}",
+      "timeout": 300
+    },
+    {
       "id": "offline-ui-console-home",
       "target": "offline",
       "cloud": "all",
