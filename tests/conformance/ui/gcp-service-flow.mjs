@@ -23,8 +23,17 @@ export async function runGcpServiceFlow(page, { service, label, check, pushActio
     same = n === before ? same + 1 : 0;
     before = n;
   }
+  const existing = await page.evaluate(() => [...document.querySelectorAll("#main table.gc tr[data-row-name]")].map((r) => r.getAttribute("data-row-name")));
   await page.locator("#main button").filter({ hasText: /^\s*(add\s*)?Create/i }).first().click({ timeout: 8000 });
   await sleep(1000);
+  // Earlier suites (the UI crawl creates with defaults and keeps what it made) can leave a
+  // resource under the wizard's default name; the real cloud rejects the duplicate with 409.
+  // Keep every other default, and only make the name unique when it is already taken.
+  await page.evaluate((existing) => {
+    const input = document.querySelector("#main input[type=text]");
+    if (!input) return;
+    if (existing.includes(input.value)) { input.value = `${input.value}-${Date.now().toString(36)}`.slice(0, 62); input.dispatchEvent(new Event("input", { bubbles: true })); input.dispatchEvent(new Event("change", { bubbles: true })); }
+  }, existing);
   // the wizard's primary "Create" (top of the summary card or the bottom of the form)
   await page.locator("#main button.primary").filter({ hasText: /Create/ }).first().click({ timeout: 8000 });
   await sleep(1500);

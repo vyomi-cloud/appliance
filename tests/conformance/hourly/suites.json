@@ -277,7 +277,7 @@
       "target": "nano",
       "cloud": "aws",
       "kind": "core",
-      "cmd": "python3 tests/conformance/test_nano_persist_delete_sync.py",
+      "cmd": "PYTHONPATH=. python3 tests/conformance/test_nano_persist_delete_sync.py",
       "timeout": 120
     },
     {
@@ -1663,6 +1663,22 @@
       "kind": "cli",
       "cmd": "ENDPOINT={ENDPOINT} bash tests/cli/gcp-artifactregistry-cli-smoke.sh",
       "timeout": 300
+    },
+    {
+      "id": "offline-ui-sdk-roundtrip",
+      "target": "offline",
+      "cloud": "aws",
+      "kind": "ui",
+      "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/roundtrip/ui-sdk-roundtrip.mjs",
+      "timeout": 600
+    },
+    {
+      "id": "offline-ui-console-home",
+      "target": "offline",
+      "cloud": "all",
+      "kind": "ui",
+      "cmd": "rc=0; for c in aws gcp azure; do VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/home/home_setup.py $c && VYOMI_BASE_URL={ENDPOINT} node tests/conformance/home/home_cards.mjs $c || rc=1; done; exit $rc",
+      "timeout": 600
     },
     {
       "id": "offline-ui-gcp-artifactregistry",

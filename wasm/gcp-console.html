@@ -3840,7 +3840,7 @@ function renderCollapsibleWizard(host, svc){
     const r = await api(svc.create_method, path, body);
     if (r.ok) { toast(name + " created"); recordNotif("ok", "Created " + name); navigate({view:"list", item:null}); }
     else {
-      const m = (r.json && (r.json.detail || (r.json.error && r.json.error.message))) || "";
+      const m = (r.json && (r.json.detail || r.json.message || (r.json.error && r.json.error.message))) || "";
       toast("Create failed (" + r.status + "): " + m, "err");
     }
   }
