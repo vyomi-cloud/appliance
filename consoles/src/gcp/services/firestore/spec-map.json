@@ -45,7 +45,9 @@
   },
   "insights": {
     "route": "#/firestore/databases/uic-firestore-db/insights",
-    "vars": { "resource-name": "uic-firestore-db" }
+    "vars": { "resource-name": "uic-firestore-db" },
+    "fixtures": ["firestore-database"],
+    "live": "live-insight"
   },
   "usage": {
     "route": "#/firestore/databases/uic-firestore-db/usage",
@@ -53,6 +55,8 @@
   },
   "key-visualizer": {
     "route": "#/firestore/databases/uic-firestore-db/key-visualizer",
-    "vars": { "resource-name": "uic-firestore-db" }
+    "vars": { "resource-name": "uic-firestore-db" },
+    "fixtures": ["firestore-database"],
+    "live": "live-keyvisualizer"
   }
 }

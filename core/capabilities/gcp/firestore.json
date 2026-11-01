@@ -39,10 +39,12 @@
   },
   "gcp.firestore.vector-indexes": {
     "title": "Vector indexes (for vector-similarity search)",
-    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "level": { "nano": "limited", "offline": "limited" },
     "limitations": [
-      "Vyomi has no vector field type or similarity search engine, so vector indexes cannot be created or used."
-    ]
+      "Vyomi has a real vector field type (the same `__type__: \"__vector__\"` map encoding the SDK's Vector class writes) and a real `findNearest` k-NN search; creating a matching vector index is genuinely required before findNearest works, exactly like production Firestore.",
+      "findNearest performs an exact brute-force scan of every document (correct results, same approach a local emulator uses at small scale) rather than production's approximate-nearest-neighbor search over a distributed index — large collections would be slower than production, never approximate-and-wrong."
+    ],
+    "tests": ["tests/conformance/test_gcp_firestore_vector_core.py"]
   },
   "gcp.firestore.ttl": {
     "title": "Time-to-live (TTL) policies",
@@ -54,12 +56,12 @@
   },
   "gcp.firestore.security-rules": {
     "title": "Security rules editor",
-    "level": { "nano": "config_only", "offline": "config_only" },
+    "level": { "nano": "limited", "offline": "limited" },
     "limitations": [
-      "Vyomi stores and returns the rules source exactly as written through its own getSecurityRules/updateSecurityRules endpoints (real Firestore security rules are managed by the separate Firebase Rules API), but it never evaluates the rules against a request — every document read/write Vyomi allows is unconditional.",
-      "Real Firestore only evaluates rules against end-user client-SDK requests — the Admin SDK, gcloud and the console's own Data viewer always bypass them. Vyomi's native wire has no notion of a client-vs-admin caller (the console itself is one of the callers), so evaluating rules against it would lock the console out of its own data viewer rather than model the real behavior."
+      "Vyomi stores and returns the rules source exactly as written through its own getSecurityRules/updateSecurityRules endpoints (real Firestore security rules are managed by the separate Firebase Rules API), and the Development & test tab's Simulate action runs a real rules-language parser + evaluator (path match/capture, allow read/write/get/list/create/update/delete, request.auth/resource.data/request.resource.data expressions with ==, !=, comparisons, in, &&, ||, !) against the stored (or unsaved draft) rules text.",
+      "That evaluator is the ONLY path that ever evaluates rules: actual document reads/writes over the native wire — what the console's own Data viewer, every Admin-SDK call and this capability's own tests use — stay unconditional, exactly matching real Firestore (only end-user client-SDK requests are rule-checked in production; the Admin SDK, gcloud and the console always bypass them)."
     ],
-    "tests": ["tests/conformance/test_gcp_firestore_admin_core.py"]
+    "tests": ["tests/conformance/test_gcp_firestore_rules_core.py"]
   },
   "gcp.firestore.import-export": {
     "title": "Import / Export (exportDocuments / importDocuments)",
@@ -89,10 +91,12 @@
   },
   "gcp.firestore.insights": {
     "title": "Insights (query and index usage recommendations)",
-    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "level": { "nano": "limited", "offline": "limited" },
     "limitations": [
-      "Vyomi collects no query-performance telemetry, so it has nothing to generate index or query insights from."
-    ]
+      "Index recommendations and \"unused indexes\" are derived from real activity the core records as it happens (a `:runQuery`/`findNearest` that actually fails with FAILED_PRECONDITION for a missing index, and which composite/vector indexes a query's real filter/orderBy/vector fields actually overlap) — never synthetic or randomly generated data.",
+      "This is current-session telemetry only (counts reset when the database is deleted); it has no historical trend charts or the ML-driven query-shape clustering of the real Insights page."
+    ],
+    "tests": ["tests/conformance/test_gcp_firestore_telemetry_core.py"]
   },
   "gcp.firestore.usage": {
     "title": "Usage dashboard (reads/writes/deletes/storage charts)",
@@ -104,9 +108,11 @@
   },
   "gcp.firestore.key-visualizer": {
     "title": "Key Visualizer",
-    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "level": { "nano": "limited", "offline": "limited" },
     "limitations": [
-      "Key Visualizer renders a heatmap of real production key-access load; Vyomi records no per-key traffic histograms to visualize."
-    ]
+      "The heatmap is built from real per-document access counts the core records on every read/write/delete/query match, bucketed by collection and a hash of the document key — never synthetic or randomly generated data.",
+      "It is a current-snapshot heatmap with no time axis (production Key Visualizer shows load over days/weeks), and the key-range buckets are a simple hash rather than production's actual tablet key-range splits."
+    ],
+    "tests": ["tests/conformance/test_gcp_firestore_telemetry_core.py"]
   }
 }

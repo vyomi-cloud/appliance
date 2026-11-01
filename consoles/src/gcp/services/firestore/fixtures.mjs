@@ -71,4 +71,32 @@ export default {
     const fresh = after.find((b) => !before.has(b.name));
     return (fresh || after[0]).name.split("/").pop();
   },
+
+  /** "insights" page: disable automatic indexing on a uniquely named collection group's
+   *  field, then run a query that genuinely needs an index — the real failure shows up
+   *  as an index recommendation naming that collection group. */
+  "live-insight": async (wire, uniq) => {
+    await ensureDatabase(wire, DB);
+    await wire("POST", `${base(DB)}/documents/${uniq}?documentId=d1`, { svc: null,
+      body: { fields: { price: { integerValue: "5" } } } });
+    await wire("PATCH", `${base(DB)}/collectionGroups/${uniq}/fields/price`, { svc: null,
+      body: { indexConfig: { indexes: [], usesAncestorConfig: false } } });
+    try {
+      await wire("POST", `${base(DB)}/documents:runQuery`, { svc: null, body: { structuredQuery: {
+        from: [{ collectionId: uniq }],
+        where: { fieldFilter: { field: { fieldPath: "price" }, op: "GREATER_THAN", value: { integerValue: "0" } } },
+      } } });
+    } catch { /* expected: FAILED_PRECONDITION is exactly what generates the recommendation */ }
+    return uniq;
+  },
+
+  /** "key-visualizer" page: a document write + read under a uniquely named collection
+   *  shows up as a hot key in the real access heatmap / hottest-keys table. */
+  "live-keyvisualizer": async (wire, uniq) => {
+    await ensureDatabase(wire, DB);
+    await wire("POST", `${base(DB)}/documents/${uniq}?documentId=d1`, { svc: null,
+      body: { fields: { v: { integerValue: "1" } } } });
+    await wire("GET", `${base(DB)}/documents/${uniq}/d1`, { svc: null });
+    return uniq;
+  },
 };

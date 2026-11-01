@@ -18,9 +18,8 @@ import SecurityRules from "./SecurityRules.jsx";
 import ImportExport from "./ImportExport.jsx";
 import DisasterRecovery from "./DisasterRecovery.jsx";
 import Usage from "./Usage.jsx";
-import GapPage from "./GapPage.jsx";
-
-const gap = (title, id) => () => <GapPage title={title} id={id} />;
+import Insights from "./Insights.jsx";
+import KeyVisualizer from "./KeyVisualizer.jsx";
 
 /** The database id the current route is scoped to, e.g. "/firestore/databases/mydb/studio" -> "mydb". */
 function currentDatabase() {
@@ -58,8 +57,8 @@ export default {
     { pattern: "/firestore/databases/:name/rules", component: SecurityRules },
     { pattern: "/firestore/databases/:name/import-export", component: ImportExport },
     { pattern: "/firestore/databases/:name/disaster-recovery", component: DisasterRecovery },
-    { pattern: "/firestore/databases/:name/insights", component: gap("Insights", "gcp.firestore.insights") },
+    { pattern: "/firestore/databases/:name/insights", component: Insights },
     { pattern: "/firestore/databases/:name/usage", component: Usage },
-    { pattern: "/firestore/databases/:name/key-visualizer", component: gap("Key Visualizer", "gcp.firestore.key-visualizer") },
+    { pattern: "/firestore/databases/:name/key-visualizer", component: KeyVisualizer },
   ],
 };

@@ -64,7 +64,7 @@ export async function runQuery(db, parent, structuredQuery) {
 export const docRelPath = (doc) => doc.name.split("/documents/")[1];
 export const docId = (doc) => docRelPath(doc).split("/").pop();
 
-export const FIELD_TYPES = ["string", "number", "boolean", "map", "array", "null", "timestamp", "geopoint", "reference"];
+export const FIELD_TYPES = ["string", "number", "boolean", "map", "array", "null", "timestamp", "geopoint", "reference", "vector"];
 /** {name, type, value} rows (the Studio's "Start a collection"/"Add field" editor) -> typed `fields`. */
 export function fieldsFromRows(rows) {
   const out = {};
@@ -84,12 +84,22 @@ export function encodeValue(type, value) {
     case "reference": return { referenceValue: value };
     case "map": return { mapValue: { fields: {} } };
     case "array": return { arrayValue: { values: [] } };
+    // Vyomi's vector encoding matches the real SDK's Vector class wire shape: a mapValue
+    // tagged `__type__: "__vector__"` carrying the components as an arrayValue of doubles.
+    case "vector": return encodeVector(String(value).split(",").map((n) => Number(n.trim()) || 0));
     default: return { stringValue: String(value ?? "") };
   }
 }
+export const encodeVector = (values) => ({ mapValue: { fields: {
+  __type__: { stringValue: "__vector__" },
+  value: { arrayValue: { values: values.map((n) => ({ doubleValue: n })) } },
+} } });
+export const isVectorValue = (v) => v?.mapValue?.fields?.__type__?.stringValue === "__vector__" && v.mapValue.fields.value !== undefined;
+export const vectorFloats = (v) => (v?.mapValue?.fields?.value?.arrayValue?.values || []).map((x) => Number(x.doubleValue ?? x.integerValue ?? 0));
 /** A typed Firestore value -> a short display string for the data-viewer grid. */
 export function displayValue(v) {
   if (!v || typeof v !== "object") return "";
+  if (isVectorValue(v)) return `[${vectorFloats(v).join(", ")}]`;
   const [kind, val] = Object.entries(v)[0] || [];
   if (kind === "mapValue") return `{${Object.keys(val?.fields || {}).length} fields}`;
   if (kind === "arrayValue") return `[${(val?.values || []).length} items]`;
@@ -98,7 +108,7 @@ export function displayValue(v) {
   if (kind === "booleanValue") return String(val);
   return String(val ?? "");
 }
-export const valueType = (v) => Object.keys(v || {})[0]?.replace(/Value$/, "").toLowerCase() || "string";
+export const valueType = (v) => isVectorValue(v) ? "vector" : Object.keys(v || {})[0]?.replace(/Value$/, "").toLowerCase() || "string";
 
 // ── Indexes ──────────────────────────────────────────────────────────────────────────────
 export async function listIndexes(db, collectionGroup = "-") {
@@ -158,6 +168,16 @@ export async function getSecurityRules(db) {
   return r.rules || "";
 }
 export const updateSecurityRules = (db, rules) => restJson("POST", `${dbBase(db)}:updateSecurityRules`, { body: { rules } });
+/** Development & test (Rules Playground): really parses + evaluates `rules` against one
+ * simulated request. `request.resourceData` / `requestResourceData` are plain JSON (not
+ * Firestore's typed wire encoding) — the same shape a person fills into the form. */
+export const testSecurityRules = (db, body) => restJson("POST", `${dbBase(db)}:testSecurityRules`, { body });
+
+// ── Insights (real query/index telemetry) ───────────────────────────────────────────────
+export const getInsights = (db) => restJson("GET", `${dbBase(db)}:insights`);
+
+// ── Key Visualizer (real per-document access heatmap) ───────────────────────────────────
+export const getKeyVisualizer = (db) => restJson("GET", `${dbBase(db)}:keyVisualizer`);
 
 export const DEFAULT_RULES = `rules_version = '2';
 service cloud.firestore {

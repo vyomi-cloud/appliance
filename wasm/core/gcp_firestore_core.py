@@ -45,7 +45,9 @@ type round-trips exactly as the SDK encoded it.
 """
 from __future__ import annotations
 
+import hashlib
 import json
+import math
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -87,6 +89,16 @@ class FirestoreStore:
         self.history: dict[str, list[tuple[str, dict | None]]] = {}
         # Usage metering: running totals only (no time-series) — db -> {"reads","writes","deletes"}.
         self.usage: dict[str, dict[str, int]] = {}
+        # Insights: derived purely from real query/index activity, never synthetic —
+        # db -> "{collectionGroup}:{fieldPath}:{kinds}" -> recommendation record.
+        self.index_recommendations: dict[str, dict[str, dict]] = {}
+        # db -> indexId -> {"hits", "lastUsed"} — bumped when a query's filter/orderBy/
+        # vector-search fields actually overlap a composite/vector index's fields.
+        self.index_usage: dict[str, dict[str, dict]] = {}
+        self.query_count: dict[str, int] = {}           # db -> total :runQuery calls
+        # Key Visualizer: real per-document access counts (reads + writes + deletes),
+        # bucketed by a hash of the key at render time — db -> rel -> count.
+        self.key_access: dict[str, dict[str, int]] = {}
 
     # -- documents ------------------------------------------------------------
     def get(self, db: str, rel: str) -> dict | None:
@@ -111,6 +123,10 @@ class FirestoreStore:
     def bump_usage(self, db: str, kind: str, n: int = 1) -> None:
         u = self.usage.setdefault(db, {"reads": 0, "writes": 0, "deletes": 0})
         u[kind] = u.get(kind, 0) + n
+
+    def bump_key_access(self, db: str, rel: str, n: int = 1) -> None:
+        ka = self.key_access.setdefault(db, {})
+        ka[rel] = ka.get(rel, 0) + n
 
     def persist(self) -> None:
         """Durable subclasses save here; called after every mutating request."""
@@ -427,11 +443,61 @@ def _check_index_requirements(store: FirestoreStore, db: str, group: str, where:
         if not missing:
             continue
         if not any(_covered_by_composite(store, db, group, fp, k) for k in missing):
+            _record_index_recommendation(store, db, group, fp, set(missing))
             return _err(400, "FAILED_PRECONDITION",
                         f'The query requires an index on field "{fp}": automatic single-field '
                         f'indexing is disabled for it (see Indexes > Single field) and no composite '
                         f'index on collection group "{group}" covers it.')
     return None
+
+
+# ── Insights (real query/index telemetry) ───────────────────────────────────
+def _record_index_recommendation(store: FirestoreStore, db: str, group: str, fp: str,
+                                 kinds: set[str]) -> None:
+    recs = store.index_recommendations.setdefault(db, {})
+    key = f"{group}:{fp}:{','.join(sorted(kinds))}"
+    rec = recs.setdefault(key, {"collectionGroup": group, "fieldPath": fp,
+                                 "kinds": sorted(kinds), "occurrences": 0, "firstSeen": _now()})
+    rec["occurrences"] += 1
+    rec["lastSeen"] = _now()
+
+
+def _bump_matching_index_usage(store: FirestoreStore, db: str, group: str, where: dict,
+                               order_by: list) -> None:
+    """A real, if heuristic, signal for "Unused indexes": a composite index is counted
+    as used whenever a query on its collection group filters/orders by at least one of
+    its fields — derived from genuine :runQuery traffic, never synthesized."""
+    used_fields: set[str] = set()
+
+    def _walk(f):
+        if not f:
+            return
+        if "fieldFilter" in f:
+            fp = ((f["fieldFilter"].get("field") or {}).get("fieldPath"))
+            if fp:
+                used_fields.add(fp)
+        elif "unaryFilter" in f:
+            fp = ((f["unaryFilter"].get("field") or {}).get("fieldPath"))
+            if fp:
+                used_fields.add(fp)
+        elif "compositeFilter" in f:
+            for sub in f["compositeFilter"].get("filters") or []:
+                _walk(sub)
+    _walk(where)
+    for ob in order_by or []:
+        fp = (ob.get("field") or {}).get("fieldPath")
+        if fp:
+            used_fields.add(fp)
+    if not used_fields:
+        return
+    for iid, idx in store.indexes.get(db, {}).items():
+        if idx.get("collectionGroup") != group:
+            continue
+        idx_fields = {f.get("fieldPath") for f in (idx.get("fields") or []) if f.get("fieldPath")}
+        if idx_fields & used_fields:
+            rec = store.index_usage.setdefault(db, {}).setdefault(iid, {"hits": 0})
+            rec["hits"] += 1
+            rec["lastUsed"] = _now()
 
 
 # ── export / import <-> real Cloud Storage objects ──────────────────────────
@@ -550,6 +616,7 @@ def _dispatch_documents(store: FirestoreStore, db: str, base: str, method: str,
             entry = {"fields": data.get("fields", {}), "createTime": ts, "updateTime": ts}
             store.put(db, new_rel, entry)
             store.bump_usage(db, "writes")
+            store.bump_key_access(db, new_rel)
             return _json(200, _doc_view(base, new_rel, entry))
         if method == "GET":                # list documents
             read_time = query.get("readTime")
@@ -557,6 +624,8 @@ def _dispatch_documents(store: FirestoreStore, db: str, base: str, method: str,
                     else sorted(store.in_collection(db, coll), key=lambda kv: kv[0]))
             docs = [_doc_view(base, r, e) for r, e in rows]
             store.bump_usage(db, "reads", max(1, len(docs)))
+            for r, _e in rows:
+                store.bump_key_access(db, r)
             out: dict[str, Any] = {}
             if docs:
                 out["documents"] = docs
@@ -574,6 +643,7 @@ def _dispatch_documents(store: FirestoreStore, db: str, base: str, method: str,
                 return _err(404, "NOT_FOUND",
                             f"Document not found: {_doc_name(base, rel)}")
             store.bump_usage(db, "reads")
+            store.bump_key_access(db, rel)
             return _json(200, _doc_view(base, rel, entry))
         if method in ("PATCH", "PUT"):     # set / merge fields
             data = _load_json(body)
@@ -591,12 +661,14 @@ def _dispatch_documents(store: FirestoreStore, db: str, base: str, method: str,
                 entry["updateTime"] = ts
                 store.put(db, rel, entry)
                 store.bump_usage(db, "writes")
+                store.bump_key_access(db, rel)
                 return _json(200, _doc_view(base, rel, entry))
             if entry is None:              # create-on-set
                 ts = _now()
                 entry = {"fields": dict(new_fields), "createTime": ts, "updateTime": ts}
                 store.put(db, rel, entry)
                 store.bump_usage(db, "writes")
+                store.bump_key_access(db, rel)
                 return _json(200, _doc_view(base, rel, entry))
             merged = dict(entry.get("fields", {}))
             merged.update(new_fields)      # merge: add/overwrite named fields, keep others
@@ -604,10 +676,12 @@ def _dispatch_documents(store: FirestoreStore, db: str, base: str, method: str,
             entry["updateTime"] = _now()
             store.put(db, rel, entry)
             store.bump_usage(db, "writes")
+            store.bump_key_access(db, rel)
             return _json(200, _doc_view(base, rel, entry))
         if method == "DELETE":
             store.delete(db, rel)          # Firestore delete is idempotent → 200 {}
             store.bump_usage(db, "deletes")
+            store.bump_key_access(db, rel)
             return _json(200, {})
         return _err(400, "INVALID_ARGUMENT", f"Unsupported method {method} on document")
 
@@ -765,6 +839,7 @@ def _commit(store: FirestoreStore, db: str, base: str, request: dict) -> Firesto
         else:
             store.put(db, rel, entry)
             store.bump_usage(db, "writes")
+        store.bump_key_access(db, rel)
     return _json(200, {"writeResults": results, "commitTime": ts})
 
 
@@ -780,6 +855,8 @@ def _batch_get(store: FirestoreStore, db: str, base: str, request: dict) -> Fire
             out.append({"missing": name, "readTime": ts})
         else:
             out.append({"found": _doc_view(base, rel, entry), "readTime": ts})
+        if rel is not None:
+            store.bump_key_access(db, rel)
     store.bump_usage(db, "reads", max(1, len(out)))
     return _json(200, out)
 
@@ -908,8 +985,8 @@ def _run_query(store: FirestoreStore, db: str, base: str, parent_rel: str,
     """structuredQuery: `from[0].collectionId` (relative to the query parent) with
     a where clause (fieldFilter / unaryFilter / compositeFilter AND|OR, full
     comparison + IN/NOT_IN + ARRAY_CONTAINS[_ANY] operators), plus orderBy,
-    offset and limit. Returns the Firestore streaming shape — a JSON array of
-    `{"document","readTime"}` rows."""
+    offset and limit — or a `findNearest` vector-similarity search. Returns the
+    Firestore streaming shape — a JSON array of `{"document","readTime"}` rows."""
     sq = _norm_query_enums(request.get("structuredQuery", {}) or {})
     froms = sq.get("from", []) or []
     if not froms:
@@ -918,10 +995,16 @@ def _run_query(store: FirestoreStore, db: str, base: str, parent_rel: str,
     coll = f"{parent_rel}/{coll_id}" if parent_rel else coll_id
     where = sq.get("where") or {}
     order_by = sq.get("orderBy") or []
+    store.query_count[db] = store.query_count.get(db, 0) + 1
+
+    find_nearest = sq.get("findNearest")
+    if find_nearest:
+        return _run_find_nearest(store, db, base, coll, coll_id, find_nearest, where)
 
     index_err = _check_index_requirements(store, db, coll_id, where, order_by)
     if index_err:
         return index_err
+    _bump_matching_index_usage(store, db, coll_id, where, order_by)
 
     as_of = request.get("readTime")
     candidates = _historical_in_collection(store, db, coll, as_of) if as_of else store.in_collection(db, coll)
@@ -951,12 +1034,529 @@ def _run_query(store: FirestoreStore, db: str, base: str, parent_rel: str,
         matched = matched[:int(limit)]
 
     store.bump_usage(db, "reads", max(1, len(matched)))
+    for rel, _e in matched:
+        store.bump_key_access(db, rel)
     read_time = _now()
     rows = [{"document": _doc_view(base, rel, entry), "readTime": read_time}
             for rel, entry in matched]
     if not rows:
         return _json(200, [{"readTime": read_time}])
     return _json(200, rows)
+
+
+# ── vector search (findNearest) ─────────────────────────────────────────────
+_VECTOR_TYPE_MARKER = "__vector__"
+_DISTANCE_MEASURES = {1: "EUCLIDEAN", 2: "COSINE", 3: "DOT_PRODUCT"}
+
+
+def _is_vector_value(v: dict) -> bool:
+    fields = ((v or {}).get("mapValue") or {}).get("fields") or {}
+    return fields.get("__type__", {}).get("stringValue") == _VECTOR_TYPE_MARKER and "value" in fields
+
+
+def _vector_floats(v: dict) -> list[float]:
+    fields = ((v or {}).get("mapValue") or {}).get("fields") or {}
+    vals = ((fields.get("value") or {}).get("arrayValue") or {}).get("values") or []
+    out = []
+    for x in vals:
+        if "doubleValue" in x:
+            out.append(float(x["doubleValue"]))
+        elif "integerValue" in x:
+            out.append(float(x["integerValue"]))
+        else:
+            out.append(0.0)
+    return out
+
+
+def _encode_vector(values: list) -> dict:
+    return {"mapValue": {"fields": {
+        "__type__": {"stringValue": _VECTOR_TYPE_MARKER},
+        "value": {"arrayValue": {"values": [{"doubleValue": float(x)} for x in values]}},
+    }}}
+
+
+def _vector_distance(a: list[float], b: list[float], measure: str) -> float:
+    n = min(len(a), len(b))
+    a, b = a[:n], b[:n]
+    if measure == "DOT_PRODUCT":
+        return -sum(x * y for x, y in zip(a, b))
+    if measure == "COSINE":
+        dot = sum(x * y for x, y in zip(a, b))
+        na = math.sqrt(sum(x * x for x in a)) or 1e-12
+        nb = math.sqrt(sum(y * y for y in b)) or 1e-12
+        return 1.0 - dot / (na * nb)
+    return math.sqrt(sum((x - y) ** 2 for x, y in zip(a, b)))   # EUCLIDEAN (default)
+
+
+def _vector_index_exists(store: FirestoreStore, db: str, group: str, field_path: str, dim: int) -> bool:
+    for idx in store.indexes.get(db, {}).values():
+        if idx.get("collectionGroup") != group:
+            continue
+        for f in idx.get("fields") or []:
+            if f.get("fieldPath") == field_path and (f.get("vectorConfig") or {}).get("dimension") == dim:
+                return True
+    return False
+
+
+def _run_find_nearest(store: FirestoreStore, db: str, base: str, coll: str, group: str,
+                      fn: dict, where: dict) -> FirestoreResponse:
+    """`findNearest` — a brute-force (exact, not approximate-nearest-neighbor) k-NN scan
+    over the collection's real document vectors, same as what a local Firestore emulator
+    does at small scale. Requires a matching vector index to exist on `vectorField` +
+    dimension, exactly like production Firestore, so creating one is genuinely required —
+    not decorative console-only bookkeeping."""
+    field_path = (fn.get("vectorField") or {}).get("fieldPath")
+    qv_raw = fn.get("queryVector") or {}
+    query_vec = _vector_floats(qv_raw) if _is_vector_value(qv_raw) else _scalar_list(qv_raw)
+    if not field_path or not query_vec:
+        return _err(400, "INVALID_ARGUMENT", "findNearest requires vectorField and queryVector")
+    measure_raw = fn.get("distanceMeasure", "EUCLIDEAN")
+    if isinstance(measure_raw, int) or (isinstance(measure_raw, str) and measure_raw.isdigit()):
+        measure = _DISTANCE_MEASURES.get(int(measure_raw), "EUCLIDEAN")
+    else:
+        measure = measure_raw
+    dim = len(query_vec)
+    if not _vector_index_exists(store, db, group, field_path, dim):
+        _record_index_recommendation(store, db, group, field_path, {f"VECTOR:{dim}"})
+        return _err(400, "FAILED_PRECONDITION",
+                    f'findNearest on "{field_path}" ({dim} dimensions) requires a vector index on '
+                    f'collection group "{group}" — create one from Indexes > Vector.')
+
+    scored = []
+    for rel, entry in store.in_collection(db, coll):
+        if not _eval_filter(entry.get("fields", {}), where):
+            continue
+        fv = (entry.get("fields") or {}).get(field_path)
+        if not (isinstance(fv, dict) and _is_vector_value(fv)):
+            continue
+        vec = _vector_floats(fv)
+        if len(vec) != dim:
+            continue
+        scored.append((_vector_distance(query_vec, vec, measure), rel, entry))
+    scored.sort(key=lambda t: t[0])
+
+    threshold = fn.get("distanceThreshold")
+    if threshold is not None:
+        scored = [s for s in scored if s[0] <= float(threshold)]
+    limit = fn.get("limit")
+    if isinstance(limit, dict):
+        limit = limit.get("value")
+    if limit is not None:
+        scored = scored[:int(limit)]
+
+    for iid, idx in store.indexes.get(db, {}).items():
+        if idx.get("collectionGroup") == group and any(f.get("fieldPath") == field_path for f in idx.get("fields") or []):
+            rec = store.index_usage.setdefault(db, {}).setdefault(iid, {"hits": 0})
+            rec["hits"] += 1
+            rec["lastUsed"] = _now()
+
+    store.bump_usage(db, "reads", max(1, len(scored)))
+    read_time = _now()
+    result_field = fn.get("distanceResultField")
+    rows = []
+    for dist, rel, entry in scored:
+        store.bump_key_access(db, rel)
+        doc = _doc_view(base, rel, entry)
+        if result_field:
+            doc = dict(doc, fields=dict(doc["fields"], **{result_field: {"doubleValue": dist}}))
+        rows.append({"document": doc, "readTime": read_time})
+    if not rows:
+        return _json(200, [{"readTime": read_time}])
+    return _json(200, rows)
+
+
+# ── security rules — rules-language evaluator (Development & test playground) ─────────
+# A practical subset of the Firestore Rules Language v2: `service cloud.firestore { match
+# <path> { match <path> { allow <ops>: if <expr>; } } }`, path captures (`{id}`) and
+# recursive captures (`{id=**}`), and boolean expressions over request.auth / resource.data
+# / request.resource.data (member access, ==, !=, <, <=, >, >=, in, &&, ||, !, literals).
+# `function` blocks are recognized and skipped (unsupported) rather than breaking the parse.
+_RULES_MULTI_OPS = ("==", "!=", "&&", "||", "<=", ">=")
+_RULES_SINGLE_OPS = "{}()[],;:.!</>*=+-"
+
+
+def _rules_tokenize(src: str) -> list[tuple[str, str]]:
+    src = "\n".join(line.split("//", 1)[0] for line in src.split("\n"))
+    toks: list[tuple[str, str]] = []
+    i, n = 0, len(src)
+    while i < n:
+        c = src[i]
+        if c.isspace():
+            i += 1
+            continue
+        if src[i:i + 2] in _RULES_MULTI_OPS:
+            toks.append(("OP", src[i:i + 2])); i += 2; continue
+        if c in ("'", '"'):
+            j = i + 1
+            buf = []
+            while j < n and src[j] != c:
+                if src[j] == "\\" and j + 1 < n:
+                    buf.append(src[j + 1]); j += 2
+                else:
+                    buf.append(src[j]); j += 1
+            toks.append(("STR", "".join(buf))); i = j + 1; continue
+        if c.isdigit():
+            j = i
+            while j < n and (src[j].isdigit() or src[j] == "."):
+                j += 1
+            toks.append(("NUM", src[i:j])); i = j; continue
+        if c.isalpha() or c == "_":
+            j = i
+            while j < n and (src[j].isalnum() or src[j] == "_"):
+                j += 1
+            toks.append(("ID", src[i:j])); i = j; continue
+        if c in _RULES_SINGLE_OPS:
+            toks.append(("OP", c)); i += 1; continue
+        i += 1   # skip an unrecognized character rather than fail the whole parse
+    return toks
+
+
+class _RulesParser:
+    def __init__(self, toks: list[tuple[str, str]]) -> None:
+        self.toks = toks
+        self.pos = 0
+
+    def peek(self) -> tuple[str | None, str | None]:
+        return self.toks[self.pos] if self.pos < len(self.toks) else (None, None)
+
+    def next(self) -> tuple[str | None, str | None]:
+        t = self.peek(); self.pos += 1; return t
+
+    def expect(self, val: str) -> tuple[str | None, str | None]:
+        t = self.next()
+        if t[1] != val:
+            raise ValueError(f"expected {val!r}, got {t[1]!r}")
+        return t
+
+    def parse_document(self) -> list[dict]:
+        if self.peek()[1] == "rules_version":
+            while self.peek()[1] not in (";", None):
+                self.next()
+            self.next()
+        self.expect("service")
+        while self.peek()[1] not in ("{", None):
+            self.next()
+        self.expect("{")
+        body = self.parse_body()
+        self.expect("}")
+        return body
+
+    def parse_body(self) -> list[dict]:
+        nodes = []
+        while True:
+            _, tv = self.peek()
+            if tv == "match":
+                nodes.append(self.parse_match())
+            elif tv == "allow":
+                nodes.append(self.parse_allow())
+            elif tv == "function":
+                self.skip_function()
+            elif tv in ("}", None):
+                break
+            else:
+                self.next()
+        return nodes
+
+    def parse_match(self) -> dict:
+        self.expect("match")
+        segs = self.parse_path()
+        self.expect("{")
+        body = self.parse_body()
+        self.expect("}")
+        return {"kind": "match", "segments": segs, "body": body}
+
+    def parse_path(self) -> list[dict]:
+        segs = []
+        self.expect("/")
+        while True:
+            _, tv = self.peek()
+            if tv == "{":
+                self.next()
+                name = self.next()[1]
+                recursive = False
+                if self.peek()[1] == "=":
+                    self.next(); self.expect("*"); self.expect("*")
+                    recursive = True
+                self.expect("}")
+                segs.append({"kind": "capture", "name": name, "recursive": recursive})
+            else:
+                segs.append({"kind": "literal", "name": self.next()[1]})
+            if self.peek()[1] == "/":
+                self.next()
+                continue
+            break
+        return segs
+
+    def parse_allow(self) -> dict:
+        self.expect("allow")
+        ops = set()
+        while True:
+            ops.add(self.next()[1])
+            if self.peek()[1] == ",":
+                self.next(); continue
+            break
+        self.expect(":")
+        self.expect("if")
+        expr = self.parse_expr_until_semicolon()
+        self.expect(";")
+        return {"kind": "allow", "ops": ops, "expr": expr}
+
+    def skip_function(self) -> None:
+        self.expect("function")
+        self.next()
+        if self.peek()[1] == "(":
+            depth = 0
+            while True:
+                t = self.next()
+                if t[1] == "(":
+                    depth += 1
+                elif t[1] == ")":
+                    depth -= 1
+                    if depth == 0:
+                        break
+        self.expect("{")
+        depth = 1
+        while depth > 0:
+            t = self.next()
+            if t[0] is None:
+                break
+            if t[1] == "{":
+                depth += 1
+            elif t[1] == "}":
+                depth -= 1
+
+    def parse_expr_until_semicolon(self):
+        start = self.pos
+        depth = 0
+        while True:
+            _, tv = self.peek()
+            if tv in ("(", "["):
+                depth += 1
+            elif tv in (")", "]"):
+                depth -= 1
+            elif (tv == ";" and depth == 0) or tv is None:
+                break
+            self.next()
+        return _ExprParser(self.toks[start:self.pos]).parse()
+
+
+_REL_OPS = ("==", "!=", "<=", ">=", "<", ">", "in")
+
+
+class _ExprParser:
+    def __init__(self, toks: list[tuple[str, str]]) -> None:
+        self.toks = toks
+        self.pos = 0
+
+    def peek(self):
+        return self.toks[self.pos] if self.pos < len(self.toks) else (None, None)
+
+    def next(self):
+        t = self.peek(); self.pos += 1; return t
+
+    def parse(self):
+        return self.parse_or()
+
+    def parse_or(self):
+        node = self.parse_and()
+        while self.peek()[1] == "||":
+            self.next(); node = ("or", node, self.parse_and())
+        return node
+
+    def parse_and(self):
+        node = self.parse_not()
+        while self.peek()[1] == "&&":
+            self.next(); node = ("and", node, self.parse_not())
+        return node
+
+    def parse_not(self):
+        if self.peek()[1] == "!":
+            self.next()
+            return ("not", self.parse_not())
+        return self.parse_cmp()
+
+    def parse_cmp(self):
+        node = self.parse_primary()
+        _, tv = self.peek()
+        if tv in _REL_OPS:
+            self.next()
+            node = (tv, node, self.parse_primary())
+        return node
+
+    def parse_primary(self):
+        tt, tv = self.peek()
+        if tv == "(":
+            self.next()
+            node = self.parse_or()
+            if self.peek()[1] == ")":
+                self.next()
+            return node
+        if tv == "true":
+            self.next(); return ("lit", True)
+        if tv == "false":
+            self.next(); return ("lit", False)
+        if tv == "null":
+            self.next(); return ("lit", None)
+        if tt == "NUM":
+            self.next(); return ("lit", float(tv) if "." in tv else int(tv))
+        if tt == "STR":
+            self.next(); return ("lit", tv)
+        if tv == "[":
+            self.next()
+            items = []
+            while self.peek()[1] not in ("]", None):
+                items.append(self.parse_or())
+                if self.peek()[1] == ",":
+                    self.next()
+            self.next()
+            return ("list", items)
+        if tt == "ID":
+            path = [self.next()[1]]
+            while self.peek()[1] == ".":
+                self.next(); path.append(self.next()[1])
+            # a trailing call like `.size()` / `exists()` — unsupported: treat as None
+            if self.peek()[1] == "(":
+                depth = 0
+                while True:
+                    t = self.next()
+                    if t[1] == "(":
+                        depth += 1
+                    elif t[1] == ")":
+                        depth -= 1
+                        if depth == 0:
+                            break
+                    elif t[0] is None:
+                        break
+                return ("lit", None)
+            return ("member", path)
+        self.next()
+        return ("lit", None)
+
+
+def _rules_truthy(v: Any) -> bool:
+    return bool(v)
+
+
+def _rules_eval(node: tuple, ctx: dict) -> Any:
+    kind = node[0]
+    if kind == "lit":
+        return node[1]
+    if kind == "list":
+        return [_rules_eval(n, ctx) for n in node[1]]
+    if kind == "member":
+        cur: Any = ctx
+        for seg in node[1]:
+            cur = cur.get(seg) if isinstance(cur, dict) else None
+        return cur
+    if kind == "not":
+        return not _rules_truthy(_rules_eval(node[1], ctx))
+    if kind == "and":
+        return _rules_truthy(_rules_eval(node[1], ctx)) and _rules_truthy(_rules_eval(node[2], ctx))
+    if kind == "or":
+        return _rules_truthy(_rules_eval(node[1], ctx)) or _rules_truthy(_rules_eval(node[2], ctx))
+    if kind == "in":
+        return _rules_eval(node[1], ctx) in (_rules_eval(node[2], ctx) or [])
+    a, b = _rules_eval(node[1], ctx), _rules_eval(node[2], ctx)
+    try:
+        if kind == "==":
+            return a == b
+        if kind == "!=":
+            return a != b
+        if kind == "<":
+            return a < b
+        if kind == "<=":
+            return a <= b
+        if kind == ">":
+            return a > b
+        if kind == ">=":
+            return a >= b
+    except TypeError:
+        return False
+    return False
+
+
+def _rules_flatten(nodes: list[dict], prefix: list[dict]) -> list[tuple[list[dict], list[dict]]]:
+    out = []
+    for node in nodes:
+        if node["kind"] != "match":
+            continue
+        pat = prefix + node["segments"]
+        allows = [n for n in node["body"] if n["kind"] == "allow"]
+        if allows:
+            out.append((pat, allows))
+        out += _rules_flatten([n for n in node["body"] if n["kind"] == "match"], pat)
+    return out
+
+
+def _rules_pattern_matches(pattern: list[dict], path_segs: list[str]) -> dict | None:
+    caps: dict[str, str] = {}
+    pi = 0
+    for i, seg in enumerate(pattern):
+        if seg["kind"] == "capture" and seg.get("recursive"):
+            if i != len(pattern) - 1:
+                return None
+            caps[seg["name"]] = "/".join(path_segs[pi:])
+            return caps
+        if pi >= len(path_segs):
+            return None
+        if seg["kind"] == "literal":
+            if path_segs[pi] != seg["name"]:
+                return None
+        else:
+            caps[seg["name"]] = path_segs[pi]
+        pi += 1
+    return caps if pi == len(path_segs) else None
+
+
+_RULES_OP_ALIASES = {"get": {"get", "read"}, "list": {"list", "read"}, "create": {"create", "write"},
+                     "update": {"update", "write"}, "delete": {"delete", "write"}}
+
+
+def evaluate_security_rules(rules_src: str, *, method: str, db: str, rel_path: str,
+                            auth: dict | None, resource_data: dict | None,
+                            request_resource_data: dict | None) -> dict:
+    """Evaluate `rules_src` against one simulated request, for the console's Development &
+    test (Rules Playground) tab. Returns `{"allow", "matchedPath", "error"}`. This is the
+    ONLY path that ever evaluates rules — the native wire's actual document reads/writes
+    (what the console's own Data viewer and every Admin-SDK/gcloud caller use) always
+    bypass them, matching real Firestore (only end-user client-SDK requests are evaluated
+    against rules in production)."""
+    try:
+        top = _RulesParser(_rules_tokenize(rules_src)).parse_document()
+    except Exception as e:
+        return {"allow": False, "matchedPath": None, "error": f"Rules did not parse: {e}"}
+    path_segs = ["databases", db, "documents"] + [s for s in rel_path.split("/") if s]
+    flat = _rules_flatten(top, [])
+    ctx = {
+        "request": {
+            "auth": ({"uid": auth.get("uid")} if auth else None),
+            "resource": {"data": request_resource_data or {}},
+            "method": method,
+            "time": _now(),
+        },
+        "resource": {"data": resource_data if resource_data is not None else (request_resource_data or {})},
+    }
+    wanted = _RULES_OP_ALIASES.get(method, {method})
+    best = None
+    for pattern, allows in flat:
+        caps = _rules_pattern_matches(pattern, path_segs)
+        if caps is None:
+            continue
+        merged = {**ctx, **caps}
+        for rule in allows:
+            if not (rule["ops"] & wanted):
+                continue
+            desc = "/" + "/".join(
+                s["name"] if s["kind"] == "literal" else "{" + s["name"] + ("=**" if s.get("recursive") else "") + "}"
+                for s in pattern)
+            try:
+                ok = _rules_truthy(_rules_eval(rule["expr"], merged))
+            except Exception:
+                ok = False
+            if ok:
+                return {"allow": True, "matchedPath": desc, "error": None}
+            best = best or {"allow": False, "matchedPath": desc, "error": None}
+    return best or {"allow": False, "matchedPath": None, "error": None}
 
 
 # ── admin plane ─────────────────────────────────────────────────────────────
@@ -1011,18 +1611,32 @@ def _dispatch_databases_collection(store: FirestoreStore, project: str, method: 
     return _err(400, "INVALID_ARGUMENT", f"Unsupported method {method} on databases")
 
 
+_KEY_VISUALIZER_BUCKETS = 8
+
+
 def _dispatch_database_item(store: FirestoreStore, project: str, dbid: str, suffix: str,
                             method: str, query: dict, body: bytes, gcs_store=None) -> FirestoreResponse:
     if suffix in ("exportDocuments", "importDocuments"):
         if dbid not in store.databases:
             return _err(404, "NOT_FOUND", f"Database does not exist: {dbid}")
         return _dispatch_export_import(store, project, dbid, suffix, body, gcs_store)
-    if suffix in ("getSecurityRules", "updateSecurityRules"):
+    if suffix in ("getSecurityRules", "updateSecurityRules", "testSecurityRules"):
         if suffix == "getSecurityRules":
             return _json(200, {"rules": store.security_rules.get(dbid, "")})
+        if suffix == "updateSecurityRules":
+            data = _load_json(body)
+            store.security_rules[dbid] = data.get("rules", "")
+            return _json(200, {"rules": store.security_rules[dbid]})
         data = _load_json(body)
-        store.security_rules[dbid] = data.get("rules", "")
-        return _json(200, {"rules": store.security_rules[dbid]})
+        rules_src = data.get("rules")
+        if rules_src is None:
+            rules_src = store.security_rules.get(dbid, "")
+        req = data.get("request") or {}
+        result = evaluate_security_rules(
+            rules_src, method=req.get("method", "get"), db=dbid,
+            rel_path=str(req.get("path", "")).strip("/"), auth=req.get("auth"),
+            resource_data=req.get("resourceData"), request_resource_data=req.get("requestResourceData"))
+        return _json(200, result)
     if suffix == "usage":
         if dbid not in store.databases:
             return _err(404, "NOT_FOUND", f"Database does not exist: {dbid}")
@@ -1032,6 +1646,35 @@ def _dispatch_database_item(store: FirestoreStore, project: str, dbid: str, suff
         storage_bytes = sum(len(json.dumps(e.get("fields", {}))) for k, e in store.documents.items()
                             if k.startswith(prefix))
         return _json(200, {"documentCount": doc_count, "storageBytes": storage_bytes, **u})
+    if suffix == "insights":
+        if dbid not in store.databases:
+            return _err(404, "NOT_FOUND", f"Database does not exist: {dbid}")
+        recs = sorted(store.index_recommendations.get(dbid, {}).values(), key=lambda r: -r["occurrences"])
+        used_ids = set(store.index_usage.get(dbid, {}).keys())
+        unused = [{"indexId": iid, "collectionGroup": idx["collectionGroup"],
+                   "fields": [f.get("fieldPath") for f in idx.get("fields") or []]}
+                  for iid, idx in store.indexes.get(dbid, {}).items() if iid not in used_ids]
+        return _json(200, {
+            "indexRecommendations": recs,
+            "unusedIndexes": sorted(unused, key=lambda u: u["indexId"]),
+            "totalQueries": store.query_count.get(dbid, 0),
+            "queriesMissingIndex": sum(r["occurrences"] for r in recs),
+        })
+    if suffix == "keyVisualizer":
+        if dbid not in store.databases:
+            return _err(404, "NOT_FOUND", f"Database does not exist: {dbid}")
+        ka = store.key_access.get(dbid, {})
+        groups: dict[str, list[int]] = {}
+        for rel, count in ka.items():
+            segs = rel.split("/")
+            group = "/".join(segs[:-1]) if len(segs) > 1 else rel
+            bucket = int(hashlib.md5(rel.encode()).hexdigest(), 16) % _KEY_VISUALIZER_BUCKETS
+            row = groups.setdefault(group, [0] * _KEY_VISUALIZER_BUCKETS)
+            row[bucket] += count
+        rows = sorted(({"collection": g, "buckets": b, "total": sum(b)} for g, b in groups.items()),
+                      key=lambda r: -r["total"])
+        hottest = sorted(ka.items(), key=lambda kv: -kv[1])[:10]
+        return _json(200, {"rows": rows, "hottestKeys": [{"key": rel, "count": n} for rel, n in hottest]})
 
     db = store.databases.get(dbid)
     if method == "GET":
@@ -1063,6 +1706,10 @@ def _dispatch_database_item(store: FirestoreStore, project: str, dbid: str, suff
         store.operations.pop(dbid, None)
         store.security_rules.pop(dbid, None)
         store.usage.pop(dbid, None)
+        store.index_recommendations.pop(dbid, None)
+        store.index_usage.pop(dbid, None)
+        store.query_count.pop(dbid, None)
+        store.key_access.pop(dbid, None)
         for key in [k for k in store.history if k.startswith(prefix)]:
             store.history.pop(key, None)
         return _json(200, db)
