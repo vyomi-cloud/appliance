@@ -1622,7 +1622,6 @@ function tableOf(cols, rows, actions, opts){
     const tr = el("tr",{});
     if (sel) {
       const b = el("input",{type:"checkbox"}); b.disabled = !sel.can(row); b._row = row;
-      if (b.disabled) b.title = "This item can't be deleted";
       b.addEventListener("change", () => sel.onChange());
       boxes.push(b); tr.append(el("td",{class:"chk"}, b));
     }
@@ -1733,11 +1732,14 @@ async function childList(host, opts){
     let tbl = null;
     const bd = opts.bulkDelete;
     const delBtn = bd ? el("button",{class:"btn danger", disabled:true, onclick: async () => {
-      const rows = tbl ? tbl.selectedRows() : []; if (!rows.length) return;
-      if (!confirm(bd.confirm(rows))) return;
+      const picked = tbl ? tbl.selectedRows() : []; if (!picked.length) return;
+      const can = bd.can || (() => true);
+      const rows = picked.filter(can), skipped = picked.length - rows.length;
+      if (!rows.length) { toast((bd.cantMsg || "These items are system-managed and can't be deleted") + (skipped > 1 ? " (" + skipped + " selected)" : ""), "err"); return; }
+      if (!confirm(bd.confirm(rows) + (skipped ? "\n\n" + skipped + " selected system-managed " + (skipped === 1 ? "item" : "items") + " will be skipped." : ""))) return;
       let failed = 0;
       for (const row of rows) { const rr = await bd.run(row); if (rr && !rr.ok) { failed++; toast("Delete failed: " + errMsg(rr), "err"); } }
-      if (failed < rows.length) toast((rows.length - failed) + " " + ((rows.length - failed) === 1 ? (opts.noun || "item") : (opts.nouns || "items")) + " deleted");
+      if (failed < rows.length) toast((rows.length - failed) + " " + ((rows.length - failed) === 1 ? (opts.noun || "item") : (opts.nouns || "items")) + " deleted" + (skipped ? " · " + skipped + " system-managed skipped" : ""));
       load();
     }}, icon("delete"), bd.label || "Delete") : null;
     if (delBtn) bar.append(delBtn);
@@ -1758,7 +1760,7 @@ async function childList(host, opts){
       const rr = await a.run(row);
       if (rr && !rr.ok) toast(a.label + " failed: " + errMsg(rr), "err"); else { toast(a.label + " done"); load(); }
     }})), {ctx: {reload: load},
-      select: bd ? {can: bd.can || (() => true), onChange: () => { const n = tbl.selectedRows().length; delBtn.disabled = !n;
+      select: bd ? {can: () => true, onChange: () => { const n = tbl.selectedRows().length; delBtn.disabled = !n;
         delBtn.lastChild.textContent = (bd.label || "Delete") + (n ? " (" + n + ")" : ""); }} : null});
     wrap.append(tbl);
     if (opts.after) opts.after(wrap, items);
@@ -2436,8 +2438,9 @@ GT.vpcsubnets = async function(host, svc, item){
                {name: "ipCidrRange", label: "IPv4 range", placeholder: "10.10.0.0/24"},
                {name: "privateIpGoogleAccess", label: "Private Google Access", type: "checkbox"}],
       run: v => subPost(svc, "createSubnet", name, {name: v.name.trim(), region: v.region, ipCidrRange: v.ipCidrRange.trim(), privateIpGoogleAccess: v.privateIpGoogleAccess})},
-    rowActions: [{label: "Delete", icon: "delete", danger: true, when: s => !s.autoCreated, confirm: s => "Delete subnet " + s.name + " (" + s.region + ")?",
-                  run: s => subPost(svc, "deleteSubnet", name, {name: s.name, region: s.region})}],
+    bulkDelete: {label: "Delete", cantMsg: "Auto-mode subnets can't be deleted", can: s => !s.autoCreated,
+      confirm: rows => rows.length === 1 ? "Delete subnet " + rows[0].name + " (" + rows[0].region + ")?" : "Delete " + rows.length + " subnets?",
+      run: s => subPost(svc, "deleteSubnet", name, {name: s.name, region: s.region})},
   });
 };
 function fwRules(f){
@@ -2482,7 +2485,7 @@ GT.vpcroutes = async function(host, svc, item){
                {name: "nextHop", label: "Next hop IP / instance", placeholder: "10.128.0.5", width: 140},
                {name: "priority", label: "Priority", type: "number", value: 1000, width: 90}],
       run: v => subPost(svc, "createRoute", name, {...v, name: v.name.trim(), priority: Number(v.priority)})},
-    bulkDelete: {label: "Delete", can: r => r.type !== "Subnet route" && r.type !== "Peering subnet route",
+    bulkDelete: {label: "Delete", cantMsg: "System subnet routes can't be deleted", can: r => r.type !== "Subnet route" && r.type !== "Peering subnet route",
       confirm: rows => rows.length === 1 ? "Delete route " + rows[0].name + "?" : "Delete " + rows.length + " routes?",
       run: r => subPost(svc, "deleteRoute", name, {name: r.name})},
   });
