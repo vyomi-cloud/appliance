@@ -353,7 +353,16 @@ BUILTIN_METRICS = {m["type"]: m for m in [
     _md("storage.googleapis.com/api/request_count", "DELTA", "INT64", "1", "Delta count of API calls.",
         [{"key": "method", "valueType": "STRING"}], "Request count", ["gcs_bucket"]),
     _md("pubsub.googleapis.com/subscription/num_undelivered_messages", "GAUGE", "INT64", "1",
-        "Number of unacknowledged messages in a subscription.", [], "Undelivered messages", ["pubsub_subscription"]),
+        "Live count of unacknowledged messages in a subscription, mirrored from Cloud Pub/Sub's "
+        "own backlog — fed by core/gcp_pubsub_core.py on every pull/acknowledge, not written over "
+        "the public timeSeries API.", [], "Unacked messages", ["pubsub_subscription"]),
+    _md("pubsub.googleapis.com/subscription/oldest_unacked_message_age", "GAUGE", "INT64", "s",
+        "Age of the oldest unacknowledged message in a subscription, in seconds, mirrored from "
+        "Cloud Pub/Sub's own backlog.", [], "Oldest unacked message age", ["pubsub_subscription"]),
+    _md("pubsub.googleapis.com/topic/send_message_operation_count", "GAUGE", "INT64", "1",
+        "Live cumulative count of publish calls made against a topic, mirrored from Cloud "
+        "Pub/Sub's own activity — a GAUGE snapshot of the running total, not GCP's per-minute "
+        "DELTA rate.", [], "Publish count", ["pubsub_topic"]),
     _md("cloudsql.googleapis.com/database/cpu/utilization", "GAUGE", "DOUBLE", "10^2.%",
         "Current CPU utilization as a fraction of reserved CPU.", [], "CPU utilization", ["cloudsql_database"]),
     _md("kubernetes.io/container/cpu/core_usage_time", "CUMULATIVE", "DOUBLE", "s",
@@ -416,6 +425,9 @@ MONITORED_RESOURCES = {r["type"]: r for r in [
      "labels": [{"key": "project_id", "valueType": "STRING"}, {"key": "service_name", "valueType": "STRING"},
                 {"key": "revision_name", "valueType": "STRING"}, {"key": "location", "valueType": "STRING"},
                 {"key": "configuration_name", "valueType": "STRING"}]},
+    {"type": "pubsub_topic", "displayName": "Cloud Pub/Sub Topic",
+     "description": "A Pub/Sub topic.",
+     "labels": [{"key": "project_id", "valueType": "STRING"}, {"key": "topic_id", "valueType": "STRING"}]},
     {"type": "generic_node", "displayName": "Generic Node", "description": "A generic node in your system.",
      "labels": [{"key": "project_id", "valueType": "STRING"}, {"key": "location", "valueType": "STRING"},
                 {"key": "namespace", "valueType": "STRING"}, {"key": "node_id", "valueType": "STRING"}]},
