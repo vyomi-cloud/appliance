@@ -269,7 +269,7 @@
       "target": "nano",
       "cloud": "gcp",
       "kind": "core",
-      "cmd": "python3 tests/conformance/test_gcp_compute_core.py",
+      "cmd": "PYTHONPATH=wasm python3 tests/conformance/test_gcp_compute_core.py",
       "timeout": 120
     },
     {

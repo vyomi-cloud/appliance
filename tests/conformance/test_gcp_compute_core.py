@@ -10,7 +10,7 @@ fails = []
 
 
 def check(name, ok, detail=""):
-    print(("  ok  " if ok else "  FAIL ") + name + ("" if ok else f" :: {detail}"))
+    print(("[PASS] " if ok else "[FAIL] ") + name + ("" if ok else f" :: {detail}"))
     if not ok:
         fails.append(name)
 
