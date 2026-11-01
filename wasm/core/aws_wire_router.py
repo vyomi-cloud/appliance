@@ -69,6 +69,7 @@ from core import gcp_monitoring_core as gcp_mon
 from core import gcp_redis_core as gcp_redis
 from core import gcp_artifactregistry_core as gcp_ar
 from core import gcp_compute_core as gcp_compute
+from core import nano_triggers
 
 
 def _gcp_service(path):
@@ -613,6 +614,9 @@ class AwsWireRouter:
         body = body if isinstance(body, (bytes, bytearray)) else (body or b"")
         if isinstance(body, str):
             body = body.encode("utf-8")
+        _tr = nano_triggers.route(self, method, path, query, lheaders, bytes(body))   # /gcf, Event Grid publish, function apps
+        if _tr is not None:
+            return _tr
         svc = self.service_of(method, path, lheaders, body, query)
         if queue_alias and svc == "az-blob":
             svc = "az-queue"
@@ -757,6 +761,7 @@ class AwsWireRouter:
                     self.gcp_redis, lambda *a: gcp_gke.dispatch(self.gcp_gke, *a), method, path, query or {}, headers or {}, bytes(body))
             else:
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body))
+            nano_triggers.after_gcp(self, svc, method, path, query, bytes(body), r)   # uploads / publishes fire Eventarc triggers
             hdrs = dict(r.headers or {})
             if r.media_type and not any(k.lower() == "content-type" for k in hdrs):
                 hdrs["content-type"] = r.media_type

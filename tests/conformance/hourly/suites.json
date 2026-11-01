@@ -993,6 +993,30 @@
       "timeout": 600
     },
     {
+      "id": "nano-ui-aws-event-delivery",
+      "target": "nano",
+      "cloud": "aws",
+      "kind": "ui",
+      "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-nano-event-delivery.mjs",
+      "timeout": 600
+    },
+    {
+      "id": "nano-ui-gcp-eventarc-delivery",
+      "target": "nano",
+      "cloud": "gcp",
+      "kind": "ui",
+      "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-nano-gcp-azure-triggers.mjs",
+      "timeout": 600
+    },
+    {
+      "id": "nano-core-triggers",
+      "target": "nano",
+      "cloud": "gcp",
+      "kind": "api",
+      "cmd": "python3 tests/conformance/test_nano_triggers.py",
+      "timeout": 300
+    },
+    {
       "id": "nano-ui-aws-stepfunctions",
       "target": "nano",
       "cloud": "aws",
