@@ -108,3 +108,161 @@ export const validClusterName = (n) => {
   if (!/^[a-z]([-a-z0-9]{0,38}[a-z0-9])?$/.test(n)) return "Use lowercase letters, numbers and hyphens. Start with a letter, end with a letter or number.";
   return null;
 };
+
+/* ── Kubernetes data plane (clusters/{c}/k8s/{real Kubernetes REST path}) — every call below
+ * is the literal path/body shape a real kubectl/client-go request carries; see
+ * core/gcp_gke_dataplane_core.py's docstring for why the `/k8s/` prefix exists. */
+const k8sBase = (location, cluster) => `${base(location)}/clusters/${e(cluster)}/k8s`;
+const nsSeg = (ns) => (ns ? `/namespaces/${e(ns)}` : "");
+
+/** Runs `fn(location, name)` against every cluster in the project and flattens the
+ * results, tagging each item with the cluster it came from — the Workloads/Discovery/
+ * Secrets & ConfigMaps/Storage/Applications/Object Browser pages are project-wide, not
+ * per-cluster, exactly like the real console's federated views. */
+export async function overAllClusters(fn) {
+  const clusters = await listClusters();
+  const lists = await Promise.all(clusters.map(async (c) => {
+    try {
+      const items = await fn(c.location, c.name);
+      return items.map((it) => ({ ...it, _location: c.location, _cluster: c.name }));
+    } catch { return []; }
+  }));
+  return lists.flat();
+}
+
+export const validNsName = (n) => (n && /^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$/.test(n)) ? null : "Use lowercase letters, numbers and hyphens.";
+
+export async function listNamespaces(location, cluster) {
+  const r = await restJson("GET", `${k8sBase(location, cluster)}/api/v1/namespaces`);
+  return r.items || [];
+}
+export const createNamespace = (location, cluster, name) => restJson("POST", `${k8sBase(location, cluster)}/api/v1/namespaces`, { body: { metadata: { name } } });
+export const deleteNamespace = (location, cluster, name) => restJson("DELETE", `${k8sBase(location, cluster)}/api/v1/namespaces/${e(name)}`);
+
+// Workloads: Deployments / StatefulSets (scalable) + Jobs (run-to-completion) + their Pods.
+export async function listDeployments(location, cluster, ns) {
+  const r = await restJson("GET", `${k8sBase(location, cluster)}/apis/apps/v1${nsSeg(ns)}/deployments`);
+  return r.items || [];
+}
+export async function listStatefulSets(location, cluster, ns) {
+  const r = await restJson("GET", `${k8sBase(location, cluster)}/apis/apps/v1${nsSeg(ns)}/statefulsets`);
+  return r.items || [];
+}
+export async function listJobs(location, cluster, ns) {
+  const r = await restJson("GET", `${k8sBase(location, cluster)}/apis/batch/v1${nsSeg(ns)}/jobs`);
+  return r.items || [];
+}
+export async function listWorkloads(location, cluster, ns) {
+  const [d, s, j] = await Promise.all([listDeployments(location, cluster, ns), listStatefulSets(location, cluster, ns), listJobs(location, cluster, ns)]);
+  return [...d, ...s, ...j];
+}
+export const createDeployment = (location, cluster, ns, body) => restJson("POST", `${k8sBase(location, cluster)}/apis/apps/v1/namespaces/${e(ns)}/deployments`, { body });
+export const createStatefulSet = (location, cluster, ns, body) => restJson("POST", `${k8sBase(location, cluster)}/apis/apps/v1/namespaces/${e(ns)}/statefulsets`, { body });
+export const createJob = (location, cluster, ns, body) => restJson("POST", `${k8sBase(location, cluster)}/apis/batch/v1/namespaces/${e(ns)}/jobs`, { body });
+export const scaleWorkload = (location, cluster, plural, ns, name, replicas) =>
+  restJson("PUT", `${k8sBase(location, cluster)}/apis/apps/v1/namespaces/${e(ns)}/${plural}/${e(name)}`, { body: { spec: { replicas } } });
+export const deleteDeployment = (location, cluster, ns, name) => restJson("DELETE", `${k8sBase(location, cluster)}/apis/apps/v1/namespaces/${e(ns)}/deployments/${e(name)}`);
+export const deleteStatefulSet = (location, cluster, ns, name) => restJson("DELETE", `${k8sBase(location, cluster)}/apis/apps/v1/namespaces/${e(ns)}/statefulsets/${e(name)}`);
+export const deleteJob = (location, cluster, ns, name) => restJson("DELETE", `${k8sBase(location, cluster)}/apis/batch/v1/namespaces/${e(ns)}/jobs/${e(name)}`);
+export const deleteWorkload = (location, cluster, kind, ns, name) => ({
+  Deployment: deleteDeployment, StatefulSet: deleteStatefulSet, Job: deleteJob,
+})[kind](location, cluster, ns, name);
+
+export async function listPods(location, cluster, ns) {
+  const r = await restJson("GET", `${k8sBase(location, cluster)}/api/v1${nsSeg(ns)}/pods`);
+  return r.items || [];
+}
+export const deletePod = (location, cluster, ns, name) => restJson("DELETE", `${k8sBase(location, cluster)}/api/v1/namespaces/${e(ns)}/pods/${e(name)}`);
+
+// Discovery: Services / Ingress / Gateways.
+export async function listServices(location, cluster, ns) {
+  const r = await restJson("GET", `${k8sBase(location, cluster)}/api/v1${nsSeg(ns)}/services`);
+  return r.items || [];
+}
+export const createService = (location, cluster, ns, body) => restJson("POST", `${k8sBase(location, cluster)}/api/v1/namespaces/${e(ns)}/services`, { body });
+export const deleteService = (location, cluster, ns, name) => restJson("DELETE", `${k8sBase(location, cluster)}/api/v1/namespaces/${e(ns)}/services/${e(name)}`);
+
+export async function listIngresses(location, cluster, ns) {
+  const r = await restJson("GET", `${k8sBase(location, cluster)}/apis/networking.k8s.io/v1${nsSeg(ns)}/ingresses`);
+  return r.items || [];
+}
+export const createIngress = (location, cluster, ns, body) => restJson("POST", `${k8sBase(location, cluster)}/apis/networking.k8s.io/v1/namespaces/${e(ns)}/ingresses`, { body });
+export const deleteIngress = (location, cluster, ns, name) => restJson("DELETE", `${k8sBase(location, cluster)}/apis/networking.k8s.io/v1/namespaces/${e(ns)}/ingresses/${e(name)}`);
+
+export async function listGateways(location, cluster, ns) {
+  const r = await restJson("GET", `${k8sBase(location, cluster)}/apis/gateway.networking.k8s.io/v1${nsSeg(ns)}/gateways`);
+  return r.items || [];
+}
+export const createGateway = (location, cluster, ns, body) => restJson("POST", `${k8sBase(location, cluster)}/apis/gateway.networking.k8s.io/v1/namespaces/${e(ns)}/gateways`, { body });
+export const deleteGateway = (location, cluster, ns, name) => restJson("DELETE", `${k8sBase(location, cluster)}/apis/gateway.networking.k8s.io/v1/namespaces/${e(ns)}/gateways/${e(name)}`);
+
+// Secrets & ConfigMaps.
+export async function listSecrets(location, cluster, ns) {
+  const r = await restJson("GET", `${k8sBase(location, cluster)}/api/v1${nsSeg(ns)}/secrets`);
+  return r.items || [];
+}
+export const createSecret = (location, cluster, ns, body) => restJson("POST", `${k8sBase(location, cluster)}/api/v1/namespaces/${e(ns)}/secrets`, { body });
+export const deleteSecret = (location, cluster, ns, name) => restJson("DELETE", `${k8sBase(location, cluster)}/api/v1/namespaces/${e(ns)}/secrets/${e(name)}`);
+export async function listConfigMaps(location, cluster, ns) {
+  const r = await restJson("GET", `${k8sBase(location, cluster)}/api/v1${nsSeg(ns)}/configmaps`);
+  return r.items || [];
+}
+export const createConfigMap = (location, cluster, ns, body) => restJson("POST", `${k8sBase(location, cluster)}/api/v1/namespaces/${e(ns)}/configmaps`, { body });
+export const deleteConfigMap = (location, cluster, ns, name) => restJson("DELETE", `${k8sBase(location, cluster)}/api/v1/namespaces/${e(ns)}/configmaps/${e(name)}`);
+
+// Storage: StorageClasses (seeded) + PersistentVolumeClaims/Volumes.
+export async function listStorageClasses(location, cluster) {
+  const r = await restJson("GET", `${k8sBase(location, cluster)}/apis/storage.k8s.io/v1/storageclasses`);
+  return r.items || [];
+}
+export async function listPvcs(location, cluster, ns) {
+  const r = await restJson("GET", `${k8sBase(location, cluster)}/api/v1${nsSeg(ns)}/persistentvolumeclaims`);
+  return r.items || [];
+}
+export const createPvc = (location, cluster, ns, body) => restJson("POST", `${k8sBase(location, cluster)}/api/v1/namespaces/${e(ns)}/persistentvolumeclaims`, { body });
+export const deletePvc = (location, cluster, ns, name) => restJson("DELETE", `${k8sBase(location, cluster)}/api/v1/namespaces/${e(ns)}/persistentvolumeclaims/${e(name)}`);
+export async function listPvs(location, cluster) {
+  const r = await restJson("GET", `${k8sBase(location, cluster)}/api/v1/persistentvolumes`);
+  return r.items || [];
+}
+
+export async function listK8sNodes(location, cluster) {
+  const r = await restJson("GET", `${k8sBase(location, cluster)}/api/v1/nodes`);
+  return r.items || [];
+}
+
+// Config: Config Sync + Policy Controller (real, enforced — see capability notes).
+export const getConfigManagement = (location, cluster) => restJson("GET", `${k8sBase(location, cluster)}/apis/configmanagement.gke.io/v1/configmanagements/config-management`);
+export const applyConfigManagement = (location, cluster, spec) =>
+  restJson("PUT", `${k8sBase(location, cluster)}/apis/configmanagement.gke.io/v1/configmanagements/config-management`, { body: { spec } });
+export async function listConstraints(location, cluster) {
+  const r = await restJson("GET", `${k8sBase(location, cluster)}/apis/constraints.gatekeeper.sh/v1beta1/k8srequiredlabels`);
+  return r.items || [];
+}
+export const createConstraint = (location, cluster, body) => restJson("POST", `${k8sBase(location, cluster)}/apis/constraints.gatekeeper.sh/v1beta1/k8srequiredlabels`, { body });
+export const deleteConstraint = (location, cluster, name) => restJson("DELETE", `${k8sBase(location, cluster)}/apis/constraints.gatekeeper.sh/v1beta1/k8srequiredlabels/${e(name)}`);
+
+// Observability (real, derived-only counts) + Applications (real grouping by app label).
+export const getObservability = (location, cluster) => restJson("GET", `${k8sBase(location, cluster)}/observability`);
+export async function listApplications(location, cluster) {
+  const r = await restJson("GET", `${k8sBase(location, cluster)}/applications`);
+  return r.items || [];
+}
+
+/* ── GKE Hub fleet registration (gkehub.googleapis.com shape) — independent of the k8s data
+ * plane: a Membership just names a cluster into the project's fleet. */
+const membershipsBase = () => `/v1/projects/${e(getProject())}/locations/global/memberships`;
+export async function listMemberships() {
+  const r = await restJson("GET", membershipsBase());
+  return r.resources || [];
+}
+export const createMembership = (id, clusterLocation, clusterName) => restJson("POST", membershipsBase(), {
+  query: { membershipId: id },
+  body: { endpoint: { gkeCluster: { resourceLink: `//container.googleapis.com/projects/${getProject()}/locations/${clusterLocation}/clusters/${clusterName}` } } },
+});
+export const deleteMembership = (id) => restJson("DELETE", `${membershipsBase()}/${e(id)}`);
+export function findMembership(memberships, project, location, clusterName) {
+  const link = `//container.googleapis.com/projects/${project}/locations/${location}/clusters/${clusterName}`;
+  return memberships.find((m) => m.endpoint?.gkeCluster?.resourceLink === link) || null;
+}
+export const membershipId = (m) => m.name.split("/").pop();

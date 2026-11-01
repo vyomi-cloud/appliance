@@ -22,15 +22,24 @@
   },
   "workloads": {
     "route": "#/kubernetes/workloads",
-    "honest_page": true
+    "fixtures": [
+      "gke-cluster"
+    ],
+    "live": "live-workload"
   },
   "gateways-services-ingress": {
     "route": "#/kubernetes/discovery",
-    "honest_page": true
+    "fixtures": [
+      "gke-cluster"
+    ],
+    "live": "live-discovery"
   },
   "secrets-configmaps": {
     "route": "#/kubernetes/secrets-configmaps",
-    "honest_page": true
+    "fixtures": [
+      "gke-cluster"
+    ],
+    "live": "live-secret-configmap"
   },
   "overview": {
     "route": "#/kubernetes/overview",
@@ -40,20 +49,32 @@
   },
   "applications": {
     "route": "#/kubernetes/applications",
-    "honest_page": true
+    "fixtures": [
+      "gke-cluster"
+    ],
+    "live": "live-applications"
   },
   "storage": {
     "route": "#/kubernetes/storage",
-    "honest_page": true
+    "fixtures": [
+      "gke-cluster"
+    ],
+    "live": "live-storage"
   },
   "object-browser": {
-    "route": "#/kubernetes/object-browser"
+    "route": "#/kubernetes/object-browser",
+    "fixtures": [
+      "gke-cluster"
+    ]
   },
   "backup-for-gke": {
     "route": "#/kubernetes/backup",
     "live": "live-backup-plan"
   },
   "config": {
-    "route": "#/kubernetes/config"
+    "route": "#/kubernetes/config",
+    "fixtures": [
+      "gke-cluster"
+    ]
   }
 }

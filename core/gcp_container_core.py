@@ -27,6 +27,16 @@ backupPlans.create/get/list/delete, backups.create/get/list/delete. Backups snap
 cluster's control-plane config (node pool shapes, version) at create time and complete
 synchronously (state SUCCEEDED); there is no scheduler, no RestorePlan/Restore, and no pod
 volume data — see core/capabilities/gcp/kubernetes.json's `gcp.kubernetes.backup` entry.
+
+Also serves GKE Hub's fleet-registration shape (`gkehub.googleapis.com/v1`) — a Membership
+names a cluster into the project's fleet, the real prerequisite for Anthos/fleet features:
+    projects/{p}/locations/{l}/memberships/{m}
+memberships.create/get/list/delete, full CRUD against a real cluster.
+
+Finally, every path under a cluster's `/k8s/` sub-tree (`clusters/{c}/k8s/{real Kubernetes
+REST path}`) is handed to `core/gcp_gke_dataplane_core.py` — the Kubernetes *data plane*
+(Namespaces, Workloads, Services, Secrets, Storage, Nodes…) this module's docstring says
+isn't modeled; see that module's docstring for why/how.
 """
 from __future__ import annotations
 
@@ -35,6 +45,8 @@ import json
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+
+from core import gcp_gke_dataplane_core as k8s_core
 
 RUNNING, PROVISIONING, STOPPING, RECONCILING, ERROR, DEGRADED = (
     "RUNNING", "PROVISIONING", "STOPPING", "RECONCILING", "ERROR", "DEGRADED")
@@ -69,6 +81,8 @@ class ContainerStore:
         self.operations: dict = {}   # full operation name -> Operation resource
         self.backup_plans: dict = {}   # full backupPlan name -> BackupPlan resource (Backup for GKE)
         self.backups: dict = {}        # full backup name -> Backup resource (Backup for GKE)
+        self.memberships: dict = {}    # full membership name -> Membership resource (GKE Hub fleet registration)
+        self.k8s: dict = {}            # cluster full name -> that cluster's Kubernetes data plane (gcp_gke_dataplane_core)
         self.seq: dict = {"op": 0}
 
 
@@ -665,6 +679,64 @@ def delete_backup(store, project, location, bp_id, b_id):
     return {"name": full, "done": True}
 
 
+# ── GKE Hub (gkehub.googleapis.com shape, served from this core) — fleet registration ──────
+def membership_name(project, location, mid):
+    return "projects/%s/locations/%s/memberships/%s" % (project, location, mid)
+
+
+def _cluster_resource_link(full):
+    return "//container.googleapis.com/" + full
+
+
+def _get_membership(store, project, location, mid):
+    full = membership_name(project, location, mid)
+    m = store.memberships.get(full)
+    if not m:
+        raise _E(404, "NOT_FOUND", "Not found: %s." % full)
+    return m
+
+
+def create_membership(store, project, location, mid, payload):
+    if not mid or not _NAME.match(mid):
+        raise _E(400, "INVALID_ARGUMENT", "Invalid membership id %r: must match %s." % (mid, _NAME.pattern))
+    full = membership_name(project, location, mid)
+    if full in store.memberships:
+        raise _E(409, "ALREADY_EXISTS", "Already exists: %s." % full)
+    cluster_full = ((payload.get("endpoint") or {}).get("gkeCluster") or {}).get("resourceLink", "")
+    cluster_full = cluster_full.split("googleapis.com/", 1)[-1]
+    if cluster_full not in store.clusters:
+        raise _E(400, "INVALID_ARGUMENT", "endpoint.gkeCluster.resourceLink %r does not name an existing cluster; a fleet membership needs a cluster to register." % cluster_full)
+    if any(m["endpoint"]["gkeCluster"]["resourceLink"] == _cluster_resource_link(cluster_full) for m in store.memberships.values()):
+        raise _E(409, "ALREADY_EXISTS", "Cluster %s is already a member of this fleet." % cluster_full)
+    now = _ts()
+    m = {
+        "name": full, "description": payload.get("description") or mid,
+        "endpoint": {"gkeCluster": {"resourceLink": _cluster_resource_link(cluster_full)}},
+        "labels": payload.get("labels") or {}, "state": {"code": "READY"},
+        "authority": payload.get("authority") or {},
+        "createTime": now, "updateTime": now, "uniqueId": hashlib.sha1(full.encode()).hexdigest(),
+    }
+    store.memberships[full] = m
+    return _copy(m)
+
+
+def list_memberships(store, project, location):
+    return [_copy(m) for n, m in sorted(store.memberships.items())
+            if n.startswith("projects/%s/locations/" % project) and (location == "-" or n.split("/")[3] == location)]
+
+
+def delete_membership(store, project, location, mid):
+    full = membership_name(project, location, mid)
+    _get_membership(store, project, location, mid)
+    del store.memberships[full]
+    return {"name": full, "done": True}
+
+
+def membership_for_cluster(store, cluster_full):
+    link = _cluster_resource_link(cluster_full)
+    return next((_copy(m) for m in store.memberships.values() if m["endpoint"]["gkeCluster"]["resourceLink"] == link), None)
+
+
 # ── operations / server config ─────────────────────────────────────────────
 def _get_op(store, project, location, oid):
     op = store.operations.get("projects/%s/locations/%s/operations/%s" % (project, location, oid))
@@ -813,9 +885,11 @@ def _dispatch(store, method, path, query, headers, body):
         if not rest:
             return _err(404, "NOT_FOUND", "Unknown path: %s" % path)
         if rest[0] == "clusters":
-            return _clusters(store, method, project, location, rest[1:], verb, payload, legacy)
+            return _clusters(store, method, project, location, rest[1:], verb, payload, legacy, query)
         if rest[0] == "backupPlans":
             return _backup_plans(store, method, project, location, rest[1:], payload, query)
+        if rest[0] == "memberships":
+            return _memberships(store, method, project, location, rest[1:], payload, query)
         if rest[0] == "operations":
             if len(rest) == 1 and method == "GET":
                 ops = [o for n, o in sorted(store.operations.items())
@@ -831,7 +905,205 @@ def _dispatch(store, method, path, query, headers, body):
         return _err(e.status, e.gcp_status, e.message)
 
 
-def _clusters(store, method, project, location, rest, verb, payload, legacy):
+# ── Kubernetes data plane bridge (clusters/{c}/k8s/{real Kubernetes REST path}) —
+# path parsing lives here; the actual object model is core/gcp_gke_dataplane_core.py ─────
+_URL_NAME = {"services": "services", "secrets": "secrets", "configmaps": "configmaps",
+             "pvcs": "persistentvolumeclaims", "ingresses": "ingresses", "gateways": "gateways"}
+_COLL_BY_URL = {v: k for k, v in _URL_NAME.items()}
+_LIST_KIND = {"services": "ServiceList", "secrets": "SecretList", "configmaps": "ConfigMapList",
+              "pvcs": "PersistentVolumeClaimList", "ingresses": "IngressList", "gateways": "GatewayList",
+              "deployments": "DeploymentList", "statefulsets": "StatefulSetList", "jobs": "JobList"}
+_ITEM_KIND = {"services": "Service", "secrets": "Secret", "configmaps": "ConfigMap",
+              "pvcs": "PersistentVolumeClaim", "ingresses": "Ingress", "gateways": "Gateway"}
+_CREATE_FN = {"services": k8s_core.create_service, "secrets": k8s_core.create_secret,
+              "configmaps": k8s_core.create_configmap, "pvcs": k8s_core.create_pvc,
+              "ingresses": k8s_core.create_ingress, "gateways": k8s_core.create_gateway}
+_API_VER = {"services": "v1", "secrets": "v1", "configmaps": "v1", "pvcs": "v1",
+            "ingresses": "networking.k8s.io/v1", "gateways": "gateway.networking.k8s.io/v1"}
+
+
+def _method_err(method):
+    return k8s_core._KErr(405, "MethodNotAllowed", "the %s method is not supported" % method)
+
+
+def _ns_simple(cs, method, ns, coll, rest, payload):
+    if not rest:
+        if method == "GET":
+            items = k8s_core.list_services(cs, ns) if coll == "services" else k8s_core.list_simple(cs, coll, ns)
+            return {"apiVersion": _API_VER[coll], "kind": _LIST_KIND[coll], "items": items}
+        if method == "POST":
+            return _CREATE_FN[coll](cs, ns, payload)
+        raise _method_err(method)
+    name = rest[0]
+    if method == "GET":
+        return k8s_core.get_simple(cs, coll, ns, name, _ITEM_KIND[coll])
+    if method == "DELETE":
+        return k8s_core.delete_pvc(cs, ns, name) if coll == "pvcs" else k8s_core.delete_simple(cs, coll, ns, name, _ITEM_KIND[coll])
+    raise _method_err(method)
+
+
+def _ns_simple_allns(cs, method, coll):
+    if method != "GET":
+        raise _method_err(method)
+    items = k8s_core.list_services(cs) if coll == "services" else k8s_core.list_simple(cs, coll)
+    return {"apiVersion": _API_VER[coll], "kind": _LIST_KIND[coll], "items": items}
+
+
+def _workload(cs, method, ns, coll, rest, payload):
+    is_job = coll == "jobs"
+    api_version = "batch/v1" if is_job else "apps/v1"
+    if not rest:
+        if method == "GET":
+            return {"apiVersion": api_version, "kind": _LIST_KIND[coll], "items": k8s_core.list_workloads(cs, coll, ns)}
+        if method == "POST":
+            return k8s_core.create_job(cs, ns, payload) if is_job else k8s_core.create_workload(cs, coll, ns, payload)
+        raise _method_err(method)
+    name = rest[0]
+    if method == "GET":
+        return k8s_core.get_workload(cs, coll, ns, name)
+    if method in ("PUT", "PATCH") and not is_job:
+        spec = payload.get("spec") or {}
+        if "replicas" in spec:
+            return k8s_core.scale_workload(cs, coll, ns, name, spec["replicas"])
+        raise k8s_core._KErr(422, "Invalid", "only spec.replicas updates are supported")
+    if method == "DELETE":
+        return k8s_core.delete_workload(cs, coll, ns, name)
+    raise _method_err(method)
+
+
+def _workload_allns(cs, method, coll):
+    if method != "GET":
+        raise _method_err(method)
+    api_version = "batch/v1" if coll == "jobs" else "apps/v1"
+    return {"apiVersion": api_version, "kind": _LIST_KIND[coll], "items": k8s_core.list_workloads(cs, coll, None)}
+
+
+def _core_v1(cs, c, method, rest, payload):
+    if not rest:
+        raise k8s_core._KErr(404, "NotFound", "the server could not find the requested resource")
+    kind = rest[0]
+    if kind == "namespaces":
+        if len(rest) == 1:
+            if method == "GET":
+                return {"apiVersion": "v1", "kind": "NamespaceList", "items": k8s_core.list_namespaces(cs)}
+            if method == "POST":
+                return k8s_core.create_namespace(cs, payload)
+            raise _method_err(method)
+        ns = rest[1]
+        if len(rest) == 2:
+            if method == "GET":
+                return k8s_core.get_namespace(cs, ns)
+            if method == "DELETE":
+                return k8s_core.delete_namespace(cs, ns)
+            raise _method_err(method)
+        sub, sub_rest = rest[2], rest[3:]
+        if sub == "pods":
+            if not sub_rest:
+                if method == "GET":
+                    return {"apiVersion": "v1", "kind": "PodList", "items": k8s_core.list_pods(cs, ns)}
+                raise _method_err(method)   # bare Pod creation isn't exposed — Pods belong to a workload controller
+            name = sub_rest[0]
+            if method == "GET":
+                return k8s_core.get_simple(cs, "pods", ns, name, "Pod")
+            if method == "DELETE":
+                return k8s_core.delete_pod(cs, ns, name)
+            raise _method_err(method)
+        coll = _COLL_BY_URL.get(sub)
+        if coll in ("services", "secrets", "configmaps", "pvcs"):
+            return _ns_simple(cs, method, ns, coll, sub_rest, payload)
+        raise k8s_core._KErr(404, "NotFound", "no matches for kind %r" % sub)
+    if kind == "nodes":
+        if len(rest) == 1 and method == "GET":
+            return {"apiVersion": "v1", "kind": "NodeList", "items": k8s_core.list_nodes(c, shape)}
+        raise _method_err(method)
+    if kind == "persistentvolumes":
+        if len(rest) == 1 and method == "GET":
+            return {"apiVersion": "v1", "kind": "PersistentVolumeList", "items": k8s_core.list_pvs(cs)}
+        raise _method_err(method)
+    if kind == "pods" and len(rest) == 1:
+        if method != "GET":
+            raise _method_err(method)
+        return {"apiVersion": "v1", "kind": "PodList", "items": k8s_core.list_pods(cs)}
+    coll = _COLL_BY_URL.get(kind)
+    if coll in ("services", "secrets", "configmaps", "pvcs") and len(rest) == 1:
+        return _ns_simple_allns(cs, method, coll)
+    raise k8s_core._KErr(404, "NotFound", "no matches for kind %r in version \"v1\"" % kind)
+
+
+def _apis(cs, c, method, group, version, rest, payload):
+    if group == "apps" and version == "v1":
+        if rest and rest[0] == "namespaces" and len(rest) >= 3 and rest[2] in ("deployments", "statefulsets"):
+            return _workload(cs, method, rest[1], rest[2], rest[3:], payload)
+        if rest and rest[0] in ("deployments", "statefulsets") and len(rest) == 1:
+            return _workload_allns(cs, method, rest[0])
+        raise k8s_core._KErr(404, "NotFound", 'no matches for kind in group "apps"')
+    if group == "batch" and version == "v1":
+        if rest and rest[0] == "namespaces" and len(rest) >= 3 and rest[2] == "jobs":
+            return _workload(cs, method, rest[1], "jobs", rest[3:], payload)
+        if rest == ["jobs"]:
+            return _workload_allns(cs, method, "jobs")
+        raise k8s_core._KErr(404, "NotFound", 'no matches for kind in group "batch"')
+    if group == "networking.k8s.io" and version == "v1":
+        if rest and rest[0] == "namespaces" and len(rest) >= 3 and rest[2] == "ingresses":
+            return _ns_simple(cs, method, rest[1], "ingresses", rest[3:], payload)
+        if rest == ["ingresses"]:
+            return _ns_simple_allns(cs, method, "ingresses")
+        raise k8s_core._KErr(404, "NotFound", 'no matches for kind in group "networking.k8s.io"')
+    if group == "gateway.networking.k8s.io" and version == "v1":
+        if rest and rest[0] == "namespaces" and len(rest) >= 3 and rest[2] == "gateways":
+            return _ns_simple(cs, method, rest[1], "gateways", rest[3:], payload)
+        if rest == ["gateways"]:
+            return _ns_simple_allns(cs, method, "gateways")
+        raise k8s_core._KErr(404, "NotFound", 'no matches for kind in group "gateway.networking.k8s.io"')
+    if group == "storage.k8s.io" and version == "v1":
+        if rest == ["storageclasses"] and method == "GET":
+            return {"apiVersion": "storage.k8s.io/v1", "kind": "StorageClassList", "items": k8s_core.list_storageclasses(cs)}
+        raise k8s_core._KErr(404, "NotFound", 'no matches for kind in group "storage.k8s.io"')
+    if group == "configmanagement.gke.io":
+        if rest == ["configmanagements", "config-management"]:
+            if method == "GET":
+                return k8s_core.get_configmanagement(cs)
+            if method in ("PUT", "PATCH", "POST"):
+                return k8s_core.apply_configmanagement(cs, payload)
+            raise _method_err(method)
+        raise k8s_core._KErr(404, "NotFound", 'no matches for kind in group "configmanagement.gke.io"')
+    if group == "constraints.gatekeeper.sh":
+        if rest == ["k8srequiredlabels"]:
+            if method == "GET":
+                return {"apiVersion": "constraints.gatekeeper.sh/v1beta1", "kind": "K8sRequiredLabelsList", "items": k8s_core.list_constraints(cs)}
+            if method == "POST":
+                return k8s_core.create_constraint(cs, payload)
+            raise _method_err(method)
+        if len(rest) == 2 and rest[0] == "k8srequiredlabels":
+            if method == "DELETE":
+                return k8s_core.delete_constraint(cs, rest[1])
+            if method == "GET":
+                found = next((x for x in k8s_core.list_constraints(cs) if x["metadata"]["name"] == rest[1]), None)
+                if not found:
+                    raise k8s_core._KErr(404, "NotFound", "k8srequiredlabels %r not found" % rest[1])
+                return found
+            raise _method_err(method)
+        raise k8s_core._KErr(404, "NotFound", 'no matches for kind in group "constraints.gatekeeper.sh"')
+    raise k8s_core._KErr(404, "NotFound", "no matches for group %r" % group)
+
+
+def _dispatch_k8s(cs, c, method, segs, payload):
+    if segs == ["observability"]:   # Vyomi convenience aggregate — not a real k8s path, see module docstring
+        if method != "GET":
+            raise _method_err(method)
+        return k8s_core.observability(cs, c, shape)
+    if segs == ["applications"]:   # Vyomi convenience aggregate (groups real workloads by label) — see module docstring
+        if method != "GET":
+            raise _method_err(method)
+        return {"items": k8s_core.list_applications(cs)}
+    if len(segs) >= 2 and segs[0] == "api" and segs[1] == "v1":
+        return _core_v1(cs, c, method, segs[2:], payload)
+    if len(segs) >= 3 and segs[0] == "apis":
+        return _apis(cs, c, method, segs[1], segs[2], segs[3:], payload)
+    raise k8s_core._KErr(404, "NotFound", "the server could not find the requested resource")
+
+
+def _clusters(store, method, project, location, rest, verb, payload, legacy, query=None):
     if not rest:
         if method == "POST":
             if legacy and payload.get("cluster") is None:
@@ -857,6 +1129,15 @@ def _clusters(store, method, project, location, rest, verb, payload, legacy):
         if method == "DELETE":
             return _json(200, delete_cluster(store, project, location, cid))
         raise _E(405, "UNIMPLEMENTED", "Method %s not allowed on cluster." % method)
+    if rest[1] == "k8s":
+        c = _get(store, project, location, cid)
+        cs = k8s_core.ensure_cluster(store.k8s, cluster_name(project, location, cid))
+        try:
+            body = _dispatch_k8s(cs, c, method, rest[2:], payload)
+        except k8s_core._KErr as e:
+            kbody = {"kind": "Status", "apiVersion": "v1", "status": "Failure", "message": e.message, "reason": e.reason, "code": e.status}
+            return ContainerResponse(status=e.status, body=json.dumps(kbody).encode())
+        return _json(200, body)
     if rest[1] != "nodePools":
         raise _E(404, "NOT_FOUND", "Unknown path.")
     c = _get(store, project, location, cid)
@@ -878,6 +1159,23 @@ def _clusters(store, method, project, location, rest, verb, payload, legacy):
     if method == "DELETE":
         return _json(200, delete_pool(store, project, location, cid, pid))
     raise _E(405, "UNIMPLEMENTED", "Method %s not allowed on nodePool." % method)
+
+
+def _memberships(store, method, project, location, rest, payload, query):
+    if not rest:
+        if method == "POST":
+            return _json(200, create_membership(store, project, location, query.get("membershipId", ""), payload))
+        if method == "GET":
+            return _json(200, {"resources": list_memberships(store, project, location)})
+        raise _E(405, "UNIMPLEMENTED", "Method %s not allowed on memberships collection." % method)
+    mid = rest[0]
+    if len(rest) == 1:
+        if method == "GET":
+            return _json(200, _get_membership(store, project, location, mid))
+        if method == "DELETE":
+            return _json(200, delete_membership(store, project, location, mid))
+        raise _E(405, "UNIMPLEMENTED", "Method %s not allowed on membership." % method)
+    raise _E(404, "NOT_FOUND", "Unknown path.")
 
 
 def _backup_plans(store, method, project, location, rest, payload, query):

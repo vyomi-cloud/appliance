@@ -33,7 +33,7 @@
   "title": "Connect to cluster (gcloud / kubectl command)",
   "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "The displayed gcloud/kubectl commands are accurate (real endpoint, cluster CA certificate), but no Kubernetes API server runs behind a cluster's endpoint — kubectl commands against it fail. A control-plane-only simulation; the data plane needs the Max-tier k3s backend."
+   "The displayed gcloud/kubectl commands are accurate (real endpoint, cluster CA certificate), but Vyomi does not run a real network listener at that literal IP/DNS name, so pasting the command into a real terminal fails. Vyomi's own console and native wire reach the SAME Kubernetes objects (Workloads, Services, Secrets, Storage, …) through `clusters/{c}/k8s/{real Kubernetes REST path}` — see core/gcp_gke_dataplane_core.py — so every object kubectl would show is real and live inside Vyomi, just not through that exact command line."
   ],
   "api": ["projects.locations.clusters.get"],
   "tests": ["tests/conformance/test_gcp_container_core.py"]
@@ -49,33 +49,47 @@
  },
  "gcp.kubernetes.cluster.nodes": {
   "title": "Nodes (kubectl get nodes)",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["Kubernetes Node objects live in the cluster's API server, which Vyomi does not run. Node pools (the GKE control-plane resource) are fully modeled — see the Node pools table."]
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "api": ["projects.locations.clusters.k8s.nodes.list"],
+  "tests": ["tests/conformance/test_gcp_gke_dataplane_core.py"]
  },
  "gcp.kubernetes.workloads": {
   "title": "Workloads (Deployments, StatefulSets, Pods, Jobs)",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["Needs a live Kubernetes API server behind the cluster endpoint; below the Max tier Vyomi only models the GKE control plane (clusters and node pools)."]
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "api": ["projects.locations.clusters.k8s.deployments.*", "projects.locations.clusters.k8s.statefulsets.*", "projects.locations.clusters.k8s.jobs.*", "projects.locations.clusters.k8s.pods.*"],
+  "tests": ["tests/conformance/test_gcp_gke_dataplane_core.py"]
  },
  "gcp.kubernetes.secrets-configmaps": {
   "title": "Secrets & ConfigMaps",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["Kubernetes-native Secret/ConfigMap objects live in the cluster's API server, which Vyomi does not run."]
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "api": ["projects.locations.clusters.k8s.secrets.*", "projects.locations.clusters.k8s.configmaps.*"],
+  "tests": ["tests/conformance/test_gcp_gke_dataplane_core.py"]
  },
  "gcp.kubernetes.discovery": {
   "title": "Gateways, Services & Ingress",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["Gateway/Service/Ingress objects live in the cluster's API server, which Vyomi does not run."]
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "api": ["projects.locations.clusters.k8s.services.*", "projects.locations.clusters.k8s.ingresses.*", "projects.locations.clusters.k8s.gateways.*"],
+  "tests": ["tests/conformance/test_gcp_gke_dataplane_core.py"]
  },
  "gcp.kubernetes.storage": {
   "title": "Kubernetes Storage (PersistentVolumes, StorageClasses, snapshots)",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["PersistentVolume/StorageClass objects live in the cluster's API server, which Vyomi does not run."]
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "StorageClasses (real defaults: standard-rwo, premium-rwo, standard), PersistentVolumeClaims and their auto-provisioned PersistentVolumes are real, enforced objects — a PVC binds to a real PV sized/classed exactly as requested, and is reclaimed when the PVC is deleted. VolumeSnapshots/VolumeSnapshotClasses (the CSI snapshot controller) are not modeled."
+  ],
+  "api": ["projects.locations.clusters.k8s.storageclasses.list", "projects.locations.clusters.k8s.persistentvolumeclaims.*", "projects.locations.clusters.k8s.persistentvolumes.list"],
+  "tests": ["tests/conformance/test_gcp_gke_dataplane_core.py"]
  },
  "gcp.kubernetes.object-browser": {
   "title": "Object Browser (generic Kubernetes resource browser)",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["Browses live objects from the cluster's API server, which Vyomi does not run."]
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "api": ["projects.locations.clusters.k8s.*.list"],
+  "tests": ["tests/conformance/test_gcp_gke_dataplane_core.py"]
  },
  "gcp.kubernetes.backup": {
   "title": "Backup for GKE",
@@ -89,23 +103,35 @@
  },
  "gcp.kubernetes.config": {
   "title": "Config (Config Sync / Policy Controller / fleet configuration)",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["GKE Enterprise fleet configuration is not implemented."]
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Policy Controller is real and enforced: a ConfigManagement object with policyController.enabled=true, plus one or more K8sRequiredLabels constraints, genuinely denies admission (403) to Workloads that don't carry the required labels — see test_gcp_gke_dataplane_core.py's admission tests. Config Sync's git half is stored in the same real shape (spec.git.syncRepo/syncBranch/policyDir) but never fetched: cloning a real external git repository needs real internet egress, which the simulator's 'nothing leaves Vyomi' rule (tests/conformance/test_no_cloud_egress.py) forbids outright — not a modeling gap, a sandboxing one."
+  ],
+  "api": ["projects.locations.clusters.k8s.configmanagement.*", "projects.locations.clusters.k8s.constraints.*"],
+  "tests": ["tests/conformance/test_gcp_gke_dataplane_core.py"]
  },
  "gcp.kubernetes.applications": {
   "title": "Applications",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["Groups live Kubernetes objects by application label; needs the cluster's API server, which Vyomi does not run."]
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "api": ["projects.locations.clusters.k8s.applications.get"],
+  "tests": ["tests/conformance/test_gcp_gke_dataplane_core.py"]
  },
  "gcp.kubernetes.fleet-registration": {
   "title": "Fleet registration (GKE Hub / Anthos)",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["GKE Hub fleet membership (gkehub.googleapis.com) is not implemented."]
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "api": ["projects.locations.memberships.create", "projects.locations.memberships.list", "projects.locations.memberships.get", "projects.locations.memberships.delete"],
+  "tests": ["tests/conformance/test_gcp_gke_dataplane_core.py"]
  },
  "gcp.kubernetes.observability": {
   "title": "Observability & Cost optimization",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["Cluster/fleet metrics, logs-based observability and cost-optimization recommendations need Cloud Monitoring data this simulator does not generate for GKE."]
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Resource inventory (namespace/workload/pod/service/secret counts) and a requested-vs-allocatable CPU/memory rollup are real numbers derived from objects genuinely stored in the cluster's data plane and its node pools — never a synthetic series. Historical time-series metrics, Cloud Logging-based insights and automated cost-optimization recommendations need real kubelet/cAdvisor telemetry and Cloud Monitoring, which this simulator does not generate for GKE."
+  ],
+  "api": ["projects.locations.clusters.k8s.observability.get"],
+  "tests": ["tests/conformance/test_gcp_gke_dataplane_core.py"]
  },
  "gcp.kubernetes.logs": {
   "title": "Logs",

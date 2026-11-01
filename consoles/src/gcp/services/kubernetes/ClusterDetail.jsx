@@ -1,6 +1,6 @@
-/* Cluster details: summary + tabs (Details, Nodes, Storage, Observability, Logs), all on
- * the native Kubernetes Engine REST API. Storage/Observability/Logs need a live Kubernetes
- * API server or Cloud Monitoring data this simulator doesn't generate for GKE — honest gaps. */
+/* Cluster details: summary + tabs (Details, Nodes, Storage, Observability, Logs). Details/
+ * Nodes/Logs are the native Kubernetes Engine REST API (control plane); Storage/Observability
+ * read the real Kubernetes data plane (core/gcp_gke_dataplane_core.py) scoped to this cluster. */
 import { useState } from "react";
 import {
   Alert, Box, Button, Checkbox, Chip, Dialog, DialogActions, DialogContent, DialogTitle, FormControl,
@@ -21,6 +21,7 @@ import DeleteDialog from "../../kit/DeleteDialog.jsx";
 import { ErrorAlert, KeyValue, PageHeader, Section } from "../../kit/common.jsx";
 import { CapabilityBadge, CapabilityContainer } from "../../kit/Capability.jsx";
 import { hashHref } from "../../link.jsx";
+import { useProject } from "../../project.js";
 import * as api from "./api.js";
 import DeployDialog from "./DeployDialog.jsx";
 import ConnectDialog from "./ConnectDialog.jsx";
@@ -60,13 +61,13 @@ export default function ClusterDetail({ params, query }) {
         {TABS.map(([id, label]) => <Tab key={id} value={id} label={label} />)}
       </Tabs>
       {tab !== "details" && !c.data && !c.error && <Typography variant="body2" color="text.secondary">Loading…</Typography>}
-      {tab === "details" && c.data && <Details cluster={c.data} />}
+      {tab === "details" && c.data && <Details cluster={c.data} location={location} />}
       {tab === "nodes" && c.data && <Nodes cluster={c.data} location={location} reload={c.reload} />}
-      {tab === "storage" && <CapabilityContainer id="gcp.kubernetes.storage" title="Storage" />}
-      {tab === "observability" && <CapabilityContainer id="gcp.kubernetes.observability" title="Observability" />}
+      {tab === "storage" && c.data && <ClusterStorage location={location} cluster={c.data.name} />}
+      {tab === "observability" && c.data && <ClusterObservability location={location} cluster={c.data.name} />}
       {tab === "logs" && c.data && <Logs location={location} name={name} />}
       {c.data && <EditDialog open={edit} onClose={() => setEdit(false)} cluster={c.data} location={location} reload={c.reload} />}
-      <DeployDialog open={deploy} onClose={() => setDeploy(false)} />
+      <DeployDialog open={deploy} onClose={() => setDeploy(false)} cluster={c.data?.name} location={location} onDeployed={() => notify.success("Workload deployed")} />
       <ConnectDialog open={connect} onClose={() => setConnect(false)} cluster={c.data && { ...c.data, location_name: location }} />
       <DeleteDialog open={del} onClose={() => setDel(false)} title="Delete cluster?" confirmText={name}
         warning="Deleting a cluster deletes all its node pools. This can't be undone."
@@ -78,8 +79,21 @@ export default function ClusterDetail({ params, query }) {
 }
 
 // ── Details ─────────────────────────────────────────────────────────────────────────────
-function Details({ cluster: cl }) {
+function Details({ cluster: cl, location }) {
   const auto = (cl.autopilot || {}).enabled;
+  const notify = useNotify();
+  const project = useProject();
+  const memberships = useAsync(() => api.listMemberships(), [cl.name]);
+  const membership = api.findMembership(memberships.data || [], project, location, cl.name);
+  const [busy, setBusy] = useState(false);
+  const toggleFleet = async () => {
+    setBusy(true);
+    try {
+      if (membership) { await api.deleteMembership(api.membershipId(membership)); notify.success("Removed from fleet"); }
+      else { await api.createMembership(`${cl.name}-member`, location, cl.name); notify.success("Registered to fleet"); }
+      memberships.reload();
+    } catch (e) { notify.error(e); } finally { setBusy(false); }
+  };
   return (
     <Stack spacing={2}>
       <Section title="Cluster basics">
@@ -92,6 +106,8 @@ function Details({ cluster: cl }) {
           ["Total size", `${cl.currentNodeCount} node${cl.currentNodeCount === 1 ? "" : "s"}`],
           ["Endpoint", cl.endpoint],
           ["Mode", auto ? "Autopilot" : "Standard"],
+          ["Fleet membership", membership ? "Registered" : "Not registered",
+            <Button size="small" disabled={busy || memberships.loading} onClick={toggleFleet}>{membership ? "Unregister" : "Register to fleet"}</Button>],
         ]} />
       </Section>
       <Section title="Networking">
@@ -141,12 +157,12 @@ function Nodes({ cluster: cl, location, reload }) {
   const [add, setAdd] = useState(false);
   const pools = cl.nodePools || [];
   const autopilot = !!(cl.autopilot || {}).enabled;
+  const nodes = useAsync(() => api.listK8sNodes(location, cl.name), [location, cl.name, cl.currentNodeCount]);
   if (autopilot) {
     return (
       <Stack spacing={2}>
         <Typography variant="h3" component="h2">Node pools</Typography>
         <Typography variant="body2" color="text.secondary">Autopilot manages node pools automatically — there's nothing to add, resize or delete.</Typography>
-        <CapabilityContainer id="gcp.kubernetes.cluster.nodes" title="Nodes" />
       </Stack>
     );
   }
@@ -179,11 +195,80 @@ function Nodes({ cluster: cl, location, reload }) {
           ]}
         />
       </Box>
-      <CapabilityContainer id="gcp.kubernetes.cluster.nodes" title="Nodes" />
+      <Typography variant="h3" component="h2">Nodes</Typography>
+      <ErrorAlert error={nodes.error} title="Failed to load nodes" />
+      <ResourceTable
+        resourceName="nodes"
+        items={nodes.data || []}
+        rowKey={(n) => n.metadata.name}
+        loading={nodes.loading}
+        dense
+        columns={[
+          { id: "name", header: "Name", cell: (n) => n.metadata.name },
+          { id: "status", header: "Status", cell: (n) => <Chip size="small" label={n.status.conditions[0].status === "True" ? "Ready" : "NotReady"} color="success" /> },
+          { id: "pool", header: "Node pool", cell: (n) => n.metadata.labels["cloud.google.com/gke-nodepool"] },
+          { id: "cpu", header: "CPU requested", cell: (n) => `${n.status.allocatable.cpu} allocatable` },
+          { id: "memory", header: "Memory requested", cell: (n) => `${n.status.allocatable.memory} allocatable` },
+          { id: "storage", header: "Storage requested", cell: () => "—" },
+        ]}
+        empty={<Typography variant="body2" color="text.secondary">No nodes yet.</Typography>}
+      />
       {add && <AddPoolDialog onClose={() => setAdd(false)} onSave={async (pool) => {
         await api.createNodePool(location, cl.name, pool); notify.success(`Added node pool "${pool.name}"`); reload();
       }} />}
     </Stack>
+  );
+}
+
+// ── Storage (this cluster's real StorageClasses + PersistentVolumeClaims) ─────────────────
+function ClusterStorage({ location, cluster }) {
+  const scs = useAsync(() => api.listStorageClasses(location, cluster), [location, cluster]);
+  const pvcs = useAsync(() => api.listPvcs(location, cluster), [location, cluster]);
+  return (
+    <Stack spacing={2}>
+      <Section title={<Stack direction="row" spacing={1} alignItems="center"><span>Storage classes</span><CapabilityBadge id="gcp.kubernetes.storage" /></Stack>}>
+        <ResourceTable resourceName="storage classes" items={scs.data || []} rowKey={(o) => o.metadata.name} loading={scs.loading} dense
+          columns={[
+            { id: "name", header: "Name", cell: (o) => o.metadata.name },
+            { id: "provisioner", header: "Provisioner", cell: (o) => o.provisioner },
+            { id: "default", header: "Default", cell: (o) => (o.metadata.annotations?.["storageclass.kubernetes.io/is-default-class"] === "true" ? "Yes" : "") },
+          ]} />
+      </Section>
+      <Section title="Persistent volume claims">
+        <ResourceTable resourceName="persistent volume claims" items={pvcs.data || []} rowKey={(o) => `${o.metadata.namespace}/${o.metadata.name}`} loading={pvcs.loading} dense
+          columns={[
+            { id: "name", header: "Name", cell: (o) => o.metadata.name },
+            { id: "status", header: "Status", cell: (o) => o.status.phase },
+            { id: "capacity", header: "Capacity", cell: (o) => o.status.capacity?.storage },
+            { id: "class", header: "Storage class", cell: (o) => o.spec.storageClassName },
+            { id: "ns", header: "Namespace", cell: (o) => o.metadata.namespace },
+          ]}
+          empty={<Typography variant="body2" color="text.secondary">No persistent volume claims in this cluster yet.</Typography>} />
+      </Section>
+    </Stack>
+  );
+}
+
+// ── Observability (real, derived-only resource/cost rollup — see capability notes) ────────
+function ClusterObservability({ location, cluster }) {
+  const obs = useAsync(() => api.getObservability(location, cluster), [location, cluster]);
+  if (obs.loading) return <Typography variant="body2" color="text.secondary">Loading…</Typography>;
+  if (!obs.data) return <ErrorAlert error={obs.error} title="Failed to load observability data" />;
+  const o = obs.data;
+  return (
+    <CapabilityContainer id="gcp.kubernetes.observability" title="Observability">
+      <Stack spacing={2}>
+        <KeyValue items={[
+          ["Namespaces", o.namespaces], ["Workloads", o.workloads], ["Pods", o.pods],
+          ["Services", o.services], ["Secrets", o.secrets], ["ConfigMaps", o.configmaps],
+        ]} />
+        <Typography variant="h3" component="h2" sx={{ fontSize: 16 }}>Cost optimization: requested vs. allocatable</Typography>
+        <KeyValue items={[
+          ["CPU requested / allocatable", `${o.requestedCpu} / ${o.allocatableCpu} vCPU (${o.cpuUtilizationPct}%)`],
+          ["Memory requested / allocatable", `${o.requestedMemoryMi} / ${o.allocatableMemoryMi} Mi (${o.memoryUtilizationPct}%)`],
+        ]} />
+      </Stack>
+    </CapabilityContainer>
   );
 }
 
