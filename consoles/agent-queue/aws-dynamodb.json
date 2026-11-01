@@ -2,64 +2,38 @@
  "cloud": "aws",
  "service": "dynamodb",
  "phase": "depth",
- "attempt": 1,
- "goal": "GAP SWEEP (wave 5b): every listed depth_target is currently not_simulated/config_only in the shipped console. Build each one on a REAL backend (Nano + offline) and lift its capability level to full or limited. 'Out of Vyomi's scope', 'separate product', 'single-account' or 'not modeled' are NOT acceptable reasons: model it in the shared core (Python core/*_core.py, vendored to wasm), wire it through the native wire, enforce behaviour (not stored config), and make the console section live. Only leave a target not_simulated if it needs something physically impossible in a local simulator (real external hardware, real money, a real third-party service) \u2014 and then write that concrete reason. config_only targets must become enforced (the setting changes observable behaviour). Update core/capabilities, tests/conformance, ui-spec mapping and smoke where relevant.",
- "note": "WAVE 5b gap sweep (orchestrator). Approved by the user: finish all the gaps with real backends.",
+ "attempt": 2,
+ "goal": "DynamoDB alarms + DAX. (1) ALARMS/MONITOR: dynamodb_core publishes the real AWS/DynamoDB metrics through cloudwatch_core.ingest_internal_metric (ConsumedRead/WriteCapacityUnits, ProvisionedRead/WriteCapacityUnits, ThrottledRequests, Read/WriteThrottleEvents, UserErrors, SystemErrors, SuccessfulRequestLatency, ReturnedItemCount; ItemCount/TableSizeBytes) on every operation, on Nano and offline (same CloudWatch store the CloudWatch console reads). Compute consumed capacity the AWS way (4 KB read units, eventually consistent = half, 1 KB write units, transactions x2) and return ConsumedCapacity when ReturnConsumedCapacity is set. ENFORCE provisioned throughput with a per-table/GSI token bucket (burst = 300 s of capacity) \u2192 real ProvisionedThroughputExceededException; on-demand never throttles. Table Monitor tab = real GetMetricData charts; Alarms tab lists alarms on the table and 'Create alarm' pre-fills TableName dims; actions go to simulator SNS. (2) DAX: new core/dax_core.py (AmazonDAXV3 JSON protocol): CreateCluster/DescribeClusters/UpdateCluster/DeleteCluster/IncreaseReplicationFactor/DecreaseReplicationFactor/RebootNode, subnet groups, parameter groups (record-ttl-millis, query-ttl-millis), DescribeEvents, tags; real cluster/node endpoints. PLUS a real cache engine: item cache + query cache in front of the DynamoDB store, read-through and write-through, TTLs from the parameter group, strongly-consistent reads bypass the cache, LRU by node size; AWS/DAX metrics (ItemCacheHits/Misses, QueryCacheHits/Misses, ...). Expose the cache data plane through the console/test hooks; the DAX binary wire protocol comes later (wave 6 tunnel TCP relay) \u2014 say so honestly in the capability (Nano/offline 'limited' for SDK data-plane access until then). Wire the existing DAX console pages (clusters, subnet groups, parameter groups, events) to the live core; add capability entries aws.dynamodb.dax.* (there are none today), tests in tests/conformance, smoke round-trips.",
+ "note": "FOLLOW-UP approved by the user 2026-11-01: DynamoDB CloudWatch alarms + DAX clusters on real backends. Resume from the gap-sweep branch (continue_from) and keep its work.",
  "depth_targets": [
   {
-   "id": "dynamodb.streams",
-   "title": "DynamoDB stream details",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "DynamoDB Streams is a separate change-data-capture API (shard iterators, GetRecords, trim-horizon, Lambda event-source mapping) that Vyomi's single-process store does not model."
-  },
-  {
-   "id": "dynamodb.imports",
-   "title": "Imports from S3",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "ImportTable requires parsing multiple external file formats (CSV, DynamoDB JSON, Amazon Ion; optionally GZIP/ZSTD-compressed) from arbitrary S3 content, which Vyomi does not implement; only the export direction (ExportTableToPointInTime) is built."
-  },
-  {
-   "id": "dynamodb.kinesis",
-   "title": "Amazon Kinesis data stream details",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Kinesis Data Streams for DynamoDB (change-data-capture into a Kinesis stream) is a separate streaming product Vyomi does not run."
-  },
-  {
-   "id": "dynamodb.resource-policy",
-   "title": "Resource-based policy",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Resource-based policies need the full cross-account IAM policy-evaluation engine (condition keys, principal matching) that Vyomi's single-tenant simulator does not implement."
-  },
-  {
    "id": "dynamodb.monitor",
-   "title": "CloudWatch metrics and alarms",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "CloudWatch is a separate monitoring product (its own metric pipeline and alarm-evaluation engine) that Vyomi does not run for any service.",
-   "hint": "telemetry: emit real metrics/logs from the simulated engine (wave-6 Prometheus/OTel are the offline sinks once landed; until then derive real series from actual API activity in the core) \u2014 never synthetic random data"
+   "target": "full"
   },
   {
-   "id": "dynamodb.global-tables",
-   "title": "Global tables",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Vyomi simulates a single region."
+   "id": "dynamodb.alarms",
+   "target": "full"
+  },
+  {
+   "id": "dynamodb.dax.clusters",
+   "target": "full"
+  },
+  {
+   "id": "dynamodb.dax.subnet-groups",
+   "target": "full"
+  },
+  {
+   "id": "dynamodb.dax.parameter-groups",
+   "target": "full"
+  },
+  {
+   "id": "dynamodb.dax.events",
+   "target": "full"
+  },
+  {
+   "id": "dynamodb.dax.cache",
+   "target": "limited until the wave-6 DAX wire protocol"
   }
- ]
+ ],
+ "continue_from": "v4/ui-aws-dynamodb-41263898111"
 }
