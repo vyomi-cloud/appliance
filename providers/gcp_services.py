@@ -131,6 +131,8 @@ TARGETS = [
     "api_gcp_vpc_delete_network",
     "api_gcp_vpc_list_subnetworks",
     "api_gcp_vpc_create_subnetwork",
+    "api_gcp_vpc_get_subnetwork",
+    "api_gcp_vpc_delete_subnetwork",
     "api_gcp_vpc_list_firewalls",
     "api_gcp_vpc_create_firewall",
     "api_gcp_vpc_update_firewall",
@@ -1689,7 +1691,7 @@ def api_gcp_vpc_list_networks(project: str):
         if str(network.get("project") or project) != project:
             continue
         network_name = str(network.get("name") or "")
-        networks.append({"kind": "compute#network", "id": str(network.get("id") or s._gcp_compute_numeric_id(f"{project}:{network_name}")), "creationTimestamp": network.get("createTime", _now()), "name": network_name, "description": network.get("description", ""), "IPv4Range": network.get("IPv4Range", ""), "gatewayIPv4": network.get("gatewayIPv4", ""), "mtu": int(network.get("mtu") or 1460), "selfLink": f"{s._gcp_compute_network_root()}/projects/{project}/global/networks/{network_name}", "selfLinkWithId": network.get("selfLinkWithId", f"{s._gcp_compute_network_root()}/projects/{project}/global/networks/{network_name}?id={network.get('id') or s._gcp_compute_numeric_id(f'{project}:{network_name}')}"), "autoCreateSubnetworks": bool(network.get("autoCreateSubnetworks", True)), "subnetworks": network.get("subnetworks", []), "peerings": network.get("peerings", []), "routingConfig": {"routingMode": network.get("routingMode", "REGIONAL")}})
+        networks.append({"kind": "compute#network", "id": str(network.get("id") or s._gcp_compute_numeric_id(f"{project}:{network_name}")), "creationTimestamp": network.get("createTime", _now()), "name": network_name, "description": network.get("description", ""), "IPv4Range": network.get("IPv4Range", ""), "gatewayIPv4": network.get("gatewayIPv4", ""), "mtu": int(network.get("mtu") or 1460), "selfLink": f"{s._gcp_compute_network_root()}/projects/{project}/global/networks/{network_name}", "selfLinkWithId": network.get("selfLinkWithId", f"{s._gcp_compute_network_root()}/projects/{project}/global/networks/{network_name}?id={network.get('id') or s._gcp_compute_numeric_id(f'{project}:{network_name}')}"), "autoCreateSubnetworks": bool(network.get("autoCreateSubnetworks", True)), "subnetworks": _vpc_subnet_links(s, project, network_name, network.get("subnetworks")), "peerings": network.get("peerings", []), "routingConfig": {"routingMode": network.get("routingMode", "REGIONAL")}})
     return {"kind": "compute#networkList", "items": networks}
 
 
@@ -1722,7 +1724,7 @@ def api_gcp_vpc_get_network(project: str, network: str):
     rec = gcp_vpc_state.get("networks", {}).get(network)
     if not rec or str(rec.get("project") or project) != project:
         raise HTTPException(404, detail="Network not found")
-    return {"kind": "compute#network", "id": rec.get("id", s._gcp_compute_numeric_id(f"{project}:{network}")), "creationTimestamp": rec.get("createTime", _now()), "name": rec["name"], "description": rec.get("description", ""), "IPv4Range": rec.get("IPv4Range", ""), "gatewayIPv4": rec.get("gatewayIPv4", ""), "mtu": int(rec.get("mtu") or 1460), "selfLink": f"{s._gcp_compute_network_root()}/projects/{project}/global/networks/{network}", "selfLinkWithId": f"{s._gcp_compute_network_root()}/projects/{project}/global/networks/{network}?id={rec.get('id', s._gcp_compute_numeric_id(f'{project}:{network}'))}", "autoCreateSubnetworks": bool(rec.get("autoCreateSubnetworks", True)), "subnetworks": rec.get("subnetworks", []), "peerings": rec.get("peerings", []), "routingConfig": {"routingMode": rec.get("routingMode", "REGIONAL")}}
+    return {"kind": "compute#network", "id": rec.get("id", s._gcp_compute_numeric_id(f"{project}:{network}")), "creationTimestamp": rec.get("createTime", _now()), "name": rec["name"], "description": rec.get("description", ""), "IPv4Range": rec.get("IPv4Range", ""), "gatewayIPv4": rec.get("gatewayIPv4", ""), "mtu": int(rec.get("mtu") or 1460), "selfLink": f"{s._gcp_compute_network_root()}/projects/{project}/global/networks/{network}", "selfLinkWithId": f"{s._gcp_compute_network_root()}/projects/{project}/global/networks/{network}?id={rec.get('id', s._gcp_compute_numeric_id(f'{project}:{network}'))}", "autoCreateSubnetworks": bool(rec.get("autoCreateSubnetworks", True)), "subnetworks": _vpc_subnet_links(s, project, network, rec.get("subnetworks")), "peerings": rec.get("peerings", []), "routingConfig": {"routingMode": rec.get("routingMode", "REGIONAL")}}
 
 
 def api_gcp_vpc_delete_network(project: str, network: str):
@@ -1731,6 +1733,13 @@ def api_gcp_vpc_delete_network(project: str, network: str):
     rec = gcp_vpc_state.get("networks", {}).get(network)
     if not rec or str(rec.get("project") or project) != project:
         raise HTTPException(404, detail="Network not found")
+    # Real Compute refuses while a subnetwork the caller created still uses the network
+    # (auto-mode subnets go with it) -- same rule as the Nano shared core.
+    in_use = [sn.get("name") for sn in gcp_vpc_state.get("subnetworks", {}).values()
+              if sn.get("network") == network and not sn.get("autoCreated")
+              and str(sn.get("project") or project) == project]
+    if in_use:
+        raise HTTPException(400, detail=f"resourceInUseByAnotherResource: The network resource 'projects/{project}/global/networks/{network}' is already being used by '{in_use[0]}'")
     del gcp_vpc_state["networks"][network]
     # the network's auto-mode subnets and its default internet route go with it
     from core import gcp_console_tabs as _tabs
@@ -1738,6 +1747,49 @@ def api_gcp_vpc_delete_network(project: str, network: str):
         if sn.get("network") == network and sn.get("autoCreated"):
             gcp_vpc_state["subnetworks"].pop(k, None)
     gcp_vpc_state.get("routes", {}).pop(_tabs.default_route(network)["name"], None)
+    return {"done": True}
+
+
+def _vpc_subnet_links(s, project: str, network: str, stored) -> list:
+    """selfLinks of the network's subnetworks, computed from the live subnetwork records."""
+    links = []
+    for sn in gcp_vpc_state.get("subnetworks", {}).values():
+        if sn.get("network") == network and str(sn.get("project") or project) == project and sn.get("region"):
+            links.append(f"{s._gcp_compute_network_root()}/projects/{project}/regions/{sn['region']}/subnetworks/{sn['name']}")
+    return sorted(set(links)) if links else (stored or [])
+
+
+def _vpc_find_subnet(project: str, region: str, name: str):
+    for key, sn in gcp_vpc_state.get("subnetworks", {}).items():
+        if sn.get("name") == name and str(sn.get("region") or region) == region \
+                and str(sn.get("project") or project) == project:
+            return key, sn
+    return None, None
+
+
+def api_gcp_vpc_get_subnetwork(project: str, region: str, subnetwork: str):
+    project = _gcp_project_name(project)
+    key, sn = _vpc_find_subnet(project, region, subnetwork)
+    if sn is None:
+        raise HTTPException(404, detail=f"The resource 'projects/{project}/regions/{region}/subnetworks/{subnetwork}' was not found")
+    for item in api_gcp_vpc_list_subnetworks(project, region)["items"]:
+        if item["name"] == subnetwork:
+            return item
+    raise HTTPException(404, detail="Subnetwork not found")
+
+
+def api_gcp_vpc_delete_subnetwork(project: str, region: str, subnetwork: str):
+    project = _gcp_project_name(project)
+    key, sn = _vpc_find_subnet(project, region, subnetwork)
+    if sn is None:
+        raise HTTPException(404, detail=f"The resource 'projects/{project}/regions/{region}/subnetworks/{subnetwork}' was not found")
+    from core.app_context import gcp_compute_state, record_usage as _record_usage
+    users = [i.get("name") for i in gcp_compute_state.get("instances", {}).values()
+             if isinstance(i, dict) and i.get("subnet_id") == subnetwork and str(i.get("status", "")).upper() != "TERMINATED"]
+    if users:
+        raise HTTPException(400, detail=f"resourceInUseByAnotherResource: The subnetwork resource is already being used by '{users[0]}'")
+    del gcp_vpc_state["subnetworks"][key]
+    _record_usage("gcp.vpc.delete_subnetwork", {"project": project, "region": region, "subnetwork": subnetwork})
     return {"done": True}
 
 
