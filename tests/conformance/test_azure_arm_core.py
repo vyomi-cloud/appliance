@@ -1311,6 +1311,65 @@ def run() -> int:
            r["status"] == 200)
     r = arm.handle("GET", dr_alias("drsecondary"), {"api-version": "2022-10-01-preview"})
     _check("Geo-DR: pairing is gone on both ends after break", r["body"]["value"] == [])
+    # 30. azure.vnets.ip_address_management: Microsoft.Network/networkManagers/{nm}/ipamPools —
+    # a nested ARM child reached through the generic type/name alternation (no dedicated code,
+    # same mechanic as a container registry's webhooks) — and the REAL allocation it drives:
+    # a vnet created with properties.addressSpace.ipamPoolPrefixAllocations gets a genuine
+    # non-overlapping CIDR block carved out of the pool (AzureArm._allocate_ipam_pool), not a
+    # stored label.
+    nm1 = _p(RG, "Microsoft.Network", "networkManagers", "nm1")
+    r = arm.handle("PUT", nm1, {"api-version": "2024-05-01"}, {"location": "eastus"})
+    _check("network manager created", r["status"] == 200)  # top-level type: async LRO shape, same as every other catalog resource
+    pool1 = f"{nm1}/ipamPools/pool1"
+    r = arm.handle("PUT", pool1, {"api-version": "2024-05-01"}, {"properties": {"addressPrefixes": ["10.50.0.0/16"]}})
+    _check("IPAM pool created as a real nested ARM resource", r["status"] == 201
+           and r["body"]["properties"]["addressPrefixes"] == ["10.50.0.0/16"])
+    r = arm.handle("GET", f"{nm1}/ipamPools", {"api-version": "2024-05-01"})
+    _check("IPAM pools listable under their network manager", [x["name"] for x in r["body"]["value"]] == ["pool1"])
+
+    vnet_ipam1 = _p(RG, "Microsoft.Network", "virtualNetworks", "vnetipam1")
+    r = arm.handle("PUT", vnet_ipam1, {"api-version": "2023-11-01"}, {"location": "eastus", "properties": {
+        "addressSpace": {"ipamPoolPrefixAllocations": [{"pool": {"id": pool1}, "numberOfIpAddresses": "256"}]}}})
+    _check("vnet allocated from an IPAM pool gets a real, computed address space",
+           r["status"] == 200 and r["body"]["properties"]["addressSpace"]["addressPrefixes"] == ["10.50.0.0/24"])
+
+    vnet_ipam2 = _p(RG, "Microsoft.Network", "virtualNetworks", "vnetipam2")
+    r = arm.handle("PUT", vnet_ipam2, {"api-version": "2023-11-01"}, {"location": "eastus", "properties": {
+        "addressSpace": {"ipamPoolPrefixAllocations": [{"pool": {"id": pool1}, "numberOfIpAddresses": "256"}]}}})
+    _check("a second vnet from the same pool gets the NEXT non-overlapping block, not a repeat",
+           r["status"] == 200 and r["body"]["properties"]["addressSpace"]["addressPrefixes"] == ["10.50.1.0/24"])
+
+    r = arm.handle("PATCH", vnet_ipam1, {"api-version": "2023-11-01"}, {"properties": {
+        "addressSpace": {"ipamPoolPrefixAllocations": [{"pool": {"id": pool1}, "numberOfIpAddresses": "256"}]}}})
+    _check("re-PATCHing the SAME allocation request is idempotent — the block doesn't change",
+           r["status"] == 200 and r["body"]["properties"]["addressSpace"]["addressPrefixes"] == ["10.50.0.0/24"])
+
+    r = arm.handle("DELETE", vnet_ipam1, {"api-version": "2023-11-01"})
+    _check("vnet delete 200", r["status"] == 200)
+    vnet_ipam3 = _p(RG, "Microsoft.Network", "virtualNetworks", "vnetipam3")
+    r = arm.handle("PUT", vnet_ipam3, {"api-version": "2023-11-01"}, {"location": "eastus", "properties": {
+        "addressSpace": {"ipamPoolPrefixAllocations": [{"pool": {"id": pool1}, "numberOfIpAddresses": "256"}]}}})
+    _check("deleting a vnet releases its pool allocation — a later vnet reclaims the freed block",
+           r["status"] == 200 and r["body"]["properties"]["addressSpace"]["addressPrefixes"] == ["10.50.0.0/24"])
+
+    pool_small = f"{nm1}/ipamPools/poolsmall"
+    arm.handle("PUT", pool_small, {"api-version": "2024-05-01"}, {"properties": {"addressPrefixes": ["10.60.0.0/24"]}})
+    vnet_ex1 = _p(RG, "Microsoft.Network", "virtualNetworks", "vnetex1")
+    r = arm.handle("PUT", vnet_ex1, {"api-version": "2023-11-01"}, {"location": "eastus", "properties": {
+        "addressSpace": {"ipamPoolPrefixAllocations": [{"pool": {"id": pool_small}, "numberOfIpAddresses": "256"}]}}})
+    _check("a vnet can take an entire exactly-sized pool", r["status"] == 200)
+    vnet_ex2 = _p(RG, "Microsoft.Network", "virtualNetworks", "vnetex2")
+    r = arm.handle("PUT", vnet_ex2, {"api-version": "2023-11-01"}, {"location": "eastus", "properties": {
+        "addressSpace": {"ipamPoolPrefixAllocations": [{"pool": {"id": pool_small}, "numberOfIpAddresses": "256"}]}}})
+    _check("an exhausted pool returns AddressSpaceExhausted, not a silent/overlapping allocation",
+           r["status"] == 400 and r["body"]["error"]["code"] == "AddressSpaceExhausted")
+    r = arm.handle("GET", vnet_ex2, {"api-version": "2023-11-01"})
+    _check("the rejected vnet was never actually created", r["status"] == 404)
+
+    vnet_bad = _p(RG, "Microsoft.Network", "virtualNetworks", "vnetbadpool")
+    r = arm.handle("PUT", vnet_bad, {"api-version": "2023-11-01"}, {"location": "eastus", "properties": {
+        "addressSpace": {"ipamPoolPrefixAllocations": [{"pool": {"id": pool1 + "-missing"}, "numberOfIpAddresses": "256"}]}}})
+    _check("allocating from a pool that doesn't exist fails, not a silent success", r["status"] == 400)
 
     print("\nRESULT: PASS — Azure ARM core conforms (native ARM wire + LRO + catalog CRUD) on this substrate.")
     return 0

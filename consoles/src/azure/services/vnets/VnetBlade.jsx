@@ -52,9 +52,6 @@ export const MENU = [
 ];
 const LABEL = Object.fromEntries(MENU.flatMap((m) => (m.group ? m.items : [m])).map((i) => [i.id, i.label]));
 const GAP_CAP = {
-  resourcevisualizer: "azure.vnets.tools",
-  tasks: "azure.vnets.tools", support: "azure.vnets.tools",
-  alerts: "azure.vnets.monitoring", metrics: "azure.vnets.monitoring", diagnosticsettings: "azure.vnets.monitoring", logs: "azure.vnets.monitoring",
   bastion: "azure.vnets.network_appliances", ddosprotection: "azure.vnets.network_appliances", firewall: "azure.vnets.network_appliances",
   defender: "azure.vnets.network_appliances", networkmanager: "azure.vnets.network_appliances", privateendpoints: "azure.vnets.network_appliances",
   connecteddevices: "azure.vnets.connected_devices",
@@ -89,6 +86,13 @@ export default function VnetBlade({ params }) {
       topology: () => <TopologyPanel a={a} />,
       diagnose: () => <Diagnose />,
       connectiontroubleshoot: () => <ConnectionTroubleshootPanel />,
+      diagnosticsettings: () => <DiagnosticSettings a={a} />,
+      logs: () => <LogsPanel a={a} />,
+      alerts: () => <Alerts a={a} />,
+      metrics: () => <Metrics a={a} />,
+      tasks: () => <Tasks a={a} />,
+      resourcevisualizer: () => <ResourceVisualizer a={a} />,
+      support: () => <Support self={self} />,
     }[panel];
     body = P ? P() : (
       <CapabilityContainer id={GAP_CAP[panel] || "azure.vnets.tools"} title={`${name} | ${LABEL[panel] || panel}`} />
@@ -161,15 +165,19 @@ function Overview({ a, reload, self }) {
   );
 }
 
-// ── Diagnose and solve problems: the Network Watcher tiles (IP flow verify, Next hop) are
-// real; its other diagnostic tiles stay an honest gap (azure.vnets.tools). ────────────────
+// ── Diagnose and solve problems: the Network Watcher tiles (IP flow verify, Next hop,
+// Connection troubleshoot) are real (azure.vnets.network_watcher). Resource visualizer, Tasks
+// and Support + Troubleshooting are real too (see below). The remaining diagnostic tiles stay
+// an honest gap — azure.vnets.tools — they run against Microsoft's own AI-driven diagnostics
+// backend (VPN/ExpressRoute/DNS recommendation engines), not a deterministic local ARM read. ──
 function Diagnose() {
   return (
     <>
       <div className="vy-panel-title">Diagnose and solve problems</div>
       <NetworkWatcherTools />
       <div style={{ marginTop: 16 }}>
-        <NotSimulatedContainer title="Other diagnostic tools" feature="Resource visualizer, Tasks, Support + Troubleshooting and the remaining Diagnose and solve problems tiles" />
+        <NotSimulatedContainer title="Other diagnostic tools" feature="The remaining Diagnose and solve problems tiles"
+          note="Azure's AI-driven troubleshooting recommendations (VPN/ExpressRoute/DNS diagnostics) run against Microsoft's own analytics backend, not a deterministic local ARM read — outside what a local simulator can model." />
       </div>
     </>
   );
@@ -610,6 +618,295 @@ function ExportTemplate({ a }) {
         <label><input type="checkbox" checked={params} onChange={(e) => setParams(e.target.checked)} /> Include parameters</label>
         <Textarea readOnly value={text} style={{ width: "100%", minHeight: 320, fontFamily: "monospace" }} />
       </section>
+    </>
+  );
+}
+
+// ── Diagnostic settings (Microsoft.Insights/diagnosticSettings, a real ARM extension
+// resource scoped to this vnet) — the same generic mechanism the NSG lens wires. Logs/metrics
+// are stored and validated exactly as the real resource requires, but never delivered
+// anywhere (core/capabilities/azure/vnets.json azure.vnets.monitoring). ──────────────────
+const DIAG_ID_RE = /^[a-zA-Z0-9][a-zA-Z0-9-._]{0,255}$/;
+function DiagnosticSettings({ a }) {
+  const notify = useNotify();
+  const { data, loading, error, reload } = useAsync(() => api.listDiagnosticSettings(a.id), [a.id]);
+  const workspaces = useAsync(() => api.listWorkspaces(), []);
+  const [add, setAdd] = useState(false);
+  const [name, setName] = useState("");
+  const [workspace, setWorkspace] = useState("");
+  const ws = workspaces.data || [];
+  return (
+    <CapabilityContainer id="azure.vnets.monitoring" title={`${a.name} | Diagnostic settings`}>
+      <BrowseGrid
+        resourceName="diagnostic setting" rowKey={(r) => r.name} filterPlaceholder="Search diagnostic settings"
+        items={data || []} loading={loading} error={error} onRefresh={reload}
+        extraCommands={<ToolbarButton icon={<Add20Regular />} onClick={() => { setAdd(true); setWorkspace(ws[0]?.id || ""); }}>Add diagnostic setting</ToolbarButton>}
+        onDelete={async (sel) => {
+          for (const r of sel) await api.deleteDiagnosticSetting(a.id, r.name);
+          notify.success(`Deleted ${sel.length} diagnostic setting${sel.length === 1 ? "" : "s"}.`, "Delete succeeded");
+          reload();
+        }}
+        csvName="diagnostic-settings.csv"
+        columns={[
+          { key: "name", label: "Diagnostic setting name" },
+          { key: "dest", label: "Destination details", value: (r) => (r.properties?.workspaceId ? "Log Analytics workspace" : r.properties?.storageAccountId ? "Storage account" : r.properties?.eventHubAuthorizationRuleId ? "Event hub" : "--") },
+          { key: "logs", label: "Log categories", value: (r) => (r.properties?.logs || []).filter((l) => l.enabled).length },
+          { key: "metrics", label: "Metric categories", value: (r) => (r.properties?.metrics || []).filter((m) => m.enabled).length },
+        ]}
+      />
+      {add && (
+        <section className="vy-section" style={{ marginTop: 16 }}>
+          <h3>Add diagnostic setting</h3>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 480 }}>
+            <Field label="Diagnostic setting name" required><Input value={name} onChange={(_, d) => setName(d.value)} aria-label="Diagnostic setting name" /></Field>
+            <Field label="Log Analytics workspace">
+              {ws.length ? (
+                <Select value={workspace} onChange={(_, d) => setWorkspace(d.value)} aria-label="Log Analytics workspace">
+                  {ws.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+                </Select>
+              ) : <p style={{ margin: 0 }}>No Log Analytics workspace yet. Create one in the Monitor service first.</p>}
+            </Field>
+          </div>
+          <div className="vy-cmdbar" style={{ marginTop: 12 }}>
+            <Button appearance="primary" disabled={!DIAG_ID_RE.test(name) || !workspace} onClick={async () => {
+              await api.putDiagnosticSetting(a.id, name, {
+                properties: { workspaceId: workspace, logs: [{ categoryGroup: "allLogs", enabled: true }], metrics: [{ category: "AllMetrics", enabled: true }] },
+              });
+              notify.success(`Diagnostic setting '${name}' was created.`, "Create succeeded");
+              setAdd(false); setName(""); reload();
+            }}>Save</Button>
+            <Button onClick={() => setAdd(false)}>Cancel</Button>
+          </div>
+        </section>
+      )}
+    </CapabilityContainer>
+  );
+}
+
+// ── Logs (Microsoft.OperationalInsights/workspaces/{ws}/api/query) — the same ARM pass-
+// through the Azure Portal's resource-scoped Logs blade uses, carrying a small real KQL
+// subset (core/azure_operationalinsights_core.py). AzureActivity rows are the real per-
+// resource Activity log entries this vnet's own Activity log tab reads. ──────────────────
+function LogsPanel({ a }) {
+  const workspaces = useAsync(() => api.listWorkspaces(), []);
+  const [workspace, setWorkspace] = useState("");
+  const [query, setQuery] = useState(`AzureActivity\n| where ResourceId == '${a.id}'\n| take 50`);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState(null);
+  const [running, setRunning] = useState(false);
+  const ws = workspaces.data || [];
+  useEffect(() => { if (ws.length && !workspace) setWorkspace(ws[0].id); }, [ws.length]);
+  const run = async () => {
+    const w = ws.find((x) => x.id === workspace);
+    if (!w) return;
+    setRunning(true); setError(null);
+    try { setResult(await api.runLogQuery(w.resourceGroup, w.name, query)); }
+    catch (e) { setError(e); setResult(null); }
+    finally { setRunning(false); }
+  };
+  const table = result?.tables?.[0];
+  return (
+    <CapabilityContainer id="azure.vnets.monitoring" title={`${a.name} | Logs`}>
+      {workspaces.loading ? <Loading /> : !ws.length ? (
+        <p>No Log Analytics workspace yet. <Link href="#/monitor/createloganalyticsworkspace">Create one</Link>, then configure a diagnostic setting on this virtual network to send its logs there.</p>
+      ) : (
+        <>
+          <Field label="Scope"><Select value={workspace} onChange={(_, d) => setWorkspace(d.value)} aria-label="Log Analytics workspace">
+            {ws.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+          </Select></Field>
+          <Textarea value={query} onChange={(_, d) => setQuery(d.value)} rows={4} resize="vertical" style={{ width: "100%", fontFamily: "monospace", marginTop: 8 }} aria-label="KQL query" />
+          <div className="vy-cmdbar" style={{ marginTop: 8 }}><Button appearance="primary" disabled={running || !workspace} onClick={run}>Run</Button></div>
+          <ErrorBar error={error} title="Query failed" />
+          {table && (table.rows.length ? (
+            <Table size="small" aria-label="Query results" style={{ marginTop: 8 }}>
+              <TableHeader><TableRow>{table.columns.map((c) => <TableHeaderCell key={c.name}>{c.name}</TableHeaderCell>)}</TableRow></TableHeader>
+              <TableBody>{table.rows.map((row, i) => <TableRow key={i}>{row.map((cell, j) => <TableCell key={j}>{cell === null || cell === undefined ? "" : String(cell)}</TableCell>)}</TableRow>)}</TableBody>
+            </Table>
+          ) : <p>No results found.</p>)}
+        </>
+      )}
+    </CapabilityContainer>
+  );
+}
+
+// ── Alerts — metric alert / activity log alert rules whose own `scopes` names this vnet
+// (core/azure_monitor_core.py, the same resources the Monitor service's Alerts page lists
+// subscription-wide). Vyomi stores alert rules but runs no live metric-evaluation loop, same
+// honest limitation as azure.monitor.alert_rules. ────────────────────────────────────────
+function Alerts({ a }) {
+  const { data, loading, error, reload } = useAsync(() => api.listAlertsForResource(a.id), [a.id]);
+  return (
+    <CapabilityContainer id="azure.vnets.monitoring" title={`${a.name} | Alerts`}
+      actions={<>
+        <ToolbarButton icon={<Add20Regular />} as="a" href="#/monitor/createalertrule">Create alert rule</ToolbarButton>
+        <ToolbarButton icon={<ArrowClockwise20Regular />} onClick={reload}>Refresh</ToolbarButton>
+      </>}>
+      <p style={{ fontSize: 12 }}>Vyomi stores alert rules but runs no live metric-evaluation loop, so no alert has ever fired for this virtual network.</p>
+      <BrowseGrid resourceName="alert rule" rowKey={(r) => r.id} filterPlaceholder="Search alert rules"
+        items={data || []} loading={loading} error={error} onRefresh={reload}
+        columns={[
+          { key: "name", label: "Name" },
+          { key: "kind", label: "Type" },
+          { key: "severity", label: "Severity", value: (r) => (r.severity != null ? r.severity : "--") },
+          { key: "enabled", label: "Enabled", value: (r) => (r.enabled ? "Yes" : "No") },
+        ]}
+      />
+    </CapabilityContainer>
+  );
+}
+
+// ── Metrics — Microsoft.Network/virtualNetworks publishes no real-time telemetry Vyomi can
+// emulate (core/azure_monitor_core.py: "Not modelled: metric definitions / metrics"; see the
+// Monitor service's azure.monitor.metrics_charts). Instead of a stored/random chart, this is a
+// REAL derived series: this vnet's own management-operation count per hour, read back from
+// its Activity log — never synthetic data. ───────────────────────────────────────────────
+function Metrics({ a }) {
+  const log = useAsync(() => api.listActivityLog(a.resourceGroup, a.name), [a.id]);
+  const subnets = useAsync(() => api.listSubnets(a.resourceGroup, a.name), [a.id]);
+  const peerings = useAsync(() => api.listPeerings(a.resourceGroup, a.name), [a.id]);
+  const events = log.data || [];
+  const now = Date.now();
+  const buckets = Array.from({ length: 12 }, (_, i) => {
+    const hoursAgo = 11 - i;
+    const start = now - (hoursAgo + 1) * 3600000, end = now - hoursAgo * 3600000;
+    const count = events.filter((e) => { const t = Date.parse(e.eventTimestamp); return t >= start && t < end; }).length;
+    return { label: `${hoursAgo}h`, count };
+  });
+  const max = Math.max(1, ...buckets.map((b) => b.count));
+  const addressCount = (a.properties?.addressSpace?.addressPrefixes || []).reduce((n, p) => {
+    const bits = Number(p.split("/")[1]);
+    return n + (Number.isFinite(bits) ? 2 ** (32 - bits) : 0);
+  }, 0);
+  return (
+    <CapabilityContainer id="azure.vnets.monitoring" title={`${a.name} | Metrics`}>
+      <p style={{ fontSize: 12 }}>Vyomi has no metric-value data plane for this resource type; the chart below is a real derived series instead — management-operation counts per hour from this virtual network's own Activity log (never synthetic/random data).</p>
+      <div style={{ display: "flex", alignItems: "flex-end", gap: 4, height: 120, marginTop: 12, borderBottom: "1px solid var(--colorNeutralStroke2)" }}>
+        {buckets.map((b, i) => (
+          <div key={i} title={`${b.count} operation${b.count === 1 ? "" : "s"}, ~${b.label} ago`}
+            style={{ width: 20, height: `${Math.max(2, (b.count / max) * 100)}%`, background: "var(--colorBrandBackground)" }} />
+        ))}
+      </div>
+      <p style={{ fontSize: 11 }} className="vy-muted">Management operations per hour, last 12 hours (most recent on the right).</p>
+      <Essentials
+        left={[["Subnets", subnets.data?.length ?? "--"], ["Peerings", peerings.data?.length ?? "--"]]}
+        right={[["Address space size", addressCount ? `${addressCount} addresses` : "--"], ["Flow timeout", `${a.properties?.flowTimeoutInMinutes || 4} minutes`]]}
+      />
+    </CapabilityContainer>
+  );
+}
+
+// ── Tasks (preview) — lightweight per-resource task tracking. Real Azure's "Tasks (preview)"
+// resource-menu item isn't a documented ARM resource provider Vyomi can model against; it's
+// the same kind of console-local, per-user bookkeeping as "Pin to dashboard", so it's built as
+// a browser-local (localStorage) list, keyed to this vnet's resource id. ─────────────────
+const tasksKey = (id) => `vyomi.tasks.${id}`;
+const loadTasks = (id) => { try { return JSON.parse(localStorage.getItem(tasksKey(id)) || "[]"); } catch { return []; } };
+const saveTasks = (id, tasks) => localStorage.setItem(tasksKey(id), JSON.stringify(tasks));
+const newTaskId = () => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`);
+
+function Tasks({ a }) {
+  const [tasks, setTasks] = useState(() => loadTasks(a.id));
+  const [title, setTitle] = useState("");
+  const commit = (next) => { setTasks(next); saveTasks(a.id, next); };
+  const add = () => { if (!title.trim()) return; commit([...tasks, { id: newTaskId(), title: title.trim(), done: false, created: new Date().toISOString() }]); setTitle(""); };
+  const toggle = (id) => commit(tasks.map((t) => (t.id === id ? { ...t, done: !t.done } : t)));
+  const remove = (id) => commit(tasks.filter((t) => t.id !== id));
+  return (
+    <>
+      <div className="vy-panel-title">Tasks</div>
+      <p style={{ fontSize: 12 }} className="vy-muted">Lightweight per-resource task tracking, stored in this browser (a console preference, like "Pin to dashboard") — not an ARM resource.</p>
+      <div style={{ display: "flex", gap: 8, maxWidth: 480 }}>
+        <Input value={title} onChange={(_, d) => setTitle(d.value)} placeholder="New task" aria-label="New task title" onKeyDown={(e) => e.key === "Enter" && add()} />
+        <Button appearance="primary" onClick={add}>Add</Button>
+      </div>
+      <Table size="small" aria-label="Tasks" style={{ marginTop: 12, maxWidth: 640 }}>
+        <TableHeader><TableRow><TableHeaderCell style={{ width: 32 }} /><TableHeaderCell>Title</TableHeaderCell><TableHeaderCell>Created</TableHeaderCell><TableHeaderCell style={{ width: 48 }} /></TableRow></TableHeader>
+        <TableBody>
+          {tasks.map((t) => (
+            <TableRow key={t.id}>
+              <TableCell><input type="checkbox" checked={t.done} onChange={() => toggle(t.id)} aria-label={`Mark "${t.title}" done`} /></TableCell>
+              <TableCell style={{ textDecoration: t.done ? "line-through" : "none" }}>{t.title}</TableCell>
+              <TableCell>{fmtDate(t.created)}</TableCell>
+              <TableCell><Button appearance="subtle" size="small" icon={<Delete20Regular />} aria-label={`Delete "${t.title}"`} onClick={() => remove(t.id)} /></TableCell>
+            </TableRow>
+          ))}
+          {!tasks.length && <TableRow><TableCell colSpan={4} className="vy-muted">No tasks yet.</TableCell></TableRow>}
+        </TableBody>
+      </Table>
+    </>
+  );
+}
+
+// ── Resource visualizer — a real, structured map of this vnet's subnets and the resources
+// inside them (the same ARM reads the Subnets/Connected devices/Peerings panels use); Vyomi
+// renders cards instead of Azure's interactive canvas diagram (azure.vnets.tools). ────────
+function ResourceVisualizer({ a }) {
+  const subnets = useAsync(() => api.listSubnets(a.resourceGroup, a.name), [a.id]);
+  const devices = useAsync(() => api.listConnectedDevices(a.resourceGroup, a.name), [a.id]);
+  const peerings = useAsync(() => api.listPeerings(a.resourceGroup, a.name), [a.id]);
+  if (subnets.loading || devices.loading || peerings.loading) return <Loading />;
+  const devicesIn = (subnetId) => (devices.data || []).filter((n) =>
+    (n.properties?.ipConfigurations || []).some((c) => (c.properties?.subnet?.id || "").toLowerCase() === subnetId.toLowerCase()));
+  return (
+    <CapabilityContainer id="azure.vnets.tools" title={`${a.name} | Resource visualizer`}>
+      <p style={{ fontSize: 12 }} className="vy-muted">A real, structured map of this virtual network's subnets and the resources inside them — rendered as cards rather than Azure's interactive canvas diagram.</p>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginTop: 12 }}>
+        {(subnets.data || []).map((s) => (
+          <div key={s.id} className="vy-section" style={{ minWidth: 220 }}>
+            <h4 style={{ marginTop: 0 }}>{s.name}</h4>
+            <div className="vy-muted" style={{ fontSize: 12 }}>{s.properties?.addressPrefix}</div>
+            <ul style={{ paddingLeft: 16, margin: "8px 0 0" }}>
+              {devicesIn(s.id).map((d) => <li key={d.id}>{d.name}</li>)}
+              {!devicesIn(s.id).length && <li className="vy-muted">No connected devices</li>}
+            </ul>
+          </div>
+        ))}
+        {!subnets.data?.length && <p className="vy-muted">No subnets yet.</p>}
+      </div>
+      {!!(peerings.data || []).length && (
+        <div style={{ marginTop: 16 }}>
+          <h4>Peered virtual networks</h4>
+          <ul>{peerings.data.map((p) => (
+            <li key={p.id}>{p.properties?.remoteVirtualNetwork?.id ? parseId(p.properties.remoteVirtualNetwork.id).name : p.name} — {p.properties?.peeringState}</li>
+          ))}</ul>
+        </div>
+      )}
+    </CapabilityContainer>
+  );
+}
+
+// ── Support + Troubleshooting — a real navigational hub (Diagnose and solve problems,
+// Resource health) plus one honest, narrowly-scoped gap: filing an actual Microsoft support
+// ticket needs Microsoft's own support ticketing service (azure.vnets.tools). ─────────────
+function Support({ self }) {
+  const [gap, setGap] = useState(false);
+  return (
+    <>
+      <div className="vy-panel-title">Support + Troubleshooting</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 480, marginTop: 12 }}>
+        <section className="vy-section">
+          <h3>Diagnose and solve problems</h3>
+          <p style={{ fontSize: 13 }}>Run Vyomi's network diagnostics (IP flow verify, Next hop, Connection troubleshoot) against this virtual network.</p>
+          <Link href={`${self}/diagnose`}>Go to Diagnose and solve problems</Link>
+        </section>
+        <section className="vy-section">
+          <h3>Resource health</h3>
+          <p style={{ fontSize: 13 }}>This virtual network is <b>Available</b> — Vyomi has no fault-injection model, so every simulated resource always reports healthy.</p>
+        </section>
+        <section className="vy-section">
+          <h3>New support request</h3>
+          <Button onClick={() => setGap(true)}>New support request</Button>
+        </section>
+      </div>
+      <Dialog open={gap} onOpenChange={(_, d) => !d.open && setGap(false)}>
+        <DialogSurface aria-label="New support request">
+          <DialogBody>
+            <DialogTitle>New support request</DialogTitle>
+            <DialogContent><NotSimulatedContainer feature="Filing a Microsoft support ticket" note="Creating a real support case needs Microsoft's own support ticketing service — outside anything a local simulator can model." /></DialogContent>
+            <DialogActions><Button onClick={() => setGap(false)}>Close</Button></DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
     </>
   );
 }
