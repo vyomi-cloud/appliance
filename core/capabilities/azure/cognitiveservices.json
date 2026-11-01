@@ -1,0 +1,80 @@
+{
+ "$doc": "Vyomi capability registry — Azure AI services / Cognitive Services. See azure/keyvaults.json for the contract.",
+ "azure.cognitiveservices.account.crud": {
+  "title": "Accounts (create, get, list, update, delete) over ARM — every kind in core/azure_cognitiveservices_core.py KINDS",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_azure_cognitiveservices_core.py"]
+ },
+ "azure.cognitiveservices.account.tags": {
+  "title": "Tags",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.cognitiveservices.keys": {
+  "title": "Keys and Endpoint (listKeys, regenerateKey)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "Keys are deterministic simulator secrets, not material an inference call is checked against — any non-empty bearer value is accepted by the (non-simulated) data plane. regenerateKey changes the stored value and is honest about which of Key1/Key2 it rotated."
+  ],
+  "tests": ["tests/conformance/test_azure_cognitiveservices_core.py"]
+ },
+ "azure.cognitiveservices.deployments": {
+  "title": "Model deployments (create, get, list, delete) over ARM — Azure OpenAI and Azure AI services kinds",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "Deployment, quota and rate-limit bookkeeping (capacity, Tokens-Per-Minute quota per model) is real; the model itself is not served — Vyomi has no local inference backend, so the deployment's data-plane chat/completions/embeddings endpoint is not simulated (console-only: control plane CRUD).",
+   "Deployments are only accepted on OpenAI and AIServices kind accounts, matching the real service; other kinds return the native InvalidParameter error, same as Azure."
+  ],
+  "tests": ["tests/conformance/test_azure_cognitiveservices_core.py"]
+ },
+ "azure.cognitiveservices.quotas": {
+  "title": "Quotas (usages: per-model Tokens-Per-Minute for OpenAI/AIServices, TotalCalls for every other kind)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_azure_cognitiveservices_core.py"]
+ },
+ "azure.cognitiveservices.networking": {
+  "title": "Networking (public network access / firewall default action)",
+  "level": { "nano": "config_only", "offline": "config_only" },
+  "limitations": [
+   "publicNetworkAccess and networkAcls round-trip through ARM exactly as written, but Vyomi does not enforce them against the account's Keys and Endpoint or Model deployments calls — unlike azure.keyvaults.networking, this data plane has no per-account routing signal to check (no x-vyomi-account equivalent is wired into core/aws_wire_router.py for Microsoft.CognitiveServices yet)."
+  ],
+  "tests": ["tests/conformance/test_azure_cognitiveservices_core.py"]
+ },
+ "azure.cognitiveservices.identity": {
+  "title": "System-assigned managed identity",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "System-assigned identity (principalId/tenantId) is real and persists across PATCH. User-assigned managed identities are an honest 'Not simulated' gap — Microsoft.ManagedIdentity/userAssignedIdentities is not a catalogued resource type in Vyomi, so there is nothing to attach."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.cognitiveservices.locks": {
+  "title": "Resource locks (Microsoft.Authorization/locks), scoped to this account",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "Locks are only simulated at the resource scope (this account); subscription- and resource-group-scoped lock lists are an honest 'Not simulated' gap, same as the real Subscription/Resource group scope-switch buttons."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.cognitiveservices.activity_log": {
+  "title": "Activity log",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Only console/SDK-triggered mutations made since the simulation booted are recorded (no historical backfill), and `caller` is a fixed placeholder identity rather than the real signed-in principal. Severity/category filtering is not modelled (every recorded event is Informational/Administrative).",
+   "The Timespan picker IS enforced: its lower bound is a real OData `eventTimestamp ge` predicate (core/azure_arm_core.py _activity_log_query) — narrowing it really narrows the result, it isn't a cosmetic control."
+  ],
+  "api": ["ActivityLogs_List"],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.cognitiveservices.soft_delete": {
+  "title": "Soft-delete, restore and purge (deletedAccounts)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "There is a fixed soft-delete retention window applied by the engine rather than a configurable per-account retention policy (Cognitive Services accounts have no 'purge protection' toggle in real Azure either, unlike Key vaults)."
+  ],
+  "tests": ["tests/conformance/test_azure_cognitiveservices_core.py"]
+ }
+}
