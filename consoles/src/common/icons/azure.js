@@ -60,6 +60,8 @@ export const AZURE_ICONS = {
   subscriptions: `<rect x="2.5" y="5" width="19" height="14" rx="2" fill="${A}"/><rect x="2.5" y="8" width="19" height="2.4" fill="${C}"/><rect x="5" y="12.6" width="4" height="3.2" rx=".6" fill="${G}"/>${line("M11.5 14.2h7", M, 1.4)}`,
   // Cost Management: a coin with rising bars
   cost: `<circle cx="12" cy="12" r="9" fill="${A}"/>${line("M8 16v-2.4M11 16v-4.6M14 16V9.6M17 16V7.6", L, 1.8)}`,
+  // App Configuration: a stack of three toggle switches (key-values / feature flags)
+  appconfiguration: `<rect x="3" y="3" width="18" height="18" rx="2.4" fill="${A}"/><rect x="6" y="6.8" width="12" height="3.2" rx="1.6" fill="${L}"/><circle cx="14.4" cy="8.4" r="2" fill="${A}"/><rect x="6" y="10.9" width="12" height="3.2" rx="1.6" fill="${M}"/><circle cx="9.6" cy="12.5" r="2" fill="${A}"/><rect x="6" y="15" width="12" height="3.2" rx="1.6" fill="${L}"/><circle cx="14.4" cy="16.6" r="2" fill="${A}"/>`,
 };
 
 const FALLBACK = `<rect x="3" y="3" width="18" height="18" rx="2.4" fill="${A}"/><rect x="6.5" y="6.5" width="4.5" height="4.5" rx=".8" fill="${L}"/><rect x="13" y="6.5" width="4.5" height="4.5" rx=".8" fill="${M}"/><rect x="6.5" y="13" width="4.5" height="4.5" rx=".8" fill="${M}"/><rect x="13" y="13" width="4.5" height="4.5" rx=".8" fill="${L}"/>`;

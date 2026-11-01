@@ -259,6 +259,20 @@ def run() -> int:
     dv += "=" * (-len(dv) % 4)
     _check("azure kv key encrypt→decrypt round-trips", _b64u.urlsafe_b64decode(dv) == b"vault-secret")
 
+    # App Configuration data plane: bare "/keys" is shared with Key Vault's keys CRUD —
+    # disambiguated by api-version shape (Key Vault "7.x" vs App Configuration's dated
+    # version). The store itself lives inside the ARM record (az_arm.state), selected by the
+    # `x-vyomi-store` header the console sends (Key Vault's `x-vyomi-vault` pattern).
+    R.az_arm.handle("PUT", "/subscriptions/S/resourceGroups/rg1/providers/Microsoft.AppConfiguration/configurationStores/cfg1",
+                    {"api-version": "2024-05-01"}, {"location": "eastus"})
+    AC_H = {"x-vyomi-store": "cfg1"}
+    acput = R.handle("PUT", "/kv/app:color", {"api-version": "2023-11-01", "label": "dev"}, AC_H, _j.dumps({"value": "blue"}).encode())
+    _check("app config kv put routes 200", acput["status"] == 200 and _j.loads(_body(acput))["value"] == "blue")
+    acget = R.handle("GET", "/kv/app:color", {"api-version": "2023-11-01", "label": "dev"}, AC_H, b"")
+    _check("app config kv get round-trips", _j.loads(_body(acget))["value"] == "blue")
+    ackeys = _j.loads(_body(R.handle("GET", "/keys", {"api-version": "2023-11-01"}, AC_H, b"")))
+    _check("app config /keys lists key names, not Key Vault's keys CRUD", {"name": "app:color"} in ackeys["items"])
+
     # ── v2.8.0 net-new + late-wired services on the shared router ──────────
     # Lambda REST + sandboxed invoke
     R.handle("POST", "/2015-03-31/functions", {}, {},

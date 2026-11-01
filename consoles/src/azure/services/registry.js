@@ -27,6 +27,7 @@ export const SERVICES = [
   { id: "entra", title: "Microsoft Entra ID", type: "Identity", category: "Identity", icon: "entra", load: () => import("./entra/index.jsx") },
   { id: "subscriptions", title: "Subscriptions", type: "Microsoft.Resources/subscriptions", category: "Management and governance", icon: "subscriptions", load: () => import("./subscriptions/index.jsx") },
   { id: "cost", title: "Cost Management", type: "Microsoft.CostManagement", category: "Management and governance", icon: "cost", load: () => import("./cost/index.jsx") },
+  { id: "appconfiguration", title: "App Configuration", type: "Microsoft.AppConfiguration/configurationStores", category: "Integration", icon: "appconfiguration", load: () => import("./appconfiguration/index.jsx") },
 ];
 
 export const byId = Object.fromEntries(SERVICES.map((s) => [s.id, s]));
