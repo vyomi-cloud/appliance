@@ -38,7 +38,7 @@ public class RedisConformance {
 
   public static void main(String[] args) throws Exception {
     String endpoint = System.getenv().getOrDefault("ENDPOINT", "http://127.0.0.1:9000");
-    String project = System.getenv().getOrDefault("PROJECT", "java-redis-proj");
+    String project = System.getenv().getOrDefault("PROJECT", "vyomi-project");
     String region = "us-central1";
     System.out.println("== google-cloud-redis (Java) against " + endpoint + " project=" + project + " ==");
 

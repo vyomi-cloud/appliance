@@ -335,8 +335,12 @@ async function crawlConsole(browser, base, con, needsSW) {
   });
   const calls = () => {
     const now = Date.now();
-    const bg = new Set(log.filter((x) => x.t >= t0 - 2500 && x.t < t0).map((x) => x.p));
-    const n = new Set(log.filter((x) => x.t >= t0 && x.t <= now && !bg.has(x.p)).map((x) => x.p)).size;
+    // Fetches a previous surface was already credited for (e.g. Insights then Metrics both
+    // call /api/metrics/series) are not background polling, so they don't mask this surface's own.
+    const bg = new Set(log.filter((x) => x.t >= t0 - 2500 && x.t < t0 && !x.own).map((x) => x.p));
+    const mine = log.filter((x) => x.t >= t0 && x.t <= now && !bg.has(x.p));
+    mine.forEach((x) => { x.own = true; });
+    const n = new Set(mine.map((x) => x.p)).size;
     t0 = now;
     return n;
   };
@@ -359,12 +363,14 @@ async function crawlConsole(browser, base, con, needsSW) {
       await page.waitForFunction((sel) => document.querySelectorAll(sel).length > 0, RAIL_SEL, { timeout: 120000, polling: 500 });
     }
     drain(); // boot noise is reported once below, not per service
-    // The side menu also holds chrome that is not a service: the hamburger / close
-    // buttons, the "Console Home" title and the collapsible section headers (clicking
-    // a header folds its section and hides the services under it).
-    const services = await page.evaluate((sel) => [...document.querySelectorAll(sel)]
-      .map((e, i) => ({ i, chrome: e.matches(".nav-open, .nav-x, .nav-title, .nav-sec-h"), label: (e.innerText || e.title || e.getAttribute("data-key") || e.getAttribute("data-service") || "").trim().split("\n").pop() }))
-      .filter((x) => x.label && !x.chrome && !/^home$/i.test(x.label)), RAIL_SEL);
+    // The side nav also holds chrome that is not a service (hamburger, close,
+    // the Console Home title, collapsible section headers): not crawled.
+    const NAV_CHROME = "nav-open nav-x nav-title nav-sec-h";
+    const services = await page.evaluate(([sel, chrome]) => [...document.querySelectorAll(sel)]
+      .map((e, i) => ({ e, i }))
+      .filter(({ e }) => !chrome.split(" ").some((c) => e.classList.contains(c)))
+      .map(({ e, i }) => ({ i, label: (e.innerText || e.title || e.getAttribute("data-key") || e.getAttribute("data-service") || "").trim().split("\n").pop() }))
+      .filter((x) => x.label && !/^home$/i.test(x.label)), [RAIL_SEL, NAV_CHROME]);
     // Opening a service swaps #rail for that service's own sidebar (EC2 →
     // Events, Instances, …), so the service list's indexes stop matching.
     // Go back to the console home whenever the rail entry isn't this service.

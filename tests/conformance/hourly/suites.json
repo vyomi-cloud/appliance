@@ -42,6 +42,14 @@
       "timeout": 120
     },
     {
+      "id": "offline-sdk-python-azure-vm-runcommand",
+      "target": "offline",
+      "cloud": "azure",
+      "kind": "sdk-python",
+      "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/test_azure_vm_runcommand_sdk.py",
+      "timeout": 120
+    },
+    {
       "id": "offline-api-azure-console-data-planes",
       "target": "offline",
       "cloud": "azure",
@@ -1027,11 +1035,11 @@
       "timeout": 300
     },
     {
-      "id": "offline-ui-gcp-metrics-tab",
+      "id": "offline-cli-gcp-scheduler-pubsub",
       "target": "offline",
       "cloud": "gcp",
-      "kind": "ui",
-      "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/ui/gcp-metrics-tab.mjs",
+      "kind": "cli",
+      "cmd": "ENDPOINT={ENDPOINT} bash tests/cli/gcp-scheduler-pubsub-cli-smoke.sh",
       "timeout": 300
     },
     {
@@ -1049,6 +1057,14 @@
       "kind": "ui",
       "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-gcp-cloudscheduler.mjs",
       "timeout": 600
+    },
+    {
+      "id": "nano-ui-gcp-scheduler-pubsub",
+      "target": "nano",
+      "cloud": "gcp",
+      "kind": "ui",
+      "cmd": "NANO_DIR=$PWD/wasm node wasm/ui-tests/validate-gcp-scheduler-pubsub.mjs",
+      "timeout": 300
     },
     {
       "id": "offline-sdk-java-gcp-container",
@@ -1641,6 +1657,14 @@
       "timeout": 600
     },
     {
+      "id": "offline-ui-gcp-metrics-tab",
+      "target": "offline",
+      "cloud": "gcp",
+      "kind": "ui",
+      "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/ui/gcp-metrics-tab.mjs",
+      "timeout": 300
+    },
+    {
       "id": "nano-ui-aws-kinesis",
       "target": "nano",
       "cloud": "aws",
@@ -1751,6 +1775,14 @@
       "timeout": 600
     },
     {
+      "id": "offline-cli-aws-ec2-sg-description",
+      "target": "offline",
+      "cloud": "aws",
+      "kind": "cli",
+      "cmd": "ENDPOINT={ENDPOINT} bash tests/cli/aws-ec2-sg-description-cli-smoke.sh",
+      "timeout": 120
+    },
+    {
       "id": "offline-cli-aws-sns",
       "target": "offline",
       "cloud": "aws",
@@ -1781,6 +1813,14 @@
       "kind": "ui",
       "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-gcp-artifactregistry.mjs",
       "timeout": 600
+    },
+    {
+      "id": "nano-ui-gcp-apigw-monitoring-tabs",
+      "target": "nano",
+      "cloud": "gcp",
+      "kind": "ui",
+      "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-gcp-apigw-monitoring-tabs.mjs",
+      "timeout": 300
     },
     {
       "id": "offline-sdk-java-gcp-monitoring",
@@ -1830,6 +1870,38 @@
       "cloud": "aws",
       "kind": "ui",
       "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-aws-secrets-created.mjs",
+      "timeout": 300
+    },
+    {
+      "id": "nano-ui-azure-resource-group-detail",
+      "target": "nano",
+      "cloud": "azure",
+      "kind": "ui",
+      "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-azure-resource-group-detail.mjs",
+      "timeout": 300
+    },
+    {
+      "id": "offline-ui-azure-resource-group-detail",
+      "target": "offline",
+      "cloud": "azure",
+      "kind": "ui",
+      "cmd": "VYOMI_CONSOLE_URL={ENDPOINT}/console/azure node wasm/ui-tests/validate-azure-resource-group-detail.mjs",
+      "timeout": 300
+    },
+    {
+      "id": "nano-ui-azure-apim-appinsights",
+      "target": "nano",
+      "cloud": "azure",
+      "kind": "ui",
+      "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-azure-apim-appinsights.mjs",
+      "timeout": 300
+    },
+    {
+      "id": "offline-ui-azure-apim-appinsights",
+      "target": "offline",
+      "cloud": "azure",
+      "kind": "ui",
+      "cmd": "VYOMI_CONSOLE_URL={ENDPOINT}/console/azure node wasm/ui-tests/validate-azure-apim-appinsights.mjs",
       "timeout": 300
     }
   ]

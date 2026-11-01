@@ -3,6 +3,7 @@
  * The census read a non-existent `state` attribute of the ARM core, so they never counted. */
 import { startServer, bootConsole, chromium, sleep } from "./lib.mjs";
 
+const SUB = "00000000-0000-0000-0000-cloudlearn01"; // the space's one subscription (core/azure_arm_core.py)
 const { server, base } = await startServer();
 const browser = await chromium.launch();
 const page = await (await browser.newContext()).newPage();
@@ -13,7 +14,7 @@ const snap = () => page.evaluate(async () => {
   return (d.spaces[0] || {}).cost_savings || null;
 });
 const put = (type, name, body) => page.evaluate(async ([t, n, b]) => {
-  const r = await fetch(`/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/rg1/providers/${t}/${n}?api-version=2023-01-01`,
+  const r = await fetch(`/subscriptions/${SUB}/resourceGroups/rg1/providers/${t}/${n}?api-version=2023-01-01`,
     { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(b) });
   return r.status;
 }, [type, name, body]);

@@ -907,6 +907,8 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     #view-usage .u-cloud-tab .u-logo { opacity: .7; }
     #view-usage .u-cloud-tab.on .u-logo, #view-usage .u-cloud-tab:hover .u-logo { opacity: 1; }
     @media (max-width: 600px) { #view-usage .u-cloud-tab { font-size: 15px; padding: 0 8px 10px; gap: 7px; } }
+    #view-usage .u-tunnel .sc-desc code { background: #f2f4f7; padding: 1px 5px; border-radius: 4px; }
+    #view-usage .u-tunnel-card pre.u-code { min-height: 0; }
     #view-usage .u-panel > .sc-desc { margin: 12px 0 16px; font-size: 13px; color: #a1a1aa; }
     #view-usage .u-card { background: #1f2937; border-radius: 14px; padding: 16px 18px 18px; min-width: 0; display: flex; flex-direction: column; }
     #view-usage .u-card .u-head { margin-bottom: 4px; }
@@ -1283,7 +1285,11 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
        Tokens: page #f4f5f7 · surface #fff · tile #f8fafc · border #e4e7ec ·
        text #101828 / #475467 / #667085 · accent #2563eb. ═══════════ */
     html, body { background: #f4f5f7 !important; color: #101828 !important; }
-    #app-body, #app-main { background: transparent !important; }
+    #app-body { background: transparent !important; }
+    /* the view next to the side menu: a white rounded sheet, no border, with the gray page
+       showing on all four sides (Nano adds room below for the tunnel bar) */
+    #app-main { background: #fff !important; border: 0 !important; border-radius: 14px; margin: 16px; box-sizing: border-box; }
+    body:has(#nano-foot) #app-main { margin-bottom: 50px; }
 
     /* top bar + logo */
     #app-topbar, #app-topbar .top-bar { background: #fff !important; border-bottom: 1px solid #e4e7ec !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
@@ -1317,17 +1323,17 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     .kc-open { color: #2563eb !important; border-color: #2563eb !important; background: #fff !important; }
 
     /* panels (Active spaces, Health sections, Knowledge Center groups, SDK & CLI usage) */
-    #spaces-card, #stats-card, #host-util-card, #svc-status-card, #view-kc .kc-panel, #view-usage .u-panel {
-      background: #fff !important; border: 1px solid #e4e7ec !important;
+    #spaces-card, #stats-card, #host-util-card, #svc-status-card, #view-kc .kc-panel, #view-usage .u-panel, #view-api .api-group {
+      background: #f4f5f7 !important; border: 1px solid #e4e7ec !important;
       box-shadow: 0 1px 2px rgba(16,24,40,.05), 0 6px 16px rgba(16,24,40,.06) !important;
     }
     #spaces-card > .sc-head, #stats-card > .sc-head, #host-util-card > .sc-head, #svc-status-card > .sc-head,
-    #view-kc .kc-panel > .sc-head, #view-usage .u-panel > .sc-head { border-bottom-color: #e4e7ec !important; }
+    #view-kc .kc-panel > .sc-head, #view-usage .u-panel > .sc-head, #view-api .api-group > .api-tag-head { border-bottom-color: #e4e7ec !important; }
 
     /* tiles inside panels */
     #stats-card .pie-card, #host-util-card .stat-card, #vyomi-services-mount > div:last-child > div,
-    #view-kc .kct, #view-kc .kct.kct-pack, #view-usage .u-card { background: #f8fafc !important; border: 1px solid #eef0f3 !important; }
-    #view-kc .kct:hover { background: #f2f4f7 !important; }
+    #view-kc .kct, #view-kc .kct.kct-pack, #view-usage .u-card { background: #fff !important; border: 1px solid #e4e7ec !important; }
+    #view-kc .kct:hover { background: #f9fafb !important; }
     #stats-card .pie-card .pie-label, #host-util-card .stat-card .stat-label { color: #667085 !important; }
     .pie-card .pie-center .pc-sub, .pie-legend-item .lv, .pie-legend-item .ll { color: #475467 !important; }
     .pie-card .pie-legend-item .swatch { outline-color: rgba(16,24,40,.12) !important; }
@@ -1373,13 +1379,21 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     #view-api .api-search { background: #fff !important; border-color: #d0d5dd !important; color: #101828 !important; }
     #view-api .api-search::placeholder { color: #98a2b3 !important; }
     #view-api .api-tag-head { color: #101828 !important; border-bottom-color: #e4e7ec !important; }
+    /* each tag group is a card, in the same design as the other panels */
+    #view-api .api-group { border-radius: 16px; padding: 0 22px 22px; margin-bottom: 24px;
+      box-shadow: 0 1px 2px rgba(16,24,40,.05), 0 6px 16px rgba(16,24,40,.06) !important; }
+    #view-api .api-group > .api-tag-head { margin: 0 -22px 16px; padding: 18px 22px 0; align-items: flex-end; font-size: 16px; }
+    #view-api .api-group > .api-tag-head .api-tag-title { display: inline-flex; align-items: center; gap: 9px; padding: 0 2px 10px; margin-bottom: -10px; border-bottom: 2px solid #2563eb; }
+    #view-api .api-group > .api-tag-head .cnt { margin-bottom: 11px; font-size: 11.5px; font-weight: 700; color: #475467 !important; background: #fff; border: 1px solid #e4e7ec; border-radius: 999px; padding: 1px 9px; }
+    #view-api .api-op .p, #view-api .api-op .s { display: block; }   /* path, then its summary underneath */
+    #view-api .api-group .api-grid { margin-bottom: 0; }
     #view-api .api-tag-head .material-icons { color: #2563eb !important; }
     #view-api .api-tag-head .cnt, #view-api .api-op .s, #view-api .api-caret, #view-api .api-empty { color: #667085 !important; }
     #view-api .api-op { background: #fff !important; border: 1px solid #e4e7ec !important; }
     #view-api .api-op:hover, #view-api .api-op-wrap.open .api-op { border-color: #84adff !important; }
     #view-api .api-op .p { color: #101828 !important; }
     #view-api .api-op-wrap.open .api-caret { color: #344054 !important; }
-    #view-api .api-detail { background: #f8fafc !important; border-color: #84adff !important; }
+    #view-api .api-detail { background: #fff !important; border-color: #84adff !important; }
     #view-api .api-detail .am-sec-h, #view-api .api-detail table.am-t th, #view-api .api-detail .am-none, #view-api .api-detail .api-rdesc { color: #667085 !important; }
     #view-api .api-detail table.am-t td { color: #344054 !important; border-bottom-color: #eef0f3 !important; }
     #view-api .api-detail table.am-t th { border-bottom-color: #eef0f3 !important; }
@@ -1429,6 +1443,25 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     #spaces-grid .space-card[data-provider="aws"].active   { border-color: #0972d3 !important; box-shadow: 0 0 0 1px #0972d3 !important; }
     #spaces-grid .space-card[data-provider="gcp"].active   { border-color: #1a73e8 !important; box-shadow: 0 0 0 1px #1a73e8 !important; }
     #spaces-grid .space-card[data-provider="azure"].active { border-color: #0078d4 !important; box-shadow: 0 0 0 1px #0078d4 !important; }
+    /* Internal white cards are borderless (the gray panel around them is the edge);
+       selection keeps its colour — the active space and an opened Swagger endpoint. */
+    #stats-card .pie-card, #host-util-card .stat-card, #vyomi-services-mount > div:last-child > div,
+    #view-kc .kct, #view-kc .kct.kct-pack, #view-usage .u-card,
+    #view-api .api-op, #view-api .api-op:hover, #view-api .api-detail,
+    #spaces-grid .space-card[data-provider], #spaces-grid .space-card[data-provider]:hover { border-color: transparent !important; }
+    /* …and so are the gray panels that hold them (their header rule stays) */
+    #spaces-card, #stats-card, #host-util-card, #svc-status-card, #view-kc .kc-panel, #view-usage .u-panel, #view-api .api-group { border-color: transparent !important; }
+    #view-api .api-op-wrap.open .api-op, #view-api .api-op-wrap.open .api-detail { border-color: #84adff !important; }
+    #spaces-grid .space-card[data-provider="aws"].active   { border-color: #0972d3 !important; }
+    #spaces-grid .space-card[data-provider="gcp"].active   { border-color: #1a73e8 !important; }
+    #spaces-grid .space-card[data-provider="azure"].active { border-color: #0078d4 !important; }
+
+    /* Activate appliance + GitHub community live in the header (right), on every view */
+    .tb-actions { margin-left: auto; }
+    .tb-actions .hero-actions { display: flex; align-items: center; gap: 8px; margin: 0; }
+    .tb-actions .hero-btn { padding: 7px 14px; font-size: 13px; border-radius: 8px; white-space: nowrap; }
+    .tb-actions .tb-community-menu { left: auto; right: 0; transform: none; z-index: 1000; }
+    @media (max-width: 720px) { .tb-actions .hero-btn-github > span:not(.tb-caret) { display: none; } .tb-actions .hb-badge { display: none; } }
   </style>
 </head>
 <body>
@@ -1488,6 +1521,38 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     <button id="side-burger" type="button" onclick="toggleSidebar()" aria-label="Open menu" aria-controls="app-sidebar" aria-expanded="false"><span class="material-icons">menu</span></button>
     <a class="tb-brand" href="./" aria-label="vyomi"><img src="assets/brand/vyomi-logo.png" alt="vyomi"></a>
     <div class="tb-actions">
+        <div class="hero-actions">
+          <button class="hero-btn hero-btn-activate" type="button" onclick="openActivateModal()">
+            <span class="material-icons">verified</span>Activate appliance
+          </button>
+          <div class="tb-community" id="tb-community">
+            <button class="hero-btn hero-btn-github" type="button" onclick="toggleCommunityMenu(event)">
+              <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8a8 8 0 0 0 5.47 7.59c.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+              <span>GitHub community</span>
+              <span class="tb-caret" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"></polyline></svg></span>
+            </button>
+            <div class="tb-community-menu" role="menu">
+              <div class="tbc-title">Join the Vyomi community</div>
+              <div class="tbc-sub">Star us · Watch releases · Join Discussions</div>
+              <a class="tbc-row tbc-row-primary" href="https://github.com/vyomi-cloud/appliance" target="_blank" rel="noopener noreferrer" onclick="trackCommunityClick('star')">
+                <span class="tbc-row-ic">⭐</span><span class="tbc-row-lbl"><strong>Star on GitHub</strong></span>
+                <span class="tbc-row-meta" id="tbc-star-count"><span class="tbc-spin"></span>loading</span>
+              </a>
+              <a class="tbc-row" href="https://github.com/vyomi-cloud/appliance/subscription" target="_blank" rel="noopener noreferrer" onclick="trackCommunityClick('watch')">
+                <span class="tbc-row-ic">👀</span><span class="tbc-row-lbl">Watch releases</span><span class="tbc-row-meta tbc-row-arrow">↗</span>
+              </a>
+              <a class="tbc-row" href="https://github.com/vyomi-cloud/appliance/discussions" target="_blank" rel="noopener noreferrer" onclick="trackCommunityClick('discussions')">
+                <span class="tbc-row-ic">💬</span><span class="tbc-row-lbl">Discussions</span><span class="tbc-row-meta tbc-row-arrow">↗</span>
+              </a>
+              <div class="tbc-sep"></div>
+              <div class="tbc-foot">
+                <a href="https://github.com/vyomi-cloud/appliance" target="_blank" rel="noopener noreferrer" onclick="trackCommunityClick('source')">Source ↗</a>
+                <a href="https://github.com/vyomi-cloud/appliance/issues" target="_blank" rel="noopener noreferrer" onclick="trackCommunityClick('issues')">Issues ↗</a>
+                <a href="https://github.com/vyomi-cloud/appliance/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener noreferrer" onclick="trackCommunityClick('contributing')">Contributing ↗</a>
+              </div>
+            </div>
+          </div>
+        </div>
       <style>
         #tb-user-trigger:hover { background: rgba(255,255,255,.06); }
         #tb-user-out:hover { background: rgba(124,92,246,.16); color:#fff; }
@@ -1734,38 +1799,6 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
         .tbc-foot a:hover { color: #1f2937; }
         @keyframes rspin { to { transform: rotate(360deg); } }
       </style>
-      <div class="hero-actions">
-        <button class="hero-btn hero-btn-activate" type="button" onclick="openActivateModal()">
-          <span class="material-icons">verified</span>Activate appliance
-        </button>
-        <div class="tb-community" id="tb-community">
-          <button class="hero-btn hero-btn-github" type="button" onclick="toggleCommunityMenu(event)">
-            <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8a8 8 0 0 0 5.47 7.59c.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
-            <span>GitHub community</span>
-            <span class="tb-caret" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"></polyline></svg></span>
-          </button>
-          <div class="tb-community-menu" role="menu">
-            <div class="tbc-title">Join the Vyomi community</div>
-            <div class="tbc-sub">Star us · Watch releases · Join Discussions</div>
-            <a class="tbc-row tbc-row-primary" href="https://github.com/vyomi-cloud/appliance" target="_blank" rel="noopener noreferrer" onclick="trackCommunityClick('star')">
-              <span class="tbc-row-ic">⭐</span><span class="tbc-row-lbl"><strong>Star on GitHub</strong></span>
-              <span class="tbc-row-meta" id="tbc-star-count"><span class="tbc-spin"></span>loading</span>
-            </a>
-            <a class="tbc-row" href="https://github.com/vyomi-cloud/appliance/subscription" target="_blank" rel="noopener noreferrer" onclick="trackCommunityClick('watch')">
-              <span class="tbc-row-ic">👀</span><span class="tbc-row-lbl">Watch releases</span><span class="tbc-row-meta tbc-row-arrow">↗</span>
-            </a>
-            <a class="tbc-row" href="https://github.com/vyomi-cloud/appliance/discussions" target="_blank" rel="noopener noreferrer" onclick="trackCommunityClick('discussions')">
-              <span class="tbc-row-ic">💬</span><span class="tbc-row-lbl">Discussions</span><span class="tbc-row-meta tbc-row-arrow">↗</span>
-            </a>
-            <div class="tbc-sep"></div>
-            <div class="tbc-foot">
-              <a href="https://github.com/vyomi-cloud/appliance" target="_blank" rel="noopener noreferrer" onclick="trackCommunityClick('source')">Source ↗</a>
-              <a href="https://github.com/vyomi-cloud/appliance/issues" target="_blank" rel="noopener noreferrer" onclick="trackCommunityClick('issues')">Issues ↗</a>
-              <a href="https://github.com/vyomi-cloud/appliance/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener noreferrer" onclick="trackCommunityClick('contributing')">Contributing ↗</a>
-            </div>
-          </div>
-        </div>
-      </div>
     </header>
     <script>
       function toggleCommunityMenu(evt){ if(evt)evt.stopPropagation(); var w=document.getElementById('tb-community'); if(!w)return; var was=w.classList.contains('open'); w.classList.toggle('open'); if(!was){ _loadStarCount(); trackCommunityClick('modal_open'); } }
@@ -2583,6 +2616,40 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
         var L = (typeof SPACE_LOGOS !== 'undefined') && SPACE_LOGOS[id];
         return L ? '<span class="u-logo '+id+'" aria-hidden="true">'+L.replace(/sp-az-g/g, 'ul-az-g')+'</span>' : '';
       }
+      // Nano: your CLIs / SDKs reach this tab through the local Vyomi tunnel — install it once
+      // (npm or Homebrew), run it, then Start tunnel in the bar below.
+      var TUNNEL = [
+        { k:'npm',  label:'npm',      code:'npm install -g vyomi-tunnel   # any OS with Node 18+\nvyomi-tunnel                  # relay on http://127.0.0.1:8090\n# or, without installing:  npx vyomi-tunnel' },
+        { k:'brew', label:'Homebrew', code:'brew install vyomi-cloud/tap/vyomi-tunnel\nvyomi-tunnel' }
+      ];
+      var tunnelPick = 'npm';
+      function tunnelHtml(){
+        var cur = TUNNEL.filter(function(t){ return t.k===tunnelPick; })[0];
+        return '<section class="u-panel u-tunnel"><div class="sc-head"><div class="sc-title"><h2><span class="material-icons" style="font-size:20px;color:#2563eb">cable</span>Local Vyomi tunnel</h2></div></div>'
+          + '<p class="sc-desc">Your CLIs and SDKs reach this browser tab through a small local tunnel on <code>127.0.0.1:8090</code>. Install it once, run it, then click <b>Start tunnel</b> in the bar at the bottom.</p>'
+          + '<div class="u-card u-tunnel-card"><div class="u-strip" role="tablist">'
+          + TUNNEL.map(function(t){ return '<button class="u-tab" type="button" role="tab" data-tk="'+t.k+'" aria-selected="'+(t.k===tunnelPick)+'">'+t.label+'</button>'; }).join('')
+          + '<button class="u-cp" type="button" title="Copy" aria-label="Copy"><span class="material-icons">content_copy</span></button></div>'
+          + '<pre class="u-code"><code>'+esc(cur.code)+'</code></pre></div></section>';
+      }
+      function wireTunnel(){
+        var card = grid.querySelector('.u-tunnel-card'); if(!card) return;
+        var codeEl = card.querySelector('pre.u-code code'), cp = card.querySelector('.u-cp');
+        card.querySelectorAll('.u-tab').forEach(function(t){
+          t.onclick = function(){
+            tunnelPick = t.dataset.tk;
+            card.querySelectorAll('.u-tab').forEach(function(x){ x.setAttribute('aria-selected', String(x===t)); });
+            codeEl.textContent = TUNNEL.filter(function(x){ return x.k===tunnelPick; })[0].code;
+          };
+        });
+        cp.onclick = function(){
+          var txt = codeEl.textContent, ic = cp.querySelector('.material-icons');
+          if(navigator.clipboard) navigator.clipboard.writeText(txt).then(function(){
+            ic.textContent = 'check'; cp.style.color = '#60a5fa';
+            setTimeout(function(){ ic.textContent = 'content_copy'; cp.style.color = ''; }, 1400);
+          });
+        };
+      }
       function cardHtml(s){
         var cur = picked[s.key] || 'cli';
         return '<div class="u-card" data-c="'+s.key+'"><div class="u-head"><h3>'+svcIcon(s)+s.name+'</h3>'
@@ -2603,7 +2670,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
           var svcs = SERVICES.filter(function(s){ return s.cloud===c.id; });
           var icons = '';
           if(c.setup) icons += '<button class="u-ibtn" type="button" data-tt="Setup" data-tip="'+escAttr(sub(c.setup))+'" title="Setup" aria-label="Setup"><span class="material-icons">terminal</span></button>';
-          grid.innerHTML = '<section class="u-panel"><div class="sc-head"><div class="u-cloud-tabs" role="tablist" aria-label="Cloud">'
+          grid.innerHTML = (isNano ? tunnelHtml() : '') + '<section class="u-panel"><div class="sc-head"><div class="u-cloud-tabs" role="tablist" aria-label="Cloud">'
             + clouds.map(function(x){
                 var on = x.id===c.id;
                 return '<button type="button" role="tab" class="u-cloud-tab'+(on?' on':'')+'" data-cloud="'+x.id+'" aria-selected="'+on+'">'
@@ -2612,6 +2679,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
             + '</div>' + (icons ? '<span class="u-info">'+icons+'</span>' : '') + '</div>'
             + '<p class="sc-desc">'+svcs.length+' services · pick CLI, SDK or curl on each card and copy the snippet.</p>'
             + '<div class="u-grid">' + svcs.map(cardHtml).join('') + '</div></section>';
+          wireTunnel();
           grid.querySelectorAll('.u-cloud-tab').forEach(function(t){
             t.onclick = function(){
               cloudPick = t.dataset.cloud;
@@ -2674,7 +2742,14 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
       for (var i = 0; i < items.length; i++)
         items[i].classList.toggle('active', items[i].getAttribute('data-view') === view);
       try { localStorage.setItem('vyomi.appview', view); } catch (_) {}
+      // Keep the URL on the current view, so a refresh lands right back here (the
+      // boot code below restores the hash first). replaceState adds no history entries.
+      if (location.hash !== '#' + view) try { history.replaceState(history.state, '', location.pathname + location.search + '#' + view); } catch (_) {}
     }
+    window.addEventListener('hashchange', function () {   // a #view link on the page itself
+      var hv = (location.hash || '').replace('#', '');
+      if (APP_VIEWS[hv]) showAppView(hv);
+    });
     var _sideMQ = window.matchMedia('(max-width: 768px)');
     // The drawer (and its backdrop) start right below the sticky logo bar, so neither covers the other.
     function _placeSideDrawer() {
@@ -2863,7 +2938,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
               + '<span class="material-icons api-caret">expand_more</span></button>'
               + '<div class="api-detail" hidden></div></div>';
           }).join('');
-          return '<div class="api-tag-head"><span class="material-icons">folder</span>' + esc(tag) + '<span class="cnt">' + g[tag].length + '</span></div><div class="api-grid">' + cards + '</div>';
+          return '<section class="api-group"><div class="api-tag-head"><span class="api-tag-title"><span class="material-icons">folder</span>' + esc(tag) + '</span><span class="cnt">' + g[tag].length + '</span></div><div class="api-grid">' + cards + '</div></section>';
         }).join('');
         // Toggle the inline detail on click (lazy-render its content on first open).
         body.querySelectorAll('.api-op').forEach(function(btn){
@@ -4062,12 +4137,6 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
  <span class="sp"></span>
  <button id="nano-foot-logs">Logs ▴</button>
  <button id="nano-foot-toggle">Start tunnel</button>
- <button id="nano-foot-more" title="More">⋯</button>
-</div>
-<div id="nano-foot-menu">
- <button id="nano-menu-star">⭐ Star on GitHub</button>
- <button id="nano-menu-connect" style="display:none">🔌 Connect apps</button>
- <button id="nano-menu-conf">📘 Conformance</button>
 </div>
 <script>
 (function(){
@@ -4113,7 +4182,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
   var phase = "off", lastSeen = 0, mode = null, external = null, noteText = null, _prevServed = 0, _prevPhase = null;
   // Never cover page content: the space for the bar is reserved inside the main column, so
   // the side menu still runs to the bottom of the window and the bar starts at its edge.
-  (document.getElementById("app-main") || document.body).style.paddingBottom = "40px";
+  // (#app-main keeps a 50px bottom margin for it — see the light theme)
 
   function render(state, served){
     phase = state || "off";

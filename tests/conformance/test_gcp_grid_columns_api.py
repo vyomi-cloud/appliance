@@ -8,13 +8,7 @@ import uuid
 import requests
 
 BASE = os.environ.get("VYOMI_BASE_URL", "http://localhost:9000")
-def _project():
-    # only the space's project id reaches the project (GCP "project not found" otherwise)
-    import json as _j, urllib.request as _u
-    return _j.load(_u.urlopen(BASE + "/v1/projects"))["projects"][0]["projectId"]
-
-
-P = _project()
+P = "vyomi-project"
 failed = False
 
 

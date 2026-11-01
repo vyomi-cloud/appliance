@@ -113,6 +113,17 @@ def test_vm_blades():
     executed = []
     ok = __import__("core.azure_arm_ext_core", fromlist=["x"])
     st = arm.state
+    s, ra = call(arm, "POST", vm + "/runCommand", {"commandId": "RunShellScript", "script": ["id"]}, "2023-09-01")
+    _check("runCommand action reports a failed provisioning status without a guest runtime",
+           s == 200 and ra["value"][0]["code"] == "ProvisioningState/failed" and ra["value"][0]["level"] == "Error", ra)
+    s, rb = call(arm, "POST", vm + "/runCommand", {"commandId": "RunShellScript"}, "2023-09-01")
+    _check("runCommand action without a script is rejected", s == 400 and rb["error"]["code"] == "InvalidParameter", rb)
+    s, rc2 = call(arm, "POST", vm.replace("vm1", "nope") + "/runCommand", {"script": ["id"]}, "2023-09-01")
+    _check("runCommand on a missing VM is a 404", s == 404, rc2)
+    res = ok.route(st, "POST", SUB, RG, ["Microsoft.Compute", "virtualMachines", "vm1", "runCommand"],
+                   {"commandId": "RunShellScript", "script": ["echo hi"]}, {}, executor=lambda v, sc: (0, "hi\n", ""))
+    _check("runCommand action with a guest runtime returns the script output",
+           "hi" in str(res) and "ProvisioningState/succeeded" in str(res), res)
     res = ok.route(st, "PUT", SUB, RG, ["Microsoft.Compute", "virtualMachines", "vm1", "runCommands", "r2"],
                    {"properties": {"source": {"script": "echo hi"}}}, {},
                    executor=lambda v, sc: executed.append(sc) or (0, "hi\n", ""))

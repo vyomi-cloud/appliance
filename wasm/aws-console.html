@@ -94,7 +94,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
   header .back-spaces{display:inline-flex;align-items:center;gap:5px;height:26px;padding:0 10px;font-size:12.5px;font-weight:600;color:#fff;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);border-radius:6px;cursor:pointer;text-decoration:none;margin-left:6px}
   header .back-spaces:hover{background:rgba(255,255,255,.14);border-color:var(--orange);color:var(--orange);text-decoration:none}
   header .back-spaces .material-symbols-outlined{font-size:16px}
-  header .search{flex:1;max-width:560px;background:#fff;border-radius:3px;display:flex;align-items:center;padding:0 8px;height:28px;color:#000}
+  header .search{flex:1;min-width:0;background:#fff;border-radius:3px;display:flex;align-items:center;padding:0 8px;height:28px;color:#000}
   header .search input{flex:1;border:none;outline:none;font-size:12.5px;height:24px;background:transparent}
   header .right{display:flex;align-items:center;gap:14px;color:#fff;font-size:12.5px}
   header .right button,header .right a{background:none;border:none;color:#fff;cursor:pointer;display:flex;align-items:center;gap:5px;padding:0;font-size:12.5px}
@@ -5581,12 +5581,6 @@ boot();
  <span class="sp"></span>
  <button id="nano-foot-logs">Logs ▴</button>
  <button id="nano-foot-toggle">Start tunnel</button>
- <button id="nano-foot-more" title="More">⋯</button>
-</div>
-<div id="nano-foot-menu">
- <button id="nano-menu-star">⭐ Star on GitHub</button>
- <button id="nano-menu-connect" style="display:none">🔌 Connect apps</button>
- <button id="nano-menu-conf">📘 Conformance</button>
 </div>
 <script>
 (function(){

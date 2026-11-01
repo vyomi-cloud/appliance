@@ -49,7 +49,7 @@ public class MonitoringConformance {
 
   public static void main(String[] args) throws Exception {
     String endpoint = System.getenv().getOrDefault("ENDPOINT", "http://127.0.0.1:9000");
-    String project = System.getenv().getOrDefault("PROJECT", "java-mon-proj");
+    String project = System.getenv().getOrDefault("PROJECT", "vyomi-project");
     System.out.println("== google-api-services-monitoring (Java) against " + endpoint + " project=" + project + " ==");
     String sfx = String.valueOf(System.currentTimeMillis() % 1000000);
     String pn = "projects/" + project;

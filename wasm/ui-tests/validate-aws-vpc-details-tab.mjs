@@ -26,7 +26,8 @@ try {
   }, [name, cidr]);
   await page.evaluate(([sel]) => [...document.querySelectorAll(sel)].find((e) => /\bvpc\b/i.test(e.innerText.trim()))?.click(), [RAIL_SEL]);
   await sleep(2000);
-  await page.locator("#main tr", { hasText: name }).locator("a.id").first().waitFor({ timeout: 60000 });
+  await page.locator("#main input.search").first().fill(name); // list is paged (10/page): filter so the new VPC is on screen
+  await sleep(500);
   await page.locator("#main tr", { hasText: name }).locator("a.id").first().click();
   await sleep(2000);
   const ov = await tabText("Overview");

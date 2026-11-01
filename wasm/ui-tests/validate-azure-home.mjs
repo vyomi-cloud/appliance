@@ -14,28 +14,30 @@ const check = (ok, what, note = "") => results.push({ ok, what, note });
 try {
   await bootConsole(page, base, "/azure-console.html");
   await sleep(3000);
-  // The Home page is the portal's design now: an "Azure services" icon row (More services
-  // expands it) and a "Resources" table, not per-service count tiles. Every data-plane
-  // service must still be reachable from the row, and its items listed under Resources.
-  await page.evaluate(() => { const m = [...document.querySelectorAll(".az-svc")].find((a) => /More services/.test(a.innerText)); if (m) m.click(); });
-  const tiles = await page.evaluate(async () => {
-    const out = [];
-    const labels = [...document.querySelectorAll(".az-svc .az-svc-l")].map((e) => e.innerText.trim());
-    const resText = (document.querySelector(".az-res")?.innerText || "");
-    for (const s of ((typeof CATALOG !== "undefined" && CATALOG?.services) || []).filter((x) => x.dataPlane)) {
-      let items = null;
-      try { items = ((await (await fetch("/api/azure/" + s.key)).json()).items || []); } catch (_) {}
-      out.push({ label: s.label, tile: labels.includes(s.label), items: items && items.length,
-                 listed: items ? items.slice(0, 10).every((it) => resText.includes(it.name || it.id || "")) : false });
+  // The portal-style Home lists every service in the "Azure services" row (More services
+  // expands it) and every resource, counted from each service's own list API, under Resources.
+  await page.evaluate(() => { const m = [...document.querySelectorAll("#main .az-svc")].find((a) => /More services/.test(a.innerText)); if (m) m.click(); });
+  await sleep(300);
+  const info = await page.evaluate(async () => {
+    const dps = ((typeof CATALOG !== "undefined" && CATALOG?.services) || []).filter((x) => x.dataPlane);
+    const names = [...document.querySelectorAll("#main .az-svc")].map((a) => (a.getAttribute("title") || a.innerText || "").trim());
+    let dpTotal = 0;
+    const tiles = [];
+    for (const s of dps) {
+      let api = null;
+      try { api = ((await (await fetch("/api/azure/" + s.key)).json()).items || []).length; } catch (_) {}
+      dpTotal += api || 0;
+      tiles.push({ label: s.label, present: names.includes(s.label), api });
     }
-    return out;
+    const more = document.querySelector("#main .az-more")?.innerText || "";
+    const m = /\((\d+)\)/.exec(more);
+    const empty = !!document.querySelector("#main .az-res .az-empty:not(:empty)") && /No resources yet/.test(document.querySelector("#main .az-res")?.innerText || "");
+    return { tiles, dpTotal, seeAll: m ? Number(m[1]) : (empty ? 0 : null) };
   });
   check(undefinedCalls.length === 0, "home makes no requests to .../undefined", undefinedCalls.slice(0, 2).join(", "));
-  check(tiles.length > 0, "data-plane services present on the home dashboard", `${tiles.length} found`);
-  for (const t of tiles) {
-    check(t.tile, `service "${t.label}" is in the Azure services row`);
-    check(t.items !== null && t.listed, `"${t.label}" items are listed under Resources`, `items=${t.items}`);
-  }
+  check(info.tiles.length > 0, "data-plane services present on the home dashboard", `${info.tiles.length} found`);
+  for (const t of info.tiles) check(t.present && t.api !== null, `service "${t.label}" is on the Azure services row and its list API answers`, `present=${t.present} api=${t.api}`);
+  check(info.seeAll !== null && info.seeAll >= info.dpTotal, "Resources count includes every data-plane resource", `seeAll=${info.seeAll} dataPlane=${info.dpTotal}`);
 } catch (e) { check(false, "(boot)", String(e).split("\n")[0]); }
 await browser.close(); server.close();
 

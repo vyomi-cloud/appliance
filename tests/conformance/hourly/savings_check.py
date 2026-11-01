@@ -78,9 +78,9 @@ def create_aws(name: str):
 
 
 def create_gcp(name: str):
-    # Every GCP space is one project; the legacy "gcp-dev" id is refused like any unknown project.
-    _, projs = http("GET", f"{BASE}/v1/projects")
-    project = projs["projects"][0]["projectId"]
+    # Each GCP space is its own project; ask Resource Manager for it, like gcloud does.
+    _, projects = http("GET", f"{BASE}/v1/projects")
+    project = projects["projects"][0]["projectId"]
     http("POST", f"{BASE}/storage/v1/b?project={project}", {"name": name})
     return lambda i, blob: http("POST", f"{BASE}/upload/storage/v1/b/{name}/o?uploadType=media&name=obj-{i}.bin",
                                 raw=blob, headers={"Content-Type": "application/octet-stream"})

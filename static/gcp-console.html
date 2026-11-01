@@ -1457,36 +1457,21 @@ function renderLabelsTab(host, svc, item){
     g.append(el("div",{}, el("div",{class:"k"}, k), el("div",{class:"v"}, String(v)))));
   card.append(g); host.append(card);
 }
-// Measured request metrics: drawn from GET /api/metrics/series — what the simulator
-// actually served for THIS resource in the last hour. Never seeded; idle = empty state.
-function renderMetricsTab(host, svc){
-  const item = STATE.item || {};
-  const name = tabName(svc, item);
-  const wrap = el("div",{}); host.append(wrap);
-  const q = new URLSearchParams({provider:"gcp", service:"", resource:name, minutes:"60", step:"60"});
-  fetch(ORIGIN+"/api/metrics/series?"+q).then(r=>r.json()).then(d=>{
-    const pts = d.points || [];
-    wrap.append(el("div",{class:"note",style:"font-size:12.5px;color:var(--sub);margin:-4px 0 12px","data-metrics-source":"measured"},
-      "Measured from the requests this simulator served for " + (name || svc.label || "this resource") + " in the last hour (1-minute resolution)."));
-    if (!d.total_requests) { wrap.append(el("div",{class:"empty","data-metrics-empty":"1"}, "No requests in the last hour")); return; }
-    const grid = el("div",{style:"display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px"});
-    grid.append(buildSeriesChart("Requests", "requests", pts, ["requests"], ["#1a73e8"]));
-    grid.append(buildSeriesChart("Errors (4xx/5xx)", "errors", pts, ["errors"], ["#d93025"]));
-    grid.append(buildSeriesChart("Latency", "ms", pts, ["latency_p50","latency_p95"], ["#188038","#f9ab00"]));
-    wrap.append(grid);
-  }).catch(e => wrap.append(el("div",{class:"empty"}, "Failed to load metrics: " + e.message)));
-}
+// Measured request metrics: charts are drawn from GET /api/metrics/series — what the
+// simulator actually served for this resource — never from a seed. An idle resource
+// shows the empty state.
 function buildSeriesChart(label, unit, pts, fields, colors){
-  const card = el("div",{class:"kv-card","data-metric":label});
+  const card = el("div",{class:"kv-card"});
   card.append(el("div",{class:"k",style:"color:var(--sub);font-size:11.5px;text-transform:uppercase"}, label));
   const W = 300, H = 90, L = 34, B = 16, T = 6, R = 4;
   const max = Math.max(1, ...pts.flatMap(p => fields.map(f => p[f] || 0)));
   const niceMax = max <= 4 ? Math.ceil(max) : Math.ceil(max / 5) * 5;
   const bw = (W - L - R) / Math.max(pts.length, 1);
   const y = v => T + (H - T - B) * (1 - v / niceMax);
-  const tl = ts => new Date(ts*1000).toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"});
+  const tl = t => new Date(t*1000).toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"});
   let svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" role="img" aria-label="${label}">`;
-  svg += `<line x1="${L}" y1="${y(0)}" x2="${W-R}" y2="${y(0)}" stroke="#dadce0"/><text x="${L-4}" y="${y(niceMax)+3}" font-size="9" text-anchor="end" fill="#5f6368">${niceMax}</text><text x="${L-4}" y="${y(0)+3}" font-size="9" text-anchor="end" fill="#5f6368">0</text>`;
+  svg += `<line x1="${L}" y1="${y(0)}" x2="${W-R}" y2="${y(0)}" stroke="#dadce0"/><line x1="${L}" y1="${y(niceMax)}" x2="${W-R}" y2="${y(niceMax)}" stroke="#f1f3f4"/>`;
+  svg += `<text x="${L-4}" y="${y(niceMax)+3}" font-size="9" text-anchor="end" fill="#5f6368">${niceMax}</text><text x="${L-4}" y="${y(0)+3}" font-size="9" text-anchor="end" fill="#5f6368">0</text>`;
   if (pts.length) svg += `<text x="${L}" y="${H-3}" font-size="9" fill="#5f6368">${tl(pts[0].t)}</text><text x="${W-R}" y="${H-3}" font-size="9" text-anchor="end" fill="#5f6368">${tl(pts[pts.length-1].t)}</text>`;
   if (fields.length === 1) {
     pts.forEach((p, i) => { const v = p[fields[0]] || 0; if (!v) return;
@@ -1500,10 +1485,26 @@ function buildSeriesChart(label, unit, pts, fields, colors){
   svg += `</svg>`;
   card.append(el("div",{html:svg}));
   const last = pts[pts.length-1] || {};
-  card.append(el("div",{style:"font-size:18px;font-weight:500;font-family:'Google Sans',sans-serif;margin-top:6px"}, fields.length === 1
-    ? String(pts.reduce((a, p) => a + (p[fields[0]]||0), 0)) + " " + unit + " (last hour)"
-    : "p50 " + (last.latency_p50||0) + " / p95 " + (last.latency_p95||0) + " " + unit));
+  card.append(el("div",{style:"font-size:18px;font-weight:500;font-family:'Google Sans',sans-serif;margin-top:6px"},
+    fields.length === 1 ? pts.reduce((a, p) => a + (p[fields[0]]||0), 0) + " " + unit + " (last hour)"
+                        : "p50 " + (last.latency_p50||0) + " / p95 " + (last.latency_p95||0) + " " + unit));
   return card;
+}
+function renderMetricsTab(host, svc){
+  const name = tabName(svc, STATE.item);
+  const wrap = el("div",{}); host.append(wrap);
+  const q = new URLSearchParams({provider:"gcp", resource: name, minutes:"60", step:"60"});
+  fetch(ORIGIN+"/api/metrics/series?"+q).then(r=>r.json()).then(d=>{
+    const pts = d.points || [];
+    wrap.append(el("div",{style:"font-size:12.5px;color:var(--sub);margin:-4px 0 12px"},
+      `Measured from the requests this simulator served for ${name || "this project"} in the last hour (1-minute resolution).`));
+    if (!d.total_requests) { wrap.append(el("div",{class:"empty"}, "No requests for " + (name || "this resource") + " in the last hour")); return; }
+    const grid = el("div",{style:"display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px"});
+    grid.append(buildSeriesChart("Requests", "requests", pts, ["requests"], ["#1a73e8"]));
+    grid.append(buildSeriesChart("Errors (4xx/5xx)", "errors", pts, ["errors"], ["#d93025"]));
+    grid.append(buildSeriesChart("Latency", "ms", pts, ["latency_p50","latency_p95"], ["#188038","#e37400"]));
+    wrap.append(grid);
+  }).catch(e => wrap.append(el("div",{class:"empty"}, "Failed to load metrics: " + e.message)));
 }
 
 // ========== DETAIL TABS — this resource's real data =========================

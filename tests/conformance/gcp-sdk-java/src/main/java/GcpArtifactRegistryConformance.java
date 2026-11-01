@@ -42,7 +42,7 @@ public class GcpArtifactRegistryConformance {
 
   public static void main(String[] args) throws Exception {
     String endpoint = System.getenv().getOrDefault("ENDPOINT", "http://127.0.0.1:9000");
-    String project = System.getenv().getOrDefault("PROJECT", "gcp-dev");
+    String project = System.getenv().getOrDefault("PROJECT", "vyomi-project");
     String id = "java-ar-" + (System.currentTimeMillis() % 1000000000L);
     LocationName parent = LocationName.of(project, "us-central1");
     String name = RepositoryName.of(project, "us-central1", id).toString();

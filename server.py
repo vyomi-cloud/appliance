@@ -5407,7 +5407,7 @@ def _ec2_security_group_xml(group_id: str, group: dict) -> ET.Element:
     item = _ec2_xml("item")
     _ec2_sub(item, "groupId", group_id)
     _ec2_sub(item, "groupName", group.get("group_name", group_id))
-    _ec2_sub(item, "description", group.get("description", "CloudLearn security group"))
+    _ec2_sub(item, "groupDescription", group.get("description", "CloudLearn security group"))
     _ec2_sub(item, "ownerId", AWS_ACCOUNT_ID)
     _ec2_sub(item, "vpcId", group.get("vpc_id", ""))
     ip_permissions = _ec2_sub(item, "ipPermissions")
@@ -18812,20 +18812,18 @@ def _rds_runtime_delete(db: dict) -> None:
 
 
 def _rds_vpc_id() -> str:
-    # Like RDS: a DB instance with no explicit group goes in the default VPC; a custom
-    # VPC without subnets can't host it. Create the default VPC when nothing usable exists.
+    # RDS places an instance in the account's default VPC unless told otherwise; a custom
+    # VPC without subnets can't host a DB subnet group, so it is the last resort.
     vpcs = vpc_state.get("vpcs", {})
     for vpc_id in sorted(vpcs):
-        if vpcs[vpc_id].get("is_default") and _rds_default_subnet_ids(vpc_id):
+        if vpcs[vpc_id].get("is_default"):
             return vpc_id
     for vpc_id in sorted(vpcs):
         if _rds_default_subnet_ids(vpc_id):
             return vpc_id
-    try:
-        from core.aws_console_detail import OfflineNet
-        return OfflineNet(vpc_state, None, None).default_vpc()["vpc_id"]
-    except Exception:
-        return next(iter(sorted(vpcs)), "")
+    for vpc_id in sorted(vpcs):
+        return vpc_id
+    return ""
 
 
 def _rds_default_subnet_ids(vpc_id: str) -> list[str]:

@@ -1242,10 +1242,36 @@ async function selectRG(){
   const wrap=el("div",{class:"wrap"});
   const t=el("table"); t.append(el("tr",{},el("th",{},"Name"),el("th",{},"Location"),el("th",{},"Status")));
   (res.json.value||[]).forEach(g=>{
-    t.append(el("tr",{class:"row"}, el("td",{},el("a",{class:"reslink"},g.name)), el("td",{},g.location||"—"),
+    t.append(el("tr",{class:"row",style:"cursor:pointer",onclick:()=>openRG(g.name)}, el("td",{},el("a",{class:"reslink"},g.name)), el("td",{},g.location||"—"),
       el("td",{},el("span",{class:"badge"},getPath(g,"properties.provisioningState")||"Succeeded"))));
   });
   wrap.append(t); main.append(wrap);
+}
+
+// Resource group detail: the group itself (GET) + the resources it holds
+// (GET .../resources), as the portal's Overview blade shows them.
+async function openRG(name){
+  const main=document.getElementById("main"); main.innerHTML="";
+  main.append(crumb(["Home","Resource groups",name]), pageHead("folder",name,"Resource group"));
+  const body=el("div",{class:"wrap",id:"rgDetail"},el("div",{class:"empty"},"Loading…")); main.append(body);
+  const base=`/subscriptions/${SUB}/resourcegroups/${encodeURIComponent(name)}`;
+  const [g,r]=await Promise.all([arm("GET",base,undefined,"2021-04-01"), arm("GET",base+"/resources",undefined,"2021-04-01")]);
+  if(CURRENT!=="__rg__") return;
+  body.innerHTML="";
+  if(!g.json||!g.json.name){ body.append(el("div",{class:"empty"},(g.json&&g.json.error&&g.json.error.message)||"Resource group not found")); return; }
+  const grp=g.json, tags=Object.entries(grp.tags||{}).map(([k,v])=>k+" : "+v).join(", ")||"None";
+  const ess=el("table",{class:"sub-table"});
+  [["Name",grp.name],["Resource ID",grp.id],["Subscription ID",SUB],["Location",grp.location],
+   ["Provisioning state",getPath(grp,"properties.provisioningState")||"Succeeded"],["Tags",tags]]
+    .forEach(([k,v])=>ess.append(el("tr",{},el("th",{},k),el("td",{},String(v)))));
+  body.append(el("h3",{},"Essentials"), ess);
+  const items=(r.json&&r.json.value)||[];
+  body.append(el("h3",{id:"rgResHd"},`Resources (${items.length})`));
+  const t=el("table",{class:"sub-table",id:"rgResources"});
+  t.append(el("tr",{},el("th",{},"Name"),el("th",{},"Type"),el("th",{},"Location")));
+  items.forEach(x=>t.append(el("tr",{},el("td",{},x.name),el("td",{},x.type),el("td",{},x.location||grp.location))));
+  if(!items.length) t.append(el("tr",{},el("td",{colspan:"3"},"This resource group has no resources.")));
+  body.append(t);
 }
 
 // ---------- service grid ----------
@@ -6087,6 +6113,18 @@ SUB_RENDERERS.apimnamedvalues = function(svc, full, host){
       const r = await arm("POST", it.id + "/listValue", {}, svc.apiVersion); if (r.ok) alert(it.name + " = " + r.json.value); else toast("Failed: " + rbErr(r), "err"); }, "sec")] : [],
   });
 };
+// ---- API Management: Application Insights = the service's App Insights loggers ----
+SUB_RENDERERS.apimappinsights = function(svc, full, host){
+  return rbChildCrud(full, host, {
+    coll: "loggers", apiv: svc.apiVersion, child: "Logger",
+    intro: "Application Insights loggers of " + full.name + ": the gateway sends request telemetry to each one. Instrumentation keys are never returned by GET.",
+    empty: "No Application Insights logger on " + full.name + ". Add one to start sending gateway telemetry.",
+    columns: [["properties.loggerType","Type"],["properties.description","Description"],["properties.isBuffered","Buffered"]],
+    fields: [{key:"description", label:"Description", default:"Application Insights logger"},
+             {key:"key", label:"Instrumentation key", default:"00000000-0000-0000-0000-000000000000"}],
+    body: v => ({properties:{loggerType:"applicationInsights", description: v.description, isBuffered: true, credentials:{instrumentationKey: v.key}}}),
+  });
+};
 SUB_RENDERERS.apimdomains = async function(svc, full, host){
   const r = await arm("GET", full.id, undefined, svc.apiVersion);
   const hc = (r.ok && getPath(r.json,"properties.hostnameConfigurations")) || [];
@@ -7030,12 +7068,6 @@ boot();
  <span class="sp"></span>
  <button id="nano-foot-logs">Logs ▴</button>
  <button id="nano-foot-toggle">Start tunnel</button>
- <button id="nano-foot-more" title="More">⋯</button>
-</div>
-<div id="nano-foot-menu">
- <button id="nano-menu-star">⭐ Star on GitHub</button>
- <button id="nano-menu-connect" style="display:none">🔌 Connect apps</button>
- <button id="nano-menu-conf">📘 Conformance</button>
 </div>
 <script>
 (function(){

@@ -471,6 +471,23 @@ def test_pubsub_encryption_and_labels(c, topic):
     assert out["item"]["labels"] == {"team": "events"}
 
 
+def test_pubsub_tabs_resolve_topic_created_under_account_id(c):
+    """A topic created through the pubsub API under the account-number project (the console's
+    default space) must be found by the detail tabs, which used the raw account id."""
+    if not hasattr(c, "s"):
+        pytest.skip("offline-only: the project mapping lives in the appliance")
+    name = uid("tabacct")
+    r = c.s.post(BASE + "/api/gcp/pubsub/v1/projects/123456789012/topics", json={"topicId": name}, timeout=30)
+    assert r.status_code == 200, r.text
+    try:
+        for op, key in (("getLabels", "item"), ("getSchema", "item"), ("getEncryption", "item"),
+                        ("listSubscriptions", "items"), ("listPullSubscriptions", "items")):
+            st, out = c.sub("pubsub", op, name)
+            assert st == 200 and key in out, (op, st, out)
+    finally:
+        c.s.delete(BASE + "/api/gcp/pubsub/v1/projects/123456789012/topics/" + name, timeout=30)
+
+
 # ── VPC network ───────────────────────────────────────────────────────────────
 @pytest.fixture(scope="module")
 def nets(c):
