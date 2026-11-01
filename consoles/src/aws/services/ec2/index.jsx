@@ -15,6 +15,8 @@ import { PlacementGroups, CreatePlacementGroup } from "./PlacementGroups.jsx";
 import { KeyPairs, CreateKeyPair, ImportKeyPair } from "./KeyPairs.jsx";
 import NetworkInterfaces from "./NetworkInterfaces.jsx";
 import Settings from "./Settings.jsx";
+import { LoadBalancers, LoadBalancerDetail, CreateLoadBalancer } from "./LoadBalancers.jsx";
+import { TargetGroups, TargetGroupDetail, CreateTargetGroup } from "./TargetGroups.jsx";
 import * as Honest from "./HonestPages.jsx";
 
 const crumb = (text, ...path) => ({ text, href: `#/ec2/${path.join("/")}` });
@@ -113,8 +115,12 @@ export default {
     { pattern: "/ec2/import-key-pair", component: ImportKeyPair, crumbs: () => [crumb("EC2", ""), crumb("Key pairs", "key-pairs"), crumb("Import key pair", "import-key-pair")] },
     { pattern: "/ec2/network-interfaces", component: NetworkInterfaces, crumbs: () => [crumb("EC2", ""), crumb("Network interfaces", "network-interfaces")] },
 
-    { pattern: "/ec2/load-balancers", component: Honest.LoadBalancers, crumbs: () => [crumb("EC2", ""), crumb("Load balancers", "load-balancers")] },
-    { pattern: "/ec2/target-groups", component: Honest.TargetGroups, crumbs: () => [crumb("EC2", ""), crumb("Target groups", "target-groups")] },
+    { pattern: "/ec2/load-balancers", component: LoadBalancers, crumbs: () => [crumb("EC2", ""), crumb("Load balancers", "load-balancers")] },
+    { pattern: "/ec2/load-balancers/:id", component: LoadBalancerDetail, crumbs: (p) => [crumb("EC2", ""), crumb("Load balancers", "load-balancers"), crumb(p.id, "load-balancers", p.id)] },
+    { pattern: "/ec2/create-load-balancer", component: CreateLoadBalancer, crumbs: () => [crumb("EC2", ""), crumb("Load balancers", "load-balancers"), crumb("Create load balancer", "create-load-balancer")] },
+    { pattern: "/ec2/target-groups", component: TargetGroups, crumbs: () => [crumb("EC2", ""), crumb("Target groups", "target-groups")] },
+    { pattern: "/ec2/target-groups/:id", component: TargetGroupDetail, crumbs: (p) => [crumb("EC2", ""), crumb("Target groups", "target-groups"), crumb(p.id, "target-groups", p.id)] },
+    { pattern: "/ec2/create-target-group", component: CreateTargetGroup, crumbs: () => [crumb("EC2", ""), crumb("Target groups", "target-groups"), crumb("Create target group", "create-target-group")] },
     { pattern: "/ec2/trust-stores", component: Honest.TrustStores, crumbs: () => [crumb("EC2", ""), crumb("Trust stores", "trust-stores")] },
     { pattern: "/ec2/create-trust-store", component: Honest.CreateTrustStore, crumbs: () => [crumb("EC2", ""), crumb("Trust stores", "trust-stores"), crumb("Create trust store", "create-trust-store")] },
     { pattern: "/ec2/auto-scaling-groups", component: Honest.AutoScalingGroups, crumbs: () => [crumb("EC2", ""), crumb("Auto Scaling groups", "auto-scaling-groups")] },

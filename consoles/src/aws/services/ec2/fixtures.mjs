@@ -15,6 +15,12 @@ const Q = (action, params = {}) => ({
   body: new URLSearchParams(flatten({ Action: action, ...params })).toString(),
 });
 const xid = (xml, tag) => { const m = String(xml).match(new RegExp(`<${tag}>(.*?)</${tag}>`)); return m ? m[1] : null; };
+// ELBv2 is a separate AWS service ("elasticloadbalancing") sharing the same /_wire endpoint.
+const ELB = (action, params = {}) => ({
+  svc: "elasticloadbalancing",
+  headers: { "content-type": "application/x-www-form-urlencoded; charset=utf-8" },
+  body: new URLSearchParams(flatten({ Action: action, ...params })).toString(),
+});
 
 async function launchInstance(wire) {
   const body = await wire("POST", "/", Q("RunInstances", { InstanceType: "t3.micro", MinCount: 1, MaxCount: 1 }));
@@ -62,6 +68,18 @@ export default {
   },
   "live-launch-template": async (wire, uniq) => {
     await wire("POST", "/", Q("CreateLaunchTemplate", { LaunchTemplateName: uniq, "LaunchTemplateData.InstanceType": "t3.micro" }));
+    return uniq;
+  },
+  "live-lb": async (wire, uniq) => {
+    const subBody = await wire("POST", "/", Q("DescribeSubnets"));
+    const ids = [...String(subBody).matchAll(/<subnetId>(.*?)<\/subnetId>/g)].map((m) => m[1]).slice(0, 2);
+    await wire("POST", "/", ELB("CreateLoadBalancer", { Name: uniq, "Subnets.1": ids[0], "Subnets.2": ids[1] }));
+    return uniq;
+  },
+  "live-tg": async (wire, uniq) => {
+    const subBody = await wire("POST", "/", Q("DescribeSubnets"));
+    const vpcId = xid(subBody, "vpcId") || "vpc-default";
+    await wire("POST", "/", ELB("CreateTargetGroup", { Name: uniq, Protocol: "HTTP", Port: 80, VpcId: vpcId }));
     return uniq;
   },
 };

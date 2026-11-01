@@ -260,14 +260,75 @@
    "These account-wide EC2 settings aren't modeled; they have no effect in Vyomi."
   ]
  },
- "ec2.load-balancing": {
-  "title": "Load balancers, target groups, trust stores",
+ "ec2.load-balancers": {
+  "title": "Load balancers (create, delete, listeners, rules, security groups)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_elbv2_core.py"
+  ]
+ },
+ "ec2.load-balancers.attributes": {
+  "title": "Load balancer attributes",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Deletion protection is really enforced — DeleteLoadBalancer is rejected while it's on.",
+   "idle timeout, HTTP/2, desync mitigation, WAF fail-open and cross-zone balancing are stored and returned exactly as set, but there's no real data plane behind them to change behaviour."
+  ],
+  "tests": [
+   "tests/conformance/test_elbv2_core.py"
+  ]
+ },
+ "ec2.target-groups": {
+  "title": "Target groups (create, delete, register/deregister targets, health checks)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "Target health is deterministic (healthy once the target group is attached to a listener, otherwise unused) rather than derived from a real health-check probe over the network."
+  ],
+  "tests": [
+   "tests/conformance/test_elbv2_core.py"
+  ]
+ },
+ "ec2.target-groups.attributes": {
+  "title": "Target group attributes",
+  "level": {
+   "nano": "config_only",
+   "offline": "config_only"
+  },
+  "limitations": [
+   "Stickiness, slow start, deregistration delay and the load-balancing algorithm are stored and returned exactly as set, but there's no real data plane behind them to change traffic distribution."
+  ],
+  "tests": [
+   "tests/conformance/test_elbv2_core.py"
+  ]
+ },
+ "ec2.load-balancing.monitoring": {
+  "title": "CloudWatch metrics for load balancers and target groups",
   "level": {
    "nano": "not_simulated",
    "offline": "not_simulated"
   },
   "limitations": [
-   "Elastic Load Balancing isn't part of the EC2 console surface Vyomi simulates."
+   "RequestCount, HealthyHostCount, TargetResponseTime and the rest of the ELB CloudWatch metrics aren't published — Vyomi's ELBv2 engine is control-plane only."
+  ]
+ },
+ "ec2.trust-stores": {
+  "title": "Trust stores (mutual TLS)",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Trust store management for ALB mutual TLS isn't part of the EC2 console surface Vyomi simulates."
   ]
  },
  "ec2.auto-scaling": {

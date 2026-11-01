@@ -23,10 +23,8 @@ export const UltraServers = capability("UltraServers", "ec2.purchasing-options")
 export const CapacityManager = capability("Capacity Manager", "ec2.purchasing-options");
 export const LifecycleManager = capability("Lifecycle Manager", "ec2.lifecycle-manager");
 export const CreateLifecyclePolicy = capability("Create default policy", "ec2.lifecycle-manager");
-export const LoadBalancers = capability("Load balancers", "ec2.load-balancing");
-export const TargetGroups = capability("Target groups", "ec2.load-balancing");
-export const TrustStores = capability("Trust stores", "ec2.load-balancing");
-export const CreateTrustStore = capability("Create trust store", "ec2.load-balancing");
+export const TrustStores = capability("Trust stores", "ec2.trust-stores");
+export const CreateTrustStore = capability("Create trust store", "ec2.trust-stores");
 export const AutoScalingGroups = capability("Auto Scaling groups", "ec2.auto-scaling");
 
 export const MigrateAServer = honest("Migrate a server", "AWS Application Migration Service");

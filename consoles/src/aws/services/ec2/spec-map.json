@@ -149,10 +149,26 @@
     "live": "live-eni"
   },
   "load-balancers": {
-    "route": "#/ec2/load-balancers"
+    "route": "#/ec2/load-balancers",
+    "live": "live-lb"
+  },
+  "load-balancer-detail": {
+    "route": "#/ec2/load-balancers/{live}",
+    "live": "live-lb"
+  },
+  "create-load-balancer": {
+    "route": "#/ec2/create-load-balancer"
+  },
+  "target-group-detail": {
+    "route": "#/ec2/target-groups/{live}",
+    "live": "live-tg"
+  },
+  "create-target-group": {
+    "route": "#/ec2/create-target-group"
   },
   "target-groups": {
-    "route": "#/ec2/target-groups"
+    "route": "#/ec2/target-groups",
+    "live": "live-tg"
   },
   "trust-stores": {
     "route": "#/ec2/trust-stores"
