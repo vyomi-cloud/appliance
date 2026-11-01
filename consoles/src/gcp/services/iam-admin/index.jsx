@@ -40,10 +40,15 @@ import PolicyTroubleshooter from "./PolicyTroubleshooter.jsx";
 import PolicyAnalyzer from "./PolicyAnalyzer.jsx";
 import WorkloadIdentity from "./WorkloadIdentity.jsx";
 import QuotasSystemLimits from "./QuotasSystemLimits.jsx";
-import {
-  AssetInventory, Groups, IdentityAwareProxy, IdentityOrganization, ManagedWorkloadIdentities,
-  PrincipalAccessBoundary, PrivacySecurity, SecurityInsights, WorkforceIdentityFederation,
-} from "./InfoPages.jsx";
+import Groups from "./Groups.jsx";
+import WorkforceIdentityFederation from "./WorkforceIdentity.jsx";
+import PrincipalAccessBoundary from "./PrincipalAccessBoundary.jsx";
+import ManagedWorkloadIdentities from "./ManagedWorkloadIdentities.jsx";
+import AssetInventory from "./AssetInventory.jsx";
+import SecurityInsights from "./SecurityInsights.jsx";
+import IdentityOrganization from "./IdentityOrganization.jsx";
+import IdentityAwareProxy from "./IdentityAwareProxy.jsx";
+import { PrivacySecurity } from "./InfoPages.jsx";
 
 const IamAllow = () => <Iam tab="allow" />;
 const IamDeny = () => <Iam tab="deny" />;

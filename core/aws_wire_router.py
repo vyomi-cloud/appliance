@@ -123,6 +123,25 @@ def _gcp_service(path):
     # Predefined roles catalog (no project scope): /v1/roles
     if path.startswith("/v1/roles"):
         return "gcp-iam"
+    # Asset Inventory search, Security Insights and Identity-Aware Proxy resources —
+    # all project-scoped IAM & Admin sub-features that don't fit the generic
+    # "/serviceAccounts" / "/roles" checks below.
+    if re.match(r"^/v1/projects/[^/]+:searchAllResources$", path):
+        return "gcp-iam"
+    if re.match(r"^/v1/projects/[^/]+/locations/global/insights$", path):
+        return "gcp-iam"
+    if re.match(r"^/v1/projects/[^/]+/iap_web(/|:|$)", path):
+        return "gcp-iam"
+    # Organizations, Cloud Identity Groups, Workforce Identity Federation pools and
+    # Principal Access Boundary policies/bindings — org-scoped resources Resource
+    # Manager backs (every project has an implicit backing organization; see
+    # gcp_resourcemanager_core.get_or_create_default_org).
+    if path.startswith("/v3/organizations"):
+        return "gcp-resourcemanager"
+    if path.startswith("/v1/groups"):
+        return "gcp-resourcemanager"
+    if path.startswith("/v1/locations/global/workforcePools"):
+        return "gcp-resourcemanager"
     if re.match(r"^/v1/projects/[^/]+/locations/global/connectivityTests([/:?]|$)", path):
         return "gcp-compute"   # Network Intelligence Center Connectivity Tests → netsim via the VPC core
     if re.search(r"^/v1/projects/[^/]+/(dashboards|snoozes)([/:]|$)", path):   # Dashboards / Snoozes APIs (v1)
@@ -132,7 +151,7 @@ def _gcp_service(path):
     if "/projects/" in path:
         if re.search(r"^/v1/projects/[^/]+/locations/[^/]+/instances([/:]|$)", path):
             return "gcp-redis"
-        if re.search(r"/locations/[^/]+/entitlements([/?]|$)", path):
+        if re.search(r"/locations/[^/]+/(entitlements|settings|notifications)([/?]|$)", path) and "/workloadIdentityPools" not in path:
             return "gcp-pam"
         if "workloadIdentityPools" in path:
             return "gcp-iam"
@@ -906,9 +925,9 @@ class AwsWireRouter:
             elif svc == "gcp-pam":   # grant activation/expiry is a real project IAM policy change
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body),
                                   grant_fn=self._pam_grant, revoke_fn=self._pam_revoke)
-            elif svc == "gcp-iam":   # org policy enforcement + Data Access audit log emission
+            elif svc == "gcp-iam":   # org policy enforcement + Data Access audit log emission + SA metrics
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body),
-                                  rm_store=self.gcp_rm, logger=self._iam_audit_log)
+                                  rm_store=self.gcp_rm, logger=self._iam_audit_log, iamc_store=self.gcp_iamc)
             else:
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body))
             hdrs = dict(r.headers or {})

@@ -37,6 +37,7 @@ export async function listServiceAccountActivity(email) {
   const r = await restJson("GET", `/v1/projects/${getProject()}/serviceAccounts/${e(email)}/policyActivity`);
   return r.activity || [];
 }
+export const getServiceAccountMetrics = (email) => restJson("GET", `/v1/projects/${getProject()}/serviceAccounts/${e(email)}:metrics`);
 
 // ── service account keys ─────────────────────────────────────────────────────
 export async function listKeys(email) {
@@ -78,6 +79,103 @@ export async function listWorkloadIdentityPools() {
 export const createWorkloadIdentityPool = (poolId, body) =>
   restJson("POST", `/v1/projects/${getProject()}/locations/global/workloadIdentityPools`, { query: { workloadIdentityPoolId: poolId }, body });
 export const deleteWorkloadIdentityPool = (name) => restJson("DELETE", `/v1/${name}`);
+
+// ── Managed Workload Identities (nested under a workload identity pool) ──────
+export async function listManagedIdentities(poolName) {
+  const r = await restJson("GET", `/v1/${poolName}/managedIdentities`);
+  return r.managedIdentities || [];
+}
+export const createManagedIdentity = (poolName, identityId) =>
+  restJson("POST", `/v1/${poolName}/managedIdentities`, { query: { workloadIdentityPoolManagedIdentityId: identityId }, body: {} });
+export const rotateManagedIdentityCert = (name) => restJson("POST", `/v1/${name}:rotateCertificate`, { body: {} });
+export const deleteManagedIdentity = (name) => restJson("DELETE", `/v1/${name}`);
+
+// ── Asset Inventory ───────────────────────────────────────────────────────────
+export async function searchAssets(query) {
+  const r = await restJson("GET", `/v1/projects/${getProject()}:searchAllResources`, { query: query ? { query } : {} });
+  return r.results || [];
+}
+
+// ── Security Insights ─────────────────────────────────────────────────────────
+export async function listSecurityInsights() {
+  const r = await restJson("GET", `/v1/projects/${getProject()}/locations/global/insights`);
+  return r.insights || [];
+}
+
+// ── Identity-Aware Proxy ───────────────────────────────────────────────────────
+export async function listIapResources() {
+  const r = await restJson("GET", `/v1/projects/${getProject()}/iap_web`);
+  return r.resources || [];
+}
+export const createIapResource = (resourceId, displayName) =>
+  restJson("POST", `/v1/projects/${getProject()}/iap_web`, { query: { resourceId }, body: { displayName } });
+export const setIapEnabled = (name, enabled) => restJson("PATCH", `/v1/${name}`, { body: { enabled } });
+export const deleteIapResource = (name) => restJson("DELETE", `/v1/${name}`);
+export const checkIapAccess = (name, member) => restJson("POST", `/v1/${name}:checkAccess`, { body: { member } });
+
+// ── Organization (every project has a real backing org) ──────────────────────
+export async function getOrganization() {
+  const p = await getProjectMeta();
+  if (!p.parent || p.parent.type !== "organization") return null;
+  return restJson("GET", `/v3/organizations/${p.parent.id}`);
+}
+
+// ── Cloud Identity Groups (org-scoped) ────────────────────────────────────────
+export async function listGroups() {
+  const org = await getOrganization();
+  const r = await restJson("GET", "/v1/groups", { query: org ? { parent: org.name } : {} });
+  return r.groups || [];
+}
+export async function createGroup(email, displayName) {
+  const org = await getOrganization();
+  return restJson("POST", "/v1/groups", { body: { groupKey: { id: email }, displayName, parent: org?.name } });
+}
+export const deleteGroup = (name) => restJson("DELETE", `/v1/${name}`);
+export async function listGroupMemberships(groupName) {
+  const r = await restJson("GET", `/v1/${groupName}/memberships`);
+  return r.memberships || [];
+}
+export const addGroupMembership = (groupName, memberId) =>
+  restJson("POST", `/v1/${groupName}/memberships`, { body: { preferredMemberKey: { id: memberId } } });
+export const removeGroupMembership = (name) => restJson("DELETE", `/v1/${name}`);
+
+// ── Workforce Identity Federation pools (org-scoped) ──────────────────────────
+export async function listWorkforcePools() {
+  const org = await getOrganization();
+  const r = await restJson("GET", "/v1/locations/global/workforcePools", { query: org ? { parent: org.name } : {} });
+  return r.workforcePools || [];
+}
+export async function createWorkforcePool(poolId, displayName) {
+  const org = await getOrganization();
+  return restJson("POST", "/v1/locations/global/workforcePools", { query: { workforcePoolId: poolId }, body: { displayName, parent: org?.name } });
+}
+export const deleteWorkforcePool = (name) => restJson("DELETE", `/v1/${name}`);
+
+// ── Principal Access Boundary (org-scoped policies + bindings) ───────────────
+export async function listPabPolicies() {
+  const org = await getOrganization();
+  if (!org) return [];
+  const r = await restJson("GET", `/v3/${org.name}/locations/global/principalAccessBoundaryPolicies`);
+  return r.principalAccessBoundaryPolicies || [];
+}
+export async function createPabPolicy(policyId, displayName, resources) {
+  const org = await getOrganization();
+  return restJson("POST", `/v3/${org.name}/locations/global/principalAccessBoundaryPolicies`,
+    { query: { principalAccessBoundaryPolicyId: policyId }, body: { displayName, details: { rules: [{ resources }] } } });
+}
+export const deletePabPolicy = (name) => restJson("DELETE", `/v3/${name}`);
+export async function listPabBindings() {
+  const org = await getOrganization();
+  if (!org) return [];
+  const r = await restJson("GET", `/v3/${org.name}/locations/global/policyBindings`);
+  return r.policyBindings || [];
+}
+export async function createPabBinding(bindingId, policyName, principal) {
+  const org = await getOrganization();
+  return restJson("POST", `/v3/${org.name}/locations/global/policyBindings`,
+    { query: { policyBindingId: bindingId }, body: { policy: policyName, target: { principal } } });
+}
+export const deletePabBinding = (name) => restJson("DELETE", `/v3/${name}`);
 
 // ── project (Resource Manager v3) ─────────────────────────────────────────────
 export const getProjectMeta = () => restJson("GET", `/v3/projects/${getProject()}`);
@@ -132,6 +230,12 @@ export const approveGrant = (name, body = {}) => restJson("POST", `/v1/${name}:a
 export const denyGrant = (name, body = {}) => restJson("POST", `/v1/${name}:deny`, { body });
 export const revokeGrant = (name, body = {}) => restJson("POST", `/v1/${name}:revoke`, { body });
 export const grantEntitlementId = (grantName) => grantName.split("/grants/")[0].split("/").pop();
+export const getPamSettings = () => restJson("GET", `/v1/projects/${getProject()}/locations/global/settings`);
+export const patchPamSettings = (body) => restJson("PATCH", `/v1/projects/${getProject()}/locations/global/settings`, { body });
+export async function listPamNotifications() {
+  const r = await restJson("GET", `/v1/projects/${getProject()}/locations/global/notifications`);
+  return r.notifications || [];
+}
 
 // ── display helpers ───────────────────────────────────────────────────────────
 export const PREDEFINED_ROLE_TITLES = {

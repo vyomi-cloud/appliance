@@ -104,4 +104,42 @@ export default {
     await wire("POST", `/v1/projects/${PROJECT}/locations/global/workloadIdentityPools?workloadIdentityPoolId=${uniq}`, { svc: null, body: { displayName: uniq } });
     return uniq;
   },
+
+  "group": async (wire, uniq) => {
+    const email = `${uniq}@example.com`;
+    await wire("POST", "/v1/groups", { svc: null, body: { groupKey: { id: email } } });
+    return email;
+  },
+
+  "workforce-pool": async (wire, uniq) => {
+    await wire("POST", `/v1/locations/global/workforcePools?workforcePoolId=${uniq}`, { svc: null, body: { displayName: uniq } });
+    return uniq;
+  },
+
+  "pab-policy": async (wire, uniq) => {
+    const proj = await wire("GET", `/v3/projects/${PROJECT}`, { svc: null });
+    const org = `organizations/${proj.parent.id}`;
+    await wire("POST", `/v3/${org}/locations/global/principalAccessBoundaryPolicies?principalAccessBoundaryPolicyId=${uniq}`,
+      { svc: null, body: { displayName: uniq, details: { rules: [{ resources: [`projects/${PROJECT}`] }] } } });
+    return uniq;
+  },
+
+  "managed-identity": async (wire, uniq) => {
+    try { await wire("POST", `/v1/projects/${PROJECT}/locations/global/workloadIdentityPools?workloadIdentityPoolId=uic-mwi-pool`, { svc: null, body: { displayName: "uic-mwi-pool" } }); }
+    catch {}
+    await wire("POST", `/v1/projects/${PROJECT}/locations/global/workloadIdentityPools/uic-mwi-pool/managedIdentities?workloadIdentityPoolManagedIdentityId=${uniq}`,
+      { svc: null, body: {} });
+    return uniq;
+  },
+
+  "iap-resource": async (wire, uniq) => {
+    await wire("POST", `/v1/projects/${PROJECT}/iap_web?resourceId=${uniq}`, { svc: null, body: { displayName: uniq } });
+    return uniq;
+  },
+
+  "security-insight": async (wire, uniq) => {
+    const r = await wire("POST", `/v1/projects/${PROJECT}/serviceAccounts`, { svc: null, body: { accountId: uniq, serviceAccount: { displayName: uniq } } });
+    await wire("POST", `/v1/projects/${PROJECT}/serviceAccounts/${r.email}/keys`, { svc: null, body: {} });
+    return r.email;
+  },
 };

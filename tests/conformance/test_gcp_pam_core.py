@@ -136,6 +136,36 @@ check("list grants for an entitlement", s == 200 and {g["name"] for g in grants[
 s, missing = pam_call("GET", base + "/approval-ent/grants/nope")
 check("get missing grant -> 404", s == 404)
 
+# Settings — notification channels + require-justification are ENFORCED, not stored-only.
+settings_path = f"/v1/projects/{project}/locations/{loc}/settings"
+s, defaults = call(st, "GET", settings_path)
+check("get settings 200 with defaults auto-created", s == 200 and defaults["notificationChannels"] == [] and defaults["requireJustification"] is False, defaults)
+s, patched = call(st, "PATCH", settings_path, {"notificationChannels": ["secops@example.com"], "requireJustification": True})
+check("patch settings 200", s == 200 and patched["notificationChannels"] == ["secops@example.com"] and patched["requireJustification"] is True, patched)
+s, roundtrip = call(st, "GET", settings_path)
+check("settings round-trip", roundtrip == patched)
+
+s, auto_ent = call(st, "POST", base, {"maxRequestDuration": "3600s"}, query={"entitlementId": "auto-settings-test"})
+check("auto entitlement for settings test", s == 200)
+s, no_just = call(st, "POST", auto_ent["name"] + "/grants", {"requester": "user:x@example.com"})
+check("requireJustification rejects a grant with no justification -> 400", s == 400 and "justification" in no_just["error"]["message"], no_just)
+s, with_just = call(st, "POST", auto_ent["name"] + "/grants",
+                    {"requester": "user:x@example.com", "justification": {"unstructuredJustification": "need prod access"}})
+check("requireJustification accepts a grant WITH a justification", s == 200 and with_just["state"] == "ACTIVATED", with_just)
+
+s, notifs = call(st, "GET", f"/v1/projects/{project}/locations/{loc}/notifications")
+check("notifications recorded for the configured channel on REQUESTED + ACTIVATED", s == 200
+      and sum(1 for n in notifs["notifications"] if n["grant"] == with_just["name"]) == 2
+      and all(n["channels"] == ["secops@example.com"] for n in notifs["notifications"] if n["grant"] == with_just["name"]), notifs)
+
+s, _ = call(st, "PATCH", settings_path, {"notificationChannels": []})
+s, no_chan_ent = call(st, "POST", base, {"maxRequestDuration": "3600s"}, query={"entitlementId": "no-channel-test"})
+s, g_no_chan = call(st, "POST", no_chan_ent["name"] + "/grants",
+                    {"requester": "user:y@example.com", "justification": {"unstructuredJustification": "n/a"}})
+s, notifs2 = call(st, "GET", f"/v1/projects/{project}/locations/{loc}/notifications")
+check("no notification channels configured -> nothing recorded for that grant",
+      all(n["grant"] != g_no_chan["name"] for n in notifs2["notifications"]))
+
 print(f"{PASS} passed, {FAIL} failed")
 
 

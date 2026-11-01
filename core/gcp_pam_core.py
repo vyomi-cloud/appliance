@@ -54,6 +54,8 @@ class PamStore:
     def __init__(self):
         self.entitlements: dict = {}   # name -> Entitlement
         self.grants: dict = {}         # name (entitlement/grants/id) -> Grant
+        self.settings: dict = {}       # "projects/{p}/locations/{loc}/settings" -> Settings
+        self.notifications: list = []  # [{time, event, grant, channels}] — real lifecycle notices
 
 
 def _json(status: int, obj: dict) -> PamResponse:
@@ -85,6 +87,59 @@ def _parse_duration(s) -> float:
         except ValueError:
             pass
     return 3600.0
+
+
+# ── settings (notification channels + default approval requirements) ───────
+# A real singleton per project/location, GET-then-PATCH like Resource Manager's
+# project settings. ENFORCED, not stored-only: requireJustification rejects grant
+# requests missing one, and every grant lifecycle event records which configured
+# channels Vyomi would notify (console "Settings" tab + "Audit Logs" show the
+# resulting notifications list) — Vyomi does not deliver a real email/Pub/Sub
+# message, it proves the event fired and who would have been told.
+def _settings_name(project, location) -> str:
+    return f"projects/{project}/locations/{location}/settings"
+
+
+def _get_or_create_settings(store: PamStore, project, location) -> dict:
+    name = _settings_name(project, location)
+    s = store.settings.get(name)
+    if s is None:
+        s = {"name": name, "notificationChannels": [], "requireJustification": False}
+        store.settings[name] = s
+    return s
+
+
+def _get_settings(store: PamStore, project, location) -> PamResponse:
+    return _json(200, dict(_get_or_create_settings(store, project, location)))
+
+
+def _patch_settings(store: PamStore, project, location, body) -> PamResponse:
+    s = _get_or_create_settings(store, project, location)
+    if "notificationChannels" in body:
+        chans = body["notificationChannels"]
+        if not isinstance(chans, list) or not all(isinstance(c, str) for c in chans):
+            return _err(400, "notificationChannels must be a list of strings.", "INVALID_ARGUMENT")
+        s["notificationChannels"] = list(chans)
+    if "requireJustification" in body:
+        s["requireJustification"] = bool(body["requireJustification"])
+    return _json(200, dict(s))
+
+
+def _notify(store: PamStore, project, location, event: str, grant_name: str) -> None:
+    channels = _get_or_create_settings(store, project, location).get("notificationChannels") or []
+    if not channels:
+        return
+    store.notifications.append({
+        "time": _now_iso(), "event": event, "grant": grant_name, "channels": list(channels),
+    })
+    if len(store.notifications) > 500:
+        del store.notifications[: len(store.notifications) - 500]
+
+
+def _list_notifications(store: PamStore, project, location) -> PamResponse:
+    prefix = f"projects/{project}/locations/{location}/entitlements/"
+    out = [dict(n) for n in store.notifications if n["grant"].startswith(prefix)]
+    return _json(200, {"notifications": out})
 
 
 def _create(store: PamStore, project, location, entitlement_id, body) -> PamResponse:
@@ -149,7 +204,12 @@ def _apply_bindings(grant: dict, fn) -> None:
             fn(grant["_project_resource"], role, grant["requester"])
 
 
-def _activate(grant: dict, grant_fn, actor: str) -> None:
+def _proj_loc(name: str) -> tuple[str, str]:
+    segs = name.split("/")
+    return segs[1], segs[3]
+
+
+def _activate(store: PamStore, grant: dict, grant_fn, actor: str) -> None:
     duration = _parse_duration(grant["requestedDuration"])
     expire_ts = _now_ts() + duration
     grant["state"] = "ACTIVATED"
@@ -159,28 +219,38 @@ def _activate(grant: dict, grant_fn, actor: str) -> None:
     grant["updateTime"] = now
     grant["timeline"]["events"].append({"eventTime": now, "event": "ACTIVATED", "actor": actor})
     _apply_bindings(grant, grant_fn)
+    project, location = _proj_loc(grant["name"])
+    _notify(store, project, location, "ACTIVATED", grant["name"])
 
 
-def _end(grant: dict, revoke_fn, state: str, actor: str) -> None:
+def _end(store: PamStore, grant: dict, revoke_fn, state: str, actor: str) -> None:
     _apply_bindings(grant, revoke_fn)
     grant["state"] = state
     grant["_expire_ts"] = None
     now = _now_iso()
     grant["updateTime"] = now
     grant["timeline"]["events"].append({"eventTime": now, "event": state, "actor": actor})
+    project, location = _proj_loc(grant["name"])
+    _notify(store, project, location, state, grant["name"])
 
 
 def _sweep(store: PamStore, revoke_fn) -> None:
     now_ts = _now_ts()
     for g in store.grants.values():
         if g["state"] == "ACTIVATED" and g.get("_expire_ts") and now_ts >= g["_expire_ts"]:
-            _end(g, revoke_fn, "EXPIRED", "system")
+            _end(store, g, revoke_fn, "EXPIRED", "system")
 
 
 def _create_grant(store: PamStore, entitlement_name, body, project_resource, grant_fn) -> PamResponse:
     ent = store.entitlements.get(entitlement_name)
     if ent is None:
         return _err(404, f"Entitlement {entitlement_name} not found.", "NOT_FOUND")
+    project, location = _proj_loc(entitlement_name)
+    justification = body.get("justification") or {}
+    if _get_or_create_settings(store, project, location).get("requireJustification") and \
+            not str(justification.get("unstructuredJustification", "")).strip():
+        return _err(400, "A justification is required to request this grant (PAM Settings: "
+                         "require justification is enabled for this project).", "INVALID_ARGUMENT")
     gid = uuid.uuid4().hex[:12]
     name = f"{entitlement_name}/grants/{gid}"
     requester = str(body.get("requester") or "user:console@example.com")
@@ -200,8 +270,9 @@ def _create_grant(store: PamStore, entitlement_name, body, project_resource, gra
         "_project_resource": project_resource,
     }
     store.grants[name] = grant
+    _notify(store, project, location, "REQUESTED", name)
     if not needs_approval:
-        _activate(grant, grant_fn, "system (auto-approved — no approvers configured)")
+        _activate(store, grant, grant_fn, "system (auto-approved — no approvers configured)")
     return _json(200, _grant_view(grant))
 
 
@@ -227,7 +298,7 @@ def _approve_grant(store: PamStore, name, body, grant_fn, revoke_fn) -> PamRespo
         return _err(404, f"Grant {name} not found.", "NOT_FOUND")
     if g["state"] != "APPROVAL_AWAITED":
         return _err(400, f"Grant {name} is not awaiting approval.", "FAILED_PRECONDITION")
-    _activate(g, grant_fn, str(body.get("approver") or "user:approver@example.com"))
+    _activate(store, g, grant_fn, str(body.get("approver") or "user:approver@example.com"))
     return _json(200, _grant_view(g))
 
 
@@ -241,6 +312,8 @@ def _deny_grant(store: PamStore, name, body, revoke_fn) -> PamResponse:
     now = _now_iso()
     g["state"], g["updateTime"] = "DENIED", now
     g["timeline"]["events"].append({"eventTime": now, "event": "DENIED", "actor": str(body.get("approver") or "user:approver@example.com")})
+    project, location = _proj_loc(name)
+    _notify(store, project, location, "DENIED", name)
     return _json(200, _grant_view(g))
 
 
@@ -251,7 +324,7 @@ def _revoke_grant(store: PamStore, name, body, revoke_fn) -> PamResponse:
         return _err(404, f"Grant {name} not found.", "NOT_FOUND")
     if g["state"] != "ACTIVATED":
         return _err(400, f"Grant {name} is not active.", "FAILED_PRECONDITION")
-    _end(g, revoke_fn, "REVOKED", str(body.get("actor") or "user:console@example.com"))
+    _end(store, g, revoke_fn, "REVOKED", str(body.get("actor") or "user:console@example.com"))
     return _json(200, _grant_view(g))
 
 
@@ -274,6 +347,19 @@ def dispatch(store: PamStore, method: str, path: str,
         p = p[len("/v1"):]
     p = p.strip("/")
     segs = [unquote(s) for s in p.split("/") if s != ""]
+
+    if (len(segs) == 5 and segs[0] == "projects" and segs[2] == "locations" and segs[4] == "settings"):
+        project, location = segs[1], segs[3]
+        if method == "GET":
+            return _get_settings(store, project, location)
+        if method == "PATCH":
+            return _patch_settings(store, project, location, _body())
+        return _err(400, f"Unsupported method {method} on settings", "INVALID_ARGUMENT")
+
+    if (len(segs) == 5 and segs[0] == "projects" and segs[2] == "locations" and segs[4] == "notifications"):
+        if method == "GET":
+            return _list_notifications(store, segs[1], segs[3])
+        return _err(400, f"Unsupported method {method} on notifications", "INVALID_ARGUMENT")
 
     if (len(segs) >= 5 and segs[0] == "projects" and segs[2] == "locations"
             and segs[4] == "entitlements"):

@@ -17,10 +17,12 @@ try:
     from core.iam_store import InMemoryIamStore
     from core import gcp_iam_core as giam
     from core import gcp_resourcemanager_core as grm
+    from core import gcp_iamcredentials_core as giamc
 except ImportError:  # pragma: no cover - Pyodide flat layout
     from iam_store import InMemoryIamStore  # type: ignore
     import gcp_iam_core as giam  # type: ignore
     import gcp_resourcemanager_core as grm  # type: ignore
+    import gcp_iamcredentials_core as giamc  # type: ignore
 
 
 def _check(name, cond):
@@ -330,6 +332,112 @@ def run() -> int:
                      {"service": "iam.googleapis.com", "auditLogConfigs": [{"logType": "DATA_WRITE"}]}]}}).encode())
     giam.dispatch(st, "GET", f"/v1/projects/{proj18}/serviceAccounts", {}, {}, b"", logger=_logger)
     _check("DATA_WRITE toggle does not log a read", len(logged) == 1)
+
+    # 19. service account Metrics tab — derived from real iamcredentials issuance ---
+    iamc_st = giamc.shared_store()
+    sa19 = _jbody(_post(st, f"/v1/projects/{project}/serviceAccounts", {"accountId": "svc-metrics"}))
+    empty_metrics = giam.dispatch(st, "GET", f"/v1/projects/{project}/serviceAccounts/{sa19['email']}:metrics",
+                                  {}, {}, b"", iamc_store=iamc_st)
+    _check("metrics 200 with zero requests before any credential issuance",
+           empty_metrics.status == 200 and _jbody(empty_metrics)["totalRequests"] == 0)
+    giamc.generate_access_token(iamc_st, sa19["email"], {"scope": ["https://www.googleapis.com/auth/cloud-platform"]})
+    giamc.sign_blob(iamc_st, sa19["email"], {"payload": "aGVsbG8="})
+    m19 = giam.dispatch(st, "GET", f"/v1/projects/{project}/serviceAccounts/{sa19['email']}:metrics",
+                        {}, {}, b"", iamc_store=iamc_st)
+    mbody = _jbody(m19)
+    _check("metrics counts real issued credentials, not another SA's", mbody["totalRequests"] == 2)
+    _check("metrics breaks down by method", {d["method"] for d in mbody["byMethod"]} == {"generateAccessToken", "signBlob"})
+    _check("metrics unaffected by an unrelated SA's activity",
+           _jbody(giam.dispatch(st, "GET", f"/v1/projects/{project}/serviceAccounts/{sa4['email']}:metrics",
+                                {}, {}, b"", iamc_store=iamc_st))["totalRequests"] == 0)
+
+    # 20. Managed Workload Identities — nested under a workload identity pool, real
+    #     synthetic-cert lifecycle (create, rotate, delete) ------------------------
+    pool20 = _jbody(giam.dispatch(st, "POST", f"/v1/projects/{project}/locations/global/workloadIdentityPools",
+                                  {"workloadIdentityPoolId": "mwi-pool"}, {}, json.dumps({"displayName": "MWI pool"}).encode()))
+    mi_create = giam.dispatch(st, "POST", f"/v1/{pool20['name']}/managedIdentities",
+                              {"workloadIdentityPoolManagedIdentityId": "svc1"}, {}, b"{}")
+    _check("create managed identity 200", mi_create.status == 200)
+    mi20 = _jbody(mi_create)
+    _check("managed identity has a SPIFFE id", mi20["spiffeId"].startswith("spiffe://"))
+    _check("managed identity issued one certificate", len(mi20["certificates"]) == 1)
+    rotated = _jbody(giam.dispatch(st, "POST", f"/v1/{mi20['name']}:rotateCertificate", {}, {}, b"{}"))
+    _check("rotate issues a NEW certificate (different serial)",
+           len(rotated["certificates"]) == 2 and rotated["certificates"][0]["serialNumber"] != rotated["certificates"][1]["serialNumber"])
+    listed20 = _jbody(giam.dispatch(st, "GET", f"/v1/{pool20['name']}/managedIdentities", {}, {}, b""))
+    _check("list managed identities has svc1", any(x["name"] == mi20["name"] for x in listed20["managedIdentities"]))
+    del20 = giam.dispatch(st, "DELETE", f"/v1/{mi20['name']}", {}, {}, b"")
+    _check("delete managed identity 200", del20.status == 200)
+    _check("deleted managed identity 404s", giam.dispatch(st, "GET", f"/v1/{mi20['name']}", {}, {}, b"").status == 404)
+
+    # 21. Asset Inventory — searchAllResources over real IAM + Resource Manager state --
+    rm21 = grm.ResourceManagerStore()
+    grm.dispatch(rm21, "GET", f"/v3/projects/{project}")  # auto-creates the project record
+    assets = _jbody(giam.dispatch(st, "GET", f"/v1/projects/{project}:searchAllResources", {}, {}, b"", rm_store=rm21))
+    types = {a["assetType"] for a in assets["results"]}
+    _check("asset inventory indexes service accounts", "iam.googleapis.com/ServiceAccount" in types)
+    _check("asset inventory indexes the project itself", "cloudresourcemanager.googleapis.com/Project" in types)
+    filtered = _jbody(giam.dispatch(st, "GET", f"/v1/projects/{project}:searchAllResources",
+                                    {"query": "svc-metrics"}, {}, b"", rm_store=rm21))
+    _check("asset inventory query filters results", all("svc-metrics" in a["displayName"] for a in filtered["results"]) and filtered["results"])
+
+    # 22. Security Insights — real lint over live policy/key/credential state --------
+    sa22 = _jbody(_post(st, f"/v1/projects/{project}/serviceAccounts", {"accountId": "svc-insight"}))
+    giam.dispatch(st, "POST", f"/v1/projects/{project}/serviceAccounts/{sa22['email']}/keys", {}, {}, b"{}")
+    _post(st, f"/v1/projects/{project}:setIamPolicy",
+          {"policy": {"bindings": [{"role": "roles/owner", "members": [f"serviceAccount:{sa22['email']}"]}]}})
+    insights = _jbody(giam.dispatch(st, "GET", f"/v1/projects/{project}/locations/global/insights", {}, {}, b"", iamc_store=iamc_st))
+    _check("insights flag the primitive-role grant",
+           any("basic role roles/owner" in i["description"] for i in insights["insights"]))
+    _check("insights flag the service account with user-managed keys",
+           any(sa22["email"] in i["description"] and "user-managed key" in i["description"] for i in insights["insights"]))
+    _check("insights flag the unused SA (no keys, never issued a credential)",
+           any(sa4["email"] in i["description"] and "never issued a credential" in i["description"] for i in insights["insights"]))
+
+    # 23. Identity-Aware Proxy — real per-resource toggle + the Allow decision it gates -
+    iap_res = _jbody(giam.dispatch(st, "POST", f"/v1/projects/{project}/iap_web",
+                                   {"resourceId": "app1"}, {}, json.dumps({"displayName": "App 1"}).encode()))
+    denied = _jbody(giam.dispatch(st, "POST", f"/v1/{iap_res['name']}:checkAccess", {}, {},
+                                  json.dumps({"member": "user:nobody@example.com"}).encode()))
+    _check("checkAccess denies a member with no IAP role", denied["allowed"] is False)
+    _post(st, f"/v1/{iap_res['name']}:setIamPolicy",
+          {"policy": {"bindings": [{"role": "roles/iap.httpsResourceAccessor", "members": ["user:ok@example.com"]}]}})
+    allowed = _jbody(giam.dispatch(st, "POST", f"/v1/{iap_res['name']}:checkAccess", {}, {},
+                                   json.dumps({"member": "user:ok@example.com"}).encode()))
+    _check("checkAccess allows a member holding iap.httpsResourceAccessor", allowed["allowed"] is True)
+    giam.dispatch(st, "PATCH", f"/v1/{iap_res['name']}", {}, {}, json.dumps({"enabled": False}).encode())
+    off = _jbody(giam.dispatch(st, "POST", f"/v1/{iap_res['name']}:checkAccess", {}, {},
+                               json.dumps({"member": "user:ok@example.com"}).encode()))
+    _check("checkAccess denies everyone once IAP is turned off", off["allowed"] is False and "turned off" in off["reason"])
+
+    # 24. Principal Access Boundary — org-scoped policy + binding REALLY narrows access --
+    rm24 = grm.ResourceManagerStore()
+    org24 = grm.get_or_create_default_org(rm24)
+    proj_in, proj_out = f"{project}-pab-in", f"{project}-pab-out"
+    _post(st, f"/v1/projects/{proj_in}:setIamPolicy", {"policy": {"bindings": [{"role": "roles/owner", "members": ["user:bound@example.com"]}]}})
+    _post(st, f"/v1/projects/{proj_out}:setIamPolicy", {"policy": {"bindings": [{"role": "roles/owner", "members": ["user:bound@example.com"]}]}})
+    pol24 = _jbody(grm.dispatch(rm24, "POST", f"/v3/{org24['name']}/locations/global/principalAccessBoundaryPolicies",
+                               {"principalAccessBoundaryPolicyId": "p1"}, {},
+                               json.dumps({"details": {"rules": [{"resources": [f"projects/{proj_in}"]}]}}).encode()))
+    grm.dispatch(rm24, "POST", f"/v3/{org24['name']}/locations/global/policyBindings",
+                {"policyBindingId": "b1"}, {},
+                json.dumps({"policy": pol24["name"], "target": {"principal": "user:bound@example.com"}}).encode())
+    in_perm = _jbody(giam.dispatch(st, "POST", f"/v1/projects/{proj_in}:testIamPermissions", {}, {},
+                                   json.dumps({"permissions": ["resourcemanager.projects.get"], "member": "user:bound@example.com"}).encode(),
+                                   rm_store=rm24))
+    out_perm = _jbody(giam.dispatch(st, "POST", f"/v1/projects/{proj_out}:testIamPermissions", {}, {},
+                                    json.dumps({"permissions": ["resourcemanager.projects.get"], "member": "user:bound@example.com"}).encode(),
+                                    rm_store=rm24))
+    _check("PAB allows the in-boundary resource despite an owner binding existing elsewhere too",
+           in_perm["permissions"] == ["resourcemanager.projects.get"])
+    _check("PAB DENIES the same member+role on an out-of-boundary resource",
+           out_perm["permissions"] == [])
+    _post(st, f"/v1/projects/{proj_out}:setIamPolicy", {"policy": {"bindings": [{"role": "roles/owner", "members": ["user:free@example.com"]}]}})
+    unbound = _jbody(giam.dispatch(st, "POST", f"/v1/projects/{proj_out}:testIamPermissions", {}, {},
+                                   json.dumps({"permissions": ["resourcemanager.projects.get"], "member": "user:free@example.com"}).encode(),
+                                   rm_store=rm24))
+    _check("a member with no PAB binding at all keeps its normal grant on the same resource PAB blocks the bound member on",
+           unbound["permissions"] == ["resourcemanager.projects.get"])
 
     print("\nGCP IAM-core conformance: ALL GREEN")
     return 0

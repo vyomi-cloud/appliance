@@ -5,19 +5,24 @@ native **Cloud Resource Manager v3** (`cloudresourcemanager.googleapis.com`), **
 Manager Tags v3** (`tagKeys`) and **Essential Contacts v1** (`essentialcontacts.googleapis.com`)
 and **Org Policy v2** (`orgpolicy.googleapis.com`) REST APIs, so the native
 `google-cloud-resource-manager` / `google-cloud-resource-settings` SDKs and `gcloud` work
-unchanged against it.
+unchanged against it. It also hosts the org-scoped resources every Vyomi project's
+single backing organization makes real: Cloud Identity Groups, Workforce Identity
+Federation pools and Principal Access Boundary policies/bindings.
 
 NO fastapi / google-cloud / socket / subprocess imports -> loads under Pyodide.
 
 Wire shapes:
     Project
-      GET    /v3/projects/{projectId}                 -> Project
+      GET    /v3/projects/{projectId}                 -> Project (parent: this project's
+                                                          real backing organization, auto-created)
       PATCH  /v3/projects/{projectId}                  body {displayName?, labels?} -> Project
       POST   /v3/projects                              body {projectId,displayName?,parent?} -> Project
       GET    /v3/projects:search?query=                -> {projects:[...]}  (name/ID substring match)
       DELETE /v3/projects/{projectId}                  -> {}  (immediate delete; Vyomi has no
-                                                          30-day recoverable soft-delete / folders
-                                                          or organizations to move a project into)
+                                                          30-day recoverable soft-delete / folders)
+    Organizations (every project belongs to the one Vyomi-wide organization)
+      GET    /v3/organizations/{id}                   -> Organization
+      GET    /v3/organizations[:search]                -> {organizations:[the one org]}
     Tag keys
       POST   /v3/tagKeys          body {parent,shortName,description} -> TagKey
       GET    /v3/tagKeys?parent=projects/{p}          -> {tagKeys:[...]}
@@ -32,6 +37,25 @@ Wire shapes:
       GET    {parent}/policies        -> {policies:[...]}
       GET    {name}
       DELETE {name}
+    Cloud Identity Groups (Cloud Identity Groups v1)
+      POST   /v1/groups   body {groupKey:{id:email},displayName?,parent?} -> Group
+      GET    /v1/groups[?parent=organizations/{id}]  -> {groups:[...]}
+      GET/DELETE /v1/groups/{id}
+      POST   /v1/{group}/memberships   body {preferredMemberKey:{id}}   -> Membership
+      GET/DELETE /v1/{group}/memberships[/{id}]
+    Workforce Identity Federation pools
+      POST   /v1/locations/global/workforcePools?workforcePoolId=X  body {displayName?,parent?}
+      GET    /v1/locations/global/workforcePools[?parent=]   -> {workforcePools:[...]}
+      GET/DELETE /v1/locations/global/workforcePools/{id}
+    Principal Access Boundary policies + bindings (ENFORCED by gcp_iam_core.py's
+    testIamPermissions, which this module's `pab_bindings`/`pab_policies` back)
+      POST   /v3/{org}/locations/global/principalAccessBoundaryPolicies?principalAccessBoundaryPolicyId=X
+             body {displayName?,details:{rules:[{resources:[...]}]}}
+      GET    /v3/{org}/locations/global/principalAccessBoundaryPolicies[/{id}]
+      DELETE /v3/{org}/locations/global/principalAccessBoundaryPolicies/{id}
+      POST   /v3/{org}/locations/global/policyBindings?policyBindingId=X
+             body {policy,target:{principal}}
+      GET/DELETE /v3/{org}/locations/global/policyBindings[/{id}]
 
 Errors use the native GCP shape {"error":{"code","message","status"}}.
 """
@@ -62,6 +86,12 @@ class ResourceManagerStore:
         self.tag_keys: dict = {}       # name "tagKeys/{id}" -> TagKey
         self.contacts: dict = {}       # "projects/{p}/contacts/{id}" -> Contact
         self.org_policies: dict = {}   # policy name -> Policy
+        self.organizations: dict = {}  # "organizations/{id}" -> Organization
+        self.groups: dict = {}         # "groups/{id}" -> Group (Cloud Identity)
+        self.group_memberships: dict = {}  # "groups/{id}/memberships/{id}" -> Membership
+        self.workforce_pools: dict = {}    # "locations/global/workforcePools/{id}" -> WorkforcePool
+        self.pab_policies: dict = {}       # PAB policy name -> PrincipalAccessBoundaryPolicy
+        self.pab_bindings: dict = {}       # PolicyBinding name -> PolicyBinding
 
 
 def _json(status: int, obj: dict) -> RmResponse:
@@ -79,10 +109,52 @@ def _project_number(project_id: str) -> str:
     return str(int(hashlib.sha1(project_id.encode()).hexdigest(), 16) % (10 ** 12)).zfill(12)
 
 
+# ── organizations ─────────────────────────────────────────────────────────────
+# Vyomi's GCP lens is single-customer: every project it hosts belongs to the SAME
+# backing organization (a Google Workspace / Cloud Identity account normally owns
+# every project under it, same as this). This is what lets the org-scoped IAM & Admin
+# pages (Groups, Workforce Identity Federation, Principal Access Boundary, Identity &
+# Organization) be real instead of "requires an organization" — the organization
+# always exists, a project's `parent` always points at it unless the caller supplies
+# a different one explicitly at creation.
+_DEFAULT_ORG_ID = "908614232548"
+
+
+def get_or_create_default_org(store: ResourceManagerStore) -> dict:
+    name = f"organizations/{_DEFAULT_ORG_ID}"
+    org = store.organizations.get(name)
+    if org is None:
+        customer_id = "C" + hashlib.sha1(name.encode()).hexdigest()[:8].upper()
+        org = {
+            "name": name,
+            "displayName": "vyomi.example.com",
+            "directoryCustomerId": customer_id,
+            "state": "ACTIVE",
+            "createTime": "2026-01-01T00:00:00Z",
+            "owner": {"directoryCustomerId": customer_id},
+        }
+        store.organizations[name] = org
+    return org
+
+
+def _get_organization(store, name) -> RmResponse:
+    org = store.organizations.get(name)
+    if org is None and name == f"organizations/{_DEFAULT_ORG_ID}":
+        org = get_or_create_default_org(store)
+    if org is None:
+        return _err(404, f"Organization {name} not found.", "NOT_FOUND")
+    return _json(200, dict(org))
+
+
+def _search_organizations(store) -> RmResponse:
+    return _json(200, {"organizations": [dict(get_or_create_default_org(store))]})
+
+
 # ── project ───────────────────────────────────────────────────────────────────
 def _get_or_create_project(store: ResourceManagerStore, project_id: str) -> dict:
     p = store.projects.get(project_id)
     if p is None:
+        org = get_or_create_default_org(store)
         p = {
             "name": f"projects/{_project_number(project_id)}",
             "projectId": project_id,
@@ -91,6 +163,7 @@ def _get_or_create_project(store: ResourceManagerStore, project_id: str) -> dict
             "createTime": "2026-01-01T00:00:00Z",
             "etag": base64.b64encode(uuid.uuid4().bytes[:8]).decode(),
             "labels": {},
+            "parent": {"type": "organization", "id": org["name"].split("/", 1)[1]},
         }
         store.projects[project_id] = p
     return p
@@ -261,6 +334,210 @@ def _delete_org_policy(store, name) -> RmResponse:
     return _json(200, {})
 
 
+# ── Cloud Identity Groups (org-scoped; console "Groups" page) ────────────────
+def _group_id() -> str:
+    return "groups/" + str(int(hashlib.sha1(uuid.uuid4().bytes).hexdigest(), 16) % (10 ** 12))
+
+
+def _create_group(store, body) -> RmResponse:
+    key = (body.get("groupKey") or {}).get("id", "").strip()
+    if not key or "@" not in key:
+        return _err(400, "groupKey.id must be a valid group email.", "INVALID_ARGUMENT")
+    for g in store.groups.values():
+        if g["groupKey"]["id"] == key:
+            return _err(409, f"Group {key} already exists.", "ALREADY_EXISTS")
+    name = _group_id()
+    get_or_create_default_org(store)
+    g = {
+        "name": name,
+        "groupKey": {"id": key},
+        "parent": body.get("parent") or f"organizations/{_DEFAULT_ORG_ID}",
+        "displayName": body.get("displayName", key.split("@")[0]),
+        "description": body.get("description", ""),
+        "createTime": "2026-01-01T00:00:00Z",
+        "updateTime": "2026-01-01T00:00:00Z",
+        "labels": body.get("labels") or {"cloudidentity.googleapis.com/groups.discussion_forum": ""},
+    }
+    store.groups[name] = g
+    return _json(200, dict(g))
+
+
+def _list_groups(store, parent) -> RmResponse:
+    out = [dict(g) for n, g in sorted(store.groups.items()) if not parent or g["parent"] == parent]
+    return _json(200, {"groups": out})
+
+
+def _get_group(store, name) -> RmResponse:
+    g = store.groups.get(name)
+    if g is None:
+        return _err(404, f"Group {name} not found.", "NOT_FOUND")
+    return _json(200, dict(g))
+
+
+def _delete_group(store, name) -> RmResponse:
+    if name not in store.groups:
+        return _err(404, f"Group {name} not found.", "NOT_FOUND")
+    del store.groups[name]
+    for mname in [m for m in store.group_memberships if m.startswith(name + "/memberships/")]:
+        del store.group_memberships[mname]
+    return _json(200, {})
+
+
+def _create_membership(store, group_name, body) -> RmResponse:
+    if group_name not in store.groups:
+        return _err(404, f"Group {group_name} not found.", "NOT_FOUND")
+    key = (body.get("preferredMemberKey") or {}).get("id", "").strip()
+    if not key:
+        return _err(400, "preferredMemberKey.id is required.", "INVALID_ARGUMENT")
+    for n, m in store.group_memberships.items():
+        if n.startswith(group_name + "/memberships/") and m["preferredMemberKey"]["id"] == key:
+            return _err(409, f"{key} is already a member of {group_name}.", "ALREADY_EXISTS")
+    mid = str(int(hashlib.sha1(uuid.uuid4().bytes).hexdigest(), 16) % (10 ** 12))
+    name = f"{group_name}/memberships/{mid}"
+    m = {
+        "name": name,
+        "preferredMemberKey": {"id": key},
+        "roles": body.get("roles") or [{"name": "MEMBER"}],
+        "createTime": "2026-01-01T00:00:00Z",
+    }
+    store.group_memberships[name] = m
+    return _json(200, dict(m))
+
+
+def _list_memberships(store, group_name) -> RmResponse:
+    prefix = group_name + "/memberships/"
+    out = [dict(m) for n, m in sorted(store.group_memberships.items()) if n.startswith(prefix)]
+    return _json(200, {"memberships": out})
+
+
+def _delete_membership(store, name) -> RmResponse:
+    if name not in store.group_memberships:
+        return _err(404, f"Membership {name} not found.", "NOT_FOUND")
+    del store.group_memberships[name]
+    return _json(200, {})
+
+
+# ── Workforce Identity Federation pools (org-scoped) ─────────────────────────
+def _create_workforce_pool(store, pool_id, body) -> RmResponse:
+    if not pool_id:
+        return _err(400, "workforcePoolId is required.", "INVALID_ARGUMENT")
+    name = f"locations/global/workforcePools/{pool_id}"
+    if name in store.workforce_pools:
+        return _err(409, f"Workforce pool {pool_id} already exists.", "ALREADY_EXISTS")
+    get_or_create_default_org(store)
+    wp = {
+        "name": name,
+        "parent": body.get("parent") or f"organizations/{_DEFAULT_ORG_ID}",
+        "displayName": body.get("displayName", pool_id),
+        "description": body.get("description", ""),
+        "state": "ACTIVE",
+        "disabled": False,
+        "sessionDuration": body.get("sessionDuration", "3600s"),
+    }
+    store.workforce_pools[name] = wp
+    return _json(200, dict(wp))
+
+
+def _list_workforce_pools(store, parent) -> RmResponse:
+    out = [dict(wp) for n, wp in sorted(store.workforce_pools.items()) if not parent or wp["parent"] == parent]
+    return _json(200, {"workforcePools": out})
+
+
+def _get_workforce_pool(store, name) -> RmResponse:
+    wp = store.workforce_pools.get(name)
+    if wp is None:
+        return _err(404, f"Workforce pool {name} not found.", "NOT_FOUND")
+    return _json(200, dict(wp))
+
+
+def _delete_workforce_pool(store, name) -> RmResponse:
+    if name not in store.workforce_pools:
+        return _err(404, f"Workforce pool {name} not found.", "NOT_FOUND")
+    del store.workforce_pools[name]
+    return _json(200, {})
+
+
+# ── Principal Access Boundary policies + bindings (org-scoped, ENFORCED) ────
+# A PAB binding ties a principal to a policy whose rules enumerate the ONLY
+# resources that principal may be granted access to; core/gcp_iam_core.py's
+# testIamPermissions consults store.pab_policies/pab_bindings (via the rm_store it
+# already receives) on every call, so this narrows real access decisions — it is
+# not stored-but-unevaluated config.
+def _create_pab_policy(store, parent, policy_id, body) -> RmResponse:
+    if not policy_id:
+        return _err(400, "principalAccessBoundaryPolicyId is required.", "INVALID_ARGUMENT")
+    name = f"{parent}/locations/global/principalAccessBoundaryPolicies/{policy_id}"
+    if name in store.pab_policies:
+        return _err(409, f"Policy {policy_id} already exists.", "ALREADY_EXISTS")
+    pol = {
+        "name": name,
+        "displayName": body.get("displayName", policy_id),
+        "details": body.get("details") or {"rules": []},
+        "etag": base64.b64encode(uuid.uuid4().bytes[:8]).decode(),
+        "createTime": "2026-01-01T00:00:00Z",
+    }
+    store.pab_policies[name] = pol
+    return _json(200, dict(pol))
+
+
+def _list_pab_policies(store, parent) -> RmResponse:
+    prefix = f"{parent}/locations/global/principalAccessBoundaryPolicies/"
+    out = [dict(p) for n, p in sorted(store.pab_policies.items()) if n.startswith(prefix)]
+    return _json(200, {"principalAccessBoundaryPolicies": out})
+
+
+def _get_pab_policy(store, name) -> RmResponse:
+    pol = store.pab_policies.get(name)
+    if pol is None:
+        return _err(404, f"Policy {name} not found.", "NOT_FOUND")
+    return _json(200, dict(pol))
+
+
+def _delete_pab_policy(store, name) -> RmResponse:
+    if name not in store.pab_policies:
+        return _err(404, f"Policy {name} not found.", "NOT_FOUND")
+    del store.pab_policies[name]
+    for bname in [b for b, bind in store.pab_bindings.items() if bind.get("policy") == name]:
+        del store.pab_bindings[bname]
+    return _json(200, {})
+
+
+def _create_pab_binding(store, parent, binding_id, body) -> RmResponse:
+    if not binding_id:
+        return _err(400, "policyBindingId is required.", "INVALID_ARGUMENT")
+    policy = str(body.get("policy", "")).strip()
+    if policy not in store.pab_policies:
+        return _err(400, f"policy {policy} does not exist.", "INVALID_ARGUMENT")
+    target = body.get("target") or {}
+    if not target.get("principal"):
+        return _err(400, "target.principal is required.", "INVALID_ARGUMENT")
+    name = f"{parent}/locations/global/policyBindings/{binding_id}"
+    if name in store.pab_bindings:
+        return _err(409, f"Policy binding {binding_id} already exists.", "ALREADY_EXISTS")
+    b = {
+        "name": name,
+        "policy": policy,
+        "policyKind": "PRINCIPAL_ACCESS_BOUNDARY",
+        "target": target,
+        "createTime": "2026-01-01T00:00:00Z",
+    }
+    store.pab_bindings[name] = b
+    return _json(200, dict(b))
+
+
+def _list_pab_bindings(store, parent) -> RmResponse:
+    prefix = f"{parent}/locations/global/policyBindings/"
+    out = [dict(b) for n, b in sorted(store.pab_bindings.items()) if n.startswith(prefix)]
+    return _json(200, {"policyBindings": out})
+
+
+def _delete_pab_binding(store, name) -> RmResponse:
+    if name not in store.pab_bindings:
+        return _err(404, f"Policy binding {name} not found.", "NOT_FOUND")
+    del store.pab_bindings[name]
+    return _json(200, {})
+
+
 # ── dispatch ────────────────────────────────────────────────────────────────
 def dispatch(store: ResourceManagerStore, method: str, path: str,
              query: dict | None = None, headers: dict | None = None,
@@ -330,6 +607,89 @@ def dispatch(store: ResourceManagerStore, method: str, path: str,
         if method == "DELETE":
             return _delete_org_policy(store, name)
         return _err(400, f"Unsupported method {method} on policy", "INVALID_ARGUMENT")
+
+    # ---- organizations: organizations[/{id}|:search] ----
+    if segs and segs[0] == "organizations":
+        if len(segs) == 1 and method == "GET":
+            return _search_organizations(store)
+        if len(segs) >= 2 and ":" in segs[1]:
+            org_id, verb = segs[1].split(":", 1)
+            if verb == "search" and method == "GET":
+                return _search_organizations(store)
+            return _err(400, f"Unsupported organizations verb '{verb}'", "INVALID_ARGUMENT")
+        if len(segs) == 2:
+            if method == "GET":
+                return _get_organization(store, f"organizations/{segs[1]}")
+            return _err(400, f"Unsupported method {method} on organization", "INVALID_ARGUMENT")
+        org_name = f"organizations/{segs[1]}"
+        # ---- Principal Access Boundary: organizations/{org}/locations/global/{principalAccessBoundaryPolicies|policyBindings}[/{id}] ----
+        if len(segs) >= 5 and segs[2] == "locations" and segs[3] == "global" and segs[4] == "principalAccessBoundaryPolicies":
+            if len(segs) == 5:
+                if method == "POST":
+                    return _create_pab_policy(store, org_name, str(query.get("principalAccessBoundaryPolicyId", "")).strip(), _body())
+                if method == "GET":
+                    return _list_pab_policies(store, org_name)
+                return _err(400, f"Unsupported method {method} on principalAccessBoundaryPolicies", "INVALID_ARGUMENT")
+            name = f"{org_name}/locations/global/principalAccessBoundaryPolicies/{segs[5]}"
+            if method == "GET":
+                return _get_pab_policy(store, name)
+            if method == "DELETE":
+                return _delete_pab_policy(store, name)
+            return _err(400, f"Unsupported method {method} on principalAccessBoundaryPolicy", "INVALID_ARGUMENT")
+        if len(segs) >= 5 and segs[2] == "locations" and segs[3] == "global" and segs[4] == "policyBindings":
+            if len(segs) == 5:
+                if method == "POST":
+                    return _create_pab_binding(store, org_name, str(query.get("policyBindingId", "")).strip(), _body())
+                if method == "GET":
+                    return _list_pab_bindings(store, org_name)
+                return _err(400, f"Unsupported method {method} on policyBindings", "INVALID_ARGUMENT")
+            name = f"{org_name}/locations/global/policyBindings/{segs[5]}"
+            if method == "DELETE":
+                return _delete_pab_binding(store, name)
+            return _err(400, f"Unsupported method {method} on policyBinding", "INVALID_ARGUMENT")
+        return _err(404, f"Unknown path: {path}", "NOT_FOUND")
+
+    # ---- Cloud Identity groups: groups[/{id}[/memberships[/{id}]]] ----
+    if segs and segs[0] == "groups":
+        if len(segs) == 1:
+            if method == "POST":
+                return _create_group(store, _body())
+            if method == "GET":
+                return _list_groups(store, str(query.get("parent", "")).strip())
+            return _err(400, f"Unsupported method {method} on groups", "INVALID_ARGUMENT")
+        group_name = f"groups/{segs[1]}"
+        if len(segs) == 2:
+            if method == "GET":
+                return _get_group(store, group_name)
+            if method == "DELETE":
+                return _delete_group(store, group_name)
+            return _err(400, f"Unsupported method {method} on group", "INVALID_ARGUMENT")
+        if len(segs) >= 3 and segs[2] == "memberships":
+            if len(segs) == 3:
+                if method == "POST":
+                    return _create_membership(store, group_name, _body())
+                if method == "GET":
+                    return _list_memberships(store, group_name)
+                return _err(400, f"Unsupported method {method} on memberships", "INVALID_ARGUMENT")
+            if method == "DELETE":
+                return _delete_membership(store, f"{group_name}/memberships/{segs[3]}")
+            return _err(400, f"Unsupported method {method} on membership", "INVALID_ARGUMENT")
+        return _err(404, f"Unknown path: {path}", "NOT_FOUND")
+
+    # ---- Workforce Identity Federation pools: locations/global/workforcePools[/{id}] ----
+    if len(segs) >= 3 and segs[0] == "locations" and segs[1] == "global" and segs[2] == "workforcePools":
+        if len(segs) == 3:
+            if method == "POST":
+                return _create_workforce_pool(store, str(query.get("workforcePoolId", "")).strip(), _body())
+            if method == "GET":
+                return _list_workforce_pools(store, str(query.get("parent", "")).strip())
+            return _err(400, f"Unsupported method {method} on workforcePools", "INVALID_ARGUMENT")
+        name = f"locations/global/workforcePools/{segs[3]}"
+        if method == "GET":
+            return _get_workforce_pool(store, name)
+        if method == "DELETE":
+            return _delete_workforce_pool(store, name)
+        return _err(400, f"Unsupported method {method} on workforcePool", "INVALID_ARGUMENT")
 
     # ---- projects collection: POST creates, GET "projects:search" lists ----
     if segs == ["projects"] and method == "POST":
