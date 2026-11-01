@@ -33,6 +33,7 @@ from datetime import datetime, timezone
 from xml.sax.saxutils import escape as _xml_escape
 
 from core.sql_store import SqlStore, TransactionError, TransactionLimitError
+from core import cloudwatch_core as _cw_core
 
 RDS_NS = "http://rds.amazonaws.com/doc/2014-10-31/"
 _ENGINE_PORT = {"postgres": 5432, "postgresql": 5432, "aurora-postgresql": 5432,
@@ -223,6 +224,7 @@ def _db_instance_xml(db: dict) -> str:
         _el("StorageType", db.get("storage_type", "gp3")),
         _el("AvailabilityZone", db.get("availability_zone", "us-east-1a")),
         _el("MultiAZ", str(db.get("multi_az", False)).lower()),
+        (_el("SecondaryAvailabilityZone", db["secondary_availability_zone"]) if db.get("secondary_availability_zone") else ""),
         _el("PubliclyAccessible", str(db.get("publicly_accessible", False)).lower()),
         _el("DBInstanceArn", db.get("db_instance_arn", "")),
         _el("InstanceCreateTime", db.get("created", "")),
@@ -247,6 +249,11 @@ def _db_instance_xml(db: dict) -> str:
         "<DBParameterGroups>",
         f"<DBParameterGroupStatus>{_el('DBParameterGroupName', db.get('db_parameter_group_name', 'default'))}{_el('ParameterApplyStatus', 'in-sync')}</DBParameterGroupStatus>",
         "</DBParameterGroups>",
+        (_el("ReadReplicaSourceDBInstanceIdentifier", db["read_replica_source_db_instance_identifier"])
+         if db.get("read_replica_source_db_instance_identifier") else ""),
+        "<ReadReplicaDBInstanceIdentifiers>" +
+        "".join(_el("ReadReplicaDBInstanceIdentifier", r) for r in db.get("read_replica_db_instance_identifiers", [])) +
+        "</ReadReplicaDBInstanceIdentifiers>",
         "</DBInstance>",
     ]
     return "".join(parts)
@@ -527,6 +534,8 @@ def _create_db_instance(store: SqlStore, params: dict, msg_store=None) -> RdsRes
     engine = str(params.get("Engine", "postgres")).lower()
     ca_cert = str(params.get("CACertificateIdentifier", DEFAULT_CA))
     _validate_ca_certificate(ca_cert)
+    multi_az = str(params.get("MultiAZ", "false")).lower() == "true"
+    availability_zone = str(params.get("AvailabilityZone", "us-east-1a"))
     record = {
         "db_instance_identifier": db_id,
         "db_instance_class": str(params.get("DBInstanceClass", "db.t3.micro")),
@@ -537,8 +546,11 @@ def _create_db_instance(store: SqlStore, params: dict, msg_store=None) -> RdsRes
         "master_user_password": str(params.get("MasterUserPassword", "")),
         "allocated_storage": _int(params, "AllocatedStorage", 20),
         "storage_type": str(params.get("StorageType", "gp3")),
-        "availability_zone": str(params.get("AvailabilityZone", "us-east-1a")),
-        "multi_az": str(params.get("MultiAZ", "false")).lower() == "true",
+        "availability_zone": availability_zone,
+        "multi_az": multi_az,
+        "secondary_availability_zone": _secondary_az(availability_zone) if multi_az else None,
+        "read_replica_source_db_instance_identifier": None,
+        "read_replica_db_instance_identifiers": [],
         "publicly_accessible": str(params.get("PubliclyAccessible", "false")).lower() == "true",
         "backup_retention_period": _int(params, "BackupRetentionPeriod", 7),
         "endpoint_address": f"{db_id}.nano-rds.local",
@@ -594,6 +606,10 @@ def _modify_db_instance(store: SqlStore, params: dict, msg_store=None) -> RdsRes
                 db[field_name] = caster(params[param])
             except (TypeError, ValueError):
                 pass
+    if params.get("MultiAZ") is not None:
+        multi_az = str(params["MultiAZ"]).lower() == "true"
+        db["multi_az"] = multi_az
+        db["secondary_availability_zone"] = _secondary_az(db.get("availability_zone", "us-east-1a")) if multi_az else None
     db["updated"] = _now()
     store.persist()
     _log_event(store, db["db_instance_identifier"], "db-instance", "DB instance modified.", ["configuration change"], msg_store)
@@ -605,10 +621,24 @@ def _set_status(store: SqlStore, params: dict, action: str, status: str, msg_sto
     if db.get("deletion_protection") and action == "DeleteDBInstance":
         raise RdsError("InvalidParameterCombination",
                        "Cannot delete a DB instance with deletion protection enabled.", 400)
+    db_id = db["db_instance_identifier"]
+    force_failover = action == "RebootDBInstance" and str(params.get("ForceFailover", "false")).lower() == "true"
+    if force_failover:
+        if not db.get("multi_az"):
+            raise RdsError("InvalidParameterCombination",
+                           "ForceFailover can only be used with a Multi-AZ DB instance.", 400)
+        _log_event(store, db_id, "db-instance", "Multi-AZ instance failover started.", ["failover"], msg_store)
+        primary, secondary = db.get("availability_zone", "us-east-1a"), db.get("secondary_availability_zone") or _secondary_az(db.get("availability_zone", "us-east-1a"))
+        db["availability_zone"], db["secondary_availability_zone"] = secondary, primary
     db["db_instance_status"] = status
     db["updated"] = _now()
     store.persist()
-    _log_event(store, db["db_instance_identifier"], "db-instance", f"DB instance status set to {status}.", msg_store=msg_store)
+    if force_failover:
+        _log_event(store, db_id, "db-instance",
+                   f"Multi-AZ instance failover completed. New primary is in Availability Zone {db['availability_zone']}.",
+                   ["failover"], msg_store)
+    else:
+        _log_event(store, db_id, "db-instance", f"DB instance status set to {status}.", msg_store=msg_store)
     return _success(action, _db_instance_xml(db))
 
 
@@ -618,9 +648,19 @@ def _delete_db_instance(store: SqlStore, params: dict, msg_store=None) -> RdsRes
     if db.get("deletion_protection"):
         raise RdsError("InvalidParameterCombination",
                        "Cannot delete a DB instance with deletion protection enabled.", 400)
+    if db.get("read_replica_db_instance_identifiers"):
+        raise RdsError("InvalidDBInstanceState",
+                       f"DB instance {db_id} cannot be deleted because it has read replicas: "
+                       f"{', '.join(db['read_replica_db_instance_identifiers'])}.", 400)
     if str(params.get("SkipFinalSnapshot", "true")).lower() != "true":
         snap_id = str(params.get("FinalDBSnapshotIdentifier", f"{db_id}-final"))
         _make_snapshot(store, db, snap_id, snapshot_type="automated")
+    source_id = db.get("read_replica_source_db_instance_identifier")
+    if source_id:
+        source = store.get_instance(source_id)
+        if source:
+            source["read_replica_db_instance_identifiers"] = [
+                r for r in source.get("read_replica_db_instance_identifiers", []) if r != db_id]
     db = dict(db)
     db["db_instance_status"] = "deleting"
     store.drop_instance(db_id)
@@ -1288,6 +1328,124 @@ def _describe_db_recommendations(store: SqlStore, params: dict) -> RdsResponse:
     return _success("DescribeDBRecommendations", inner)
 
 
+# ── rds.logs: DescribeDBLogFiles / DownloadDBLogFilePortion — real native RDS
+# actions, backed by the SAME error-log ring buffer execute_sql/aexecute_sql
+# append to on a genuine failed statement (see _append_error_log above). ──
+def _log_file_name(db: dict) -> str:
+    engine = str(db.get("engine", "postgres")).lower()
+    if "mysql" in engine or "maria" in engine:
+        return "error/mysql-error-running.log"
+    return "error/postgresql.log"
+
+
+def _describe_db_log_files(store: SqlStore, params: dict) -> RdsResponse:
+    db = _require_instance(store, str(params.get("DBInstanceIdentifier", "")).strip())
+    lines = store.log_lines(db["db_instance_identifier"])
+    size = sum(len(line.encode("utf-8")) + 1 for _, line in lines)
+    last_written = int((lines[-1][0] if lines else 0) * 1000)
+    inner = ("<DescribeDBLogFiles><DescribeDBLogFilesDetails>"
+             + _el("LogFileName", _log_file_name(db)) + _el("LastWritten", last_written) + _el("Size", size)
+             + "</DescribeDBLogFilesDetails></DescribeDBLogFiles>")
+    return _success("DescribeDBLogFiles", inner)
+
+
+def _download_db_log_file_portion(store: SqlStore, params: dict) -> RdsResponse:
+    db = _require_instance(store, str(params.get("DBInstanceIdentifier", "")).strip())
+    lines = store.log_lines(db["db_instance_identifier"])
+    try:
+        start = max(0, int(params.get("Marker", "0") or "0"))
+    except ValueError:
+        start = 0
+    chunk = lines[start:start + 200]
+    text = "\n".join(line for _, line in chunk)
+    pending = (start + len(chunk)) < len(lines)
+    inner = (_el("LogFileData", text) + _el("Marker", start + len(chunk))
+             + _el("AdditionalDataPending", "true" if pending else "false"))
+    return _success("DownloadDBLogFilePortion", inner)
+
+
+# ── rds.replication: read replicas (real, stateful linkage + synchronous
+# write forwarding — see _replicate_write/_areplicate_write above) and
+# Multi-AZ failover (RebootDBInstance ForceFailover genuinely swaps the
+# instance's live AvailabilityZone, not just a stored flag). ──────────────
+_AZ_LETTERS = "abcdef"
+
+
+def _secondary_az(primary_az: str) -> str:
+    """A different AZ letter in the same region — e.g. us-east-1a -> us-east-1b."""
+    if primary_az and primary_az[-1] in _AZ_LETTERS:
+        base, letter = primary_az[:-1], primary_az[-1]
+        nxt = _AZ_LETTERS[(_AZ_LETTERS.index(letter) + 1) % len(_AZ_LETTERS)]
+        return f"{base}{nxt}"
+    return f"{primary_az}b" if primary_az else "us-east-1b"
+
+
+def _create_db_instance_read_replica(store: SqlStore, params: dict, msg_store=None) -> RdsResponse:
+    db_id = str(params.get("DBInstanceIdentifier", "")).strip()
+    source_id = str(params.get("SourceDBInstanceIdentifier", "")).strip()
+    if not db_id:
+        raise RdsError("InvalidParameterValue", "DBInstanceIdentifier is required.", 400)
+    if store.instance_exists(db_id):
+        raise RdsError("DBInstanceAlreadyExists", f"DBInstance {db_id} already exists.", 400)
+    source = _require_instance(store, source_id)
+    if source.get("read_replica_source_db_instance_identifier"):
+        raise RdsError("InvalidParameterValue",
+                       f"DB instance {source_id} is itself a read replica — cascading replicas are not supported.", 400)
+    record = {
+        "db_instance_identifier": db_id,
+        "db_instance_class": str(params.get("DBInstanceClass", source.get("db_instance_class", "db.t3.micro"))),
+        "engine": source.get("engine", "postgres"),
+        "engine_version": source.get("engine_version", "16.4"),
+        "db_instance_status": "available",
+        "master_username": source.get("master_username", "admin"),
+        "master_user_password": source.get("master_user_password", ""),
+        "allocated_storage": source.get("allocated_storage", 20),
+        "storage_type": source.get("storage_type", "gp3"),
+        "availability_zone": str(params.get("AvailabilityZone", source.get("availability_zone", "us-east-1a"))),
+        "multi_az": False,
+        "publicly_accessible": str(params.get("PubliclyAccessible", "false")).lower() == "true",
+        "backup_retention_period": 0,
+        "endpoint_address": f"{db_id}.nano-rds.local",
+        "endpoint_port": source.get("endpoint_port", _engine_port(source.get("engine", "postgres"))),
+        "db_instance_arn": _instance_arn(store, db_id),
+        "db_subnet_group_name": source.get("db_subnet_group_name", "default"),
+        "db_parameter_group_name": source.get("db_parameter_group_name", "default"),
+        "vpc_security_group_ids": list(source.get("vpc_security_group_ids", ["sg-default"])),
+        "deletion_protection": False,
+        "ca_certificate_identifier": source.get("ca_certificate_identifier", DEFAULT_CA),
+        "created": _now(),
+        "updated": _now(),
+        "runtime_backend": "sqlite",
+        "read_replica_source_db_instance_identifier": source_id,
+        "read_replica_db_instance_identifiers": [],
+    }
+    store.put_instance(db_id, record)
+    source.setdefault("read_replica_db_instance_identifiers", []).append(db_id)
+    store.mirror_create_instance(db_id, record)
+    store.persist()
+    _log_event(store, db_id, "db-instance", f"DB instance {db_id} created as a read replica of {source_id}.", ["creation"], msg_store)
+    return _success("CreateDBInstanceReadReplica", _db_instance_xml(record))
+
+
+def _promote_read_replica(store: SqlStore, params: dict, msg_store=None) -> RdsResponse:
+    db = _require_instance(store, str(params.get("DBInstanceIdentifier", "")).strip())
+    source_id = db.get("read_replica_source_db_instance_identifier")
+    if not source_id:
+        raise RdsError("InvalidDBInstanceState", "DB instance is not a read replica.", 400)
+    source = store.get_instance(source_id)
+    if source:
+        source["read_replica_db_instance_identifiers"] = [
+            r for r in source.get("read_replica_db_instance_identifiers", []) if r != db["db_instance_identifier"]]
+    if "backup_retention_period" not in params:
+        db["backup_retention_period"] = 1
+    db["read_replica_source_db_instance_identifier"] = None
+    db["updated"] = _now()
+    store.persist()
+    _log_event(store, db["db_instance_identifier"], "db-instance", "Read replica promoted to a standalone DB instance.",
+               ["creation"], msg_store)
+    return _success("PromoteReadReplica", _db_instance_xml(db))
+
+
 # ── native-wire dispatcher (Query-protocol Action → operation) ─────────────
 # The single routing point for the native AWS RDS Query protocol — what an
 # unmodified aws-cli / boto3 RDS client speaks. `params` is the parsed
@@ -1395,6 +1553,14 @@ def dispatch(store: SqlStore, params: dict | None = None, msg_store=None, s3_sto
             return _describe_db_recommendations(store, params)
         if action == "DescribeCertificates":
             return _describe_certificates(store, params)
+        if action == "DescribeDBLogFiles":
+            return _describe_db_log_files(store, params)
+        if action == "DownloadDBLogFilePortion":
+            return _download_db_log_file_portion(store, params)
+        if action == "CreateDBInstanceReadReplica":
+            return _create_db_instance_read_replica(store, params, msg_store)
+        if action == "PromoteReadReplica":
+            return _promote_read_replica(store, params, msg_store)
         return _error("InvalidAction", f"The action {action} is not implemented.", 400)
     except RdsError as e:
         return _error(e.code, e.message, e.status)
@@ -1413,6 +1579,64 @@ def _dataplane_precheck(store: SqlStore, db_instance_identifier: str) -> dict | 
     return None
 
 
+# ── rds.monitoring: CloudWatch metrics genuinely derived from real activity
+# (never synthetic). `cw_store` is wired onto the SqlStore by the same seam as
+# vpc_core's StatusCheckFailed (AwsWireRouter / nano_registry set
+# `store.cw_store = <the shared CloudWatchStore>`); it's absent for a bare
+# SqlStore (e.g. conformance tests that don't construct one), in which case
+# this is a no-op rather than an error. ──────────────────────────────────
+def _push_activity_metrics(store: SqlStore, db_id: str, sql: str | None = None) -> None:
+    cw = getattr(store, "cw_store", None)
+    if cw is None:
+        return
+    dims = [{"Name": "DBInstanceIdentifier", "Value": db_id}]
+    if sql is not None:
+        metric = "ReadIOPS" if sql.strip()[:6].upper() == "SELECT" else "WriteIOPS"
+        _cw_core.ingest_internal_metric(cw, "AWS/RDS", metric, dims, 1.0, unit="Count")
+    _cw_core.ingest_internal_metric(cw, "AWS/RDS", "DatabaseConnections", dims,
+                                    float(store.open_transaction_count(db_id)), unit="Count")
+
+
+# ── rds.logs: one real error-log file per instance, built from genuine SQL
+# execution failures (never fabricated — an instance with no failed
+# statements has an empty log). ───────────────────────────────────────────
+def _append_error_log(store: SqlStore, db_id: str, sql: str, message: str) -> None:
+    store.append_log_line(db_id, f"{_now()} ERROR:  {message}\n  STATEMENT:  {sql}")
+
+
+# ── rds.replication: a write statement run WITHOUT an explicit transaction
+# (autocommit — the common case for ExecuteStatement/the console query tool)
+# is really replayed against every read replica's own engine, so a replica's
+# data genuinely reflects the source's writes (lag is always ~0, since this
+# is synchronous). Statements run inside an explicit BeginTransaction are NOT
+# forwarded (replicas are independent engines, not a literal shared WAL) —
+# disclosed in the rds.replication capability limitations. ────────────────
+def _replicate_write(store: SqlStore, source_id: str, sql: str, params: list | None) -> None:
+    if sql.strip()[:6].upper() == "SELECT":
+        return
+    source = store.get_instance(source_id)
+    if not source:
+        return
+    for replica_id in source.get("read_replica_db_instance_identifiers", []):
+        try:
+            store.execute_sql(replica_id, sql, params)
+        except Exception:
+            pass  # a replica-side failure never fails the source write
+
+
+async def _areplicate_write(store: SqlStore, source_id: str, sql: str, params: list | None) -> None:
+    if sql.strip()[:6].upper() == "SELECT":
+        return
+    source = store.get_instance(source_id)
+    if not source:
+        return
+    for replica_id in source.get("read_replica_db_instance_identifiers", []):
+        try:
+            await store.aexecute_sql(replica_id, sql, params)
+        except Exception:
+            pass
+
+
 def execute_sql(store: SqlStore, db_instance_identifier: str, sql: str,
                 params: list | None = None) -> dict:
     """Run real SQL against an instance's engine (sqlite3 in Nano). Used by the
@@ -1423,8 +1647,11 @@ def execute_sql(store: SqlStore, db_instance_identifier: str, sql: str,
         return err
     try:
         result = store.execute_sql(db_instance_identifier, sql, params)
+        _push_activity_metrics(store, db_instance_identifier, sql)
+        _replicate_write(store, db_instance_identifier, sql, params)
         return {"ok": True, **result}
     except Exception as e:
+        _append_error_log(store, db_instance_identifier, sql, str(e))
         return {"ok": False, "code": "SQLError", "message": str(e)}
 
 
@@ -1439,8 +1666,11 @@ async def aexecute_sql(store: SqlStore, db_instance_identifier: str, sql: str,
         return err
     try:
         result = await store.aexecute_sql(db_instance_identifier, sql, params)
+        _push_activity_metrics(store, db_instance_identifier, sql)
+        await _areplicate_write(store, db_instance_identifier, sql, params)
         return {"ok": True, **result}
     except Exception as e:
+        _append_error_log(store, db_instance_identifier, sql, str(e))
         return {"ok": False, "code": "SQLError", "message": str(e)}
 
 
@@ -1474,6 +1704,7 @@ async def abegin_transaction(store: SqlStore, db_instance_identifier: str) -> di
     limit = _max_connections_for(store, db)
     try:
         tx_id = await store.abegin_transaction(db_instance_identifier, limit=limit)
+        _push_activity_metrics(store, db_instance_identifier)
         return {"ok": True, "transactionId": tx_id}
     except TransactionLimitError as e:
         return {"ok": False, "code": "BadRequestException", "message": str(e)}
@@ -1481,26 +1712,37 @@ async def abegin_transaction(store: SqlStore, db_instance_identifier: str) -> di
 
 async def aexecute_in_transaction(store: SqlStore, transaction_id: str, sql: str,
                                   params: list | None = None) -> dict:
+    db_id = store.transaction_db_id(transaction_id)
     try:
         result = await store.aexecute_in_transaction(transaction_id, sql, params)
+        if db_id is not None:
+            _push_activity_metrics(store, db_id, sql)
         return {"ok": True, **result}
     except TransactionError as e:
         return {"ok": False, "code": "TransactionNotFoundException", "message": str(e)}
     except Exception as e:
+        if db_id is not None:
+            _append_error_log(store, db_id, sql, str(e))
         return {"ok": False, "code": "SQLError", "message": str(e)}
 
 
 async def acommit_transaction(store: SqlStore, transaction_id: str) -> dict:
+    db_id = store.transaction_db_id(transaction_id)
     ok = await store.acommit_transaction(transaction_id)
     if not ok:
         return {"ok": False, "code": "TransactionNotFoundException",
                 "message": f"Transaction {transaction_id} is not found or has expired."}
+    if db_id is not None:
+        _push_activity_metrics(store, db_id)
     return {"ok": True}
 
 
 async def arollback_transaction(store: SqlStore, transaction_id: str) -> dict:
+    db_id = store.transaction_db_id(transaction_id)
     ok = await store.arollback_transaction(transaction_id)
     if not ok:
         return {"ok": False, "code": "TransactionNotFoundException",
                 "message": f"Transaction {transaction_id} is not found or has expired."}
+    if db_id is not None:
+        _push_activity_metrics(store, db_id)
     return {"ok": True}

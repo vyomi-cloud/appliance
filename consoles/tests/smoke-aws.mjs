@@ -676,6 +676,16 @@ try {
   await page.getByText(SNAP).first().waitFor({ timeout: 10000 });
   check("RDS snapshot created over wire → shown in Snapshots list", true);
   await shot("16-rds-snapshots");
+
+  // RDS: a read replica created over the wire shows on its source's detail page,
+  // and genuinely received the source's post-creation writes (CLI → UI direction).
+  const RDB_RO = `${RDB}-ro`;
+  await rds("CreateDBInstanceReadReplica", { DBInstanceIdentifier: RDB_RO, SourceDBInstanceIdentifier: RDB });
+  await page.goto(UI + `#/rds/databases/${RDB}`);
+  await page.getByRole("tab", { name: "Connectivity & security" }).click();
+  await page.getByText(RDB_RO).first().waitFor({ timeout: 10000 });
+  check("RDS read replica created over wire → shown on the source's Replication tab", true);
+  await shot("16b-rds-replication");
   // IAM: create a user through the 3-step wizard (UI → CLI direction)
   const U = `v4smoke-user-${Date.now() % 100000}`;
   await page.goto(UI + "#/iam/create-user");

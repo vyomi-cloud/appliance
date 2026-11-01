@@ -45,7 +45,7 @@ export default function Databases() {
         columns={[
           { id: "id", header: "DB identifier", isRowHeader: true, cell: (d) => <Link href={href("rds", "databases", d.DBInstanceIdentifier)} onFollow={follow}>{d.DBInstanceIdentifier}</Link> },
           { id: "status", header: "Status", cell: (d) => statusOf(d.DBInstanceStatus) },
-          { id: "role", header: "Role", cell: () => "Instance" },
+          { id: "role", header: "Role", cell: (d) => (d.ReadReplicaSourceDBInstanceIdentifier ? "Replica" : "Instance") },
           { id: "engine", header: "Engine", cell: (d) => `${d.Engine} ${d.EngineVersion}` },
           { id: "rollout", header: "Upgrade rollout order", cell: () => "-" },
           { id: "az", header: "Region & AZ", cell: (d) => d.AvailabilityZone },

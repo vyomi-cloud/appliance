@@ -130,6 +130,7 @@ def get() -> dict:
         _REG["cw"].msg_store, _REG["cw"].lam_store = _REG["msg"], _REG["compute"]   # real SNS / Lambda alarm actions
         _REG["cw"].vpc_store = _REG["vpc_net"]   # real EC2 alarm actions (aws.cloudwatch.alarms.actions.ec2)
         _REG["vpc_net"].cw_store = _REG["cw"]   # real StatusCheckFailed metrics (ec2.instances.monitoring / .alarms-metrics)
+        _REG["rds"].cw_store = _REG["cw"]   # real DatabaseConnections/ReadIOPS/WriteIOPS metrics (rds.monitoring)
         _REG["logs"].lam_store, _REG["logs"].kinesis_store = _REG["compute"], _REG["kinesis"]   # real subscription-filter delivery
         _REG["cw"].logs_store = _REG["logs"]   # real log-based Contributor Insights rules
         _REG["msg"].logs_store = _REG["logs"]   # real SNS delivery-status logging (SQSSuccessFeedbackRoleArn/…)

@@ -3,7 +3,7 @@
  * (Query editor SQL execution) speaks the RDS Data API — a REST-JSON surface
  * reached directly over `/_wire/Execute` (no SigV4 routing needed: the path
  * alone identifies it to the router). */
-import { awsQuery, asList, WIRE_BASE } from "../../../common/wire.js";
+import { awsQuery, awsJson, asList, WIRE_BASE } from "../../../common/wire.js";
 
 const ACCOUNT_ID = "123456789012";
 
@@ -59,6 +59,32 @@ export async function deleteDBInstance(id, { skipFinalSnapshot = true, finalSnap
 export const startDBInstance = (id) => call("StartDBInstance", { DBInstanceIdentifier: id });
 export const stopDBInstance = (id) => call("StopDBInstance", { DBInstanceIdentifier: id });
 export const rebootDBInstance = (id) => call("RebootDBInstance", { DBInstanceIdentifier: id });
+export const failoverDBInstance = (id) => call("RebootDBInstance", { DBInstanceIdentifier: id, ForceFailover: true });
+
+// ── Read replicas ────────────────────────────────────────────────────────────
+export async function createDBInstanceReadReplica(newId, sourceId, fields = {}) {
+  const r = await call("CreateDBInstanceReadReplica", {
+    DBInstanceIdentifier: newId, SourceDBInstanceIdentifier: sourceId, ...fields,
+  });
+  return r.DBInstance;
+}
+export async function promoteReadReplica(id) {
+  const r = await call("PromoteReadReplica", { DBInstanceIdentifier: id });
+  return r.DBInstance;
+}
+
+// ── DB log files (rds.logs — a real error log derived from genuine failed
+// statements, never fabricated) ─────────────────────────────────────────────
+export async function describeDBLogFiles(dbInstanceId) {
+  const r = await call("DescribeDBLogFiles", { DBInstanceIdentifier: dbInstanceId });
+  return asList(r.DescribeDBLogFiles?.DescribeDBLogFilesDetails);
+}
+export async function downloadDBLogFilePortion(dbInstanceId, logFileName, marker) {
+  const r = await call("DownloadDBLogFilePortion", {
+    DBInstanceIdentifier: dbInstanceId, LogFileName: logFileName, ...(marker ? { Marker: marker } : {}),
+  });
+  return { data: r.LogFileData || "", marker: r.Marker, pending: r.AdditionalDataPending === "true" };
+}
 
 // ── Snapshots ────────────────────────────────────────────────────────────────
 export async function createDBSnapshot(dbInstanceId, snapshotId, tags) {
@@ -217,3 +243,69 @@ export async function executeStatement(dbInstanceIdentifier, sql, { parameters, 
   if (!res.ok) throw new Error(data.message || `ExecuteStatement failed (${res.status})`);
   return data; // {records, columnMetadata, numberOfRecordsUpdated}
 }
+
+// ── CloudWatch (rds.monitoring) — real AWS/RDS datapoints pushed by the core
+// off genuine Data API activity (core/rds_core.py's _push_activity_metrics),
+// read back over CloudWatch's OWN native wire rather than duplicating its
+// engine, same as the EC2 console's Monitoring tab does for StatusCheckFailed. ─
+const CW = (op, payload = {}) => awsJson("monitoring", `GraniteServiceVersion20100801.${op}`, payload);
+const dbDims = (dbInstanceId) => [{ Name: "DBInstanceIdentifier", Value: dbInstanceId }];
+export const RDS_METRICS = ["DatabaseConnections", "ReadIOPS", "WriteIOPS"];
+
+export function getDBInstanceMetric(dbInstanceId, metricName, minutes = 60) {
+  const end = new Date(), start = new Date(end - minutes * 60_000);
+  return CW("GetMetricStatistics", {
+    Namespace: "AWS/RDS", MetricName: metricName, Dimensions: dbDims(dbInstanceId),
+    StartTime: start.toISOString(), EndTime: end.toISOString(), Period: 60,
+    Statistics: [metricName === "DatabaseConnections" ? "Maximum" : "Sum"],
+  }).then((r) => (r.Datapoints || []).sort((a, b) => new Date(a.Timestamp) - new Date(b.Timestamp)));
+}
+
+// ── Connected compute resources / Security group rules (rds.replication) —
+// real cross-service reads off the EC2/VPC core (core/vpc_core.py), by actual
+// security-group membership; never fabricated rows. ─────────────────────────
+const EC2 = (action, params = {}) => awsQuery("ec2", action, params).then((r) => r[`${action}Response`] || {});
+
+export async function describeSecurityGroupsById(groupIds) {
+  if (!groupIds?.length) return [];
+  const params = {};
+  groupIds.forEach((id, i) => { params[`GroupId.${i + 1}`] = id; });
+  const r = await EC2("DescribeSecurityGroups", params);
+  return asList(r.securityGroupInfo?.item).map((sg) => ({
+    GroupId: sg.groupId, GroupName: sg.groupName,
+    Ingress: asList(sg.ipPermissions?.item).map(permFromXml),
+    Egress: asList(sg.ipPermissionsEgress?.item).map(permFromXml),
+  }));
+}
+
+function permFromXml(x) {
+  return {
+    IpProtocol: x.ipProtocol,
+    FromPort: x.fromPort !== undefined && x.fromPort !== "" ? Number(x.fromPort) : undefined,
+    ToPort: x.toPort !== undefined && x.toPort !== "" ? Number(x.toPort) : undefined,
+    cidrs: asList(x.ipRanges?.item).map((r) => r.cidrIp),
+    groupIds: asList(x.groups?.item).map((g) => g.groupId),
+  };
+}
+
+export async function describeAllEc2Instances() {
+  const r = await EC2("DescribeInstances", {});
+  return asList(r.reservationSet?.item).flatMap((res) => asList(res.instancesSet?.item)).map((inst) => ({
+    InstanceId: inst.instanceId, InstanceType: inst.instanceType,
+    GroupIds: asList(inst.groupSet?.item).map((g) => g.groupId),
+  }));
+}
+
+export async function describeConnectedComputeResources(groupIds) {
+  if (!groupIds?.length) return [];
+  const rows = await describeAllEc2Instances();
+  return rows
+    .filter((row) => row.GroupIds.some((g) => groupIds.includes(g)))
+    .map((row) => ({ ...row, ComputeSecurityGroupId: row.GroupIds.find((g) => groupIds.includes(g)) }));
+}
+
+export const setUpEc2Connection = (dbSecurityGroupId, ec2SecurityGroupId, port) => EC2("AuthorizeSecurityGroupIngress", {
+  GroupId: dbSecurityGroupId, "IpPermissions.1.IpProtocol": "tcp",
+  "IpPermissions.1.FromPort": port, "IpPermissions.1.ToPort": port,
+  "IpPermissions.1.Groups.1.GroupId": ec2SecurityGroupId,
+});

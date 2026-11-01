@@ -179,31 +179,44 @@
  "rds.monitoring": {
   "title": "CloudWatch metrics on the DB instance detail page",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Vyomi does not emit CPUUtilization/DatabaseConnections/IOPS metrics for RDS instances, so the Monitoring tab has nothing real to chart."
+   "DatabaseConnections (the instance's real count of currently open RDS Data API transactions) and ReadIOPS/WriteIOPS (a real count of SELECT vs. write statements actually executed through the RDS Data API / query editor) are genuine datapoints pushed to CloudWatch (AWS/RDS namespace) as the activity happens — GetMetricStatistics/GetMetricData return real series, not synthetic ones.",
+   "CPUUtilization, FreeStorageSpace and FreeableMemory have no real analogue in Vyomi — there is no virtualized compute, disk or memory allocation behind a DB instance to measure, so the Monitoring tab shows them as unavailable rather than inventing numbers."
+  ],
+  "tests": [
+   "tests/conformance/test_rds_console_v4_core.py"
   ]
  },
  "rds.logs": {
   "title": "DB log files",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "The sqlite3 / PGlite data plane does not produce real engine log files (error log, slow query log) for Vyomi to list or tail."
+   "Vyomi derives one real error-log file per DB instance (error/postgresql.log or error/mysql-error-running.log, via the native DescribeDBLogFiles/DownloadDBLogFilePortion actions) from genuine SQL execution failures raised through the RDS Data API / query editor — an instance with no failed statements has an empty log, not a fabricated one.",
+   "The sqlite3 / PGlite data plane has no general engine process of its own, so startup, checkpoint and slow-query logging that a real Postgres/MySQL log would contain is not generated — only statement errors are captured."
+  ],
+  "tests": [
+   "tests/conformance/test_rds_console_v4_core.py"
   ]
  },
  "rds.replication": {
   "title": "Read replicas, Multi-AZ failover, connected compute resources, security group rules",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Vyomi does not model a second physical replica, EC2 instances, or VPC security group rule evaluation for RDS; MultiAZ/compute-resource fields are stored and returned but have no runtime effect."
+   "CreateDBInstanceReadReplica/PromoteReadReplica are real, stateful: a replica is a genuine, independent DB instance, linked bidirectionally to its source, that cannot be deleted while replicas exist. Every autocommit write (ExecuteStatement without a transactionId) on the source is really replayed against each replica's own engine as it happens, so a replica's data genuinely reflects the source's writes — statements run inside an explicit BeginTransaction are NOT forwarded (replicas are independent engines, not a shared WAL), so lag is effectively zero for the path that is replicated and undefined for the path that isn't.",
+   "RebootDBInstance with ForceFailover=true genuinely swaps a Multi-AZ instance's live AvailabilityZone with its secondary (rejected with InvalidParameterCombination on a non-Multi-AZ instance) — a real state change, not a stored flag.",
+   "Connected compute resources and Security group rules are read directly off the real EC2/VPC core (core/vpc_core.py) by security-group membership — genuine cross-service correlation, not fabricated rows. Vyomi does not model a literal second physical storage volume for Multi-AZ, so failover carries no data (nothing is lost, since Nano's data plane isn't volume-replicated to begin with)."
+  ],
+  "tests": [
+   "tests/conformance/test_rds_console_v4_core.py"
   ]
  },
  "rds.reserved-instances": {
