@@ -661,7 +661,7 @@ function renderCrumbs(){
   }
 }
 
-// Left rail — GCP-faithful: hierarchical groups (COMPUTE / STORAGE / DATABASES / ...)
+// Left rail — GCP classic design: one flat list of products, no group headings
 function renderRail(){
   const rail = document.getElementById("rail"); rail.innerHTML = "";
   rail.append(el("div",{class:"rail-h"}, "All products"));
@@ -675,8 +675,7 @@ function renderRail(){
     ["IAM & ADMIN",   ["iam", "iamcredentials"]],
     ["OPERATIONS",    ["monitoring"]],
   ];
-  groups.forEach(([label, keys]) => {
-    rail.append(el("div",{class:"group"}, label));
+  groups.forEach(([, keys]) => {
     keys.forEach(k => {
       const s = svcByKey(k); if (!s) return;
       const isActive = STATE.service === k;
