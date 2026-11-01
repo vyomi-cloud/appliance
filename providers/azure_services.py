@@ -1096,6 +1096,7 @@ async def _handle_appconfiguration(request: Request, method: str, sub: str, rg: 
     if r["status"] < 300 and r["verb"] in ("put", "patch", "delete") and r["rid"] and len(chain) == 2:
         _record_usage(f"azure.{r['verb']}", {"type": "Microsoft.AppConfiguration/" + chain[0], "name": r["rid"].rsplit("/", 1)[-1],
                                              "resource_id": r["rid"]})
+        _record_arm_activity(r["rid"], ("Microsoft.AppConfiguration/" + chain[0]) + ("/delete" if r["verb"] == "delete" else "/write"), sub)   # Activity log (offline parity with Nano)
     return resp
 
 
@@ -1113,6 +1114,7 @@ async def _handle_dns(request: Request, method: str, sub: str, rg: str | None, c
     if r["status"] < 300 and r["verb"] in ("put", "patch", "delete") and r["rid"] and len(chain) == 2:
         _record_usage(f"azure.{r['verb']}", {"type": "Microsoft.Network/dnsZones", "name": r["rid"].rsplit("/", 1)[-1],
                                              "resource_id": r["rid"]})
+        _record_arm_activity(r["rid"], ("Microsoft.Network/dnsZones") + ("/delete" if r["verb"] == "delete" else "/write"), sub)   # Activity log (offline parity with Nano)
     return resp
 
 
@@ -1128,6 +1130,7 @@ async def _handle_monitor(request: Request, method: str, sub: str, rg: str | Non
     if r["status"] < 300 and r["verb"] in ("put", "patch", "delete") and r["rid"] and len(chain) == 2:
         _record_usage(f"azure.{r['verb']}", {"type": "Microsoft.Insights/" + chain[0], "name": r["rid"].rsplit("/", 1)[-1],
                                              "resource_id": r["rid"]})
+        _record_arm_activity(r["rid"], ("Microsoft.Insights/" + chain[0]) + ("/delete" if r["verb"] == "delete" else "/write"), sub)   # Activity log (offline parity with Nano)
     return resp
 
 
@@ -1145,6 +1148,7 @@ async def _handle_operationalinsights(request: Request, method: str, sub: str, r
     if r["status"] < 300 and r["verb"] in ("put", "patch", "delete") and r["rid"] and len(chain) == 2:
         _record_usage(f"azure.{r['verb']}", {"type": "Microsoft.OperationalInsights/workspaces", "name": r["rid"].rsplit("/", 1)[-1],
                                              "resource_id": r["rid"]})
+        _record_arm_activity(r["rid"], ("Microsoft.OperationalInsights/workspaces") + ("/delete" if r["verb"] == "delete" else "/write"), sub)   # Activity log (offline parity with Nano)
     return resp
 
 
@@ -1199,6 +1203,7 @@ async def _handle_cognitiveservices(request: Request, method: str, sub: str, rg:
     if r["status"] < 300 and r["verb"] in ("put", "patch", "delete") and r["rid"] and len(chain) == 2:
         _record_usage(f"azure.{r['verb']}", {"type": "Microsoft.CognitiveServices/" + chain[0], "name": r["rid"].rsplit("/", 1)[-1],
                                              "resource_id": r["rid"]})
+        _record_arm_activity(r["rid"], ("Microsoft.CognitiveServices/" + chain[0]) + ("/delete" if r["verb"] == "delete" else "/write"), sub)   # Activity log (offline parity with Nano)
     return resp
 
 
@@ -1218,6 +1223,7 @@ async def _handle_app(request: Request, method: str, sub: str, rg: str | None, c
     if r["status"] < 300 and r["verb"] in ("put", "patch", "delete", "start", "stop") and r["rid"]:
         _record_usage(f"azure.{r['verb']}", {"type": "Microsoft.App/" + chain[0], "name": r["rid"].rsplit("/", 1)[-1],
                                              "resource_id": r["rid"]})
+        _record_arm_activity(r["rid"], ("Microsoft.App/" + chain[0]) + ("/delete" if r["verb"] == "delete" else "/write"), sub)   # Activity log (offline parity with Nano)
     return resp
 
 
@@ -1331,6 +1337,7 @@ async def _handle_webapp(request: Request, method: str, sub: str, rg: str | None
     if r["status"] < 300 and r["verb"] in ("put", "patch", "delete") and r["rid"] and len(chain) == 2:
         _record_usage(f"azure.{r['verb']}", {"type": "Microsoft.Web/" + chain[0], "name": r["rid"].rsplit("/", 1)[-1],
                                              "resource_id": r["rid"]})
+        _record_arm_activity(r["rid"], ("Microsoft.Web/" + chain[0]) + ("/delete" if r["verb"] == "delete" else "/write"), sub)   # Activity log (offline parity with Nano)
     return resp
 
 
