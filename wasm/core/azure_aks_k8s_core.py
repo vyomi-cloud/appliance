@@ -17,7 +17,16 @@ Kubescape posture scan (Microsoft Defender for Cloud) see real objects. This mod
   * nothing is scheduled: workload ``status`` says so (0 ready replicas, Pods ``Pending`` with a
     ``PodScheduled=False`` condition whose message is "Not scheduled — Vyomi doesn't run
     containers"), Services get a ClusterIP from the cluster's serviceCidr and LoadBalancers stay
-    ``<pending>`` (no cloud load balancer is provisioned).
+    ``<pending>`` (no cloud load balancer is provisioned);
+  * real controllers DO run for storage and events: a PersistentVolumeClaim is bound to a volume
+    (static, by ``spec.volumeName``, or dynamically provisioned from its StorageClass — AKS's
+    disk/file CSI driver add-ons seed the usual default StorageClasses on every new cluster) and
+    released/deleted on the claim's reclaim policy when it's removed; every one of those
+    mutations — and the honest scheduling/load-balancer/ingress failures above — emits a real
+    Event object, listed and gettable like any other kind;
+  * CustomResourceDefinitions are themselves stored objects: once one is applied, its Kind is
+    registered for this cluster and its custom resource instances apply/get/describe/delete like
+    any built-in kind (``_kind_spec``/``_resolve_kind`` fall back to a cluster's own CRDs).
 
 Supported kubectl: apply / create -f (files from the runCommand ``context`` zip, `-f -` with a
 heredoc or `cat <<EOF |` pipe), create namespace, get (table, -o json|yaml|name|wide, -A, -n,
@@ -27,7 +36,9 @@ else — logs, exec, port-forward, rollout, helm, … — fails with exit code 1
 
 Kinds: Namespace, Pod, Deployment, ReplicaSet, StatefulSet, DaemonSet, Job, CronJob, Service,
 ConfigMap, Secret (``stringData`` folded into base64 ``data`` like the real API server),
-ServiceAccount, Role, ClusterRole, RoleBinding, ClusterRoleBinding, NetworkPolicy, Ingress.
+ServiceAccount, Role, ClusterRole, RoleBinding, ClusterRoleBinding, NetworkPolicy, Ingress,
+PersistentVolume, PersistentVolumeClaim, StorageClass, Event, CustomResourceDefinition (+ any
+Kind a cluster's own CRDs register).
 """
 from __future__ import annotations
 
@@ -69,6 +80,11 @@ KINDS = {
     "ClusterRoleBinding": ("rbac.authorization.k8s.io", ["v1"], "clusterrolebindings", [], False),
     "NetworkPolicy":      ("networking.k8s.io", ["v1"], "networkpolicies", ["netpol"], True),
     "Ingress":            ("networking.k8s.io", ["v1"], "ingresses", ["ing"], True),
+    "PersistentVolume":      ("", ["v1"], "persistentvolumes", ["pv"], False),
+    "PersistentVolumeClaim": ("", ["v1"], "persistentvolumeclaims", ["pvc"], True),
+    "StorageClass":          ("storage.k8s.io", ["v1"], "storageclasses", ["sc"], False),
+    "Event":                 ("", ["v1"], "events", ["ev"], True),
+    "CustomResourceDefinition": ("apiextensions.k8s.io", ["v1"], "customresourcedefinitions", ["crd", "crds"], False),
 }
 WORKLOAD_KINDS = ("Deployment", "ReplicaSet", "StatefulSet", "DaemonSet", "Job", "CronJob", "Pod")
 NOT_SCHEDULED = "Not scheduled — Vyomi doesn't run containers"
@@ -106,13 +122,32 @@ def version(rec: dict) -> str:
     return f"{int((rec.get('_k8s') or {}).get('rv', 0))}-{zlib.crc32(nss.encode()) & 0xffffffff:08x}"
 
 
+def _kind_spec(rec: dict, kind: str):
+    """(group, versions, plural, shortNames, namespaced) for a built-in kind, or for a custom
+    kind registered by a CustomResourceDefinition this cluster has applied. None if unknown."""
+    spec = KINDS.get(kind)
+    if spec is not None:
+        return spec
+    for crd in _store(rec)["objects"].values():
+        if crd.get("kind") != "CustomResourceDefinition":
+            continue
+        names = (crd.get("spec") or {}).get("names") or {}
+        if names.get("kind") != kind:
+            continue
+        group = (crd.get("spec") or {}).get("group") or ""
+        versions = [v.get("name") for v in (crd.get("spec") or {}).get("versions") or [] if isinstance(v, dict) and v.get("name")]
+        namespaced = ((crd.get("spec") or {}).get("scope") or "Namespaced") == "Namespaced"
+        return (group, versions or ["v1"], names.get("plural") or kind.lower() + "s", list(names.get("shortNames") or []), namespaced)
+    return None
+
+
 def _prune(rec: dict) -> None:
     """Objects of a namespace removed over ARM (Namespaces blade) go with it — the namespace
     controller's cascade."""
     st = rec.get("_k8s") or {}
     objs = st.get("objects") or {}
     live = {n.get("name") for n in ((rec.get("properties") or {}).get("namespaces") or [])}
-    gone = [k for k, o in objs.items() if KINDS.get(o.get("kind"), ("", [], "", [], False))[4]
+    gone = [k for k, o in objs.items() if (_kind_spec(rec, o.get("kind")) or ("", [], "", [], False))[4]
             and (o.get("metadata") or {}).get("namespace") not in live]
     for k in gone:
         del objs[k]
@@ -169,9 +204,10 @@ def list_objects(rec: dict, kind: str | None = None, namespace: str | None = Non
     for obj in _store(rec)["objects"].values():
         if kind and obj.get("kind") != kind:
             continue
-        if namespace is not None and KINDS[obj["kind"]][4] and obj["metadata"].get("namespace") != namespace:
+        nsd = (_kind_spec(rec, obj["kind"]) or ("", [], "", [], False))[4]
+        if namespace is not None and nsd and obj["metadata"].get("namespace") != namespace:
             continue
-        if namespace is not None and not KINDS[obj["kind"]][4]:
+        if namespace is not None and not nsd:
             continue
         out.append(obj)
     out.sort(key=lambda o: (o["kind"], o["metadata"].get("namespace") or "", o["metadata"]["name"]))
@@ -210,13 +246,13 @@ def _validate(doc, default_ns: str, rec: dict, pending_ns: set) -> dict:
     if not av or not kind:
         raise KubectlError("error: error validating data: [apiVersion not set, kind not set]" if not av and not kind
                            else f"error: error validating data: {'apiVersion' if not av else 'kind'} not set")
-    spec = KINDS.get(kind)
+    spec = KINDS.get(kind) or _kind_spec(rec, kind)
     group, ver = (av.split("/", 1) if "/" in av else ("", av))
     if spec is None or group != spec[0] or ver not in spec[1]:
         raise KubectlError(f'error: resource mapping not found for name: "{md.get("name", "")}" namespace: "{md.get("namespace", "")}" '
                            f'from "STDIN": no matches for kind "{kind}" in version "{av}"\n'
-                           f"ensure CRDs are installed first (Vyomi's object store holds the built-in kinds listed in "
-                           f"`kubectl api-resources`; custom resources are not simulated)")
+                           f"ensure CRDs are installed first (`kubectl apply` a CustomResourceDefinition for \"{kind}\" "
+                           f"before applying its custom resources)")
     name = md.get("name")
     if not name or not re.match(r"^[a-z0-9]([-a-z0-9.]{0,251}[a-z0-9])?$", str(name)):
         raise KubectlError(f'The {kind} "{name or ""}" is invalid: metadata.name: Invalid value: "{name or ""}": a lowercase RFC 1123 subdomain must consist of lower case alphanumeric characters, \'-\' or \'.\'')
@@ -240,7 +276,57 @@ def _validate(doc, default_ns: str, rec: dict, pending_ns: set) -> dict:
                 raise KubectlError(f'Error from server (BadRequest): error when creating "STDIN": Secret in version "v1" cannot be handled as a Secret: illegal base64 data at input byte 0 (key "{k}")')
         obj["data"] = data
         obj.setdefault("type", "Opaque")
+    elif kind == "StorageClass" and not obj.get("provisioner"):
+        raise KubectlError(f'StorageClass.storage.k8s.io "{name}" is invalid: provisioner: Required value')
+    elif kind == "CustomResourceDefinition":
+        _validate_crd(obj)
     return obj
+
+
+def _validate_crd(obj: dict) -> None:
+    cname = obj["metadata"].get("name")
+    spec = obj.get("spec") or {}
+    group = spec.get("group")
+    names = spec.get("names") or {}
+    plural, kind_name = names.get("plural"), names.get("kind")
+    versions = [v for v in (spec.get("versions") or []) if isinstance(v, dict) and v.get("name")]
+    if not group or not plural or not kind_name or not versions:
+        raise KubectlError(f'The CustomResourceDefinition "{cname}" is invalid: spec.group, spec.names.plural, '
+                           f"spec.names.kind and at least one spec.versions entry are required")
+    want_name = f"{plural}.{group}"
+    if cname != want_name:
+        raise KubectlError(f'The CustomResourceDefinition "{cname}" is invalid: metadata.name: Invalid value: '
+                           f'"{cname}": must be spec.names.plural + "." + spec.group ("{want_name}")')
+    if (spec.get("scope") or "Namespaced") not in ("Namespaced", "Cluster"):
+        raise KubectlError(f'The CustomResourceDefinition "{cname}" is invalid: spec.scope: Unsupported value: '
+                           f'"{spec.get("scope")}": supported values: "Namespaced", "Cluster"')
+
+
+_WORKLOAD_COMPONENT = {"Deployment": "deployment-controller", "ReplicaSet": "replicaset-controller",
+                       "StatefulSet": "statefulset-controller", "DaemonSet": "daemonset-controller",
+                       "Job": "job-controller", "CronJob": "cronjob-controller"}
+
+
+def _emit_event(rec: dict, obj: dict, type_: str, reason: str, message: str, component: str) -> None:
+    """Store one Event the way a real controller/scheduler would after acting on `obj` — tied to
+    a real mutation, never a fabricated readout. Events are regular stored objects (kubectl get
+    events, -A, -o json, … all work on them like any other kind)."""
+    st = _store(rec)
+    md = obj["metadata"]
+    ns = md.get("namespace") or "default"
+    now = _now()
+    name = f"{md['name']}.{uuid.uuid4().hex[:16]}"
+    ev = {
+        "apiVersion": "v1", "kind": "Event",
+        "metadata": {"name": name, "namespace": ns, "uid": str(uuid.uuid4()),
+                     "creationTimestamp": now, "resourceVersion": str(st["rv"])},
+        "involvedObject": {"apiVersion": obj.get("apiVersion", "v1"), "kind": obj["kind"],
+                           "name": md["name"], "namespace": md.get("namespace")},
+        "reason": reason, "message": message, "type": type_,
+        "source": {"component": component}, "firstTimestamp": now, "lastTimestamp": now, "count": 1,
+    }
+    st["objects"][_key("Event", ns, name)] = ev
+    st["rv"] += 1
 
 
 def _decorate(rec: dict, obj: dict, prev: dict | None, rv: int, applied: dict | None):
@@ -259,7 +345,7 @@ def _decorate(rec: dict, obj: dict, prev: dict | None, rv: int, applied: dict | 
         md["annotations"] = ann
     kind = obj["kind"]
     spec = obj.setdefault("spec", {}) if kind not in ("ConfigMap", "Secret", "ServiceAccount", "Role", "ClusterRole",
-                                                      "RoleBinding", "ClusterRoleBinding") else None
+                                                      "RoleBinding", "ClusterRoleBinding", "StorageClass") else None
     cond = {"type": "Available", "status": "False", "reason": "VyomiNotScheduled", "message": NOT_SCHEDULED,
             "lastTransitionTime": md["creationTimestamp"]}
     if kind in ("Deployment", "ReplicaSet", "StatefulSet"):
@@ -269,19 +355,27 @@ def _decorate(rec: dict, obj: dict, prev: dict | None, rv: int, applied: dict | 
                          "availableReplicas": 0, "updatedReplicas": 0,
                          **({"unavailableReplicas": desired} if kind == "Deployment" else {}),
                          "conditions": [cond]}
+        if prev is None:
+            _emit_event(rec, obj, "Warning", "FailedCreate", f"Error creating: {NOT_SCHEDULED}", _WORKLOAD_COMPONENT[kind])
     elif kind == "DaemonSet":
         obj["status"] = {"observedGeneration": md.get("generation", 1), "currentNumberScheduled": 0,
                          "desiredNumberScheduled": 0, "numberReady": 0, "numberAvailable": 0, "numberMisscheduled": 0,
                          "conditions": [cond]}
+        if prev is None:
+            _emit_event(rec, obj, "Warning", "FailedCreate", f"Error creating: {NOT_SCHEDULED}", _WORKLOAD_COMPONENT[kind])
     elif kind == "Job":
         obj["status"] = {"active": 0, "succeeded": 0, "failed": 0,
                          "conditions": [{**cond, "type": "Complete"}]}
+        if prev is None:
+            _emit_event(rec, obj, "Warning", "FailedCreate", f"Error creating: {NOT_SCHEDULED}", _WORKLOAD_COMPONENT[kind])
     elif kind == "CronJob":
         obj["status"] = {"active": [], "lastScheduleTime": None}
     elif kind == "Pod":
         obj["status"] = {"phase": "Pending", "qosClass": _qos(spec),
                          "conditions": [{"type": "PodScheduled", "status": "False", "reason": "Unschedulable",
                                          "message": NOT_SCHEDULED, "lastTransitionTime": md["creationTimestamp"]}]}
+        if prev is None:
+            _emit_event(rec, obj, "Warning", "FailedScheduling", NOT_SCHEDULED, "default-scheduler")
     elif kind == "Service":
         stype = spec.get("type") or "ClusterIP"
         spec["type"] = stype
@@ -296,8 +390,23 @@ def _decorate(rec: dict, obj: dict, prev: dict | None, rv: int, applied: dict | 
                 p.setdefault("protocol", "TCP")
                 p.setdefault("targetPort", p.get("port"))
         obj["status"] = {"loadBalancer": {}}
+        if prev is None and stype == "LoadBalancer":
+            _emit_event(rec, obj, "Warning", "SyncLoadBalancerFailed",
+                       "Error syncing load balancer: no cloud load balancer provider runs in Vyomi", "service-controller")
     elif kind == "Ingress":
         obj["status"] = {"loadBalancer": {}}
+        if prev is None:
+            _emit_event(rec, obj, "Warning", "Sync", "no ingress controller runs in Vyomi to assign an address", "ingress-controller")
+    elif kind == "PersistentVolumeClaim":
+        # A reapply of an already-bound claim keeps its binding — only a brand-new claim starts
+        # Pending and goes through dynamic provisioning (_provision_pvc, called by _put).
+        if prev is not None and (prev.get("status") or {}).get("phase") == "Bound":
+            obj["status"] = dict(prev["status"])
+            obj["spec"]["volumeName"] = (prev.get("spec") or {}).get("volumeName")
+        else:
+            obj["status"] = {"phase": "Pending"}
+    elif kind == "PersistentVolume":
+        obj["status"] = dict(prev["status"]) if prev is not None and prev.get("status") else {"phase": "Available"}
 
 
 def _qos(spec: dict) -> str:
@@ -331,7 +440,8 @@ def _put(rec: dict, obj: dict, mode: str, applied=None) -> str:
     key = _key(kind, md.get("namespace"), md["name"])
     prev = st["objects"].get(key)
     if prev is not None and mode == "create":
-        raise KubectlError(f'Error from server (AlreadyExists): error when creating "STDIN": {KINDS[kind][2]}{"." + KINDS[kind][0] if KINDS[kind][0] else ""} "{md["name"]}" already exists')
+        rspec = _kind_spec(rec, kind) or ("", [], kind.lower(), [], True)
+        raise KubectlError(f'Error from server (AlreadyExists): error when creating "STDIN": {rspec[2]}{"." + rspec[0] if rspec[0] else ""} "{md["name"]}" already exists')
     if prev is not None:
         def _cmp(o):
             o = copy.deepcopy(o)
@@ -353,13 +463,126 @@ def _put(rec: dict, obj: dict, mode: str, applied=None) -> str:
                 o["spec"].pop("replicas", None)
             if o.get("kind") == "Secret" and o.get("type") == "Opaque":
                 o.pop("type", None)
+            if o.get("kind") == "PersistentVolumeClaim":
+                (o.get("spec") or {}).pop("volumeName", None)       # set by dynamic provisioning, not user input
             return json.dumps(o, sort_keys=True)
         if _cmp(prev) == _cmp(obj):
             return "unchanged"
     st["rv"] += 1
     _decorate(rec, obj, prev, st["rv"], applied)
     st["objects"][key] = obj
+    if kind == "PersistentVolumeClaim" and prev is None:
+        _provision_pvc(rec, obj)
     return "configured" if prev is not None else "created"
+
+
+def _provision_pvc(rec: dict, pvc: dict) -> None:
+    """Bind a brand-new PersistentVolumeClaim the way the real persistentvolume-controller would:
+    static provisioning (spec.volumeName names an existing, unbound PV) or dynamic provisioning
+    (the resolved StorageClass gets a freshly "provisioned" PV, matching AKS's disk/file CSI
+    driver default). A claim with no resolvable volume or storage class just stays Pending —
+    the same outcome a real cluster gives, never a fake Bound."""
+    st = _store(rec)
+    spec = pvc.setdefault("spec", {})
+    md = pvc["metadata"]
+    vol = spec.get("volumeName")
+    if vol:
+        pv = st["objects"].get(_key("PersistentVolume", None, vol))
+        if pv is None or (pv.get("spec") or {}).get("claimRef"):
+            _emit_event(rec, pvc, "Warning", "ProvisioningFailed",
+                       f'persistentvolume "{vol}" {"not found" if pv is None else "is already bound to another claim"}',
+                       "persistentvolume-controller")
+            return
+        pv["spec"]["claimRef"] = {"name": md["name"], "namespace": md["namespace"]}
+        pv["status"] = {"phase": "Bound"}
+        pvc["status"] = {"phase": "Bound", "accessModes": list(pv["spec"].get("accessModes") or []),
+                         "capacity": dict(pv["spec"].get("capacity") or {})}
+        st["rv"] += 1
+        _emit_event(rec, pvc, "Normal", "ProvisioningSucceeded", f'Successfully bound to pre-provisioned volume "{vol}"', "persistentvolume-controller")
+        return
+    sc_name = spec.get("storageClassName")
+    if sc_name is None:
+        for o in st["objects"].values():
+            if o.get("kind") == "StorageClass" and (o.get("metadata", {}).get("annotations") or {}).get("storageclass.kubernetes.io/is-default-class") == "true":
+                sc_name = o["metadata"]["name"]
+                break
+    if not sc_name:
+        return                                          # no storage class resolved — stays Pending, like real k8s
+    sc = st["objects"].get(_key("StorageClass", None, sc_name))
+    if sc is None:
+        _emit_event(rec, pvc, "Warning", "ProvisioningFailed", f'storageclass.storage.k8s.io "{sc_name}" not found', "persistentvolume-controller")
+        return
+    capacity = ((spec.get("resources") or {}).get("requests") or {}).get("storage") or "1Gi"
+    pv_name = f"pvc-{uuid.uuid4()}"
+    now = _now()
+    access_modes = list(spec.get("accessModes") or ["ReadWriteOnce"])
+    pv = {
+        "apiVersion": "v1", "kind": "PersistentVolume",
+        "metadata": {"name": pv_name, "uid": str(uuid.uuid4()), "creationTimestamp": now, "resourceVersion": str(st["rv"])},
+        "spec": {
+            "capacity": {"storage": capacity}, "accessModes": access_modes,
+            "persistentVolumeReclaimPolicy": sc.get("reclaimPolicy") or "Delete",
+            "storageClassName": sc_name, "volumeMode": spec.get("volumeMode") or "Filesystem",
+            "claimRef": {"name": md["name"], "namespace": md["namespace"]},
+            "csi": {"driver": sc.get("provisioner") or "disk.csi.azure.com", "volumeHandle": pv_name},
+        },
+        "status": {"phase": "Bound"},
+    }
+    st["objects"][_key("PersistentVolume", None, pv_name)] = pv
+    spec["volumeName"] = pv_name
+    pvc["status"] = {"phase": "Bound", "accessModes": access_modes, "capacity": {"storage": capacity}}
+    st["rv"] += 1
+    _emit_event(rec, pvc, "Normal", "ProvisioningSucceeded",
+               f'Successfully provisioned volume "{pv_name}" using {sc.get("provisioner") or "disk.csi.azure.com"}', "persistentvolume-controller")
+
+
+_DEFAULT_STORAGE_CLASSES = [
+    {"name": "default", "provisioner": "disk.csi.azure.com", "reclaimPolicy": "Delete", "volumeBindingMode": "WaitForFirstConsumer",
+     "allowVolumeExpansion": True, "parameters": {"skuname": "StandardSSD_LRS"}, "is_default": True},
+    {"name": "managed-csi", "provisioner": "disk.csi.azure.com", "reclaimPolicy": "Delete", "volumeBindingMode": "WaitForFirstConsumer",
+     "allowVolumeExpansion": True, "parameters": {"skuname": "StandardSSD_LRS"}},
+    {"name": "managed-csi-premium", "provisioner": "disk.csi.azure.com", "reclaimPolicy": "Delete", "volumeBindingMode": "WaitForFirstConsumer",
+     "allowVolumeExpansion": True, "parameters": {"skuname": "Premium_LRS"}},
+    {"name": "azurefile-csi", "provisioner": "file.csi.azure.com", "reclaimPolicy": "Delete", "volumeBindingMode": "Immediate",
+     "allowVolumeExpansion": True, "parameters": {"skuName": "Standard_LRS"}},
+    {"name": "azurefile-csi-premium", "provisioner": "file.csi.azure.com", "reclaimPolicy": "Delete", "volumeBindingMode": "Immediate",
+     "allowVolumeExpansion": True, "parameters": {"skuName": "Premium_LRS"}},
+]
+
+
+def seed_storage_classes(rec: dict) -> None:
+    """AKS's disk/file CSI driver add-ons provision these StorageClasses on every new cluster,
+    present from the moment it comes up — same seeding convention as the default namespaces
+    (properties.namespaces), just in the Kubernetes object store instead."""
+    for sc in _DEFAULT_STORAGE_CLASSES:
+        obj = {
+            "apiVersion": "storage.k8s.io/v1", "kind": "StorageClass",
+            "metadata": {"name": sc["name"],
+                        **({"annotations": {"storageclass.kubernetes.io/is-default-class": "true"}} if sc.get("is_default") else {})},
+            "provisioner": sc["provisioner"], "reclaimPolicy": sc["reclaimPolicy"],
+            "volumeBindingMode": sc["volumeBindingMode"], "allowVolumeExpansion": sc["allowVolumeExpansion"],
+            "parameters": dict(sc["parameters"]),
+        }
+        _put(rec, obj, "create")
+
+
+def _release_pv(rec: dict, pvc: dict) -> None:
+    """A deleted PVC's dynamically-bound volume follows its reclaim policy: Delete (the AKS
+    default for the built-in storage classes) removes the PV with it, Retain just releases it —
+    same cascade the real persistentvolume-controller runs on PVC deletion."""
+    st = _store(rec)
+    vol = (pvc.get("spec") or {}).get("volumeName")
+    if not vol:
+        return
+    pv_key = _key("PersistentVolume", None, vol)
+    pv = st["objects"].get(pv_key)
+    if pv is None:
+        return
+    if (pv.get("spec") or {}).get("persistentVolumeReclaimPolicy", "Delete") == "Delete":
+        del st["objects"][pv_key]
+    else:
+        pv["status"] = {"phase": "Released"}
+    st["rv"] += 1
 
 
 def _delete(rec: dict, kind: str, ns: str | None, name: str) -> bool:
@@ -371,29 +594,48 @@ def _delete(rec: dict, kind: str, ns: str | None, name: str) -> bool:
         if name in ("default", "kube-system", "kube-public", "kube-node-lease"):
             raise KubectlError(f'Error from server (Forbidden): namespaces "{name}" is forbidden: this namespace may not be deleted')
         rec["properties"]["namespaces"] = [n for n in nss if n.get("name") != name]
-        for k in [k for k, o in st["objects"].items() if KINDS[o["kind"]][4] and o["metadata"].get("namespace") == name]:
+        for k in [k for k, o in st["objects"].items() if (_kind_spec(rec, o["kind"]) or ("", [], "", [], False))[4] and o["metadata"].get("namespace") == name]:
             del st["objects"][k]
         st["rv"] += 1
         return True
-    key = _key(kind, ns if KINDS[kind][4] else None, name)
-    if key in st["objects"]:
-        del st["objects"][key]
-        st["rv"] += 1
-        return True
-    return False
+    nsd = (_kind_spec(rec, kind) or ("", [], "", [], False))[4]
+    key = _key(kind, ns if nsd else None, name)
+    obj = st["objects"].get(key)
+    if obj is None:
+        return False
+    del st["objects"][key]
+    st["rv"] += 1
+    if kind == "PersistentVolumeClaim":
+        _release_pv(rec, obj)
+    return True
 
 
 # ── kubectl ──────────────────────────────────────────────────────────────────────────────
-def _resource_label(kind: str) -> str:
-    g = KINDS[kind][0]
+def _resource_label(rec: dict, kind: str) -> str:
+    g = (_kind_spec(rec, kind) or (kind.lower(),))[0]
     return f"{kind.lower()}.{g}" if g else kind.lower()
 
 
-def _resolve_kind(token: str) -> str:
+def _resolve_kind(token: str, rec: dict) -> str:
     k = _ALIASES.get(token.lower())
-    if not k:
-        raise KubectlError(f'error: the server doesn\'t have a resource type "{token}"')
-    return k
+    if k:
+        return k
+    low = token.lower()
+    for crd in _store(rec)["objects"].values():
+        if crd.get("kind") != "CustomResourceDefinition":
+            continue
+        names = (crd.get("spec") or {}).get("names") or {}
+        group = (crd.get("spec") or {}).get("group") or ""
+        kind_name, plural = names.get("kind"), names.get("plural")
+        if not kind_name:
+            continue
+        candidates = {kind_name.lower(), (plural or "").lower(), (names.get("singular") or "").lower(),
+                      *[s.lower() for s in names.get("shortNames") or []]}
+        if group and plural:
+            candidates.add(f"{plural.lower()}.{group.lower()}")
+        if low in candidates:
+            return kind_name
+    raise KubectlError(f'error: the server doesn\'t have a resource type "{token}"')
 
 
 def _split_commands(command: str):
@@ -572,7 +814,7 @@ def _row(kind: str, o: dict, wide: bool):
         return [md["name"], str(len(o.get("secrets") or [])), age]
     if kind == "Namespace":
         return [md["name"], status.get("phase") or "Active", age]
-    if kind in ("Role", "ClusterRole"):
+    if kind in ("Role", "ClusterRole", "CustomResourceDefinition"):
         return [md["name"], md.get("creationTimestamp") or ""]
     if kind in ("RoleBinding", "ClusterRoleBinding"):
         rr = o.get("roleRef") or {}
@@ -583,6 +825,20 @@ def _row(kind: str, o: dict, wide: bool):
     if kind == "Ingress":
         hosts = ",".join(r.get("host") for r in (spec.get("rules") or []) if r.get("host")) or "*"
         return [md["name"], spec.get("ingressClassName") or "<none>", hosts, "", "443" if spec.get("tls") else "80", age]
+    if kind == "PersistentVolumeClaim":
+        return [md["name"], status.get("phase") or "Pending", spec.get("volumeName") or "",
+               (status.get("capacity") or {}).get("storage") or "", ",".join(spec.get("accessModes") or []),
+               spec.get("storageClassName") or "", age]
+    if kind == "PersistentVolume":
+        claim = spec.get("claimRef") or {}
+        return [md["name"], (spec.get("capacity") or {}).get("storage") or "", ",".join(spec.get("accessModes") or []),
+               spec.get("persistentVolumeReclaimPolicy") or "Delete", status.get("phase") or "Available",
+               f"{claim['namespace']}/{claim['name']}" if claim else "", spec.get("storageClassName") or "", age]
+    if kind == "StorageClass":
+        return [md["name"], o.get("provisioner") or "", o.get("reclaimPolicy") or "Delete", o.get("volumeBindingMode") or "Immediate", age]
+    if kind == "Event":
+        io = o.get("involvedObject") or {}
+        return [age, o.get("type") or "Normal", o.get("reason") or "", f"{io.get('kind', '')}/{io.get('name', '')}", o.get("message") or ""]
     return [md["name"], age]
 
 
@@ -597,6 +853,11 @@ _HEADERS = {
     "Role": ["NAME", "CREATED AT"], "ClusterRole": ["NAME", "CREATED AT"], "RoleBinding": ["NAME", "ROLE", "AGE"],
     "ClusterRoleBinding": ["NAME", "ROLE", "AGE"], "NetworkPolicy": ["NAME", "POD-SELECTOR", "AGE"],
     "Ingress": ["NAME", "CLASS", "HOSTS", "ADDRESS", "PORTS", "AGE"],
+    "PersistentVolumeClaim": ["NAME", "STATUS", "VOLUME", "CAPACITY", "ACCESS MODES", "STORAGECLASS", "AGE"],
+    "PersistentVolume": ["NAME", "CAPACITY", "ACCESS MODES", "RECLAIM POLICY", "STATUS", "CLAIM", "STORAGECLASS", "AGE"],
+    "StorageClass": ["NAME", "PROVISIONER", "RECLAIMPOLICY", "VOLUMEBINDINGMODE", "AGE"],
+    "CustomResourceDefinition": ["NAME", "CREATED AT"],
+    "Event": ["LAST SEEN", "TYPE", "REASON", "OBJECT", "MESSAGE"],
 }
 
 
@@ -610,15 +871,16 @@ def _get(rec: dict, pos: list, fl: dict, describe=False) -> str:
         raise KubectlError("error: you must specify the type of resource to get. Use \"kubectl api-resources\" for a complete list of supported resources.")
     first = pos[0]
     if "/" in first:                                   # kind/name form
-        kinds, names = [_resolve_kind(first.split("/", 1)[0])], [first.split("/", 1)[1]] + pos[1:]
+        kinds, names = [_resolve_kind(first.split("/", 1)[0], rec)], [first.split("/", 1)[1]] + pos[1:]
     elif first == "all":
         kinds, names = ["Pod", "Service", "DaemonSet", "Deployment", "ReplicaSet", "StatefulSet", "Job", "CronJob"], pos[1:]
     else:
-        kinds, names = [_resolve_kind(t) for t in first.split(",") if t], pos[1:]
+        kinds, names = [_resolve_kind(t, rec) for t in first.split(",") if t], pos[1:]
+    nsd_of = {k: (_kind_spec(rec, k) or ("", [], "", [], False))[4] for k in kinds}
     ns = None if fl["A"] else (fl["n"] or "default")
     items = []
     for kind in kinds:
-        for o in list_objects(rec, kind, ns if KINDS[kind][4] else None):
+        for o in list_objects(rec, kind, ns if nsd_of[kind] else None):
             if names and o["metadata"]["name"] not in names:
                 continue
             if not _match_labels(o, fl["l"]):
@@ -628,7 +890,8 @@ def _get(rec: dict, pos: list, fl: dict, describe=False) -> str:
         found = {o["metadata"]["name"] for o in items}
         missing = [n for n in names if n not in found]
         if missing:
-            raise KubectlError("\n".join(f'Error from server (NotFound): {KINDS[kinds[0]][2]}{"." + KINDS[kinds[0]][0] if KINDS[kinds[0]][0] else ""} "{n}" not found' for n in missing))
+            rspec = _kind_spec(rec, kinds[0]) or ("", [], kinds[0].lower(), [], True)
+            raise KubectlError("\n".join(f'Error from server (NotFound): {rspec[2]}{"." + rspec[0] if rspec[0] else ""} "{n}" not found' for n in missing))
     out = fl["o"]
     if describe or out == "yaml":
         if len(items) == 1 and names:
@@ -639,11 +902,11 @@ def _get(rec: dict, pos: list, fl: dict, describe=False) -> str:
             return json.dumps(items[0], indent=4) + "\n"
         return json.dumps({"apiVersion": "v1", "items": items, "kind": "List", "metadata": {"resourceVersion": ""}}, indent=4) + "\n"
     if out == "name":
-        return "".join(f"{_resource_label(o['kind'])}/{o['metadata']['name']}\n" for o in items)
+        return "".join(f"{_resource_label(rec, o['kind'])}/{o['metadata']['name']}\n" for o in items)
     if out not in (None, "wide"):
         raise KubectlError(f'error: unable to match a printer suitable for the output format "{out}", allowed formats are: json,name,wide,yaml')
     if not items:
-        if fl["A"] or not any(KINDS[k][4] for k in kinds):
+        if fl["A"] or not any(nsd_of[k] for k in kinds):
             return "No resources found\n"
         return f"No resources found in {ns} namespace.\n"
     chunks = []
@@ -653,12 +916,12 @@ def _get(rec: dict, pos: list, fl: dict, describe=False) -> str:
             continue
         head = list(_HEADERS.get(kind, ["NAME", "AGE"])) + (["IP", "NODE"] if kind == "Pod" and out == "wide" else [])
         prefix = len(kinds) > 1
-        rows = [(["NAMESPACE"] if fl["A"] and KINDS[kind][4] else []) + head]
+        rows = [(["NAMESPACE"] if fl["A"] and nsd_of[kind] else []) + head]
         for o in ks:
             r = _row(kind, o, out == "wide")
             if prefix:
-                r[0] = f"{_resource_label(kind)}/{r[0]}"
-            rows.append(([o["metadata"].get("namespace", "")] if fl["A"] and KINDS[kind][4] else []) + r)
+                r[0] = f"{_resource_label(rec, kind)}/{r[0]}"
+            rows.append(([o["metadata"].get("namespace", "")] if fl["A"] and nsd_of[kind] else []) + r)
         chunks.append(_table(rows))
     return "\n".join(chunks)
 
@@ -687,7 +950,7 @@ def _kubectl(rec: dict, args: list, files: dict, stdin: str | None, k8s_version:
             res = _put(rec, obj, "create" if verb == "create" else "apply", applied=d if verb == "apply" else None)
             if verb == "create":
                 res = "created"
-            out.append(f"{_resource_label(obj['kind'])}/{obj['metadata']['name']} {res}")
+            out.append(f"{_resource_label(rec, obj['kind'])}/{obj['metadata']['name']} {res}")
         return "\n".join(out) + "\n"
     if verb == "create" and pos[:1] in (["namespace"], ["ns"]) and len(pos) == 2:
         obj = _validate({"apiVersion": "v1", "kind": "Namespace", "metadata": {"name": pos[1]}}, "default", rec, set())
@@ -701,7 +964,7 @@ def _kubectl(rec: dict, args: list, files: dict, stdin: str | None, k8s_version:
         targets = []
         if fl["f"]:
             for d in _read_files(fl["f"], files, stdin):
-                if not isinstance(d, dict) or d.get("kind") not in KINDS:
+                if not isinstance(d, dict) or _kind_spec(rec, d.get("kind")) is None:
                     continue
                 md = d.get("metadata") or {}
                 targets.append((d["kind"], md.get("namespace") or fl["n"] or "default", md.get("name")))
@@ -709,9 +972,9 @@ def _kubectl(rec: dict, args: list, files: dict, stdin: str | None, k8s_version:
             if "/" in pos[0]:
                 for p in pos:
                     k, n = p.split("/", 1)
-                    targets.append((_resolve_kind(k), fl["n"] or "default", n))
+                    targets.append((_resolve_kind(k, rec), fl["n"] or "default", n))
             else:
-                kind = _resolve_kind(pos[0])
+                kind = _resolve_kind(pos[0], rec)
                 if len(pos) < 2:
                     raise KubectlError("error: resource(s) were provided, but no name was specified")
                 targets += [(kind, fl["n"] or "default", n) for n in pos[1:]]
@@ -720,24 +983,26 @@ def _kubectl(rec: dict, args: list, files: dict, stdin: str | None, k8s_version:
         out = []
         for kind, ns, name in targets:
             if _delete(rec, kind, ns, name):
-                out.append(f'{_resource_label(kind)} "{name}" deleted')
+                out.append(f'{_resource_label(rec, kind)} "{name}" deleted')
             else:
-                raise KubectlError("\n".join(out + [f'Error from server (NotFound): {KINDS[kind][2]}{"." + KINDS[kind][0] if KINDS[kind][0] else ""} "{name}" not found']))
+                rspec = _kind_spec(rec, kind) or ("", [], kind.lower(), [], True)
+                raise KubectlError("\n".join(out + [f'Error from server (NotFound): {rspec[2]}{"." + rspec[0] if rspec[0] else ""} "{name}" not found']))
         return "\n".join(out) + "\n"
     if verb == "scale":
         if fl["replicas"] is None or not pos:
             raise KubectlError("error: --replicas=COUNT is required, and you must specify a resource")
-        kind, name = (_resolve_kind(pos[0].split("/", 1)[0]), pos[0].split("/", 1)[1]) if "/" in pos[0] else (_resolve_kind(pos[0]), pos[1] if len(pos) > 1 else "")
+        kind, name = (_resolve_kind(pos[0].split("/", 1)[0], rec), pos[0].split("/", 1)[1]) if "/" in pos[0] else (_resolve_kind(pos[0], rec), pos[1] if len(pos) > 1 else "")
         if kind not in ("Deployment", "ReplicaSet", "StatefulSet"):
             raise KubectlError(f"error: cannot scale a {kind}")
         key = _key(kind, fl["n"] or "default", name)
         obj = _store(rec)["objects"].get(key)
         if obj is None:
-            raise KubectlError(f'Error from server (NotFound): {KINDS[kind][2]}.{KINDS[kind][0]} "{name}" not found')
+            rspec = _kind_spec(rec, kind) or ("", [], kind.lower(), [], True)
+            raise KubectlError(f'Error from server (NotFound): {rspec[2]}.{rspec[0]} "{name}" not found')
         new = copy.deepcopy(obj)
         new["spec"]["replicas"] = int(fl["replicas"])
         _put(rec, new, "replace")
-        return f"{_resource_label(kind)}/{name} scaled\n"
+        return f"{_resource_label(rec, kind)}/{name} scaled\n"
     if verb == "version":
         v = str(k8s_version or "")
         return (f"Client Version: v{v}\nKustomize Version: v5.0.4\nServer Version: v{v}\n"

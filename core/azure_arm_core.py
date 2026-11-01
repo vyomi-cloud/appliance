@@ -1789,6 +1789,11 @@ class AzureArm:
                 return bad
         if full_type.lower() == "microsoft.network/virtualnetworks":
             self._sync_inline_subnets(rid, rec)
+        if full_type.lower() == "microsoft.containerservice/managedclusters" and not existed:
+            # The disk/file CSI driver add-ons provision these StorageClasses on every new AKS
+            # cluster, from the moment it comes up — same seeding convention as the default
+            # namespaces above (properties.namespaces, via the catalog defaults).
+            k8s_engine.seed_storage_classes(rec)
         self.state[key] = rec
         return _ok(_view(rec), status=200 if existed else 201)
 

@@ -1,11 +1,12 @@
 /* Kubernetes service (AKS cluster) resource blade: left resource menu + panels. Overview,
  * Activity log, Access control (IAM), Tags, Namespaces, Run command, Node pools, Cluster
  * configuration, Locks, Properties and Export template are backed by native ARM calls;
- * Workloads, Services and ingresses and Configuration list the Kubernetes objects the cluster
- * really holds (kubectl through runCommand — stored, never scheduled); Microsoft Defender for
- * Cloud shows this cluster's live recommendations (Kubescape). Everything else in the menu
- * (Storage, Custom resources, Events, Azure Monitor/Advisor/GitOps integrations) is an honest
- * NotSimulated panel. */
+ * Workloads, Services and ingresses, Configuration, Storage and Custom resources list the
+ * Kubernetes objects the cluster really holds (kubectl through runCommand — stored, never
+ * scheduled); Events lists the real Event objects Vyomi's "controllers" emit when those objects
+ * are mutated (FailedScheduling, SyncLoadBalancerFailed, PVC provisioning, …); Microsoft Defender
+ * for Cloud shows this cluster's live recommendations (Kubescape). Everything else in the menu
+ * (Azure Monitor/Advisor/GitOps integrations) is an honest NotSimulated panel. */
 import { useEffect, useState } from "react";
 import {
   Button, Checkbox, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, Field, Input, Link,
@@ -57,8 +58,6 @@ export const MENU = [
 const LABEL = Object.fromEntries(MENU.flatMap((m) => (m.group ? m.items : [m])).map((i) => [i.id, i.label]));
 const NS_NOTES = {
   diagnose: "Diagnose and solve problems",
-  storage: "Kubernetes persistent volumes / storage classes",
-  customresources: "Kubernetes custom resource definitions",
   applicationscaling: "KEDA-based application scaling",
   networking: "Cluster networking settings (configured at create time; see the create wizard's Networking tab)",
   extensionsapplications: "Cluster extensions and applications",
@@ -96,7 +95,10 @@ export default function ClusterBlade({ params, query }) {
       namespaces: () => <Namespaces a={a} />,
       workloads: () => <Workloads a={a} />,
       servicesingresses: () => <ServicesIngresses a={a} />,
+      storage: () => <Storage a={a} />,
       configuration: () => <Configuration a={a} />,
+      customresources: () => <CustomResources a={a} />,
+      events: () => <EventsPanel a={a} />,
       defender: () => <ResourceRecommendations resourceId={a.id} />,
       runcommand: () => <RunCommand a={a} />,
       nodepools: () => <NodePools a={a} />,
@@ -436,14 +438,34 @@ const K8S_TABS = {
     { key: "address", label: "Address", value: () => "Pending — no ingress controller runs in Vyomi" }] },
   configmaps: { kind: "configmaps", label: "Config maps", columns: [{ key: "data", label: "Data", value: (o) => Object.keys(o.data || {}).length }] },
   secrets: { kind: "secrets", label: "Secrets", columns: [{ key: "type", label: "Type", value: (o) => o.type }, { key: "data", label: "Data", value: (o) => Object.keys(o.data || {}).length }] },
+  persistentvolumeclaims: { kind: "persistentvolumeclaims", label: "Persistent volume claims", columns: [
+    { key: "status", label: "Status", value: (o) => o.status?.phase || "Pending" },
+    { key: "volume", label: "Volume", value: (o) => o.spec?.volumeName || "-" },
+    { key: "capacity", label: "Capacity", value: (o) => o.status?.capacity?.storage || o.spec?.resources?.requests?.storage || "-" },
+    { key: "accessmodes", label: "Access modes", value: (o) => (o.spec?.accessModes || []).join(", ") },
+    { key: "storageclass", label: "Storage class", value: (o) => o.spec?.storageClassName || "-" }] },
+  persistentvolumes: { kind: "persistentvolumes", label: "Persistent volumes", columns: [
+    { key: "capacity", label: "Capacity", value: (o) => o.spec?.capacity?.storage || "-" },
+    { key: "accessmodes", label: "Access modes", value: (o) => (o.spec?.accessModes || []).join(", ") },
+    { key: "reclaim", label: "Reclaim policy", value: (o) => o.spec?.persistentVolumeReclaimPolicy || "Delete" },
+    { key: "status", label: "Status", value: (o) => o.status?.phase || "Available" },
+    { key: "claim", label: "Claim", value: (o) => (o.spec?.claimRef ? `${o.spec.claimRef.namespace}/${o.spec.claimRef.name}` : "-") },
+    { key: "storageclass", label: "Storage class", value: (o) => o.spec?.storageClassName || "-" }] },
+  storageclasses: { kind: "storageclasses", label: "Storage classes", columns: [
+    { key: "provisioner", label: "Provisioner", value: (o) => o.provisioner },
+    { key: "reclaim", label: "Reclaim policy", value: (o) => o.reclaimPolicy || "Delete" },
+    { key: "binding", label: "Volume binding mode", value: (o) => o.volumeBindingMode || "Immediate" },
+    { key: "default", label: "Default class", value: (o) => ((o.metadata?.annotations || {})["storageclass.kubernetes.io/is-default-class"] === "true" ? "Yes" : "No") }] },
 };
 const SCHEDULED = new Set(["deployments", "pods", "replicasets", "statefulsets", "daemonsets", "jobs", "cronjobs"]);
+const CLUSTER_SCOPED = new Set(["persistentvolumes", "storageclasses"]);
 
 function K8sTabs({ a, title, tabs, capId }) {
   const [tab, setTab] = useState(tabs[0]);
   const [apply, setApply] = useState(false);
   const notify = useNotify();
   const t = K8S_TABS[tab];
+  const namespaced = !CLUSTER_SCOPED.has(tab);
   const { data, loading, error, reload } = useAsync(() => api.listK8s(a.resourceGroup, a.name, t.kind), [a.resourceGroup, a.name, tab]);
   return (
     <>
@@ -454,18 +476,18 @@ function K8sTabs({ a, title, tabs, capId }) {
       <div style={{ marginTop: 12 }}>
         <CapabilityContainer id={capId} title={t.label}>
           <BrowseGrid
-            resourceName={t.label.toLowerCase().replace(/s$/, "")} rowKey={(o) => `${o.metadata.namespace}/${o.metadata.name}`}
+            resourceName={t.label.toLowerCase().replace(/s$/, "")} rowKey={(o) => (namespaced ? `${o.metadata.namespace}/${o.metadata.name}` : o.metadata.name)}
             items={(data || []).map((o) => ({ ...o, name: o.metadata.name }))} loading={loading} error={error} onRefresh={reload} onCreate={() => setApply(true)}
             onDelete={async (sel) => {
               for (const o of sel) await api.deleteK8s(a.resourceGroup, a.name, t.kind, o.metadata.namespace, o.metadata.name);
               notify.success(`Deleted ${sel.length} object${sel.length === 1 ? "" : "s"}.`, "Delete succeeded");
               reload();
             }}
-            csvName={`${t.kind}.csv`} filterPlaceholder="Filter by name or namespace"
-            pills={[{ key: "ns", label: "Namespace", value: (o) => o.metadata.namespace }]}
+            csvName={`${t.kind}.csv`} filterPlaceholder={namespaced ? "Filter by name or namespace" : "Filter by name"}
+            pills={namespaced ? [{ key: "ns", label: "Namespace", value: (o) => o.metadata.namespace }] : []}
             columns={[
               { key: "name", label: "Name", value: (o) => o.metadata.name },
-              { key: "namespace", label: "Namespace", value: (o) => o.metadata.namespace },
+              ...(namespaced ? [{ key: "namespace", label: "Namespace", value: (o) => o.metadata.namespace }] : []),
               ...(SCHEDULED.has(tab) ? [{ key: "status", label: "Status", value: () => "Not scheduled — Vyomi doesn't run containers" }] : []),
               ...t.columns,
               { key: "age", label: "Age", value: ageOf },
@@ -522,6 +544,115 @@ function ServicesIngresses({ a }) {
 
 function Configuration({ a }) {
   return <K8sTabs a={a} title="Configuration" capId="azure.aks.workloads" tabs={["configmaps", "secrets"]} />;
+}
+
+function Storage({ a }) {
+  return <K8sTabs a={a} title="Storage" capId="azure.aks.kubernetes_objects" tabs={["persistentvolumeclaims", "persistentvolumes", "storageclasses"]} />;
+}
+
+// ── Custom resources — CRDs this cluster has applied, and each one's live instances ───────
+// A CustomResourceDefinition registers a real Kind for the cluster (core/azure_aks_k8s_core.py):
+// its instances apply/get/delete through kubectl exactly like a built-in kind.
+function CustomResources({ a }) {
+  const notify = useNotify();
+  const [tab, setTab] = useState("definitions");
+  const [apply, setApply] = useState(false);
+  const [selected, setSelected] = useState("");
+  const { data: crdData, loading, error, reload } = useAsync(() => api.listK8s(a.resourceGroup, a.name, "customresourcedefinitions"), [a.resourceGroup, a.name]);
+  const crds = (crdData || []).map((o) => ({ ...o, name: o.metadata.name }));
+  const sel = crds.find((c) => c.metadata.name === selected) || crds[0];
+  const plural = sel?.spec?.names?.plural;
+  const { data: instData, loading: iLoading, error: iError, reload: iReload } = useAsync(
+    () => (plural ? api.listK8s(a.resourceGroup, a.name, plural) : Promise.resolve([])), [a.resourceGroup, a.name, plural]);
+  const instances = (instData || []).map((o) => ({ ...o, name: o.metadata.name }));
+  const reloadBoth = () => { reload(); iReload(); };
+  return (
+    <>
+      <div className="vy-panel-title">Custom resources</div>
+      <TabList selectedValue={tab} onTabSelect={(_, d) => setTab(d.value)} aria-label="Custom resources tabs">
+        <Tab value="definitions">Definitions</Tab>
+        <Tab value="instances">Instances</Tab>
+      </TabList>
+      <div style={{ marginTop: 12 }}>
+        {tab === "definitions" ? (
+          <CapabilityContainer id="azure.aks.kubernetes_objects" title="Custom resource definitions">
+            <BrowseGrid
+              resourceName="custom resource definition" rowKey={(o) => o.metadata.name}
+              items={crds} loading={loading} error={error} onRefresh={reload} onCreate={() => setApply(true)}
+              onDelete={async (rows) => {
+                for (const o of rows) await api.deleteK8s(a.resourceGroup, a.name, "customresourcedefinitions", null, o.metadata.name);
+                notify.success(`Deleted ${rows.length} definition${rows.length === 1 ? "" : "s"}.`, "Delete succeeded");
+                reload();
+              }}
+              csvName="crds.csv" filterPlaceholder="Filter by name"
+              columns={[
+                { key: "name", label: "Name", value: (o) => o.metadata.name },
+                { key: "group", label: "Group", value: (o) => o.spec?.group },
+                { key: "kind", label: "Kind", value: (o) => o.spec?.names?.kind },
+                { key: "scope", label: "Scope", value: (o) => o.spec?.scope || "Namespaced" },
+                { key: "versions", label: "Versions", value: (o) => (o.spec?.versions || []).map((v) => v.name).join(", ") },
+                { key: "age", label: "Age", value: ageOf },
+              ]}
+            />
+          </CapabilityContainer>
+        ) : (
+          <>
+            <Field label="Custom resource definition" style={{ maxWidth: 420, marginBottom: 12 }}>
+              <Select value={sel?.metadata?.name || ""} onChange={(_, d) => setSelected(d.value)} aria-label="Custom resource definition" disabled={!crds.length}>
+                {crds.map((o) => <option key={o.metadata.name} value={o.metadata.name}>{o.metadata.name}</option>)}
+              </Select>
+            </Field>
+            <CapabilityContainer id="azure.aks.kubernetes_objects" title="Custom resources">
+              <BrowseGrid
+                resourceName={sel?.spec?.names?.singular || "custom resource"} rowKey={(o) => `${o.metadata.namespace || ""}/${o.metadata.name}`}
+                items={instances} loading={iLoading} error={iError} onRefresh={iReload} onCreate={() => setApply(true)}
+                onDelete={async (rows) => {
+                  for (const o of rows) await api.deleteK8s(a.resourceGroup, a.name, plural, o.metadata.namespace, o.metadata.name);
+                  notify.success(`Deleted ${rows.length} resource${rows.length === 1 ? "" : "s"}.`, "Delete succeeded");
+                  iReload();
+                }}
+                csvName="custom-resources.csv" filterPlaceholder="Filter by name or namespace"
+                columns={[
+                  { key: "name", label: "Name", value: (o) => o.metadata.name },
+                  { key: "namespace", label: "Namespace", value: (o) => o.metadata.namespace || "-" },
+                  { key: "age", label: "Age", value: ageOf },
+                ]}
+              />
+            </CapabilityContainer>
+          </>
+        )}
+      </div>
+      <ApplyYamlDialog a={a} open={apply} onClose={() => setApply(false)} onApplied={reloadBoth} />
+    </>
+  );
+}
+
+// ── Events — real Event objects Vyomi's "controllers" emit on real mutations (unschedulable
+// Pods, LoadBalancer Services, PVC provisioning, …), never a fabricated readout ────────────────
+function EventsPanel({ a }) {
+  const { data, loading, error, reload } = useAsync(() => api.listK8s(a.resourceGroup, a.name, "events"), [a.resourceGroup, a.name]);
+  const rows = (data || []).map((o) => ({ ...o, name: o.metadata.name }));
+  return (
+    <>
+      <div className="vy-panel-title">Events</div>
+      <CapabilityContainer id="azure.aks.kubernetes_objects" title="Events">
+        <BrowseGrid
+          resourceName="event" rowKey={(o) => `${o.metadata.namespace}/${o.metadata.name}`}
+          items={rows} loading={loading} error={error} onRefresh={reload}
+          csvName="events.csv" filterPlaceholder="Filter by reason, object or message"
+          pills={[{ key: "type", label: "Type", value: (o) => o.type }]}
+          columns={[
+            { key: "type", label: "Type", value: (o) => o.type },
+            { key: "reason", label: "Reason", value: (o) => o.reason },
+            { key: "object", label: "Object", value: (o) => `${o.involvedObject?.kind}/${o.involvedObject?.name}` },
+            { key: "message", label: "Message", value: (o) => o.message },
+            { key: "namespace", label: "Namespace", value: (o) => o.metadata.namespace },
+            { key: "lastseen", label: "Last seen", value: ageOf },
+          ]}
+        />
+      </CapabilityContainer>
+    </>
+  );
 }
 
 // ── Run command ────────────────────────────────────────────────────────────────────────

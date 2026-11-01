@@ -12,6 +12,17 @@ Proves, over the native ARM wire (POST .../managedClusters/{c}/runCommand):
   - status fields tell the truth (nothing is scheduled: Pods Pending / PodScheduled=False,
     workloads 0 ready, LoadBalancer <pending>, ClusterIP from the serviceCidr);
   - unsupported commands fail honestly (exit 1 / 127), never a fake success;
+  - Storage: AKS's disk/file CSI add-ons seed the default StorageClasses on cluster creation;
+    PersistentVolumeClaims bind dynamically (resolved StorageClass provisions a new PV) or
+    statically (spec.volumeName names an existing PV); reclaim policy is enforced on delete
+    (Delete cascades the PV, Retain releases it); a missing StorageClass leaves the claim
+    honestly Pending, never fake-Bound; a StorageClass with no provisioner is rejected;
+  - Events: real mutations (unschedulable Pods, a LoadBalancer Service, PVC provisioning) emit
+    real Event objects — listed and gettable like any other kind, never a fabricated readout;
+  - Custom resources: a CustomResourceDefinition applies like any built-in kind and registers a
+    real Kind for the cluster — its instances apply/get/describe/delete, by plural or shortName,
+    while still-unregistered kinds keep failing with "no matches for kind"; malformed CRDs
+    (missing group/names/versions, or metadata.name not matching plural.group) are rejected;
   - the store is JSON-safe (it persists with the ARM state) and goes away with the cluster;
   - the YAML reader agrees with PyYAML on the fixtures (when PyYAML is installed).
 
@@ -188,6 +199,95 @@ def run() -> int:
     _check("empty command -> 400", r["status"] == 400)
     code, logs = kc("kubectl version")
     _check("kubectl version reports the cluster's Kubernetes version", "Server Version: v1.29.2" in logs)
+
+    # ── Storage: StorageClasses, dynamic + static PVC provisioning, reclaim ──────────────
+    scs = {o["metadata"]["name"] for o in k8s.list_objects(rec, "StorageClass")}
+    _check("AKS's disk/file CSI add-ons seed the default StorageClasses on cluster creation",
+           {"default", "managed-csi", "managed-csi-premium", "azurefile-csi", "azurefile-csi-premium"} <= scs)
+    _check("one StorageClass is annotated as the cluster default",
+           any((o["metadata"].get("annotations") or {}).get("storageclass.kubernetes.io/is-default-class") == "true"
+               for o in k8s.list_objects(rec, "StorageClass") if o["metadata"]["name"] == "default"))
+    pvc = "apiVersion: v1\nkind: PersistentVolumeClaim\nmetadata:\n  name: data\n  namespace: default\nspec:\n  accessModes: [ReadWriteOnce]\n  resources:\n    requests:\n      storage: 5Gi\n"
+    code, logs = kc("kubectl apply -f - <<EOF\n" + pvc + "EOF")
+    _check("dynamic provisioning: PVC created and bound", code == 0 and "persistentvolumeclaim/data created" in logs)
+    claim = next(o for o in k8s.list_objects(rec, "PersistentVolumeClaim") if o["metadata"]["name"] == "data")
+    _check("PVC is Bound to a freshly provisioned PV using the default StorageClass",
+           claim["status"]["phase"] == "Bound" and claim["spec"]["volumeName"].startswith("pvc-")
+           and claim["status"]["capacity"]["storage"] == "5Gi")
+    pv = next(o for o in k8s.list_objects(rec, "PersistentVolume") if o["metadata"]["name"] == claim["spec"]["volumeName"])
+    _check("the provisioned PV is Bound back to the claim, Delete reclaim policy (AKS default)",
+           pv["status"]["phase"] == "Bound" and pv["spec"]["claimRef"]["name"] == "data"
+           and pv["spec"]["persistentVolumeReclaimPolicy"] == "Delete")
+    code, logs = kc("kubectl delete pvc data -n default")
+    _check("deleting a Delete-policy PVC cascades to its dynamically provisioned PV",
+           code == 0 and not any(o["metadata"]["name"] == claim["spec"]["volumeName"] for o in k8s.list_objects(rec, "PersistentVolume")))
+
+    pv_yaml = "apiVersion: v1\nkind: PersistentVolume\nmetadata:\n  name: static-pv\nspec:\n  capacity: {storage: 2Gi}\n  accessModes: [ReadWriteOnce]\n  storageClassName: manual\n  hostPath: {path: /data}\n"
+    kc("kubectl apply -f - <<EOF\n" + pv_yaml + "EOF")
+    static_pvc = "apiVersion: v1\nkind: PersistentVolumeClaim\nmetadata:\n  name: static-claim\n  namespace: default\nspec:\n  volumeName: static-pv\n  accessModes: [ReadWriteOnce]\n  storageClassName: manual\n  resources:\n    requests:\n      storage: 2Gi\n"
+    code, logs = kc("kubectl apply -f - <<EOF\n" + static_pvc + "EOF")
+    _check("static provisioning: a PVC naming an existing unbound PV binds to it", code == 0)
+    static_claim = next(o for o in k8s.list_objects(rec, "PersistentVolumeClaim") if o["metadata"]["name"] == "static-claim")
+    _check("statically-bound PVC is Bound, not dynamically provisioned", static_claim["status"]["phase"] == "Bound")
+    code, logs = kc("kubectl get pv static-pv")
+    _check("the named PV shows Bound to the static claim", "Bound" in logs and "default/static-claim" in logs)
+
+    retain_sc = "apiVersion: storage.k8s.io/v1\nkind: StorageClass\nmetadata:\n  name: retain-sc\nprovisioner: disk.csi.azure.com\nreclaimPolicy: Retain\nvolumeBindingMode: Immediate\n"
+    kc("kubectl apply -f - <<EOF\n" + retain_sc + "EOF")
+    retain_pvc = "apiVersion: v1\nkind: PersistentVolumeClaim\nmetadata:\n  name: retained\n  namespace: default\nspec:\n  storageClassName: retain-sc\n  accessModes: [ReadWriteOnce]\n  resources:\n    requests:\n      storage: 3Gi\n"
+    kc("kubectl apply -f - <<EOF\n" + retain_pvc + "EOF")
+    retained = next(o for o in k8s.list_objects(rec, "PersistentVolumeClaim") if o["metadata"]["name"] == "retained")
+    retain_vol = retained["spec"]["volumeName"]
+    kc("kubectl delete pvc retained -n default")
+    code, logs = kc(f"kubectl get pv {retain_vol}")
+    _check("Retain policy: deleting the PVC releases (not deletes) its PV", code == 0 and "Released" in logs)
+
+    missing_sc_pvc = "apiVersion: v1\nkind: PersistentVolumeClaim\nmetadata:\n  name: broken\n  namespace: default\nspec:\n  storageClassName: does-not-exist\n  accessModes: [ReadWriteOnce]\n  resources:\n    requests:\n      storage: 1Gi\n"
+    code, logs = kc("kubectl apply -f - <<EOF\n" + missing_sc_pvc + "EOF")
+    _check("a missing StorageClass is accepted (like real k8s) but leaves the PVC Pending, never fake-Bound",
+           code == 0 and next(o for o in k8s.list_objects(rec, "PersistentVolumeClaim") if o["metadata"]["name"] == "broken")["status"]["phase"] == "Pending")
+    bad_sc = "apiVersion: storage.k8s.io/v1\nkind: StorageClass\nmetadata:\n  name: bad-sc\nreclaimPolicy: Delete\n"
+    code, logs = kc("kubectl apply -f - <<EOF\n" + bad_sc + "EOF")
+    _check("a StorageClass with no provisioner is rejected", code == 1 and "provisioner: Required value" in logs)
+
+    # ── Events: real mutations emit real Event objects, never a fabricated readout ────────
+    pod_yaml = "apiVersion: v1\nkind: Pod\nmetadata:\n  name: ev-pod\n  namespace: default\nspec:\n  containers:\n  - {name: c, image: nginx}\n"
+    kc("kubectl apply -f - <<EOF\n" + pod_yaml + "EOF")
+    lb_yaml = "apiVersion: v1\nkind: Service\nmetadata:\n  name: ev-lb\n  namespace: default\nspec:\n  type: LoadBalancer\n  selector: {app: x}\n  ports: [{port: 80}]\n"
+    kc("kubectl apply -f - <<EOF\n" + lb_yaml + "EOF")
+    code, logs = kc("kubectl get events -n default")
+    _check("Pod creation emits a Warning FailedScheduling event (the real reason, not a fake success)",
+           code == 0 and "FailedScheduling" in logs and "Pod/ev-pod" in logs)
+    _check("a LoadBalancer Service emits a Warning SyncLoadBalancerFailed event", "SyncLoadBalancerFailed" in logs and "Service/ev-lb" in logs)
+    events = k8s.list_objects(rec, "Event", namespace="default")
+    _check("Events are real stored objects with involvedObject/reason/message/type",
+           any(e["involvedObject"]["kind"] == "Pod" and e["reason"] == "FailedScheduling" and e["type"] == "Warning" for e in events))
+
+    # ── Custom resources: a CRD this cluster applies registers a real, usable Kind ────────
+    crd_yaml = ("apiVersion: apiextensions.k8s.io/v1\nkind: CustomResourceDefinition\nmetadata:\n  name: widgets.example.com\n"
+               "spec:\n  group: example.com\n  names: {plural: widgets, singular: widget, kind: Widget, shortNames: [wd]}\n"
+               "  scope: Namespaced\n  versions:\n  - {name: v1, served: true, storage: true}\n")
+    code, logs = kc("kubectl apply -f - <<EOF\n" + crd_yaml + "EOF")
+    _check("CustomResourceDefinition applies like any other kind", code == 0 and "customresourcedefinition.apiextensions.k8s.io/widgets.example.com created" in logs)
+    cr_yaml = "apiVersion: example.com/v1\nkind: Widget\nmetadata:\n  name: w1\n  namespace: default\nspec:\n  size: large\n"
+    code, logs = kc("kubectl apply -f - <<EOF\n" + cr_yaml + "EOF")
+    _check("a custom resource instance of the registered Kind applies", code == 0 and "widget.example.com/w1 created" in logs)
+    code, logs = kc("kubectl get widgets -n default")
+    _check("get by the CRD's plural name lists the instance", code == 0 and "w1" in logs)
+    code, logs = kc("kubectl get wd")
+    _check("get by the CRD's shortName resolves the same Kind", code == 0 and "w1" in logs)
+    code, logs = kc("kubectl describe widget w1 -n default")
+    _check("describe works on a custom resource", code == 0 and "size: large" in logs)
+    before_cr = kc("kubectl apply -f - <<EOF\n" + "apiVersion: nope.io/v1\nkind: Gizmo\nmetadata:\n  name: g\n" + "EOF")
+    _check("an unregistered custom kind is still rejected with 'no matches for kind'", before_cr[0] == 1 and 'no matches for kind "Gizmo"' in before_cr[1])
+    code, logs = kc("kubectl delete widget w1 -n default")
+    _check("custom resource instances delete like any other kind", code == 0 and 'widget.example.com "w1" deleted' in logs)
+    code, logs = kc("kubectl delete crd widgets.example.com")
+    _check("the CRD itself deletes too", code == 0 and 'customresourcedefinition.apiextensions.k8s.io "widgets.example.com" deleted' in logs)
+    bad_crd = ("apiVersion: apiextensions.k8s.io/v1\nkind: CustomResourceDefinition\nmetadata:\n  name: wrong.name.io\n"
+              "spec:\n  group: example.com\n  names: {plural: widgets, kind: Widget}\n  versions:\n  - {name: v1}\n")
+    code, logs = kc("kubectl apply -f - <<EOF\n" + bad_crd + "EOF")
+    _check("a CRD whose metadata.name doesn't match plural.group is rejected", code == 1 and "must be spec.names.plural" in logs)
 
     # ── durability / lifecycle ───────────────────────────────────────────────────────────
     _check("the object store is JSON-safe (persists with the ARM state)", json.loads(json.dumps(arm.state)) == arm.state)
