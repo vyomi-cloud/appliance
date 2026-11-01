@@ -2712,7 +2712,7 @@ class AppStateGcpIamStore(_CoreSlotStore, _IamMem):
     space's "gcp_iam_core" would shadow AWS IAM's "iam_core" in the CloudSim lookup.)"""
     _BASE, _SLOT, _PROVIDER = _IamMem, "iam_admin_core", "gcp"
     _EXTRA = ("gcp_custom_roles", "gcp_deny_policies", "gcp_iam_policies", "gcp_policy_activity",
-              "gcp_sa_keys", "gcp_service_accounts", "gcp_wi_pools")
+              "gcp_sa_keys", "gcp_service_accounts", "gcp_wi_pools", "gcp_iap_resources", "gcp_managed_identities")
 
 
 class AppStateAzureRbacStore(_CoreSlotStore, _IamMem):
