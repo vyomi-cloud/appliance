@@ -3586,6 +3586,11 @@ def _lambda_sync_code_artifact(function: dict) -> None:
     code_path = function_dir / f"{module_name}.py"
     code = function.get("code") or _lambda_default_code(function["function_name"])
     code_path.write_text(code, encoding="utf-8")
+    for rel, text in (function.get("extra_files") or {}).items():   # other modules from the uploaded zip
+        dest = (function_dir / rel).resolve()
+        if function_dir.resolve() in dest.parents:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_text(text, encoding="utf-8")
     function["code_path"] = str(code_path)
     function["workdir"] = str(function_dir)
 
@@ -3753,6 +3758,7 @@ def _lambda_create_function_record(req: LambdaFunctionRequest) -> dict:
         "permissions": [],
         "tags": copy.deepcopy(req.tags or []),
         "layers": list(req.layers) if req.layers else [],
+        "extra_files": dict(getattr(req, "extra_files", None) or {}),
     }
     function["code_sha256"] = base64.b64encode(hashlib.sha256(function["code"].encode("utf-8")).digest()).decode("ascii")
     _lambda_sync_code_artifact(function)
@@ -3973,10 +3979,15 @@ def _lambda_run_handler(function: dict, event_payload: Any) -> dict:
         handler = getattr(module, handler_name)
 
         class Context:
-            function_name = ""
-            memory_limit_in_mb = 0
-            invoked_function_arn = ""
-            aws_request_id = ""
+            function_name = os.environ.get("AWS_LAMBDA_FUNCTION_NAME", "")
+            function_version = "$LATEST"
+            memory_limit_in_mb = int(os.environ.get("AWS_LAMBDA_FUNCTION_MEMORY_SIZE", "128") or 128)
+            invoked_function_arn = os.environ.get("VYOMI_LAMBDA_ARN", "")
+            aws_request_id = os.environ.get("VYOMI_LAMBDA_REQUEST_ID", "")
+            log_group_name = "/aws/lambda/" + function_name
+            log_stream_name = ""
+            def get_remaining_time_in_millis(self):
+                return 3000
 
         stdout = io.StringIO()
         stderr = io.StringIO()
@@ -4009,6 +4020,10 @@ def _lambda_run_handler(function: dict, event_payload: Any) -> dict:
         env={
             **os.environ,
             **(function.get("environment") or {}),
+            "AWS_LAMBDA_FUNCTION_NAME": function.get("function_name", ""),
+            "AWS_LAMBDA_FUNCTION_MEMORY_SIZE": str(function.get("memory_size", 128)),
+            "VYOMI_LAMBDA_ARN": function.get("function_arn", ""),
+            "VYOMI_LAMBDA_REQUEST_ID": str(uuid.uuid4()),
             "PYTHONPATH": str(workdir) + (os.pathsep + os.environ.get("PYTHONPATH", "") if os.environ.get("PYTHONPATH") else ""),
         },
     )

@@ -291,6 +291,13 @@ async def api_lambda_invoke_function_aws(function_name: str, request: Request):
     if invocation_type and invocation_type.lower() == "event":
         return Response(status_code=202)
     response_payload = record.get("response_payload")
+    if record.get("status") == "error":
+        # Real Lambda: 200 + X-Amz-Function-Error, body {errorMessage, errorType, stackTrace}.
+        tb = (record.get("traceback") or "").strip().splitlines()
+        last = tb[-1] if tb else ""
+        etype = last.split(":", 1)[0].strip() if ":" in last else (last or "Error")
+        response_payload = {"errorMessage": record.get("error", ""), "errorType": etype.rsplit(".", 1)[-1],
+                            "stackTrace": [ln for ln in tb[:-1] if ln.strip()]}
     if isinstance(response_payload, (dict, list)):
         body_bytes = json.dumps(response_payload, default=str).encode("utf-8")
         media_type = "application/json"
@@ -307,7 +314,10 @@ async def api_lambda_invoke_function_aws(function_name: str, request: Request):
         "X-Amz-Executed-Version": "$LATEST",
     }
     if record.get("status") == "error":
-        headers["X-Amz-Function-Error"] = "Handled"
+        headers["X-Amz-Function-Error"] = "Unhandled"
+    if (request.headers.get("x-amz-log-type") or "").lower() == "tail":
+        log = ((record.get("stdout") or "") + (record.get("stderr") or "")).encode("utf-8")[-4096:]
+        headers["X-Amz-Log-Result"] = base64.b64encode(log).decode("ascii")
     return Response(content=body_bytes, media_type=media_type, headers=headers)
 
 
