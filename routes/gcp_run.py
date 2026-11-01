@@ -16,7 +16,7 @@ from core import gcp_run_core as run
 
 PLATFORM = ctx.PLATFORM
 _KEYS = ("services", "revisions", "jobs", "executions", "tasks", "operations", "policies",
-         "worker_pools", "domain_mappings", "event_triggers", "triggers", "builds")
+         "worker_pools", "domain_mappings", "triggers", "builds")
 
 
 def _slot() -> dict | None:

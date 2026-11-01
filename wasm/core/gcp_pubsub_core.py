@@ -1142,24 +1142,6 @@ def _delete_topic(store, name: str) -> PubsubResponse:
     return _json(200, {})
 
 
-def _deliver_eventarc(store, et: dict, record: dict) -> None:
-    """A Eventarc Pub/Sub-sourced trigger firing for real: deliver the message to its
-    destination Cloud Run service — an in-process cross-core call (never outbound network),
-    the same pattern core/lambda_core.py's _deliver_to_arn uses for EventBridge targets.
-    `store.run_store` is set once by the wire router (core/aws_wire_router.py)."""
-    run_store = getattr(store, "run_store", None)
-    if run_store is None:
-        return
-    from core import gcp_run_core as gcp_run   # local: gcp_run_core imports this module at top level
-    event = {"specversion": "1.0", "type": "google.cloud.pubsub.topic.v1.messagePublished",
-             "data": {"message": {"data": record.get("data", ""), "attributes": record.get("attributes") or {},
-                                   "messageId": record.get("messageId", "")}}}
-    try:
-        gcp_run.invoke_service(run_store, et["project"], et["location"], et["service"], event)
-    except Exception:
-        pass
-
-
 def _fanout(store, topic: dict, record: dict) -> None:
     """Deliver a prepared message record into every subscription attached to `topic`
     whose filter (if any) matches the message's attributes. A Cloud Storage subscription
@@ -1171,10 +1153,9 @@ def _fanout(store, topic: dict, record: dict) -> None:
         if sub.get("cloudStorageConfig"):
             _deliver_to_cloud_storage(store, sub, record)
             continue
+        if sub.get("_eventarc_trigger"):   # push-delivered by gcp_run_core.deliver_event (on_publish), nobody pulls it
+            continue
         sub.setdefault("messages", []).append({"_id": uuid.uuid4().hex, "_publish_at": store.now(), **record})
-        et = sub.get("_eventarc_trigger")
-        if et:
-            _deliver_eventarc(store, et, record)
 
 
 def _prune_topic_retention(store, topic: dict) -> None:
@@ -1192,7 +1173,7 @@ def _prune_topic_retention(store, topic: dict) -> None:
     topic["_retained"] = [m for m in topic.get("_retained", []) if now - m.get("_publish_at", now) <= retention]
 
 
-def _publish(store, name: str, body: dict) -> PubsubResponse:
+def _publish(store, name: str, body: dict, on_publish=None) -> PubsubResponse:
     topic = _require_topic(store, name)
     _sync_cloud_storage_ingestion(store, topic)
     messages = body.get("messages") or []
@@ -1230,6 +1211,8 @@ def _publish(store, name: str, body: dict) -> PubsubResponse:
     _sync_topic_metrics(store, name)
     for sub_name in topic.get("subscriptions", []):
         _sync_subscription_metrics(store, sub_name)
+    if on_publish:
+        on_publish(name, prepared)
     return _json(200, {"messageIds": [r["messageId"] for r in prepared]})
 
 
@@ -1735,9 +1718,13 @@ _IAM_VERBS = ("getIamPolicy", "setIamPolicy", "testIamPermissions")
 # ── dispatch ──────────────────────────────────────────────────────────────
 def dispatch(store: MessagingStore, method: str, path: str,
              query: dict | None = None, headers: dict | None = None,
-             body: bytes = b"") -> PubsubResponse:
+             body: bytes = b"", on_publish=None) -> PubsubResponse:
     """Native GCP Pub/Sub REST v1 router. Resource names are `projects/{p}/...`;
-    verbs (`:publish`, `:pull`, `:acknowledge`, `:seek`) are `:`-suffixed on the path."""
+    verbs (`:publish`, `:pull`, `:acknowledge`, `:seek`) are `:`-suffixed on the path.
+
+    *on_publish(topic_full_name, prepared_messages)*, when given, is called after a
+    successful publish — Cloud Run's Eventarc-style triggers hook in here (see
+    core/aws_wire_router.py / routes/gcp_pubsub_unified.py)."""
     method = (method or "GET").upper()
     query = query or {}
 
@@ -1786,7 +1773,7 @@ def dispatch(store: MessagingStore, method: str, path: str,
                 return _iam(store, collection, resource, verb, payload)
             # specific topic
             if verb == "publish" and method == "POST":
-                return _publish(store, resource, payload)
+                return _publish(store, resource, payload, on_publish=on_publish)
             if method == "PUT":
                 return _create_topic(store, resource, payload)
             if method == "PATCH":

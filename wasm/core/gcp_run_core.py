@@ -83,7 +83,7 @@ class RunStore:
         self.policies: dict = {}     # full resource name -> IAM Policy
         self.worker_pools: dict = {}     # full worker pool name -> WorkerPool resource
         self.domain_mappings: dict = {}  # full domain mapping name -> DomainMapping resource
-        self.triggers: dict = {}         # full trigger name -> Eventarc-style Trigger (nested under a service)
+        self.triggers: dict = {}         # full trigger name -> THE Eventarc Trigger (services/{s}/triggers; eventarcTriggers is an alias)
         self.builds: dict = {}           # full build name -> Build resource (nested under a service)
         self.seq: dict = {"op": 0, "uid": 0}
         # Cross-store refs set once by the wire router (never persisted — see nano_persist):
@@ -432,11 +432,27 @@ def _record_observability(store, project, location, sid, revision, svc, out, lat
                                      max(min_inst, 1), now)
 
 
-def invoke_service(store, project, location, sid, event):
-    """Deliver one real request to `sid`'s currently-serving revision. The mechanism
-    Observability's metrics/logs are fed from: the console's own :invoke call, or an
-    Eventarc trigger firing for real (see _deliver_eventarc in gcp_pubsub_core.py)."""
+def _check_invoker(store, full, headers):
+    """Enforce the IAM invoker policy, exactly like the real serving path does before a
+    request ever reaches a revision: allUsers roles/run.invoker, or a Bearer token."""
+    if public_invoker(store, full):
+        return
+    auth = next((str(v) for k, v in (headers or {}).items() if k.lower() == "authorization"), "")
+    if not auth.lower().startswith("bearer ") or len(auth) < 15:
+        raise _E(403, "PERMISSION_DENIED",
+                 "The request was not authenticated. Either allow unauthenticated invocations "
+                 "or include a valid Authorization: Bearer token.")
+
+
+def invoke_service(store, project, location, sid, event=None, headers=None, internal=False):
+    """Deliver one real request to `sid`'s currently-serving revision, after the IAM invoker
+    check. The mechanism Observability's metrics/logs are fed from: a direct :invoke call, or
+    an Eventarc trigger firing for real (deliver_event). Internal callers (Eventarc delivery)
+    skip the IAM check: the trigger's service account is granted run.invoker automatically,
+    as in real Eventarc."""
     full, svc = _get_service(store, project, location, sid)
+    if not internal:
+        _check_invoker(store, full, headers)
     revision = _pick_revision(svc)
     t0 = time.perf_counter()
     out = _run_function_source(svc.get("annotations"), event if isinstance(event, dict) else {"raw": event})
@@ -1205,11 +1221,11 @@ def _knative(store, method, ns, rest, query, headers, payload):
 
 
 # ── dispatch ───────────────────────────────────────────────────────────────
-def dispatch(store, method, path, query=None, headers=None, body=b""):
-    return _dispatch(store, method, path, query or {}, headers or {}, body)
+def dispatch(store, method, path, query=None, headers=None, body=b"", log_fn=None, topic_exists=None):
+    return _dispatch(store, method, path, query or {}, headers or {}, body, log_fn=log_fn, topic_exists=topic_exists)
 
 
-def _dispatch(store, method, path, query, headers, body):
+def _dispatch(store, method, path, query, headers, body, log_fn=None, topic_exists=None):
     method = method.upper()
     for k, v in headers.items():   # REST clients without PATCH/PUT tunnel them over POST
         if k.lower() == "x-http-method-override" and method == "POST" and v:
@@ -1251,9 +1267,10 @@ def _dispatch(store, method, path, query, headers, body):
         if path.startswith("/v1/") and kind != "services":
             return _err(404, "NOT_FOUND", "Unknown path: %s" % path)
         if kind == "services":
-            return _services(store, method, project, location, rest[1:], verb, query, payload)
+            return _services(store, method, project, location, rest[1:], verb, query, payload,
+                             log_fn=log_fn, topic_exists=topic_exists, headers=headers)
         if kind == "jobs":
-            return _jobs(store, method, project, location, rest[1:], verb, query, payload)
+            return _jobs(store, method, project, location, rest[1:], verb, query, payload, log_fn=log_fn)
         if kind == "workerPools":
             return _worker_pools_dispatch(store, method, project, location, rest[1:], verb, query, payload)
         if kind == "operations":
@@ -1274,10 +1291,15 @@ def _iam_verb(store, full, method, verb, query, payload):
     return None
 
 
-def _services(store, method, project, location, rest, verb, query, payload):
+def _services(store, method, project, location, rest, verb, query, payload, log_fn=None, topic_exists=None, headers=None):
     if not rest:
         if method == "POST" and not verb:
-            return _json(200, create_service(store, project, location, query, payload))
+            op = create_service(store, project, location, query, payload)
+            if log_fn and query.get("validateOnly") not in ("true", "True", True):
+                sid = op["response"]["name"].rsplit("/", 1)[-1]
+                image = op["response"]["template"]["containers"][0]["image"]
+                log_fn("service", project, location, sid, "Service %s created (image %s)" % (sid, image))
+            return _json(200, op)
         if method == "GET" and not verb:
             _check_location(location)
             names = sorted(n for n in store.services if n.startswith("projects/%s/locations/%s/services/" % (project, location)))
@@ -1290,7 +1312,7 @@ def _services(store, method, project, location, rest, verb, query, payload):
         sid = rest[0]
         full = service_name(project, location, sid)
         if verb == "invoke" and method == "POST":
-            out = invoke_service(store, project, location, sid, payload)
+            out = invoke_service(store, project, location, sid, payload, headers=headers)
             body = out["body"]
             return _json(out["status"], body if isinstance(body, (dict, list)) else {"result": body})
         if verb == "connectRepo" and method == "POST":
@@ -1301,13 +1323,30 @@ def _services(store, method, project, location, rest, verb, query, payload):
             _get_service(store, project, location, sid)
             r = _iam_verb(store, full, method, verb, query, payload)
             if r:
+                if verb == "setIamPolicy" and method == "POST" and log_fn:
+                    public = public_invoker(store, full)
+                    log_fn("service", project, location, sid, "Authentication changed for service %s: %s"
+                           % (sid, "allow unauthenticated" if public else "require authentication"))
                 return r
         elif method == "GET":
             return _json(200, service_view(_get_service(store, project, location, sid)[1]))
         elif method == "PATCH":
-            return _json(200, update_service(store, project, location, sid, query, payload))
+            before_rev = (store.services.get(full) or {}).get("latestCreatedRevision")
+            op = update_service(store, project, location, sid, query, payload)
+            if log_fn and query.get("validateOnly") not in ("true", "True", True):
+                after_rev = op["response"].get("latestCreatedRevision")
+                if after_rev and after_rev != before_rev:
+                    image = op["response"]["template"]["containers"][0]["image"]
+                    log_fn("service", project, location, sid, "New revision deployed for service %s (image %s)" % (sid, image))
+                else:
+                    fields = ", ".join(_mask_fields(query, _norm_enums(payload))) or "configuration"
+                    log_fn("service", project, location, sid, "Service %s updated (%s)" % (sid, fields))
+            return _json(200, op)
         elif method == "DELETE":
-            return _json(200, delete_service(store, project, location, sid, query))
+            op = delete_service(store, project, location, sid, query)
+            if log_fn and query.get("validateOnly") not in ("true", "True", True):
+                log_fn("service", project, location, sid, "Service %s deleted" % sid)
+            return _json(200, op)
     elif rest[1] == "revisions":
         sid = rest[0]
         if len(rest) == 2 and method == "GET" and not verb:
@@ -1324,17 +1363,22 @@ def _services(store, method, project, location, rest, verb, query, payload):
                 return _json(200, revision_view(_get_revision(store, project, location, sid, rest[2])[1]))
             if method == "DELETE":
                 return _json(200, delete_revision(store, project, location, sid, rest[2], query))
-    elif rest[1] == "triggers":
-        return _triggers_dispatch(store, method, project, location, rest[0], rest[2:], verb, query, payload)
+    elif rest[1] in ("triggers", "eventarcTriggers"):   # one Trigger resource, two wire paths
+        return _triggers_dispatch(store, method, project, location, rest[0], rest[2:], verb, query, payload,
+                                  topic_exists=topic_exists, alias=rest[1] == "eventarcTriggers")
     elif rest[1] == "builds":
         return _builds_dispatch(store, method, project, location, rest[0], rest[2:], verb, query, payload)
     return _err(404, "NOT_FOUND", "Unknown path or method: %s %s" % (method, "/".join(rest)))
 
 
-def _jobs(store, method, project, location, rest, verb, query, payload):
+def _jobs(store, method, project, location, rest, verb, query, payload, log_fn=None):
     if not rest:
         if method == "POST" and not verb:
-            return _json(200, create_job(store, project, location, query, payload))
+            op = create_job(store, project, location, query, payload)
+            if log_fn and query.get("validateOnly") not in ("true", "True", True):
+                jid = op["response"]["name"].rsplit("/", 1)[-1]
+                log_fn("job", project, location, jid, "Job %s created" % jid)
+            return _json(200, op)
         if method == "GET" and not verb:
             _check_location(location)
             names = sorted(n for n in store.jobs if n.startswith("projects/%s/locations/%s/jobs/" % (project, location)))
@@ -1347,7 +1391,11 @@ def _jobs(store, method, project, location, rest, verb, query, payload):
         jid = rest[0]
         full = job_name(project, location, jid)
         if verb == "run" and method == "POST":
-            return _json(200, run_job(store, project, location, jid, payload))
+            op = run_job(store, project, location, jid, payload)
+            if log_fn:
+                eid = op["response"]["name"].rsplit("/", 1)[-1]
+                log_fn("job", project, location, jid, "Execution %s started (%d task(s))" % (eid, op["response"]["taskCount"]))
+            return _json(200, op)
         if verb:
             _get_job(store, project, location, jid)
             r = _iam_verb(store, full, method, verb, query, payload)
@@ -1356,9 +1404,15 @@ def _jobs(store, method, project, location, rest, verb, query, payload):
         elif method == "GET":
             return _json(200, job_view(_get_job(store, project, location, jid)[1]))
         elif method == "PATCH":
-            return _json(200, update_job(store, project, location, jid, query, payload))
+            op = update_job(store, project, location, jid, query, payload)
+            if log_fn and query.get("validateOnly") not in ("true", "True", True):
+                log_fn("job", project, location, jid, "Job %s updated" % jid)
+            return _json(200, op)
         elif method == "DELETE":
-            return _json(200, delete_job(store, project, location, jid, query))
+            op = delete_job(store, project, location, jid, query)
+            if log_fn and query.get("validateOnly") not in ("true", "True", True):
+                log_fn("job", project, location, jid, "Job %s deleted" % jid)
+            return _json(200, op)
     elif rest[1] == "executions":
         jid = rest[0]
         if len(rest) == 2 and method == "GET" and not verb:
@@ -1651,42 +1705,68 @@ def _operations(store, method, project, location, rest, verb, query):
 
 # ── Eventarc triggers (nested under a service — the Triggers tab's destination is always
 # that service) ─────────────────────────────────────────────────────────────────────────
+# Vyomi has no eventarc.googleapis.com, so ONE Trigger resource lives under its destination
+# service in store.triggers, reachable on two wire paths: services/{s}/triggers (canonical,
+# the Functions console) and services/{s}/eventarcTriggers (alias, the Run console; its `name`
+# is reported on the path it was asked through). The view carries both consoles' fields.
 # Vyomi only has a real event source for ONE Eventarc provider: Pub/Sub. A trigger for any
 # other real event type (Cloud Storage, Cloud Audit Logs, …) is honestly rejected at create
 # time rather than accepted and silently never firing — see core/capabilities/gcp/functions.json.
+# Delivery is deliver_event alone, wired from the Pub/Sub core's on_publish hook
+# (core/aws_wire_router.py, routes/gcp_pubsub_unified.py), so a publish fires a trigger once.
 TRIGGER_EVENT_TYPES = ("google.cloud.pubsub.topic.v1.messagePublished",)
+_TOPIC_RE = re.compile(r"^projects/[^/]+/topics/[^/]+$")
 
 
 def trigger_name(project, location, sid, tid):
     return "%s/triggers/%s" % (service_name(project, location, sid), tid)
 
 
-def trigger_view(t):
-    return {k: _copy(v) for k, v in t.items() if not k.startswith("_")}
+def trigger_view(t, alias=False):
+    view = {k: _copy(v) for k, v in t.items() if not k.startswith("_")}
+    if alias:
+        view["name"] = _alias_name(view["name"])
+    return view
+
+
+def _alias_name(name):
+    head, tid = name.rsplit("/triggers/", 1)
+    return "%s/eventarcTriggers/%s" % (head, tid)
 
 
 def _get_trigger(store, project, location, sid, tid):
     full = trigger_name(project, location, sid, tid)
     t = store.triggers.get(full)
     if not t:
-        raise _E(404, "NOT_FOUND", "Trigger '%s' does not exist." % tid)
+        raise _E(404, "NOT_FOUND", "Trigger '%s' of service '%s' does not exist." % (tid, sid))
     return full, t
 
 
-def list_triggers(store, project, location, sid):
+def list_triggers(store, project, location, sid, alias=False):
     prefix = service_name(project, location, sid) + "/triggers/"
-    return sorted((trigger_view(t) for n, t in store.triggers.items() if n.startswith(prefix)),
-                  key=lambda t: t["createTime"])
+    return sorted((trigger_view(t, alias) for n, t in store.triggers.items() if n.startswith(prefix)),
+                  key=lambda t: (t["createTime"], t["name"]))
 
 
-def create_trigger(store, project, location, sid, query, payload):
+def _topic_known(store, topic, topic_exists):
+    if topic_exists is not None:
+        return topic_exists(topic)
+    pubsub_store = getattr(store, "pubsub_store", None)
+    return pubsub_store is None or gcp_ps.dispatch(pubsub_store, "GET", "/v1/%s" % topic, {}, {}, b"").status == 200
+
+
+def create_trigger(store, project, location, sid, query, payload, topic_exists=None, alias=False):
     _get_service(store, project, location, sid)
-    tid = query.get("triggerId") or ""
+    tid = str(query.get("triggerId") or query.get("eventarcTriggerId") or "").strip()
+    if not tid:
+        raise _E(400, "INVALID_ARGUMENT", "%s must be specified." % ("eventarcTriggerId" if alias else "triggerId"))
     _check_name("trigger", tid)
     tfull = trigger_name(project, location, sid, tid)
     if tfull in store.triggers:
-        raise _E(409, "ALREADY_EXISTS", "Resource '%s' already exists." % tfull)
+        raise _E(409, "ALREADY_EXISTS", "Resource '%s' already exists." % (_alias_name(tfull) if alias else tfull))
     filters = payload.get("eventFilters") or []
+    if alias and not filters:   # the eventarcTriggers wire names only the transport: always a Pub/Sub trigger
+        filters = [{"attribute": "type", "value": TRIGGER_EVENT_TYPES[0]}]
     event_type = next((f.get("value") for f in filters if isinstance(f, dict) and f.get("attribute") == "type"), None)
     if not event_type:
         raise _E(400, "INVALID_ARGUMENT", "eventFilters must include an entry with attribute \"type\".")
@@ -1694,19 +1774,25 @@ def create_trigger(store, project, location, sid, query, payload):
         raise _E(400, "INVALID_ARGUMENT",
                  "Event type %r is not simulated: Vyomi has no event source for it (only %s). "
                  "Use a Pub/Sub-sourced custom event." % (event_type, ", ".join(TRIGGER_EVENT_TYPES)))
-    topic = payload.get("pubsubTopic") or ""
+    topic = str(payload.get("pubsubTopic") or ((payload.get("transport") or {}).get("pubsub") or {}).get("topic") or "").strip()
     if not topic:
-        raise _E(400, "INVALID_ARGUMENT", "pubsubTopic is required for event type %r." % event_type)
-    pubsub_store = getattr(store, "pubsub_store", None)
-    if pubsub_store is not None and gcp_ps.dispatch(pubsub_store, "GET", "/v1/%s" % topic, {}, {}, b"").status != 200:
+        raise _E(400, "INVALID_ARGUMENT", "pubsubTopic (or transport.pubsub.topic) is required for event type %r." % event_type)
+    if not _TOPIC_RE.match(topic):
+        raise _E(400, "INVALID_ARGUMENT", "Invalid topic resource name %r; expected projects/{p}/topics/{t}." % topic)
+    if not _topic_known(store, topic, topic_exists):
         raise _E(400, "INVALID_ARGUMENT", "Pub/Sub topic '%s' does not exist." % topic)
     now = _ts()
     trig = {"name": tfull, "uid": _uid(store, "trg", tfull), "createTime": now, "updateTime": now,
             "eventFilters": _copy(filters), "eventType": event_type, "pubsubTopic": topic,
+            "transport": {"pubsub": {"topic": topic}},
             "serviceAccount": payload.get("serviceAccount") or "%s-compute@developer.gserviceaccount.com" % project_number(project),
-            "destination": {"service": sid, "region": location}, "state": "ACTIVE",
-            "etag": '"%s"' % _h("trg", tfull, now)[:16]}
-    if pubsub_store is not None:
+            "destination": {"service": sid, "region": location,
+                            "cloudRun": {"service": sid, "region": location, "path": "/"}},
+            "labels": payload.get("labels") or {}, "state": "ACTIVE",
+            "etag": '"%s"' % _h("trg", tfull, now)[:16],
+            "_eventCount": 0, "_lastEventTime": "", "_lastError": ""}
+    pubsub_store = getattr(store, "pubsub_store", None)
+    if pubsub_store is not None:   # the subscription real Eventarc creates, visible in Pub/Sub
         sub_full = "projects/%s/subscriptions/eventarc-%s" % (project, tid)
         r = gcp_ps.dispatch(pubsub_store, "PUT", "/v1/%s" % sub_full, {}, {}, json.dumps({
             "topic": topic,
@@ -1714,35 +1800,79 @@ def create_trigger(store, project, location, sid, query, payload):
         }).encode())
         if r.status < 300:
             sub = pubsub_store.get_queue(sub_full)
-            if sub is not None:
+            if sub is not None:   # push-delivered by deliver_event: _fanout keeps no pull backlog for it
                 sub["_eventarc_trigger"] = {"project": project, "location": location, "service": sid}
             trig["_subscription"] = sub_full
     store.triggers[tfull] = trig
-    return trigger_view(trig)
+    return trigger_view(trig, alias)
 
 
-def delete_trigger(store, project, location, sid, tid):
+def delete_trigger(store, project, location, sid, tid, alias=False):
     full, t = _get_trigger(store, project, location, sid, tid)
     sub_full = t.get("_subscription")
     pubsub_store = getattr(store, "pubsub_store", None)
     if sub_full and pubsub_store is not None:
         gcp_ps.dispatch(pubsub_store, "DELETE", "/v1/%s" % sub_full, {}, {}, b"")
     del store.triggers[full]
-    return trigger_view(t)
+    return trigger_view(t, alias)
 
 
-def _triggers_dispatch(store, method, project, location, sid, rest, verb, query, payload):
+def _cloud_event(topic_full, message):
+    return {"specversion": "1.0", "type": TRIGGER_EVENT_TYPES[0], "id": message.get("messageId", ""),
+            "source": "//pubsub.googleapis.com/%s" % topic_full,
+            "data": {"message": {"data": message.get("data", ""), "attributes": message.get("attributes") or {},
+                                  "messageId": message.get("messageId", "")}}}
+
+
+def deliver_event(store, topic_full, messages, log_fn=None):
+    """A real Pub/Sub publish on `topic_full` -> one real request per message to every trigger
+    bound to it. Never raises: a delivery failure is recorded on the trigger and logged, not
+    propagated to the publisher — exactly like real Eventarc, which acks the publish
+    independently of delivery."""
+    if not messages:
+        return
+    for full, trg in list(store.triggers.items()):
+        if ((trg.get("transport") or {}).get("pubsub") or {}).get("topic") != topic_full:
+            continue
+        parts = full.split("/")
+        project, location, sid, tid = parts[1], parts[3], parts[5], parts[7]
+        delivered, error = 0, ""
+        for message in messages:
+            try:
+                out = invoke_service(store, project, location, sid, _cloud_event(topic_full, message), internal=True)
+            except _E as e:
+                error = e.message
+                break
+            except Exception as e:   # noqa: BLE001 — never let a bad trigger break the publish call
+                error = str(e)
+                break
+            if out["status"] >= 500:
+                error = out["body"]["error"]
+            else:
+                delivered += 1
+        trg["_eventCount"] = trg.get("_eventCount", 0) + delivered
+        trg["_lastEventTime"] = _ts()
+        trg["_lastError"] = error
+        if log_fn and delivered:
+            log_fn("service", project, location, sid,
+                   "Eventarc trigger %s delivered %d event(s) from %s" % (tid, delivered, topic_full))
+        if log_fn and error:
+            log_fn("service", project, location, sid,
+                   "Eventarc trigger %s failed to deliver from %s: %s" % (tid, topic_full, error), "ERROR")
+
+
+def _triggers_dispatch(store, method, project, location, sid, rest, verb, query, payload, topic_exists=None, alias=False):
     _get_service(store, project, location, sid)
     if not rest:
         if method == "POST" and not verb:
-            return _json(200, create_trigger(store, project, location, sid, query, payload))
+            return _json(200, create_trigger(store, project, location, sid, query, payload, topic_exists, alias))
         if method == "GET" and not verb:
-            return _json(200, {"triggers": list_triggers(store, project, location, sid)})
+            return _json(200, {"triggers": list_triggers(store, project, location, sid, alias)})
     elif len(rest) == 1 and not verb:
         if method == "GET":
-            return _json(200, trigger_view(_get_trigger(store, project, location, sid, rest[0])[1]))
+            return _json(200, trigger_view(_get_trigger(store, project, location, sid, rest[0])[1], alias))
         if method == "DELETE":
-            return _json(200, delete_trigger(store, project, location, sid, rest[0]))
+            return _json(200, delete_trigger(store, project, location, sid, rest[0], alias))
     return _err(404, "NOT_FOUND", "Unknown path or method: %s %s" % (method, "/".join(rest)))
 
 

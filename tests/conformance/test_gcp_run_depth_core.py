@@ -28,8 +28,8 @@ P, L = "p1", "us-central1"
 RUN = f"/v2/projects/{P}/locations/{L}"
 
 
-def call(method, path, body=None, query=None):
-    r = router.handle(method, path, query or {}, {}, json.dumps(body).encode() if body is not None else b"")
+def call(method, path, body=None, query=None, headers=None):
+    r = router.handle(method, path, query or {}, headers or {}, json.dumps(body).encode() if body is not None else b"")
     try:
         return r["status"], json.loads(r["body"] or b"{}")
     except Exception:
@@ -43,6 +43,16 @@ s, op = call("POST", RUN + "/services", {"template": {"containers": [{"image": "
                                          "annotations": fn_ann}, {"serviceId": "obs-fn"})
 check("deploy a python function service", s == 200, op)
 
+s, out = call("POST", RUN + "/services/obs-fn:invoke", {"hello": "world"})
+check("an anonymous invoke of a non-public service is 403", s == 403 and out["error"]["status"] == "PERMISSION_DENIED", out)
+s, m = call("GET", f"/v3/projects/{P}/timeSeries", None,
+            {"filter": 'metric.type="run.googleapis.com/request_count" AND resource.labels.service_name="obs-fn"',
+             "interval.startTime": "2000-01-01T00:00:00Z", "interval.endTime": "2100-01-01T00:00:00Z"})
+check("a rejected invoke never reaches the handler or the metrics", s == 200 and not m.get("timeSeries"), m)
+
+s, _ = call("POST", RUN + "/services/obs-fn:setIamPolicy",
+            {"policy": {"bindings": [{"role": "roles/run.invoker", "members": ["allUsers"]}]}})
+check("allow unauthenticated invocations", s == 200)
 s, out = call("POST", RUN + "/services/obs-fn:invoke", {"hello": "world"})
 check("invoke runs the real handler", s == 200 and out == {"echo": {"hello": "world"}}, out)
 
@@ -64,7 +74,7 @@ s, out = call("POST", RUN + "/services/obs-fn:invoke", {})
 check("a raised exception in the handler is a real 500, not swallowed", s == 500 and "boom" in out.get("error", ""), out)
 
 s, op = call("POST", RUN + "/services", {"template": {"containers": [{"image": "gcr.io/x/y:1"}]}}, {"serviceId": "obs-container"})
-s, out = call("POST", RUN + "/services/obs-container:invoke", {})
+s, out = call("POST", RUN + "/services/obs-container:invoke", {}, headers={"Authorization": "Bearer test-token-123"})
 check("a container-image service's invoke is honestly 202, not a fake 200", s == 202, out)
 
 s, m2 = call("GET", f"/v3/projects/{P}/timeSeries", None,
@@ -105,6 +115,52 @@ s, after = call("GET", f"/v3/projects/{P}/timeSeries", None,
 after_count = int(after["timeSeries"][0]["points"][-1]["value"]["int64Value"]) if after.get("timeSeries") else -1
 check("publishing to the topic really invokes the destination service", after_count == before_count + 1,
       f"before={before_count} after={after_count}")
+
+s, alias = call("GET", RUN + "/services/trg-fn/eventarcTriggers")
+check("a /triggers trigger is the same resource on /eventarcTriggers", s == 200 and len(alias["triggers"]) == 1
+      and alias["triggers"][0]["name"].endswith("/eventarcTriggers/on-order")
+      and alias["triggers"][0]["transport"]["pubsub"]["topic"] == f"projects/{P}/topics/orders", alias)
+s, made = call("POST", RUN + "/services/trg-fn/eventarcTriggers",
+               {"transport": {"pubsub": {"topic": f"projects/{P}/topics/alias-only"}}}, {"eventarcTriggerId": "on-missing"})
+check("the alias path validates the topic exists too", s == 400, made)
+s, _ = call("PUT", f"/v1/projects/{P}/topics/alias-only", {})
+s, made = call("POST", RUN + "/services/trg-fn/eventarcTriggers",
+               {"transport": {"pubsub": {"topic": f"projects/{P}/topics/alias-only"}}}, {"eventarcTriggerId": "on-alias"})
+check("create through the alias path", s == 200 and made["name"].endswith("/eventarcTriggers/on-alias"), made)
+s, lst = call("GET", RUN + "/services/trg-fn/triggers")
+check("an /eventarcTriggers trigger is visible on /triggers", s == 200 and any(
+    t["name"].endswith("/triggers/on-alias") and t["pubsubTopic"].endswith("/alias-only") and t["state"] == "ACTIVE"
+    for t in lst["triggers"]), lst)
+s, dup = call("POST", RUN + "/services/trg-fn/triggers",
+              {"eventFilters": [{"attribute": "type", "value": "google.cloud.pubsub.topic.v1.messagePublished"}],
+               "pubsubTopic": f"projects/{P}/topics/orders"}, {"triggerId": "on-alias"})
+check("a trigger id is unique across both paths", s == 409, dup)
+
+
+def request_count(sid):
+    _, ts = call("GET", f"/v3/projects/{P}/timeSeries", None,
+                 {"filter": f'metric.type="run.googleapis.com/request_count" AND resource.labels.service_name="{sid}"',
+                  "interval.startTime": "2000-01-01T00:00:00Z", "interval.endTime": "2100-01-01T00:00:00Z"})
+    return int(ts["timeSeries"][0]["points"][0]["value"]["int64Value"]) if ts.get("timeSeries") else 0   # newest first
+
+
+before_count = request_count("trg-fn")
+call("POST", f"/v1/projects/{P}/topics/alias-only:publish", {"messages": [{"data": "e30="}]})
+check("a publish fires an alias-created trigger exactly once", request_count("trg-fn") == before_count + 1,
+      f"before={before_count} after={request_count('trg-fn')}")
+before_count = request_count("trg-fn")
+call("POST", f"/v1/projects/{P}/topics/alias-only:publish", {"messages": [{"data": "e30="}, {"data": "e30="}]})
+check("each message in a batch is one real request", request_count("trg-fn") == before_count + 2,
+      f"before={before_count} after={request_count('trg-fn')}")
+s, pulled = call("POST", f"/v1/projects/{P}/subscriptions/eventarc-on-alias:pull", {"maxMessages": 10})
+check("the trigger's subscription keeps no undelivered backlog", s == 200 and not pulled.get("receivedMessages"), pulled)
+s, _ = call("DELETE", RUN + "/services/trg-fn/eventarcTriggers/on-alias")
+check("delete through the alias removes it from both paths", s == 200
+      and call("GET", RUN + "/services/trg-fn/triggers/on-alias")[0] == 404
+      and call("GET", f"/v1/projects/{P}/subscriptions/eventarc-on-alias")[0] == 404)
+before_count = request_count("trg-fn")
+call("POST", f"/v1/projects/{P}/topics/alias-only:publish", {"messages": [{"data": "e30="}]})
+check("a deleted trigger no longer fires", request_count("trg-fn") == before_count)
 
 s, _ = call("DELETE", RUN + "/services/trg-fn/triggers/on-order")
 check("delete trigger", s == 200 and call("GET", RUN + "/services/trg-fn/triggers/on-order")[0] == 404)

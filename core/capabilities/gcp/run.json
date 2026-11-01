@@ -117,9 +117,9 @@
    "offline": "limited"
   },
   "limitations": [
-   "Modelled as a Pub/Sub-transport Eventarc trigger (a service sub-resource, since Vyomi has no eventarc.googleapis.com): \"Add trigger\" binds the service to an existing Pub/Sub topic, and publishing on that topic — from the Pub/Sub console, the native wire, or any other trigger that publishes — really invokes the destination service (IAM invoker policy enforced) and writes a real Cloud Logging entry read back on the Observability tab.",
+   "Modelled as a Pub/Sub-transport Eventarc trigger (a service sub-resource, since Vyomi has no eventarc.googleapis.com): \"Add trigger\" binds the service to an existing Pub/Sub topic, and publishing on that topic — from the Pub/Sub console, the native wire, or any other trigger that publishes — really invokes the destination service once per message (the trigger's service account is implicitly a run.invoker; a direct :invoke enforces the IAM invoker policy) and writes a real Cloud Logging entry read back on the Observability tab. The Functions console's services/{s}/triggers path is the same Trigger resource.",
    "Only Pub/Sub-sourced events are modelled; Vyomi has no Eventarc backend for Storage, Audit Log or direct Cloud Build source-deploy triggers, and \"Continuously deploy from a repository\" is not simulated (see continuous_deployment).",
-   "Vyomi does not run the destination's container image, so a delivered event cannot change the service's own behaviour — delivery and IAM enforcement are real, execution is not."
+   "Vyomi does not run a container image, so a delivered event to a container-image service is recorded (honest 202) but cannot change its behaviour; only a Python function source really executes."
   ],
   "api": [
    "projects.locations.services.eventarcTriggers.create (simulator-only sub-resource)",

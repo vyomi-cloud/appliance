@@ -125,7 +125,7 @@
    "offline": "limited"
   },
   "limitations": [
-   "Vyomi only has a real event source for Pub/Sub-sourced (\"Custom event\") triggers: creating one validates the topic exists and wires a real Pub/Sub push subscription that invokes the destination service whenever a message is published.",
+   "Vyomi only has a real event source for Pub/Sub-sourced (\"Custom event\") triggers: creating one validates the topic exists and creates a real Pub/Sub subscription; each published message really invokes the destination service once (no invoker check, as the trigger's service account is implicitly granted run.invoker).",
    "Eventarc providers Vyomi cannot source for real (Cloud Storage, Cloud Audit Logs, Cloud Scheduler-via-Eventarc, third-party) are rejected at trigger-create time rather than accepted and silently never firing."
   ],
   "api": [

@@ -264,7 +264,8 @@ def _project_of(path: str) -> str:
 
 
 def dispatch_service(service: str, method: str, path: str, query: dict, headers: dict,
-                     body: bytes, router: AwsWireRouter | None = None, account: str | None = None) -> dict:
+                     body: bytes, router: AwsWireRouter | None = None, account: str | None = None,
+                     on_publish=None) -> dict:
     """Serve one request of a KNOWN service (the route already identified it) with
     that service's core over the router's store. Skips the router's header/path
     sniffing on purpose: an S3 key like `a/restapis/b` or an upload carrying
@@ -396,7 +397,7 @@ def dispatch_service(service: str, method: str, path: str, query: dict, headers:
         st = r.gcp_msg
         if hasattr(st, "adopt"):
             st.adopt()                   # pre-v4 records / emulator resources → the core shape
-        resp = gcp_pubsub_core.dispatch(st, method, path, query or {}, headers or {}, body or b"")
+        resp = gcp_pubsub_core.dispatch(st, method, path, query or {}, headers or {}, body or b"", on_publish=on_publish)
         hdrs = dict(resp.headers or {})
         hdrs.setdefault("content-type", resp.media_type or "application/json")
         return {"status": resp.status, "headers": hdrs, "body": resp.body or b""}

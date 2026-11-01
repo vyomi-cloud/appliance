@@ -32,7 +32,6 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 from contextlib import contextmanager
 from urllib.parse import quote
 
@@ -43,7 +42,6 @@ from core import wire_ingress as _wi
 _log = logging.getLogger("vyomi.engine")
 _METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"]
 _COLLECTIONS = ("topics", "subscriptions", "snapshots", "schemas")
-_PUBLISH_RE = re.compile(r"^/?v1/projects/([^/]+)/topics/([^/:]+):publish$")
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
@@ -126,16 +124,12 @@ def ps(method: str, native: str, query: dict | None = None, body: bytes = b"") -
     """Serve one native Pub/Sub call on the core (the GCP space's state)."""
     with _gcp():
         out = _wi.dispatch_service("gcp_pubsub", method, native, query or {},
-                                   {"content-type": "application/json"}, body or b"")
+                                   {"content-type": "application/json"}, body or b"", on_publish=_deliver_eventarc)
     if out["status"] == 200 and method in ("PUT", "DELETE"):
         segs = native.split("?", 1)[0].strip("/").split("/")
         if len(segs) == 5 and segs[0] == "v1" and segs[3] in ("topics", "subscriptions") and ":" not in segs[4]:
             kind = "topic" if segs[3] == "topics" else "subscription"
             _sync(kind, "/".join(segs[1:]), _load(out["body"]), delete=(method == "DELETE"))
-    if out["status"] == 200 and method == "POST":
-        m = _PUBLISH_RE.match(native.split("?", 1)[0])
-        if m:
-            _deliver_eventarc(f"projects/{m.group(1)}/topics/{m.group(2)}", _load(body).get("messages") or [])
     return out
 
 
@@ -148,6 +142,8 @@ def _deliver_eventarc(topic_full: str, messages: list) -> None:
         from core import gcp_run_core as _run_core
         from routes import gcp_run as _run_routes
         _run_core.deliver_event(_run_routes.store(), topic_full, messages, log_fn=_run_routes._log_fn)
+        if _run_routes._slot() is not None:   # the core persisted Pub/Sub before calling this hook
+            _run_routes.ctx.persist_state()
     except Exception:
         _log.debug("pubsub: eventarc delivery skipped", exc_info=True)
 

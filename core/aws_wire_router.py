@@ -542,7 +542,6 @@ class AwsWireRouter:
         self.gcp_run.pubsub_store = self.gcp_msg    # Eventarc Pub/Sub-sourced triggers validate/create a real subscription
         self.gcp_run.logging_store = self.gcp_logging   # Observability "Logs" — real Cloud Logging entries per invocation
         self.gcp_run.mon_store = self.gcp_mon       # Observability "Metrics" — real Cloud Monitoring points per invocation
-        self.gcp_msg.run_store = self.gcp_run       # the OTHER side of Eventarc delivery: Pub/Sub -> Cloud Run invoke
         # Azure data-plane services.
         self.az_blob = s.get("az_blob") or AzureBlobStore()
         self.az_cosmos = s.get("az_cosmos") or CosmosStore()

@@ -1516,7 +1516,7 @@ def record_system_point(store, project, metric_type, resource, value, end_iso, u
     metric = {"type": metric_type, "labels": dict(metric_labels or {})}
     key = _series_key(project, metric, resource)
     prev = store.time_series.get(key)
-    if prev and prev["points"] and end_iso <= prev["points"][-1]["interval"]["endTime"]:
+    if prev and prev["points"] and end_iso < prev["points"][-1]["interval"]["endTime"]:
         return
     vk = {"INT64": "int64Value", "DOUBLE": "doubleValue", "BOOL": "boolValue"}.get(desc["valueType"])
     if vk is None:
@@ -1525,6 +1525,9 @@ def record_system_point(store, project, metric_type, resource, value, end_iso, u
     rec = store.time_series.setdefault(key, {"metric": metric, "resource": _copy(resource),
                                               "metricKind": desc["metricKind"], "valueType": desc["valueType"],
                                               "unit": unit, "points": []})
+    if rec["points"] and rec["points"][-1]["interval"]["endTime"] == end_iso:   # same instant: the latest value wins
+        rec["points"][-1]["value"] = {vk: val}
+        return
     rec["points"].append({"interval": {"endTime": end_iso}, "value": {vk: val}})
     if len(rec["points"]) > MAX_POINTS_PER_SERIES:
         del rec["points"][: len(rec["points"]) - MAX_POINTS_PER_SERIES]
