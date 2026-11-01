@@ -1,0 +1,7 @@
+{
+ "cloud": "azure",
+ "service": "loganalytics",
+ "phase": "base",
+ "goal": "Log Analytics workspaces console (browse/create, Logs query editor over the existing KQL engine, tables, usage) on the EXISTING core/azure_operationalinsights_core.py.",
+ "note": "WAVE 7 (orchestrator): native console for a service whose backend ALREADY EXISTS. Log Analytics workspaces console (browse/create, Logs query editor over the existing KQL engine, tables, usage) on the EXISTING core/azure_operationalinsights_core.py.\n\nHouse rules: native look per consoles/AGENT-UI.md; real backend only (no static data); capability registry core/capabilities/<cloud>/<service>.json with honest levels; works on Nano (wasm cores) AND offline (route the native paths offline, durable state via core/appliance_stores._CoreSlotStore); UI<->wire smoke round trips; run gate + smoke + conformance in the FOREGROUND before your final message; commit source."
+}

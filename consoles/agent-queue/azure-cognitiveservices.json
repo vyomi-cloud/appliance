@@ -1,0 +1,7 @@
+{
+ "cloud": "azure",
+ "service": "cognitiveservices",
+ "phase": "base",
+ "goal": "Azure AI services (Cognitive Services) console \u2014 accounts browse/create, keys and endpoint, model deployments \u2014 on the EXISTING core/azure_cognitiveservices_core.py; inference itself honest unless a local model backend exists.",
+ "note": "WAVE 7 (orchestrator): native console for a service whose backend ALREADY EXISTS. Azure AI services (Cognitive Services) console \u2014 accounts browse/create, keys and endpoint, model deployments \u2014 on the EXISTING core/azure_cognitiveservices_core.py; inference itself honest unless a local model backend exists.\n\nHouse rules: native look per consoles/AGENT-UI.md; real backend only (no static data); capability registry core/capabilities/<cloud>/<service>.json with honest levels; works on Nano (wasm cores) AND offline (route the native paths offline, durable state via core/appliance_stores._CoreSlotStore); UI<->wire smoke round trips; run gate + smoke + conformance in the FOREGROUND before your final message; commit source."
+}

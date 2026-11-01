@@ -1,0 +1,7 @@
+{
+ "cloud": "gcp",
+ "service": "memorystore",
+ "phase": "base",
+ "goal": "Memorystore for Redis console (instances list/create/detail, maintenance, connections) on the EXISTING core/gcp_redis_core.py.",
+ "note": "WAVE 7 (orchestrator): native console for a service whose backend ALREADY EXISTS. Memorystore for Redis console (instances list/create/detail, maintenance, connections) on the EXISTING core/gcp_redis_core.py.\n\nHouse rules: native look per consoles/AGENT-UI.md; real backend only (no static data); capability registry core/capabilities/<cloud>/<service>.json with honest levels; works on Nano (wasm cores) AND offline (route the native paths offline, durable state via core/appliance_stores._CoreSlotStore); UI<->wire smoke round trips; run gate + smoke + conformance in the FOREGROUND before your final message; commit source."
+}

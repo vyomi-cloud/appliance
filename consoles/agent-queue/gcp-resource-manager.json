@@ -1,0 +1,7 @@
+{
+ "cloud": "gcp",
+ "service": "resource-manager",
+ "phase": "base",
+ "goal": "IAM & Admin > Manage resources page set (projects/folders tree, create/move/delete project, labels, tags) on the EXISTING core/gcp_resourcemanager_core.py.",
+ "note": "WAVE 7 (orchestrator): native console for a service whose backend ALREADY EXISTS. IAM & Admin > Manage resources page set (projects/folders tree, create/move/delete project, labels, tags) on the EXISTING core/gcp_resourcemanager_core.py.\n\nHouse rules: native look per consoles/AGENT-UI.md; real backend only (no static data); capability registry core/capabilities/<cloud>/<service>.json with honest levels; works on Nano (wasm cores) AND offline (route the native paths offline, durable state via core/appliance_stores._CoreSlotStore); UI<->wire smoke round trips; run gate + smoke + conformance in the FOREGROUND before your final message; commit source."
+}

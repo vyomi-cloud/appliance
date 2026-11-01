@@ -1,0 +1,7 @@
+{
+ "cloud": "azure",
+ "service": "dns",
+ "phase": "base",
+ "goal": "Azure DNS console (DNS zones browse/create, record sets CRUD, private zones + VNet links) on the EXISTING core/azure_dns_core.py; real resolution through CoreDNS offline when wave 6 lands.",
+ "note": "WAVE 7 (orchestrator): native console for a service whose backend ALREADY EXISTS. Azure DNS console (DNS zones browse/create, record sets CRUD, private zones + VNet links) on the EXISTING core/azure_dns_core.py; real resolution through CoreDNS offline when wave 6 lands.\n\nHouse rules: native look per consoles/AGENT-UI.md; real backend only (no static data); capability registry core/capabilities/<cloud>/<service>.json with honest levels; works on Nano (wasm cores) AND offline (route the native paths offline, durable state via core/appliance_stores._CoreSlotStore); UI<->wire smoke round trips; run gate + smoke + conformance in the FOREGROUND before your final message; commit source."
+}
