@@ -214,6 +214,17 @@ def _json_items(txt):
     return []
 
 
+def dispatch_blobs(st, container):
+    """A blob container's blobs, for the console."""
+    _, bx = _call(_blob, st, "GET", f"/{container}", {"restype": "container", "comp": "list"}, XMS)
+    blobs = []
+    for b in re.findall(r"<Blob>(.*?)</Blob>", bx, re.S):
+        g = lambda tag: (re.search(rf"<{tag}>([^<]*)</{tag}>", b) or [None, ""])[1]
+        blobs.append({"name": g("Name"), "size": int(g("Content-Length") or 0),
+                      "contentType": g("Content-Type"), "lastModified": g("Last-Modified"), "etag": g("Etag")})
+    return blobs
+
+
 def resource_op(service, operation, name="", body=None):
     """Console CRUD → Azure data-plane core. Returns the registry envelope."""
     body = body or {}
@@ -238,14 +249,7 @@ def resource_op(service, operation, name="", body=None):
                 out.append({"name": n, "blobCount": len(re.findall(r"<Blob>", bx))})
             return {"ok": True, "value": out}
         if operation == "ListBlobs":
-            _, bx = _call(_blob, st, "GET", f"/{name}", {"restype": "container", "comp": "list"}, XMS)
-            blobs = []
-            for b in re.findall(r"<Blob>(.*?)</Blob>", bx, re.S):
-                g = lambda tag: (re.search(rf"<{tag}>([^<]*)</{tag}>", b) or [None, ""])[1]
-                blobs.append({"name": g("Name"), "size": int(g("Content-Length") or 0),
-                              "contentType": g("Content-Type"), "lastModified": g("Last-Modified"),
-                              "etag": g("Etag")})
-            return {"ok": True, "value": blobs}
+            return {"ok": True, "value": dispatch_blobs(st, name)}
         if operation == "DeleteObject":
             s, _ = _call(_blob, st, "DELETE", f"/{name}/{body.get('blob', '')}", {}, XMS)
             return {"ok": s < 300, "deleted": s < 300, "container": name, "blob": body.get("blob")}
@@ -257,7 +261,7 @@ def resource_op(service, operation, name="", body=None):
             return {"ok": s < 300, "name": rid} if s < 300 else {"ok": False, "code": "AlreadyExists", "name": rid}
         if operation == "Get":
             _, x = _call(_blob, st, "GET", "/", {"comp": "list"}, XMS)
-            return {"ok": True, "name": name} if name in _xml_names(x) else {"ok": False, "code": "NotFound", "name": name}
+            return {"ok": True, "name": name, "blobs": dispatch_blobs(st, name)} if name in _xml_names(x) else {"ok": False, "code": "NotFound", "name": name}
         if operation == "Delete":
             s, _ = _call(_blob, st, "DELETE", f"/{name}", {"restype": "container"}, XMS)
             return {"ok": s < 300, "code": None if s < 300 else "NotFound", "name": name}

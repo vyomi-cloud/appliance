@@ -22,8 +22,22 @@ jobs:
       github.event_name == 'workflow_dispatch' ||
       (github.event.workflow_run.conclusion != 'cancelled' && startsWith(github.event.workflow_run.head_branch, 'v'))
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 80   # Docker Publish finishes after Release
     steps:
+      # `vyomi up` pulls this release's images, and Docker Publish finishes after Release does:
+      # signalling straight away failed the Windows run with "image not found".
+      - name: Wait for this release's Docker images
+        env:
+          TAG: ${{ github.event.workflow_run.head_branch || format('v{0}', inputs.version) }}
+        run: |
+          VER="${TAG#v}"
+          for i in $(seq 1 90); do
+            if docker manifest inspect "vyomi/appliance:$VER" >/dev/null 2>&1 && docker manifest inspect "vyomi/cloudsim:$VER" >/dev/null 2>&1; then
+              echo "images for $VER are published"; exit 0
+            fi
+            sleep 50
+          done
+          echo "::error::images for $VER not published after 75 min"; exit 1
       - name: Send appliance-release to vyomi-cloud/release-e2e
         env:
           GH_TOKEN: ${{ secrets.CONFORMANCE_BOT_TOKEN }}

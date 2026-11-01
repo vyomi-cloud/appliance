@@ -100,6 +100,15 @@ def run(store=None):
     call({"Action": "CreateSubnet", "VpcId": v3, "CidrBlock": "10.7.1.0/24"})
     _check("console cascade removes the VPC and its subnets", vpc.delete_vpc_cascade(s, v3) and v3 not in m["vpcs"] and not any(x["vpc_id"] == v3 for x in m["subnets"].values()))
 
+    # DescribeSecurityGroups: what was given at creation, and the default group every VPC has
+    v4 = xid(call({"Action": "CreateVpc", "CidrBlock": "10.6.0.0/16"}), "vpcId")
+    g4 = xid(call({"Action": "CreateSecurityGroup", "VpcId": v4, "GroupName": "web", "GroupDescription": "web <tier>"}), "groupId")
+    body = call({"Action": "DescribeSecurityGroups", "GroupId.1": g4})
+    _check("DescribeSecurityGroups returns the Description + name", "<groupDescription>web &lt;tier&gt;</groupDescription>" in body and "<groupName>web</groupName>" in body)
+    body = call({"Action": "DescribeSecurityGroups", "Filter.1.Name": "vpc-id", "Filter.1.Value.1": v4, "Filter.2.Name": "group-name", "Filter.2.Value.1": "default"})
+    _check("every VPC has a default group", "<groupDescription>default VPC security group</groupDescription>" in body)
+    _check("unknown group → InvalidGroup.NotFound", "InvalidGroup.NotFound" in vpc.dispatch(s, {"Action": "DescribeSecurityGroups", "GroupId.1": "sg-nope"}).body)
+
     print("\nVPC network-simulation conformance: ALL GREEN")
     return s
 

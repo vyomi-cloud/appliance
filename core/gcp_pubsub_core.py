@@ -22,6 +22,7 @@ from __future__ import annotations
 import base64
 import json
 import re
+import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -45,7 +46,7 @@ def _now_rfc3339() -> str:
 def _next_message_id(store) -> str:
     seq = getattr(store, "_pubsub_msg_seq", 0) + 1
     store._pubsub_msg_seq = seq
-    return str(seq)
+    return str(int(time.time() * 1000) * 1000 + seq % 1000)
 
 
 def _json(status: int, obj: dict) -> PubsubResponse:

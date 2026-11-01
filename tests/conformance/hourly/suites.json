@@ -265,6 +265,14 @@
       "timeout": 900
     },
     {
+      "id": "nano-gcp-compute-core",
+      "target": "nano",
+      "cloud": "gcp",
+      "kind": "core",
+      "cmd": "python3 tests/conformance/test_gcp_compute_core.py",
+      "timeout": 120
+    },
+    {
       "id": "nano-store-delete-sync",
       "target": "nano",
       "cloud": "aws",

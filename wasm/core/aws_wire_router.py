@@ -68,6 +68,7 @@ from core import gcp_iamcredentials_core as gcp_iamc
 from core import gcp_monitoring_core as gcp_mon
 from core import gcp_redis_core as gcp_redis
 from core import gcp_artifactregistry_core as gcp_ar
+from core import gcp_compute_core as gcp_compute
 
 
 def _gcp_service(path):
@@ -77,6 +78,8 @@ def _gcp_service(path):
         return "gcp-resourcemanager"
     if path.startswith(("/storage/v1", "/upload/storage/v1", "/download/storage/v1")):
         return "gcp-gcs"
+    if path.startswith("/compute/v1/"):
+        return "gcp-compute"
     if path.startswith(("/sql/v1beta4", "/sql/v1")):
         return "gcp-cloudsql"
     if path.startswith("/v3/projects/") or path == "/v3/uptimeCheckIps":   # Cloud Monitoring API v3
@@ -239,6 +242,7 @@ _QUERY_ACTION = {
     "SimulatePrincipalPolicy": "iam", "CreateGroup": "iam", "ListGroups": "iam",
     # EC2 / VPC
     "CreateVpc": "vpc", "CreateSubnet": "vpc", "CreateSecurityGroup": "vpc",
+    "DescribeSecurityGroups": "vpc",
     "DeleteVpc": "vpc", "DeleteSubnet": "vpc", "DeleteSecurityGroup": "vpc",
     "DetachInternetGateway": "vpc", "DeleteInternetGateway": "vpc",
     "DeleteRouteTable": "vpc", "DeleteNetworkAcl": "vpc",
@@ -721,6 +725,11 @@ class AwsWireRouter:
         if svc and svc.startswith("gcp-"):   # GCP services — native google-cloud-* REST wire
             # One project, by ID or number (core/gcp_project): normalize before the core sees it.
             proj = self.gcp_project() if callable(self.gcp_project) else self.gcp_project
+            if svc == "gcp-compute":   # the console's own records; also answers public image projects
+                root = getattr(self.gcp_iam, "nano_sub", None)
+                if not isinstance(root, dict):
+                    root = self.gcp_iam.nano_sub = {}
+                return gcp_compute.dispatch(self._stores["resources"], root, proj, method, path, headers, bytes(body))
             path, query, err = gcp_proj.normalize_request(path, dict(query or {}), method, proj)
             if err is not None or svc == "gcp-resourcemanager":
                 st, obj = err if err is not None else gcp_proj.crm_dispatch(method, path, query, proj)

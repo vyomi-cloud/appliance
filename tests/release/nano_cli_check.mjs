@@ -50,7 +50,11 @@ if (!(await health()).ok) { console.log("FAIL: local relay did not start"); stop
 // 2. the Nano bundle + a real spaces page, tunnel started from its own button
 const { server, base } = await startServer(process.env.NANO_DIR);
 const browser = await chromium.launch();
-const page = await (await browser.newContext()).newPage();
+const context = await browser.newContext();
+if (RELAY_PORT !== 8090) {   // the bundle auto-detects :8090; point it at a relay elsewhere (a dev's own tunnel keeps :8090)
+  await context.addInitScript((r) => { for (const [k, v] of [["nano_local_health", r + "/health"], ["nano_local_ws", r.replace("http", "ws") + "/register"], ["nano_local_ext", r]]) localStorage.setItem(k, v); }, RELAY);
+}
+const page = await context.newPage();
 page.on("pageerror", (e) => console.log("[nano pageerror]", e.message));
 await page.goto(base + "/clouds.html", { waitUntil: "domcontentloaded" });
 await page.waitForFunction(() => navigator.serviceWorker && navigator.serviceWorker.controller
