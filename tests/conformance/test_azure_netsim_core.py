@@ -132,6 +132,52 @@ def run():
     bad = arm.handle("POST", f"{NET}/networkWatchers/NetworkWatcher_eastus/connectivityCheck", Q,
                      {"source": {"resourceId": "nope"}, "destination": {"address": "10.80.2.10", "port": 80}})
     _check("connectivityCheck unresolvable source → 400", bad["status"] == 400)
+
+    def ncd(**kw):
+        return call("POST", "networkWatchers/NetworkWatcher_eastus/queryNetworkConfigurationDiagnostic",
+                    {"targetResourceId": vm_id, **kw})
+
+    r = ncd(profiles=[{"direction": "Inbound", "protocol": "TCP", "source": "10.80.2.10",
+                       "destination": "10.80.1.4", "destinationPort": "22"}])
+    res = r["results"][0]
+    _check("queryNetworkConfigurationDiagnostic inbound 22 → Allow", res["networkSecurityGroupResult"]["securityRuleAccessResult"] == "Allow")
+    hop = res["networkSecurityGroupResult"]["evaluatedNetworkSecurityGroups"][0]
+    _check("…reports nsg-web applied at the subnet with the matched 'ssh' rule",
+           hop["appliedTo"] == "subnet" and hop["matchedRule"] == {"name": "ssh", "action": "Allow"})
+
+    r = ncd(profiles=[{"direction": "Inbound", "protocol": "TCP", "source": "10.80.2.10",
+                       "destination": "10.80.1.4", "destinationPort": "5432"}])
+    res = r["results"][0]
+    _check("…inbound 5432 → Deny (no-5432 rule)", res["networkSecurityGroupResult"]["securityRuleAccessResult"] == "Deny"
+           and res["networkSecurityGroupResult"]["evaluatedNetworkSecurityGroups"][0]["matchedRule"]["name"] == "no-5432")
+
+    r = ncd(profiles=[
+        {"direction": "Inbound", "protocol": "TCP", "source": "10.80.2.10", "destination": "10.80.1.4", "destinationPort": "22"},
+        {"direction": "Inbound", "protocol": "TCP", "source": "10.80.2.10", "destination": "10.80.1.4", "destinationPort": "5432"},
+    ])
+    _check("…evaluates every profile of a multi-profile request", len(r["results"]) == 2)
+
+    # A NIC with its OWN NSG, on top of the subnet's nsg-web: Azure evaluates NIC NSG then
+    # subnet NSG inbound, both must allow — queryNetworkConfigurationDiagnostic must report
+    # BOTH, not just the one that decided it (ipFlowVerify only reports the decider).
+    nsg_nic = call("PUT", "networkSecurityGroups/nsg-nic", {"properties": {"securityRules": [
+        {"name": "block-8081", "properties": {"priority": 100, "direction": "Inbound", "access": "Deny", "protocol": "Tcp",
+                                              "sourceAddressPrefix": "*", "sourcePortRange": "*",
+                                              "destinationAddressPrefix": "*", "destinationPortRange": "8081"}}]}})
+    n3 = call("PUT", "networkInterfaces/web3-nic", {"properties": {
+        "networkSecurityGroup": {"id": nsg_nic["id"]},
+        "ipConfigurations": [{"name": "ipconfig1", "properties": {"subnet": {"id": web_sub}}}]}})
+    r = ncd(targetResourceId=None, targetNicResourceId=n3["id"],
+           profiles=[{"direction": "Inbound", "protocol": "TCP", "source": "10.80.2.10",
+                      "destination": n3["properties"]["ipConfigurations"][0]["properties"]["privateIPAddress"], "destinationPort": "8081"}])
+    res = r["results"][0]
+    applied = {h["appliedTo"] for h in res["networkSecurityGroupResult"]["evaluatedNetworkSecurityGroups"]}
+    _check("…reports both the NIC NSG and the subnet NSG on a dual-NSG NIC", applied == {"networkInterface", "subnet"})
+    _check("…combined decision is Deny (the NIC NSG denies 8081)", res["networkSecurityGroupResult"]["securityRuleAccessResult"] == "Deny")
+
+    miss = arm.handle("POST", f"{NET}/networkWatchers/NetworkWatcher_eastus/queryNetworkConfigurationDiagnostic", Q,
+                      {"targetResourceId": "nope", "profiles": []})
+    _check("queryNetworkConfigurationDiagnostic unresolvable target → 400", miss["status"] == 400)
     print("\nAzure netsim types + Network Watcher conformance: ALL GREEN")
 
 

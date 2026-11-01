@@ -1187,7 +1187,8 @@ class AzureArm:
 
         # Network Watcher diagnostics → the shared netsim evaluator (same engine as Nano + enforcement)
         if (method == "POST" and namespace.lower() == "microsoft.network" and len(chain) == 3
-                and chain[0].lower() == "networkwatchers" and chain[2].lower() in ("ipflowverify", "nexthop", "connectivitycheck")):
+                and chain[0].lower() == "networkwatchers" and chain[2].lower() in (
+                    "ipflowverify", "nexthop", "connectivitycheck", "querynetworkconfigurationdiagnostic")):
             if self.state.get(_canonical_id(sub, rg, type_chain[:2], names[:1]).lower()) is None:
                 return _err(404, "ResourceNotFound", f"Network watcher '{names[0]}' not found.")
             return self._network_watcher(chain[2].lower(), payload or {})
@@ -2181,6 +2182,47 @@ class AzureArm:
                     "avgLatencyInMs": 1 if reachable else 0, "minLatencyInMs": 1 if reachable else 0,
                     "maxLatencyInMs": 1 if reachable else 0, "probesSent": 100, "probesFailed": 0 if reachable else 100})
 
+    def _nw_config_diagnostic(self, topo, ev, nm, payload: dict):
+        """Microsoft.Network/networkWatchers/{nw}/queryNetworkConfigurationDiagnostic — real
+        Azure's NSG-focused diagnostic reached from the NSG blade's 'Diagnose and solve
+        problems' page ('Network configuration diagnostics' tile): for each
+        {direction, protocol, source, destination, destinationPort} profile it reports EVERY
+        network security group evaluated on the path (NIC NSG and/or subnet NSG) with its
+        matched rule and decision — unlike ipFlowVerify, which only returns the single combined
+        verdict. Same netsim `_layers` pass as ipFlowVerify — see azure.nsgs.network_watcher."""
+        iface = self._nw_target_iface(topo, payload)
+        if iface is None:
+            return _err(400, "InvalidTargetResource", "targetResourceId must be a virtual machine (or targetNicResourceId a NIC) "
+                                                      "with a network interface in a simulated subnet.")
+        sub = topo.subnet_of(iface)
+        results = []
+        for profile in payload.get("profiles") or []:
+            direction = nm.INGRESS if str(profile.get("direction", "Inbound")).lower() == "inbound" else nm.EGRESS
+            proto = str(profile.get("protocol", "TCP")).lower()
+            remote = str((profile.get("source") if direction == nm.INGRESS else profile.get("destination")) or "")
+            port = profile.get("destinationPort")
+            dport = int(port) if str(port).isdigit() else None
+            remote_iface = topo.iface_by_ip(remote)
+            v = ev.Verdict()
+            ok = ev._layers(topo, iface, direction, proto, dport, remote, remote_iface, True, v)
+            nsgs = []
+            for h in v.hops:
+                if h.component != "nsg":
+                    continue
+                applied_to = "networkInterface" if h.id in iface.rulesets else ("subnet" if h.id in sub.rulesets else "unknown")
+                rule_name = h.detail.split(" ")[0] if h.detail else ""
+                access = "Allow" if h.decision == "allow" else "Deny"
+                nsgs.append({"networkSecurityGroupId": h.id, "appliedTo": applied_to,
+                            "matchedRule": {"name": rule_name, "action": access},
+                            "rulesEvaluationResult": [{"name": rule_name, "destinationPort": str(port or "*"),
+                                                      "destinationAddress": remote, "decision": access}]})
+            results.append({"profile": {"direction": profile.get("direction", "Inbound"), "protocol": profile.get("protocol", "TCP"),
+                                        "source": profile.get("source", ""), "destination": profile.get("destination", ""),
+                                        "destinationPort": str(port or "")},
+                            "networkSecurityGroupResult": {"securityRuleAccessResult": "Allow" if ok else "Deny",
+                                                            "evaluatedNetworkSecurityGroups": nsgs}})
+        return _ok({"results": results})
+
     def _network_watcher(self, verb: str, payload: dict):
         try:
             from core.netsim import evaluate as ev, from_azure as fz, model as nm
@@ -2189,6 +2231,8 @@ class AzureArm:
         topo = fz.from_azure(self.state)
         if verb == "connectivitycheck":
             return self._nw_connectivity_check(topo, ev, payload or {})
+        if verb == "querynetworkconfigurationdiagnostic":
+            return self._nw_config_diagnostic(topo, ev, nm, payload or {})
         iface = self._nw_target_iface(topo, payload or {})
         if iface is None:
             return _err(400, "InvalidTargetResource", "targetResourceId must be a virtual machine (or targetNicResourceId a NIC) "

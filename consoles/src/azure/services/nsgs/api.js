@@ -166,11 +166,13 @@ export const putDiagnosticSetting = (nsgId, setting, body) => restJson("PUT", di
 export const deleteDiagnosticSetting = (nsgId, setting) => restJson("DELETE", diagPath(nsgId, setting), { query: { "api-version": DIAG_API } });
 export const listWorkspaces = async () => (await ARM_WORKSPACES.list()).map((w) => ({ id: w.id, name: w.name }));
 
-// ── Network Watcher: IP flow verify / Next hop (Microsoft.Network/networkWatchers/{nw}/
-// ipFlowVerify|nextHop, answered by the shared netsim evaluator — core/azure_arm_core.py
-// _network_watcher). Reached from this NSG's "Diagnose and solve problems" blade, same as
-// the real portal; the tool itself is a subscription/region-wide Network Watcher action, not
-// scoped to this NSG, so it lists every VM in the subscription like the real picker does. ──
+// ── Network Watcher: IP flow verify / Next hop / Connection troubleshoot / Network
+// configuration diagnostics (Microsoft.Network/networkWatchers/{nw}/ipFlowVerify|nextHop|
+// connectivityCheck|queryNetworkConfigurationDiagnostic, answered by the shared netsim
+// evaluator — core/azure_arm_core.py _network_watcher). All reached from this NSG's "Diagnose
+// and solve problems" blade, same as the real portal; the tools themselves are a
+// subscription/region-wide Network Watcher action, not scoped to this NSG, so they list every
+// VM in the subscription like the real picker does. ──────────────────────────────────────
 const NETWORK_WATCHER_RG = "NetworkWatcherRG";
 const networkWatcherName = (location) => `NetworkWatcher_${String(location || "eastus").toLowerCase()}`;
 
@@ -187,6 +189,33 @@ async function ensureNetworkWatcher(location) {
 }
 export const ipFlowVerify = async (location, body) => NW_ARM.action(NETWORK_WATCHER_RG, await ensureNetworkWatcher(location), "ipFlowVerify", body);
 export const nextHop = async (location, body) => NW_ARM.action(NETWORK_WATCHER_RG, await ensureNetworkWatcher(location), "nextHop", body);
+export const connectivityCheck = async (location, body) => NW_ARM.action(NETWORK_WATCHER_RG, await ensureNetworkWatcher(location), "connectivityCheck", body);
+export const queryNetworkConfigurationDiagnostic = async (location, body) =>
+  NW_ARM.action(NETWORK_WATCHER_RG, await ensureNetworkWatcher(location), "queryNetworkConfigurationDiagnostic", body);
+
+// ── Tasks (Preview): a lightweight per-resource checklist — core/capabilities/azure/nsgs.json
+// azure.nsgs.tasks. Each task is a real tag on this NSG (hidden-task-<id>, JSON-encoded),
+// written with the same ARM PUT the Tags page uses below, so it survives a refresh and is
+// hidden from the regular Tags editor (TASK_TAG_PREFIX). The cross-resource "all tasks across
+// every resource" aggregate (a separate Resource Graph query) is out of scope for this blade. ─
+export const TASK_TAG_PREFIX = "hidden-task-";
+export const visibleTags = (tags) => Object.entries(tags || {}).filter(([k]) => !k.startsWith(TASK_TAG_PREFIX));
+export const taskTags = (tags) => Object.fromEntries(Object.entries(tags || {}).filter(([k]) => k.startsWith(TASK_TAG_PREFIX)));
+export const listTasks = (a) => Object.entries(a.tags || {})
+  .filter(([k]) => k.startsWith(TASK_TAG_PREFIX))
+  .map(([k, v]) => { try { return { id: k.slice(TASK_TAG_PREFIX.length), ...JSON.parse(v) }; } catch { return null; } })
+  .filter(Boolean)
+  .sort((x, y) => (x.title || "").localeCompare(y.title || ""));
+async function putTags(a, tags) {
+  const { id, name, type, resourceGroup, ...rest } = a;
+  return createNsg(a.resourceGroup, a.name, { ...rest, tags });
+}
+export const saveTask = (a, id, task) => putTags(a, { ...(a.tags || {}), [`${TASK_TAG_PREFIX}${id}`]: JSON.stringify(task) });
+export const deleteTask = (a, id) => {
+  const tags = { ...(a.tags || {}) };
+  delete tags[`${TASK_TAG_PREFIX}${id}`];
+  return putTags(a, tags);
+};
 
 // ── create-NSG form model → ARM body ────────────────────────────────────────────────────
 export function toArmBody(f) {

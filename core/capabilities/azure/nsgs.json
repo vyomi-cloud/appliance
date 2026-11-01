@@ -54,10 +54,10 @@
   "tests": ["tests/conformance/test_azure_arm_core.py"]
  },
  "azure.nsgs.tools": {
-  "title": "Diagnose and solve problems (remaining tiles), Tasks, Support + Troubleshooting",
+  "title": "Support + Troubleshooting",
   "level": { "nano": "not_simulated", "offline": "not_simulated" },
   "limitations": [
-   "Tasks and Support + Troubleshooting are not built, and Diagnose and solve problems' other diagnostic tiles (VM connectivity issue, Network configuration diagnostics, …) remain an honest gap — Tasks is a cross-resource Azure Resource Graph/tagging feature and Support + Troubleshooting opens a Microsoft support request, neither specific to network security groups. Its IP flow verify and Next hop tiles ARE built (azure.nsgs.network_watcher), and Effective security rules is now built (azure.nsgs.effective_rules)."
+   "Support + Troubleshooting opens a real Microsoft support ticket (Microsoft.Support/supportTickets) against Microsoft's own support organization — a genuine third party Vyomi cannot simulate. Every other 'Diagnose and solve problems' tile (IP flow verify, Next hop, VM connectivity issue, Network configuration diagnostics — azure.nsgs.network_watcher) and Tasks (azure.nsgs.tasks) are built on real backends."
   ]
  },
  "azure.nsgs.effective_rules": {
@@ -69,12 +69,20 @@
   "tests": ["tests/conformance/test_azure_arm_core.py"]
  },
  "azure.nsgs.network_watcher": {
-  "title": "Diagnose and solve problems: IP flow verify, Next hop (Network Watcher)",
+  "title": "Diagnose and solve problems: IP flow verify, Next hop, VM connectivity issue, Network configuration diagnostics (Network Watcher)",
   "level": { "nano": "full", "offline": "full" },
   "limitations": [
-   "IP flow verify and Next hop answer from the shared netsim evaluator (core/netsim) — the same engine behind AWS Reachability Analyzer and GCP Connectivity Tests — scoped to a virtual machine's network interface in this subscription. Vyomi auto-provisions the regional NetworkWatcher_<location> resource the first time either tool runs in a location, same as the real portal's 'Enable Network Watcher' behaviour. There is no standalone Network Watcher service console (browsing/deleting networkWatchers resources) yet, only these two diagnostic tools reached from the NSG and Virtual network blades."
+   "IP flow verify, Next hop, VM connectivity issue (Connection troubleshoot) and Network configuration diagnostics all answer from the shared netsim evaluator (core/netsim) — the same engine behind AWS Reachability Analyzer and GCP Connectivity Tests — scoped to a virtual machine's network interface in this subscription. Vyomi auto-provisions the regional NetworkWatcher_<location> resource the first time any of these tools run in a location, same as the real portal's 'Enable Network Watcher' behaviour. Network configuration diagnostics reports every network security group evaluated on the path (NIC and/or subnet) with its matched rule — the same picture `az network watcher run-configuration-diagnostic` and the real portal's result pane show — but, unlike the real multi-resource version, is scoped to one NIC rather than also reporting route-table/user-defined-route results. There is no standalone Network Watcher service console (browsing/deleting networkWatchers resources) yet, only these diagnostic tools reached from the NSG and Virtual network blades."
   ],
   "tests": ["tests/conformance/test_azure_netsim_core.py"]
+ },
+ "azure.nsgs.tasks": {
+  "title": "Tasks",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "Each task (title, status, description) is a real tag on this network security group (hidden-task-<id>, JSON-encoded), written with the same ARM PUT the Tags page uses, so it survives a refresh and a tag written by another tool with that prefix shows up here too; it's hidden from the regular Tags editor, the same way real Azure hides its own internal tags. The cross-resource 'all tasks across every resource in the subscription' aggregate (a separate Azure Resource Graph query) is not built — only the per-resource list this blade shows."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
  },
  "azure.nsgs.monitoring": {
   "title": "Alerts, Diagnostic settings, Logs, NSG flow logs",
