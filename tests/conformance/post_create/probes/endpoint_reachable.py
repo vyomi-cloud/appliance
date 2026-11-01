@@ -186,6 +186,55 @@ def gcp_apigateway():
     check(st == 200 and b"ok" in body, "GET http://<shown defaultHostname>/hello invokes the gateway", f"{st} {body[:120]}")
 
 
+def aws_apigateway():
+    import base64, io, zipfile
+    jcall("POST", "/api/spaces/space-legacy/switch") if False else None
+    n = f"pcapi{SFX}"
+    s, api = jcall("POST", "/restapis", {"name": n})
+    check(s in (200, 201) and api.get("id"), "create_rest_api", f"{s} {str(api)[:120]}")
+    aid = api.get("id")
+    s, res = jcall("GET", f"/restapis/{aid}/resources")
+    root = res["item"][0]["id"]
+    # MOCK
+    s, r1 = jcall("POST", f"/restapis/{aid}/resources/{root}", {"pathPart": "mock"})
+    jcall("PUT", f"/restapis/{aid}/resources/{r1['id']}/methods/GET", {"authorizationType": "NONE"})
+    jcall("PUT", f"/restapis/{aid}/resources/{r1['id']}/methods/GET/integration", {"type": "MOCK", "requestTemplates": {"application/json": '{"statusCode": 200}'}, "mockBody": "mock-ok", "mockStatus": 200})
+    # HTTP -> the simulator's own health endpoint
+    s, r2 = jcall("POST", f"/restapis/{aid}/resources/{root}", {"pathPart": "http"})
+    jcall("PUT", f"/restapis/{aid}/resources/{r2['id']}/methods/GET", {"authorizationType": "NONE"})
+    jcall("PUT", f"/restapis/{aid}/resources/{r2['id']}/methods/GET/integration", {"type": "HTTP", "httpMethod": "GET", "uri": "http://host.docker.internal:9420/healthz"})   # an upstream the appliance container can reach (the unpatched sim on :9420)
+    # Lambda proxy
+    fn = f"pcfn{SFX}"
+    s, _ = jcall("POST", "/api/lambda/functions", {"function_name": fn, "runtime": "python3.12", "handler": "lambda_function.lambda_handler",
+                 "code": "def lambda_handler(event, ctx):\n    return {'statusCode': 200, 'body': 'lambda-ok:' + event['path']}\n"})
+    s, r3 = jcall("POST", f"/restapis/{aid}/resources/{root}", {"pathPart": "lam"})
+    jcall("PUT", f"/restapis/{aid}/resources/{r3['id']}/methods/GET", {"authorizationType": "NONE"})
+    jcall("PUT", f"/restapis/{aid}/resources/{r3['id']}/methods/GET/integration", {"type": "AWS_PROXY", "httpMethod": "POST",
+          "uri": f"arn:aws:apigateway:us-east-1:lambda:path/2015-03-31/functions/arn:aws:lambda:us-east-1:123456789012:function:{fn}/invocations"})
+    s, d = jcall("POST", f"/restapis/{aid}/deployments", {"stageName": "prod"})
+    check(s in (200, 201), "create_deployment", f"{s} {str(d)[:120]}")
+    u = f"{BASE}/restapis/{aid}/prod/_user_request_"
+    for path, want, label in (("/mock", b"mock-ok", "MOCK"), ("/http", b"", "HTTP"), ("/lam", b"lambda-ok", "Lambda proxy")):
+        st, body, _ = http("GET", u + path)
+        check(st == 200 and want in body, f"GET {u.replace(BASE, '<origin>')}{path} ({label} integration)", f"{st} {body[:100]}")
+    jcall("DELETE", f"/restapis/{aid}")
+
+
+def aws_apigatewayv2():
+    n = f"pcv2{SFX}"
+    s, api = jcall("POST", "/v2/apis", {"name": n, "protocolType": "HTTP"})
+    ep = api.get("apiEndpoint", "")
+    check(s in (200, 201) and ep.startswith(BASE), "create_api shows an ApiEndpoint on the simulator origin", f"{s} {ep}")
+    aid = api.get("apiId")
+    s, ig = jcall("POST", f"/v2/apis/{aid}/integrations", {"integrationType": "HTTP_PROXY", "integrationMethod": "GET", "integrationUri": "http://host.docker.internal:9420/healthz", "payloadFormatVersion": "1.0"})
+    s, rt = jcall("POST", f"/v2/apis/{aid}/routes", {"routeKey": "GET /hi", "target": f"integrations/{ig.get('integrationId')}"})
+    s, st = jcall("POST", f"/v2/apis/{aid}/stages", {"stageName": "$default", "autoDeploy": True})
+    time.sleep(1)
+    code, body, _ = http("GET", ep + "/hi")
+    check(code == 200, "GET <shown ApiEndpoint>/hi reaches the integration", f"{code} {body[:100]}")
+    jcall("DELETE", f"/v2/apis/{aid}")
+
+
 if __name__ == "__main__":
     globals()[WHAT]()
     sys.exit(1 if fails else 0)

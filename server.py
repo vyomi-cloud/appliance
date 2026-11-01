@@ -23769,6 +23769,12 @@ except Exception as _e:   # never let this break appliance boot
 try:   # API Gateway V2 data plane: the integration handler behind the shared Caddy gateway
     from providers import aws_apigatewayv2_gateway as _apigwv2_gateway
     _apigwv2_gateway.register(app, lambda fn, ev: _lambda_invoke_function(fn, ev, source="apigateway"))
+    from core import apigateway_core as _apigw1_core      # API Gateway v1 (REST) _user_request_ invoke -> the same Lambdas
+
+    def _apigw1_lambda(fn, ev):
+        rec = _lambda_invoke_function(fn, ev, source="apigateway")
+        return rec.get("response_payload") if rec.get("status") == "success" else {"_error": True}
+    _apigw1_core.LAMBDA_INVOKER = _apigw1_lambda
 except Exception as _e:   # never let this break appliance boot
     print(f"[apigatewayv2] gateway handler skipped: {_e}")
 # Systems Manager console REST (/api/ssm/*) — shares its store with the native AmazonSSM wire.
