@@ -598,6 +598,8 @@ def _dispatch_messaging(service: str, r: AwsWireRouter, method: str, path: str, 
 
 
 _NEW_SERVICES_ROUTER: AwsWireRouter | None = None
+# net-new paths whose state lives in the Azure space (REQUEST_PROVIDER="azure")
+_AZURE_SPACE_PREFIXES = ("/azure-sql", "/kv", "/labels", "/revisions", "/snapshots", "/locks")
 
 
 def new_services_router() -> AwsWireRouter | None:
@@ -869,8 +871,8 @@ def mount_new_services(app, router: AwsWireRouter | None = None) -> None:
     async def _proxy(request: Request):
         body = await request.body()
         from core import app_context as _ctx
-        # /azure-sql reads the Azure space's ARM records (space-scoped by provider)
-        tok = _ctx.REQUEST_PROVIDER.set("azure") if request.url.path.startswith("/azure-sql") else None
+        # /azure-sql + the App Configuration data plane read the Azure space's ARM records (space-scoped by provider)
+        tok = _ctx.REQUEST_PROVIDER.set("azure") if request.url.path.startswith(_AZURE_SPACE_PREFIXES) else None
         try:
             out = await r.ahandle(request.method, request.url.path,
                                   dict(request.query_params), dict(request.headers), body)
@@ -888,6 +890,9 @@ def mount_new_services(app, router: AwsWireRouter | None = None) -> None:
                    "/v1/projects/{project}/roles", "/v1/projects/{project}/locations/global/workloadIdentityPools",
                    "/v2/projects/{project}/policies",
                    # Backup for GKE (gkebackup backupPlans / backups) on the shared GKE core
-                   "/v1/projects/{project}/locations/{location}/backupPlans"):
+                   "/v1/projects/{project}/locations/{location}/backupPlans",
+                   # Azure App Configuration data plane ({store}.azconfig.io; store = x-vyomi-store)
+                   # over the offline ARM state — Nano serves these via the same router
+                   "/kv", "/labels", "/revisions", "/snapshots", "/locks"):
         app.add_route(prefix, _proxy, methods=methods)
         app.add_route(prefix + "/{rest:path}", _proxy, methods=methods)
