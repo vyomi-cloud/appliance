@@ -999,6 +999,7 @@ def _evaluate_anomaly_detectors(store, g: dict, events: list) -> None:
                 continue
             if pattern not in baseline:
                 _record_anomaly(d, g["arn"], pattern, e["message"], e["timestamp"])
+        d.pop("_store_anomalies", None)   # a live reference, never part of the persisted detector record
 
 
 def _duration_secs(s: str) -> int:

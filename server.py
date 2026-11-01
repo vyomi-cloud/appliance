@@ -12761,6 +12761,47 @@ def _stop_runtime_process(instance: dict) -> None:
     raise HTTPException(status_code=503, detail="RuntimeUnavailable")
 
 
+def _ec2_terminate_runtime(instance: dict) -> None:
+    backend = str(instance.get("runtime_backend") or "").strip().lower()
+    if instance.get("launch_status") == "error" and not str(instance.get("container_id") or "").strip():
+        _terminate_simulated_instance(instance)
+    elif backend == "docker":
+        _terminate_docker_instance(instance)
+    elif backend == "multipass":
+        _terminate_multipass_instance(instance)
+    elif backend == "lxd":
+        _terminate_lxd_instance(instance)
+    else:
+        _terminate_simulated_instance(instance)
+
+
+def ec2_runtime_alarm_action(instance_id: str, action: str) -> bool | None:
+    """A CloudWatch EC2 alarm action (aws.cloudwatch.alarms.actions.ec2) on an instance the offline
+    EC2 runtime owns (ec2_state — RunInstances / the launch wizard): the SAME stop / terminate /
+    reboot path StopInstances / TerminateInstances / RebootInstances take. None when the instance
+    isn't a runtime instance (core/vpc_core's own model then handles it)."""
+    instance = ec2_state["instances"].get(instance_id)
+    if not instance:
+        return None
+    try:
+        if action == "stop":
+            if instance.get("disable_api_stop"):
+                return False
+            _stop_runtime_process(instance)
+        elif action == "terminate":
+            if instance.get("disable_api_termination"):
+                return False
+            _ec2_terminate_runtime(instance)
+        elif action == "reboot":
+            _reboot_runtime_process(instance)
+        else:
+            return False
+    except HTTPException:
+        return False
+    _persist_state()
+    return True
+
+
 def _reboot_runtime_process(instance: dict) -> None:
     backend = str(instance.get("runtime_backend") or "lxd").strip().lower()
     if backend == "docker":
@@ -14161,6 +14202,62 @@ def _ec2_query_state_change_response(root_name: str, changes: list[tuple[dict, s
     return _ec2_success_response(root_name, build)
 
 
+_EC2_CORE_INSTANCE_ACTIONS = ("DescribeInstances", "DescribeInstanceStatus", "StartInstances", "StopInstances",
+                              "RebootInstances", "TerminateInstances", "MonitorInstances", "UnmonitorInstances")
+
+
+def _ec2_core_dispatch(params: dict) -> Response:
+    """One EC2 Query action on the shared EC2/VPC core (core/vpc_core.py) over the space slot."""
+    from core import vpc_core as _vpc_core
+    action = str(params.get("Action", "")).strip()
+    vpc_store = _Ec2CoreSpaceStore()
+    vpc_store.cw_store = aws_cloudwatch.get_store()
+    vpc_store.ram_store = _aps_durable.aws_runtime_core_stores()["ram"]
+    r = _vpc_core.dispatch(vpc_store, dict(params))
+    if r.status < 300 and not action.startswith(("Describe", "Get", "List", "AnalyzeReachability")):
+        _persist_state()
+    return Response(content=r.body, status_code=r.status, media_type=r.media_type, headers=r.headers or None)
+
+
+def _ec2_core_instance_bridge(action: str, params: dict) -> Response | None:
+    """Instances the shared EC2 core launched (Auto Scaling groups — core/autoscaling_core via
+    core/vpc_core.launch_for_autoscaling) live in the vpc_core model, not in this handler's
+    runtime-backed ec2_state. Requests naming ONLY such instances go to the core; an unfiltered
+    DescribeInstances lists both, so a scaled group's instances show in the EC2 console."""
+    if action not in _EC2_CORE_INSTANCE_ACTIONS:
+        return None
+    try:
+        model = _Ec2CoreSpaceStore()._vpc_model or {}
+    except Exception:
+        return None
+    core_instances = model.get("instances") or {}
+    if not core_instances:
+        return None
+    ids = _ec2_parse_instance_ids(params)
+    if ids:
+        if all(i in core_instances and i not in ec2_state["instances"] for i in ids):
+            return _ec2_core_dispatch(params)
+        return None
+    if action != "DescribeInstances":
+        return None
+    legacy = _ec2_query_describe_instances(params)
+    core = _ec2_core_dispatch(params)
+    try:
+        lb = legacy.body.decode("utf-8")
+        cb = core.body.decode("utf-8") if isinstance(core.body, (bytes, bytearray)) else str(core.body)
+        m = re.search(r"<reservationSet>(.*)</reservationSet>", cb, re.S)
+        items = m.group(1).strip() if m else ""
+        if not items:
+            return legacy
+        if "<reservationSet />" in lb or "<reservationSet/>" in lb:
+            lb = re.sub(r"<reservationSet\s*/>", f"<reservationSet>{items}</reservationSet>", lb, count=1)
+        else:
+            lb = lb.replace("</reservationSet>", items + "</reservationSet>", 1)
+        return Response(content=lb, status_code=legacy.status_code, media_type=legacy.media_type)
+    except Exception:
+        return legacy
+
+
 async def api_ec2_query(request: Request):
     params = await _ec2_query_params(request)
     action = str(params.get("Action", "")).strip()
@@ -14172,6 +14269,10 @@ async def api_ec2_query(request: Request):
 
     if str(params.get("DryRun", "")).lower() == "true":
         return _ec2_error_response("DryRunOperation", "Request would have succeeded, but DryRun flag is set.", 412)
+
+    bridged = _ec2_core_instance_bridge(action, params)
+    if bridged is not None:
+        return bridged
 
     try:
         if action == "DescribeInstances":
@@ -14246,17 +14347,7 @@ async def api_ec2_query(request: Request):
                 if not instance:
                     raise HTTPException(404, detail=f"InvalidInstanceID.NotFound: {instance_id}")
                 previous = instance.get("state", "running")
-                backend = str(instance.get("runtime_backend") or "").strip().lower()
-                if instance.get("launch_status") == "error" and not str(instance.get("container_id") or "").strip():
-                    _terminate_simulated_instance(instance)
-                elif backend == "docker":
-                    _terminate_docker_instance(instance)
-                elif backend == "multipass":
-                    _terminate_multipass_instance(instance)
-                elif backend == "lxd":
-                    _terminate_lxd_instance(instance)
-                else:
-                    _terminate_simulated_instance(instance)
+                _ec2_terminate_runtime(instance)
                 changes.append((instance, previous, "shutting-down"))
             return _ec2_query_state_change_response("TerminateInstancesResponse", changes)
         if action in ("MonitorInstances", "UnmonitorInstances"):
@@ -14289,6 +14380,7 @@ async def api_ec2_query(request: Request):
     if action in _vpc_core._OPS:
         vpc_store = _Ec2CoreSpaceStore()
         vpc_store.cw_store = aws_cloudwatch.get_store()
+        vpc_store.ram_store = _aps_durable.aws_runtime_core_stores()["ram"]   # shared subnets/SGs can't be deleted
         r = _vpc_core.dispatch(vpc_store, dict(params))
         if r.status < 300 and not action.startswith(("Describe", "Get", "List", "AnalyzeReachability")):
             _persist_state()
@@ -14346,6 +14438,7 @@ def api_vpc_core_query(params: dict) -> Response:
     action = str(params.get("Action", "")).strip()
     vpc_store = _Ec2CoreSpaceStore()
     vpc_store.cw_store = aws_cloudwatch.get_store()
+    vpc_store.ram_store = _aps_durable.aws_runtime_core_stores()["ram"]   # shared subnets/SGs can't be deleted
     r = _vpc_core.dispatch(vpc_store, dict(params))
     if r.status < 300 and not action.startswith(("Describe", "Get", "List", "AnalyzeReachability")):
         try:

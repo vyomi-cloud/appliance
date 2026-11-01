@@ -2047,7 +2047,7 @@ try {
   // (azure.entra.devices is now "limited", not not_simulated) ───────────────────────────
   await page.goto(UI + "#/entra/users");
   await page.getByRole("link", { name: EUSR2, exact: true }).click();
-  await page.getByRole("tab", { name: "Devices" }).click();
+  await page.getByRole("link", { name: "Devices", exact: true }).last().click();   // a user-blade menu item, not a tab
   await page.getByRole("button", { name: "Register device" }).click();
   await page.getByLabel("Name", { exact: true }).fill(EDEV);
   await page.getByRole("button", { name: "Register", exact: true }).click();

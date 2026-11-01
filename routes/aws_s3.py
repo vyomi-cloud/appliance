@@ -1103,7 +1103,23 @@ def _aws_query_target_service(request: Request) -> str:
         return "states"
     if target.startswith("AmazonSQS."):
         return "sqs"
+    if target.startswith("AmazonDAXV3."):
+        return "dax"
+    if target.startswith("AWSRAMFrontendService."):
+        return "ram"
     return ""
+
+
+# Services the appliance serves ONLY through the shared router (core/aws_wire_router.py) over
+# its durable stores (core/wire_ingress.appliance_router → offline_runtime_stores): the JSON /
+# Query ones on POST / and the REST ones whose paths would otherwise fall into the S3 catch-all.
+_ROUTER_QUERY_SERVICES = ("dax", "ram", "cloudformation")
+_ROUTER_REST_SERVICES = ("dlm", "pipes", "apigateway")
+
+
+def _signed_service(request: Request) -> str:
+    m = _AWS_CRED_SCOPE_RE.search(request.headers.get("authorization", "") or "")
+    return m.group(1).strip().lower() if m else ""
 
 
 # Query-protocol Action -> service for UNSIGNED requests (plain curl, docs
@@ -1178,6 +1194,11 @@ def _register_unified_s3(app: FastAPI) -> None:
         if _amu.queue_path_request(request):
             # v4 C0e: an SDK POSTing to a queue URL the appliance handed out (/<account>/<queue>)
             return await _amu.serve_queue_path(request)
+        await _wi.track_activity(request)   # IAM Last Accessed (a user's own access key)
+        if _signed_service(request) in _ROUTER_REST_SERVICES:
+            # DLM (/policies), EventBridge Pipes (/v1/pipes), API Gateway v1 account-level paths
+            # (/apikeys, /usageplans, …): REST paths with no S3 meaning, told apart by SigV4 scope.
+            return await _wi.serve(_wi.new_services_router() or _wi.appliance_router(), request)
         if _is_reserved_bucket(bucket):
             raise HTTPException(status_code=404, detail="Not found")
         path = request.scope.get("path") or request.url.path
@@ -1239,11 +1260,17 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
     async def aws_query_root(request: Request) -> Response:
         """Root dispatch for real AWS SDK/CLI query + JSON protocol requests."""
         service = _aws_query_target_service(request)
+        await _wi.track_activity(request)   # IAM Last Accessed (a user's own access key)
         if not service:
             # Unsigned Query-protocol request: infer the service from Action.
             _p = await _srv()._ec2_query_params(request)
             _a = str(_p.get("Action", "")).strip()
             service = "ec2" if _a in _EC2_VPC_ACTIONS else _UNSIGNED_QUERY_ACTION.get(_a, "")
+        if service == "stepfunctions":   # the v4 console signs Step Functions as "stepfunctions"
+            service = "states"
+        if service in _ROUTER_QUERY_SERVICES:
+            # DAX / RAM / CloudFormation: the shared cores over durable space slots, like Nano.
+            return await _wi.serve(_wi.appliance_router(), request)
         if service == "states":
             # Step Functions (X-Amz-Target AWSStepFunctions.*) — in-process engine, shared with the console REST.
             from core import stepfunctions_core as _sfn
@@ -1352,6 +1379,13 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
                 )
             return Response(content=json.dumps(resp), media_type="application/x-amz-json-1.1",
                             status_code=400 if isinstance(resp, dict) and "__type" in resp else 200)
+        # Anything else the shared router recognises (by SigV4 scope / X-Amz-Target / Action) is
+        # served by it over the appliance's durable stores — never a router-only feature offline.
+        _r = _wi.appliance_router()
+        from core.aws_wire_router import _lower_headers as _lh
+        if _r.service_of("POST", "/", _lh(dict(request.headers)), await request.body(),
+                         dict(request.query_params)) not in (None, "s3"):
+            return await _wi.serve(_r, request)
         params = await _srv()._ec2_query_params(request)
         action = str(params.get("Action", "")).strip()
         hint = "" if service else (

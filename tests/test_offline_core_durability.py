@@ -181,6 +181,50 @@ def test_aws_stepfunctions_apigwv2_ssm_apigw_survive_restart(client):
     assert rest["id"] in {a["id"] for a in _ok(client.get("/restapis")).get("item", [])}
 
 
+def _signed(svc):
+    return {"authorization": f"AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/{svc}/aws4_request, "
+                             "SignedHeaders=host, Signature=0"}
+
+
+def test_aws_dax_dlm_ram_cfn_pipes_survive_restart(client):
+    """The cores the offline appliance used to leave on the router's IN-MEMORY defaults (or not
+    route at all): DAX, DLM, RAM, CloudFormation and EventBridge Pipes."""
+    tag = uuid.uuid4().hex[:6]
+    j11 = "application/x-amz-json-1.1"
+    _ok(client.post("/", content=json.dumps({"SubnetGroupName": "dax" + tag, "SubnetIds": ["subnet-1"]}),
+                    headers={"x-amz-target": "AmazonDAXV3.CreateSubnetGroup", "content-type": j11, **_signed("dax")}))
+    share = _ok(client.post("/", content=json.dumps({"name": "share" + tag}),
+                            headers={"x-amz-target": "AWSRAMFrontendService.CreateResourceShare",
+                                     "content-type": j11, **_signed("ram")}))["resourceShare"]["resourceShareArn"]
+    pol = _ok(client.post("/policies", content=json.dumps({"Description": "d" + tag, "State": "DISABLED", "PolicyDetails": {
+        "ResourceTypes": ["VOLUME"], "TargetTags": [{"Key": "k", "Value": tag}],
+        "Schedules": [{"Name": "s", "CreateRule": {"Interval": 12, "IntervalUnit": "HOURS"}, "RetainRule": {"Count": 1}}]}}),
+        headers={"content-type": "application/json", **_signed("dlm")}))["PolicyId"]
+    stack = "st" + tag
+    tpl = json.dumps({"Resources": {"Q": {"Type": "AWS::SQS::Queue", "Properties": {"QueueName": "cfnq" + tag}}}})
+    r = client.post("/", content=f"Action=CreateStack&StackName={stack}&TemplateBody={tpl}",
+                    headers={"content-type": "application/x-www-form-urlencoded", **_signed("cloudformation")})
+    assert r.status_code == 200, r.text[:300]
+    pipe = "pipe" + tag
+    _ok(client.post(f"/v1/pipes/{pipe}", content=json.dumps({
+        "Source": "arn:aws:sqs:us-east-1:000000000000:a", "Target": "arn:aws:sqs:us-east-1:000000000000:b"}),
+        headers={"content-type": "application/json", **_signed("pipes")}))
+    _restart()
+    sgs = _ok(client.post("/", content="{}", headers={"x-amz-target": "AmazonDAXV3.DescribeSubnetGroups",
+                                                      "content-type": j11, **_signed("dax")}))["SubnetGroups"]
+    assert "dax" + tag in {g["SubnetGroupName"] for g in sgs}
+    shares = _ok(client.post("/", content=json.dumps({"resourceOwner": "SELF"}), headers={
+        "x-amz-target": "AWSRAMFrontendService.GetResourceShares", "content-type": j11, **_signed("ram")}))["resourceShares"]
+    assert share in {x["resourceShareArn"] for x in shares}
+    pols = _ok(client.get("/policies", headers=_signed("dlm")))["Policies"]
+    assert pol in {x["PolicyId"] for x in pols}
+    r = client.post("/", content="Action=ListStacks", headers={"content-type": "application/x-www-form-urlencoded",
+                                                               **_signed("cloudformation")})
+    assert f"<StackName>{stack}</StackName>" in r.text
+    pipes = _ok(client.get("/v1/pipes", headers=_signed("pipes")))["Pipes"]
+    assert pipe in {x["Name"] for x in pipes}
+
+
 # ── Azure: RBAC (role assignments) + Azure SQL (catalog AND rows) ──────────────────────
 
 def test_azure_rbac_and_sql_survive_restart(client):

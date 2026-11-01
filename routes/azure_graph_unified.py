@@ -93,6 +93,10 @@ def register(app) -> list:
         for pre in ("/v1.0", "/beta"):
             app.add_route(pre, _graph, methods=_METHODS)
             app.add_route(f"{pre}/{{rest:path}}", _graph, methods=_METHODS)
+        # Entra sign-in (client_credentials grant against a REAL app secret — core/azure_graph_core
+        # validates it and logs the sign-in), the endpoint Nano's router claims by path shape too.
+        for tok in ("/{tenant}/oauth2/v2.0/token", "/{tenant}/oauth2/token"):
+            app.add_route(tok, _graph, methods=["POST"])
         mounted.append("azure_graph")
     if _wi.is_unified("azure_cosmos"):
         app.add_route("/dbs", _cosmos, methods=_METHODS)

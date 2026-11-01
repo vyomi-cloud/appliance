@@ -141,7 +141,41 @@ def appliance_stores() -> dict:
             "gcp_msg": aps.gcp_pubsub_store(), "az_graph": aps.graph_store(),
             "az_cosmos": aps.cosmos_store(), "iam": aps.iam_store(), "az_table": aps.table_store(),
             "rds": aps.rds_store(),
-            **_gcp_logging_store(), **_azure_arm_store()}
+            **_gcp_logging_store(), **_azure_arm_store(), **offline_runtime_stores()}
+
+
+def offline_runtime_stores() -> dict:
+    """The durable offline store of every other router key whose default would otherwise be the
+    router's IN-MEMORY one (Nano's logic): the stores the offline routes already serve (Kinesis,
+    CloudWatch, CloudWatch Logs, Auto Scaling, ELBv2, the EC2/VPC model, SSM, Step Functions,
+    API Gateway V2, the GCP slot cores) plus the space slots of DAX / DLM / RAM / CloudFormation.
+    Sharing them is what makes the router's runtime links real offline (ddb.cw_store,
+    ddb.kinesis_store, dax.ddb_store, cw.asg_store, cw.vpc_store, vpc.ram_store, logs.lam_store, …)."""
+    from core import appliance_stores as aps
+    aps.install_core_slot_stores()
+    out = dict(aps.aws_runtime_core_stores())
+    out["az_queue"] = aps.az_queue_store()   # the root Storage Queue wire (Azure space slot)
+    for key, mod, attr in (("kinesis", "routes.aws_kinesis", "STORE"), ("logs", "routes.aws_logs", "STORE"),
+                           ("asg", "routes.aws_autoscaling", "STORE"), ("elbv2", "routes.aws_elbv2", "STORE"),
+                           ("gcp_run", "routes.gcp_run", "_STORE"), ("gcp_pam", "routes.gcp_pam", "_STORE"),
+                           ("gcp_ar", "routes.gcp_artifactregistry", "_STORE")):
+        try:
+            out[key] = getattr(__import__(mod, fromlist=[attr]), attr)
+        except Exception:
+            pass
+    try:
+        from routes.aws_cloudwatch import get_store as _cw_store
+        out["cw"] = _cw_store()
+    except Exception:
+        pass
+    from core import (apigatewayv2_core, ssm_core, stepfunctions_core, gcp_cloudscheduler_core,
+                      gcp_container_core, gcp_iamcredentials_core, gcp_redis_core, gcp_monitoring_core)
+    for key, mod in (("ssm", ssm_core), ("sfn", stepfunctions_core), ("apigwv2", apigatewayv2_core),
+                     ("gcp_sched", gcp_cloudscheduler_core), ("gcp_gke", gcp_container_core),
+                     ("gcp_iamc", gcp_iamcredentials_core), ("gcp_redis", gcp_redis_core),
+                     ("gcp_mon", gcp_monitoring_core)):
+        out[key] = mod.shared_store()
+    return out
 
 
 def _azure_arm_store() -> dict:
@@ -185,6 +219,25 @@ def appliance_router() -> AwsWireRouter:
     if _APPLIANCE_ROUTER is None:
         _APPLIANCE_ROUTER = AwsWireRouter(stores=appliance_stores())
     return _APPLIANCE_ROUTER
+
+
+async def track_activity(request) -> None:
+    """IAM Last Accessed / policy generation (core/iam_core.record_activity): a request signed
+    with an IAM user's OWN access key is attributed to that user, exactly as the router does for
+    every request it serves (`AwsWireRouter._track_activity`) — offline the native wire is spread
+    over many routes, so the AWS front doors (POST /, the S3/REST catch-all) call this."""
+    auth = request.headers.get("authorization", "") or ""
+    if "Credential=" not in auth or "Credential=VYOMICONSOLE/" in auth:
+        return
+    try:
+        from core.aws_wire_router import _lower_headers
+        r = appliance_router()
+        body = await request.body()
+        lh = _lower_headers(dict(request.headers))
+        q = dict(request.query_params)
+        r._track_activity(r.service_of(request.method, request.url.path, lh, body, q), lh, q, body)
+    except Exception:
+        pass
 
 
 def to_response(out: dict):
@@ -570,8 +623,8 @@ def _dispatch_messaging(service: str, r: AwsWireRouter, method: str, path: str, 
                     "body": _json.dumps({"__type": "SerializationException",
                                          "message": "Request body is not valid JSON."}).encode()}
         if service == "sqs":
-            from core import sqs_core
-            resp = sqs_core.dispatch(st, target, payload)
+            from core import sqs_core   # lam_store: Lambda triggers (event source mappings) really fire
+            resp = sqs_core.dispatch(st, target, payload, lam_store=_lam_store(r))
         elif service == "events":
             from core import eventbridge_core
             resp = eventbridge_core.dispatch(st, target, payload, lam_store=_lam_store(r),
@@ -601,7 +654,7 @@ def _dispatch_messaging(service: str, r: AwsWireRouter, method: str, path: str, 
             segs = [x for x in (path or "").split("?", 1)[0].split("/") if x]
             if len(segs) == 2:
                 params["QueueUrl"] = segs[1]
-        status, xml = sqs_core.dispatch_query(st, params)
+        status, xml = sqs_core.dispatch_query(st, params, lam_store=_lam_store(r))
         return {"status": status, "headers": {"content-type": "text/xml", "x-amzn-requestid": rid},
                 "body": xml.encode()}
     if service == "sns":
@@ -858,19 +911,15 @@ def mount_new_services(app, router: AwsWireRouter | None = None) -> None:
 
     from core import appliance_stores as _aps
     _aps.install_core_slot_stores()   # the cores' shared_store()s → durable space slots
-    from core.apigatewayv2_core import shared_store as _apigwv2_store
-    from core.stepfunctions_core import shared_store as _sfn_store, set_lambda_store as _sfn_lambda
-    from core.gcp_cloudscheduler_core import shared_store as _gcp_sched_store
-    from core.gcp_container_core import shared_store as _gcp_gke_store
-    from core.gcp_iamcredentials_core import shared_store as _gcp_iamc_store
-    from core.gcp_redis_core import shared_store as _gcp_redis_store
-    from core.gcp_monitoring_core import shared_store as _gcp_mon_store
-    _ns = {"apigwv2": _apigwv2_store(), "sfn": _sfn_store(), "gcp_sched": _gcp_sched_store(), "gcp_gke": _gcp_gke_store(), "gcp_iamc": _gcp_iamc_store(), "gcp_redis": _gcp_redis_store(), "gcp_mon": _gcp_mon_store(),
-           # GCP custom roles / Workload Identity (gcp_iam), Org Policy v2 (gcp_rm), Azure RBAC
-           # (iam) and Azure SQL (rds): durable space slots, not the router's in-memory defaults
-           **_aps.net_new_core_stores()}
-    if is_unified("lambda"):   # C0f: API Gateway / Step Functions / Scheduler reach the appliance's functions
-        _ns["lam"] = _aps.lambda_store()
+    from core.stepfunctions_core import set_lambda_store as _sfn_lambda
+    # EVERY store is the appliance's durable one (the same objects appliance_router() serves the
+    # unified services with), so a runtime link this router wires (Lambda destinations → SQS,
+    # Pipes → SQS, DLM → EC2 snapshots, …) reaches the state the rest of the offline wire reads.
+    # GCP custom roles / Workload Identity (gcp_iam), Org Policy v2 (gcp_rm), Azure RBAC (iam) and
+    # Azure SQL (rds) override the AWS IAM / RDS stores: this router serves the Azure surfaces.
+    _ns = {**appliance_stores(), **_aps.net_new_core_stores()}
+    if not is_unified("lambda"):
+        _ns.pop("lam", None)
     try:   # the Azure SQL data plane enforces the server's ARM settings (publicNetworkAccess, …):
         from providers.azure_services import core_arm as _core_arm   # read the appliance's OWN ARM state
         _ns["az_arm"] = _core_arm()
@@ -911,6 +960,36 @@ def mount_new_services(app, router: AwsWireRouter | None = None) -> None:
                    "/v1/projects/{project}/locations/{location}/backupPlans",
                    # Azure App Configuration data plane ({store}.azconfig.io; store = x-vyomi-store)
                    # over the offline ARM state — Nano serves these via the same router
-                   "/kv", "/labels", "/revisions", "/snapshots", "/locks"):
+                   "/kv", "/labels", "/revisions", "/snapshots", "/locks",
+                   # Resource Manager tag keys + Essential Contacts (core/gcp_resourcemanager_core.py)
+                   "/v3/tagKeys", "/v1/projects/{project}/contacts"):
         app.add_route(prefix, _proxy, methods=methods)
         app.add_route(prefix + "/{rest:path}", _proxy, methods=methods)
+    async def _az_queue(request: Request):
+        """Azure Storage Queue root wire (rewritten here by core/middleware for x-ms-version
+        requests the router classifies as az-queue) → core/azure_queue_core over the Azure
+        space's durable slot (core/appliance_stores.AppStateAzureQueueStore)."""
+        from core import app_context as _ctx
+        from core import azure_queue_core as _azq
+        path = request.url.path[len("/azure-data/queue-core"):] or "/"
+        tok = _ctx.REQUEST_PROVIDER.set("azure")
+        try:
+            resp = _azq.dispatch(_aps.az_queue_store(), request.method, path, dict(request.query_params),
+                                 dict(request.headers), await request.body())
+            if request.method == "GET" and resp.status < 300 and "/messages" in path \
+                    and str(request.query_params.get("peekonly", "")).lower() != "true":
+                _ctx.persist_state()   # a receive changes visibility / dequeue counts on a GET
+        finally:
+            _ctx.REQUEST_PROVIDER.reset(tok)
+        hdrs = dict(resp.headers or {})
+        if resp.media_type and not any(k.lower() == "content-type" for k in hdrs):
+            hdrs["content-type"] = resp.media_type
+        return Response(content=resp.body or b"", status_code=resp.status, headers=hdrs)
+
+    app.add_route("/azure-data/queue-core/{rest:path}", _az_queue, methods=methods)
+
+    # Resource Manager v3 projects (create / search / get / update / delete / undelete): EXACT
+    # paths only — "/v3/projects/{p}/<collection>" is Cloud Monitoring (providers/
+    # gcp_monitoring_console.py), registered after this.
+    for exact in ("/v3/projects", "/v3/projects:search", "/v3/projects/{project}"):
+        app.add_route(exact, _proxy, methods=methods)

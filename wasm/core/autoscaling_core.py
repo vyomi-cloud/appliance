@@ -709,11 +709,15 @@ def _reconcile(store: AutoScalingStore, g: dict, new_desired: int, respect_hooks
     if new_desired > current:
         for _ in range(new_desired - current):
             az = g["azs"][len(g["instance_ids"]) % len(g["azs"])] if g["azs"] else None
-            iid = _vpc_mod.launch_for_autoscaling(
-                store.vpc_store, az=az, instance_type=g.get("instance_type"), image_id=g.get("image_id"),
-                subnet_id=(g.get("subnet_ids") or [None])[len(g["instance_ids"]) % len(g["subnet_ids"])] if g.get("subnet_ids") else None,
-                security_group_ids=g.get("security_group_ids"), key_name=g.get("key_name"),
-                tags={"Name": f"{g['name']}-instance", "aws:autoscaling:groupName": g["name"]})
+            try:
+                iid = _vpc_mod.launch_for_autoscaling(
+                    store.vpc_store, az=az, instance_type=g.get("instance_type"), image_id=g.get("image_id"),
+                    subnet_id=(g.get("subnet_ids") or [None])[len(g["instance_ids"]) % len(g["subnet_ids"])] if g.get("subnet_ids") else None,
+                    security_group_ids=g.get("security_group_ids"), key_name=g.get("key_name"),
+                    tags={"Name": f"{g['name']}-instance", "aws:autoscaling:groupName": g["name"]})
+            except _vpc_mod.VpcError as e:   # e.g. the launch template's AMI doesn't exist: a 400, never a 500
+                g["desired"] = len(g["instance_ids"])   # only what really launched
+                raise AsgError("ValidationError", f"Launching a new EC2 instance failed: {e.message}") from e
             g["instance_ids"].append(iid)
             if launch_hook is not None:
                 g["lifecycle"][iid] = "Pending:Wait"
@@ -758,7 +762,11 @@ def execute_policy_arn(store: AutoScalingStore, policy_arn: str) -> bool:
     else:  # ChangeInCapacity
         new_desired = current + p["scaling_adjustment"]
     new_desired = max(g["min"], min(g["max"], new_desired))
-    _reconcile(store, g, new_desired)
+    try:
+        _reconcile(store, g, new_desired)
+    except AsgError:
+        store.persist()
+        return False   # the alarm records a failed action, as AWS does when a launch fails
     store.persist()
     return True
 

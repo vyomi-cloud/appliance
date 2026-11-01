@@ -1013,7 +1013,7 @@ class AppStateComputeVmStore(_SlotStore, _gci.ComputeStore):
 # ── v4 C0e: SQS + SNS + EventBridge (+ Scheduler) — ONE messaging store ────────────
 from core.messaging_store import MessagingStore   # noqa: E402
 
-_EB_FACTORY = lambda: {"buses": {}, "rules": {}, "archives": {}, "replays": {}, "meta": {}}   # noqa: E731
+_EB_FACTORY = lambda: {"buses": {}, "rules": {}, "archives": {}, "replays": {}, "pipes": {}, "meta": {}}   # noqa: E731
 
 
 def _iso_epoch(ts, default: float | None = None) -> float:
@@ -1052,6 +1052,7 @@ class AppStateMessagingStore(MessagingStore):
         event_buses / event_rules / event_archives / event_replays
                                    -> service_states["eventbridge"]["buses" | "rules" | "archives" | "replays"]
         sqs_move_tasks             -> service_states["sqs"]["move_tasks"]
+        eb_pipes                   -> service_states["eventbridge"]["pipes"]
     """
 
     def __init__(self, account_id: str):
@@ -1085,6 +1086,17 @@ class AppStateMessagingStore(MessagingStore):
     event_rules = property(lambda self: self._eb()["rules"])
     event_archives = property(lambda self: self._eb()["archives"])
     event_replays = property(lambda self: self._eb()["replays"])
+
+    @property
+    def eb_pipes(self):
+        """EventBridge Pipes (core/eventbridge_core.py `_pipes`) -> service_states["eventbridge"]["pipes"]."""
+        return self._eb()["pipes"]
+
+    @eb_pipes.setter
+    def eb_pipes(self, v):
+        self._eb()["pipes"] = v
+
+    logs_store = None   # runtime link set by the wire router (SNS delivery-status logging) — never persisted
 
     @property
     def sns(self):
@@ -2560,6 +2572,7 @@ class _CoreSlotStore:
     _SLOT = ""
     _PROVIDER = "aws"
     _EXTRA: tuple = ()
+    _LINKS: tuple = ()     # runtime links the wire router sets (cw_store, vpc_store, …): never slot data
     _DEFAULTS: dict = {}
     _FIELDS: tuple = ()
 
@@ -2570,13 +2583,14 @@ class _CoreSlotStore:
         base = cls._BASE()
         cls._DEFAULTS = {k: v for k, v in vars(base).items()
                          if (k in cls._EXTRA or not k.startswith("_")) and not callable(v)
-                         and _state_json_safe(v)}
+                         and k not in cls._LINKS and _state_json_safe(v)}
         cls._FIELDS = tuple(dict.fromkeys(tuple(cls._DEFAULTS) + tuple(cls._EXTRA)))
 
     def __init__(self):        # NB: no base __init__ on self — the data attributes are the slot's
         object.__setattr__(self, "_scratch", None)
         for k, v in vars(self._BASE()).items():
-            if k not in self._FIELDS and not isinstance(getattr(type(self), k, None), property):
+            if k not in self._FIELDS and k not in self._LINKS \
+                    and not isinstance(getattr(type(self), k, None), property):
                 object.__setattr__(self, k, v)
 
     # slot resolution ---------------------------------------------------------------
@@ -2947,6 +2961,167 @@ def rds_store() -> AppStateRdsStore:
         except Exception as exc:
             _log.warning("rds: Parquet writer not installed: %s", exc)
     return _RDS
+
+
+# ── v4 offline parity: the AWS cores the router used to keep IN MEMORY offline ─────────
+#
+#   DAX  clusters / subnet + parameter groups / events / tags -> service_states["dax_core"]["store"]
+#        (the item/query cache stays per-process — "lost on cold start", like a real cache)
+#   DLM  lifecycle policies                                  -> service_states["dlm_core"]["store"]
+#   RAM  resource shares (ram_core `_ram_model`)             -> service_states["ram_core"]["store"]
+#   CFN  stacks / change sets / stack sets / hooks / …       -> service_states["cloudformation_core"]["store"]
+#   Runtime links (dax.ddb_store/cw_store, dlm.vpc_store, ram.vpc_store) are class attributes the
+#   wire router overwrites per instance — never persisted.
+from core import dax_core as _daxc   # noqa: E402
+from core import dlm_core as _dlmc   # noqa: E402
+from core import cloudformation_core as _cfnc   # noqa: E402
+
+
+class AppStateDaxStore(_CoreSlotStore, _daxc.DaxStore):
+    _BASE, _SLOT, _PROVIDER = _daxc.DaxStore, "dax_core", "aws"
+    _LINKS = ("ddb_store", "cw_store")
+    ddb_store = None
+    cw_store = None
+
+
+class AppStateDlmStore(_CoreSlotStore, _dlmc.DlmStore):
+    _BASE, _SLOT, _PROVIDER = _dlmc.DlmStore, "dlm_core", "aws"
+    _LINKS = ("vpc_store",)
+    vpc_store = None
+
+    def persist(self) -> None:
+        """Due schedules are evaluated on READS too (they really create snapshots / AMIs in the
+        EC2 model), which the write-only middleware flush would miss."""
+        from core import app_context as ctx
+        ctx.persist_state()
+
+
+class _RamBase:
+    """ram_core keeps its whole model lazily in `store._ram_model` (no store class of its own)."""
+
+
+class AppStateRamStore(_CoreSlotStore, _RamBase):
+    _BASE, _SLOT, _PROVIDER = _RamBase, "ram_core", "aws"
+    _EXTRA = ("_ram_model",)
+    vpc_store = None
+
+
+class AppStateCloudFormationStore(_CoreSlotStore, _cfnc.CloudFormationStore):
+    _BASE, _SLOT, _PROVIDER = _cfnc.CloudFormationStore, "cloudformation_core", "aws"
+
+
+class OfflineVpcStore:
+    """The offline EC2/VPC model (vpc_core's `_vpc_model`) as a router store: the SAME active-space
+    slot server.py's `_Ec2CoreSpaceStore` (api_vpc_core_query) reads, so Auto Scaling / DLM / RAM /
+    CloudWatch alarm actions reached through the router act on the instances, snapshots, subnets
+    and security groups the offline EC2 + VPC wire shows."""
+
+    cw_store = None    # runtime links set by the wire router — never persisted
+    ram_store = None
+
+    @staticmethod
+    def _space_store():
+        import sys
+        srv = sys.modules.get("server")
+        cls = getattr(srv, "_Ec2CoreSpaceStore", None) if srv is not None else None
+        return cls() if cls is not None else None
+
+    @property
+    def _vpc_model(self):
+        st = self._space_store()
+        return st._vpc_model if st is not None else None
+
+    @staticmethod
+    def runtime_alarm_action(instance_id: str, action: str):
+        """CloudWatch EC2 alarm actions on an instance of the offline EC2 runtime (server.py
+        ec2_state: RunInstances / the launch wizard), which lives outside vpc_core's model."""
+        import sys
+        fn = getattr(sys.modules.get("server"), "ec2_runtime_alarm_action", None)
+        return fn(instance_id, action) if callable(fn) else None
+
+    @_vpc_model.setter
+    def _vpc_model(self, model):
+        st = self._space_store()
+        if st is not None:
+            st._vpc_model = model
+
+
+class _AzQueueSlotBase:
+    def __init__(self):
+        self.queues = {}   # queue name -> {"metadata": {}, "messages": [message dict, …]} (JSON form)
+
+
+class AppStateAzureQueueSlot(_CoreSlotStore, _AzQueueSlotBase):
+    """The Azure space's `queue_core` slot: Storage Queue queues + messages in JSON form."""
+    _BASE, _SLOT, _PROVIDER = _AzQueueSlotBase, "queue_core", "azure"
+
+
+from core.azure_queue_core import AzureQueueStore as _AzQueueStore   # noqa: E402
+
+
+class AppStateAzureQueueStore(_AzQueueStore):
+    """Azure Storage Queue data plane (core/azure_queue_core.py — the root queue wire the v4
+    console and Nano speak) over the Azure space's slot. The core mutates live `_Message`
+    objects (datetimes, dequeue counts) and calls persist() after every mutation, so the live
+    objects are cached per slot and written back in JSON form on persist()."""
+
+    def __init__(self):   # NB: no super().__init__() — `queues` is resolved per active space
+        self._slot = AppStateAzureQueueSlot()
+        self._live: tuple = (None, {})
+
+    @property
+    def queues(self) -> dict:
+        from core.persistent_store import PersistentAzureQueueStore as _P
+        slot = self._slot._dir()
+        if self._live[0] is not slot:
+            live = {name: {"metadata": dict(q.get("metadata") or {}),
+                           "messages": [_P._d2m(m) for m in q.get("messages") or []]}
+                    for name, q in (slot.get("queues") or {}).items()}
+            self._live = (slot, live)
+        return self._live[1]
+
+    @queues.setter
+    def queues(self, value):
+        self._live = (self._slot._dir(), value)
+        self.persist()
+
+    def create_queue(self, name, metadata=None):
+        super().create_queue(name, metadata)
+        self.persist()
+
+    def delete_queue(self, name):
+        super().delete_queue(name)
+        self.persist()
+
+    def persist(self) -> None:
+        from core.persistent_store import PersistentAzureQueueStore as _P
+        live = self.queues
+        self._slot._dir()["queues"] = {name: {"metadata": q["metadata"], "messages": [_P._m2d(m) for m in q["messages"]]}
+                                       for name, q in live.items()}
+
+
+_AZ_QUEUE = None
+
+
+def az_queue_store() -> AppStateAzureQueueStore:
+    global _AZ_QUEUE
+    if _AZ_QUEUE is None:
+        _AZ_QUEUE = AppStateAzureQueueStore()
+    return _AZ_QUEUE
+
+
+_AWS_RUNTIME: dict | None = None
+
+
+def aws_runtime_core_stores() -> dict:
+    """Durable offline stores for the AWS cores whose native wire the appliance serves through
+    the shared router (keyed by AwsWireRouter store name)."""
+    global _AWS_RUNTIME
+    if _AWS_RUNTIME is None:
+        _AWS_RUNTIME = {"dax": AppStateDaxStore(), "dlm": AppStateDlmStore(),
+                        "ram": AppStateRamStore(), "cfn": AppStateCloudFormationStore(),
+                        "vpc": OfflineVpcStore()}
+    return _AWS_RUNTIME
 
 
 # core module → its durable store (installed as the module's `shared_store()` singleton)
