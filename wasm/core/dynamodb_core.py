@@ -47,7 +47,7 @@ import time
 import uuid
 import zlib
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from core.nosql_store import NoSqlStore
@@ -922,7 +922,15 @@ def _seq_str(n: int) -> str:
 
 
 def _new_stream(table: dict, view_type: str) -> dict:
-    label = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3]
+    # The label is a millisecond timestamp; re-enabling within the same millisecond must
+    # still open a NEW stream (a new StreamArn), so never reuse or go below the last label.
+    now = datetime.now(timezone.utc)
+    label = now.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3]
+    last = str(table.get("last_stream_label") or "")
+    while label <= last:
+        now += timedelta(milliseconds=1)
+        label = now.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3]
+    table["last_stream_label"] = label
     return {
         "enabled": True, "view_type": view_type, "label": label,
         "arn": f"{table['table_arn']}/stream/{label}",
