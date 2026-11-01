@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import base64
 import datetime
+import hashlib
 import re
 import uuid
 from urllib.parse import urlsplit
@@ -220,6 +221,42 @@ def keyvault_network_denied(state: dict | None, vault: str) -> bool:
     return (p.get("networkAcls") or {}).get("defaultAction") == "Deny"
 
 
+def acr_registry_properties(state: dict | None, registry: str) -> dict:
+    """Look up a Microsoft.ContainerRegistry/registries resource's `properties` by registry
+    name alone (the registry's own data plane — core/azure_acr_core.py — never learns the
+    subscription/resource group it lives in; the console tells the wire router which registry
+    it's showing via the `x-vyomi-registry` header, same mechanism as `vault_properties` above)."""
+    if not state or not registry:
+        return {}
+    want = f"/registries/{registry}".lower()
+    for rec in state.values():
+        if isinstance(rec, dict) and rec.get("_type", "").lower() == "microsoft.containerregistry/registries" \
+                and rec.get("id", "").lower().endswith(want):
+            return rec.get("properties") or {}
+    return {}
+
+
+def acr_network_denied(state: dict | None, registry: str) -> bool:
+    """True when this registry's ARM-configured networking (Networking blade /
+    azure.acr.networking) would reject a data-plane call: public network access disabled
+    (Vyomi has no private-endpoint/VNet path to let it through, the same simplification
+    keyvault_network_denied makes)."""
+    return acr_registry_properties(state, registry).get("publicNetworkAccess") == "Disabled"
+
+
+def acr_retention_days(state: dict | None, registry: str) -> int | None:
+    """The registry's untagged-manifest retention policy (Retention (Preview) blade /
+    azure.acr.retention) if enabled, else None — core/azure_acr_core.py's purge sweep uses this
+    to actually delete untagged manifests older than the configured window."""
+    policy = (acr_registry_properties(state, registry).get("policies") or {}).get("retentionPolicy") or {}
+    if policy.get("status") != "enabled":
+        return None
+    try:
+        return int(policy.get("days", 7))
+    except (TypeError, ValueError):
+        return None
+
+
 def _now() -> str:
     return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
@@ -307,6 +344,41 @@ def _merge(base: dict, overlay: dict) -> dict:
         else:
             out[k] = v
     return out
+
+
+def _h(*parts, n=8):
+    return hashlib.sha1("|".join(str(p) for p in parts).encode()).hexdigest()[:n]
+
+
+def _guid(*parts):
+    h = _h(*parts, n=32)
+    return f"{h[0:8]}-{h[8:12]}-{h[12:16]}-{h[16:20]}-{h[20:32]}"
+
+
+_NO_IDENTITY = {"type": "None", "principalId": None, "tenantId": None, "userAssignedIdentities": None}
+
+
+def _apply_identity(rec: dict, ident: dict) -> None:
+    """``identity`` is a top-level sibling of ``properties`` on ANY generic-catalog resource
+    (real ARM shape) — generic over every type this engine serves (ACR, APIM, VMs, …), mirroring
+    azure_webapp_core.py's own ``_apply_identity`` for Microsoft.Web. A partial PATCH with no
+    "type" (e.g. a caller stamping its own principalId) still just MERGES onto whatever identity
+    is already there, like any other field. A PATCH that DOES carry "type" re-derives the whole
+    block: System-assigned gets a stable, deterministic principal/tenant id (minted once, kept
+    across repeat PUT/PATCH like the real RP does), and switching to "None" clears it. User-
+    assigned identities are stored by resource id but not resolved (Vyomi has no Managed Identity
+    resource of its own)."""
+    cur = rec.get("identity") or dict(_NO_IDENTITY)
+    if "type" not in ident:
+        rec["identity"] = _merge(cur, ident)
+        return
+    itype = str(ident.get("type") or "None")
+    out = {"type": itype, "principalId": None, "tenantId": None,
+           "userAssignedIdentities": ident.get("userAssignedIdentities") or cur.get("userAssignedIdentities") or {}}
+    if "systemassigned" in itype.lower():
+        out["principalId"] = cur.get("principalId") or _guid(rec["id"], "principal")
+        out["tenantId"] = _guid(rec["_sub"], "tenant")
+    rec["identity"] = out
 
 
 def _public_ip() -> str:
@@ -524,11 +596,96 @@ class AzureArm:
                 base.update({"id": op["id"], "name": op["name"], "startTime": op["startTime"], "endTime": op["endTime"]})
                 base.update(op.get("result") or {})
             return _ok(base)
+        # Microsoft.ResourceGraph/resources ("Open query" on any browse list's command bar):
+        # real Azure Resource Graph is TENANT-scoped (no /subscriptions/{sub}/ prefix — the
+        # subscriptions to search are in the request body instead), so it's handled before the
+        # /subscriptions/ prefix check below, same URL shape the Resource Graph Explorer uses.
+        if "/providers/Microsoft.ResourceGraph/resources" in path:
+            if method != "POST":
+                return _err(405, "MethodNotAllowed", "Use POST to run a Resource Graph query.")
+            return self._resource_graph(body if isinstance(body, dict) else {})
         i = path.find("/subscriptions/")
         if i == -1:
             return _err(404, "NotFound", f"Not an ARM path: {path}")
         rest = path[i + len("/subscriptions/"):].split("?", 1)[0]
         return self._arm(method, rest, query, body if isinstance(body, dict) else {})
+
+    # ── Microsoft.ResourceGraph/resources: a real, minimal KQL subset (table "Resources" or
+    # "ResourceContainers" | where <field> ==/=~/contains '<value>' [and ...] | project <fields>
+    # | limit <n> | order by <field> [asc|desc] | count) evaluated over THIS engine's own
+    # resource store — genuine cross-type/cross-subscription query results, not a canned
+    # response (azure.acr.registry.listactions' "Open query"). ──────────────────────────────
+    _RG_FIELDS = {
+        "id": lambda r: r.get("id"), "name": lambda r: r.get("name"), "type": lambda r: r.get("type"),
+        "kind": lambda r: r.get("kind"), "location": lambda r: r.get("location"),
+        "resourcegroup": lambda r: r.get("_rg") or "", "subscriptionid": lambda r: r.get("_sub") or "",
+        "tenantid": lambda r: "00000000-0000-0000-0000-000000000000",
+        "tags": lambda r: r.get("tags") or {}, "properties": lambda r: r.get("properties") or {},
+    }
+    _RG_DEFAULT_COLUMNS = ["id", "name", "type", "tenantid", "kind", "location", "resourcegroup", "subscriptionid"]
+    _RG_WHERE_RE = re.compile(r"^\s*(\w+)\s*(=~|==|contains)\s*'([^']*)'\s*$")
+
+    def _resource_graph(self, payload: dict):
+        q = str((payload or {}).get("query") or "").strip()
+        if not q:
+            return _err(400, "BadRequest", "The query field is required.")
+        subs = {str(s).lower() for s in (payload.get("subscriptions") or [])}
+        stages = [s.strip() for s in q.split("|")]
+        table = stages[0].strip().lower()
+        if table not in ("resources", "resourcecontainers"):
+            return _err(400, "BadRequest", f"Table '{stages[0].strip()}' is not supported. Only 'Resources' and 'ResourceContainers' are simulated.")
+        is_rg_table = table == "resourcecontainers"
+        rows = [rec for rec in self.state.values()
+                if isinstance(rec, dict) and rec.get("id") and "/__event__/" not in rec.get("id", "")
+                and (not subs or str(rec.get("_sub", "")).lower() in subs)
+                and (rec.get("_type", "").lower() == "microsoft.resources/resourcegroups") == is_rg_table]
+        columns = list(self._RG_DEFAULT_COLUMNS)
+        limit, count_only = None, False
+        for stage in stages[1:]:
+            s = stage.strip()
+            low = s.lower()
+            if low.startswith("where "):
+                for clause in re.split(r"\s+and\s+", s[6:], flags=re.IGNORECASE):
+                    m = self._RG_WHERE_RE.match(clause)
+                    if not m:
+                        return _err(400, "BadRequest", f"Unsupported 'where' clause: {clause.strip()}")
+                    field, op, value = m.group(1).lower(), m.group(2), m.group(3)
+                    getter = self._RG_FIELDS.get(field)
+                    if getter is None:
+                        return _err(400, "BadRequest", f"Unknown column '{field}'.")
+                    def _match(rec, getter=getter, op=op, value=value):
+                        v = str(getter(rec) or "")
+                        return (value.lower() in v.lower()) if op == "contains" else \
+                               (v.lower() == value.lower()) if op == "=~" else (v == value)
+                    rows = [r for r in rows if _match(r)]
+            elif low.startswith("project "):
+                fields = [f.strip().lower() for f in s[8:].split(",") if f.strip()]
+                unknown = [f for f in fields if f not in self._RG_FIELDS]
+                if unknown:
+                    return _err(400, "BadRequest", f"Unknown column(s) in project: {', '.join(unknown)}.")
+                columns = fields
+            elif low.startswith("limit "):
+                try:
+                    limit = int(s[6:].strip())
+                except ValueError:
+                    return _err(400, "BadRequest", "limit requires an integer.")
+            elif low == "count":
+                count_only = True
+            elif low.startswith("order by "):
+                field = s[9:].strip().split()[0].lower()
+                getter = self._RG_FIELDS.get(field)
+                if getter is not None:
+                    rows = sorted(rows, key=lambda r: str(getter(r) or ""), reverse="desc" in low)
+            else:
+                return _err(400, "BadRequest", f"Unsupported query stage: {stage.strip()}")
+        if count_only:
+            return _ok({"totalRecords": len(rows), "count": len(rows), "data": [{"Count": len(rows)}], "resultTruncated": "false"})
+        if limit is not None:
+            rows = rows[:limit]
+        out_rows = [[self._RG_FIELDS[c](r) for c in columns] for r in rows]
+        return _ok({"totalRecords": len(out_rows), "count": len(out_rows),
+                    "data": {"columns": [{"name": c, "type": "string"} for c in columns], "rows": out_rows},
+                    "facets": [], "resultTruncated": "false"})
 
     # ── ARM dispatcher (port of handle_arm) ───────────────────────────────
     def _arm(self, method, rest, query, payload):
@@ -896,6 +1053,9 @@ class AzureArm:
             blocked = self._apim_tier_block(type_chain, names, payload, sub, rg)
             if blocked:
                 return blocked
+            blocked = self._acr_validate_block(type_chain, names, payload, sub, rg)
+            if blocked:
+                return blocked
             if full_type.lower() == "microsoft.authorization/roleassignments":
                 # Real ARM derives a role assignment's scope from the resource ID it was PUT
                 # under — not from a client-supplied properties.scope — so checkAccess and the
@@ -1030,6 +1190,84 @@ class AzureArm:
             return _err(400, "BadRequest", "The Consumption tier has no scale units — sku.capacity must be 0.")
         if tier == "Developer" and capacity not in (None, 1):
             return _err(400, "BadRequest", "The Developer tier is capped at exactly 1 unit (no scale-out, no SLA).")
+        return None
+
+    _ACR_PREMIUM_CHILD = {
+        "replications": "Geo-replication", "cacherules": "Cache rules",
+        "connectedregistries": "Connected registries", "tokens": "Tokens", "scopemaps": "Scope maps",
+    }
+    _ACR_SCOPE_PERMS = {"content/read", "content/write", "content/delete", "metadata/read", "metadata/write"}
+
+    def _acr_scope_action_valid(self, action: str) -> bool:
+        if ":" not in action:
+            return False
+        repo, perms = action.split(":", 1)
+        return bool(repo) and bool(perms) and all(p in self._ACR_SCOPE_PERMS for p in perms.split(","))
+
+    def _acr_validate_block(self, type_chain, names, payload, sub, rg):
+        """Microsoft.ContainerRegistry — real ACR tier gates (geo-replication, cache rules,
+        connected registries, repository-scoped tokens/scope maps and ACR Tasks are Premium/
+        Standard-only features; customer-managed-key encryption, zone redundancy and disabling
+        public network access are Premium-only too) plus the cross-field validation real ACR
+        applies to those child resources (region/target uniqueness, well-formed scope-map
+        actions, a token's scopeMapId must reference a real scope map) — Vyomi now ENFORCES
+        these instead of just storing whatever the caller sends (azure.acr.georeplications,
+        .cache, .connectedregistries, .tokens, .scopemaps, .tasks, .encryption, .networking)."""
+        if type_chain[0].lower() != "microsoft.containerregistry" or type_chain[1].lower() != "registries":
+            return None
+        props = (payload or {}).get("properties") or {}
+        if len(type_chain) == 2:
+            existing = self.state.get(_canonical_id(sub, rg, type_chain, names).lower()) or {}
+            sku = (payload or {}).get("sku") or {}
+            # ACR's sku.name IS its tier (Basic/Standard/Premium, no separate tier label) —
+            # checked before sku.tier, which the generic catalog default always stamps
+            # "Standard" unless a caller explicitly overrides it too.
+            tier = sku.get("name") or sku.get("tier") or (existing.get("sku") or {}).get("name") or (existing.get("sku") or {}).get("tier")
+            if tier != "Premium":
+                if (props.get("encryption") or {}).get("status") == "enabled":
+                    return _err(400, "BadRequest", "Customer-managed key encryption requires a Premium registry.")
+                if props.get("zoneRedundancy") == "Enabled":
+                    return _err(400, "BadRequest", "Zone redundancy requires a Premium registry.")
+                if props.get("publicNetworkAccess") == "Disabled":
+                    return _err(400, "BadRequest", "Disabling public network access requires a Premium registry.")
+                if (props.get("networkRuleSet") or {}).get("ipRules"):
+                    return _err(400, "BadRequest", "IP network rules require a Premium registry.")
+            return None
+        if len(type_chain) != 3:
+            return None
+        child = type_chain[2].lower()
+        parent_rid = _canonical_id(sub, rg, type_chain[:-1], names[:-1]).lower()
+        parent = self.state.get(parent_rid) or {}
+        tier = (parent.get("sku") or {}).get("name") or (parent.get("sku") or {}).get("tier")
+        if child in self._ACR_PREMIUM_CHILD and tier != "Premium":
+            return _err(400, "BadRequest", f"{self._ACR_PREMIUM_CHILD[child]} require a Premium registry.")
+        if child == "tasks" and tier == "Basic":
+            return _err(400, "BadRequest", "Tasks require a Standard or Premium registry.")
+        if child == "replications":
+            region = str(payload.get("location") or "").lower()
+            if region and region == str(parent.get("location") or "").lower():
+                return _err(400, "BadRequest", "A registry cannot be replicated to its own primary location.")
+            for k, rec in self.state.items():
+                if k == parent_rid or not k.startswith(parent_rid + "/replications/"):
+                    continue
+                if rec.get("name") != names[-1] and region and str(rec.get("location") or "").lower() == region:
+                    return _err(409, "Conflict", f"A replication to '{region}' already exists on this registry.")
+        if child == "scopemaps" and isinstance(props.get("actions"), list):
+            bad = [a for a in props["actions"] if not self._acr_scope_action_valid(a)]
+            if bad:
+                return _err(400, "BadRequest", f"Invalid scope map action(s): {', '.join(bad)}. Use '<repository>:<content|metadata>/<read|write|delete>'.")
+        if child == "tokens":
+            smid = props.get("scopeMapId")
+            if smid and not self.state.get(str(smid).lower()):
+                return _err(400, "BadRequest", f"scopeMapId '{smid}' does not reference an existing scope map.")
+        if child == "cacherules":
+            target = props.get("targetRepository")
+            if target:
+                for k, rec in self.state.items():
+                    if k == parent_rid or not k.startswith(parent_rid + "/cacherules/"):
+                        continue
+                    if rec.get("name") != names[-1] and (rec.get("properties") or {}).get("targetRepository") == target:
+                        return _err(409, "Conflict", f"Target repository '{target}' is already mapped by cache rule '{rec.get('name')}'.")
         return None
 
     def _aks_stopped_block(self, type_chain, names, sub, rg):
@@ -1482,7 +1720,7 @@ class AzureArm:
         if isinstance(payload.get("sku"), dict):
             rec["sku"] = _merge(rec.get("sku", {}), payload["sku"])
         if isinstance(payload.get("identity"), dict):
-            rec["identity"] = _merge(rec.get("identity", {}), payload["identity"])
+            _apply_identity(rec, payload["identity"])
         if isinstance(payload.get("properties"), dict):
             rec["properties"] = _merge(rec.get("properties", {}), payload["properties"])
 

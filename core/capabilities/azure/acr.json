@@ -14,8 +14,11 @@
  },
  "azure.acr.registry.listactions": {
   "title": "\"Manage view\", \"Open query\" (Azure Resource Graph) and \"Assign tags\" on the registries list",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["Azure Resource Graph, saved views and bulk tag assignment across resources are not modeled."]
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "\"Manage view\" is the lens kit's own column chooser (BrowseGrid), a console preference that needs no backend. \"Open query\" runs a real, minimal KQL subset (table Resources/ResourceContainers, where/project/limit/order by/count) evaluated over the ARM engine's own resource store — not a canned response, but not full Kusto either (no joins, summarize, or time-series operators). \"Assign tags\" PATCHes real ARM tags onto every selected registry."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
  },
  "azure.acr.admin_credentials": {
   "title": "Admin user credentials (listCredentials / regenerateCredential)",
@@ -67,8 +70,11 @@
  },
  "azure.acr.overview_tabs": {
   "title": "Overview Monitoring, Capabilities and Recommendations tabs",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["Pull/push throughput charts, the capabilities summary and Advisor recommendations are not modeled."]
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "Monitoring shows a live snapshot of this registry's own state (repository/webhook/geo-replication counts read off the real data plane and ARM child resources) — Vyomi doesn't meter push/pull bandwidth over time, so there is no historical throughput chart. Capabilities computes a real Yes/No feature matrix from the registry's actual sku tier, not a static reference table. Recommendations reuses the same live Defender for Cloud rule engine as the Microsoft Defender for Cloud blade (azure.acr.defender / azure.defender.recommendations)."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py", "tests/conformance/test_azure_security_core.py"]
  },
  "azure.acr.monitoring": {
   "title": "Insights, Alerts, Metrics, Diagnostic settings and Logs",
@@ -88,8 +94,11 @@
  },
  "azure.acr.create_fields": {
   "title": "Domain name label scope and Role assignment permissions mode (create wizard)",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["These 2025 ARM additions are collected in the wizard for fidelity but stored on neither ARM nor the registry record — Vyomi has no DNS label or ABAC-repository-permission layer to apply them to."]
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "Both 2025 ARM additions are stored on the registry's own properties for real (ARM PUT/GET round-trip), surfaced in Properties/Essentials and included in Export template — Vyomi does not model a DNS-label-reuse layer or an ABAC-repository-permission ENGINE for them to additionally gate (repository-scoped Tokens/Scope maps remain usable regardless of the selected mode, same as real ACR's own RBAC-vs-ABAC rollout)."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
  },
  "azure.acr.defender": {
   "title": "Microsoft Defender for Cloud (this container registry's recommendations)",
@@ -98,9 +107,105 @@
   "api": ["Assessments_List (resource scope)"],
   "tests": ["tests/conformance/test_azure_security_core.py"]
  },
- "azure.acr.tools": {
-  "title": "Quick start, Events, Encryption, Identity, Networking, Geo-replications, Tasks, Cache, Connected registries, Tokens, Scope maps, Retention (Preview), and Support + Troubleshooting",
+ "azure.acr.quickstart": {
+  "title": "Quick start",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": ["Docker/az-acr sign-in, push and pull snippets are generated from this registry's own live login server and admin-user state — there is nothing further to simulate."],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.acr.events": {
+  "title": "Events",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Event Grid system topics scoped to this registry (Microsoft.EventGrid/systemTopics, filtered by source) are real, stored ARM resources using the same engine the Event Grid service itself ships — but, like Webhooks, Vyomi never actually fires a push/delete event at a subscriber endpoint."
+  ],
+  "tests": ["tests/conformance/test_azure_eventgrid_core.py"]
+ },
+ "azure.acr.encryption": {
+  "title": "Encryption",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Customer-managed key encryption is ENFORCED Premium-only (server-side, not just a disabled UI control) and requires a system assigned managed identity to be turned on first, same as real ACR requiring an identity to reach the key. The key identifier is stored and round-tripped for real; Vyomi does not re-encrypt or validate repository content against the referenced Key Vault key."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.acr.identity": {
+  "title": "Identity",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "System assigned managed identity mints a real, stable principalId/tenantId (generic over every ARM catalog type, core/azure_arm_core.py's _apply_identity) that persists across PUT/PATCH and clears on 'None'. User assigned identities stay an honest gap — Vyomi has no Managed Identity resource of its own to attach, same as the App Service/VM Identity blades."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.acr.networking": {
+  "title": "Networking",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Disabling public network access is ENFORCED on the registry's own data-plane endpoint for real (push/pull/_catalog/… are rejected with a 403 while it's off — core/azure_arm_core.py's acr_network_denied, wired through the x-vyomi-registry header in core/aws_wire_router.py and core/wire_ingress.py) and is Premium-gated server-side. Vyomi has no private-endpoint/VNet path to let a caller back in, and per-IP firewall allow-list rules are not evaluated (same simplification Key Vault's own networking makes)."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.acr.georeplications": {
+  "title": "Geo-replications",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Replication resources are real, Premium-gated nested ARM child resources, server-side validated (no replicating to the registry's own primary location, no duplicate-region replication). Actual cross-region data redundancy isn't modeled — this registry's repositories are already a single process-global store (see azure.acr.repositories)."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.acr.tasks": {
+  "title": "Tasks",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Task definitions and run history are real, Standard+-gated, stored ARM resources (registries/tasks + registries/runs) — \"Run now\" records a genuine run, but Vyomi never executes the build itself: there is no container runtime, and a real build would need to pull base images over the real internet, which the simulator never does."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.acr.cache": {
+  "title": "Cache",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Cache rule definitions are real, Premium-gated nested ARM child resources, server-side validated (each target repository can only be mapped by one rule). Vyomi never actually fetches from the upstream registry — nothing leaves the simulator."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.acr.connectedregistries": {
+  "title": "Connected registries",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Connected registry definitions are real, Premium-gated nested ARM child resources. Vyomi runs no edge/offline sync agent, so content never actually replicates to one."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.acr.tokens": {
+  "title": "Tokens",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Token resources are real, Premium-gated nested ARM child resources: a token's scopeMapId is server-side validated against a real scope map on the same registry. Tokens are not wired to the data plane's own authentication — a docker/oras client is never actually challenged for one (same gap as azure.acr.admin_credentials)."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.acr.scopemaps": {
+  "title": "Scope maps",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Scope map resources are real, Premium-gated nested ARM child resources: `actions` entries are server-side validated against the real grammar (<repository>:<content|metadata>/<read|write|delete>[,...]). They are not enforced against the data plane's own authorization (same gap as Tokens)."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.acr.retention": {
+  "title": "Retention (Preview)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "ENFORCED for real: once enabled, an untagged manifest is purged after it has gone untagged for longer than the configured number of days (core/azure_acr_core.py's purge_untagged, swept on every data-plane call via the x-vyomi-registry header) — not a stored setting nobody acts on. Because repositories are process-global (azure.acr.repositories), the policy that applies during a sweep is whichever registry's data-plane call triggered it, not cleanly isolated per registry if more than one registry has retention enabled at once."
+  ],
+  "tests": ["tests/conformance/test_azure_acr_core.py"]
+ },
+ "azure.acr.support_troubleshooting": {
+  "title": "Support + Troubleshooting",
   "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["These portal blade menu items (push/pull quick-start snippets, CMK encryption, managed identity, private networking, geo-replication, ACR Tasks, cache rules, connected registries, repository-scoped tokens/scope maps, retention policy, and the support tools) are not modeled."]
+  "limitations": [
+   "Opening a support request routes to Microsoft's own support ticketing system — a genuine third party Vyomi has no backing support organization to open a ticket against."
+  ]
  }
 }

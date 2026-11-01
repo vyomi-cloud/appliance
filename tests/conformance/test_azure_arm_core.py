@@ -588,6 +588,96 @@ def run() -> int:
     r = arm.handle("GET", acr2 + "/providers/Microsoft.Insights/diagnosticSettings", {"api-version": "2021-05-01-preview"})
     _check("a sibling registry's diagnostic settings stay empty", r["body"]["value"] == [])
 
+    # azure.acr.identity: System-assigned managed identity mints a stable, deterministic
+    # principal/tenant id (generic over every catalog type — azure_webapp_core.py's own
+    # _apply_identity for Microsoft.Web, ported here for ACR/APIM/VMs), and clears on "None".
+    r = arm.handle("PATCH", acr, {"api-version": AV_ACR}, {"identity": {"type": "SystemAssigned"}})
+    _check("System-assigned identity mints a principalId", r["status"] == 200 and r["body"]["identity"]["principalId"])
+    pid = r["body"]["identity"]["principalId"]
+    r = arm.handle("GET", acr, {"api-version": AV_ACR})
+    _check("principalId is stable across a no-op GET/PATCH", r["body"]["identity"]["principalId"] == pid)
+    r = arm.handle("PATCH", acr, {"api-version": AV_ACR}, {"identity": {"type": "SystemAssigned"}})
+    _check("re-PATCHing SystemAssigned keeps the SAME principalId", r["body"]["identity"]["principalId"] == pid)
+    r = arm.handle("PATCH", acr, {"api-version": AV_ACR}, {"identity": {"type": "None"}})
+    _check("switching identity back to None clears the principalId", r["body"]["identity"]["principalId"] is None)
+
+    # azure.acr.tools: geo-replication / cache rules / connected registries / tokens / scope
+    # maps are Premium-only features in real ACR, and Tasks need at least Standard — Vyomi now
+    # ENFORCES those tier gates instead of silently storing the child resource regardless.
+    r = arm.handle("PUT", acr + "/replications/westus", {"api-version": AV_ACR}, {"location": "westus"})
+    _check("geo-replication on a Standard registry is rejected", r["status"] == 400)
+    r = arm.handle("PUT", acr + "/scopeMaps/sm1", {"api-version": AV_ACR}, {"properties": {"actions": ["repo1:content/read"]}})
+    _check("scope maps on a Standard registry is rejected", r["status"] == 400)
+    r = arm.handle("PUT", acr + "/tasks/t1", {"api-version": AV_ACR}, {"properties": {}})
+    _check("Tasks on a Standard registry IS allowed (Standard+, not Premium-only)", r["status"] == 201)
+
+    acrprem = _p(RG, "Microsoft.ContainerRegistry", "registries", "uicacrprem")
+    arm.handle("PUT", acrprem, {"api-version": AV_ACR}, {"location": "eastus", "sku": {"name": "Premium", "tier": "Premium"}})
+    r = arm.handle("PUT", acrprem + "/replications/westus", {"api-version": AV_ACR}, {"location": "westus"})
+    _check("geo-replication to a different region on a Premium registry succeeds", r["status"] == 201)
+    r = arm.handle("PUT", acrprem + "/replications/eastus", {"api-version": AV_ACR}, {"location": "eastus"})
+    _check("replicating to the registry's own primary location is rejected", r["status"] == 400)
+    r = arm.handle("PUT", acrprem + "/replications/westus2", {"api-version": AV_ACR}, {"location": "westus"})
+    _check("a second replication to an already-replicated region is rejected", r["status"] == 409)
+
+    r = arm.handle("PUT", acrprem + "/scopeMaps/sm1", {"api-version": AV_ACR}, {"properties": {"actions": ["repo1:content/read,content/write"]}})
+    _check("well-formed scope map actions on a Premium registry succeed", r["status"] == 201)
+    r = arm.handle("PUT", acrprem + "/scopeMaps/sm2", {"api-version": AV_ACR}, {"properties": {"actions": ["repo1:bogus/perm"]}})
+    _check("malformed scope map action is rejected", r["status"] == 400)
+    r = arm.handle("PUT", acrprem + "/tokens/tok1", {"api-version": AV_ACR}, {"properties": {"scopeMapId": acrprem + "/scopeMaps/sm1"}})
+    _check("a token referencing a real scope map succeeds", r["status"] == 201)
+    r = arm.handle("PUT", acrprem + "/tokens/tok2", {"api-version": AV_ACR}, {"properties": {"scopeMapId": acrprem + "/scopeMaps/doesnotexist"}})
+    _check("a token referencing an unknown scope map is rejected", r["status"] == 400)
+
+    r = arm.handle("PUT", acrprem + "/cacheRules/cr1", {"api-version": AV_ACR}, {"properties": {"sourceRepository": "docker.io/library/ubuntu", "targetRepository": "ubuntu"}})
+    _check("cache rule create succeeds", r["status"] == 201)
+    r = arm.handle("PUT", acrprem + "/cacheRules/cr2", {"api-version": AV_ACR}, {"properties": {"sourceRepository": "docker.io/library/alpine", "targetRepository": "ubuntu"}})
+    _check("a second cache rule targeting the same repository is rejected", r["status"] == 409)
+
+    # Customer-managed-key encryption / zone redundancy / disabling public network access are
+    # Premium-only at the REGISTRY level too (not just its child resources).
+    r = arm.handle("PATCH", acr, {"api-version": AV_ACR}, {"properties": {"encryption": {"status": "enabled"}}})
+    _check("enabling CMK encryption on a Standard registry is rejected", r["status"] == 400)
+    r = arm.handle("PATCH", acrprem, {"api-version": AV_ACR}, {"properties": {"encryption": {"status": "enabled"}}})
+    _check("enabling CMK encryption on a Premium registry succeeds", r["status"] == 200)
+    r = arm.handle("PATCH", acr, {"api-version": AV_ACR}, {"properties": {"publicNetworkAccess": "Disabled"}})
+    _check("disabling public network access on a Standard registry is rejected", r["status"] == 400)
+
+    # azure.acr.networking: publicNetworkAccess=Disabled actually blocks the registry's own
+    # data-plane calls (not just a stored setting) — see acr_network_denied, wired through
+    # core/aws_wire_router.py / core/wire_ingress.py with the x-vyomi-registry header.
+    from core.azure_arm_core import acr_network_denied
+    _check("acr_network_denied is false while public network access is Enabled", acr_network_denied(arm.state, "uicacr") is False)
+    r = arm.handle("PATCH", acrprem, {"api-version": AV_ACR}, {"properties": {"publicNetworkAccess": "Disabled"}})
+    _check("disabling public network access on a Premium registry succeeds", r["status"] == 200)
+    _check("acr_network_denied is true once public network access is Disabled", acr_network_denied(arm.state, "uicacrprem") is True)
+
+    # azure.acr.registry.listactions: Microsoft.ResourceGraph/resources ("Open query") — a
+    # real, minimal KQL subset evaluated over this engine's OWN resource store, not a stub.
+    r = arm.handle("POST", "/providers/Microsoft.ResourceGraph/resources", {"api-version": "2021-03-01"},
+                   {"query": "Resources | where type =~ 'microsoft.containerregistry/registries' | project name, location"})
+    names = {row[0] for row in r["body"]["data"]["rows"]}
+    _check("Resource Graph query finds both registries", {"uicacr", "uicacrprem"} <= names)
+    r = arm.handle("POST", "/providers/Microsoft.ResourceGraph/resources", {"api-version": "2021-03-01"},
+                   {"query": "Resources | where type =~ 'microsoft.containerregistry/registries' | where name == 'uicacrprem' | project name"})
+    _check("Resource Graph 'where' clauses chain (AND)", [row[0] for row in r["body"]["data"]["rows"]] == ["uicacrprem"])
+    r = arm.handle("POST", "/providers/Microsoft.ResourceGraph/resources", {"api-version": "2021-03-01"}, {"query": "NotARealTable | count"})
+    _check("Resource Graph rejects an unsupported table", r["status"] == 400)
+
+    # azure.acr.tasks: a run is a real, nested child resource too (registries/{reg}/runs).
+    r = arm.handle("PUT", acrprem + "/runs/run1", {"api-version": AV_ACR}, {"properties": {"taskName": "t1", "status": "Succeeded"}})
+    _check("task run create 201", r["status"] == 201 and r["body"]["properties"]["taskName"] == "t1")
+    r = arm.handle("GET", acrprem + "/runs", {"api-version": AV_ACR})
+    _check("run history lists the run", [x["name"] for x in r["body"]["value"]] == ["run1"])
+
+    # azure.acr.connectedregistries: Premium-gated, same generic nested-child mechanism.
+    r = arm.handle("PUT", acrprem + "/connectedRegistries/edge1", {"api-version": AV_ACR}, {"properties": {"mode": "ReadOnly"}})
+    _check("connected registry create succeeds on Premium", r["status"] == 201)
+    r = arm.handle("PUT", acr + "/connectedRegistries/edge2", {"api-version": AV_ACR}, {"properties": {"mode": "ReadOnly"}})
+    _check("connected registry create rejected on Standard", r["status"] == 400)
+
+    r = arm.handle("DELETE", acrprem, {"api-version": AV_ACR})
+    _check("premium registry delete 200", r["status"] == 200)
     r = arm.handle("DELETE", acr, {"api-version": AV_ACR})
     _check("registry delete 200", r["status"] == 200)
     # 21. Network security groups + security rules — a nested, same-namespace child

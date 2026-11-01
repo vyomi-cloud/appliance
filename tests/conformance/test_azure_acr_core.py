@@ -10,11 +10,12 @@ Run on host:    python3 tests/conformance/test_azure_acr_core.py
 Run in Pyodide: loaded by the wasm/ harness (same file).
 """
 import json
+from datetime import datetime, timedelta, timezone
 
 try:
-    from core.azure_acr_core import AcrRegistryStore, dispatch
+    from core.azure_acr_core import AcrRegistryStore, dispatch, purge_untagged
 except ImportError:  # pragma: no cover - Pyodide flat layout
-    from azure_acr_core import AcrRegistryStore, dispatch  # type: ignore
+    from azure_acr_core import AcrRegistryStore, dispatch, purge_untagged  # type: ignore
 
 
 def _check(name, cond):
@@ -159,6 +160,21 @@ def run() -> int:
     # 16. an upload session unknown to the registry 404s (not a silent no-op) ───────────────
     unknown_session = dispatch(st, "PATCH", "/v2/withlayers/blobs/uploads/does-not-exist", {}, {}, b"x")
     _check("unknown upload session 404", unknown_session.status == 404 and _jbody(unknown_session)["errors"][0]["code"] == "BLOB_UPLOAD_UNKNOWN")
+
+    # 17. Retention (Preview): an untagged manifest's clock starts the moment its last tag is
+    # removed, and purge_untagged() only deletes manifests whose clock is older than the policy's
+    # `days` — azure.acr.retention's real enforcement, not a stored setting nobody acts on. ─────
+    dispatch(st, "PUT", "/v2/retain/manifests/v1", {}, {"content-type": "application/vnd.docker.distribution.manifest.v2+json"}, MANIFEST)
+    _check("freshly tagged manifest is not untagged", st.repos["retain"]["manifests"][list(st.repos["retain"]["manifests"])[0]]["untaggedAt"] is None)
+    dispatch(st, "DELETE", "/acr/v1/retain/_tags/v1")  # untags it — starts the retention clock
+    digest_key = list(st.repos["retain"]["manifests"])[0]
+    _check("untagging a manifest starts its retention clock", st.repos["retain"]["manifests"][digest_key]["untaggedAt"] is not None)
+    purge_untagged(st, 7)
+    _check("sweep keeps a manifest untagged for less than the policy window", "retain" in st.repos)
+    st.repos["retain"]["manifests"][digest_key]["untaggedAt"] = (datetime.now(timezone.utc) - timedelta(days=8)).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    purged = purge_untagged(st, 7)
+    _check("sweep purges a manifest untagged past the policy window", purged == 1)
+    _check("the now-empty repository disappears with it", "retain" not in st.repos)
 
     print("\nAzure Container Registry repository-core conformance: ALL GREEN")
     return 0
