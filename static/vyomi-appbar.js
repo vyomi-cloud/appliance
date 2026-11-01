@@ -18,7 +18,8 @@
   ];
   var css = '' +
     '#vy-appbar{position:relative;z-index:70;height:44px;background:#fff;display:flex;justify-content:center;font-family:Inter,system-ui,sans-serif}' +
-    '#vy-appbar::before{content:"";position:absolute;left:0;right:0;top:0;height:2px;background:#4d8cf3}' +   /* the line:  ------ */
+    '#vy-appbar::before{content:"";position:absolute;left:0;right:0;top:0;height:2px;background:#0f121c}' +   /* the line:  ------ */
+    '#vy-appbar + header{border-top:1px solid #dadce0}' +
     '#vy-appbar .vy-cloud{position:absolute;left:14px;top:10px;display:flex;align-items:center;gap:6px;font-size:12px;color:#667085}' +
     '#vy-appbar .vy-cloud b{color:#101828;font-weight:600}' +
     '#vy-appbar .vy-notch{height:44px;padding:0 44px;display:flex;align-items:center;gap:2px;position:relative;isolation:isolate}' +   /* the dip:  \\____/ */
