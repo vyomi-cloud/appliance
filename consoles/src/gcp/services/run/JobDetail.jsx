@@ -62,7 +62,7 @@ export default function JobDetail({ params, query }) {
       </Tabs>
       {!job.data && !job.error && <Box sx={{ textAlign: "center", py: 4 }}><CircularProgress size={24} /></Box>}
       {job.data && tab === "history" && <History region={region} name={name} />}
-      {job.data && tab === "observability" && <CapabilityContainer id="gcp.run.jobs.observability" title="Observability" />}
+      {job.data && tab === "observability" && <Observability region={region} name={name} />}
       {job.data && tab === "triggers" && <Triggers region={region} name={name} />}
       {job.data && tab === "yaml" && <Yaml job={job.data} />}
       <DeleteDialog open={del} onClose={() => setDel(false)} title="Delete job?" confirmText={name}
@@ -142,6 +142,50 @@ function AddTriggerDialog({ region, name, onClose, onAdded }) {
         <Button variant="contained" disabled={busy || !!idErr || !schedule.trim()} onClick={save}>{busy ? "Creating…" : "Create"}</Button>
       </DialogActions>
     </Dialog>
+  );
+}
+
+// ── Observability (real counts from real executions, + real Cloud Logging entries for
+// every execution start — see api.js listJobLogs) ─────────────────────────────────────────
+function Observability({ region, name }) {
+  const execs = useAsync(() => api.listExecutions(region, name), [region, name]);
+  const logs = useAsync(() => api.listJobLogs(name), [name]);
+  const list = execs.data || [];
+  const succeeded = list.filter((e) => api.executionStatus(e) === "Succeeded").length;
+  const failed = list.filter((e) => api.executionStatus(e) === "Failed").length;
+  const tasks = list.reduce((n, e) => n + (e.taskCount || 0), 0);
+  return (
+    <Stack spacing={2}>
+      <CapabilityContainer id="gcp.run.jobs.observability" title="Metrics">
+        <Stack direction="row" spacing={4} sx={{ flexWrap: "wrap", rowGap: 1 }}>
+          <Box><Typography variant="caption" color="text.secondary">Executions</Typography><Typography variant="h3" sx={{ fontSize: 20 }}>{list.length}</Typography></Box>
+          <Box><Typography variant="caption" color="text.secondary">Succeeded</Typography><Typography variant="h3" sx={{ fontSize: 20 }}>{succeeded}</Typography></Box>
+          <Box><Typography variant="caption" color="text.secondary">Failed</Typography><Typography variant="h3" sx={{ fontSize: 20 }}>{failed}</Typography></Box>
+          <Box><Typography variant="caption" color="text.secondary">Tasks run</Typography><Typography variant="h3" sx={{ fontSize: 20 }}>{tasks}</Typography></Box>
+        </Stack>
+        <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1 }}>
+          Real counts from this job's own execution history (see the History tab) — Vyomi runs
+          each task to completion synchronously, so per-task CPU/memory metrics aren't produced.
+        </Typography>
+      </CapabilityContainer>
+      <CapabilityContainer id="gcp.run.jobs.observability" title="Logs">
+        <ResourceTable
+          resourceName="log entries"
+          items={logs.data || []}
+          rowKey={(e) => e.insertId}
+          loading={logs.loading}
+          error={logs.error}
+          onRetry={logs.reload}
+          filterPlaceholder="Filter log entries"
+          empty={<Typography variant="body2" color="text.secondary">No log entries yet — execute the job to see activity here.</Typography>}
+          columns={[
+            { id: "time", header: "Time", sortField: "timestamp", cell: (e) => fmtDate(e.timestamp) },
+            { id: "severity", header: "Severity", cell: (e) => e.severity },
+            { id: "message", header: "Message", cell: (e) => e.textPayload },
+          ]}
+        />
+      </CapabilityContainer>
+    </Stack>
   );
 }
 

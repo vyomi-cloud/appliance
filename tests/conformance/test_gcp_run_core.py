@@ -190,5 +190,95 @@ check("patch rejects an entry point the saved source doesn't define", call(st5, 
 check("rejected patch left the service and its revisions untouched", len(call(st5, "GET", L + "/services/fn1/revisions")[1]["revisions"]) == 2
       and call(st5, "GET", L + "/services/fn1")[1]["annotations"]["vyomi.dev/function-entry-point"] == "handler")
 
+
+# Eventarc-style triggers (services/{s}/eventarcTriggers) + delivery + Cloud Logging hooks —
+# wave 5b gap sweep (gcp.run.services.triggers / observability, gcp.run.jobs.observability):
+# real IAM-enforced invoke, real delivery on a real Pub/Sub publish, real log entries, never
+# synthetic data.
+import base64 as _b64
+
+logged = []
+
+
+def _log_fn(kind, project, location, rid, message, severity="INFO"):
+    logged.append((kind, project, location, rid, message, severity))
+
+
+st6 = rn.RunStore()
+
+
+def d(method, path, body=None, query=None, **kw):
+    return rn.dispatch(st6, method, path, query or {}, {}, json.dumps(body).encode() if body is not None else b"", **kw)
+
+
+s, _op = call(st6, "POST", L + "/services", {"template": {"containers": [{"image": "gcr.io/x/app:1"}]}}, {"serviceId": "api"})
+check("create service (setup)", s == 200)
+
+# create/update/delete/setIamPolicy each log a real entry through the dispatch() entry point
+logged.clear()
+r = d("POST", L + "/services", {"template": {"containers": [{"image": "gcr.io/x/app:1"}]}}, {"serviceId": "lg"}, log_fn=_log_fn)
+check("create logs a real 'Service created' entry", r.status == 200 and len(logged) == 1
+      and logged[0][:2] == ("service", "p1") and "created" in logged[0][4], logged)
+logged.clear()
+d("PATCH", L + "/services/lg", {"template": {"containers": [{"image": "gcr.io/x/app:2"}]}}, log_fn=_log_fn)
+check("new revision logs 'New revision deployed'", len(logged) == 1 and "New revision deployed" in logged[0][4], logged)
+logged.clear()
+d("PATCH", L + "/services/lg", {"labels": {"a": "b"}}, {"updateMask": "labels"}, log_fn=_log_fn)
+check("config-only patch logs an 'updated' entry, not a new revision", len(logged) == 1
+      and "New revision" not in logged[0][4] and "updated" in logged[0][4], logged)
+logged.clear()
+d("POST", L + "/services/lg:setIamPolicy", {"policy": {"bindings": [{"role": "roles/run.invoker", "members": ["allUsers"]}]}}, log_fn=_log_fn)
+check("auth change logs 'Authentication changed'", len(logged) == 1 and "allow unauthenticated" in logged[0][4], logged)
+logged.clear()
+d("DELETE", L + "/services/lg", log_fn=_log_fn)
+check("delete logs 'Service deleted'", len(logged) == 1 and "deleted" in logged[0][4], logged)
+
+# Eventarc-style trigger: nested under the service, bound to a Pub/Sub topic
+check("create trigger with an invalid topic resource name -> 400", d("POST", L + "/services/api/eventarcTriggers",
+      {"transport": {"pubsub": {"topic": "not-a-resource-name"}}}, {"eventarcTriggerId": "tbad"}).status == 400)
+r = d("POST", L + "/services/api/eventarcTriggers", {"transport": {"pubsub": {"topic": "projects/p1/topics/evt"}}}, {"eventarcTriggerId": "t1"})
+trg = json.loads(r.body)
+check("create trigger on a known topic", r.status == 200 and trg["name"].endswith("/services/api/eventarcTriggers/t1")
+      and trg["transport"]["pubsub"]["topic"] == "projects/p1/topics/evt" and "_eventCount" not in trg, trg)
+check("topic_exists is enforced when provided", d("POST", L + "/services/api/eventarcTriggers",
+      {"transport": {"pubsub": {"topic": "projects/p1/topics/missing"}}}, {"eventarcTriggerId": "t2"},
+      topic_exists=lambda t: t == "projects/p1/topics/evt").status == 400)
+r = d("GET", L + "/services/api/eventarcTriggers")
+check("list triggers for the service", r.status == 200 and len(json.loads(r.body)["triggers"]) == 1)
+check("duplicate trigger id -> 409", d("POST", L + "/services/api/eventarcTriggers",
+      {"transport": {"pubsub": {"topic": "projects/p1/topics/evt"}}}, {"eventarcTriggerId": "t1"}).status == 409)
+
+# invoke_service: IAM invoker is enforced for a direct (non-internal) call, bypassed for
+# internal (Eventarc) delivery — exactly like a real trigger's auto-granted service account.
+try:
+    rn.invoke_service(st6, "p1", "us-central1", "api", headers={})
+    check("invoke without auth on a private service raises", False)
+except rn._E as e:
+    check("invoke without auth on a private service raises 403", e.status == 403)
+check("invoke with a bearer token succeeds", bool(rn.invoke_service(st6, "p1", "us-central1", "api", headers={"authorization": "Bearer faketoken123"})))
+check("internal invoke bypasses IAM", bool(rn.invoke_service(st6, "p1", "us-central1", "api", internal=True)))
+
+# deliver_event: a real Pub/Sub publish on the bound topic delivers to the trigger and logs it
+logged.clear()
+msg = {"data": _b64.b64encode(b"hello").decode(), "attributes": {}}
+rn.deliver_event(st6, "projects/p1/topics/evt", [msg], log_fn=_log_fn)
+check("delivery logs an Eventarc delivery entry", len(logged) == 1 and "Eventarc trigger t1 delivered" in logged[0][4], logged)
+logged.clear()
+rn.deliver_event(st6, "projects/p1/topics/nope", [msg], log_fn=_log_fn)
+check("delivery to an unbound topic is a no-op", logged == [])
+
+# delete trigger
+check("delete trigger", d("DELETE", L + "/services/api/eventarcTriggers/t1").status == 200
+      and len(json.loads(d("GET", L + "/services/api/eventarcTriggers").body)["triggers"]) == 0)
+check("get a deleted trigger -> 404", json.loads(d("GET", L + "/services/api/eventarcTriggers/t1").body)["error"]["status"] == "NOT_FOUND")
+
+# jobs: run logs a real 'Execution started' entry
+s, _op = call(st6, "POST", L + "/jobs", {"template": {"template": {"containers": [{"image": "gcr.io/x/batch:1"}]}}}, {"jobId": "batch"})
+check("create job (setup)", s == 200)
+logged.clear()
+d("POST", L + "/jobs/batch:run", log_fn=_log_fn)
+check("run_job logs a real 'Execution started' entry", len(logged) == 1 and logged[0][0] == "job"
+      and "Execution" in logged[0][4] and "started" in logged[0][4], logged)
+
 print(f"RESULT pass={PASS} fail={FAIL}")
 sys.exit(1 if FAIL else 0)

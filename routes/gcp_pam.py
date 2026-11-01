@@ -16,7 +16,7 @@ from core import app_context as ctx
 from core import gcp_pam_core as pam
 
 PLATFORM = ctx.PLATFORM
-_KEYS = ("entitlements", "grants")
+_KEYS = ("entitlements", "grants", "notifications", "settings")
 
 
 def _slot() -> dict | None:

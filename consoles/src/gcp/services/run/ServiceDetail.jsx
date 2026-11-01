@@ -11,6 +11,7 @@ import DeleteIcon from "@mui/icons-material/esm/Delete.js";
 import EditIcon from "@mui/icons-material/esm/Edit.js";
 import CloudSyncIcon from "@mui/icons-material/esm/CloudSyncOutlined.js";
 import ContentCopyIcon from "@mui/icons-material/esm/ContentCopy.js";
+import AddIcon from "@mui/icons-material/esm/Add.js";
 import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import ResourceTable from "../../kit/ResourceTable.jsx";
@@ -66,12 +67,12 @@ export default function ServiceDetail({ params, query }) {
         {TABS.map(([id, label]) => <Tab key={id} value={id} label={label} />)}
       </Tabs>
       {!svc.data && !svc.error && <Box sx={{ textAlign: "center", py: 4 }}><CircularProgress size={24} /></Box>}
-      {svc.data && tab === "observability" && <Observability />}
+      {svc.data && tab === "observability" && <Observability name={name} />}
       {svc.data && tab === "revisions" && <Revisions region={region} name={name} service={svc.data} reload={svc.reload} />}
       {svc.data && tab === "source" && <Source region={region} name={name} service={svc.data} reload={svc.reload} notify={notify} />}
       {svc.data && tab === "networking" && <Networking region={region} name={name} service={svc.data} reload={svc.reload} notify={notify} />}
       {svc.data && tab === "security" && <Security region={region} name={name} policy={pol} reload={reloadAll} notify={notify} />}
-      {svc.data && tab === "triggers" && <CapabilityContainer id="gcp.run.services.triggers" title="Triggers" />}
+      {svc.data && tab === "triggers" && <Triggers region={region} name={name} />}
       {svc.data && tab === "yaml" && <Yaml service={svc.data} />}
       <DeleteDialog open={del} onClose={() => setDel(false)} title="Delete service?" confirmText={name}
         warning="All revisions are deleted as well. This can't be undone."
@@ -84,7 +85,7 @@ export default function ServiceDetail({ params, query }) {
         <Dialog open onClose={() => setCicd(false)} maxWidth="sm" fullWidth aria-label="Set up continuous deployment">
           <DialogTitle>Set up continuous deployment</DialogTitle>
           <DialogContent><NotSimulatedContainer title="Continuous deployment" feature="Set up continuous deployment"
-            note="Vyomi has no Cloud Build or source-repository integration." /></DialogContent>
+            note="Continuous deployment needs a real GitHub/Cloud Source Repository connection and a real container build (Cloud Build); the simulator has no git-hosting service and forbids network egress from its cores, so there is nothing local to connect to or build." /></DialogContent>
           <DialogActions sx={{ px: 3, pb: 2 }}><Button onClick={() => setCicd(false)}>Close</Button></DialogActions>
         </Dialog>
       )}
@@ -119,13 +120,119 @@ function EditRevisionDialog({ region, name, service, onClose, onSaved }) {
   );
 }
 
-// ── Observability ───────────────────────────────────────────────────────────────────────
-function Observability() {
+// ── Observability (real Cloud Logging entries for real service activity — lifecycle
+// mutations and Eventarc deliveries; see api.js listServiceLogs) ──────────────────────────
+function Observability({ name }) {
+  const logs = useAsync(() => api.listServiceLogs(name), [name]);
+  const entries = logs.data || [];
+  const lastHour = entries.filter((e) => Date.now() - new Date(e.timestamp).getTime() < 3600_000).length;
   return (
     <Stack spacing={2}>
-      <CapabilityContainer id="gcp.run.services.observability" title="Metrics" />
-      <CapabilityContainer id="gcp.run.services.observability" title="Logs" />
+      <CapabilityContainer id="gcp.run.services.observability" title="Metrics">
+        <Stack direction="row" spacing={4} sx={{ flexWrap: "wrap", rowGap: 1 }}>
+          <Box><Typography variant="caption" color="text.secondary">Logged events (all time)</Typography><Typography variant="h3" sx={{ fontSize: 20 }}>{entries.length}</Typography></Box>
+          <Box><Typography variant="caption" color="text.secondary">Logged events (last hour)</Typography><Typography variant="h3" sx={{ fontSize: 20 }}>{lastHour}</Typography></Box>
+          <Box><Typography variant="caption" color="text.secondary">Last activity</Typography><Typography variant="body2">{entries[0] ? fmtDate(entries[0].timestamp) : "No activity yet"}</Typography></Box>
+        </Stack>
+        <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1 }}>
+          Vyomi does not run the deployed container, so there is no live request traffic to meter. These counts
+          come from real activity on this service — deployments, config changes and Eventarc trigger deliveries.
+        </Typography>
+      </CapabilityContainer>
+      <CapabilityContainer id="gcp.run.services.observability" title="Logs">
+        <ResourceTable
+          resourceName="log entries"
+          items={entries}
+          rowKey={(e) => e.insertId}
+          loading={logs.loading}
+          error={logs.error}
+          onRetry={logs.reload}
+          filterPlaceholder="Filter log entries"
+          empty={<Typography variant="body2" color="text.secondary">No log entries yet — deploy a revision, change a setting or deliver an Eventarc event to see activity here.</Typography>}
+          columns={[
+            { id: "time", header: "Time", sortField: "timestamp", cell: (e) => fmtDate(e.timestamp) },
+            { id: "severity", header: "Severity", cell: (e) => e.severity },
+            { id: "message", header: "Message", cell: (e) => e.textPayload },
+          ]}
+        />
+      </CapabilityContainer>
     </Stack>
+  );
+}
+
+// ── Triggers (Eventarc-style; Pub/Sub transport — see api.js) ─────────────────────────────
+function Triggers({ region, name }) {
+  const notify = useNotify();
+  const list = useAsync(() => api.listServiceTriggers(region, name), [region, name]);
+  const [add, setAdd] = useState(false);
+  return (
+    <Stack spacing={2}>
+      <CapabilityContainer id="gcp.run.services.triggers" title="Triggers"
+        actions={<Button size="small" startIcon={<AddIcon />} onClick={() => setAdd(true)}>Add trigger</Button>}>
+        <ResourceTable
+          resourceName="triggers"
+          items={list.data || []}
+          rowKey={(t) => t.name}
+          loading={list.loading}
+          error={list.error}
+          onRetry={list.reload}
+          filterPlaceholder="Filter triggers"
+          empty={<Typography variant="body2" color="text.secondary">No triggers yet. Add one to deliver Pub/Sub events to this service.</Typography>}
+          columns={[
+            { id: "name", header: "Name", sortField: "name", cell: (t) => api.serviceTriggerId(t) },
+            { id: "type", header: "Type", cell: () => "Pub/Sub" },
+            { id: "event", header: "Event", cell: (t) => t.eventFilters?.[0]?.value || "—" },
+            { id: "destination", header: "Destination", cell: () => name },
+            { id: "actions", header: "Actions", cell: (t) => (
+              <Button size="small" color="error" onClick={async () => { await api.deleteServiceTrigger(region, name, api.serviceTriggerId(t)); notify.success("Trigger deleted"); list.reload(); }}>Delete</Button>
+            ) },
+          ]}
+        />
+        <NotSimulated compact feature="Non-Pub/Sub event sources"
+          note="Vyomi has no Eventarc backend; triggers are modelled as a Pub/Sub topic binding, and publishing to that topic really delivers to this service (see the Observability tab's Logs)." />
+      </CapabilityContainer>
+      {add && <AddTriggerDialog region={region} name={name} onClose={() => setAdd(false)} onAdded={() => { notify.success("Trigger added"); list.reload(); }} />}
+    </Stack>
+  );
+}
+
+function AddTriggerDialog({ region, name, onClose, onAdded }) {
+  const notify = useNotify();
+  const [id, setId] = useState(`${name}-trigger`);
+  const [topic, setTopic] = useState("");
+  const topics = useAsync(() => api.listTopicIds(), []);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const idErr = api.validName(id, "Trigger");
+  const save = async () => {
+    setBusy(true); setError(null);
+    try { await api.createServiceTrigger(region, name, id, topic); onAdded(); onClose(); }
+    catch (e) { setError(e); } finally { setBusy(false); }
+  };
+  return (
+    <Dialog open onClose={busy ? undefined : onClose} maxWidth="sm" fullWidth aria-label="Add trigger">
+      <DialogTitle>Add trigger</DialogTitle>
+      <DialogContent>
+        <Stack spacing={2} sx={{ pt: 1 }}>
+          <Typography variant="body2" color="text.secondary">Delivers messages published on a Pub/Sub topic to this service.</Typography>
+          <TextField label="Trigger name" required value={id} onChange={(e) => setId(e.target.value.trim())} error={!!idErr} helperText={idErr || " "} />
+          <FormControl required>
+            <InputLabel id="trg-topic-l">Pub/Sub topic</InputLabel>
+            <Select labelId="trg-topic-l" label="Pub/Sub topic" value={topic} onChange={(e) => setTopic(e.target.value)}>
+              {(topics.data || []).map((t) => <MenuItem key={t} value={t}>{t}</MenuItem>)}
+            </Select>
+          </FormControl>
+          {!topics.loading && !(topics.data || []).length && (
+            <Typography variant="caption" color="text.secondary">No topics yet — create one in Pub/Sub first.</Typography>
+          )}
+          {error && <Alert severity="error">{error.message}</Alert>}
+        </Stack>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2 }}>
+        <Button onClick={onClose} disabled={busy}>Cancel</Button>
+        <Button variant="contained" disabled={busy || !!idErr || !topic} onClick={save}>{busy ? "Creating…" : "Create"}</Button>
+      </DialogActions>
+    </Dialog>
   );
 }
 

@@ -120,3 +120,36 @@ def test_slot_adapter_covers_base_store_fields(cls):
                      and k not in cls._KEYS and not isinstance(getattr(cls, k, None), property)
                      and f"self.{k} =" not in own_init)
     assert not missing, f"{cls.__name__} lacks durable slots for {base.__name__} fields {missing}"
+
+
+# Route-level space stores (routes/*.py `class Space<X>Store(<core store>)`) expose a FIXED set of
+# persisted keys over the active space's slot and skip the base __init__ — a field a sweep adds to
+# the core store is then missing offline (AttributeError / lost on restart). Seen: Cloud Run
+# triggers/builds (Functions sweep). Every base-store data field must be reachable on the space store.
+import importlib as _importlib
+import re as _re
+from pathlib import Path as _Path
+
+# Fields on a SHARED base store that this route store genuinely doesn't own (another cloud's state).
+_ROUTE_STORE_NOT_OWNED = {"SpaceSnsStore": {"pubsub"}}   # GCP Pub/Sub snapshots/schemas — this store serves AWS SNS only
+_ROUTE_SPACE_STORES = []
+for _f in sorted((_Path(__file__).resolve().parent.parent / "routes").glob("*.py")):
+    for _m in _re.finditer(r"^class (Space\w+Store)\(", _f.read_text(), _re.M):
+        _ROUTE_SPACE_STORES.append((f"routes.{_f.stem}", _m.group(1)))
+
+
+@_pytest.mark.parametrize("mod,cls_name", _ROUTE_SPACE_STORES, ids=[c for _, c in _ROUTE_SPACE_STORES])
+def test_route_space_store_covers_base_fields(mod, cls_name):
+    m = _importlib.import_module(mod)
+    cls = getattr(m, cls_name)
+    base = next(b for b in cls.__mro__[1:] if b is not object)
+    try:
+        inst = base()
+    except TypeError:
+        _pytest.skip(f"{base.__name__}() needs args")
+    keys = set(getattr(m, "_KEYS", ()) or ())
+    keys |= _ROUTE_STORE_NOT_OWNED.get(cls_name, set())
+    missing = sorted(k for k, v in vars(inst).items()
+                     if not k.startswith("_") and isinstance(v, (dict, list))
+                     and k not in keys and k != "seq" and not hasattr(cls, k))
+    assert not missing, f"{mod}.{cls_name} doesn't persist {base.__name__} fields {missing} (add to _KEYS)"

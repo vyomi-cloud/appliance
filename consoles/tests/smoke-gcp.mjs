@@ -1315,6 +1315,26 @@ try {
   check("Cloud Scheduler trigger really starts a Cloud Run job execution", runJobAfterTrigger.executionCount === 1, JSON.stringify(runJobAfterTrigger).slice(0, 200));
   await shot("14c-run-job-trigger-fired");
 
+  // Cloud Run depth: an Eventarc-style trigger added from the service's Triggers tab really
+  // delivers — publishing on the bound Pub/Sub topic (over the native wire) invokes the
+  // service and writes a real Cloud Logging entry, read back on the Observability tab.
+  const RUNTOPIC = `v4-gcp-run-evt-${Date.now() % 100000}`;
+  await wire(`/v1/projects/vyomi-project/topics/${RUNTOPIC}`, { method: "PUT", headers: { "content-type": "application/json" }, body: "{}" });
+  await page.goto(UI + `#/run/detail/us-central1/${RUNSVC}?tab=triggers`);
+  await page.getByRole("button", { name: "Add trigger" }).click();
+  await page.getByLabel("Pub/Sub topic").click();
+  await page.getByRole("option", { name: RUNTOPIC, exact: true }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Create" }).click();
+  await page.getByRole("cell", { name: `${RUNSVC}-trigger` }).waitFor({ timeout: 10000 });
+  await wire(`/v1/projects/vyomi-project/topics/${RUNTOPIC}:publish`, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ messages: [{ data: Buffer.from("smoke test event").toString("base64") }] }),
+  });
+  await page.goto(UI + `#/run/detail/us-central1/${RUNSVC}?tab=observability`);
+  await page.getByText(/Eventarc trigger .* delivered/).waitFor({ timeout: 10000 });
+  check("Eventarc trigger really delivers on a real Pub/Sub publish", true);
+  await shot("14d-run-service-trigger-delivered");
+
   await page.goto(UI + "#/run/services");
   await page.getByRole("checkbox", { name: `Select ${RUNSVC}` }).check();
   await page.getByRole("button", { name: "Delete", exact: true }).click();
