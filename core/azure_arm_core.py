@@ -1402,6 +1402,8 @@ class AzureArm:
             if blocked:
                 return blocked
             blocked = self._acr_validate_block(type_chain, names, payload, sub, rg)
+            if blocked:
+                return blocked
             blocked = self._policy_block(sub, rg, full_type, payload)
             if blocked:
                 return blocked
