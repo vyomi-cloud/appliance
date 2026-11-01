@@ -108,6 +108,15 @@ def gcp_project(endpoint: str) -> str:
 
 
 def run_suite(s: dict, subs: dict) -> dict:
+    # "pending": the probe is written but depends on something not built yet (named in
+    # the value). Reported as pending in every run so it cannot hide, but not run and
+    # not counted as a failure. Remove the key when the dependency lands.
+    if s.get("pending"):
+        res = {k: s.get(k) for k in ("id", "target", "cloud", "kind")}
+        res.update(duration_s=0, exit_code=0, passed=0, failed=0, status="pending",
+                   pending_reason=str(s["pending"]), tail="PENDING: " + str(s["pending"]))
+        print(f"  PEND {s['id']:<28} {s['pending']}", flush=True)
+        return res
     cmd = s["cmd"]
     env = dict(os.environ)
     if s.get("cloud") == "gcp" and s.get("target") == "offline" and subs.get("ENDPOINT"):
@@ -194,8 +203,10 @@ def main() -> int:
     else:
         name = "results.json" if (a.target == "all" and not only) else "results-partial.json"
     json.dump(out, open(os.path.join(OUT, name), "w"), indent=1)
-    bad = [r["id"] for r in results if r["status"] != "pass"]
-    print(f"\n{len(results) - len(bad)}/{len(results)} suites green" + (f"; failing: {', '.join(bad)}" if bad else ""))
+    pend = [r["id"] for r in results if r["status"] == "pending"]
+    bad = [r["id"] for r in results if r["status"] not in ("pass", "pending")]
+    print(f"\n{len(results) - len(bad) - len(pend)}/{len(results)} suites green"
+          + (f"; failing: {', '.join(bad)}" if bad else "") + (f"; pending: {', '.join(pend)}" if pend else ""))
     return 0  # the agent and the page decide what to do with failures
 
 

@@ -1681,6 +1681,15 @@
       "timeout": 300
     },
     {
+      "id": "nano-post-create-aws-ec2-ssh",
+      "target": "nano",
+      "cloud": "aws",
+      "kind": "ui",
+      "pending": "Nano in-browser compute (v86 instance VM + exec) not built: connect-info is 409 NoRuntime, /exec is 501",
+      "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-aws-post-create-ec2.mjs",
+      "timeout": 300
+    },
+    {
       "id": "offline-ui-console-home",
       "target": "offline",
       "cloud": "all",

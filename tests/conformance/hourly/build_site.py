@@ -74,11 +74,11 @@ def markdown(d: dict, e: dict) -> str:
         if cs:
             L += ["| Status | Suite | Target | Kind | Passed | Failed | Time (s) |", "|---|---|---|---|---|---|---|"]
             for s in sorted(cs, key=lambda s: (s["status"] == "pass", s["id"])):
-                L.append(f"| {'✅' if s['status'] == 'pass' else '❌'} | `{md(s['id'])}` | {md(s['target'])} | "
+                L.append(f"| {'✅' if s['status'] == 'pass' else '⏳' if s['status'] == 'pending' else '❌'} | `{md(s['id'])}` | {md(s['target'])} | "
                          f"{md(s['kind'])} | {s.get('passed') or 0} | {s.get('failed') or 0} | {md(s.get('duration_s'))} |")
             L.append("")
             for s in cs:
-                if s["status"] != "pass" and s.get("tail"):
+                if s["status"] not in ("pass", "pending") and s.get("tail"):
                     L += [f"<details><summary>❌ <code>{md(s['id'])}</code> log</summary>", "", "```",
                           s["tail"].replace("```", "'''"), "```", "", "</details>", ""]
         if c != "all":
@@ -158,6 +158,7 @@ def main() -> None:
 
     entry = {"at": res.get("at"), "commit": res.get("commit", "")[:12],
              "suites_green": sum(1 for s in suites if s["status"] == "pass"), "suites_total": len(suites),
+             "suites_pending": sum(1 for s in suites if s["status"] == "pending"),
              "checks_passed": sum(s.get("passed", 0) for s in suites),
              "checks_failed": sum(s.get("failed", 0) for s in suites), "api_coverage_pct": api_cov,
              "ui_findings": len(findings), "agent": agent.splitlines()[0][:200] if agent else "",
@@ -173,7 +174,7 @@ def main() -> None:
 
     data = {
         "at": res.get("at"), "commit": res.get("commit", ""), "agent": agent,
-        "suites": [{k: s.get(k) for k in ("id", "target", "cloud", "kind", "status", "passed", "failed", "duration_s", "tail")}
+        "suites": [{k: s.get(k) for k in ("id", "target", "cloud", "kind", "status", "passed", "failed", "duration_s", "tail", "pending_reason")}
                    for s in suites],
         "services": services, "findings": findings, "history": history,
         "api": {"total": rt, "uncovered": ru, "pct": api_cov},

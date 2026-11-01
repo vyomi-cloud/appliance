@@ -140,7 +140,11 @@ in the prompt and in `$SLICE`). Each has its own appliance stack and relay.
    Docker-internal IPs or container-only key paths). Findings: `POST_CREATE_UNUSABLE`,
    `CONNECT_INFO_MISSING`, `CONNECT_INFO_UNREACHABLE`. Every probe is required on BOTH offline and Nano: build
    the Nano twin with the offline one; a Nano probe blocked on missing in-browser compute is `pending`
-   (reported, not green), never skipped. They run every cycle (and the slow ones daily), as normal suites. Not built yet: start with phase 1 (EC2 SSH).
+   (reported, not green), never skipped. They run every cycle (and the slow ones daily), as normal suites. A suite with a `"pending"` key in
+   suites.json is written but blocked on something unbuilt (the value names it): it is NOT run, shows ⏳ in the
+   report and `status: pending` in results.json, and is never counted as green. When you build the dependency,
+   delete the key in the same commit so it starts running (e.g. `nano-post-create-aws-ec2-ssh` needs Nano
+   in-browser compute: connect-info + `/exec`). Not built yet: start with phase 1 (EC2 SSH).
 7. **New features** (`new_features.json` → `new`): a new SDK operation with
    `tested: false` gets a Java or Go test (official SDK, endpoint changed only); a
    new service/tab/action is crawled live — fix whatever the crawl finds and add a
