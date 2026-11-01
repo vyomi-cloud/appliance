@@ -1984,6 +1984,22 @@
       "kind": "ui",
       "cmd": "VYOMI_CONSOLE_URL={ENDPOINT}/console/azure node wasm/ui-tests/validate-azure-apim-appinsights.mjs",
       "timeout": 300
+    },
+    {
+      "id": "offline-sweepA-azure",
+      "target": "offline",
+      "cloud": "azure",
+      "kind": "api",
+      "cmd": "python3 tests/conformance/post_create/probes/sweep_azure.py {ENDPOINT}",
+      "timeout": 300
+    },
+    {
+      "id": "nano-sweepA-azure",
+      "target": "nano",
+      "cloud": "azure",
+      "kind": "ui",
+      "cmd": "NANO_DIR=$PWD/wasm node wasm/ui-tests/validate-sweepA-nano.mjs",
+      "timeout": 300
     }
   ]
 }

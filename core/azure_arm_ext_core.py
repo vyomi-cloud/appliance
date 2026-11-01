@@ -2009,6 +2009,31 @@ def _apim_nv_view(rec):
     return v
 
 
+def apim_sub_keys(svc_id: str, sub_name: str, rec: dict | None = None) -> tuple[str, str]:
+    """(primaryKey, secondaryKey) of an APIM subscription. A key the caller supplied on the
+    subscription wins; otherwise it is derived deterministically from the service id + name,
+    so listSecrets, the gateway and a re-created simulator all agree without extra storage."""
+    p = (rec or {}).get("properties") or {}
+
+    def _d(tag):
+        return hashlib.sha256(f"apim|{svc_id.lower()}|{sub_name.lower()}|{tag}".encode()).hexdigest()[:32]
+    return (p.get("primaryKey") or _d("primary"), p.get("secondaryKey") or _d("secondary"))
+
+
+def apim_valid_keys(records, svc_id: str) -> set[str]:
+    """Every subscription key the gateway of APIM service `svc_id` accepts: the built-in
+    `master` subscription plus each child subscription (active ones only)."""
+    keys = set(apim_sub_keys(svc_id, "master"))
+    pref = svc_id.lower() + "/subscriptions/"
+    for r in records:
+        if not isinstance(r, dict) or not str(r.get("id", "")).lower().startswith(pref):
+            continue
+        if str((r.get("properties") or {}).get("state", "active")).lower() in ("suspended", "cancelled", "expired", "rejected"):
+            continue
+        keys.update(apim_sub_keys(svc_id, r.get("name", ""), r))
+    return keys
+
+
 def _apim_route(state, method, sub, rg, after, payload):
     low = [a.lower() for a in after]
     svc_id = scope_id(sub, rg, after[:3])
@@ -2224,6 +2249,16 @@ def route(state, method, sub, rg, after, payload=None, query=None, executor=None
         if svc is None:
             return _err(404, "ResourceNotFound", f"API Management service '{after[2]}' not found.")
         return _apim_backup(state, svc_id, svc, payload, blob, low[3] == "restore")
+    if low[0] == "microsoft.apimanagement" and low[1] == "service" and len(after) == 6 and method == "POST" \
+            and low[3] == "subscriptions" and low[5] == "listsecrets":
+        svc_id = scope_id(sub, rg, after[:3])
+        if state.get(svc_id.lower()) is None:
+            return _err(404, "ResourceNotFound", f"API Management service '{after[2]}' not found.")
+        srec = state.get(f"{svc_id}/subscriptions/{after[4]}".lower())
+        if srec is None and low[4] != "master":
+            return _err(404, "ResourceNotFound", f"Subscription '{after[4]}' not found.")
+        pk, sk = apim_sub_keys(svc_id, after[4], srec)
+        return _ok({"primaryKey": pk, "secondaryKey": sk})
     if low[0] == "microsoft.apimanagement" and low[1] == "service" and len(after) >= 4 and low[3] == "namedvalues" \
             and (method == "GET" or (len(after) == 6 and low[5] == "listvalue")):
         r = _apim_route(state, method, sub, rg, after, payload)

@@ -70,6 +70,24 @@ def main():
     check(not containers(vm), "RG delete removed the VM container", str(containers(vm)))
     st, _ = call("GET", f"/azure-data/keyvault/{kv}/secrets/s1")
     check(st != 200, "RG delete destroyed Key Vault secrets (no longer readable)", f"HTTP {st}")
+    # --- Item 2: API Management gateway: wrong key 401, unknown API 404, valid flow proxies
+    svc = f"{rg}/providers/Microsoft.ApiManagement/service/{tag}apim"
+    call("PUT", svc + "?api-version=2023-05-01-preview", {"location": "eastus", "sku": {"name": "Developer", "capacity": 1},
+         "properties": {"publisherEmail": "a@b.c", "publisherName": "qa"}})
+    call("PUT", svc + "/apis/echo?api-version=2023-05-01-preview",
+         {"properties": {"displayName": "echo", "path": "echo", "protocols": ["https"], "serviceUrl": "http://127.0.0.1:9000"}})
+    st, sec = call("POST", svc + "/subscriptions/master/listSecrets?api-version=2023-05-01-preview", {})
+    key = sec.get("primaryKey") if isinstance(sec, dict) else None
+    check(st == 200 and bool(key), "APIM listSecrets returns a primaryKey", f"HTTP {st} {sec}")
+    gw = f"/azure-data/apim/{tag}apim"
+    st, _ = call("GET", gw + "/echo/healthz", headers={"Ocp-Apim-Subscription-Key": "totallybogus"})
+    check(st == 401, "APIM wrong subscription key -> 401", f"HTTP {st}")
+    st, _ = call("GET", gw + "/echo/healthz")
+    check(st == 401, "APIM missing subscription key -> 401", f"HTTP {st}")
+    st, _ = call("GET", gw + "/nosuchapi/x", headers={"Ocp-Apim-Subscription-Key": key or "x"})
+    check(st == 404, "APIM unknown API -> 404", f"HTTP {st}")
+    st, body = call("GET", gw + "/echo/healthz", headers={"Ocp-Apim-Subscription-Key": key or "x"})
+    check(st == 200 and "mock" not in json.dumps(body), "APIM valid key proxies to the backend (no httpx 502)", f"HTTP {st} {str(body)[:120]}")
     sys.exit(1 if fails else 0)
 
 

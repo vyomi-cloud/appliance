@@ -33,6 +33,16 @@ try {
   check("RG delete accepted", del.status < 300, `HTTP ${del.status}`);
   const got = await call("GET", "/azure-data/keyvault/sweepkv/secrets/s1");
   check("RG delete destroyed Key Vault secrets", got.status !== 200, `HTTP ${got.status}`);
+  // Item 2 (Nano half): APIM subscription keys come from listSecrets (stable, non-empty, distinct).
+  // Nano has no APIM gateway runtime, so the 401/404 gateway semantics are offline-only (documented limitation).
+  const rg2 = `/subscriptions/${sub}/resourceGroups/sweeprg2`;
+  await call("PUT", rg2 + "?api-version=2021-04-01", { location: "eastus" });
+  await call("PUT", `${rg2}/providers/Microsoft.ApiManagement/service/sweepapim?api-version=2023-05-01-preview`,
+    { location: "eastus", sku: { name: "Developer", capacity: 1 }, properties: { publisherEmail: "a@b.c", publisherName: "qa" } });
+  const k1 = await call("POST", `${rg2}/providers/Microsoft.ApiManagement/service/sweepapim/subscriptions/master/listSecrets?api-version=2023-05-01-preview`, {});
+  const k2 = await call("POST", `${rg2}/providers/Microsoft.ApiManagement/service/sweepapim/subscriptions/master/listSecrets?api-version=2023-05-01-preview`, {});
+  check("APIM listSecrets returns distinct primary/secondary keys", k1.status === 200 && k1.json && k1.json.primaryKey && k1.json.secondaryKey && k1.json.primaryKey !== k1.json.secondaryKey, k1.text.slice(0, 120));
+  check("APIM listSecrets is stable across calls", k1.json && k2.json && k1.json.primaryKey === k2.json.primaryKey);
 } catch (e) { check("boot", false, String(e).split("\n")[0]); }
 await browser.close(); server.close();
 for (const r of results) console.log(`[${r.ok ? "PASS" : "FAIL"}] ${r.name} ${r.ok ? "" : r.note}`);

@@ -715,12 +715,9 @@ async def _apim_handle(service_name: str, rest: str, request: Request) -> Respon
 
     # ── locate the APIM ARM resource ──
     try:
-        import server
-        spaces_state = server._spaces_state()
-        active_id = spaces_state.get("active_space_id", "")
-        space = (spaces_state.get("spaces") or {}).get(active_id) or {}
-        svc = space.get("service_states") or {}
-        azure_resources = (svc.get("azure_arm") or {}).get("resources") or {}
+        # The ARM control plane writes to the Azure-provider space (the request-provider
+        # scoped proxy), which is not necessarily the globally "active" space.
+        from core.app_context import azure_arm_state as azure_resources
     except Exception:
         return JSONResponse(status_code=500, content={"error": {"code": "InternalError", "message": "Unable to access space state"}})
 
@@ -745,6 +742,13 @@ async def _apim_handle(service_name: str, rest: str, request: Request) -> Respon
             "statusCode": 401,
             "message": "Access denied due to missing subscription key. "
                        "Include 'Ocp-Apim-Subscription-Key' header."})
+
+    from core import azure_arm_ext_core as _ext
+    if sub_key not in _ext.apim_valid_keys(azure_resources.values(), str(apim_rec.get("id", ""))):
+        return JSONResponse(status_code=401, content={
+            "statusCode": 401,
+            "message": "Access denied due to invalid subscription key. "
+                       "Make sure to provide a valid key for an active subscription."})
 
     # ── simple per-key rate limiting ──
     import threading
@@ -806,7 +810,27 @@ async def _apim_handle(service_name: str, rest: str, request: Request) -> Respon
             sub_path = "/".join(rest.split("/")[1:]) if "/" in rest else ""
             target = f"{backend_url.rstrip('/')}/{sub_path}" if sub_path else backend_url
             try:
-                import httpx
+                try:
+                    import httpx
+                except ImportError:   # degrade to the stdlib instead of failing every proxied call
+                    httpx = None
+                if httpx is None:
+                    import asyncio
+                    import urllib.error
+                    import urllib.request
+                    body = await request.body()
+                    fwd = {k: v for k, v in request.headers.items()
+                           if k.lower() not in ("host", "content-length", "ocp-apim-subscription-key")}
+
+                    def _fetch():
+                        req = urllib.request.Request(target, data=body or None, headers=fwd, method=method)
+                        try:
+                            with urllib.request.urlopen(req, timeout=30) as r:
+                                return r.status, r.read(), r.headers.get("content-type", "application/json")
+                        except urllib.error.HTTPError as e:
+                            return e.code, e.read(), e.headers.get("content-type", "application/json")
+                    st, content, ctype = await asyncio.to_thread(_fetch)
+                    return Response(content=content, status_code=st, media_type=ctype)
                 async with httpx.AsyncClient(timeout=30) as client:
                     body = await request.body()
                     resp = await client.request(
@@ -822,7 +846,10 @@ async def _apim_handle(service_name: str, rest: str, request: Request) -> Respon
                     "statusCode": 502,
                     "message": f"Backend unavailable: {exc!s}"[:300]})
 
-    # No matching API found — return a generic mock
+    if not matched_api:
+        return JSONResponse(status_code=404, content={"statusCode": 404, "message": "Resource not found"})
+
+    # Matched API with neither mock nor backend configured — generic mock
     try:
         from core.app_context import record_usage
         record_usage("azure.apim.invoke", {"service": service_name, "path": rest, "mode": "default-mock"})
