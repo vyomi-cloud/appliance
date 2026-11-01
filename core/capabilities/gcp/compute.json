@@ -10,10 +10,21 @@
   "tests": ["tests/conformance/test_gcp_compute_instances_core.py"]
  },
  "gcp.compute.instances.data_plane": {
-  "title": "Guest OS access (SSH, serial console, screenshot, OS info)",
+  "title": "Guest OS access (SSH, screenshot, OS info)",
   "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["No guest OS boots behind an instance, so there is nothing to SSH into, no serial console output, no screenshot preview and no OS Info (guest attributes)."],
-  "api": ["instances.getSerialPortOutput", "instances.getScreenshot", "instances.getGuestAttributes"]
+  "limitations": [
+   "SSH: no SSH daemon runs behind an instance — there is no guest OS to open an interactive shell on.",
+   "Screenshot: getScreenshot needs a real virtual display's framebuffer; none is rendered, so there is nothing to capture.",
+   "OS info: getGuestAttributes is populated by a guest agent writing back through the metadata server after boot; no guest OS or agent runs to report hostname, OS release or kernel version."
+  ],
+  "api": ["instances.getScreenshot", "instances.getGuestAttributes"]
+ },
+ "gcp.compute.instances.serial_console": {
+  "title": "Serial port output",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["Serial output is Vyomi's own instance lifecycle record (create/start/stop/suspend/resume/reset, each at its real timestamp) rendered as console lines, not a real guest kernel's boot/console text — no guest OS runs to produce authentic kernel or init messages."],
+  "api": ["instances.getSerialPortOutput"],
+  "tests": ["tests/conformance/test_gcp_compute_instances_core.py"]
  },
  "gcp.compute.disks.crud": {
   "title": "Persistent disks (create, delete, snapshot)",
@@ -84,11 +95,13 @@
  },
  "gcp.compute.observability": {
   "title": "Observability, recommendations and VM Manager",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "Vyomi's monitoring/logging core only charts metrics explicitly written to it — there's no request-metering engine tying a VM's real CPU/disk/network state to time series, so the Monitoring/Logging tabs would have nothing real to plot (the same boundary as gcp.storage.observability).",
+   "The status duration and recent-activity feed shown here are real — Vyomi's own recorded instance lifecycle operations (insert/start/stop/suspend/resume/reset/...) at their real timestamps — not Cloud Monitoring charts or Cloud Logging entries: there's no request-metering engine tying a VM's real CPU/disk/network state to a sampled time series (the same boundary as gcp.storage.observability).",
    "Recommender suggestions are AI-generated insights Vyomi does not generate.",
-   "VM Manager (Patch, OS policies, VM Extension Manager) is a separate product with no backend in Vyomi."
-  ]
+   "VM Manager (Patch, OS policies, VM Extension Manager) needs a guest OS and patch agent to apply anything to — none runs in Vyomi."
+  ],
+  "api": ["zoneOperations.list", "globalOperations.aggregatedList"],
+  "tests": ["tests/conformance/test_gcp_compute_instances_core.py"]
  }
 }

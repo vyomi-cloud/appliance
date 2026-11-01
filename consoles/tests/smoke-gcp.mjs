@@ -532,6 +532,22 @@ try {
   );
   check("stop from instance detail → TERMINATED over native wire", true);
 
+  // Serial port output tab: a real replay of this instance's own recorded lifecycle
+  // operations (insert, stop), not a fabricated guest console — matches the native wire.
+  await page.getByRole("tab", { name: "Serial port output" }).click();
+  await page.getByText(`Instance ${VM} created.`).waitFor({ timeout: 10000 });
+  await page.getByText(`Instance ${VM} stopped.`).waitFor({ timeout: 10000 });
+  const serial = await wjson(`/compute/v1/projects/vyomi-project/zones/us-central1-a/instances/${VM}/serialPort`);
+  check("serial port output tab matches native getSerialPortOutput",
+    serial.contents.includes(`Instance ${VM} created.`) && serial.contents.includes(`Instance ${VM} stopped.`));
+
+  // Observability tab: real recorded activity (the same lifecycle operations), not a stub.
+  await page.getByRole("tab", { name: "Observability", exact: true }).click();
+  await page.getByText("TERMINATED").first().waitFor({ timeout: 10000 });
+  await page.getByText("insert").first().waitFor({ timeout: 10000 });
+  check("observability tab shows this instance's real recorded activity (not a not-simulated stub)", true);
+  await shot("13b-instance-observability");
+
   // Disk created over the wire (SDK direction) → shown in the UI list
   const DISK = `v4-gcp-smoke-disk-${Date.now() % 100000}`;
   await wire("/compute/v1/projects/vyomi-project/zones/us-central1-a/disks", {

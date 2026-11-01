@@ -1,20 +1,82 @@
-/* Instance detail: Details tab (all spec sections) + honest Observability/OS info/Screenshot
- * tabs (no guest OS is modeled, so there's nothing to report there). */
+/* Instance detail: Details tab (all spec sections) + a real Observability tab (recorded
+ * lifecycle activity) + a real Serial port output tab (same activity, replayed as console
+ * lines) + honest OS info/Screenshot tabs (no guest OS is modeled, so there's nothing to
+ * report there). */
 import { useState } from "react";
 import {
   Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, Stack, Tab, Tabs,
   TextField, Typography,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/esm/ArrowBack.js";
+import RefreshIcon from "@mui/icons-material/esm/Refresh.js";
 import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
-import { ErrorAlert, KeyValue, NotSimulated, PageHeader, Section, fmtDate } from "../../kit/common.jsx";
+import { ErrorAlert, KeyValue, NotSimulated, PageHeader, Section, fmtDate, fmtDuration } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { hashHref } from "../../link.jsx";
 import * as api from "./api.js";
 
-const TABS = ["Details", "Observability", "OS info", "Screenshot"];
+const TABS = ["Details", "Observability", "Serial port output", "OS info", "Screenshot"];
+
+/** Real recorded activity for this instance: status duration (from its own real lifecycle
+ * timestamps) + the operations the core actually performed, oldest action last. No Cloud
+ * Monitoring chart / Cloud Logging entry is plotted (nothing meters real resource use). */
+function ObservabilityPanel({ zone, name, inst }) {
+  const { data: ops = [], loading } = useAsync(() => api.listOperations(), [zone, name, inst.status]);
+  const mine = ops
+    .filter((o) => (o.targetLink || "").includes(`/zones/${zone}/instances/${name}`))
+    .sort((a, b) => Number(b.id) - Number(a.id));
+  const since = inst.status === "RUNNING" ? inst.lastStartTimestamp : inst.lastStopTimestamp;
+  const durSecs = since ? Math.max(0, Math.round((Date.now() - new Date(since).getTime()) / 1000)) : null;
+  return (
+    <Stack spacing={2}>
+      <KeyValue items={[
+        ["Status", inst.status],
+        ["Time in current status", durSecs != null ? fmtDuration(durSecs) : "—"],
+        ["Lifecycle operations recorded", String(mine.length)],
+      ]} />
+      <Box>
+        <Typography variant="body2" sx={{ fontWeight: 500, mb: 0.5 }}>Recent activity</Typography>
+        {loading ? <CircularProgress size={20} /> : (
+          <Box sx={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", fontSize: 14, borderCollapse: "collapse" }}>
+              <thead><tr>{["Operation", "Status", "Time"].map((h) => <th key={h} style={{ textAlign: "left", padding: 6, borderBottom: "1px solid #ddd" }}>{h}</th>)}</tr></thead>
+              <tbody>
+                {mine.slice(0, 10).map((o) => (
+                  <tr key={o.name}><td style={{ padding: 6 }}>{o.operationType}</td><td style={{ padding: 6 }}>{o.status}</td><td style={{ padding: 6 }}>{fmtDate(o.endTime)}</td></tr>
+                ))}
+                {!mine.length && <tr><td colSpan={3} style={{ padding: 6, color: "#666" }}>No recorded operations yet.</td></tr>}
+              </tbody>
+            </table>
+          </Box>
+        )}
+      </Box>
+      <NotSimulated compact feature="Recommender & VM Manager"
+        note="Recommender suggestions and VM Manager (Patch, OS policies, VM Extension Manager) aren't modeled in Vyomi." />
+    </Stack>
+  );
+}
+
+/** Real serial port output: the instance's own recorded lifecycle operations, replayed as
+ * console lines at their real timestamps — not a fabricated guest kernel boot log. */
+function SerialPortPanel({ zone, name }) {
+  const { data, loading, error, reload } = useAsync(() => api.getSerialPortOutput(zone, name), [zone, name]);
+  return (
+    <Stack spacing={1.5}>
+      <Box><Button size="small" startIcon={<RefreshIcon />} onClick={reload}>Refresh</Button></Box>
+      {error && <ErrorAlert error={error} title="Failed to load serial port output" />}
+      {loading && !data ? <CircularProgress size={20} /> : (
+        <Box component="pre" sx={{
+          m: 0, p: 1.5, bgcolor: "grey.900", color: "grey.100", fontFamily: "monospace", fontSize: 13,
+          borderRadius: 1, maxHeight: 360, overflow: "auto", whiteSpace: "pre-wrap",
+        }}>
+          {data?.contents || "(no output yet)"}
+        </Box>
+      )}
+    </Stack>
+  );
+}
 
 export default function InstanceDetail({ params }) {
   const { zone, name } = params;
@@ -58,9 +120,9 @@ export default function InstanceDetail({ params }) {
         </Stack>
       </PageHeader>
 
-      <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
-        <NotSimulated compact feature="SSH" note="No guest OS runs behind this instance — nothing to connect to." />
-      </Stack>
+      <Box sx={{ mb: 2 }}>
+        <CapabilityContainer id="gcp.compute.instances.data_plane" title="SSH" />
+      </Box>
 
       <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 2 }}>
         {TABS.map((t) => <Tab key={t} label={t} value={t} />)}
@@ -130,7 +192,16 @@ export default function InstanceDetail({ params }) {
           </Section>
         </Stack>
       )}
-      {tab === "Observability" && <CapabilityContainer id="gcp.compute.observability" title="Observability" />}
+      {tab === "Observability" && (
+        <CapabilityContainer id="gcp.compute.observability" title="Observability">
+          <ObservabilityPanel zone={zone} name={name} inst={inst} />
+        </CapabilityContainer>
+      )}
+      {tab === "Serial port output" && (
+        <CapabilityContainer id="gcp.compute.instances.serial_console" title="Serial port output">
+          <SerialPortPanel zone={zone} name={name} />
+        </CapabilityContainer>
+      )}
       {tab === "OS info" && <CapabilityContainer id="gcp.compute.instances.data_plane" title="OS info" />}
       {tab === "Screenshot" && <CapabilityContainer id="gcp.compute.instances.data_plane" title="Screenshot" />}
 

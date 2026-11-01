@@ -16,7 +16,8 @@ import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import ResourceTable from "../../kit/ResourceTable.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
-import { PageHeader, NotSimulated } from "../../kit/common.jsx";
+import { PageHeader, NotSimulated, fmtDate } from "../../kit/common.jsx";
+import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { Link } from "../../link.jsx";
 import { useProject } from "../../project.js";
 import * as api from "./api.js";
@@ -34,6 +35,8 @@ export default function VmInstances() {
   const [menu, setMenu] = useState(null);
   const [importOpen, setImportOpen] = useState(false);
   const { data = [], loading, error, reload } = useAsync(() => api.listInstancesAllZones(), [project]);
+  const { data: ops = [], loading: opsLoading } = useAsync(() => api.listOperations(), [project]);
+  const instanceOps = ops.filter((o) => (o.targetLink || "").includes("/instances/"));
 
   const byKey = (k) => data.find((i) => `${i._zoneScope}/${i.name}` === k);
   const bulk = async (action) => {
@@ -109,7 +112,24 @@ export default function VmInstances() {
         />
       </TabPanel>
       <TabPanel value={tab} name="observability">
-        <NotSimulated feature="Observability" note="Per-instance CPU/disk/network metrics and logs aren't modeled." />
+        <CapabilityContainer id="gcp.compute.observability" title="Observability">
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+            Recent lifecycle activity Vyomi actually recorded for VM instances in this project.
+          </Typography>
+          <ResourceTable
+            resourceName="operations"
+            items={instanceOps.slice(0, 20)}
+            loading={opsLoading}
+            columns={[
+              { id: "target", header: "Instance", cell: (o) => api.last(o.targetLink) },
+              { id: "type", header: "Operation", cell: (o) => o.operationType },
+              { id: "status", header: "Status", cell: (o) => o.status },
+              { id: "time", header: "Time", cell: (o) => fmtDate(o.endTime) },
+            ]}
+          />
+          <NotSimulated compact feature="Recommender & VM Manager"
+            note="Recommender suggestions and VM Manager (Patch, OS policies, VM Extension Manager) aren't modeled in Vyomi." />
+        </CapabilityContainer>
       </TabPanel>
       <TabPanel value={tab} name="schedules">
         <NotSimulated feature="Instance schedules" note="Scheduled start/stop policies aren't modeled." />
@@ -122,8 +142,8 @@ export default function VmInstances() {
           </MenuItem>
         ))}
         <MenuItem onClick={() => { setSel([`${menu.inst._zoneScope}/${menu.inst.name}`]); setMenu(null); setDel(true); }}>Delete</MenuItem>
-        <MenuItem disabled>View logs (not simulated)</MenuItem>
-        <MenuItem disabled>View monitoring (not simulated)</MenuItem>
+        {menu && <MenuItem component="a" href={`#/compute/instances/${menu.inst._zoneScope}/${menu.inst.name}`} onClick={() => setMenu(null)}>View logs</MenuItem>}
+        {menu && <MenuItem component="a" href={`#/compute/instances/${menu.inst._zoneScope}/${menu.inst.name}`} onClick={() => setMenu(null)}>View monitoring</MenuItem>}
       </Menu>
 
       <DeleteDialog

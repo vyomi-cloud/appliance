@@ -112,6 +112,32 @@ def run() -> int:
     _check("setLabels 200", sl.status == 200)
     _check("label updated", _jbody(_call(st, "GET", "/zones/%s/instances/web-1" % ZONE))["labels"]["env"] == "staging")
 
+    # 4b. serial port output: a real replay of web-1's own recorded lifecycle operations
+    # (insert/stop/start/suspend/resume/reset/setLabels so far), not a fabricated guest boot
+    # log; screenshot/getGuestAttributes honestly fail (no guest OS, no framebuffer, no agent).
+    sp = _call(st, "GET", "/zones/%s/instances/web-1/serialPort" % ZONE)
+    _check("getSerialPortOutput 200", sp.status == 200)
+    spb = _jbody(sp)
+    _check("serial output kind", spb["kind"] == "compute#serialPortOutput")
+    sp_lines = spb["contents"].splitlines()
+    _check("serial output has one line per recorded operation", len(sp_lines) == 7)
+    _check("serial output replays the real lifecycle in order",
+           [l.split("  ", 1)[-1] for l in sp_lines] ==
+           ["Instance web-1 created.", "Instance web-1 stopped.", "Instance web-1 started.",
+            "Instance web-1 suspended.", "Instance web-1 resumed.", "Instance web-1 reset.",
+            "Instance web-1 labels updated."])
+    sp2 = _jbody(_call(st, "GET", "/zones/%s/instances/web-1/serialPort" % ZONE, query={"start": spb["next"]}))
+    _check("serial output start cursor returns nothing new yet", sp2["contents"] == "")
+    sp_missing = _call(st, "GET", "/zones/%s/instances/ghost/serialPort" % ZONE)
+    _check("serial output for missing instance 404", sp_missing.status == 404)
+
+    shot = _call(st, "GET", "/zones/%s/instances/web-1/screenshot" % ZONE)
+    _check("getScreenshot honestly fails (not a silent success)", shot.status == 400
+           and _jbody(shot)["error"]["status"] == "FAILED_PRECONDITION")
+    attrs = _call(st, "GET", "/zones/%s/instances/web-1/getGuestAttributes" % ZONE)
+    _check("getGuestAttributes honestly fails (not a silent success)", attrs.status == 400
+           and _jbody(attrs)["error"]["status"] == "FAILED_PRECONDITION")
+
     # 5. standalone disk + createSnapshot + in-use delete protection
     dr = _call(st, "POST", "/zones/%s/disks" % ZONE, {"name": "data-1", "sizeGb": 50, "type": "pd-ssd"})
     _check("insert disk 200", dr.status == 200)
