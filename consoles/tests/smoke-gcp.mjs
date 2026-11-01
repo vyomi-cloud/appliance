@@ -792,6 +792,125 @@ try {
     !(pamPolRevoked.bindings || []).some((b) => b.role === "roles/editor" && b.members.includes(PAM_REQUESTER2)));
   await shot("15-pam-approve-grants");
 
+  // PAM Settings: enable "require justification" via the UI → a wire grant request with
+  // no justification is really rejected; the reverse (wire enables it, UI shows the saved
+  // state) is implicit in loading the Settings tab after Save.
+  await page.goto(UI + "#/iam-admin/pam");
+  await page.getByRole("tab", { name: "Settings" }).click();
+  await page.getByLabel("Notification channels").fill("secops@example.com");
+  await page.getByRole("checkbox", { name: "Require a justification to request a grant" }).check();
+  await page.getByRole("button", { name: "Save" }).click();
+  await page.getByText("Saved PAM settings").first().waitFor({ timeout: 10000 });
+  const PAM_NOJUST = `pam-nojust-${Date.now() % 100000}`;
+  await wire(`/v1/projects/vyomi-project/locations/global/entitlements?entitlementId=${PAM_NOJUST}`,
+    { method: "POST", body: JSON.stringify({ maxRequestDuration: "3600s" }) });
+  const noJustRes = await wire(`/v1/projects/vyomi-project/locations/global/entitlements/${PAM_NOJUST}/grants`,
+    { method: "POST", body: JSON.stringify({ requester: "user:nojust@example.com" }) });
+  check("PAM Settings 'require justification' saved via UI → native wire rejects a grant with none", noJustRes.status === 400);
+  await wire("/v1/projects/vyomi-project/locations/global/settings", { method: "PATCH", body: JSON.stringify({ requireJustification: false }) });
+
+  // Service account Metrics tab: issuing a credential over the native iamcredentials wire
+  // (as the smoke SA created above) shows up as a real request in the UI's Metrics tab.
+  await wire(`/v1/projects/-/serviceAccounts/${encodeURIComponent(SA_EMAIL)}:generateAccessToken`,
+    { method: "POST", body: JSON.stringify({ scope: ["https://www.googleapis.com/auth/cloud-platform"] }) });
+  await page.goto(UI + `#/iam-admin/serviceaccounts/details/${encodeURIComponent(SA_EMAIL)}?tab=metrics`);
+  await page.getByText("generateAccessToken").first().waitFor({ timeout: 10000 });
+  check("credential issued over native iamcredentials wire → shown in the UI Metrics tab", true);
+
+  // Groups (Cloud Identity): create via the UI → shown over the native wire.
+  const GROUP_EMAIL = `smoke-group-${Date.now() % 100000}@example.com`;
+  await page.goto(UI + "#/iam-admin/groups");
+  await page.getByRole("button", { name: "Create group" }).click();
+  await page.getByLabel("Group email").fill(GROUP_EMAIL);
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByText(GROUP_EMAIL).first().waitFor({ timeout: 10000 });
+  const groupsWire = await wjson("/v1/groups");
+  check("create group via UI → visible over native wire (groups.list)",
+    (groupsWire.groups || []).some((g) => g.groupKey.id === GROUP_EMAIL));
+
+  // Workforce Identity Federation: create a pool via the UI → shown over the native wire
+  // under the project's real backing organization.
+  const WF_POOL = `smoke-wf-${Date.now() % 100000}`;
+  await page.goto(UI + "#/iam-admin/workforce-identity-pools");
+  await page.getByRole("button", { name: "Create pool" }).click();
+  await page.getByLabel("Pool ID").fill(WF_POOL);
+  await page.getByRole("dialog").getByRole("button", { name: "Create pool" }).click();
+  await page.getByText(WF_POOL).first().waitFor({ timeout: 10000 });
+  const wfPoolsWire = await wjson("/v1/locations/global/workforcePools");
+  check("create workforce pool via UI → visible over native wire (org-scoped)",
+    (wfPoolsWire.workforcePools || []).some((p) => p.name.endsWith(`/${WF_POOL}`)));
+
+  // Principal Access Boundary: create a policy + binding over the wire that narrows a
+  // member's access → the UI shows both, and the native testIamPermissions decision
+  // reflects the real narrowing (not stored-but-unevaluated config).
+  const orgMeta = await wjson("/v3/projects/vyomi-project");
+  const ORG_NAME = `organizations/${orgMeta.parent.id}`;
+  const PAB_ID = `smoke-pab-${Date.now() % 100000}`;
+  const pabPolicy = await wjson(`/v3/${ORG_NAME}/locations/global/principalAccessBoundaryPolicies?principalAccessBoundaryPolicyId=${PAB_ID}`,
+    { method: "POST", body: JSON.stringify({ displayName: PAB_ID, details: { rules: [{ resources: ["projects/some-other-project"] }] } }) });
+  const PAB_MEMBER = `user:pab-${Date.now() % 100000}@example.com`;
+  await wire(`/v1/projects/vyomi-project:setIamPolicy`, { method: "POST", body: JSON.stringify({ policy: { bindings: [{ role: "roles/viewer", members: [PAB_MEMBER] }] } }) });
+  await wire(`/v3/${ORG_NAME}/locations/global/policyBindings?policyBindingId=${PAB_ID}`,
+    { method: "POST", body: JSON.stringify({ policy: pabPolicy.name, target: { principal: PAB_MEMBER } }) });
+  await page.goto(UI + "#/iam-admin/principal-access-boundary");
+  await page.getByText(PAB_ID).first().waitFor({ timeout: 10000 });
+  const pabDecision = await wjson("/v1/projects/vyomi-project:testIamPermissions",
+    { method: "POST", body: JSON.stringify({ permissions: ["resourcemanager.projects.get"], member: PAB_MEMBER }) });
+  check("PAB policy+binding created over wire → shown in UI, and REALLY denies the bound member on an out-of-boundary resource",
+    (pabDecision.permissions || []).length === 0);
+  await shot("15b-principal-access-boundary");
+
+  // Managed Workload Identities: create via the UI → real certificate issued, visible
+  // over the native wire.
+  await wire(`/v1/projects/vyomi-project/locations/global/workloadIdentityPools?workloadIdentityPoolId=smoke-mwi-pool`,
+    { method: "POST", body: JSON.stringify({ displayName: "smoke-mwi-pool" }) });
+  await page.goto(UI + "#/iam-admin/managed-workload-identity-pools");
+  const MWI_ID = `smoke-mwi-${Date.now() % 100000}`;
+  await page.getByRole("button", { name: "Create managed identity" }).click();
+  await page.getByRole("dialog").getByLabel("Pool").click();
+  await page.getByRole("option", { name: "smoke-mwi-pool" }).click();
+  await page.getByLabel("Managed identity ID").fill(MWI_ID);
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByText(MWI_ID).first().waitFor({ timeout: 10000 });
+  const mwiWire = await wjson("/v1/projects/vyomi-project/locations/global/workloadIdentityPools/smoke-mwi-pool/managedIdentities");
+  check("create managed identity via UI → visible over native wire with an issued certificate",
+    (mwiWire.managedIdentities || []).some((m) => m.name.endsWith(`/${MWI_ID}`) && m.certificates.length === 1));
+
+  // Asset Inventory: a service account created over the wire shows up in the UI search.
+  const ASSET_SA = `smoke-asset-${Date.now() % 100000}`;
+  await wire("/v1/projects/vyomi-project/serviceAccounts", { method: "POST", body: JSON.stringify({ accountId: ASSET_SA }) });
+  await page.goto(UI + "#/iam-admin/asset-inventory");
+  await page.getByText(`${ASSET_SA}@vyomi-project.iam.gserviceaccount.com`).first().waitFor({ timeout: 10000 });
+  check("service account created over wire → found by Asset Inventory searchAllResources", true);
+
+  // Security Insights: a service account with a user-managed key over the wire is really
+  // flagged by the UI's live lint — not a canned list.
+  const INSIGHT_SA = `smoke-insight-${Date.now() % 100000}`;
+  const insightSa = await wjson("/v1/projects/vyomi-project/serviceAccounts", { method: "POST", body: JSON.stringify({ accountId: INSIGHT_SA }) });
+  await wire(`/v1/projects/vyomi-project/serviceAccounts/${encodeURIComponent(insightSa.email)}/keys`, { method: "POST", body: "{}" });
+  await page.goto(UI + "#/iam-admin/security-insights");
+  await page.getByText(new RegExp(insightSa.email)).first().waitFor({ timeout: 10000 });
+  check("service account key created over wire → flagged live by Security Insights", true);
+
+  // Identity-Aware Proxy: add a resource via the UI → the native checkAccess decision
+  // really flips with the IAP toggle and the IAM policy, not a static disclaimer.
+  const IAP_ID = `smoke-iap-${Date.now() % 100000}`;
+  await page.goto(UI + "#/iam-admin/iap");
+  await page.getByRole("button", { name: "Add resource" }).click();
+  await page.getByLabel("Resource ID").fill(IAP_ID);
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  await page.getByText(IAP_ID).first().waitFor({ timeout: 10000 });
+  const iapDeniedWire = await wjson(`/v1/projects/vyomi-project/iap_web/${IAP_ID}:checkAccess`,
+    { method: "POST", body: JSON.stringify({ member: "user:nobody@example.com" }) });
+  check("IAP resource added via UI → native checkAccess denies a member with no accessor role", iapDeniedWire.allowed === false);
+  await wire(`/v1/projects/vyomi-project/iap_web/${IAP_ID}:setIamPolicy`, {
+    method: "POST", body: JSON.stringify({ policy: { bindings: [{ role: "roles/iap.httpsResourceAccessor", members: ["user:nobody@example.com"] }] } }),
+  });
+  const iapAllowedWire = await wjson(`/v1/projects/vyomi-project/iap_web/${IAP_ID}:checkAccess`,
+    { method: "POST", body: JSON.stringify({ member: "user:nobody@example.com" }) });
+  check("granting roles/iap.httpsResourceAccessor over the wire → native checkAccess now allows that member", iapAllowedWire.allowed === true);
+  await shot("15c-identity-aware-proxy");
+
   // Kubernetes Engine: create an Autopilot cluster through the UI, cross-check over the
   // native Kubernetes Engine REST API, add a node pool over the wire and see it in the UI.
   const K = `v4-gcp-smoke-k8s-${Date.now() % 100000}`;

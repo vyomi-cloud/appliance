@@ -36,10 +36,11 @@
  },
  "gcp.iam-admin.service-account-metrics-logs": {
   "title": "Service account Metrics tab",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "Per-service-account request metrics aren't modeled; Vyomi has no telemetry pipeline backing this view."
-  ]
+   "Shows a real series derived from the credentials this service account actually issued (access tokens, ID tokens, signed blobs/JWTs via iamcredentials.googleapis.com) — total request count, a breakdown by method and a per-day series — not Cloud Monitoring's full request/error/latency metrics (Vyomi has no request-latency telemetry pipeline)."
+  ],
+  "tests": ["tests/conformance/test_gcp_iam_core.py"]
  },
  "gcp.iam-admin.service-account-logs": {
   "title": "Service account Logs tab",
@@ -105,10 +106,11 @@
  },
  "gcp.iam-admin.pam-settings": {
   "title": "PAM Settings",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "Notification channels and default approval settings aren't modeled."
-  ]
+   "Notification channels and a 'require justification' default are stored per project and ENFORCED: when 'require justification' is on, grant requests submitted without one are rejected, and every grant lifecycle event (requested, activated, denied, revoked, expired) records which configured channels Vyomi would notify. Vyomi does not deliver a real email or Pub/Sub message to those channels."
+  ],
+  "tests": ["tests/conformance/test_gcp_pam_core.py"]
  },
  "gcp.iam-admin.essential-contacts": {
   "title": "Essential Contacts",
@@ -140,35 +142,51 @@
  },
  "gcp.iam-admin.workforce-identity-federation": {
   "title": "Workforce Identity Federation",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["This feature requires an organization; Vyomi's GCP lens is project-scoped."]
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Every Vyomi project has a real backing organization (core/gcp_resourcemanager_core.py's default organization); creating, listing and deleting a workforce pool under it is real and stateful. Connecting an external OIDC/SAML workforce identity provider and exchanging its tokens for Google credentials is not modeled (same limitation as the project-scoped Workload Identity Federation pools)."
+  ],
+  "tests": ["tests/conformance/test_gcp_resourcemanager_core.py"]
  },
  "gcp.iam-admin.groups": {
   "title": "Groups",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["This feature requires an organization; Vyomi's GCP lens is project-scoped."]
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Cloud Identity group create/get/list/delete and membership add/list/remove, under the project's real backing organization, are real and stateful. Google Workspace/Cloud Identity directory sync, group-based Gmail/Calendar resources and dynamic group membership rules are not modeled."
+  ],
+  "tests": ["tests/conformance/test_gcp_resourcemanager_core.py"]
  },
  "gcp.iam-admin.principal-access-boundary": {
   "title": "Principal Access Boundary",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["This feature requires an organization; Vyomi's GCP lens is project-scoped."]
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Policies and bindings, under the project's real backing organization, are real and stateful, and ENFORCED: core/gcp_iam_core.py's testIamPermissions narrows a bound principal's access to only the resources named in its boundary's rules, even when a normal Allow-policy binding would otherwise grant more. Resource-type boundaries (vs. exact resource names) and the Boundary conditions CEL language aren't evaluated."
+  ],
+  "tests": ["tests/conformance/test_gcp_iam_core.py", "tests/conformance/test_gcp_resourcemanager_core.py"]
  },
  "gcp.iam-admin.managed-workload-identities": {
   "title": "Managed Workload Identities",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "Managed Workload Identities auto-issues and rotates short-lived workload certificates (SPIFFE/mTLS trust domains) outside the key-file model; Vyomi doesn't run a certificate authority or credential-issuance pipeline to back that."
-  ]
+   "Managed identities nested under a workload identity pool are real and stateful — create, list, delete and certificate rotation all work, each issuing a new certificate record (serial number, notBefore/notAfter) on rotation. The certificate material is synthetic (not issued by a real CA), so it cannot be used to authenticate against anything outside Vyomi, and automatic background rotation on expiry is not modeled — rotation is explicit (same caveat as service-account keys)."
+  ],
+  "tests": ["tests/conformance/test_gcp_iam_core.py"]
  },
  "gcp.iam-admin.asset-inventory": {
   "title": "Asset Inventory",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["Cloud Asset Inventory's resource/IAM/org-policy search index isn't modeled."]
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "searchAllResources indexes what Vyomi's IAM & Resource Manager cores actually model for this project — service accounts, custom roles, workload identity pools, the project itself and its tag keys — live, from current state. It does not index resources from other GCP services (storage buckets, Pub/Sub topics, …) or keep Cloud Asset Inventory's change-history feed."
+  ],
+  "tests": ["tests/conformance/test_gcp_iam_core.py"]
  },
  "gcp.iam-admin.security-insights": {
   "title": "Security Insights",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["IAM lint/insight analysis isn't modeled."]
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "A small set of real IAM-lint rules are evaluated live against the project's actual policy bindings, service-account keys and issued credentials on every call (basic-role grants, service accounts with user-managed keys, service accounts that have never issued a credential and have no keys) — not GCP's full IAM Recommender rule catalog, and findings aren't persisted or tracked for dismissal across calls."
+  ],
+  "tests": ["tests/conformance/test_gcp_iam_core.py"]
  },
  "gcp.iam-admin.quotas-system-limits": {
   "title": "Quotas & System Limits",
@@ -180,8 +198,11 @@
  },
  "gcp.iam-admin.identity-organization": {
   "title": "Identity & Organization",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["This feature requires an organization; Vyomi's GCP lens is project-scoped."]
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Shows the project's real backing organization (display name, directory customer ID, state) via Resource Manager's project.parent -> organization lookup. Claiming domain ownership via a DNS TXT record and signing up for Google Workspace/Cloud Identity (the real console's setup flow when a project has no organization yet) aren't modeled — every Vyomi project already has one."
+  ],
+  "tests": ["tests/conformance/test_gcp_resourcemanager_core.py"]
  },
  "gcp.iam-admin.privacy-security": {
   "title": "Privacy & Security",
@@ -190,7 +211,10 @@
  },
  "gcp.iam-admin.identity-aware-proxy": {
   "title": "Identity-Aware Proxy",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["IAP's per-resource access proxy isn't modeled."]
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Per-resource IAP enable/disable and its IAM policy (roles/iap.httpsResourceAccessor) are real and stateful, and the Allow decision is ENFORCED: a checkAccess call returns the same allow/deny IAP's own proxy would — denied while IAP is off, denied without the accessor role, allowed with it. Vyomi does not run an actual HTTPS reverse proxy in front of a real backend service/App Engine app; checkAccess is the decision, not a live request path."
+  ],
+  "tests": ["tests/conformance/test_gcp_iam_core.py"]
  }
 }

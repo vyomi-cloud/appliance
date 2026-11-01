@@ -20,14 +20,14 @@
   "policy-troubleshooter": { "route": "#/iam-admin/troubleshooter" },
   "policy-analyzer": { "route": "#/iam-admin/analyzer" },
   "workload-identity-federation": { "route": "#/iam-admin/workload-identity-pools", "live": "workload-pool" },
-  "groups": { "route": "#/iam-admin/groups" },
-  "workforce-identity-federation": { "route": "#/iam-admin/workforce-identity-pools" },
-  "principal-access-boundary": { "route": "#/iam-admin/principal-access-boundary" },
-  "managed-workload-identities": { "route": "#/iam-admin/managed-workload-identity-pools" },
-  "asset-inventory": { "route": "#/iam-admin/asset-inventory" },
-  "security-insights": { "route": "#/iam-admin/security-insights" },
+  "groups": { "route": "#/iam-admin/groups", "live": "group" },
+  "workforce-identity-federation": { "route": "#/iam-admin/workforce-identity-pools", "live": "workforce-pool" },
+  "principal-access-boundary": { "route": "#/iam-admin/principal-access-boundary", "live": "pab-policy" },
+  "managed-workload-identities": { "route": "#/iam-admin/managed-workload-identity-pools", "live": "managed-identity" },
+  "asset-inventory": { "route": "#/iam-admin/asset-inventory", "live": "service-account" },
+  "security-insights": { "route": "#/iam-admin/security-insights", "live": "security-insight" },
   "quotas-system-limits": { "route": "#/iam-admin/quotas" },
   "identity-organization": { "route": "#/iam-admin/cloudidentity/consumer" },
   "privacy-security": { "route": "#/iam-admin/privacy" },
-  "identity-aware-proxy": { "route": "#/iam-admin/iap" }
+  "identity-aware-proxy": { "route": "#/iam-admin/iap", "live": "iap-resource" }
 }

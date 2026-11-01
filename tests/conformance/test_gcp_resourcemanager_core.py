@@ -107,6 +107,78 @@ check("delete predefined constraint by its full (slash-containing) name", s == 2
 s, got3 = call(st, "GET", f"/v2/{pol2['name']}")
 check("deleted predefined constraint is gone", s == 404)
 
+# organizations — every project has an implicit backing organization (depth: the
+# former "requires an organization" excuse for Groups / Workforce Identity
+# Federation / Principal Access Boundary / Identity & Organization is now real)
+s, pmeta = call(st, "GET", f"/v3/projects/{project}")
+check("project auto-gets a parent organization", s == 200 and pmeta.get("parent", {}).get("type") == "organization", pmeta)
+org_id = pmeta["parent"]["id"]
+s, org = call(st, "GET", f"/v3/organizations/{org_id}")
+check("get organization 200", s == 200 and org["name"] == f"organizations/{org_id}", org)
+check("organization has a directory customer id", bool(org.get("directoryCustomerId")))
+s, search = call(st, "GET", "/v3/organizations")
+check("organizations:search lists the same org", s == 200 and search["organizations"][0]["name"] == org["name"])
+s, missing = call(st, "GET", "/v3/organizations/0")
+check("unknown organization -> 404", s == 404)
+
+# Cloud Identity groups + memberships
+s, grp = call(st, "POST", "/v1/groups", {"groupKey": {"id": "eng@example.com"}, "displayName": "Engineering"})
+check("create group 200", s == 200 and grp["groupKey"]["id"] == "eng@example.com", grp)
+s, dup = call(st, "POST", "/v1/groups", {"groupKey": {"id": "eng@example.com"}})
+check("duplicate group -> 409", s == 409)
+s, lst = call(st, "GET", "/v1/groups")
+check("list groups has eng@", s == 200 and "eng@example.com" in [g["groupKey"]["id"] for g in lst["groups"]])
+gid = grp["name"].rsplit("/", 1)[-1]
+s, got = call(st, "GET", f"/v1/groups/{gid}")
+check("get group 200", s == 200 and got["name"] == grp["name"])
+s, mem = call(st, "POST", f"/v1/{grp['name']}/memberships", {"preferredMemberKey": {"id": "user:alice@example.com"}})
+check("add membership 200", s == 200 and mem["preferredMemberKey"]["id"] == "user:alice@example.com", mem)
+s, dupmem = call(st, "POST", f"/v1/{grp['name']}/memberships", {"preferredMemberKey": {"id": "user:alice@example.com"}})
+check("duplicate membership -> 409", s == 409)
+s, memlst = call(st, "GET", f"/v1/{grp['name']}/memberships")
+check("list memberships has alice", s == 200 and len(memlst["memberships"]) == 1)
+s, _ = call(st, "DELETE", f"/v1/groups/{gid}")
+check("delete group 200", s == 200)
+s, memlst2 = call(st, "GET", f"/v1/{grp['name']}/memberships")
+check("deleting a group drops its memberships too", memlst2["memberships"] == [])
+
+# Workforce Identity Federation pools (org-scoped)
+s, wp = call(st, "POST", "/v1/locations/global/workforcePools", {"displayName": "Contractors"}, query={"workforcePoolId": "contractors"})
+check("create workforce pool 200", s == 200 and wp["name"] == "locations/global/workforcePools/contractors", wp)
+check("workforce pool parented under the default organization", wp["parent"] == org["name"])
+s, dup = call(st, "POST", "/v1/locations/global/workforcePools", {}, query={"workforcePoolId": "contractors"})
+check("duplicate workforce pool -> 409", s == 409)
+s, lst = call(st, "GET", "/v1/locations/global/workforcePools", query={"parent": org["name"]})
+check("list workforce pools has contractors", s == 200 and "contractors" in [p["name"].rsplit("/", 1)[-1] for p in lst["workforcePools"]])
+s, got = call(st, "GET", f"/v1/{wp['name']}")
+check("get workforce pool 200", s == 200 and got["name"] == wp["name"])
+s, _ = call(st, "DELETE", f"/v1/{wp['name']}")
+check("delete workforce pool 200", s == 200)
+s, after = call(st, "GET", f"/v1/{wp['name']}")
+check("deleted workforce pool 404s", s == 404)
+
+# Principal Access Boundary policies + bindings (enforcement itself is proven against
+# core/gcp_iam_core.py's testIamPermissions in test_gcp_iam_core.py)
+s, pab = call(st, "POST", f"/v3/{org['name']}/locations/global/principalAccessBoundaryPolicies",
+             {"displayName": "Prod only", "details": {"rules": [{"resources": [f"projects/{project}"]}]}},
+             query={"principalAccessBoundaryPolicyId": "prod-only"})
+check("create PAB policy 200", s == 200 and pab["details"]["rules"][0]["resources"] == [f"projects/{project}"], pab)
+s, lst = call(st, "GET", f"/v3/{org['name']}/locations/global/principalAccessBoundaryPolicies")
+check("list PAB policies has prod-only", s == 200 and pab["name"] in [p["name"] for p in lst["principalAccessBoundaryPolicies"]])
+s, bad_bind = call(st, "POST", f"/v3/{org['name']}/locations/global/policyBindings",
+                   {"policy": "organizations/0/locations/global/principalAccessBoundaryPolicies/nope",
+                    "target": {"principal": "user:x@example.com"}}, query={"policyBindingId": "b1"})
+check("binding to an unknown policy -> 400", s == 400)
+s, bind = call(st, "POST", f"/v3/{org['name']}/locations/global/policyBindings",
+              {"policy": pab["name"], "target": {"principal": "user:x@example.com"}}, query={"policyBindingId": "b1"})
+check("create PAB binding 200", s == 200 and bind["policy"] == pab["name"], bind)
+s, lst = call(st, "GET", f"/v3/{org['name']}/locations/global/policyBindings")
+check("list PAB bindings has b1", s == 200 and bind["name"] in [b["name"] for b in lst["policyBindings"]])
+s, _ = call(st, "DELETE", f"/v3/{pab['name']}")
+check("delete PAB policy 200", s == 200)
+s, lst2 = call(st, "GET", f"/v3/{org['name']}/locations/global/policyBindings")
+check("deleting a PAB policy drops its bindings too", lst2["policyBindings"] == [])
+
 print(f"{PASS} passed, {FAIL} failed")
 
 

@@ -4,7 +4,7 @@
  * Audit Logs renders the grant lifecycle Vyomi actually recorded (not the full Cloud
  * Audit Log trail). Settings (notification channels) isn't modeled. */
 import { useState } from "react";
-import { Button, Dialog, DialogActions, DialogContent, DialogTitle, MenuItem, Stack, Tab, Tabs, TextField, ToggleButton, ToggleButtonGroup } from "@mui/material";
+import { Button, Checkbox, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, MenuItem, Stack, Tab, Tabs, TextField, ToggleButton, ToggleButtonGroup } from "@mui/material";
 import RefreshIcon from "@mui/icons-material/esm/Refresh.js";
 import AddIcon from "@mui/icons-material/esm/Add.js";
 import { useAsync } from "../../../common/useAsync.js";
@@ -29,7 +29,7 @@ export default function Pam() {
       {tab === "grants" && <Grants />}
       {tab === "approve" && <ApproveGrants />}
       {tab === "audit" && <AuditLogs />}
-      {tab === "settings" && <CapabilityContainer id="gcp.iam-admin.pam-settings" title="Settings" />}
+      {tab === "settings" && <Settings />}
     </>
   );
 }
@@ -208,6 +208,48 @@ function ApproveGrants() {
           },
         ]} />
     </>
+  );
+}
+
+function Settings() {
+  const notify = useNotify();
+  const settings = useAsync(() => api.getPamSettings(), []);
+  const notifs = useAsync(() => api.listPamNotifications(), []);
+  const [channels, setChannels] = useState(null);
+  const [requireJustification, setRequireJustification] = useState(null);
+  const [busy, setBusy] = useState(false);
+  if (settings.data && channels === null) setChannels(settings.data.notificationChannels.join(", "));
+  if (settings.data && requireJustification === null) setRequireJustification(settings.data.requireJustification);
+  return (
+    <CapabilityContainer id="gcp.iam-admin.pam-settings" title="Settings" actions={
+      <Button variant="contained" size="small" disabled={busy || !settings.data} onClick={async () => {
+        setBusy(true);
+        try {
+          await api.patchPamSettings({
+            notificationChannels: channels.split(",").map((c) => c.trim()).filter(Boolean),
+            requireJustification: !!requireJustification,
+          });
+          notify.success("Saved PAM settings");
+          settings.reload(); notifs.reload();
+        } catch (e) { notify.error(e); } finally { setBusy(false); }
+      }}>Save</Button>}>
+      <ErrorAlert error={settings.error} title="Failed to load settings" />
+      <Stack spacing={2} sx={{ maxWidth: 480, mb: 3 }}>
+        <TextField label="Notification channels" value={channels ?? ""} onChange={(e) => setChannels(e.target.value)}
+          helperText="Comma-separated email addresses notified on grant lifecycle events" />
+        <FormControlLabel control={<Checkbox checked={!!requireJustification} onChange={(e) => setRequireJustification(e.target.checked)} />}
+          label="Require a justification to request a grant" />
+      </Stack>
+      <Stack sx={{ fontWeight: 500, mb: 1 }}>Recent notifications</Stack>
+      <ResourceTable resourceName="notifications" items={notifs.data || []} rowKey={(n) => `${n.grant}#${n.event}#${n.time}`}
+        loading={notifs.loading} empty="No notifications recorded yet" filterPlaceholder="Filter"
+        columns={[
+          { id: "time", header: "Time", cell: (n) => fmtDate(n.time) },
+          { id: "event", header: "Event", cell: (n) => n.event },
+          { id: "grant", header: "Grant", cell: (n) => n.grant.split("/").pop() },
+          { id: "channels", header: "Notified channels", cell: (n) => n.channels.join(", ") },
+        ]} />
+    </CapabilityContainer>
   );
 }
 

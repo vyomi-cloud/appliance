@@ -30,7 +30,7 @@ export default function ServiceAccountDetail({ params, query }) {
       {tab === "details" && sa.data && <Details email={email} sa={sa.data} reload={sa.reload} />}
       {tab === "principals" && <Principals email={email} />}
       {tab === "keys" && <Keys email={email} />}
-      {tab === "metrics" && <Box sx={{ pt: 1 }}><CapabilityContainer id="gcp.iam-admin.service-account-metrics-logs" title="Metrics" /></Box>}
+      {tab === "metrics" && <Metrics email={email} />}
       {tab === "logs" && <Logs email={email} />}
     </>
   );
@@ -148,6 +148,35 @@ function Logs({ email }) {
             { id: "time", header: "Time", sortField: "time", cell: (ev) => fmtDate(ev.time) },
             { id: "event", header: "Event", cell: (ev) => SA_LOG_ACTION_LABEL[ev.action] || ev.action },
             { id: "detail", header: "Detail", cell: (ev) => ev.role ? `${api.roleTitle(ev.role)} → ${ev.member}` : ev.member || "—" },
+          ]} />
+      </CapabilityContainer>
+    </Box>
+  );
+}
+
+function Metrics({ email }) {
+  const m = useAsync(() => api.getServiceAccountMetrics(email), [email]);
+  return (
+    <Box sx={{ pt: 1 }}>
+      <CapabilityContainer id="gcp.iam-admin.service-account-metrics-logs" title="Metrics">
+        <ErrorAlert error={m.error} title="Failed to load metrics" />
+        <KeyValue items={[
+          ["Total requests", String(m.data?.totalRequests ?? "—")],
+          ["Last request", m.data?.lastCallTime ? fmtDate(m.data.lastCallTime) : "No requests yet"],
+        ]} />
+        <Typography variant="subtitle2" sx={{ mt: 2, mb: 1 }}>Requests by method</Typography>
+        <ResourceTable resourceName="methods" items={m.data?.byMethod || []} rowKey={(r) => r.method} loading={m.loading}
+          empty="No requests made with this service account's credentials yet"
+          columns={[
+            { id: "method", header: "Method", cell: (r) => r.method },
+            { id: "count", header: "Request count", cell: (r) => r.count },
+          ]} />
+        <Typography variant="subtitle2" sx={{ mt: 2, mb: 1 }}>Requests by day</Typography>
+        <ResourceTable resourceName="days" items={m.data?.series || []} rowKey={(r) => r.date} loading={m.loading}
+          empty="No daily activity recorded yet"
+          columns={[
+            { id: "date", header: "Date", cell: (r) => r.date },
+            { id: "count", header: "Request count", cell: (r) => r.count },
           ]} />
       </CapabilityContainer>
     </Box>

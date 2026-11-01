@@ -31,18 +31,39 @@ Wire shapes (GCP IAM REST):
     Resource IAM policy
       POST   {resource}:getIamPolicy      -> {"version","bindings":[...],"etag"}
       POST   {resource}:setIamPolicy      body {"policy":{"bindings":[...]}}
-      POST   {resource}:testIamPermissions  body {"permissions":[...]}
-             -> {"permissions":[granted...]}   (EVALUATED, not echoed)
+      POST   {resource}:testIamPermissions  body {"permissions":[...],"member"?}
+             -> {"permissions":[granted...]}   (EVALUATED, not echoed; narrowed by any
+             ENFORCED Principal Access Boundary binding on `member` — see rm_store)
+    Service account Metrics tab (console-only convenience verb; derived from the real
+    iamcredentials issuance log, not synthetic)
+      GET    {resource}:metrics           -> {"totalRequests","byMethod":[...],"series":[...],"lastCallTime"}
+    Managed Workload Identities (nested under a workload identity pool)
+      POST   {pool}/managedIdentities?workloadIdentityPoolManagedIdentityId=X -> {"name","spiffeId","certificates":[...]}
+      GET    {pool}/managedIdentities[/{id}]
+      DELETE {pool}/managedIdentities/{id}
+      POST   {managedIdentity}:rotateCertificate  -> issues a new certificate
+    Asset Inventory
+      GET    projects/{p}:searchAllResources?query= -> {"results":[...],"totalResults"}
+    Security Insights
+      GET    projects/{p}/locations/global/insights -> {"insights":[...]}  (evaluated live)
+    Identity-Aware Proxy
+      POST   projects/{p}/iap_web?resourceId=X    body {displayName} -> IapResource
+      GET    projects/{p}/iap_web                 -> {"resources":[...]}
+      PATCH  {resource}  body {enabled?,displayName?}
+      DELETE {resource}
+      POST   {resource}:checkAccess  body {"member"} -> {"allowed","reason"}  (the real
+             Allow decision: enabled AND member holds roles/iap.httpsResourceAccessor)
 
 Errors use the native GCP shape {"error":{"code","message","status"}}.
 """
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from urllib.parse import unquote
 
 MAX_ACTIVITY = 200
@@ -200,6 +221,24 @@ def _pools_ns(store: IamStore) -> dict:
     return ns
 
 
+def _managed_identities_ns(store: IamStore) -> dict:
+    """Managed Workload Identities, keyed by '.../workloadIdentityPools/{pool}/managedIdentities/{id}'."""
+    ns = getattr(store, "gcp_managed_identities", None)
+    if ns is None:
+        ns = {}
+        store.gcp_managed_identities = ns  # type: ignore[attr-defined]
+    return ns
+
+
+def _iap_ns(store: IamStore) -> dict:
+    """Identity-Aware Proxy resources, keyed by 'projects/{p}/iap_web/{id}'."""
+    ns = getattr(store, "gcp_iap_resources", None)
+    if ns is None:
+        ns = {}
+        store.gcp_iap_resources = ns  # type: ignore[attr-defined]
+    return ns
+
+
 def _activity_ns(store: IamStore) -> list:
     """Applied-policy-change log (console 'Recommendations history' tab), keyed by resource."""
     ns = getattr(store, "gcp_policy_activity", None)
@@ -262,6 +301,31 @@ def org_policy_enforced(rm_store, project: str, constraint_id: str) -> bool:
         return False
     rules = (pol.get("spec") or {}).get("rules") or []
     return bool(rules) and bool(rules[0].get("enforce", True))
+
+
+def _pab_allowed_resources(rm_store, member: str | None) -> set[str] | None:
+    """Principal Access Boundary enforcement. `None` means the member is not
+    restricted by any boundary. Otherwise, the set of resource names the member's
+    bound Principal Access Boundary policies explicitly allow — testIamPermissions
+    must deny the member on every other resource, even if a regular IAM binding
+    would otherwise grant it. Mirrors the real PAB semantics: a boundary can only
+    narrow access, never widen it, on top of whatever Allow-policy bindings exist."""
+    if rm_store is None or member is None:
+        return None
+    bindings = getattr(rm_store, "pab_bindings", None) or {}
+    policies = getattr(rm_store, "pab_policies", None) or {}
+    allowed: set[str] = set()
+    restricted = False
+    for b in bindings.values():
+        if b.get("target", {}).get("principal") != member:
+            continue
+        pol = policies.get(b.get("policy"))
+        if not pol:
+            continue
+        restricted = True
+        for rule in (pol.get("details") or {}).get("rules", []):
+            allowed.update(rule.get("resources", []))
+    return allowed if restricted else None
 
 
 # Data Access audit log categories Vyomi actually evaluates for iam.googleapis.com —
@@ -722,7 +786,7 @@ def _permissions_for_role(role: str) -> set[str]:
     return ROLE_PERMISSIONS.get(role, set())
 
 
-def _test_iam_permissions(store, resource, body) -> GcpIamResponse:
+def _test_iam_permissions(store, resource, body, rm_store=None) -> GcpIamResponse:
     """EVALUATE, don't echo. For each requested permission, grant it iff the
     caller's member is in a binding whose role grants that permission.
 
@@ -736,6 +800,10 @@ def _test_iam_permissions(store, resource, body) -> GcpIamResponse:
     member = body.get("member")  # optional caller override
     policies = _policy_ns(store)
     pol = policies.get(resource) or {"bindings": []}
+
+    boundary = _pab_allowed_resources(rm_store, member)
+    if boundary is not None and resource not in boundary:
+        return _json(200, {"permissions": []})
 
     granted_perms: set[str] = set()
     for b in pol.get("bindings", []):
@@ -754,10 +822,279 @@ def _test_iam_permissions(store, resource, body) -> GcpIamResponse:
     return _json(200, {"permissions": result})
 
 
+# ── service account Metrics tab (console) ───────────────────────────────────
+def _get_service_account_metrics(store, resource: str, iamc_store=None) -> GcpIamResponse:
+    """Real request-activity series for a service account, derived from the
+    credentials this service account actually issued (core/gcp_iamcredentials_core.py's
+    `store.issued`, written on every generateAccessToken/generateIdToken/signBlob/signJwt
+    call made AS this service account) — never synthetic/random data."""
+    rsegs = resource.split("/")
+    if len(rsegs) != 4 or rsegs[0] != "projects" or rsegs[2] != "serviceAccounts":
+        return _err(400, f"Invalid resource for metrics: {resource}", "INVALID_ARGUMENT")
+    project, ident = rsegs[1], rsegs[3]
+    sas = _sa_ns(store)
+    email = ident if "@" in ident else _sa_email(ident, project)
+    if email not in sas or sas[email]["projectId"] != project:
+        return _err(404, f"Unknown service account: {ident}", "NOT_FOUND")
+    issued = list(getattr(iamc_store, "issued", {}).values()) if iamc_store is not None else []
+    rows = [r for r in issued if r.get("serviceAccount") == email]
+    by_method: dict[str, int] = {}
+    by_day: dict[str, int] = {}
+    last_call = ""
+    for r in rows:
+        by_method[r["method"]] = by_method.get(r["method"], 0) + 1
+        day = (r.get("issueTime") or "")[:10]
+        if day:
+            by_day[day] = by_day.get(day, 0) + 1
+        if (r.get("issueTime") or "") > last_call:
+            last_call = r["issueTime"]
+    return _json(200, {
+        "serviceAccount": email,
+        "totalRequests": len(rows),
+        "byMethod": [{"method": m, "count": c} for m, c in sorted(by_method.items())],
+        "series": [{"date": d, "count": c} for d, c in sorted(by_day.items())],
+        "lastCallTime": last_call,
+    })
+
+
+# ── Managed Workload Identities (nested under a workload identity pool) ─────
+def _mi_cert(identity_name: str, serial: int, now: datetime) -> dict:
+    """Synthetic X.509-shaped certificate material — real stateful lifecycle
+    (serial, notBefore/notAfter, rotation) but not issued by a real CA, so it
+    cannot be used to authenticate against anything outside Vyomi (same caveat
+    as service-account keys)."""
+    fp = hashlib.sha256(f"{identity_name}#{serial}#{now.isoformat()}".encode()).hexdigest()
+    pem = ("-----BEGIN CERTIFICATE-----\n" +
+           base64.b64encode(fp.encode()).decode() + "\n-----END CERTIFICATE-----\n")
+    return {
+        "serialNumber": str(serial),
+        "pemCertificate": pem,
+        "notBefore": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "notAfter": (now + timedelta(days=90)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    }
+
+
+def _create_managed_identity(store, pool_name, identity_id, body) -> GcpIamResponse:
+    if pool_name not in _pools_ns(store):
+        return _err(404, f"Workload identity pool {pool_name} not found.", "NOT_FOUND")
+    if not identity_id:
+        return _err(400, "workloadIdentityPoolManagedIdentityId is required.", "INVALID_ARGUMENT")
+    name = f"{pool_name}/managedIdentities/{identity_id}"
+    ns = _managed_identities_ns(store)
+    if name in ns:
+        return _err(409, f"Managed identity {identity_id} already exists.", "ALREADY_EXISTS")
+    pool_id = pool_name.rsplit("/", 1)[-1]
+    now = datetime.now(timezone.utc)
+    mi = {
+        "name": name,
+        "spiffeId": f"spiffe://{pool_id}.global.vyomi.dev/ns/default/sa/{identity_id}",
+        "description": body.get("description", ""),
+        "createTime": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "state": "ACTIVE",
+        "certificates": [_mi_cert(name, 1, now)],
+        "_next_serial": 2,
+    }
+    ns[name] = mi
+    store.persist()
+    return _json(200, {k: v for k, v in mi.items() if not k.startswith("_")})
+
+
+def _list_managed_identities(store, pool_name) -> GcpIamResponse:
+    prefix = pool_name + "/managedIdentities/"
+    out = [{k: v for k, v in mi.items() if not k.startswith("_")}
+           for n, mi in sorted(_managed_identities_ns(store).items()) if n.startswith(prefix)]
+    return _json(200, {"managedIdentities": out})
+
+
+def _get_managed_identity(store, name) -> GcpIamResponse:
+    mi = _managed_identities_ns(store).get(name)
+    if mi is None:
+        return _err(404, f"Managed identity {name} not found.", "NOT_FOUND")
+    return _json(200, {k: v for k, v in mi.items() if not k.startswith("_")})
+
+
+def _delete_managed_identity(store, name) -> GcpIamResponse:
+    ns = _managed_identities_ns(store)
+    if name not in ns:
+        return _err(404, f"Managed identity {name} not found.", "NOT_FOUND")
+    del ns[name]
+    store.persist()
+    return _json(200, {})
+
+
+def _rotate_managed_identity_cert(store, name) -> GcpIamResponse:
+    ns = _managed_identities_ns(store)
+    mi = ns.get(name)
+    if mi is None:
+        return _err(404, f"Managed identity {name} not found.", "NOT_FOUND")
+    now = datetime.now(timezone.utc)
+    cert = _mi_cert(name, mi["_next_serial"], now)
+    mi["_next_serial"] += 1
+    mi["certificates"].insert(0, cert)
+    mi["certificates"] = mi["certificates"][:5]
+    store.persist()
+    return _json(200, {k: v for k, v in mi.items() if not k.startswith("_")})
+
+
+# ── Asset Inventory: searchAllResources over what Vyomi models for IAM/RM ───
+def _search_assets(store, project, query_str, rm_store=None) -> GcpIamResponse:
+    """Real, live search over the IAM & Resource Manager resources this project
+    actually has — not Cloud Asset Inventory's full org-wide resource/IAM/policy
+    index (which spans every GCP service and keeps a change history Vyomi doesn't
+    maintain)."""
+    q = (query_str or "").strip().lower()
+    results = []
+    for email, sa in sorted(_sa_ns(store).items()):
+        if sa["projectId"] != project:
+            continue
+        results.append({
+            "name": sa["name"], "assetType": "iam.googleapis.com/ServiceAccount",
+            "displayName": sa.get("displayName") or email, "project": f"projects/{project}",
+            "state": "DISABLED" if sa.get("disabled") else "ACTIVE",
+        })
+    for name, role in sorted(_roles_ns(store).items()):
+        if not name.startswith(f"projects/{project}/roles/"):
+            continue
+        results.append({
+            "name": name, "assetType": "iam.googleapis.com/Role",
+            "displayName": role.get("title") or name.rsplit("/", 1)[-1],
+            "project": f"projects/{project}", "state": role.get("stage", "GA"),
+        })
+    for name, pool in sorted(_pools_ns(store).items()):
+        if not name.startswith(f"projects/{project}/locations/"):
+            continue
+        results.append({
+            "name": name, "assetType": "iam.googleapis.com/WorkloadIdentityPool",
+            "displayName": pool.get("displayName") or name.rsplit("/", 1)[-1],
+            "project": f"projects/{project}", "state": pool.get("state", "ACTIVE"),
+        })
+    if rm_store is not None:
+        p = getattr(rm_store, "projects", {}).get(project)
+        if p:
+            results.append({
+                "name": p["name"], "assetType": "cloudresourcemanager.googleapis.com/Project",
+                "displayName": p.get("displayName") or project, "project": f"projects/{project}",
+                "state": p.get("state", "ACTIVE"),
+            })
+        for name, tk in sorted(getattr(rm_store, "tag_keys", {}).items()):
+            if tk.get("parent") != f"projects/{project}":
+                continue
+            results.append({
+                "name": name, "assetType": "cloudresourcemanager.googleapis.com/TagKey",
+                "displayName": tk.get("shortName", ""), "project": f"projects/{project}", "state": "ACTIVE",
+            })
+    if q:
+        results = [r for r in results if q in r["displayName"].lower() or q in r["assetType"].lower()]
+    return _json(200, {"results": results, "totalResults": len(results)})
+
+
+# ── Security Insights: lint rules evaluated live over the current IAM state ─
+def _security_insights(store, project, iamc_store=None) -> GcpIamResponse:
+    """Real IAM-lint-style findings computed fresh on every call from the
+    project's ACTUAL policy bindings, service accounts, keys and issued
+    credentials — not a canned or randomly-generated list."""
+    insights = []
+    pol = _policy_ns(store).get(f"projects/{project}") or {}
+    for b in pol.get("bindings", []):
+        if b.get("role") not in ("roles/owner", "roles/editor"):
+            continue
+        for m in b.get("members", []):
+            insights.append({
+                "name": "insights/primitive-role-" + hashlib.sha1(f"{b['role']}|{m}".encode()).hexdigest()[:12],
+                "category": "PERMISSIONS_USAGE", "severity": "MEDIUM",
+                "description": f"{m} is granted the basic role {b['role']} on projects/{project}. "
+                                "Basic roles grant broad permissions across every service; consider a "
+                                "predefined or custom role with the specific permissions needed instead.",
+                "stateMetadata": {"state": "ACTIVE"},
+            })
+    issued_sas = {r["serviceAccount"] for r in getattr(iamc_store, "issued", {}).values()} if iamc_store else set()
+    keys = _keys_ns(store)
+    for email, sa in sorted(_sa_ns(store).items()):
+        if sa["projectId"] != project:
+            continue
+        has_keys = bool(keys.get(email))
+        if has_keys:
+            insights.append({
+                "name": "insights/sa-has-keys-" + hashlib.sha1(email.encode()).hexdigest()[:12],
+                "category": "SECURITY", "severity": "LOW",
+                "description": f"{email} has {len(keys[email])} user-managed key(s). Downloadable keys are a "
+                                "long-lived credential risk; prefer Workload Identity Federation or short-lived "
+                                "tokens where possible.",
+                "stateMetadata": {"state": "ACTIVE"},
+            })
+        if not has_keys and email not in issued_sas and not sa.get("disabled"):
+            insights.append({
+                "name": "insights/sa-unused-" + hashlib.sha1(email.encode()).hexdigest()[:12],
+                "category": "PERMISSIONS_USAGE", "severity": "LOW",
+                "description": f"{email} has no keys and has never issued a credential (access token, ID "
+                                "token or signed blob/JWT). If it is not needed, consider removing it.",
+                "stateMetadata": {"state": "ACTIVE"},
+            })
+    return _json(200, {"insights": insights})
+
+
+# ── Identity-Aware Proxy: per-resource toggle + the Allow decision it gates ──
+def _iap_create(store, project, resource_id, body) -> GcpIamResponse:
+    if not resource_id:
+        return _err(400, "resourceId is required.", "INVALID_ARGUMENT")
+    name = f"projects/{project}/iap_web/{resource_id}"
+    ns = _iap_ns(store)
+    if name in ns:
+        return _err(409, f"IAP resource {resource_id} already exists.", "ALREADY_EXISTS")
+    ns[name] = {"name": name, "enabled": bool(body.get("enabled", True)),
+                "displayName": body.get("displayName", resource_id)}
+    store.persist()
+    return _json(200, dict(ns[name]))
+
+
+def _iap_list(store, project) -> GcpIamResponse:
+    prefix = f"projects/{project}/iap_web/"
+    return _json(200, {"resources": [dict(r) for n, r in sorted(_iap_ns(store).items()) if n.startswith(prefix)]})
+
+
+def _iap_patch(store, name, body) -> GcpIamResponse:
+    ns = _iap_ns(store)
+    r = ns.get(name)
+    if r is None:
+        return _err(404, f"IAP resource {name} not found.", "NOT_FOUND")
+    if "enabled" in body:
+        r["enabled"] = bool(body["enabled"])
+    if "displayName" in body:
+        r["displayName"] = body["displayName"]
+    store.persist()
+    return _json(200, dict(r))
+
+
+def _iap_delete(store, name) -> GcpIamResponse:
+    ns = _iap_ns(store)
+    if name not in ns:
+        return _err(404, f"IAP resource {name} not found.", "NOT_FOUND")
+    del ns[name]
+    store.persist()
+    return _json(200, {})
+
+
+def _iap_check_access(store, resource, body) -> GcpIamResponse:
+    """The decision IAP's proxy makes on every request: enabled AND the member
+    holds roles/iap.httpsResourceAccessor (or roles/owner) on this IAP resource."""
+    member = body.get("member")
+    r = _iap_ns(store).get(resource)
+    if r is None:
+        return _err(404, f"IAP resource {resource} not found.", "NOT_FOUND")
+    if not r.get("enabled"):
+        return _json(200, {"allowed": False, "reason": "Identity-Aware Proxy is turned off for this resource."})
+    pol = _policy_ns(store).get(resource) or {"bindings": []}
+    accessor_roles = {"roles/iap.httpsResourceAccessor", "roles/owner"}
+    allowed = any(member in b.get("members", []) for b in pol.get("bindings", []) if b.get("role") in accessor_roles)
+    reason = "Member holds roles/iap.httpsResourceAccessor." if allowed else \
+        "Member does not hold roles/iap.httpsResourceAccessor (or roles/owner) on this resource."
+    return _json(200, {"allowed": allowed, "reason": reason})
+
+
 # ── dispatch ────────────────────────────────────────────────────────────────
 def dispatch(store: IamStore, method: str, path: str,
              query: dict | None = None, headers: dict | None = None,
-             body: bytes = b"", rm_store=None, logger=None) -> GcpIamResponse:
+             body: bytes = b"", rm_store=None, logger=None, iamc_store=None) -> GcpIamResponse:
     """Single routing point for the native GCP IAM REST API — what unmodified
     google-cloud-iam / google-cloud-resource-manager clients speak."""
     query = query or {}
@@ -785,6 +1122,18 @@ def dispatch(store: IamStore, method: str, path: str,
     if ":" in p:
         resource_path, _, verb = p.rpartition(":")
         resource = unquote(resource_path)
+        if verb == "metrics" and method == "GET":
+            return _get_service_account_metrics(store, resource, iamc_store=iamc_store)
+        if verb == "searchAllResources" and method == "GET":
+            rsegs = resource.split("/")
+            if len(rsegs) == 2 and rsegs[0] == "projects":
+                return _search_assets(store, rsegs[1], query.get("query"), rm_store=rm_store)
+            return _err(400, f"Invalid scope for searchAllResources: {resource}", "INVALID_ARGUMENT")
+
+        if verb == "checkAccess" and method == "POST" and "/iap_web/" in resource:
+            return _iap_check_access(store, resource, _body())
+        if verb == "rotateCertificate" and method == "POST" and "/managedIdentities/" in resource:
+            return _rotate_managed_identity_cert(store, resource)
         if method != "POST":
             return _err(400, f"Method {method} not allowed for :{verb}", "INVALID_ARGUMENT")
         if verb == "getIamPolicy":
@@ -792,7 +1141,7 @@ def dispatch(store: IamStore, method: str, path: str,
         if verb == "setIamPolicy":
             return _set_iam_policy(store, resource, _body())
         if verb == "testIamPermissions":
-            return _test_iam_permissions(store, resource, _body())
+            return _test_iam_permissions(store, resource, _body(), rm_store=rm_store)
         if verb in ("disable", "enable") and resource.startswith("projects/") and "/serviceAccounts/" in resource:
             rsegs = resource.split("/")
             return _set_service_account_disabled(store, rsegs[1], rsegs[3], verb == "disable")
@@ -882,11 +1231,50 @@ def dispatch(store: IamStore, method: str, path: str,
                 return _list_pools(store, project)
             return _err(400, f"Unsupported method {method} on workloadIdentityPools", "INVALID_ARGUMENT")
         name = f"projects/{project}/locations/global/workloadIdentityPools/{segs[5]}"
-        if method == "GET":
-            return _get_pool(store, name)
+        if len(segs) == 6:
+            if method == "GET":
+                return _get_pool(store, name)
+            if method == "DELETE":
+                return _delete_pool(store, name)
+            return _err(400, f"Unsupported method {method} on workloadIdentityPool", "INVALID_ARGUMENT")
+        # ---- managed workload identities: .../workloadIdentityPools/{pool}/managedIdentities[/{id}] ----
+        if segs[6] == "managedIdentities":
+            if len(segs) == 7:
+                if method == "POST":
+                    return _create_managed_identity(store, name, str(query.get("workloadIdentityPoolManagedIdentityId", "")).strip(), _body())
+                if method == "GET":
+                    return _list_managed_identities(store, name)
+                return _err(400, f"Unsupported method {method} on managedIdentities", "INVALID_ARGUMENT")
+            mi_name = f"{name}/managedIdentities/{segs[7]}"
+            if method == "GET":
+                return _get_managed_identity(store, mi_name)
+            if method == "DELETE":
+                return _delete_managed_identity(store, mi_name)
+            return _err(400, f"Unsupported method {method} on managedIdentity", "INVALID_ARGUMENT")
+        return _err(404, f"Unknown path: {path}", "NOT_FOUND")
+
+    # ---- Identity-Aware Proxy resources: projects/{p}/iap_web[/{id}] ----
+    if len(segs) >= 3 and segs[0] == "projects" and segs[2] == "iap_web":
+        project = segs[1]
+        if len(segs) == 3:
+            if method == "POST":
+                return _iap_create(store, project, str(query.get("resourceId", "")).strip(), _body())
+            if method == "GET":
+                return _iap_list(store, project)
+            return _err(400, f"Unsupported method {method} on iap_web", "INVALID_ARGUMENT")
+        name = f"projects/{project}/iap_web/{segs[3]}"
+        if method == "PATCH":
+            return _iap_patch(store, name, _body())
         if method == "DELETE":
-            return _delete_pool(store, name)
-        return _err(400, f"Unsupported method {method} on workloadIdentityPool", "INVALID_ARGUMENT")
+            return _iap_delete(store, name)
+        return _err(400, f"Unsupported method {method} on IAP resource", "INVALID_ARGUMENT")
+
+    # ---- Security Insights: projects/{p}/locations/global/insights ----
+    if (len(segs) == 5 and segs[0] == "projects" and segs[2] == "locations"
+            and segs[3] == "global" and segs[4] == "insights"):
+        if method == "GET":
+            return _security_insights(store, segs[1], iamc_store=iamc_store)
+        return _err(400, f"Unsupported method {method} on insights", "INVALID_ARGUMENT")
 
     # ---- deny policies: policies/{attachmentPoint}/denypolicies[/{policyId}] ----
     if len(segs) >= 3 and segs[0] == "policies" and segs[2] == "denypolicies":
