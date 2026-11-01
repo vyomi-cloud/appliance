@@ -4,6 +4,68 @@ All notable changes to Vyomi will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.37] — 2026-11-01
+
+Daily conformance release. **6 product fixes** (AWS 1, GCP 3, Azure 1, all clouds 1); 2 reach Nano and 5 reach the offline appliance; 16 test and harness improvements.
+
+### Highlights
+
+- **New "How Nano works" videos in Nano.** Each cloud console Home in Nano now has a slim banner that opens a pop-up player with a short video explaining how Nano works for that cloud.
+- **GCP Pub/Sub detail tabs now load offline.** Pub/Sub topics and other project-scoped resources are now found correctly in the GCP console, so their detail tabs no longer show a 404.
+- **GCP Metrics tab shows real data offline.** The tab now charts the request series the simulator actually measured, not placeholder sparklines.
+- **RDS instances land in the default VPC offline.** A new RDS DB instance now uses the default VPC and its subnets, not a custom VPC that may have none.
+- **Azure Home heading is clearer in Nano and offline.** It now reads "Azure (Vyomi simulator)" instead of the old CloudLearn name.
+
+### Fixes — AWS
+
+- **[offline]** RDS DB instance defaults to the default VPC (with subnets), not the first custom VPC that may have none; API test creates empty VPCs first (fails before, passes after)
+
+### Fixes — GCP
+
+- **[offline]** Gcp tabs: keep main's per-call-site project mapping (no second mapping in _project())
+- **[offline]** GCP console resource tabs look up Pub/Sub topics (and other project-scoped state) under the project id, not the project number; Pub/Sub detail tabs no longer 404 (API test fails before, passes after)
+- **[offline]** GCP offline Metrics tab shows measured request series (/api/metrics/series) instead of seeded sparklines; adds offline-ui-gcp-metrics-tab
+
+### Fixes — Azure
+
+- **[Nano + offline]** Home heading says 'Azure (Vyomi simulator)', not CloudLearn (Nano + offline)
+
+### Fixes — all clouds
+
+- **[Nano]** 'How Nano <cloud> works' videos bundled, slim banner + pop-up player on each console Home
+
+<details><summary>Platform and release pipeline (1)</summary>
+
+- Daily branch never silently drops main — main wins conflicting hunks
+
+</details>
+
+<details><summary>Test and harness improvements (16)</summary>
+
+- GCP Pub/Sub lens routes — literal paths in test so the route-coverage scan sees the 12 already-tested routes
+- AWS UI validators (vpc-details, vpc-sg-iam-cells, real-tabs) wait for the row/result instead of fixed sleeps (harness flake under parallel load; suites pass on re-run)
+- API test covers the GCP Artifact Registry console routes (create/get/patch/labels/list/pushSample/children/delete); previously uncovered (passes; coverage only)
+- Cover the Azure VM runCommand POST action (stopped VM 409, missing script 400, no invented output without a guest runtime); previously untested op
+- Azure Nano UI validators (app, appconfiguration, monitor) wait for the service-page text instead of a fixed 1.5s sleep (harness flake under parallel load; product renders it)
+- GCP service flow waits for a stable grid row count before the create baseline (offline-ui-gcp-artifactregistry saw 'rows 1 → 0' from a still-loading grid)
+- Savings check uses the GCP space's real project id (legacy gcp-dev is refused like any unknown project)
+- Crawler harness fix — blade text no longer truncated at 4000 chars, and a tab that repeats the preceding live tab's panel (Azure Insights → Metrics, both real /api/metrics/series) is not STATIC_TAB
+- SNS UI test fills the message body (the console refuses an empty publish, like AWS)
+- EC2 row validator checks security_group_ids (launch-wizard SG is created by the form)
+- Step Functions validators read the Definition textarea (the ASL is editable, not page text)
+- Crawler skips side-menu chrome (menu/close/section headers) that folded the rail and failed every AWS service click
+- Fix GCP UI tests to match real Cloud SQL (built-in users need a password, default postgres user) and the space's project in Cloud Scheduler
+- Azure-home validator follows the portal-style Home (services row + Resources) instead of removed count tiles; harness fix
+- Nano-ui-azure-savings used a stale subscription id (one subscription per space → 404); harness fix
+- GCP suites use the space's project id (old ids are 'project not found' now); fixes 10+ red gcp SDK/API suites
+
+</details>
+
+### How to upgrade
+
+- **Offline appliance:** `vyomi update` (Homebrew installs older than 3.0.24: run `brew trust vyomi-cloud/tap && brew upgrade vyomi-docker` once first). Docker: `docker pull vyomi/appliance:3.0.37`.
+- **Nano** ([vyomi.cloud](https://vyomi.cloud)): updates with this release; close all Nano tabs and reopen to load it.
+
 ## [3.0.36] — 2026-10-31
 
 Daily conformance release. **68 product fixes** (AWS 12, GCP 6, Azure 2, all clouds 48); 59 reach Nano and 60 reach the offline appliance; 20 test and harness improvements.
