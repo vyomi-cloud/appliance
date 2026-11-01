@@ -25,7 +25,7 @@ const pyodideIndex = () => fetch(PYODIDE_LOCAL + "pyodide.mjs", { method: "HEAD"
 // Cores live at ../core/ relative to THIS worker (works at web root AND /nano/).
 const CORE_BASE = new URL("../core/", self.location.href).href.replace(/\/$/, "");
 const CORES = [
-  "object_store.py", "s3_object_core.py", "nosql_store.py", "dynamodb_expr.py", "dynamodb_core.py",
+  "object_store.py", "s3_object_core.py", "nosql_store.py", "dynamodb_expr.py", "dynamodb_core.py", "dax_core.py",
   "kms_keystore.py", "kms_core.py", "kv_store.py", "secrets_core.py",
   "sql_store.py", "rds_core.py", "iam_store.py", "iam_core.py",
   "messaging_store.py", "sqs_core.py", "sns_core.py", "elbv2_core.py", "rds_data_core.py",

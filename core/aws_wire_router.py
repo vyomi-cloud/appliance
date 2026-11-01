@@ -38,6 +38,7 @@ from core.object_store import InMemoryObjectStore
 from core import s3_object_core as s3
 from core.nosql_store import InMemoryNoSqlStore
 from core import dynamodb_core as ddb
+from core import dax_core as dax
 from core.kms_keystore import InMemoryKeyStore
 from core import kms_core as kms
 from core.kv_store import InMemoryKvStore
@@ -288,7 +289,7 @@ _CRED_RE = re.compile(r"Credential=[^/]+/[^/]+/[^/]+/([^/,]+)/aws4_request")
 
 # AWS signing-name → our core key. (S3 falls through as the default.)
 _SIGNING = {
-    "dynamodb": "dynamodb", "kms": "kms", "secretsmanager": "secretsmanager",
+    "dynamodb": "dynamodb", "dax": "dax", "kms": "kms", "secretsmanager": "secretsmanager",
     "sqs": "sqs", "sns": "sns", "iam": "iam", "rds": "rds", "s3": "s3",
     "rds-data": "rds-data",   # the Aurora HTTP SQL surface (async path)
     "events": "events", "lambda": "lambda", "ec2": "vpc", "kinesis": "kinesis", "monitoring": "cloudwatch", "logs": "logs", "states": "stepfunctions",
@@ -301,7 +302,7 @@ _SIGNING = {
 
 # X-Amz-Target prefix → our core key (the JSON-wire services).
 _TARGET_PREFIX = {
-    "DynamoDB_": "dynamodb", "TrentService": "kms",
+    "DynamoDB_": "dynamodb", "AmazonDAXV3": "dax", "TrentService": "kms",
     "secretsmanager": "secretsmanager", "AmazonSQS": "sqs", "AWSEvents": "events",
     "Kinesis_20131202": "kinesis",
     "Logs_20140328": "logs",
@@ -311,7 +312,7 @@ _TARGET_PREFIX = {
 
 # Native JSON content-types the real SDK expects back per service.
 _JSON_CT = {
-    "dynamodb": "application/x-amz-json-1.0", "kms": "application/x-amz-json-1.1",
+    "dynamodb": "application/x-amz-json-1.0", "dax": "application/x-amz-json-1.1", "kms": "application/x-amz-json-1.1",
     "secretsmanager": "application/x-amz-json-1.1", "sqs": "application/x-amz-json-1.0",
     "events": "application/x-amz-json-1.1", "logs": "application/x-amz-json-1.1",
     "ssm": "application/x-amz-json-1.1",
@@ -442,6 +443,8 @@ class AwsWireRouter:
         s = stores or {}
         self.s3 = s.get("s3") or InMemoryObjectStore()
         self.ddb = s.get("ddb") or InMemoryNoSqlStore()
+        self.dax = s.get("dax") or dax.DaxStore()
+        self.dax.ddb_store = self.ddb   # real read-through/write-through into the fronted table
         self.kms = s.get("kms") or InMemoryKeyStore()
         self.sec = s.get("sec") or InMemoryKvStore()
         self.rds = s.get("rds") or sql_store or InMemorySqlStore()
@@ -511,6 +514,7 @@ class AwsWireRouter:
         self.rds.cw_store = self.cw   # real DatabaseConnections/ReadIOPS/WriteIOPS metrics (rds.monitoring)
         self.ddb.cw_store = self.cw            # real per-op CloudWatch metrics (aws.dynamodb.monitor)
         self.ddb.kinesis_store = self.kinesis  # real Kinesis Data Streams destination (aws.dynamodb.kinesis)
+        self.dax.cw_store = self.cw            # real AWS/DAX ItemCache/QueryCache hit/miss metrics
         self.logs = s.get("logs") or logs.LogsStore()         # CloudWatch Logs
         self.logs.lam_store, self.logs.kinesis_store = self.lam, self.kinesis   # real subscription-filter delivery
         self.cw.logs_store = self.logs            # real log-based Contributor Insights rules
@@ -928,6 +932,8 @@ class AwsWireRouter:
             payload = self._json_body(body)
             if svc == "dynamodb":
                 r = ddb.dispatch(self.ddb, target, payload, s3_store=self.s3)
+            elif svc == "dax":
+                r = dax.dispatch(self.dax, target, payload)
             elif svc == "kms":
                 r = kms.dispatch(self.kms, target, payload)
             elif svc == "secretsmanager":   # a customer KmsKeyId is really encrypted/decrypted through the KMS core

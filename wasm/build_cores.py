@@ -30,6 +30,7 @@ CORES = [
     "object_store.py", "s3_object_core.py",        # S3
     "nosql_store.py", "dynamodb_core.py",           # DynamoDB
     "dynamodb_expr.py",                             # DynamoDB expression engine (v4 C0: key/filter/condition/update/projection)
+    "dax_core.py",                                  # DynamoDB Accelerator (DAX): clusters, subnet/parameter groups, cache engine
     "kms_keystore.py", "kms_core.py",               # KMS
     "kv_store.py", "secrets_core.py",               # Secrets Manager
     "sql_store.py", "rds_core.py",                  # RDS

@@ -40,6 +40,7 @@ import base64
 import copy
 import gzip
 import json
+import math
 import re
 import time
 import uuid
@@ -121,11 +122,14 @@ def _kinesis(store: NoSqlStore):
     return getattr(store, "kinesis_store", None)
 
 
-def _emit_op_metrics(store: NoSqlStore, table_name: str, op: str, units: float, elapsed_s: float) -> None:
+def _emit_op_metrics(store: NoSqlStore, table: dict | str, op: str, elapsed_s: float, *,
+                      rcu: float = 0.0, wcu: float = 0.0, returned_items: int | None = None) -> None:
     """Real AWS/DynamoDB CloudWatch datapoints derived from actual request activity
     (never synthetic) — both the per-table series the console's Monitor tab reads and
     the per-table+Operation series DescribeAlarmsForMetric / GetMetricData use."""
     cw = _cw(store)
+    table_dict = table if isinstance(table, dict) else None
+    table_name = table_dict.get("table_name", "") if table_dict is not None else str(table or "")
     if cw is None or not table_name:
         return
     now = _epoch()
@@ -134,12 +138,219 @@ def _emit_op_metrics(store: NoSqlStore, table_name: str, op: str, units: float, 
     # with — those sort by Name (cloudwatch_core._dims) — so sort here too, or a query with
     # Dimensions=[TableName, Operation] (alphabetically out of order) would silently miss them.
     op_dims = sorted(base_dims + [{"Name": "Operation", "Value": op}], key=lambda dd: dd["Name"])
-    kind = "ConsumedReadCapacityUnits" if op in ("GetItem", "Query", "Scan", "BatchGetItem", "TransactGetItems") \
-        else "ConsumedWriteCapacityUnits"
-    for dims in (base_dims, op_dims):
-        _cw_core.ingest_internal_metric(cw, "AWS/DynamoDB", kind, dims, float(units), unit="Count", ts=now)
+    if rcu:
+        for dims in (base_dims, op_dims):
+            _cw_core.ingest_internal_metric(cw, "AWS/DynamoDB", "ConsumedReadCapacityUnits", dims, float(rcu), unit="Count", ts=now)
+    if wcu:
+        for dims in (base_dims, op_dims):
+            _cw_core.ingest_internal_metric(cw, "AWS/DynamoDB", "ConsumedWriteCapacityUnits", dims, float(wcu), unit="Count", ts=now)
     _cw_core.ingest_internal_metric(cw, "AWS/DynamoDB", "SuccessfulRequestLatency", op_dims,
                                     elapsed_s * 1000.0, unit="Milliseconds", ts=now)
+    if returned_items is not None:
+        _cw_core.ingest_internal_metric(cw, "AWS/DynamoDB", "ReturnedItemCount", op_dims,
+                                        float(returned_items), unit="Count", ts=now)
+    if table_dict is not None:
+        _cw_core.ingest_internal_metric(cw, "AWS/DynamoDB", "ItemCount", base_dims,
+                                        float(table_dict.get("item_count", 0) or 0), unit="Count", ts=now)
+        _cw_core.ingest_internal_metric(cw, "AWS/DynamoDB", "TableSizeBytes", base_dims,
+                                        float(table_dict.get("table_size_bytes", 0) or 0), unit="Bytes", ts=now)
+        if str(table_dict.get("billing_mode", "PAY_PER_REQUEST")).upper() != "PAY_PER_REQUEST":
+            pt = table_dict.get("provisioned_throughput") or {}
+            _cw_core.ingest_internal_metric(cw, "AWS/DynamoDB", "ProvisionedReadCapacityUnits", base_dims,
+                                            float(pt.get("ReadCapacityUnits", 0) or 0), unit="Count", ts=now)
+            _cw_core.ingest_internal_metric(cw, "AWS/DynamoDB", "ProvisionedWriteCapacityUnits", base_dims,
+                                            float(pt.get("WriteCapacityUnits", 0) or 0), unit="Count", ts=now)
+
+
+def _emit_error_metric(store: NoSqlStore, table_name: str, status: int) -> None:
+    """UserErrors (4xx) / SystemErrors (5xx) — pushed for every failed request, account-wide
+    (no dimensions, matching real AWS/DynamoDB) and, when the table is known, on TableName too."""
+    cw = _cw(store)
+    if cw is None:
+        return
+    now = _epoch()
+    kind = "SystemErrors" if status >= 500 else "UserErrors"
+    dims = [[], [{"Name": "TableName", "Value": table_name}]] if table_name else [[]]
+    for d in dims:
+        _cw_core.ingest_internal_metric(cw, "AWS/DynamoDB", kind, d, 1.0, unit="Count", ts=now)
+
+
+def _emit_throttle_metrics(store: NoSqlStore, table_name: str, read: bool, write: bool) -> None:
+    cw = _cw(store)
+    if cw is None or not table_name:
+        return
+    now = _epoch()
+    dims = [{"Name": "TableName", "Value": table_name}]
+    _cw_core.ingest_internal_metric(cw, "AWS/DynamoDB", "ThrottledRequests", dims, 1.0, unit="Count", ts=now)
+    if read:
+        _cw_core.ingest_internal_metric(cw, "AWS/DynamoDB", "ReadThrottleEvents", dims, 1.0, unit="Count", ts=now)
+    if write:
+        _cw_core.ingest_internal_metric(cw, "AWS/DynamoDB", "WriteThrottleEvents", dims, 1.0, unit="Count", ts=now)
+
+
+# ── provisioned-throughput enforcement (real per-table/GSI token buckets) ──────────
+_RCU_BYTES = 4096        # one strongly-consistent read capacity unit
+_WCU_BYTES = 1024        # one write capacity unit
+_THROUGHPUT_BURST_SECONDS = 300.0   # AWS documents burst capacity as up to 5 minutes' worth
+
+
+def _rcu_for_bytes(size_bytes: int, consistent: bool) -> float:
+    """4 KB per strongly-consistent read unit; an eventually-consistent read costs half."""
+    whole = max(1, math.ceil(max(int(size_bytes), 1) / _RCU_BYTES))
+    return float(whole) if consistent else whole / 2.0
+
+
+def _wcu_for_bytes(size_bytes: int) -> float:
+    """1 KB per write capacity unit."""
+    return float(max(1, math.ceil(max(int(size_bytes), 1) / _WCU_BYTES)))
+
+
+class _ThroughputBucket:
+    """Token bucket for one table/GSI + direction (read or write): tokens refill at the
+    provisioned rate per second, up to a burst capacity of 300 seconds' worth — the same
+    burst window AWS documents for provisioned throughput."""
+    __slots__ = ("rate", "capacity", "tokens", "last")
+
+    def __init__(self, rate: float) -> None:
+        self.rate = max(0.0, float(rate))
+        self.capacity = self.rate * _THROUGHPUT_BURST_SECONDS
+        self.tokens = self.capacity
+        self.last = _epoch()
+
+    def _refill(self) -> None:
+        now = _epoch()
+        self.tokens = min(self.capacity, self.tokens + (now - self.last) * self.rate)
+        self.last = now
+
+    def resize(self, rate: float) -> None:
+        rate = max(0.0, float(rate))
+        if rate != self.rate:
+            self._refill()
+            self.rate = rate
+            self.capacity = rate * _THROUGHPUT_BURST_SECONDS
+            self.tokens = min(self.tokens, self.capacity)
+
+    def consume(self, amount: float) -> bool:
+        if amount <= 0:
+            return True
+        self._refill()
+        if self.tokens + 1e-6 >= amount:
+            self.tokens -= amount
+            return True
+        return False
+
+
+def _throughput_bucket(store: NoSqlStore, key: tuple, rate: float) -> _ThroughputBucket:
+    buckets = getattr(store, "_ddb_throughput_buckets", None)
+    if buckets is None:
+        buckets = {}
+        store._ddb_throughput_buckets = buckets
+    b = buckets.get(key)
+    if b is None:
+        b = _ThroughputBucket(rate)
+        buckets[key] = b
+    else:
+        b.resize(rate)
+    return b
+
+
+def _gsi_write_targets(table: dict, old_item: dict | None, new_item: dict | None) -> set[str]:
+    """GSI names a Put/Update/Delete writes into — the item is projected onto a (sparse)
+    GSI whenever it carries that index's key attributes, before OR after the write."""
+    names: set[str] = set()
+    for idx in table.get("indexes", []):
+        pk, sk = idx.get("partition_key_name"), idx.get("sort_key_name")
+
+        def _on_index(it: dict | None) -> bool:
+            return bool(it) and pk in it and (not sk or sk in it)
+
+        if _on_index(old_item) or _on_index(new_item):
+            names.add(str(idx.get("name")))
+    return names
+
+
+def _enforce_throughput(store: NoSqlStore, table: dict, *, rcu: float = 0.0, wcu: float = 0.0,
+                        gsi_rcu: dict | None = None, gsi_wcu: dict | None = None) -> None:
+    """Real per-table/GSI provisioned-throughput enforcement; on-demand (PAY_PER_REQUEST)
+    tables never throttle. Raises ProvisionedThroughputExceededException the way real
+    DynamoDB does, after pushing ThrottledRequests/Read|WriteThrottleEvents."""
+    if str(table.get("billing_mode", "PAY_PER_REQUEST")).upper() == "PAY_PER_REQUEST":
+        return
+    tname = table.get("table_name", "")
+    pt = table.get("provisioned_throughput") or {}
+    read_throttled = write_throttled = False
+    if rcu and not _throughput_bucket(store, (tname, None, "r"), pt.get("ReadCapacityUnits", 5)).consume(rcu):
+        read_throttled = True
+    if wcu and not _throughput_bucket(store, (tname, None, "w"), pt.get("WriteCapacityUnits", 5)).consume(wcu):
+        write_throttled = True
+    for name, units in (gsi_rcu or {}).items():
+        idx = _index_spec(table, name)
+        ipt = (idx or {}).get("provisioned_throughput") or pt
+        if not _throughput_bucket(store, (tname, name, "r"), ipt.get("ReadCapacityUnits", 5)).consume(units):
+            read_throttled = True
+    for name, units in (gsi_wcu or {}).items():
+        idx = _index_spec(table, name)
+        ipt = (idx or {}).get("provisioned_throughput") or pt
+        if not _throughput_bucket(store, (tname, name, "w"), ipt.get("WriteCapacityUnits", 5)).consume(units):
+            write_throttled = True
+    if read_throttled or write_throttled:
+        _emit_throttle_metrics(store, tname, read_throttled, write_throttled)
+        raise DdbError("ProvisionedThroughputExceededException",
+                       "The level of configured provisioned throughput for the table was exceeded. "
+                       "Consider increasing your provisioning level with the UpdateTable API.", 400)
+
+
+def _consumed_capacity(payload: dict, table: dict, *, rcu: float = 0.0, wcu: float = 0.0,
+                        gsi_rcu: dict | None = None, gsi_wcu: dict | None = None) -> dict | None:
+    """The `ConsumedCapacity` member of a single-item response, honouring ReturnConsumedCapacity
+    (TOTAL/INDEXES/NONE); None when the caller didn't ask (the common case)."""
+    mode = str(payload.get("ReturnConsumedCapacity") or "NONE").upper()
+    if mode not in ("TOTAL", "INDEXES"):
+        return None
+    gsi_rcu, gsi_wcu = gsi_rcu or {}, gsi_wcu or {}
+    gsi_names = set(gsi_rcu) | set(gsi_wcu)
+    cc: dict = {"TableName": table.get("table_name", ""),
+                "CapacityUnits": rcu + wcu + sum(gsi_rcu.values()) + sum(gsi_wcu.values())}
+    if rcu:
+        cc["ReadCapacityUnits"] = rcu
+    if wcu:
+        cc["WriteCapacityUnits"] = wcu
+    if mode == "INDEXES":
+        table_cc: dict = {"CapacityUnits": rcu + wcu}
+        if rcu:
+            table_cc["ReadCapacityUnits"] = rcu
+        if wcu:
+            table_cc["WriteCapacityUnits"] = wcu
+        cc["Table"] = table_cc
+        if gsi_names:
+            cc["GlobalSecondaryIndexes"] = {}
+            for name in gsi_names:
+                entry = {"CapacityUnits": gsi_rcu.get(name, 0.0) + gsi_wcu.get(name, 0.0)}
+                if name in gsi_rcu:
+                    entry["ReadCapacityUnits"] = gsi_rcu[name]
+                if name in gsi_wcu:
+                    entry["WriteCapacityUnits"] = gsi_wcu[name]
+                cc["GlobalSecondaryIndexes"][name] = entry
+    return cc
+
+
+def _consumed_capacity_list(payload: dict, rcu_by_table: dict | None = None,
+                            wcu_by_table: dict | None = None) -> list | None:
+    """The `ConsumedCapacity` member of a Batch*/Transact* response — one entry per table."""
+    mode = str(payload.get("ReturnConsumedCapacity") or "NONE").upper()
+    if mode not in ("TOTAL", "INDEXES"):
+        return None
+    rcu_by_table, wcu_by_table = rcu_by_table or {}, wcu_by_table or {}
+    out = []
+    for name in sorted(set(rcu_by_table) | set(wcu_by_table)):
+        r, w = rcu_by_table.get(name, 0.0), wcu_by_table.get(name, 0.0)
+        entry = {"TableName": name, "CapacityUnits": r + w}
+        if r:
+            entry["ReadCapacityUnits"] = r
+        if w:
+            entry["WriteCapacityUnits"] = w
+        out.append(entry)
+    return out
 
 
 def _table_arn(store: NoSqlStore, table_name: str) -> str:
@@ -315,6 +526,11 @@ def _index_view(table: dict, idx: dict) -> dict:
         "IndexSizeBytes": 0,
         "ItemCount": int(table.get("item_count", 0) or 0),
     }
+    if str(table.get("billing_mode", "PAY_PER_REQUEST")).upper() != "PAY_PER_REQUEST":
+        pt = idx.get("provisioned_throughput") or table.get("provisioned_throughput") or {}
+        v["ProvisionedThroughput"] = {"ReadCapacityUnits": int(pt.get("ReadCapacityUnits", 5) or 5),
+                                      "WriteCapacityUnits": int(pt.get("WriteCapacityUnits", 5) or 5),
+                                      "NumberOfDecreasesToday": 0}
     return v
 
 
@@ -385,9 +601,14 @@ def _index_record(spec: dict) -> dict:
     gks = spec.get("KeySchema") or []
     g_pk = next((str(k.get("AttributeName", "")) for k in gks if str(k.get("KeyType", "")).upper() == "HASH"), "")
     g_sk = next((str(k.get("AttributeName", "")) for k in gks if str(k.get("KeyType", "")).upper() == "RANGE"), "")
-    return {"name": str(spec.get("IndexName", "")), "key_schema": gks,
+    rec = {"name": str(spec.get("IndexName", "")), "key_schema": gks,
             "partition_key_name": g_pk, "sort_key_name": g_sk,
             "projection": spec.get("Projection") or {"ProjectionType": "ALL"}, "index_status": "ACTIVE"}
+    pt = spec.get("ProvisionedThroughput")
+    if pt:
+        rec["provisioned_throughput"] = {"ReadCapacityUnits": int(pt.get("ReadCapacityUnits", 5) or 5),
+                                         "WriteCapacityUnits": int(pt.get("WriteCapacityUnits", 5) or 5)}
+    return rec
 
 
 def _validate_create_table(payload: dict, native: bool) -> None:
@@ -583,6 +804,18 @@ def _update_table_record(store: NoSqlStore, table: dict, payload: dict[str, Any]
         elif "Delete" in upd:
             name = str(upd["Delete"].get("IndexName", ""))
             table["indexes"] = [g for g in table.get("indexes", []) if g.get("name") != name]
+        elif "Update" in upd:
+            u = upd["Update"] or {}
+            name = str(u.get("IndexName", ""))
+            pt = u.get("ProvisionedThroughput") or {}
+            if pt:
+                for g in table.get("indexes", []):
+                    if g.get("name") == name:
+                        current = g.get("provisioned_throughput") or table.get("provisioned_throughput", {})
+                        g["provisioned_throughput"] = {
+                            "ReadCapacityUnits": int(pt.get("ReadCapacityUnits", current.get("ReadCapacityUnits", 5)) or 5),
+                            "WriteCapacityUnits": int(pt.get("WriteCapacityUnits", current.get("WriteCapacityUnits", 5)) or 5),
+                        }
     stream_spec = payload.get("StreamSpecification")
     if isinstance(stream_spec, dict):
         if stream_spec.get("StreamEnabled"):
@@ -1275,7 +1508,7 @@ def _rv(payload: dict, allowed: tuple) -> str:
 
 
 # ── single-item operations ─────────────────────────────────────────────────
-def _op_put(store: NoSqlStore, payload: dict) -> dict:
+def _op_put(store: NoSqlStore, payload: dict) -> tuple[dict, float, float]:
     table = _require_table(store, str(payload.get("TableName") or ""))
     item = _validate_item(payload.get("Item"))
     _check_item_keys(table, item)
@@ -1288,14 +1521,21 @@ def _op_put(store: NoSqlStore, payload: dict) -> dict:
     old = _rec_av(rec) if rec else None
     if cond is not None and not _expr.evaluate(cond, old or {}):
         raise _ccf(old, payload)
+    wcu = _wcu_for_bytes(_expr.item_size(item))
+    gsi_wcu = {name: wcu for name in _gsi_write_targets(table, old, item)}
+    _enforce_throughput(store, table, wcu=wcu, gsi_wcu=gsi_wcu)
     store.enforce_storage_cap(_expr.item_size(item))
     _store_av(store, table, key, item)
     _refresh_table_metrics(table)
     store.persist()
-    return {"Attributes": copy.deepcopy(old)} if rv == "ALL_OLD" and old else {}
+    body = {"Attributes": copy.deepcopy(old)} if rv == "ALL_OLD" and old else {}
+    cc = _consumed_capacity(payload, table, wcu=wcu, gsi_wcu=gsi_wcu)
+    if cc:
+        body["ConsumedCapacity"] = cc
+    return body, 0.0, wcu
 
 
-def _op_get(store: NoSqlStore, payload: dict) -> dict:
+def _op_get(store: NoSqlStore, payload: dict) -> tuple[dict, float, float]:
     table = _require_table(store, str(payload.get("TableName") or ""))
     _expire_table_items(table)
     _, key = _key_from_param(table, payload.get("Key"))
@@ -1303,13 +1543,21 @@ def _op_get(store: NoSqlStore, payload: dict) -> dict:
     proj = ex.projection(payload.get("ProjectionExpression"))
     ex.finish()
     rec = table.get("items", {}).get(key)
+    item = _rec_av(rec) if rec else None
+    consistent = bool(payload.get("ConsistentRead"))
+    rcu = _rcu_for_bytes(_expr.item_size(item) if item else 0, consistent)
+    _enforce_throughput(store, table, rcu=rcu)
     if not rec:
-        return {}
-    item = _rec_av(rec)
-    return {"Item": _expr.project_paths(item, proj) if proj is not None else copy.deepcopy(item)}
+        body: dict = {}
+    else:
+        body = {"Item": _expr.project_paths(item, proj) if proj is not None else copy.deepcopy(item)}
+    cc = _consumed_capacity(payload, table, rcu=rcu)
+    if cc:
+        body["ConsumedCapacity"] = cc
+    return body, rcu, 0.0
 
 
-def _op_delete(store: NoSqlStore, payload: dict) -> dict:
+def _op_delete(store: NoSqlStore, payload: dict) -> tuple[dict, float, float]:
     table = _require_table(store, str(payload.get("TableName") or ""))
     _, key = _key_from_param(table, payload.get("Key"))
     rv = _rv(payload, ("NONE", "ALL_OLD"))
@@ -1320,11 +1568,18 @@ def _op_delete(store: NoSqlStore, payload: dict) -> dict:
     old = _rec_av(rec) if rec else None
     if cond is not None and not _expr.evaluate(cond, old or {}):
         raise _ccf(old, payload)
+    wcu = _wcu_for_bytes(_expr.item_size(old) if old else 0)
+    gsi_wcu = {name: wcu for name in _gsi_write_targets(table, old, None)}
+    _enforce_throughput(store, table, wcu=wcu, gsi_wcu=gsi_wcu)
     if rec:
         _drop_key(store, table, key)
         _refresh_table_metrics(table)
         store.persist()
-    return {"Attributes": copy.deepcopy(old)} if rv == "ALL_OLD" and old else {}
+    body = {"Attributes": copy.deepcopy(old)} if rv == "ALL_OLD" and old else {}
+    cc = _consumed_capacity(payload, table, wcu=wcu, gsi_wcu=gsi_wcu)
+    if cc:
+        body["ConsumedCapacity"] = cc
+    return body, 0.0, wcu
 
 
 def _apply_attribute_updates(table: dict, current: dict, updates: dict) -> tuple[dict, list]:
@@ -1371,7 +1626,7 @@ def _apply_attribute_updates(table: dict, current: dict, updates: dict) -> tuple
     return new, touched
 
 
-def _op_update(store: NoSqlStore, payload: dict) -> dict:
+def _op_update(store: NoSqlStore, payload: dict) -> tuple[dict, float, float]:
     table = _require_table(store, str(payload.get("TableName") or ""))
     key_av, key = _key_from_param(table, payload.get("Key"))
     rv = _rv(payload, ("NONE", "ALL_OLD", "UPDATED_OLD", "ALL_NEW", "UPDATED_NEW"))
@@ -1396,21 +1651,29 @@ def _op_update(store: NoSqlStore, payload: dict) -> dict:
     except _expr.ExprError as exc:
         raise _expr_error("UpdateExpression", exc)
     _check_item_keys(table, new)
+    wcu = _wcu_for_bytes(_expr.item_size(new))
+    gsi_wcu = {name: wcu for name in _gsi_write_targets(table, old, new)}
+    _enforce_throughput(store, table, wcu=wcu, gsi_wcu=gsi_wcu)
     store.enforce_storage_cap(_expr.item_size(new))
     _store_av(store, table, key, new)
     _refresh_table_metrics(table)
     store.persist()
     if rv == "NONE":
-        return {}
-    if rv == "ALL_OLD":
-        return {"Attributes": copy.deepcopy(old)} if old else {}
-    if rv == "ALL_NEW":
-        return {"Attributes": copy.deepcopy(new)}
-    if rv == "UPDATED_NEW" and actions is not None:
-        touched = [a[1] for a in actions if a[0] != "REMOVE"]     # a REMOVEd path has no new value
-    src = old if rv == "UPDATED_OLD" else new
-    out = _expr.project_paths(src or {}, [[p[0]] for p in touched])   # whole top-level attributes
-    return {"Attributes": out} if out else {}
+        out: dict = {}
+    elif rv == "ALL_OLD":
+        out = {"Attributes": copy.deepcopy(old)} if old else {}
+    elif rv == "ALL_NEW":
+        out = {"Attributes": copy.deepcopy(new)}
+    else:
+        if rv == "UPDATED_NEW" and actions is not None:
+            touched = [a[1] for a in actions if a[0] != "REMOVE"]     # a REMOVEd path has no new value
+        src = old if rv == "UPDATED_OLD" else new
+        proj_out = _expr.project_paths(src or {}, [[p[0]] for p in touched])   # whole top-level attributes
+        out = {"Attributes": proj_out} if proj_out else {}
+    cc = _consumed_capacity(payload, table, wcu=wcu, gsi_wcu=gsi_wcu)
+    if cc:
+        out["ConsumedCapacity"] = cc
+    return out, 0.0, wcu
 
 
 # ── Query / Scan ───────────────────────────────────────────────────────────
@@ -1449,7 +1712,7 @@ def _order_tuple(table: dict, item: dict, pk: str, sk: str) -> tuple:
     return (_expr.sort_value(item.get(sk)) if sk else (0,),) + tk
 
 
-def _read(store: NoSqlStore, payload: dict, query: bool) -> dict:
+def _read(store: NoSqlStore, payload: dict, query: bool) -> tuple[dict, float]:
     table = _require_table(store, str(payload.get("TableName") or ""))
     _expire_table_items(table)
     index_name = str(payload.get("IndexName") or "").strip()
@@ -1548,7 +1811,18 @@ def _read(store: NoSqlStore, payload: dict, query: bool) -> dict:
         last = page[-1]
         names = list(_key_names(table)) + ([a for a in (pk, sk) if a and a not in _key_names(table)] if idx else [])
         body["LastEvaluatedKey"] = {a: copy.deepcopy(last[a]) for a in names if a in last}
-    return body
+    # Capacity is charged on items EXAMINED (the page, before the filter), like real
+    # DynamoDB; a GSI read draws from the index's own bucket, an LSI read from the table's.
+    consistent = bool(payload.get("ConsistentRead"))
+    rcu = _rcu_for_bytes(sum(_expr.item_size(r) for r in page), consistent)
+    is_gsi = idx is not None and idx in table.get("indexes", [])
+    table_rcu = 0.0 if is_gsi else rcu
+    gsi_rcu_map = {index_name: rcu} if is_gsi else None
+    _enforce_throughput(store, table, rcu=table_rcu, gsi_rcu=gsi_rcu_map)
+    cc = _consumed_capacity(payload, table, rcu=table_rcu, gsi_rcu=gsi_rcu_map)
+    if cc:
+        body["ConsumedCapacity"] = cc
+    return body, rcu
 
 
 def _at_far_bound(sk_node, last: dict, sk: str, forward: bool) -> bool:
@@ -1569,7 +1843,7 @@ def _at_far_bound(sk_node, last: dict, sk: str, forward: bool) -> bool:
 
 
 # ── batch / transactions ───────────────────────────────────────────────────
-def _op_batch_write(store: NoSqlStore, payload: dict) -> dict:
+def _op_batch_write(store: NoSqlStore, payload: dict) -> tuple[dict, dict]:
     req = payload.get("RequestItems") or {}
     if not req:
         raise _validation("1 validation error detected: Value null at 'requestItems' failed to satisfy constraint: "
@@ -1578,8 +1852,10 @@ def _op_batch_write(store: NoSqlStore, payload: dict) -> dict:
     if total > 25:
         raise _validation("Too many items requested for the BatchWriteItem call")
     plan = []
+    tables: dict[str, dict] = {}
     for tname, ops in req.items():
         table = _require_table(store, str(tname))
+        tables[str(tname)] = table
         seen = set()
         for op in ops or []:
             if "PutRequest" in op:
@@ -1596,6 +1872,19 @@ def _op_batch_write(store: NoSqlStore, payload: dict) -> dict:
             if key in seen:
                 raise _validation("Provided list of item keys contains duplicates")
             seen.add(key)
+    wcu_by_table: dict[str, float] = {}
+    gsi_wcu_by_table: dict[str, dict[str, float]] = {}
+    for kind, table, key, item in plan:
+        tname = table["table_name"]
+        rec = table.get("items", {}).get(key)
+        old = _rec_av(rec) if rec else None
+        new = item if kind == "put" else None
+        wcu = _wcu_for_bytes(_expr.item_size(new if new is not None else (old or {})))
+        wcu_by_table[tname] = wcu_by_table.get(tname, 0.0) + wcu
+        for name in _gsi_write_targets(table, old, new):
+            gsi_wcu_by_table.setdefault(tname, {})[name] = gsi_wcu_by_table[tname].get(name, 0.0) + wcu
+    for tname, table in tables.items():
+        _enforce_throughput(store, table, wcu=wcu_by_table.get(tname, 0.0), gsi_wcu=gsi_wcu_by_table.get(tname))
     for kind, table, key, item in plan:
         if kind == "put":
             store.enforce_storage_cap(_expr.item_size(item))
@@ -1604,14 +1893,19 @@ def _op_batch_write(store: NoSqlStore, payload: dict) -> dict:
             _drop_key(store, table, key)
         _refresh_table_metrics(table)
     store.persist()
-    return {"UnprocessedItems": {}}
+    body: dict = {"UnprocessedItems": {}}
+    cc = _consumed_capacity_list(payload, wcu_by_table=wcu_by_table)
+    if cc:
+        body["ConsumedCapacity"] = cc
+    return body, wcu_by_table
 
 
-def _op_batch_get(store: NoSqlStore, payload: dict) -> dict:
+def _op_batch_get(store: NoSqlStore, payload: dict) -> tuple[dict, dict]:
     req = payload.get("RequestItems") or {}
     if sum(len((v or {}).get("Keys") or []) for v in req.values()) > 100:
         raise _validation("Too many items requested for the BatchGetItem call")
     responses: dict = {}
+    rcu_by_table: dict[str, float] = {}
     for tname, spec in req.items():
         spec = spec or {}
         table = _require_table(store, str(tname))
@@ -1620,7 +1914,9 @@ def _op_batch_get(store: NoSqlStore, payload: dict) -> dict:
         ex = _Exprs(spec)
         proj = ex.projection(spec.get("ProjectionExpression"))
         ex.finish()
+        consistent = bool(spec.get("ConsistentRead"))
         rows, seen = [], set()
+        total_rcu = 0.0
         for k in spec.get("Keys") or []:
             _, key = _key_from_param(table, k)
             if key in seen:
@@ -1629,12 +1925,21 @@ def _op_batch_get(store: NoSqlStore, payload: dict) -> dict:
             rec = table.get("items", {}).get(key)
             if rec:
                 item = _rec_av(rec)
+                total_rcu += _rcu_for_bytes(_expr.item_size(item), consistent)
                 rows.append(_expr.project_paths(item, proj) if proj is not None else copy.deepcopy(item))
+            else:
+                total_rcu += _rcu_for_bytes(0, consistent)
         responses[tname] = rows
-    return {"Responses": responses, "UnprocessedKeys": {}}
+        rcu_by_table[str(tname)] = rcu_by_table.get(str(tname), 0.0) + total_rcu
+        _enforce_throughput(store, table, rcu=total_rcu)
+    body: dict = {"Responses": responses, "UnprocessedKeys": {}}
+    cc = _consumed_capacity_list(payload, rcu_by_table=rcu_by_table)
+    if cc:
+        body["ConsumedCapacity"] = cc
+    return body, rcu_by_table
 
 
-def _op_transact_write(store: NoSqlStore, payload: dict) -> dict:
+def _op_transact_write(store: NoSqlStore, payload: dict) -> tuple[dict, dict]:
     ops = payload.get("TransactItems") or payload.get("transact_items") or []
     if not ops:
         raise _validation("1 validation error detected: Value null at 'transactItems' failed to satisfy constraint: "
@@ -1713,6 +2018,25 @@ def _op_transact_write(store: NoSqlStore, payload: dict) -> dict:
         raise DdbError("TransactionCanceledException",
                        f"Transaction cancelled, please refer cancellation reasons for specific reasons [{codes}]",
                        400, {"CancellationReasons": reasons})
+    # Transactions cost 2x the normal write capacity; throttling is checked (and the whole
+    # transaction rejected) before any item is actually written, same as real DynamoDB.
+    wcu_by_table: dict[str, float] = {}
+    gsi_wcu_by_table: dict[str, dict[str, float]] = {}
+    tables_by_name: dict[str, dict] = {}
+    for kind, table, key, item in results:
+        tname = table["table_name"]
+        tables_by_name[tname] = table
+        if kind == "ConditionCheck":
+            continue
+        rec = table.get("items", {}).get(key)
+        old = _rec_av(rec) if rec else None
+        new = item   # Put: the put item; Update: computed new state; Delete: None
+        wcu = 2.0 * _wcu_for_bytes(_expr.item_size(new if new is not None else (old or {})))
+        wcu_by_table[tname] = wcu_by_table.get(tname, 0.0) + wcu
+        for name in _gsi_write_targets(table, old, new):
+            gsi_wcu_by_table.setdefault(tname, {})[name] = gsi_wcu_by_table[tname].get(name, 0.0) + wcu
+    for tname, table in tables_by_name.items():
+        _enforce_throughput(store, table, wcu=wcu_by_table.get(tname, 0.0), gsi_wcu=gsi_wcu_by_table.get(tname))
     for kind, table, key, item in results:
         if kind in ("Put", "Update"):
             _store_av(store, table, key, item)
@@ -1720,10 +2044,14 @@ def _op_transact_write(store: NoSqlStore, payload: dict) -> dict:
             _drop_key(store, table, key)
         _refresh_table_metrics(table)
     store.persist()
-    return {}
+    body: dict = {}
+    cc = _consumed_capacity_list(payload, wcu_by_table=wcu_by_table)
+    if cc:
+        body["ConsumedCapacity"] = cc
+    return body, wcu_by_table
 
 
-def _op_transact_get(store: NoSqlStore, payload: dict) -> dict:
+def _op_transact_get(store: NoSqlStore, payload: dict) -> tuple[dict, dict]:
     ops = payload.get("TransactItems") or payload.get("transact_items") or []
     plan, seen = [], set()
     for entry in ops:
@@ -1737,6 +2065,18 @@ def _op_transact_get(store: NoSqlStore, payload: dict) -> dict:
             raise _validation("Transaction request cannot include multiple operations on one item")
         seen.add((table["table_name"], key))
         plan.append((table, key, proj))
+    # TransactGetItems is always strongly consistent and costs 2x the normal read capacity.
+    rcu_by_table: dict[str, float] = {}
+    tables_by_name: dict[str, dict] = {}
+    for table, key, proj in plan:
+        tname = table["table_name"]
+        tables_by_name[tname] = table
+        rec = table.get("items", {}).get(key)
+        size = _expr.item_size(_rec_av(rec)) if rec else 0
+        rcu = 2.0 * _rcu_for_bytes(size, True)
+        rcu_by_table[tname] = rcu_by_table.get(tname, 0.0) + rcu
+    for tname, table in tables_by_name.items():
+        _enforce_throughput(store, table, rcu=rcu_by_table.get(tname, 0.0))
     responses = []
     for table, key, proj in plan:
         rec = table.get("items", {}).get(key)
@@ -1745,7 +2085,11 @@ def _op_transact_get(store: NoSqlStore, payload: dict) -> dict:
             continue
         item = _rec_av(rec)
         responses.append({"Item": _expr.project_paths(item, proj) if proj is not None else copy.deepcopy(item)})
-    return {"Responses": responses}
+    body: dict = {"Responses": responses}
+    cc = _consumed_capacity_list(payload, rcu_by_table=rcu_by_table)
+    if cc:
+        body["ConsumedCapacity"] = cc
+    return body, rcu_by_table
 
 
 # ── PartiQL (ExecuteStatement) ──────────────────────────────────────────────
@@ -2774,79 +3118,87 @@ def dispatch(store: NoSqlStore, target: str, payload: dict | None = None, s3_sto
 
         if action == "PutItem":
             t0 = time.monotonic()
-            body = _op_put(store, payload)
-            _emit_op_metrics(store, table_name(), action, 1.0, time.monotonic() - t0)
+            body, rcu, wcu = _op_put(store, payload)
+            _emit_op_metrics(store, _require_table(store, table_name()), action, time.monotonic() - t0, rcu=rcu, wcu=wcu)
             return _ok(body)
 
         if action == "GetItem":
             t0 = time.monotonic()
-            body = _op_get(store, payload)
-            _emit_op_metrics(store, table_name(), action, 1.0, time.monotonic() - t0)
+            body, rcu, wcu = _op_get(store, payload)
+            _emit_op_metrics(store, _require_table(store, table_name()), action, time.monotonic() - t0, rcu=rcu, wcu=wcu,
+                             returned_items=1 if "Item" in body else 0)
             return _ok(body)
 
         if action == "DeleteItem":
             t0 = time.monotonic()
-            body = _op_delete(store, payload)
-            _emit_op_metrics(store, table_name(), action, 1.0, time.monotonic() - t0)
+            body, rcu, wcu = _op_delete(store, payload)
+            _emit_op_metrics(store, _require_table(store, table_name()), action, time.monotonic() - t0, rcu=rcu, wcu=wcu)
             return _ok(body)
 
         if action == "UpdateItem":
             t0 = time.monotonic()
-            body = _op_update(store, payload)
-            _emit_op_metrics(store, table_name(), action, 1.0, time.monotonic() - t0)
+            body, rcu, wcu = _op_update(store, payload)
+            _emit_op_metrics(store, _require_table(store, table_name()), action, time.monotonic() - t0, rcu=rcu, wcu=wcu)
             return _ok(body)
 
         if action == "Query":
             t0 = time.monotonic()
+            table = _require_table(store, table_name())
             if payload.get("KeyConditionExpression") is None and any(
                     k in payload for k in ("partition_key_value", "sort_key_equals", "sort_key_begins_with",
                                            "sort_key_between")):
-                table = _require_table(store, table_name())          # console-REST shaped payload
-                _expire_table_items(table)
+                _expire_table_items(table)                            # console-REST shaped payload
                 matched, scanned = _query_filter(table, payload)
                 body = {"Items": [_rec_av(r) for r in matched], "Count": len(matched), "ScannedCount": scanned}
+                rcu = _rcu_for_bytes(sum(_expr.item_size(_rec_av(r)) for r in matched), True)
+                _enforce_throughput(store, table, rcu=rcu)
             else:
-                body = _read(store, payload, query=True)
-            _emit_op_metrics(store, table_name(), action, float(body.get("Count", 0)), time.monotonic() - t0)
+                body, rcu = _read(store, payload, query=True)
+            _emit_op_metrics(store, table, action, time.monotonic() - t0, rcu=rcu, returned_items=body.get("Count", 0))
             return _ok(body)
 
         if action == "Scan":
             t0 = time.monotonic()
-            body = _read(store, payload, query=False)
-            _emit_op_metrics(store, table_name(), action, float(body.get("Count", 0)), time.monotonic() - t0)
+            body, rcu = _read(store, payload, query=False)
+            _emit_op_metrics(store, _require_table(store, table_name()), action, time.monotonic() - t0, rcu=rcu,
+                             returned_items=body.get("Count", 0))
             return _ok(body)
 
         if action == "BatchGetItem":
             t0 = time.monotonic()
-            body = _op_batch_get(store, payload)
-            units = float(sum(len(v or []) for v in (body.get("Responses") or {}).values()))
+            body, rcu_by_table = _op_batch_get(store, payload)
+            returned = sum(len(v or []) for v in (body.get("Responses") or {}).values())
             for tname in (payload.get("RequestItems") or {}):
-                _emit_op_metrics(store, str(tname), action, units, time.monotonic() - t0)
+                _emit_op_metrics(store, _require_table(store, str(tname)), action, time.monotonic() - t0,
+                                 rcu=rcu_by_table.get(str(tname), 0.0), returned_items=returned)
             return _ok(body)
 
         if action == "BatchWriteItem":
             t0 = time.monotonic()
-            body = _op_batch_write(store, payload)
+            body, wcu_by_table = _op_batch_write(store, payload)
             for tname, ops in (payload.get("RequestItems") or {}).items():
-                _emit_op_metrics(store, str(tname), action, float(len(ops or [])), time.monotonic() - t0)
+                _emit_op_metrics(store, _require_table(store, str(tname)), action, time.monotonic() - t0,
+                                 wcu=wcu_by_table.get(str(tname), 0.0))
             return _ok(body)
 
         if action == "TransactWriteItems":
             t0 = time.monotonic()
-            body = _op_transact_write(store, payload)
+            body, wcu_by_table = _op_transact_write(store, payload)
             tnames = {str((next(iter(e.values())) or {}).get("TableName")) for e in payload.get("TransactItems") or []
                      if isinstance(e, dict) and e}
             for tname in tnames:
-                _emit_op_metrics(store, tname, action, 2.0, time.monotonic() - t0)
+                _emit_op_metrics(store, _require_table(store, tname), action, time.monotonic() - t0,
+                                 wcu=wcu_by_table.get(tname, 0.0))
             return _ok(body)
 
         if action == "TransactGetItems":
             t0 = time.monotonic()
-            body = _op_transact_get(store, payload)
+            body, rcu_by_table = _op_transact_get(store, payload)
             tnames = {str((e.get("Get") or {}).get("TableName")) for e in payload.get("TransactItems") or []
                      if isinstance(e, dict)}
             for tname in tnames:
-                _emit_op_metrics(store, tname, action, 2.0, time.monotonic() - t0)
+                _emit_op_metrics(store, _require_table(store, tname), action, time.monotonic() - t0,
+                                 rcu=rcu_by_table.get(tname, 0.0))
             return _ok(body)
 
         if action == "TagResource":
@@ -2925,4 +3277,5 @@ def dispatch(store: NoSqlStore, target: str, payload: dict | None = None, s3_sto
 
         return _error("UnknownOperationException", f"The action {action} is not implemented.", 400)
     except DdbError as e:
+        _emit_error_metric(store, table_name(), e.status)
         return _error(e.code, e.message, e.status, e.extra)

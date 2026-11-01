@@ -1,5 +1,6 @@
 /* UI-conformance fixtures for DynamoDB (native X-Amz-Target JSON). See s3/fixtures.mjs. */
 const T = (op) => ({ svc: "dynamodb", target: `DynamoDB_20120810.${op}` });
+const D = (op) => ({ svc: "dax", target: `AmazonDAXV3.${op}` });
 const table = (name) => ({ TableName: name, AttributeDefinitions: [{ AttributeName: "pk", AttributeType: "S" }], KeySchema: [{ AttributeName: "pk", KeyType: "HASH" }], BillingMode: "PAY_PER_REQUEST" });
 export default {
   "ddb-table": async (wire) => { await wire("POST", "/", { ...T("CreateTable"), body: table("uic-table") }).catch(() => {}); return "uic-table"; },
@@ -32,4 +33,9 @@ export default {
     } });
     return uniq;
   },
+  "dax-cluster": async (wire) => { await wire("POST", "/", { ...D("CreateCluster"), body: { ClusterName: "uic-dax", NodeType: "dax.t3.small", ReplicationFactor: 1 } }).catch(() => {}); return "uic-dax"; },
+  "live-dax-cluster": async (wire, uniq) => { await wire("POST", "/", { ...D("CreateCluster"), body: { ClusterName: uniq, NodeType: "dax.t3.small", ReplicationFactor: 1 } }); return uniq; },
+  "live-dax-subnet-group": async (wire, uniq) => { await wire("POST", "/", { ...D("CreateSubnetGroup"), body: { SubnetGroupName: uniq, SubnetIds: ["subnet-aaaa1111"] } }); return uniq; },
+  "live-dax-parameter-group": async (wire, uniq) => { await wire("POST", "/", { ...D("CreateParameterGroup"), body: { ParameterGroupName: uniq } }); return uniq; },
+  "live-dax-event": async (wire, uniq) => { await wire("POST", "/", { ...D("CreateCluster"), body: { ClusterName: uniq, NodeType: "dax.t3.small", ReplicationFactor: 1 } }); return uniq; },
 };
