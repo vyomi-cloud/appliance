@@ -1,0 +1,18 @@
+{
+  "_doc": "ui-spec page id → v4 route. honest_page = the whole page is a declared 'Not simulated in Vyomi' gap. Unlisted spec pages count as missing.",
+  "kinesis-home": {
+    "route": "#/kinesis/home"
+  },
+  "data-streams": {
+    "route": "#/kinesis/streams",
+    "live": "live-stream"
+  },
+  "create-data-stream": {
+    "route": "#/kinesis/streams/create",
+    "expand": ["role=radio[name=\"Provisioned\"]"]
+  },
+  "stream-detail": {
+    "route": "#/kinesis/streams/{live}",
+    "live": "live-stream"
+  }
+}

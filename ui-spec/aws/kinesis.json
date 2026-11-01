@@ -1,0 +1,173 @@
+{
+  "$schema": "../schema.json",
+  "cloud": "aws",
+  "service": "kinesis",
+  "console_path": "/kinesis/",
+  "status": "draft",
+  "nav": [
+    {"label": "Data streams", "page_id": "data-streams"}
+  ],
+  "pages": [
+    {
+      "id": "kinesis-home",
+      "kind": "other",
+      "title": "Amazon Kinesis",
+      "route": "/kinesis/home",
+      "breadcrumbs": ["Kinesis"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": ["Create data stream"],
+      "notes": "Service home: hero text, Get started card with Create data stream."
+    },
+    {
+      "id": "data-streams",
+      "kind": "list",
+      "title": "Data streams",
+      "route": "/kinesis/home#/streams",
+      "breadcrumbs": ["Kinesis", "Data streams"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": ["Refresh", "Delete", "Actions", "Create data stream"],
+      "table": {
+        "resource_label": "Data streams",
+        "counter": true,
+        "selection": "single",
+        "header_actions": ["Delete", "Create data stream"],
+        "actions": ["Enable enhanced (shard-level) metrics", "Disable enhanced (shard-level) metrics"],
+        "filter_placeholder": "Find data streams",
+        "pagination": true,
+        "preferences": true,
+        "empty_state": "You don't have any data streams.",
+        "empty_state_action": "Create data stream",
+        "columns": ["Name", "Status", "Creation time", "Capacity mode"],
+        "confidence": "medium"
+      }
+    },
+    {
+      "id": "create-data-stream",
+      "kind": "create",
+      "title": "Create data stream",
+      "route": "/kinesis/home#/streams/create",
+      "breadcrumbs": ["Kinesis", "Data streams", "Create data stream"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "submit": "Create data stream",
+      "header_actions": ["Cancel", "Create data stream"],
+      "sections": [
+        {
+          "title": "Data stream configuration",
+          "fields": [
+            {"label": "Data stream name", "type": "text", "required": true, "placeholder": "my-stream", "constraints": "1-128 characters: letters, numbers, underscores, periods and hyphens"},
+            {"label": "Capacity mode", "type": "radio", "required": true, "default": "On-demand", "options": ["On-demand", "Provisioned"], "help": "On-demand scales automatically; Provisioned uses a fixed shard count you manage."},
+            {"label": "Number of open shards", "type": "number", "required": true, "default": 1, "visible_when": "Capacity mode = Provisioned", "constraints": "1 to the account's open-shard limit"}
+          ]
+        },
+        {
+          "title": "Tags - optional",
+          "fields": [
+            {"label": "Tags", "type": "tags", "required": false, "actions": ["Add new tag", "Remove"]}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "stream-detail",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "route": "/kinesis/home#/streams/details?streamName={resource-name}",
+      "breadcrumbs": ["Kinesis", "Data streams", "{resource-name}"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": ["Actions"],
+      "notes": "Actions: Edit retention period, Switch capacity mode, Edit shard count (Provisioned), Delete.",
+      "tabs": ["Configuration", "Data viewer", "Monitoring", "Enhanced fan-out"],
+      "tab_panels": [
+        {
+          "label": "Configuration",
+          "sections": [
+            {
+              "title": "Stream details",
+              "actions": ["Edit"],
+              "fields": [
+                {"label": "Stream name", "type": "readonly"},
+                {"label": "Stream ARN", "type": "readonly"},
+                {"label": "Status", "type": "readonly"},
+                {"label": "Creation time", "type": "readonly"},
+                {"label": "Capacity mode", "type": "readonly"},
+                {"label": "Retention period", "type": "readonly"}
+              ]
+            },
+            {
+              "title": "Shards",
+              "table": {"resource_label": "Shards", "counter": true, "columns": ["Shard ID", "Status", "Starting hash key", "Ending hash key", "Starting sequence number"], "empty_state": "No shards"}
+            },
+            {
+              "title": "Server-side encryption",
+              "actions": ["Edit"],
+              "fields": [
+                {"label": "Encryption type", "type": "readonly"},
+                {"label": "KMS key ARN", "type": "readonly"}
+              ]
+            },
+            {
+              "title": "Resource policy",
+              "actions": ["Edit"],
+              "fields": [
+                {"label": "Policy", "type": "readonly"}
+              ]
+            },
+            {
+              "title": "Tags",
+              "actions": ["Manage tags"],
+              "table": {"columns": ["Key", "Value"], "empty_state": "No tags"}
+            }
+          ]
+        },
+        {
+          "label": "Data viewer",
+          "sections": [
+            {
+              "title": "Data viewer",
+              "fields": [
+                {"label": "Shard ID", "type": "select", "required": true},
+                {"label": "Starting position", "type": "select", "required": true, "default": "Trim horizon", "options": ["Trim horizon", "Latest", "At timestamp", "At sequence number"]},
+                {"label": "Timestamp", "type": "text", "visible_when": "Starting position = At timestamp"},
+                {"label": "Sequence number", "type": "text", "visible_when": "Starting position = At sequence number"},
+                {"label": "Get records", "type": "button"}
+              ],
+              "table": {"resource_label": "Records", "columns": ["Partition key", "Sequence number", "Size", "Timestamp", "Data"], "empty_state": "No records retrieved yet"}
+            }
+          ]
+        },
+        {
+          "label": "Monitoring",
+          "sections": [
+            {
+              "title": "CloudWatch metrics"
+            },
+            {
+              "title": "Enhanced (shard-level) metrics",
+              "actions": ["Edit"],
+              "fields": [
+                {"label": "Shard-level metrics", "type": "readonly"}
+              ]
+            }
+          ]
+        },
+        {
+          "label": "Enhanced fan-out",
+          "sections": [
+            {
+              "title": "Registered consumers",
+              "fields": [
+                {"label": "Register consumer", "type": "button"}
+              ],
+              "table": {"resource_label": "Consumers", "counter": true, "header_actions": ["Deregister"], "columns": ["Consumer name", "Consumer ARN", "Status", "Consumer creation time"], "empty_state": "No registered consumers"}
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "gaps_note": "No private captures repo was available for this run (captures/ absent), so every page is provenance=reference, built from current Kinesis Data Streams console product knowledge rather than a screenshot crawl. Re-verify against captures next time they're available. CloudWatch metric graphs on the Monitoring tab are a declared Vyomi gap (no metrics-aggregation engine feeds Kinesis); enhanced shard-level metrics enable/disable and the shard/consumer/record data itself are real against core/kinesis_core.py."
+}
