@@ -235,6 +235,13 @@ try:
     _gps_unified.register(app)
 except Exception as _e:   # never let this break appliance boot — legacy stays
     print(f"[wire_ingress] Pub/Sub core mount skipped: {_e}")
+# v4 C0i — ONE engine: GCP IAM (service accounts + keys, project :get/:set/:testIamPermissions and
+# the classic /api/gcp/iam aliases) on the shared core, like custom roles / Asset Inventory already.
+try:
+    from routes import gcp_iam_unified as _giam_unified
+    _giam_unified.register(app)
+except Exception as _e:   # never let this break appliance boot — legacy stays
+    print(f"[wire_ingress] GCP IAM core mount skipped: {_e}")
 # v4 C0h — ONE engine: Microsoft Graph (Entra ID directory, /v1.0 + /beta) on the shared core.
 try:
     from routes import azure_graph_unified as _graph_unified
@@ -2865,7 +2872,12 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
 
     gcp_iam = _cloudsim_service_state(space, "gcp_iam")
     for account_id, account in gcp_iam.get("service_accounts", {}).items():
-        if isinstance(account, dict):
+        if not isinstance(account, dict):
+            continue
+        if account and all(isinstance(v, dict) and "email" in v for v in account.values()):
+            for nested_id, nested in account.items():   # {project: {id: record}}
+                add("gcp", "iam", "service_account", nested_id, nested)
+        elif account:   # a flat record (terraform import)
             add("gcp", "iam", "service_account", account_id, account)
     for policy_id, policy in gcp_iam.get("policies", {}).items():
         if isinstance(policy, dict):

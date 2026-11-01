@@ -28,6 +28,8 @@ def _slot() -> dict | None:
     slot = space.setdefault("service_states", {}).setdefault("gcp_pam", {})
     for k in _KEYS:
         slot.setdefault(k, {})
+    if not isinstance(slot["notifications"], list):   # a list in the core; slots used to seed {}
+        slot["notifications"] = []
     return slot
 
 
@@ -35,7 +37,7 @@ class SpacePamStore(pam.PamStore):
     """PamStore whose state is the active space's persisted slot."""
 
     def __init__(self) -> None:           # no super().__init__: the state attrs are properties
-        self._fallback = {k: {} for k in _KEYS}
+        self._fallback = {**{k: {} for k in _KEYS}, "notifications": []}
 
     def _s(self) -> dict:
         return _slot() or self._fallback
@@ -56,6 +58,11 @@ def _project(resource: str) -> str:
 def _edit_policy(resource: str, role: str, member: str, add: bool) -> None:
     import server as s
     project = _project(resource)
+    from core import wire_ingress as _wi
+    if _wi.is_unified("gcp_iam"):   # v4 C0i: the project policy lives in the shared IAM core
+        from routes import gcp_iam_unified as _giam
+        _giam.edit_policy(f"projects/{project}", role, member, add)
+        return
     pol = s._gcp_iam_policy_view(project)
     bindings = [dict(b, members=list(b.get("members") or [])) for b in pol.get("bindings") or []]
     b = next((x for x in bindings if x.get("role") == role), None)

@@ -82,6 +82,11 @@ Graph wire at all: the v4 Entra console's user/group create fell through to the 
 core/azure_cosmos_core.py, the wire Nano and the v4 Cosmos console speak) over
 AppStateCosmosStore. The pre-v4 per-account /azure-data/cosmos/{account}/… handler
 (core/azure_dataplane.py, in-memory) is unchanged.
+
+v4 C0i adds "gcp_iam" (service accounts + keys and the project :get/:set/:testIamPermissions —
+core/gcp_iam_core.py, routes/gcp_iam_unified.py) over core/appliance_stores.AppStateGcpIamStore,
+the store custom roles, Workload Identity and Asset Inventory already used. The store adopts the
+pre-v4 `gcp_iam_state` records once per space and projects its writes back into that slot.
 """
 from __future__ import annotations
 
@@ -97,12 +102,12 @@ def _cfg(key: str, default: str) -> str:
 _DEFAULT_SERVICES = ("s3,dynamodb,gcs,azure_blob,gcp_secrets,gcp_kms,kms,secretsmanager,"
                      "gcp_firestore,gcp_compute,sqs,sns,events,scheduler,"
                      "lambda,azure_keyvault,azure_acr,azure_servicebus,gcp_pubsub,azure_graph,azure_cosmos,iam,"
-                     "azure_table,rds")
+                     "azure_table,rds,gcp_iam")
 _KNOWN_SERVICES = ("s3", "dynamodb", "gcs", "azure_blob", "gcp_secrets", "gcp_kms",
                    "kms", "secretsmanager", "gcp_firestore", "gcp_compute",
                    "sqs", "sns", "events", "scheduler",
                    "lambda", "azure_keyvault", "azure_acr", "azure_servicebus", "gcp_pubsub",
-                   "azure_graph", "azure_cosmos", "iam", "azure_table", "rds")
+                   "azure_graph", "azure_cosmos", "iam", "azure_table", "rds", "gcp_iam")
 
 
 def unified_services() -> frozenset:
@@ -168,6 +173,10 @@ def offline_runtime_stores() -> dict:
         out["cw"] = _cw_store()
     except Exception:
         pass
+    # GCP IAM + Resource Manager: the SAME objects mount_new_services' router serves, so a request
+    # falling back to appliance_router() never reaches an in-memory default.
+    nn = aps.net_new_core_stores()
+    out["gcp_iam"], out["gcp_rm"] = nn["gcp_iam"], nn["gcp_rm"]
     from core import (apigatewayv2_core, ssm_core, stepfunctions_core, gcp_cloudscheduler_core,
                       gcp_container_core, gcp_iamcredentials_core, gcp_redis_core, gcp_monitoring_core)
     for key, mod in (("ssm", ssm_core), ("sfn", stepfunctions_core), ("apigwv2", apigatewayv2_core),

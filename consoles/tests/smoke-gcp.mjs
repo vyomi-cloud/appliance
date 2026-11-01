@@ -904,17 +904,18 @@ try {
 
   // Managed Workload Identities: create via the UI → real certificate issued, visible
   // over the native wire.
-  await wire(`/v1/projects/vyomi-project/locations/global/workloadIdentityPools?workloadIdentityPoolId=smoke-mwi-pool`,
-    { method: "POST", body: JSON.stringify({ displayName: "smoke-mwi-pool" }) });
+  const MWI_POOL = `smoke-mwi-pool-${Date.now() % 100000}`;   // unique: offline state outlives a run
+  await wire(`/v1/projects/vyomi-project/locations/global/workloadIdentityPools?workloadIdentityPoolId=${MWI_POOL}`,
+    { method: "POST", body: JSON.stringify({ displayName: MWI_POOL }) });
   await page.goto(UI + "#/iam-admin/managed-workload-identity-pools");
   const MWI_ID = `smoke-mwi-${Date.now() % 100000}`;
   await page.getByRole("button", { name: "Create managed identity" }).click();
   await page.getByRole("dialog").getByLabel("Pool").click();
-  await page.getByRole("option", { name: "smoke-mwi-pool" }).click();
+  await page.getByRole("option", { name: MWI_POOL }).click();
   await page.getByLabel("Managed identity ID").fill(MWI_ID);
   await page.getByRole("button", { name: "Create", exact: true }).click();
   await page.getByText(MWI_ID).first().waitFor({ timeout: 10000 });
-  const mwiWire = await wjson("/v1/projects/vyomi-project/locations/global/workloadIdentityPools/smoke-mwi-pool/managedIdentities");
+  const mwiWire = await wjson(`/v1/projects/vyomi-project/locations/global/workloadIdentityPools/${MWI_POOL}/managedIdentities`);
   check("create managed identity via UI → visible over native wire with an issued certificate",
     (mwiWire.managedIdentities || []).some((m) => m.name.endsWith(`/${MWI_ID}`) && m.certificates.length === 1));
 
@@ -1446,19 +1447,20 @@ try {
     method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify({
       name: `projects/vyomi-project/locations/appengine/jobs/${CRON}`,
-      description: "smoke cron job",
+      description: `smoke cron job ${CRON}`,
       schedule: "every 1 hours synchronized",
       appEngineHttpTarget: { relativeUri: "/tasks/cleanup", httpMethod: "GET" },
     }),
   });
   await page.goto(UI + "#/cloudscheduler/jobs?tab=cron");
-  await page.getByRole("cell", { name: "smoke cron job" }).waitFor({ timeout: 10000 });
+  await page.getByRole("cell", { name: `smoke cron job ${CRON}` }).waitFor({ timeout: 10000 });
   check("cron.yaml job deployed over native wire → shown on Cron jobs tab", true);
   await shot("14b-scheduler-cron-jobs");
-  await page.getByRole("button", { name: "Run now" }).click();
+  await page.getByRole("row", { name: `smoke cron job ${CRON}` }).getByRole("button", { name: "Run now" }).click();
   await page.waitForTimeout(500);
   const cronAfterRun = await wjson(`/v1/projects/vyomi-project/locations/appengine/jobs/${CRON}`);
   check("Run now via UI → jobs.get shows lastAttemptTime", !!cronAfterRun.lastAttemptTime);
+  await wire(`/v1/projects/vyomi-project/locations/appengine/jobs/${CRON}`, { method: "DELETE" });
 
   // Firestore: create database → start a collection via the UI → cross-check the native wire,
   // then the reverse (a document created over the wire shows up in the Studio UI).

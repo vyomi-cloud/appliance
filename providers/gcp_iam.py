@@ -30,6 +30,9 @@ def _strip_action_suffix(value: str, *suffixes: str) -> str:
     return text
 
 
+# v4 C0i: the service-account + project-policy handlers below only serve the opt-out
+# (VYOMI_UNIFIED_INGRESS_SERVICES without gcp_iam / VYOMI_LEGACY_WIRE=1); by default
+# routes/gcp_iam_unified.py wins those paths and this slot is the core's projection.
 # ── org policy enforcement + Data Access audit log, shared with core/gcp_iam_core.py ──
 # This legacy handler keeps its own service-account state (gcp_iam_state) rather than
 # core/gcp_iam_core's, but the console's Org Policies and Audit logs pages are backed by

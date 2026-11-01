@@ -206,6 +206,14 @@ def register(app: FastAPI) -> None:
             nested.clear()
             nested[target] = merged
 
+        try:   # v4 C0i: accounts / keys / project policies live in the shared core's store (re-projects the slot)
+            from core import wire_ingress as _wi_iam
+            if _wi_iam.is_unified("gcp_iam"):
+                from routes import gcp_iam_unified as _giam
+                updated += _giam.consolidate(target)
+        except Exception:
+            pass
+
         _record_fields = ("selfLink", "kind", "uniqueId", "email")
 
         def _is_record(node: dict) -> bool:

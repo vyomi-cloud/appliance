@@ -270,7 +270,7 @@ class ApiParityContractsTest(unittest.TestCase):
             self.assertIn(sa_id, created_sa["email"])
             status, sa_list, _, _ = self.request_json("GET", f"/v1/projects/{project}/serviceAccounts")
             self.assertEqual(status, 200)
-            self.assertIn(sa_id, [item["name"] for item in sa_list["accounts"]])
+            self.assertIn(created_sa["email"], [item["email"] for item in sa_list["accounts"]])
             status, created_gcp_user, _, _ = self.request_json("POST", "/api/gcp/iam/users", body={"user_name": iam_user_name})
             self.assertEqual(status, 200)
             self.assertEqual(created_gcp_user["user_name"], iam_user_name)

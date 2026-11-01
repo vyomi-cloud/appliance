@@ -2753,7 +2753,172 @@ class AppStateGcpIamStore(_CoreSlotStore, _IamMem):
     space's "gcp_iam_core" would shadow AWS IAM's "iam_core" in the CloudSim lookup.)"""
     _BASE, _SLOT, _PROVIDER = _IamMem, "iam_admin_core", "gcp"
     _EXTRA = ("gcp_custom_roles", "gcp_deny_policies", "gcp_iam_policies", "gcp_policy_activity",
-              "gcp_sa_keys", "gcp_service_accounts", "gcp_wi_pools", "gcp_iap_resources", "gcp_managed_identities")
+              "gcp_sa_keys", "gcp_service_accounts", "gcp_wi_pools", "gcp_iap_resources", "gcp_managed_identities",
+              "_vyomi_adopted")
+
+    @staticmethod
+    def _unified() -> bool:
+        from core import wire_ingress as wi
+        return wi.is_unified("gcp_iam")
+
+    @staticmethod
+    def _legacy() -> dict:
+        """The pre-v4 `gcp_iam_state` of the same space (a proxy; resolved as a GCP request)."""
+        from core.app_context import gcp_iam_state
+        return gcp_iam_state
+
+    def _dir(self) -> dict:
+        """Every reader goes through here, so the pre-v4 records are adopted before ANY path
+        (service accounts, Asset Inventory, Security Insights, IAM Credentials) sees the slot —
+        once per space; the marker persists, so a deleted record is never resurrected."""
+        d = super()._dir()
+        if "_vyomi_adopted" not in d and d is not self._scratch and self._unified():
+            d["_vyomi_adopted"] = _http_date()
+            from core import app_context as ctx
+            tok = ctx.REQUEST_PROVIDER.set(self._PROVIDER)
+            try:
+                n = adopt_legacy_gcp_iam(d, self._legacy())
+                if n:
+                    _log.info("gcp iam: adopted %d pre-v4 service accounts/keys/policies", n)
+            except Exception as exc:   # never break the data plane over a migration
+                _log.warning("gcp iam: pre-v4 adoption skipped: %s", exc)
+            finally:
+                ctx.REQUEST_PROVIDER.reset(tok)
+        return d
+
+    def persist(self) -> None:
+        """Every core write ends here: keep `gcp_iam_state` a correct view of this store for what
+        still reads it (enforcement middleware, IAM Credentials, console counts, CloudSim
+        inventory). The tier middleware still does the actual save."""
+        if not self._unified():
+            return
+        d = self._dir()
+        if d is self._scratch:
+            return
+        from core import app_context as ctx
+        tok = ctx.REQUEST_PROVIDER.set(self._PROVIDER)
+        try:
+            project_gcp_iam_to_legacy(d, self._legacy())
+        finally:
+            ctx.REQUEST_PROVIDER.reset(tok)
+
+
+def adopt_legacy_gcp_iam(slot: dict, legacy) -> int:
+    """Pre-v4 providers/gcp_iam.py records ({project: {id: record}}, keys nested in the account,
+    {project: policy}) -> the core's shapes (keyed by email / resource). A record the core
+    already has wins. Console-only legacy records under "policies" are not IAM policies: left."""
+    from core import gcp_iam_core as c
+    n = 0
+    sas, keys = slot.setdefault("gcp_service_accounts", {}), slot.setdefault("gcp_sa_keys", {})
+    pols, activity = slot.setdefault("gcp_iam_policies", {}), slot.setdefault("gcp_policy_activity", [])
+    for project, accounts in (legacy.get("service_accounts") or {}).items():
+        if not isinstance(accounts, dict):
+            continue
+        for rec in accounts.values():
+            email = rec.get("email") if isinstance(rec, dict) else None
+            if not email or email in sas:
+                continue
+            sas[email] = {"name": f"projects/{project}/serviceAccounts/{email}", "projectId": project,
+                          "uniqueId": str(rec.get("uniqueId") or c._unique_id()), "email": email,
+                          "accountId": email.split("@", 1)[0], "displayName": rec.get("displayName", ""),
+                          "description": rec.get("description", ""), "etag": rec.get("etag") or c._etag(),
+                          "disabled": bool(rec.get("disabled")), "createTime": rec.get("createTime", "")}
+            n += 1
+            for kid, k in (rec.get("keys") or {}).items():
+                if isinstance(k, dict):
+                    keys.setdefault(email, {})[kid] = {**{x: y for x, y in k.items() if x != "_key_id"},
+                                                       "disabled": bool(k.get("disabled")), "_email": email}
+                    n += 1
+            activity.extend(e for e in (rec.get("_activity") or []) if isinstance(e, dict))
+    for project, pol in (legacy.get("policies") or {}).items():
+        res = f"projects/{project}"
+        if isinstance(pol, dict) and isinstance(pol.get("bindings"), list) and res not in pols:
+            pols[res] = {"version": pol.get("version", 1), "etag": pol.get("etag") or c._etag(),
+                         "bindings": [dict(b) for b in pol["bindings"] if isinstance(b, dict)]}
+            if pol.get("auditConfigs"):
+                pols[res]["auditConfigs"] = pol["auditConfigs"]
+            n += 1 if pol["bindings"] else 0
+    return n
+
+
+def _legacy_key_view(kid: str, k: dict) -> dict:
+    return {**{x: y for x, y in k.items() if x != "_email"}, "_key_id": kid}
+
+
+def project_gcp_iam_to_legacy(slot: dict, legacy) -> None:
+    """This store -> the pre-v4 shapes in `gcp_iam_state`, replacing what it manages only: a
+    terraform-imported flat record under service_accounts and console-only records inside a
+    project's policies entry are not this store's. Also what makes the escape hatch
+    (VYOMI_UNIFIED_INGRESS_SERVICES without gcp_iam) keep showing current accounts + keys."""
+    keys = slot.get("gcp_sa_keys") or {}
+    by_project: dict = {}
+    for email, sa in (slot.get("gcp_service_accounts") or {}).items():
+        account = sa.get("accountId") or email.split("@", 1)[0]
+        by_project.setdefault(sa.get("projectId", ""), {})[account] = {
+            "name": account, "project": sa.get("projectId", ""), "uniqueId": sa.get("uniqueId", ""),
+            "email": email, "displayName": sa.get("displayName", ""), "description": sa.get("description", ""),
+            "oauth2ClientId": sa.get("uniqueId", ""), "disabled": bool(sa.get("disabled")),
+            "createTime": sa.get("createTime", ""), "etag": sa.get("etag", ""),
+            "keys": {kid: _legacy_key_view(kid, k) for kid, k in (keys.get(email) or {}).items()}}
+    out = legacy.setdefault("service_accounts", {})
+    for project, cur in list(out.items()):
+        if project not in by_project and isinstance(cur, dict) \
+                and all(isinstance(v, dict) and "email" in v for v in cur.values()):
+            del out[project]
+    out.update(by_project)
+    policies = legacy.setdefault("policies", {})
+    for res, pol in (slot.get("gcp_iam_policies") or {}).items():
+        segs = res.split("/")
+        if len(segs) != 2 or segs[0] != "projects":
+            continue
+        cur = policies.setdefault(segs[1], {})
+        if not isinstance(cur, dict):
+            continue
+        cur.update(version=pol.get("version", 1), etag=pol.get("etag", ""), bindings=pol.get("bindings", []))
+        if pol.get("auditConfigs"):
+            cur["auditConfigs"] = pol["auditConfigs"]
+        else:
+            cur.pop("auditConfigs", None)
+
+
+def retarget_gcp_iam(store, target: str) -> int:
+    """Re-key the store's project-scoped records onto one project (space = project)."""
+    n = 0
+    moved_sa: dict = {}
+    sas = getattr(store, "gcp_service_accounts", None) or {}
+    keys = getattr(store, "gcp_sa_keys", None) or {}
+    for email, sa in list(sas.items()):
+        if sa.get("projectId") == target:
+            continue
+        new_email = f"{sa.get('accountId') or email.split('@', 1)[0]}@{target}.iam.gserviceaccount.com"
+        old_name = sa["name"]
+        sa.update(projectId=target, email=new_email, name=f"projects/{target}/serviceAccounts/{new_email}")
+        del sas[email]
+        sas[new_email] = sa
+        moved_sa[old_name] = sa["name"]
+        ks = keys.pop(email, None)
+        if ks:
+            for k in ks.values():
+                k["name"] = k["name"].replace(old_name, sa["name"], 1)
+                k["_email"] = new_email
+            keys[new_email] = ks
+        n += 1
+    pols = getattr(store, "gcp_iam_policies", None) or {}
+    tres = f"projects/{target}"
+    for res in [r for r in pols if r.startswith("projects/") and r.count("/") == 1 and r != tres]:
+        old = pols.pop(res)
+        cur = pols.setdefault(tres, {"version": 1, "etag": old.get("etag", ""), "bindings": []})
+        for b in old.get("bindings") or []:
+            same = next((x for x in cur["bindings"] if x.get("role") == b.get("role")
+                         and x.get("condition") == b.get("condition")), None)
+            if same is None:
+                cur["bindings"].append(dict(b))
+            else:
+                same["members"] = [*same.get("members", []),
+                                   *[m for m in b.get("members", []) if m not in same.get("members", [])]]
+        n += 1
+    store.persist()
+    return n
 
 
 class AppStateAzureRbacStore(_CoreSlotStore, _IamMem):

@@ -98,8 +98,13 @@ def register(app, on_change=None):
         sa = core.form_service_account(b)
         if "@" in sa and not resolve(sa):   # the console issues for the account, creating it if absent
             acct, _, rest = sa.partition("@")
-            from providers import gcp_iam
-            await gcp_iam.api_gcp_iam_create_service_account(rest.split(".")[0], _Shim({"accountId": acct}))
+            from core import wire_ingress as _wi
+            if _wi.is_unified("gcp_iam"):
+                from routes import gcp_iam_unified as _giam
+                _giam.create_account(rest.split(".")[0], acct)
+            else:
+                from providers import gcp_iam
+                await gcp_iam.api_gcp_iam_create_service_account(rest.split(".")[0], _Shim({"accountId": acct}))
         try:
             v = core.issue_from_form(store(), b, resolve)
         except core._E as e:

@@ -364,6 +364,16 @@ def _sa_email(account_id: str, project: str) -> str:
     return f"{account_id}@{project}.iam.gserviceaccount.com"
 
 
+def _resolve_email(store, project, ident: str) -> str:
+    """{ACCOUNT} in a service-account path: email, numeric unique ID, or bare account id."""
+    if "@" in ident:
+        return ident
+    for email, sa in _sa_ns(store).items():
+        if sa.get("uniqueId") == ident:
+            return email
+    return _sa_email(ident, project)
+
+
 def _sa_view(sa: dict) -> dict:
     return {
         "name": sa["name"],
@@ -409,7 +419,7 @@ def _create_service_account(store, project, body, rm_store=None) -> GcpIamRespon
 
 def _get_service_account(store, project, ident, logger=None) -> GcpIamResponse:
     sas = _sa_ns(store)
-    email = ident if "@" in ident else _sa_email(ident, project)
+    email = _resolve_email(store, project, ident)
     sa = sas.get(email)
     if sa is None:
         return _err(404, f"Unknown service account: {ident}", "NOT_FOUND")
@@ -427,17 +437,18 @@ def _list_service_accounts(store, project, logger=None) -> GcpIamResponse:
 
 def _delete_service_account(store, project, ident) -> GcpIamResponse:
     sas = _sa_ns(store)
-    email = ident if "@" in ident else _sa_email(ident, project)
+    email = _resolve_email(store, project, ident)
     if email not in sas:
         return _err(404, f"Unknown service account: {ident}", "NOT_FOUND")
     del sas[email]
+    _keys_ns(store).pop(email, None)   # a service account's keys die with it
     store.persist()
     return _json(200, {})
 
 
 def _patch_service_account(store, project, ident, body) -> GcpIamResponse:
     sas = _sa_ns(store)
-    email = ident if "@" in ident else _sa_email(ident, project)
+    email = _resolve_email(store, project, ident)
     sa = sas.get(email)
     if sa is None:
         return _err(404, f"Unknown service account: {ident}", "NOT_FOUND")
@@ -455,7 +466,7 @@ def _patch_service_account(store, project, ident, body) -> GcpIamResponse:
 
 def _set_service_account_disabled(store, project, ident, disabled) -> GcpIamResponse:
     sas = _sa_ns(store)
-    email = ident if "@" in ident else _sa_email(ident, project)
+    email = _resolve_email(store, project, ident)
     sa = sas.get(email)
     if sa is None:
         return _err(404, f"Unknown service account: {ident}", "NOT_FOUND")
@@ -688,7 +699,8 @@ def _get_key(store, project, email, kid, logger=None) -> GcpIamResponse:
     if key is None:
         return _err(404, f"Key {kid} not found.", "NOT_FOUND")
     _audit_log(logger, store, project, "ADMIN_READ", f"iam.googleapis.com keys.get {kid} for {email}")
-    return _json(200, _key_view(key))
+    # like list: private key material is only ever returned by create
+    return _json(200, {k2: v2 for k2, v2 in _key_view(key).items() if k2 != "privateKeyData"})
 
 
 def _delete_key(store, project, email, kid) -> GcpIamResponse:
@@ -835,7 +847,7 @@ def _get_service_account_metrics(store, resource: str, iamc_store=None) -> GcpIa
         return _err(400, f"Invalid resource for metrics: {resource}", "INVALID_ARGUMENT")
     project, ident = rsegs[1], rsegs[3]
     sas = _sa_ns(store)
-    email = ident if "@" in ident else _sa_email(ident, project)
+    email = _resolve_email(store, project, ident)
     if email not in sas or sas[email]["projectId"] != project:
         return _err(404, f"Unknown service account: {ident}", "NOT_FOUND")
     return _json(200, service_account_metrics(email, iamc_store))
@@ -1159,7 +1171,9 @@ def dispatch(store: IamStore, method: str, path: str,
 
     # ---- service account keys: projects/{p}/serviceAccounts/{email}/keys[/{keyId}] ----
     if len(segs) >= 5 and segs[0] == "projects" and segs[2] == "serviceAccounts" and segs[4] == "keys":
-        project, email = segs[1], segs[3]
+        project, email = segs[1], _resolve_email(store, segs[1], segs[3])
+        if email not in _sa_ns(store):
+            return _err(404, f"Unknown service account: {segs[3]}", "NOT_FOUND")
         if len(segs) == 5:
             if method == "POST":
                 return _create_key(store, project, email, _body(), rm_store=rm_store)
@@ -1176,7 +1190,7 @@ def dispatch(store: IamStore, method: str, path: str,
     # ---- per-service-account admin-activity log: .../serviceAccounts/{email}/policyActivity ----
     if len(segs) == 5 and segs[0] == "projects" and segs[2] == "serviceAccounts" and segs[4] == "policyActivity":
         if method == "GET":
-            return _list_activity(store, f"projects/{segs[1]}/serviceAccounts/{segs[3]}")
+            return _list_activity(store, f"projects/{segs[1]}/serviceAccounts/{_resolve_email(store, segs[1], segs[3])}")
         return _err(400, f"Unsupported method {method} on policyActivity", "INVALID_ARGUMENT")
 
     # ---- service accounts: projects/{p}/serviceAccounts[/{email}] ----
