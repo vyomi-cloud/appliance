@@ -250,6 +250,9 @@ def register(app: FastAPI) -> None:
                 ar.dispatch(_STORE, "PATCH", "/v1/" + full, {"updateMask": "labels"}, {}, __import__("json").dumps({"labels": labels}).encode())
                 _usage("set_labels", name)
             return {"ok": True, "item": {"name": name, "labels": dict(_STORE.repos[full].get("labels") or {})}}
+        if op == "getPushpull":                # the Push / pull tab (schedkv: get + tab key)
+            out = ar.console_pushpull(_STORE, name)
+            return JSONResponse(out, status_code=200 if out.get("ok") else 404)
         if op == "pushSample":
             out = ar.console_push_sample(_STORE, name, await _json(request))
             return JSONResponse(out, status_code=200 if out.get("ok") else 404)

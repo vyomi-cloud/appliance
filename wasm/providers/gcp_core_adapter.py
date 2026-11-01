@@ -698,6 +698,8 @@ def _resource_op(service, operation, name="", body=None):
             return {"ok": True, "items": _ar.console_children(st_, name, operation[4:].lower())}
         if operation == "PushSample":
             return _ar.console_push_sample(st_, name, body)
+        if operation == "GetPushpull":         # Push / pull tab (no OCI registry in Nano: says so)
+            return _ar.console_pushpull(st_, name)
 
     # ---------------- CLOUD SQL (instances) ----------------
     if svc == "cloudsql":

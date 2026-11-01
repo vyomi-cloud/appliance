@@ -617,6 +617,15 @@ def console_find(store: ArtifactRegistryStore, name: str):
     return None, None
 
 
+def console_pushpull(store: ArtifactRegistryStore, name: str) -> dict:
+    """The repository's Push / pull tab: the host a user's docker pushes to (or, with no
+    registry running, the honest "not available" text) and a ready-to-paste command."""
+    _, repo = console_find(store, name)
+    if repo is None:
+        return {"ok": False, "code": "NotFound", "name": name}
+    return {"ok": True, "item": {"name": name, **_push_info(repo)}}
+
+
 def console_delete(store: ArtifactRegistryStore, name: str) -> dict:
     full, _ = console_find(store, name)
     if full is None:
