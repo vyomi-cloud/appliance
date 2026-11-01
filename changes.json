@@ -1,6 +1,9 @@
 {
- "at": "2026-11-01T06:51:25+00:00",
+ "at": "2026-11-01T07:51:26+00:00",
  "baseline": false,
  "changes": [],
- "errors": []
+ "errors": [
+  "maven/com.azure:azure-data-appconfiguration: The read operation timed out",
+  "maven/com.azure.resourcemanager:azure-resourcemanager-cognitiveservices: The read operation timed out"
+ ]
 }
