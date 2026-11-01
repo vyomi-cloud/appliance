@@ -4,6 +4,27 @@ All notable changes to Vyomi will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.38] — 2026-11-01
+
+Daily conformance release. **3 product fixes** (all clouds 3); 3 reach Nano and 3 reach the offline appliance.
+
+### Highlights
+
+- **Deleted resources now stay deleted.** Resources you delete no longer reappear when you switch between Nano tabs or work through the tunnel, in Nano and the offline appliance.
+- **Cost savings no longer shows deleted resources, and VPCs can be deleted.** Items you removed stay gone from the Cost savings view, and you can now delete VPCs.
+- **`gcloud compute` works through the tunnel.** You can run `gcloud compute` commands against the simulator through the tunnel, in Nano and offline.
+
+### Fixes — all clouds
+
+- **[Nano + offline]** Deleted resources stay deleted across tabs and the tunnel
+- **[Nano + offline]** Deleted resources no longer return on Cost savings; VPCs can be deleted
+- **[Nano + offline]** Gcloud compute through the tunnel; close the gaps in the release checks
+
+### How to upgrade
+
+- **Offline appliance:** `vyomi update` (Homebrew installs older than 3.0.24: run `brew trust vyomi-cloud/tap && brew upgrade vyomi-docker` once first). Docker: `docker pull vyomi/appliance:3.0.38`.
+- **Nano** ([vyomi.cloud](https://vyomi.cloud)): updates with this release; close all Nano tabs and reopen to load it.
+
 ## [3.0.37] — 2026-11-01
 
 Daily conformance release. **6 product fixes** (AWS 1, GCP 3, Azure 1, all clouds 1); 2 reach Nano and 5 reach the offline appliance; 16 test and harness improvements.
