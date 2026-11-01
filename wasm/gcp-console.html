@@ -173,7 +173,12 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
   .wrap .card,.wrap .kv-card,.wrap .col-card,.wizard-page .card,.wizard-page .kv-card,.wizard-page .col-card,.wizard-page .summary-card{border:1px solid var(--line);border-radius:8px}
   /* Detail pages: the outer white card stays borderless; an inner rounded border wraps the breadcrumb, title, side menu and config area. */
   .wrap.detail-card{padding:16px}
-  .detail-inner{border:1px solid #dadce0;border-radius:12px;padding:20px 24px;background:#fff}
+  /* The rules inside run edge to edge: the line under the title meets the box's left/right borders and the
+     side-menu divider meets its top and bottom borders. */
+  .detail-inner{border:1px solid #dadce0;border-radius:12px;padding:0;background:#fff;overflow:hidden}
+  .detail-inner > .detail-top{padding:20px 24px 18px;margin-bottom:0}
+  .detail-inner > .sub-layout{margin-top:0;border-top:1px solid #dadce0}
+  .detail-inner .sub-nav{border-right:1px solid #dadce0}
   /* Grids keep their rounded border; the rules inside (toolbar, header, rows) run edge to edge of the grid. */
   .wrap .table-wrap{border:1px solid var(--line);border-radius:8px;overflow:hidden}
   .page-head{display:flex;align-items:center;gap:14px;margin-bottom:18px}
