@@ -25,7 +25,10 @@
     '#vy-appbar .vy-notch::before{content:"";position:absolute;inset:0;z-index:-1;background:#0f121c;clip-path:polygon(0 0,100% 0,calc(100% - 30px) 100%,30px 100%)}' +
     '#vy-appbar .vy-notch .vy-sep{width:1px;height:20px;background:rgba(255,255,255,.18);margin:0 6px}' +
     '#vy-appbar #disk-widget-slot{position:relative !important;top:auto !important;right:auto !important;left:auto !important;z-index:5 !important;display:inline-block}' +
-    '#vy-appbar #disk-widget-slot .disk-chip{height:28px;padding:0 10px;font-size:12px;border-radius:8px;border-width:1px}' +
+    '#vy-appbar #disk-widget-slot .disk-chip{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 10px;font:400 12px Inter,system-ui,sans-serif;border:0 !important;border-radius:8px;background:transparent !important;color:#b4b8cc !important;box-shadow:none !important}' +
+    '#vy-appbar #disk-widget-slot .disk-chip:hover,#vy-appbar #disk-widget-slot.open .disk-chip{background:rgba(255,255,255,.08) !important;color:#fff !important}' +
+    '#vy-appbar #disk-widget-slot .disk-chip *{color:inherit !important;font:inherit !important}' +
+    '#vy-appbar #disk-widget-slot .disk-chip .disk-chip-caret{display:none}' +
     '#vy-appbar #disk-widget-slot .disk-popover{top:calc(100% + 14px) !important;right:auto !important;left:50% !important;transform:translateX(-50%)}' +
     '#vy-appbar .vy-notch a{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 10px;border-radius:8px;color:#b4b8cc;font-size:12px;text-decoration:none;white-space:nowrap}' +
     '#vy-appbar .vy-notch a:hover{background:rgba(255,255,255,.08);color:#fff}' +
