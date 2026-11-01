@@ -1,6 +1,7 @@
 /* Create a topic — the console's side-panel form. Every real setting goes into ONE
- * native topics.create body; ingestion and message transforms aren't Vyomi products yet,
- * so they're declared gaps, not silent no-op controls. */
+ * native topics.create body; ingestion (Cloud Storage source) and message transforms
+ * (a documented JS subset) are REAL, enforced by core/gcp_pubsub_core.py — see
+ * core/capabilities/gcp/pubsub.json. */
 import { useState } from "react";
 import {
   Box, Button, Checkbox, FormControl, FormControlLabel, IconButton, InputLabel, MenuItem,
@@ -9,9 +10,17 @@ import {
 import ArrowBackIcon from "@mui/icons-material/esm/ArrowBack.js";
 import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
-import { ErrorAlert, NotSimulated, PageHeader, Section } from "../../kit/common.jsx";
+import { CapabilityBadge } from "../../kit/Capability.jsx";
+import { ErrorAlert, PageHeader, Section } from "../../kit/common.jsx";
 import { hashHref } from "../../link.jsx";
 import * as api from "./api.js";
+
+const TRANSFORM_PLACEHOLDER = `function transform(message, metadata) {
+  const data = JSON.parse(message.data);
+  // mutate data, or "return null;" to drop the message
+  message.data = JSON.stringify(data);
+  return message;
+}`;
 
 export default function CreateTopic() {
   const notify = useNotify();
@@ -26,6 +35,10 @@ export default function CreateTopic() {
   const [retDays, setRetDays] = useState("7");
   const [encType, setEncType] = useState("google");
   const [kmsKey, setKmsKey] = useState("");
+  const [ingest, setIngest] = useState(false);
+  const [ingestBucket, setIngestBucket] = useState("");
+  const [transform, setTransform] = useState(false);
+  const [transformCode, setTransformCode] = useState(TRANSFORM_PLACEHOLDER);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
 
@@ -41,6 +54,8 @@ export default function CreateTopic() {
       if (useSchema && schema) body.schemaSettings = { schema, encoding };
       if (retention) body.messageRetentionDuration = `${Number(retDays) * 86400}s`;
       if (encType === "kms" && kmsKey) body.kmsKeyName = kmsKey;
+      if (ingest && ingestBucket.trim()) body.ingestionDataSourceSettings = { cloudStorage: { bucket: ingestBucket.trim() } };
+      if (transform && transformCode.trim()) body.messageTransforms = [{ javascriptUdf: { functionName: "transform", code: transformCode } }];
       await api.createTopic(id, body);
       if (defaultSub) {
         try { await api.createSubscription(`${id}-sub`, { topic: api.topicName(id) }); }
@@ -85,7 +100,17 @@ export default function CreateTopic() {
             )}
           </Box>
 
-          <NotSimulated compact feature="Enable ingestion" note="Ingestion from AWS, Azure, Kafka and database CDC sources isn't modeled in Vyomi." />
+          <Box>
+            <Stack direction="row" spacing={1} alignItems="center">
+              <FormControlLabel control={<Checkbox checked={ingest} onChange={(e) => setIngest(e.target.checked)} />} label="Enable ingestion" />
+              <CapabilityBadge id="gcp.pubsub.topics.ingestion" />
+            </Stack>
+            {ingest && (
+              <TextField sx={{ mt: 1, ml: 4, width: 420 }} label="Cloud Storage bucket" value={ingestBucket}
+                onChange={(e) => setIngestBucket(e.target.value)} placeholder="my-bucket"
+                helperText="Objects already in the bucket, and any added later, are ingested as messages the next time this topic is read, published to, or pulled from. AWS Kinesis, Azure Event Hubs, Kafka and CDC sources have no connector in Vyomi." />
+            )}
+          </Box>
 
           <Box>
             <FormControlLabel control={<Checkbox checked={retention} onChange={(e) => setRetention(e.target.checked)} />} label="Enable message retention" />
@@ -95,7 +120,17 @@ export default function CreateTopic() {
             )}
           </Box>
 
-          <NotSimulated compact feature="Enable message transforms" note="JavaScript transform pipelines on publish aren't modeled in Vyomi." />
+          <Box>
+            <Stack direction="row" spacing={1} alignItems="center">
+              <FormControlLabel control={<Checkbox checked={transform} onChange={(e) => setTransform(e.target.checked)} />} label="Enable message transforms" />
+              <CapabilityBadge id="gcp.pubsub.topics.message-transforms" />
+            </Stack>
+            {transform && (
+              <TextField sx={{ mt: 1, ml: 4, width: 560 }} label="JavaScript UDF code" value={transformCode}
+                onChange={(e) => setTransformCode(e.target.value)} multiline minRows={6} InputProps={{ sx: { fontFamily: "monospace", fontSize: 13 } }}
+                helperText="A documented subset of JavaScript is really parsed and run on every publish — see the badge for exactly what's covered. Returning null drops the message." />
+            )}
+          </Box>
 
           <Box>
             <Typography variant="body2" sx={{ fontWeight: 500, mb: 1 }}>Encryption</Typography>

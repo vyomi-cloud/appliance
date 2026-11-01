@@ -199,41 +199,80 @@
  "gcp.pubsub.subscriptions.bigquery-gcs-delivery": {
   "title": "Write to BigQuery / write to Cloud Storage delivery",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "BigQuery and Cloud Storage aren't Vyomi products yet, so there is nowhere for this delivery type to write. Choose Pull or Push instead."
+   "Write to Cloud Storage delivery is ENFORCED: each delivered message is written as a real newline-delimited TEXT object into the configured bucket (named from filenamePrefix/filenameSuffix) in Vyomi's own GCS store — never queued on the subscription. The bucket must already exist; avroConfig output isn't modeled.",
+   "Write to BigQuery delivery is not modeled: there is no BigQuery dataset/table resource anywhere in Vyomi to stream rows into (not 'out of scope for Pub/Sub' — no such resource type is simulated at all). Choose Pull, Push, or Cloud Storage delivery instead."
+  ],
+  "api": [
+   "subscriptions.create",
+   "subscriptions.patch",
+   "topics.publish"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_pubsub_depth_core.py"
   ]
  },
  "gcp.pubsub.topics.ingestion": {
   "title": "Topic ingestion from external sources (AWS/Azure/Kafka/CDC)",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Vyomi has no connectors to AWS, Azure, Kafka or database CDC sources, so a topic can't be configured to ingest from them."
+   "ingestionDataSourceSettings.cloudStorage is ENFORCED: a topic configured with it really ingests objects from a real GCS bucket as messages (one message per object, matching matchGlob if set), lazily catching up on the next topics.get/publish or a pull on one of its subscriptions — Vyomi has no background poller, so a brand-new object doesn't appear until something next touches the topic.",
+   "Every other declared source (AWS Kinesis, Azure Event Hubs, Confluent/Kafka, database CDC) is rejected at create/patch time: Vyomi has no connector for any of them — not a 'separate product' excuse, there is no such external resource simulated anywhere to ingest from."
+  ],
+  "api": [
+   "topics.create",
+   "topics.patch",
+   "topics.get",
+   "topics.publish",
+   "subscriptions.pull"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_pubsub_depth_core.py"
   ]
  },
  "gcp.pubsub.topics.message-transforms": {
   "title": "Message transforms (JavaScript UDFs on publish)",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Vyomi does not run a JavaScript transform pipeline on published messages."
+   "A documented SUBSET of JavaScript is really parsed and executed against every published message (not a fixed menu of transform kinds): const/let, property get/set, delete, if/else, return, object/array literals + spread, JSON.parse/stringify, a few String/Object/Array builtins (toUpperCase/toLowerCase/trim/includes/startsWith/endsWith/split/join/keys/isArray), +, ===, !==, &&, ||, !.",
+   "No loops, classes, async, regular expressions, or arbitrary globals. A transform that fails to PARSE is rejected at topic create/patch time (INVALID_ARGUMENT), matching the real API's compile step. A transform that throws AT RUNTIME is skipped for that one message (fails open) rather than blocking the whole publish call.",
+   "Returning null/undefined (or falling off the end of the function) drops the message, same as the real API — it is never delivered, retained, or returned in the publish response's messageIds."
+  ],
+  "api": [
+   "topics.create",
+   "topics.patch",
+   "topics.publish"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_pubsub_depth_core.py"
   ]
  },
  "gcp.pubsub.metrics": {
   "title": "Topic / subscription metrics and monitoring charts",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Vyomi does not collect the time-series metrics (throughput, backlog, oldest unacked age) the console's Metrics tab charts."
+   "Three series are mirrored into the shared Cloud Monitoring store from the core's OWN activity (never synthetic/random data): pubsub.googleapis.com/topic/send_message_operation_count (a live cumulative publish count), subscription/num_undelivered_messages (the subscription's real current backlog) and subscription/oldest_unacked_message_age, refreshed on every publish/pull/acknowledge/get.",
+   "Published as a GAUGE snapshot of the running total/current value rather than GCP's own per-minute DELTA rate, same simplification core/gcp_logging_core.py's usage-metrics mirror already makes. Every other Pub/Sub metric (publish/pull request latency, retained-byte quota usage, …) isn't collected."
+  ],
+  "api": [
+   "topics.publish",
+   "subscriptions.pull",
+   "subscriptions.acknowledge"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_pubsub_depth_core.py"
   ]
  },
  "gcp.pubsub.snapshots.crud": {

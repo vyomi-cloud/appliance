@@ -15,10 +15,11 @@ import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
 import ResourceTable from "../../kit/ResourceTable.jsx";
-import { CapabilityBadge, CapabilityContainer } from "../../kit/Capability.jsx";
+import { CapabilityBadge } from "../../kit/Capability.jsx";
 import { ErrorAlert, KeyValue, PageHeader, Section } from "../../kit/common.jsx";
 import { Link, hashHref } from "../../link.jsx";
 import { useProject } from "../../project.js";
+import { TopicMetrics } from "./Metrics.jsx";
 import * as api from "./api.js";
 
 export default function TopicDetail({ params }) {
@@ -61,7 +62,7 @@ export default function TopicDetail({ params }) {
       </Tabs>
       {tab === "subscriptions" && <SubscriptionsTab id={id} />}
       {tab === "snapshots" && <SnapshotsTab id={id} />}
-      {tab === "metrics" && <CapabilityContainer id="gcp.pubsub.metrics" title="Metrics" />}
+      {tab === "metrics" && <TopicMetrics id={id} />}
       {tab === "details" && <DetailsTab topic={topic} />}
       {tab === "messages" && <MessagesTab id={id} />}
 
