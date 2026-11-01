@@ -23,6 +23,7 @@ import { navigate } from "../../../common/router.js";
 import { ErrorAlert, KeyValue, fmtDate } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import DeleteModal from "../../kit/DeleteModal.jsx";
+import { LastAccessedTab } from "./LastAccessed.jsx";
 import * as api from "./api.js";
 
 function PermissionsTab({ policy }) {
@@ -136,7 +137,7 @@ export default function PolicyDetail({ params }) {
           { id: "permissions", label: "Permissions", content: <PermissionsTab policy={policy} /> },
           { id: "entities", label: "Entities attached", content: <EntitiesTab policyArn={policy.Arn} /> },
           { id: "versions", label: "Policy versions", content: <VersionsTab policyArn={policy.Arn} defaultVersionId={policy.DefaultVersionId} reloadPolicy={list.reload} /> },
-          { id: "last-accessed", label: "Last Accessed", content: <CapabilityContainer id="iam.last-accessed" title="Last accessed" /> },
+          { id: "last-accessed", label: "Last Accessed", content: <LastAccessedTab arn={policy.Arn} /> },
         ]} />
       </SpaceBetween>
       <DeleteModal visible={delModal} onDismiss={() => setDelModal(false)} resourceType="policy" names={[policyName]}

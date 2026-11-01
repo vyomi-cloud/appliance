@@ -54,4 +54,22 @@ export default {
     await wire("POST", "/", Q("RequestAccountAccess", { RequestorId: uniq, InitiatedBy: uniq }));
     return uniq;
   },
+
+  // Access Analyzer (Vyomi-only): core/iam_core.py CreateAnalyzer/ListFindings.
+  "live-analyzer": async (wire, uniq) => {
+    await wire("POST", "/", Q("CreateAnalyzer", { AnalyzerName: uniq, Type: "ACCOUNT" }));
+    return uniq;
+  },
+  "live-ext-finding": async (wire, uniq) => {
+    await wire("POST", "/", Q("CreateAnalyzer", { AnalyzerName: "uic-analyzer-ext", Type: "ACCOUNT" })).catch(() => {});
+    const trust = JSON.stringify({ Version: "2012-10-17", Statement: [{ Effect: "Allow", Principal: { AWS: "arn:aws:iam::999999999999:root" }, Action: "sts:AssumeRole" }] });
+    await wire("POST", "/", Q("CreateRole", { RoleName: uniq, AssumeRolePolicyDocument: trust }));
+    return uniq;
+  },
+  "live-unused-finding": async (wire, uniq) => {
+    await wire("POST", "/", Q("CreateAnalyzer", { AnalyzerName: "uic-analyzer-unused", Type: "ACCOUNT_UNUSED_ACCESS", UnusedAccessAge: "0" })).catch(() => {});
+    await wire("POST", "/", Q("CreateUser", { UserName: uniq }));
+    await wire("POST", "/", Q("CreateAccessKey", { UserName: uniq }));
+    return uniq;
+  },
 };

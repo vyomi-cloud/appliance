@@ -183,3 +183,34 @@ export const deleteOrgPolicy = (PolicyId) => call("DeleteOrgPolicy", { PolicyId 
 // ── Account access requests ("Temporary delegation requests") — Vyomi-only ──
 export const requestAccountAccess = async (params) => (await call("RequestAccountAccess", params)).RequestAccountAccessResponse.RequestAccountAccessResult.AccountAccessRequest;
 export const listAccountAccessRequests = async () => asList((await call("ListAccountAccessRequests", {})).ListAccountAccessRequestsResponse.ListAccountAccessRequestsResult.AccountAccessRequests?.AccountAccessRequest);
+
+// ── Last accessed (real IAM API) + policy-from-activity (Vyomi-only) — see
+// core/iam_core.py's record_activity / GetServiceLastAccessedDetails / GeneratePolicyFromActivity ──
+export const generateServiceLastAccessedDetails = async (Arn) =>
+  (await call("GenerateServiceLastAccessedDetails", { Arn })).GenerateServiceLastAccessedDetailsResponse.GenerateServiceLastAccessedDetailsResult.JobId;
+export const getServiceLastAccessedDetailsForJob = async (JobId) =>
+  (await call("GetServiceLastAccessedDetails", { JobId })).GetServiceLastAccessedDetailsResponse.GetServiceLastAccessedDetailsResult;
+export const getServiceLastAccessedDetails = async (Arn) => {
+  const jobId = await generateServiceLastAccessedDetails(Arn);
+  const r = await getServiceLastAccessedDetailsForJob(jobId);
+  return asList(r.ServicesLastAccessed?.member);
+};
+export const generatePolicyFromActivity = async (Arn) =>
+  (await call("GeneratePolicyFromActivity", { Arn })).GeneratePolicyFromActivityResponse.GeneratePolicyFromActivityResult.GeneratedPolicyDocument;
+
+// ── Access Analyzer (Vyomi-only) — see core/iam_core.py ─────────────────
+export const createAnalyzer = async (params) => (await call("CreateAnalyzer", params)).CreateAnalyzerResponse.CreateAnalyzerResult.AnalyzerSummary;
+export const listAnalyzers = async () => asList((await call("ListAnalyzers", {})).ListAnalyzersResponse.ListAnalyzersResult.Analyzers?.AnalyzerSummary);
+export const getAnalyzer = async (AnalyzerName) => (await call("GetAnalyzer", { AnalyzerName })).GetAnalyzerResponse.GetAnalyzerResult.AnalyzerSummary;
+export const updateAnalyzer = (AnalyzerName, UnusedAccessAge) => call("UpdateAnalyzer", { AnalyzerName, UnusedAccessAge });
+export const deleteAnalyzer = (AnalyzerName) => call("DeleteAnalyzer", { AnalyzerName });
+export const listFindings = async (AnalyzerName, Status) => asList((await call("ListFindings", Status ? { AnalyzerName, Status } : { AnalyzerName })).ListFindingsResponse.ListFindingsResult.Findings?.member);
+export const updateFindingStatus = (AnalyzerName, Id, Status) => call("UpdateFindingStatus", { AnalyzerName, Id, Status });
+
+// ── IAM Roles Anywhere (Vyomi-only) — see core/iam_core.py ──────────────
+export const createTrustAnchor = async (Name, SourceData) => (await call("CreateTrustAnchor", { Name, SourceData })).CreateTrustAnchorResponse.CreateTrustAnchorResult.TrustAnchorDetail;
+export const listTrustAnchors = async () => asList((await call("ListTrustAnchors", {})).ListTrustAnchorsResponse.ListTrustAnchorsResult.TrustAnchors?.TrustAnchorDetail);
+export const deleteTrustAnchor = (TrustAnchorArn) => call("DeleteTrustAnchor", { TrustAnchorArn });
+export const createProfile = async (Name, RoleArns = []) => (await call("CreateProfile", { Name, ...members("RoleArns", RoleArns) })).CreateProfileResponse.CreateProfileResult.ProfileDetail;
+export const listProfiles = async () => asList((await call("ListProfiles", {})).ListProfilesResponse.ListProfilesResult.Profiles?.ProfileDetail);
+export const deleteProfile = (ProfileArn) => call("DeleteProfile", { ProfileArn });

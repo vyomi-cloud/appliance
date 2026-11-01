@@ -24,8 +24,11 @@ import ServiceControlPolicyDetail from "./ServiceControlPolicyDetail.jsx";
 import ResourceControlPolicies from "./ResourceControlPolicies.jsx";
 import {
   AssignDelegatedAdministrator, RootAccessManagement, OrganizationActivity, AccountAccessManager,
-  AccessAnalyzer, ResourceAnalysis, UnusedAccess, AnalyzerSettings,
 } from "./HonestPages.jsx";
+import AccessAnalyzer from "./AccessAnalyzer.jsx";
+import ResourceAnalysis from "./ResourceAnalysis.jsx";
+import UnusedAccess from "./UnusedAccess.jsx";
+import AnalyzerSettings from "./AnalyzerSettings.jsx";
 
 const iamCrumb = { text: "IAM", href: "#/iam" };
 

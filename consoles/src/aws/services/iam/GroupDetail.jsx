@@ -20,6 +20,7 @@ import { navigate } from "../../../common/router.js";
 import { ErrorAlert, KeyValue, fmtDate } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import DeleteModal from "../../kit/DeleteModal.jsx";
+import { LastAccessedTab } from "./LastAccessed.jsx";
 import * as api from "./api.js";
 
 function UsersTab({ groupName }) {
@@ -124,7 +125,7 @@ export default function GroupDetail({ params }) {
         <Tabs tabs={[
           { id: "users", label: "Users", content: <UsersTab groupName={groupName} /> },
           { id: "permissions", label: "Permissions", content: <GroupPermissionsTab groupName={groupName} /> },
-          { id: "access-advisor", label: "Access Advisor", content: <CapabilityContainer id="iam.last-accessed" title="Last accessed" /> },
+          { id: "access-advisor", label: "Access Advisor", content: <LastAccessedTab arn={group.Arn} /> },
         ]} />
       </SpaceBetween>
       <DeleteModal visible={delModal} onDismiss={() => setDelModal(false)} resourceType="group" names={[groupName]}

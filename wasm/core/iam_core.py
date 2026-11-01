@@ -28,6 +28,7 @@ versions reuse the same helpers and slot in next.
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import uuid
 from dataclasses import dataclass, field
@@ -1343,6 +1344,403 @@ def _list_account_access_requests(store, params):
     return _envelope("ListAccountAccessRequests", inner)
 
 
+# ── native-wire activity log (Vyomi-only) ───────────────────────────────────
+# Recorded by core/aws_wire_router.py for every request signed with an IAM USER's own
+# access key (a real aws-cli/boto3 caller configured with CreateAccessKey credentials —
+# distinguishable because the AKID sits in clear in the SigV4 credential scope even
+# though Vyomi never verifies the signature itself). The console's own fixed operator
+# credential and the conformance harness's placeholder credentials never match a real
+# access key, so they never appear here: every entry is real recorded activity, not
+# fabricated. Backs GenerateServiceLastAccessedDetails, the Vyomi-only policy-from-activity
+# generator ("Generate policy based on CloudTrail events"), and Access Analyzer's
+# unused-access findings below. Roles have no long-term access keys in real AWS either
+# (they get temporary AssumeRole credentials, which Vyomi does not mint), so role activity
+# is always empty here — a real, honest limitation, not a bug.
+_ACTIVITY_CAP = 5000
+
+
+def record_activity(store, user_name: str, service: str, action: str | None) -> None:
+    store.activity.append({"principal_arn": _user_arn(store, user_name), "service": service,
+                           "action": action, "time": _now()})
+    if len(store.activity) > _ACTIVITY_CAP:
+        del store.activity[: len(store.activity) - _ACTIVITY_CAP]
+    store.persist()
+
+
+_SERVICE_NAMESPACE = {   # internal router service-key -> AWS IAM policy prefix (ServiceNamespace)
+    "vpc": "ec2", "elbv2": "elasticloadbalancing", "stepfunctions": "states",
+}
+_SERVICE_NAME = {   # ServiceNamespace -> the display name real AWS's Last Accessed table shows
+    "s3": "Amazon S3", "dynamodb": "Amazon DynamoDB", "kms": "AWS Key Management Service",
+    "secretsmanager": "AWS Secrets Manager", "sqs": "Amazon Simple Queue Service (SQS)",
+    "sns": "Amazon Simple Notification Service (SNS)", "iam": "AWS Identity and Access Management (IAM)",
+    "rds": "Amazon Relational Database Service", "ec2": "Amazon EC2", "lambda": "AWS Lambda",
+    "cloudwatch": "Amazon CloudWatch", "logs": "Amazon CloudWatch Logs", "events": "Amazon EventBridge",
+    "kinesis": "Amazon Kinesis", "ssm": "AWS Systems Manager", "states": "AWS Step Functions",
+    "cloudformation": "AWS CloudFormation", "apigateway": "Amazon API Gateway",
+    "elasticloadbalancing": "Elastic Load Balancing", "scheduler": "Amazon EventBridge Scheduler",
+}
+
+
+def _namespace(service: str) -> str:
+    return _SERVICE_NAMESPACE.get(service, service)
+
+
+def _principal_names_for_last_accessed(store, arn: str) -> list[str]:
+    """Resolve an Arn argument to the IAM USER names whose activity to aggregate — the
+    only principal kind Vyomi can attribute activity to (see record_activity). A group
+    or policy Arn aggregates its member/attached users; a role Arn always yields none."""
+    if ":user/" in arn:
+        name = arn.split(":user/", 1)[1]
+        return [name] if store.get_user(name) else []
+    if ":group/" in arn:
+        g = store.get_group(arn.split(":group/", 1)[1])
+        return list(g["members"]) if g else []
+    if ":policy/" in arn:
+        if not store.get_policy(arn):
+            return []
+        names = [u["user_name"] for u in store.users.values() if arn in u["attached_policies"]]
+        for g in store.groups.values():
+            if arn in g["attached_policies"]:
+                names.extend(g["members"])
+        return sorted(set(names))
+    return []
+
+
+def _service_last_accessed_report(store, names: list[str]) -> list[dict]:
+    per_service: dict[str, dict] = {}
+    for entry in store.activity:
+        principal_name = entry["principal_arn"].rsplit("/", 1)[-1]
+        if principal_name not in names:
+            continue
+        ns = _namespace(entry["service"])
+        rec = per_service.setdefault(ns, {"last": entry["time"], "entities": set()})
+        if entry["time"] > rec["last"]:
+            rec["last"] = entry["time"]
+        rec["entities"].add(entry["principal_arn"])
+    return [{"ServiceNamespace": ns, "ServiceName": _SERVICE_NAME.get(ns, ns), "LastAuthenticated": rec["last"],
+             "LastAuthenticatedEntity": sorted(rec["entities"])[0], "TotalAuthenticatedEntities": len(rec["entities"])}
+            for ns, rec in sorted(per_service.items())]
+
+
+def _decode_last_accessed_job(job_id: str):
+    if not job_id.startswith("vyomi-"):
+        raise IamError("NoSuchEntity", f"Job {job_id} not found.", 404)
+    rest = job_id[6:]
+    padded = rest + "=" * (-len(rest) % 4)
+    try:
+        return base64.urlsafe_b64decode(padded).decode()
+    except Exception:
+        raise IamError("NoSuchEntity", f"Job {job_id} not found.", 404)
+
+
+def _generate_service_last_accessed_details(store, params):
+    arn = str(params.get("Arn", "")).strip()
+    if not arn:
+        raise IamError("ValidationError", "Arn is required.", 400)
+    job_id = "vyomi-" + base64.urlsafe_b64encode(arn.encode()).decode().rstrip("=")
+    return _envelope("GenerateServiceLastAccessedDetails", _el("JobId", job_id))
+
+
+def _get_service_last_accessed_details(store, params):
+    arn = _decode_last_accessed_job(str(params.get("JobId", "")).strip())
+    report = _service_last_accessed_report(store, _principal_names_for_last_accessed(store, arn))
+    now = _now()
+    items = "".join(
+        "<member>" + _el("ServiceNamespace", r["ServiceNamespace"]) + _el("ServiceName", r["ServiceName"])
+        + _el("LastAuthenticated", r["LastAuthenticated"]) + _el("LastAuthenticatedEntity", r["LastAuthenticatedEntity"])
+        + _el("TotalAuthenticatedEntities", r["TotalAuthenticatedEntities"]) + "</member>"
+        for r in report)
+    inner = (_el("JobStatus", "COMPLETED") + _el("JobCreationDate", now) + _el("JobCompletionDate", now)
+             + f"<ServicesLastAccessed>{items}</ServicesLastAccessed>")
+    return _envelope("GetServiceLastAccessedDetails", inner)
+
+
+# ── policy generation from activity (Vyomi-only) ────────────────────────────
+# Real AWS mines CloudTrail management events for "Generate policy based on CloudTrail
+# events" (the IAM console routes it through Access Analyzer's StartPolicyGeneration /
+# GetGeneratedPolicy). Vyomi doesn't simulate CloudTrail, so this mines the same real
+# signal CloudTrail would have recorded for the principal — Vyomi's own native-wire
+# activity log (see record_activity) — synchronously, in one call.
+def _generate_policy_from_activity(store, params):
+    arn = str(params.get("Arn", "")).strip()
+    if not arn:
+        raise IamError("ValidationError", "Arn is required.", 400)
+    names = _principal_names_for_last_accessed(store, arn)
+    pairs = set()
+    for entry in store.activity:
+        if entry["principal_arn"].rsplit("/", 1)[-1] not in names:
+            continue
+        ns = _namespace(entry["service"])
+        pairs.add(f"{ns}:{entry['action']}" if entry.get("action") else f"{ns}:*")
+    doc = {"Version": "2012-10-17", "Statement": [{"Effect": "Allow", "Action": sorted(pairs), "Resource": "*"}] if pairs else []}
+    return _envelope("GeneratePolicyFromActivity", f"<GeneratedPolicyDocument>{_xml_escape(json.dumps(doc))}</GeneratedPolicyDocument>")
+
+
+# ── IAM Access Analyzer (Vyomi-only) ─────────────────────────────────────────
+# Real AWS exposes this through a separate "accessanalyzer" service; the IAM console
+# surfaces it under its own nav for convenience, same as the SCP/RCP precedent above, so
+# Vyomi models it on IAM's native wire. Two real, non-fabricated signals back it:
+#   external access — resource-based/trust policies (IAM role trust policies, S3 bucket
+#                      policies) naming a principal outside this account, or "*"
+#   unused access   — IAM user access keys at least `unused_access_age` days old with NO
+#                      entries in the activity log (see record_activity above)
+# Vyomi simulates a single account, so cross-account "zone of trust" membership and
+# organization-wide analyzers are not modeled (see iam.organizations); external-access
+# analysis currently covers IAM role trust policies and S3 bucket policies — not yet KMS
+# key policies, SQS/SNS resource policies or Secrets Manager resource policies.
+_ANALYZER_TYPES = {"ACCOUNT", "ACCOUNT_UNUSED_ACCESS"}
+_NEEDS_S3_STORE = {"ListFindings", "GetFinding"}
+
+
+def _external_principals(doc: dict, account_id: str) -> list[str]:
+    found = []
+    for st in (doc or {}).get("Statement") or []:
+        if str(st.get("Effect", "")).strip().lower() != "allow":
+            continue
+        principal = st.get("Principal")
+        if principal == "*":
+            found.append("*")
+            continue
+        if isinstance(principal, dict):
+            aws = principal.get("AWS")
+            for a in ([aws] if isinstance(aws, str) else (aws or [])):
+                a = str(a)
+                if a == "*" or (f":{account_id}:" not in a and a != account_id):
+                    found.append(a)
+    return found
+
+
+def _age_days(iso: str) -> int:
+    try:
+        then = datetime.strptime(iso, "%Y-%m-%dT%H:%M:%S.000Z").replace(tzinfo=timezone.utc)
+    except Exception:
+        return 0
+    return max(0, (datetime.now(timezone.utc) - then).days)
+
+
+def _finding_id(analyzer_name: str, kind: str, resource: str) -> str:
+    return hashlib.sha1(f"{analyzer_name}|{kind}|{resource}".encode()).hexdigest()[:20]
+
+
+def _finding(analyzer, kind, resource_type, resource, principals, extra=None):
+    fid = _finding_id(analyzer["name"], kind, resource)
+    f = {"id": fid, "type": kind, "resource_type": resource_type, "resource": resource,
+         "principals": principals, "status": "ARCHIVED" if fid in analyzer["archived"] else "ACTIVE",
+         "created": analyzer["created"]}
+    if extra:
+        f.update(extra)
+    return f
+
+
+def _compute_findings(store, analyzer, s3_store=None) -> list[dict]:
+    out = []
+    if analyzer["type"] == "ACCOUNT":
+        for r in store.roles.values():
+            ext = _external_principals(r.get("assume_role_policy_document") or {}, store.account_id)
+            if ext:
+                out.append(_finding(analyzer, "ExternalAccess", "AWS::IAM::Role", r["arn"], ext))
+        for bname, meta in (getattr(s3_store, "buckets", None) or {}).items():
+            txt = (meta.get("cfg") or {}).get("policy")
+            if not txt:
+                continue
+            try:
+                doc = json.loads(txt)
+            except Exception:
+                continue
+            ext = _external_principals(doc, store.account_id)
+            if ext:
+                out.append(_finding(analyzer, "ExternalAccess", "AWS::S3::Bucket", f"arn:aws:s3:::{bname}", ext))
+    else:   # ACCOUNT_UNUSED_ACCESS
+        age = int(analyzer.get("unused_access_age", 90))
+        used_users = {e["principal_arn"].rsplit("/", 1)[-1] for e in store.activity}
+        for k in store.access_keys.values():
+            if k["user_name"] in used_users or _age_days(k["created"]) < age:
+                continue
+            out.append(_finding(analyzer, "UnusedIAMUserAccessKey", "AWS::IAM::AccessKey", k["access_key_id"],
+                                [_user_arn(store, k["user_name"])], {"age_days": _age_days(k["created"])}))
+    return out
+
+
+def _analyzer_xml(a: dict) -> str:
+    return ("<AnalyzerSummary>" + _el("Name", a["name"]) + _el("Arn", a["arn"]) + _el("Type", a["type"])
+            + _el("Status", "ACTIVE") + _el("CreatedAt", a["created"]) + _el("UnusedAccessAge", a.get("unused_access_age", 90))
+            + "</AnalyzerSummary>")
+
+
+def _create_analyzer(store, params):
+    name = str(params.get("AnalyzerName", "")).strip()
+    if not name:
+        raise IamError("ValidationError", "AnalyzerName is required.", 400)
+    atype = str(params.get("Type", "")).strip().upper()
+    if atype not in _ANALYZER_TYPES:
+        raise IamError("ValidationError", f"Type must be one of {sorted(_ANALYZER_TYPES)}.", 400)
+    if name in store.analyzers:
+        raise IamError("ConflictException", f"Analyzer {name} already exists.", 409)
+    a = {"name": name, "arn": f"arn:aws:access-analyzer:us-east-1:{store.account_id}:analyzer/{name}",
+         "type": atype, "created": _now(), "unused_access_age": int(params.get("UnusedAccessAge") or 90), "archived": []}
+    store.analyzers[name] = a
+    store.persist()
+    return _envelope("CreateAnalyzer", _analyzer_xml(a))
+
+
+def _list_analyzers(store, params):
+    inner = "<Analyzers>" + "".join(_analyzer_xml(a) for a in sorted(store.analyzers.values(), key=lambda a: a["created"])) + "</Analyzers>"
+    return _envelope("ListAnalyzers", inner)
+
+
+def _require_analyzer(store, name):
+    a = store.analyzers.get(name)
+    if not a:
+        raise IamError("ResourceNotFoundException", f"Analyzer {name} not found.", 404)
+    return a
+
+
+def _get_analyzer(store, params):
+    return _envelope("GetAnalyzer", _analyzer_xml(_require_analyzer(store, str(params.get("AnalyzerName", "")).strip())))
+
+
+def _update_analyzer(store, params):
+    a = _require_analyzer(store, str(params.get("AnalyzerName", "")).strip())
+    if params.get("UnusedAccessAge") is not None:
+        a["unused_access_age"] = int(params["UnusedAccessAge"])
+    store.persist()
+    return _envelope("UpdateAnalyzer", _analyzer_xml(a))
+
+
+def _delete_analyzer(store, params):
+    name = str(params.get("AnalyzerName", "")).strip()
+    _require_analyzer(store, name)
+    del store.analyzers[name]
+    store.persist()
+    return _envelope("DeleteAnalyzer")
+
+
+def _finding_xml(f: dict) -> str:
+    principals = "".join(_el("member", p) for p in f["principals"])
+    extra = _el("AgeDays", f["age_days"]) if "age_days" in f else ""
+    return ("<member>" + _el("Id", f["id"]) + _el("FindingType", f["type"]) + _el("ResourceType", f["resource_type"])
+            + _el("Resource", f["resource"]) + _el("Status", f["status"]) + _el("CreatedAt", f["created"])
+            + f"<Principals>{principals}</Principals>" + extra + "</member>")
+
+
+def _list_findings(store, params, s3_store=None):
+    a = _require_analyzer(store, str(params.get("AnalyzerName", "")).strip())
+    status_filter = str(params.get("Status", "")).strip().upper() or None
+    findings = _compute_findings(store, a, s3_store=s3_store)
+    if status_filter:
+        findings = [f for f in findings if f["status"] == status_filter]
+    return _envelope("ListFindings", "<Findings>" + "".join(_finding_xml(f) for f in findings) + "</Findings>")
+
+
+def _get_finding(store, params, s3_store=None):
+    a = _require_analyzer(store, str(params.get("AnalyzerName", "")).strip())
+    fid = str(params.get("Id", "")).strip()
+    for f in _compute_findings(store, a, s3_store=s3_store):
+        if f["id"] == fid:
+            return _envelope("GetFinding", _finding_xml(f))
+    raise IamError("ResourceNotFoundException", f"Finding {fid} not found.", 404)
+
+
+def _update_finding_status(store, params):
+    a = _require_analyzer(store, str(params.get("AnalyzerName", "")).strip())
+    fid = str(params.get("Id", "")).strip()
+    status = str(params.get("Status", "")).strip().upper()
+    if status not in ("ACTIVE", "ARCHIVED"):
+        raise IamError("ValidationError", "Status must be ACTIVE or ARCHIVED.", 400)
+    if status == "ARCHIVED" and fid not in a["archived"]:
+        a["archived"].append(fid)
+    elif status == "ACTIVE":
+        a["archived"] = [x for x in a["archived"] if x != fid]
+    store.persist()
+    return _envelope("UpdateFindingStatus")
+
+
+# ── IAM Roles Anywhere (Vyomi-only) ──────────────────────────────────────────
+# Real AWS exposes this through a separate "rolesanywhere" service (X.509-authenticated
+# on-prem/non-AWS workloads exchange a certificate for short-term role credentials).
+# Vyomi models the control plane (trust anchors, profiles) on IAM's native wire, same
+# reason as the other Vyomi-only extensions above. The certificate is format-checked (a
+# well-formed PEM block), never cryptographically verified — no different in kind from
+# the virtual-MFA flow's two-code format check (see iam.user.mfa); CreateSession (minting
+# actual temporary credentials from a signed challenge) is not modeled.
+def _is_pem_certificate(text: str) -> bool:
+    t = (text or "").strip()
+    return t.startswith("-----BEGIN CERTIFICATE-----") and t.endswith("-----END CERTIFICATE-----") and len(t) > 64
+
+
+def _trust_anchor_xml(t: dict) -> str:
+    return ("<TrustAnchorDetail>" + _el("TrustAnchorId", t["id"]) + _el("TrustAnchorArn", t["arn"])
+            + _el("Name", t["name"]) + _el("Enabled", "true") + _el("CreatedAt", t["created"]) + "</TrustAnchorDetail>")
+
+
+def _create_trust_anchor(store, params):
+    name = str(params.get("Name", "")).strip()
+    if not name:
+        raise IamError("ValidationError", "Name is required.", 400)
+    cert = str(params.get("SourceData", "")).strip()
+    if not _is_pem_certificate(cert):
+        raise IamError("ValidationException", "SourceData must be a PEM-encoded X.509 certificate.", 400)
+    tid = uuid.uuid4().hex[:12]
+    arn = f"arn:aws:rolesanywhere:us-east-1:{store.account_id}:trust-anchor/{tid}"
+    t = {"id": tid, "arn": arn, "name": name, "source_data": cert, "created": _now()}
+    store.trust_anchors[arn] = t
+    store.persist()
+    return _envelope("CreateTrustAnchor", _trust_anchor_xml(t))
+
+
+def _list_trust_anchors(store, params):
+    items = sorted(store.trust_anchors.values(), key=lambda t: t["created"])
+    return _envelope("ListTrustAnchors", "<TrustAnchors>" + "".join(_trust_anchor_xml(t) for t in items) + "</TrustAnchors>")
+
+
+def _delete_trust_anchor(store, params):
+    arn = str(params.get("TrustAnchorArn", "")).strip()
+    if arn not in store.trust_anchors:
+        raise IamError("ResourceNotFoundException", f"Trust anchor {arn} not found.", 404)
+    del store.trust_anchors[arn]
+    store.persist()
+    return _envelope("DeleteTrustAnchor")
+
+
+def _profile_xml(p: dict) -> str:
+    roles = "".join(_el("member", r) for r in p["role_arns"])
+    return ("<ProfileDetail>" + _el("ProfileId", p["id"]) + _el("ProfileArn", p["arn"]) + _el("Name", p["name"])
+            + f"<RoleArns>{roles}</RoleArns>" + _el("Enabled", "true") + _el("CreatedAt", p["created"]) + "</ProfileDetail>")
+
+
+def _create_profile(store, params):
+    name = str(params.get("Name", "")).strip()
+    if not name:
+        raise IamError("ValidationError", "Name is required.", 400)
+    role_arns = _members(params, "RoleArns")
+    if not role_arns:
+        raise IamError("ValidationError", "RoleArns must have at least one role.", 400)
+    for arn in role_arns:
+        if not any(r["arn"] == arn for r in store.roles.values()):
+            raise IamError("ValidationException", f"Role {arn} does not exist.", 400)
+    pid = uuid.uuid4().hex[:12]
+    arn = f"arn:aws:rolesanywhere:us-east-1:{store.account_id}:profile/{pid}"
+    p = {"id": pid, "arn": arn, "name": name, "role_arns": role_arns, "created": _now()}
+    store.rolesanywhere_profiles[arn] = p
+    store.persist()
+    return _envelope("CreateProfile", _profile_xml(p))
+
+
+def _list_profiles(store, params):
+    items = sorted(store.rolesanywhere_profiles.values(), key=lambda p: p["created"])
+    return _envelope("ListProfiles", "<Profiles>" + "".join(_profile_xml(p) for p in items) + "</Profiles>")
+
+
+def _delete_profile(store, params):
+    arn = str(params.get("ProfileArn", "")).strip()
+    if arn not in store.rolesanywhere_profiles:
+        raise IamError("ResourceNotFoundException", f"Profile {arn} not found.", 404)
+    del store.rolesanywhere_profiles[arn]
+    store.persist()
+    return _envelope("DeleteProfile")
+
+
 # ── native-wire dispatcher (Query-protocol Action → operation) ─────────────
 _OPS = {
     "CreateUser": _create_user, "GetUser": _get_user, "ListUsers": _list_users, "DeleteUser": _delete_user,
@@ -1398,13 +1796,26 @@ _OPS = {
     "DescribeOrgPolicy": _describe_org_policy, "DeleteOrgPolicy": _delete_org_policy,
     "RequestAccountAccess": _request_account_access,
     "ListAccountAccessRequests": _list_account_access_requests,
+    # Real IAM API: service last-accessed data (see iam.last-accessed).
+    "GenerateServiceLastAccessedDetails": _generate_service_last_accessed_details,
+    "GetServiceLastAccessedDetails": _get_service_last_accessed_details,
+    # Vyomi-only (see the functions' docstrings above): policy-from-activity generator,
+    # Access Analyzer, Roles Anywhere.
+    "GeneratePolicyFromActivity": _generate_policy_from_activity,
+    "CreateAnalyzer": _create_analyzer, "ListAnalyzers": _list_analyzers, "GetAnalyzer": _get_analyzer,
+    "UpdateAnalyzer": _update_analyzer, "DeleteAnalyzer": _delete_analyzer,
+    "ListFindings": _list_findings, "GetFinding": _get_finding, "UpdateFindingStatus": _update_finding_status,
+    "CreateTrustAnchor": _create_trust_anchor, "ListTrustAnchors": _list_trust_anchors,
+    "DeleteTrustAnchor": _delete_trust_anchor,
+    "CreateProfile": _create_profile, "ListProfiles": _list_profiles, "DeleteProfile": _delete_profile,
 }
 
 
-def dispatch(store: IamStore, params: dict | None = None) -> IamResponse:
+def dispatch(store: IamStore, params: dict | None = None, s3_store=None) -> IamResponse:
     """The single routing point for the native AWS IAM Query protocol — what an
     unmodified aws-cli / boto3 IAM client speaks. `params` is the parsed
-    form-encoded body ({"Action": "CreateUser", "UserName": ...})."""
+    form-encoded body ({"Action": "CreateUser", "UserName": ...}). `s3_store` backs
+    Access Analyzer's external-access scan over S3 bucket policies (Vyomi-only)."""
     params = params if isinstance(params, dict) else {}
     action = str(params.get("Action", "")).strip()
     if not action:
@@ -1413,6 +1824,8 @@ def dispatch(store: IamStore, params: dict | None = None) -> IamResponse:
     if op is None:
         return _error("InvalidAction", f"The action {action} is not implemented.", 400)
     try:
+        if action in _NEEDS_S3_STORE:
+            return op(store, params, s3_store=s3_store)
         return op(store, params)
     except IamError as e:
         return _error(e.code, e.message, e.status)
