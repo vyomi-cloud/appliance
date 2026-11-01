@@ -27,6 +27,7 @@ let page;
 const wire = (path, init = {}) => page.evaluate(async ([u, i]) => { const r = await fetch(u, i); return r.text(); }, [WIRE + path, init]);
 const ddb = async (target, body) => JSON.parse(await wire("/", { method: "POST", headers: { "x-amz-target": `DynamoDB_20120810.${target}`, "content-type": "application/x-amz-json-1.0", authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/dynamodb/aws4_request, SignedHeaders=host, Signature=0" }, body: JSON.stringify(body) }));
 const kms = async (target, body) => JSON.parse(await wire("/", { method: "POST", headers: { "x-amz-target": `TrentService.${target}`, "content-type": "application/x-amz-json-1.1", authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/kms/aws4_request, SignedHeaders=host, Signature=0" }, body: JSON.stringify(body) }));
+const ssm = async (target, body) => JSON.parse(await wire("/", { method: "POST", headers: { "x-amz-target": `AmazonSSM.${target}`, "content-type": "application/x-amz-json-1.1", authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/ssm/aws4_request, SignedHeaders=host, Signature=0" }, body: JSON.stringify(body) }));
 const sm = async (target, body) => JSON.parse(await wire("/", { method: "POST", headers: { "x-amz-target": `secretsmanager.${target}`, "content-type": "application/x-amz-json-1.1", authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/secretsmanager/aws4_request, SignedHeaders=host, Signature=0" }, body: JSON.stringify(body) }));
 const sqs = async (target, body) => JSON.parse(await wire("/", { method: "POST", headers: { "x-amz-target": `AmazonSQS.${target}`, "content-type": "application/x-amz-json-1.0", authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/sqs/aws4_request, SignedHeaders=host, Signature=0" }, body: JSON.stringify(body) }));
 const sns = async (action, body) => wire("/", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded; charset=utf-8", authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/sns/aws4_request, SignedHeaders=host, Signature=0" }, body: new URLSearchParams({ Action: action, ...body }).toString() });
@@ -983,6 +984,32 @@ try {
   check("IaC generator create template (UI) → real live role properties over native wire",
         genTplXml.includes(ROLE4) && genTplXml.includes("AWS::IAM::Role"), genTplXml.slice(0, 300));
   await shot("23-cloudformation-iac-generator");
+
+  // Systems Manager: create a SecureString parameter through the UI (UI → CLI direction),
+  // verify the real KMS-backed round trip over the native wire (WithDecryption recovers the
+  // exact plaintext even though the stored/undecrypted value is a real KMS CiphertextBlob).
+  const P = `/vyomi/smoke/${Date.now() % 100000}`;
+  await page.goto(UI + "#/ssm/create-parameter");
+  await page.getByLabel("Name", { exact: true }).fill(P);
+  await page.getByRole("radio", { name: "SecureString", exact: true }).check();
+  await page.getByLabel("Value", { exact: true }).fill("v4-smoke-secret");
+  await page.getByRole("button", { name: "Create parameter" }).last().click();
+  await page.getByRole("heading", { name: P }).waitFor({ timeout: 10000 });
+  const ssmMasked = await ssm("GetParameter", { Name: P });
+  check("SSM create SecureString parameter (UI) → visible over native wire", ssmMasked.Parameter?.Type === "SecureString", JSON.stringify(ssmMasked.Parameter));
+  check("SSM undecrypted value is a real KMS ciphertext, not plaintext", ssmMasked.Parameter?.Value !== "v4-smoke-secret", ssmMasked.Parameter?.Value);
+  const ssmDecrypted = await ssm("GetParameter", { Name: P, WithDecryption: true });
+  check("SSM SecureString decrypts through the real KMS core to the exact plaintext", ssmDecrypted.Parameter?.Value === "v4-smoke-secret", ssmDecrypted.Parameter?.Value);
+  await shot("24-ssm-parameter-detail");
+
+  // Systems Manager: PutParameter over the wire (CLI direction), confirm it shows in the UI list.
+  const P2 = `/vyomi/smoke2/${Date.now() % 100000}`;
+  await ssm("PutParameter", { Name: P2, Value: "from-the-wire", Type: "String" });
+  await page.goto(UI + "#/ssm/parameters");
+  await page.getByPlaceholder("Search parameters by name, description, or value").fill(P2);
+  await page.getByText(P2, { exact: true }).waitFor({ timeout: 10000 });
+  check("SSM PutParameter over wire → visible in the UI parameters list", true);
+  await shot("25-ssm-parameters");
 
   // Dark mode
   await page.evaluate(() => localStorage.setItem("vyomi.v4.mode", "dark"));

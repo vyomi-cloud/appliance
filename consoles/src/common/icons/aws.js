@@ -50,6 +50,8 @@ export const AWS_ICONS = {
   cloudwatch: ["management", '<circle cx="12" cy="12" r="7"/><path d="M8 13.8l2.4-2.7 2 1.6 3.6-4"/>'],
   // templates/stacks: three layers
   cloudformation: ["management", '<path d="M12 5 19 8.7 12 12.4 5 8.7z"/><path d="M5 12.3l7 3.7 7-3.7M5 15.7l7 3.7 7-3.7"/>'],
+  // fleet control: a checklist clipboard with a gear, managing many resources at once
+  ssm: ["management", '<rect x="5.5" y="5" width="9" height="14" rx="1.3"/><path d="M8 5V4.3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1V5"/><path d="M7.6 10h3.8M7.6 13.3h3.8"/><circle cx="17.3" cy="14.8" r="2.1"/><path d="M17.3 11.4v1.1M17.3 17v1.1M14.6 14.8h1.1M19.9 14.8h1.1M15.5 12.9l.8.8M18.3 16.6l.8.8M15.5 16.6l.8-.8M18.3 12.9l.8-.8"/>'],
 };
 
 const FALLBACK = ["other", '<rect x="6" y="6" width="5" height="5" rx="1"/><rect x="13" y="6" width="5" height="5" rx="1"/><rect x="6" y="13" width="5" height="5" rx="1"/><rect x="13" y="13" width="5" height="5" rx="1"/>'];
