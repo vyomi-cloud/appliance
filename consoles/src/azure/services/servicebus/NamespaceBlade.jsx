@@ -67,12 +67,8 @@ const CAP_FOR_PANEL = {
   diagnose: "azure.servicebus.namespace.tools", events: "azure.servicebus.namespace.tools",
   tasks: "azure.servicebus.namespace.tools", resourcehealth: "azure.servicebus.namespace.tools",
   support: "azure.servicebus.namespace.tools",
-  georecovery: "azure.servicebus.namespace.georecovery",
-  networking: "azure.servicebus.namespace.networking", encryption: "azure.servicebus.namespace.networking",
-  identity: "azure.servicebus.namespace.networking",
-  insights: "azure.servicebus.namespace.monitoring", alerts: "azure.servicebus.namespace.monitoring",
-  metrics: "azure.servicebus.namespace.monitoring", diagnosticsettings: "azure.servicebus.namespace.monitoring",
-  logs: "azure.servicebus.namespace.monitoring",
+  networking: "azure.servicebus.namespace.networking", encryption: "azure.servicebus.namespace.encryption",
+  insights: "azure.servicebus.namespace.monitoring", metrics: "azure.servicebus.namespace.monitoring",
 };
 
 export default function NamespaceBlade({ params, query }) {
@@ -99,6 +95,11 @@ export default function NamespaceBlade({ params, query }) {
       queues: () => <Queues a={a} self={self} />,
       topics: () => <Topics a={a} self={self} />,
       exporttemplate: () => <ExportTemplate a={a} />,
+      identity: () => <Identity a={a} reload={reload} />,
+      diagnosticsettings: () => <DiagnosticSettings a={a} />,
+      alerts: () => <Alerts a={a} />,
+      logs: () => <LogsPanel a={a} />,
+      georecovery: () => <GeoRecovery a={a} reload={reload} />,
     }[panel];
     body = P ? P() : <CapabilityContainer id={CAP_FOR_PANEL[panel] || "azure.servicebus.namespace.tools"} title={`${a.name} | ${LABEL[panel] || panel}`} />;
   }
@@ -228,13 +229,21 @@ function Overview({ a, reload, self }) {
   );
 }
 
-// ── Access control (IAM) ──────────────────────────────────────────────────────────────
+// ── Access control (IAM): Role assignments / Roles / Check access are real ARM reads and a
+// real decision call scoped to this namespace (plus its subscription/resource-group
+// ancestors); Deny assignments and Classic administrators stay honest — same pattern as
+// consoles/src/azure/services/nsgs/NsgBlade.jsx — core/capabilities/azure/servicebus.json
+// azure.servicebus.namespace.iam. ────────────────────────────────────────────────────────
 function AccessControlIam({ a }) {
   const [tab, setTab] = useState("check");
   const [dlg, setDlg] = useState(null);
+  const [principal, setPrincipal] = useState("");
+  const [action, setAction] = useState("Microsoft.ServiceBus/namespaces/write");
+  const [decision, setDecision] = useState(null);
+  const roleAssignments = useAsync(() => api.listRoleAssignments(a.resourceGroup, a.name), [a.resourceGroup, a.name]);
+  const roleDefinitions = useAsync(() => api.listRoleDefinitions(), []);
   return (
-    <>
-      <div className="vy-panel-title">Access control (IAM)</div>
+    <CapabilityContainer id="azure.servicebus.namespace.iam" title="Access control (IAM)">
       <TabList selectedValue={tab} onTabSelect={(_, d) => setTab(d.value)} aria-label="Access control (IAM) tabs">
         <Tab value="check">Check access</Tab>
         <Tab value="assignments">Role assignments</Tab>
@@ -248,24 +257,69 @@ function AccessControlIam({ a }) {
             <Button onClick={() => setDlg("mine")}>View my access</Button>
           </section>
           <section className="vy-section"><h3>Check access</h3>
-            <Button onClick={() => setDlg("check")}>Check access</Button>
+            <Button onClick={() => { setDecision(null); setDlg("check"); }}>Check access</Button>
           </section>
         </div>
       )}
-      {tab === "assignments" && <div style={{ marginTop: 12 }}><CapabilityContainer id="azure.servicebus.namespace.iam" title="Role assignments" /></div>}
-      {tab === "roles" && <div style={{ marginTop: 12 }}><CapabilityContainer id="azure.servicebus.namespace.iam" title="Roles" /></div>}
-      {tab === "deny" && <div style={{ marginTop: 12 }}><CapabilityContainer id="azure.servicebus.namespace.iam" title="Deny assignments" /></div>}
-      {tab === "classic" && <div style={{ marginTop: 12 }}><CapabilityContainer id="azure.servicebus.namespace.iam" title="Classic administrators" /></div>}
+      {tab === "assignments" && (
+        <section className="vy-section" style={{ marginTop: 12 }}>
+          <BrowseGrid resourceName="role assignment" rowKey={(r) => r.id} filterPlaceholder="Search by name or email"
+            items={roleAssignments.data || []} loading={roleAssignments.loading} error={roleAssignments.error} onRefresh={roleAssignments.reload}
+            columns={[
+              { key: "name", label: "Name", value: (r) => r.properties?.principalId },
+              { key: "type", label: "Type", value: (r) => r.properties?.principalType || "--" },
+              { key: "role", label: "Role", value: (r) => r.properties?.roleName || (r.properties?.roleDefinitionId || "").split("/").pop() },
+              { key: "scope", label: "Scope", value: (r) => r.properties?.scope || "/" },
+              { key: "condition", label: "Condition", value: () => "None" },
+            ]}
+          />
+        </section>
+      )}
+      {tab === "roles" && (
+        <section className="vy-section" style={{ marginTop: 12 }}>
+          <BrowseGrid resourceName="role" rowKey={(r) => r.id} filterPlaceholder="Search by role name, description, permission, or ID"
+            items={roleDefinitions.data || []} loading={roleDefinitions.loading} error={roleDefinitions.error} onRefresh={roleDefinitions.reload}
+            columns={[
+              { key: "name", label: "Name", value: (r) => r.properties?.roleName || r.name },
+              { key: "description", label: "Description", value: (r) => r.properties?.description || "--" },
+              { key: "type", label: "Type", value: (r) => r.properties?.type || "BuiltInRole" },
+              { key: "category", label: "Category", value: () => "General" },
+              { key: "details", label: "Details", value: () => "View" },
+            ]}
+          />
+        </section>
+      )}
+      {tab === "deny" && <div style={{ marginTop: 12 }}><NotSimulatedContainer title="Deny assignments" feature="Deny assignments" /></div>}
+      {tab === "classic" && <div style={{ marginTop: 12 }}><NotSimulatedContainer title="Classic administrators" feature="Classic administrators" /></div>}
       <Dialog open={!!dlg} onOpenChange={(_, d) => !d.open && setDlg(null)}>
         <DialogSurface aria-label="Access check">
           <DialogBody>
             <DialogTitle>{dlg === "mine" ? "My access" : "Check access"}</DialogTitle>
-            <DialogContent><NotSimulated feature="Per-identity role-assignment resolution for this resource" note={`The namespace's resource id is ${a.id}.`} /></DialogContent>
+            <DialogContent>
+              {dlg === "mine" ? (
+                <NotSimulated feature="Per-identity 'my access' resolution" note="Vyomi has no signed-in identity to resolve — use Check access with a principal id instead." />
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 12, minWidth: 360 }}>
+                  <Field label="Find"><Input value={principal} onChange={(_, d) => setPrincipal(d.value)} placeholder="Principal (object) id" aria-label="Principal ID" /></Field>
+                  <Field label="Action"><Input value={action} onChange={(_, d) => setAction(d.value)} aria-label="Action" /></Field>
+                  <Button appearance="primary" disabled={!principal} onClick={async () => {
+                    const [r] = await api.checkAccess(a.id, principal, action);
+                    setDecision(r);
+                  }}>Check access</Button>
+                  {decision && (
+                    <section className="vy-section">
+                      <b>{decision.accessDecision}</b>
+                      {decision.roles?.length > 0 && <div>Granted by: {decision.roles.join(", ")}</div>}
+                    </section>
+                  )}
+                </div>
+              )}
+            </DialogContent>
             <DialogActions><Button onClick={() => setDlg(null)}>Close</Button></DialogActions>
           </DialogBody>
         </DialogSurface>
       </Dialog>
-    </>
+    </CapabilityContainer>
   );
 }
 
@@ -474,6 +528,7 @@ function Locks({ a }) {
   const notify = useNotify();
   const { data, loading, error, reload } = useAsync(() => api.listLocks(a.resourceGroup, a.name), [a.resourceGroup, a.name]);
   const [add, setAdd] = useState(false);
+  const [scopeView, setScopeView] = useState(null); // "subscription" | "resourcegroup" | null
   const [gap, setGap] = useState(null);
   const rows = data || [];
   return (
@@ -485,8 +540,8 @@ function Locks({ a }) {
           items={rows} loading={loading} error={error} onRefresh={reload}
           extraCommands={<>
             <ToolbarButton icon={<Add20Regular />} onClick={() => setAdd(true)}>Add</ToolbarButton>
-            <ToolbarButton onClick={() => setGap("Subscription")}>Subscription</ToolbarButton>
-            <ToolbarButton onClick={() => setGap("Resource group")}>Resource group</ToolbarButton>
+            <ToolbarButton onClick={() => setScopeView("subscription")}>Subscription</ToolbarButton>
+            <ToolbarButton onClick={() => setScopeView("resourcegroup")}>Resource group</ToolbarButton>
             <ToolbarButton onClick={() => setGap("Feedback")}>Feedback</ToolbarButton>
           </>}
           onDelete={async (sel) => {
@@ -505,16 +560,52 @@ function Locks({ a }) {
       </CapabilityContainer>
       <AddLockDialog open={add} onClose={() => setAdd(false)}
         onCreate={async (name, level, notes) => { await api.putLock(a.resourceGroup, a.name, name, { properties: { level, notes } }); reload(); }} />
+      <ScopeLocksDialog scope={scopeView} a={a} onClose={() => setScopeView(null)} />
       <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
         <DialogSurface aria-label={gap || "Not simulated"}>
           <DialogBody>
             <DialogTitle>{gap}</DialogTitle>
-            <DialogContent><NotSimulated feature={gap === "Feedback" ? "Sending product feedback" : `Locks scoped to the ${(gap || "").toLowerCase()}`} /></DialogContent>
+            <DialogContent><NotSimulated feature="Sending product feedback" /></DialogContent>
             <DialogActions><Button onClick={() => setGap(null)}>Close</Button></DialogActions>
           </DialogBody>
         </DialogSurface>
       </Dialog>
     </>
+  );
+}
+
+// Locks' "Subscription" / "Resource group" scope-switcher buttons — real locks at that wider
+// scope (the SAME Microsoft.Authorization/locks engine the Subscription/Resource group
+// blades' own Locks panels use), read-only here since they're managed from those blades.
+function ScopeLocksDialog({ scope, a, onClose }) {
+  const { data, loading, error } = useAsync(
+    () => (scope === "subscription" ? api.listLocksAtSubscription() : scope === "resourcegroup" ? api.listLocksAtResourceGroup(a.resourceGroup) : null),
+    [scope, a.resourceGroup],
+  );
+  if (!scope) return null;
+  const rows = data || [];
+  return (
+    <Dialog open={!!scope} onOpenChange={(_, d) => !d.open && onClose()}>
+      <DialogSurface aria-label={scope === "subscription" ? "Subscription locks" : "Resource group locks"}>
+        <DialogBody>
+          <DialogTitle>{scope === "subscription" ? "Subscription locks" : "Resource group locks"}</DialogTitle>
+          <DialogContent>
+            <ErrorBar error={error} />
+            {loading ? <Loading /> : (
+              <table className="vy-grid">
+                <thead><tr><th>Lock name</th><th>Lock type</th><th>Notes</th></tr></thead>
+                <tbody>
+                  {rows.length ? rows.map((r) => (
+                    <tr key={r.name}><td>{r.name}</td><td>{r.properties?.level === "ReadOnly" ? "Read-only" : "Delete"}</td><td>{r.properties?.notes || "--"}</td></tr>
+                  )) : <tr><td colSpan={3} className="vy-muted">No locks to display</td></tr>}
+                </tbody>
+              </table>
+            )}
+          </DialogContent>
+          <DialogActions><Button onClick={onClose}>Close</Button></DialogActions>
+        </DialogBody>
+      </DialogSurface>
+    </Dialog>
   );
 }
 
@@ -862,5 +953,313 @@ function ExportTemplate({ a }) {
         {tab !== "arm" && <NotSimulatedContainer feature={`${tab === "bicep" ? "Bicep" : "Terraform"} template export`} />}
       </CapabilityContainer>
     </>
+  );
+}
+
+// ── Identity: system-assigned managed identity, the same generic ARM identity merge every
+// lens resource's PUT/PATCH can carry (core/azure_arm_core.py "18. Generic top-level
+// 'identity' block") — core/capabilities/azure/servicebus.json azure.servicebus.namespace.identity.
+function Identity({ a, reload }) {
+  const notify = useNotify();
+  const [on, setOn] = useState(a.identity?.type === "SystemAssigned");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => setOn(a.identity?.type === "SystemAssigned"), [a]);
+  const dirty = on !== (a.identity?.type === "SystemAssigned");
+  const save = async () => {
+    setBusy(true);
+    try {
+      await api.updateNamespace(a.resourceGroup, a.name, { identity: on ? { type: "SystemAssigned" } : { type: "None" } });
+      notify.success("Identity settings saved.", "Save succeeded");
+      reload();
+    } catch (e) { notify.error(e, "Saving identity failed"); }
+    finally { setBusy(false); }
+  };
+  return (
+    <CapabilityContainer id="azure.servicebus.namespace.identity" title={`${a.name} | Identity`} actions={<>
+      <ToolbarButton icon={<Save20Regular />} disabled={!dirty || busy} onClick={save}>Save</ToolbarButton>
+      <ToolbarButton disabled={!dirty} onClick={() => setOn(a.identity?.type === "SystemAssigned")}>Discard</ToolbarButton>
+    </>}>
+      <TabList selectedValue="system" aria-label="Identity tabs">
+        <Tab value="system">System assigned</Tab>
+        <Tab value="user">User assigned</Tab>
+      </TabList>
+      <div style={{ marginTop: 12 }}>
+        <Field label="Status">
+          <RadioGroup layout="horizontal" value={on ? "On" : "Off"} onChange={(_, d) => setOn(d.value === "On")} aria-label="Status">
+            <Radio value="Off" label="Off" /><Radio value="On" label="On" />
+          </RadioGroup>
+        </Field>
+        {on && a.identity?.principalId && <p style={{ fontSize: 13 }}>Object (principal) ID: <code>{a.identity.principalId}</code></p>}
+      </div>
+    </CapabilityContainer>
+  );
+}
+
+// ── Diagnostic settings (Microsoft.Insights/diagnosticSettings, scoped to this namespace) ──
+// Clone of consoles/src/azure/services/apim/DiagnosticSettings.jsx's pattern — the SAME
+// generic extension-resource mechanism any lens resource's Diagnostic settings blade uses.
+const DIAG_ID_RE = /^[a-zA-Z0-9][a-zA-Z0-9-._]{0,255}$/;
+function DiagnosticSettings({ a }) {
+  const notify = useNotify();
+  const { data, loading, error, reload } = useAsync(() => api.listDiagnosticSettings(a.resourceGroup, a.name), [a.resourceGroup, a.name]);
+  const workspaces = useAsync(() => api.listWorkspaces(), []);
+  const [add, setAdd] = useState(false);
+  const [name, setName] = useState("");
+  const [workspace, setWorkspace] = useState("");
+  const ws = workspaces.data || [];
+  return (
+    <CapabilityContainer id="azure.servicebus.namespace.diagnosticsettings" title={`${a.name} | Diagnostic settings`}>
+      <BrowseGrid
+        resourceName="diagnostic setting" rowKey={(r) => r.name} filterPlaceholder="Search diagnostic settings"
+        items={data || []} loading={loading} error={error} onRefresh={reload}
+        extraCommands={<ToolbarButton icon={<Add20Regular />} onClick={() => { setAdd(true); setWorkspace(ws[0]?.id || ""); }}>Add diagnostic setting</ToolbarButton>}
+        onDelete={async (sel) => {
+          for (const r of sel) await api.deleteDiagnosticSetting(a.resourceGroup, a.name, r.name);
+          notify.success(`Deleted ${sel.length} diagnostic setting${sel.length === 1 ? "" : "s"}.`, "Delete succeeded");
+          reload();
+        }}
+        csvName="diagnostic-settings.csv"
+        columns={[
+          { key: "name", label: "Diagnostic setting name" },
+          { key: "dest", label: "Destination details", value: (r) => r.properties?.workspaceId ? "Log Analytics workspace" : r.properties?.storageAccountId ? "Storage account" : r.properties?.eventHubAuthorizationRuleId ? "Event hub" : "--" },
+          { key: "logs", label: "Log categories", value: (r) => (r.properties?.logs || []).filter((l) => l.enabled).length },
+          { key: "metrics", label: "Metric categories", value: (r) => (r.properties?.metrics || []).filter((m) => m.enabled).length },
+        ]}
+      />
+      {add && (
+        <section className="vy-section" style={{ marginTop: 16 }}>
+          <h3>Add diagnostic setting</h3>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 480 }}>
+            <Field label="Diagnostic setting name" required><Input value={name} onChange={(_, d) => setName(d.value)} aria-label="Diagnostic setting name" /></Field>
+            <Field label="Log Analytics workspace">
+              {ws.length ? (
+                <Select value={workspace} onChange={(_, d) => setWorkspace(d.value)} aria-label="Log Analytics workspace">
+                  {ws.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+                </Select>
+              ) : <p style={{ margin: 0 }}>No Log Analytics workspace yet. Create one in the Monitor service first.</p>}
+            </Field>
+          </div>
+          <div className="vy-cmdbar" style={{ marginTop: 12 }}>
+            <Button appearance="primary" disabled={!DIAG_ID_RE.test(name) || !workspace} onClick={async () => {
+              await api.putDiagnosticSetting(a.resourceGroup, a.name, name, {
+                properties: { workspaceId: workspace, logs: [{ categoryGroup: "allLogs", enabled: true }], metrics: [{ category: "AllMetrics", enabled: true }] },
+              });
+              notify.success(`Diagnostic setting '${name}' was created.`, "Create succeeded");
+              setAdd(false); setName(""); reload();
+            }}>Save</Button>
+            <Button onClick={() => setAdd(false)}>Cancel</Button>
+          </div>
+        </section>
+      )}
+    </CapabilityContainer>
+  );
+}
+
+// ── Alert rules (Microsoft.Insights/metricAlerts, filtered to properties.scopes containing
+// this namespace's id) — the rule round-trips exactly as configured and ENABLED/disabled is
+// real, but nothing evaluates it (no metrics pipeline), so it never fires — see
+// core/capabilities/azure/servicebus.json azure.servicebus.namespace.alerts. ───────────────
+const ALERT_NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9-._ ]{0,254}$/;
+function Alerts({ a }) {
+  const notify = useNotify();
+  const { data, loading, error, reload } = useAsync(() => api.listAlertsForNamespace(a.resourceGroup, a.id), [a.resourceGroup, a.id]);
+  const [add, setAdd] = useState(false);
+  const [f, setF] = useState({ name: "", metric: api.ALERT_METRICS[0], operator: "GreaterThan", threshold: "0", severity: "3" });
+  const rows = data || [];
+  return (
+    <CapabilityContainer id="azure.servicebus.namespace.alerts" title={`${a.name} | Alerts`}>
+      <BrowseGrid
+        resourceName="alert rule" rowKey={(r) => r.id} filterPlaceholder="Search alert rules"
+        items={rows} loading={loading} error={error} onRefresh={reload}
+        extraCommands={<ToolbarButton icon={<Add20Regular />} onClick={() => setAdd(true)}>New alert rule</ToolbarButton>}
+        onDelete={async (sel) => {
+          for (const r of sel) await api.deleteAlert(a.resourceGroup, r.name);
+          notify.success(`Deleted ${sel.length} alert rule${sel.length === 1 ? "" : "s"}.`, "Delete succeeded");
+          reload();
+        }}
+        csvName="alert-rules.csv"
+        columns={[
+          { key: "name", label: "Name" },
+          { key: "condition", label: "Condition", value: (r) => { const c = (r.properties?.criteria?.allOf || [])[0]; return c ? `${c.metricName} ${c.operator} ${c.threshold}` : "--"; } },
+          { key: "severity", label: "Severity", value: (r) => r.properties?.severity },
+          { key: "status", label: "Status", value: (r) => r.properties?.enabled ? "Enabled" : "Disabled" },
+        ]}
+      />
+      {add && (
+        <section className="vy-section" style={{ marginTop: 16 }}>
+          <h3>Create alert rule</h3>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 480 }}>
+            <Field label="Alert rule name" required><Input value={f.name} onChange={(_, d) => setF((x) => ({ ...x, name: d.value }))} aria-label="Alert rule name" /></Field>
+            <Field label="Signal (metric)">
+              <Select value={f.metric} onChange={(_, d) => setF((x) => ({ ...x, metric: d.value }))} aria-label="Signal">
+                {api.ALERT_METRICS.map((m) => <option key={m}>{m}</option>)}
+              </Select>
+            </Field>
+            <Field label="Operator">
+              <Select value={f.operator} onChange={(_, d) => setF((x) => ({ ...x, operator: d.value }))} aria-label="Operator">
+                {api.ALERT_OPERATORS.map((o) => <option key={o}>{o}</option>)}
+              </Select>
+            </Field>
+            <Field label="Threshold value"><Input type="number" value={f.threshold} onChange={(_, d) => setF((x) => ({ ...x, threshold: d.value }))} aria-label="Threshold value" /></Field>
+            <Field label="Severity">
+              <Select value={f.severity} onChange={(_, d) => setF((x) => ({ ...x, severity: d.value }))} aria-label="Severity">
+                {[0, 1, 2, 3, 4].map((s) => <option key={s} value={s}>{s}</option>)}
+              </Select>
+            </Field>
+          </div>
+          <div className="vy-cmdbar" style={{ marginTop: 12 }}>
+            <Button appearance="primary" disabled={!ALERT_NAME_RE.test(f.name)} onClick={async () => {
+              await api.putAlert(a.resourceGroup, f.name, {
+                location: "global",
+                properties: {
+                  severity: Number(f.severity), enabled: true, scopes: [a.id],
+                  evaluationFrequency: "PT5M", windowSize: "PT15M",
+                  criteria: {
+                    "odata.type": "Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria",
+                    allOf: [{ name: "1", metricName: f.metric, metricNamespace: "Microsoft.ServiceBus/namespaces",
+                             operator: f.operator, threshold: Number(f.threshold) || 0, timeAggregation: "Average" }],
+                  },
+                },
+              });
+              notify.success(`Alert rule '${f.name}' was created.`, "Create succeeded");
+              setAdd(false); setF((x) => ({ ...x, name: "" })); reload();
+            }}>Create alert rule</Button>
+            <Button onClick={() => setAdd(false)}>Cancel</Button>
+          </div>
+        </section>
+      )}
+    </CapabilityContainer>
+  );
+}
+
+// ── Logs: a Log Analytics query scoped to this namespace, defaulted to its own AzureActivity
+// rows — the real "Logs" blade on any Azure resource opens the same query editor with the
+// resource as context (core/capabilities/azure/servicebus.json azure.servicebus.namespace.logs). ──
+function LogsPanel({ a }) {
+  const workspaces = useAsync(() => api.listWorkspaces(), []);
+  const [workspace, setWorkspace] = useState("");
+  const [query, setQuery] = useState(`AzureActivity\n| where ResourceId == "${a.id}"\n| take 20`);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState(null);
+  const [running, setRunning] = useState(false);
+  const ws = workspaces.data || [];
+  useEffect(() => { if (ws.length && !workspace) setWorkspace(ws[0].id); }, [ws.length]);
+  const run = async () => {
+    const w = ws.find((x) => x.id === workspace);
+    if (!w) return;
+    setRunning(true); setError(null);
+    try { setResult(await api.runLogQuery(w.resourceGroup, w.name, query)); }
+    catch (e) { setError(e); setResult(null); }
+    finally { setRunning(false); }
+  };
+  const table = result?.tables?.[0];
+  return (
+    <CapabilityContainer id="azure.servicebus.namespace.logs" title={`${a.name} | Logs`}>
+      {workspaces.loading ? <Loading /> : !ws.length ? (
+        <p>No Log Analytics workspace yet. <Link href="#/loganalytics">Create one</Link> first, then add it as a Diagnostic setting destination.</p>
+      ) : (
+        <>
+          <Field label="Scope">
+            <Select value={workspace} onChange={(_, d) => setWorkspace(d.value)} aria-label="Log Analytics workspace">
+              {ws.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+            </Select>
+          </Field>
+          <Textarea value={query} onChange={(_, d) => setQuery(d.value)} rows={4} resize="vertical"
+            style={{ width: "100%", fontFamily: "monospace", marginTop: 8 }} aria-label="KQL query" />
+          <div className="vy-cmdbar" role="toolbar" aria-label="Logs commands" style={{ marginTop: 8 }}>
+            <Button appearance="primary" disabled={running || !workspace} onClick={run}>Run</Button>
+          </div>
+          <ErrorBar error={error} title="Query failed" />
+          {table && (table.rows.length ? (
+            <Table size="small" aria-label="Query results">
+              <TableHeader><TableRow>{table.columns.map((c) => <TableHeaderCell key={c.name}>{c.name}</TableHeaderCell>)}</TableRow></TableHeader>
+              <TableBody>
+                {table.rows.map((row, i) => (
+                  <TableRow key={i}>{row.map((cell, j) => <TableCell key={j}>{cell === null || cell === undefined ? "" : String(cell)}</TableCell>)}</TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          ) : <p>No results found.</p>)}
+        </>
+      )}
+    </CapabilityContainer>
+  );
+}
+
+// ── Geo-disaster recovery (Microsoft.ServiceBus/namespaces/{ns}/disasterRecoveryConfigs):
+// pairing + role + failover are real ARM state (core/azure_arm_core.AzureArm.
+// _servicebus_georecovery) — core/capabilities/azure/servicebus.json azure.servicebus.namespace.georecovery.
+function GeoRecovery({ a, reload }) {
+  const notify = useNotify();
+  const { data, loading, error, reload: reloadDr } = useAsync(() => api.listGeoRecovery(a.resourceGroup, a.name), [a.resourceGroup, a.name]);
+  const namespaces = useAsync(() => api.listNamespaces(), []);
+  const [pairOpen, setPairOpen] = useState(false);
+  const [alias, setAlias] = useState("");
+  const [partner, setPartner] = useState("");
+  const pairing = (data || [])[0];
+  const partners = (namespaces.data || []).filter((n) => n.id.toLowerCase() !== a.id.toLowerCase() && (n.sku?.tier || n.sku?.name) === "Premium");
+  const refresh = () => { reloadDr(); reload(); };
+  return (
+    <CapabilityContainer id="azure.servicebus.namespace.georecovery" title={`${a.name} | Geo-disaster recovery`}>
+      <ErrorBar error={error} />
+      {loading ? <Loading /> : pairing ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <div className="vy-props">
+            <KV label="Alias name" value={pairing.name} />
+            <KV label="Role" value={pairing.properties.role} />
+            <KV label="Partner namespace" value={pairing.properties.partnerNamespace.split("/").pop()} />
+            <KV label="Pending replication operations" value={pairing.properties.pendingReplicationOperationsCount} />
+          </div>
+          <div className="vy-cmdbar" role="toolbar" aria-label="Geo-disaster recovery commands">
+            {pairing.properties.role === "Secondary" && (
+              <ToolbarButton appearance="primary" onClick={async () => {
+                await api.failoverGeoRecovery(a.resourceGroup, a.name, pairing.name);
+                notify.success(`'${a.name}' is now the Primary namespace.`, "Failover succeeded");
+                refresh();
+              }}>Failover</ToolbarButton>
+            )}
+            <ToolbarButton icon={<Delete20Regular />} onClick={async () => {
+              await api.breakGeoRecoveryPairing(a.resourceGroup, a.name, pairing.name);
+              notify.success("The disaster recovery pairing was deleted.", "Delete succeeded");
+              refresh();
+            }}>Delete</ToolbarButton>
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <p style={{ fontSize: 13 }}>Pair this namespace with another Premium-tier namespace for geo-disaster recovery. If there is an outage you can fail over to the secondary namespace.</p>
+          <Button appearance="primary" disabled={(a.sku?.tier || a.sku?.name) !== "Premium"} onClick={() => setPairOpen(true)}>Initiate Disaster Recovery Pairing</Button>
+          {(a.sku?.tier || a.sku?.name) !== "Premium" && <p style={{ fontSize: 13 }}>Geo-disaster recovery requires a Premium-tier namespace.</p>}
+        </div>
+      )}
+      <Dialog open={pairOpen} onOpenChange={(_, d) => !d.open && setPairOpen(false)}>
+        <DialogSurface aria-label="Initiate Disaster Recovery Pairing">
+          <DialogBody>
+            <DialogTitle>Initiate Disaster Recovery Pairing</DialogTitle>
+            <DialogContent>
+              <div style={{ display: "flex", flexDirection: "column", gap: 12, minWidth: 360 }}>
+                <Field label="Alias" required><Input value={alias} onChange={(_, d) => setAlias(d.value)} aria-label="Alias" /></Field>
+                <Field label="Secondary namespace" required>
+                  {partners.length ? (
+                    <Select value={partner} onChange={(_, d) => setPartner(d.value)} aria-label="Secondary namespace">
+                      <option value="">Choose a namespace...</option>
+                      {partners.map((n) => <option key={n.id} value={n.id}>{n.name} ({locationLabel(n.location)})</option>)}
+                    </Select>
+                  ) : <p style={{ margin: 0 }}>No other Premium-tier namespace available to pair with yet.</p>}
+                </Field>
+              </div>
+            </DialogContent>
+            <DialogActions>
+              <Button appearance="primary" disabled={!alias || !partner} onClick={async () => {
+                await api.pairGeoRecovery(a.resourceGroup, a.name, alias, partner);
+                notify.success(`Disaster recovery pairing '${alias}' was created.`, "Create succeeded");
+                setPairOpen(false); setAlias(""); setPartner(""); refresh();
+              }}>Create</Button>
+              <Button onClick={() => setPairOpen(false)}>Cancel</Button>
+            </DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
+    </CapabilityContainer>
   );
 }

@@ -13,6 +13,10 @@ import { WireError, WIRE_BASE } from "../../../common/wire.js";
 import { restJson } from "../../../common/wire.js";
 import { armType, getSubscription, parseId } from "../../kit/arm.js";
 
+const AUTHZ_API = "2022-04-01";
+const DIAG_API = "2021-05-01-preview";
+const DR_API = "2022-10-01-preview";
+
 export const ARM = armType("Microsoft.ServiceBus", "namespaces", "2022-10-01-preview");
 
 const shape = (v) => ({ ...v, resourceGroup: parseId(v.id).resourceGroup });
@@ -177,3 +181,66 @@ export const deadLetterMessage = (name, seq, reason) => sbFetch("POST", `/${enco
   headers: { "content-type": "application/json" }, body: JSON.stringify({ DeadLetterReason: reason || "" }),
 });
 export const completeDeadLetterMessage = (name, seq) => sbFetch("POST", `/${encodeURIComponent(name)}/$deadletterqueue/messages/${encodeURIComponent(seq)}/complete`);
+
+// ── Access control (IAM): Microsoft.Authorization/roleAssignments + roleDefinitions +
+// checkAccess, all real ARM resources/actions resource-scoped to this namespace (plus its
+// subscription/resource-group ancestors — real Azure's inherited-access view), the same
+// generic extension-resource engine the NSG/VM/VNet/Cosmos blades use (core/azure_arm_core.py). ──
+export const listRoleAssignments = async (rg, name) =>
+  (await restJson("GET", `${ARM.path(rg, name)}/providers/Microsoft.Authorization/roleAssignments`, { query: { "api-version": AUTHZ_API } })).value || [];
+export const listRoleDefinitions = async () =>
+  (await restJson("GET", `/subscriptions/${getSubscription()}/providers/Microsoft.Authorization/roleDefinitions`, { query: { "api-version": AUTHZ_API } })).value || [];
+export const checkAccess = async (nsId, principalId, action) =>
+  (await restJson("POST", `${nsId}/providers/Microsoft.Authorization/checkAccess`, { query: { "api-version": AUTHZ_API }, body: { principalId, action } })).value || [];
+
+// ── Locks at the Subscription / Resource group scope (the Locks panel's scope-switcher
+// buttons) — the SAME generic Microsoft.Authorization/locks engine, just scoped to the
+// containing group/subscription instead of this namespace (read-only here: those locks are
+// managed from the Resource group / Subscription blades, not from a namespace's Locks panel). ──
+export const listLocksAtResourceGroup = async (rg) =>
+  (await restJson("GET", `/subscriptions/${getSubscription()}/resourceGroups/${encodeURIComponent(rg)}/providers/Microsoft.Authorization/locks`, { query: { "api-version": LOCK_API_VERSION } })).value || [];
+export const listLocksAtSubscription = async () =>
+  (await restJson("GET", `/subscriptions/${getSubscription()}/providers/Microsoft.Authorization/locks`, { query: { "api-version": LOCK_API_VERSION } })).value || [];
+
+// ── Diagnostic settings (Microsoft.Insights/diagnosticSettings, a real ARM extension
+// resource scoped to this namespace's own id — same generic mechanism APIM's Diagnostic
+// settings blade uses, core/azure_arm_core.AzureArm._diagnostic_settings). ─────────────────
+const diagPath = (rg, name, setting) => `${ARM.path(rg, name)}/providers/Microsoft.Insights/diagnosticSettings${setting ? `/${encodeURIComponent(setting)}` : ""}`;
+export const listDiagnosticSettings = async (rg, name) => (await restJson("GET", diagPath(rg, name), { query: { "api-version": DIAG_API } })).value || [];
+export const putDiagnosticSetting = (rg, name, setting, body) => restJson("PUT", diagPath(rg, name, setting), { query: { "api-version": DIAG_API }, body });
+export const deleteDiagnosticSetting = (rg, name, setting) => restJson("DELETE", diagPath(rg, name, setting), { query: { "api-version": DIAG_API } });
+export const listWorkspaces = async () =>
+  (await restJson("GET", `/subscriptions/${getSubscription()}/providers/Microsoft.OperationalInsights/workspaces`, { query: { "api-version": "2022-10-01" } })).value || [];
+
+// ── Alert rules (Microsoft.Insights/metricAlerts) — a plain RG-scoped ARM resource whose
+// properties.scopes[] names the target(s) it watches; this namespace's Alerts panel lists
+// only the rules that target it (core/azure_monitor_core.py owns the generic CRUD). Real
+// enforcement stops at "the rule round-trips as configured" — there is no metrics pipeline
+// to actually evaluate a condition against, so a rule never fires (azure.servicebus.namespace.alerts). ──
+const METRIC_ALERTS_API = "2018-03-01";
+const alertPath = (rg, ruleName) => `/subscriptions/${getSubscription()}/resourceGroups/${encodeURIComponent(rg)}/providers/Microsoft.Insights/metricAlerts${ruleName ? `/${encodeURIComponent(ruleName)}` : ""}`;
+export const listAlertsForNamespace = async (rg, nsId) => {
+  const all = (await restJson("GET", alertPath(rg), { query: { "api-version": METRIC_ALERTS_API } })).value || [];
+  return all.filter((r) => (r.properties?.scopes || []).some((s) => s.toLowerCase() === nsId.toLowerCase()));
+};
+export const putAlert = (rg, ruleName, body) => restJson("PUT", alertPath(rg, ruleName), { query: { "api-version": METRIC_ALERTS_API }, body });
+export const deleteAlert = (rg, ruleName) => restJson("DELETE", alertPath(rg, ruleName), { query: { "api-version": METRIC_ALERTS_API } });
+export const ALERT_METRICS = ["ActiveMessages", "DeadletteredMessages", "IncomingMessages", "OutgoingMessages", "ServerSendLatency"];
+export const ALERT_OPERATORS = ["GreaterThan", "GreaterThanOrEqual", "LessThan", "LessThanOrEqual"];
+
+// ── Logs (a Log Analytics query, defaulted to this namespace's own AzureActivity rows — the
+// same POST .../workspaces/{ws}/api/query pass-through the Monitor service's own Logs page
+// uses, core/azure_operationalinsights_core.py; only the AzureActivity table returns real
+// rows, see azure.monitor.log_query) ────────────────────────────────────────────────────────
+export const runLogQuery = (rg, name, query) =>
+  restJson("POST", `/subscriptions/${getSubscription()}/resourceGroups/${encodeURIComponent(rg)}/providers/Microsoft.OperationalInsights/workspaces/${encodeURIComponent(name)}/api/query`,
+    { query: { "api-version": "2017-10-01" }, body: { query } });
+
+// ── Geo-disaster recovery (Microsoft.ServiceBus/namespaces/{ns}/disasterRecoveryConfigs):
+// paired namespaces + alias failover, ENFORCED (core/azure_arm_core.AzureArm._servicebus_georecovery) ──
+const drPath = (rg, name, alias) => `${ARM.path(rg, name)}/disasterRecoveryConfigs${alias ? `/${encodeURIComponent(alias)}` : ""}`;
+export const listGeoRecovery = async (rg, name) => (await restJson("GET", drPath(rg, name), { query: { "api-version": DR_API } })).value || [];
+export const pairGeoRecovery = (rg, name, alias, partnerNamespaceId) =>
+  restJson("PUT", drPath(rg, name, alias), { query: { "api-version": DR_API }, body: { properties: { partnerNamespace: partnerNamespaceId } } });
+export const breakGeoRecoveryPairing = (rg, name, alias) => restJson("DELETE", drPath(rg, name, alias), { query: { "api-version": DR_API } });
+export const failoverGeoRecovery = (rg, name, alias) => restJson("POST", `${drPath(rg, name, alias)}/failOver`, { query: { "api-version": DR_API }, body: {} });

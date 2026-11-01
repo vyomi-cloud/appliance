@@ -1270,6 +1270,48 @@ def run() -> int:
     _check("checkAccess reflects the deleted assignment immediately",
            _decision(iamrg1, "alice", "Microsoft.Storage/storageAccounts/read") == "NotAllowed")
 
+    # 30. Microsoft.ServiceBus/namespaces/{ns}/disasterRecoveryConfigs — Geo-disaster recovery
+    # pairing + alias failover (azure.servicebus.namespace.georecovery). ENFORCED: both ends
+    # must exist, differ, and be Premium tier; only ONE record is stored (under the current
+    # Primary) — the Secondary's own list is a derived mirror, and failOver must be called
+    # from the Secondary's own path, matching the real DisasterRecoveryConfigs_FailOver action.
+    drrg = "dr-rg"
+    arm.handle("PUT", _rgpath(drrg), {"api-version": "2021-04-01"}, {})
+    sb_ns = lambda name: _p(drrg, "Microsoft.ServiceBus", "namespaces", name)
+    arm.handle("PUT", sb_ns("drprimary"), {"api-version": "2022-10-01-preview"},
+               {"location": "eastus", "sku": {"name": "Premium", "tier": "Premium"}, "properties": {}})
+    arm.handle("PUT", sb_ns("drbasic"), {"api-version": "2022-10-01-preview"},
+               {"location": "eastus", "sku": {"name": "Standard", "tier": "Standard"}, "properties": {}})
+    arm.handle("PUT", sb_ns("drsecondary"), {"api-version": "2022-10-01-preview"},
+               {"location": "westus", "sku": {"name": "Premium", "tier": "Premium"}, "properties": {}})
+    dr_alias = lambda ns, rest="": f"{sb_ns(ns)}/disasterRecoveryConfigs{rest}"
+    r = arm.handle("PUT", dr_alias("drprimary", "/pairing1"), {"api-version": "2022-10-01-preview"},
+                   {"properties": {"partnerNamespace": sb_ns("drbasic")}})
+    _check("Geo-DR pairing rejects a non-Premium partner", r["status"] == 400)
+    r = arm.handle("PUT", dr_alias("drprimary", "/pairing1"), {"api-version": "2022-10-01-preview"},
+                   {"properties": {"partnerNamespace": sb_ns("drprimary")}})
+    _check("Geo-DR pairing rejects pairing a namespace with itself", r["status"] == 400)
+    r = arm.handle("PUT", dr_alias("drprimary", "/pairing1"), {"api-version": "2022-10-01-preview"},
+                   {"properties": {"partnerNamespace": sb_ns("drsecondary")}})
+    _check("Geo-DR pairing create 201 with role Primary",
+           r["status"] == 201 and r["body"]["properties"]["role"] == "Primary")
+    r = arm.handle("GET", dr_alias("drsecondary"), {"api-version": "2022-10-01-preview"})
+    _check("Geo-DR: the Secondary's own list is a derived mirror of the Primary's pairing",
+           len(r["body"]["value"]) == 1 and r["body"]["value"][0]["properties"]["role"] == "Secondary")
+    r = arm.handle("POST", dr_alias("drprimary", "/pairing1/failover"), {"api-version": "2022-10-01-preview"}, {})
+    _check("Geo-DR failOver rejects being called from the Primary's own path", r["status"] == 400)
+    r = arm.handle("POST", dr_alias("drsecondary", "/pairing1/failover"), {"api-version": "2022-10-01-preview"}, {})
+    _check("Geo-DR failOver from the Secondary succeeds and promotes it to Primary",
+           r["status"] == 200 and r["body"]["properties"]["role"] == "Primary")
+    r = arm.handle("GET", dr_alias("drprimary"), {"api-version": "2022-10-01-preview"})
+    _check("Geo-DR: the old Primary is now a derived Secondary mirror after failover",
+           len(r["body"]["value"]) == 1 and r["body"]["value"][0]["properties"]["role"] == "Secondary")
+    r = arm.handle("DELETE", dr_alias("drprimary", "/pairing1"), {"api-version": "2022-10-01-preview"})
+    _check("Geo-DR break pairing (delete) called on the derived Secondary mirror's own path still deletes it",
+           r["status"] == 200)
+    r = arm.handle("GET", dr_alias("drsecondary"), {"api-version": "2022-10-01-preview"})
+    _check("Geo-DR: pairing is gone on both ends after break", r["body"]["value"] == [])
+
     print("\nRESULT: PASS — Azure ARM core conforms (native ARM wire + LRO + catalog CRUD) on this substrate.")
     return 0
 

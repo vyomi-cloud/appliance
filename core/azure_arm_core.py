@@ -1006,6 +1006,17 @@ class AzureArm:
             events.sort(key=lambda e: _parse_odata_ts(str(e.get("eventTimestamp") or "")) or _epoch, reverse=True)
             return _ok({"value": events})
 
+        # Microsoft.ServiceBus/namespaces/{ns}/disasterRecoveryConfigs[/{alias}[/failOver]]:
+        # Geo-disaster recovery (paired namespaces + alias failover, 2022-10-01-preview
+        # DisasterRecoveryConfigs). A plain nested child of the namespace, but handled here
+        # (before the generic type/name alternation) because listing/reading it must also
+        # surface the mirrored "Secondary" view on the PARTNER namespace, and failover has to
+        # move the stored record's key — the generic engine only knows PUT/GET/DELETE on one
+        # fixed id. See _servicebus_georecovery / azure.servicebus.namespace.georecovery.
+        if (namespace.lower() == "microsoft.servicebus" and len(chain) >= 3
+                and chain[0].lower() == "namespaces" and chain[2].lower() == "disasterrecoveryconfigs"):
+            return self._servicebus_georecovery(method, sub, rg, chain, payload)
+
         # Microsoft.Authorization/locks scoped directly to the RESOURCE GROUP (or, with no
         # resourceGroups segment, the SUBSCRIPTION) itself — not a resource inside it:
         # .../resourceGroups/{rg}/providers/Microsoft.Authorization/locks or
@@ -1397,6 +1408,123 @@ class AzureArm:
                 return _err(400, "BadRequest",
                             "Duplicate detection is not supported on a Basic-tier Service Bus namespace.")
         return None
+
+    _SB_DR_TYPE = "microsoft.servicebus/namespaces/disasterrecoveryconfigs"
+
+    def _servicebus_georecovery(self, method, sub, rg, chain, payload):
+        """Microsoft.ServiceBus/namespaces/{ns}/disasterRecoveryConfigs — Geo-disaster
+        recovery (paired namespaces + alias failover). ENFORCED: both namespaces of a pairing
+        must exist, be different, and be Premium tier (real Geo-DR requirement); FailOver
+        actually moves the Primary role to the partner (azure.servicebus.namespace.georecovery)
+        — no message data moves with it, since this simulator's Service Bus data plane is one
+        store shared by every namespace (azure.servicebus.queue.explorer) and has nothing of
+        its own to replicate per namespace.
+
+        Only ONE record is ever stored per pairing, keyed under whichever namespace currently
+        holds the Primary role — the Secondary's own list/get is a derived, read-only mirror
+        (found by scanning for a record whose partnerNamespace is this namespace's id), so
+        failover never leaves a stale duplicate behind."""
+        ns_name = chain[1]
+        ns_rid = _canonical_id(sub, rg, ["Microsoft.ServiceBus", "namespaces"], [ns_name])
+        ns_rec = self.state.get(ns_rid.lower())
+        if ns_rec is None:
+            return _err(404, "ResourceNotFound", f"Namespace '{ns_name}' not found.")
+        rest = chain[3:]
+
+        def own_records():
+            prefix = ns_rid.lower() + "/disasterrecoveryconfigs/"
+            return [r for k, r in self.state.items() if k.startswith(prefix) and "/__event__/" not in k]
+
+        def mirrored_records():
+            # this namespace is someone else's partnerNamespace: show their record back as our
+            # own Secondary-role view (never stored — always derived from the Primary's record).
+            out = []
+            for r in self.state.values():
+                if (r.get("_type") or "") != self._SB_DR_TYPE:
+                    continue
+                if str((r.get("properties") or {}).get("partnerNamespace") or "").lower() != ns_rid.lower():
+                    continue
+                v = _view(r)
+                v["id"] = f"{ns_rid}/disasterRecoveryConfigs/{r['name']}"
+                v["properties"] = {**v["properties"], "role": "Secondary", "partnerNamespace": r["id"]}
+                out.append(v)
+            return out
+
+        if not rest:
+            if method != "GET":
+                return _err(405, "MethodNotAllowed", "Collection supports GET only.")
+            return _ok({"value": [_view(r) for r in own_records()] + mirrored_records()})
+
+        alias = rest[0]
+        rid = f"{ns_rid}/disasterRecoveryConfigs/{alias}"
+        key = rid.lower()
+
+        if len(rest) >= 2 and rest[1].lower() == "failover":
+            if method != "POST":
+                return _err(405, "MethodNotAllowed", "failOver is a POST-only action.")
+            rec = self.state.get(key)
+            mirror = next((m for m in mirrored_records() if m["name"].lower() == alias.lower()), None)
+            if rec is None and mirror is None:
+                return _err(404, "ResourceNotFound", f"Disaster recovery config '{alias}' not found.")
+            if rec is not None:
+                return _err(400, "BadRequest",
+                            "FailOver must be called on the SECONDARY namespace's alias, not the primary's.")
+            # mirror != None: this namespace is the Secondary — promote it to Primary, demote
+            # the old primary to the new Secondary end of the (now reversed) pairing.
+            old_primary_rid = mirror["properties"]["partnerNamespace"].rsplit("/disasterRecoveryConfigs/", 1)[0]
+            old_key = f"{old_primary_rid}/disasterRecoveryConfigs/{alias}".lower()
+            del self.state[old_key]
+            new_rec = {"id": rid, "name": alias, "type": "Microsoft.ServiceBus/namespaces/disasterRecoveryConfigs",
+                      "_type": self._SB_DR_TYPE,
+                      "properties": {"provisioningState": "Succeeded", "role": "Primary",
+                                     "partnerNamespace": old_primary_rid, "pendingReplicationOperationsCount": 0}}
+            self.state[key] = new_rec
+            self._record_activity(rid, f"{self._SB_DR_TYPE}/failOver/action", sub)
+            return _ok(_view(new_rec))
+
+        if method == "GET":
+            rec = self.state.get(key)
+            if rec is not None:
+                return _ok(_view(rec))
+            mirror = next((m for m in mirrored_records() if m["name"].lower() == alias.lower()), None)
+            if mirror is not None:
+                return _ok(mirror)
+            return _err(404, "ResourceNotFound", f"Disaster recovery config '{alias}' not found.")
+
+        if method == "PUT":
+            partner_id = str(((payload or {}).get("properties") or {}).get("partnerNamespace") or "")
+            partner_rec = self.state.get(partner_id.lower())
+            if not partner_id or partner_rec is None:
+                return _err(400, "BadRequest", "properties.partnerNamespace must reference an existing Service Bus namespace.")
+            if partner_id.lower() == ns_rid.lower():
+                return _err(400, "BadRequest", "A namespace cannot be paired with itself.")
+            if (ns_rec.get("sku") or {}).get("tier") != "Premium" or (partner_rec.get("sku") or {}).get("tier") != "Premium":
+                return _err(400, "BadRequest", "Geo-disaster recovery pairing requires both namespaces to be Premium tier.")
+            if own_records() or mirrored_records():
+                return _err(400, "BadRequest", f"Namespace '{ns_name}' is already part of a disaster recovery pairing.")
+            rec = {"id": rid, "name": alias, "type": "Microsoft.ServiceBus/namespaces/disasterRecoveryConfigs",
+                  "_type": self._SB_DR_TYPE,
+                  "properties": {"provisioningState": "Succeeded", "role": "Primary",
+                                 "partnerNamespace": partner_id, "pendingReplicationOperationsCount": 0}}
+            self.state[key] = rec
+            self._record_activity(rid, f"{self._SB_DR_TYPE}/write", sub)
+            return _ok(_view(rec), status=201)
+
+        if method == "DELETE":
+            # Breaking the pairing is allowed from EITHER end: called on the Secondary's own
+            # (derived, never-stored) path, there is nothing under `key` to pop — redirect to
+            # the actually-owned record under the Primary instead.
+            del_key = key
+            if del_key not in self.state:
+                mirror = next((m for m in mirrored_records() if m["name"].lower() == alias.lower()), None)
+                if mirror is not None:
+                    del_key = f"{mirror['properties']['partnerNamespace'].rsplit('/disasterRecoveryConfigs/', 1)[0]}/disasterRecoveryConfigs/{alias}".lower()
+            rec = self.state.pop(del_key, None)
+            if rec is not None:
+                self._record_activity(rid, f"{self._SB_DR_TYPE}/delete", sub)
+            return _ok(None, status=200 if rec is not None else 204)
+
+        return _err(405, "MethodNotAllowed", f"{method} not allowed.")
 
     def _apim_tier_block(self, type_chain, names, payload, sub, rg):
         """Microsoft.ApiManagement/service sku.capacity — real APIM rejects a scale unit count
