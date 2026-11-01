@@ -174,6 +174,7 @@ from core.azure_cosmos_core import CosmosStore
 from core import azure_keyvault_secrets_core as az_kvsec
 from core import azure_keyvault_keys_core as az_kvkeys
 from core import azure_keyvault_certificates_core as az_kvcerts
+from core import azure_appconfiguration_core as az_appconfig
 from core import azure_queue_core as az_queue
 from core.azure_queue_core import AzureQueueStore
 from core import azure_table_core as az_table
@@ -233,14 +234,25 @@ def _azure_service(path, lheaders, query):
     apiv = ("api-version" in query) or ("api-version=" in path)
     # Key Vault (data plane): root /keys or /secrets WITH api-version (GCP secrets
     # live under /v1/projects/…; a plain S3 bucket named "keys" has no api-version).
+    # App Configuration (data plane) shares the bare root "/keys" with Key Vault (its
+    # GET /keys lists distinct key NAMES used across key-values, vs Key Vault's full
+    # keys CRUD) — disambiguated by api-version shape: Key Vault sends "7.x"
+    # (azure_keyvault_keys_core.API_VERSION), App Configuration sends a dated version
+    # ("2023-11-01", azure_appconfiguration_core.DATA_API_VERSION) or the legacy "1.0".
     if apiv and "/projects/" not in p:
         s0 = p.lstrip("/").split("/", 1)[0]
+        m = re.search(r"api-version=([^&]+)", path)
+        av = query.get("api-version") or (m.group(1) if m else "")
+        if s0 == "keys" and not re.match(r"^\d+\.\d+$", str(av)):
+            return "az-appconfig"
         if s0 == "keys":
             return "az-kv-keys"
         if s0 == "secrets":
             return "az-kv-secrets"
         if s0 == "certificates":
             return "az-kv-certs"
+        if s0 in ("kv", "labels", "locks", "revisions", "snapshots", "operations"):
+            return "az-appconfig"
     # Cosmos DB: /dbs path or the documentdb headers.
     if p.startswith("/dbs") or any(k.startswith("x-ms-documentdb") for k in lheaders):
         return "az-cosmos"
@@ -829,6 +841,24 @@ class AwsWireRouter:
             if r.media_type and not any(k.lower() == "content-type" for k in hdrs):
                 hdrs["content-type"] = r.media_type
             return {"status": r.status, "headers": hdrs, "body": r.body or b""}
+
+        if svc == "az-appconfig":   # App Configuration data plane ({store}.azconfig.io: /kv /keys /labels /locks /revisions /snapshots /operations)
+            # Key-values live INSIDE the store's ARM record (core/azure_appconfiguration_core.py),
+            # so the "store" is just an ARM state lookup, not a separate InMemory* store — same
+            # seam the ARM control plane (az_arm.state) and the console's own ARM calls already
+            # share. Real App Configuration routes by the store's own {store}.azconfig.io
+            # hostname; this one-relay-for-every-store simulation has no per-store host, so the
+            # console sends the store it's showing as `x-vyomi-store` (azure/services/
+            # appconfiguration/api.js setActiveStore), the same pattern Key Vault uses for
+            # `x-vyomi-vault`.
+            store = lheaders.get("x-vyomi-store", "")
+            r = az_appconfig.data_dispatch(self.az_arm.state, store, method, path, query or {}, headers or {}, bytes(body))
+            hdrs = dict(r.get("headers") or {})
+            media = r.get("media")
+            if media and not any(k.lower() == "content-type" for k in hdrs):
+                hdrs["content-type"] = media
+            out_body = r.get("body")
+            return {"status": r["status"], "headers": hdrs, "body": b"" if out_body is None else json.dumps(out_body).encode()}
 
         if svc and svc.startswith("az-"):   # Azure data plane — native azure-* SDK wire
             _az_core = {

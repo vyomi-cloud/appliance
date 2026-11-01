@@ -1,0 +1,129 @@
+{
+ "$doc": "Vyomi capability registry — Azure App Configuration. See aws/s3.json for the contract.",
+ "azure.appconfiguration.store.crud": {
+  "title": "Configuration stores (create, get, list, delete, soft delete/recover/purge) over ARM",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_azure_appconfiguration_core.py"
+  ]
+ },
+ "azure.appconfiguration.store.tags": {
+  "title": "Tags",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_azure_appconfiguration_core.py"
+  ]
+ },
+ "azure.appconfiguration.access_keys": {
+  "title": "Access settings: access keys (listKeys, regenerateKey)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "Enable/disable access key authentication (disableLocalAuth) is stored and returned exactly as written, and really blocks HMAC-authenticated data-plane calls once set — but Vyomi has no signed-in-identity/session-principal concept behind a data-plane call, so a store with access keys disabled cannot be reached by any other credential either (real App Configuration would fall back to Microsoft Entra ID)."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_appconfiguration_core.py"
+  ]
+ },
+ "azure.appconfiguration.kv.crud": {
+  "title": "Configuration explorer: key-values (get, list, create, update, delete, labels, tags, revisions, snapshots)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_azure_appconfiguration_core.py"
+  ]
+ },
+ "azure.appconfiguration.kv.locks": {
+  "title": "Key-value locks (read-only keys)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_azure_appconfiguration_core.py"
+  ]
+ },
+ "azure.appconfiguration.feature_flags": {
+  "title": "Feature manager (feature flags)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "Feature flags are Vyomi's UI convention over plain key-values (the reserved `.appconfig.featureflag/` key prefix and the `application/vnd.microsoft.appconfig.ff+json` content type, exactly as real App Configuration stores them) — there is no dedicated feature-flag engine, so malformed flag JSON is stored and round-tripped as-is rather than schema-validated like the real service does."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_appconfiguration_core.py"
+  ]
+ },
+ "azure.appconfiguration.replicas": {
+  "title": "Geo-replication (replicas)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "A replica is a real ARM child resource with its own endpoint, but key-value reads/writes against a replica's endpoint are not modelled separately — Vyomi has one data-plane relay per store (see azure.appconfiguration.kv.crud), not one per replica, so there is nothing to simulate region-local latency or replication lag with."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_appconfiguration_core.py"
+  ]
+ },
+ "azure.appconfiguration.networking": {
+  "title": "Networking (public network access)",
+  "level": {
+   "nano": "config_only",
+   "offline": "config_only"
+  },
+  "limitations": [
+   "publicNetworkAccess is stored and returned exactly as written, but Vyomi does not enforce it against the data plane — unlike the Key Vault lens's x-vyomi-vault based enforcement, App Configuration's data-plane relay has no caller-network concept to gate on."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_appconfiguration_core.py"
+  ]
+ },
+ "azure.appconfiguration.locks": {
+  "title": "Resource locks (Microsoft.Authorization/locks), scoped to this configuration store",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "Locks are only simulated at the resource scope (this configuration store); subscription- and resource-group-scoped lock lists are an honest 'Not simulated' gap, same as every other Azure resource blade's scope-switch buttons."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py"
+  ]
+ },
+ "azure.appconfiguration.activity_log": {
+  "title": "Activity log",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Only console/SDK-triggered mutations made since the simulation booted are recorded (no historical backfill), and `caller` is a fixed placeholder identity rather than the real signed-in principal. Severity/category filtering is not modelled (every recorded event is Informational/Administrative).",
+   "The Timespan picker IS enforced: its lower bound is a real OData `eventTimestamp ge` predicate (core/azure_arm_core.py _activity_log_query) — narrowing it really narrows the result, it isn't a cosmetic control."
+  ],
+  "api": [
+   "ActivityLogs_List"
+  ],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py"
+  ]
+ }
+}

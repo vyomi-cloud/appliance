@@ -2678,6 +2678,84 @@ try {
   await page.getByRole("heading", { name: "Log Analytics workspaces", exact: true }).waitFor({ timeout: 10000 });
   const lawGone = await arm("GET", `/resourceGroups/${DEFAULT_RG}/providers/Microsoft.OperationalInsights/workspaces/${LAW}`);
   check("UI delete Log Analytics workspace → ARM GET 404", lawGone.status === 404, `HTTP ${lawGone.status}`);
+  // ── App Configuration store created through the wizard → visible over native ARM ──────
+  const acArm = (method, path, body) => wire(`/subscriptions/${SUB}${path}${path.includes("?") ? "&" : "?"}api-version=2024-05-01`,
+    { method, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
+  const acData = (path, method = "GET", body, store) => wire(`${path}${path.includes("?") ? "&" : "?"}api-version=2023-11-01`,
+    { method, headers: { "content-type": "application/json", ...(store ? { "x-vyomi-store": store } : {}) }, body: body ? JSON.stringify(body) : undefined });
+  const AC = `vysmokeac${n}`;
+  await page.goto(UI + "#/appconfiguration/create");
+  await page.getByLabel("Resource name", { exact: true }).fill(AC);
+  await page.getByRole("link", { name: "Create new" }).or(page.getByRole("button", { name: "Create new" })).first().click();
+  await page.getByLabel("New resource group name").fill(RG);
+  await page.getByLabel("Pricing tier", { exact: true }).selectOption("Standard");   // Geo-replication below needs Standard/Premium
+  await shot("33-create-appconfig-basics");
+  await page.getByRole("button", { name: "Review + create" }).click();
+  await page.getByText("Validation passed").waitFor({ timeout: 5000 });
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("heading", { name: AC, exact: true }).waitFor({ timeout: 10000 });
+  const gotAc = await acArm("GET", `/resourceGroups/${RG}/providers/Microsoft.AppConfiguration/configurationStores/${AC}`);
+  check("UI create configuration store → visible over native ARM", gotAc.status === 200, `HTTP ${gotAc.status}`);
+  await shot("34-appconfig-overview");
+
+  // ── Key-value created in the UI → readable over the App Configuration data-plane wire ──
+  await openPanel("Configuration explorer");
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  const ACKEY = `smoke-key-${n}`;
+  await page.getByLabel("Key", { exact: true }).fill(ACKEY);
+  await page.getByLabel("Value", { exact: true }).fill("smoke-value");
+  await page.getByRole("dialog").getByRole("button", { name: "Apply" }).click();
+  await page.getByRole("link", { name: ACKEY, exact: true }).waitFor({ timeout: 10000 });
+  const kvGet = await acData(`/kv/${ACKEY}`, "GET", undefined, AC);
+  check("UI create key-value → readable over App Configuration data-plane wire", kvGet.status === 200 && JSON.parse(kvGet.text).value === "smoke-value", `HTTP ${kvGet.status}`);
+  await shot("35-configuration-explorer");
+
+  // ── Key-value created over the wire → visible in the UI (CLI → UI) ─────────────────────
+  const WIREKEY = `wirekey-ac-${n}`;
+  const putKv = await acData(`/kv/${WIREKEY}`, "PUT", { value: "from-wire" }, AC);
+  check("App Configuration kv REST PUT over wire", putKv.status === 200, `HTTP ${putKv.status}`);
+  await page.getByRole("toolbar", { name: "Command bar" }).getByRole("button", { name: "Refresh" }).click();
+  await page.getByText(WIREKEY, { exact: true }).waitFor({ timeout: 10000 });
+  check("wire-created key-value shown in Configuration explorer", true);
+  await shot("36-configuration-explorer-wire");
+
+  // ── Feature flag added through the UI → readable over the data-plane wire, then toggled
+  // from the grid → the change round-trips back out over the SAME wire ──────────────────
+  await openPanel("Feature manager");
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  const FLAG = `smokeflag${n}`;
+  await page.getByLabel("Name", { exact: true }).fill(FLAG);
+  await page.getByRole("dialog").getByRole("button", { name: "Apply" }).click();
+  await page.getByText(FLAG, { exact: true }).waitFor({ timeout: 10000 });
+  const ffGet = await acData(`/kv/.appconfig.featureflag%2F${FLAG}`, "GET", undefined, AC);
+  check("UI add feature flag → readable over the data-plane wire, starts disabled",
+    ffGet.status === 200 && JSON.parse(JSON.parse(ffGet.text).value).enabled === false, ffGet.text.slice(0, 200));
+  await page.getByRole("row", { name: new RegExp(FLAG) }).getByRole("switch").click();
+  await page.waitForTimeout(800);
+  const ffGet2 = await acData(`/kv/.appconfig.featureflag%2F${FLAG}`, "GET", undefined, AC);
+  check("UI toggle feature flag → enabled over the data-plane wire", JSON.parse(JSON.parse(ffGet2.text).value).enabled === true, ffGet2.text.slice(0, 200));
+  await shot("37-feature-manager");
+
+  // ── Geo-replication: replica added through the UI → visible over native ARM ────────────
+  await openPanel("Geo-replication");
+  await page.getByRole("button", { name: "Create" }).click();
+  const REPLICA = `smokerepl${n}`;
+  await page.getByLabel("Name", { exact: true }).fill(REPLICA);
+  await page.getByRole("dialog").getByRole("button", { name: "Create" }).click();
+  await page.getByText(REPLICA, { exact: true }).waitFor({ timeout: 10000 });
+  const replGet = await acArm("GET", `/resourceGroups/${RG}/providers/Microsoft.AppConfiguration/configurationStores/${AC}/replicas/${REPLICA}`);
+  check("UI add replica → visible over native ARM", replGet.status === 200, `HTTP ${replGet.status}`);
+  await shot("38-geo-replication");
+
+  // ── Delete through the Overview command bar → gone over native ARM ─────────────────────
+  await page.goto(UI + `#/appconfiguration/${RG}/${AC}`);
+  await page.getByRole("toolbar", { name: "Overview commands" }).getByRole("button", { name: "Delete" }).click();
+  await page.getByLabel("Confirm deletion").fill(AC);
+  await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await page.getByRole("dialog", { name: /^Delete / }).waitFor({ state: "detached", timeout: 30000 });
+  await page.getByRole("heading", { name: "Configuration stores", exact: true }).waitFor({ timeout: 10000 });
+  const acGone = await acArm("GET", `/resourceGroups/${RG}/providers/Microsoft.AppConfiguration/configurationStores/${AC}`);
+  check("UI delete configuration store → ARM GET 404", acGone.status === 404, `HTTP ${acGone.status}`);
 } catch (e) {
   const at = ((e.stack || "").match(/(?:smoke|dbg)-[a-z]+\.mjs:(\d+)/) || [])[1];   // the failing step's line
   check("smoke run", false, e.message.split("\n")[0] + (at ? ` (smoke line ${at})` : ""));
