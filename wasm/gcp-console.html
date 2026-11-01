@@ -222,6 +222,17 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
   .table-toolbar input.search{flex:1;max-width:380px;height:36px;border:1px solid var(--line-d);border-radius:4px;padding:0 12px;font-size:13px;outline:none}
   .table-toolbar input.search:focus{border-color:var(--blue);box-shadow:0 0 0 1px var(--blue)}
   .table-toolbar .stats{font-size:12px;color:var(--sub);margin-left:auto}
+  /* Column chooser */
+  .vy-grid-tools{display:flex;justify-content:flex-end;margin:0 0 8px}
+  .vy-colmenu{position:relative;display:inline-block}
+  .vy-colmenu > .btn{height:32px;padding:0 12px}
+  .vy-colpop{position:absolute;right:0;top:calc(100% + 4px);z-index:40;background:#fff;border:1px solid var(--line-d);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.16);padding:6px 0;min-width:220px;max-height:340px;overflow-y:auto}
+  .vy-colpop[hidden]{display:none}
+  .vy-colrow{display:flex;align-items:center;gap:10px;padding:7px 14px;font-size:13px;cursor:pointer;white-space:nowrap}
+  .vy-colrow:hover{background:var(--blue-bg)}
+  .vy-colrow input:disabled + span{color:var(--sub)}
+  .vy-colfoot{border-top:1px solid var(--line);margin-top:4px;padding:8px 14px 4px;font-size:12.5px}
+  .vy-colfoot a{color:var(--blue);cursor:pointer}
   table.gc{width:100%;border-collapse:collapse;font-size:13px;background:#fff}
   table.gc th{text-align:left;padding:11px 14px;font-weight:500;color:var(--sub);background:var(--blue-bg);font-size:12px;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--line)}
   table.gc th.sortable{cursor:pointer;user-select:none}
@@ -1081,6 +1092,9 @@ async function renderList(main){
   const fi = el("input",{class:"search",placeholder:"Filter "+svc.label.toLowerCase()+"…"});
   const stats = el("span",{class:"stats"});
   toolbar.append(fi, stats);
+  let curTable = null;
+  const listKey = gridKeyOf(svc.columns.map(c => c[1]));
+  if (svc.columns.length > 2) toolbar.append(columnsMenu(listKey, svc.columns.map(c => c[1]), () => curTable));
   tableWrap.append(toolbar);
   const tableHolder = el("div",{}); tableWrap.append(tableHolder);
   wrap.append(tableWrap);
@@ -1136,7 +1150,7 @@ async function renderList(main){
     hdr.append(el("th",{class:"chk"}, el("input",{type:"checkbox"})));
     svc.columns.forEach((c, idx) => {
       const arr = state.sortBy === idx ? (state.sortDir === 1 ? " ▲" : " ▼") : "";
-      hdr.append(el("th",{class:"sortable",onclick:()=>{
+      hdr.append(el("th",{class:"sortable","data-label": c[1],onclick:()=>{
         if (state.sortBy === idx) state.sortDir = -state.sortDir;
         else { state.sortBy = idx; state.sortDir = 1; } paint();
       }}, c[1] + arr));
@@ -1151,7 +1165,7 @@ async function renderList(main){
       tr.append(el("td",{class:"chk"}, el("input",{type:"checkbox",onclick:e=>e.stopPropagation()})));
       svc.columns.forEach((c,i) => {
         const v = getPath(it, c[0]);
-        const td = el("td",{});
+        const td = el("td",{"data-label": c[1]});
         if (i === 0) td.append(el("a",{class:"id",onclick:()=>navigate({view:"detail", item:it, detailTab:0})},
           String(v||"—")));
         else if (c[0].endsWith("state") || c[0].endsWith("status")) td.append(stateBadge(v));
@@ -1161,6 +1175,7 @@ async function renderList(main){
       t.append(tr);
     });
     tableHolder.append(t);
+    curTable = t; applyColVis(t, hiddenCols(listKey));
   }
   fi.addEventListener("input", e => { state.filter = e.target.value; paint(); });
   paint();
@@ -2206,6 +2221,36 @@ function kvCardOf(title, pairs){
   card.append(g);
   return card;
 }
+// ---- Column chooser (every grid): a "Columns" button that shows/hides columns, remembered per grid ----------
+function gridKeyOf(labels){ return (STATE.service || "") + "|" + labels.join("|"); }
+function hiddenCols(key){ try { return new Set(JSON.parse(localStorage.getItem("vyomi.gcp.cols." + key) || "[]")); } catch (_) { return new Set(); } }
+function saveHiddenCols(key, set){ try { if (set.size) localStorage.setItem("vyomi.gcp.cols." + key, JSON.stringify([...set])); else localStorage.removeItem("vyomi.gcp.cols." + key); } catch (_) {} }
+function applyColVis(table, hidden){
+  if (!table) return;
+  table.querySelectorAll("[data-label]").forEach(c => { c.style.display = hidden.has(c.getAttribute("data-label")) ? "none" : ""; });
+}
+// labels: column headers in order; the first (the row's name/link) stays visible. getTable(): the table to update.
+function columnsMenu(key, labels, getTable){
+  const hidden = hiddenCols(key);
+  const root = el("div",{class:"vy-colmenu"});
+  const btn = el("button",{class:"btn", type:"button", title:"Show or hide columns"}, icon("view_column"), "Columns");
+  const pop = el("div",{class:"vy-colpop"}); pop.hidden = true;
+  const boxes = [];
+  function sync(){ saveHiddenCols(key, hidden); applyColVis(getTable(), hidden); }
+  labels.forEach((l, i) => {
+    const cb = el("input",{type:"checkbox"}); cb.checked = !hidden.has(l); if (i === 0) cb.disabled = true;
+    cb.addEventListener("change", () => { if (cb.checked) hidden.delete(l); else hidden.add(l); sync(); });
+    boxes.push(cb);
+    pop.append(el("label",{class:"vy-colrow"}, cb, el("span",{}, l)));
+  });
+  pop.append(el("div",{class:"vy-colfoot"}, el("a",{onclick:()=>{ hidden.clear(); boxes.forEach(b => b.checked = true); sync(); }}, "Show all")));
+  btn.addEventListener("click", e => { e.stopPropagation(); pop.hidden = !pop.hidden; });
+  pop.addEventListener("click", e => e.stopPropagation());
+  document.addEventListener("click", () => { pop.hidden = true; });
+  root.append(btn, pop);
+  root.sync = sync;
+  return root;
+}
 // A standard on/off switch (not a button). onChange(checked) runs when the user flips it.
 function toggleEl(on, onChange){
   const lab = el("label",{class:"vy-sw"});
@@ -2226,7 +2271,7 @@ function tableOf(cols, rows, actions, opts){
     all.addEventListener("change", () => { boxes.forEach(b => { if (!b.disabled) b.checked = all.checked; }); sel.onChange(); });
     hr.append(el("th",{class:"chk"}, all));
   }
-  cols.forEach(c => hr.append(el("th",{}, c[1])));
+  cols.forEach(c => hr.append(el("th",{"data-label": c[1]}, c[1])));
   if (actions && actions.length) hr.append(el("th",{}, "Actions"));
   t.append(hr);
   rows.forEach((row, i) => {
@@ -2238,7 +2283,7 @@ function tableOf(cols, rows, actions, opts){
     }
     cols.forEach(c => {
       const v = c[2] ? c[2](row, opts.ctx || {}) : getPath(row, c[0]);
-      tr.append(el("td",{}, v instanceof Node ? v : fmtVal(v)));
+      tr.append(el("td",{"data-label": c[1]}, v instanceof Node ? v : fmtVal(v)));
     });
     if (actions && actions.length) tr.append(el("td",{style:"white-space:nowrap"},
       ...actions.filter(a => !a.when || a.when(row)).map(a =>
@@ -2246,8 +2291,14 @@ function tableOf(cols, rows, actions, opts){
           icon(a.icon || "edit"), a.label))));
     t.append(tr);
   });
-  t.selectedRows = () => boxes.filter(b => b.checked && !b.disabled).map(b => b._row);
-  return t;
+  const selectedRows = () => boxes.filter(b => b.checked && !b.disabled).map(b => b._row);
+  if (cols.length < 3) { t.selectedRows = selectedRows; return t; }   // a two-column key/value list has nothing to hide
+  const key = gridKeyOf(cols.map(c => c[1]));
+  const menu = columnsMenu(key, cols.map(c => c[1]), () => t);
+  const box = el("div",{class:"vy-grid"}, el("div",{class:"vy-grid-tools"}, menu), t);
+  applyColVis(t, hiddenCols(key));
+  box.selectedRows = selectedRows;
+  return box;
 }
 function emptyOf(iconName, text, hint){
   return el("div",{class:"empty"}, el("span",{class:"ic material-symbols-outlined"}, iconName), el("div",{}, text),
