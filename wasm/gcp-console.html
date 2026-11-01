@@ -208,7 +208,9 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
   .card .h{padding:16px 20px;display:flex;align-items:center;gap:10px;font-size:14px;font-weight:500;font-family:'Google Sans',sans-serif;border-bottom:1px solid var(--line)}
   .card .b{padding:16px 20px}
   /* Dashboard → Resources card (Google Cloud's): product icon, name as a link, what it holds. */
-  .res-card .res-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));column-gap:32px}
+  .res-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr));gap:14px;align-items:stretch}
+  .res-cards .res-card{margin-bottom:0}
+  .res-card .res-list{display:grid;grid-template-columns:1fr}
   .res-card .res-row{display:flex;align-items:center;gap:14px;padding:9px 0;min-width:0}
   .res-card .res-ic{display:flex;color:#5f6368}
   .res-card .res-ic .material-symbols-outlined{font-size:22px}
@@ -297,7 +299,6 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
   .kv-card > div:first-child:not(.kv-grid){font-weight:500;font-size:14px;margin-bottom:6px}
   /* Overview / Properties: every field is its own card */
   .fld-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px;margin-bottom:14px}
-  .fld-grid.keys{grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
   .fld-card{background:#fff;border:1px solid var(--line);border-radius:8px;padding:12px 16px;min-width:0}
   .fld-card .fld-k{font-size:12px;color:var(--sub);margin-bottom:4px}
   .fld-card .fld-v{font-size:14px;color:var(--ink);overflow-wrap:anywhere;line-height:1.35}
@@ -1010,10 +1011,20 @@ function renderHome(main){
     secretmanager:"secret", artifactregistry:"repository", kms:"key", cloudscheduler:"job", container:"cluster",
     iamcredentials:"credential", monitoring:"alerting policy", redis:"instance" };
   const plural = (n, u) => n + " " + (n === 1 ? u : u === "repository" ? "repositories" : u === "alerting policy" ? "alerting policies" : u + "s");
-  const res = el("div",{class:"card res-card"});
-  res.append(el("div",{class:"h"}, icon("dns"), "Resources"));
-  const rows = el("div",{class:"res-list"});
-  CATALOG.services.forEach(s => {
+  // Three cards: compute & integration, data & storage, networking / security / operations.
+  const GROUPS = [
+    {title: "Compute & integration", icon: "memory", keys: ["compute", "functions", "container", "cloudscheduler", "eventarc", "pubsub", "apigateway"]},
+    {title: "Data & storage", icon: "database", keys: ["storage", "artifactregistry", "cloudsql", "firestore", "redis"]},
+    {title: "Networking, security & operations", icon: "shield", keys: ["vpc", "secretmanager", "kms", "iam", "iamcredentials", "monitoring"]},
+  ];
+  const grouped = new Set(GROUPS.flatMap(g => g.keys));
+  CATALOG.services.forEach(s => { if (!grouped.has(s.key)) GROUPS[2].keys.push(s.key); });   // anything new lands in the last card
+  const resGrid = el("div",{class:"res-cards"});
+  GROUPS.forEach(g => {
+    const res = el("div",{class:"card res-card"});
+    res.append(el("div",{class:"h"}, icon(g.icon), g.title));
+    const rows = el("div",{class:"res-list"});
+    g.keys.map(k => CATALOG.services.find(s => s.key === k)).filter(Boolean).forEach(s => {
     const n = el("span",{class:"res-n"}, "…");
     rows.append(el("div",{class:"res-row"}, el("span",{class:"res-ic"}, icon(s.icon)),
       el("a",{class:"res-l",onclick:()=>navigate({view:"list", service:s.key, item:null})}, s.label), n));
@@ -1026,9 +1037,11 @@ function renderHome(main){
         || (Array.isArray(d) ? d : Object.values(d).find(v => Array.isArray(v))) || [];
       n.textContent = plural(items.length, UNIT[s.key] || "resource");
     }).catch(() => { n.textContent = ""; });
+    });
+    res.append(el("div",{class:"b"}, rows));
+    resGrid.append(res);
   });
-  res.append(el("div",{class:"b"}, rows));
-  wrap.append(res);
+  wrap.append(resGrid);
   main.append(wrap);
 }
 
