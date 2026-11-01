@@ -15,6 +15,6 @@
   "operations": { "route": "#/sql/instances/{live}/operations", "live": "live-operation" },
   "backups": { "route": "#/sql/backups", "fixtures": ["sql-instance"], "live": "live-backup" },
   "system-insights": { "route": "#/sql/instances/uic-instance/system-insights", "fixtures": ["sql-instance"], "vars": { "resource-name": "uic-instance" } },
-  "query-insights": { "route": "#/sql/instances/uic-instance/query-insights", "fixtures": ["sql-instance"], "vars": { "resource-name": "uic-instance" } },
+  "query-insights": { "route": "#/sql/instances/uic-instance/query-insights", "fixtures": ["sql-instance"], "vars": { "resource-name": "uic-instance" }, "live": "live-query-insight" },
   "cloud-sql-studio": { "route": "#/sql/instances/uic-instance/studio", "fixtures": ["sql-instance"], "vars": { "resource-name": "uic-instance" } }
 }

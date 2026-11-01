@@ -382,6 +382,19 @@ def register(app, h) -> None:
         ("GET", "/api/gcp/rds/databases/{instance}/queryInsights", "api_gcp_sql_list_insights", "(project: str, instance: str = \"\")"),
         ("POST", "/sql/v1beta4/projects/{project}/instances/{instance}/queryInsights", "api_gcp_sql_create_insight", "(project: str, instance: str, request: Request)"),
         ("POST", "/api/gcp/rds/databases/{instance}/queryInsights", "api_gcp_sql_create_insight", "(project: str, instance: str, request: Request)"),
+        # gcp.sql.connections-security: sslCerts — NOT a real Admin API collection either
+        # (well, it is — see sqladmin SslCerts — but this simulator adds it the same way
+        # core/gcp_cloudsql_core.py does on Nano, sharing its cert generator).
+        ("GET", "/sql/v1beta4/projects/{project}/instances/{instance}/sslCerts", "api_gcp_sql_list_ssl_certs", "(project: str, instance: str)"),
+        ("POST", "/sql/v1beta4/projects/{project}/instances/{instance}/sslCerts", "api_gcp_sql_insert_ssl_cert", "(project: str, instance: str, request: Request)"),
+        ("DELETE", "/sql/v1beta4/projects/{project}/instances/{instance}/sslCerts/{fingerprint}", "api_gcp_sql_delete_ssl_cert", "(project: str, instance: str, fingerprint: str)"),
+        # gcp.sql.insights: Cloud SQL Studio's query RPC + the real tables/queries/metrics
+        # it's derived from — a Vyomi-added data-plane surface next to the real control
+        # plane, mirroring core/gcp_cloudsql_core.py's Nano routes 1:1.
+        ("POST", "/sql/v1beta4/projects/{project}/instances/{instance}/query", "api_gcp_sql_query", "(project: str, instance: str, request: Request)"),
+        ("GET", "/sql/v1beta4/projects/{project}/instances/{instance}/queries", "api_gcp_sql_list_queries", "(project: str, instance: str)"),
+        ("GET", "/sql/v1beta4/projects/{project}/instances/{instance}/tables", "api_gcp_sql_list_tables", "(project: str, instance: str)"),
+        ("GET", "/sql/v1beta4/projects/{project}/instances/{instance}/metrics", "api_gcp_sql_get_metrics", "(project: str, instance: str)"),
         # Pub/Sub
         ("GET", "/v1/projects/{project}/topics", "api_gcp_pubsub_list_topics", "(project: str)"),
         ("GET", "/api/gcp/sqs/queues", "api_gcp_pubsub_list_topics", "(project: str)"),
