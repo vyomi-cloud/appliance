@@ -55,7 +55,7 @@ export const deleteHmacKey = (project, accessId) =>
 
 /** One "directory" level: folders (prefixes) + objects directly under `prefix`. */
 export async function listLevel(bucket, prefix = "") {
-  const r = await restJson("GET", `/storage/v1/b/${e(bucket)}/o`, { query: { prefix, delimiter: "/" } });
+  const r = await restJson("GET", `/storage/v1/b/${e(bucket)}/o`, { query: { prefix, delimiter: "/", userProject: getProject() } });
   return {
     folders: (r.prefixes || []).map((p) => ({ key: p, name: p.slice(prefix.length), folder: true })),
     objects: (r.items || []).filter((o) => o.name !== prefix).map((o) => ({ ...o, key: o.name, display: o.name.slice(prefix.length) })),
@@ -63,17 +63,86 @@ export async function listLevel(bucket, prefix = "") {
 }
 /** Every object under a prefix (flat) — used to delete a folder's contents. */
 export async function listAll(bucket, prefix = "") {
-  const r = await restJson("GET", `/storage/v1/b/${e(bucket)}/o`, { query: { prefix } });
+  const r = await restJson("GET", `/storage/v1/b/${e(bucket)}/o`, { query: { prefix, userProject: getProject() } });
   return r.items || [];
 }
-export const getObject = (b, name) => restJson("GET", `/storage/v1/b/${e(b)}/o/${e(name)}`);
-export const patchObject = (b, name, body) => restJson("PATCH", `/storage/v1/b/${e(b)}/o/${e(name)}`, { body });
-export const deleteObject = (b, name) => restJson("DELETE", `/storage/v1/b/${e(b)}/o/${e(name)}`);
-export const downloadUrl = (b, name) => `${WIRE_BASE}/storage/v1/b/${e(b)}/o/${e(name)}?alt=media`;
+
+/** Noncurrent object generations kept by versioning / soft delete (gcp.storage.versioning,
+ * gcp.storage.soft-delete) — every generation when `soft` is false, only soft-deleted ones when true. */
+export async function listVersions(bucket, soft = false) {
+  const r = await restJson("GET", `/storage/v1/b/${e(bucket)}/o`,
+    { query: soft ? { softDeleted: "true", userProject: getProject() } : { versions: "true", userProject: getProject() } });
+  return (r.items || []).filter((o) => !o.name.endsWith("/"));
+}
+export const restoreObject = (bucket, name, generation) =>
+  restJson("POST", `/storage/v1/b/${e(bucket)}/o/${e(name)}/restore`, { query: { generation } });
+export const deleteObjectVersion = (bucket, name, generation) =>
+  restJson("DELETE", `/storage/v1/b/${e(bucket)}/o/${e(name)}`, { query: { generation } });
+export const getObject = (b, name) => restJson("GET", `/storage/v1/b/${e(b)}/o/${e(name)}`, { query: { userProject: getProject() } });
+export const patchObject = (b, name, body) => restJson("PATCH", `/storage/v1/b/${e(b)}/o/${e(name)}`, { query: { userProject: getProject() }, body });
+export const deleteObject = (b, name) => restJson("DELETE", `/storage/v1/b/${e(b)}/o/${e(name)}`, { query: { userProject: getProject() } });
+export const downloadUrl = (b, name) => `${WIRE_BASE}/storage/v1/b/${e(b)}/o/${e(name)}?alt=media&userProject=${e(getProject())}`;
+
+/** The simulated public static-website host for a bucket (gcp.storage.static-website) —
+ * Vyomi's own wire, never a real internet host; serves mainPageSuffix/notFoundPage for real. */
+export const websiteUrl = (b) => `${WIRE_BASE}/storage/website/${e(b)}/`;
+
+/** GCP-wide resource tags (Resource Manager tagKeys/tagValues/tagBindings — distinct from
+ * labels) attached to a bucket's full resource name. See core/gcp_resourcemanager_core.js. */
+const bucketResource = (b) => `//storage.googleapis.com/projects/_/buckets/${b}`;
+async function findOrCreateTagKey(parent, shortName) {
+  const r = await restJson("GET", "/v3/tagKeys", { query: { parent } });
+  return (r.tagKeys || []).find((k) => k.shortName === shortName) || restJson("POST", "/v3/tagKeys", { body: { parent, shortName } });
+}
+async function findOrCreateTagValue(tagKeyName, shortName) {
+  const r = await restJson("GET", "/v3/tagValues", { query: { parent: tagKeyName } });
+  return (r.tagValues || []).find((v) => v.shortName === shortName) || restJson("POST", "/v3/tagValues", { body: { parent: tagKeyName, shortName } });
+}
+export async function addTag(bucket, key, value) {
+  const tk = await findOrCreateTagKey(`projects/${getProject()}`, key);
+  const tv = await findOrCreateTagValue(tk.name, value);
+  return restJson("POST", "/v3/tagBindings", { body: { parent: bucketResource(bucket), tagValue: tv.name } });
+}
+export async function listTags(bucket) {
+  const r = await restJson("GET", "/v3/tagBindings", { query: { parent: bucketResource(bucket) } });
+  return r.tagBindings || [];
+}
+export const removeTagBinding = (name) => restJson("DELETE", `/v3/${name}`);
+
+/** Real request-count metering (gcp.storage.observability) — Cloud Monitoring's own
+ * storage.googleapis.com/api/request_count metric, fed by actual API activity in
+ * core/gcp_storage_core.py (never synthetic data). */
+export async function getRequestCountSeries(bucket, hours) {
+  const now = new Date();
+  const start = new Date(now.getTime() - hours * 3600_000);
+  const r = await restJson("GET", `/v3/projects/${e(getProject())}/timeSeries`, {
+    query: {
+      filter: `metric.type="storage.googleapis.com/api/request_count" AND resource.label.bucket_name="${bucket}"`,
+      "interval.startTime": start.toISOString().replace(/\.\d+Z$/, ".000Z"),
+      "interval.endTime": now.toISOString().replace(/\.\d+Z$/, ".000Z"),
+    },
+  });
+  const points = (r.timeSeries || [])[0]?.points || [];
+  return points.map((p) => ({ t: p.interval.endTime, v: Number(p.value.int64Value) })).reverse();
+}
+
+/** Hierarchical namespace Folders (gcp.storage.hierarchical-namespace) — a real
+ * sub-resource with atomic rename, distinct from the flat-namespace zero-byte
+ * "name/" placeholder objects createFolder() above writes. */
+export async function listFolders(bucket, prefix = "") {
+  const r = await restJson("GET", `/storage/v1/b/${e(bucket)}/folders`, { query: { prefix } });
+  return r.items || [];
+}
+export const createHnsFolder = (bucket, name, recursive = false) =>
+  restJson("POST", `/storage/v1/b/${e(bucket)}/folders`, { query: recursive ? { recursive: "true" } : {}, body: { name } });
+export const renameHnsFolder = (bucket, folder, destinationFolderId) =>
+  restJson("POST", `/storage/v1/b/${e(bucket)}/folders/${e(folder)}:renameTo`, { body: { destinationFolderId } });
+export const deleteHnsFolder = (bucket, folder) =>
+  restJson("DELETE", `/storage/v1/b/${e(bucket)}/folders/${e(folder)}`);
 
 /** objects.insert, simple media upload (uploadType=media). */
 export async function uploadObject(bucket, name, data, contentType) {
-  const qs = new URLSearchParams({ uploadType: "media", name }).toString();
+  const qs = new URLSearchParams({ uploadType: "media", name, userProject: getProject() }).toString();
   const res = await fetch(`${WIRE_BASE}/upload/storage/v1/b/${e(bucket)}/o?${qs}`, {
     method: "POST", headers: { "content-type": contentType || "application/octet-stream" }, body: data,
   });
@@ -89,6 +158,18 @@ export const createFolder = (bucket, key) => uploadObject(bucket, key.endsWith("
 /** Delete a folder (prefix) and everything in it. */
 export async function deletePrefix(bucket, prefix) {
   for (const o of await listAll(bucket, prefix)) await deleteObject(bucket, o.name);
+}
+
+/** Project-wide default soft delete retention applied to NEW buckets (the console's
+ * Settings > Soft delete page) — a real console preference, stored client-side like any
+ * other per-project console setting; days=null means "don't enable by default". */
+const SOFT_DELETE_DEFAULT_KEY = (project) => `vyomi.v4.gcp.storage.softDeleteDefaultDays.${project}`;
+export function getDefaultSoftDeleteDays(project) {
+  try { const v = localStorage.getItem(SOFT_DELETE_DEFAULT_KEY(project)); return v === null ? 7 : (v === "" ? null : Number(v)); }
+  catch { return 7; }
+}
+export function setDefaultSoftDeleteDays(project, days) {
+  try { localStorage.setItem(SOFT_DELETE_DEFAULT_KEY(project), days === null ? "" : String(days)); } catch {}
 }
 
 export const LOCATIONS = {

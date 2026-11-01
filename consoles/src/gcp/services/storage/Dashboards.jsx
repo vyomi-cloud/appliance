@@ -3,7 +3,10 @@
  * title and tabs render for real; individual sections that need telemetry, a separate
  * identity/billing concept or a separate product stay honest via CapabilityContainer. */
 import { useState } from "react";
-import { Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Stack, Tab, Tabs, TextField, Typography } from "@mui/material";
+import {
+  Box, Button, Checkbox, Dialog, DialogActions, DialogContent, DialogTitle, FormControl, FormControlLabel, InputLabel,
+  MenuItem, Select, Stack, Tab, Tabs, TextField, Typography,
+} from "@mui/material";
 import AddIcon from "@mui/icons-material/esm/Add.js";
 import DeleteIcon from "@mui/icons-material/esm/Delete.js";
 import { useAsync } from "../../../common/useAsync.js";
@@ -66,8 +69,28 @@ export function Overview() {
 }
 
 // ── Monitoring ──────────────────────────────────────────────────────────────────────────
+function Sparkline({ points }) {
+  const vals = points.map((p) => p.v);
+  if (!vals.length) return <Typography variant="body2" color="text.secondary">No requests recorded yet for this bucket in the selected range.</Typography>;
+  const max = Math.max(...vals, 1);
+  const d = vals.map((v, i) => `${i === 0 ? "M" : "L"} ${(i / Math.max(vals.length - 1, 1)) * 320} ${40 - (v / max) * 36}`).join(" ");
+  return <svg width={320} height={44} role="img" aria-label="Request count over time"><path d={d} fill="none" stroke="currentColor" strokeWidth={1.5} /></svg>;
+}
+
+const RANGES = [["1", "Last hour"], ["6", "Last 6 hours"], ["24", "Last 24 hours"]];
+
 export function Monitoring() {
   const [tab, setTab] = useState("overview");
+  const [bucket, setBucket] = useState("");
+  const [hours, setHours] = useState("1");
+  const [location, setLocation] = useState("all");
+  const buckets = useAsync(() => api.listBuckets(), []);
+  const allBuckets = buckets.data || [];
+  const locations = [...new Set(allBuckets.map((b) => b.location))];
+  const bucketNames = location === "all" ? allBuckets : allBuckets.filter((b) => b.location === location);
+  const effectiveBucket = bucketNames.some((b) => b.name === bucket) ? bucket : (bucketNames[0]?.name || "");
+  const series = useAsync(() => effectiveBucket ? api.getRequestCountSeries(effectiveBucket, Number(hours)) : Promise.resolve([]), [effectiveBucket, hours]);
+  const total = (series.data || []).reduce((n, p) => n + p.v, 0);
   return (
     <Box sx={{ pt: 1 }}>
       <PageHeader title="Monitoring" />
@@ -75,7 +98,40 @@ export function Monitoring() {
         <Tab value="overview" label="Overview" />
         <Tab value="rapid-cache" label="Rapid Cache" />
       </Tabs>
-      <CapabilityContainer id="gcp.storage.observability" title="Charts" />
+      {tab === "overview" && (
+        <CapabilityContainer id="gcp.storage.observability" title="Charts"
+          description="Real request-count metering, fed by actual API activity against the selected bucket — metered live, not synthetic data.">
+          <Stack direction="row" spacing={2} sx={{ mb: 2 }} alignItems="center">
+            <Stack direction="row" spacing={0.5} alignItems="center">
+              <Typography variant="body2">Filter by:</Typography>
+              <Select size="small" value={location} onChange={(e) => { setLocation(e.target.value); setBucket(""); }}
+                displayEmpty renderValue={(v) => v === "all" ? "All locations" : v} inputProps={{ "aria-label": "Filter by location" }}>
+                <MenuItem value="all">All locations</MenuItem>
+                {locations.map((l) => <MenuItem key={l} value={l}>{l}</MenuItem>)}
+              </Select>
+            </Stack>
+            <FormControl sx={{ minWidth: 220 }} size="small">
+              <InputLabel id="mon-bucket">Bucket</InputLabel>
+              <Select labelId="mon-bucket" label="Bucket" value={effectiveBucket} onChange={(e) => setBucket(e.target.value)}>
+                {bucketNames.map((b) => <MenuItem key={b.name} value={b.name}>{b.name}</MenuItem>)}
+              </Select>
+            </FormControl>
+            <FormControl sx={{ minWidth: 160 }} size="small">
+              <InputLabel id="mon-range">Time range</InputLabel>
+              <Select labelId="mon-range" label="Time range" value={hours} onChange={(e) => setHours(e.target.value)}>
+                {RANGES.map(([v, l]) => <MenuItem key={v} value={v}>{l}</MenuItem>)}
+              </Select>
+            </FormControl>
+          </Stack>
+          {!bucketNames.length ? <Typography variant="body2" color="text.secondary">Create a bucket to see its request metrics.</Typography> : (
+            <>
+              <Typography variant="body2" sx={{ mb: 1 }}><b>{total}</b> API requests in the selected range</Typography>
+              <Sparkline points={series.data || []} />
+            </>
+          )}
+        </CapabilityContainer>
+      )}
+      {tab === "rapid-cache" && <CapabilityContainer id="gcp.storage.rapid-cache" title="Rapid Cache" />}
     </Box>
   );
 }
@@ -120,8 +176,30 @@ export function Settings() {
           <UserAccountHmac project={project} />
         </Box>
       )}
-      {tab === "soft-delete" && <CapabilityContainer id="gcp.storage.soft-delete" title="Soft delete" />}
+      {tab === "soft-delete" && <SoftDeleteSettings project={project} />}
     </Box>
+  );
+}
+
+// ── Soft delete project default (applied to buckets created from now on; a bucket's own
+// Protection tab always overrides this when the user picks something different there) ──
+function SoftDeleteSettings({ project }) {
+  const notify = useNotify();
+  const current = api.getDefaultSoftDeleteDays(project);
+  const [enabled, setEnabled] = useState(current !== null);
+  const [days, setDays] = useState(String(current || 7));
+  const ok = !enabled || (Number(days) > 0 && Number.isInteger(Number(days)));
+  return (
+    <CapabilityContainer id="gcp.storage.soft-delete" title="Soft delete"
+      description="The default retention duration applied to buckets you create in this project from now on. Vyomi stores this in the browser, same as the real console's project preference, and CreateBucket reads it for real."
+      actions={<Button variant="contained" disabled={!ok} onClick={() => {
+        api.setDefaultSoftDeleteDays(project, enabled ? Number(days) : null);
+        notify.success("Default soft delete retention saved");
+      }}>Save</Button>}>
+      <FormControlLabel control={<Checkbox size="small" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />} label="Enable soft delete by default for new buckets" />
+      {enabled && <TextField label="Retention duration (days)" type="number" size="small" sx={{ ml: 4, mt: 1, width: 220 }}
+        value={days} onChange={(e) => setDays(e.target.value)} error={!ok} helperText={ok ? " " : "Enter a whole number greater than 0."} />}
+    </CapabilityContainer>
   );
 }
 

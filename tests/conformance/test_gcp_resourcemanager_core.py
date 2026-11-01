@@ -61,10 +61,37 @@ check("list tag keys has env", s == 200 and "env" in [t["shortName"] for t in ls
 tkid = tk["name"].rsplit("/", 1)[-1]
 s, got = call(st, "GET", f"/v3/tagKeys/{tkid}")
 check("get tag key 200", s == 200 and got["name"] == tk["name"])
+
+# tag values (nested under the tag key) + tag bindings (attach a value to any resource,
+# e.g. a GCS bucket — see gcp.storage.tags)
+s, tv = call(st, "POST", "/v3/tagValues", {"parent": tk["name"], "shortName": "prod"})
+check("create tag value 200", s == 200 and tv["shortName"] == "prod" and tv["namespacedName"] == f"{project}/env/prod", tv)
+s, dupe_tv = call(st, "POST", "/v3/tagValues", {"parent": tk["name"], "shortName": "prod"})
+check("duplicate tag value 409", s == 409)
+s, no_key = call(st, "POST", "/v3/tagValues", {"parent": "tagKeys/999999999", "shortName": "x"})
+check("tag value under unknown key 404", s == 404)
+s, lstv = call(st, "GET", "/v3/tagValues", query={"parent": tk["name"]})
+check("list tag values has prod", s == 200 and "prod" in [v["shortName"] for v in lstv["tagValues"]])
+
+bucket_resource = "//storage.googleapis.com/projects/_/buckets/uic-bucket"
+s, tb = call(st, "POST", "/v3/tagBindings", {"parent": bucket_resource, "tagValue": tv["name"]})
+check("create tag binding on a GCS bucket 200", s == 200 and tb["parent"] == bucket_resource and tb["tagValue"] == tv["name"], tb)
+s, dupe_tb = call(st, "POST", "/v3/tagBindings", {"parent": bucket_resource, "tagValue": tv["name"]})
+check("duplicate binding of the same tag KEY to the same resource -> 409", s == 409)
+s, lstb = call(st, "GET", "/v3/tagBindings", query={"parent": bucket_resource})
+check("list tag bindings for the bucket shows it", s == 200 and len(lstb["tagBindings"]) == 1)
+bid = tb["name"].rsplit("/", 1)[-1]
+s, _ = call(st, "DELETE", f"/v3/tagBindings/{bid}")
+check("delete tag binding 200", s == 200)
+s, lstb2 = call(st, "GET", "/v3/tagBindings", query={"parent": bucket_resource})
+check("deleted tag binding dropped", lstb2["tagBindings"] == [])
+
 s, _ = call(st, "DELETE", f"/v3/tagKeys/{tkid}")
 check("delete tag key 200", s == 200)
 s, lst2 = call(st, "GET", "/v3/tagKeys", query={"parent": f"projects/{project}"})
 check("deleted tag key dropped", lst2["tagKeys"] == [])
+s, lstv2 = call(st, "GET", "/v3/tagValues", query={"parent": tk["name"]})
+check("deleting a tag key cascades to its tag values", s == 200 and lstv2["tagValues"] == [])
 
 # essential contacts
 s, c = call(st, "POST", f"/v1/projects/{project}/contacts", {"email": "ops@example.com", "notificationCategorySubscriptions": ["ALL"]})

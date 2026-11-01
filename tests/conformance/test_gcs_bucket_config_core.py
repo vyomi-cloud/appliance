@@ -9,7 +9,8 @@ Bucket.labels / iam_configuration / lifecycle_rules / retention_period / patch()
     metageneration; buckets.update (PUT) replaces
   - a retention policy is ENFORCED: delete/overwrite of a younger object -> 403
     retentionPolicyNotMet
-  - settings Vyomi does not model (versioning, soft delete, autoclass) are not echoed
+  - versioning + softDeletePolicy round-trip and are ENFORCED for real (noncurrent-version
+    archive — see test_gcp_storage_versioning_core.py); autoclass is not modeled
   - bucket IAM policy get (default legacy bindings) / set round-trip
   - objects.list with delimiter -> `prefixes` (folders), placeholder object listed
     under its own prefix
@@ -61,8 +62,11 @@ def run() -> int:
     _check("uniform access kept", b["iamConfiguration"]["uniformBucketLevelAccess"]["enabled"] is True)
     _check("public access prevention kept", b["iamConfiguration"]["publicAccessPrevention"] == "enforced")
     _check("lifecycle rule kept", b["lifecycle"]["rule"][0]["condition"]["age"] == 30)
-    _check("unmodelled versioning not echoed", "versioning" not in b)
-    _check("unmodelled softDeletePolicy not echoed", "softDeletePolicy" not in b)
+    _check("versioning kept", b["versioning"] == {"enabled": True})
+    _check("softDeletePolicy kept", b["softDeletePolicy"]["retentionDurationSeconds"] == "604800")
+
+    nover = _j(_call(st, "POST", "/storage/v1/b", {"project": "p"}, {"name": "noverflag"}))
+    _check("versioning omitted when never set", "versioning" not in nover and "softDeletePolicy" not in nover)
 
     mr = _j(_call(st, "POST", "/storage/v1/b", {"project": "p"}, {"name": "multi"}))
     _check("default location US multi-region", mr["location"] == "US" and mr["locationType"] == "multi-region")

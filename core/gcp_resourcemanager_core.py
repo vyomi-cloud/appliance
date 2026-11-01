@@ -21,6 +21,16 @@ Wire shapes:
       GET    /v3/tagKeys?parent=projects/{p}          -> {tagKeys:[...]}
       GET    /v3/tagKeys/{id}
       DELETE /v3/tagKeys/{id}
+    Tag values (nested under a tag key)
+      POST   /v3/tagValues        body {parent: "tagKeys/{id}", shortName, description} -> TagValue
+      GET    /v3/tagValues?parent=tagKeys/{id}        -> {tagValues:[...]}
+      GET    /v3/tagValues/{id}
+      DELETE /v3/tagValues/{id}
+    Tag bindings (attach a tag value to ANY resource by its full resource name — the
+    GCP-wide tags other services, like gcp.storage.tags, attach to a bucket/instance/…)
+      POST   /v3/tagBindings      body {parent: "<full resource name>", tagValue: "tagValues/{id}"} -> TagBinding
+      GET    /v3/tagBindings?parent=<full resource name>  -> {tagBindings:[...]}
+      DELETE /v3/tagBindings/{id}
     Essential contacts
       POST   projects/{p}/contacts   body {email,notificationCategorySubscriptions,languageTag}
       GET    projects/{p}/contacts   -> {contacts:[...]}
@@ -58,6 +68,8 @@ class ResourceManagerStore:
     def __init__(self):
         self.projects: dict = {}       # projectId -> Project
         self.tag_keys: dict = {}       # name "tagKeys/{id}" -> TagKey
+        self.tag_values: dict = {}     # name "tagValues/{id}" -> TagValue
+        self.tag_bindings: dict = {}   # name "tagBindings/{id}" -> TagBinding
         self.contacts: dict = {}       # "projects/{p}/contacts/{id}" -> Contact
         self.org_policies: dict = {}   # policy name -> Policy
 
@@ -187,7 +199,95 @@ def _get_tag_key(store, name) -> RmResponse:
 def _delete_tag_key(store, name) -> RmResponse:
     if name not in store.tag_keys:
         return _err(404, f"TagKey {name} not found.", "NOT_FOUND")
+    for vname in [n for n, v in store.tag_values.items() if v["parent"] == name]:
+        _delete_tag_value(store, vname)
     del store.tag_keys[name]
+    return _json(200, {})
+
+
+# ── tag values (nested under a tag key) ────────────────────────────────────────
+def _tagvalue_id() -> str:
+    return "tagValues/" + str(int(hashlib.sha1(uuid.uuid4().bytes).hexdigest(), 16) % (10 ** 9))
+
+
+def _create_tag_value(store, body) -> RmResponse:
+    short = str(body.get("shortName", "")).strip()
+    parent = str(body.get("parent", "")).strip()
+    if not short:
+        return _err(400, "shortName is required.", "INVALID_ARGUMENT")
+    tk = store.tag_keys.get(parent)
+    if tk is None:
+        return _err(404, f"TagKey {parent} not found.", "NOT_FOUND")
+    for tv in store.tag_values.values():
+        if tv["parent"] == parent and tv["shortName"] == short:
+            return _err(409, f"TagValue {short} already exists under {parent}.", "ALREADY_EXISTS")
+    name = _tagvalue_id()
+    tv = {
+        "name": name,
+        "parent": parent,
+        "shortName": short,
+        "namespacedName": f"{tk['namespacedName']}/{short}",
+        "description": body.get("description", ""),
+        "createTime": "2026-01-01T00:00:00Z",
+        "etag": base64.b64encode(uuid.uuid4().bytes[:8]).decode(),
+    }
+    store.tag_values[name] = tv
+    return _json(200, dict(tv))
+
+
+def _list_tag_values(store, parent) -> RmResponse:
+    out = [dict(tv) for tv in sorted(store.tag_values.values(), key=lambda t: t["name"]) if tv["parent"] == parent]
+    return _json(200, {"tagValues": out})
+
+
+def _get_tag_value(store, name) -> RmResponse:
+    tv = store.tag_values.get(name)
+    if tv is None:
+        return _err(404, f"TagValue {name} not found.", "NOT_FOUND")
+    return _json(200, dict(tv))
+
+
+def _delete_tag_value(store, name) -> RmResponse:
+    if name not in store.tag_values:
+        return _err(404, f"TagValue {name} not found.", "NOT_FOUND")
+    for bname in [n for n, b in store.tag_bindings.items() if b["tagValue"] == name]:
+        del store.tag_bindings[bname]
+    del store.tag_values[name]
+    return _json(200, {})
+
+
+# ── tag bindings (attach a tag value to any resource by its full resource name) ────────
+def _create_tag_binding(store, body) -> RmResponse:
+    parent = str(body.get("parent", "")).strip()
+    tag_value = str(body.get("tagValue", "")).strip()
+    if not parent or not tag_value:
+        return _err(400, "parent and tagValue are required.", "INVALID_ARGUMENT")
+    tv = store.tag_values.get(tag_value)
+    if tv is None:
+        return _err(404, f"TagValue {tag_value} not found.", "NOT_FOUND")
+    # Real API: at most one value of a given tag KEY can be bound to a resource.
+    for b in store.tag_bindings.values():
+        if b["parent"] != parent:
+            continue
+        other = store.tag_values.get(b["tagValue"])
+        if other and other["parent"] == tv["parent"]:
+            return _err(409, f"A value for tag key {tv['parent']} is already bound to {parent}.", "ALREADY_EXISTS")
+    bid = uuid.uuid4().hex[:16]
+    name = f"tagBindings/{bid}"
+    tb = {"name": name, "parent": parent, "tagValue": tag_value, "tagValueNamespacedName": tv["namespacedName"]}
+    store.tag_bindings[name] = tb
+    return _json(200, dict(tb))
+
+
+def _list_tag_bindings(store, parent) -> RmResponse:
+    out = [dict(b) for n, b in sorted(store.tag_bindings.items()) if b["parent"] == parent]
+    return _json(200, {"tagBindings": out})
+
+
+def _delete_tag_binding(store, name) -> RmResponse:
+    if name not in store.tag_bindings:
+        return _err(404, f"TagBinding {name} not found.", "NOT_FOUND")
+    del store.tag_bindings[name]
     return _json(200, {})
 
 
@@ -296,6 +396,34 @@ def dispatch(store: ResourceManagerStore, method: str, path: str,
         if method == "DELETE":
             return _delete_tag_key(store, name)
         return _err(400, f"Unsupported method {method} on tagKey", "INVALID_ARGUMENT")
+
+    # ---- tag values: tagValues[/{id}] ----
+    if segs and segs[0] == "tagValues":
+        if len(segs) == 1:
+            if method == "POST":
+                return _create_tag_value(store, _body())
+            if method == "GET":
+                return _list_tag_values(store, str(query.get("parent", "")).strip())
+            return _err(400, f"Unsupported method {method} on tagValues", "INVALID_ARGUMENT")
+        name = f"tagValues/{segs[1]}"
+        if method == "GET":
+            return _get_tag_value(store, name)
+        if method == "DELETE":
+            return _delete_tag_value(store, name)
+        return _err(400, f"Unsupported method {method} on tagValue", "INVALID_ARGUMENT")
+
+    # ---- tag bindings: tagBindings[/{id}] ----
+    if segs and segs[0] == "tagBindings":
+        if len(segs) == 1:
+            if method == "POST":
+                return _create_tag_binding(store, _body())
+            if method == "GET":
+                return _list_tag_bindings(store, str(query.get("parent", "")).strip())
+            return _err(400, f"Unsupported method {method} on tagBindings", "INVALID_ARGUMENT")
+        name = f"tagBindings/{segs[1]}"
+        if method == "DELETE":
+            return _delete_tag_binding(store, name)
+        return _err(400, f"Unsupported method {method} on tagBinding", "INVALID_ARGUMENT")
 
     # ---- essential contacts: projects/{p}/contacts[/{id}] ----
     if len(segs) >= 3 and segs[0] == "projects" and segs[2] == "contacts":

@@ -12,6 +12,7 @@ import DeleteIcon from "@mui/icons-material/esm/Delete.js";
 import { useNotify } from "../../../common/notify.jsx";
 import { ErrorAlert, NotSimulated, PageHeader } from "../../kit/common.jsx";
 import { hashHref } from "../../link.jsx";
+import { getProject } from "../../project.js";
 import * as api from "./api.js";
 
 const location_ = window.location;   // `location` is the bucket-location state below
@@ -41,6 +42,7 @@ export default function CreateBucket() {
   const [name, setName] = useState("");
   const [touched, setTouched] = useState(false);
   const [labels, setLabels] = useState([]);
+  const [tags, setTags] = useState([]);
   const [locType, setLocType] = useState("multi-region");
   const [location, setLocation] = useState("US");
   const [storageClass, setStorageClass] = useState("STANDARD");
@@ -50,27 +52,37 @@ export default function CreateBucket() {
   const [retN, setRetN] = useState("7");
   const [retUnit, setRetUnit] = useState("days");
   const [objectRetention, setObjectRetention] = useState(false);
+  const defaultSoftDeleteDays = api.getDefaultSoftDeleteDays(getProject());
+  const [softDelete, setSoftDelete] = useState(defaultSoftDeleteDays !== null);
+  const [softDeleteDays, setSoftDeleteDays] = useState(String(defaultSoftDeleteDays || 7));
+  const [versioning, setVersioning] = useState(false);
+  const [hns, setHns] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
 
   const nameErr = touched ? api.validBucketName(name) : null;
   const labelErr = labels.some((l) => !/^[a-z][a-z0-9_-]{0,62}$/.test(l.key)) ? "Label keys must start with a lowercase letter and contain only lowercase letters, numbers, underscores and dashes." : null;
   const retErr = retention && !(Number(retN) > 0 && Number.isInteger(Number(retN))) ? "Enter a whole number greater than 0." : null;
+  const softDeleteErr = softDelete && !(Number(softDeleteDays) > 0 && Number.isInteger(Number(softDeleteDays))) ? "Enter a whole number greater than 0." : null;
 
   const submit = async (ev) => {
     ev.preventDefault();
     setTouched(true);
-    if (api.validBucketName(name) || labelErr || retErr) return;
+    if (api.validBucketName(name) || labelErr || retErr || softDeleteErr) return;
     setBusy(true); setError(null);
     const body = {
       name, location, storageClass,
-      iamConfiguration: { uniformBucketLevelAccess: { enabled: access === "uniform" }, publicAccessPrevention: pap ? "enforced" : "inherited" },
+      iamConfiguration: { uniformBucketLevelAccess: { enabled: hns || access === "uniform" }, publicAccessPrevention: pap ? "enforced" : "inherited" },
       ...(labels.length ? { labels: Object.fromEntries(labels.map((l) => [l.key, l.value])) } : {}),
       ...(retention ? { retentionPolicy: { retentionPeriod: String(Number(retN) * UNIT_SECS[retUnit]) } } : {}),
       ...(objectRetention ? { objectRetention: { mode: "Enabled" } } : {}),
+      ...(softDelete ? { softDeletePolicy: { retentionDurationSeconds: String(Number(softDeleteDays) * 86400) } } : {}),
+      ...(versioning ? { versioning: { enabled: true } } : {}),
+      ...(hns ? { hierarchicalNamespace: { enabled: true } } : {}),
     };
     try {
       await api.insertBucket(body);
+      for (const t of tags) if (t.key && t.value) await api.addTag(name, t.key, t.value);
       notify.success(`Created bucket "${name}"`);
       location_.hash = hashHref("storage", "browser", name).slice(1);
     } catch (e) { setError(e); }
@@ -99,7 +111,18 @@ export default function CreateBucket() {
             <Box><Button startIcon={<AddIcon />} onClick={() => setLabels([...labels, { key: "", value: "" }])}>Add label</Button></Box>
           </Stack>
         </Sub>
-        <NotSimulated compact feature="Tags (optional)" note="GCP resource tags (tagKeys/tagValues bindings) are a separate Resource Manager product Vyomi doesn't integrate with." />
+        <Sub title="Tags (optional)" help="GCP-wide resource tags (Resource Manager tagKeys/tagValues bindings) — distinct from labels.">
+          <Stack spacing={1}>
+            {tags.map((t, i) => (
+              <Stack key={i} direction="row" spacing={1} alignItems="center">
+                <TextField label={`Key ${i + 1}`} value={t.key} onChange={(e) => setTags(tags.map((x, j) => j === i ? { ...x, key: e.target.value.trim() } : x))} />
+                <TextField label={`Value ${i + 1}`} value={t.value} onChange={(e) => setTags(tags.map((x, j) => j === i ? { ...x, value: e.target.value.trim() } : x))} />
+                <IconButton aria-label={`Delete tag ${i + 1}`} onClick={() => setTags(tags.filter((_, j) => j !== i))}><DeleteIcon fontSize="small" /></IconButton>
+              </Stack>
+            ))}
+            <Box><Button startIcon={<AddIcon />} onClick={() => setTags([...tags, { key: "", value: "" }])}>Add tag</Button></Box>
+          </Stack>
+        </Sub>
       </Step>
       <Divider />
 
@@ -129,7 +152,8 @@ export default function CreateBucket() {
         </Sub>
         <NotSimulated compact feature="Autoclass" note="Vyomi keeps objects in the bucket's default class; storage classes don't change pricing or retrieval here." />
         <Sub title="Optimize storage for data-intensive workloads">
-          <NotSimulated compact feature="Enable hierarchical namespace on this bucket" note="Vyomi models every bucket as a flat namespace; it has no HNS mode with atomic folder rename/delete." />
+          <FormControlLabel control={<Checkbox size="small" checked={hns} onChange={(e) => setHns(e.target.checked)} />} label="Enable hierarchical namespace on this bucket" />
+          {hns && <FormHelperText sx={{ ml: 4 }}>Requires uniform bucket-level access — Vyomi sets it for you. Can't be changed after the bucket is created.</FormHelperText>}
         </Sub>
       </Step>
       <Divider />
@@ -139,10 +163,11 @@ export default function CreateBucket() {
           <FormControlLabel control={<Checkbox size="small" checked={pap} onChange={(e) => setPap(e.target.checked)} />} label="Enforce public access prevention on this bucket" />
         </Sub>
         <Sub title="Access control">
-          <RadioGroup value={access} onChange={(e) => setAccess(e.target.value)} aria-label="Access control">
+          <RadioGroup value={hns ? "uniform" : access} onChange={(e) => setAccess(e.target.value)} aria-label="Access control">
             <FormControlLabel value="uniform" control={<Radio size="small" />} label={<><b>Uniform</b> — Ensure uniform access to all objects in the bucket by using only bucket-level permissions (IAM).</>} />
-            <FormControlLabel value="fine" control={<Radio size="small" />} label={<><b>Fine-grained</b> — Specify access to individual objects by using object-level permissions (ACLs) in addition to bucket-level permissions (IAM).</>} />
+            <FormControlLabel value="fine" disabled={hns} control={<Radio size="small" />} label={<><b>Fine-grained</b> — Specify access to individual objects by using object-level permissions (ACLs) in addition to bucket-level permissions (IAM).</>} />
           </RadioGroup>
+          {hns && <FormHelperText>A hierarchical namespace bucket requires uniform access.</FormHelperText>}
         </Sub>
         <Alert severity="info" variant="outlined">Vyomi records these settings and reports them to SDKs; it does not enforce IAM or ACLs on data access.</Alert>
       </Step>
@@ -151,8 +176,14 @@ export default function CreateBucket() {
       <Step n={5} title="Choose how to protect object data">
         <Sub title="Data protection">
           <Stack spacing={2.5}>
-            <NotSimulated compact feature="Soft delete policy (For data recovery)" note="Retention duration defaults to 7 days, but recovering a deleted/overwritten object needs the noncurrent-version history Vyomi doesn't keep." />
-            <NotSimulated compact feature="Object versioning (For version control)" />
+            <Box>
+              <FormControlLabel control={<Checkbox size="small" checked={softDelete} onChange={(e) => setSoftDelete(e.target.checked)} />} label="Soft delete policy (For data recovery)" />
+              {softDelete && (
+                <TextField label="Retention duration (days)" type="number" size="small" sx={{ ml: 4, mt: 0.5, width: 200 }}
+                  value={softDeleteDays} onChange={(e) => setSoftDeleteDays(e.target.value)} error={!!softDeleteErr} helperText={softDeleteErr || " "} />
+              )}
+            </Box>
+            <FormControlLabel control={<Checkbox size="small" checked={versioning} onChange={(e) => setVersioning(e.target.checked)} />} label="Object versioning (For version control)" />
             <Box>
               <Typography variant="body2" sx={{ fontWeight: 500, mb: 1 }}>Retention (For compliance)</Typography>
               <FormControlLabel control={<Checkbox size="small" checked={retention} onChange={(e) => setRetention(e.target.checked)} />} label="Set bucket retention policy" />

@@ -69,10 +69,37 @@ export default function BucketDetail({ params, query }) {
       {tab === "permissions" && b.data && <Permissions bucket={b.data} policy={pol} reload={reloadAll} />}
       {tab === "protection" && b.data && <Protection bucket={b.data} reload={b.reload} />}
       {tab === "lifecycle" && b.data && <Lifecycle bucket={b.data} reload={b.reload} />}
-      {tab === "observability" && <CapabilityContainer id="gcp.storage.observability" title="Monitoring" />}
+      {tab === "observability" && <Observability bucket={bucket} />}
       {tab === "inventory" && <CapabilityContainer id="gcp.storage.inventory-reports" title="Inventory reports" />}
       {tab === "operations" && <Operations bucket={bucket} />}
     </>
+  );
+}
+
+// ── Observability (gcp.storage.observability — real request-count metering) ───────────
+function Observability({ bucket }) {
+  const [hours, setHours] = useState("1");
+  const series = useAsync(() => api.getRequestCountSeries(bucket, Number(hours)), [bucket, hours]);
+  const total = (series.data || []).reduce((n, p) => n + p.v, 0);
+  const vals = (series.data || []).map((p) => p.v);
+  const max = Math.max(...vals, 1);
+  const d = vals.map((v, i) => `${i === 0 ? "M" : "L"} ${(i / Math.max(vals.length - 1, 1)) * 320} ${40 - (v / max) * 36}`).join(" ");
+  return (
+    <CapabilityContainer id="gcp.storage.observability" title="Monitoring"
+      description="Real request-count metering, fed by actual API activity against this bucket."
+      actions={<FormControl size="small" sx={{ minWidth: 160 }}>
+        <InputLabel id="obs-range">Time range</InputLabel>
+        <Select labelId="obs-range" label="Time range" value={hours} onChange={(e) => setHours(e.target.value)}>
+          <MenuItem value="1">Last hour</MenuItem>
+          <MenuItem value="6">Last 6 hours</MenuItem>
+          <MenuItem value="24">Last 24 hours</MenuItem>
+        </Select>
+      </FormControl>}>
+      <Typography variant="body2" sx={{ mb: 1 }}><b>{total}</b> API requests in the selected range</Typography>
+      {vals.length
+        ? <svg width={320} height={44} role="img" aria-label="Request count over time"><path d={d} fill="none" stroke="currentColor" strokeWidth={1.5} /></svg>
+        : <Typography variant="body2" color="text.secondary">No requests recorded yet for this bucket in the selected range.</Typography>}
+    </CapabilityContainer>
   );
 }
 
@@ -169,7 +196,7 @@ function Objects({ bucket, prefix, meta, policy }) {
         ]}
         empty={<Typography variant="body2" color="text.secondary">No rows to display. Upload files or create a folder.</Typography>}
       />
-      <Box sx={{ mt: 1.5 }}><NotSimulated compact feature="Object version history and per-object customer-managed encryption keys" note="Object holds and object retention are real — see the object's Protection section." /></Box>
+      <Box sx={{ mt: 1.5 }}><NotSimulated compact feature="Per-object customer-managed encryption keys" note="Object holds, object retention and — on a bucket with versioning/soft delete on — noncurrent version history are real; see the bucket's Protection tab." /></Box>
       <DeleteDialog
         open={del}
         onClose={() => setDel(false)}
@@ -223,7 +250,7 @@ function Configuration({ bucket, reload }) {
           ["Location type", api.LOCATION_TYPE_LABEL[bucket.locationType]],
           ["Location", bucket.location.toLowerCase()],
           ["Default storage class", api.classLabel(bucket.storageClass), <IconButton key="e" size="small" aria-label="Edit default storage class" onClick={() => setEditClass(true)}><EditIcon fontSize="inherit" /></IconButton>],
-          ["Hierarchical namespace", "Disabled"],
+          ["Hierarchical namespace", bucket.hierarchicalNamespace?.enabled ? "Enabled" : "Disabled"],
           ["Requester pays", bucket.billing?.requesterPays ? "Enabled" : "Not enabled"],
           ["Labels", ls.length ? <Stack direction="row" spacing={0.5} sx={{ flexWrap: "wrap", rowGap: 0.5 }}>{ls.map(([k, v]) => <Chip key={k} size="small" label={`${k}: ${v}`} />)}</Stack> : "None",
             <IconButton key="e" size="small" aria-label="Edit labels" onClick={() => setEditLabels(true)}><EditIcon fontSize="inherit" /></IconButton>],
@@ -249,9 +276,15 @@ function Configuration({ bucket, reload }) {
       <CapabilityContainer id="gcp.storage.static-website" title="Static website configuration"
         actions={<Button variant="outlined" startIcon={bucket.website ? <EditIcon /> : <AddIcon />} onClick={() => setEditWebsite(true)}>Edit website configuration</Button>}>
         {bucket.website
-          ? <KeyValue items={[["Index (main) page suffix", bucket.website.mainPageSuffix || "—"], ["Error (404 not found) page", bucket.website.notFoundPage || "—"]]} />
+          ? <KeyValue items={[
+              ["Index (main) page suffix", bucket.website.mainPageSuffix || "—"],
+              ["Error (404 not found) page", bucket.website.notFoundPage || "—"],
+              ["Website endpoint", <Link key="url" href={api.websiteUrl(bucket.name)} target="_blank" rel="noopener">{api.websiteUrl(bucket.name)}</Link>],
+            ]} />
           : <Typography variant="body2" color="text.secondary">Static website hosting is not configured for this bucket.</Typography>}
       </CapabilityContainer>
+      <Tags bucket={bucket.name} />
+      {bucket.hierarchicalNamespace?.enabled && <Folders bucket={bucket.name} />}
       {editLabels && <LabelsDialog labels={bucket.labels || {}} onClose={() => setEditLabels(false)} onSave={async (next) => {
         const body = { ...Object.fromEntries(Object.keys(bucket.labels || {}).map((k) => [k, null])), ...next };
         await patch({ labels: body }, "Updated labels");
@@ -262,6 +295,94 @@ function Configuration({ bucket, reload }) {
       {editKms && <KmsDialog current={bucket.encryption?.defaultKmsKeyName} onClose={() => setEditKms(false)}
         onSave={(name) => patch({ encryption: name ? { defaultKmsKeyName: name } : null }, name ? "Cloud KMS key set" : "Reverted to Google-managed encryption")} />}
     </Stack>
+  );
+}
+
+// ── Tags (GCP-wide resource tags, distinct from labels — gcp.storage.tags) ──────────────
+function Tags({ bucket }) {
+  const notify = useNotify();
+  const { data, loading, error, reload } = useAsync(() => api.listTags(bucket), [bucket]);
+  const [add, setAdd] = useState(false);
+  const rows = (data || []).map((b) => {
+    const parts = (b.tagValueNamespacedName || "").split("/");
+    return { ...b, key: b.name, keyName: parts[parts.length - 2] || "", value: parts[parts.length - 1] || "" };
+  });
+  return (
+    <CapabilityContainer id="gcp.storage.tags" title="Tags"
+      description="GCP-wide resource tags (Resource Manager tagKeys/tagValues bindings) — distinct from labels."
+      actions={<Button variant="outlined" startIcon={<AddIcon />} onClick={() => setAdd(true)}>Add tag</Button>}>
+      {error && <ErrorAlert error={error} />}
+      <ResourceTable resourceName="tags" items={rows} rowKey={(r) => r.key} loading={loading} dense
+        columns={[
+          { id: "key", header: "Key", cell: (r) => r.keyName },
+          { id: "value", header: "Value", cell: (r) => r.value },
+          { id: "remove", header: "", cell: (r) => <IconButton size="small" aria-label={`Remove tag ${r.keyName}`} onClick={async () => {
+              try { await api.removeTagBinding(r.name); notify.success(`Removed tag ${r.keyName}`); reload(); } catch (e) { notify.error(e); }
+            }}><DeleteIcon fontSize="small" /></IconButton> },
+        ]}
+        empty={<Typography variant="body2" color="text.secondary">No tags are attached to this bucket.</Typography>} />
+      {add && <TagDialog onClose={() => setAdd(false)} onSave={async (k, v) => {
+        await api.addTag(bucket, k, v); notify.success(`Added tag ${k}: ${v}`); reload();
+      }} />}
+    </CapabilityContainer>
+  );
+}
+
+function TagDialog({ onClose, onSave }) {
+  const [key, setKey] = useState("");
+  const [value, setValue] = useState("");
+  const ok = /^[a-z][a-z0-9_-]{0,62}$/.test(key) && /^[a-z0-9][a-z0-9_-]{0,62}$/.test(value);
+  return (
+    <SaveDialog title="Add tag" onClose={onClose} disabled={!ok} onSave={() => onSave(key, value)}>
+      <TextField label="Key" value={key} onChange={(e) => setKey(e.target.value.trim())} helperText="e.g. env" />
+      <TextField label="Value" value={value} onChange={(e) => setValue(e.target.value.trim())} helperText="e.g. prod" />
+    </SaveDialog>
+  );
+}
+
+// ── Folders (hierarchical namespace — gcp.storage.hierarchical-namespace) ──────────────
+function Folders({ bucket }) {
+  const notify = useNotify();
+  const { data, loading, error, reload } = useAsync(() => api.listFolders(bucket), [bucket]);
+  const [add, setAdd] = useState(false);
+  const [rename, setRename] = useState(null);
+  const rows = (data || []).map((f) => ({ ...f, key: f.name }));
+  return (
+    <CapabilityContainer id="gcp.storage.hierarchical-namespace" title="Folders"
+      description="Real folders on this hierarchical-namespace bucket — renaming one moves every object and subfolder beneath it in a single atomic operation."
+      actions={<Button variant="outlined" startIcon={<AddIcon />} onClick={() => setAdd(true)}>Create folder</Button>}>
+      {error && <ErrorAlert error={error} />}
+      <ResourceTable resourceName="folders" items={rows} rowKey={(f) => f.key} loading={loading} dense
+        filterPlaceholder="Filter folders"
+        columns={[
+          { id: "name", header: "Name", cell: (f) => f.name },
+          { id: "updated", header: "Updated", sortValue: (f) => f.updateTime || "", cell: (f) => fmtDate(f.updateTime) },
+          { id: "actions", header: "", cell: (f) => <Stack direction="row">
+              <Button size="small" onClick={() => setRename(f)}>Rename</Button>
+              <IconButton size="small" aria-label={`Delete folder ${f.name}`} onClick={async () => {
+                try { await api.deleteHnsFolder(bucket, f.name); notify.success(`Deleted folder "${f.name}"`); reload(); }
+                catch (e) { notify.error(e); }
+              }}><DeleteIcon fontSize="small" /></IconButton>
+            </Stack> },
+        ]}
+        empty={<Typography variant="body2" color="text.secondary">No folders yet.</Typography>} />
+      {add && <FolderDialog title="Create folder" onClose={() => setAdd(false)} onSave={async (name) => {
+        await api.createHnsFolder(bucket, name, true); notify.success(`Created folder "${name}"`); reload();
+      }} />}
+      {rename && <FolderDialog title={`Rename "${rename.name}"`} initial={rename.name} onClose={() => setRename(null)} onSave={async (name) => {
+        await api.renameHnsFolder(bucket, rename.name, name); notify.success(`Renamed to "${name}"`); reload();
+      }} />}
+    </CapabilityContainer>
+  );
+}
+
+function FolderDialog({ title, initial, onClose, onSave }) {
+  const [name, setName] = useState(initial || "");
+  const ok = /^[^/]+(\/[^/]+)*\/?$/.test(name) && name.length > 0;
+  return (
+    <SaveDialog title={title} onClose={onClose} disabled={!ok} onSave={() => onSave(name.endsWith("/") ? name : name + "/")}>
+      <TextField label="Folder path" value={name} onChange={(e) => setName(e.target.value)} helperText="e.g. logs/2026/" autoFocus />
+    </SaveDialog>
   );
 }
 
@@ -424,17 +545,108 @@ function GrantDialog({ onClose, onSave }) {
   );
 }
 
+// ── Object versions (gcp.storage.versioning) / soft-deleted objects (gcp.storage.soft-delete)
+function ObjectVersions({ bucket }) {
+  const { data, loading, error, reload } = useAsync(() => api.listVersions(bucket, false), [bucket]);
+  const rows = (data || []).map((o) => ({ ...o, key: `${o.name}#${o.generation}` }));
+  return (
+    <Box sx={{ mt: 1 }}>
+      <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
+        <Typography variant="body2" sx={{ fontWeight: 500 }}>Object versions</Typography>
+        <Box sx={{ flex: 1 }} />
+        <Button size="small" startIcon={<RefreshIcon />} onClick={reload}>Refresh</Button>
+      </Stack>
+      {error && <ErrorAlert error={error} />}
+      <ResourceTable resourceName="versions" items={rows} rowKey={(o) => o.key} loading={loading} dense
+        filterPlaceholder="Filter versions"
+        columns={[
+          { id: "name", header: "Name", cell: (o) => o.name },
+          { id: "generation", header: "Generation", sortValue: (o) => Number(o.generation), cell: (o) => o.generation },
+          { id: "size", header: "Size", cell: (o) => fmtBytes(o.size) },
+          { id: "updated", header: "Last modified", sortValue: (o) => o.updated || "", cell: (o) => fmtDate(o.updated) },
+          { id: "status", header: "Status", cell: (o) => o.timeDeleted ? "Noncurrent (deleted)" : "Noncurrent (overwritten)" },
+        ]}
+        empty={<Typography variant="body2" color="text.secondary">No noncurrent versions yet — overwrite or delete an object to create one.</Typography>} />
+    </Box>
+  );
+}
+
+function SoftDeletedObjects({ bucket }) {
+  const notify = useNotify();
+  const { data, loading, error, reload } = useAsync(() => api.listVersions(bucket, true), [bucket]);
+  const rows = (data || []).map((o) => ({ ...o, key: `${o.name}#${o.generation}` }));
+  return (
+    <Box sx={{ mt: 1 }}>
+      <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
+        <Typography variant="body2" sx={{ fontWeight: 500 }}>Soft-deleted objects</Typography>
+        <Box sx={{ flex: 1 }} />
+        <Button size="small" startIcon={<RefreshIcon />} onClick={reload}>Refresh</Button>
+      </Stack>
+      {error && <ErrorAlert error={error} />}
+      <ResourceTable resourceName="soft-deleted objects" items={rows} rowKey={(o) => o.key} loading={loading} dense
+        filterPlaceholder="Filter soft-deleted objects"
+        columns={[
+          { id: "name", header: "Name", cell: (o) => o.name },
+          { id: "generation", header: "Generation", cell: (o) => o.generation },
+          { id: "deleted", header: "Deleted", sortValue: (o) => o.timeDeleted || "", cell: (o) => fmtDate(o.timeDeleted) },
+          { id: "restore", header: "", cell: (o) => <Button size="small" onClick={async () => {
+              try { await api.restoreObject(bucket, o.name, o.generation); notify.success(`Restored "${o.name}"`); reload(); }
+              catch (e) { notify.error(e); }
+            }}>Restore</Button> },
+        ]}
+        empty={<Typography variant="body2" color="text.secondary">No soft-deleted objects within the retention window.</Typography>} />
+    </Box>
+  );
+}
+
+function SoftDeleteDialog({ onClose, onSave }) {
+  const [n, setN] = useState("7");
+  const ok = Number(n) > 0 && Number.isInteger(Number(n));
+  return (
+    <SaveDialog title="Enable soft delete" onClose={onClose} disabled={!ok} onSave={() => onSave(Number(n) * 86400)}>
+      <Typography variant="body2" color="text.secondary">Objects deleted or overwritten while soft delete is on can be restored within the retention window.</Typography>
+      <TextField label="Retention duration (days)" type="number" value={n} onChange={(e) => setN(e.target.value)} error={!ok} />
+    </SaveDialog>
+  );
+}
+
 // ── Protection ──────────────────────────────────────────────────────────────────────────
 function Protection({ bucket, reload }) {
   const notify = useNotify();
   const [edit, setEdit] = useState(false);
   const [remove, setRemove] = useState(false);
+  const [sdEdit, setSdEdit] = useState(false);
   const rp = bucket.retentionPolicy;
   const objRetEnabled = bucket.objectRetention?.mode === "Enabled";
+  const versioningOn = !!bucket.versioning?.enabled;
+  const softDelete = bucket.softDeletePolicy;
   return (
     <Stack spacing={2}>
-      <CapabilityContainer id="gcp.storage.soft-delete" title="Soft delete policy (for data recovery)" />
-      <CapabilityContainer id="gcp.storage.versioning" title="Object versioning (for version control)" />
+      <CapabilityContainer id="gcp.storage.soft-delete" title="Soft delete policy (for data recovery)"
+        actions={<Button variant="outlined" onClick={async () => {
+          if (softDelete) { try { await api.patchBucket(bucket.name, { softDeletePolicy: null }); notify.success("Soft delete disabled"); reload(); } catch (e) { notify.error(e); } }
+          else setSdEdit(true);
+        }}>{softDelete ? "Disable" : "Enable"}</Button>}>
+        {softDelete
+          ? <>
+              <KeyValue items={[["Retention duration", fmtDuration(softDelete.retentionDurationSeconds)]]} />
+              <SoftDeletedObjects bucket={bucket.name} />
+            </>
+          : <Typography variant="body2" color="text.secondary">Soft delete is not enabled for this bucket. Deleted or overwritten objects can't be recovered.</Typography>}
+      </CapabilityContainer>
+      <CapabilityContainer id="gcp.storage.versioning" title="Object versioning (for version control)"
+        actions={<Button variant="outlined" onClick={async () => {
+          try { await api.patchBucket(bucket.name, { versioning: { enabled: !versioningOn } }); notify.success(versioningOn ? "Versioning disabled" : "Versioning enabled"); reload(); }
+          catch (e) { notify.error(e); }
+        }}>{versioningOn ? "Disable" : "Enable"}</Button>}>
+        {versioningOn
+          ? <ObjectVersions bucket={bucket.name} />
+          : <Typography variant="body2" color="text.secondary">Object versioning is not enabled for this bucket.</Typography>}
+      </CapabilityContainer>
+      {sdEdit && <SoftDeleteDialog onClose={() => setSdEdit(false)} onSave={async (secs) => {
+        try { await api.patchBucket(bucket.name, { softDeletePolicy: { retentionDurationSeconds: String(secs) } }); notify.success("Soft delete enabled"); setSdEdit(false); reload(); }
+        catch (e) { notify.error(e); }
+      }} />}
       <Section title="Bucket retention policy" description="Objects can't be deleted or replaced until they reach the age you set. Enforced by Vyomi."
         actions={<>
           <Button variant="outlined" startIcon={rp ? <EditIcon /> : <AddIcon />} onClick={() => setEdit(true)}>{rp ? "Edit retention policy" : "Set retention policy"}</Button>
