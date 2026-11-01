@@ -151,5 +151,6 @@ def test_route_space_store_covers_base_fields(mod, cls_name):
     keys |= _ROUTE_STORE_NOT_OWNED.get(cls_name, set())
     missing = sorted(k for k, v in vars(inst).items()
                      if not k.startswith("_") and isinstance(v, (dict, list))
-                     and k not in keys and k != "seq" and not hasattr(cls, k))
+                     and k not in _ROUTE_STORE_NOT_OWNED.get(cls_name, set()) and k != "seq"
+                     and not isinstance(getattr(cls, k, None), property))   # must be a slot-backed property
     assert not missing, f"{mod}.{cls_name} doesn't persist {base.__name__} fields {missing} (add to _KEYS)"

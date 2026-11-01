@@ -42,6 +42,8 @@ class SpacePamStore(pam.PamStore):
 
     entitlements = property(lambda self: self._s()["entitlements"])
     grants = property(lambda self: self._s()["grants"])
+    notifications = property(lambda self: self._s()["notifications"])
+    settings = property(lambda self: self._s()["settings"])
 
 
 _STORE = SpacePamStore()
