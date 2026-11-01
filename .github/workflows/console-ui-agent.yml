@@ -100,6 +100,7 @@ jobs:
       - name: Tooling
         run: |
           (cd consoles && npm ci)
+          pip install -q -r requirements.txt   # the REAL offline appliance (server.py) for the offline-parity smoke
           npm i --no-save --prefix .ci-node playwright@1.48.2 && npx --prefix .ci-node playwright install --with-deps chromium
           echo ".ci-node/" >> .git/info/exclude
           echo "NODE_PATH=$PWD/.ci-node/node_modules" >> "$GITHUB_ENV"
@@ -203,11 +204,28 @@ jobs:
           done
           rm -f consoles/tests/.gate-smoke.mjs
           PYTHONPATH=. python3 tests/conformance/test_capabilities.py | tail -3 || smoke=1
+          # Offline parity: dev_server.py is the shared router with in-memory stores (= Nano's logic);
+          # the shipped offline appliance is server.py with its own routes + durable space stores.
+          # A feature that only works through the router (missing offline route / in-memory store)
+          # passes the smoke above but is broken offline — so smoke the target cloud on server.py too.
+          offline=0
+          mkdir -p $RUNNER_TEMP/offline
+          CLOUDLEARN_STATE_FILE=$RUNNER_TEMP/offline/state.json VYOMI_NO_TELEMETRY=1 VYOMI_PERSIST_DEBOUNCE_MS=0 \
+            python3 -m uvicorn server:app --host 127.0.0.1 --port 8791 > $RUNNER_TEMP/offline/server.log 2>&1 &
+          for i in $(seq 120); do curl -sf -o /dev/null localhost:8791/v4/aws/ && break; sleep 1; done
+          c=${{ steps.tg.outputs.cloud }}
+          for t in $RUNNER_TEMP/base/consoles/tests/smoke-$c.mjs consoles/tests/smoke-$c.mjs; do
+            [ -f "$t" ] || continue
+            cp "$t" consoles/tests/.gate-smoke.mjs
+            BASE=http://127.0.0.1:8791 UI_PATH=/v4/$c/ OUT=$RUNNER_TEMP/smoke-out/offline-$c node consoles/tests/.gate-smoke.mjs || offline=1
+          done
+          rm -f consoles/tests/.gate-smoke.mjs
+          pkill -f "uvicorn server:app --host 127.0.0.1 --port 8791" || true
           core=0
           for f in $(git diff --name-only origin/${{ env.BASE_BRANCH }}...HEAD -- tests/conformance/ | grep '\.py$'); do PYTHONPATH=. python3 "$f" || core=1; done
           for f in tests/conformance/test_s3_core.py tests/conformance/test_dynamodb_core.py tests/conformance/test_aws_wire_router.py tests/conformance/test_capabilities.py tests/conformance/test_gcp_storage_core.py tests/conformance/test_azure_blob_core.py tests/conformance/test_azure_arm_core.py tests/conformance/test_nano_core_manifest.py tests/conformance/test_console_registry_unique.py; do PYTHONPATH=. python3 "$f" >/dev/null || core=1; done
-          echo "ui=$ui smoke=$smoke core=$core"
-          echo "ok=$([ $ui -eq 0 ] && [ $smoke -eq 0 ] && [ $core -eq 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "ui=$ui smoke=$smoke core=$core offline=$offline"
+          echo "ok=$([ $ui -eq 0 ] && [ $smoke -eq 0 ] && [ $core -eq 0 ] && [ $offline -eq 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
           cp -r $RUNNER_TEMP/ui-out ui-out 2>/dev/null; cp -r $RUNNER_TEMP/smoke-out smoke-out 2>/dev/null; cp $RUNNER_TEMP/gate.txt gate.txt 2>/dev/null
           printf 'ui-out/\nsmoke-out/\ngate.txt\nconsoles/tests/.gate-smoke.mjs\n' >> .git/info/exclude
 

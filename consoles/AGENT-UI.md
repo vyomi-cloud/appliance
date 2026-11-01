@@ -125,3 +125,23 @@ A destination that doesn't exist in the simulator (an unknown bucket, a real `*.
 `*.googleapis.com` / `*.windows.net` host) makes the operation FAIL with the native error; it is
 never resolved on the internet. Shared cores never import urllib.request / http.client / socket /
 requests / httpx / boto3 / aiohttp (tests/conformance/test_no_cloud_egress.py enforces this).
+
+## Offline + Nano parity checklist (hard rule — run before you commit)
+`consoles/dev_server.py` is the shared router with IN-MEMORY stores, i.e. Nano's logic. The
+shipped offline appliance is `server.py` (its own routes + durable, space-scoped stores). A
+capability claimed for `offline` must work on `server.py`, and one claimed for `nano` must be
+loadable + persisted in Pyodide. The gate now smokes your cloud on both. For every NEW core,
+store or wire surface you add:
+1. **Nano:** add the core to `wasm/build_cores.py` AND the load list in `wasm/nano-boot.js`;
+   register its store in `core/nano_registry.py` and name it in `core/nano_persist.py`; wire
+   runtime links (`_REG[...]`) there too. Run `tests/conformance/test_nano_core_manifest.py`.
+2. **Offline:** route the native wire on `server.py` (e.g. `core/wire_ingress.py` mounts /
+   unified services, `routes/aws_s3.py` + `server.py aws_query_root` for Query/JSON targets) and
+   give the store a DURABLE appliance store (`core/appliance_stores.py`, space-scoped slot) —
+   never the router's in-memory default. Declare runtime links (`cw_store`, `vpc_store`, …) as
+   class attributes, not persisted fields (`tests/test_appliance_store_fields.py`).
+3. **Verify offline for real:** `CLOUDLEARN_STATE_FILE=/tmp/vyomi-agent/state.json python3 -m
+   uvicorn server:app --port 8791 &` then run your cloud's smoke with
+   `BASE=http://127.0.0.1:8791 UI_PATH=/v4/<cloud>/ node consoles/tests/smoke-<cloud>.mjs`.
+   If something can't work offline, claim `offline: not_simulated` with the concrete reason —
+   never claim a level only the router delivers.
