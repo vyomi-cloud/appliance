@@ -1201,6 +1201,7 @@ def _iam_resolve_identity(principal: str) -> dict:
                     policy_ids.extend(list(group.get("policies", [])))
             policy_ids = list(dict.fromkeys(policy_ids))
             policies = [state.get("policies", {}).get(pid) for pid in policy_ids if state.get("policies", {}).get(pid)]
+            policies += [{"policy_name": n, "document": d} for n, d in (user.get("inline_policies") or {}).items()]   # PutUserPolicy
             return {
                 "principal": principal,
                 "type": "user",
@@ -21937,6 +21938,10 @@ async def api_iam_query(request: Request) -> Response:
         return _iam_query_error(code, detail, exc.status_code if exc.status_code >= 400 else 400)
     if not action:
         return _iam_query_error("MissingAction", "The request must contain the parameter Action.")
+    from providers import aws_iam_query_ext as _iam_ext   # Attach/PutUserPolicy, access keys, Simulate*
+    _ext = _iam_ext.handle(action, params)
+    if _ext is not None:
+        return _ext
     return _iam_query_error("InvalidAction", f"The action '{action}' is not implemented by the simulator.")
 
 
