@@ -104,21 +104,27 @@
  "sqs.lambda-triggers": {
   "title": "Lambda triggers (event source mappings)",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Lambda event source mappings that poll a queue and invoke a function aren't modeled; there is no Lambda poller in Vyomi."
+   "A message landing in the queue is invoked synchronously, one message per Lambda invocation, the instant SendMessage returns — not through a real batched, asynchronous poller. BatchSize / MaximumBatchingWindowInSeconds are stored but have no effect on batching. The message is deleted from the queue only if the invocation succeeds (LastProcessingResult reflects the real outcome); a function error leaves it for redelivery, same as real SQS."
+  ],
+  "tests": [
+   "tests/conformance/test_sqs_lambda_trigger_core.py"
   ]
  },
  "sqs.eventbridge-pipes": {
   "title": "EventBridge Pipes (queue as a pipe source)",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "EventBridge Pipes aren't modeled by Vyomi."
+   "A message is forwarded to the pipe's Target the instant SendMessage returns, not through a real background poller. Enrichment and InputTemplate/filtering on the pipe are stored but not applied — the raw message body is forwarded as-is. The message is removed from the source queue only once delivery to a real target (an existing queue/topic/function/state machine/stream) succeeds."
+  ],
+  "tests": [
+   "tests/conformance/test_sqs_eventbridge_pipe_core.py"
   ]
  }
 }

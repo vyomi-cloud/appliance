@@ -462,6 +462,52 @@ try {
     JSON.stringify({ afterRedrive: afterRedrive.Attributes, backOnMain }));
   await shot("17-sqs-dlq-redrive");
 
+  // SQS "Lambda triggers" tab: configure a real trigger through the UI, send a message
+  // over the native wire (CLI direction) and verify the function was really invoked and
+  // the message consumed — not a stored, inert config.
+  const TRIGQ = `v4smoke-trigger-queue-${Date.now() % 100000}`;
+  const TRIGFN = `v4smoke-trigger-fn-${Date.now() % 100000}`;
+  const trigQUrl = (await sqs("CreateQueue", { QueueName: TRIGQ })).QueueUrl;
+  await lam("POST", "/2015-03-31/functions", {
+    FunctionName: TRIGFN, Runtime: "python3.12", MemorySize: 256,
+    Code: { Source: "def handler(event, context):\n    return {'n': len(event['Records'])}\n" },
+  });
+  await page.goto(UI + `#/sqs/queues/${TRIGQ}?tab=lambda`);
+  await page.getByRole("button", { name: "Configure Lambda function trigger" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Lambda function" }).click();
+  await page.getByRole("option", { name: TRIGFN }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Save" }).click();
+  await page.getByRole("tabpanel").getByText(TRIGFN).waitFor({ timeout: 10000 });
+  await shot("17b-sqs-lambda-trigger");
+  await sqs("SendMessage", { QueueUrl: trigQUrl, MessageBody: "trigger-me" });
+  const trigInvocations = await lam("GET", `/2015-03-31/functions/${TRIGFN}/invocations`);
+  const trigQueueAfter = await sqs("GetQueueAttributes", { QueueUrl: trigQUrl, AttributeNames: ["ApproximateNumberOfMessages"] });
+  check("SQS Lambda trigger (UI) → SendMessage over wire really invoked the function and consumed the message",
+    (trigInvocations.Invocations || []).length === 1 && trigQueueAfter.Attributes?.ApproximateNumberOfMessages === "0",
+    JSON.stringify({ trigInvocations, trigQueueAfter: trigQueueAfter.Attributes }));
+
+  // SQS "EventBridge Pipes" tab: connect the queue to another queue through the UI, send a
+  // message over the native wire and verify it was really forwarded to the target.
+  const PIPESRC = `v4smoke-pipe-src-${Date.now() % 100000}`;
+  const PIPEDST = `v4smoke-pipe-dst-${Date.now() % 100000}`;
+  const PIPENAME = `v4smoke-pipe-${Date.now() % 100000}`;
+  const pipeSrcUrl = (await sqs("CreateQueue", { QueueName: PIPESRC })).QueueUrl;
+  const pipeDstUrl = (await sqs("CreateQueue", { QueueName: PIPEDST })).QueueUrl;
+  await page.goto(UI + `#/sqs/queues/${PIPESRC}?tab=pipes`);
+  await page.getByRole("button", { name: "Connect queue to pipe" }).click();
+  await page.getByRole("dialog").getByLabel("Pipe name").fill(PIPENAME);
+  await page.getByRole("dialog").getByRole("button", { name: "Target" }).click();
+  await page.getByRole("option", { name: new RegExp(`SQS queue: ${PIPEDST}$`) }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Create pipe" }).click();
+  await page.getByRole("tabpanel").getByText(PIPENAME).waitFor({ timeout: 10000 });
+  await shot("17c-sqs-eventbridge-pipe");
+  await sqs("SendMessage", { QueueUrl: pipeSrcUrl, MessageBody: "piped-over-wire" });
+  const pipeDstMsgs = await sqs("ReceiveMessage", { QueueUrl: pipeDstUrl, MaxNumberOfMessages: 1 });
+  const pipeSrcAfter = await sqs("GetQueueAttributes", { QueueUrl: pipeSrcUrl, AttributeNames: ["ApproximateNumberOfMessages"] });
+  check("SQS EventBridge Pipe (UI) → SendMessage over wire really forwarded to the target queue",
+    (pipeDstMsgs.Messages || [])[0]?.Body === "piped-over-wire" && pipeSrcAfter.Attributes?.ApproximateNumberOfMessages === "0",
+    JSON.stringify({ pipeDstMsgs, pipeSrcAfter: pipeSrcAfter.Attributes }));
+
   // SNS: create a topic through the UI, subscribe an SQS queue through the UI, publish
   // through the UI — then verify the queue really received the fanned-out notification
   // over the native wire (the P2 queue's mandatory real SNS→SQS fan-out).

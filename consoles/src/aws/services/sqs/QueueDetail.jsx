@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Header from "@cloudscape-design/components/header";
 import Tabs from "@cloudscape-design/components/tabs";
 import Table from "@cloudscape-design/components/table";
@@ -14,14 +14,24 @@ import Select from "@cloudscape-design/components/select";
 import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import { follow, href } from "../../../common/router.js";
+import StatusIndicator from "@cloudscape-design/components/status-indicator";
+import Link from "@cloudscape-design/components/link";
 import { ErrorAlert, KeyValue, NotSimulated, fmtDate } from "../../kit/common.jsx";
 import { CapabilityContainer, saveNotice } from "../../kit/Capability.jsx";
 import SnsSubscribeModal from "./SnsSubscribeModal.jsx";
+import LambdaTriggerModal from "./LambdaTriggerModal.jsx";
+import ConnectPipeModal from "./ConnectPipeModal.jsx";
 import * as api from "./api.js";
 
 export default function QueueDetail({ params, query }) {
   const name = params.name;
-  const [activeTabId, setActiveTabId] = useState(query?.tab === "redrive-tasks" ? "redrive-tasks" : "sns");
+  const [activeTabId, setActiveTabId] = useState(["redrive-tasks", "lambda", "pipes"].includes(query?.tab) ? query.tab : "sns");
+  // This component isn't remounted when the user deep-links from one queue's detail
+  // page straight to another's (e.g. a different queue's "Start DLQ redrive" link) —
+  // re-sync the active tab to the URL's ?tab= whenever the queue or query changes.
+  useEffect(() => {
+    setActiveTabId(["redrive-tasks", "lambda", "pipes"].includes(query?.tab) ? query.tab : "sns");
+  }, [name, query?.tab]);
   const t = useAsync(async () => {
     const url = await api.getQueueUrl(name);
     return { url, attrs: await api.getQueueAttributes(url) };
@@ -51,8 +61,8 @@ export default function QueueDetail({ params, query }) {
         ]} />
         <Tabs activeTabId={activeTabId} onChange={({ detail }) => setActiveTabId(detail.activeTabId)} tabs={[
           { id: "sns", label: "SNS subscriptions", content: <SnsSubscriptionsTab queueArn={attrs.QueueArn} /> },
-          { id: "lambda", label: "Lambda triggers", content: <CapabilityContainer id="sqs.lambda-triggers" title="Lambda triggers" /> },
-          { id: "pipes", label: "EventBridge Pipes", content: <CapabilityContainer id="sqs.eventbridge-pipes" title="EventBridge Pipes" /> },
+          { id: "lambda", label: "Lambda triggers", content: <LambdaTriggersTab queueArn={attrs.QueueArn} /> },
+          { id: "pipes", label: "EventBridge Pipes", content: <PipesTab queueArn={attrs.QueueArn} /> },
           { id: "dlq", label: "Dead-letter queue", content: <DlqTab name={name} attrs={attrs} /> },
           { id: "monitor", label: "Monitoring", content: <MonitoringTab attrs={attrs} /> },
           { id: "tags", label: "Tagging", content: <TaggingTab name={name} url={url} /> },
@@ -85,6 +95,57 @@ function SnsSubscriptionsTab({ queueArn }) {
       />
       <SnsSubscribeModal visible={modal} queueArn={queueArn} onDismiss={() => setModal(false)} onDone={() => { notify.success("Subscribed to the topic."); subs.reload(); }} />
     </SpaceBetween>
+  );
+}
+
+function LambdaTriggersTab({ queueArn }) {
+  const notify = useNotify();
+  const t = useAsync(() => api.listEventSourceMappingsForQueue(queueArn), [queueArn]);
+  const [modal, setModal] = useState(false);
+  return (
+    <CapabilityContainer id="sqs.lambda-triggers" title="Lambda triggers" counter={`(${(t.data || []).length})`}
+      actions={<Button onClick={() => setModal(true)}>Configure Lambda function trigger</Button>}>
+      <Table
+        variant="embedded"
+        items={t.data || []}
+        loading={t.loading}
+        trackBy="UUID"
+        columnDefinitions={[
+          { id: "uuid", header: "UUID", cell: (e) => e.UUID },
+          { id: "arn", header: "ARN", cell: (e) => <Link href={href("lambda", "functions", e.FunctionName)} onFollow={follow}>{e.FunctionArn}</Link> },
+          { id: "status", header: "Status", cell: (e) => <StatusIndicator type={e.State === "Enabled" ? "success" : "stopped"}>{e.State}</StatusIndicator> },
+          { id: "modified", header: "Last modified", cell: (e) => fmtDate(e.LastModified) },
+        ]}
+        empty={<Box textAlign="center" color="inherit"><b>No triggers</b></Box>}
+      />
+      <LambdaTriggerModal visible={modal} queueArn={queueArn} onDismiss={() => setModal(false)}
+        onDone={() => { notify.success("Lambda function trigger configured."); t.reload(); }} />
+    </CapabilityContainer>
+  );
+}
+
+function PipesTab({ queueArn }) {
+  const notify = useNotify();
+  const t = useAsync(() => api.listPipesForQueue(queueArn), [queueArn]);
+  const [modal, setModal] = useState(false);
+  return (
+    <CapabilityContainer id="sqs.eventbridge-pipes" title="EventBridge Pipes" counter={`(${(t.data || []).length})`}
+      actions={<Button onClick={() => setModal(true)}>Connect queue to pipe</Button>}>
+      <Table
+        variant="embedded"
+        items={t.data || []}
+        loading={t.loading}
+        trackBy="Name"
+        columnDefinitions={[
+          { id: "name", header: "Pipe name", cell: (p) => p.Name },
+          { id: "status", header: "Status", cell: (p) => <StatusIndicator type={p.CurrentState === "RUNNING" ? "success" : "stopped"}>{p.CurrentState}</StatusIndicator> },
+          { id: "target", header: "Target", cell: (p) => p.Target },
+        ]}
+        empty={<Box textAlign="center" color="inherit"><b>No pipes</b></Box>}
+      />
+      <ConnectPipeModal visible={modal} queueArn={queueArn} onDismiss={() => setModal(false)}
+        onDone={() => { notify.success("Queue connected to the pipe."); t.reload(); }} />
+    </CapabilityContainer>
   );
 }
 

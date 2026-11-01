@@ -741,16 +741,19 @@ def _delete_layer_version(store, layer_name, version):
 
 # ── event source mappings ("Triggers") ──────────────────────────────────────────────────
 # Modeled for every source the console offers (SQS/DynamoDB/Kinesis/S3/SNS/EventBridge/
-# API Gateway/CloudWatch Logs) as one UUID-keyed, listable, deletable record — but Vyomi
-# never polls or subscribes the other service, so LastProcessingResult always reads
-# "No records processed" and the trigger never fires on its own (see module docstring).
+# API Gateway/CloudWatch Logs) as one UUID-keyed, listable, deletable record. SQS is the
+# one source Vyomi actually polls: sqs_core._fire_triggers calls invoke_trigger_mapping
+# below the instant a message is sent, so an Enabled SQS mapping really invokes the
+# function and LastProcessingResult reflects the outcome. The other source types have no
+# poller/subscriber behind them, so their mappings stay inert ("No records processed") —
+# see lambda.triggers / sqs.lambda-triggers limitations.
 def _esm_view(e):
     return {"UUID": e["UUID"], "EventSourceArn": e.get("EventSourceArn", ""),
             "FunctionArn": _fn_arn(e["FunctionName"]), "FunctionName": e["FunctionName"],
             "EventSourceType": e.get("EventSourceType", "Unknown"),
             "State": e.get("State", "Enabled"), "StateTransitionReason": "USER_INITIATED",
             "BatchSize": e.get("BatchSize", 10), "LastModified": e.get("LastModified", ""),
-            "LastProcessingResult": "No records processed"}
+            "LastProcessingResult": e.get("LastProcessingResult", "No records processed")}
 
 
 def _create_event_source_mapping(store, body):
@@ -778,8 +781,10 @@ def _esm_source_type(arn: str) -> str:
     return "Unknown"
 
 
-def _list_event_source_mappings(store, function_name=None):
+def _list_event_source_mappings(store, function_name=None, event_source_arn=None):
     rows = [e for e in _esms(store).values() if not function_name or e["FunctionName"] == function_name]
+    if event_source_arn:
+        rows = [e for e in rows if e.get("EventSourceArn") == event_source_arn]
     rows.sort(key=lambda e: e["LastModified"])
     return _json(200, {"EventSourceMappings": [_esm_view(e) for e in rows]})
 
@@ -1373,6 +1378,44 @@ def _invoke(store, name, body, headers=None, query=None, msg_store=None, lam_sto
                           headers={**hdrs, "X-Amz-Function-Error": "Unhandled"})
 
 
+def active_mappings_for_source(lam_store, source_arn: str) -> list[dict]:
+    """Enabled event source mappings whose EventSourceArn is `source_arn` — the lookup a
+    polling source (SQS SendMessage) makes to find which functions to invoke."""
+    return [e for e in _esms(lam_store).values()
+            if e.get("EventSourceArn") == source_arn and e.get("State") == "Enabled"]
+
+
+def invoke_trigger_mapping(lam_store, mapping: dict, event: dict) -> bool:
+    """Synchronously invoke `mapping`'s function for a polling source and record
+    LastProcessingResult — unlike `invoke_by_arn`'s fire-and-forget EventBridge-target
+    semantics, the caller (sqs_core) needs to know success/failure to decide whether the
+    record was consumed (deleted) or should redeliver, exactly like a real Lambda ESM
+    deleting a message from SQS only once the invocation succeeds."""
+    fn = _functions(lam_store).get(mapping.get("FunctionName", ""))
+    if not fn:
+        mapping["LastProcessingResult"] = "PROBLEM: function not found"
+        return False
+    request_id = uuid.uuid4().hex
+    context = {"function_name": fn["name"], "aws_request_id": request_id,
+               "invoked_function_arn": _fn_arn(fn["name"]), "memory_limit_in_mb": fn.get("memory_size", 128)}
+    runner = getattr(lam_store, "run_function", None)
+    start = time.perf_counter()
+    try:
+        out = runner(fn, event, context) if callable(runner) else _sandbox_run(fn, event, context)
+    except Exception as e:
+        out = {"ok": False, "errorType": type(e).__name__, "error": str(e)}
+    duration_ms = (time.perf_counter() - start) * 1000
+    extra = {}
+    if out.get("logs"):
+        extra["LogTail"] = str(out["logs"])[-4096:]
+    if not out.get("ok"):
+        extra["ErrorMessage"] = str(out.get("error") or "")[:1024]
+    _record_invocation(fn, request_id, duration_ms, error=not out.get("ok"), extra=extra)
+    _persist(lam_store)
+    mapping["LastProcessingResult"] = "OK" if out.get("ok") else f"PROBLEM: {out.get('error') or 'function error'}"
+    return bool(out.get("ok"))
+
+
 def invoke_by_arn(store, arn: str, event: dict) -> bool:
     """Public cross-core seam: asynchronously invoke a function by ARN with an
     event payload, for callers that only have an ARN (EventBridge targets).
@@ -1584,7 +1627,7 @@ def _dispatch_esms(store, method, tail, query, body):
         if method == "POST":
             return _create_event_source_mapping(store, _parse(body))
         if method == "GET":
-            return _list_event_source_mappings(store, query.get("FunctionName"))
+            return _list_event_source_mappings(store, query.get("FunctionName"), query.get("EventSourceArn"))
         return _err(405, "MethodNotAllowed", "Unsupported method on event-source-mappings")
     uid = tail[0]
     if method == "GET":

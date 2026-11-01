@@ -283,7 +283,7 @@ _SIGNING = {
     "events": "events", "lambda": "lambda", "ec2": "vpc", "kinesis": "kinesis", "monitoring": "cloudwatch", "logs": "logs", "states": "stepfunctions",
     "elasticloadbalancing": "elbv2",
     "cloudformation": "cloudformation",
-    "ssm": "ssm", "scheduler": "scheduler",
+    "ssm": "ssm", "scheduler": "scheduler", "pipes": "pipes",
     "apigateway": "apigateway",   # v1 REST control plane paths with no "/restapis" segment (apikeys, usageplans, clientcertificates, account)
 }
 
@@ -760,6 +760,13 @@ class AwsWireRouter:
                 hdrs["content-type"] = r.media_type
             return {"status": r.status, "headers": hdrs, "body": r.body or b""}
 
+        if svc == "pipes":   # native EventBridge Pipes REST (/v1/pipes) — SQS source -> target delivery
+            r = events.dispatch_pipes(self.events, method, path, query or {}, headers or {}, bytes(body))
+            hdrs = dict(r.headers or {})
+            if r.media_type and not any(k.lower() == "content-type" for k in hdrs):
+                hdrs["content-type"] = r.media_type
+            return {"status": r.status, "headers": hdrs, "body": r.body or b""}
+
         if svc == "azure-sql-iam-rbac":   # Azure RBAC checkAccess (shares the IAM store)
             r = az_iam.dispatch(self.iam, method, path, query or {}, headers or {}, bytes(body))
             hdrs = dict(r.headers or {})
@@ -868,7 +875,7 @@ class AwsWireRouter:
                 segs = [x for x in path.split("/") if x]
                 if len(segs) == 2:
                     params["QueueUrl"] = segs[1]
-            status, xml = sqs.dispatch_query(self.msg, params)
+            status, xml = sqs.dispatch_query(self.msg, params, lam_store=self.lam)
             return {"status": status, "headers": {"content-type": "text/xml"}, "body": xml.encode()}
 
         if svc in _JSON_CT:
@@ -891,7 +898,7 @@ class AwsWireRouter:
             elif svc == "stepfunctions":
                 r = sfn.dispatch(self.sfn, target, payload, lambda_store=self.lam)
             else:  # sqs
-                r = sqs.dispatch(self.msg, target, payload)
+                r = sqs.dispatch(self.msg, target, payload, lam_store=self.lam)
             hdrs = dict(r.headers or {})
             hdrs.setdefault("content-type", _JSON_CT[svc])
             return {"status": r.status, "headers": hdrs,
