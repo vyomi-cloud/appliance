@@ -576,6 +576,12 @@ async function api(method, path, body){
   let json = null; try { json = await r.json(); } catch(e){}
   return {status:r.status, ok:r.ok, json};
 }
+// The reason an API call gave for failing, as readable text ("" if it gave none).
+function apiErrorText(r){
+  const j = (r && r.json) || {};
+  const t = j.message || j.detail || j.error || j.code || "";
+  return typeof t === "string" ? t : (t.message || t.code || "");
+}
 function fillPath(template, params){
   return template.replace(/\{(\w+)\}/g, (_, k) => encodeURIComponent(params[k] || ""));
 }
@@ -1221,7 +1227,9 @@ function renderHome(main){
     }
     fetch("/api/runtime/host-distribution").then(function(r){return r.json();}).then(function(d){
       var provs=d.providers||{}; var bs=((provs[provider])||{}).by_service||{};
-      if (Object.keys(bs).length>0){
+      // A census exists once this cloud's engine has counted (as_of): trust it even when empty, so
+      // deleting the last resources clears the card. The saved estimate is only for "no census yet".
+      if ((provs[provider]||{}).as_of || Object.keys(bs).length>0){
         nanoComputeAndRender(bs, provider, accent, cloud, els);
         try{ var bySvc={},byProv={},tot=0; for (var p in provs){ var pbs=(provs[p]||{}).by_service||{}; bySvc[p]=pbs; var m=Math.round(nanoSavingsFromByService(pbs)*100); byProv[p]=m; tot+=m; }
           var sig=JSON.stringify(bySvc); if (sig!==els.pushed){ els.pushed=sig;   // only when the footprint changed
@@ -1529,7 +1537,7 @@ async function renderList(main){
     // terminate, so multi-select Terminate silently did nothing on EC2.
     const ap = (svc.api_paths || {})[action];
     const explicitDelete = !ap && (action === "delete" || action === "terminate");
-    let okCount = 0, failCount = 0;
+    let okCount = 0, failCount = 0, failWhy = "";
     for (const it of sel) {
       const name = itemKey(svc, it);
       let r;
@@ -1547,11 +1555,12 @@ async function renderList(main){
         recordNotif("ok", `${action} ${name}`);
       } else {
         failCount += 1;
-        recordNotif("error", `${action} ${name} failed`);
+        failWhy = apiErrorText(r);
+        recordNotif("error", `${action} ${name} failed` + (failWhy ? `: ${failWhy}` : ""));
       }
     }
     if (failCount === 0) toast(`${action} on ${sel.length} item(s) completed`);
-    else toast(`${action}: ${okCount} ok, ${failCount} failed`, failCount ? "err" : null);
+    else toast(`${action}: ${okCount} ok, ${failCount} failed` + (failWhy ? ` (${failWhy})` : ""), "err");
     state.selected.clear();
     renderList(main);
   }
@@ -2155,7 +2164,7 @@ function detailActions(svc, full){
     if (!confirm("Delete "+name+"?")) return;
     const r = await api("DELETE", fillPath(svc.resource_path, {name}));
     if (r.ok || [200,202,204].includes(r.status)) { toast(name+" deleted"); recordNotif("ok","Deleted "+name); navigate({view:"list", item:null}); }
-    else toast("Delete failed ("+r.status+")", "err");
+    else toast("Delete failed: " + (apiErrorText(r) || r.status), "err");
   }}, icon("delete"), "Delete"));
   return acts;
 }

@@ -294,6 +294,20 @@ def vpc_create(p):
     return {"ok": bool(vid), "id": vid.group(1) if vid else None, "cidr": cidr}
 
 
+def vpc_delete(b, a, p):
+    """Console Delete VPC: removes the VPC and its networking, refused while instances run in it."""
+    vid = str(p.get("name") or "")
+    if vid not in getattr(_VPC, "_vpc_model", {}).get("vpcs", {}):
+        return {"ok": False, "code": "InvalidVpcID.NotFound", "name": vid, "message": f"The vpc ID '{vid}' does not exist"}
+    active = [r.get("instance_id") or r.get("name") for r in b.resources.list("aws", a, "ec2")
+              if r.get("vpc_id") == vid and r.get("state") not in ("terminated", "shutting-down")]
+    if active:
+        return {"ok": False, "http_status": 409, "code": "DependencyViolation",
+                "message": f"Terminate its instances first: {', '.join(str(i) for i in active[:3])}"}
+    vpc_core.delete_vpc_cascade(_VPC, vid)
+    return {"ok": True, "vpc_id": vid}
+
+
 def vpc_create_subnet(p):
     import re
     body = _vpc_q("CreateSubnet", {"VpcId": str(p.get("vpcId") or ""), "CidrBlock": str(p.get("cidr") or "")}).body

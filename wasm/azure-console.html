@@ -1125,7 +1125,9 @@ function nanoLoadSavings(provider, accent, cloud, els){
   }
   fetch("/api/runtime/host-distribution").then(function(r){return r.json();}).then(function(d){
     var provs=d.providers||{}; var bs=((provs[provider])||{}).by_service||{};
-    if (Object.keys(bs).length>0){
+    // A census exists once this cloud's engine has counted (as_of): trust it even when empty, so
+    // deleting the last resources clears the card. The saved estimate is only for "no census yet".
+    if ((provs[provider]||{}).as_of || Object.keys(bs).length>0){
       nanoComputeAndRender(bs, provider, accent, cloud, els);
       try{ var bySvc={},byProv={},tot=0; for (var p in provs){ var pbs=(provs[p]||{}).by_service||{}; bySvc[p]=pbs; var m=Math.round(nanoSavingsFromByService(pbs)*100); byProv[p]=m; tot+=m; }
         var sig=JSON.stringify(bySvc); if (sig!==els.pushed){ els.pushed=sig;   // only when the footprint changed

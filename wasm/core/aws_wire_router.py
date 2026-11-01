@@ -239,6 +239,9 @@ _QUERY_ACTION = {
     "SimulatePrincipalPolicy": "iam", "CreateGroup": "iam", "ListGroups": "iam",
     # EC2 / VPC
     "CreateVpc": "vpc", "CreateSubnet": "vpc", "CreateSecurityGroup": "vpc",
+    "DeleteVpc": "vpc", "DeleteSubnet": "vpc", "DeleteSecurityGroup": "vpc",
+    "DetachInternetGateway": "vpc", "DeleteInternetGateway": "vpc",
+    "DeleteRouteTable": "vpc", "DeleteNetworkAcl": "vpc",
     "AuthorizeSecurityGroupIngress": "vpc", "AuthorizeSecurityGroupEgress": "vpc",
     "CreateInternetGateway": "vpc", "AttachInternetGateway": "vpc", "CreateRoute": "vpc",
     "DescribeVpcs": "vpc", "CreateNetworkAcl": "vpc", "CreateNetworkAclEntry": "vpc",

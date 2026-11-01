@@ -129,6 +129,7 @@ class Aws(CloudProvider):
             # VPC — topology + reachability analyzer, via core/vpc_core.py
             ("vpc", "List"):              lambda b, a, p: D.vpc_list(p),
             ("vpc", "GetVpc"):            lambda b, a, p: D.vpc_get(p),
+            ("vpc", "DeleteVpc"):         lambda b, a, p: D.vpc_delete(b, a, p),
             ("vpc", "CreateVpc"):         lambda b, a, p: D.vpc_create(p),
             ("vpc", "CreateSubnet"):      lambda b, a, p: D.vpc_create_subnet(p),
             ("vpc", "CreateSecurityGroup"): lambda b, a, p: D.vpc_create_sg(p),

@@ -82,6 +82,24 @@ def run(store=None):
                  "DestinationPort": "5432", "Protocol": "tcp"})
     _check("AnalyzeReachability over EC2 Query wire → <reachable> emitted", "<reachable>" in body)
 
+    # DeleteVpc, as on real EC2: refused while dependencies exist, gone once they are cleared
+    v2 = xid(call({"Action": "CreateVpc", "CidrBlock": "10.8.0.0/16"}), "vpcId")
+    sn = xid(call({"Action": "CreateSubnet", "VpcId": v2, "CidrBlock": "10.8.1.0/24"}), "subnetId")
+    gw = xid(call({"Action": "CreateInternetGateway"}), "internetGatewayId")
+    call({"Action": "AttachInternetGateway", "InternetGatewayId": gw, "VpcId": v2})
+    _check("DeleteVpc with a subnet + gateway → DependencyViolation", vpc.dispatch(s, {"Action": "DeleteVpc", "VpcId": v2}).status == 400 and "DependencyViolation" in vpc.dispatch(s, {"Action": "DeleteVpc", "VpcId": v2}).body)
+    _check("DeleteInternetGateway while attached → DependencyViolation", "DependencyViolation" in vpc.dispatch(s, {"Action": "DeleteInternetGateway", "InternetGatewayId": gw}).body)
+    call({"Action": "DeleteSubnet", "SubnetId": sn})
+    call({"Action": "DetachInternetGateway", "InternetGatewayId": gw, "VpcId": v2})
+    call({"Action": "DeleteInternetGateway", "InternetGatewayId": gw})
+    call({"Action": "DeleteVpc", "VpcId": v2})
+    m = s._vpc_model
+    _check("DeleteVpc removes the VPC and its main route table", v2 not in m["vpcs"] and not any(r["vpc_id"] == v2 for r in m["route_tables"].values()))
+    _check("DeleteVpc on an unknown id → InvalidVpcID.NotFound", "InvalidVpcID.NotFound" in vpc.dispatch(s, {"Action": "DeleteVpc", "VpcId": v2}).body)
+    v3 = xid(call({"Action": "CreateVpc", "CidrBlock": "10.7.0.0/16"}), "vpcId")
+    call({"Action": "CreateSubnet", "VpcId": v3, "CidrBlock": "10.7.1.0/24"})
+    _check("console cascade removes the VPC and its subnets", vpc.delete_vpc_cascade(s, v3) and v3 not in m["vpcs"] and not any(x["vpc_id"] == v3 for x in m["subnets"].values()))
+
     print("\nVPC network-simulation conformance: ALL GREEN")
     return s
 

@@ -719,6 +719,7 @@ async function route(method, path, body, query) {
   if (m && method === "PUT") return { tuple: ["aws", "vpc", "ModifyVpcSection", { name: dec(m[1]), section: m[2], method, body: body || {} }] };
   m = path.match(/^\/api\/vpc\/vpcs\/([^/]+)$/);
   if (m && method === "GET") return { tuple: ["aws", "vpc", "GetVpc", { name: dec(m[1]) }] };
+  if (m && method === "DELETE") return { tuple: ["aws", "vpc", "DeleteVpc", { name: dec(m[1]) }] };
   if (path === "/api/vpc/vpcs" && method === "POST") return { tuple: ["aws", "vpc", "CreateVpc", body || {}] };
   if (path === "/api/vpc/subnets" && method === "GET") return { tuple: ["aws", "vpc", "ListSubnets", {}] };
   if (path === "/api/vpc/route-tables" && method === "GET") return { tuple: ["aws", "vpc", "ListRouteTables", {}] };
@@ -1369,7 +1370,7 @@ self.addEventListener("fetch", (event) => {
       }
       // The cores return console-shaped JSON ({buckets|tables|objects|items:[...]}),
       // so the adapter result is the response body verbatim.
-      return json(res, res && res.ok === false ? 404 : 200);
+      return json(res, res && res.ok === false ? (res.http_status || 404) : 200);
     } catch (e) {
       return json({ ok: false, error: String(e) }, 500);
     }
