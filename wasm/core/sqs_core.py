@@ -143,6 +143,53 @@ def _name_from_url(url: str) -> str:
 
 
 # ── shared enqueue primitive (used by SendMessage AND SNS fan-out) ─────────
+def _sqs_event_record(q: dict, msg: dict) -> dict:
+    """The record shape a real Lambda SQS event source mapping hands the function —
+    used both for a Lambda trigger invocation and (pass-through) for an EventBridge
+    Pipe delivery."""
+    sent_ms = str(int(float(msg.get("sent_epoch") or 0) * 1000))
+    attrs = {"ApproximateReceiveCount": "1", "SentTimestamp": sent_ms,
+             "SenderId": "AIDACKCEVSQ6C2EXAMPLE", "ApproximateFirstReceiveTimestamp": sent_ms}
+    if msg.get("message_group_id"):
+        attrs["MessageGroupId"] = msg["message_group_id"]
+    if msg.get("message_dedup_id"):
+        attrs["MessageDeduplicationId"] = msg["message_dedup_id"]
+    msg_attrs = {name: {"stringValue": a.get("StringValue"), "binaryValue": a.get("BinaryValue"),
+                        "dataType": a.get("DataType", "String")}
+                 for name, a in (msg.get("message_attributes") or {}).items()}
+    return {"messageId": msg["message_id"], "receiptHandle": "trigger-" + uuid.uuid4().hex,
+            "body": msg["body"], "attributes": attrs, "messageAttributes": msg_attrs,
+            "md5OfBody": msg["md5_of_body"], "eventSource": "aws:sqs",
+            "eventSourceARN": q.get("queue_arn", ""), "awsRegion": REGION}
+
+
+def _fire_triggers(store, lam_store, q: dict, msg: dict) -> None:
+    """A message landing in the queue is handed, right away, to every ENABLED Lambda
+    event source mapping and RUNNING EventBridge Pipe that names this queue as its
+    source — the same two console features ("Lambda triggers" / "EventBridge Pipes")
+    a real background poller would deliver to; Vyomi has none, so this fires
+    synchronously at send time instead of on a batching/polling schedule (see
+    sqs.lambda-triggers / sqs.eventbridge-pipes limitations). A delayed message
+    (DelaySeconds) isn't fired until it is actually visible."""
+    arn = q.get("queue_arn", "")
+    if not arn or msg.get("visible_at", 0) > store.now():
+        return
+    consumed = False
+    if lam_store is not None:
+        from core import lambda_core as _lam
+        for mapping in _lam.active_mappings_for_source(lam_store, arn):
+            event = {"Records": [_sqs_event_record(q, msg)]}
+            if _lam.invoke_trigger_mapping(lam_store, mapping, event):
+                consumed = True
+    from core import eventbridge_core as _eb
+    for pipe in _eb.active_pipes_for_source(store, arn):
+        record = _sqs_event_record(q, msg)
+        if _eb.deliver(store, lam_store, pipe["Target"], msg["body"], record):
+            consumed = True
+    if consumed:
+        msg["deleted"] = True
+
+
 def enqueue(store: MessagingStore, queue: dict, body: str,
             message_attributes: dict | None = None, delay_seconds: int = 0,
             message_group_id: str | None = None,
@@ -344,7 +391,7 @@ def _available(msg: dict, now: float) -> bool:
     return not msg.get("deleted") and msg.get("visible_at", 0) <= now
 
 
-def _send_message(store, body):
+def _send_message(store, body, lam_store=None):
     q = _require_queue(store, body.get("QueueUrl", ""))
     payload = body.get("MessageBody")
     if payload is None:
@@ -393,6 +440,7 @@ def _send_message(store, body):
         out["SequenceNumber"] = msg["sequence_number"]
         if dedup_id:
             q["dedup_seen"][dedup_id] = {"id": msg["message_id"], "ts": store.now(), "seq": msg["sequence_number"]}
+    _fire_triggers(store, lam_store, q, msg)
     store.persist()
     return SqsResponse(body=out)
 
@@ -606,14 +654,14 @@ def _batch(entries, fn, ok_key):
     return SqsResponse(body={ok_key: ok, "Failed": failed})
 
 
-def _send_message_batch(store, body):
+def _send_message_batch(store, body, lam_store=None):
     url = body.get("QueueUrl", "")
     _require_queue(store, url)
 
     def one(e):
         req = {k: v for k, v in e.items() if k != "Id"}
         req["QueueUrl"] = url
-        r = _send_message(store, req)
+        r = _send_message(store, req, lam_store)
         return r.body
     return _batch(body.get("Entries") or [], one, "Successful")
 
@@ -737,9 +785,14 @@ _OPS = {
 }
 
 
-def dispatch(store: MessagingStore, target: str, payload: dict | None = None) -> SqsResponse:
+_NEEDS_LAMBDA = {"SendMessage", "SendMessageBatch"}
+
+
+def dispatch(store: MessagingStore, target: str, payload: dict | None = None, lam_store=None) -> SqsResponse:
     """Native AWS SQS JSON protocol router. `target` is the X-Amz-Target header,
-    e.g. "AmazonSQS.SendMessage"."""
+    e.g. "AmazonSQS.SendMessage". `lam_store` (optional) is the Lambda function/trigger
+    registry, needed only so SendMessage(Batch) can fire an active Lambda trigger or
+    EventBridge Pipe targeting a Lambda function (see `_fire_triggers`)."""
     body = payload if isinstance(payload, dict) else {}
     action = target.rsplit(".", 1)[-1] if target else ""
     if not action:
@@ -748,6 +801,8 @@ def dispatch(store: MessagingStore, target: str, payload: dict | None = None) ->
     if op is None:
         return _error("com.amazonaws.sqs#UnknownOperation", f"Unknown operation {action}.", 400)
     try:
+        if action in _NEEDS_LAMBDA:
+            return op(store, body, lam_store)
         return op(store, body)
     except SqsError as e:
         return _error(e.code, e.message, e.status)
@@ -927,14 +982,14 @@ def _xml_result(action: str, body: dict) -> str:
             f"<ResponseMetadata><RequestId>{_req_id()}</RequestId></ResponseMetadata></{action}Response>")
 
 
-def dispatch_query(store: MessagingStore, params: dict | None = None) -> tuple[int, str]:
+def dispatch_query(store: MessagingStore, params: dict | None = None, lam_store=None) -> tuple[int, str]:
     """Legacy Query-protocol router → (status, XML). Same operations, same state as
     `dispatch`; errors come back as the native `<ErrorResponse>`."""
     params = dict(params or {})
     action, body = query_to_json(params)
     if not action:
         return _query_error("MissingAction", "The request must contain the parameter Action.", 400)
-    r = dispatch(store, "AmazonSQS." + action, body)
+    r = dispatch(store, "AmazonSQS." + action, body, lam_store=lam_store)
     if r.status >= 400:
         code = str(r.body.get("__type", "InternalError")).split("#")[-1]
         return _query_error(_QUERY_ERROR_CODE.get(code, code), str(r.body.get("message", "")), r.status)

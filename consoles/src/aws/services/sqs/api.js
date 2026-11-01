@@ -1,7 +1,11 @@
 /* SQS over the native JSON wire (X-Amz-Target AmazonSQS.*), plus the real SNS Query-wire
  * calls the SQS console itself makes for "Subscribe to Amazon SNS topic" (sns:Subscribe
- * with Protocol=sqs really fans a Publish out into the queue — see core/sns_core.py). */
-import { awsJson, awsQuery, asList } from "../../../common/wire.js";
+ * with Protocol=sqs really fans a Publish out into the queue — see core/sns_core.py), the
+ * real Lambda REST calls "Configure Lambda function trigger" makes (core/lambda_core.py's
+ * event-source-mapping CRUD — path-routed, no signing needed), and the real EventBridge
+ * Pipes REST calls "Connect queue to pipe" makes (core/eventbridge_core.py's Pipes CRUD —
+ * SigV4-scoped as "pipes" since /v1/pipes isn't a unique path prefix the relay can route by). */
+import { awsJson, awsQuery, asList, restJson, getRegion } from "../../../common/wire.js";
 
 const call = (op, body) => awsJson("sqs", `AmazonSQS.${op}`, body, { version: "1.0" });
 const snsCall = (action, params) => awsQuery("sns", action, params, { version: "2010-03-31" });
@@ -69,3 +73,39 @@ export const subscribeQueueToTopic = (topicArn, queueArn) => snsCall("Subscribe"
 export const unsubscribe = (subscriptionArn) => snsCall("Unsubscribe", { SubscriptionArn: subscriptionArn });
 
 export const b64 = (s) => btoa(unescape(encodeURIComponent(s)));
+
+// ── Lambda triggers (event source mappings) — native Lambda REST, path-routed ───────────
+export const listFunctions = async () => (await restJson("GET", "/2015-03-31/functions")).Functions || [];
+export const listEventSourceMappingsForQueue = async (queueArn) =>
+  (await restJson("GET", "/2015-03-31/event-source-mappings", { query: { EventSourceArn: queueArn } })).EventSourceMappings || [];
+export const createLambdaTrigger = (queueArn, functionName, enabled) => restJson("POST", "/2015-03-31/event-source-mappings", {
+  body: { EventSourceArn: queueArn, FunctionName: functionName, EventSourceType: "SQS", Enabled: enabled },
+});
+export const deleteLambdaTrigger = (uuid) => restJson("DELETE", `/2015-03-31/event-source-mappings/${encodeURIComponent(uuid)}`);
+
+// ── EventBridge Pipes (queue as a pipe source) — native REST, SigV4-scoped as "pipes" ───
+function pipesHeaders() {
+  const d = new Date().toISOString().replace(/[-:]|\.\d{3}/g, "");
+  return { authorization: `AWS4-HMAC-SHA256 Credential=VYOMICONSOLE/${d.slice(0, 8)}/${getRegion()}/pipes/aws4_request, SignedHeaders=host;x-amz-date, Signature=0`, "x-amz-date": d };
+}
+const P = (method, path, opts = {}) => restJson(method, path, { ...opts, headers: { ...pipesHeaders(), ...(opts.headers || {}) } });
+
+export const listPipesForQueue = async (queueArn) => (await P("GET", "/v1/pipes", { query: { SourcePrefix: queueArn } })).Pipes || [];
+export const createPipe = (name, source, target) => P("POST", `/v1/pipes/${encodeURIComponent(name)}`, { body: { Source: source, Target: target } });
+export const deletePipe = (name) => P("DELETE", `/v1/pipes/${encodeURIComponent(name)}`);
+export const startPipe = (name) => P("POST", `/v1/pipes/${encodeURIComponent(name)}/start`);
+export const stopPipe = (name) => P("POST", `/v1/pipes/${encodeURIComponent(name)}/stop`);
+
+// ── target pickers for "Connect queue to pipe" ───────────────────────────────────────────
+export async function listPipeTargets() {
+  const urls = await listQueueUrls();
+  const out = [];
+  for (const url of urls) {
+    const attrs = await getQueueAttributes(url);
+    out.push({ arn: attrs.QueueArn, label: `SQS queue: ${nameFromUrl(url)}` });
+  }
+  for (const fn of await listFunctions()) {
+    out.push({ arn: fn.FunctionArn, label: `Lambda function: ${fn.FunctionName}` });
+  }
+  return out;
+}

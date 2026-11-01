@@ -67,7 +67,7 @@ export default function Queues() {
                 else if (detail.id === "delete") navigate("sqs", "queues", one.name, "delete");
                 else if (detail.id === "subscribe-sns") setSubModal(true);
                 else if (detail.id === "dlq-redrive") { location.hash = href("sqs", "queues", one.name).slice(1) + "?tab=redrive-tasks"; }
-                else if (detail.id === "lambda-trigger") notify.info("Lambda event source mappings aren't simulated by Vyomi.", "Configure Lambda function trigger");
+                else if (detail.id === "lambda-trigger") { location.hash = href("sqs", "queues", one.name).slice(1) + "?tab=lambda"; }
               }}
             >Actions</ButtonDropdown>
             <Button variant="primary" href={href("sqs", "create-queue")} onFollow={follow}>Create queue</Button>

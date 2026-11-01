@@ -82,7 +82,7 @@
    "offline": "limited"
   },
   "limitations": [
-   "Creating, listing, enabling/disabling and deleting a trigger (SQS, DynamoDB, Kinesis, S3, SNS, EventBridge, API Gateway, CloudWatch Logs) is real and stateful. Vyomi never polls or subscribes the other service, so a trigger never actually invokes the function on its own — LastProcessingResult always reads \"No records processed\". Only a direct Invoke (Test tab or the native API) runs code."
+   "Creating, listing, enabling/disabling and deleting a trigger (SQS, DynamoDB, Kinesis, S3, SNS, EventBridge, API Gateway, CloudWatch Logs) is real and stateful. An SQS-sourced trigger really invokes the function the instant a message is sent (see sqs.lambda-triggers); the other source types have no poller/subscriber behind them, so those triggers never invoke the function on their own — LastProcessingResult stays \"No records processed\" for them. A direct Invoke (Test tab or the native API) always runs code regardless of source type."
   ],
   "tests": [
    "tests/conformance/test_lambda_console_v4_core.py"

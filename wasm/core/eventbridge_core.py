@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import base64
 import json
+import re
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -733,3 +734,172 @@ def dispatch(store: MessagingStore, target: str, payload: dict | None = None, la
         return op(store, body)
     except _E as e:
         return EventsResponse(status=400, body={"__type": e.code, "message": e.message})
+
+
+# ── EventBridge Pipes (REST, botocore `pipes` 2015-10-07) ───────────────────────────────
+# A Pipe continuously polls one Source (an SQS queue here — Kinesis/DynamoDB Streams are
+# the other real source types, not modeled) and forwards every record straight to a Target
+# ARN via the SAME `deliver()` fan-out Rules/Targets and Scheduler use — so a queue wired
+# to a RUNNING pipe really drains into its target, not a stored config. Vyomi has no
+# standalone poller process, so delivery happens synchronously the moment a message lands
+# in the source (see sqs_core._fire_triggers), exactly the "fires when next looked at"
+# simplification documented for EventBridge Scheduler. Enrichment and InputTemplate/
+# filtering on pipes are accepted and stored but not applied — the raw message body is
+# forwarded as-is (see sqs.eventbridge-pipes limitations).
+@dataclass
+class PipesResponse:
+    status: int = 200
+    body: bytes = b""
+    headers: dict = field(default_factory=dict)
+    media_type: str | None = "application/json"
+
+
+class _PE(Exception):
+    def __init__(self, code, message, status=400):
+        super().__init__(message)
+        self.code, self.message, self.status = code, message, status
+
+
+def _pjson(status, obj=None) -> PipesResponse:
+    return PipesResponse(status=status, body=b"" if obj is None else json.dumps(obj).encode())
+
+
+def _pipes(store) -> dict:
+    m = getattr(store, "eb_pipes", None)
+    if m is None:
+        m = {}
+        store.eb_pipes = m
+    return m
+
+
+def _pipe_arn(store, name: str) -> str:
+    return f"arn:aws:pipes:{REGION}:{store.account_id}:pipe/{name}"
+
+
+def _pipe_view(p: dict) -> dict:
+    return {"Name": p["Name"], "Arn": p["Arn"], "Source": p["Source"], "Target": p["Target"],
+            "SourceParameters": p.get("SourceParameters") or {}, "TargetParameters": p.get("TargetParameters") or {},
+            "Enrichment": p.get("Enrichment", ""), "RoleArn": p.get("RoleArn", ""),
+            "Description": p.get("Description", ""), "DesiredState": p["DesiredState"],
+            "CurrentState": p["CurrentState"], "StateReason": p.get("StateReason", ""),
+            "CreationTime": p["CreationTime"], "LastModifiedTime": p["LastModifiedTime"]}
+
+
+def _create_pipe(store, name, body):
+    if not name:
+        raise _PE("ValidationException", "Name is required.")
+    if name in _pipes(store):
+        raise _PE("ConflictException", f"Pipe {name} already exists.", 409)
+    source = str(body.get("Source", "")).strip()
+    target = str(body.get("Target", "")).strip()
+    if not source or not target:
+        raise _PE("ValidationException", "Source and Target are required.")
+    desired = str(body.get("DesiredState") or "RUNNING")
+    now = _now_iso()
+    p = {"Name": name, "Arn": _pipe_arn(store, name), "Source": source, "Target": target,
+         "SourceParameters": body.get("SourceParameters") or {}, "TargetParameters": body.get("TargetParameters") or {},
+         "Enrichment": body.get("Enrichment", ""), "RoleArn": body.get("RoleArn", ""),
+         "Description": body.get("Description", ""), "DesiredState": desired, "CurrentState": desired,
+         "CreationTime": now, "LastModifiedTime": now}
+    _pipes(store)[name] = p
+    store.persist()
+    return _pjson(200, _pipe_view(p))
+
+
+def _require_pipe(store, name):
+    p = _pipes(store).get(name)
+    if not p:
+        raise _PE("NotFoundException", f"Pipe {name} does not exist.", 404)
+    return p
+
+
+def _describe_pipe(store, name):
+    return _pjson(200, _pipe_view(_require_pipe(store, name)))
+
+
+def _list_pipes(store, query):
+    prefix = query.get("NamePrefix", "")
+    source_prefix = query.get("SourcePrefix", "")
+    rows = [_pipe_view(p) for p in _pipes(store).values()
+            if p["Name"].startswith(prefix) and p["Source"].startswith(source_prefix)]
+    return _pjson(200, {"Pipes": rows})
+
+
+def _update_pipe(store, name, body):
+    p = _require_pipe(store, name)
+    for key in ("Target", "SourceParameters", "TargetParameters", "Enrichment", "Description", "RoleArn"):
+        if key in body:
+            p[key] = body[key]
+    if "DesiredState" in body:
+        p["DesiredState"] = str(body["DesiredState"])
+        p["CurrentState"] = p["DesiredState"]
+    p["LastModifiedTime"] = _now_iso()
+    store.persist()
+    return _pjson(200, _pipe_view(p))
+
+
+def _delete_pipe(store, name):
+    p = _require_pipe(store, name)
+    _pipes(store).pop(name, None)
+    p["CurrentState"] = "DELETED"
+    store.persist()
+    return _pjson(200, _pipe_view(p))
+
+
+def _set_pipe_state(store, name, state):
+    p = _require_pipe(store, name)
+    p["DesiredState"] = state
+    p["CurrentState"] = state
+    p["LastModifiedTime"] = _now_iso()
+    store.persist()
+    return _pjson(200, _pipe_view(p))
+
+
+def active_pipes_for_source(store, source_arn: str) -> list[dict]:
+    """RUNNING pipes whose Source is `source_arn` — called by the source's own core
+    (sqs_core, on SendMessage) the moment a record lands, since Vyomi has no
+    standalone poller process to drive this on its own."""
+    return [p for p in _pipes(store).values() if p.get("Source") == source_arn and p.get("CurrentState") == "RUNNING"]
+
+
+_PIPE_START = re.compile(r"^/v1/pipes/([^/]+)/start$")
+_PIPE_STOP = re.compile(r"^/v1/pipes/([^/]+)/stop$")
+_PIPE_ITEM = re.compile(r"^/v1/pipes/([^/]+)$")
+
+
+def dispatch_pipes(store, method: str, path: str, query: dict | None = None,
+                    headers: dict | None = None, body: bytes = b"") -> PipesResponse:
+    """Native EventBridge Pipes REST router (`/v1/pipes[/{Name}[/start|/stop]]`)."""
+    query = query or {}
+    method = (method or "GET").upper()
+    try:
+        payload = {}
+        if body:
+            try:
+                payload = json.loads(body.decode("utf-8") if isinstance(body, (bytes, bytearray)) else body)
+            except Exception:
+                payload = {}
+        if path == "/v1/pipes" and method == "GET":
+            return _list_pipes(store, query)
+        m = _PIPE_START.match(path)
+        if m and method == "POST":
+            return _set_pipe_state(store, m.group(1), "RUNNING")
+        m = _PIPE_STOP.match(path)
+        if m and method == "POST":
+            return _set_pipe_state(store, m.group(1), "STOPPED")
+        m = _PIPE_ITEM.match(path)
+        if m:
+            name = m.group(1)
+            if method == "POST":
+                return _create_pipe(store, name, payload)
+            if method == "GET":
+                return _describe_pipe(store, name)
+            if method == "PUT":
+                return _update_pipe(store, name, payload)
+            if method == "DELETE":
+                return _delete_pipe(store, name)
+        msg = f"No route for {method} {path}"
+        return PipesResponse(status=404, body=json.dumps({"message": msg, "error": {"code": "NotFoundException", "message": msg}}).encode())
+    except _PE as e:
+        return PipesResponse(status=e.status, headers={"x-amzn-errortype": e.code},
+                              body=json.dumps({"message": e.message, "error": {"code": e.code, "message": e.message}}).encode())
