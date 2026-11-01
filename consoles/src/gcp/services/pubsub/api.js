@@ -81,7 +81,9 @@ export const durationText = (wire) => {
   if (secs % 60 === 0) return `${secs / 60} minute${secs / 60 === 1 ? "" : "s"}`;
   return `${secs} seconds`;
 };
-export const deliveryTypeText = (sub) => (sub.pushConfig?.pushEndpoint ? "Push" : "Pull");
+export const deliveryTypeText = (sub) => (
+  sub.cloudStorageConfig ? "Write to Cloud Storage" : sub.pushConfig?.pushEndpoint ? "Push" : "Pull"
+);
 export const expirationText = (sub) => {
   const p = sub.expirationPolicy;
   if (!p || Object.keys(p).length === 0) return "Never expires";
@@ -92,6 +94,35 @@ export const exactlyOnceText = (sub) => (sub.enableExactlyOnceDelivery ? "On" : 
 export const retentionText = (sub) => durationText(sub.messageRetentionDuration);
 
 export const validId = (id) => /^[A-Za-z][A-Za-z0-9_.~+%-]{2,254}$/.test(id || "");
+
+// ── Metrics tab: real Cloud Monitoring time series mirrored from the core's own activity
+// (core/gcp_pubsub_core.py's _sync_topic_metrics / _sync_subscription_metrics) — the
+// console reads them back over the native Monitoring timeSeries API, the same cross-API
+// hand-off the real console's embedded Metrics widget makes. ────────────────────────────
+async function recentSeries(metricType, extraFilter) {
+  const end = new Date(), start = new Date(end.getTime() - 3600_000);
+  const r = await restJson("GET", `/v3/projects/${e(getProject())}/timeSeries`, { query: {
+    filter: `metric.type = "${metricType}" AND ${extraFilter}`,
+    "interval.startTime": start.toISOString(), "interval.endTime": end.toISOString(),
+  } });
+  return r.timeSeries?.[0]?.points || [];
+}
+export const pointValue = (p) => Number(p?.value?.int64Value ?? p?.value?.doubleValue ?? 0);
+
+export async function topicMetrics(id) {
+  await getTopic(id);   // lazily refreshes the mirrored metrics — there is no background poller
+  const published = await recentSeries("pubsub.googleapis.com/topic/send_message_operation_count", `resource.labels.topic_id = "${id}"`);
+  return { published };
+}
+
+export async function subscriptionMetrics(id) {
+  await getSubscription(id);
+  const [backlog, oldest] = await Promise.all([
+    recentSeries("pubsub.googleapis.com/subscription/num_undelivered_messages", `resource.labels.subscription_id = "${id}"`),
+    recentSeries("pubsub.googleapis.com/subscription/oldest_unacked_message_age", `resource.labels.subscription_id = "${id}"`),
+  ]);
+  return { backlog, oldest };
+}
 
 export const decode = (b64) => { try { return atob(b64 || ""); } catch { return ""; } };
 export const encode = (text) => btoa(text || "");

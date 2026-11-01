@@ -1,6 +1,7 @@
 /* Create a subscription — one native subscriptions.create body. Push/dead-lettering/retry/
- * ordering/filter are all real (stored + enforced where Vyomi can — see the capability
- * badges); BigQuery/Cloud Storage delivery isn't a Vyomi product, so it's a declared gap. */
+ * ordering/filter/Cloud-Storage-delivery are all real (stored + enforced where Vyomi can —
+ * see the capability badges); BigQuery delivery has no backend anywhere in Vyomi to write
+ * into, so it's submitted for real and the native API rejects it (never a silent no-op). */
 import { useState } from "react";
 import {
   Box, Button, Checkbox, FormControl, FormControlLabel, IconButton, InputLabel, MenuItem,
@@ -30,6 +31,10 @@ export default function CreateSubscription() {
 
   const [delivery, setDelivery] = useState("Pull");
   const [endpoint, setEndpoint] = useState("");
+  const [gcsBucket, setGcsBucket] = useState("");
+  const [gcsPrefix, setGcsPrefix] = useState("");
+  const [gcsSuffix, setGcsSuffix] = useState(".txt");
+  const [bqTable, setBqTable] = useState("");
 
   const [retDays, setRetDays] = useState("7");
   const [retainAcked, setRetainAcked] = useState(false);
@@ -76,6 +81,9 @@ export default function CreateSubscription() {
         ...(dlqEnabled && dlqTopic ? { deadLetterPolicy: { deadLetterTopic: dlqTopic, maxDeliveryAttempts: Number(maxAttempts) || 5 } } : {}),
         ...(retryMode === "backoff" ? { retryPolicy: { minimumBackoff: "10s", maximumBackoff: "600s" } } : {}),
         ...(filter.trim() ? { filter: filter.trim() } : {}),
+        ...(delivery === "Write to Cloud Storage" && gcsBucket.trim()
+          ? { cloudStorageConfig: { bucket: gcsBucket.trim(), filenamePrefix: gcsPrefix, filenameSuffix: gcsSuffix } } : {}),
+        ...(delivery === "Write to BigQuery" && bqTable.trim() ? { bigQueryConfig: { table: bqTable.trim() } } : {}),
       };
       await api.createSubscription(id, body);
       notify.success(`Created subscription "${id}"`);
@@ -102,17 +110,35 @@ export default function CreateSubscription() {
         </Stack>
       </Section>
 
-      <Section title="Delivery type">
+      <Section title={<Stack direction="row" spacing={1} alignItems="center"><span>Delivery type</span><CapabilityBadge id="gcp.pubsub.subscriptions.bigquery-gcs-delivery" /></Stack>}>
         <Stack spacing={2}>
           <RadioGroup row value={delivery} onChange={(e) => setDelivery(e.target.value)} aria-label="Delivery type">
             <FormControlLabel value="Pull" control={<Radio size="small" />} label="Pull" />
             <FormControlLabel value="Push" control={<Radio size="small" />} label="Push" />
+            <FormControlLabel value="Write to BigQuery" control={<Radio size="small" />} label="Write to BigQuery" />
+            <FormControlLabel value="Write to Cloud Storage" control={<Radio size="small" />} label="Write to Cloud Storage" />
           </RadioGroup>
           {delivery === "Push" && (
             <TextField label="Endpoint URL" value={endpoint} onChange={(e) => setEndpoint(e.target.value)} placeholder="https://example.com/push"
               helperText="Stored and returned as configured; Vyomi never makes the outbound call. Use Pull to receive messages in Vyomi." sx={{ maxWidth: 480 }} />
           )}
-          <NotSimulated compact feature="Write to BigQuery / Write to Cloud Storage delivery" note="BigQuery and Cloud Storage aren't Vyomi products yet." />
+          {delivery === "Write to Cloud Storage" && (
+            <Stack spacing={2} sx={{ maxWidth: 480 }}>
+              <TextField label="Cloud Storage bucket" required value={gcsBucket} onChange={(e) => setGcsBucket(e.target.value)} placeholder="my-bucket"
+                helperText="Must already exist. Each delivered message is written as a real newline-delimited TEXT object in this bucket." />
+              <Stack direction="row" spacing={2}>
+                <TextField label="Filename prefix" value={gcsPrefix} onChange={(e) => setGcsPrefix(e.target.value)} />
+                <TextField label="Filename suffix" value={gcsSuffix} onChange={(e) => setGcsSuffix(e.target.value)} />
+              </Stack>
+            </Stack>
+          )}
+          {delivery === "Write to BigQuery" && (
+            <Stack spacing={2} sx={{ maxWidth: 480 }}>
+              <TextField label="BigQuery table" value={bqTable} onChange={(e) => setBqTable(e.target.value)} placeholder="project.dataset.table" />
+              <NotSimulated compact feature="Write to BigQuery delivery"
+                note="No BigQuery dataset/table resource exists anywhere in Vyomi, so Create below will fail with a real error — there is nowhere for this delivery type to write. Choose Pull, Push, or Write to Cloud Storage instead." />
+            </Stack>
+          )}
         </Stack>
       </Section>
 

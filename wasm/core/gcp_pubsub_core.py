@@ -42,8 +42,10 @@ are not modeled at all — see core/capabilities/gcp/pubsub.json.
 from __future__ import annotations
 
 import base64
+import fnmatch
 import json
 import re
+import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -251,6 +253,511 @@ def _message_matches(filter_expr: str | None, attrs: dict | None) -> bool:
         return True
 
 
+# ── message transforms: a documented SUBSET of JavaScript UDFs, REALLY parsed and
+# executed (not a fixed menu of transform kinds) — const/let, property get/set, delete,
+# if/else, return, object/array literals + spread, JSON.parse/stringify, a few
+# string/Object/Array builtins, +, ===, !==, &&, ||, !. No loops, classes, async, or
+# arbitrary globals — see core/capabilities/gcp/pubsub.json for exactly what's covered.
+# A transform returning null/undefined drops the message (matching the real API); a
+# transform that fails to PARSE is rejected at topic create/patch time (INVALID_ARGUMENT,
+# like the real API's compile step); a transform that throws AT RUNTIME is skipped for
+# that one message — fails open, same policy as the filter language above — rather than
+# blocking the whole publish call. ──────────────────────────────────────────────────────
+class _JsTransformError(Exception):
+    pass
+
+
+_JS_TOKEN_SPEC = [
+    (re.compile(r"//[^\n]*"), None),
+    (re.compile(r"/\*.*?\*/", re.DOTALL), None),
+    (re.compile(r"\s+"), None),
+    (re.compile(r'"(?:[^"\\]|\\.)*"'), "string"),
+    (re.compile(r"'(?:[^'\\]|\\.)*'"), "string"),
+    (re.compile(r"-?\d+(?:\.\d+)?"), "number"),
+    (re.compile(r"[A-Za-z_$][A-Za-z0-9_$]*"), "ident"),
+    (re.compile(r"===|!==|&&|\|\||\.\.\.|[{}()\[\].,;=!+:]"), "punct"),
+]
+
+
+def _js_unescape(s: str) -> str:
+    return (s.replace('\\"', '"').replace("\\'", "'").replace("\\n", "\n")
+            .replace("\\t", "\t").replace("\\\\", "\\"))
+
+
+def _js_tokenize(src: str) -> list[tuple[str, str]]:
+    toks: list[tuple[str, str]] = []
+    pos, n = 0, len(src)
+    while pos < n:
+        for pat, kind in _JS_TOKEN_SPEC:
+            m = pat.match(src, pos)
+            if m:
+                if kind:
+                    val = m.group(0)
+                    toks.append((kind, _js_unescape(val[1:-1]) if kind == "string" else val))
+                pos = m.end()
+                break
+        else:
+            raise _JsTransformError(f"unexpected character {src[pos]!r}")
+    return toks
+
+
+class _JsParser:
+    """Recursive-descent parser for the documented JS subset: a single top-level
+    `function name(message, metadata) { ... }` declaration."""
+
+    def __init__(self, toks: list[tuple[str, str]]) -> None:
+        self.toks = toks
+        self.i = 0
+
+    def peek(self):
+        return self.toks[self.i] if self.i < len(self.toks) else (None, None)
+
+    def at(self, kind, val=None) -> bool:
+        k, v = self.peek()
+        return k == kind and (val is None or v == val)
+
+    def advance(self):
+        t = self.peek()
+        if t[0] is None:
+            raise _JsTransformError("unexpected end of input")
+        self.i += 1
+        return t
+
+    def expect(self, kind, val=None):
+        if not self.at(kind, val):
+            raise _JsTransformError(f"expected {val or kind}, got {self.peek()}")
+        return self.advance()
+
+    def parse_function(self):
+        self.expect("ident", "function")
+        if self.at("ident") and not self.at("punct", "("):
+            self.advance()   # function name — not referenced; the topic's own entry names it
+        self.expect("punct", "(")
+        params = []
+        while not self.at("punct", ")"):
+            params.append(self.expect("ident")[1])
+            if self.at("punct", ","):
+                self.advance()
+        self.expect("punct", ")")
+        body = self.parse_block()
+        if self.peek()[0] is not None:
+            raise _JsTransformError("unexpected trailing input after function body")
+        return params, body
+
+    def parse_block(self):
+        self.expect("punct", "{")
+        stmts = []
+        while not self.at("punct", "}"):
+            stmts.append(self.parse_statement())
+        self.expect("punct", "}")
+        return stmts
+
+    def parse_statement(self):
+        if self.at("ident", "const") or self.at("ident", "let") or self.at("ident", "var"):
+            self.advance()
+            ident = self.expect("ident")[1]
+            self.expect("punct", "=")
+            value = self.parse_expr()
+            self.expect("punct", ";")
+            return ("decl", ident, value)
+        if self.at("ident", "return"):
+            self.advance()
+            if self.at("punct", ";"):
+                self.advance()
+                return ("return", None)
+            value = self.parse_expr()
+            self.expect("punct", ";")
+            return ("return", value)
+        if self.at("ident", "if"):
+            self.advance()
+            self.expect("punct", "(")
+            cond = self.parse_expr()
+            self.expect("punct", ")")
+            then = self.parse_block()
+            otherwise = None
+            if self.at("ident", "else"):
+                self.advance()
+                otherwise = self.parse_block()
+            return ("if", cond, then, otherwise)
+        if self.at("ident", "delete"):
+            self.advance()
+            target = self.parse_postfix()
+            self.expect("punct", ";")
+            return ("delete", target)
+        expr = self.parse_postfix()
+        if self.at("punct", "="):
+            self.advance()
+            value = self.parse_expr()
+            self.expect("punct", ";")
+            return ("assign", expr, value)
+        self.expect("punct", ";")
+        return ("expr", expr)
+
+    def parse_expr(self):
+        return self.parse_or()
+
+    def parse_or(self):
+        left = self.parse_and()
+        while self.at("punct", "||"):
+            self.advance()
+            left = ("bin", "||", left, self.parse_and())
+        return left
+
+    def parse_and(self):
+        left = self.parse_eq()
+        while self.at("punct", "&&"):
+            self.advance()
+            left = ("bin", "&&", left, self.parse_eq())
+        return left
+
+    def parse_eq(self):
+        left = self.parse_add()
+        while self.at("punct", "===") or self.at("punct", "!=="):
+            op = self.advance()[1]
+            left = ("bin", op, left, self.parse_add())
+        return left
+
+    def parse_add(self):
+        left = self.parse_unary()
+        while self.at("punct", "+"):
+            self.advance()
+            left = ("bin", "+", left, self.parse_unary())
+        return left
+
+    def parse_unary(self):
+        if self.at("punct", "!"):
+            self.advance()
+            return ("unary", "!", self.parse_unary())
+        return self.parse_postfix()
+
+    def parse_postfix(self):
+        node = self.parse_primary()
+        while True:
+            if self.at("punct", "."):
+                self.advance()
+                prop = self.expect("ident")[1]
+                node = ("member", node, prop)
+            elif self.at("punct", "["):
+                self.advance()
+                idx = self.parse_expr()
+                self.expect("punct", "]")
+                node = ("index", node, idx)
+            elif self.at("punct", "("):
+                self.advance()
+                args = []
+                while not self.at("punct", ")"):
+                    args.append(self.parse_expr())
+                    if self.at("punct", ","):
+                        self.advance()
+                self.expect("punct", ")")
+                node = ("call", node, args)
+            else:
+                return node
+
+    def parse_primary(self):
+        k, v = self.peek()
+        if k == "string":
+            self.advance()
+            return ("lit", v)
+        if k == "number":
+            self.advance()
+            return ("lit", float(v) if "." in v else int(v))
+        if k == "ident" and v in ("true", "false"):
+            self.advance()
+            return ("lit", v == "true")
+        if k == "ident" and v in ("null", "undefined"):
+            self.advance()
+            return ("lit", None)
+        if k == "ident":
+            self.advance()
+            return ("ident", v)
+        if k == "punct" and v == "(":
+            self.advance()
+            e = self.parse_expr()
+            self.expect("punct", ")")
+            return e
+        if k == "punct" and v == "{":
+            return self.parse_object()
+        if k == "punct" and v == "[":
+            return self.parse_array()
+        raise _JsTransformError(f"unexpected token {k}:{v!r}")
+
+    def parse_object(self):
+        self.expect("punct", "{")
+        entries = []
+        while not self.at("punct", "}"):
+            if self.at("punct", "..."):
+                self.advance()
+                entries.append(("spread", self.parse_expr()))
+            else:
+                k, v = self.peek()
+                if k not in ("ident", "string"):
+                    raise _JsTransformError("expected an object key")
+                self.advance()
+                self.expect("punct", ":")
+                entries.append(("kv", v, self.parse_expr()))
+            if self.at("punct", ","):
+                self.advance()
+        self.expect("punct", "}")
+        return ("obj", entries)
+
+    def parse_array(self):
+        self.expect("punct", "[")
+        items = []
+        while not self.at("punct", "]"):
+            items.append(self.parse_expr())
+            if self.at("punct", ","):
+                self.advance()
+        self.expect("punct", "]")
+        return ("arr", items)
+
+
+_JS_STR_METHODS = {
+    "toUpperCase": lambda s, a: s.upper(),
+    "toLowerCase": lambda s, a: s.lower(),
+    "trim": lambda s, a: s.strip(),
+    "includes": lambda s, a: (a[0] in s) if a else False,
+    "startsWith": lambda s, a: s.startswith(a[0]) if a else False,
+    "endsWith": lambda s, a: s.endswith(a[0]) if a else False,
+    "split": lambda s, a: s.split(a[0]) if a else [s],
+}
+
+
+def _js_truthy(v) -> bool:
+    return not (v is None or v is False or v == "" or v == 0)
+
+
+def _js_to_string(v) -> str:
+    if v is None:
+        return "null"
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    if isinstance(v, (dict, list)):
+        return json.dumps(v)
+    return str(v)
+
+
+def _js_get_member(obj, prop):
+    if isinstance(obj, dict):
+        return obj.get(prop)
+    if prop == "length" and isinstance(obj, (str, list)):
+        return len(obj)
+    if isinstance(obj, list) and isinstance(prop, int) and 0 <= prop < len(obj):
+        return obj[prop]
+    return None
+
+
+def _js_eval(node, env):
+    kind = node[0]
+    if kind == "lit":
+        return node[1]
+    if kind == "ident":
+        if node[1] not in env:
+            raise _JsTransformError(f"{node[1]!r} is not defined")
+        return env[node[1]]
+    if kind == "member":
+        return _js_get_member(_js_eval(node[1], env), node[2])
+    if kind == "index":
+        return _js_get_member(_js_eval(node[1], env), _js_eval(node[2], env))
+    if kind == "call":
+        return _js_call(node[1], node[2], env)
+    if kind == "obj":
+        out: dict = {}
+        for e in node[1]:
+            if e[0] == "spread":
+                v = _js_eval(e[1], env)
+                if isinstance(v, dict):
+                    out.update(v)
+            else:
+                out[e[1]] = _js_eval(e[2], env)
+        return out
+    if kind == "arr":
+        return [_js_eval(n, env) for n in node[1]]
+    if kind == "unary":
+        return not _js_truthy(_js_eval(node[2], env))
+    if kind == "bin":
+        op = node[1]
+        if op == "&&":
+            left = _js_eval(node[2], env)
+            return _js_eval(node[3], env) if _js_truthy(left) else left
+        if op == "||":
+            left = _js_eval(node[2], env)
+            return left if _js_truthy(left) else _js_eval(node[3], env)
+        left, right = _js_eval(node[2], env), _js_eval(node[3], env)
+        if op == "===":
+            return type(left) is type(right) and left == right
+        if op == "!==":
+            return not (type(left) is type(right) and left == right)
+        if op == "+":
+            if isinstance(left, str) or isinstance(right, str):
+                return _js_to_string(left) + _js_to_string(right)
+            return left + right
+    raise _JsTransformError(f"unsupported expression {kind!r}")
+
+
+def _js_call(callee, arg_nodes, env):
+    args = [_js_eval(a, env) for a in arg_nodes]
+    if callee[0] == "member":
+        base_node, prop = callee[1], callee[2]
+        if base_node[0] == "ident" and base_node[1] in ("JSON", "Object", "Array"):
+            ns = base_node[1]
+            if ns == "JSON" and prop == "parse":
+                try:
+                    return json.loads(args[0])
+                except Exception:
+                    raise _JsTransformError("JSON.parse: invalid JSON")
+            if ns == "JSON" and prop == "stringify":
+                return json.dumps(args[0] if args else None)
+            if ns == "Object" and prop == "keys":
+                return list(args[0].keys()) if args and isinstance(args[0], dict) else []
+            if ns == "Array" and prop == "isArray":
+                return bool(args) and isinstance(args[0], list)
+            raise _JsTransformError(f"unsupported call {ns}.{prop}()")
+        base = _js_eval(base_node, env)
+        if isinstance(base, str) and prop in _JS_STR_METHODS:
+            return _JS_STR_METHODS[prop](base, args)
+        if isinstance(base, list) and prop == "includes":
+            return bool(args) and args[0] in base
+        if isinstance(base, list) and prop == "join":
+            return (args[0] if args else ",").join(_js_to_string(x) for x in base)
+        raise _JsTransformError(f"unsupported method call .{prop}()")
+    if callee[0] == "ident":
+        name = callee[1]
+        if name == "String":
+            return _js_to_string(args[0]) if args else ""
+        if name == "Boolean":
+            return _js_truthy(args[0]) if args else False
+        if name == "Number":
+            try:
+                s = str(args[0]) if args else "0"
+                return float(s) if "." in s else int(s)
+            except (TypeError, ValueError):
+                raise _JsTransformError("Number(): invalid value")
+        raise _JsTransformError(f"unsupported call to {name}()")
+    raise _JsTransformError("unsupported call expression")
+
+
+def _js_assign(target, value, env) -> None:
+    if target[0] == "ident":
+        env[target[1]] = value
+        return
+    if target[0] == "member":
+        obj = _js_eval(target[1], env)
+        if not isinstance(obj, dict):
+            raise _JsTransformError("cannot set a property on a non-object value")
+        obj[target[2]] = value
+        return
+    if target[0] == "index":
+        obj, key = _js_eval(target[1], env), _js_eval(target[2], env)
+        if isinstance(obj, dict):
+            obj[key] = value
+        elif isinstance(obj, list) and isinstance(key, int):
+            while len(obj) <= key:
+                obj.append(None)
+            obj[key] = value
+        else:
+            raise _JsTransformError("unsupported assignment target")
+        return
+    raise _JsTransformError("unsupported assignment target")
+
+
+def _js_delete(target, env) -> None:
+    if target[0] in ("member", "index"):
+        obj = _js_eval(target[1], env)
+        key = target[2] if target[0] == "member" else _js_eval(target[2], env)
+        if isinstance(obj, dict):
+            obj.pop(key, None)
+        return
+    raise _JsTransformError("unsupported delete target")
+
+
+def _js_run_block(stmts, env):
+    """Executes a block; returns (returned, value) so an explicit `return` inside a
+    nested `if` short-circuits every enclosing block, same as JS control flow."""
+    for s in stmts:
+        kind = s[0]
+        if kind == "decl":
+            env[s[1]] = _js_eval(s[2], env)
+        elif kind == "assign":
+            _js_assign(s[1], _js_eval(s[2], env), env)
+        elif kind == "delete":
+            _js_delete(s[1], env)
+        elif kind == "expr":
+            _js_eval(s[1], env)
+        elif kind == "if":
+            branch = s[2] if _js_truthy(_js_eval(s[1], env)) else s[3]
+            if branch is not None:
+                returned, value = _js_run_block(branch, env)
+                if returned:
+                    return True, value
+        elif kind == "return":
+            return True, (_js_eval(s[1], env) if s[1] is not None else None)
+        else:
+            raise _JsTransformError(f"unsupported statement {kind!r}")
+    return False, None
+
+
+def _compile_js_transform(code: str):
+    """Parse one javascriptUdf.code string into (params, body) ONCE, at topic create/patch
+    time — a syntax/shape error the transform's subset doesn't cover is rejected right
+    there (INVALID_ARGUMENT), matching the real API's own compile-time validation."""
+    try:
+        return _JsParser(_js_tokenize(code)).parse_function()
+    except _JsTransformError as e:
+        raise PubsubError(400, "INVALID_ARGUMENT", f"Invalid message transform: {e}")
+
+
+def _compile_transforms(transforms: list[dict]) -> list[tuple]:
+    compiled = []
+    for t in transforms or []:
+        udf = (t or {}).get("javascriptUdf") or {}
+        code = str(udf.get("code") or "")
+        if not code.strip():
+            raise PubsubError(400, "INVALID_ARGUMENT", "messageTransforms[].javascriptUdf.code is required.")
+        compiled.append(_compile_js_transform(code))
+    return compiled
+
+
+def _run_js_transform(params: list[str], body, message: dict, attrs: dict):
+    """Runs one compiled transform against a {data, attributes} message view (`data` as
+    a decoded UTF-8 string, matching the real UDF's view of the message — never base64).
+    Returns the (possibly mutated) message dict, or None to DROP the message (falling off
+    the end of the function, like plain JS, returns undefined — also a drop)."""
+    env: dict = {}
+    if params:
+        env[params[0]] = message
+    if len(params) > 1:
+        env[params[1]] = {"attributes": dict(attrs)}
+    returned, value = _js_run_block(body, env)
+    return value if returned else None
+
+
+def _apply_message_transforms(topic: dict, record: dict) -> dict | None:
+    transforms = topic.get("_compiled_transforms")
+    if not transforms:
+        return record
+    try:
+        text = base64.b64decode(record.get("data") or "").decode("utf-8")
+    except Exception:
+        return record   # a non-UTF-8 payload passes through unchanged: this text-oriented subset can't view it
+    view = {"data": text, "attributes": dict(record.get("attributes") or {})}
+    for params, body in transforms:
+        try:
+            result = _run_js_transform(params, body, dict(view), view["attributes"])
+        except _JsTransformError:
+            continue   # fails open: a runtime error in a transform never blocks the publish call
+        if result is None:
+            return None   # the transform dropped the message
+        if not isinstance(result, dict):
+            continue
+        view = {"data": _js_to_string(result.get("data", view["data"])),
+                "attributes": dict(result.get("attributes") or view["attributes"])}
+    out = dict(record)
+    out["data"] = base64.b64encode(view["data"].encode("utf-8")).decode()
+    out["attributes"] = view["attributes"]
+    return out
+
+
 # ── AVRO/JSON schema validation (a documented subset: scalars, unions,
 # records/arrays/maps/enums by structural shape — not full Avro semantics) ──
 _AVRO_SCALARS = {
@@ -339,6 +846,10 @@ def _topic_view(topic: dict) -> dict:
         v["messageRetentionDuration"] = topic["messageRetentionDuration"]
     if topic.get("schemaSettings"):
         v["schemaSettings"] = topic["schemaSettings"]
+    if topic.get("messageTransforms"):
+        v["messageTransforms"] = topic["messageTransforms"]
+    if topic.get("ingestionDataSourceSettings"):
+        v["ingestionDataSourceSettings"] = topic["ingestionDataSourceSettings"]
     return v
 
 
@@ -365,6 +876,8 @@ def _subscription_view(sub: dict) -> dict:
         v["retryPolicy"] = sub["retryPolicy"]
     if sub.get("filter"):
         v["filter"] = sub["filter"]
+    if sub.get("cloudStorageConfig"):
+        v["cloudStorageConfig"] = sub["cloudStorageConfig"]
     return v
 
 
@@ -400,6 +913,156 @@ def _require_subscription(store, name: str) -> dict:
     return s
 
 
+# ── Cloud Storage ingestion/delivery + Cloud Monitoring metrics: cross-core seams onto
+# the SAME simulator stores every other native-wire call reaches (ADR-001 "nothing leaves
+# the simulator") — wired by core/aws_wire_router.py onto the shared MessagingStore as
+# `.gcs_store` / `.mon_store`, exactly like gcp_logging_core's usage-metrics mirror. ──────
+def _validate_ingestion_settings(settings: dict) -> None:
+    gcs = (settings or {}).get("cloudStorage")
+    if gcs is None:
+        # Every OTHER declared source (awsKinesis, azureEventHubs, confluentCloud,
+        # platformLogsSettings/CDC, …) names an external system that has no connector
+        # anywhere in Vyomi — not "out of scope for Pub/Sub", there is no such resource
+        # type simulated at all to read from.
+        raise PubsubError(400, "INVALID_ARGUMENT",
+                           "Only ingestionDataSourceSettings.cloudStorage is supported in Vyomi: AWS Kinesis, "
+                           "Azure Event Hubs, Confluent/Kafka and database CDC sources have no connector "
+                           "simulated anywhere in Vyomi.")
+    if not str(gcs.get("bucket", "")).strip():
+        raise PubsubError(400, "INVALID_ARGUMENT", "ingestionDataSourceSettings.cloudStorage.bucket is required.")
+
+
+def _sync_cloud_storage_ingestion(store, topic: dict) -> None:
+    """Lazily (no background poller exists) catch up a topic's Cloud Storage ingestion:
+    called from every real entry point that touches the topic (get, publish, a pull on one
+    of its subscriptions), so the console sees new objects without a continuous pull of
+    its own. Each object not ingested before is published as one message, keyed by its
+    generation so it is never re-ingested after being overwritten with the same name."""
+    settings = (topic.get("ingestionDataSourceSettings") or {}).get("cloudStorage")
+    if not settings:
+        return
+    gcs_store = getattr(store, "gcs_store", None)
+    if gcs_store is None:
+        return
+    bucket = settings.get("bucket", "")
+    if not gcs_store.bucket_exists(bucket):
+        return
+    from core.gcp_storage_core import _entry_bytes
+    seen = topic.setdefault("_ingested", set())
+    glob = settings.get("matchGlob") or ""
+    new_records = []
+    for oname, entry in sorted(gcs_store.bucket_objects(bucket).items()):
+        key = f"{oname}#{entry.get('generation', 1)}"
+        if key in seen:
+            continue
+        seen.add(key)
+        if glob and not fnmatch.fnmatch(oname, glob):
+            continue
+        data = _entry_bytes(gcs_store, bucket, oname, entry)
+        new_records.append({
+            "data": base64.b64encode(data).decode(),
+            "attributes": {"objectId": oname, "bucket": bucket},
+            "messageId": _next_message_id(store),
+            "publishTime": _now_rfc3339(),
+        })
+    if not new_records:
+        return
+    retain = bool(topic.get("messageRetentionDuration"))
+    for record in new_records:
+        _fanout(store, topic, record)
+        if retain:
+            topic.setdefault("_retained", []).append({**record, "_publish_at": store.now()})
+    if retain:
+        _prune_topic_retention(store, topic)
+    topic["_publish_count"] = topic.get("_publish_count", 0) + len(new_records)
+    store.persist()
+
+
+def _validate_cloud_storage_config(store, cfg: dict) -> None:
+    bucket = str((cfg or {}).get("bucket", "")).strip()
+    if not bucket:
+        raise PubsubError(400, "INVALID_ARGUMENT", "cloudStorageConfig.bucket is required.")
+    gcs_store = getattr(store, "gcs_store", None)
+    if gcs_store is None or not gcs_store.bucket_exists(bucket):
+        raise PubsubError(404, "NOT_FOUND", f"Cloud Storage bucket not found: {bucket}")
+    if cfg.get("avroConfig"):
+        raise PubsubError(400, "INVALID_ARGUMENT",
+                           "cloudStorageConfig.avroConfig isn't modeled in Vyomi: messages are always "
+                           "written as newline-delimited TEXT objects.")
+
+
+def _deliver_to_cloud_storage(store, sub: dict, record: dict) -> None:
+    """A Cloud Storage subscription writes each delivered message as a REAL object in the
+    simulator's own GCS bucket (never queued on the subscription) — one object per
+    message, named from the subscription's filenamePrefix/Suffix, matching
+    `outputFormat: TEXT` (the only format Vyomi models; see _validate_cloud_storage_config)."""
+    gcs_store = getattr(store, "gcs_store", None)
+    cfg = sub.get("cloudStorageConfig")
+    if gcs_store is None or not cfg or not gcs_store.bucket_exists(cfg.get("bucket", "")):
+        return
+    try:
+        text = base64.b64decode(record.get("data") or "").decode("utf-8")
+    except Exception:
+        text = record.get("data", "")
+    from core.gcp_storage_core import _new_entry
+    bucket = cfg["bucket"]
+    objs = gcs_store.bucket_objects(bucket)
+    sub_id = sub["name"].rsplit("/", 1)[-1]
+    key = f"{cfg.get('filenamePrefix', '')}{sub_id}-{record['messageId']}{cfg.get('filenameSuffix', '') or '.txt'}"
+    objs[key] = _new_entry(objs, key, (text + "\n").encode("utf-8"), "text/plain", {})
+    gcs_store.persist()
+
+
+def _mon_end_iso(store) -> str:
+    return time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(store.now())) + ".000000Z"
+
+
+def _sync_topic_metrics(store, name: str) -> None:
+    """Mirrors a topic's live cumulative publish count into the shared Cloud Monitoring
+    store as pubsub.googleapis.com/topic/send_message_operation_count — a REAL metric a
+    REAL alert policy or the console's own Metrics tab can read back (never fabricated)."""
+    mon_store = getattr(store, "mon_store", None)
+    topic = store.get_topic(name)
+    if mon_store is None or topic is None:
+        return
+    try:
+        from core import gcp_monitoring_core as mon
+        project, topic_id = name.split("/")[1], name.rsplit("/", 1)[-1]
+        resource = {"type": "pubsub_topic", "labels": {"project_id": project, "topic_id": topic_id}}
+        mon.record_system_point(mon_store, project, "pubsub.googleapis.com/topic/send_message_operation_count",
+                                 resource, topic.get("_publish_count", 0), _mon_end_iso(store), unit="1")
+    except Exception:
+        pass
+
+
+def _sync_subscription_metrics(store, name: str) -> None:
+    """Mirrors a subscription's live backlog (num_undelivered_messages) and oldest unacked
+    message age into the shared Cloud Monitoring store — the same two series the real
+    console's Metrics tab charts, derived from the subscription's OWN message list."""
+    mon_store = getattr(store, "mon_store", None)
+    sub = store.get_queue(name)
+    if mon_store is None or sub is None:
+        return
+    try:
+        from core import gcp_monitoring_core as mon
+        project, sub_id = name.split("/")[1], name.rsplit("/", 1)[-1]
+        now = store.now()
+        backlog, oldest = 0, 0.0
+        for m in sub.get("messages", []):
+            if m.get("_acked"):
+                continue
+            backlog += 1
+            oldest = max(oldest, now - m.get("_publish_at", now))
+        resource = {"type": "pubsub_subscription", "labels": {"project_id": project, "subscription_id": sub_id}}
+        end_iso = _mon_end_iso(store)
+        mon.record_system_point(mon_store, project, "pubsub.googleapis.com/subscription/num_undelivered_messages",
+                                 resource, backlog, end_iso, unit="1")
+        mon.record_system_point(mon_store, project, "pubsub.googleapis.com/subscription/oldest_unacked_message_age",
+                                 resource, oldest, end_iso, unit="s")
+    except Exception:
+        pass
+
+
 # ── topic operations ──────────────────────────────────────────────────────
 def _create_topic(store, name: str, body: dict) -> PubsubResponse:
     if store.get_topic(name):
@@ -411,16 +1074,28 @@ def _create_topic(store, name: str, body: dict) -> PubsubResponse:
         topic["messageRetentionDuration"] = body["messageRetentionDuration"]
     if body.get("schemaSettings"):
         topic["schemaSettings"] = body["schemaSettings"]
+    if body.get("messageTransforms"):
+        topic["messageTransforms"] = body["messageTransforms"]
+        topic["_compiled_transforms"] = _compile_transforms(topic["messageTransforms"])
+    if body.get("ingestionDataSourceSettings"):
+        _validate_ingestion_settings(body["ingestionDataSourceSettings"])
+        topic["ingestionDataSourceSettings"] = body["ingestionDataSourceSettings"]
     store.put_topic(name, topic)
     store.persist()
+    _sync_cloud_storage_ingestion(store, topic)
+    _sync_topic_metrics(store, name)
     return _json(200, _topic_view(store.get_topic(name)))
 
 
 def _get_topic(store, name: str) -> PubsubResponse:
-    return _json(200, _topic_view(_require_topic(store, name)))
+    topic = _require_topic(store, name)
+    _sync_cloud_storage_ingestion(store, topic)
+    _sync_topic_metrics(store, name)
+    return _json(200, _topic_view(topic))
 
 
-_TOPIC_PATCHABLE = {"labels", "kmsKeyName", "messageRetentionDuration", "schemaSettings"}
+_TOPIC_PATCHABLE = {"labels", "kmsKeyName", "messageRetentionDuration", "schemaSettings",
+                     "messageTransforms", "ingestionDataSourceSettings"}
 
 
 def _patch_topic(store, name: str, body: dict) -> PubsubResponse:
@@ -432,10 +1107,17 @@ def _patch_topic(store, name: str, body: dict) -> PubsubResponse:
         if k not in _TOPIC_PATCHABLE:
             continue
         if k in fields:
+            if k == "messageTransforms":
+                topic["_compiled_transforms"] = _compile_transforms(fields[k] or [])
+            elif k == "ingestionDataSourceSettings":
+                _validate_ingestion_settings(fields[k] or {})
             topic[k] = fields[k]
         else:
             topic.pop(k, None)
+            if k == "messageTransforms":
+                topic.pop("_compiled_transforms", None)
     store.persist()
+    _sync_cloud_storage_ingestion(store, topic)
     return _json(200, _topic_view(topic))
 
 
@@ -480,10 +1162,14 @@ def _deliver_eventarc(store, et: dict, record: dict) -> None:
 
 def _fanout(store, topic: dict, record: dict) -> None:
     """Deliver a prepared message record into every subscription attached to `topic`
-    whose filter (if any) matches the message's attributes."""
+    whose filter (if any) matches the message's attributes. A Cloud Storage subscription
+    writes the message straight into a real bucket object instead of queuing it."""
     for sub_name in topic.get("subscriptions", []):
         sub = store.get_queue(sub_name)
         if sub is None or not _message_matches(sub.get("filter"), record.get("attributes")):
+            continue
+        if sub.get("cloudStorageConfig"):
+            _deliver_to_cloud_storage(store, sub, record)
             continue
         sub.setdefault("messages", []).append({"_id": uuid.uuid4().hex, "_publish_at": store.now(), **record})
         et = sub.get("_eventarc_trigger")
@@ -508,12 +1194,15 @@ def _prune_topic_retention(store, topic: dict) -> None:
 
 def _publish(store, name: str, body: dict) -> PubsubResponse:
     topic = _require_topic(store, name)
+    _sync_cloud_storage_ingestion(store, topic)
     messages = body.get("messages") or []
     if not messages:
         raise PubsubError(400, "INVALID_ARGUMENT", "The value for message_count is too small. You passed 0")
-    # Validate every message against the topic's schema (if any) BEFORE fanning any of
-    # them out: a schema violation anywhere in the batch fails the whole publish call,
-    # same as the real API — never a partial delivery.
+    # Message transforms run first, then schema validation runs against the TRANSFORMED
+    # message (same order as the real API) — all BEFORE fanning any message out: a schema
+    # violation anywhere in the batch fails the whole publish call, same as the real API,
+    # never a partial delivery. A transform that drops a message removes it from this
+    # batch entirely — it is never delivered, retained, or returned in messageIds.
     prepared: list[dict] = []
     for m in messages:
         record = {
@@ -524,6 +1213,9 @@ def _publish(store, name: str, body: dict) -> PubsubResponse:
         }
         if m.get("orderingKey"):
             record["orderingKey"] = m["orderingKey"]
+        record = _apply_message_transforms(topic, record)
+        if record is None:
+            continue
         _validate_schema_message(store, topic, record)
         prepared.append(record)
     retain = bool(topic.get("messageRetentionDuration"))
@@ -533,7 +1225,11 @@ def _publish(store, name: str, body: dict) -> PubsubResponse:
             topic.setdefault("_retained", []).append({**record, "_publish_at": store.now()})
     if retain:
         _prune_topic_retention(store, topic)
+    topic["_publish_count"] = topic.get("_publish_count", 0) + len(prepared)
     store.persist()
+    _sync_topic_metrics(store, name)
+    for sub_name in topic.get("subscriptions", []):
+        _sync_subscription_metrics(store, sub_name)
     return _json(200, {"messageIds": [r["messageId"] for r in prepared]})
 
 
@@ -574,20 +1270,33 @@ def _create_subscription(store, name: str, body: dict) -> PubsubResponse:
         sub["deadLetterPolicy"] = body["deadLetterPolicy"]
     if body.get("retryPolicy"):
         sub["retryPolicy"] = body["retryPolicy"]
+    if body.get("bigQueryConfig"):
+        # Not "a separate product" hand-wave: there is no BigQuery dataset/table resource
+        # anywhere in Vyomi to stream rows into, so this delivery type has nowhere to go.
+        raise PubsubError(400, "INVALID_ARGUMENT",
+                           "bigQueryConfig delivery isn't modeled in Vyomi: no BigQuery core exists anywhere "
+                           "in the simulator. Use Pull, Push, or Cloud Storage delivery instead.")
+    if body.get("cloudStorageConfig"):
+        _validate_cloud_storage_config(store, body["cloudStorageConfig"])
+        sub["cloudStorageConfig"] = body["cloudStorageConfig"]
     store.put_queue(name, sub)
     if name not in topic["subscriptions"]:
         topic["subscriptions"].append(name)
     store.persist()
+    _sync_subscription_metrics(store, name)
     return _json(200, _subscription_view(sub))
 
 
 def _get_subscription(store, name: str) -> PubsubResponse:
-    return _json(200, _subscription_view(_require_subscription(store, name)))
+    sub = _require_subscription(store, name)
+    _sync_subscription_metrics(store, name)
+    return _json(200, _subscription_view(sub))
 
 
 _SUB_PATCHABLE = {
     "labels", "ackDeadlineSeconds", "messageRetentionDuration", "retainAckedMessages",
     "expirationPolicy", "enableMessageOrdering", "pushConfig", "deadLetterPolicy", "retryPolicy",
+    "cloudStorageConfig",
 }
 
 
@@ -600,6 +1309,8 @@ def _patch_subscription(store, name: str, body: dict) -> PubsubResponse:
         if k not in _SUB_PATCHABLE:
             continue
         if k in fields:
+            if k == "cloudStorageConfig":
+                _validate_cloud_storage_config(store, fields[k] or {})
             sub[k] = fields[k]
         else:
             sub.pop(k, None)
@@ -648,6 +1359,9 @@ def _backoff_seconds(retry_policy: dict, attempts: int) -> float:
 
 def _pull(store, name: str, body: dict) -> PubsubResponse:
     sub = _require_subscription(store, name)
+    topic = store.get_topic(sub.get("topic", ""))
+    if topic:
+        _sync_cloud_storage_ingestion(store, topic)
     _prune_retention(store, sub)
     max_messages = int(body.get("maxMessages", 1) or 1)
     deadline = int(sub.get("ackDeadlineSeconds", 10) or 10)
@@ -701,6 +1415,7 @@ def _pull(store, name: str, body: dict) -> PubsubResponse:
     if received:
         out["receivedMessages"] = received
         store.persist()
+    _sync_subscription_metrics(store, name)
     return _json(200, out)
 
 
@@ -718,6 +1433,7 @@ def _acknowledge(store, name: str, body: dict) -> PubsubResponse:
         else:
             sub["messages"] = [m for m in sub.get("messages", []) if m["_id"] not in remove_ids]
         store.persist()
+        _sync_subscription_metrics(store, name)
     return _json(200, {})
 
 

@@ -1946,6 +1946,110 @@ try {
   check("subscription filter: the non-matching message never shows", (await page.getByText("drop-this").count()) === 0);
   await shot("20-pubsub-filter");
 
+  // Pub/Sub DEPTH (wave 5b gap sweep): Cloud Storage delivery — a subscription created
+  // via the UI with "Write to Cloud Storage" really writes each delivered message as a
+  // real object in a real GCS bucket, never queuing it.
+  const PGCS_BUCKET = `v4-gcp-ps-gcs-${Date.now() % 100000}`;
+  await wire(`/storage/v1/b?project=vyomi-project`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: PGCS_BUCKET }) });
+  const PGCS_TOPIC = `v4-gcp-ps-gcs-topic-${Date.now() % 100000}`;
+  await wire(`/v1/projects/vyomi-project/topics/${PGCS_TOPIC}`, { method: "PUT", headers: { "content-type": "application/json" }, body: "{}" });
+  await page.goto(UI + "#/pubsub/subscriptions/create");
+  const PGCS_SUB = `v4-gcp-ps-gcs-sub-${Date.now() % 100000}`;
+  await page.getByLabel("Subscription ID").fill(PGCS_SUB);
+  await page.getByLabel("Select a Cloud Pub/Sub topic").click();
+  await page.getByRole("option", { name: PGCS_TOPIC }).click();
+  await page.getByRole("radio", { name: "Write to Cloud Storage", exact: true }).check();
+  await page.getByLabel("Cloud Storage bucket").fill(PGCS_BUCKET);
+  await shot("20b-pubsub-gcs-delivery-create");
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("heading", { name: PGCS_SUB }).waitFor({ timeout: 10000 });
+  await wire(`/v1/projects/vyomi-project/topics/${PGCS_TOPIC}:publish`, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ messages: [{ data: Buffer.from("gcs delivery row").toString("base64") }] }),
+  });
+  const gcsDelivered = await wjson(`/storage/v1/b/${PGCS_BUCKET}/o`);
+  check("Cloud Storage delivery via UI → message written as a real object over native wire",
+    (gcsDelivered.items || []).length === 1);
+  const psGcsDeliverySub = await wjson(`/v1/projects/vyomi-project/subscriptions/${PGCS_SUB}`);
+  check("a Cloud Storage subscription never queues the message itself", !psGcsDeliverySub.messages);
+
+  // BigQuery delivery: submitted for real, rejected with a real error — never a silent
+  // no-op (no BigQuery core exists anywhere in Vyomi).
+  await page.goto(UI + "#/pubsub/subscriptions/create");
+  await page.getByLabel("Subscription ID").fill(`v4-gcp-ps-bq-sub-${Date.now() % 100000}`);
+  await page.getByLabel("Select a Cloud Pub/Sub topic").click();
+  await page.getByRole("option", { name: PGCS_TOPIC }).click();
+  await page.getByRole("radio", { name: "Write to BigQuery", exact: true }).check();
+  await page.getByLabel("BigQuery table").fill("p.d.t");
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByText("Failed to create subscription").waitFor({ timeout: 10000 });
+  check("BigQuery delivery via UI → a real native error round trip, not a silent success", true);
+  await shot("20c-pubsub-bigquery-rejected");
+
+  // Topic ingestion from Cloud Storage: a topic configured via the UI really ingests an
+  // object already in the bucket as a message, the next time the topic is read.
+  const PING_BUCKET = `v4-gcp-ps-ingest-${Date.now() % 100000}`;
+  await wire(`/storage/v1/b?project=vyomi-project`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: PING_BUCKET }) });
+  await page.goto(UI + "#/pubsub/topics/create");
+  const PING_TOPIC = `v4-gcp-ps-ingest-topic-${Date.now() % 100000}`;
+  await page.getByLabel("Topic ID").fill(PING_TOPIC);
+  await page.getByRole("checkbox", { name: "Add a default subscription" }).uncheck();
+  await page.getByRole("checkbox", { name: "Enable ingestion" }).check();
+  await page.getByLabel("Cloud Storage bucket").fill(PING_BUCKET);
+  await shot("20d-pubsub-ingestion-create");
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("heading", { name: PING_TOPIC }).waitFor({ timeout: 10000 });
+  const PING_SUB = `${PING_TOPIC}-sub`;
+  await wire(`/v1/projects/vyomi-project/subscriptions/${PING_SUB}`, {
+    method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ topic: `projects/vyomi-project/topics/${PING_TOPIC}` }),
+  });
+  await wire(`/upload/storage/v1/b/${PING_BUCKET}/o?uploadType=media&name=${encodeURIComponent("orders/ingested.txt")}`, {
+    method: "POST", headers: { "content-type": "text/plain" }, body: "ingested from gcs",
+  });
+  await page.reload();   // re-GETting the topic lazily syncs ingestion — no background poller
+  const ingestPulled = await wjson(`/v1/projects/vyomi-project/subscriptions/${PING_SUB}:pull`, {
+    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ maxMessages: 10 }),
+  });
+  check("topic ingestion via UI → the GCS object arrived as a real message",
+    (ingestPulled.receivedMessages || []).some((m) => Buffer.from(m.message.data, "base64").toString() === "ingested from gcs"));
+
+  // Message transforms: a JS UDF entered via the UI really redacts a field at publish
+  // time (not a fixed menu — the code is parsed and executed).
+  await page.goto(UI + "#/pubsub/topics/create");
+  const PUDF_TOPIC = `v4-gcp-ps-udf-topic-${Date.now() % 100000}`;
+  await page.getByLabel("Topic ID").fill(PUDF_TOPIC);
+  await page.getByRole("checkbox", { name: "Enable message transforms" }).check();
+  await page.getByLabel("JavaScript UDF code").fill(
+    'function redact(message, metadata) { const data = JSON.parse(message.data); delete data.ssn; message.data = JSON.stringify(data); return message; }');
+  await shot("20e-pubsub-transform-create");
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("heading", { name: PUDF_TOPIC }).waitFor({ timeout: 10000 });
+  await wire(`/v1/projects/vyomi-project/topics/${PUDF_TOPIC}:publish`, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ messages: [{ data: Buffer.from(JSON.stringify({ ssn: "123-45-6789", name: "bob" })).toString("base64") }] }),
+  });
+  const udfPulled = await wjson(`/v1/projects/vyomi-project/subscriptions/${PUDF_TOPIC}-sub:pull`, {
+    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ maxMessages: 10 }),
+  });
+  const udfDecoded = (udfPulled.receivedMessages || []).map((m) => JSON.parse(Buffer.from(m.message.data, "base64").toString()));
+  check("message transform entered via UI → ssn really redacted at publish time",
+    udfDecoded.length === 1 && !("ssn" in udfDecoded[0]) && udfDecoded[0].name === "bob");
+
+  // Metrics tab: real numbers derived from the activity above, not a placeholder.
+  await page.goto(UI + `#/pubsub/topics/${PUDF_TOPIC}`);
+  await page.getByRole("tab", { name: "Metrics" }).click();
+  await page.getByText("Publish message operation count").waitFor({ timeout: 10000 });
+  check("topic Metrics tab shows a real publish count, not a NotSimulated panel",
+    (await page.locator("[data-vyomi-not-simulated]").count()) === 0);
+  await shot("20f-pubsub-topic-metrics");
+
+  await page.goto(UI + `#/pubsub/subscriptions/${PUDF_TOPIC}-sub`);
+  await page.getByRole("tab", { name: "Metrics" }).click();
+  await page.getByText("Unacked messages").waitFor({ timeout: 10000 });
+  check("subscription Metrics tab shows a real backlog, not a NotSimulated panel",
+    (await page.locator("[data-vyomi-not-simulated]").count()) === 0);
+  await shot("20g-pubsub-subscription-metrics");
+
   // Memorystore for Redis: create a Basic instance via UI (with a label and AUTH enabled)
   // → visible over the native wire, AUTH string shown in Connections matches getAuthString.
   const MS = `v4-gcp-ms-${Date.now() % 100000}`;

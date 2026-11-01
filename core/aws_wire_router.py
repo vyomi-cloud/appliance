@@ -519,6 +519,8 @@ class AwsWireRouter:
         self.gcp_kms = s.get("gcp_kms") or InMemoryKeyStore()
         self.gcp_sec = s.get("gcp_sec") or InMemoryKvStore()
         self.gcp_msg = s.get("gcp_msg") or InMemoryMessagingStore()
+        self.gcp_msg.gcs_store = self.gcs   # topic ingestion / Cloud Storage subscription delivery read/write real GCS objects
+
         self.gcp_iam = s.get("gcp_iam") or InMemoryIamStore()
         self.gcp_sql = s.get("gcp_sql") or InMemorySqlStore()
         self.gcp_sched = s.get("gcp_sched") or gcp_sched.CloudSchedulerStore()   # Cloud Scheduler jobs
@@ -529,6 +531,7 @@ class AwsWireRouter:
         self.gcp_ar = s.get("gcp_ar") or gcp_ar.ArtifactRegistryStore()
         self.gcp_logging = s.get("gcp_logging") or gcp_logging.LoggingStore()   # Cloud Logging
         self.gcp_logging.mon_store = self.gcp_mon   # Logs Storage "Create usage alert" mirrors live byte/entry counts into Monitoring
+        self.gcp_msg.mon_store = self.gcp_mon   # Pub/Sub topic/subscription Metrics tabs mirror live publish/backlog counts into Monitoring
         self.gcp_compute = s.get("gcp_compute") or gcp_compute.ComputeStore()   # VPC: networks, subnets, firewalls, routes, addresses
         self.gcp_compute_vm = s.get("gcp_compute_vm") or gcp_compute_vm.ComputeStore()   # Compute Engine VMs, disks, images, templates
         self.gcp_mon.compute_vm_store = self.gcp_compute_vm   # Overview "VMs with Ops Agent" + uptime checks targeting a GCE instance read real Compute Engine state
