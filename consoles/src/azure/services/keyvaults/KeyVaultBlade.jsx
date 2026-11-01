@@ -175,13 +175,25 @@ function PropertyList({ a }) {
   );
 }
 
-// ── Access control (IAM) ──────────────────────────────────────────────────────────────
+// ── Access control (IAM): Role assignments / Roles / Check access are real ARM reads and a
+// real decision call scoped to this vault (plus its subscription/resource-group ancestors) —
+// azure.keyvaults.iam. "My access" is real too (unlike most other resources' IAM blades):
+// Vyomi has exactly one simulated signed-in principal (api.CALLER_PRINCIPAL_ID), so there's
+// no identity to resolve — it shows that principal's own grant on THIS vault directly, the
+// same RBAC-vs-access-policy switch azure.keyvaults.access_configuration enforces. ─────────
 function AccessControlIam({ a }) {
   const [tab, setTab] = useState("check");
   const [dlg, setDlg] = useState(null);
+  const [principal, setPrincipal] = useState(api.CALLER_PRINCIPAL_ID);
+  const [action, setAction] = useState("Microsoft.KeyVault/vaults/write");
+  const [decision, setDecision] = useState(null);
+  const roleAssignments = useAsync(() => api.listRoleAssignments(a.id), [a.id]);
+  const roleDefinitions = useAsync(() => api.listRoleDefinitions(), []);
+  const rbac = !!a.properties?.enableRbacAuthorization;
+  const myRoles = (roleAssignments.data || []).filter((r) => r.properties?.principalId === api.CALLER_PRINCIPAL_ID).map((r) => r.properties?.roleName || (r.properties?.roleDefinitionId || "").split("/").pop());
+  const myPolicy = (a.properties?.accessPolicies || []).find((p) => p.objectId === api.CALLER_PRINCIPAL_ID);
   return (
-    <>
-      <div className="vy-panel-title">Access control (IAM)</div>
+    <CapabilityContainer id="azure.keyvaults.iam" title="Access control (IAM)">
       <TabList selectedValue={tab} onTabSelect={(_, d) => setTab(d.value)} aria-label="Access control (IAM) tabs">
         <Tab value="check">Check access</Tab>
         <Tab value="assignments">Role assignments</Tab>
@@ -195,20 +207,38 @@ function AccessControlIam({ a }) {
             <Button onClick={() => setDlg("mine")}>View my access</Button>
           </section>
           <section className="vy-section"><h3>Check access</h3>
-            <Button onClick={() => setDlg("check")}>Check access</Button>
+            <Button onClick={() => { setDecision(null); setDlg("check"); }}>Check access</Button>
           </section>
         </div>
       )}
       {tab === "assignments" && (
         <div style={{ marginTop: 12 }}>
           <div className="vy-panel-title">Role assignments</div>
-          <NotSimulatedContainer feature="Role assignments scoped to this key vault (Microsoft.Authorization/roleAssignments is simulated at subscription scope only)" />
+          <BrowseGrid resourceName="role assignment" rowKey={(r) => r.id} filterPlaceholder="Search by name or email"
+            items={roleAssignments.data || []} loading={roleAssignments.loading} error={roleAssignments.error} onRefresh={roleAssignments.reload}
+            columns={[
+              { key: "name", label: "Name", value: (r) => r.properties?.principalId },
+              { key: "type", label: "Type", value: (r) => r.properties?.principalType || "--" },
+              { key: "role", label: "Role", value: (r) => r.properties?.roleName || (r.properties?.roleDefinitionId || "").split("/").pop() },
+              { key: "scope", label: "Scope", value: (r) => r.properties?.scope || "/" },
+              { key: "condition", label: "Condition", value: () => "None" },
+            ]}
+          />
         </div>
       )}
       {tab === "roles" && (
         <div style={{ marginTop: 12 }}>
           <div className="vy-panel-title">Roles</div>
-          <NotSimulatedContainer feature="The built-in and custom role catalog" />
+          <BrowseGrid resourceName="role" rowKey={(r) => r.id} filterPlaceholder="Search by role name, description, permission, or ID"
+            items={roleDefinitions.data || []} loading={roleDefinitions.loading} error={roleDefinitions.error} onRefresh={roleDefinitions.reload}
+            columns={[
+              { key: "name", label: "Name", value: (r) => r.properties?.roleName || r.name },
+              { key: "description", label: "Description", value: (r) => r.properties?.description || "--" },
+              { key: "type", label: "Type", value: (r) => r.properties?.type || "BuiltInRole" },
+              { key: "category", label: "Category", value: () => "General" },
+              { key: "details", label: "Details", value: () => "View" },
+            ]}
+          />
         </div>
       )}
       {tab === "deny" && (
@@ -222,12 +252,44 @@ function AccessControlIam({ a }) {
         <DialogSurface aria-label="Access check">
           <DialogBody>
             <DialogTitle>{dlg === "mine" ? "My access" : "Check access"}</DialogTitle>
-            <DialogContent><NotSimulated feature="Per-identity role-assignment resolution for this resource" note={`The vault's resource id is ${a.id}.`} /></DialogContent>
+            <DialogContent>
+              {dlg === "mine" ? (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  <p style={{ fontSize: 13 }}>Vyomi has one simulated signed-in principal ({api.CALLER_PRINCIPAL_ID}) — this is its own access on this vault, exactly as azure.keyvaults.access_configuration enforces it.</p>
+                  {rbac ? (
+                    <section className="vy-section"><b>Permission model: Azure role-based access control</b>
+                      <div>{myRoles.length ? `Role assignments: ${myRoles.join(", ")}` : "No role assignment covers this vault — every Keys/Secrets/Certificates call is denied."}</div>
+                    </section>
+                  ) : (
+                    <section className="vy-section"><b>Permission model: Vault access policy</b>
+                      <div>{myPolicy ? `Keys: ${(myPolicy.permissions?.keys || []).join(", ") || "--"} · Secrets: ${(myPolicy.permissions?.secrets || []).join(", ") || "--"} · Certificates: ${(myPolicy.permissions?.certificates || []).join(", ") || "--"}` : "No access policy entry covers this vault — every Keys/Secrets/Certificates call is denied."}</div>
+                    </section>
+                  )}
+                </div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 12, minWidth: 360 }}>
+                  <Field label="Find">
+                    <Input value={principal} onChange={(_, d) => setPrincipal(d.value)} placeholder="Principal (object) id" aria-label="Principal ID" />
+                  </Field>
+                  <Field label="Action"><Input value={action} onChange={(_, d) => setAction(d.value)} aria-label="Action" /></Field>
+                  <Button appearance="primary" disabled={!principal} onClick={async () => {
+                    const [r] = await api.checkAccess(a.id, principal, action);
+                    setDecision(r);
+                  }}>Check access</Button>
+                  {decision && (
+                    <section className="vy-section">
+                      <b>{decision.accessDecision}</b>
+                      {decision.roles?.length > 0 && <div>Granted by: {decision.roles.join(", ")}</div>}
+                    </section>
+                  )}
+                </div>
+              )}
+            </DialogContent>
             <DialogActions><Button onClick={() => setDlg(null)}>Close</Button></DialogActions>
           </DialogBody>
         </DialogSurface>
       </Dialog>
-    </>
+    </CapabilityContainer>
   );
 }
 
@@ -308,6 +370,7 @@ function AccessPolicies({ a, reload }) {
         <ToolbarButton icon={<Delete20Regular />} disabled={!policies.length} onClick={() => save(policies.slice(1))}>Delete</ToolbarButton>
         <ToolbarButton icon={<ArrowClockwise20Regular />} onClick={reload}>Refresh</ToolbarButton>
       </>}>
+      <p className="vy-muted" style={{ fontSize: 13 }}>ENFORCED: these entries really gate the Keys/Secrets/Certificates data planes. Vyomi has one simulated signed-in principal, <code>{api.CALLER_PRINCIPAL_ID}</code> (self-granted on create) — removing or narrowing its entry really removes or narrows this console's own access.</p>
       <Table size="small" aria-label="Access policies" style={{ maxWidth: 900, marginTop: 8 }}>
         <TableHeader><TableRow>
           <TableHeaderCell>Name</TableHeaderCell><TableHeaderCell>Email</TableHeaderCell>
@@ -316,7 +379,7 @@ function AccessPolicies({ a, reload }) {
         <TableBody>
           {policies.map((p, i) => (
             <TableRow key={i}>
-              <TableCell>{p.objectId}</TableCell><TableCell>--</TableCell>
+              <TableCell>{p.objectId}{p.objectId === api.CALLER_PRINCIPAL_ID && <span className="vy-muted"> (this console)</span>}</TableCell><TableCell>--</TableCell>
               <TableCell>{(p.permissions?.keys || []).join(", ") || "--"}</TableCell>
               <TableCell>{(p.permissions?.secrets || []).join(", ") || "--"}</TableCell>
               <TableCell>{(p.permissions?.certificates || []).join(", ") || "--"}</TableCell>
@@ -793,6 +856,7 @@ function AccessConfiguration({ a, reload }) {
         <ToolbarButton disabled={!dirty} onClick={() => setF(init())}>Discard changes</ToolbarButton>
       </>}>
       <section className="vy-section"><h3>Permission model</h3>
+        <p className="vy-muted" style={{ fontSize: 13 }}>ENFORCED: switching models really changes which grant the Keys/Secrets/Certificates data planes check — RBAC mode checks a role assignment (Access control (IAM)); Vault access policy mode checks the Access policies list. Vyomi's one simulated signed-in principal, <code>{api.CALLER_PRINCIPAL_ID}</code>, is self-granted full access on create either way.</p>
         <RadioGroup value={f.rbac ? "rbac" : "policy"} onChange={(_, d) => setF((x) => ({ ...x, rbac: d.value === "rbac" }))} aria-label="Permission model">
           <Radio value="rbac" label="Azure role-based access control (recommended)" />
           <Radio value="policy" label="Vault access policy" />
@@ -802,6 +866,7 @@ function AccessConfiguration({ a, reload }) {
         <Checkbox label="Azure Virtual Machines for deployment" checked={f.vm} onChange={(_, d) => setF((x) => ({ ...x, vm: !!d.checked }))} />
         <Checkbox label="Azure Resource Manager for template deployment" checked={f.arm} onChange={(_, d) => setF((x) => ({ ...x, arm: !!d.checked }))} />
         <Checkbox label="Azure Disk Encryption for volume encryption" checked={f.disk} onChange={(_, d) => setF((x) => ({ ...x, disk: !!d.checked }))} />
+        <NotSimulated feature="VM/ARM-template/Disk-Encryption secret retrieval from this vault" note="Vyomi doesn't model those services' own Key Vault integration, so these three flags round-trip through ARM but have nothing to gate." />
       </section>
     </CapabilityContainer>
   );

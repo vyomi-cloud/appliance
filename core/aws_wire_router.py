@@ -183,7 +183,9 @@ from core import azure_queue_core as az_queue
 from core.azure_queue_core import AzureQueueStore
 from core import azure_table_core as az_table
 from core.azure_table_core import AzureTableStore
-from core.azure_arm_core import AzureArm, keyvault_network_denied, acr_network_denied, acr_retention_days
+from core.azure_arm_core import (AzureArm, keyvault_network_denied, keyvault_access_denied,
+                                  classify_keyvault_operation, CALLER_PRINCIPAL_ID,
+                                  acr_network_denied, acr_retention_days)
 from core import azure_servicebus_core as az_sb
 from core import eventbridge_core as events
 from core import scheduler_core as sched
@@ -1007,6 +1009,17 @@ class AwsWireRouter:
                     body_json = json.dumps({"error": {"code": "Forbidden",
                         "message": f"Client address is not authorized and caller is not a trusted "
                                    f"service. Client address not allowed to access vault '{vault}'."}}).encode()
+                    return {"status": 403, "headers": {"content-type": "application/json"}, "body": body_json}
+                # azure.keyvaults.access_configuration / azure.keyvaults.access_policies:
+                # the vault's RBAC-vs-access-policy permission model, ENFORCED against the
+                # single simulated signed-in principal (core/azure_arm_core.py
+                # CALLER_PRINCIPAL_ID) every Keys/Secrets/Certificates call carries the vault
+                # for (same x-vyomi-vault signal the networking check above reads).
+                op = vault and classify_keyvault_operation(method, path)
+                if op and keyvault_access_denied(self.az_arm.state, vault, op[0], op[1]):
+                    body_json = json.dumps({"error": {"code": "Forbidden",
+                        "message": f"The user, group or application 'oid={CALLER_PRINCIPAL_ID}' does not have "
+                                   f"{op[0]} {op[1]} permission on key vault '{vault}'."}}).encode()
                     return {"status": 403, "headers": {"content-type": "application/json"}, "body": body_json}
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body))
             elif svc == "az-blob":   # CORS preflight, lifecycle tiering/expiry and static-website

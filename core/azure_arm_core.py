@@ -189,20 +189,26 @@ def _activity_log_query(query: dict) -> dict:
     return _ok({"value": value})
 
 
-def vault_properties(state: dict | None, vault: str) -> dict:
-    """Look up a Microsoft.KeyVault/vaults resource's `properties` by vault name alone (the
+def _vault_record(state: dict | None, vault: str) -> dict | None:
+    """Look up a Microsoft.KeyVault/vaults resource's full record by vault name alone (the
     Key Vault Keys/Secrets/Certificates data planes never learn the subscription/resource
-    group — same read-only-snapshot pattern as azure_sql_core._server_props). Returns {} if
+    group — same read-only-snapshot pattern as azure_sql_core._server_props). None if
     `vault` is blank or no such vault exists (callers must treat that as "not enforced", not
-    "denied" — an unknown vault name is not evidence of a network restriction)."""
+    "denied" — an unknown vault name is not evidence of a restriction)."""
     if not state or not vault:
-        return {}
+        return None
     want = f"/vaults/{vault}".lower()
     for rec in state.values():
         if isinstance(rec, dict) and rec.get("_type", "").lower() == "microsoft.keyvault/vaults" \
                 and rec.get("id", "").lower().endswith(want):
-            return rec.get("properties") or {}
-    return {}
+            return rec
+    return None
+
+
+def vault_properties(state: dict | None, vault: str) -> dict:
+    """`_vault_record`'s `properties`, or {} if the vault doesn't exist."""
+    rec = _vault_record(state, vault)
+    return (rec or {}).get("properties") or {}
 
 
 def keyvault_network_denied(state: dict | None, vault: str) -> bool:
@@ -253,6 +259,171 @@ def acr_retention_days(state: dict | None, registry: str) -> int | None:
         return int(policy.get("days", 7))
     except (TypeError, ValueError):
         return None
+
+
+# A single simulated signed-in identity: Vyomi has no multi-user session concept anywhere in
+# the product (the whole console acts as one operator), so this is the one principal every
+# Key Vault data-plane permission check below is evaluated against. A fresh vault's create
+# PUT (see the generic PUT branch's "microsoft.keyvault/vaults" hook) self-grants it full
+# access — exactly what `az keyvault create` already does by default (RBAC mode: a Key Vault
+# Administrator role assignment; access-policy mode: a self-granting policy entry) — so the
+# console's own create-vault-then-add-a-secret path keeps working without a detour through a
+# separate "go grant yourself access" step nothing else in the product models either.
+CALLER_PRINCIPAL_ID = "11111111-1111-1111-1111-111111111111"
+
+# (resource, bucket) -> the Key Vault dataAction an RBAC role (core/azure_arm_data.py ROLES,
+# the "Key Vault *" built-ins) must grant CALLER_PRINCIPAL_ID for azure.keyvaults.
+# access_configuration's RBAC mode. "use" is the crypto operations (encrypt/decrypt/sign/
+# verify/wrapKey/unwrapKey) — readable/usable by a Crypto User without full key management.
+_KV_DATA_ACTIONS = {
+    ("keys", "get"): "Microsoft.KeyVault/vaults/keys/read",
+    ("keys", "list"): "Microsoft.KeyVault/vaults/keys/read",
+    ("keys", "use"): "Microsoft.KeyVault/vaults/keys/use/action",
+    ("keys", "create"): "Microsoft.KeyVault/vaults/keys/write",
+    ("keys", "delete"): "Microsoft.KeyVault/vaults/keys/delete",
+    ("secrets", "get"): "Microsoft.KeyVault/vaults/secrets/getSecret/action",
+    ("secrets", "list"): "Microsoft.KeyVault/vaults/secrets/readMetadata/action",
+    ("secrets", "create"): "Microsoft.KeyVault/vaults/secrets/write",
+    ("secrets", "delete"): "Microsoft.KeyVault/vaults/secrets/delete",
+    ("certificates", "get"): "Microsoft.KeyVault/vaults/certificates/read",
+    ("certificates", "list"): "Microsoft.KeyVault/vaults/certificates/read",
+    ("certificates", "create"): "Microsoft.KeyVault/vaults/certificates/write",
+    ("certificates", "delete"): "Microsoft.KeyVault/vaults/certificates/delete",
+}
+# bucket -> the access-policy permission string (azure.keyvaults.access_policies' Get/List/
+# Create/Delete — the console's own AccessPolicies dialog, consoles/src/azure/services/
+# keyvaults/KeyVaultBlade.jsx PERMS); a crypto "use" needs at least Get, same simplification.
+_KV_POLICY_PERM = {"get": "Get", "list": "List", "create": "Create", "delete": "Delete", "use": "Get"}
+
+_KV_CRYPTO_OPS = ("encrypt", "decrypt", "sign", "verify", "wrapkey", "unwrapkey")
+
+
+def classify_keyvault_operation(method: str, path: str) -> tuple[str, str] | None:
+    """(resource, bucket) for a Key Vault Keys/Secrets/Certificates data-plane request —
+    the same (resource, bucket) `_KV_DATA_ACTIONS` / `_KV_POLICY_PERM` key on. `path` is the
+    root-shaped Key Vault path (/keys/..., /secrets/..., /certificates/...), the same shape
+    both substrates normalize to before calling the *_core dispatch (aws_wire_router.py's own
+    `path`; wire_ingress.py's `kv_core_path(path)`). None if the request doesn't map to a
+    permission this console checks (unmodelled sub-resources fall through to the core's own
+    404/405 — never a silent allow)."""
+    method = (method or "GET").upper()
+    segs = [s for s in (path or "").split("?", 1)[0].split("/") if s]
+    if not segs or segs[0] not in ("keys", "secrets", "certificates"):
+        return None
+    resource = segs[0]
+    if len(segs) == 1:
+        return (resource, "list") if method == "GET" else None
+    if len(segs) >= 3:
+        tail = segs[2]
+        if tail in ("create", "import") and method == "POST":
+            return (resource, "create")
+        if tail == "versions":
+            return (resource, "list") if method == "GET" else None
+        if tail == "pending":
+            if method == "GET":
+                return (resource, "get")
+            if method == "DELETE":
+                return (resource, "delete")
+            return None
+        if resource == "keys" and tail in _KV_CRYPTO_OPS and method == "POST":
+            return (resource, "use")
+    if len(segs) == 2:
+        if method == "GET":
+            return (resource, "get")
+        if method == "DELETE":
+            return (resource, "delete")
+        if method in ("PUT", "PATCH"):
+            return (resource, "create")
+        return None
+    if len(segs) == 3:
+        if method == "GET":
+            return (resource, "get")
+        if method == "PATCH":
+            return (resource, "create")
+        return None
+    if resource == "keys" and len(segs) == 4 and method == "POST" and segs[3] in _KV_CRYPTO_OPS:
+        return (resource, "use")
+    return None
+
+
+def _kv_role_data_actions(state: dict | None, sub: str) -> dict:
+    """roleName -> (dataActions, notDataActions), the built-in "Key Vault *" roles (core/
+    azure_arm_data.py ROLES) merged with any custom role definition created via PUT .../
+    roleDefinitions/{name} that carries its own dataActions — mirrors AzureArm._role_catalog's
+    actions/notActions merge, over the separate dataActions namespace (control-plane roles
+    like Owner/Contributor carry none, matching real Azure: being Owner of a subscription does
+    not, by itself, grant Key Vault data access once RBAC authorization is enabled)."""
+    out = {}
+    for r in ROLES:
+        props = r["properties"]
+        data_actions, not_data_actions = [], []
+        for p in props.get("permissions") or []:
+            data_actions.extend(p.get("dataActions") or [])
+            not_data_actions.extend(p.get("notDataActions") or [])
+        out[props["roleName"]] = (data_actions, not_data_actions)
+    for rec in (state or {}).values():
+        if not isinstance(rec, dict) or rec.get("_type", "").lower() != "microsoft.authorization/roledefinitions" \
+                or rec.get("_sub") != sub:
+            continue
+        props = rec.get("properties") or {}
+        data_actions, not_data_actions = [], []
+        for p in props.get("permissions") or []:
+            data_actions.extend(p.get("dataActions") or [])
+            not_data_actions.extend(p.get("notDataActions") or [])
+        out[rec.get("name")] = (data_actions, not_data_actions)
+    return out
+
+
+def _check_data_access(state: dict | None, sub: str, scope_rid: str, principal_id: str, data_action: str) -> bool:
+    """True if `principal_id` holds a role assignment covering `scope_rid` (the vault itself,
+    or an ancestor scope — resource group / subscription, real Azure's inherited access) whose
+    role's dataActions grant `data_action` — the RBAC half of azure.keyvaults.
+    access_configuration. Same wildcard + scope-inheritance algorithm as AzureArm._check_access,
+    over dataActions instead of actions; deny assignments are a control-plane-only concept here
+    (skipped), same simplification azure.keyvaults.access_policies' flat allow-list makes."""
+    roles = _kv_role_data_actions(state, sub)
+    for rec in (state or {}).values():
+        if not isinstance(rec, dict) or rec.get("_type", "").lower() != "microsoft.authorization/roleassignments" \
+                or rec.get("_sub") != sub:
+            continue
+        props = rec.get("properties") or {}
+        if props.get("principalId") != principal_id:
+            continue
+        if str(props.get("kind", "allow")).lower() == "deny":
+            continue
+        if not iam_engine._scope_covers(props.get("scope", "/"), scope_rid):
+            continue
+        role_name = props.get("roleName") or (props.get("roleDefinitionId") or "").rsplit("/", 1)[-1]
+        data_actions, not_data_actions = roles.get(role_name, ([], []))
+        if iam_engine._matches_any(data_actions, data_action) and not iam_engine._matches_any(not_data_actions, data_action):
+            return True
+    return False
+
+
+def keyvault_access_denied(state: dict | None, vault: str, resource: str, bucket: str) -> bool:
+    """True when this vault's access model (azure.keyvaults.access_configuration's RBAC-vs-
+    access-policy switch, azure.keyvaults.access_policies' entries) would reject a data-plane
+    call for `resource` ("keys"/"secrets"/"certificates") + `bucket` ("get"/"list"/"create"/
+    "delete"/"use") — ENFORCED against the single simulated signed-in principal
+    CALLER_PRINCIPAL_ID: RBAC mode checks a real role assignment covering this vault (or an
+    ancestor scope); vault access policy mode checks the vault's own accessPolicies list."""
+    rec = _vault_record(state, vault)
+    if not rec:
+        return False
+    props = rec.get("properties") or {}
+    if props.get("enableRbacAuthorization"):
+        sub = rec.get("_sub")
+        data_action = _KV_DATA_ACTIONS.get((resource, bucket))
+        if not sub or not data_action:
+            return False
+        return not _check_data_access(state, sub, rec.get("id", ""), CALLER_PRINCIPAL_ID, data_action)
+    perm = _KV_POLICY_PERM.get(bucket, bucket.capitalize())
+    for p in props.get("accessPolicies") or []:
+        if p.get("objectId") != CALLER_PRINCIPAL_ID:
+            continue
+        if perm in ((p.get("permissions") or {}).get(resource) or []):
+            return False
+    return True
 
 
 def _now() -> str:
@@ -1090,6 +1261,35 @@ class AzureArm:
                 if errors:
                     rec["properties"]["provisioningState"] = "Failed"
                     rec["properties"]["error"] = {"code": "DeploymentFailed", "details": errors}
+                resp["body"] = _view(rec)
+            if full_type.lower() == "microsoft.keyvault/vaults" and resp["status"] == 201:
+                # azure.keyvaults.access_configuration / azure.keyvaults.access_policies,
+                # ENFORCED by keyvault_access_denied() below: real Azure default-denies a
+                # fresh vault's data plane until a role/access-policy entry is explicitly
+                # granted, which would lock this console's own create-vault-then-add-a-secret
+                # path since nothing else in the product has a signed-in identity to grant one
+                # — so, exactly like `az keyvault create` does by default (and unlike a raw
+                # ARM/Bicep deploy, which doesn't), self-grant the one simulated signed-in
+                # principal full access at creation time.
+                rec = self.state[key]
+                props = rec.setdefault("properties", {})
+                if props.get("enableRbacAuthorization"):
+                    ra_name = str(uuid.uuid4())
+                    ra_rid = f"{rid}/providers/Microsoft.Authorization/roleAssignments/{ra_name}"
+                    self.state[ra_rid.lower()] = {
+                        "id": ra_rid, "name": ra_name, "type": "Microsoft.Authorization/roleAssignments",
+                        "_type": "microsoft.authorization/roleassignments", "_sub": sub, "_rg": rg,
+                        "properties": {"principalId": CALLER_PRINCIPAL_ID, "roleName": "Key Vault Administrator",
+                                      "principalType": "User", "scope": rid},
+                    }
+                else:
+                    props["accessPolicies"] = [{
+                        "tenantId": props.get("tenantId", "00000000-0000-0000-0000-000000000000"),
+                        "objectId": CALLER_PRINCIPAL_ID,
+                        "permissions": {"keys": ["Get", "List", "Create", "Delete"],
+                                       "secrets": ["Get", "List", "Create", "Delete"],
+                                       "certificates": ["Get", "List", "Create", "Delete"]},
+                    }]
                 resp["body"] = _view(rec)
             if lro:
                 resp["status"] = 200

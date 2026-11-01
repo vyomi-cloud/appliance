@@ -23,6 +23,25 @@ export const deleteVault = (rg, name) => ARM.remove(rg, name);
 export const vaultUri = (name) => `https://${name}.vault.azure.net/`;
 export const skuLabel = (sku) => (sku?.name === "premium" ? "Premium" : "Standard");
 
+// The one simulated signed-in identity every data-plane permission check (azure.keyvaults.
+// access_configuration / access_policies) evaluates against — core/azure_arm_core.py
+// CALLER_PRINCIPAL_ID. A fresh vault self-grants it full access (RBAC: Key Vault
+// Administrator; access policy: a self-granting entry); it's the objectId/principalId to
+// use when granting access to THIS console's own session from the Access policies panel,
+// the Subscription/Resource group "Add role assignment" dialogs, or Check access below.
+export const CALLER_PRINCIPAL_ID = "11111111-1111-1111-1111-111111111111";
+
+// ── Access control (IAM): Microsoft.Authorization/roleAssignments + roleDefinitions +
+// checkAccess, all real ARM resources/actions resource-scoped to this vault (plus its
+// subscription/resource-group ancestors) — azure.keyvaults.iam.
+const AUTHZ_API = "2022-04-01";
+export const listRoleAssignments = async (vaultId) =>
+  (await restJson("GET", `${vaultId}/providers/Microsoft.Authorization/roleAssignments`, { query: { "api-version": AUTHZ_API } })).value || [];
+export const listRoleDefinitions = async () =>
+  (await restJson("GET", `/subscriptions/${getSubscription()}/providers/Microsoft.Authorization/roleDefinitions`, { query: { "api-version": AUTHZ_API } })).value || [];
+export const checkAccess = async (vaultId, principalId, action) =>
+  (await restJson("POST", `${vaultId}/providers/Microsoft.Authorization/checkAccess`, { query: { "api-version": AUTHZ_API }, body: { principalId, action } })).value || [];
+
 // ── Keys data plane (Key Vault Keys REST) ───────────────────────────────────────────────
 // Which vault the blade currently showing is calling for — real Key Vault learns this from
 // the vault's own hostname ({vault}.vault.azure.net); Vyomi's one shared relay has no
