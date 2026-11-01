@@ -36,9 +36,12 @@ All errors use the NATIVE `{"__type", "message"}` shape with DynamoDB's HTTP 400
 """
 from __future__ import annotations
 
+import base64
 import copy
+import gzip
 import json
 import re
+import time
 import uuid
 import zlib
 from dataclasses import dataclass, field
@@ -47,6 +50,12 @@ from typing import Any
 
 from core.nosql_store import NoSqlStore
 from core import dynamodb_expr as _expr
+try:
+    from core import cloudwatch_core as _cw_core
+    from core import kinesis_core as _kinesis_core
+except ImportError:  # pragma: no cover - Pyodide flat layout
+    import cloudwatch_core as _cw_core  # type: ignore
+    import kinesis_core as _kinesis_core  # type: ignore
 
 
 # ── transport types ───────────────────────────────────────────────────────
@@ -93,6 +102,44 @@ def _fmt_size(n: int) -> str:
             return f"{orig:.1f} {unit}"
         orig /= 1024
     return f"{orig:.1f} TB"
+
+
+def _epoch() -> float:
+    return time.time()
+
+
+def _cw(store: NoSqlStore):
+    """The CloudWatch store the router wires onto `store.cw_store` (None in bare
+    conformance tests that construct a NoSqlStore directly — every metric push is then
+    a no-op, same pattern as core/vpc_core.py's `_push_status_metrics`)."""
+    return getattr(store, "cw_store", None)
+
+
+def _kinesis(store: NoSqlStore):
+    """The Kinesis store the router wires onto `store.kinesis_store` for the
+    Kinesis Data Streams destination (aws.dynamodb.kinesis); None outside the router."""
+    return getattr(store, "kinesis_store", None)
+
+
+def _emit_op_metrics(store: NoSqlStore, table_name: str, op: str, units: float, elapsed_s: float) -> None:
+    """Real AWS/DynamoDB CloudWatch datapoints derived from actual request activity
+    (never synthetic) — both the per-table series the console's Monitor tab reads and
+    the per-table+Operation series DescribeAlarmsForMetric / GetMetricData use."""
+    cw = _cw(store)
+    if cw is None or not table_name:
+        return
+    now = _epoch()
+    base_dims = [{"Name": "TableName", "Value": table_name}]
+    # Dimensions are stored under the SAME key GetMetricStatistics/GetMetricData look them up
+    # with — those sort by Name (cloudwatch_core._dims) — so sort here too, or a query with
+    # Dimensions=[TableName, Operation] (alphabetically out of order) would silently miss them.
+    op_dims = sorted(base_dims + [{"Name": "Operation", "Value": op}], key=lambda dd: dd["Name"])
+    kind = "ConsumedReadCapacityUnits" if op in ("GetItem", "Query", "Scan", "BatchGetItem", "TransactGetItems") \
+        else "ConsumedWriteCapacityUnits"
+    for dims in (base_dims, op_dims):
+        _cw_core.ingest_internal_metric(cw, "AWS/DynamoDB", kind, dims, float(units), unit="Count", ts=now)
+    _cw_core.ingest_internal_metric(cw, "AWS/DynamoDB", "SuccessfulRequestLatency", op_dims,
+                                    elapsed_s * 1000.0, unit="Milliseconds", ts=now)
 
 
 def _table_arn(store: NoSqlStore, table_name: str) -> str:
@@ -212,7 +259,11 @@ def _normalize_table(store: NoSqlStore, table_name: str, table: dict) -> dict:
     table.setdefault("tags", {})
     table.setdefault("indexes", [])
     table.setdefault("local_indexes", [])
-    table.setdefault("streams", {"enabled": False, "latest_stream_label": ""})
+    table.setdefault("stream", {"enabled": False, "view_type": "", "label": "", "arn": "", "status": "DISABLED"})
+    table.setdefault("kinesis_dest", None)
+    table.setdefault("resource_policy", None)
+    table.setdefault("resource_policy_revision", None)
+    table.setdefault("replicas", [])
     table.setdefault("items", {})
     table.setdefault("created", _now())
     table.setdefault("last_modified", _now())
@@ -303,7 +354,30 @@ def _table_view(store: NoSqlStore, table: dict, include_items: bool = True) -> d
     lsis = table.get("local_indexes", [])
     if lsis:
         view["LocalSecondaryIndexes"] = [_index_view(table, li) for li in lsis]
+    stream = table.get("stream") or {}
+    view["StreamSpecification"] = {"StreamEnabled": bool(stream.get("enabled"))}
+    if stream.get("enabled"):
+        view["StreamSpecification"]["StreamViewType"] = stream.get("view_type")
+        view["LatestStreamArn"] = stream.get("arn")
+        view["LatestStreamLabel"] = stream.get("label")
+    replicas = table.get("replicas") or []
+    if replicas:
+        view["Replicas"] = [_replica_view(table, r) for r in replicas]
+        view["GlobalTableVersion"] = "2019.11.21"
     return view
+
+
+def _replica_view(table: dict, replica: dict) -> dict:
+    mode = str(table.get("billing_mode", "PAY_PER_REQUEST")).upper()
+    out = {"RegionName": replica["region"], "ReplicaStatus": replica.get("status", "ACTIVE"),
+           "ReplicaStatusDescription": "Replica is ready for use" if replica.get("status") == "ACTIVE" else "Replica is being created",
+           "KMSMasterKeyId": replica.get("kms_master_key_id") or "",
+           "ReplicaTableClassSummary": {"TableClass": table.get("table_class", "STANDARD")}}
+    if mode == "PAY_PER_REQUEST":
+        out["ReplicaProvisionedReadCapacityAutoScalingSettings"] = {}
+    else:
+        out["ReplicaProvisionedReadCapacityUnits"] = table.get("provisioned_throughput", {}).get("ReadCapacityUnits", 5)
+    return out
 
 
 # ── table CRUD ─────────────────────────────────────────────────────────────
@@ -439,7 +513,11 @@ def _create_table_record(store: NoSqlStore, payload: dict[str, Any]) -> dict:
         "tags": copy.deepcopy(tags or {}),
         "indexes": indexes,
         "local_indexes": local_indexes,
-        "streams": {"enabled": False, "latest_stream_label": ""},
+        "stream": {"enabled": False, "view_type": "", "label": "", "arn": "", "status": "DISABLED"},
+        "kinesis_dest": None,
+        "resource_policy": None,
+        "resource_policy_revision": None,
+        "replicas": [],
         "items": {},
         "created": _now(),
         "last_modified": _now(),
@@ -454,6 +532,9 @@ def _create_table_record(store: NoSqlStore, payload: dict[str, Any]) -> dict:
         if name not in (pk_name, sk_name):
             defs.append({"AttributeName": name, "AttributeType": t})
     table["attribute_definitions"] = defs
+    stream_spec = payload.get("StreamSpecification") or payload.get("stream_specification")
+    if isinstance(stream_spec, dict) and stream_spec.get("StreamEnabled"):
+        table["stream"] = _enable_stream(table, stream_spec.get("StreamViewType"))
     store.put_table(table_name, table)
     store.mirror_create_table(table_name, table)
     store.persist()
@@ -463,6 +544,11 @@ def _create_table_record(store: NoSqlStore, payload: dict[str, Any]) -> dict:
 def _delete_table_record(store: NoSqlStore, table_name: str) -> None:
     if not store.table_exists(table_name):
         raise DdbError("ResourceNotFoundException", _RNF.format(table_name), 400)
+    table = store.get_table(table_name)
+    if isinstance(table, dict) and table.get("replicas"):
+        regions = ", ".join(r["region"] for r in table["replicas"])
+        raise DdbError("ValidationException",
+                       f"Replication group must be empty to delete the table; active replicas in: {regions}", 400)
     store.drop_table(table_name)
     store.mirror_delete_table(table_name)
     store.persist()
@@ -497,9 +583,44 @@ def _update_table_record(store: NoSqlStore, table: dict, payload: dict[str, Any]
         elif "Delete" in upd:
             name = str(upd["Delete"].get("IndexName", ""))
             table["indexes"] = [g for g in table.get("indexes", []) if g.get("name") != name]
+    stream_spec = payload.get("StreamSpecification")
+    if isinstance(stream_spec, dict):
+        if stream_spec.get("StreamEnabled"):
+            table["stream"] = _enable_stream(table, stream_spec.get("StreamViewType"))
+        else:
+            _disable_stream(table)
+    for upd in payload.get("ReplicaUpdates") or []:
+        if not isinstance(upd, dict):
+            continue
+        _apply_replica_update(table, upd)
     table["last_modified"] = _now()
     store.persist()
     return table
+
+
+def _apply_replica_update(table: dict, upd: dict) -> None:
+    if "Create" in upd:
+        region = str((upd["Create"] or {}).get("RegionName") or "").strip()
+        if not region:
+            raise _validation("UpdateTable ReplicaUpdates.Create.RegionName is required.")
+        if any(r["region"] == region for r in table.get("replicas") or []):
+            raise DdbError("ReplicaAlreadyExistsException", f"Table already has a replica in region: {region}", 400)
+        if region == "us-east-1":
+            raise DdbError("ReplicaAlreadyExistsException",
+                           "Table already has a replica in region: us-east-1 (the table's own region).", 400)
+        table.setdefault("replicas", []).append({"region": region, "status": "ACTIVE", "created": _now(),
+                                                 "kms_master_key_id": (upd["Create"] or {}).get("KMSMasterKeyId") or ""})
+        # New replicas start from the primary's current data (real DynamoDB backfills a replica on creation).
+        table.setdefault("replica_items", {})[region] = copy.deepcopy(table.get("items") or {})
+    elif "Delete" in upd:
+        region = str((upd["Delete"] or {}).get("RegionName") or "").strip()
+        before = len(table.get("replicas") or [])
+        table["replicas"] = [r for r in table.get("replicas") or [] if r["region"] != region]
+        if len(table["replicas"]) == before:
+            raise DdbError("ReplicaNotFoundException", f"Table does not have a replica in region: {region}", 400)
+        table.get("replica_items", {}).pop(region, None)
+    else:
+        raise _validation("ReplicaUpdates can only contain one of Create or Delete")
 
 
 # ── TTL (faithful lazy-expiry: items past their TTL are dropped on read) ───
@@ -783,6 +904,118 @@ def _create_export_record(store: NoSqlStore, s3_store: Any, payload: dict[str, A
     return record
 
 
+# ── change-data-capture: streams, Kinesis destination, global-table replicas ──
+# Every item write/delete funnels through _store_av / _drop_key below (PutItem,
+# UpdateItem, BatchWriteItem, TransactWriteItems and their Delete counterparts) —
+# the ONE place a stream record is appended, a Kinesis destination record is
+# published and a global-table replica's own item copy is kept in sync. Real
+# DynamoDB Streams/Kinesis CDC and real cross-region replication; see
+# core/capabilities/aws/dynamodb.json's streams/kinesis/global-tables entries for
+# the (honest) simplifications.
+_MAX_STREAM_RECORDS = 1000
+
+
+def _seq_str(n: int) -> str:
+    return f"{n:021d}"
+
+
+def _new_stream(table: dict, view_type: str) -> dict:
+    label = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3]
+    return {
+        "enabled": True, "view_type": view_type, "label": label,
+        "arn": f"{table['table_arn']}/stream/{label}",
+        "status": "ENABLED", "shard_id": "shardId-00000000000000000000-0000000000000000000",
+        "start_seq": None, "next_seq": 1, "records": [], "created": _now(),
+    }
+
+
+def _enable_stream(table: dict, view_type: str) -> dict:
+    view_type = str(view_type or "NEW_AND_OLD_IMAGES").upper()
+    if view_type not in ("NEW_IMAGE", "OLD_IMAGE", "NEW_AND_OLD_IMAGES", "KEYS_ONLY"):
+        raise _validation(f"ExpectedValue: StreamViewType must be one of NEW_IMAGE, OLD_IMAGE, "
+                          f"NEW_AND_OLD_IMAGES, KEYS_ONLY; got {view_type}")
+    cur = table.get("stream")
+    if cur and cur.get("enabled"):
+        if cur.get("view_type") == view_type:
+            return cur
+        raise _validation("Table already has an enabled stream; disable it before changing StreamViewType.")
+    table["stream"] = _new_stream(table, view_type)
+    return table["stream"]
+
+
+def _disable_stream(table: dict) -> None:
+    cur = table.get("stream")
+    if not cur or not cur.get("enabled"):
+        return
+    cur["enabled"] = False
+    cur["status"] = "DISABLED"
+    cur["end_seq"] = cur["next_seq"] - 1
+    table.setdefault("stream_history", []).append(cur)
+    table["stream"] = {"enabled": False, "view_type": "", "label": "", "arn": "", "status": "DISABLED"}
+
+
+def _stream_view(table: dict, view_type: str, keys_av: dict, old_av: dict | None, new_av: dict | None) -> dict:
+    out: dict[str, Any] = {"Keys": keys_av, "StreamViewType": view_type,
+                           "SizeBytes": _expr.item_size(new_av or old_av or {})}
+    if view_type in ("NEW_IMAGE", "NEW_AND_OLD_IMAGES") and new_av is not None:
+        out["NewImage"] = new_av
+    if view_type in ("OLD_IMAGE", "NEW_AND_OLD_IMAGES") and old_av is not None:
+        out["OldImage"] = old_av
+    return out
+
+
+def _emit_stream_record(table: dict, event_name: str, old_av: dict | None, new_av: dict | None) -> None:
+    st = table.get("stream")
+    if not st or not st.get("enabled"):
+        return
+    seq = st["next_seq"]
+    st["next_seq"] += 1
+    keys_av = {k: (new_av or old_av or {}).get(k) for k in _key_names(table) if (new_av or old_av or {}).get(k) is not None}
+    rec = {"seq": seq, "event_name": event_name, "dynamodb": _stream_view(table, st["view_type"], keys_av, old_av, new_av),
+           "ts": _epoch()}
+    st["records"].append(rec)
+    if len(st["records"]) > _MAX_STREAM_RECORDS:
+        del st["records"][: len(st["records"]) - _MAX_STREAM_RECORDS]
+    st["start_seq"] = st["records"][0]["seq"] if st["records"] else seq
+
+
+def _push_kinesis_record(store: NoSqlStore, table: dict, event_name: str, old_av: dict | None, new_av: dict | None) -> None:
+    dest = table.get("kinesis_dest")
+    if not dest or dest.get("status") != "ACTIVE":
+        return
+    kstore = _kinesis(store)
+    if kstore is None:
+        return
+    keys_av = {k: (new_av or old_av or {}).get(k) for k in _key_names(table)}
+    payload = {
+        "awsRegion": "us-east-1", "eventID": uuid.uuid4().hex, "eventName": event_name,
+        "userIdentity": None, "recordFormat": "application/json", "tableName": table["table_name"],
+        "dynamodb": _stream_view(table, "NEW_AND_OLD_IMAGES", keys_av, old_av, new_av),
+        "eventSource": "aws:dynamodb",
+    }
+    data = base64.b64encode(json.dumps(payload).encode()).decode()
+    try:
+        _kinesis_core.put_record(kstore, {"StreamARN": dest["stream_arn"], "Data": data, "PartitionKey": table["table_name"]})
+    except Exception:
+        pass    # the destination stream may have been deleted directly through Kinesis; best-effort, like a mirror hook
+
+
+def _replica_items(table: dict, region: str) -> dict:
+    return table.setdefault("replica_items", {}).setdefault(region, {})
+
+
+def _replicate_write(table: dict, key: str, rec: dict) -> None:
+    for replica in table.get("replicas") or []:
+        if replica.get("status") != "ACTIVE":
+            continue
+        _replica_items(table, replica["region"])[key] = copy.deepcopy(rec)
+
+
+def _replicate_delete(table: dict, key: str) -> None:
+    for replica in table.get("replicas") or []:
+        _replica_items(table, replica["region"]).pop(key, None)
+
+
 # ── typed item records ─────────────────────────────────────────────────────
 # record = {"item": <native projection — console REST / legacy readers>,
 #           "av":   <typed AttributeValue map — the wire's source of truth>,
@@ -802,12 +1035,17 @@ def _rec_av(rec: dict | None) -> dict:
 def _store_av(store: NoSqlStore, table: dict, key: str, av_item: dict) -> dict:
     items = table.setdefault("items", {})
     existing = items.get(key)
+    old_av = _rec_av(existing) if isinstance(existing, dict) else None
     native = {k: json_to_native(v) for k, v in av_item.items()}
     rec = {"item": native, "av": copy.deepcopy(av_item),
            "created": existing.get("created", _now()) if isinstance(existing, dict) else _now(),
            "updated": _now(), "size_bytes": _expr.item_size(av_item)}
     items[key] = rec
     store.mirror_put_item(table["table_name"], key, native)
+    event = "MODIFY" if old_av else "INSERT"
+    _emit_stream_record(table, event, old_av, av_item)
+    _push_kinesis_record(store, table, event, old_av, av_item)
+    _replicate_write(table, key, rec)
     return rec
 
 
@@ -815,6 +1053,10 @@ def _drop_key(store: NoSqlStore, table: dict, key: str) -> dict | None:
     removed = table.get("items", {}).pop(key, None)
     if removed is not None:
         store.mirror_delete_item(table["table_name"], key)
+        old_av = _rec_av(removed)
+        _emit_stream_record(table, "REMOVE", old_av, None)
+        _push_kinesis_record(store, table, "REMOVE", old_av, None)
+        _replicate_delete(table, key)
     return removed
 
 
@@ -2008,6 +2250,368 @@ def _set_tags(store: NoSqlStore, table: dict, tags: dict[str, str]) -> None:
     store.persist()
 
 
+# ── resource-based policy (aws.dynamodb.resource-policy) ───────────────────
+# Same shape/public-policy guard as core/secrets_core.py's PutResourcePolicy (the
+# precedent the console's Permissions tab follows): validates the document and
+# blocks a policy that grants '*' access, same as real PutResourcePolicy does.
+# Evaluating the policy against an actual caller at request time is not modeled —
+# Vyomi has one implicit caller identity (see the capability registry's note).
+def _table_from_resource_arn(store: NoSqlStore, arn: str) -> dict:
+    arn = str(arn or "")
+    if ":table/" not in arn:
+        raise _validation("ResourceArn must be a DynamoDB table ARN.")
+    return _require_table(store, arn.split(":table/", 1)[1].split("/", 1)[0])
+
+
+def _policy_is_public(doc: dict) -> bool:
+    for st in doc.get("Statement") or []:
+        if st.get("Effect") != "Allow":
+            continue
+        principal = st.get("Principal")
+        if principal == "*":
+            return True
+        if isinstance(principal, dict):
+            aws = principal.get("AWS")
+            if aws == "*" or (isinstance(aws, list) and "*" in aws):
+                return True
+    return False
+
+
+def _parse_resource_policy(policy) -> dict:
+    try:
+        doc = json.loads(policy)
+    except (TypeError, ValueError):
+        raise DdbError("MalformedPolicyDocumentException", "The policy text is not valid JSON.", 400)
+    statements = doc.get("Statement") if isinstance(doc, dict) else None
+    if not isinstance(doc, dict) or not isinstance(statements, list) or not statements:
+        raise DdbError("MalformedPolicyDocumentException",
+                       "The policy must be a JSON object with a non-empty Statement list.", 400)
+    for st in statements:
+        if not isinstance(st, dict) or st.get("Effect") not in ("Allow", "Deny") or not st.get("Principal"):
+            raise DdbError("MalformedPolicyDocumentException",
+                           "Each statement needs an Effect of Allow or Deny and a Principal.", 400)
+    return doc
+
+
+def _put_resource_policy(store: NoSqlStore, payload: dict) -> dict:
+    table = _table_from_resource_arn(store, payload.get("ResourceArn"))
+    policy = payload.get("Policy")
+    if not policy:
+        raise _validation("Policy is required.")
+    doc = _parse_resource_policy(policy)
+    if _policy_is_public(doc) and not payload.get("ConfirmRemoveSelfResourceAccess"):
+        raise DdbError("PolicyNotFoundException",
+                       "The policy grants public access; this is usually a mistake. Pass "
+                       "ConfirmRemoveSelfResourceAccess=true to attach it anyway.", 400)
+    expected = payload.get("ExpectedRevisionId")
+    if expected is not None and str(expected) != str(table.get("resource_policy_revision") or ""):
+        raise DdbError("PolicyNotFoundException",
+                       f"Policy revision {expected} does not match the current revision.", 400)
+    table["resource_policy"] = str(policy)
+    table["resource_policy_revision"] = uuid.uuid4().hex
+    table["last_modified"] = _now()
+    store.persist()
+    return {"RevisionId": table["resource_policy_revision"]}
+
+
+def _get_resource_policy(store: NoSqlStore, payload: dict) -> dict:
+    table = _table_from_resource_arn(store, payload.get("ResourceArn"))
+    if not table.get("resource_policy"):
+        raise DdbError("PolicyNotFoundException", f"No policy found for: {payload.get('ResourceArn')}", 400)
+    return {"Policy": table["resource_policy"], "RevisionId": table.get("resource_policy_revision")}
+
+
+def _delete_resource_policy(store: NoSqlStore, payload: dict) -> dict:
+    table = _table_from_resource_arn(store, payload.get("ResourceArn"))
+    if not table.get("resource_policy"):
+        raise DdbError("PolicyNotFoundException", f"No policy found for: {payload.get('ResourceArn')}", 400)
+    expected = payload.get("ExpectedRevisionId")
+    if expected is not None and str(expected) != str(table.get("resource_policy_revision") or ""):
+        raise DdbError("PolicyNotFoundException",
+                       f"Policy revision {expected} does not match the current revision.", 400)
+    revision = table.get("resource_policy_revision")
+    table["resource_policy"] = None
+    table["resource_policy_revision"] = None
+    table["last_modified"] = _now()
+    store.persist()
+    return {"RevisionId": revision}
+
+
+# ── DynamoDB Streams (aws.dynamodb.streams) ─────────────────────────────────
+def _find_stream(store: NoSqlStore, stream_arn: str) -> tuple[dict, dict]:
+    """(table, stream-generation) for a StreamArn — the live one or a closed one
+    kept in stream_history, matching real Streams' "data stays readable for up to
+    24h after you disable the stream" behaviour (bounded here, not time-limited)."""
+    stream_arn = str(stream_arn or "")
+    for table in store.tables.values():
+        if not isinstance(table, dict):
+            continue
+        for gen in [table.get("stream")] + list(table.get("stream_history") or []):
+            if gen and gen.get("arn") == stream_arn:
+                return table, gen
+    raise DdbError("ResourceNotFoundException", f"Requested resource not found: Stream: {stream_arn} not found", 400)
+
+
+def _stream_summary(table: dict, gen: dict) -> dict:
+    return {"StreamArn": gen["arn"], "TableName": table["table_name"], "StreamLabel": gen["label"]}
+
+
+def _stream_description(table: dict, gen: dict) -> dict:
+    records = gen.get("records") or []
+    shard = {"ShardId": gen["shard_id"],
+             "SequenceNumberRange": {"StartingSequenceNumber": _seq_str(gen["start_seq"] or 1)}}
+    if not gen.get("enabled"):
+        shard["SequenceNumberRange"]["EndingSequenceNumber"] = _seq_str(gen.get("end_seq", gen["next_seq"] - 1) or 1)
+    return {
+        "StreamArn": gen["arn"], "StreamLabel": gen["label"],
+        "StreamStatus": gen.get("status", "ENABLED" if gen.get("enabled") else "DISABLED"),
+        "StreamViewType": gen.get("view_type"), "CreationRequestDateTime": gen.get("created"),
+        "TableName": table["table_name"], "KeySchema": table.get("key_schema", []),
+        "Shards": [shard], "ItemCount": len(records),
+    }
+
+
+def _list_streams(store: NoSqlStore, payload: dict) -> dict:
+    tname = str(payload.get("TableName") or "").strip()
+    rows = []
+    for table in store.tables.values():
+        if not isinstance(table, dict) or (tname and table.get("table_name") != tname):
+            continue
+        for gen in [table.get("stream")] + list(table.get("stream_history") or []):
+            if gen and gen.get("arn"):
+                rows.append(_stream_summary(table, gen))
+    rows.sort(key=lambda r: r["StreamArn"])
+    return {"Streams": rows}
+
+
+def _get_shard_iterator(store: NoSqlStore, payload: dict) -> dict:
+    table, gen = _find_stream(store, payload.get("StreamArn"))
+    shard_id = str(payload.get("ShardId") or "")
+    if shard_id != gen["shard_id"]:
+        raise DdbError("ResourceNotFoundException", f"Requested resource not found: Shard: {shard_id} not found", 400)
+    kind = str(payload.get("ShardIteratorType") or "").upper()
+    records = gen.get("records") or []
+    if kind == "TRIM_HORIZON":
+        pos = 0
+    elif kind == "LATEST":
+        pos = len(records)
+    elif kind in ("AT_SEQUENCE_NUMBER", "AFTER_SEQUENCE_NUMBER"):
+        target = str(payload.get("SequenceNumber") or "")
+        idx = next((i for i, r in enumerate(records) if _seq_str(r["seq"]) == target), None)
+        if idx is None:
+            raise _validation(f"Invalid SequenceNumber: {target}")
+        pos = idx if kind == "AT_SEQUENCE_NUMBER" else idx + 1
+    else:
+        raise _validation(f"Invalid ShardIteratorType: {kind}")
+    token = {"arn": gen["arn"], "pos": pos}
+    return {"ShardIterator": base64.urlsafe_b64encode(json.dumps(token).encode()).decode()}
+
+
+def _get_records(store: NoSqlStore, payload: dict) -> dict:
+    raw = str(payload.get("ShardIterator") or "")
+    try:
+        token = json.loads(base64.urlsafe_b64decode(raw.encode()))
+        pos = int(token["pos"])
+    except Exception:
+        raise DdbError("ExpiredIteratorException", "The shard iterator is invalid.", 400)
+    table, gen = _find_stream(store, token.get("arn"))
+    limit = int(payload.get("Limit") or 1000)
+    records = gen.get("records") or []
+    page = records[pos: pos + max(1, limit)]
+    out = [{"eventID": str(r["seq"]), "eventName": r["event_name"], "eventVersion": "1.1",
+           "eventSource": "aws:dynamodb", "awsRegion": "us-east-1",
+           "dynamodb": {**r["dynamodb"], "ApproximateCreationDateTime": r["ts"], "SequenceNumber": _seq_str(r["seq"])},
+           "eventSourceARN": gen["arn"]} for r in page]
+    next_pos = pos + len(page)
+    next_iter = None
+    if gen.get("enabled") or next_pos < len(records):
+        next_iter = base64.urlsafe_b64encode(json.dumps({"arn": gen["arn"], "pos": next_pos}).encode()).decode()
+    return {"Records": out, "NextShardIterator": next_iter}
+
+
+# ── Kinesis Data Streams destination (aws.dynamodb.kinesis) ────────────────
+def _kinesis_dest_view(table: dict) -> dict:
+    dest = table.get("kinesis_dest")
+    if not dest:
+        return {}
+    return {"StreamArn": dest["stream_arn"], "DestinationStatus": dest.get("status", "ACTIVE"),
+           "TableName": table["table_name"],
+           "DestinationStatusDescription": "" if dest.get("status") == "ACTIVE" else "Being updated",
+           "ApproximateCreationDateTimePrecision": dest.get("precision", "MILLISECOND")}
+
+
+def _enable_kinesis_destination(store: NoSqlStore, table: dict, payload: dict) -> dict:
+    arn = str(payload.get("StreamArn") or "").strip()
+    if not arn:
+        raise _validation("StreamArn is required.")
+    if table.get("kinesis_dest") and table["kinesis_dest"].get("status") == "ACTIVE":
+        raise DdbError("ResourceInUseException",
+                       f"Table {table['table_name']} already has an active Kinesis streaming destination.", 400)
+    kstore = _kinesis(store)
+    if kstore is not None:
+        try:
+            _kinesis_core._resolve(kstore, {"StreamARN": arn})     # the stream must really exist
+        except Exception as exc:
+            raise DdbError("ResourceNotFoundException", f"Kinesis stream not found: {arn} ({exc})", 400)
+    precision = ((payload.get("EnableKinesisStreamingConfiguration") or {}).get("ApproximateCreationDateTimePrecision")
+                or "MILLISECOND")
+    table["kinesis_dest"] = {"stream_arn": arn, "status": "ACTIVE", "precision": precision}
+    table["last_modified"] = _now()
+    store.persist()
+    return _kinesis_dest_view(table)
+
+
+def _disable_kinesis_destination(store: NoSqlStore, table: dict, payload: dict) -> dict:
+    arn = str(payload.get("StreamArn") or "").strip()
+    dest = table.get("kinesis_dest")
+    if not dest or dest.get("stream_arn") != arn:
+        raise DdbError("ResourceNotFoundException", f"No active Kinesis streaming destination: {arn}", 400)
+    view = _kinesis_dest_view(table)
+    view["DestinationStatus"] = "DISABLED"
+    table["kinesis_dest"] = None
+    table["last_modified"] = _now()
+    store.persist()
+    return view
+
+
+# ── Imports from S3 (aws.dynamodb.imports) ──────────────────────────────────
+_SUPPORTED_IMPORT_FORMATS = ("CSV", "DYNAMODB_JSON")
+_SUPPORTED_IMPORT_COMPRESSION = ("NONE", "GZIP")
+
+
+def _import_summary(rec: dict) -> dict:
+    return {"ImportArn": rec["import_arn"], "ImportStatus": rec["import_status"], "TableArn": rec.get("table_arn", ""),
+           "S3BucketSource": {"S3Bucket": rec["s3_bucket"], "S3KeyPrefix": rec.get("s3_prefix", "")},
+           "CloudWatchLogGroupArn": "", "InputFormat": rec["input_format"],
+           "StartTime": rec["start_time"], "EndTime": rec.get("end_time")}
+
+
+def _import_description(rec: dict) -> dict:
+    out = {**_import_summary(rec),
+          "TableId": rec.get("table_id", ""), "ClientToken": rec.get("client_token", ""),
+          "InputCompressionType": rec["input_compression_type"],
+          "ProcessedSizeBytes": rec.get("processed_size_bytes", 0),
+          "ProcessedItemCount": rec.get("processed_item_count", 0),
+          "ImportedItemCount": rec.get("imported_item_count", 0), "ErrorCount": rec.get("error_count", 0)}
+    if rec.get("table_name"):
+        out["TableCreationParameters"] = {"TableName": rec["table_name"]}
+    if rec.get("failure_code"):
+        out["FailureCode"] = rec["failure_code"]
+        out["FailureMessage"] = rec["failure_message"]
+    return out
+
+
+def _csv_rows(body: bytes, options: dict) -> list[dict]:
+    import csv
+    import io
+    delim = str((options.get("Csv") or {}).get("Delimiter") or ",")
+    header = (options.get("Csv") or {}).get("HeaderList")
+    reader = csv.reader(io.StringIO(body.decode("utf-8", "replace")), delimiter=delim)
+    rows = list(reader)
+    if not rows:
+        return []
+    if not header:
+        header, rows = rows[0], rows[1:]
+    return [dict(zip(header, r)) for r in rows]
+
+
+def _source_objects(s3_store: Any, bucket: str, prefix: str) -> list[bytes]:
+    try:
+        from core import s3_object_core as s3c
+    except ImportError:  # pragma: no cover - Pyodide flat layout
+        import s3_object_core as s3c  # type: ignore
+    keys = sorted(k for k in s3_store.bucket_objects(bucket) if k.startswith(prefix))
+    bodies = []
+    for key in keys:
+        resp = s3c.get_object(s3_store, bucket, key, {}, {})
+        if resp.status == 200 and isinstance(resp.body, bytes):
+            bodies.append(resp.body)
+    return bodies
+
+
+def _create_import_record(store: NoSqlStore, s3_store: Any, payload: dict) -> dict:
+    src = payload.get("S3BucketSource") or {}
+    bucket = str(src.get("S3Bucket") or "").strip()
+    if not bucket:
+        raise _validation("S3BucketSource.S3Bucket is required.")
+    prefix = str(src.get("S3KeyPrefix") or "").strip()
+    input_format = str(payload.get("InputFormat") or "").upper()
+    if input_format not in _SUPPORTED_IMPORT_FORMATS:
+        raise _validation(f"InputFormat '{input_format}' is not supported; only CSV and DYNAMODB_JSON are implemented "
+                          "(Amazon Ion is not).")
+    compression = str(payload.get("InputCompressionType") or "NONE").upper()
+    if compression not in _SUPPORTED_IMPORT_COMPRESSION:
+        raise _validation(f"InputCompressionType '{compression}' is not supported; only NONE and GZIP are implemented "
+                          "(ZSTD needs a codec Vyomi does not vendor).")
+    tcp = payload.get("TableCreationParameters") or {}
+    table_name = str(tcp.get("TableName") or "").strip()
+    if not table_name:
+        raise _validation("TableCreationParameters.TableName is required.")
+    if store.table_exists(table_name):
+        raise DdbError("ResourceInUseException", f"Table already exists: {table_name}", 400)
+
+    import_id = f"{uuid.uuid4().hex[:14]}-{uuid.uuid4().hex[:8]}"
+    record: dict[str, Any] = {
+        "import_arn": f"{_table_arn(store, table_name)}/import/{import_id}", "s3_bucket": bucket, "s3_prefix": prefix,
+        "input_format": input_format, "input_compression_type": compression, "start_time": _now(),
+        "client_token": str(payload.get("ClientToken") or ""), "table_name": table_name,
+    }
+    try:
+        if s3_store is None:
+            raise DdbError("ImportConflictException", "No S3 store is configured for this request.", 400)
+        bodies = _source_objects(s3_store, bucket, prefix)
+        if compression == "GZIP":
+            bodies = [gzip.decompress(b) for b in bodies]
+        native_rows: list[dict] = []
+        if input_format == "DYNAMODB_JSON":
+            for body in bodies:
+                for line in body.decode("utf-8", "replace").splitlines():
+                    line = line.strip()
+                    if not line:
+                        continue
+                    obj = json.loads(line)
+                    native_rows.append(_validate_item(obj.get("Item", obj)))
+        else:
+            options = payload.get("InputFormatOptions") or {}
+            for body in bodies:
+                for row in _csv_rows(body, options):
+                    native_rows.append(row)
+
+        table = _create_table_record(store, {**tcp, "TableName": table_name})
+        record["table_arn"], record["table_id"] = table["table_arn"], table.get("table_id", "")
+        attr_type = _attr_types(table)
+        count = 0
+        for row in native_rows:
+            if input_format == "DYNAMODB_JSON":
+                av_item = row
+            else:
+                av_item = {k: {attr_type.get(k, "S"): v} if attr_type.get(k) != "S" else {"S": v}
+                          for k, v in row.items() if k}
+                av_item = _validate_item(av_item)
+            _check_item_keys(table, av_item)
+            key = _storage_key(table, {k: av_item[k] for k in _key_names(table)})
+            _store_av(store, table, key, av_item)
+            count += 1
+        _refresh_table_metrics(table)
+        record["import_status"] = "COMPLETED"
+        record["processed_item_count"] = len(native_rows)
+        record["imported_item_count"] = count
+        record["processed_size_bytes"] = sum(len(b) for b in bodies)
+        record["error_count"] = 0
+    except DdbError as exc:
+        record["import_status"] = "FAILED"
+        record["failure_code"] = exc.code
+        record["failure_message"] = exc.message
+    except Exception as exc:  # malformed source data — a real import job fails, it does not 500
+        record["import_status"] = "FAILED"
+        record["failure_code"] = "ValidationException"
+        record["failure_message"] = str(exc)
+    record["end_time"] = _now()
+    store.put_import(record["import_arn"], record)
+    store.persist()
+    return record
+
+
 
 # ── native-wire dispatcher (X-Amz-Target action → operation) ───────────────
 # The single routing point for the native AWS DynamoDB JSON protocol — what an
@@ -2086,6 +2690,12 @@ def dispatch(store: NoSqlStore, target: str, payload: dict | None = None, s3_sto
                     g["Backfilling"] = False
                     if str(table.get("billing_mode")).upper() == "PAY_PER_REQUEST":
                         g["OnDemandThroughput"] = {"MaxReadRequestUnits": -1, "MaxWriteRequestUnits": -1}
+            created_replicas = {str((u.get("Create") or {}).get("RegionName")) for u in payload.get("ReplicaUpdates") or []
+                               if isinstance(u, dict) and "Create" in u}
+            for r in view.get("Replicas", []):
+                if r["RegionName"] in created_replicas:   # same instantaneous-but-labeled-transitional convention as GSIs above
+                    r["ReplicaStatus"] = "CREATING"
+                    r["ReplicaStatusDescription"] = "Replica is being created"
             return _ok({"TableDescription": view})
 
         if action == "UpdateTimeToLive":
@@ -2163,41 +2773,81 @@ def dispatch(store: NoSqlStore, target: str, payload: dict | None = None, s3_sto
             return _execute_statement(store, payload)
 
         if action == "PutItem":
-            return _ok(_op_put(store, payload))
+            t0 = time.monotonic()
+            body = _op_put(store, payload)
+            _emit_op_metrics(store, table_name(), action, 1.0, time.monotonic() - t0)
+            return _ok(body)
 
         if action == "GetItem":
-            return _ok(_op_get(store, payload))
+            t0 = time.monotonic()
+            body = _op_get(store, payload)
+            _emit_op_metrics(store, table_name(), action, 1.0, time.monotonic() - t0)
+            return _ok(body)
 
         if action == "DeleteItem":
-            return _ok(_op_delete(store, payload))
+            t0 = time.monotonic()
+            body = _op_delete(store, payload)
+            _emit_op_metrics(store, table_name(), action, 1.0, time.monotonic() - t0)
+            return _ok(body)
 
         if action == "UpdateItem":
-            return _ok(_op_update(store, payload))
+            t0 = time.monotonic()
+            body = _op_update(store, payload)
+            _emit_op_metrics(store, table_name(), action, 1.0, time.monotonic() - t0)
+            return _ok(body)
 
         if action == "Query":
+            t0 = time.monotonic()
             if payload.get("KeyConditionExpression") is None and any(
                     k in payload for k in ("partition_key_value", "sort_key_equals", "sort_key_begins_with",
                                            "sort_key_between")):
                 table = _require_table(store, table_name())          # console-REST shaped payload
                 _expire_table_items(table)
                 matched, scanned = _query_filter(table, payload)
-                return _ok({"Items": [_rec_av(r) for r in matched], "Count": len(matched), "ScannedCount": scanned})
-            return _ok(_read(store, payload, query=True))
+                body = {"Items": [_rec_av(r) for r in matched], "Count": len(matched), "ScannedCount": scanned}
+            else:
+                body = _read(store, payload, query=True)
+            _emit_op_metrics(store, table_name(), action, float(body.get("Count", 0)), time.monotonic() - t0)
+            return _ok(body)
 
         if action == "Scan":
-            return _ok(_read(store, payload, query=False))
+            t0 = time.monotonic()
+            body = _read(store, payload, query=False)
+            _emit_op_metrics(store, table_name(), action, float(body.get("Count", 0)), time.monotonic() - t0)
+            return _ok(body)
 
         if action == "BatchGetItem":
-            return _ok(_op_batch_get(store, payload))
+            t0 = time.monotonic()
+            body = _op_batch_get(store, payload)
+            units = float(sum(len(v or []) for v in (body.get("Responses") or {}).values()))
+            for tname in (payload.get("RequestItems") or {}):
+                _emit_op_metrics(store, str(tname), action, units, time.monotonic() - t0)
+            return _ok(body)
 
         if action == "BatchWriteItem":
-            return _ok(_op_batch_write(store, payload))
+            t0 = time.monotonic()
+            body = _op_batch_write(store, payload)
+            for tname, ops in (payload.get("RequestItems") or {}).items():
+                _emit_op_metrics(store, str(tname), action, float(len(ops or [])), time.monotonic() - t0)
+            return _ok(body)
 
         if action == "TransactWriteItems":
-            return _ok(_op_transact_write(store, payload))
+            t0 = time.monotonic()
+            body = _op_transact_write(store, payload)
+            tnames = {str((next(iter(e.values())) or {}).get("TableName")) for e in payload.get("TransactItems") or []
+                     if isinstance(e, dict) and e}
+            for tname in tnames:
+                _emit_op_metrics(store, tname, action, 2.0, time.monotonic() - t0)
+            return _ok(body)
 
         if action == "TransactGetItems":
-            return _ok(_op_transact_get(store, payload))
+            t0 = time.monotonic()
+            body = _op_transact_get(store, payload)
+            tnames = {str((e.get("Get") or {}).get("TableName")) for e in payload.get("TransactItems") or []
+                     if isinstance(e, dict)}
+            for tname in tnames:
+                _emit_op_metrics(store, tname, action, 2.0, time.monotonic() - t0)
+            return _ok(body)
 
         if action == "TagResource":
             table = _require_table(store, table_name())
@@ -2220,6 +2870,58 @@ def dispatch(store: NoSqlStore, target: str, payload: dict | None = None, s3_sto
         if action == "ListTagsOfResource":
             table = _require_table(store, table_name())
             return _ok({"Tags": [{"Key": k, "Value": v} for k, v in _tags_view(table).items()]})
+
+        if action == "PutResourcePolicy":
+            return _ok(_put_resource_policy(store, payload))
+
+        if action == "GetResourcePolicy":
+            return _ok(_get_resource_policy(store, payload))
+
+        if action == "DeleteResourcePolicy":
+            return _ok(_delete_resource_policy(store, payload))
+
+        if action == "ListStreams":
+            return _ok(_list_streams(store, payload))
+
+        if action == "DescribeStream":
+            table, gen = _find_stream(store, payload.get("StreamArn"))
+            return _ok({"StreamDescription": _stream_description(table, gen)})
+
+        if action == "GetShardIterator":
+            return _ok(_get_shard_iterator(store, payload))
+
+        if action == "GetRecords":
+            return _ok(_get_records(store, payload))
+
+        if action == "EnableKinesisStreamingDestination":
+            table = _require_table(store, table_name())
+            return _ok(_enable_kinesis_destination(store, table, payload))
+
+        if action == "DisableKinesisStreamingDestination":
+            table = _require_table(store, table_name())
+            return _ok(_disable_kinesis_destination(store, table, payload))
+
+        if action == "DescribeKinesisStreamingDestination":
+            table = _require_table(store, table_name())
+            dest = _kinesis_dest_view(table)
+            return _ok({"TableName": table["table_name"], "KinesisDataStreamDestinations": [dest] if dest else []})
+
+        if action == "ImportTable":
+            rec = _create_import_record(store, s3_store, payload)
+            return _ok({"ImportTableDescription": _import_description(rec)})
+
+        if action == "DescribeImport":
+            arn = str(payload.get("ImportArn") or "").strip()
+            rec = store.get_import(arn)
+            if not rec:
+                raise DdbError("ImportNotFoundException", f"Import not found: {arn}", 400)
+            return _ok({"ImportTableDescription": _import_description(rec)})
+
+        if action == "ListImports":
+            tarn = str(payload.get("TableArn") or "").strip()
+            rows = [i for i in store.list_imports() if not tarn or i.get("table_arn") == tarn]
+            rows.sort(key=lambda i: i["start_time"])
+            return _ok({"ImportSummaryList": [_import_summary(i) for i in rows]})
 
         return _error("UnknownOperationException", f"The action {action} is not implemented.", 400)
     except DdbError as e:

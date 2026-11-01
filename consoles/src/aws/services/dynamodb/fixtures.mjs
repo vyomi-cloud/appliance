@@ -21,4 +21,15 @@ export default {
     await wire("POST", "/", { ...T("ExportTableToPointInTime"), body: { TableName: "uic-table", S3Bucket: uniq } });
     return uniq;
   },
+  "live-import": async (wire, uniq) => {
+    const bucket = `ddb-import-${uniq}`;
+    await wire("PUT", `/${bucket}`, { svc: "s3" }).catch(() => {});
+    await wire("PUT", `/${bucket}/src/data/1.json`, { svc: "s3", body: JSON.stringify({ Item: { pk: { S: "x" } } }) + "\n" });
+    await wire("POST", "/", { ...T("ImportTable"), body: {
+      S3BucketSource: { S3Bucket: bucket, S3KeyPrefix: "src/" }, InputFormat: "DYNAMODB_JSON",
+      TableCreationParameters: { TableName: uniq, AttributeDefinitions: [{ AttributeName: "pk", AttributeType: "S" }],
+        KeySchema: [{ AttributeName: "pk", KeyType: "HASH" }], BillingMode: "PAY_PER_REQUEST" },
+    } });
+    return uniq;
+  },
 };
