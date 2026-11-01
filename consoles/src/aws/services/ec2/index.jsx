@@ -17,6 +17,9 @@ import NetworkInterfaces from "./NetworkInterfaces.jsx";
 import Settings from "./Settings.jsx";
 import { LoadBalancers, LoadBalancerDetail, CreateLoadBalancer } from "./LoadBalancers.jsx";
 import { TargetGroups, TargetGroupDetail, CreateTargetGroup } from "./TargetGroups.jsx";
+import { TrustStores, CreateTrustStore } from "./TrustStores.jsx";
+import { LifecycleManager, CreateLifecyclePolicy } from "./LifecycleManager.jsx";
+import { AutoScalingGroups, AutoScalingGroupDetail, CreateAutoScalingGroup } from "./AutoScaling.jsx";
 import * as Honest from "./HonestPages.jsx";
 
 const crumb = (text, ...path) => ({ text, href: `#/ec2/${path.join("/")}` });
@@ -97,8 +100,8 @@ export default {
     { pattern: "/ec2/snapshots", component: Snapshots, crumbs: () => [crumb("EC2", ""), crumb("Snapshots", "snapshots")] },
     { pattern: "/ec2/create-snapshot", component: CreateSnapshot, crumbs: () => [crumb("EC2", ""), crumb("Snapshots", "snapshots"), crumb("Create snapshot", "create-snapshot")] },
     { pattern: "/ec2/create-snapshot/:volumeId", component: CreateSnapshot, crumbs: () => [crumb("EC2", ""), crumb("Snapshots", "snapshots"), crumb("Create snapshot", "create-snapshot")] },
-    { pattern: "/ec2/lifecycle-manager", component: Honest.LifecycleManager, crumbs: () => [crumb("EC2", ""), crumb("Lifecycle Manager", "lifecycle-manager")] },
-    { pattern: "/ec2/create-lifecycle-policy", component: Honest.CreateLifecyclePolicy, crumbs: () => [crumb("EC2", ""), crumb("Lifecycle Manager", "lifecycle-manager"), crumb("Create policy", "create-lifecycle-policy")] },
+    { pattern: "/ec2/lifecycle-manager", component: LifecycleManager, crumbs: () => [crumb("EC2", ""), crumb("Lifecycle Manager", "lifecycle-manager")] },
+    { pattern: "/ec2/create-lifecycle-policy", component: CreateLifecyclePolicy, crumbs: () => [crumb("EC2", ""), crumb("Lifecycle Manager", "lifecycle-manager"), crumb("Create policy", "create-lifecycle-policy")] },
 
     { pattern: "/ec2/security-groups", component: SecurityGroups, crumbs: () => [crumb("EC2", ""), crumb("Security Groups", "security-groups")] },
     { pattern: "/ec2/security-groups/:id", component: SecurityGroupDetail, crumbs: (p) => [crumb("EC2", ""), crumb("Security Groups", "security-groups"), crumb(p.id, "security-groups", p.id)] },
@@ -121,9 +124,11 @@ export default {
     { pattern: "/ec2/target-groups", component: TargetGroups, crumbs: () => [crumb("EC2", ""), crumb("Target groups", "target-groups")] },
     { pattern: "/ec2/target-groups/:id", component: TargetGroupDetail, crumbs: (p) => [crumb("EC2", ""), crumb("Target groups", "target-groups"), crumb(p.id, "target-groups", p.id)] },
     { pattern: "/ec2/create-target-group", component: CreateTargetGroup, crumbs: () => [crumb("EC2", ""), crumb("Target groups", "target-groups"), crumb("Create target group", "create-target-group")] },
-    { pattern: "/ec2/trust-stores", component: Honest.TrustStores, crumbs: () => [crumb("EC2", ""), crumb("Trust stores", "trust-stores")] },
-    { pattern: "/ec2/create-trust-store", component: Honest.CreateTrustStore, crumbs: () => [crumb("EC2", ""), crumb("Trust stores", "trust-stores"), crumb("Create trust store", "create-trust-store")] },
-    { pattern: "/ec2/auto-scaling-groups", component: Honest.AutoScalingGroups, crumbs: () => [crumb("EC2", ""), crumb("Auto Scaling groups", "auto-scaling-groups")] },
+    { pattern: "/ec2/trust-stores", component: TrustStores, crumbs: () => [crumb("EC2", ""), crumb("Trust stores", "trust-stores")] },
+    { pattern: "/ec2/create-trust-store", component: CreateTrustStore, crumbs: () => [crumb("EC2", ""), crumb("Trust stores", "trust-stores"), crumb("Create trust store", "create-trust-store")] },
+    { pattern: "/ec2/auto-scaling-groups", component: AutoScalingGroups, crumbs: () => [crumb("EC2", ""), crumb("Auto Scaling groups", "auto-scaling-groups")] },
+    { pattern: "/ec2/auto-scaling-groups/:id", component: AutoScalingGroupDetail, crumbs: (p) => [crumb("EC2", ""), crumb("Auto Scaling groups", "auto-scaling-groups"), crumb(p.id, "auto-scaling-groups", p.id)] },
+    { pattern: "/ec2/create-auto-scaling-group", component: CreateAutoScalingGroup, crumbs: () => [crumb("EC2", ""), crumb("Auto Scaling groups", "auto-scaling-groups"), crumb("Create Auto Scaling group", "create-auto-scaling-group")] },
     { pattern: "/ec2/settings", component: Settings, crumbs: () => [crumb("EC2", ""), crumb("Settings", "settings")] },
 
     { pattern: "/ec2/migrate-a-server", component: Honest.MigrateAServer, crumbs: () => [crumb("EC2", ""), crumb("Migrate a server", "migrate-a-server")] },

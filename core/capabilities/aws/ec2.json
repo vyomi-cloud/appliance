@@ -159,11 +159,15 @@
  "ec2.lifecycle-manager": {
   "title": "Amazon Data Lifecycle Manager (automated snapshot/AMI policies)",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Scheduled lifecycle policies aren't modeled; create snapshots and AMIs directly instead."
+   "An ENABLED policy really creates (and prunes past RetainRule.Count) snapshots/AMIs for every EBS volume / EC2 instance matching its TargetTags, through the same CreateSnapshot/CreateImage path the console's manual actions use.",
+   "Only the Interval/IntervalUnit=HOURS cadence is modeled (no Times-of-day schedule windows), and policies are evaluated lazily on read rather than by a live background clock, so a policy's first run can happen on the next page load instead of at the exact scheduled minute."
+  ],
+  "tests": [
+   "tests/conformance/test_dlm_core.py"
   ]
  },
  "ec2.security-groups": {
@@ -178,13 +182,36 @@
   ]
  },
  "ec2.security-groups.sharing": {
-  "title": "Security group sharing (AWS RAM) and VPC associations",
+  "title": "Security group VPC associations",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "AssociateSecurityGroupVpc / DisassociateSecurityGroupVpc / DescribeSecurityGroupVpcAssociations are real: a security group from one VPC must be associated with another VPC before an instance there can use it, and RunInstances really enforces that (InvalidParameterValue if it isn't)."
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_gap_sweep_core.py"
+  ]
+ },
+ "ec2.security-groups.ram-sharing": {
+  "title": "Security group sharing (AWS Resource Access Manager)",
   "level": {
    "nano": "not_simulated",
    "offline": "not_simulated"
   },
   "limitations": [
-   "Cross-account sharing via AWS Resource Access Manager isn't modeled; every security group stays scoped to this account and its one default VPC."
+   "Cross-account sharing via AWS Resource Access Manager isn't modeled — Vyomi simulates one account, so there's no second account to share a resource with."
+  ]
+ },
+ "ec2.security-groups.related-resources": {
+  "title": "Related resources",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "The console's cross-service 'what else references this security group' map isn't modeled."
   ]
  },
  "ec2.elastic-ips": {
@@ -250,14 +277,66 @@
    "tests/conformance/test_ec2_console_v4_core.py"
   ]
  },
+ "ec2.settings.allowed-amis": {
+  "title": "Allowed AMIs",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "Image provider criteria (amazon / self / aws-marketplace) are matched against each AMI's real owner; RunInstances is really rejected (UnauthorizedImage) once enabled with criteria that don't match the chosen AMI."
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_gap_sweep_core.py"
+  ]
+ },
+ "ec2.settings.serial-console": {
+  "title": "EC2 Serial Console",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "The account-wide access toggle round-trips for real; there's no real serial console to actually connect to (see ec2.instances.connect)."
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_gap_sweep_core.py"
+  ]
+ },
+ "ec2.settings.credit-specification": {
+  "title": "Default credit specification",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "A T-family default (standard/unlimited) really applies to new instances of that family that don't specify CreditSpecification explicitly."
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_gap_sweep_core.py"
+  ]
+ },
+ "ec2.settings.zones": {
+  "title": "Zones",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "A real read of DescribeAvailabilityZones; Local Zone / Wavelength Zone opt-in isn't modeled — Vyomi has only the three standard AZs."
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_console_v4_core.py"
+  ]
+ },
  "ec2.settings.other": {
-  "title": "Allowed AMIs, Managed resources, EC2 Serial Console, Auto Scaling group defaults, Zones",
+  "title": "Managed resources, Auto Scaling group account defaults",
   "level": {
    "nano": "not_simulated",
    "offline": "not_simulated"
   },
   "limitations": [
-   "These account-wide EC2 settings aren't modeled; they have no effect in Vyomi."
+   "Managed resources is a cross-service inventory view (resources other AWS services created) and Auto Scaling's account-level defaults page aren't modeled; they have no effect in Vyomi."
   ]
  },
  "ec2.load-balancers": {
@@ -314,31 +393,47 @@
  "ec2.load-balancing.monitoring": {
   "title": "CloudWatch metrics for load balancers and target groups",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "RequestCount, HealthyHostCount, TargetResponseTime and the rest of the ELB CloudWatch metrics aren't published — Vyomi's ELBv2 engine is control-plane only."
+   "HealthyHostCount and UnHealthyHostCount under AWS/ApplicationELB and AWS/NetworkELB are real — published every time DescribeTargetHealth is evaluated, derived from each target's real EC2 instance state (see ec2.target-groups).",
+   "RequestCount, TargetResponseTime and the rest of the ELB CloudWatch metrics aren't published — Vyomi's ELBv2 engine has no real L7 traffic data plane, so there's no traffic to measure."
+  ],
+  "tests": [
+   "tests/conformance/test_elbv2_gap_sweep_core.py"
   ]
  },
  "ec2.trust-stores": {
   "title": "Trust stores (mutual TLS)",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Trust store management for ALB mutual TLS isn't part of the EC2 console surface Vyomi simulates."
+   "CreateTrustStore really reads the referenced CA bundle from Vyomi's own S3 (nothing leaves the simulator) and validates it's a well-formed PEM bundle; NumberOfCaCertificates is a real count of the parsed bundle. Revocations, associations with HTTPS listeners and MutualAuthentication.Mode all round-trip for real.",
+   "No real TLS handshake is ever performed (ec2.load-balancers has no L7 data plane), so a trust store never actually accepts or rejects a client certificate — mutual TLS enforcement itself isn't simulated."
+  ],
+  "tests": [
+   "tests/conformance/test_elbv2_gap_sweep_core.py"
   ]
  },
  "ec2.auto-scaling": {
   "title": "Auto Scaling groups",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Auto Scaling isn't modeled; launch and manage instances directly."
+   "Groups, launch-template resolution, SimpleScaling/StepScaling/TargetTrackingScaling policies, scheduled actions (5-field Recurrence cron, evaluated lazily), lifecycle hooks (a real Pending:Wait / Terminating:Wait hold) and instance refresh are all real, reconciled against real EC2 instances (core/vpc_core.py) through the same RunInstances/TerminateInstances path the console uses.",
+   "Vyomi's alarm → policy trigger carries no breach magnitude: StepScaling always applies its first (smallest-breach) step, and TargetTrackingScaling nudges by one instance toward the target instead of continuously tracking a live metric value.",
+   "Instance refresh executes every replacement immediately (Vyomi has no background scheduler to spread a rollout over time), so there's never a window where CancelInstanceRefresh has anything in progress to cancel.",
+   "Warm pools and mixed-instances policies aren't modeled."
+  ],
+  "tests": [
+   "tests/conformance/test_autoscaling_depth_core.py",
+   "tests/conformance/test_autoscaling_offline_route.py",
+   "tests/conformance/test_cloudwatch_core.py"
   ]
  },
  "ec2.purchasing-options": {

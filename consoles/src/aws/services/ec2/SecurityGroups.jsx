@@ -117,13 +117,66 @@ export function SecurityGroupDetail({ params }) {
         <Tabs tabs={[
           { id: "in", label: "Inbound rules", content: <RulesTable g={g} direction="ingress" reload={t.reload} /> },
           { id: "out", label: "Outbound rules", content: <RulesTable g={g} direction="egress" reload={t.reload} /> },
-          { id: "share", label: "Sharing", content: <CapabilityContainer id="ec2.security-groups.sharing" title="Shared with" /> },
-          { id: "vpc", label: "VPC associations", content: <CapabilityContainer id="ec2.security-groups.sharing" title="VPC associations" /> },
-          { id: "rel", label: "Related resources - new", content: <CapabilityContainer id="ec2.security-groups.sharing" title="Related resources" /> },
+          { id: "share", label: "Sharing", content: <CapabilityContainer id="ec2.security-groups.ram-sharing" title="Shared with" /> },
+          { id: "vpc", label: "VPC associations", content: <VpcAssociationsTab g={g} /> },
+          { id: "rel", label: "Related resources - new", content: <CapabilityContainer id="ec2.security-groups.related-resources" title="Related resources" /> },
           { id: "tags", label: "Tags", content: <TagsTable resourceId={g.GroupId} tags={g.Tags} onSave={saveTags} /> },
         ]} />
       </SpaceBetween>
     </ContentLayout>
+  );
+}
+
+function VpcAssociationsTab({ g }) {
+  const notify = useNotify();
+  const [adding, setAdding] = useState(false);
+  const [vpcId, setVpcId] = useState("");
+  const [sel, setSel] = useState([]);
+  const t = useAsync(() => api.describeSecurityGroupVpcAssociations(g.GroupId), [g.GroupId]);
+  const vpcs = useAsync(() => api.describeVpcs(), [adding]).data || [];
+  const rows = t.data || [];
+  const candidates = vpcs.filter((v) => v.vpcId !== g.VpcId && !rows.some((r) => r.vpcId === v.vpcId));
+
+  return (
+    <CapabilityContainer id="ec2.security-groups.sharing" title="VPC associations" actions={
+      <SpaceBetween direction="horizontal" size="xs">
+        <Button disabled={!sel.length} onClick={async () => {
+          for (const r of sel) await api.disassociateSecurityGroupVpc(g.GroupId, r.vpcId);
+          notify.success(`${sel.length} VPC association(s) removed.`); setSel([]); t.reload();
+        }}>Disassociate VPC</Button>
+        <Button variant="primary" onClick={() => setAdding(true)}>Associate VPC</Button>
+      </SpaceBetween>
+    }>
+      <Table
+        items={rows}
+        loading={t.loading}
+        trackBy="vpcId"
+        selectionType="multi"
+        selectedItems={sel}
+        onSelectionChange={({ detail }) => setSel(detail.selectedItems)}
+        columnDefinitions={[
+          { id: "vpc", header: "VPC ID", cell: (r) => r.vpcId, isRowHeader: true },
+          { id: "owner", header: "VPC owner", cell: () => "123456789012" },
+          { id: "state", header: "State", cell: (r) => r.state },
+          { id: "reason", header: "State reason", cell: () => "-" },
+        ]}
+        empty={<Box textAlign="center" color="inherit">This security group isn't associated with any other VPC — it's usable only in {g.VpcId}.</Box>}
+      />
+      <Modal visible={adding} onDismiss={() => setAdding(false)} header="Associate VPC" size="medium"
+        footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs">
+          <Button variant="link" onClick={() => setAdding(false)}>Cancel</Button>
+          <Button variant="primary" disabled={!vpcId} onClick={async () => {
+            await api.associateSecurityGroupVpc(g.GroupId, vpcId);
+            notify.success(`Associated with ${vpcId}.`); setAdding(false); setVpcId(""); t.reload();
+          }}>Associate</Button>
+        </SpaceBetween></Box>}>
+        <FormField label="VPC" description="Instances in this VPC will be able to use this security group.">
+          <Select selectedOption={vpcId ? opt(vpcId) : null} onChange={({ detail }) => setVpcId(detail.selectedOption.value)}
+            options={candidates.map((v) => opt(v.vpcId, `${v.vpcId}${v.isDefault === "true" ? " (default)" : ""}`))}
+            placeholder="Select a VPC" ariaLabel="VPC" />
+        </FormField>
+      </Modal>
+    </CapabilityContainer>
   );
 }
 

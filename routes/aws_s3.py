@@ -1277,6 +1277,11 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
             from routes.aws_elbv2 import STORE as _elb_store
             _elb_r = _elb.dispatch(_elb_store, await _srv()._ec2_query_params(request))
             return Response(content=_elb_r.body, status_code=_elb_r.status, media_type="text/xml")
+        if service == "autoscaling":
+            from core import autoscaling_core as _asg
+            from routes.aws_autoscaling import STORE as _asg_store
+            _asg_r = _asg.dispatch(_asg_store, await _srv()._ec2_query_params(request))
+            return Response(content=_asg_r.body, status_code=_asg_r.status, media_type="text/xml")
         if service == "sns":
             from routes.aws_sns import sns_query as _sns_wire
             return await _sns_wire(request)

@@ -192,6 +192,7 @@ from core import ssm_core as ssm
 from core import stepfunctions_core as sfn
 from core import vpc_core as vpc
 from core import autoscaling_core as asg
+from core import dlm_core as dlm
 from core import kinesis_core as kinesis
 from core import cloudwatch_core as cw
 from core import azure_sql_core as az_sql
@@ -283,6 +284,7 @@ _SIGNING = {
     "rds-data": "rds-data",   # the Aurora HTTP SQL surface (async path)
     "events": "events", "lambda": "lambda", "ec2": "vpc", "kinesis": "kinesis", "monitoring": "cloudwatch", "logs": "logs", "states": "stepfunctions",
     "autoscaling": "asg",
+    "dlm": "dlm",
     "elasticloadbalancing": "elbv2",
     "cloudformation": "cloudformation",
     "ssm": "ssm", "scheduler": "scheduler",
@@ -494,11 +496,16 @@ class AwsWireRouter:
         self.asg = s.get("asg") or asg.AutoScalingStore()   # EC2 Auto Scaling groups + scaling policies
         self.asg.vpc_store = self.vpc   # scaling really launches/terminates real EC2 instances
         self.cw.asg_store = self.asg    # real Auto Scaling alarm actions (aws.cloudwatch.alarms.actions.compute)
+        self.dlm = s.get("dlm") or dlm.DlmStore()   # Data Lifecycle Manager (ec2.lifecycle-manager)
+        self.dlm.vpc_store = self.vpc   # policies really create/prune real snapshots + AMIs
         self.logs = s.get("logs") or logs.LogsStore()         # CloudWatch Logs
         self.logs.lam_store, self.logs.kinesis_store = self.lam, self.kinesis   # real subscription-filter delivery
         self.cw.logs_store = self.logs            # real log-based Contributor Insights rules
         self.msg.logs_store = self.logs           # real SNS delivery-status logging (SQSSuccessFeedbackRoleArn/…)
         self.elbv2 = s.get("elbv2") or elbv2.Elbv2Store()
+        self.elbv2.vpc_store = self.vpc    # target health reacts to real instance state
+        self.elbv2.cw_store = self.cw      # real AWS/ApplicationELB + AWS/NetworkELB metrics
+        self.elbv2.s3_store = self.s3      # trust-store CA bundles are read from Vyomi's own S3
         self.sfn = s.get("sfn") or sfn.StepFunctionsStore()   # Step Functions (state machines + executions)
         self.cfn = s.get("cfn") or cfn.CloudFormationStore()   # CloudFormation (stacks, change sets, stack sets)
 
@@ -753,6 +760,12 @@ class AwsWireRouter:
             hdrs = dict(r.headers or {})
             if r.media_type and r.body and not any(k.lower() == "content-type" for k in hdrs):
                 hdrs["content-type"] = r.media_type
+            return {"status": r.status, "headers": hdrs, "body": r.body or b""}
+
+        if svc == "dlm":   # native Data Lifecycle Manager REST (/policies, /policies/{id})
+            r = dlm.dispatch(self.dlm, method, path, query or {}, headers or {}, bytes(body))
+            hdrs = dict(r.headers or {})
+            hdrs.setdefault("content-type", r.media_type)
             return {"status": r.status, "headers": hdrs, "body": r.body or b""}
 
         if svc == "apigateway":   # native API Gateway v1 control plane (/restapis)

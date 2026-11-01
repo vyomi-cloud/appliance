@@ -55,11 +55,14 @@
   },
   "limitations": [
    "A scaling-policy ARN (core/autoscaling_core.py) really executes when the alarm transitions: the group's desired capacity is adjusted (clamped to MinSize/MaxSize) and real EC2 instances are launched/terminated through the same vpc_core lifecycle RunInstances/TerminateInstances use.",
-   "Vyomi has no Auto Scaling console page yet — create the group and policy with the native autoscaling API (CLI/SDK/conformance test), then paste the policy ARN into the alarm's action field.",
-   "Launch configurations, lifecycle hooks, warm pools, mixed-instance policies, scheduled actions and target-tracking/step policies aren't modeled — only SimpleScaling (ChangeInCapacity / ExactCapacity / PercentChangeInCapacity)."
+   "The EC2 console's Auto Scaling section (ec2.auto-scaling) builds and manages the group/policy; SimpleScaling, StepScaling and TargetTrackingScaling, scheduled actions and lifecycle hooks are all modeled — see ec2.auto-scaling for exactly what's real vs. simplified.",
+   "Routed natively offline too (routes/aws_s3.py, a durable space-scoped store — routes/aws_autoscaling.py), not just on Nano.",
+   "Warm pools and mixed-instances policies aren't modeled."
   ],
   "tests": [
-   "tests/conformance/test_cloudwatch_core.py"
+   "tests/conformance/test_cloudwatch_core.py",
+   "tests/conformance/test_autoscaling_depth_core.py",
+   "tests/conformance/test_autoscaling_offline_route.py"
   ]
  },
  "aws.cloudwatch.alarms.actions.ec2": {
