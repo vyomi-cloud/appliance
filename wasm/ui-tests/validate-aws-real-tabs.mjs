@@ -21,7 +21,14 @@ const openService = async (re) => {
   await sleep(2000);
 };
 const openRow = async (text) => {
-  await page.locator("#main tr", { hasText: text }).first().locator("a.id, td a").first().click({ timeout: 15000 });
+  // The list pages at 10 rows (like the real console): on an appliance with more resources of the
+  // kind the new one can be on page 2, so filter for it the way a user would.
+  const row = () => page.locator("#main tr", { hasText: text }).first();
+  if (!(await row().count())) {
+    const filter = page.locator("#main input.search").first();
+    if (await filter.count()) { await filter.fill(text); await sleep(800); }
+  }
+  await row().locator("a.id, td a").first().click({ timeout: 15000 });
   await sleep(2000);
 };
 const tab = async (label) => {
