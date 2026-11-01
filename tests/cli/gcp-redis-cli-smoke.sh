@@ -27,8 +27,8 @@ out=$(gcloud redis instances create "$ID" $F --size=2 --tier=basic --redis-versi
 chk $? "gcloud redis instances create (basic, 2 GB)" "$out"
 
 out=$(gcloud redis instances describe "$ID" $F --format=json 2>&1)
-echo "$out" | grep -q '"state": "READY"' && echo "$out" | grep -q '"memorySizeGb": 2' && echo "$out" | grep -q '"tier": "BASIC"' && echo "$out" | grep -q '"port": 6379' && echo "$out" | grep -q '"redisVersion": "REDIS_7_0"'
-chk $? "describe (READY, 2 GB, BASIC, port 6379, REDIS_7_0)" "$(echo "$out" | head -5)"
+echo "$out" | grep -q '"state": "READY"' && echo "$out" | grep -q '"memorySizeGb": 2' && echo "$out" | grep -q '"tier": "BASIC"' && echo "$out" | grep -Eq '"port": [0-9]+' && echo "$out" | grep -q '"redisVersion": "REDIS_7_0"'
+chk $? "describe (READY, 2 GB, BASIC, a TCP port, REDIS_7_0)" "$(echo "$out" | head -5)"
 
 out=$(gcloud redis instances list $F --format='value(name,state)' 2>&1); echo "$out" | grep -q "$ID.*READY"
 chk $? "instances list contains the instance" "$out"

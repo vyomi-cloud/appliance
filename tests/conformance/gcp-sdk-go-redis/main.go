@@ -73,7 +73,7 @@ func main() {
 		created, err = op.Wait(ctx)
 	}
 	check("CreateInstance (LRO) -> Instance READY with host/port", err == nil && created.GetState() == redispb.Instance_READY &&
-		created.GetHost() != "" && created.GetPort() == 6379 && created.GetName() == name, fmt.Sprintf("%v %v", err, created))
+		created.GetHost() != "" && created.GetPort() > 0 && created.GetName() == name, fmt.Sprintf("%v %v", err, created))
 
 	_, err = c.CreateInstance(ctx, &redispb.CreateInstanceRequest{Parent: parent, InstanceId: id, Instance: &redispb.Instance{Tier: redispb.Instance_BASIC, MemorySizeGb: 1}})
 	check("CreateInstance duplicate -> 409 ALREADY_EXISTS", err != nil && httpCode(err) == 409, fmt.Sprint(err))

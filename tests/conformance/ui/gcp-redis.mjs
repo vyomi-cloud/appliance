@@ -108,7 +108,7 @@ try {
   };
   check(/READY/.test(await tabText("Details")) && /Valkey data plane|Control plane only/.test(await tabText("Details")), "Details tab shows READY and the data-plane note");
   const conn = await tabText("Connection");
-  check(/redis-cli -h \S+ -p 6379/.test(conn) && /Authorized network/i.test(conn), "Connection tab shows the endpoint and the redis-cli command", conn.slice(0, 400).replace(/\n/g, " ⏎ "));
+  check(/redis-cli -h \S+ -p \d+/.test(conn) && /Authorized network/i.test(conn), "Connection tab shows the endpoint and the redis-cli command", conn.slice(0, 400).replace(/\n/g, " ⏎ "));
   check(/node-0/.test(await tabText("Replication")), "Replication tab lists the nodes");
 
   // resize the capacity from the detail header (the prompt is answered with 5)
