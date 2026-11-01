@@ -1697,6 +1697,22 @@
       "timeout": 300
     },
     {
+      "id": "offline-post-create-aws-rds-db-connect",
+      "target": "offline",
+      "cloud": "aws",
+      "kind": "api",
+      "cmd": "python3 tests/conformance/post_create/probes/db_connect.py aws {ENDPOINT}",
+      "timeout": 300
+    },
+    {
+      "id": "offline-post-create-gcp-cloudsql-db-connect",
+      "target": "offline",
+      "cloud": "gcp",
+      "kind": "api",
+      "cmd": "python3 tests/conformance/post_create/probes/db_connect.py gcp {ENDPOINT}",
+      "timeout": 300
+    },
+    {
       "id": "nano-post-create-aws-ec2-ssh",
       "target": "nano",
       "cloud": "aws",

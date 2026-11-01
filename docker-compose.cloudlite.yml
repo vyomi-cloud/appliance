@@ -66,6 +66,10 @@ services:
       CLOUDLEARN_CLOUDSIM_URL: http://cloudsim:9010
       CLOUDLEARN_SQL_PG_HOST: vyomi-sql-postgres
       CLOUDLEARN_SQL_PG_PORT: "5432"
+      # What a user's own machine connects to (the published loopback ports below). RDS /
+      # Cloud SQL / Azure SQL show these in their endpoints and connection strings.
+      CLOUDLEARN_SQL_PG_PUBLIC_PORT: "${VYOMI_PG_PORT:-15432}"
+      CLOUDLEARN_SQL_MYSQL_PUBLIC_PORT: "${VYOMI_MYSQL_PORT:-13306}"
       CLOUDLEARN_SQL_PG_ADMIN_USER: postgres
       CLOUDLEARN_SQL_PG_ADMIN_PASSWORD: cloudlearn
       CLOUDLEARN_SQL_MYSQL_HOST: vyomi-sql-mysql
@@ -123,6 +127,11 @@ services:
   vyomi-sql-postgres:
     image: postgres:16-alpine
     networks: [vyomi-net]
+    # Published on loopback so `psql` / app code on the user's machine can reach the managed
+    # databases (RDS, Cloud SQL, Azure SQL). Uncommon default port so a local Postgres on 5432
+    # cannot stop `vyomi up`; override with VYOMI_PG_PORT.
+    ports:
+      - "127.0.0.1:${VYOMI_PG_PORT:-15432}:5432"
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: cloudlearn
@@ -143,6 +152,8 @@ services:
     profiles: ["full"]
     image: mysql:8.0
     networks: [vyomi-net]
+    ports:
+      - "127.0.0.1:${VYOMI_MYSQL_PORT:-13306}:3306"
     environment:
       MYSQL_ROOT_PASSWORD: cloudlearn
       MYSQL_ROOT_HOST: "%"
