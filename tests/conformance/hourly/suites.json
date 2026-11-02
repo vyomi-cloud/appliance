@@ -74,6 +74,14 @@
       "timeout": 300
     },
     {
+      "id": "offline-sdk-python-aws-ops3",
+      "target": "offline",
+      "cloud": "aws",
+      "kind": "sdk-python",
+      "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/test_aws_sdk_python_ops3.py",
+      "timeout": 300
+    },
+    {
       "id": "offline-sdk-python-aws-ops2",
       "target": "offline",
       "cloud": "aws",
