@@ -281,6 +281,14 @@
       "timeout": 120
     },
     {
+      "id": "nano-gcp-cloudsql-core",
+      "target": "nano",
+      "cloud": "gcp",
+      "kind": "core",
+      "cmd": "PYTHONPATH=$PWD python3 tests/conformance/test_gcp_cloudsql_core.py",
+      "timeout": 120
+    },
+    {
       "id": "nano-gcp-compute-core",
       "target": "nano",
       "cloud": "gcp",
