@@ -60,6 +60,35 @@
     '#vy-acct-menu a svg{width:17px;height:17px;flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;color:#475467}' +
     '#vy-acct-menu a .vy-n{margin-left:auto;font-weight:600;font-size:12px;color:#475467}' +
     '#vy-acct-menu a[data-act=signout]{color:#b42318}#vy-acct-menu a[data-act=signout] svg{color:#b42318}' +
+    /* ---- per-cloud look of the account menu + sign-out confirmation (follows each console's own account UX) ---- */
+    '#vy-so{position:fixed;inset:0;z-index:400;background:rgba(15,20,30,.55);display:none;align-items:center;justify-content:center}#vy-so.open{display:flex}' +
+    '#vy-so .dlg{width:min(440px,92vw);background:#fff;color:#16191f;box-shadow:0 12px 40px rgba(0,0,0,.35)}' +
+    '#vy-so h4{margin:0;font-size:18px;font-weight:700}#vy-so p{margin:10px 0 0;font-size:14px;line-height:1.5;color:#414d5c}' +
+    '#vy-so .row{display:flex;justify-content:flex-end;gap:10px;margin-top:22px}#vy-so button{cursor:pointer;font:inherit;font-size:14px;font-weight:700}' +
+    /* AWS: Cloudscape — navy chrome, 2px radii, orange primary */
+    '#vy-acct-btn.vy-aws{background:#545b64;box-shadow:none;border-radius:50%}#vy-acct-btn.vy-aws:hover{background:#687078}' +
+    '#vy-acct-menu.vy-aws{min-width:300px;padding:0;border:1px solid #d5dbdb;border-radius:2px;box-shadow:0 1px 1px 0 rgba(0,28,36,.3),1px 1px 1px 0 rgba(0,28,36,.15),-1px 1px 1px 0 rgba(0,28,36,.15);font-family:"Amazon Ember","Helvetica Neue",Arial,sans-serif;color:#16191f}' +
+    '#vy-acct-menu.vy-aws .vy-who{padding:16px 20px;border-bottom:1px solid #eaeded;background:#fafafa}#vy-acct-menu.vy-aws .vy-av{width:44px;height:44px;background:#545b64}' +
+    '#vy-acct-menu.vy-aws a{padding:10px 20px;border-radius:0;font-size:14px}#vy-acct-menu.vy-aws a:hover{background:#f2f3f3}' +
+    '#vy-acct-menu.vy-aws .vy-hr{margin:0;background:#eaeded}#vy-acct-menu.vy-aws a[data-act=signout]{margin:12px 20px;padding:6px 20px;justify-content:center;background:#ec7211;color:#fff;border-radius:2px;font-weight:700}' +
+    '#vy-acct-menu.vy-aws a[data-act=signout]:hover{background:#eb5f07}#vy-acct-menu.vy-aws a[data-act=signout] svg{color:#fff}' +
+    '#vy-so.vy-aws .dlg{border-radius:2px;padding:20px 24px;font-family:"Amazon Ember","Helvetica Neue",Arial,sans-serif}#vy-so.vy-aws .go{background:#ec7211;color:#fff;border:2px solid #ec7211;border-radius:2px;padding:4px 20px}#vy-so.vy-aws .no{background:#fff;color:#545b64;border:2px solid #545b64;border-radius:2px;padding:4px 20px}' +
+    /* Google Cloud: Material 3 account card (Google account chooser) */
+    '#vy-acct-btn.vy-gcp{background:#1a73e8;box-shadow:none}' +
+    '#vy-acct-menu.vy-gcp{width:340px;min-width:0;padding:12px;background:#e9eef6;border:0;border-radius:28px;box-shadow:0 4px 8px 3px rgba(60,64,67,.15),0 1px 3px rgba(60,64,67,.3);font-family:"Google Sans",Roboto,Arial,sans-serif}' +
+    '#vy-acct-menu.vy-gcp .vy-who{flex-direction:column;text-align:center;padding:14px 8px 12px;gap:8px;align-items:center}#vy-acct-menu.vy-gcp .vy-av{width:72px;height:72px;font-size:28px;background:#1a73e8}#vy-acct-menu.vy-gcp .vy-av svg{width:38px;height:38px}' +
+    '#vy-acct-menu.vy-gcp .vy-wt{align-items:center}#vy-acct-menu.vy-gcp .vy-wt b{font-size:16px;font-weight:500;color:#1f1f1f}#vy-acct-menu.vy-gcp .vy-wt small{color:#444746}' +
+    '#vy-acct-menu.vy-gcp a{background:#fff;padding:12px 16px;border-radius:4px;margin-bottom:2px;font-size:14px;color:#1f1f1f}#vy-acct-menu.vy-gcp a:hover{background:#f6f8fc}' +
+    '#vy-acct-menu.vy-gcp a[data-act=activate],#vy-acct-menu.vy-gcp a[data-act=upgrade]{border-radius:16px 16px 4px 4px}#vy-acct-menu.vy-gcp a[href*=github]{border-radius:4px 4px 16px 16px}' +
+    '#vy-acct-menu.vy-gcp .vy-hr{display:none}#vy-acct-menu.vy-gcp a[data-act=signout]{margin:8px 0 2px;justify-content:center;border-radius:100px;border:1px solid #747775;background:transparent;color:#1f1f1f;font-weight:500}#vy-acct-menu.vy-gcp a[data-act=signout]:hover{background:#fff}#vy-acct-menu.vy-gcp a[data-act=signout] svg{color:#444746}' +
+    '#vy-so.vy-gcp .dlg{border-radius:28px;padding:24px;font-family:"Google Sans",Roboto,Arial,sans-serif;color:#1f1f1f}#vy-so.vy-gcp h4{font-weight:400;font-size:24px}#vy-so.vy-gcp p{color:#444746}#vy-so.vy-gcp button{background:none;border:0;color:#0b57d0;padding:10px 16px;border-radius:100px;font-weight:500}#vy-so.vy-gcp button:hover{background:#e9eef6}#vy-so.vy-gcp .go{background:#0b57d0;color:#fff}#vy-so.vy-gcp .go:hover{background:#0a4cb8}' +
+    /* Azure: Fluent flyout — avatar left, "Sign out" link top-right */
+    '#vy-acct-btn.vy-azure{background:#0078d4;box-shadow:none;border-radius:50%}#vy-acct-btn.vy-azure:hover{background:#106ebe}' +
+    '#vy-acct-menu.vy-azure{width:340px;min-width:0;padding:0;border:1px solid #edebe9;border-radius:2px;box-shadow:0 6.4px 14.4px rgba(0,0,0,.132),0 1.2px 3.6px rgba(0,0,0,.108);font-family:"Segoe UI",system-ui,sans-serif;color:#323130}' +
+    '#vy-acct-menu.vy-azure .vy-who{padding:20px 20px 16px;gap:14px;align-items:center;border-bottom:1px solid #edebe9}#vy-acct-menu.vy-azure .vy-av{width:56px;height:56px;background:#0078d4;font-size:22px}#vy-acct-menu.vy-azure .vy-wt{padding-right:70px}' +
+    '#vy-acct-menu.vy-azure .vy-wt b{font-size:16px;font-weight:600}#vy-acct-menu.vy-azure a{padding:10px 20px;border-radius:0;font-size:14px;color:#323130}#vy-acct-menu.vy-azure a:hover{background:#f3f2f1}' +
+    '#vy-acct-menu.vy-azure .vy-hr{display:none}#vy-acct-menu.vy-azure a[data-act=signout]{position:absolute;top:14px;right:14px;padding:4px 8px;color:#0078d4;font-size:13px}#vy-acct-menu.vy-azure a[data-act=signout]:hover{background:transparent;text-decoration:underline}#vy-acct-menu.vy-azure a[data-act=signout] svg{display:none}' +
+    '#vy-so.vy-azure .dlg{border-radius:2px;padding:24px;font-family:"Segoe UI",system-ui,sans-serif;color:#323130}#vy-so.vy-azure h4{font-weight:600}#vy-so.vy-azure button{border-radius:2px;padding:6px 20px;font-weight:600}#vy-so.vy-azure .go{background:#0078d4;color:#fff;border:1px solid #0078d4}#vy-so.vy-azure .no{background:#fff;color:#323130;border:1px solid #8a8886}' +
     '@media(max-width:900px){#vy-appbar .vy-notch a span{display:none}#vy-appbar .vy-cloud{display:none}}';
   function build() {
     if (document.getElementById('vy-appbar')) return;
@@ -92,10 +121,10 @@
     var PERSON = '<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg>';
     var hdr = document.querySelector('header'), host = document.querySelector('header .right') || (function () { var h = document.querySelectorAll('header .hicons'); return h.length ? h[h.length - 1] : hdr; })();
     var ab = document.getElementById('avatarBtn'); if (ab && ab.classList.contains('avatar')) ab.style.display = 'none';   // GCP's inert "U" avatar: ours replaces it
-    var btn = document.createElement('button'); btn.type = 'button'; btn.id = 'vy-acct-btn'; btn.title = 'Vyomi account'; btn.setAttribute('aria-haspopup', 'true'); btn.setAttribute('aria-expanded', 'false');
+    var btn = document.createElement('button'); btn.type = 'button'; btn.id = 'vy-acct-btn'; btn.className = 'vy-' + cloud; btn.title = 'Vyomi account'; btn.setAttribute('aria-haspopup', 'true'); btn.setAttribute('aria-expanded', 'false');
     btn.innerHTML = PERSON;
     if (host) host.appendChild(btn);
-    var menu = document.createElement('div'); menu.id = 'vy-acct-menu'; menu.setAttribute('role', 'menu');
+    var menu = document.createElement('div'); menu.id = 'vy-acct-menu'; menu.className = 'vy-' + cloud; menu.setAttribute('role', 'menu');
     var who$ = document.createElement('div'); who$.className = 'vy-who';
     var act = document.createElement('a'); act.href = '#'; act.setAttribute('data-act', 'activate'); act.setAttribute('role', 'menuitem');
     var gh = document.createElement('a'); gh.href = 'https://github.com/vyomi-cloud/appliance'; gh.target = '_blank'; gh.rel = 'noopener noreferrer'; gh.setAttribute('role', 'menuitem');
@@ -141,11 +170,22 @@
         if (j && typeof j.stargazers_count === 'number') { show(j.stargazers_count); try { sessionStorage.setItem('vyomi.community.stars', JSON.stringify({ count: j.stargazers_count, at: Date.now() })); } catch (e) {} }
       }).catch(function () {});
     } catch (e) {}
+    var so$ = document.createElement('div'); so$.id = 'vy-so'; so$.className = 'vy-' + cloud;
+    so$.innerHTML = '<div class="dlg" role="alertdialog" aria-modal="true" aria-labelledby="vy-so-t"><h4 id="vy-so-t">Sign out of Vyomi?</h4><p></p><div class="row"><button type="button" class="no">Cancel</button><button type="button" class="go">Sign out</button></div></div>';
+    document.body.appendChild(so$);
+    function closeSo() { so$.classList.remove('open'); }
+    so$.addEventListener('click', function (e) { if (e.target === so$) closeSo(); });
+    so$.querySelector('.no').addEventListener('click', closeSo);
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeSo(); });
     function signOut() {
-      if (!confirm('Sign out? ' + (NANO ? '' : 'Your tier reverts to Free until you re-activate.'))) return;
+      so$.querySelector('p').textContent = NANO ? 'You will be signed out of your Vyomi account on this device.' : 'Your tier reverts to Free until you re-activate this appliance.';
+      so$.classList.add('open'); so$.querySelector('.go').focus();
+    }
+    so$.querySelector('.go').addEventListener('click', function () {
+      closeSo();
       var done = function () { if (NANO) location.href = '/dashboard'; else location.reload(); };
       try { var l = new XMLHttpRequest(); l.open('POST', '/api/auth/logout', true); l.withCredentials = true; l.onloadend = done; l.send(); } catch (e) { done(); }
-    }
+    });
     window.addEventListener('message', function (e) { if (e.data && e.data.vy === 'close-modal') { close(); refreshAcct(); } });
     function onItem(e) {
       var l = e.target.closest('a'); if (!l) return; if (menu.contains(l)) closeMenu();

@@ -57,7 +57,6 @@ for (const cloud of ["aws", "gcp", "azure"]) {
     };
   }, AV);
   await p.route("**/dashboard", r => r.fulfill({ status: 200, contentType: "text/html", body: "<title>dash</title>" }));
-  p.on("dialog", d => d.accept());
   await bootConsole(p, base, "/aws-console.html"); await p.waitForSelector("#vy-acct-btn", { timeout: 60000 });
   await p.waitForSelector("#vy-acct-btn img", { timeout: 20000 }).catch(() => {});
   check("social login: the avatar image is on the header button", (await p.locator("#vy-acct-btn img").count()) === 1);
@@ -65,7 +64,9 @@ for (const cloud of ["aws", "gcp", "azure"]) {
   const mt = await p.locator("#vy-acct-menu").innerText();
   check("social login: menu shows name, email and 'Signed in with GitHub'", /adal/.test(mt) && /ada@example\.com/.test(mt) && /Signed in with GitHub/.test(mt), mt.replace(/\n/g, " | "));
   check("social login: menu avatar image + Sign out visible", (await p.locator("#vy-acct-menu .vy-av img").count()) === 1 && await p.locator('#vy-acct-menu a[data-act="signout"]').isVisible());
-  await p.click('#vy-acct-menu a[data-act="signout"]'); await sleep(1500);
+  await p.click('#vy-acct-menu a[data-act="signout"]');
+  check("social login: sign-out asks in a themed (AWS) dialog, not a native one", await p.locator("#vy-so.open.vy-aws .dlg").isVisible() && /Sign out of Vyomi\?/.test(await p.locator("#vy-so h4").innerText()));
+  await p.click("#vy-so .go"); await sleep(1500);
   check("social login: Sign out posts the logout and returns to the portal dashboard", /\/dashboard/.test(p.url()), p.url());
   await ctx.close();
 }
