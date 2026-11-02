@@ -250,6 +250,13 @@ const rowCount = async (page) => {
   return m ? Math.max(rows, +m[1]) : rows;
 };
 
+// A fresh variant of a taken name that keeps its character class: names without separators
+// (Azure storage accounts: lowercase letters and digits only) get a plain suffix.
+const freshName = (v) => {
+  const sfx = Date.now().toString(36).slice(-4);
+  return /[-_.\/]/.test(v) ? `${v}-${sfx}` : `${v}${sfx}`;
+};
+
 // Create a resource accepting every form default, return to the service list
 // (create pages navigate away from it), and check the new row is there, fully
 // populated, and reflected in the space's cost savings.
@@ -259,12 +266,13 @@ async function createWithDefaults(page, drain, cloud, backToList, service) {
   if (!(await btn.count())) return f;
   const rowsBefore = await rowCount(page);
   const savBefore = await savingsSnapshot(page);
-  // The names already listed: each row's first non-empty cell (the name / id column). Only a
-  // form value equal to one of these is a taken name; matching anywhere in the list text also
-  // renamed field values that merely appear in it (CloudWatch "CPUUtilization", "300", "80").
-  const listNames = new Set(await page.evaluate((sel) => [...document.querySelectorAll(sel)].map((tr) =>
-    ([...tr.querySelectorAll("td,[role=cell],[role=gridcell]")].map((c) => (c.innerText || "").trim()).find((t) => t) || "")
-  ).filter(Boolean), ROW_SEL).catch(() => []));
+  // What the list already shows, cell by cell (and each cell's last path segment: GCP lists
+  // full resource names, …/functions/<id>). A form NAME whose value equals a listed cell is
+  // taken. Matching anywhere in the list text instead also renamed ordinary field values that
+  // merely appear in it (CloudWatch "CPUUtilization", "300", "80" → an invalid alarm).
+  const listNames = new Set(await page.evaluate((sel) => [...document.querySelectorAll(sel)].flatMap((tr) =>
+    [...tr.querySelectorAll("td,[role=cell],[role=gridcell]")].map((c) => (c.innerText || "").trim()).filter(Boolean)
+  ).flatMap((t) => [t, t.split("/").pop(), t.split("@")[0]]), ROW_SEL).catch(() => []));   // …/<id>, <id>@project.iam…
   try {
     await btn.click({ timeout: 3000 });
     await sleep(1200);
@@ -280,8 +288,24 @@ async function createWithDefaults(page, drain, cloud, backToList, service) {
         if (await inp.count() && !(await inp.inputValue().catch(() => "x"))) await inp.fill(`crawl-${Date.now().toString(36)}`).catch(() => {});
       }
     };
+    // Only name fields are renamed: the first text field of the form/step, or one labelled
+    // "... name" / "... ID" (a log class "Standard" equal to a listed cell is not a name).
+    const renameIn = async (where) => {
+      const inps = await where.locator("input[type=text], input:not([type])").all();   // a bare <input> is text too
+      for (let i = 0; i < inps.length; i++) {
+        const inp = inps[i];
+        const v = await inp.inputValue().catch(() => "");
+        if (!v || !/^[\/a-z0-9][\/a-z0-9._-]*$/i.test(v) || !listNames.has(v)) continue;
+        const label = await inp.evaluate((e) => {
+          const f = e.closest(".field, .wiz-field, .form-field, .fld, label") || e.parentElement;
+          return ((f && f.innerText) || e.getAttribute("aria-label") || e.placeholder || "").split("\n")[0];
+        }).catch(() => "");
+        if (i === 0 || /\bname\b|\bid\b/i.test(label)) await inp.fill(freshName(v)).catch(() => {});
+      }
+    };
     if (await blade.count()) {
       for (let step = 0; step < 12; step++) {
+        await renameIn(blade);   // each wizard tab renders only its own fields (the name is on Basics)
         await fillWizardRequired();
         const fin = blade.locator("button").filter({ hasText: /^\s*create\s*$/i });
         if (await fin.count()) break;
@@ -299,12 +323,7 @@ async function createWithDefaults(page, drain, cloud, backToList, service) {
     // A default name that already exists (an earlier crawl created it) would be
     // rejected or overwritten by the real cloud; give it a fresh suffix so the
     // create adds a row.
-    const renameTaken = async () => {
-      for (const inp of await scope.locator("input[type=text], input:not([type])").all()) {   // a bare <input> is text too
-        const v = await inp.inputValue().catch(() => "");
-        if (v && /^[\/a-z0-9][\/a-z0-9._-]*$/i.test(v) && listNames.has(v)) await inp.fill(`${v}-${Date.now().toString(36).slice(-4)}`).catch(() => {});
-      }
-    };
+    const renameTaken = () => renameIn(scope);
     await renameTaken();
     // AWS create pages are step wizards (Choose secret type → Configure secret → …) that only
     // render the current step's fields, so the name may sit on a later step: walk the
@@ -348,8 +367,9 @@ async function createWithDefaults(page, drain, cloud, backToList, service) {
       if (await first.count()) { await first.click({ timeout: 3000 }).catch(() => {}); await sleep(400); }
       const nameInp = scope.locator("input[type=text]:visible, input:not([type]):visible").first();
       const v = await nameInp.inputValue().catch(() => "");
-      if (v && /^[\/a-z0-9][\/a-z0-9._-]*$/i.test(v)) {
-        await nameInp.fill(`${v}-${Date.now().toString(36).slice(-4)}`).catch(() => {});
+      if (v) {
+        // "(default)" (Firestore's one default database) cannot take a suffix: use a fresh id.
+        await nameInp.fill(/^[\/a-z0-9][\/a-z0-9._-]*$/i.test(v) ? freshName(v) : `crawl-${Date.now().toString(36)}`).catch(() => {});
         for (let step = 0; step < 8 && !(await blade.count()); step++) {
           const next = scope.locator("button:visible").filter({ hasText: /^\s*next\s*:/i }).first();   // wizard "Next: <step>", not a list pager
           if (!(await next.count())) break;
