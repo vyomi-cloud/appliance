@@ -76,7 +76,8 @@ const SECTIONS = {
     });
     check("ec2 User data: the launch script", ud.includes("echo " + name), ud);
     const conn = await tab("Connect");
-    check("ec2 Connect: SSH command with its key pair", conn.includes(`kp-${name}.pem`), conn);
+    // Nano has one account key per browser profile (vyomi-<id>.pem, valid for every Nano VM), not the launch key pair.
+    check("ec2 Connect: SSH command with the account key", /vyomi-\S+\.pem/.test(conn) && /ssh -i /.test(conn), conn.slice(0, 300));
     await tab("Details");
     await page.locator("#main input[data-attr=disable_api_stop]").check();
     await page.locator("#main button", { hasText: "Save" }).first().click();
