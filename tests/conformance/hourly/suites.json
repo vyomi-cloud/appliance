@@ -1091,6 +1091,14 @@
       "timeout": 300
     },
     {
+      "id": "offline-api-gcp-sql-patch-monitoring",
+      "target": "offline",
+      "cloud": "gcp",
+      "kind": "api",
+      "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/test_gcp_sql_patch_monitoring_api.py",
+      "timeout": 300
+    },
+    {
       "id": "offline-api-gcp-cloudscheduler-http",
       "target": "offline",
       "cloud": "gcp",
