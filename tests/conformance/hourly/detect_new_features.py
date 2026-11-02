@@ -233,6 +233,27 @@ GCP_SDK_ALIASES = {
     ("gcp_container_core", "GetOp"): ("containerpb.GetOperationRequest",),
     ("gcp_redis_core", "GetOp"): ("redispb.CreateInstanceRequest",),   # LRO Wait() polls GetOperation
     ("gcp_redis_core", "PatchInstance"): ("UpdateInstanceRequest",),
+    # Artifact Registry: the Go/Java SDK tests call these RPCs (verified in gcp-sdk-go-artifactregistry)
+    ("gcp_artifactregistry_core", "CreateRepo"): ("artifactregistrypb.CreateRepositoryRequest", "pb.CreateRepositoryRequest", "CreateRepositoryRequest"),
+    ("gcp_artifactregistry_core", "GetRepo"): ("GetRepositoryRequest",),
+    ("gcp_artifactregistry_core", "ListRepos"): ("ListRepositoriesRequest",),
+    ("gcp_artifactregistry_core", "PatchRepo"): ("UpdateRepositoryRequest",),
+    ("gcp_artifactregistry_core", "DeleteRepo"): ("DeleteRepositoryRequest",),
+    # Cloud Monitoring: gcp-sdk-go-monitoring drives these REST methods through google.golang.org/api/monitoring/v3
+    ("gcp_monitoring_core", "CreateChannel"): ("NotificationChannels.Create(",),
+    ("gcp_monitoring_core", "ListChannels"): ("NotificationChannels.List(",),
+    ("gcp_monitoring_core", "PatchChannel"): ("NotificationChannels.Patch(",),
+    ("gcp_monitoring_core", "DeleteChannel"): ("NotificationChannels.Delete(",),
+    ("gcp_monitoring_core", "CreateDescriptor"): ("MetricDescriptors.Create(",),
+    ("gcp_monitoring_core", "GetDescriptor"): ("MetricDescriptors.Get(",),
+    ("gcp_monitoring_core", "ListDescriptors"): ("MetricDescriptors.List(",),
+    ("gcp_monitoring_core", "DeleteDescriptor"): ("MetricDescriptors.Delete(",),
+    ("gcp_monitoring_core", "ListTimeSeries"): ("TimeSeries.List(",),
+    ("gcp_monitoring_core", "UpdateGroup"): ("Groups.Update(",),
+    ("gcp_monitoring_core", "DeleteGroup"): ("Groups.Delete(",),
+    ("gcp_monitoring_core", "CreateUptime"): ("UptimeCheckConfigs.Create(",),
+    ("gcp_monitoring_core", "PatchUptime"): ("UptimeCheckConfigs.Patch(",),
+    ("gcp_monitoring_core", "PatchPolicy"): ("AlertPolicies.Patch(",),
 }
 
 
