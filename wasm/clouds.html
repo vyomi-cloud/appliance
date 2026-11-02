@@ -1288,7 +1288,12 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     html.vy-embed #app-topbar, html.vy-embed #app-sidebar, html.vy-embed .side-collapse, html.vy-embed #side-scrim,
     html.vy-embed #update-banner, html.vy-embed #vyomi-readiness-mount, html.vy-embed #nano-foot { display: none !important; }
     html.vy-embed #app-main { margin: 0 !important; border-radius: 0 !important; }
-    html.vy-embed #activate-modal, html.vy-embed .am-overlay { display: none !important; }
+    html.vy-embed:not(.vy-acct) #activate-modal, html.vy-embed:not(.vy-acct) .am-overlay { display: none !important; }
+    /* ?embed=1&acct=1: the drawer's "Activate appliance" dialog - only the real activation dialog, nothing else. */
+    html.vy-acct #app-main { visibility: hidden !important; }
+    html.vy-acct #activate-modal, html.vy-acct #activate-modal * { visibility: visible; }
+    html.vy-acct, html.vy-acct body { background: transparent !important; }
+    html.vy-acct #activate-modal.am-overlay { background: transparent; padding-top: 12px; }
 
     html.vy-entering body { visibility: hidden; }   /* default cloud set: no flash of the appliance page before redirecting */
 </style>
@@ -3055,7 +3060,10 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
       openActivateModal();
     }
     function openActivateModal(){ var m = document.getElementById('activate-modal'); if(m) m.classList.add('open'); }
-    function closeActivateModal(){ var m = document.getElementById('activate-modal'); if(m) m.classList.remove('open'); }
+    function closeActivateModal(){ var m = document.getElementById('activate-modal'); if(m) m.classList.remove('open');
+      if (document.documentElement.classList.contains('vy-acct')) { try { parent.postMessage({ vy: 'close-modal' }, '*'); } catch (_) {} } }
+    if (/[?&]acct=1/.test(location.search)) { document.documentElement.classList.add('vy-acct');
+      document.addEventListener('DOMContentLoaded', function(){ setTimeout(openActivateModal, 50); }); }
     // Shared post-activation: mark signed in, hide the chip, and sync the workspace
     // (merge any spaces saved on another device, then save the union).
     function _onActivated(){

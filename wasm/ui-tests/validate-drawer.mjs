@@ -11,10 +11,21 @@ for (const cloud of ["aws", "gcp", "azure"]) {
   const errs = []; p.on("pageerror", e => errs.push(String(e)));
   await bootConsole(p, base, `/${cloud}-console.html`);
   await p.waitForSelector("#vy-appbar .vy-notch a", { timeout: 60000 });
-  check(`${cloud}: drawer has 5 items (no separate Default cloud)`, (await p.locator("#vy-appbar .vy-notch a").count()) === 5);
+  check(`${cloud}: drawer has 5 items (no separate Default cloud)`, (await p.locator("#vy-appbar .vy-notch a[data-v]").count()) === 5);
   check(`${cloud}: old back-to-spaces/api/usage header links removed`,
     (await p.locator("header .back-spaces, header .az-back-spaces, header a[href$='#api'], header a[href$='#usage']").count()) === 0);
   const url0 = p.url();
+  check(`${cloud}: Activate appliance + GitHub in the drawer, Sign out hidden when signed out`,
+    (await p.locator('#vy-appbar a[data-act="activate"], #vy-appbar a[data-act="upgrade"]').count()) === 1 && (await p.locator('#vy-appbar a[href="https://github.com/vyomi-cloud/appliance"]').count()) === 1 && !(await p.locator('#vy-appbar a[data-act="signout"]').isVisible()));
+  if ((await p.locator('#vy-appbar a[data-act="activate"]').count()) === 1) {
+    await p.click('#vy-appbar a[data-act="activate"]');
+    let ok = false; try { await p.frameLocator("#vy-modal iframe").locator("#activate-modal.open .am-card").waitFor({ state: "visible", timeout: 45000 }); ok = true; } catch (_) {}
+    check(`${cloud}: Activate opens the real activation dialog in a modal`, ok && p.url() === url0);
+    await p.keyboard.press("Escape"); await sleep(250);
+  }
+  await p.click("a.vy-co"); let lv = false; try { await p.frameLocator("#vy-modal iframe").locator("#view-spaces").waitFor({ state: "visible", timeout: 45000 }); lv = true; } catch (_) {}
+  check(`${cloud}: vyomi logo opens the Spaces dialog, console not navigated`, lv && p.url() === url0, p.url());
+  await p.keyboard.press("Escape"); await sleep(250);
   for (const v of ["spaces", "workspace", "kc", "usage", "api"]) {
     await p.click(`#vy-appbar a[data-v="${v}"]`);
     const fr = p.frameLocator("#vy-modal iframe");

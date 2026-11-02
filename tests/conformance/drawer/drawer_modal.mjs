@@ -22,9 +22,26 @@ const b = await chromium.launch();
 const p = await (await b.newContext({ viewport: { width: 1440, height: 860 } })).newPage();
 const errs = []; p.on("pageerror", e => errs.push(String(e)));
 await p.goto(`${BASE}/console/${CLOUD}`); await p.waitForSelector("#vy-appbar .vy-notch a", { timeout: 30000 });
-check((await p.locator("#vy-appbar .vy-notch a").count()) === 5, "five items in the drawer (Spaces, Health, Knowledge Center, SDK & CLI usage, API reference)");
+check((await p.locator("#vy-appbar .vy-notch a[data-v]").count()) === 5, "five items in the drawer (Spaces, Health, Knowledge Center, SDK & CLI usage, API reference)");
 check((await p.locator("header .back-spaces, header .az-back-spaces, header a[href$='#api'], header a[href$='#usage']").count()) === 0, "old back-to-spaces/api/usage header links are gone");
 const url0 = p.url();
+// account group: Activate appliance, GitHub (stars), Sign out (only when signed in)
+check((await p.locator('#vy-appbar a[data-act="activate"], #vy-appbar a[data-act="upgrade"]').count()) === 1, "Activate appliance is in the drawer");
+check((await p.locator('#vy-appbar a[href="https://github.com/vyomi-cloud/appliance"]').count()) === 1, "GitHub link is in the drawer");
+check(!(await p.locator('#vy-appbar a[data-act="signout"]').isVisible()), "Sign out is hidden while signed out");
+if ((await p.locator('#vy-appbar a[data-act="activate"]').count()) === 1) {
+  await p.click('#vy-appbar a[data-act="activate"]');
+  const af = p.frameLocator("#vy-modal iframe");
+  let ok = false; try { await af.locator("#activate-modal.open .am-card").waitFor({ state: "visible", timeout: 20000 }); ok = true; } catch (_) {}
+  check(ok && p.url() === url0, "Activate opens the real activation dialog in a modal");
+  await p.keyboard.press("Escape"); await p.waitForTimeout(250);
+  check((await p.locator("#vy-modal.open").count()) === 0, "Esc closes the activation modal");
+}
+// the vyomi logo opens the Spaces dialog, never the old full-page UI
+await p.click("a.vy-co"); const lf = p.frameLocator("#vy-modal iframe");
+let lv = false; try { await lf.locator("#view-spaces").waitFor({ state: "visible", timeout: 20000 }); lv = true; } catch (_) {}
+check(lv && p.url() === url0, "the vyomi logo opens the Spaces dialog (console not navigated)", p.url());
+await p.keyboard.press("Escape"); await p.waitForTimeout(250);
 for (const v of ["spaces", "workspace", "kc", "usage", "api"]) {
   await p.click(`#vy-appbar a[data-v="${v}"]`);
   const fr = p.frameLocator("#vy-modal iframe");
