@@ -259,7 +259,12 @@ async function createWithDefaults(page, drain, cloud, backToList, service) {
   if (!(await btn.count())) return f;
   const rowsBefore = await rowCount(page);
   const savBefore = await savingsSnapshot(page);
-  const listText = await page.locator("#main").innerText().catch(() => "");
+  // The names already listed: each row's first non-empty cell (the name / id column). Only a
+  // form value equal to one of these is a taken name; matching anywhere in the list text also
+  // renamed field values that merely appear in it (CloudWatch "CPUUtilization", "300", "80").
+  const listNames = new Set(await page.evaluate((sel) => [...document.querySelectorAll(sel)].map((tr) =>
+    ([...tr.querySelectorAll("td,[role=cell],[role=gridcell]")].map((c) => (c.innerText || "").trim()).find((t) => t) || "")
+  ).filter(Boolean), ROW_SEL).catch(() => []));
   try {
     await btn.click({ timeout: 3000 });
     await sleep(1200);
@@ -295,9 +300,9 @@ async function createWithDefaults(page, drain, cloud, backToList, service) {
     // rejected or overwritten by the real cloud; give it a fresh suffix so the
     // create adds a row.
     const renameTaken = async () => {
-      for (const inp of await scope.locator("input[type=text]").all()) {
+      for (const inp of await scope.locator("input[type=text], input:not([type])").all()) {   // a bare <input> is text too
         const v = await inp.inputValue().catch(() => "");
-        if (v && /^[a-z0-9][a-z0-9._-]*$/i.test(v) && listText.includes(v)) await inp.fill(`${v}-${Date.now().toString(36).slice(-4)}`).catch(() => {});
+        if (v && /^[\/a-z0-9][\/a-z0-9._-]*$/i.test(v) && listNames.has(v)) await inp.fill(`${v}-${Date.now().toString(36).slice(-4)}`).catch(() => {});
       }
     };
     await renameTaken();
@@ -305,7 +310,7 @@ async function createWithDefaults(page, drain, cloud, backToList, service) {
     // render the current step's fields, so the name may sit on a later step: walk the
     // "Next: …" buttons, renaming on each step, then submit from the last one.
     for (let step = 0; step < 8 && !(await blade.count()); step++) {
-      const next = scope.locator("button:visible").filter({ hasText: /^\s*next\b/i }).first();
+      const next = scope.locator("button:visible").filter({ hasText: /^\s*next\s*:/i }).first();   // wizard "Next: <step>", not a list pager
       if (!(await next.count())) break;
       await next.click({ timeout: 3000 }).catch(() => {});
       await sleep(400);
@@ -341,12 +346,12 @@ async function createWithDefaults(page, drain, cloud, backToList, service) {
     if (taken) {
       const first = scope.locator("button:visible").filter({ hasText: /^\s*1\s*[A-Za-z]/ }).first();   // step "1 Table details"
       if (await first.count()) { await first.click({ timeout: 3000 }).catch(() => {}); await sleep(400); }
-      const nameInp = scope.locator("input[type=text]:visible").first();
+      const nameInp = scope.locator("input[type=text]:visible, input:not([type]):visible").first();
       const v = await nameInp.inputValue().catch(() => "");
-      if (v && /^[a-z0-9][a-z0-9._-]*$/i.test(v)) {
+      if (v && /^[\/a-z0-9][\/a-z0-9._-]*$/i.test(v)) {
         await nameInp.fill(`${v}-${Date.now().toString(36).slice(-4)}`).catch(() => {});
         for (let step = 0; step < 8 && !(await blade.count()); step++) {
-          const next = scope.locator("button:visible").filter({ hasText: /^\s*next\b/i }).first();
+          const next = scope.locator("button:visible").filter({ hasText: /^\s*next\s*:/i }).first();   // wizard "Next: <step>", not a list pager
           if (!(await next.count())) break;
           await next.click({ timeout: 3000 }).catch(() => {});
           await sleep(400);
