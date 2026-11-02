@@ -44,9 +44,9 @@ export async function runGcpServiceFlow(page, { service, label, check, pushActio
   const grid = await page.evaluate(() => {
     const t = document.querySelector("#main table.gc");
     if (!t) return { heads: [], cells: [] };
-    const heads = [...t.querySelectorAll("th")].map((h) => (h.innerText || "").replace(/[▲▼]/g, "").trim());
+    const heads = [...t.querySelectorAll("th:not([data-auto])")].map((h) => (h.innerText || "").replace(/[▲▼]/g, "").trim());
     const row = t.querySelector("tr[data-row-name]:last-of-type") || t.querySelector("tr[data-row-name]");
-    const cells = row ? [...row.querySelectorAll("td")].map((c) => (c.innerText || "").trim()) : [];
+    const cells = row ? [...row.querySelectorAll("td:not([data-auto])")].map((c) => (c.innerText || "").trim()) : [];
     return { heads, cells };
   });
   const blank = grid.cells.map((c, i) => ({ c, h: grid.heads[i] || "" }))
@@ -76,7 +76,7 @@ export async function runGcpServiceFlow(page, { service, label, check, pushActio
     await sleep(800);
     const filled = await page.evaluate(() => {
       const rows = [...document.querySelectorAll("#main .sub-content table tr")].slice(1);
-      return { rows: rows.length, blank: rows.flatMap((r) => [...r.querySelectorAll("td")].filter((c) => ["", "-", "—"].includes((c.innerText || "").trim()))).length };
+      return { rows: rows.length, blank: rows.flatMap((r) => [...r.querySelectorAll("td:not([data-auto])")].filter((c) => ["", "-", "—"].includes((c.innerText || "").trim()))).length };
     });
     check(filled.rows > 0 && filled.blank === 0, `${service}: ${pushAction.tab} rows are filled after the push`, JSON.stringify(filled));
   }

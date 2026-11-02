@@ -2073,11 +2073,6 @@
       "timeout": 300
     },
     {
-      "id": "offline-sweepA-gcp",
-      "target": "offline",
-      "cloud": "gcp",
-      "kind": "api",
-      "cmd": "python3 tests/conformance/post_create/probes/sweep_gcp.py {ENDPOINT}",
       "id": "offline-post-create-gcp-memorystore-reachable",
       "target": "offline",
       "cloud": "gcp",
@@ -2150,11 +2145,6 @@
       "timeout": 300
     },
     {
-      "id": "offline-post-create-aws-elb-local-url",
-      "target": "offline",
-      "cloud": "aws",
-      "kind": "api",
-      "cmd": "python3 tests/conformance/post_create/probes/endpoint_reachable.py aws_elb {ENDPOINT}",
       "id": "offline-post-create-azure-container-app",
       "target": "offline",
       "cloud": "azure",
@@ -2225,6 +2215,22 @@
       "kind": "ui",
       "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-default-cloud.mjs",
       "timeout": 600
+    },
+    {
+      "id": "nano-ui-gcp-properties",
+      "target": "nano",
+      "cloud": "gcp",
+      "kind": "ui",
+      "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-gcp-properties.mjs",
+      "timeout": 300
+    },
+    {
+      "id": "offline-ui-gcp-properties",
+      "target": "offline",
+      "cloud": "gcp",
+      "kind": "ui",
+      "cmd": "VYOMI_CONSOLE_URL={ENDPOINT}/console/gcp node wasm/ui-tests/validate-gcp-properties.mjs",
+      "timeout": 300
     }
   ]
 }

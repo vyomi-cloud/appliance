@@ -1464,6 +1464,20 @@ _TAB_HANDLERS = {"compute": _compute_tab, "storage": _storage_tab, "cloudsql": _
 
 def tab_dispatch(svc, operation, name, body, resources=None, account="default"):
     """Serve one resource-detail tab op, or None when `operation` isn't a tab op."""
+    low = operation[:1].lower() + operation[1:]
+    if low in _T.META_OPS:    # editable custom properties + last-modified times (every service)
+        try:
+            return _T.meta_op(_sub_root(), svc, low, name, body or {})
+        except _T.TabError as e:
+            return _tab_err(e)
+    out = _tab_dispatch(svc, operation, name, body, resources, account)
+    if low == "setLabels" and isinstance(out, dict) and out.get("ok") is not False:
+        _T.stamp_labels(_sub_root(), svc, name)
+    return out
+
+
+def _tab_dispatch(svc, operation, name, body, resources=None, account="default"):
+    """Serve one resource-detail tab op, or None when `operation` isn't a tab op."""
     body = body or {}
     try:
         if svc == "iam" and operation in ("GetProjectPolicy", "GrantAccess", "RevokeAccess"):

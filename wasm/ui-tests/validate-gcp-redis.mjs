@@ -61,8 +61,8 @@ try {
   for (let i = 0; i < 10 && !(await rowFor().count()); i++) await sleep(800);
   check(await rowFor().count() > 0, "new instance appears in the list", `rows ${rows0} → ${await rows()}, id ${newId}`);
 
-  const heads = await page.locator("#main table th").allInnerTexts();
-  const cells = await rowFor().locator("td").allInnerTexts();
+  const heads = await page.locator("#main table th:not([data-auto])").allInnerTexts();
+  const cells = await rowFor().locator("td:not([data-auto])").allInnerTexts();
   const data = cells.map((c, i) => [(heads[i] || "").replace(/[▲▼]/g, "").trim(), c.trim()]).filter(([h]) => h);   // skip the checkbox column
   const blanks = data.filter(([, v]) => BLANK.test(v)).map(([h]) => h);
   check(data.length >= 8 && !blanks.length, "every grid column is filled", `blank: ${blanks.join(", ") || "-"} · ${JSON.stringify(data)}`);

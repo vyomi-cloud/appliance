@@ -1047,13 +1047,19 @@ async def _dispatch(service: str, op: str, name: str, request: Request):
     token = REQUEST_PROVIDER.set("gcp")
     try:
         out = None
-        if service == "iam" and op in ("getProjectPolicy", "grantAccess", "revokeAccess"):
+        if op in T.META_OPS:
+            out = T.meta_op(tab_state, service, op, name, body)
+            if op == "setProperties":
+                _usage(service, op, name)
+        elif service == "iam" and op in ("getProjectPolicy", "grantAccess", "revokeAccess"):
             out = _iam_project(op, name, body)
         elif service in _HANDLERS:
             out = _HANDLERS[service](op, name, body)
         if out is None:
             return JSONResponse({"ok": False, "code": "UNIMPLEMENTED",
                                  "message": "Operation '%s' is not supported for %s." % (op, service)}, status_code=404)
+        if op == "setLabels" and isinstance(out, dict) and out.get("ok") is not False:
+            T.stamp_labels(tab_state, service, name)
         return JSONResponse(out)
     except T.TabError as e:
         return JSONResponse({"ok": False, "code": e.code, "message": e.message}, status_code=e.status)
@@ -1080,7 +1086,9 @@ def _register_views(app) -> None:
     import inspect
 
     for svc, (path, param) in _VIEW_ROUTES.items():
-        async def view(op: str, name: str, _path=path, _param=param):
+        async def view(op: str, name: str, _path=path, _param=param, _svc=svc):
+            if op in ("getMeta", "getProperties"):
+                return JSONResponse(T.meta_op(tab_state, _svc, op, name, {}))
             if not op.startswith("get") or len(op) <= 3:
                 return JSONResponse({"ok": False, "code": "UNIMPLEMENTED", "message": "Unknown read %s." % op}, status_code=404)
             ep = next((r.endpoint for r in app.router.routes
@@ -1096,6 +1104,24 @@ def _register_views(app) -> None:
         view.__name__ = "gcp_tab_view_%s" % svc
         for prefix in ("/api/gcp/sub/", "/api/sub/"):
             app.add_api_route(prefix + svc + "/{op}/{name:path}", view, methods=["GET"], include_in_schema=False)
+
+        async def props(op: str, name: str, request: Request, _svc=svc):
+            # these services' detail tabs are read-only views, but custom properties are the console's own
+            if op != "setProperties":
+                return JSONResponse({"ok": False, "code": "UNIMPLEMENTED", "message": "Operation '%s' is not supported for %s." % (op, _svc)}, status_code=404)
+            try:
+                body = await request.json()
+            except Exception:
+                body = {}
+            try:
+                out = T.meta_op(tab_state, _svc, op, name, body if isinstance(body, dict) else {})
+            except T.TabError as e:
+                return JSONResponse({"ok": False, "code": e.code, "message": e.message}, status_code=e.status)
+            _usage(_svc, op, name)
+            return JSONResponse(out)
+        props.__name__ = "gcp_tab_props_%s" % svc
+        for prefix in ("/api/gcp/sub/", "/api/sub/"):
+            app.add_api_route(prefix + svc + "/{op}/{name:path}", props, methods=["POST"], include_in_schema=False)
 
 
 def register(app) -> None:

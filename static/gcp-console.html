@@ -1873,23 +1873,37 @@ function inlineForm(fields, submitLabel, onSubmit, onCancel){
 // Key/value editor (metadata, labels, env vars, flags): read view + Edit → Save.
 function kvEditor(host, opts){
   // opts: {title, load: async()=>[[k,v]...], save: async(pairs)=>r, keyLabel, valueLabel, addLabel, emptyText, multiline}
-  let pairs = [], editing = false;
+  // opts.fixed: async()=>[[k,v]...] read-only rows listed first (the resource's own fields);
+  // opts.modified: async()=>ISO time shown as "Last modified".
+  let pairs = [], fixed = [], modified = "", editing = false;
   const wrap = el("div",{}); host.append(wrap);
-  async function load(){ pairs = await opts.load(); paint(); }
+  async function load(){
+    pairs = await opts.load();
+    fixed = opts.fixed ? await opts.fixed().catch(() => []) : [];
+    modified = opts.modified ? await opts.modified().catch(() => "") : "";
+    paint();
+  }
+  const when = iso => { const d = new Date(iso); return isNaN(d) ? "" : d.toLocaleString([], {dateStyle:"medium", timeStyle:"medium"}); };
   function paint(){
     wrap.innerHTML = "";
-    const bar = el("div",{style:"display:flex;gap:8px;margin-bottom:12px"});
+    const bar = el("div",{style:"display:flex;gap:8px;margin-bottom:12px;align-items:center"});
     if (!editing) bar.append(el("button",{class:"btn", onclick:()=>{ editing = true; paint(); }}, icon("edit"), "Edit"),
       el("button",{class:"btn", onclick:()=>{ editing = true; pairs.push(["", ""]); paint(); }}, icon("add"), opts.addLabel || "Add item"));
+    if (opts.modified) bar.append(el("span",{class:"vy-modified", title: modified || "", style:"margin-left:auto;font-size:12.5px;color:var(--sub)"},
+      "Last modified: ", el("b",{style:"font-weight:500;color:var(--ink)"}, modified ? when(modified) : "Never")));
     wrap.append(bar);
+    const lock = el("span",{class:"material-symbols-outlined", title:"Set by the resource — read-only", style:"font-size:15px;color:var(--hint);vertical-align:middle"}, "lock");
     if (!editing) {
-      if (!pairs.length) { wrap.append(emptyOf(opts.emptyIcon || "data_object", opts.emptyText || "Nothing set.")); return; }
-      wrap.append(tableOf([["k", opts.keyLabel || "Key"], ["v", opts.valueLabel || "Value"]],
-        pairs.map(([k, v]) => ({k, v: String(v)}))));
+      if (!pairs.length && !fixed.length) { wrap.append(emptyOf(opts.emptyIcon || "data_object", opts.emptyText || "Nothing set.")); return; }
+      const rowsAll = [...fixed.map(([k, v]) => ({k, v: String(v), src: "Resource"})), ...pairs.map(([k, v]) => ({k, v: String(v), src: "Custom"}))];
+      wrap.append(tableOf(opts.fixed ? [["k", opts.keyLabel || "Key"], ["v", opts.valueLabel || "Value"], ["src", "Source"]]
+                                      : [["k", opts.keyLabel || "Key"], ["v", opts.valueLabel || "Value"]],
+        opts.fixed ? rowsAll : pairs.map(([k, v]) => ({k, v: String(v)})), null, {noAuto: true}));
       return;
     }
     const tbl = el("table",{class:"gc"});
     tbl.append(el("tr",{}, el("th",{}, opts.keyLabel || "Key"), el("th",{}, opts.valueLabel || "Value"), el("th",{style:"width:44px"}, "")));
+    fixed.forEach(([k, v]) => tbl.append(el("tr",{class:"vy-fixed"}, el("td",{style:"color:var(--sub)"}, k), el("td",{style:"color:var(--sub);overflow-wrap:anywhere"}, String(v)), el("td",{}, lock.cloneNode(true)))));
     const rows = [];
     pairs.forEach(([k, v]) => {
       const ki = el("input",{style:"width:100%;box-sizing:border-box;border:1px solid #ccc;border-radius:3px;padding:4px"}); ki.value = k;
@@ -2031,8 +2045,26 @@ GT.tags = async function(host, svc, item){
   kvEditor(host, {
     load: async () => { const it = await tabView(svc, item, "Labels"); const l = (it.labels && typeof it.labels === "object") ? it.labels : {}; STATE.item = {...STATE.item, labels: l}; return Object.entries(l); },
     save: pairs => subPost(svc, "setLabels", tabName(svc, item), {labels: Object.fromEntries(pairs)}),
+    modified: async () => { const r = await subGet(svc, "getMeta", tabName(svc, item)); return (r.json && r.json.labelsModified) || ""; },
     keyLabel: "Key", valueLabel: "Value", addLabel: "Add label", emptyIcon: "sell",
     emptyText: "No labels on " + tabName(svc, item) + ". Labels are key-value pairs that help organize and filter resources.",
+  });
+};
+// Properties: every field the resource carries (read-only, set by the service) plus custom properties you can
+// add, edit and save — like Labels, with the time they were last changed.
+GT.properties = async function(host, svc, item){
+  const name = tabName(svc, item);
+  const fresh = await freshItem(svc, STATE.item);
+  kvEditor(host, {
+    fixed: async () => {
+      const cols = svc.columns.map(c => [c[0], c[1], v => autoFmt(v)]).concat(autoColumns([fresh], svc.columns));
+      return cols.map(c => [c[1], c[2](getPath(fresh, c[0]))]).filter(([, v]) => v !== "—");
+    },
+    load: async () => { const r = await subGet(svc, "getProperties", name); return Object.entries((r.json && r.json.properties) || {}); },
+    save: pairs => subPost(svc, "setProperties", name, {properties: Object.fromEntries(pairs)}),
+    modified: async () => { const r = await subGet(svc, "getProperties", name); return (r.json && r.json.modified) || ""; },
+    keyLabel: "Property", valueLabel: "Value", addLabel: "Add property", emptyIcon: "data_object",
+    emptyText: "No properties on " + name + ".",
   });
 };
 // Logs: Cloud Logging's audit entries for this resource (admin activity), newest first.

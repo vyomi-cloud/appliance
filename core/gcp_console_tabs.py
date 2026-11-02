@@ -244,6 +244,52 @@ def sql_settings_patch(op: str, body: dict, settings: dict):
 
 
 # ---------------------------------------------------------------------------
+# custom properties + "last modified" (every service)
+# ---------------------------------------------------------------------------
+_PROP_KEY = re.compile(r"^[A-Za-z0-9_.:/\-]{1,128}$")
+META_OPS = ("getMeta", "getProperties", "setProperties")
+
+
+def validate_properties(props) -> dict:
+    if not isinstance(props, dict):
+        raise TabError(400, "INVALID_ARGUMENT", "properties must be a map of key/value strings.")
+    if len(props) > 100:
+        raise TabError(400, "INVALID_ARGUMENT", "A resource can have at most 100 custom properties.")
+    out = {}
+    for k, v in props.items():
+        k = str(k).strip()
+        if not _PROP_KEY.match(k):
+            raise TabError(400, "INVALID_ARGUMENT",
+                           "Property key '%s' is invalid: use 1-128 letters, digits and _ . : / -." % k)
+        v = "" if v is None else str(v)
+        if len(v) > 1024:
+            raise TabError(400, "INVALID_ARGUMENT", "The value of property '%s' is longer than 1024 characters." % k)
+        out[k] = v
+    return out
+
+
+def stamp_labels(root: dict, service: str, name: str) -> None:
+    """A labels write: remember when (the Labels tab shows 'Last modified')."""
+    put_settings(root, service, name, "meta", {"labelsModified": now_iso()})
+
+
+def meta_op(root: dict, service: str, op: str, name: str, body: dict):
+    """getMeta / getProperties / setProperties — the console's editable Properties grid and the
+    last-modified times of labels and properties, for every service alike. None for any other op."""
+    if op == "getMeta":
+        m = get_settings(root, service, name, "meta", {})
+        p = get_settings(root, service, name, "properties", {})
+        return {"ok": True, "labelsModified": m.get("labelsModified", ""), "propertiesModified": p.get("modified", "")}
+    if op in ("getProperties", "setProperties"):
+        if op == "setProperties":
+            put_settings(root, service, name, "properties",
+                         {"properties": validate_properties((body or {}).get("properties", {})), "modified": now_iso()})
+        p = get_settings(root, service, name, "properties", {"properties": {}, "modified": ""})
+        return {"ok": True, "properties": dict(p.get("properties") or {}), "modified": p.get("modified", "")}
+    return None
+
+
+# ---------------------------------------------------------------------------
 # labels (every service) — GCP label rules
 # ---------------------------------------------------------------------------
 _LABEL_KEY = re.compile(r"^[a-z][a-z0-9_-]{0,62}$")
