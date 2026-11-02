@@ -458,7 +458,19 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
 </head>
 <body>
 <script src="./nano-kernel.js"></script>
-<script>window.__nk = window.NanoKernel && NanoKernel.start("AWS console");</script>
+<script>
+// Download a key/file served by the Nano service worker. A plain <a href="/api/..."> breaks under a path
+// prefix (the portal serves Nano at /nano/), so fetch it through the (shimmed) fetch and save the blob.
+window.vyDownloadKey = window.vyDownloadKey || async function(url, name){
+  try {
+    const r = await fetch(url);
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const blob = await r.blob();
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+  } catch (e) { alert("Could not download " + name + ": " + e.message + ". Reload the Nano tab and try again."); }
+};
+window.__nk = window.NanoKernel && NanoKernel.start("AWS console");</script>
 
 <!-- ==================== TOP BAR ==================== -->
 <header class="aws-top">
@@ -3178,7 +3190,7 @@ SUB_RENDERERS.connect = function(svc, full, host){
         wrap.append(el("div",{class:"keyblock"},
           el("div",{class:"k"}, "Step 1 — Download SSH private key (one-time)"),
           el("div",{class:"row"},
-            el("a",{class:"btn", href:keyUrl, download:`vyomi-${instanceId}.pem`},
+            el("a",{class:"btn", href:keyUrl, download:`vyomi-${instanceId}.pem`, onclick:e=>{ e.preventDefault(); window.vyDownloadKey(keyUrl, ssh.key_local_filename || `vyomi-${instanceId}.pem`); }},
               icon("download"), `Download ${ssh.key_local_filename || "vyomi-" + instanceId + ".pem"}`),
             el("span",{class:"muted", style:"font-size:12px;margin-left:8px"},
               "Save to ~/Downloads. Run `chmod 600` on it before connecting."))));

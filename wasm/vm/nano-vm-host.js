@@ -301,7 +301,7 @@
           h("div", { style: S.title }, "SSH from your terminal"),
           h("div", { style: S.sub }, `vyomi-tunnel forwards 127.0.0.1:${s.port} on this machine to the VM's SSH port, while this Nano tab is open.`),
           h("div", { style: S.sub }, "1. Download the key (one key per browser profile, valid for every Nano VM)"),
-          h("div", {}, h("a", { href: s.key_download_url, download: s.key_local_filename, style: S.btn + ";display:inline-block;text-decoration:none" }, "Download " + s.key_local_filename)),
+          h("div", {}, h("a", { href: s.key_download_url, download: s.key_local_filename, onclick: (e) => { e.preventDefault(); (window.vyDownloadKey || ((u, n) => fetch(u).then(r => r.blob()).then(b => { const a = document.createElement("a"); a.href = URL.createObjectURL(b); a.download = n; a.click(); })))(s.key_download_url, s.key_local_filename); }, style: S.btn + ";display:inline-block;text-decoration:none" }, "Download " + s.key_local_filename)),
           h("div", { style: S.sub }, "2. Move it into place"), cmdRow(s.key_setup_command || ""),
           h("div", { style: S.sub }, "3. Connect"), cmdRow(s.command || ""),
           h("div", { style: S.sub }, `Logs you in as ${s.user} on ${rt.os || "the VM"}, ${rt.mem_mb || "?"} MB RAM.`)));
