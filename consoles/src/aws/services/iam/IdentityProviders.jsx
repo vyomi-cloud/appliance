@@ -6,10 +6,12 @@ import Modal from "@cloudscape-design/components/modal";
 import FormField from "@cloudscape-design/components/form-field";
 import Input from "@cloudscape-design/components/input";
 import Textarea from "@cloudscape-design/components/textarea";
+import Link from "@cloudscape-design/components/link";
 import RadioGroup from "@cloudscape-design/components/radio-group";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
+import { follow } from "../../../common/router.js";
 import ResourceTable from "../../kit/ResourceTable.jsx";
 import DeleteModal from "../../kit/DeleteModal.jsx";
 import { fmtDate } from "../../kit/common.jsx";
@@ -62,7 +64,7 @@ export default function IdentityProviders() {
           </SpaceBetween>
         }
         columns={[
-          { id: "name", header: "Provider name", isRowHeader: true, cell: (x) => x.name },
+          { id: "name", header: "Provider name", isRowHeader: true, cell: (x) => <Link href={`#/iam/identity-providers/${x.type === "SAML" ? "saml" : "oidc"}/${encodeURIComponent(x.arn.replace(/\//g, "~"))}`} onFollow={follow}>{x.name}</Link> },
           { id: "type", header: "Type", cell: (x) => x.type },
           { id: "created", header: "Creation time", cell: (x) => fmtDate(x.created) },
         ]}

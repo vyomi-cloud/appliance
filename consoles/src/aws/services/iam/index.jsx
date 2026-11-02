@@ -13,6 +13,8 @@ import Policies from "./Policies.jsx";
 import PolicyDetail from "./PolicyDetail.jsx";
 import CreatePolicy from "./CreatePolicy.jsx";
 import IdentityProviders from "./IdentityProviders.jsx";
+import IdentityProviderDetail from "./IdentityProviderDetail.jsx";
+import ServerCertificates from "./ServerCertificates.jsx";
 import AccountSettings from "./AccountSettings.jsx";
 import EditPasswordPolicy from "./EditPasswordPolicy.jsx";
 import SecurityCredentials from "./SecurityCredentials.jsx";
@@ -83,6 +85,8 @@ export default {
 
     { pattern: "/iam/identity-providers", component: IdentityProviders, crumbs: () => [iamCrumb, { text: "Identity providers", href: "#/iam/identity-providers" }] },
 
+    { pattern: "/iam/identity-providers/:kind/:arn", component: IdentityProviderDetail, crumbs: (p) => [iamCrumb, { text: "Identity providers", href: "#/iam/identity-providers" }, { text: decodeURIComponent(p.arn).split("~").pop(), href: `#/iam/identity-providers/${p.kind}/${p.arn}` }] },
+    { pattern: "/iam/server-certificates", component: ServerCertificates, crumbs: () => [iamCrumb, { text: "Server certificates", href: "#/iam/server-certificates" }] },
     { pattern: "/iam/account-settings", component: AccountSettings, crumbs: () => [iamCrumb, { text: "Account settings", href: "#/iam/account-settings" }] },
     { pattern: "/iam/account-settings/edit-password-policy", component: EditPasswordPolicy, crumbs: () => [iamCrumb, { text: "Account Settings", href: "#/iam/account-settings" }, { text: "Edit password policy", href: "#/iam/account-settings/edit-password-policy" }] },
     { pattern: "/iam/account-settings/assign-delegated-administrator", component: AssignDelegatedAdministrator, crumbs: () => [iamCrumb, { text: "Account Settings", href: "#/iam/account-settings" }, { text: "Assign delegated administrator for centralized root access", href: "#/iam/account-settings/assign-delegated-administrator" }] },

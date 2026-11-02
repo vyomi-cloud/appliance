@@ -310,3 +310,21 @@ export const listOrganizationsFeatures = async () => {
   catch (e) { if (e.code === "OrganizationNotFoundException") return []; throw e; }
 };
 export const setOrganizationsFeature = (feature, on) => call(`${on ? "Enable" : "Disable"}Organizations${feature}`, {});
+
+// ── server certificates (IAM certificate store) ──────────────────────────────────────
+export const listServerCertificates = async () => asList((await call("ListServerCertificates", {})).ListServerCertificatesResponse.ListServerCertificatesResult.ServerCertificateMetadataList?.member);
+export const uploadServerCertificate = (ServerCertificateName, CertificateBody, PrivateKey, CertificateChain) =>
+  call("UploadServerCertificate", { ServerCertificateName, CertificateBody, PrivateKey, ...(CertificateChain ? { CertificateChain } : {}) });
+export const renameServerCertificate = (ServerCertificateName, NewServerCertificateName) => call("UpdateServerCertificate", { ServerCertificateName, NewServerCertificateName });
+export const deleteServerCertificate = (ServerCertificateName) => call("DeleteServerCertificate", { ServerCertificateName });
+export const getServerCertificate = async (ServerCertificateName) => (await call("GetServerCertificate", { ServerCertificateName })).GetServerCertificateResponse.GetServerCertificateResult.ServerCertificate;
+
+// ── identity-provider detail (OIDC client IDs / thumbprints, SAML metadata, tags) ────
+export const addOidcClientId = (OpenIDConnectProviderArn, ClientID) => call("AddClientIDToOpenIDConnectProvider", { OpenIDConnectProviderArn, ClientID });
+export const removeOidcClientId = (OpenIDConnectProviderArn, ClientID) => call("RemoveClientIDFromOpenIDConnectProvider", { OpenIDConnectProviderArn, ClientID });
+export const updateOidcThumbprints = (OpenIDConnectProviderArn, list) => call("UpdateOpenIDConnectProviderThumbprint", { OpenIDConnectProviderArn, ...members("ThumbprintList", list) });
+export const updateSamlProvider = (SAMLProviderArn, SAMLMetadataDocument) => call("UpdateSAMLProvider", { SAMLProviderArn, SAMLMetadataDocument });
+export const tagProvider = (kind, Arn, tags) => call(`Tag${kind}Provider`, { [kind === "SAML" ? "SAMLProviderArn" : "OpenIDConnectProviderArn"]: Arn, ...tagsParams(tags) });
+export const untagProvider = (kind, Arn, keys) => call(`Untag${kind}Provider`, { [kind === "SAML" ? "SAMLProviderArn" : "OpenIDConnectProviderArn"]: Arn, ...members("TagKeys", keys) });
+export const listProviderTags = async (kind, Arn) => tagsFromXml((await call(`List${kind}ProviderTags`, { [kind === "SAML" ? "SAMLProviderArn" : "OpenIDConnectProviderArn"]: Arn }))[`List${kind}ProviderTagsResponse`][`List${kind}ProviderTagsResult`].Tags);
+export const getAccountAuthorizationDetails = async () => (await call("GetAccountAuthorizationDetails", {})).GetAccountAuthorizationDetailsResponse.GetAccountAuthorizationDetailsResult;

@@ -338,7 +338,8 @@ export function MfaSection({ userName }) {
         </SpaceBetween></Box>}>
         {assign?.step === 1 && <FormField label="Device name"><Input value={assign.name} onChange={({ detail }) => setAssign((a) => ({ ...a, name: detail.value }))} ariaLabel="Device name" /></FormField>}
         {assign?.step === 2 && <SpaceBetween size="m">
-          <FormField label="Secret key" description="Enter this key into your virtual MFA application (there is no camera to scan a QR code in this environment).">
+          {assign.device.QRCodePNG && <Box textAlign="center"><img alt="QR code" data-mfa-qr="" style={{ width: 180, height: 180, imageRendering: "pixelated" }} src={`data:image/png;base64,${assign.device.QRCodePNG}`} /></Box>}
+          <FormField label="Secret key" description="Scan the QR code with your authenticator app, or enter this key manually.">
             <Input value={assign.device.Base32StringSeed} readOnly ariaLabel="Secret key" />
           </FormField>
           <FormField label="MFA code 1"><Input value={codes.a} onChange={({ detail }) => setCodes((c) => ({ ...c, a: detail.value }))} ariaLabel="MFA code 1" /></FormField>

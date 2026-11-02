@@ -10,6 +10,7 @@ import { useNotify } from "../../../common/notify.jsx";
 import { navigate } from "../../../common/router.js";
 import { ErrorAlert, KeyValue } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
+import ServerCertificates from "./ServerCertificates.jsx";
 import { CentralizedRootAccessPanel } from "./OrgPages.jsx";
 import * as api from "./api.js";
 
@@ -56,6 +57,7 @@ export default function AccountSettings() {
         <CapabilityContainer id="iam.organizations.role-manager" title="Role manager" />
         <CentralizedRootAccessPanel />
         <StsPanel />
+        <ServerCertificates />
       </SpaceBetween>
     </ContentLayout>
   );
