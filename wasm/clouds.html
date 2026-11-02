@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="en">
 <head>
+  <script>if(/[?&]embed=1/.test(location.search))document.documentElement.classList.add("vy-embed");</script>
   <script src="nano-rates.js"></script>
   <script>
   (function(){
@@ -1276,6 +1277,12 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     .kc-frame-head h2 { color: #e4e4e7 !important; }
     /* Modals → dark surface (readable on the dark backdrop). */
     .modal, #modal-body, .cl-box { background: #0d1228 !important; color: #e4e4e7 !important; border: 1px solid rgba(255,255,255,0.10) !important; }
+
+    /* Embedded in a console's drawer modal (?embed=1): just the view, no app chrome. */
+    html.vy-embed #app-topbar, html.vy-embed #app-sidebar, html.vy-embed .side-collapse, html.vy-embed #side-scrim,
+    html.vy-embed #update-banner, html.vy-embed #vyomi-readiness-mount, html.vy-embed #nano-foot { display: none !important; }
+    html.vy-embed #app-main { margin: 0 !important; border-radius: 0 !important; }
+    html.vy-embed #activate-modal, html.vy-embed .am-overlay { display: none !important; }
 </style>
   <style>#host-util-card .stat-actions{display:none!important}</style>   <!-- Free up space / Grow disk are appliance-only -->
   <script src="./nano-sw.js" defer></script>
@@ -2720,10 +2727,10 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
       var items = document.querySelectorAll('#app-sidebar .side-item[data-view]');
       for (var i = 0; i < items.length; i++)
         items[i].classList.toggle('active', items[i].getAttribute('data-view') === view);
-      try { localStorage.setItem('vyomi.appview', view); } catch (_) {}
+      if (!document.documentElement.classList.contains('vy-embed')) try { sessionStorage.setItem('vyomi.appview', view); } catch (_) {}
       // Keep the URL on the current view, so a refresh lands right back here (the
       // boot code below restores the hash first). replaceState adds no history entries.
-      if (location.hash !== '#' + view) try { history.replaceState(history.state, '', location.pathname + location.search + '#' + view); } catch (_) {}
+      if (!document.documentElement.classList.contains('vy-embed') && location.hash !== '#' + view) try { history.replaceState(history.state, '', location.pathname + location.search + '#' + view); } catch (_) {}
     }
     window.addEventListener('hashchange', function () {   // a #view link on the page itself
       var hv = (location.hash || '').replace('#', '');
@@ -2792,7 +2799,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
       // A URL hash (e.g. clouds.html#spaces from a console "back to spaces" link) wins over the last-used view.
       var hv = (location.hash || '').replace('#', '');
       if (APP_VIEWS[hv]) { showAppView(hv); return; }
-      try { var v = localStorage.getItem('vyomi.appview'); if (v && v !== 'spaces') showAppView(v); } catch (_) {}
+      try { var v = sessionStorage.getItem('vyomi.appview'); if (v && v !== 'spaces') showAppView(v); } catch (_) {}
     })();
 
     // ── API (Swagger) native renderer — fetch the OpenAPI spec per cloud and
@@ -3413,7 +3420,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
       try {
         await fetch(`/api/spaces/${ spaceId }/switch`, { method: 'POST' });
       } catch (e) { /* swallow — opening console works without explicit switch */ }
-      window.location.href = PROVIDER_PATHS[provider] || '/ui';
+      (window.top || window).location.href = PROVIDER_PATHS[provider] || '/ui';
     }
 
     // ── Create Space modal ──────────────────────────────────────────
@@ -3481,7 +3488,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
         if (newId) {
           // Switch active context to the new space, then jump to console.
           try { await fetch(`/api/spaces/${newId}/switch`, { method: 'POST' }); } catch (_) {}
-          window.location.href = PROVIDER_PATHS[provider] || '/ui';
+          (window.top || window).location.href = PROVIDER_PATHS[provider] || '/ui';
           return;
         }
         // Fallback: reload page so it shows the new card.

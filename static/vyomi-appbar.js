@@ -8,6 +8,7 @@
 (function () {
   var s = document.currentScript;
   var cloud = (s && s.getAttribute('data-cloud')) || 'aws';
+  var CL = (s && s.getAttribute('data-clouds')) || '/clouds';   // appliance page: '/clouds' offline, 'clouds.html' on Nano
   var NAMES = { aws: 'AWS', gcp: 'Google Cloud', azure: 'Azure' };
   var ITEMS = [
     ['spaces', 'Spaces', 'M12 2 2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5'],
@@ -18,8 +19,9 @@
   ];
   var css = '' +
     '#vy-appbar{position:fixed;left:0;right:0;bottom:0;height:0;z-index:70;display:flex;justify-content:center;pointer-events:none;font-family:Inter,system-ui,sans-serif}' +
+    'body:has(#nano-foot) #vy-appbar{bottom:34px}' +   /* Nano: sit above its relay-tunnel footer bar */
     '#vy-appbar::before{content:"";position:absolute;left:0;right:0;bottom:0;height:2px;background:#0f121c}' +   /* the line along the bottom edge */
-    '#vy-appbar .vy-notch{pointer-events:auto;position:absolute;bottom:0;height:44px;padding:0 44px;display:flex;align-items:center;gap:2px;isolation:isolate}' +
+    '#vy-appbar .vy-notch{width:auto !important;max-width:none !important;overflow:visible !important;pointer-events:auto;position:absolute;bottom:0;height:44px;padding:0 44px;display:flex;align-items:center;gap:2px;isolation:isolate}' +
     '#vy-appbar .vy-notch::before{content:"";position:absolute;inset:0;z-index:-1;background:#0f121c;clip-path:polygon(30px 0,calc(100% - 30px) 0,100% 100%,0 100%)}' +
     '#vy-appbar .vy-notch .vy-sep{width:1px;height:20px;background:rgba(255,255,255,.18);margin:0 6px}' +
     '#vy-appbar #disk-widget-slot{position:relative !important;top:auto !important;right:auto !important;left:auto !important;z-index:5 !important;display:inline-block}' +
@@ -45,9 +47,9 @@
     var st = document.createElement('style'); st.textContent = css; document.head.appendChild(st);
     var bar = document.createElement('div'); bar.id = 'vy-appbar';
     var links = ITEMS.map(function (i) {
-      return '<a href="/ui#' + i[0] + '" data-v="' + i[0] + '" title="' + i[1] + '"><svg viewBox="0 0 24 24"><path d="' + i[2] + '"/></svg><span>' + i[1] + '</span></a>';
+      return '<a href="' + CL + '#' + i[0] + '" data-v="' + i[0] + '" title="' + i[1] + '"><svg viewBox="0 0 24 24"><path d="' + i[2] + '"/></svg><span>' + i[1] + '</span></a>';
     }).join('');
-    bar.innerHTML = '<nav class="vy-notch" aria-label="Appliance">' + links + '</nav>';
+    bar.innerHTML = '<div class="vy-notch" role="navigation" aria-label="Appliance">' + links + '</div>';
     document.body.appendChild(bar);
     var disk = document.getElementById('disk-widget-slot');          // the disk-usage chip lives in the drawer too
     if (disk) { var nav = bar.querySelector('.vy-notch'); var sp = document.createElement('span'); sp.className = 'vy-sep'; nav.appendChild(sp); nav.appendChild(disk); }
@@ -63,7 +65,7 @@
       var a = e.target.closest('a[data-v]'); if (!a) return;
       e.preventDefault();
       m.querySelector('#vy-modal-t').textContent = a.title;
-      fr.src = '/clouds?embed=1#' + a.getAttribute('data-v');
+      fr.src = CL + '?embed=1#' + a.getAttribute('data-v');
       m.classList.add('open');
     });
   }

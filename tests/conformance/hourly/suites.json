@@ -2178,6 +2178,22 @@
       "kind": "api",
       "cmd": "python3 tests/conformance/post_create/probes/azure_rbac.py {ENDPOINT}",
       "timeout": 300
+    },
+    {
+      "id": "offline-ui-drawer",
+      "target": "offline",
+      "cloud": "all",
+      "kind": "ui",
+      "cmd": "rc=0; for c in aws gcp azure; do VYOMI_BASE_URL={ENDPOINT} node tests/conformance/drawer/drawer_modal.mjs $c || rc=1; done; exit $rc",
+      "timeout": 300
+    },
+    {
+      "id": "nano-ui-drawer",
+      "target": "nano",
+      "cloud": "all",
+      "kind": "ui",
+      "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-drawer.mjs",
+      "timeout": 600
     }
   ]
 }
