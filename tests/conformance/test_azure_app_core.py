@@ -73,6 +73,15 @@ rv = nr["properties"]["latestRevisionName"]
 rp = call(st, "GET", ["containerApps", "form", "revisions", rv, "replicas"])["body"]["value"]
 check("no runtime -> replica details state it is not executing", rp and "Control plane only" in rp[0]["properties"]["runningStateDetails"], rp)
 
+# runtime attached but it reports no docker network: the record must omit it, never carry null
+ac.RUNTIME["start"] = lambda *a: {"id": "c1", "host": "127.0.0.1", "port": 8080}
+ac.RUNTIME["stop"] = lambda h: None
+st_rt = {}
+call(st_rt, "PUT", ["containerApps", "rt"], {"location": "eastus", "properties": {"template": {"containers": [{"image": "x/y"}], "scale": {"minReplicas": 1, "maxReplicas": 2}}}})
+rt = call(st_rt, "GET", ["containerApps", "rt"])["body"]["properties"].get("vyomiRuntime")
+check("runtime without a network does not emit network: null", rt and rt.get("backend") == "docker" and "network" not in rt, rt)
+ac.RUNTIME.pop("start"); ac.RUNTIME.pop("stop")
+
 # multiple revisions: traffic split + deactivate / restart / replicas
 M = {"location": "eastus", "properties": {"configuration": {"activeRevisionsMode": "Multiple", "ingress": {"targetPort": 80}},
                                           "template": {"containers": [{"image": "a"}], "scale": {"minReplicas": 2, "maxReplicas": 3}}}}
