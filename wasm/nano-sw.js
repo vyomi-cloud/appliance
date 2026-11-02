@@ -22,7 +22,18 @@ const NANO_BASE = location.pathname.replace(/\/[^/]*$/, "");
     const reg = await navigator.serviceWorker.register(NANO_BASE + "/sw.js", { scope: NANO_BASE + "/", updateViaCache: "none" });
     try { await reg.update(); } catch (_) {}
     await navigator.serviceWorker.ready;
-    if (wasControlledAtStart) { sessionStorage.removeItem("nano-sw-reload"); return; }
+    if (wasControlledAtStart) {
+      sessionStorage.removeItem("nano-sw-reload");
+      // In-browser VMs keep running while you're on the dashboard (flag-gated, see vm/nano-vm-host.js).
+      try {
+        if (localStorage.getItem("nano_vm_compute") === "1") {
+          const sc = document.createElement("script"); sc.src = NANO_BASE + "/vm/nano-vm-host.js";
+          sc.onload = () => { try { window.NanoVM && window.NanoVM.resume(); } catch (_) {} };
+          document.head.appendChild(sc);
+        }
+      } catch (_) {}
+      return;
+    }
     // Started uncontrolled -> the page's initial /api reads failed -> reload to
     // a controlled load (guarded against an infinite loop).
     const n = Number(sessionStorage.getItem("nano-sw-reload") || "0");

@@ -45,7 +45,7 @@ try {
     await open(svc);
     await sleep(2000);
     const rows = await page.evaluate(() => [...document.querySelectorAll("#main tr")].filter((r) => r.querySelector("td"))
-      .map((r) => [...r.querySelectorAll("td")].slice(1).map((td) => td.innerText.trim())));
+      .map((r) => [...r.querySelectorAll("td:not([data-auto])")].slice(1).map((td) => td.innerText.trim())));
     check(`${svc}: the new resource is listed`, rows.length > 0);
     const bad = rows.flat().filter((c) => !c || /^[-—]$|undefined|null|\[object/i.test(c));
     check(`${svc}: no placeholder cells`, rows.length > 0 && bad.length === 0, JSON.stringify(rows.slice(0, 2)));

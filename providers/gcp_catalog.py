@@ -55,6 +55,7 @@ RESOURCE_CATALOG_GCP = [
             ["zone",              "Zone"],
             ["machineType",       "Machine type"],
             ["status",            "Status"],
+            ["creationTimestamp", "Created"],
         ],
         "createFields": [
             {"name": "name", "label": "Name", "default": "instance-1"},
@@ -111,6 +112,7 @@ RESOURCE_CATALOG_GCP = [
             ["region",          "Region"],
             ["state",           "Status"],
             ["backendType",     "Type"],
+            ["createTime", "Created"],
         ],
         "createFields": [
             {"name": "name", "label": "Instance ID", "default": "my-sql-instance"},
@@ -183,6 +185,7 @@ RESOURCE_CATALOG_GCP = [
             ["state",       "Status"],
             ["entryPoint",  "Entry point"],
             ["updateTime",  "Last deployed"],
+            ["createTime", "Created"],
         ],
         "createFields": [
             {"name": "name",       "label": "Function name", "default": "my-function"},
@@ -238,6 +241,7 @@ RESOURCE_CATALOG_GCP = [
             ["mode",                 "Mode"],
             ["routingConfig.routingMode", "Routing mode"],
             ["mtu",                  "MTU"],
+            ["creationTimestamp", "Created"],
         ],
         "createFields": [
             {"name": "name", "label": "Network name", "default": "my-vpc"},
@@ -260,6 +264,7 @@ RESOURCE_CATALOG_GCP = [
             ["displayName", "Display name"],
             ["uniqueId",    "Unique ID"],
             ["disabled",    "State"],
+            ["createTime", "Created"],
         ],
         "createFields": [
             {"name": "name",        "label": "Service account name", "default": "my-service-account"},
@@ -536,6 +541,7 @@ RESOURCE_CATALOG_GCP = [
             ["channels_text",     "Notification channels"],
             ["incidents",         "Incidents"],
             ["last_modified",     "Last modified"],
+            ["created", "Created"],
         ],
         "createFields": [
             {"name": "name",             "label": "Policy name",                         "default": "High CPU utilization"},

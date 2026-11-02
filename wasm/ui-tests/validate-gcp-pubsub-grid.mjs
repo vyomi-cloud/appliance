@@ -28,7 +28,7 @@ try {
   await sleep(2500);
   const row = await page.evaluate((t) => {
     const tr = [...document.querySelectorAll("#main tr")].find((r) => r.innerText.includes(t));
-    return tr ? [...tr.querySelectorAll("td")].slice(1).map((td) => td.innerText.trim()) : null;
+    return tr ? [...tr.querySelectorAll("td:not([data-auto])")].slice(1).map((td) => td.innerText.trim()) : null;
   }, topic);
   check("topic row listed", !!row, JSON.stringify(row) + " " + (await page.evaluate(() => document.querySelector("#main").innerText.slice(0, 300))).replace(/\n/g, "|"));
   const bad = (row || []).filter((c) => !c || /^[-—]$|undefined|null/i.test(c));

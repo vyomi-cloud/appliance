@@ -120,7 +120,31 @@ in the prompt and in `$SLICE`). Each has its own appliance stack and relay.
    in `core/cost_model.py` (add per-service and usage-based rates from the providers'
    public price lists) and in the space tick in `server.py`, for AWS, GCP and Azure,
    and mirror the change in Nano. Never inflate numbers to pass; use real list prices.
-6. **Failing suites** in `results.json`.
+6. **Failing suites** in `results.json`. This includes `offline-ui-sdk-roundtrip`
+   (`tests/conformance/roundtrip/`): a resource made with the official SDK must show in the
+   console with the SDK's own ARN/id and type; one made in the console (form defaults) must be
+   visible to the SDK with the same values; a delete on either side must reach the other. A
+   failure there is a product bug on one side, so fix the console or the API, never the test.
+   When it is green, extend it: add the next service to `SERVICES` (and its SDK calls to
+   `sdk_side.py`), then GCP and Azure.
+   Also `offline-ui-console-home` (`tests/conformance/home/`): the crawler never opens a
+   console's Home page, so this checks it for AWS, GCP and Azure: the Cost savings card's
+   headline and service rows must equal the API's `active_space.cost_savings`, the card must not
+   sit on its empty state or `$0.00` while the API has savings, the Connect card must render,
+   the two cards must share a row height, and Home must raise no page errors or 5xx. The Nano
+   twin does not exist yet: build it on `wasm/ui-tests/lib.mjs` (`bootConsole`) with the same checks.
+   Also the **post-create "use it" checks** (plan: `tests/conformance/post_create/PLAN.md`, offline and
+   Nano). A resource that shows "running"/"available" but cannot be used the way the console says is a
+   product bug: e.g. EC2 SSH from the host with the console's own command, RDS connect + insert/select,
+   S3 put/get, Lambda invoke. Connect info the console shows must work from the user's machine (no
+   Docker-internal IPs or container-only key paths). Findings: `POST_CREATE_UNUSABLE`,
+   `CONNECT_INFO_MISSING`, `CONNECT_INFO_UNREACHABLE`. Every probe is required on BOTH offline and Nano: build
+   the Nano twin with the offline one; a Nano probe blocked on missing in-browser compute is `pending`
+   (reported, not green), never skipped. They run every cycle (and the slow ones daily), as normal suites. A suite with a `"pending"` key in
+   suites.json is written but blocked on something unbuilt (the value names it): it is NOT run, shows ⏳ in the
+   report and `status: pending` in results.json, and is never counted as green. When you build the dependency,
+   delete the key in the same commit so it starts running (e.g. `nano-post-create-aws-ec2-ssh` needs Nano
+   in-browser compute: connect-info + `/exec`). Not built yet: start with phase 1 (EC2 SSH).
 7. **New features** (`new_features.json` → `new`): a new SDK operation with
    `tested: false` gets a Java or Go test (official SDK, endpoint changed only); a
    new service/tab/action is crawled live — fix whatever the crawl finds and add a

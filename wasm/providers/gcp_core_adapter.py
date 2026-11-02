@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import base64
 import json
+import types
 
 from core import gcp_storage_core as _gcs
 from core.object_store import InMemoryObjectStore
@@ -77,6 +78,14 @@ def _call(svc, method, path, query=None, body=b""):
         body = body.encode()
     r = _MOD[svc].dispatch(_STORES[svc], method, path, query or {},
                            {"content-type": "application/json"}, body or b"")
+    if svc in ("storage", "pubsub") and method in ("POST", "PUT") and r.status < 300:
+        # Console-side uploads / publishes fire Eventarc triggers exactly like wire-side ones (core/nano_triggers).
+        try:
+            from core import nano_triggers as _nt
+            _nt.after_gcp(types.SimpleNamespace(_stores=_R), "gcp-gcs" if svc == "storage" else "gcp-pubsub",
+                          method, path, query or {}, body or b"", r)
+        except Exception:
+            pass
     try:
         parsed = json.loads(r.body.decode("utf-8")) if r.body else {}
     except Exception:
@@ -506,6 +515,13 @@ def _resource_op(service, operation, name="", body=None):
             r = _MOD["storage"].dispatch(_STORES["storage"], "POST",
                 f"/upload/storage/v1/b/{bucket}/o", {"uploadType": "media", "name": key},
                 {"content-type": body.get("content_type", "application/octet-stream")}, raw)
+            if r.status < 300:   # a console upload fires Eventarc triggers like a wire upload (core/nano_triggers)
+                try:
+                    from core import nano_triggers as _nt
+                    _nt.after_gcp(types.SimpleNamespace(_stores=_R), "gcp-gcs", "POST",
+                                  f"/upload/storage/v1/b/{bucket}/o", {"name": key}, raw, r)
+                except Exception:
+                    pass
             return {"ok": r.status < 300, "key": key, "size": len(raw)} if r.status < 300 \
                 else {"ok": False, "code": "UploadFailed", "key": key, "status": r.status}
         if operation == "DeleteObject":
@@ -682,6 +698,8 @@ def _resource_op(service, operation, name="", body=None):
             return {"ok": True, "items": _ar.console_children(st_, name, operation[4:].lower())}
         if operation == "PushSample":
             return _ar.console_push_sample(st_, name, body)
+        if operation == "GetPushpull":         # Push / pull tab (no OCI registry in Nano: says so)
+            return _ar.console_pushpull(st_, name)
 
     # ---------------- CLOUD SQL (instances) ----------------
     if svc == "cloudsql":
@@ -1446,6 +1464,20 @@ _TAB_HANDLERS = {"compute": _compute_tab, "storage": _storage_tab, "cloudsql": _
 
 def tab_dispatch(svc, operation, name, body, resources=None, account="default"):
     """Serve one resource-detail tab op, or None when `operation` isn't a tab op."""
+    low = operation[:1].lower() + operation[1:]
+    if low in _T.META_OPS:    # editable custom properties + last-modified times (every service)
+        try:
+            return _T.meta_op(_sub_root(), svc, low, name, body or {})
+        except _T.TabError as e:
+            return _tab_err(e)
+    out = _tab_dispatch(svc, operation, name, body, resources, account)
+    if low == "setLabels" and isinstance(out, dict) and out.get("ok") is not False:
+        _T.stamp_labels(_sub_root(), svc, name)
+    return out
+
+
+def _tab_dispatch(svc, operation, name, body, resources=None, account="default"):
+    """Serve one resource-detail tab op, or None when `operation` isn't a tab op."""
     body = body or {}
     try:
         if svc == "iam" and operation in ("GetProjectPolicy", "GrantAccess", "RevokeAccess"):
@@ -1458,6 +1490,11 @@ def tab_dispatch(svc, operation, name, body, resources=None, account="default"):
                 labels = _T.validate_labels(body.get("labels", {}))
                 _ar.dispatch(_STORES[svc], "PATCH", "/v1/" + full, {"updateMask": "labels"}, {}, json.dumps({"labels": labels}).encode())
             return {"ok": True, "item": {"name": name, "labels": dict(_STORES[svc].repos[full].get("labels") or {})}}
+        if svc == "artifactregistry" and operation == "GetPushpull":   # Push / pull tab: the row's push host
+            full, repo = _ar.console_find(_STORES[svc], name)
+            if repo is None:
+                return {"ok": False, "code": "NotFound", "name": name}
+            return {"ok": True, "item": _ar.console_row(repo)}
         # per-tab reads of the newer services: the resource's console view
         if svc in ("container", "redis", "cloudscheduler", "iamcredentials", "monitoring") \
                 and operation.startswith("Get") and len(operation) > 3:

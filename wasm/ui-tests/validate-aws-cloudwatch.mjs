@@ -20,7 +20,17 @@ const STACK = "my-alarm";   // the create form's default name (an alarm, here)
 
 const { server, base } = await startServer();
 const browser = await chromium.launch();
-const page = await (await browser.newContext()).newPage();
+// Register THIS page as the relay's tab (the relay routes to the newest registrant), so the
+// native-wire cross-check below reads this page's store — not whatever other tab is connected.
+const ctx = await browser.newContext();
+await ctx.addInitScript((relay) => { try {
+  const ws = relay.replace(/^http/, "ws");
+  localStorage.setItem("nano_tunnel_on", "1");
+  localStorage.setItem("nano_local_health", relay + "/health");
+  localStorage.setItem("nano_local_ws", ws + "/register");
+  localStorage.setItem("nano_local_ext", relay);
+} catch (_) {} }, RELAY);
+const page = await ctx.newPage();
 let createStatus = null;
 page.on("dialog", (d) => d.accept().catch(() => {}));
 page.on("response", (r) => {
@@ -54,9 +64,14 @@ try {
   check(cells.length > 0 && !blank.length, "every grid column of the new row is filled", `blank: ${JSON.stringify(blank)}`);
   check(cells.some((c) => /INSUFFICIENT_DATA/.test(c)), "alarm state is INSUFFICIENT_DATA until data arrives", cells.join(" | "));
 
-  // when a Nano tab is registered on the relay, the console-created alarm is visible on the native wire
-  const health = await fetch(RELAY + "/health").then((r) => r.json()).catch(() => ({}));
-  if (health.tab) {
+  // the console-created alarm is visible on the native wire, through this page's relay tunnel
+  let connected = false;
+  for (let i = 0; i < 40 && !connected; i++) {
+    connected = /connected/i.test(await page.locator("#nano-foot .lbl").innerText().catch(() => ""));
+    if (!connected) await page.waitForTimeout(500);
+  }
+  check(connected, "this page's relay tunnel connects", await page.locator("#nano-foot .lbl").innerText().catch(() => ""));
+  {
     const r = await fetch(RELAY + "/", { method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded",
         authorization: "AWS4-HMAC-SHA256 Credential=AK/20260101/us-east-1/monitoring/aws4_request, SignedHeaders=host, Signature=x" },

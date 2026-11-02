@@ -176,6 +176,12 @@ try:
 except Exception:
     pass
 try:
+    from core import gcp_eventing as _gcp_eventing
+    _gcp_eventing.register(app)
+    app.add_middleware(_gcp_eventing.EventTap)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[gcp-eventing] skipped: {_e}")
+try:
     from core import cedar_routes as _cedar_routes
     _cedar_routes.register(app)
 except Exception:
@@ -1201,6 +1207,7 @@ def _iam_resolve_identity(principal: str) -> dict:
                     policy_ids.extend(list(group.get("policies", [])))
             policy_ids = list(dict.fromkeys(policy_ids))
             policies = [state.get("policies", {}).get(pid) for pid in policy_ids if state.get("policies", {}).get(pid)]
+            policies += [{"policy_name": n, "document": d} for n, d in (user.get("inline_policies") or {}).items()]   # PutUserPolicy
             return {
                 "principal": principal,
                 "type": "user",
@@ -3586,6 +3593,11 @@ def _lambda_sync_code_artifact(function: dict) -> None:
     code_path = function_dir / f"{module_name}.py"
     code = function.get("code") or _lambda_default_code(function["function_name"])
     code_path.write_text(code, encoding="utf-8")
+    for rel, text in (function.get("extra_files") or {}).items():   # other modules from the uploaded zip
+        dest = (function_dir / rel).resolve()
+        if function_dir.resolve() in dest.parents:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_text(text, encoding="utf-8")
     function["code_path"] = str(code_path)
     function["workdir"] = str(function_dir)
 
@@ -3753,6 +3765,7 @@ def _lambda_create_function_record(req: LambdaFunctionRequest) -> dict:
         "permissions": [],
         "tags": copy.deepcopy(req.tags or []),
         "layers": list(req.layers) if req.layers else [],
+        "extra_files": dict(getattr(req, "extra_files", None) or {}),
     }
     function["code_sha256"] = base64.b64encode(hashlib.sha256(function["code"].encode("utf-8")).digest()).decode("ascii")
     _lambda_sync_code_artifact(function)
@@ -3973,10 +3986,15 @@ def _lambda_run_handler(function: dict, event_payload: Any) -> dict:
         handler = getattr(module, handler_name)
 
         class Context:
-            function_name = ""
-            memory_limit_in_mb = 0
-            invoked_function_arn = ""
-            aws_request_id = ""
+            function_name = os.environ.get("AWS_LAMBDA_FUNCTION_NAME", "")
+            function_version = "$LATEST"
+            memory_limit_in_mb = int(os.environ.get("AWS_LAMBDA_FUNCTION_MEMORY_SIZE", "128") or 128)
+            invoked_function_arn = os.environ.get("VYOMI_LAMBDA_ARN", "")
+            aws_request_id = os.environ.get("VYOMI_LAMBDA_REQUEST_ID", "")
+            log_group_name = "/aws/lambda/" + function_name
+            log_stream_name = ""
+            def get_remaining_time_in_millis(self):
+                return 3000
 
         stdout = io.StringIO()
         stderr = io.StringIO()
@@ -4009,6 +4027,10 @@ def _lambda_run_handler(function: dict, event_payload: Any) -> dict:
         env={
             **os.environ,
             **(function.get("environment") or {}),
+            "AWS_LAMBDA_FUNCTION_NAME": function.get("function_name", ""),
+            "AWS_LAMBDA_FUNCTION_MEMORY_SIZE": str(function.get("memory_size", 128)),
+            "VYOMI_LAMBDA_ARN": function.get("function_arn", ""),
+            "VYOMI_LAMBDA_REQUEST_ID": str(uuid.uuid4()),
             "PYTHONPATH": str(workdir) + (os.pathsep + os.environ.get("PYTHONPATH", "") if os.environ.get("PYTHONPATH") else ""),
         },
     )
@@ -4154,7 +4176,10 @@ def _sqs_validate_queue_name(queue_name: str) -> None:
 
 
 def _sqs_queue_url(queue_name: str) -> str:
-    return f"http://127.0.0.1:9000/api/sqs/queues/{queue_name}"
+    # The origin the client reached us on (was hard-coded to 127.0.0.1:9000, so a
+    # simulator on any other port, or reached by another host name, handed out URLs
+    # pointing at a different simulator).
+    return f"{_gcp_public_base().rstrip('/')}/api/sqs/queues/{queue_name}"
 
 
 def _sqs_queue_arn(queue_name: str) -> str:
@@ -7646,13 +7671,39 @@ def _port_publish_enabled() -> bool:
     return _instance_ssh_mode() in {"port", "both", "auto"}
 
 
+_DOCKER_DESKTOP_HOST: bool | None = None
+
+
+def _docker_desktop_host() -> bool:
+    """True when the Docker daemon runs inside Docker Desktop's VM (macOS/Windows).
+    Container bridge IPs (172.x) are NOT routable from the user's machine there,
+    even though the appliance itself (a Linux container) can reach them. Detected
+    from the daemon, not from sys.platform, because the appliance is a Linux
+    container in that case. Cached; False if the daemon can't be asked."""
+    global _DOCKER_DESKTOP_HOST
+    if _DOCKER_DESKTOP_HOST is None:
+        try:
+            out = subprocess.run(["docker", "info", "--format", "{{.OperatingSystem}}"],
+                                 capture_output=True, text=True, timeout=8).stdout
+            _DOCKER_DESKTOP_HOST = "desktop" in out.lower()
+        except Exception:
+            return False   # transient failure: don't cache
+    return _DOCKER_DESKTOP_HOST
+
+
+def _appliance_containerized() -> bool:
+    return os.path.exists("/.dockerenv")
+
+
 def _routable_ip_enabled() -> bool:
     mode = _instance_ssh_mode()
     if mode in {"routable", "both"}:
         return True
     if mode == "port":
         return False
-    return sys.platform.startswith("linux")   # auto
+    # auto: bridge IPs are reachable from the user's machine only on a native Linux
+    # Docker host, never through Docker Desktop's VM.
+    return sys.platform.startswith("linux") and not _docker_desktop_host()
 
 
 def _ensure_vpc_network() -> str | None:
@@ -7727,6 +7778,9 @@ def _docker_backed(instance: dict) -> bool:
     (vs LXD/Multipass). Docker containers are named vyomi-i-<id>."""
     if str(instance.get("console_backend") or "") == "docker-exec":
         return True
+    _rt = (instance.get("properties") or {}).get("runtime") if isinstance(instance.get("properties"), dict) else None
+    if isinstance(_rt, dict) and _rt.get("backend") == "docker":   # Azure ARM VM record
+        return True
     cn = str(instance.get("container_name") or instance.get("container_id") or "")
     return cn.startswith("vyomi-i-")
 
@@ -7752,6 +7806,11 @@ def _docker_connect_info(instance: dict, provider: str) -> dict:
     published_port = info.get("published_port") or instance.get("ssh_host_port")
     opts = "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
     iid = str(instance.get("instance_id") or "")
+    # The appliance runs in a container: its key dir (/root/.vyomi/...) is not a path
+    # the user can read. Show the path where they save the downloaded key instead.
+    local_key = f"~/.ssh/vyomi-{iid}.pem"
+    if _appliance_containerized():
+        key_path = local_key
 
     primary = None
     alternatives: list[dict] = []
@@ -7842,6 +7901,11 @@ def _docker_connect_info(instance: dict, provider: str) -> dict:
             "key_download_url": key_url,
             "key_local_filename": f"vyomi-{iid}.pem",
             "host_identity_path": key_path,
+            # One paste that fetches the key from THIS appliance and locks its mode,
+            # so the ssh command above works from the user's own machine.
+            "key_fetch_command": (
+                f"curl -fsSo {local_key} {_gcp_public_base()}{key_url} && chmod 600 {local_key}"
+                if _appliance_containerized() else None),
         },
         "alternatives": alternatives,
         # Shell fallback (works on the appliance host itself, always) — the
@@ -8527,6 +8591,35 @@ def provision_azure_vm_runtime(record: dict) -> None:
     instance_id = f"az-{digest}-{safe_name[:24]}"
 
     host_os = _resolved_host_os()
+    _compute_env = (os.environ.get("VYOMI_COMPUTE_BACKEND") or os.environ.get("CLOUDLEARN_COMPUTE_BACKEND") or "").strip().lower()
+    if _compute_env == "docker" and _docker_available():
+        # CloudLite+: same sibling-Docker-container backend as EC2/GCE (was missing
+        # for Azure: the VM was metadata-only with nothing to SSH into).
+        d_instance = {"instance_id": instance_id, "provider": "azure", "name": raw_name,
+                      "instance_type": str((props.get("hardwareProfile") or {}).get("vmSize") or "")
+                      if isinstance(props.get("hardwareProfile"), dict) else "",
+                      "runtime_backend": "docker"}
+        try:
+            _start_docker_instance(d_instance)
+        except Exception as exc:
+            runtime["status"] = "launch_failed"
+            runtime["backend"] = "docker"
+            runtime["error"] = str(getattr(exc, "detail", exc))[:200]
+            return
+        runtime["status"] = "provisioned"
+        runtime["backend"] = "docker"
+        runtime["containerName"] = d_instance["container_name"]
+        runtime["containerId"] = d_instance.get("container_id", "")
+        runtime["containerStatus"] = d_instance.get("container_status", "")
+        runtime["state"] = d_instance.get("state", "")
+        runtime["instanceId"] = instance_id
+        runtime["sshHostPort"] = d_instance.get("ssh_host_port")
+        if d_instance.get("private_ip"):
+            nics = props.setdefault("networkProfile", {}).setdefault("networkInterfaces", [])
+            if isinstance(nics, list) and not nics:
+                nics.append({"id": f"runtime/{d_instance['container_name']}",
+                             "properties": {"privateIPAddress": d_instance["private_ip"]}})
+        return
     if host_os in {"darwin", "windows"} and _runtime_available("multipass"):
         backend = "multipass"
     elif _lxd_available():
@@ -8534,7 +8627,7 @@ def provision_azure_vm_runtime(record: dict) -> None:
     else:
         runtime["status"] = "simulated"
         runtime["backend"] = "simulated"
-        runtime["note"] = "No LXD/multipass runtime available on host — Azure VM is metadata-only here."
+        runtime["note"] = "No LXD/multipass/Docker runtime available on host — Azure VM is metadata-only here."
         return
 
     workspace = _instance_workspace(instance_id)
@@ -8611,7 +8704,10 @@ def deprovision_azure_vm_runtime(record: dict) -> None:
         backend = runtime.get("backend") if isinstance(runtime, dict) else None
         if not container:
             return
-        if backend == "lxd" and _lxd_available():
+        if backend == "docker":
+            _terminate_docker_instance({"instance_id": runtime.get("instanceId") or str(container)[len("vyomi-i-"):],
+                                        "container_name": container, "ssh_host_port": runtime.get("sshHostPort")})
+        elif backend == "lxd" and _lxd_available():
             try:
                 _lxd_run_checked(["stop", container, "--force"], timeout=60)
             except Exception:
@@ -14219,7 +14315,9 @@ def api_gcp_compute_delete_instance(project: str, zone: str, instance: str):
     if not instance:
         raise HTTPException(404, detail="NoSuchInstance")
     backend = str(instance.get("runtime_backend") or "").strip().lower()
-    if backend == "multipass":
+    if backend == "docker" or (not backend and _docker_backed(instance)):
+        _terminate_docker_instance(instance)   # remove the sibling container (was leaked)
+    elif backend == "multipass":
         _terminate_multipass_instance(instance)
     elif backend == "lxd":
         _terminate_lxd_instance(instance)
@@ -15042,9 +15140,31 @@ def _gcp_apigw_api_record(project: str, location: str, payload: dict[str, Any]) 
     }
 
 
+def _gcp_apigw_openapi_routes(docs) -> list:
+    """Routes [{method, path, backend}] of a native API config's openapiDocuments (base64 contents)."""
+    import base64
+    from core import gcp_console_tabs as _T
+    out = []
+    for d in docs if isinstance(docs, list) else []:
+        try:
+            raw = ((d or {}).get("document") or {}).get("contents") or ""
+            doc = _T.parse_openapi(base64.b64decode(raw).decode("utf-8") if raw else "")
+            default = (doc.get("x-google-backend") or {}).get("address", "")
+            for path, ops in (doc.get("paths") or {}).items():
+                for method, op in (ops or {}).items():
+                    if method.lower() in ("get", "put", "post", "delete", "patch", "options", "head"):
+                        out.append({"method": method.upper(), "path": path,
+                                    "backend": ((op or {}).get("x-google-backend") or {}).get("address") or default})
+        except Exception:
+            continue
+    return out
+
+
 def _gcp_apigw_cfg_record(project: str, location: str, payload: dict[str, Any]) -> dict:
-    name = str(payload.get("name") or payload.get("apiConfigId") or payload.get("path_part") or payload.get("pathPart") or payload.get("method") or "api-config")
+    name = str(payload.get("apiConfigId") or payload.get("name") or payload.get("path_part") or payload.get("pathPart") or payload.get("method") or "api-config")
+    name = name.rstrip("/").split("/")[-1]
     return {
+        "routes": _gcp_apigw_openapi_routes(payload.get("openapiDocuments")),
         "name": name,
         "project": project,
         "location": location,
@@ -15066,7 +15186,8 @@ def _gcp_apigw_cfg_record(project: str, location: str, payload: dict[str, Any]) 
 
 
 def _gcp_apigw_gateway_record(project: str, location: str, payload: dict[str, Any]) -> dict:
-    name = str(payload.get("name") or payload.get("gatewayId") or payload.get("stage_name") or payload.get("stageName") or payload.get("apiConfig") or "gateway")
+    name = str(payload.get("gatewayId") or payload.get("name") or payload.get("stage_name") or payload.get("stageName") or payload.get("apiConfig") or "gateway")
+    name = name.rstrip("/").split("/")[-1]       # real API: a bare gatewayId (a full resource name is tolerated)
     return {
         "name": name,
         "project": project,
@@ -15098,11 +15219,36 @@ def _gcp_apigw_match_config(api: str, path: str, method: str) -> dict | None:
     cands = [c for c in gcp_apigw_state.get("configs", {}).values()
              if isinstance(c, dict) and (not api or str(c.get("api") or "") == api)]
     for c in cands:
+        for r in c.get("routes") or []:
+            if "/" + str(r.get("path") or "").strip("/") == want and str(r.get("method") or "").upper() in ("", "ANY", method):
+                return {"integration_type": "http", "integration_uri": r.get("backend") or "", "status_code": 200}
+    for c in cands:
         pp = "/" + str(c.get("path_part") or "").strip("/")
         hm = str(c.get("http_method") or "").upper()
         if (pp == want or pp == "/") and hm in ("", "ANY", method):
             return c
     return cands[0] if cands else None
+
+
+def _gcp_apigw_console_route(gateway: str, path: str, method: str):
+    """A route of a gateway deployed through the console's API-config tab (shared core/gcp_console_tabs state)."""
+    try:
+        from providers.gcp_tabs_console import tab_state
+        want, method = "/" + str(path or "").strip("/"), str(method or "").upper()
+        for key, gws in list(tab_state.items()):
+            if not (key.startswith("apigateway/") and key.endswith("/gateways")) or gateway not in gws:
+                continue
+            api = key.split("/")[1]
+            cfgs = tab_state.get(f"apigateway/{api}/configs", {})
+            for r in (cfgs.get(gws[gateway].get("apiConfig")) or {}).get("routes", []):
+                if "/" + str(r.get("path") or "").strip("/") == want and r["method"] in (method, "ANY"):
+                    return {"integration_type": "http", "integration_uri": r.get("backend", ""), "status_code": 200}
+            raise HTTPException(404, detail="No matching API config route")
+    except HTTPException:
+        raise
+    except Exception:
+        pass
+    return None
 
 
 async def api_gcp_apigw_invoke(gateway: str, path: str, request: Request):
@@ -15114,9 +15260,13 @@ async def api_gcp_apigw_invoke(gateway: str, path: str, request: Request):
             if isinstance(g, dict) and g.get("name") == gateway:
                 gw = g
                 break
+    cfg = None
     if not gw:
-        raise HTTPException(404, detail="Gateway not found")
-    cfg = _gcp_apigw_match_config(_gcp_apigw_resolve_api(gw), path, request.method)
+        cfg = _gcp_apigw_console_route(gateway, path, request.method)     # deployed from the console's API-config tab
+        if cfg is None:
+            raise HTTPException(404, detail="Gateway not found")
+    else:
+        cfg = _gcp_apigw_match_config(_gcp_apigw_resolve_api(gw), path, request.method)
     if not cfg:
         raise HTTPException(404, detail="No matching API config route")
     raw = await request.body()
@@ -17189,7 +17339,9 @@ def _gcp_functions_make_operation(project: str, location: str, fn_view: dict, op
 def _gcp_functions_view(project: str, location: str, function: dict) -> dict:
     name = str(function.get("name") or "")
     # Trigger URL points at the simulator (this is where the function actually runs).
-    uri = f"{_gcp_public_base()}/v1/projects/{project}/locations/{location}/functions/{name}:call"
+    # The HTTPS trigger URL: the handler gets a real request and returns the real response here
+    # (the `:call` management route keeps the {executionId,status,result} envelope).
+    uri = f"{_gcp_public_base()}/gcf/{project}/{location}/{name}"
     service_config = dict(function.get("serviceConfig") or {})
     service_config["uri"] = uri
     service_config.setdefault("availableMemory", "256M")
@@ -17249,7 +17401,8 @@ def _gcp_apigateway_api_view(project: str, location: str, api: dict) -> dict:
 def _gcp_apigateway_config_view(project: str, location: str, cfg: dict) -> dict:
     name = str(cfg.get("name") or "")
     return {
-        "name": f"{_gcp_apigateway_root()}/projects/{project}/locations/{location}/apiConfigs/{name}",
+        "name": (f"{_gcp_apigateway_root()}/projects/{project}/locations/{location}/apis/{cfg['api']}/configs/{name}"
+                 if cfg.get("api") and cfg.get("routes") else f"{_gcp_apigateway_root()}/projects/{project}/locations/{location}/apiConfigs/{name}"),
         "displayName": cfg.get("displayName", name),
         "api": cfg.get("api", ""),
         "parent_id": cfg.get("parent_id", ""),
@@ -17280,7 +17433,10 @@ def _gcp_apigateway_gateway_view(project: str, location: str, gw: dict) -> dict:
         "description": gw.get("description", ""),
         "labels": gw.get("labels", {}),
         "state": gw.get("state", "ACTIVE"),
-        "defaultHostname": _gcp_public_host(),
+        # host + path prefix that really routes to this gateway on the simulator (the real
+        # <gw>-<hash>.<region>.gateway.dev is not resolvable here); invokeUrl is the full http URL
+        "defaultHostname": f"{_gcp_public_host()}/api/gcp/apigateway/invoke/{name}",
+        "invokeUrl": f"{_gcp_public_base()}/api/gcp/apigateway/invoke/{name}",
         "createTime": gw.get("createTime", _now()),
         "updateTime": gw.get("updateTime", _now()),
     }
@@ -17393,9 +17549,10 @@ def api_vpc_delete(vpc_id: str, force: bool = False):
         if sg.get("vpc_id") == vpc_id:
             del vpc_state["security_groups"][sg_id]
 
-    for igw_id, igw in list(vpc_state["internet_gateways"].items()):
+    _igws = vpc_state.setdefault("internet_gateways", {})   # older persisted vpc state may lack the key
+    for igw_id, igw in list(_igws.items()):
         if igw.get("attached_vpc_id") == vpc_id:
-            del vpc_state["internet_gateways"][igw_id]
+            del _igws[igw_id]
 
     del vpc_state["vpcs"][vpc_id]
     _record_usage("vpc.delete_vpc", {"vpc_id": vpc_id, "force": force})
@@ -18088,6 +18245,9 @@ def _vpc_query_describe_route_tables(params: dict[str, Any]) -> Response:
                 route_table_ids.extend([str(v) for v in value if v])
             else:
                 route_table_ids.append(str(value))
+    for missing in route_table_ids:
+        if missing not in {r["route_table_id"] for r in vpc_state["route_tables"].values()}:
+            return _ec2_error_response("InvalidRouteTableID.NotFound", f"The routeTable ID '{missing}' does not exist", 400)
     filters = _ec2_parse_filters(params)
     route_tables = []
     for rt in vpc_state["route_tables"].values():
@@ -18435,6 +18595,30 @@ def _vpc_query_delete_subnet(params: dict[str, Any]) -> Response:
     return _ec2_success_response("DeleteSubnetResponse", build)
 
 
+def _vpc_query_delete_security_group(params: dict[str, Any]) -> Response:
+    group_id = str(params.get("GroupId", params.get("groupId", ""))).strip()
+    group_name = str(params.get("GroupName", params.get("groupName", ""))).strip()
+    if not group_id and group_name:
+        group_id = next((gid for gid, g in vpc_state["security_groups"].items() if g.get("group_name") == group_name), "")
+    if not group_id:
+        raise HTTPException(400, detail="MissingParameter: GroupId")
+    sg = vpc_state["security_groups"].get(group_id)
+    if not sg:
+        return _ec2_error_response("InvalidGroup.NotFound", f"The security group '{group_id}' does not exist", 400)
+    if sg.get("is_default") or sg.get("group_name") == "default":
+        return _ec2_error_response("CannotDelete", f"the specified group: \"{group_id}\" name: \"default\" cannot be deleted by a user", 400)
+    if any(group_id in (i.get("security_group_ids") or []) and i.get("state") not in {"terminated"}
+           for i in ec2_state["instances"].values()):
+        return _ec2_error_response("DependencyViolation", f"resource {group_id} has a dependent object", 400)
+    del vpc_state["security_groups"][group_id]
+    _record_usage("vpc.delete_security_group", {"security_group_id": group_id})
+
+    def build(root: ET.Element) -> None:
+        _ec2_sub(root, "return", "true")
+
+    return _ec2_success_response("DeleteSecurityGroupResponse", build)
+
+
 def _vpc_query_delete_route_table(params: dict[str, Any]) -> Response:
     route_table_id = str(params.get("RouteTableId", params.get("routeTableId", ""))).strip()
     if not route_table_id:
@@ -18496,6 +18680,17 @@ def _vpc_query_delete_vpc(params: dict[str, Any]) -> Response:
     vpc_id = str(params.get("VpcId", params.get("vpcId", ""))).strip()
     if not vpc_id:
         raise HTTPException(400, detail="MissingParameter: VpcId")
+    if vpc_id not in vpc_state["vpcs"]:
+        return _ec2_error_response("InvalidVpcID.NotFound", f"The vpc ID '{vpc_id}' does not exist", 400)
+    # Real EC2 refuses DeleteVpc while anything the caller created still lives in it; only the
+    # implicit main route table and default security group go with the VPC.
+    dep = (any(s.get("vpc_id") == vpc_id for s in vpc_state["subnets"].values())
+           or any(g.get("vpc_id") == vpc_id and not g.get("is_default") for g in vpc_state["security_groups"].values())
+           or any(r.get("vpc_id") == vpc_id and not r.get("is_main") for r in vpc_state["route_tables"].values())
+           or any(g.get("attached_vpc_id") == vpc_id for g in vpc_state.get("internet_gateways", {}).values())
+           or any(i.get("vpc_id") == vpc_id and i.get("state") not in {"terminated"} for i in ec2_state["instances"].values()))
+    if dep:
+        return _ec2_error_response("DependencyViolation", f"The vpc '{vpc_id}' has dependencies and cannot be deleted.", 400)
     api_vpc_delete(vpc_id, force=True)
 
     def build(root: ET.Element) -> None:
@@ -21262,6 +21457,8 @@ async def api_vpc_query(request: Request):
             return _vpc_query_describe_subnets(params)
         if action == "DeleteSubnet":
             return _vpc_query_delete_subnet(params)
+        if action == "DeleteSecurityGroup":
+            return _vpc_query_delete_security_group(params)
         if action == "CreateSecurityGroup":
             return _vpc_query_create_security_group(params)
         if action == "DescribeSecurityGroups":
@@ -21861,6 +22058,10 @@ async def api_iam_query(request: Request) -> Response:
         return _iam_query_error(code, detail, exc.status_code if exc.status_code >= 400 else 400)
     if not action:
         return _iam_query_error("MissingAction", "The request must contain the parameter Action.")
+    from providers import aws_iam_query_ext as _iam_ext   # Attach/PutUserPolicy, access keys, Simulate*
+    _ext = _iam_ext.handle(action, params)
+    if _ext is not None:
+        return _ext
     return _iam_query_error("InvalidAction", f"The action '{action}' is not implemented by the simulator.")
 
 
@@ -21889,7 +22090,7 @@ async def api_sts_query(request: Request) -> Response:
 _EC2_VPC_ACTIONS = {
     "CreateVpc", "DescribeVpcs", "DeleteVpc",
     "CreateSubnet", "DescribeSubnets", "DeleteSubnet",
-    "CreateSecurityGroup", "AuthorizeSecurityGroupIngress", "AuthorizeSecurityGroupEgress",
+    "CreateSecurityGroup", "DeleteSecurityGroup", "AuthorizeSecurityGroupIngress", "AuthorizeSecurityGroupEgress",
     "CreateRouteTable", "DescribeRouteTables", "DeleteRouteTable",
     "CreateRoute", "AssociateRouteTable", "DisassociateRouteTable",
     "CreateInternetGateway", "DescribeInternetGateways", "AttachInternetGateway",
@@ -23309,8 +23510,21 @@ def _find_instance_across_spaces(provider: str, instance_id: str) -> tuple[Optio
                     continue
                 if "virtualmachines" not in str(rec.get("_type", "")).lower():
                     continue
-                if rec.get("name") == iid or str(rid).rstrip("/").endswith("/" + iid):
+                _rt = (rec.get("properties") or {}).get("runtime") or {}
+                if (rec.get("name") == iid or str(rid).rstrip("/").endswith("/" + iid)
+                        or (isinstance(_rt, dict) and _rt.get("instanceId") == iid)):
                     return rec, space
+    if provider == "gcp":
+        # The GCE REST/gcloud/console paths resolve instances through the active
+        # space's compute bucket by id OR name; the scan above only matched the
+        # id key of spaces' persisted service_states, so connect-info 404'd for a
+        # VM that exists. Use the same resolver the instance GET uses.
+        try:
+            found = _gcp_compute_find_instance("", "", iid)
+        except Exception:
+            found = None
+        if isinstance(found, dict):
+            return found, {}
     return None, None
 
 
@@ -23327,8 +23541,11 @@ def _connect_info_response(provider: str, instance_id: str) -> dict:
         _rt = (inst.get("properties") or {}).get("runtime") or {}
         _cn = str(_rt.get("containerName") or "")
         _iid = _cn[len("cloudlearn-"):] if _cn.startswith("cloudlearn-") else (inst.get("name") or instance_id)
+        if _rt.get("backend") == "docker" and _cn:
+            _iid = _rt.get("instanceId") or _cn[len("vyomi-i-"):]
         inst = {
             **inst,
+            "ssh_host_port": _rt.get("sshHostPort"),
             "instance_id": _iid,
             "container_name": _cn,
             "container_id": _rt.get("containerId") or _cn,
@@ -23590,6 +23807,44 @@ async def api_console_azurevm_exec(instance_id: str, request: Request):
     return {"message": "Console command executed", "instance_id": instance_id, **result}
 
 
+# ── Event delivery hooks: EventBridge targets + Step Functions Lambda tasks use the appliance's REAL
+# SQS queues and Lambda functions (the shared cores otherwise look in their own, empty stores).
+def _eb_send_sqs(arn: str, body: str) -> None:
+    queue = _sqs_find_queue(arn.rsplit(":", 1)[-1])
+    if queue is not None:
+        _sqs_enqueue_message(queue, body, source="eventbridge")
+        _persist_state()
+
+
+def _eb_invoke_lambda(name: str, body: str) -> None:
+    try:
+        payload = json.loads(body) if body else {}
+    except Exception:
+        payload = {"raw": body}
+    _lambda_invoke_function(name, payload, invocation_type="Event", source="events.amazonaws.com")
+
+
+def _sfn_invoke_lambda(name: str, payload: Any) -> dict:
+    """Synchronous Lambda call for a Step Functions Task: {found, error, payload}."""
+    if _lambda_find_function(name) is None:
+        return {"found": False}
+    rec = _lambda_invoke_function(name, payload if payload is not None else {}, source="states.amazonaws.com")
+    if rec.get("status") == "error":
+        tb = (rec.get("traceback") or "").strip().splitlines()
+        last = tb[-1] if tb else ""
+        etype = (last.split(":", 1)[0].strip().rsplit(".", 1)[-1]) if ":" in last else "Error"
+        return {"found": True, "error": {"errorType": etype, "errorMessage": rec.get("error", "")}}
+    return {"found": True, "payload": rec.get("response_payload")}
+
+
+try:
+    from core import nats_routes as _nr_hooks, stepfunctions_core as _sfn_hooks
+    _nr_hooks.EB_HOOKS["sqs"] = _eb_send_sqs
+    _nr_hooks.EB_HOOKS["lambda"] = _eb_invoke_lambda
+    _sfn_hooks.set_lambda_invoker(_sfn_invoke_lambda)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[eventing] delivery hooks skipped: {_e}")
+
 # ── v2.4.0 unified wire ingress (opt-in) ────────────────────────────
 # When VYOMI_UNIFIED_INGRESS is set, native cloud-wire requests are served by
 # the ONE aws_wire_router on real backends (MinIO/Postgres/Vault/NATS) — the
@@ -23621,6 +23876,12 @@ except Exception as _e:   # never let this break appliance boot
 try:   # API Gateway V2 data plane: the integration handler behind the shared Caddy gateway
     from providers import aws_apigatewayv2_gateway as _apigwv2_gateway
     _apigwv2_gateway.register(app, lambda fn, ev: _lambda_invoke_function(fn, ev, source="apigateway"))
+    from core import apigateway_core as _apigw1_core      # API Gateway v1 (REST) _user_request_ invoke -> the same Lambdas
+
+    def _apigw1_lambda(fn, ev):
+        rec = _lambda_invoke_function(fn, ev, source="apigateway")
+        return rec.get("response_payload") if rec.get("status") == "success" else {"_error": True}
+    _apigw1_core.LAMBDA_INVOKER = _apigw1_lambda
 except Exception as _e:   # never let this break appliance boot
     print(f"[apigatewayv2] gateway handler skipped: {_e}")
 # Systems Manager console REST (/api/ssm/*) — shares its store with the native AmazonSSM wire.
@@ -23700,6 +23961,20 @@ try:
     _azure_appconfig_routes.register(app)
 except Exception as _e:   # never let this break appliance boot
     print(f"[azure-appconfig] routes skipped: {_e}")
+
+# Azure Log Analytics data plane (/azure-data/loganalytics/...: ingest + KQL subset); ARM control plane is in azure_services.
+try:
+    from providers import azure_loganalytics_routes as _azure_la_routes
+    _azure_la_routes.register(app)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[azure-loganalytics] routes skipped: {_e}")
+
+# Azure OpenAI inference data plane (SIMULATED: /azure-data/openai/{account}/openai/deployments/{dep}/chat/completions ...).
+try:
+    from providers import azure_openai_routes as _azure_openai_routes
+    _azure_openai_routes.register(app)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[azure-openai] routes skipped: {_e}")
 
 # Azure DNS resolution (/azure-data/dns/query); the ARM control plane (dnsZones) is in azure_services.
 try:

@@ -27,6 +27,7 @@ services:
     ports: !override
       - "${VYOMI_SIMULATOR_PORT:-9200}:9000"
     environment:
+      VYOMI_PUBLIC_URL: ${VYOMI_PUBLIC_URL:-http://localhost:${VYOMI_SIMULATOR_PORT:-9200}}   # SNS delivery URLs → this port
       CLOUDLEARN_DEV_MODE: "1"
       CLOUDLEARN_DISTRIBUTION_MODE: developer
     volumes:

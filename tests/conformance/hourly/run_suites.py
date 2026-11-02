@@ -108,6 +108,15 @@ def gcp_project(endpoint: str) -> str:
 
 
 def run_suite(s: dict, subs: dict) -> dict:
+    # "pending": the probe is written but depends on something not built yet (named in
+    # the value). Reported as pending in every run so it cannot hide, but not run and
+    # not counted as a failure. Remove the key when the dependency lands.
+    if s.get("pending"):
+        res = {k: s.get(k) for k in ("id", "target", "cloud", "kind")}
+        res.update(duration_s=0, exit_code=0, passed=0, failed=0, status="pending",
+                   pending_reason=str(s["pending"]), tail="PENDING: " + str(s["pending"]))
+        print(f"  PEND {s['id']:<28} {s['pending']}", flush=True)
+        return res
     cmd = s["cmd"]
     env = dict(os.environ)
     if s.get("cloud") == "gcp" and s.get("target") == "offline" and subs.get("ENDPOINT"):
@@ -119,10 +128,15 @@ def run_suite(s: dict, subs: dict) -> dict:
     cwd = os.path.join(ROOT, s.get("cwd", ""))
     os.makedirs(os.path.join(OUT, "logs"), exist_ok=True)
     log_path = os.path.join(OUT, "logs", f"{s['id']}{s.get('log_suffix', '')}.log")
+    timeout = s.get("timeout", 600)
+    # A crawl's timeout budgets ONE console (CI runs it per cloud shard); run unsharded, the
+    # same suite walks all three consoles in turn, so give it each console's budget.
+    if is_crawl(s) and not s.get("log_suffix") and "CLOUDS=" not in cmd:
+        timeout *= len(CLOUDS)
     t0 = time.time()
     try:
         p = subprocess.run(cmd, shell=True, cwd=cwd, capture_output=True, text=True,
-                           timeout=s.get("timeout", 600), executable="/bin/bash", env=env)
+                           timeout=timeout, executable="/bin/bash", env=env)
         log, code = (p.stdout or "") + (p.stderr or ""), p.returncode
     except subprocess.TimeoutExpired as e:
         log = ((e.stdout or b"").decode(errors="replace") if isinstance(e.stdout, bytes) else (e.stdout or "")) + "\nTIMEOUT"
@@ -157,6 +171,8 @@ def main() -> int:
     ap.add_argument("--only", default="")
     ap.add_argument("--cloud", default="all", choices=["all", *CLOUDS],
                     help="one detect shard: needs --target offline|nano")
+    ap.add_argument("--kind", default="", help="only suites of this kind (e.g. ui) — the release checks run the UI suites")
+    ap.add_argument("--strict", action="store_true", help="exit 1 if any suite fails (release checks)")
     a = ap.parse_args()
     if a.cloud != "all" and a.target == "all":
         ap.error("--cloud needs --target offline or nano")
@@ -168,7 +184,8 @@ def main() -> int:
 
     suites = json.load(open(os.path.join(HERE, "suites.json")))["suites"]
     only = {x for x in a.only.split(",") if x}
-    suites = [s for s in suites if (a.target == "all" or s["target"] == a.target) and (not only or s["id"] in only)]
+    suites = [s for s in suites if (a.target == "all" or s["target"] == a.target) and (not only or s["id"] in only)
+              and (not a.kind or s.get("kind") == a.kind)]
     if a.cloud != "all":
         suites = [for_shard(s, a.cloud) for s in suites if in_shard(s, a.cloud)]
 
@@ -192,11 +209,14 @@ def main() -> int:
     if a.cloud != "all":
         name = f"results-{a.target}-{a.cloud}.json"   # a detect shard (merge_shards.py joins them)
     else:
-        name = "results.json" if (a.target == "all" and not only) else "results-partial.json"
+        name = "results.json" if (a.target == "all" and not only and not a.kind) else "results-partial.json"
     json.dump(out, open(os.path.join(OUT, name), "w"), indent=1)
-    bad = [r["id"] for r in results if r["status"] != "pass"]
-    print(f"\n{len(results) - len(bad)}/{len(results)} suites green" + (f"; failing: {', '.join(bad)}" if bad else ""))
-    return 0  # the agent and the page decide what to do with failures
+    pend = [r["id"] for r in results if r["status"] == "pending"]
+    bad = [r["id"] for r in results if r["status"] not in ("pass", "pending")]
+    print(f"\n{len(results) - len(bad) - len(pend)}/{len(results)} suites green"
+          + (f"; failing: {', '.join(bad)}" if bad else "") + (f"; pending: {', '.join(pend)}" if pend else ""))
+    # The agent and the page decide what to do with failures; only the release checks ask for an exit code.
+    return 1 if (a.strict and bad) else 0
 
 
 if __name__ == "__main__":

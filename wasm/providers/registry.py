@@ -320,6 +320,25 @@ class _NanoBlobHook:
         return r.body if getattr(r, "status", 404) == 200 else None
 
 
+def _arm_child_deleted(full_type: str, rec: dict, state: dict) -> None:
+    """A resource left ARM state (DELETE or resource-group cascade). Nano's Key Vault
+    data plane is ONE store shared by all vaults (the SW route carries no vault name),
+    so once the LAST vault is gone nothing may stay readable: purge secrets + keys."""
+    if full_type.lower() != "microsoft.keyvault/vaults":
+        return
+    if any(isinstance(r, dict) and str(r.get("type", "")).lower() == "microsoft.keyvault/vaults"
+           for r in state.values()):
+        return
+    from core import nano_registry
+    reg = nano_registry.get()
+    sec, keys = reg["az_kvsec"], reg["az_kvkeys"]
+    for n in list(sec.names()):
+        sec.drop_secret(n)
+    sec.persist()
+    for k in list(keys.key_ids()):
+        keys.drop_key(k)
+
+
 def _arm_dispatch(backends: Backends, method: str, params: dict) -> dict:
     """Native Azure Resource Manager control plane. Unlike the generic
     catalog CRUD (which rides /api/{cloud}/{service} paths), the Azure console
@@ -347,6 +366,10 @@ def _arm_dispatch(backends: Backends, method: str, params: dict) -> dict:
         arm.on_event = _arm_event
     if getattr(arm, "blob_hook", None) is None:
         arm.blob_hook = _NanoBlobHook()
+    if getattr(arm, "on_child_delete", None) is None:
+        arm.on_child_delete = _arm_child_deleted
+    if params.get("origin"):
+        arm._public_base = params["origin"]      # shown endpoints point at THIS Nano origin
     resp = arm.handle(method, params.get("path", ""),
                       params.get("query") or {}, params.get("body"))
     return {"ok": resp["status"] < 400, "__http": resp}
@@ -554,6 +577,101 @@ def _handler_resource_name(params: dict) -> str:
     return ""
 
 
+# ── In-browser VM compute (wasm/vm): the instances that should have a VM ──────
+# The page-side VM host (wasm/vm/nano-vm-host.js) reconciles real v86 VMs against
+# this list: one entry per EC2 instance / Compute Engine instance / Azure VM in the
+# stores, with the state it should be in and the cloud-specific login user + the
+# public keys the user asked for at launch (GCE metadata ssh-keys, Azure osProfile).
+# The VM's root filesystem lives in RAM, so memory is also the disk for `apk add` (OpenJDK 8 alone is ~100 MB).
+_VM_MEM_MB = {"nano": 256, "micro": 512, "small": 512, "medium": 768, "large": 1024}
+
+
+def _vm_mem(itype: str) -> int:
+    t = str(itype or "").lower()
+    for k, v in _VM_MEM_MB.items():
+        if k in t:
+            return v
+    return 1024 if any(x in t for x in ("xlarge", "standard_b2", "standard_d", "e2-standard", "n2-")) else 512
+
+
+def _vms_list(backends: Backends) -> dict:
+    items = []
+    colls = getattr(backends.resources, "collections", {}) or {}
+    for key, coll in colls.items():
+        prov, _, svc = key.partition("/")[0], None, key.rsplit("/", 1)[-1]
+        if prov == "aws" and svc == "ec2":
+            for name, r in coll.items():
+                iid = r.get("instance_id") or name
+                st = str(r.get("state") or "running").lower()
+                img = str(r.get("image_id") or r.get("ami") or "").lower()
+                user = "ubuntu" if "ubuntu" in img or "ubuntu" in str(r.get("platform_details") or "").lower() else "ec2-user"
+                items.append({"cloud": "aws", "id": iid, "ref": iid, "name": r.get("name") or name,
+                              "desired": "terminate" if st in ("terminated", "shutting-down") else
+                                         "stop" if st in ("stopped", "stopping") else "run",
+                              "user": user, "mem_mb": _vm_mem(r.get("instance_type")), "keys": [],
+                              "key_name": r.get("key_name") or "", "instance_type": r.get("instance_type") or ""})
+        elif prov == "gcp" and svc == "compute":
+            for name, r in coll.items():
+                n = str(r.get("name") or name).rsplit("/", 1)[-1]
+                st = str(r.get("status") or "RUNNING").upper()
+                keys, user = [], ""
+                for it in ((r.get("metadata") or {}).get("items") or []) if isinstance(r.get("metadata"), dict) else []:
+                    if isinstance(it, dict) and it.get("key") in ("ssh-keys", "sshKeys"):
+                        for line in str(it.get("value") or "").splitlines():
+                            u, _, k = line.partition(":")
+                            if k.strip().startswith(("ssh-", "ecdsa-")):
+                                keys.append(k.strip()); user = user or u.strip()
+                mt = str(r.get("machineType") or "").rsplit("/", 1)[-1]
+                items.append({"cloud": "gcp", "id": "gce-" + n, "ref": n, "name": n,
+                              "desired": "stop" if st in ("TERMINATED", "STOPPED", "STOPPING", "SUSPENDED", "SUSPENDING") else "run",
+                              "user": user or "gcpuser", "mem_mb": _vm_mem(mt), "keys": keys,
+                              "instance_type": mt, "zone": str(r.get("zone") or "").rsplit("/", 1)[-1]})
+    arm = getattr(backends, "_azure_arm", None)
+    if arm is None:
+        try:
+            from core import nano_registry
+            arm = nano_registry.get().get("az_arm")
+        except Exception:
+            arm = None
+    for rid, rec in (getattr(arm, "state", {}) or {}).items():
+        i = rid.find("/providers/")
+        tail = rid[i + len("/providers/"):].split("/") if i >= 0 else []
+        if len(tail) != 3 or (tail[0] + "/" + tail[1]).lower() != "microsoft.compute/virtualmachines":
+            continue
+        props = rec.get("properties") or {}
+        osp = props.get("osProfile") or {}
+        keys = [k.get("keyData") for k in (((osp.get("linuxConfiguration") or {}).get("ssh") or {}).get("publicKeys") or [])
+                if isinstance(k, dict) and k.get("keyData")]
+        ps = str(props.get("powerState") or "").lower()
+        n = rec.get("name") or tail[2]
+        size = (props.get("hardwareProfile") or {}).get("vmSize") or ""
+        items.append({"cloud": "azure", "id": "az-" + n, "ref": n, "name": n,
+                      "desired": "stop" if ps.endswith(("stopped", "deallocated")) else "run",
+                      "user": osp.get("adminUsername") or "azureuser", "mem_mb": _vm_mem(size), "keys": keys,
+                      "instance_type": size, "resource_id": rec.get("id") or rid})
+    return {"ok": True, "items": items}
+
+
+def _vms_annotate(backends: Backends, params: dict) -> dict:
+    """Stamp the live VM runtime facts (launch status, ssh port/command) onto the
+    instance record so grids/describe show them like the offline appliance does."""
+    cloud, ref, ann = params.get("cloud"), params.get("ref"), params.get("runtime") or {}
+    r = backends.resources
+    if cloud == "aws":
+        for key, coll in (getattr(r, "collections", {}) or {}).items():
+            if key.startswith("aws/") and key.endswith("/ec2"):
+                for name, rec in coll.items():
+                    if (rec.get("instance_id") or name) == ref:
+                        rec.update(ann); return {"ok": True}
+    if cloud == "gcp":
+        for key, coll in (getattr(r, "collections", {}) or {}).items():
+            if key.startswith("gcp/") and key.endswith("/compute"):
+                for name, rec in coll.items():
+                    if str(rec.get("name") or name).rsplit("/", 1)[-1] == ref:
+                        rec.update(ann); return {"ok": True}
+    return {"ok": False, "code": "NotFound"}
+
+
 def dispatch(backends: Backends, provider: str, service: str, operation: str,
              account: str = "default", params: dict | None = None) -> dict:
     """Route one call to the right cloud plugin's handler."""
@@ -580,6 +698,9 @@ def dispatch(backends: Backends, provider: str, service: str, operation: str,
     # Live resource census for the dashboard's per-cloud footprint pies.
     if service == "_census":
         return _census_dispatch(backends, provider)
+    # In-browser VM compute: which instances should have a running VM (wasm/vm).
+    if service == "_vms":
+        return _vms_annotate(backends, params or {}) if operation == "Annotate" else _vms_list(backends)
     h = p.handlers().get((service, operation))
     if h is None:
         return {"ok": False, "code": "UnsupportedOperation",

@@ -23,8 +23,32 @@ export async function runGcpServiceFlow(page, { service, label, check, pushActio
     same = n === before ? same + 1 : 0;
     before = n;
   }
+  // Earlier beds in the same space (the UI crawl's create-with-defaults) leave default-named
+  // resources behind; the real cloud answers 409 AlreadyExists for a second create with the
+  // wizard's default name, so start from a clean service the way a fresh project would be.
+  page.on("dialog", (d) => d.accept().catch(() => {}));
+  for (let i = 0; i < 10 && before > 0; i++) {
+    const opened = await page.evaluate(() => { const a = document.querySelector("#main table.gc tr[data-row-name] a.id"); if (a) { a.click(); return true; } return false; });
+    if (!opened) break;
+    await sleep(1200);
+    const del = page.locator("#main button.danger").filter({ hasText: /Delete/ }).first();
+    if (!(await del.count())) break;
+    await del.click({ timeout: 5000 }).catch(() => {});
+    await sleep(1200);
+    await open();
+    before = await countRows();
+  }
+  const existing = await page.evaluate(() => [...document.querySelectorAll("#main table.gc tr[data-row-name]")].map((r) => r.getAttribute("data-row-name")));
   await page.locator("#main button").filter({ hasText: /^\s*(add\s*)?Create/i }).first().click({ timeout: 8000 });
   await sleep(1000);
+  // Earlier suites (the UI crawl creates with defaults and keeps what it made) can leave a
+  // resource under the wizard's default name; the real cloud rejects the duplicate with 409.
+  // Keep every other default, and only make the name unique when it is already taken.
+  await page.evaluate((existing) => {
+    const input = document.querySelector("#main input[type=text]");
+    if (!input) return;
+    if (existing.includes(input.value)) { input.value = `${input.value}-${Date.now().toString(36)}`.slice(0, 62); input.dispatchEvent(new Event("input", { bubbles: true })); input.dispatchEvent(new Event("change", { bubbles: true })); }
+  }, existing);
   // the wizard's primary "Create" (top of the summary card or the bottom of the form)
   await page.locator("#main button.primary").filter({ hasText: /Create/ }).first().click({ timeout: 8000 });
   await sleep(1500);
@@ -35,9 +59,9 @@ export async function runGcpServiceFlow(page, { service, label, check, pushActio
   const grid = await page.evaluate(() => {
     const t = document.querySelector("#main table.gc");
     if (!t) return { heads: [], cells: [] };
-    const heads = [...t.querySelectorAll("th")].map((h) => (h.innerText || "").replace(/[▲▼]/g, "").trim());
+    const heads = [...t.querySelectorAll("th:not([data-auto])")].map((h) => (h.innerText || "").replace(/[▲▼]/g, "").trim());
     const row = t.querySelector("tr[data-row-name]:last-of-type") || t.querySelector("tr[data-row-name]");
-    const cells = row ? [...row.querySelectorAll("td")].map((c) => (c.innerText || "").trim()) : [];
+    const cells = row ? [...row.querySelectorAll("td:not([data-auto])")].map((c) => (c.innerText || "").trim()) : [];
     return { heads, cells };
   });
   const blank = grid.cells.map((c, i) => ({ c, h: grid.heads[i] || "" }))
@@ -67,12 +91,11 @@ export async function runGcpServiceFlow(page, { service, label, check, pushActio
     await sleep(800);
     const filled = await page.evaluate(() => {
       const rows = [...document.querySelectorAll("#main .sub-content table tr")].slice(1);
-      return { rows: rows.length, blank: rows.flatMap((r) => [...r.querySelectorAll("td")].filter((c) => ["", "-", "—"].includes((c.innerText || "").trim()))).length };
+      return { rows: rows.length, blank: rows.flatMap((r) => [...r.querySelectorAll("td:not([data-auto])")].filter((c) => ["", "-", "—"].includes((c.innerText || "").trim()))).length };
     });
     check(filled.rows > 0 && filled.blank === 0, `${service}: ${pushAction.tab} rows are filled after the push`, JSON.stringify(filled));
   }
 
-  page.on("dialog", (d) => d.accept().catch(() => {}));
   await page.locator("#main button.danger").filter({ hasText: /Delete/ }).first().click({ timeout: 5000 });
   await sleep(1500);
   await open();

@@ -67,6 +67,7 @@ from core import gcp_monitoring_core as gcp_mon
 from core import gcp_redis_core as gcp_redis
 from core import gcp_artifactregistry_core as gcp_ar
 from core import gcp_compute_core as gcp_compute
+from core import nano_triggers
 
 
 def _gcp_service(path):
@@ -366,6 +367,20 @@ class AwsWireRouter:
         self.cw = s.get("cw") or cw.CloudWatchStore()          # CloudWatch metrics / alarms / dashboards
         self.vpc = s.get("vpc") or _types.SimpleNamespace()   # EC2/VPC network model
         self.logs = s.get("logs") or logs.LogsStore()         # CloudWatch Logs
+        # Lambda invocations land in CloudWatch Logs (/aws/lambda/<fn>) like real Lambda.
+        if getattr(self.lam, "_log_sink", None) is None:
+            def _lambda_log_sink(group, stream, lines, _logs=self.logs):
+                import time as _tm
+                hdr = "Logs_20140328."
+                logs.dispatch(_logs, hdr + "CreateLogGroup", {"logGroupName": group})
+                logs.dispatch(_logs, hdr + "CreateLogStream", {"logGroupName": group, "logStreamName": stream})
+                now = int(_tm.time() * 1000)
+                logs.dispatch(_logs, hdr + "PutLogEvents", {"logGroupName": group, "logStreamName": stream,
+                              "logEvents": [{"timestamp": now + i, "message": ln + "\n"} for i, ln in enumerate(lines)]})
+            try:
+                self.lam._log_sink = _lambda_log_sink
+            except Exception:
+                pass
         self.elbv2 = s.get("elbv2") or elbv2.Elbv2Store()
         self.sfn = s.get("sfn") or sfn.StepFunctionsStore()   # Step Functions (state machines + executions)
 
@@ -430,7 +445,9 @@ class AwsWireRouter:
             return "az-servicebus"
         if _execute_api_id(path, lheaders):   # HTTP API invoke URL ({id}.execute-api.* or /apigw/{id}/…)
             return "apigw-invoke"
-        if "/2015-03-31/functions" in path:   # Lambda REST (native boto3 lambda wire)
+        if "/2015-03-31/functions" in path or "/2021-10-31/functions" in path:   # Lambda REST (native boto3 lambda wire)
+            return "lambda"
+        if path.startswith("/lambda-url/"):   # a Function URL's public invoke path
             return "lambda"
         if path.startswith("/v2/") and path[4:].split("/", 1)[0] in (   # API Gateway V2 control plane
                 "apis", "domainnames", "vpclinks", "tags", "portals", "portalproducts"):
@@ -611,6 +628,9 @@ class AwsWireRouter:
         body = body if isinstance(body, (bytes, bytearray)) else (body or b"")
         if isinstance(body, str):
             body = body.encode("utf-8")
+        _tr = nano_triggers.route(self, method, path, query, lheaders, bytes(body))   # /gcf, Event Grid publish, function apps
+        if _tr is not None:
+            return _tr
         svc = self.service_of(method, path, lheaders, body, query)
         if queue_alias and svc == "az-blob":
             svc = "az-queue"
@@ -628,7 +648,11 @@ class AwsWireRouter:
             return cw.wire(self.cw, method, path, headers or {}, bytes(body), query or {})
 
         if svc == "lambda":   # native Lambda REST (function mgmt + sandboxed invoke)
-            r = lam.dispatch(self.lam, method, path, query or {}, headers or {}, bytes(body))
+            if path.startswith("/lambda-url/"):
+                _id, _, _rest = path[len("/lambda-url/"):].partition("/")
+                r = lam.url_invoke(self.lam, _id, method, _rest.split("?", 1)[0], query or {}, headers or {}, bytes(body))
+            else:
+                r = lam.dispatch(self.lam, method, path, query or {}, headers or {}, bytes(body))
             hdrs = dict(r.headers or {})
             if r.media_type and not any(k.lower() == "content-type" for k in hdrs):
                 hdrs["content-type"] = r.media_type
@@ -665,9 +689,24 @@ class AwsWireRouter:
             hdrs = dict(r.headers or {})
             if r.media_type and r.body and not any(k.lower() == "content-type" for k in hdrs):
                 hdrs["content-type"] = r.media_type
-            return {"status": r.status, "headers": hdrs, "body": r.body or b""}
+            out = r.body or b""
+            if lheaders.get("host") and b".execute-api.localhost:" in out:
+                # The shown ApiEndpoint must work from where the client is: the simulator origin's
+                # path-style invoke form (<origin>/apigw/<id>), not a host-style name on the gateway port.
+                _o = f"{lheaders.get('x-forwarded-proto', 'http')}://{lheaders['host']}"
+                out = re.sub(rb"https://([a-z0-9]+)\.execute-api\.localhost:\d+", lambda m: (_o + "/apigw/").encode() + m.group(1), out)
+            return {"status": r.status, "headers": hdrs, "body": out}
 
-        if svc == "apigateway":   # native API Gateway v1 control plane (/restapis)
+        if svc == "apigateway":   # native API Gateway v1 control plane (/restapis) + the local invoke URL
+            _m = re.match(r"^/restapis/([^/]+)/([^/]+)/_user_request_(/[^?]*)?", path)
+            if _m:   # http://<host>/restapis/<id>/<stage>/_user_request_/<path>  (the standard local invoke form)
+                r = apigw.invoke(self.apigw, _m.group(1), _m.group(2), method, _m.group(3) or "/", lheaders,
+                                 {k: (v[0] if isinstance(v, list) else v) for k, v in (query or {}).items()},
+                                 bytes(body), lambda_store=self.lam)
+                hdrs = dict(r.headers or {})
+                if r.media_type and not any(k.lower() == "content-type" for k in hdrs):
+                    hdrs["content-type"] = r.media_type
+                return {"status": r.status, "headers": hdrs, "body": r.body or b""}
             r = apigw.dispatch(self.apigw, method, path, query or {}, headers or {}, bytes(body))
             hdrs = dict(r.headers or {})
             if r.media_type and not any(k.lower() == "content-type" for k in hdrs):
@@ -755,6 +794,7 @@ class AwsWireRouter:
                     self.gcp_redis, lambda *a: gcp_gke.dispatch(self.gcp_gke, *a), method, path, query or {}, headers or {}, bytes(body))
             else:
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body))
+            nano_triggers.after_gcp(self, svc, method, path, query, bytes(body), r)   # uploads / publishes fire Eventarc triggers
             hdrs = dict(r.headers or {})
             if r.media_type and not any(k.lower() == "content-type" for k in hdrs):
                 hdrs["content-type"] = r.media_type
@@ -788,7 +828,7 @@ class AwsWireRouter:
             elif svc == "secretsmanager":
                 r = secrets.dispatch(self.sec, target, payload)
             elif svc == "events":
-                r = events.dispatch(self.events, target, payload)
+                r = events.dispatch(self.events, target, payload, lambda_store=self.lam)
             elif svc == "kinesis":
                 r = kinesis.dispatch(self.kinesis, target, payload)
             elif svc == "logs":

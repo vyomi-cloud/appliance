@@ -57,7 +57,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
   /* Search bar — 40px tall inside the 56px header = 8px breathing room
      top/bottom (via flex align-center). Horizontal margin 24px keeps it
      from crowding the project picker + utility icons. */
-  header .search{flex:1;max-width:720px;display:flex;align-items:center;background:#f1f3f4;border-radius:8px;height:40px;padding:0 16px;color:var(--ink);margin:0 24px}
+  header .search{flex:1;min-width:0;display:flex;align-items:center;background:#f1f3f4;border-radius:8px;height:40px;padding:0 16px;color:var(--ink);margin:0 24px}
   header .search:focus-within{background:#fff;box-shadow:0 1px 6px rgba(32,33,36,.28)}
   header .search .ic{color:var(--sub);font-size:20px;margin-right:12px}
   header .search input{flex:1;border:none;outline:none;font-size:14px;background:transparent;color:var(--ink);height:38px}
@@ -127,6 +127,10 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
   /* ============================================================
      BREADCRUMB BAR (above content)
      ============================================================ */
+  .crumbs-inline{font-size:12px;color:var(--sub);display:flex;align-items:center;gap:6px;margin-bottom:6px}
+  .crumbs-inline a{color:var(--blue);cursor:pointer}
+  .crumbs-inline .sep{color:var(--hint)}
+  .crumbs-inline .current{color:var(--ink);font-weight:500}
   .crumbs-bar{background:#fff;border-bottom:1px solid var(--line);padding:10px 24px;font-size:12px;color:var(--sub);display:flex;align-items:center;gap:6px}
   .crumbs-bar a{color:var(--blue);cursor:pointer}
   .crumbs-bar .sep{color:var(--hint)}
@@ -135,7 +139,20 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
   /* ============================================================
      CONTENT (page headers, panels, tables)
      ============================================================ */
-  .wrap{padding:20px 24px;max-width:1600px}
+  /* The whole feature area (breadcrumb, title, actions, content) is ONE white rounded bordered card;
+     the card itself has no border; every panel, section and grid inside it keeps its own rounded border. */
+  .wrap,.wizard-page{background:#fff;border:none;border-radius:12px;margin:16px 24px;padding:20px 24px;max-width:1600px}
+  .wrap .card,.wrap .kv-card,.wrap .col-card,.wizard-page .card,.wizard-page .kv-card,.wizard-page .col-card,.wizard-page .summary-card{border:1px solid var(--line);border-radius:8px}
+  /* Detail pages: the outer white card stays borderless; an inner rounded border wraps the breadcrumb, title, side menu and config area. */
+  .wrap.detail-card{padding:16px}
+  /* The rules inside run edge to edge: the line under the title meets the box's left/right borders and the
+     side-menu divider meets its top and bottom borders. */
+  .detail-inner{border:1px solid #dadce0;border-radius:12px;padding:0;background:#fff;overflow:hidden}
+  .detail-inner > .detail-top{padding:20px 24px 18px;margin-bottom:0}
+  .detail-inner > .sub-layout{margin-top:0;border-top:1px solid #dadce0}
+  .detail-inner .sub-nav{border-right:1px solid #dadce0}
+  /* Grids keep their rounded border; the rules inside (toolbar, header, rows) run edge to edge of the grid. */
+  .wrap .table-wrap{border:1px solid var(--line);border-radius:8px;overflow:hidden}
   .page-head{display:flex;align-items:center;gap:14px;margin-bottom:18px}
   .page-head h1{font-size:24px;font-weight:400;font-family:'Google Sans',sans-serif;flex:1}
   .page-head h1 .count{color:var(--sub);font-weight:400;margin-left:6px;font-size:18px}
@@ -163,7 +180,9 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
   .card .h{padding:16px 20px;display:flex;align-items:center;gap:10px;font-size:14px;font-weight:500;font-family:'Google Sans',sans-serif;border-bottom:1px solid var(--line)}
   .card .b{padding:16px 20px}
   /* Dashboard → Resources card (Google Cloud's): product icon, name as a link, what it holds. */
-  .res-card .res-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));column-gap:32px}
+  .res-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr));gap:14px;align-items:stretch}
+  .res-cards .res-card{margin-bottom:0}
+  .res-card .res-list{display:grid;grid-template-columns:1fr}
   .res-card .res-row{display:flex;align-items:center;gap:14px;padding:9px 0;min-width:0}
   .res-card .res-ic{display:flex;color:#5f6368}
   .res-card .res-ic .material-symbols-outlined{font-size:22px}
@@ -177,7 +196,24 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
   .table-toolbar input.search{flex:1;max-width:380px;height:36px;border:1px solid var(--line-d);border-radius:4px;padding:0 12px;font-size:13px;outline:none}
   .table-toolbar input.search:focus{border-color:var(--blue);box-shadow:0 0 0 1px var(--blue)}
   .table-toolbar .stats{font-size:12px;color:var(--sub);margin-left:auto}
+  /* Column chooser */
+  .vy-grid-tools{display:flex;justify-content:flex-end;margin:0 0 8px}
+  .vy-colmenu{position:relative;display:inline-block}
+  .vy-colmenu > .btn{height:32px;padding:0 12px}
+  .vy-colpop{position:absolute;right:0;top:calc(100% + 4px);z-index:40;background:#fff;border:1px solid var(--line-d);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.16);padding:6px 0;min-width:220px;max-height:340px;overflow-y:auto}
+  .vy-colpop[hidden]{display:none}
+  .vy-colrow{display:flex;align-items:center;gap:10px;padding:7px 14px;font-size:13px;cursor:pointer;white-space:nowrap}
+  .vy-colrow:hover{background:var(--blue-bg)}
+  .vy-colrow input:disabled + span{color:var(--sub)}
+  .vy-colfoot{border-top:1px solid var(--line);margin-top:4px;padding:8px 14px 4px;font-size:12.5px}
+  .vy-colfoot a{color:var(--blue);cursor:pointer}
   table.gc{width:100%;border-collapse:collapse;font-size:13px;background:#fff}
+  /* Every grid scrolls inside its own frame: horizontal for wide column sets, vertical with a pinned header. */
+  .vy-scroll{overflow:auto;max-width:100%;max-height:max(220px,calc(100vh - 330px));overscroll-behavior:contain}
+  .vy-scroll > table.gc{width:max-content;min-width:100%}
+  .vy-scroll > table.gc th{position:sticky;top:0;z-index:2;white-space:nowrap}
+  .vy-scroll > table.gc td{white-space:nowrap;max-width:420px;overflow:hidden;text-overflow:ellipsis}
+  .vy-scroll > table.gc td.chk,.vy-scroll > table.gc td:last-child{overflow:visible}
   table.gc th{text-align:left;padding:11px 14px;font-weight:500;color:var(--sub);background:var(--blue-bg);font-size:12px;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--line)}
   table.gc th.sortable{cursor:pointer;user-select:none}
   table.gc th.sortable:hover{background:#eaf2fb}
@@ -185,6 +221,15 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
   table.gc tr:hover td{background:var(--blue-bg)}
   table.gc tr.selected td{background:var(--blue-tint)}
   table.gc td.chk,table.gc th.chk{width:42px;padding-right:0}
+  /* Standard on/off switch (Private Google Access, Flow logs) */
+  .vy-sw{position:relative;display:inline-block;width:36px;height:20px;vertical-align:middle;cursor:pointer}
+  .vy-sw input{opacity:0;width:0;height:0;position:absolute}
+  .vy-sw .vy-sw-t{position:absolute;inset:0;background:#bdc1c6;border-radius:20px;transition:background .15s}
+  .vy-sw .vy-sw-t::before{content:"";position:absolute;width:16px;height:16px;left:2px;top:2px;background:#fff;border-radius:50%;box-shadow:0 1px 2px rgba(0,0,0,.3);transition:transform .15s}
+  .vy-sw input:checked + .vy-sw-t{background:var(--blue)}
+  .vy-sw input:checked + .vy-sw-t::before{transform:translateX(16px)}
+  .vy-sw input:disabled + .vy-sw-t{opacity:.6}
+  .vy-sw input:focus-visible + .vy-sw-t{outline:2px solid var(--blue);outline-offset:2px}
   table.gc td a.id{color:var(--blue);font-weight:500}
   table.gc td a.id:hover{text-decoration:underline}
   .empty{padding:60px 16px;text-align:center;color:var(--sub);font-size:13px}
@@ -217,14 +262,35 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
   .sub-content{flex:1;padding:20px 24px;overflow-y:auto;min-width:0}
 
   .sub-h{font-size:18px;font-weight:500;font-family:'Google Sans',sans-serif;margin:0 0 12px;color:var(--ink)}
+  /* Tab bodies (bucket Objects/Lifecycle/Permissions/Labels/Activity, ...): lists and empty states are
+     rounded bordered panels like the rest of the sections. */
+  .sub-content .empty{border:1px solid var(--line);border-radius:8px;background:#fff}
+  .sub-content table.gc{border-collapse:separate;border-spacing:0;border:1px solid var(--line);border-radius:8px}
+  .sub-content table.gc tr:first-child th:first-child{border-top-left-radius:7px}
+  .sub-content table.gc tr:first-child th:last-child{border-top-right-radius:7px}
+  .sub-content table.gc tbody tr:last-child td{border-bottom:none}
+  .sub-content table.gc tbody tr:last-child td:first-child{border-bottom-left-radius:7px}
+  .sub-content table.gc tbody tr:last-child td:last-child{border-bottom-right-radius:7px}
 
   .kv-card{background:#fff;border:1px solid var(--line);border-radius:8px;padding:16px 20px;margin-bottom:14px}
-  .kv-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px 24px}
-  .kv-grid .k{font-size:11.5px;color:var(--sub);font-weight:500;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px}
-  .kv-grid .v{font-size:13.5px;color:var(--ink);word-break:break-all}
+  .kv-grid{display:block}
+  .kv-card > div:first-child:not(.kv-grid){font-weight:500;font-size:14px;margin-bottom:6px}
+  /* Overview / Properties: every field is its own card */
+  .fld-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px;margin-bottom:14px}
+  .fld-card{background:#fff;border:1px solid var(--line);border-radius:8px;padding:12px 16px;min-width:0}
+  .fld-card .fld-k{font-size:12px;color:var(--sub);margin-bottom:4px}
+  .fld-card .fld-v{font-size:14px;color:var(--ink);overflow-wrap:anywhere;line-height:1.35}
+  .fld-card.key{padding:14px 16px;background:var(--blue-bg)}
+  .fld-card.key .fld-v{font-size:16px;font-weight:500;font-family:'Google Sans',sans-serif}
+  /* GCP classic detail list: label on the left, value on the right, one thin rule between rows. */
+  .kv-grid > div{display:grid;grid-template-columns:minmax(140px,240px) minmax(0,1fr);gap:8px 24px;align-items:start;padding:11px 0;border-bottom:1px solid var(--line)}
+  .kv-grid > div:first-child{padding-top:0}
+  .kv-grid > div:last-child{border-bottom:none;padding-bottom:0}
+  .kv-grid .k{font-size:13px;color:var(--sub);font-weight:400;line-height:20px}
+  .kv-grid .v{font-size:13px;color:var(--ink);line-height:20px;word-break:break-word;overflow-wrap:anywhere}
+  @media (max-width:760px){ .kv-grid > div{grid-template-columns:1fr;gap:2px} }
 
   /* Wizard — single-page collapsible sections + right summary card */
-  .wizard-page{padding:20px 24px;max-width:1500px}
   .wizard-grid{display:grid;grid-template-columns:1fr 360px;gap:20px;align-items:start}
   .wizard-main{display:flex;flex-direction:column;gap:14px}
   .col-card{background:#fff;border:1px solid var(--line);border-radius:8px;overflow:hidden}
@@ -343,6 +409,89 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
 #disk-widget-slot .disk-popover .dp-close:hover { color: #0f1b2d; }
   .vy-co{display:inline-flex;align-items:center;flex:none;text-decoration:none}.vy-co img{height:22px;width:auto;display:block}.vy-co-sep{width:1px;height:26px;background:#dadce0;flex:none;margin:0 -2px}
 </style>
+<style id="vy-gcp-m3">
+/* ── Current Google Cloud look (Material 3): tinted shell, white rounded content card, pill controls,
+      sentence-case buttons and grid headers. Sampled from the real console captures. ── */
+:root{--shell:#f0f5fe;--shell-sel:#dbedfc;--shell-bar:#545f72;--m3-primary:#0b57d0;--m3-outline:#747775;--m3-field:#e9eef6}
+html,body{background:var(--shell)}
+header.gc-top{background:var(--shell);border-bottom:none}
+header .hamb:hover{background:rgba(0,0,0,.06)}
+header .proj-btn{border-radius:20px;border:1px solid var(--m3-outline);background:transparent;height:34px;padding:0 14px}
+header .proj-btn:hover{background:rgba(11,87,208,.06);border-color:var(--m3-outline)}
+header .proj-btn .label{display:none}
+header .search{background:var(--m3-field);border-radius:24px;height:44px}
+header .search:focus-within{background:#fff;box-shadow:0 1px 6px rgba(32,33,36,.28)}
+aside#rail{background:var(--shell);border-right:none;padding-bottom:56px}
+aside#rail .rail-h{border-bottom:none;color:var(--ink)}
+aside#rail .group{text-transform:none;letter-spacing:0;font-size:14px;font-weight:500;color:var(--ink);padding:16px 18px 6px}
+aside#rail a.item{color:#1f1f1f}
+aside#rail a.item:hover{background:rgba(0,0,0,.05)}
+aside#rail a.item.active{background:var(--shell-sel);color:#041e49;border-left-color:var(--shell-bar);font-weight:500}
+aside#rail a.item.active .ic{color:#041e49}
+/* The content area is one white panel filling the window, inset by the same 12px on all four sides with all four
+   corners rounded, against the tinted shell; the side menu is a full-height column that scrolls on its own. */
+.body{align-items:stretch}
+main#main{background:#fff;padding:0;margin:12px;border-radius:16px;display:flex;flex-direction:column;min-width:0;min-height:calc(100vh - 56px - 44px - 24px)}
+.wrap,.wizard-page{flex:1 0 auto;margin:0;border-radius:0;box-shadow:none;max-width:none;width:100%}
+.wrap.detail-card{padding:12px;display:flex;flex-direction:column}
+.wrap.detail-card > .detail-inner{flex:1 0 auto;display:flex;flex-direction:column}
+.wrap.detail-card > .detail-inner > .sub-layout{flex:1 0 auto}
+aside#rail{position:sticky;top:56px;align-self:flex-start;height:calc(100vh - 56px - 44px);overflow-y:auto}
+/* side menu — current Google Cloud look: 272px, Google Sans 14px, slate items, 36px rows, pill selection */
+aside#rail{width:272px}
+aside#rail.collapsed{width:56px}
+aside#rail .rail-h,aside#rail .group,aside#rail a.item{font-family:'Google Sans','Google Sans Text',Roboto,Arial,sans-serif}
+aside#rail .rail-h{font-size:14px;font-weight:500;padding:14px 18px 4px 21px}
+aside#rail .group{display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none;font-size:14px;font-weight:500;color:#1f1f1f;padding:12px 16px 6px 21px;text-transform:none;letter-spacing:0}
+aside#rail .group:hover{color:#041e49}
+aside#rail .group .chev{font-size:20px;color:#444746;transition:transform .15s}
+aside#rail .group.closed .chev{transform:rotate(180deg)}
+aside#rail a.item{min-height:36px;padding:0 16px 0 18px;margin-right:12px;gap:14px;font-size:14px;color:#444746;border-radius:0 18px 18px 0}
+aside#rail a.item .ic{font-size:20px;width:20px;color:#444746}
+aside#rail a.item.active,aside#rail a.item.active .ic{color:#041e49}
+aside#rail a.item.active{font-weight:500}
+aside#rail.collapsed a.item{margin-right:0;border-radius:0;padding:0;justify-content:center}
+aside#rail.collapsed .group .chev{display:none}
+aside#rail a.item[hidden]{display:none}
+aside#rail.collapsed a.item[hidden]{display:flex}
+/* toolbar buttons: sentence case, pill-shaped */
+.btn{height:36px;border-radius:20px;text-transform:none;letter-spacing:.1px;font-size:14px;font-family:'Google Sans',Roboto,Arial,sans-serif;border-color:var(--m3-outline);color:var(--m3-primary);background:transparent}
+.btn:hover{background:rgba(11,87,208,.08);color:var(--m3-primary)}
+.btn.primary{background:var(--m3-primary);border-color:var(--m3-primary);color:#fff}
+.btn.primary:hover{background:#0a4dba;color:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3)}
+.btn.danger{color:#b3261e;border-color:#b3261e}.btn.danger:hover{background:rgba(179,38,30,.08)}
+.btn-text{text-transform:none;letter-spacing:.1px;font-size:14px;font-family:'Google Sans',Roboto,Arial,sans-serif;color:var(--m3-primary);border-radius:20px}
+.btn-text:hover{background:rgba(11,87,208,.08)}
+/* grids: sentence-case headers on white, quiet rules */
+table.gc th{text-transform:none;letter-spacing:0;font-size:13px;font-weight:500;color:var(--ink);background:#fff;border-bottom:1px solid var(--line-d)}
+table.gc th.sortable:hover{background:#f6f8fc}
+table.gc tr:hover td{background:#f6f8fc}
+.table-wrap,.wrap .table-wrap{border-radius:12px}
+.table-toolbar input.search{border-radius:20px;border-color:var(--m3-outline);height:36px}
+.vy-colmenu > .btn{height:32px}
+/* dialogs: rounded, tinted surface */
+.proj-modal .box{border-radius:28px;background:#f8fafd}
+
+/* create forms — Material outlined fields */
+.wizard-page .field{margin-bottom:20px}
+.wizard-page .field>label:not(.radio){font:500 12px/16px "Google Sans",Roboto,Arial,sans-serif;color:#444746;letter-spacing:.1px;margin-bottom:6px;display:block}
+.wizard-page .field input[type=text],.wizard-page .field input[type=number],.wizard-page .field input[type=password],.wizard-page .field input:not([type]),.wizard-page .field select,.wizard-page .field textarea{height:40px;box-sizing:border-box;border:1px solid #747775;border-radius:4px;background:#fff;color:#1f1f1f;font:400 14px "Google Sans",Roboto,Arial,sans-serif;padding:0 12px;max-width:560px;width:100%;transition:border-color .12s,box-shadow .12s}
+.wizard-page .field textarea{height:auto;padding:10px 12px}
+.wizard-page .field select{appearance:none;-webkit-appearance:none;padding-right:36px;background:#fff url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'><path fill='%23444746' d='M7 10l5 5 5-5z'/></svg>") no-repeat right 8px center}
+.wizard-page .field input:hover,.wizard-page .field select:hover,.wizard-page .field textarea:hover{border-color:#1f1f1f}
+.wizard-page .field input:focus,.wizard-page .field select:focus,.wizard-page .field textarea:focus{outline:none;border-color:#0b57d0;box-shadow:inset 0 0 0 1px #0b57d0}
+.wizard-page .field input[type=radio],.wizard-page .field input[type=checkbox]{accent-color:#0b57d0;width:18px;height:18px;margin:0 10px 0 0;vertical-align:middle}
+.wizard-page label.radio{display:flex;align-items:center;font:400 14px "Google Sans",Roboto,Arial,sans-serif;color:#1f1f1f;padding:6px 0}
+.wizard-page .info-pill{background:#f0f4f9;border-radius:4px;border:none;max-width:560px}
+
+.crumbs-inline a,.crumbs-inline .current{display:inline-flex;align-items:center;gap:6px}
+.crumbs-inline .ci{font-size:18px;line-height:1}
+.crumbs-inline .sep{font-size:18px;line-height:1;color:#747775}
+
+.ov-grid td.ov-k{width:300px;color:#444746;font-weight:500;vertical-align:top}
+.ov-grid td.ov-v{white-space:pre-line;overflow-wrap:anywhere;vertical-align:top}
+.ov-grid tr.ov-sec td{background:#f0f4f9;color:#1f1f1f;font:500 12px "Google Sans",Roboto,Arial,sans-serif;letter-spacing:.3px;text-transform:uppercase;padding:8px 16px}
+</style>
 </head>
 <body>
 
@@ -358,14 +507,9 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     <svg class="cube" viewBox="0 0 32 28" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Google Cloud"><path fill="#ea4335" d="M21.85,7.41l1,0,2.85-2.85.14-1.21A12.81,12.81,0,0,0,5,9.6a1.55,1.55,0,0,1,1-.06l5.7-.94s.29-.48.44-.45a7.11,7.11,0,0,1,9.73-.74Z"/><path fill="#4285f4" d="M29.76,9.6a12.84,12.84,0,0,0-3.87-6.24l-4,4A7.11,7.11,0,0,1,24.5,13v.71a3.56,3.56,0,1,1,0,7.12H17.38l-.71.72v4.27l.71.71H24.5A9.26,9.26,0,0,0,29.76,9.6Z"/><path fill="#34a853" d="M10.25,26.49h7.12v-5.7H10.25a3.54,3.54,0,0,1-1.47-.32l-1,.31L4.91,23.63l-.25,1A9.21,9.21,0,0,0,10.25,26.49Z"/><path fill="#fbbc05" d="M10.25,8A9.26,9.26,0,0,0,4.66,24.6l4.13-4.13a3.56,3.56,0,1,1,4.71-4.71l4.13-4.13A9.25,9.25,0,0,0,10.25,8Z"/></svg>
     Google Cloud
   </a>
-  <a class="back-spaces" href="/ui#spaces" title="Return to the Simulation Spaces view (switch provider or pick a different project)">
-    <span class="material-symbols-outlined">arrow_back</span>
-    Go back to Spaces
-  </a>
   <button class="proj-btn" id="projBtn" title="Select a project">
     <span class="material-symbols-outlined icon">folder_open</span>
     <span style="display:flex;flex-direction:column;align-items:flex-start;line-height:1.1">
-      <span class="label">Project</span>
       <span class="name" id="projName">…</span>
     </span>
     <span class="caret">▾</span>
@@ -376,8 +520,6 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     <span class="kbd">/</span>
   </div>
   <div class="right">
-    <a href="/ui#api" title="API (Swagger) — REST API reference"><span class="material-symbols-outlined" style="font-size:20px">api</span></a>
-    <a href="/ui#usage" title="SDK &amp; CLI usage"><span class="material-symbols-outlined" style="font-size:20px">code</span></a>
     <button title="Cloud Shell" id="cloudShellBtn"><span class="material-symbols-outlined" style="font-size:20px">terminal</span></button>
     <button class="bell" id="notifBtn" title="Notifications">
       <span class="material-symbols-outlined" style="font-size:20px">notifications</span>
@@ -419,9 +561,6 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     <button class="btn-text" id="notifClose">CLOSE</button></div>
   <div class="body" id="notifBody"></div>
 </div>
-
-<!-- ==================== BREADCRUMB ==================== -->
-<div class="crumbs-bar" id="crumbs"></div>
 
 <!-- ==================== PAGE BODY ==================== -->
 <div class="body">
@@ -645,24 +784,26 @@ function render(){
   main.append(el("div",{class:"empty"}, "Unknown view: "+STATE.view));
 }
 
-function renderCrumbs(){
-  const c = document.getElementById("crumbs"); c.innerHTML = "";
-  c.append(el("a",{onclick:()=>navigate({view:"home", service:null, item:null})}, PROJECT));
-  if (!STATE.service) return;
+function renderCrumbs(){}   // breadcrumbs now live inside each page's title card (crumbsEl)
+function crumbsEl(){
+  const mi = (n,c) => el("span",{class:"material-symbols-outlined "+(c||"ci")}, n);
+  const sep = () => mi("chevron_right","sep");
+  const c = el("div",{class:"crumbs-inline"});
+  c.append(el("a",{onclick:()=>navigate({view:"home", service:null, item:null})}, mi("folder_open"), PROJECT));
+  if (!STATE.service) return c;
   const svc = svcByKey(STATE.service);
-  if (!svc) return;
-  c.append(el("span",{class:"sep"}, "›"),
-    el("a",{onclick:()=>navigate({view:"list", item:null})}, svc.label));
+  if (!svc) return c;
+  c.append(sep(), el("a",{onclick:()=>navigate({view:"list", item:null})}, mi(svc.icon||"apps"), svc.label));
   if (STATE.view === "detail" && STATE.item) {
     const name = String(getPath(STATE.item, svc.name_field) || STATE.item.name || "");
-    c.append(el("span",{class:"sep"}, "›"), el("span",{class:"current"}, name));
+    c.append(sep(), el("span",{class:"current"}, mi(svc.icon||"article"), name));
   } else if (STATE.view === "create") {
-    c.append(el("span",{class:"sep"}, "›"),
-      el("span",{class:"current"}, "Create " + svc.label.replace(/s$/,"").toLowerCase()));
+    c.append(sep(), el("span",{class:"current"}, mi("add_circle"), createTitle(svc)));
   }
+  return c;
 }
 
-// Left rail — GCP-faithful: hierarchical groups (COMPUTE / STORAGE / DATABASES / ...)
+// Left rail — GCP classic design: one flat list of products, no group headings
 function renderRail(){
   const rail = document.getElementById("rail"); rail.innerHTML = "";
   rail.append(el("div",{class:"rail-h"}, "All products"));
@@ -676,16 +817,37 @@ function renderRail(){
     ["IAM & ADMIN",   ["iam", "iamcredentials"]],
     ["OPERATIONS",    ["monitoring"]],
   ];
-  groups.forEach(([label, keys]) => {
-    rail.append(el("div",{class:"group"}, label));
+  // Section headers collapse like Google Cloud's ("Storage Intelligence ⌃"); the choice is remembered.
+  let closed = []; try { closed = JSON.parse(localStorage.getItem("vyomi.gcp.rail.closed") || "[]"); } catch (_) {}
+  const sentence = s => (s.charAt(0) + s.slice(1).toLowerCase()).replace(/^Iam\b/, "IAM");
+  groups.forEach(([gname, keys]) => {
+    const present = keys.map(svcByKey).filter(Boolean); if (!present.length) return;
+    const head = el("div",{class:"group", role:"button", tabindex:"0", "aria-expanded":"true"}, sentence(gname),
+      el("span",{class:"material-symbols-outlined chev"}, "expand_less"));
+    const links = [];
+    const paint = () => {
+      const shut = closed.includes(gname);
+      head.classList.toggle("closed", shut); head.setAttribute("aria-expanded", String(!shut));
+      links.forEach(a => { a.hidden = shut && !a.classList.contains("active"); });   // the open service stays visible
+    };
+    const toggle = () => {
+      closed = closed.includes(gname) ? closed.filter(x => x !== gname) : closed.concat(gname);
+      try { localStorage.setItem("vyomi.gcp.rail.closed", JSON.stringify(closed)); } catch (_) {}
+      paint();
+    };
+    head.addEventListener("click", toggle);
+    head.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); } });
+    rail.append(head);
     keys.forEach(k => {
       const s = svcByKey(k); if (!s) return;
       const isActive = STATE.service === k;
-      rail.append(el("a",{class:"item"+(isActive?" active":""), title:s.label, "aria-label":s.label,
+      const a = el("a",{class:"item"+(isActive?" active":""), title:s.label, "aria-label":s.label, "data-group":gname,
         onclick:()=>navigate({view:"list", service:k, item:null})},
         el("span",{class:"material-symbols-outlined ic"}, s.icon),
-        el("span",{class:"lbl"}, s.label)));
+        el("span",{class:"lbl"}, s.label));
+      links.push(a); rail.append(a);
     });
+    paint();
   });
 }
 
@@ -859,7 +1021,8 @@ function buildConnectCard(){
 // ========== HOME — GCP-style project dashboard ==============================
 function renderHome(main){
   main.innerHTML = "";  // self-clear (same pattern as list/detail/create)
-  const wrap = el("div",{class:"wrap"});
+  const wrap = el("div",{class:"wrap home"});
+  wrap.append(crumbsEl());
   wrap.append(el("div",{class:"page-head"},
     el("h1",{}, "Dashboard")));
   wrap.append(el("div",{class:"sub",style:"margin-bottom:16px"},
@@ -874,10 +1037,20 @@ function renderHome(main){
     secretmanager:"secret", artifactregistry:"repository", kms:"key", cloudscheduler:"job", container:"cluster",
     iamcredentials:"credential", monitoring:"alerting policy", redis:"instance" };
   const plural = (n, u) => n + " " + (n === 1 ? u : u === "repository" ? "repositories" : u === "alerting policy" ? "alerting policies" : u + "s");
-  const res = el("div",{class:"card res-card"});
-  res.append(el("div",{class:"h"}, icon("dns"), "Resources"));
-  const rows = el("div",{class:"res-list"});
-  CATALOG.services.forEach(s => {
+  // Three cards: compute & integration, data & storage, networking / security / operations.
+  const GROUPS = [
+    {title: "Compute & integration", icon: "memory", keys: ["compute", "functions", "container", "cloudscheduler", "eventarc", "pubsub", "apigateway"]},
+    {title: "Data & storage", icon: "database", keys: ["storage", "artifactregistry", "cloudsql", "firestore", "redis"]},
+    {title: "Networking, security & operations", icon: "shield", keys: ["vpc", "secretmanager", "kms", "iam", "iamcredentials", "monitoring"]},
+  ];
+  const grouped = new Set(GROUPS.flatMap(g => g.keys));
+  CATALOG.services.forEach(s => { if (!grouped.has(s.key)) GROUPS[2].keys.push(s.key); });   // anything new lands in the last card
+  const resGrid = el("div",{class:"res-cards"});
+  GROUPS.forEach(g => {
+    const res = el("div",{class:"card res-card"});
+    res.append(el("div",{class:"h"}, icon(g.icon), g.title));
+    const rows = el("div",{class:"res-list"});
+    g.keys.map(k => CATALOG.services.find(s => s.key === k)).filter(Boolean).forEach(s => {
     const n = el("span",{class:"res-n"}, "…");
     rows.append(el("div",{class:"res-row"}, el("span",{class:"res-ic"}, icon(s.icon)),
       el("a",{class:"res-l",onclick:()=>navigate({view:"list", service:s.key, item:null})}, s.label), n));
@@ -890,9 +1063,11 @@ function renderHome(main){
         || (Array.isArray(d) ? d : Object.values(d).find(v => Array.isArray(v))) || [];
       n.textContent = plural(items.length, UNIT[s.key] || "resource");
     }).catch(() => { n.textContent = ""; });
+    });
+    res.append(el("div",{class:"b"}, rows));
+    resGrid.append(res);
   });
-  res.append(el("div",{class:"b"}, rows));
-  wrap.append(res);
+  wrap.append(resGrid);
   main.append(wrap);
 }
 
@@ -905,6 +1080,7 @@ async function renderList(main){
   const svc = svcByKey(STATE.service);
   if (!svc) { main.append(el("div",{class:"empty"}, "Service not found")); return; }
   const wrap = el("div",{class:"wrap"});
+  wrap.append(crumbsEl());
   const head = el("div",{class:"page-head"});
   head.append(el("h1",{}, svc.label, el("span",{class:"count",id:"countChip"}, "")));
   wrap.append(head);
@@ -969,6 +1145,9 @@ async function renderList(main){
   const fi = el("input",{class:"search",placeholder:"Filter "+svc.label.toLowerCase()+"…"});
   const stats = el("span",{class:"stats"});
   toolbar.append(fi, stats);
+  let curTable = null;
+  const listKey = gridKeyOf(svc.columns.map(c => c[1]));
+  const colMenuHolder = el("span",{}); toolbar.append(colMenuHolder);
   tableWrap.append(toolbar);
   const tableHolder = el("div",{}); tableWrap.append(tableHolder);
   wrap.append(tableWrap);
@@ -990,17 +1169,19 @@ async function renderList(main){
               || (Array.isArray(data) ? data : []);
   if (svc.key === "pubsub") await decoratePubsubTopics(items, fullPath);
   decorateGcpItems(svc, items);
+  const cols = svc.columns.concat(autoColumns(items, svc.columns));
+  if (cols.length > 2) colMenuHolder.append(columnsMenu(listKey, cols.map(c => c[1]), () => curTable));
 
   const state = {filter:"", sortBy:null, sortDir:1};
   function paint(){
     tableHolder.innerHTML = "";
     let filtered = items.slice();
     const q = state.filter.trim().toLowerCase();
-    if (q) filtered = filtered.filter(it => svc.columns.some(c => {
-      const v = getPath(it, c[0]); return v != null && String(v).toLowerCase().includes(q);
+    if (q) filtered = filtered.filter(it => cols.some(c => {
+      const v = getPath(it, c[0]); return v != null && (c[3] ? c[2](v) : String(v)).toLowerCase().includes(q);
     }));
     if (state.sortBy != null) {
-      const path = svc.columns[state.sortBy][0];
+      const path = cols[state.sortBy][0];
       filtered.sort((a,b) => String(getPath(a,path)||"").localeCompare(String(getPath(b,path)||"")) * state.sortDir);
     }
     const chip = document.getElementById("countChip");
@@ -1022,9 +1203,9 @@ async function renderList(main){
     const t = el("table",{class:"gc"});
     const hdr = el("tr",{});
     hdr.append(el("th",{class:"chk"}, el("input",{type:"checkbox"})));
-    svc.columns.forEach((c, idx) => {
+    cols.forEach((c, idx) => {
       const arr = state.sortBy === idx ? (state.sortDir === 1 ? " ▲" : " ▼") : "";
-      hdr.append(el("th",{class:"sortable",onclick:()=>{
+      hdr.append(el("th",{class:"sortable","data-label": c[1],...(c[3] ? {"data-auto":"1"} : {}),onclick:()=>{
         if (state.sortBy === idx) state.sortDir = -state.sortDir;
         else { state.sortBy = idx; state.sortDir = 1; } paint();
       }}, c[1] + arr));
@@ -1037,18 +1218,20 @@ async function renderList(main){
       const rowName = String(getPath(it, svc.name_field) || it.name || "");
       const tr = el("tr",{"data-row-name": rowName});
       tr.append(el("td",{class:"chk"}, el("input",{type:"checkbox",onclick:e=>e.stopPropagation()})));
-      svc.columns.forEach((c,i) => {
+      cols.forEach((c,i) => {
         const v = getPath(it, c[0]);
-        const td = el("td",{});
-        if (i === 0) td.append(el("a",{class:"id",onclick:()=>navigate({view:"detail", item:it, detailTab:0})},
+        const td = el("td",{"data-label": c[1], ...(c[3] ? {"data-auto":"1"} : {})});
+        if (c[3]) td.append(document.createTextNode(c[2](v)));
+        else if (i === 0) td.append(el("a",{class:"id",onclick:()=>navigate({view:"detail", item:it, detailTab:0})},
           String(v||"—")));
         else if (c[0].endsWith("state") || c[0].endsWith("status")) td.append(stateBadge(v));
-        else td.append(document.createTextNode(String(v ?? "—")));
+        else td.append(document.createTextNode(String(gcpShort(v) ?? "—")));
         tr.append(td);
       });
       t.append(tr);
     });
     tableHolder.append(t);
+    curTable = t; applyColVis(t, hiddenCols(listKey));
   }
   fi.addEventListener("input", e => { state.filter = e.target.value; paint(); });
   paint();
@@ -1100,6 +1283,7 @@ async function renderDetail(main){
   const item = STATE.item || {};
   const name = String(getPath(item, svc.name_field) || item.name || "");
   const top = el("div",{class:"detail-top"});
+  top.append(crumbsEl());
   top.append(el("div",{class:"id-row"},
     el("div",{style:"flex:1"},
       el("h1",{}, name),
@@ -1141,14 +1325,15 @@ async function renderDetail(main){
         if (r.ok || [200,202,204].includes(r.status)) { toast(name+" deleted"); navigate({view:"list", item:null}); }
         else toast("Delete failed ("+r.status+")", "err");
       }}, icon("delete"), "Delete"))));
-  main.append(top);
+  const dwrap = el("div",{class:"wrap detail-card"}); main.append(dwrap);
+  const dinner = el("div",{class:"detail-inner"}); dwrap.append(dinner); dinner.append(top);
 
   // Two-pane layout
   const layout = el("div",{class:"sub-layout"});
   const nav = el("aside",{class:"sub-nav"});
   const content = el("section",{class:"sub-content"});
   layout.append(nav, content);
-  main.append(layout);
+  dinner.append(layout);
 
   // Build nav from subBlades
   const flat = [];
@@ -1177,7 +1362,7 @@ async function renderDetail(main){
     // left never lands in the tab they switched to.
     const host = el("div",{}); content.append(host);
     if (GT[t]) return GT[t](host, svc, STATE.item, item);
-    if (t === "overview" || t === "properties") return freshItem(svc, STATE.item).then(it => renderOverviewTab(host, svc, it));
+    if (t === "overview" || t === "properties") return freshItem(svc, STATE.item).then(it => renderOverviewTab(host, svc, it, t));
     if (t === "secretvalue") return renderSecretValueTab(content, svc, STATE.item);
     if (t === "sublist")  return renderSublistTab(content, svc, STATE.item, item);
   if (t === "kmsconfig") return renderKmsConfigTab(content, svc, STATE.item);
@@ -1384,13 +1569,24 @@ async function renderObjectsTab(host, svc, item){
   listHost.append(t);
 }
 
-function renderOverviewTab(host, svc, item){
-  const card = el("div",{class:"kv-card"});
-  const g = el("div",{class:"kv-grid"});
+// mode "overview": key-fact tiles + a Details card; mode "properties": just the full list (so the two tabs differ).
+function renderOverviewTab(host, svc, item, mode){
   const rows = [["Project", PROJECT], ["Region", REGION]];
-  svc.columns.forEach(c => { const v = getPath(item, c[0]); if (v != null) rows.push([c[1], String(v)]); });
-  rows.forEach(([k,v]) => g.append(el("div",{}, el("div",{class:"k"}, k), el("div",{class:"v"}, v))));
-  card.append(g); host.append(card);
+  const facts = [];   // [label, value, isState] for the tiles: the state first, then the next columns
+  svc.columns.forEach((c, i) => {
+    const v = gcpShort(getPath(item, c[0])); if (v == null) return;
+    rows.push([c[1], String(v)]);
+    if (i === 0) return;   // the name is the page title
+    const isState = /(state|status)$/i.test(c[0]);
+    if (isState) facts.unshift([c[1], v, true]); else facts.push([c[1], v, false]);
+  });
+  // Every field is its own small card. Overview leads with the key facts (larger) and lists the remaining
+  // fields as cards; Properties lists every field.
+  const card = (label, v, big) => el("div",{class:"fld-card" + (big ? " key" : "")},
+    el("div",{class:"fld-k"}, label), el("div",{class:"fld-v"}, v instanceof Node ? v : fmtVal(v)));
+  // Overview = one read-only grid of everything (no summary chips); the state shows as a badge in its row.
+  const shown = rows.map(([k, v]) => /(state|status)$/i.test(k) ? [k, stateBadge(v)] : [k, v]);
+  host.append(overviewGrid(svc, item, shown));
   // Codespaces sandbox: reach this Cloud SQL instance from a remote laptop through
   // the jump host. Present only when in a Codespace with a real backend connection
   // (guarded — a no-op everywhere else).
@@ -1406,6 +1602,56 @@ function renderOverviewTab(host, svc, item){
     c2.append(el("div",{style:"font-size:11.5px;color:var(--hint);margin-top:8px"}, ch.note));
     host.append(c2);
   }
+}
+// Overview: every field of the resource in one read-only grid (Property | Value), grouped by section.
+// General = the console's own summary fields; each top-level API field then gets its own section, with
+// nested objects flattened to "Parent › child". Credentials are never shown.
+function overviewGrid(svc, item, general){
+  const sections = [{title: "General", rows: general.map(([k, v]) => [k, v])}];
+  const empty = x => x === undefined || x === null || x === "" || (Array.isArray(x) && !x.length) || (typeof x === "object" && !Array.isArray(x) && !Object.keys(x).length);
+  const details = {title: "Details", rows: []};
+  const taken = new Set(svc.columns.map(c => String(c[0]).split(".")[0]));
+  taken.add("connect_help");
+  const walk = (obj, prefix, rows, depth) => {
+    Object.keys(obj).forEach(k => {
+      if (AUTO_SKIP.test(k) || AUTO_SECRET.test(k) || /^__/.test(k)) return;
+      const v = obj[k], label = (prefix ? prefix + " › " : "") + autoHumanize(k);
+      if (v && typeof v === "object" && !Array.isArray(v) && depth < 3 && Object.keys(v).length) walk(v, label, rows, depth + 1);
+      else rows.push([label, empty(v) ? "Not set" : (Array.isArray(v) && v.some(x => x && typeof x === "object") && v.length > 1
+          ? v.map(x => autoFmt(x)).join("\n") : autoFmt(v))]);
+    });
+  };
+  Object.keys(item || {}).forEach(k => {
+    if (AUTO_SKIP.test(k) || AUTO_SECRET.test(k) || /^__/.test(k) || taken.has(k)) return;
+    const v = item[k], rows = [];
+    if (v && typeof v === "object" && !Array.isArray(v)) walk(v, "", rows, 1); else rows.push([autoHumanize(k), empty(v) ? "Not set" : (Array.isArray(v) && v.length > 1 && v.some(x => x && typeof x === "object") ? v.map(x => autoFmt(x)).join("\n") : autoFmt(v))]);
+    if (!rows.length) return;
+    if (rows.length === 1 && rows[0][0] === autoHumanize(k)) details.rows.push(rows[0]); else sections.push({title: autoHumanize(k), rows});
+  });
+  if (details.rows.length) sections.splice(1, 0, details);
+  const seen = new Set(general.map(r => String(r[0]).toLowerCase()));
+  sections.slice(1).forEach(s => { s.rows = s.rows.filter(r => !(s.title === "Details" && seen.has(String(r[0]).toLowerCase()))); });
+  const wrap = el("div",{class:"table-wrap"});
+  const tb = el("div",{class:"table-toolbar"});
+  const fi = el("input",{class:"search",placeholder:"Filter properties…"}); const stats = el("span",{class:"stats"});
+  tb.append(fi, stats); wrap.append(tb);
+  const holder = el("div",{class:"ov-scroll"}); wrap.append(holder);
+  const paint = () => {
+    holder.innerHTML = ""; const q = fi.value.trim().toLowerCase(); let n = 0;
+    const t = el("table",{class:"gc ov-grid","data-auto":"1"});
+    t.append(el("tr",{}, el("th",{}, "Property"), el("th",{}, "Value")));
+    sections.forEach(s => {
+      const rows = s.rows.filter(([k, v]) => !q || (k + " " + (v instanceof Node ? v.textContent : v) + " " + s.title).toLowerCase().includes(q));
+      if (!rows.length) return;
+      t.append(el("tr",{class:"ov-sec"}, el("td",{colspan:"2"}, s.title)));
+      rows.forEach(([k, v]) => { n++; t.append(el("tr",{}, el("td",{class:"ov-k"}, k),
+        el("td",{class:"ov-v"}, v instanceof Node ? v : fmtVal(v)))); });
+    });
+    stats.textContent = n + " propert" + (n === 1 ? "y" : "ies");
+    holder.append(n ? t : el("div",{class:"empty"}, "No matching properties."));
+  };
+  fi.addEventListener("input", paint); paint();
+  return wrap;
 }
 // Cloud Scheduler — key/value detail panes; `fields` = [[field,label],…] off the job view.
 function renderSchedKvTab(host, item, fields){
@@ -1560,23 +1806,139 @@ function kvCardOf(title, pairs){
   card.append(g);
   return card;
 }
-function tableOf(cols, rows, actions){
+// ---- Column chooser (every grid): a "Columns" button that shows/hides columns, remembered per grid ----------
+function gridKeyOf(labels){ return (STATE.service || "") + "|" + labels.join("|"); }
+function hiddenCols(key){ try { return new Set(JSON.parse(localStorage.getItem("vyomi.gcp.cols." + key) || "[]")); } catch (_) { return new Set(); } }
+function saveHiddenCols(key, set){ try { if (set.size) localStorage.setItem("vyomi.gcp.cols." + key, JSON.stringify([...set])); else localStorage.removeItem("vyomi.gcp.cols." + key); } catch (_) {} }
+function applyColVis(table, hidden){
+  if (!table) return;
+  table.querySelectorAll("[data-label]").forEach(c => { c.style.display = hidden.has(c.getAttribute("data-label")) ? "none" : ""; });
+}
+
+// ── Show every field in the grids: besides the console's curated columns, each list also gets one column per
+//    remaining property / label / date the records carry (hidden or shown via the Columns menu). ──
+const AUTO_SKIP = /^(kind|etag|selfLink|selfLinkWithId|id|uid|fingerprint|labelFingerprint|_.*)$/i;
+// never put credentials in a list: passwords, secrets, tokens, private keys
+const AUTO_SECRET = /pass(word|wd)?|secret|token|private|credential|api_?key|auth(orization)?$/i;
+function autoHumanize(s){ return String(s).replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/[_-]+/g, " ").replace(/^./, c => c.toUpperCase()); }
+// The API returns resource references as self-links ("…/zones/us-central1-a", "projects/p/…/machineTypes/e2-medium");
+// the console shows the resource's name, as Google Cloud does.
+function gcpShort(v){
+  return (typeof v === "string" && /^(https?:\/\/|projects\/)\S*\/(zones|regions|machineTypes|networks|subnetworks|diskTypes|locations|instanceGroups)\/[^\/\s]+$/.test(v)) ? v.slice(v.lastIndexOf("/") + 1) : v;
+}
+function autoFmt(v){
+  v = gcpShort(v);
+  const empty = x => x === undefined || x === null || x === "" || (Array.isArray(x) && !x.length) || (typeof x === "object" && !Array.isArray(x) && !Object.keys(x).length);
+  const one = x => {   // one element: the field that names it, else a short "key: value" list
+    x = gcpShort(x);
+    if (x === null || typeof x !== "object") return String(x);
+    for (const k of ["name", "deviceName", "displayName", "email", "id", "key", "role", "type"]) if (!empty(x[k])) return String(gcpShort(x[k]));
+    const sc = Object.entries(x).filter(([k, y]) => y !== null && typeof y !== "object" && y !== "" && !/^(kind|etag|fingerprint)$/i.test(k)).slice(0, 3);
+    return sc.length ? sc.map(([k, y]) => k + ": " + gcpShort(y)).join(", ") : "…";
+  };
+  if (empty(v)) return "—";
+  if (Array.isArray(v)) return v.map(one).join(", ");
+  if (typeof v === "object") {
+    const ks = Object.keys(v).filter(k => !/^(kind|etag|fingerprint)$/i.test(k) && !empty(v[k]));
+    if (!ks.length) return "—";
+    if (ks.length === 1 && Array.isArray(v[ks[0]])) return v[ks[0]].map(one).join(", ");
+    return ks.map(k => k + ": " + (Array.isArray(v[k]) ? v[k].map(one).join("; ") : typeof v[k] === "object" ? one(v[k]) : gcpShort(v[k]))).join(", ");
+  }
+  return String(v);
+}
+function autoColumns(items, base){
+  if (!items || !items.length) return [];
+  const used = new Set(base.map(c => String(c[0]).split(".")[0]));
+  const labels = new Set(base.map(c => String(c[1]).toLowerCase()));
+  const out = [], seen = new Set();
+  const add = (path, label) => {
+    let l = label, n = 2; while (labels.has(l.toLowerCase())) l = label + " (" + n++ + ")";
+    if (seen.has(path) || out.length >= 40) return; seen.add(path); labels.add(l.toLowerCase());
+    out.push([path, l, autoFmt, true]);
+  };
+  const keys = []; items.forEach(it => Object.keys(it || {}).forEach(k => { if (!keys.includes(k)) keys.push(k); }));
+  keys.forEach(k => {
+    if (used.has(k) || AUTO_SKIP.test(k) || AUTO_SECRET.test(k) || /^__/.test(k)) return;
+    const sample = (items.map(it => it[k]).find(v => v !== undefined && v !== null && v !== "")) ;
+    if (sample && typeof sample === "object" && !Array.isArray(sample) && !/label|tag/i.test(k)) {
+      const subs = []; items.forEach(it => Object.keys((it && it[k]) || {}).forEach(s => { if (!subs.includes(s)) subs.push(s); }));
+      subs.forEach(s => { if (!AUTO_SKIP.test(s) && !AUTO_SECRET.test(s)) add(k + "." + s, autoHumanize(k) + " " + autoHumanize(s).toLowerCase()); });
+    } else add(k, autoHumanize(k));
+  });
+  return out;
+}
+// labels: column headers in order; the first (the row's name/link) stays visible. getTable(): the table to update.
+function columnsMenu(key, labels, getTable){
+  const hidden = hiddenCols(key);
+  const root = el("div",{class:"vy-colmenu"});
+  const btn = el("button",{class:"btn", type:"button", title:"Show or hide columns"}, icon("view_column"), "Columns");
+  const pop = el("div",{class:"vy-colpop"}); pop.hidden = true;
+  const boxes = [];
+  function sync(){ saveHiddenCols(key, hidden); applyColVis(getTable(), hidden); }
+  labels.forEach((l, i) => {
+    const cb = el("input",{type:"checkbox"}); cb.checked = !hidden.has(l); if (i === 0) cb.disabled = true;
+    cb.addEventListener("change", () => { if (cb.checked) hidden.delete(l); else hidden.add(l); sync(); });
+    boxes.push(cb);
+    pop.append(el("label",{class:"vy-colrow"}, cb, el("span",{}, l)));
+  });
+  pop.append(el("div",{class:"vy-colfoot"}, el("a",{onclick:()=>{ hidden.clear(); boxes.forEach(b => b.checked = true); sync(); }}, "Show all")));
+  btn.addEventListener("click", e => { e.stopPropagation(); pop.hidden = !pop.hidden; });
+  pop.addEventListener("click", e => e.stopPropagation());
+  document.addEventListener("click", () => { pop.hidden = true; });
+  root.append(btn, pop);
+  root.sync = sync;
+  return root;
+}
+// A standard on/off switch (not a button). onChange(checked) runs when the user flips it.
+function toggleEl(on, onChange){
+  const lab = el("label",{class:"vy-sw"});
+  const inp = el("input",{type:"checkbox"}); inp.checked = !!on;
+  inp.addEventListener("change", async () => { inp.disabled = true; try { await onChange(inp.checked); } finally { inp.disabled = false; } });
+  lab.append(inp, el("span",{class:"vy-sw-t"}));
+  return lab;
+}
+// opts.select = {can(row)->bool, onChange()}: a leading checkbox column; opts.ctx is handed to cell renderers.
+function tableOf(cols, rows, actions, opts){
+  opts = opts || {};
+  if (cols.length >= 3 && !opts.noAuto && rows && rows.length && rows.every(r => r && typeof r === "object" && !(r instanceof Node)))
+    cols = cols.concat(autoColumns(rows, cols).map(c => [c[0], c[1], row => c[2](getPath(row, c[0])), true]));
   const t = el("table",{class:"gc"});
-  const hr = el("tr",{}, ...cols.map(c => el("th",{}, c[1])));
+  const sel = opts.select;
+  const hr = el("tr",{});
+  const boxes = [];
+  if (sel) {
+    const all = el("input",{type:"checkbox", title:"Select all"});
+    all.addEventListener("change", () => { boxes.forEach(b => { if (!b.disabled) b.checked = all.checked; }); sel.onChange(); });
+    hr.append(el("th",{class:"chk"}, all));
+  }
+  cols.forEach(c => hr.append(el("th",{"data-label": c[1], ...(c[3] ? {"data-auto":"1"} : {})}, c[1])));
   if (actions && actions.length) hr.append(el("th",{}, "Actions"));
   t.append(hr);
-  rows.forEach(row => {
-    const tr = el("tr",{}, ...cols.map(c => {
-      const v = c[2] ? c[2](row) : getPath(row, c[0]);
-      return el("td",{}, v instanceof Node ? v : fmtVal(v));
-    }));
+  rows.forEach((row, i) => {
+    const tr = el("tr",{});
+    if (sel) {
+      const b = el("input",{type:"checkbox"}); b.disabled = !sel.can(row); b._row = row;
+      b.addEventListener("change", () => sel.onChange());
+      boxes.push(b); tr.append(el("td",{class:"chk"}, b));
+    }
+    cols.forEach(c => {
+      const v = c[2] ? c[2](row, opts.ctx || {}) : getPath(row, c[0]);
+      tr.append(el("td",{"data-label": c[1], ...(c[3] ? {"data-auto":"1"} : {})}, v instanceof Node ? v : (c[3] ? String(v) : fmtVal(v))));
+    });
     if (actions && actions.length) tr.append(el("td",{style:"white-space:nowrap"},
       ...actions.filter(a => !a.when || a.when(row)).map(a =>
         el("button",{class:"btn" + (a.danger ? " danger" : ""), style:"margin-right:6px", onclick:()=>a.run(row)},
           icon(a.icon || "edit"), a.label))));
     t.append(tr);
   });
-  return t;
+  const selectedRows = () => boxes.filter(b => b.checked && !b.disabled).map(b => b._row);
+  if (cols.length < 3) { t.selectedRows = selectedRows; return t; }   // a two-column key/value list has nothing to hide
+  const key = gridKeyOf(cols.map(c => c[1]));
+  const menu = columnsMenu(key, cols.map(c => c[1]), () => t);
+  const box = el("div",{class:"vy-grid"}, el("div",{class:"vy-grid-tools"}, menu), t);
+  applyColVis(t, hiddenCols(key));
+  box.selectedRows = selectedRows;
+  return box;
 }
 function emptyOf(iconName, text, hint){
   return el("div",{class:"empty"}, el("span",{class:"ic material-symbols-outlined"}, iconName), el("div",{}, text),
@@ -1617,23 +1979,37 @@ function inlineForm(fields, submitLabel, onSubmit, onCancel){
 // Key/value editor (metadata, labels, env vars, flags): read view + Edit → Save.
 function kvEditor(host, opts){
   // opts: {title, load: async()=>[[k,v]...], save: async(pairs)=>r, keyLabel, valueLabel, addLabel, emptyText, multiline}
-  let pairs = [], editing = false;
+  // opts.fixed: async()=>[[k,v]...] read-only rows listed first (the resource's own fields);
+  // opts.modified: async()=>ISO time shown as "Last modified".
+  let pairs = [], fixed = [], modified = "", editing = false;
   const wrap = el("div",{}); host.append(wrap);
-  async function load(){ pairs = await opts.load(); paint(); }
+  async function load(){
+    pairs = await opts.load();
+    fixed = opts.fixed ? await opts.fixed().catch(() => []) : [];
+    modified = opts.modified ? await opts.modified().catch(() => "") : "";
+    paint();
+  }
+  const when = iso => { const d = new Date(iso); return isNaN(d) ? "" : d.toLocaleString([], {dateStyle:"medium", timeStyle:"medium"}); };
   function paint(){
     wrap.innerHTML = "";
-    const bar = el("div",{style:"display:flex;gap:8px;margin-bottom:12px"});
+    const bar = el("div",{style:"display:flex;gap:8px;margin-bottom:12px;align-items:center"});
     if (!editing) bar.append(el("button",{class:"btn", onclick:()=>{ editing = true; paint(); }}, icon("edit"), "Edit"),
       el("button",{class:"btn", onclick:()=>{ editing = true; pairs.push(["", ""]); paint(); }}, icon("add"), opts.addLabel || "Add item"));
+    if (opts.modified) bar.append(el("span",{class:"vy-modified", title: modified || "", style:"margin-left:auto;font-size:12.5px;color:var(--sub)"},
+      "Last modified: ", el("b",{style:"font-weight:500;color:var(--ink)"}, modified ? when(modified) : "Never")));
     wrap.append(bar);
+    const lock = el("span",{class:"material-symbols-outlined", title:"Set by the resource — read-only", style:"font-size:15px;color:var(--hint);vertical-align:middle"}, "lock");
     if (!editing) {
-      if (!pairs.length) { wrap.append(emptyOf(opts.emptyIcon || "data_object", opts.emptyText || "Nothing set.")); return; }
-      wrap.append(tableOf([["k", opts.keyLabel || "Key"], ["v", opts.valueLabel || "Value"]],
-        pairs.map(([k, v]) => ({k, v: String(v)}))));
+      if (!pairs.length && !fixed.length) { wrap.append(emptyOf(opts.emptyIcon || "data_object", opts.emptyText || "Nothing set.")); return; }
+      const rowsAll = [...fixed.map(([k, v]) => ({k, v: String(v), src: "Resource"})), ...pairs.map(([k, v]) => ({k, v: String(v), src: "Custom"}))];
+      wrap.append(tableOf(opts.fixed ? [["k", opts.keyLabel || "Key"], ["v", opts.valueLabel || "Value"], ["src", "Source"]]
+                                      : [["k", opts.keyLabel || "Key"], ["v", opts.valueLabel || "Value"]],
+        opts.fixed ? rowsAll : pairs.map(([k, v]) => ({k, v: String(v)})), null, {noAuto: true}));
       return;
     }
     const tbl = el("table",{class:"gc"});
     tbl.append(el("tr",{}, el("th",{}, opts.keyLabel || "Key"), el("th",{}, opts.valueLabel || "Value"), el("th",{style:"width:44px"}, "")));
+    fixed.forEach(([k, v]) => tbl.append(el("tr",{class:"vy-fixed"}, el("td",{style:"color:var(--sub)"}, k), el("td",{style:"color:var(--sub);overflow-wrap:anywhere"}, String(v)), el("td",{}, lock.cloneNode(true)))));
     const rows = [];
     pairs.forEach(([k, v]) => {
       const ki = el("input",{style:"width:100%;box-sizing:border-box;border:1px solid #ccc;border-radius:3px;padding:4px"}); ki.value = k;
@@ -1669,6 +2045,20 @@ async function childList(host, opts){
     wrap.innerHTML = "";
     const bar = el("div",{style:"display:flex;gap:8px;margin-bottom:12px;align-items:center"});
     if (opts.create) bar.append(el("button",{class:"btn primary", onclick:()=>{ formOpen = !formOpen; load(); }}, icon(opts.create.icon || "add"), opts.create.label));
+    let tbl = null;
+    const bd = opts.bulkDelete;
+    const delBtn = bd ? el("button",{class:"btn danger", disabled:true, onclick: async () => {
+      const picked = tbl ? tbl.selectedRows() : []; if (!picked.length) return;
+      const can = bd.can || (() => true);
+      const rows = picked.filter(can), skipped = picked.length - rows.length;
+      if (!rows.length) { toast((bd.cantMsg || "These items are system-managed and can't be deleted") + (skipped > 1 ? " (" + skipped + " selected)" : ""), "err"); return; }
+      if (!confirm(bd.confirm(rows) + (skipped ? "\n\n" + skipped + " selected system-managed " + (skipped === 1 ? "item" : "items") + " will be skipped." : ""))) return;
+      let failed = 0;
+      for (const row of rows) { const rr = await bd.run(row); if (rr && !rr.ok) { failed++; toast("Delete failed: " + errMsg(rr), "err"); } }
+      if (failed < rows.length) toast((rows.length - failed) + " " + ((rows.length - failed) === 1 ? (opts.noun || "item") : (opts.nouns || "items")) + " deleted" + (skipped ? " · " + skipped + " system-managed skipped" : ""));
+      load();
+    }}, icon("delete"), bd.label || "Delete") : null;
+    if (delBtn) bar.append(delBtn);
     (opts.actions || []).forEach(a => bar.append(el("button",{class:"btn", onclick: async ()=>{
       const rr = await a.run(); if (rr && !rr.ok) toast(a.label + " failed: " + errMsg(rr), "err"); else { toast(a.label + " done"); load(); }
     }}, icon(a.icon || "bolt"), a.label)));
@@ -1681,11 +2071,14 @@ async function childList(host, opts){
       else toast("Failed: " + errMsg(rr), "err");
     }, ()=>{ formOpen = false; load(); }));
     if (!items.length) { wrap.append(emptyOf(opts.emptyIcon || "inbox", opts.empty || "Nothing here yet.")); return; }
-    wrap.append(tableOf(opts.columns, items, (opts.rowActions || []).map(a => ({...a, run: async row => {
+    tbl = tableOf(opts.columns, items, (opts.rowActions || []).map(a => ({...a, run: async row => {
       if (a.confirm && !confirm(a.confirm(row))) return;
       const rr = await a.run(row);
       if (rr && !rr.ok) toast(a.label + " failed: " + errMsg(rr), "err"); else { toast(a.label + " done"); load(); }
-    }}))));
+    }})), {ctx: {reload: load},
+      select: bd ? {can: () => true, onChange: () => { const n = tbl.selectedRows().length; delBtn.disabled = !n;
+        delBtn.lastChild.textContent = (bd.label || "Delete") + (n ? " (" + n + ")" : ""); }} : null});
+    wrap.append(tbl);
     if (opts.after) opts.after(wrap, items);
   }
   await load();
@@ -1758,8 +2151,26 @@ GT.tags = async function(host, svc, item){
   kvEditor(host, {
     load: async () => { const it = await tabView(svc, item, "Labels"); const l = (it.labels && typeof it.labels === "object") ? it.labels : {}; STATE.item = {...STATE.item, labels: l}; return Object.entries(l); },
     save: pairs => subPost(svc, "setLabels", tabName(svc, item), {labels: Object.fromEntries(pairs)}),
+    modified: async () => { const r = await subGet(svc, "getMeta", tabName(svc, item)); return (r.json && r.json.labelsModified) || ""; },
     keyLabel: "Key", valueLabel: "Value", addLabel: "Add label", emptyIcon: "sell",
     emptyText: "No labels on " + tabName(svc, item) + ". Labels are key-value pairs that help organize and filter resources.",
+  });
+};
+// Properties: every field the resource carries (read-only, set by the service) plus custom properties you can
+// add, edit and save — like Labels, with the time they were last changed.
+GT.properties = async function(host, svc, item){
+  const name = tabName(svc, item);
+  const fresh = await freshItem(svc, STATE.item);
+  kvEditor(host, {
+    fixed: async () => {
+      const cols = svc.columns.map(c => [c[0], c[1], v => autoFmt(v)]).concat(autoColumns([fresh], svc.columns));
+      return cols.map(c => [c[1], c[2](getPath(fresh, c[0]))]).filter(([, v]) => v !== "—");
+    },
+    load: async () => { const r = await subGet(svc, "getProperties", name); return Object.entries((r.json && r.json.properties) || {}); },
+    save: pairs => subPost(svc, "setProperties", name, {properties: Object.fromEntries(pairs)}),
+    modified: async () => { const r = await subGet(svc, "getProperties", name); return (r.json && r.json.modified) || ""; },
+    keyLabel: "Property", valueLabel: "Value", addLabel: "Add property", emptyIcon: "data_object",
+    emptyText: "No properties on " + name + ".",
   });
 };
 // Logs: Cloud Logging's audit entries for this resource (admin activity), newest first.
@@ -1885,7 +2296,19 @@ GT.gceconnect = async function(host, svc, item){
   c.append(el("div",{style:mono}, "gcloud compute ssh " + name + " --zone=" + zone + " --project=" + PROJECT));
   c.append(el("div",{class:"k", style:"font-size:11.5px;color:var(--sub);margin-top:10px"}, "Serial console"));
   c.append(el("div",{style:mono}, "gcloud compute connect-to-serial-port " + name + " --zone=" + zone + " --project=" + PROJECT));
-  if (ext) { c.append(el("div",{class:"k", style:"font-size:11.5px;color:var(--sub);margin-top:10px"}, "Plain SSH")); c.append(el("div",{style:mono}, "ssh -i ~/.ssh/google_compute_engine $USER@" + ext)); }
+  // SSH from THIS machine: the appliance publishes the VM's sshd on a host port and serves the
+  // key, so show the commands that really work (the external IP here is just the appliance
+  // host, so `ssh $USER@<natIP>` would hit port 22 on the user's own machine).
+  let ci = null;
+  try { const r = await fetch(ORIGIN + "/api/gcp/compute/instances/" + encodeURIComponent(name) + "/connect-info"); if (r.ok) ci = await r.json(); } catch(_){}
+  if (ci && ci.ok && ci.ssh) {
+    c.append(el("div",{class:"k", style:"font-size:11.5px;color:var(--sub);margin-top:10px"}, "SSH from this machine — 1) fetch the key"));
+    if (ci.ssh.key_fetch_command) c.append(el("div",{style:mono}, ci.ssh.key_fetch_command));
+    c.append(el("div",{class:"k", style:"font-size:11.5px;color:var(--sub);margin-top:10px"}, "2) connect"));
+    c.append(el("div",{style:mono}, ci.ssh.command));
+  } else if (ext && !/^(localhost|127\.0\.0\.1)$/.test(ext)) {
+    c.append(el("div",{class:"k", style:"font-size:11.5px;color:var(--sub);margin-top:10px"}, "Plain SSH")); c.append(el("div",{style:mono}, "ssh -i ~/.ssh/google_compute_engine $USER@" + ext));
+  }
   host.append(c);
   if (gceStatus(it) !== "RUNNING") host.append(el("div",{style:"font-size:12px;color:var(--sub)"}, "Start the instance to connect — SSH needs a RUNNING VM."));
 };
@@ -2338,16 +2761,20 @@ GT.vpcsubnets = async function(host, svc, item){
     empty: name + " is a custom-mode network with no subnets yet — add one per region you deploy to.",
     columns: [["name", "Name"], ["region", "Region"], ["ipCidrRange", "Internal IP ranges"], ["gatewayAddress", "Gateway"],
               ["secondaryIpRanges", "Secondary ranges", s => (s.secondaryIpRanges || []).map(r => r.rangeName + " " + r.ipCidrRange).join(", ") || "No secondary ranges"],
-              ["privateIpGoogleAccess", "Private Google Access", s => s.privateIpGoogleAccess ? "On" : "Off"],
+              ["privateIpGoogleAccess", "Private Google Access", (s, ctx) => toggleEl(s.privateIpGoogleAccess, async on => {
+                const r = await subPost(svc, "setPrivateGoogleAccess", name, {name: s.name, region: s.region, enabled: on});
+                if (r && !r.ok) toast("Private Google Access failed: " + errMsg(r), "err"); else toast("Private Google Access " + (on ? "on" : "off") + " for " + s.name);
+                ctx.reload();
+              })],
               ["mode", "Created by", s => s.autoCreated ? "Auto mode" : "Custom"]],
     create: {label: "Add subnet", submit: "Add", done: "Subnet added",
       fields: [{name: "name", label: "Name", placeholder: name + "-subnet"}, {name: "region", label: "Region", type: "select", value: REGION, options: GCP_REGIONS},
                {name: "ipCidrRange", label: "IPv4 range", placeholder: "10.10.0.0/24"},
                {name: "privateIpGoogleAccess", label: "Private Google Access", type: "checkbox"}],
       run: v => subPost(svc, "createSubnet", name, {name: v.name.trim(), region: v.region, ipCidrRange: v.ipCidrRange.trim(), privateIpGoogleAccess: v.privateIpGoogleAccess})},
-    rowActions: [{label: "Toggle Private Google Access", icon: "toggle_on", run: s => subPost(svc, "setPrivateGoogleAccess", name, {name: s.name, region: s.region, enabled: !s.privateIpGoogleAccess})},
-                 {label: "Delete", icon: "delete", danger: true, when: s => !s.autoCreated, confirm: s => "Delete subnet " + s.name + " (" + s.region + ")?",
-                  run: s => subPost(svc, "deleteSubnet", name, {name: s.name, region: s.region})}],
+    bulkDelete: {label: "Delete", cantMsg: "Auto-mode subnets can't be deleted", can: s => !s.autoCreated,
+      confirm: rows => rows.length === 1 ? "Delete subnet " + rows[0].name + " (" + rows[0].region + ")?" : "Delete " + rows.length + " subnets?",
+      run: s => subPost(svc, "deleteSubnet", name, {name: s.name, region: s.region})},
   });
 };
 function fwRules(f){
@@ -2392,8 +2819,9 @@ GT.vpcroutes = async function(host, svc, item){
                {name: "nextHop", label: "Next hop IP / instance", placeholder: "10.128.0.5", width: 140},
                {name: "priority", label: "Priority", type: "number", value: 1000, width: 90}],
       run: v => subPost(svc, "createRoute", name, {...v, name: v.name.trim(), priority: Number(v.priority)})},
-    rowActions: [{label: "Delete", icon: "delete", danger: true, when: r => r.type !== "Subnet route" && r.type !== "Peering subnet route",
-      confirm: r => "Delete route " + r.name + "?", run: r => subPost(svc, "deleteRoute", name, {name: r.name})}],
+    bulkDelete: {label: "Delete", cantMsg: "System subnet routes can't be deleted", can: r => r.type !== "Subnet route" && r.type !== "Peering subnet route",
+      confirm: rows => rows.length === 1 ? "Delete route " + rows[0].name + "?" : "Delete " + rows.length + " routes?",
+      run: r => subPost(svc, "deleteRoute", name, {name: r.name})},
   });
 };
 GT.vpcpeerings = async function(host, svc, item){
@@ -2419,12 +2847,15 @@ GT.vpcflowlogs = async function(host, svc, item){
   await childList(host, {
     load: () => subGet(svc, "listFlowLogs", name), noun: "subnet", nouns: "subnets", emptyIcon: "subject",
     empty: name + " has no subnets to log flows for.",
-    columns: [["name", "Subnet"], ["region", "Region"], ["ipCidrRange", "Range"], ["enable", "Flow logs", s => s.enable ? "On" : "Off"],
+    columns: [["name", "Subnet"], ["region", "Region"], ["ipCidrRange", "Range"], ["enable", "Flow logs", (s, ctx) => toggleEl(s.enable, async on => {
+                const r = await subPost(svc, "setFlowLogs", name, on
+                  ? {name: s.name, region: s.region, enable: true, aggregationInterval: "INTERVAL_5_SEC", flowSampling: 0.5, metadata: "INCLUDE_ALL_METADATA"}
+                  : {name: s.name, region: s.region, enable: false});
+                if (r && !r.ok) toast("Flow logs failed: " + errMsg(r), "err"); else toast("Flow logs " + (on ? "on" : "off") + " for " + s.name);
+                ctx.reload();
+              })],
               ["aggregationInterval", "Aggregation interval", s => s.enable ? s.aggregationInterval : "Not logging"],
               ["flowSampling", "Sample rate", s => s.enable ? Math.round(s.flowSampling * 100) + "%" : "Not logging"]],
-    rowActions: [{label: "Turn on", icon: "toggle_on", when: s => !s.enable,
-                  run: s => subPost(svc, "setFlowLogs", name, {name: s.name, region: s.region, enable: true, aggregationInterval: "INTERVAL_5_SEC", flowSampling: 0.5, metadata: "INCLUDE_ALL_METADATA"})},
-                 {label: "Turn off", icon: "toggle_off", when: s => s.enable, run: s => subPost(svc, "setFlowLogs", name, {name: s.name, region: s.region, enable: false})}],
   });
 };
 
@@ -2989,13 +3420,18 @@ GT.evdestination = async function(host, svc, item){
 // ========== END DETAIL TABS =================================================
 
 // ========== CREATE — collapsible-sections form + right summary card =========
+function createTitle(svc){
+  const T={compute:"Create an instance",cloudsql:"Create a Cloud SQL instance",storage:"Create a bucket",container:"Create a cluster",pubsub:"Create a topic",functions:"Create function",vpc:"Create a VPC network",secretmanager:"Create secret",kms:"Create a key ring",cloudscheduler:"Create a job",iam:"Create service account",iamcredentials:"Create credential",monitoring:"Create alerting policy",redis:"Create a Redis instance",firestore:"Create a database",artifactregistry:"Create repository",eventarc:"Create trigger",apigateway:"Create gateway"};
+  return T[svc.key] || ("Create " + svc.label.replace(/s$/,""));
+}
 function renderCreate(main){
   main.innerHTML = "";  // self-clear so any caller is safe
   const svc = svcByKey(STATE.service);
   if (!svc) { main.append(el("div",{class:"empty"}, "Service not found")); return; }
   const wrap = el("div",{class:"wizard-page"});
+  wrap.append(crumbsEl());
   wrap.append(el("div",{class:"page-head"}, el("h1",{},
-    svc.key === "compute" ? "Create an instance" : "Create " + svc.label.replace(/s$/,"").toLowerCase())));
+    createTitle(svc))));
   if (svc.wizard && Array.isArray(svc.wizard.tabs)) {
     renderCollapsibleWizard(wrap, svc);
   } else {
@@ -3182,11 +3618,6 @@ function renderCollapsibleWizard(host, svc){
     });
     if (n === 0) aside.append(el("div",{style:"font-size:12.5px;color:var(--sub);padding:8px 0"}, "Fill in fields on the left — your choices appear here."));
 
-    // Cost estimate stub (GCP-B will wire real estimate)
-    aside.append(el("div",{class:"cost"},
-      el("div",{class:"label"}, "Monthly estimate"),
-      el("div",{class:"value"}, "$0.00 USD"),
-      el("div",{class:"period"}, "estimated cost for this resource")));
     // Equivalent code expander placeholder (GCP-B)
     aside.append(el("div",{class:"equiv-code"},
       el("div",{class:"head"}, icon("code"), "EQUIVALENT CODE",
@@ -3229,7 +3660,7 @@ function renderCollapsibleWizard(host, svc){
     const r = await api(svc.create_method, path, body);
     if (r.ok) { toast(name + " created"); recordNotif("ok", "Created " + name); navigate({view:"list", item:null}); }
     else {
-      const m = (r.json && (r.json.detail || (r.json.error && r.json.error.message))) || "";
+      const m = (r.json && (r.json.detail || r.json.message || (r.json.error && r.json.error.message))) || "";
       toast("Create failed (" + r.status + "): " + m, "err");
     }
   }
@@ -3376,6 +3807,20 @@ fetchDiskHealth();
 setInterval(fetchDiskHealth, 30000);
 </script>
 <script src="/assets/lazy_backends.js">
+</script>
+<script src="/assets/vyomi-appbar.js" data-cloud="gcp" defer></script>
+<script>
+/* Wrap every grid (table.gc) in a .vy-scroll frame as it is rendered, so wide/long grids scroll
+   (horizontal + vertical, header pinned) instead of being clipped by the card. */
+(function(){
+  function wrap(t){ var p=t.parentNode; if(!p||(p.classList&&p.classList.contains('vy-scroll')))return;
+    var d=document.createElement('div'); d.className='vy-scroll'; p.insertBefore(d,t); d.appendChild(t); }
+  function scan(n){ if(n.nodeType!==1)return; if(n.matches&&n.matches('table.gc'))wrap(n);
+    if(n.querySelectorAll){var l=n.querySelectorAll('table.gc');for(var i=0;i<l.length;i++)wrap(l[i]);} }
+  new MutationObserver(function(ms){ for(var i=0;i<ms.length;i++)for(var j=0;j<ms[i].addedNodes.length;j++)scan(ms[i].addedNodes[j]); })
+    .observe(document.documentElement,{childList:true,subtree:true});
+  scan(document.documentElement);
+})();
 </script>
 </body>
 </html>

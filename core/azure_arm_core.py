@@ -254,6 +254,22 @@ def _merge(base: dict, overlay: dict) -> dict:
     return out
 
 
+# What each service SHOWS in Nano: the URL (under the Nano origin) that really answers in the
+# service worker, or an explicit limitation. __BASE__ = the Nano origin the page runs under.
+_NANO_SHOWN = {
+    "microsoft.keyvault/vaults": {"properties.vaultUri": "__BASE__/azure-data/keyvault/__NAME__/"},
+    "microsoft.servicebus/namespaces": {"properties.serviceBusEndpoint": "__BASE__/api/servicebus/topics"},
+    "microsoft.eventgrid/topics": {"properties.vyomiAccess": {
+        "endpoint": "Not available in this build: event publishing needs the offline appliance (no HTTP topic endpoint in the browser)."}},
+    "microsoft.sql/servers": {
+        "properties.fullyQualifiedDomainName": "__BASE__/api/azuresql/servers",
+        "properties.vyomiAccess": {
+            "protocol": "In-browser HTTP data plane only (no TDS wire protocol, no port 1433)",
+            "listServers": "GET __BASE__/api/azuresql/servers",
+            "query": "POST __BASE__/api/azuresql/query"}},
+}
+
+
 def _expand_tokens(obj, name: str, base: str):
     if isinstance(obj, str):
         return (obj.replace("__UUID__", str(uuid.uuid4()))
@@ -300,7 +316,12 @@ def _canonical_id(sub: str, rg, type_chain, names) -> str:
 
 
 def _view(rec: dict) -> dict:
-    return {k: v for k, v in rec.items() if not k.startswith("_")}
+    out = {k: v for k, v in rec.items() if not k.startswith("_")}
+    props = out.get("properties")
+    if isinstance(props, dict) and "administratorLoginPassword" in props:
+        # Real Azure never returns the SQL admin password; it stays stored for the data plane.
+        out["properties"] = {k: v for k, v in props.items() if k != "administratorLoginPassword"}
+    return out
 
 
 def _rg_from_id(rid: str):
@@ -368,7 +389,7 @@ class AzureArm:
             return _err(404, "NotFound", f"Not an ARM path: {path}")
         rest = path[i + len("/subscriptions/"):].split("?", 1)[0]
         self._evented = False
-        resp = self._arm(method, rest, query, body if isinstance(body, dict) else {})
+        resp = self._arm(method, rest, query, body if isinstance(body, dict) else ({"_array": body} if isinstance(body, list) else {}))
         if method != "GET" and resp.get("status", 500) < 300 and not self._evented:
             scope, typ, name = _event_target(rest)
             if scope:
@@ -400,7 +421,14 @@ class AzureArm:
                 if method == "GET":
                     return _ok({"value": list_resource_groups(self.state)})
                 return _err(405, "MethodNotAllowed", "Use PUT /resourcegroups/{name}.")
+            kids = []
+            if method == "DELETE":
+                kids = [r for r in list(self.state.values()) if isinstance(r, dict)
+                        and (r.get("_rg") or "").lower() == rest_segs[1].lower()
+                        and r.get("type") != "Microsoft.Resources/resourceGroups"]
             code, body = resource_group_item(self.state, method, rest_segs[1], payload)
+            for _r in kids:   # after removal, so "last vault gone" checks see the final state
+                self._child_deleted(_r)
             return {"status": code, "headers": {}, "body": body}
         if len(rest_segs) == 3 and rest_segs[0].lower() == "resourcegroups" \
                 and rest_segs[2].lower() == "resources" and method == "GET":
@@ -534,8 +562,21 @@ class AzureArm:
                                 f"Network security group {key.rsplit('/', 1)[-1]} cannot be deleted because it is in use.")
             rec = self.state.pop(key, None)
             ext_engine.on_delete(self.state, rec)
+            if rec is not None:
+                self._child_deleted(rec)
             return _ok(None, status=200 if rec is not None else 204)
         return _err(405, "MethodNotAllowed", f"{method} not allowed.")
+
+    def _child_deleted(self, rec):
+        """Tell the host a resource left ARM state (single DELETE or resource-group
+        cascade) so it can drop the data-plane state the resource owned (Nano wires
+        ``on_child_delete`` to purge Key Vault secrets/keys). Never breaks a delete."""
+        cb = getattr(self, "on_child_delete", None)
+        if cb is not None:
+            try:
+                cb(str(rec.get("type") or ""), rec, self.state)
+            except Exception:
+                pass
 
     def _event(self, method, scope, typ, name):
         """Activity-log hook for every successful write: ``scope`` is the resource
@@ -660,6 +701,13 @@ class AzureArm:
         for path_expr, suffix in endpoints.items():
             if _get_path(rec, path_expr) in (None, ""):
                 _set_path(rec, path_expr, base + suffix.replace("__NAME__", name))
+        if is_top:      # URLs that work in Nano's own access path (never a fake Azure hostname)
+            pub = getattr(self, "_public_base", None)
+            if pub is None:
+                pub = base
+            forced = _NANO_SHOWN.get(full_type.lower())
+            for path_expr, val in (forced or {}).items():
+                _set_path(rec, path_expr, _expand_tokens(val, name, pub))
 
         self.state[key] = rec
         return _ok(_view(rec), status=200 if existed else 201)

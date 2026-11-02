@@ -74,6 +74,22 @@
       "timeout": 300
     },
     {
+      "id": "offline-sdk-python-aws-ops4",
+      "target": "offline",
+      "cloud": "aws",
+      "kind": "sdk-python",
+      "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/test_aws_sdk_python_ops4.py",
+      "timeout": 300
+    },
+    {
+      "id": "offline-sdk-python-aws-ops3",
+      "target": "offline",
+      "cloud": "aws",
+      "kind": "sdk-python",
+      "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/test_aws_sdk_python_ops3.py",
+      "timeout": 300
+    },
+    {
       "id": "offline-sdk-python-aws-ops2",
       "target": "offline",
       "cloud": "aws",
@@ -265,11 +281,27 @@
       "timeout": 900
     },
     {
+      "id": "nano-gcp-kms-core",
+      "target": "nano",
+      "cloud": "gcp",
+      "kind": "core",
+      "cmd": "PYTHONPATH=$PWD python3 tests/conformance/test_gcp_kms_core.py",
+      "timeout": 120
+    },
+    {
+      "id": "nano-gcp-cloudsql-core",
+      "target": "nano",
+      "cloud": "gcp",
+      "kind": "core",
+      "cmd": "PYTHONPATH=$PWD python3 tests/conformance/test_gcp_cloudsql_core.py",
+      "timeout": 120
+    },
+    {
       "id": "nano-gcp-compute-core",
       "target": "nano",
       "cloud": "gcp",
       "kind": "core",
-      "cmd": "python3 tests/conformance/test_gcp_compute_core.py",
+      "cmd": "PYTHONPATH=wasm python3 tests/conformance/test_gcp_compute_core.py",
       "timeout": 120
     },
     {
@@ -277,7 +309,7 @@
       "target": "nano",
       "cloud": "aws",
       "kind": "core",
-      "cmd": "python3 tests/conformance/test_nano_persist_delete_sync.py",
+      "cmd": "PYTHONPATH=. python3 tests/conformance/test_nano_persist_delete_sync.py",
       "timeout": 120
     },
     {
@@ -993,6 +1025,30 @@
       "timeout": 600
     },
     {
+      "id": "nano-ui-aws-event-delivery",
+      "target": "nano",
+      "cloud": "aws",
+      "kind": "ui",
+      "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-nano-event-delivery.mjs",
+      "timeout": 600
+    },
+    {
+      "id": "nano-ui-gcp-eventarc-delivery",
+      "target": "nano",
+      "cloud": "gcp",
+      "kind": "ui",
+      "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-nano-gcp-azure-triggers.mjs",
+      "timeout": 600
+    },
+    {
+      "id": "nano-core-triggers",
+      "target": "nano",
+      "cloud": "gcp",
+      "kind": "api",
+      "cmd": "set -o pipefail; PYTHONPATH=. python3 tests/conformance/test_nano_triggers.py 2>&1 | sed -E 's/^  ok  /[PASS] /; s/^  (FAIL|fail)  /[FAIL] /'",
+      "timeout": 300
+    },
+    {
       "id": "nano-ui-aws-stepfunctions",
       "target": "nano",
       "cloud": "aws",
@@ -1665,6 +1721,110 @@
       "timeout": 300
     },
     {
+      "id": "offline-ui-sdk-roundtrip",
+      "target": "offline",
+      "cloud": "aws",
+      "kind": "ui",
+      "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/roundtrip/ui-sdk-roundtrip.mjs",
+      "timeout": 600
+    },
+    {
+      "id": "offline-post-create-aws-event-delivery",
+      "target": "offline",
+      "cloud": "aws",
+      "kind": "api",
+      "cmd": "python3 tests/conformance/post_create/probes/event_delivery.py aws {ENDPOINT}",
+      "timeout": 300
+    },
+    {
+      "id": "offline-post-create-gcp-event-delivery",
+      "target": "offline",
+      "cloud": "gcp",
+      "kind": "api",
+      "cmd": "python3 tests/conformance/post_create/probes/event_delivery.py gcp {ENDPOINT}",
+      "timeout": 300
+    },
+    {
+      "id": "offline-post-create-azure-event-delivery",
+      "target": "offline",
+      "cloud": "azure",
+      "kind": "api",
+      "cmd": "python3 tests/conformance/post_create/probes/event_delivery.py azure {ENDPOINT}",
+      "timeout": 300
+    },
+    {
+      "id": "offline-post-create-aws-ec2-ssh",
+      "target": "offline",
+      "cloud": "aws",
+      "kind": "api",
+      "cmd": "python3 tests/conformance/post_create/probes/vm_ssh.py aws {ENDPOINT}",
+      "timeout": 300
+    },
+    {
+      "id": "offline-post-create-gcp-gce-ssh",
+      "target": "offline",
+      "cloud": "gcp",
+      "kind": "api",
+      "cmd": "python3 tests/conformance/post_create/probes/vm_ssh.py gcp {ENDPOINT}",
+      "timeout": 300
+    },
+    {
+      "id": "offline-post-create-azure-vm-ssh",
+      "target": "offline",
+      "cloud": "azure",
+      "kind": "api",
+      "cmd": "python3 tests/conformance/post_create/probes/vm_ssh.py azure {ENDPOINT}",
+      "timeout": 300
+    },
+    {
+      "id": "offline-post-create-aws-rds-db-connect",
+      "target": "offline",
+      "cloud": "aws",
+      "kind": "api",
+      "cmd": "python3 tests/conformance/post_create/probes/db_connect.py aws {ENDPOINT}",
+      "timeout": 300
+    },
+    {
+      "id": "offline-post-create-gcp-cloudsql-db-connect",
+      "target": "offline",
+      "cloud": "gcp",
+      "kind": "api",
+      "cmd": "python3 tests/conformance/post_create/probes/db_connect.py gcp {ENDPOINT}",
+      "timeout": 300
+    },
+    {
+      "id": "nano-post-create-aws-ec2-ssh",
+      "target": "nano",
+      "cloud": "aws",
+      "kind": "ui",
+      "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-aws-post-create-ec2.mjs",
+      "timeout": 600
+    },
+    {
+      "id": "nano-post-create-gcp-gce-ssh",
+      "target": "nano",
+      "cloud": "gcp",
+      "kind": "ui",
+      "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-gcp-post-create-gce.mjs",
+      "timeout": 600
+    },
+    {
+      "id": "nano-post-create-azure-vm-ssh",
+      "target": "nano",
+      "cloud": "azure",
+      "kind": "ui",
+      "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-azure-post-create-vm.mjs",
+      "timeout": 600
+    },
+    {
+      "id": "offline-ui-console-home",
+      "target": "offline",
+      "cloud": "all",
+      "kind": "ui",
+      "cmd": "rc=0; for c in aws gcp azure; do VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/home/home_setup.py $c && VYOMI_BASE_URL={ENDPOINT} node tests/conformance/home/home_cards.mjs $c || rc=1; done; exit $rc",
+      "timeout": 600
+    },
+    {
       "id": "offline-ui-gcp-artifactregistry",
       "target": "offline",
       "cloud": "gcp",
@@ -1918,6 +2078,190 @@
       "cloud": "azure",
       "kind": "ui",
       "cmd": "VYOMI_CONSOLE_URL={ENDPOINT}/console/azure node wasm/ui-tests/validate-azure-apim-appinsights.mjs",
+      "timeout": 300
+    },
+    {
+      "id": "offline-sweepA-azure",
+      "target": "offline",
+      "cloud": "azure",
+      "kind": "api",
+      "cmd": "python3 tests/conformance/post_create/probes/sweep_azure.py {ENDPOINT}",
+      "timeout": 300
+    },
+    {
+      "id": "nano-sweepA-azure",
+      "target": "nano",
+      "cloud": "azure",
+      "kind": "ui",
+      "cmd": "NANO_DIR=$PWD/wasm node wasm/ui-tests/validate-sweepA-nano.mjs",
+      "timeout": 300
+    },
+    {
+      "id": "offline-sweepA-aws",
+      "target": "offline",
+      "cloud": "aws",
+      "kind": "sdk-python",
+      "cmd": "python3 tests/conformance/post_create/probes/sweep_aws.py {ENDPOINT}",
+      "timeout": 300
+    },
+    {
+      "id": "offline-post-create-gcp-memorystore-reachable",
+      "target": "offline",
+      "cloud": "gcp",
+      "kind": "api",
+      "cmd": "python3 tests/conformance/post_create/probes/endpoint_reachable.py redis {ENDPOINT}",
+      "timeout": 300
+    },
+    {
+      "id": "offline-post-create-gcp-artifactregistry-reachable",
+      "target": "offline",
+      "cloud": "gcp",
+      "kind": "api",
+      "cmd": "python3 tests/conformance/post_create/probes/endpoint_reachable.py registry {ENDPOINT}",
+      "timeout": 300
+    },
+    {
+      "id": "offline-post-create-gcp-apigateway-invoke",
+      "target": "offline",
+      "cloud": "gcp",
+      "kind": "api",
+      "cmd": "python3 tests/conformance/post_create/probes/endpoint_reachable.py gcp_apigateway {ENDPOINT}",
+      "timeout": 300
+    },
+    {
+      "id": "offline-post-create-azure-keyvault-uri",
+      "target": "offline",
+      "cloud": "azure",
+      "kind": "api",
+      "cmd": "python3 tests/conformance/post_create/probes/endpoint_reachable.py azure_keyvault {ENDPOINT}",
+      "timeout": 300
+    },
+    {
+      "id": "offline-post-create-azure-eventgrid-endpoint",
+      "target": "offline",
+      "cloud": "azure",
+      "kind": "api",
+      "cmd": "python3 tests/conformance/post_create/probes/endpoint_reachable.py azure_eventgrid {ENDPOINT}",
+      "timeout": 300
+    },
+    {
+      "id": "offline-post-create-azure-servicebus-endpoint",
+      "target": "offline",
+      "cloud": "azure",
+      "kind": "api",
+      "cmd": "python3 tests/conformance/post_create/probes/endpoint_reachable.py azure_servicebus {ENDPOINT}",
+      "timeout": 300
+    },
+    {
+      "id": "offline-post-create-azure-sql-fqdn",
+      "target": "offline",
+      "cloud": "azure",
+      "kind": "api",
+      "cmd": "python3 tests/conformance/post_create/probes/endpoint_reachable.py azure_sql {ENDPOINT}",
+      "timeout": 300
+    },
+    {
+      "id": "offline-post-create-aws-apigateway-invoke",
+      "target": "offline",
+      "cloud": "aws",
+      "kind": "api",
+      "cmd": "python3 tests/conformance/post_create/probes/endpoint_reachable.py aws_apigateway {ENDPOINT}",
+      "timeout": 300
+    },
+    {
+      "id": "offline-post-create-aws-apigatewayv2-invoke",
+      "target": "offline",
+      "cloud": "aws",
+      "kind": "api",
+      "cmd": "python3 tests/conformance/post_create/probes/endpoint_reachable.py aws_apigatewayv2 {ENDPOINT}",
+      "timeout": 300
+    },
+    {
+      "id": "offline-post-create-azure-container-app",
+      "target": "offline",
+      "cloud": "azure",
+      "kind": "api",
+      "cmd": "python3 tests/conformance/post_create/probes/azure_container_app.py {ENDPOINT}",
+      "timeout": 300
+    },
+    {
+      "id": "offline-post-create-azure-loganalytics",
+      "target": "offline",
+      "cloud": "azure",
+      "kind": "api",
+      "cmd": "python3 tests/conformance/post_create/probes/azure_loganalytics.py {ENDPOINT}",
+      "timeout": 300
+    },
+    {
+      "id": "offline-post-create-azure-openai",
+      "target": "offline",
+      "cloud": "azure",
+      "kind": "api",
+      "cmd": "python3 tests/conformance/post_create/probes/azure_openai.py {ENDPOINT}",
+      "timeout": 300
+    },
+    {
+      "id": "offline-post-create-aws-iam-actions",
+      "target": "offline",
+      "cloud": "aws",
+      "kind": "api",
+      "cmd": "python3 tests/conformance/post_create/probes/aws_iam_actions.py {ENDPOINT}",
+      "timeout": 300
+    },
+    {
+      "id": "offline-post-create-azure-rbac-checkaccess",
+      "target": "offline",
+      "cloud": "azure",
+      "kind": "api",
+      "cmd": "python3 tests/conformance/post_create/probes/azure_rbac.py {ENDPOINT}",
+      "timeout": 300
+    },
+    {
+      "id": "offline-ui-drawer",
+      "target": "offline",
+      "cloud": "all",
+      "kind": "ui",
+      "cmd": "rc=0; for c in aws gcp azure; do VYOMI_BASE_URL={ENDPOINT} node tests/conformance/drawer/drawer_modal.mjs $c || rc=1; done; exit $rc",
+      "timeout": 300
+    },
+    {
+      "id": "nano-ui-drawer",
+      "target": "nano",
+      "cloud": "all",
+      "kind": "ui",
+      "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-drawer.mjs",
+      "timeout": 600
+    },
+    {
+      "id": "offline-ui-default-cloud",
+      "target": "offline",
+      "cloud": "all",
+      "kind": "ui",
+      "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/drawer/default_cloud.mjs",
+      "timeout": 300
+    },
+    {
+      "id": "nano-ui-default-cloud",
+      "target": "nano",
+      "cloud": "all",
+      "kind": "ui",
+      "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-default-cloud.mjs",
+      "timeout": 600
+    },
+    {
+      "id": "nano-ui-gcp-properties",
+      "target": "nano",
+      "cloud": "gcp",
+      "kind": "ui",
+      "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-gcp-properties.mjs",
+      "timeout": 300
+    },
+    {
+      "id": "offline-ui-gcp-properties",
+      "target": "offline",
+      "cloud": "gcp",
+      "kind": "ui",
+      "cmd": "VYOMI_CONSOLE_URL={ENDPOINT}/console/gcp node wasm/ui-tests/validate-gcp-properties.mjs",
       "timeout": 300
     }
   ]

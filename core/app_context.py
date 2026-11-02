@@ -283,6 +283,7 @@ def is_gcp_native_path(path: str) -> bool:
         "/api/gcp/pubsub/",
         "/api/gcp/firestore/",
         "/api/gcp/cloudfunctions/",
+        "/gcf/",              # Cloud Functions HTTPS trigger URL (core/gcp_eventing)
         "/api/gcp/console/",
         "/api/gcp/catalog",   # standalone console payload -- must NOT be path-stripped
         "/api/gcp/extras/",   # reserved for GCP-D (parity with /api/aws/extras)

@@ -192,8 +192,122 @@ jobs:
         if: always()
         with: { name: checks-nano-cli, path: out/ }
 
+  # Every console UI suite (crawl of every page/tab, Home cards, default-cloud + drawer,
+  # UI <-> SDK round trip, per-service flows) against the PUBLISHED release images —
+  # one job per cloud, same suites the hourly conformance agent runs.
+  console-ui:
+    needs: resolve
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix: { cloud: [aws, gcp, azure] }
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      VER: ${{ needs.resolve.outputs.ver }}
+      TAG: ${{ needs.resolve.outputs.tag }}
+      VYOMI_BASE_URL: http://localhost:9000
+      NODE_PATH: ${{ github.workspace }}/.ci-node/node_modules
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: '${{ needs.resolve.outputs.tag }}' }
+      - name: Use main's checks (they test this release, so they can be newer than it)
+        run: |
+          git fetch -q origin main
+          git checkout -q origin/main -- tests/conformance wasm/ui-tests
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - name: Test tooling
+        run: |
+          pip install --quiet requests pytest boto3 azure-storage-blob
+          mkdir -p .ci-node && cd .ci-node
+          echo '{"name":"vyomi-ci-node","private":true}' > package.json
+          npm install --silent playwright@1.47.2 ws@8.18.0
+          npx playwright install --with-deps chromium
+      - name: Wait for this release's Docker images
+        run: |
+          for i in $(seq 1 90); do
+            if docker manifest inspect "vyomi/appliance:$VER" >/dev/null 2>&1 && docker manifest inspect "vyomi/cloudsim:$VER" >/dev/null 2>&1; then exit 0; fi
+            sleep 50
+          done
+          echo "::error::images for $VER not published after 75 min"; exit 1
+      - name: Boot the release like `vyomi up`
+        run: |
+          gh release download "$TAG" -p "vyomi-$VER.tar.gz" -D /tmp/rel
+          mkdir -p /tmp/bundle && tar -xzf "/tmp/rel/vyomi-$VER.tar.gz" -C /tmp/bundle --strip-components=1
+          cd /tmp/bundle
+          export VYOMI_SIMULATOR_IMAGE="vyomi/appliance:$VER" VYOMI_CLOUDSIM_IMAGE="vyomi/cloudsim:$VER" VYOMI_NO_TELEMETRY=1
+          printf 'services:\n  simulator:\n    environment:\n      CLOUDLEARN_TIER_ENFORCE: "0"\n' > all-tiers.yml
+          C="-f docker-compose.cloudlite.yml -f all-tiers.yml -p vyomi"
+          docker compose $C pull --quiet && docker compose $C up -d && docker compose $C --profile full up -d
+          for _ in $(seq 1 120); do curl -fs "$VYOMI_BASE_URL/healthz" >/dev/null && break; sleep 2; done
+      - name: Console UI suites — ${{ matrix.cloud }}
+        run: python3 tests/conformance/hourly/run_suites.py --target offline --cloud ${{ matrix.cloud }} --kind ui --strict
+      - name: Job summary
+        if: always()
+        run: |
+          python3 tests/conformance/hourly/release_ui_summary.py "Console UI (offline) — ${{ matrix.cloud }}" tests/conformance/hourly/out/results-offline-${{ matrix.cloud }}.json > out-summary.md || true
+          cat out-summary.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: checks-console-ui-${{ matrix.cloud }}
+          path: |
+            out-summary.md
+            tests/conformance/hourly/out/results-offline-${{ matrix.cloud }}.json
+
+  # The same UI suites against Nano — this release's wasm bundle in a real browser.
+  nano-ui:
+    needs: resolve
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix: { cloud: [aws, gcp, azure] }
+    env:
+      RELAY_HTTP: http://127.0.0.1:8090
+      NODE_PATH: ${{ github.workspace }}/.ci-node/node_modules
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: '${{ needs.resolve.outputs.tag }}' }
+      - name: Use main's checks
+        run: |
+          git fetch -q origin main
+          git checkout -q origin/main -- tests/conformance wasm/ui-tests wasm/relay/local-relay.mjs
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - name: Test tooling
+        run: |
+          pip install --quiet requests pytest boto3 azure-storage-blob
+          mkdir -p .ci-node && cd .ci-node
+          echo '{"name":"vyomi-ci-node","private":true}' > package.json
+          npm install --silent playwright@1.47.2 ws@8.18.0
+          npx playwright install --with-deps chromium
+      - name: Start Nano relay
+        run: |
+          nohup node wasm/relay/local-relay.mjs > relay.log 2>&1 &
+          for _ in $(seq 1 20); do curl -fs "$RELAY_HTTP/health" >/dev/null && break; sleep 1; done
+      - name: Nano UI suites — ${{ matrix.cloud }}
+        run: python3 tests/conformance/hourly/run_suites.py --target nano --cloud ${{ matrix.cloud }} --kind ui --strict
+      - name: Job summary
+        if: always()
+        run: |
+          python3 tests/conformance/hourly/release_ui_summary.py "Console UI (Nano) — ${{ matrix.cloud }}" tests/conformance/hourly/out/results-nano-${{ matrix.cloud }}.json > out-summary.md || true
+          cat out-summary.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: checks-nano-ui-${{ matrix.cloud }}
+          path: |
+            out-summary.md
+            tests/conformance/hourly/out/results-nano-${{ matrix.cloud }}.json
+
   report:
-    needs: [resolve, deb, rpm, brew, cli, nano-cli]
+    needs: [resolve, deb, rpm, brew, cli, nano-cli, console-ui, nano-ui]
     if: always() && needs.resolve.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 120
@@ -275,6 +389,9 @@ jobs:
             done
             [ -f arts/checks-cli/summary.md ] && { echo "## CLI (aws / gcloud / az) and CLI ↔ console"; echo; cat arts/checks-cli/summary.md; echo; }
             [ -f arts/checks-nano-cli/summary.md ] && { echo "## Nano CLI through the tunnel and CLI ↔ console"; echo; cat arts/checks-nano-cli/summary.md; echo; }
+            for d in arts/checks-console-ui-* arts/checks-nano-ui-*; do
+              [ -f "$d/out-summary.md" ] && { cat "$d/out-summary.md"; echo; }
+            done
             [ -f ext/msi/summary.md ] && { echo "## MSI"; echo; cat ext/msi/summary.md; echo; }
             [ -f ext/startup/summary.md ] && { echo "## Startup (all services + UI)"; echo; cat ext/startup/summary.md; echo; }
             [ -f ext/windows-e2e/startup-check/summary.md ] && { echo "## Windows E2E"; echo; cat ext/windows-e2e/startup-check/summary.md; echo; }

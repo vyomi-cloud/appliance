@@ -59,7 +59,7 @@ public class RedisConformance {
             .setInstance(Instance.newBuilder().setDisplayName("created by the Java SDK").setTier(Instance.Tier.BASIC)
                 .setMemorySizeGb(2).setRedisVersion("REDIS_7_0").putLabels("env", "dev").build()).build()).get();
         check("CreateInstance (LRO) -> Instance READY with host/port", i.getState() == Instance.State.READY
-            && !i.getHost().isEmpty() && i.getPort() == 6379 && name.equals(i.getName()), i.toString());
+            && !i.getHost().isEmpty() && i.getPort() > 0 && name.equals(i.getName()), i.toString());
       } catch (Exception e) { check("CreateInstance (LRO) -> Instance READY with host/port", false, e.toString()); }
 
       try {

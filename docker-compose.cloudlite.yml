@@ -49,6 +49,10 @@ services:
       - vyomi-gcs
     environment:
       CLOUDLEARN_STATE_FILE: /data/cloudlearn_state.sqlite3
+      # The URL SNS HTTP/S deliveries point back at (SigningCertURL, SubscribeURL, UnsubscribeURL):
+      # it must be the PUBLISHED port, or an endpoint verifying the signature fetches another
+      # appliance's certificate (or nothing) when VYOMI_SIMULATOR_PORT is not 9000.
+      VYOMI_PUBLIC_URL: ${VYOMI_PUBLIC_URL:-http://localhost:${VYOMI_SIMULATOR_PORT:-9000}}
       CLOUDLEARN_LICENSE_SECRET: ${VYOMI_LICENSE_SECRET:-cloudlearn-dev-secret}
       CLOUDLEARN_LICENSE_BACKEND_URL: ${VYOMI_LICENSE_BACKEND_URL:-https://vyomi.cloud}
       # Opt out of install registration (users; always set in CI/test boots).
@@ -66,6 +70,10 @@ services:
       CLOUDLEARN_CLOUDSIM_URL: http://cloudsim:9010
       CLOUDLEARN_SQL_PG_HOST: vyomi-sql-postgres
       CLOUDLEARN_SQL_PG_PORT: "5432"
+      # What a user's own machine connects to (the published loopback ports below). RDS /
+      # Cloud SQL / Azure SQL show these in their endpoints and connection strings.
+      CLOUDLEARN_SQL_PG_PUBLIC_PORT: "${VYOMI_PG_PORT:-15432}"
+      CLOUDLEARN_SQL_MYSQL_PUBLIC_PORT: "${VYOMI_MYSQL_PORT:-13306}"
       CLOUDLEARN_SQL_PG_ADMIN_USER: postgres
       CLOUDLEARN_SQL_PG_ADMIN_PASSWORD: cloudlearn
       CLOUDLEARN_SQL_MYSQL_HOST: vyomi-sql-mysql
@@ -78,6 +86,9 @@ services:
       VYOMI_GATEWAY_ADMIN: http://vyomi-gateway:2019
       CLOUDLEARN_VICTORIAMETRICS_URL: http://vyomi-victoriametrics:8428
       CLOUDLEARN_VALKEY_PORT: "6379"
+      # Published loopback ports the user's machine reaches (Memorystore / Artifact Registry show these).
+      CLOUDLEARN_VALKEY_PUBLIC_PORT: "${VYOMI_REDIS_PORT:-16379}"
+      CLOUDLEARN_REGISTRY_PUBLIC_PORT: "${VYOMI_REGISTRY_PORT:-15000}"
       CLOUDLEARN_MINIO_URL: http://vyomi-minio:9000
       CLOUDLEARN_MINIO_ACCESS_KEY: cloudlearn
       CLOUDLEARN_MINIO_SECRET_KEY: cloudlearn-dev-secret-key
@@ -123,6 +134,11 @@ services:
   vyomi-sql-postgres:
     image: postgres:16-alpine
     networks: [vyomi-net]
+    # Published on loopback so `psql` / app code on the user's machine can reach the managed
+    # databases (RDS, Cloud SQL, Azure SQL). Uncommon default port so a local Postgres on 5432
+    # cannot stop `vyomi up`; override with VYOMI_PG_PORT.
+    ports:
+      - "127.0.0.1:${VYOMI_PG_PORT:-15432}:5432"
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: cloudlearn
@@ -143,6 +159,8 @@ services:
     profiles: ["full"]
     image: mysql:8.0
     networks: [vyomi-net]
+    ports:
+      - "127.0.0.1:${VYOMI_MYSQL_PORT:-13306}:3306"
     environment:
       MYSQL_ROOT_PASSWORD: cloudlearn
       MYSQL_ROOT_HOST: "%"
@@ -193,6 +211,8 @@ services:
     image: valkey/valkey:8.0.1-alpine
     command: ["valkey-server", "--save", "", "--appendonly", "no", "--maxmemory", "64mb", "--maxmemory-policy", "allkeys-lru"]
     networks: [vyomi-net]
+    ports:
+      - "127.0.0.1:${VYOMI_REDIS_PORT:-16379}:6379"
     mem_limit: 128m
     healthcheck:
       test: ["CMD", "valkey-cli", "ping"]
@@ -208,6 +228,8 @@ services:
     # {project}/{repo}/{image}; the engine ingests them from /v2/_catalog.
     image: registry:2.8.3
     networks: [vyomi-net]
+    ports:
+      - "127.0.0.1:${VYOMI_REGISTRY_PORT:-15000}:5000"
     mem_limit: 64m
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:5000/v2/"]

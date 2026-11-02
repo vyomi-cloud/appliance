@@ -86,6 +86,49 @@ def run(store=None):
     call("PutEvents", {"Entries": [{"Source": "shape.app", "DetailType": "x", "Detail": "{}"}]})
     _check("constant Input applied", recv() == {"fixed": 1})
 
+    # Pattern language: numeric, anything-but, prefix, suffix, exists, array value, $or.
+    P = eb._match_pattern
+    ev = {"source": "a.b", "detail": {"price": 12, "tags": ["x", "y"], "name": "order-17"}}
+    _check("numeric range", P({"detail": {"price": [{"numeric": [">", 10, "<=", 12]}]}}, ev)
+           and not P({"detail": {"price": [{"numeric": ["<", 10]}]}}, ev))
+    _check("anything-but / prefix / suffix",
+           P({"source": [{"anything-but": ["z"]}]}, ev) and not P({"source": [{"anything-but": "a.b"}]}, ev)
+           and P({"detail": {"name": [{"prefix": "order-"}]}}, ev) and P({"detail": {"name": [{"suffix": "17"}]}}, ev))
+    _check("exists true/false", P({"detail": {"name": [{"exists": True}]}}, ev)
+           and P({"detail": {"nope": [{"exists": False}]}}, ev) and not P({"detail": {"nope": [{"exists": True}]}}, ev))
+    _check("array event value matches any element + $or",
+           P({"detail": {"tags": ["y"]}}, ev) and P({"$or": [{"source": ["q"]}, {"source": ["a.b"]}]}, ev))
+
+    # Lambda target: matching event INVOKES the function with the event as payload.
+    try:
+        from core import lambda_core as lam
+    except ImportError:  # pragma: no cover
+        import lambda_core as lam  # type: ignore
+    import types
+    ls = types.SimpleNamespace()
+    got = []
+    lam.dispatch(ls, "POST", "/2015-03-31/functions", {}, {}, json.dumps({
+        "FunctionName": "sink", "Handler": "index.handler",
+        "Code": {"Source": "def handler(e, c):\n    return {'seen': e['detail']['k']}"}}).encode())
+    # prove delivery through the store the function records its run on
+    call2 = lambda a, b: eb.dispatch(s, E + a, b, lambda_store=ls)
+    call2("PutRule", {"Name": "rl", "EventPattern": json.dumps({"source": ["lam.app"]})})
+    call2("PutTargets", {"Rule": "rl", "Targets": [{"Id": "tl", "Arn": "arn:aws:lambda:us-east-1:123456789012:function:sink"}]})
+    eb.set_lambda_invoker(lambda n, b: got.append((n, json.loads(b))))
+    call2("PutEvents", {"Entries": [{"Source": "lam.app", "DetailType": "x", "Detail": json.dumps({"k": 7})}]})
+    eb.set_lambda_invoker(None)
+    _check("Lambda target invoked with the event (offline invoker hook)",
+           got and got[0][0] == "sink" and got[0][1]["detail"] == {"k": 7})
+    real = []
+    orig = lam.dispatch
+    lam.dispatch = lambda st, m, p, q, h, b=b"": real.append((p, json.loads(b))) or orig(st, m, p, q, h, b)
+    try:
+        call2("PutEvents", {"Entries": [{"Source": "lam.app", "DetailType": "x", "Detail": json.dumps({"k": 8})}]})
+    finally:
+        lam.dispatch = orig
+    _check("Lambda target invoked through lambda_core store (Nano path)",
+           real and real[0][0].endswith("/functions/sink/invocations") and real[0][1]["detail"] == {"k": 8})
+
     _check("ListRules",call("ListRules", {}).body["Rules"][0]["Name"] == "r1")
     _check("ListTargetsByRule", call("ListTargetsByRule", {"Rule": "r1"}).body["Targets"][0]["Id"] == "t1")
 

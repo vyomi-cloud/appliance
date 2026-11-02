@@ -123,6 +123,25 @@ def configure_data_plane(host, port=5000):
     DATA_PLANE["host"], DATA_PLANE["port"] = (host or None), int(port or 5000)
 
 
+# host:port a user's machine pushes to (the published loopback port); None → no real push target.
+PUBLIC: dict = {"hostport": None}
+
+
+def configure_public(hostport):
+    PUBLIC["hostport"] = hostport or None
+
+
+def _push_info(repo: dict) -> dict:
+    parts = repo["name"].split("/")
+    hp = PUBLIC["hostport"]
+    if repo.get("format") != "DOCKER":
+        return {}
+    if not hp:
+        return {"push_host": "Not available in this build (no OCI registry runs here; control plane only)", "push_example": ""}
+    return {"push_host": hp,
+            "push_example": "docker tag IMAGE %s/%s/%s/IMAGE:TAG && docker push %s/%s/%s/IMAGE:TAG" % (hp, parts[1], parts[-1], hp, parts[1], parts[-1])}
+
+
 def ingest_registry_images(store: ArtifactRegistryStore, project: str, images: list) -> int:
     """Fold what a real `docker push` left in the registry into the engine.
     Each item: {"path": "{repo}/{image...}", "tag", "digest", "size"} (registry path minus the
@@ -163,6 +182,8 @@ def _repo_view(repo: dict) -> dict:
         if repo.get(k) not in (None, "", {}, []):
             out[k] = repo[k]
     out["satisfiesPzi"] = True
+    if PUBLIC["hostport"] and repo.get("format") == "DOCKER":
+        out["vyomiPushHost"] = PUBLIC["hostport"]
     return out
 
 
@@ -555,6 +576,7 @@ def console_row(repo: dict) -> dict:
         "packages": len(repo["packages"]),
         "artifacts": sum(len(p["versions"]) for p in repo["packages"].values()),
         "state": "ACTIVE",
+        **_push_info(repo),
     }
 
 
@@ -593,6 +615,15 @@ def console_find(store: ArtifactRegistryStore, name: str):
         if n.rsplit("/", 1)[-1] == name or n == name:
             return n, r
     return None, None
+
+
+def console_pushpull(store: ArtifactRegistryStore, name: str) -> dict:
+    """The repository's Push / pull tab: the host a user's docker pushes to (or, with no
+    registry running, the honest "not available" text) and a ready-to-paste command."""
+    _, repo = console_find(store, name)
+    if repo is None:
+        return {"ok": False, "code": "NotFound", "name": name}
+    return {"ok": True, "item": {"name": name, **_push_info(repo)}}
 
 
 def console_delete(store: ArtifactRegistryStore, name: str) -> dict:

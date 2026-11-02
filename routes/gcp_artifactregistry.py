@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import os
 import time
+import urllib.parse
 import urllib.request
 
 from fastapi import FastAPI, Request, Response
@@ -89,28 +90,61 @@ def _sync_registry() -> None:
     _SYNC["at"] = time.time()
     ar.configure_data_plane(host, int(os.environ.get("CLOUDLEARN_REGISTRY_PORT", "5000") or 5000))
     base = f"http://{host}:{ar.DATA_PLANE['port']}/v2"
-    accept = {"Accept": "application/vnd.docker.distribution.manifest.v2+json,application/vnd.oci.image.manifest.v1+json"}
+    # Multi-arch pushes (docker buildx, containerd image store) are OCI indexes / manifest
+    # lists: the registry answers 404 MANIFEST_UNKNOWN unless the Accept header names them.
+    accept = {"Accept": ",".join((
+        "application/vnd.docker.distribution.manifest.v2+json",
+        "application/vnd.oci.image.manifest.v1+json",
+        "application/vnd.docker.distribution.manifest.list.v2+json",
+        "application/vnd.oci.image.index.v1+json"))}
 
     def get(url, headers=None):
         with urllib.request.urlopen(urllib.request.Request(url, headers=headers or {}), timeout=2) as r:
             return r.headers, json.loads(r.read() or b"{}")
 
+    def image_size(repo, man):
+        size = sum(int(l.get("size", 0)) for l in man.get("layers", [])) + int((man.get("config") or {}).get("size", 0))
+        for child in (man.get("manifests") or [])[:8]:        # index: sum the platform images
+            try:
+                size += image_size(repo, get(f"{base}/{repo}/manifests/{child['digest']}", accept)[1])
+            except Exception:
+                size += int(child.get("size", 0))
+        return size
+
     try:
         project = _project()
-        found = []
-        for repo in get(base + "/_catalog?n=1000")[1].get("repositories") or []:
-            proj, _, path = repo.partition("/")
-            # Images pushed under the project number / a legacy id are the same project.
-            if ctx.gcp_project_name(proj) != project or "/" not in path:
-                continue
-            for tag in get(f"{base}/{repo}/tags/list")[1].get("tags") or []:
+        repos, last = [], ""
+        for _ in range(20):                       # the catalog pages (n per page, `last=` cursor)
+            page = get(base + "/_catalog?n=1000" + ("&last=" + urllib.parse.quote(last) if last else ""))[1].get("repositories") or []
+            repos += page
+            if len(page) < 1000:
+                break
+            last = page[-1]
+    except Exception:
+        return          # registry down / not started: control plane keeps working
+    found = []
+    for repo in repos:
+        proj, _, path = repo.partition("/")
+        # Images pushed under the project number / a legacy id are the same project.
+        if ctx.gcp_project_name(proj) != project or "/" not in path:
+            continue
+        # One unreadable repository or tag (deleted manifest, odd media type, slow answer) must
+        # not stop every other push from showing up: skip just that entry.
+        try:
+            tags = get(f"{base}/{repo}/tags/list")[1].get("tags") or []
+        except Exception:
+            continue
+        for tag in tags:
+            try:
                 h, man = get(f"{base}/{repo}/manifests/{tag}", accept)
-                size = sum(int(l.get("size", 0)) for l in man.get("layers", [])) + int((man.get("config") or {}).get("size", 0))
-                found.append({"path": path, "tag": tag, "digest": h.get("Docker-Content-Digest", ""), "size": size})
+            except Exception:
+                continue
+            found.append({"path": path, "tag": tag, "digest": h.get("Docker-Content-Digest", ""), "size": image_size(repo, man)})
+    try:
         if ar.ingest_registry_images(_STORE, project, [f for f in found if f["digest"]]):
             _usage("registry_push", project)
     except Exception:
-        pass            # registry down / not started: control plane keeps working
+        pass
 
 
 def _usage(op: str, name: str) -> None:
@@ -122,6 +156,9 @@ def _usage(op: str, name: str) -> None:
 
 
 def register(app: FastAPI) -> None:
+    _pub = os.environ.get("CLOUDLEARN_REGISTRY_PUBLIC_PORT", "").strip()
+    if _pub:
+        ar.configure_public("%s:%s" % (os.environ.get("CLOUDLEARN_REGISTRY_PUBLIC_HOST", "localhost").strip() or "localhost", _pub))
     async def _wire(request: Request):
         body = await request.body()
         if request.method == "GET":
@@ -200,6 +237,14 @@ def register(app: FastAPI) -> None:
         if op in ("listPackages", "listVersions", "listTags", "listImages"):
             await run_in_threadpool(_sync_registry)
             return {"ok": True, "items": ar.console_children(_STORE, name, op[4:].lower())}
+        from core import gcp_console_tabs as _tabs
+        if op in _tabs.META_OPS:   # editable Properties grid + last-modified times (shared engine, every service)
+            from providers.gcp_tabs_console import tab_state
+            try:
+                out = _tabs.meta_op(tab_state, "artifactregistry", op, name, await _json(request) if op == "setProperties" else {})
+            except _tabs.TabError as e:
+                return JSONResponse({"ok": False, "code": e.code, "message": e.message}, status_code=e.status)
+            return out
         if op in ("getLabels", "setLabels"):   # the repository's Labels tab (repositories.patch labels)
             from core import gcp_console_tabs as _tabs
             full, repo = ar.console_find(_STORE, name)
@@ -212,7 +257,12 @@ def register(app: FastAPI) -> None:
                     return JSONResponse({"ok": False, "code": e.code, "message": e.message}, status_code=e.status)
                 ar.dispatch(_STORE, "PATCH", "/v1/" + full, {"updateMask": "labels"}, {}, __import__("json").dumps({"labels": labels}).encode())
                 _usage("set_labels", name)
+                from providers.gcp_tabs_console import tab_state
+                _tabs.stamp_labels(tab_state, "artifactregistry", name)
             return {"ok": True, "item": {"name": name, "labels": dict(_STORE.repos[full].get("labels") or {})}}
+        if op == "getPushpull":                # the Push / pull tab (schedkv: get + tab key)
+            out = ar.console_pushpull(_STORE, name)
+            return JSONResponse(out, status_code=200 if out.get("ok") else 404)
         if op == "pushSample":
             out = ar.console_push_sample(_STORE, name, await _json(request))
             return JSONResponse(out, status_code=200 if out.get("ok") else 404)

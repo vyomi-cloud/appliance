@@ -125,12 +125,16 @@ TARGETS = [
     "api_gcp_apigw_create_config",
     "api_gcp_apigw_list_gateways",
     "api_gcp_apigw_create_gateway",
+    "api_gcp_apigw_get_gateway",
+    "api_gcp_apigw_delete_gateway",
     "api_gcp_vpc_list_networks",
     "api_gcp_vpc_create_network",
     "api_gcp_vpc_get_network",
     "api_gcp_vpc_delete_network",
     "api_gcp_vpc_list_subnetworks",
     "api_gcp_vpc_create_subnetwork",
+    "api_gcp_vpc_get_subnetwork",
+    "api_gcp_vpc_delete_subnetwork",
     "api_gcp_vpc_list_firewalls",
     "api_gcp_vpc_create_firewall",
     "api_gcp_vpc_update_firewall",
@@ -1296,6 +1300,12 @@ async def api_gcp_firestore_doc_put(project: str, database: str, fs_path: str, r
 
 
 async def api_gcp_firestore_run_query(project: str, database: str, request: Request, collection: str = ""):
+    """POST .../documents[/parent]:runQuery. Documents live in the Firestore emulator when it is
+    up (the same place create/get/list use) else in the platform engine; the structuredQuery itself
+    (where / compositeFilter / unaryFilter / orderBy / offset / limit) is evaluated by the SAME
+    shared core Nano runs (core/gcp_firestore_core._run_query), so offline and Nano answer alike
+    and in the real REST shape: [{"document":..., "readTime":...}] or [{"readTime":...}]."""
+    from core import gcp_firestore_core as _fcore
     s = _server()
     project = _gcp_project_name(project)
     database = str(database or "(default)")
@@ -1304,49 +1314,42 @@ async def api_gcp_firestore_run_query(project: str, database: str, request: Requ
     query = payload.get("structuredQuery", {}) if isinstance(payload, dict) else {}
     query = query if isinstance(query, dict) else {}
     selectors = query.get("from", [])
-    if collection:
-        collection_id = collection
-    elif isinstance(selectors, list) and selectors and isinstance(selectors[0], dict):
-        collection_id = str(selectors[0].get("collectionId") or "")
-    else:
-        collection_id = ""
-    limit = int(query.get("limit") or payload.get("limit") or 50)
+    parent = str(collection or "").strip("/")
+    coll_id = str(selectors[0].get("collectionId") or "") if isinstance(selectors, list) and selectors and isinstance(selectors[0], dict) else ""
+    if not coll_id and parent:        # legacy form: the path itself names the collection
+        parent, coll_id = "", parent
+    coll_path = f"{parent}/{coll_id}".strip("/")
+    base = f"projects/{project}/databases/{database}/documents"
+    store = _fcore.FirestoreStore()
+    if coll_path:
+        if _fs_emu.available():
+            docs = await asyncio.to_thread(_fs_emu.list_collection, project, database, coll_path)
+        else:
+            docs = s._gcp_firestore_engine().list_documents(project, database, coll_path)
+        for d in docs:
+            name = str(d.get("name") or "")
+            rel = name.split("/documents/", 1)[1] if "/documents/" in name else f"{coll_path}/{d.get('doc_id') or d.get('id') or ''}"
+            store.put(rel, {"fields": d.get("fields", {}), "createTime": d.get("createTime"), "updateTime": d.get("updateTime")})
+    # the core resolves collectionId relative to the query parent
+    qpayload = dict(payload)
+    sq = dict(query)
+    sq["from"] = [dict(f) for f in (selectors if isinstance(selectors, list) else [])] or [{"collectionId": coll_id}]
+    qpayload["structuredQuery"] = sq
+    if parent:
+        qpayload["structuredQuery"]["from"][0]["collectionId"] = coll_id
+    resp = _fcore._run_query(store, base, parent, qpayload)
+    result = json.loads(resp.body.decode("utf-8"))
+    field_name = ""
     where = query.get("where") if isinstance(query.get("where"), dict) else {}
-    filters: list = []
-
-    def _add_field_filter(ff):
-        if not isinstance(ff, dict):
-            return
-        field = ff.get("field") if isinstance(ff.get("field"), dict) else {}
-        fpath = str(field.get("fieldPath") or "")
-        if not fpath:
-            return
-        filters.append({"field": fpath, "op": str(ff.get("op") or "EQUAL"),
-                        "value": s._gcp_firestore_plain_value(ff.get("value"))})
-
-    if isinstance(where, dict):
-        _add_field_filter(where.get("fieldFilter"))
-        composite = where.get("compositeFilter") if isinstance(where.get("compositeFilter"), dict) else {}
-        for sub in (composite.get("filters") or []):
-            if isinstance(sub, dict):
-                _add_field_filter(sub.get("fieldFilter"))
-    order_by = None
-    order_dir = "ASCENDING"
-    order_specs = query.get("orderBy")
-    if isinstance(order_specs, list) and order_specs and isinstance(order_specs[0], dict):
-        of = order_specs[0].get("field") if isinstance(order_specs[0].get("field"), dict) else {}
-        order_by = str(of.get("fieldPath") or "") or None
-        order_dir = str(order_specs[0].get("direction") or "ASCENDING")
-    field_name = filters[0]["field"] if filters else ""
-    result = s._gcp_firestore_engine().run_query(project, database, collection_id, limit=limit,
-                                                 filters=filters, order_by=order_by, order_dir=order_dir)
-    if collection_id and field_name:
-        index_key = f"{project}:{database}:{collection_id}:{field_name}:{query.get('orderBy', 'ASCENDING')}"
-        gcp_firestore_state.setdefault("indexes", {}).setdefault(index_key, s._gcp_firestore_index_record(project, database, collection_id, {
+    ff = where.get("fieldFilter") if isinstance(where.get("fieldFilter"), dict) else {}
+    field_name = str((ff.get("field") or {}).get("fieldPath") or "")
+    if coll_id and field_name:
+        index_key = f"{project}:{database}:{coll_id}:{field_name}:{query.get('orderBy', 'ASCENDING')}"
+        gcp_firestore_state.setdefault("indexes", {}).setdefault(index_key, s._gcp_firestore_index_record(project, database, coll_id, {
             "name": index_key.split(":")[-1],
             "fields": [{"fieldPath": field_name, "order": str(query.get("orderBy") or "ASCENDING")}],
             "queryScope": "COLLECTION",
-            "description": f"Auto-generated from query on {collection_id}.{field_name}",
+            "description": f"Auto-generated from query on {coll_id}.{field_name}",
         }))
     return result
 
@@ -1654,6 +1657,8 @@ async def api_gcp_apigw_create_config(project: str, request: Request, location: 
     payload = payload if isinstance(payload, dict) else {}
     if api and not payload.get("api"):
         payload["api"] = api
+    if request is not None and request.query_params.get("apiConfigId"):
+        payload["apiConfigId"] = request.query_params["apiConfigId"]
     cfg = s._gcp_apigw_cfg_record(project, location, payload)
     gcp_apigw_state.setdefault("configs", {})[cfg["name"]] = cfg
     return s._gcp_apigateway_config_view(project, location, cfg)
@@ -1676,9 +1681,26 @@ async def api_gcp_apigw_create_gateway(project: str, request: Request, location:
     payload = payload if isinstance(payload, dict) else {}
     if api and not payload.get("apiConfig"):
         payload["apiConfig"] = api
+    if request is not None and request.query_params.get("gatewayId"):
+        payload["gatewayId"] = request.query_params["gatewayId"]
     gw = s._gcp_apigw_gateway_record(project, location, payload)
     gcp_apigw_state.setdefault("gateways", {})[gw["name"]] = gw
     return s._gcp_apigateway_gateway_view(project, location, gw)
+
+
+def api_gcp_apigw_get_gateway(project: str, location: str, gateway: str):
+    s = _server()
+    gw = gcp_apigw_state.get("gateways", {}).get(gateway)
+    if not gw:
+        raise HTTPException(404, detail="Gateway not found")
+    return s._gcp_apigateway_gateway_view(_gcp_project_name(project), s._gcp_location_name(location, "global"), gw)
+
+
+def api_gcp_apigw_delete_gateway(project: str, location: str, gateway: str):
+    if gateway not in gcp_apigw_state.get("gateways", {}):
+        raise HTTPException(404, detail="Gateway not found")
+    del gcp_apigw_state["gateways"][gateway]
+    return {"done": True}
 
 
 def api_gcp_vpc_list_networks(project: str):
@@ -1689,7 +1711,7 @@ def api_gcp_vpc_list_networks(project: str):
         if str(network.get("project") or project) != project:
             continue
         network_name = str(network.get("name") or "")
-        networks.append({"kind": "compute#network", "id": str(network.get("id") or s._gcp_compute_numeric_id(f"{project}:{network_name}")), "creationTimestamp": network.get("createTime", _now()), "name": network_name, "description": network.get("description", ""), "IPv4Range": network.get("IPv4Range", ""), "gatewayIPv4": network.get("gatewayIPv4", ""), "mtu": int(network.get("mtu") or 1460), "selfLink": f"{s._gcp_compute_network_root()}/projects/{project}/global/networks/{network_name}", "selfLinkWithId": network.get("selfLinkWithId", f"{s._gcp_compute_network_root()}/projects/{project}/global/networks/{network_name}?id={network.get('id') or s._gcp_compute_numeric_id(f'{project}:{network_name}')}"), "autoCreateSubnetworks": bool(network.get("autoCreateSubnetworks", True)), "subnetworks": network.get("subnetworks", []), "peerings": network.get("peerings", []), "routingConfig": {"routingMode": network.get("routingMode", "REGIONAL")}})
+        networks.append({"kind": "compute#network", "id": str(network.get("id") or s._gcp_compute_numeric_id(f"{project}:{network_name}")), "creationTimestamp": network.get("createTime", _now()), "name": network_name, "description": network.get("description", ""), "IPv4Range": network.get("IPv4Range", ""), "gatewayIPv4": network.get("gatewayIPv4", ""), "mtu": int(network.get("mtu") or 1460), "selfLink": f"{s._gcp_compute_network_root()}/projects/{project}/global/networks/{network_name}", "selfLinkWithId": network.get("selfLinkWithId", f"{s._gcp_compute_network_root()}/projects/{project}/global/networks/{network_name}?id={network.get('id') or s._gcp_compute_numeric_id(f'{project}:{network_name}')}"), "autoCreateSubnetworks": bool(network.get("autoCreateSubnetworks", True)), "subnetworks": _vpc_subnet_links(s, project, network_name, network.get("subnetworks")), "peerings": network.get("peerings", []), "routingConfig": {"routingMode": network.get("routingMode", "REGIONAL")}})
     return {"kind": "compute#networkList", "items": networks}
 
 
@@ -1722,7 +1744,7 @@ def api_gcp_vpc_get_network(project: str, network: str):
     rec = gcp_vpc_state.get("networks", {}).get(network)
     if not rec or str(rec.get("project") or project) != project:
         raise HTTPException(404, detail="Network not found")
-    return {"kind": "compute#network", "id": rec.get("id", s._gcp_compute_numeric_id(f"{project}:{network}")), "creationTimestamp": rec.get("createTime", _now()), "name": rec["name"], "description": rec.get("description", ""), "IPv4Range": rec.get("IPv4Range", ""), "gatewayIPv4": rec.get("gatewayIPv4", ""), "mtu": int(rec.get("mtu") or 1460), "selfLink": f"{s._gcp_compute_network_root()}/projects/{project}/global/networks/{network}", "selfLinkWithId": f"{s._gcp_compute_network_root()}/projects/{project}/global/networks/{network}?id={rec.get('id', s._gcp_compute_numeric_id(f'{project}:{network}'))}", "autoCreateSubnetworks": bool(rec.get("autoCreateSubnetworks", True)), "subnetworks": rec.get("subnetworks", []), "peerings": rec.get("peerings", []), "routingConfig": {"routingMode": rec.get("routingMode", "REGIONAL")}}
+    return {"kind": "compute#network", "id": rec.get("id", s._gcp_compute_numeric_id(f"{project}:{network}")), "creationTimestamp": rec.get("createTime", _now()), "name": rec["name"], "description": rec.get("description", ""), "IPv4Range": rec.get("IPv4Range", ""), "gatewayIPv4": rec.get("gatewayIPv4", ""), "mtu": int(rec.get("mtu") or 1460), "selfLink": f"{s._gcp_compute_network_root()}/projects/{project}/global/networks/{network}", "selfLinkWithId": f"{s._gcp_compute_network_root()}/projects/{project}/global/networks/{network}?id={rec.get('id', s._gcp_compute_numeric_id(f'{project}:{network}'))}", "autoCreateSubnetworks": bool(rec.get("autoCreateSubnetworks", True)), "subnetworks": _vpc_subnet_links(s, project, network, rec.get("subnetworks")), "peerings": rec.get("peerings", []), "routingConfig": {"routingMode": rec.get("routingMode", "REGIONAL")}}
 
 
 def api_gcp_vpc_delete_network(project: str, network: str):
@@ -1731,6 +1753,13 @@ def api_gcp_vpc_delete_network(project: str, network: str):
     rec = gcp_vpc_state.get("networks", {}).get(network)
     if not rec or str(rec.get("project") or project) != project:
         raise HTTPException(404, detail="Network not found")
+    # Real Compute refuses while a subnetwork the caller created still uses the network
+    # (auto-mode subnets go with it) -- same rule as the Nano shared core.
+    in_use = [sn.get("name") for sn in gcp_vpc_state.get("subnetworks", {}).values()
+              if sn.get("network") == network and not sn.get("autoCreated")
+              and str(sn.get("project") or project) == project]
+    if in_use:
+        raise HTTPException(400, detail=f"resourceInUseByAnotherResource: The network resource 'projects/{project}/global/networks/{network}' is already being used by '{in_use[0]}'")
     del gcp_vpc_state["networks"][network]
     # the network's auto-mode subnets and its default internet route go with it
     from core import gcp_console_tabs as _tabs
@@ -1738,6 +1767,49 @@ def api_gcp_vpc_delete_network(project: str, network: str):
         if sn.get("network") == network and sn.get("autoCreated"):
             gcp_vpc_state["subnetworks"].pop(k, None)
     gcp_vpc_state.get("routes", {}).pop(_tabs.default_route(network)["name"], None)
+    return {"done": True}
+
+
+def _vpc_subnet_links(s, project: str, network: str, stored) -> list:
+    """selfLinks of the network's subnetworks, computed from the live subnetwork records."""
+    links = []
+    for sn in gcp_vpc_state.get("subnetworks", {}).values():
+        if sn.get("network") == network and str(sn.get("project") or project) == project and sn.get("region"):
+            links.append(f"{s._gcp_compute_network_root()}/projects/{project}/regions/{sn['region']}/subnetworks/{sn['name']}")
+    return sorted(set(links)) if links else (stored or [])
+
+
+def _vpc_find_subnet(project: str, region: str, name: str):
+    for key, sn in gcp_vpc_state.get("subnetworks", {}).items():
+        if sn.get("name") == name and str(sn.get("region") or region) == region \
+                and str(sn.get("project") or project) == project:
+            return key, sn
+    return None, None
+
+
+def api_gcp_vpc_get_subnetwork(project: str, region: str, subnetwork: str):
+    project = _gcp_project_name(project)
+    key, sn = _vpc_find_subnet(project, region, subnetwork)
+    if sn is None:
+        raise HTTPException(404, detail=f"The resource 'projects/{project}/regions/{region}/subnetworks/{subnetwork}' was not found")
+    for item in api_gcp_vpc_list_subnetworks(project, region)["items"]:
+        if item["name"] == subnetwork:
+            return item
+    raise HTTPException(404, detail="Subnetwork not found")
+
+
+def api_gcp_vpc_delete_subnetwork(project: str, region: str, subnetwork: str):
+    project = _gcp_project_name(project)
+    key, sn = _vpc_find_subnet(project, region, subnetwork)
+    if sn is None:
+        raise HTTPException(404, detail=f"The resource 'projects/{project}/regions/{region}/subnetworks/{subnetwork}' was not found")
+    from core.app_context import gcp_compute_state, record_usage as _record_usage
+    users = [i.get("name") for i in gcp_compute_state.get("instances", {}).values()
+             if isinstance(i, dict) and i.get("subnet_id") == subnetwork and str(i.get("status", "")).upper() != "TERMINATED"]
+    if users:
+        raise HTTPException(400, detail=f"resourceInUseByAnotherResource: The subnetwork resource is already being used by '{users[0]}'")
+    del gcp_vpc_state["subnetworks"][key]
+    _record_usage("gcp.vpc.delete_subnetwork", {"project": project, "region": region, "subnetwork": subnetwork})
     return {"done": True}
 
 

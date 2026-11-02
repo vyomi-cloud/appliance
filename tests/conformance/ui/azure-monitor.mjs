@@ -120,13 +120,18 @@ try {
   const cond = content["Condition"] || "";
   check(/Percentage CPU/.test(cond) && /GreaterThan/.test(cond) && /80/.test(cond) && /PT5M/.test(cond), "Condition shows the metric, operator, threshold and window", cond.slice(0, 200));
 
+  // the blade re-lists after its PUT; under load that takes longer than a fixed sleep
+  const subText = async (re) => {
+    let t = "";
+    for (let i = 0; i < 20; i++) { t = await page.locator(".sub-content").innerText(); if (re.test(t)) break; await sleep(750); }
+    return t;
+  };
   // add an action group in the blade, read it back over ARM
   const agt = tabIndex(/Action groups/i);
   await open(agt);
   answers.push("ui-ops", "uiops", "oncall@example.com");
   await page.locator(".sub-content button").filter({ hasText: /Add action group/i }).first().click({ timeout: 5000 });
-  await sleep(1500);
-  const sets = await page.locator(".sub-content").innerText();
+  const sets = await subText(/oncall@example\.com/);
   check(/ui-ops/.test(sets) && /uiops/.test(sets) && /oncall@example\.com/.test(sets), "action group added in the blade is listed", sets.slice(0, 240));
   const rr = await fetch(`${arm}/actionGroups/ui-ops?api-version=2023-01-01`);
   const rj = await rr.json().catch(() => ({}));
@@ -135,18 +140,16 @@ try {
     body: JSON.stringify({ location: "Global", properties: { groupShortName: "apiops", enabled: true } }) });
   await open(tabIndex(/Overview/i));
   await open(agt);
-  check(/api-ops/.test(await page.locator(".sub-content").innerText()), "an action group created through the API shows in the blade");
+  check(/api-ops/.test(await subText(/api-ops/)), "an action group created through the API shows in the blade");
   // activity log alert + autoscale tabs add flows
   await open(tabIndex(/Activity log alerts/i));
   answers.push("ui-deploy-failed", "Administrative");
   await page.locator(".sub-content button").filter({ hasText: /Add activity log alert/i }).first().click({ timeout: 5000 });
-  await sleep(1500);
-  check(/ui-deploy-failed/.test(await page.locator(".sub-content").innerText()), "activity log alert added in the blade is listed");
+  check(/ui-deploy-failed/.test(await subText(/ui-deploy-failed/)), "activity log alert added in the blade is listed");
   await open(tabIndex(/Autoscale/i));
   answers.push("ui-autoscale");
   await page.locator(".sub-content button").filter({ hasText: /Add autoscale setting/i }).first().click({ timeout: 5000 });
-  await sleep(1500);
-  check(/ui-autoscale/.test(await page.locator(".sub-content").innerText()), "autoscale setting added in the blade is listed");
+  check(/ui-autoscale/.test(await subText(/ui-autoscale/)), "autoscale setting added in the blade is listed");
   for (const [t, n, v] of [["actionGroups", "ui-ops", "2023-01-01"], ["actionGroups", "api-ops", "2023-01-01"], ["activityLogAlerts", "ui-deploy-failed", "2020-10-01"], ["autoscaleSettings", "ui-autoscale", "2022-10-01"]])
     await fetch(`${arm}/${t}/${n}?api-version=${v}`, { method: "DELETE" }).catch(() => {});
 

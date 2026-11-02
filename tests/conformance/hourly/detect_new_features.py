@@ -112,18 +112,27 @@ def _ops_in(path: str) -> set[str]:
     except Exception:
         return set()
     ops = set()
+    fn_ops: dict[str, str] = {}
+    keys_all: set[str] = set()
+    dispatched = set()   # handlers wired into a dispatch table: reported under the table's SDK operation name
     for n in ast.walk(tree):
         if isinstance(n, ast.Dict) and len(n.keys) >= 3:
             keys = [k.value for k in n.keys if isinstance(k, ast.Constant) and isinstance(k.value, str)]
             if len(keys) == len(n.keys) and all(isinstance(v, (ast.Name, ast.Attribute, ast.Lambda)) for v in n.values) \
                     and all(OP_RE.match(k) for k in keys):
                 ops |= set(keys)
+                keys_all |= set(keys)
+                dispatched |= {v.id for v in n.values if isinstance(v, ast.Name)}
         elif isinstance(n, ast.Compare) and isinstance(n.left, ast.Name) and n.left.id in ("op", "action", "target", "operation"):
             for c in n.comparators:
                 vals = [c] if isinstance(c, ast.Constant) else list(getattr(c, "elts", []))
                 ops |= {v.value for v in vals if isinstance(v, ast.Constant) and isinstance(v.value, str) and OP_RE.match(v.value)}
         elif isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and VERB_RE.match(n.name):
-            ops.add("".join(p.capitalize() for p in n.name.strip("_").split("_")))
+            fn_ops[n.name] = "".join(p.capitalize() for p in n.name.strip("_").split("_"))
+            ops.add(fn_ops[n.name])
+    for fname in dispatched:
+        if fname in fn_ops and fn_ops[fname] not in keys_all:
+            ops.discard(fn_ops[fname])
     return ops
 
 
@@ -233,6 +242,27 @@ GCP_SDK_ALIASES = {
     ("gcp_container_core", "GetOp"): ("containerpb.GetOperationRequest",),
     ("gcp_redis_core", "GetOp"): ("redispb.CreateInstanceRequest",),   # LRO Wait() polls GetOperation
     ("gcp_redis_core", "PatchInstance"): ("UpdateInstanceRequest",),
+    # Artifact Registry: the Go/Java SDK tests call these RPCs (verified in gcp-sdk-go-artifactregistry)
+    ("gcp_artifactregistry_core", "CreateRepo"): ("artifactregistrypb.CreateRepositoryRequest", "pb.CreateRepositoryRequest", "CreateRepositoryRequest"),
+    ("gcp_artifactregistry_core", "GetRepo"): ("GetRepositoryRequest",),
+    ("gcp_artifactregistry_core", "ListRepos"): ("ListRepositoriesRequest",),
+    ("gcp_artifactregistry_core", "PatchRepo"): ("UpdateRepositoryRequest",),
+    ("gcp_artifactregistry_core", "DeleteRepo"): ("DeleteRepositoryRequest",),
+    # Cloud Monitoring: gcp-sdk-go-monitoring drives these REST methods through google.golang.org/api/monitoring/v3
+    ("gcp_monitoring_core", "CreateChannel"): ("NotificationChannels.Create(",),
+    ("gcp_monitoring_core", "ListChannels"): ("NotificationChannels.List(",),
+    ("gcp_monitoring_core", "PatchChannel"): ("NotificationChannels.Patch(",),
+    ("gcp_monitoring_core", "DeleteChannel"): ("NotificationChannels.Delete(",),
+    ("gcp_monitoring_core", "CreateDescriptor"): ("MetricDescriptors.Create(",),
+    ("gcp_monitoring_core", "GetDescriptor"): ("MetricDescriptors.Get(",),
+    ("gcp_monitoring_core", "ListDescriptors"): ("MetricDescriptors.List(",),
+    ("gcp_monitoring_core", "DeleteDescriptor"): ("MetricDescriptors.Delete(",),
+    ("gcp_monitoring_core", "ListTimeSeries"): ("TimeSeries.List(",),
+    ("gcp_monitoring_core", "UpdateGroup"): ("Groups.Update(",),
+    ("gcp_monitoring_core", "DeleteGroup"): ("Groups.Delete(",),
+    ("gcp_monitoring_core", "CreateUptime"): ("UptimeCheckConfigs.Create(",),
+    ("gcp_monitoring_core", "PatchUptime"): ("UptimeCheckConfigs.Patch(",),
+    ("gcp_monitoring_core", "PatchPolicy"): ("AlertPolicies.Patch(",),
 }
 
 

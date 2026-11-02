@@ -115,7 +115,13 @@ RESOURCE_CATALOG: list[dict] = [
         "defaults": {
             "properties": {"administratorLogin": "sqladmin", "version": "12.0", "state": "Ready"},
         },
-        "endpoints": {"properties.fullyQualifiedDomainName": "/azure-data/sql/__NAME__"},
+        # Azure SQL here is HTTP-only (no TDS / port 1433). The FQDN shows the working HTTP data plane.
+        "endpoints": {"properties.fullyQualifiedDomainName": "/api/console/azure-sql/databases"},
+        "endpoints_force": {"properties.vyomiAccess": {
+            "protocol": "HTTP data plane only (no TDS wire protocol, nothing listens on 1433; sqlcmd/JDBC/ODBC cannot connect)",
+            "listDatabases": "GET __BASE__/api/console/azure-sql/databases",
+            "executeSql": "POST __BASE__/api/console/azure-sql/execute  {\"db\": \"<database id>\", \"sql\": \"...\"}",
+            "schema": "GET __BASE__/api/console/azure-sql/databases/<database id>/schema"}},
     },
     {
         "key": "servicebus", "label": "Service Bus", "icon": "queue",
@@ -135,7 +141,7 @@ RESOURCE_CATALOG: list[dict] = [
             "properties": {
                 "provisioningState": "Succeeded",
                 "status": "Active",
-                "serviceBusEndpoint": "http://localhost:9000/azure-data/servicebus/__NAME__",
+                "serviceBusEndpoint": "__BASE__/azure-data/servicebus/__NAME__",
                 "messagingProtocol": "REST (AMQP not supported in simulator)",
             },
         },
@@ -333,6 +339,7 @@ RESOURCE_CATALOG: list[dict] = [
             },
         },
         "endpoints": {"properties.vaultUri": "/azure-data/keyvault/__NAME__/"},
+        "endpoints_force": {"properties.vaultUri": "__BASE__/azure-data/keyvault/__NAME__/"},   # https://<n>.vault.azure.net/ is not reachable here
     },
     {
         "key": "app", "label": "Container Apps", "icon": "deployed_code",
@@ -646,7 +653,12 @@ def _canonical_id(sub: str, rg: str | None, type_chain: list[str], names: list[s
 
 def _view(rec: dict) -> dict:
     # Return a copy without the internal bookkeeping keys.
-    return {k: v for k, v in rec.items() if not k.startswith("_")}
+    out = {k: v for k, v in rec.items() if not k.startswith("_")}
+    props = out.get("properties")
+    if isinstance(props, dict) and "administratorLoginPassword" in props:
+        # Real Azure never returns the SQL admin password; it stays stored for the data plane.
+        out["properties"] = {k: v for k, v in props.items() if k != "administratorLoginPassword"}
+    return out
 
 
 # Map ARM resource type → CloudSim bundle key for non-compute services.
@@ -747,6 +759,8 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
             if method == "GET":
                 return JSONResponse({"value": _arm.list_resource_groups(_state)})
             return _error(405, "MethodNotAllowed", "Use PUT /resourcegroups/{name}.")
+        if method == "DELETE":
+            _cascade_rg_delete_runtime(rest_segs[1])
         code, body = _arm.resource_group_item(_state, method, rest_segs[1], await _safe_json(request))
         return JSONResponse(status_code=code, content=body)
 
@@ -1025,7 +1039,16 @@ async def _handle_operationalinsights(request: Request, method: str, sub: str, r
                                       names: list[str], base: str) -> JSONResponse:
     from core import azure_operationalinsights_core as _oi
     payload = await _safe_json(request) if method in ("PUT", "PATCH", "POST") else {}
-    r = _oi.dispatch(_state, method, sub, rg, chain, names, payload, dict(request.query_params), base=base)
+    q = dict(request.query_params)
+    if method == "POST" and len(chain) >= 3 and chain[2].lower() in ("api", "datacollectionrules"):
+        try:                                  # data plane bodies are JSON arrays; Log-Type is a header
+            payload = await request.json()
+        except Exception:
+            payload = {}
+        for hk, qk in (("log-type", "logType"), ("time-generated-field", "time-generated-field")):
+            if request.headers.get(hk) and qk not in q:
+                q[qk] = request.headers[hk]
+    r = _oi.dispatch(_state, method, sub, rg, chain, names, payload, q, base=base)
     api_version = request.query_params.get("api-version") or _oi.API_VERSION
     resp = JSONResponse(status_code=r["status"], content=r["body"]) if r["body"] is not None \
         else Response(status_code=r["status"])
@@ -1308,6 +1331,10 @@ def _upsert(rid: str, key: str, full_type: str, name: str, catalog: dict,
         if _get_path(rec, path_expr) in (None, ""):
             _set_path(rec, path_expr, base + suffix.replace("__NAME__", name))
 
+    if is_top:     # always the simulator origin (a fake Azure hostname seeded by the core is unreachable)
+        for path_expr, val in (catalog.get("endpoints_force") or {}).items():
+            _set_path(rec, path_expr, _expand_tokens(val, name, base))
+
     _state[key] = rec
     return JSONResponse(status_code=200 if existed else 201, content=_view(rec))
 
@@ -1410,6 +1437,23 @@ def _provision_on_create(full_type: str, rec: dict | None, base: str) -> None:
         _dp.on_create(full_type, rec, base)
     except Exception:
         pass
+
+
+def _cascade_rg_delete_runtime(rg: str) -> None:
+    """Resource-group DELETE removes every child from ARM state; also tear down the
+    runtime / data-plane state each child owns (VM containers, Key Vault secrets,
+    managed SQL engines) exactly as a per-resource DELETE does. Best-effort."""
+    try:
+        kids = [r for r in list(_state.values())
+                if isinstance(r, dict) and (r.get("_rg") or "").lower() == rg.lower()
+                and r.get("type") != "Microsoft.Resources/resourceGroups"]
+    except Exception:
+        return
+    for rec in kids:
+        try:
+            _deprovision_on_delete(str(rec.get("type") or ""), rec)
+        except Exception:
+            pass
 
 
 def _deprovision_on_delete(full_type: str, rec: dict | None) -> None:

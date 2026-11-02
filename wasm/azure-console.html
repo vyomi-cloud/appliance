@@ -50,7 +50,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
   header{height:48px;background:#0b1b2b;color:#fff;display:flex;align-items:center;gap:14px;padding:0 14px;position:sticky;top:0;z-index:30}
   .logo{display:flex;align-items:center;gap:8px;font-size:15px;font-weight:600;white-space:nowrap}
   .logo svg{display:block}
-  .search{flex:1;max-width:560px;background:#0f2233;border:1px solid #1d3a55;border-radius:3px;height:30px;display:flex;align-items:center;padding:0 10px;color:#9fb6cc;gap:8px;font-size:13px}
+  .search{flex:1;min-width:0;background:#0f2233;border:1px solid #1d3a55;border-radius:3px;height:30px;display:flex;align-items:center;padding:0 10px;color:#9fb6cc;gap:8px;font-size:13px}
   .search input{flex:1;background:transparent;border:none;outline:none;color:#dfe9f2;font-size:13px}
   .hicons{display:flex;align-items:center;gap:4px;margin-left:auto}
   .hicons button,.hicons a{background:transparent;border:none;color:#cfe0ee;width:34px;height:34px;border-radius:3px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
@@ -479,29 +479,11 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     <svg width="22" height="22" role="img" aria-label="Microsoft Azure" viewBox="0 0 96 96" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="e399c19f-b68f-429d-b176-18c2117ff73c" x1="-1032.172" x2="-1059.213" y1="145.312" y2="65.426" gradientTransform="matrix(1 0 0 -1 1075 158)" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#114a8b"/><stop offset="1" stop-color="#0669bc"/></linearGradient><linearGradient id="ac2a6fc2-ca48-4327-9a3c-d4dcc3256e15" x1="-1023.725" x2="-1029.98" y1="108.083" y2="105.968" gradientTransform="matrix(1 0 0 -1 1075 158)" gradientUnits="userSpaceOnUse"><stop offset="0" stop-opacity=".3"/><stop offset=".071" stop-opacity=".2"/><stop offset=".321" stop-opacity=".1"/><stop offset=".623" stop-opacity=".05"/><stop offset="1" stop-opacity="0"/></linearGradient><linearGradient id="a7fee970-a784-4bb1-af8d-63d18e5f7db9" x1="-1027.165" x2="-997.482" y1="147.642" y2="68.561" gradientTransform="matrix(1 0 0 -1 1075 158)" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#3ccbf4"/><stop offset="1" stop-color="#2892df"/></linearGradient></defs><path fill="url(#e399c19f-b68f-429d-b176-18c2117ff73c)" d="M33.338 6.544h26.038l-27.03 80.087a4.152 4.152 0 0 1-3.933 2.824H8.149a4.145 4.145 0 0 1-3.928-5.47L29.404 9.368a4.152 4.152 0 0 1 3.934-2.825z"/><path fill="#0078d4" d="M71.175 60.261h-41.29a1.911 1.911 0 0 0-1.305 3.309l26.532 24.764a4.171 4.171 0 0 0 2.846 1.121h23.38z"/><path fill="url(#ac2a6fc2-ca48-4327-9a3c-d4dcc3256e15)" d="M33.338 6.544a4.118 4.118 0 0 0-3.943 2.879L4.252 83.917a4.14 4.14 0 0 0 3.908 5.538h20.787a4.443 4.443 0 0 0 3.41-2.9l5.014-14.777 17.91 16.705a4.237 4.237 0 0 0 2.666.972H81.24L71.024 60.261l-29.781.007L59.47 6.544z"/><path fill="url(#a7fee970-a784-4bb1-af8d-63d18e5f7db9)" d="M66.595 9.364a4.145 4.145 0 0 0-3.928-2.82H33.648a4.146 4.146 0 0 1 3.928 2.82l25.184 74.62a4.146 4.146 0 0 1-3.928 5.472h29.02a4.146 4.146 0 0 0 3.927-5.472z"/></svg>
     Microsoft Azure
   </a>
-  <!-- Back to Spaces — mirrors aws-console.html's .back-spaces link.
-       Inline-styled (no shared stylesheet) to avoid touching the Azure
-       portal-style theme tokens. Returns the user to /clouds where they
-       can switch space/provider or create a new one. -->
-  <a class="az-back-spaces" href="clouds.html#spaces"
-     title="Return to Workspaces — switch space, provider, or create a new one"
-     style="display:inline-flex; align-items:center; gap:6px;
-            margin-left:8px; padding:6px 12px; border-radius:6px;
-            background:rgba(255,255,255,0.08); color:#cfe0ee;
-            text-decoration:none; font-size:13px; font-weight:500;
-            white-space:nowrap; transition:background 0.15s, color 0.15s;"
-     onmouseover="this.style.background='rgba(60,203,244,0.18)'; this.style.color='#fff';"
-     onmouseout="this.style.background='rgba(255,255,255,0.08)'; this.style.color='#cfe0ee';">
-    <span class="material-symbols-outlined" style="font-size:16px">arrow_back</span>
-    <span>Back to Spaces</span>
-  </a>
   <div class="search"><span class="material-symbols-outlined" style="font-size:18px">search</span>
     <input placeholder="Search resources, services, and docs (simulated)"></div>
   <div class="hicons">
     <span class="subchip" id="budgetChip" title="Simulator host budget" style="display:none">budget…</span>
     <span class="subchip" id="subChip">subscription…</span>
-    <a href="clouds.html#api" title="API (Swagger) — REST API reference"><span class="material-symbols-outlined">api</span></a>
-    <a href="clouds.html#usage" title="SDK &amp; CLI usage"><span class="material-symbols-outlined">code</span></a>
     <a href="/docs" title="All consoles"><span class="material-symbols-outlined">apps</span></a>
     <button title="Cloud Shell"><span class="material-symbols-outlined">terminal</span></button>
     <button title="Notifications" id="notifBtn" style="position:relative">
@@ -680,6 +662,13 @@ toast = function(msg, kind){ _origToast(msg, kind); recordNotif(kind==="err"?"er
 function openConnectModal(rec){
   const body = document.getElementById("connectBody");
   body.innerHTML = "";
+  // Nano: the VM is an in-browser VM; the VM host renders what really works
+  // (ssh through vyomi-tunnel as the adminUsername + a browser terminal).
+  if (window.NanoVM && window.NanoVM.renderConnect) {
+    window.NanoVM.renderConnect(body, "azure", rec.name || "");
+    document.getElementById("connectModal").classList.add("open");
+    return;
+  }
   const rt = (rec.properties || {}).runtime || {};
   if (!rt.containerName) {
     // v2.0.6 — compact metadata-only modal. Three vertical sections
@@ -932,7 +921,7 @@ function renderRail(){
     const it=el("div",{class:"navitem"+(CURRENT===key?" active":""),onclick});
     it.dataset.key=key; it.append(icon(ic), el("span",{class:"lbl"},label)); return it;
   };
-  c.append(mk("home","Home",selectHome,"__home__"));
+  c.append(mk("home","Dashboard",selectHome,"__home__"));
   c.append(mk("folder","Resource groups",selectRG,"__rg__"));
   for(const s of CATALOG.services){ c.append(mk(s.icon,s.label,()=>selectService(s.key),s.key)); }
 }
@@ -1167,7 +1156,7 @@ async function selectHome(){
   markActive("__home__");
   const main=document.getElementById("main");
   main.innerHTML="";
-  main.append(crumb(["Home"]), pageHead("dashboard","Azure (Vyomi simulator)","All resources in resource group "+RG));
+  main.append(crumb(["Dashboard"]), pageHead("dashboard","Dashboard","Azure (Vyomi simulator) · all resources in resource group "+RG));
   const wrap=el("div",{class:"wrap"});
   wrap.append(vyVideoBanner("azure"));
   wrap.append(el("div",{style:"display:grid;grid-template-columns:repeat(auto-fit,minmax(min(340px,100%),1fr));gap:14px;margin-bottom:16px;align-items:stretch"},   /* both cards share the row height */
@@ -1238,7 +1227,7 @@ async function selectHome(){
 async function selectRG(){
   markActive("__rg__");
   const main=document.getElementById("main"); main.innerHTML="";
-  main.append(crumb(["Home","Resource groups"]), pageHead("folder","Resource groups",""));
+  main.append(crumb(["Dashboard","Resource groups"]), pageHead("folder","Resource groups",""));
   main.append(el("div",{class:"empty",id:"rgLoading"},"Loading…"));
   const res=await arm("GET", `/subscriptions/${SUB}/resourcegroups`, undefined, "2021-04-01");
   if(CURRENT!=="__rg__") return;
@@ -1256,7 +1245,7 @@ async function selectRG(){
 // (GET .../resources), as the portal's Overview blade shows them.
 async function openRG(name){
   const main=document.getElementById("main"); main.innerHTML="";
-  main.append(crumb(["Home","Resource groups",name]), pageHead("folder",name,"Resource group"));
+  main.append(crumb(["Dashboard","Resource groups",name]), pageHead("folder",name,"Resource group"));
   const body=el("div",{class:"wrap",id:"rgDetail"},el("div",{class:"empty"},"Loading…")); main.append(body);
   const base=`/subscriptions/${SUB}/resourcegroups/${encodeURIComponent(name)}`;
   const [g,r]=await Promise.all([arm("GET",base,undefined,"2021-04-01"), arm("GET",base+"/resources",undefined,"2021-04-01")]);
@@ -1291,7 +1280,7 @@ async function selectService(key){
   const _sub = svc.dataPlane
     ? ("Data plane · " + (svc.dpLabel || ("GET /api/azure/" + svc.key)))
     : (svc.namespace + "/" + svc.type + " · api-version " + svc.apiVersion);
-  main.append(crumb(["Home",svc.label]), pageHead(svc.icon, svc.label, _sub));
+  main.append(crumb(["Dashboard",svc.label]), pageHead(svc.icon, svc.label, _sub));
   const tb=el("div",{class:"toolbar"});
   tb.append(
     el("button",{class:"tbtn",onclick:()=>openCreate(svc)}, icon("add_circle"),"Create"),
@@ -1727,6 +1716,11 @@ SUB_RENDERERS.overview = function(svc, full, host){
   ];
   if (full.sku && full.sku.name) rows.push(["SKU", full.sku.name]);
   if (full.kind) rows.push(["Kind", full.kind]);
+  // Honest runtime state: the API keeps a valid status so SDKs/Terraform work, but where nothing
+  // actually runs (Nano has no container runtime) say so instead of letting "Running" imply it.
+  const vr = getPath(full, "properties.vyomiRuntime");
+  if (vr && vr.backend === "none") rows.push(["Runtime", "Control plane only — " + (vr.note || "no container is running for this resource")]);
+  else if (vr && vr.error) rows.push(["Runtime", "Container failed to start: " + vr.error]);
   for (const ep of ["properties.primaryEndpoints.blob","properties.serviceBusEndpoint",
                     "properties.documentEndpoint","properties.fullyQualifiedDomainName",
                     "properties.gatewayUrl","properties.defaultHostName"]) {
@@ -7206,5 +7200,6 @@ boot();
     document.addEventListener("keydown", function(e){ if(e.key==="Escape") docs.classList.remove("open"); });
   }
 })();
-</script></body>
+</script><script src="./vyomi-appbar.js" data-cloud="azure" data-clouds="clouds.html" defer></script>
+</body>
 </html>

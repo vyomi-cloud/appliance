@@ -21,13 +21,34 @@ const openService = async (re) => {
   await sleep(2000);
 };
 const openRow = async (text) => {
-  await page.locator("#main tr", { hasText: text }).first().locator("a.id, td a").first().click({ timeout: 15000 });
+  // The list pages at 10 rows (like the real console): on an appliance with more resources of the
+  // kind the new one can be on page 2, so filter for it the way a user would.
+  const row = () => page.locator("#main tr", { hasText: text }).first();
+  if (!(await row().count())) {
+    const filter = page.locator("#main input.search").first();
+    if (await filter.count()) { await filter.fill(text); await sleep(800); }
+  }
+  await row().locator("a.id, td a").first().click({ timeout: 15000 });
   await sleep(2000);
 };
 const tab = async (label) => {
   await page.locator(".top-tabs button", { hasText: label }).first().click();
   await sleep(1200);
   return page.evaluate(() => document.querySelector("#main")?.innerText || "");
+};
+// Reopen `label` until `pred(text)` holds (or `ms` passes): a write made just before (alias, flow log,
+// replica…) and the tab's own fetch can take longer than the fixed pauses on a busy appliance, which
+// read the tab before its data arrived. Still requires the same content; returns the tab's body text
+// (its tail, past the header) so a real miss shows what the tab rendered.
+const tabUntil = async (label, pred, ms = 20000) => {
+  const t0 = Date.now();
+  let text = "";
+  for (;;) {
+    text = await tab(label);
+    if (pred(text) || Date.now() - t0 > ms) break;
+    await sleep(1500);
+  }
+  return { ok: !!pred(text), text, body: text.slice(-300) };
 };
 
 const SECTIONS = {
@@ -55,7 +76,9 @@ const SECTIONS = {
     });
     check("ec2 User data: the launch script", ud.includes("echo " + name), ud);
     const conn = await tab("Connect");
-    check("ec2 Connect: SSH command with its key pair", conn.includes(`kp-${name}.pem`), conn);
+    // Nano has one account key per browser profile (vyomi-<id>.pem, valid for every Nano VM), not the launch key pair.
+    // Nano: the Connect tab is the in-browser VM panel (VM compute is opt-in); offline it is the real SSH command.
+    check("ec2 Connect: this instance's connect panel", conn.includes(iid) && (/In-browser VM/.test(conn) || /ssh -i /.test(conn)), conn.slice(-300));
     await tab("Details");
     await page.locator("#main input[data-attr=disable_api_stop]").check();
     await page.locator("#main button", { hasText: "Save" }).first().click();
@@ -177,8 +200,8 @@ const SECTIONS = {
     await page.locator("#main [data-testid=lambda-alias-save]").click();
     await sleep(1500);
     await tab("Versions");
-    const al = await tab("Aliases");
-    check("lambda Aliases: alias created in the tab is listed after reopening", al.includes(":" + name + ":live"), al);
+    const al = await tabUntil("Aliases", (t) => t.includes(":" + name + ":live"));
+    check("lambda Aliases: alias created in the tab is listed after reopening", al.ok, al.body);
   },
   async iam() {
     const user = "rt-user-" + Date.now().toString(36);
@@ -230,10 +253,10 @@ const SECTIONS = {
     await page.locator("#main [data-testid=flowlog-create]").click();
     await sleep(1500);
     await tab("Network ACLs");
-    const fl = await tab("Flow logs");
-    check("vpc Flow logs: flow log created in the tab persists", fl.includes("/vpc/" + name), fl);
-    const nacl = await tab("Network ACLs");
-    check("vpc Network ACLs: the default NACL with its allow rules", /\(default\)/.test(nacl) && /Allow/.test(nacl), nacl);
+    const fl = await tabUntil("Flow logs", (t) => t.includes("/vpc/" + name));
+    check("vpc Flow logs: flow log created in the tab persists", fl.ok, fl.body);
+    const nacl = await tabUntil("Network ACLs", (t) => /\(default\)/.test(t) && /Allow/.test(t));
+    check("vpc Network ACLs: the default NACL with its allow rules", nacl.ok, nacl.body);
   },
   async sqs() {
     const name = "rt-q-" + Date.now().toString(36), dlq = name + "-dlq";
@@ -278,8 +301,8 @@ const SECTIONS = {
     await page.locator("#main [data-testid=sns-subscribe]").click();
     await sleep(1500);
     await tab("Publish message");
-    const subs = await tab("Subscriptions");
-    check("sns Subscriptions: SQS subscription created in the tab is listed after reopening", subs.includes(qarn), subs);
+    const subs = await tabUntil("Subscriptions", (t) => t.includes(qarn));
+    check("sns Subscriptions: SQS subscription created in the tab is listed after reopening", subs.ok, subs.body);
     await tab("Publish message");
     await page.locator("#main [data-testid=sns-message]").fill("ping " + name);
     await page.locator("#main [data-testid=sns-publish]").click();
@@ -305,14 +328,14 @@ const SECTIONS = {
     await page.locator("#main [data-testid=secret-edit-text]").fill('{"db":"changed-' + name + '"}');
     await page.locator("#main [data-testid=secret-save]").click();
     await sleep(1500);
-    const vers = await tab("Versions");
-    check("secretsmanager Versions: the edit created a new AWSCURRENT version", /AWSCURRENT/.test(vers) && /AWSPREVIOUS/.test(vers), vers);
+    const vers = await tabUntil("Versions", (t) => /AWSCURRENT/.test(t) && /AWSPREVIOUS/.test(t));
+    check("secretsmanager Versions: the edit created a new AWSCURRENT version", vers.ok, vers.body);
     await tab("Replication");
     await page.locator("#main [data-testid=sec-rep-add]").click();
     await sleep(1500);
     await tab("Versions");
-    const rep = await tab("Replication");
-    check("secretsmanager Replication: replica added in the tab persists", /us-east-2/.test(rep) && /InSync/.test(rep), rep);
+    const rep = await tabUntil("Replication", (t) => /us-east-2/.test(t) && /InSync/.test(t));
+    check("secretsmanager Replication: replica added in the tab persists", rep.ok, rep.body);
   },
   async kms() {
     const alias = "rt-key-" + Date.now().toString(36);

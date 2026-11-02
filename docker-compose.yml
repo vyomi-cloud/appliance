@@ -110,7 +110,7 @@ services:
     image: valkey/valkey:8.0.1-alpine
     command: ["valkey-server", "--save", "", "--appendonly", "no", "--maxmemory", "64mb", "--maxmemory-policy", "allkeys-lru"]
     ports:
-      - "6379:6379"
+      - "127.0.0.1:${VYOMI_REDIS_PORT:-16379}:6379"
     mem_limit: 128m
     healthcheck:
       test: ["CMD", "valkey-cli", "ping"]
@@ -126,7 +126,7 @@ services:
     # {project}/{repo}/{image}; the engine ingests them from /v2/_catalog.
     image: registry:2.8.3
     ports:
-      - "5000:5000"
+      - "127.0.0.1:${VYOMI_REGISTRY_PORT:-15000}:5000"
     mem_limit: 64m
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:5000/v2/"]
@@ -261,6 +261,10 @@ services:
       - vyomi-gcs
     environment:
       CLOUDLEARN_STATE_FILE: /data/cloudlearn_state.sqlite3
+      # The URL SNS HTTP/S deliveries point back at (SigningCertURL, SubscribeURL, UnsubscribeURL):
+      # it must be the PUBLISHED port, or an endpoint verifying the signature fetches another
+      # appliance's certificate (or nothing) when VYOMI_SIMULATOR_PORT is not 9000.
+      VYOMI_PUBLIC_URL: ${VYOMI_PUBLIC_URL:-http://localhost:${VYOMI_SIMULATOR_PORT:-${CLOUDLEARN_SIMULATOR_PORT:-9000}}}
       # PRODUCTION: override CLOUDLEARN_LICENSE_SECRET via env or .env file
       CLOUDLEARN_LICENSE_SECRET: ${VYOMI_LICENSE_SECRET:-${CLOUDLEARN_LICENSE_SECRET:-cloudlearn-dev-secret}}
       # Identity-first license backend (CloudLearn Portal). Reachable from
@@ -309,6 +313,9 @@ services:
       VYOMI_GATEWAY_ADMIN: http://vyomi-gateway:2019
       CLOUDLEARN_VICTORIAMETRICS_URL: http://vyomi-victoriametrics:8428
       CLOUDLEARN_VALKEY_PORT: "6379"
+      # Published loopback ports the user's machine reaches (Memorystore / Artifact Registry show these).
+      CLOUDLEARN_VALKEY_PUBLIC_PORT: "${VYOMI_REDIS_PORT:-16379}"
+      CLOUDLEARN_REGISTRY_PUBLIC_PORT: "${VYOMI_REGISTRY_PORT:-15000}"
       CLOUDLEARN_MINIO_URL: http://vyomi-minio:9000
       CLOUDLEARN_MINIO_ACCESS_KEY: cloudlearn
       CLOUDLEARN_MINIO_SECRET_KEY: cloudlearn-dev-secret-key

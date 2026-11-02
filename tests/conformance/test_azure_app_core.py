@@ -65,6 +65,14 @@ ing = r["body"]["properties"]["configuration"]["ingress"]
 check("string form values are coerced", ing["targetPort"] == 8080 and ing["external"] is True
       and r["body"]["properties"]["template"]["scale"]["maxReplicas"] == 4, r["body"])
 
+# no container runtime (Nano / no Docker): the record must say so, never present a served FQDN
+nr = call(st, "GET", ["containerApps", "form"])["body"]
+check("no runtime -> vyomiRuntime says control-plane only; no vyomiEndpoint",
+      nr["properties"].get("vyomiRuntime", {}).get("backend") == "none" and "vyomiEndpoint" not in nr["properties"], nr["properties"].get("vyomiRuntime"))
+rv = nr["properties"]["latestRevisionName"]
+rp = call(st, "GET", ["containerApps", "form", "revisions", rv, "replicas"])["body"]["value"]
+check("no runtime -> replica details state it is not executing", rp and "Control plane only" in rp[0]["properties"]["runningStateDetails"], rp)
+
 # multiple revisions: traffic split + deactivate / restart / replicas
 M = {"location": "eastus", "properties": {"configuration": {"activeRevisionsMode": "Multiple", "ingress": {"targetPort": 80}},
                                           "template": {"containers": [{"image": "a"}], "scale": {"minReplicas": 2, "maxReplicas": 3}}}}

@@ -151,6 +151,8 @@ def _sa_view(sa: dict) -> dict:
         "etag": sa.get("etag", "BwXXX"),
         "oauth2ClientId": sa["uniqueId"],
         "disabled": sa.get("disabled", False),
+        # accounts stored before creation times were kept show when they were first listed
+        "createTime": sa.get("createTime") or sa.setdefault("createTime", datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"),
     }
 
 
@@ -174,6 +176,7 @@ def _create_service_account(store, project, body) -> GcpIamResponse:
         "description": spec.get("description", ""),
         "etag": _etag(),
         "disabled": False,
+        "createTime": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z",
     }
     sas[email] = sa
     store.persist()
