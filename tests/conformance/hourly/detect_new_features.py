@@ -112,18 +112,27 @@ def _ops_in(path: str) -> set[str]:
     except Exception:
         return set()
     ops = set()
+    fn_ops: dict[str, str] = {}
+    keys_all: set[str] = set()
+    dispatched = set()   # handlers wired into a dispatch table: reported under the table's SDK operation name
     for n in ast.walk(tree):
         if isinstance(n, ast.Dict) and len(n.keys) >= 3:
             keys = [k.value for k in n.keys if isinstance(k, ast.Constant) and isinstance(k.value, str)]
             if len(keys) == len(n.keys) and all(isinstance(v, (ast.Name, ast.Attribute, ast.Lambda)) for v in n.values) \
                     and all(OP_RE.match(k) for k in keys):
                 ops |= set(keys)
+                keys_all |= set(keys)
+                dispatched |= {v.id for v in n.values if isinstance(v, ast.Name)}
         elif isinstance(n, ast.Compare) and isinstance(n.left, ast.Name) and n.left.id in ("op", "action", "target", "operation"):
             for c in n.comparators:
                 vals = [c] if isinstance(c, ast.Constant) else list(getattr(c, "elts", []))
                 ops |= {v.value for v in vals if isinstance(v, ast.Constant) and isinstance(v.value, str) and OP_RE.match(v.value)}
         elif isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and VERB_RE.match(n.name):
-            ops.add("".join(p.capitalize() for p in n.name.strip("_").split("_")))
+            fn_ops[n.name] = "".join(p.capitalize() for p in n.name.strip("_").split("_"))
+            ops.add(fn_ops[n.name])
+    for fname in dispatched:
+        if fname in fn_ops and fn_ops[fname] not in keys_all:
+            ops.discard(fn_ops[fname])
     return ops
 
 
