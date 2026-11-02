@@ -21,7 +21,8 @@ try {
   const row = (await rows()).find((r) => r.some((c) => /^i-[0-9a-f]{17}$/.test(c)));
   check("launched instance is listed with an i-… id", !!row, JSON.stringify((await rows()).slice(-2)));
   check("no placeholder cells in the row", !!row && row.slice(1).every((c) => c && !/^[-—]$/.test(c)), JSON.stringify(row));
-  check("state is running", !!row && row.includes("running"), JSON.stringify(row));
+  // The row shows the VM's real power state: in Nano the in-browser VM is off by default, so "stopped"; offline it is "running".
+  check("state shows the VM power state", !!row && (row.includes(process.env.VYOMI_CONSOLE_URL ? "running" : "stopped")), JSON.stringify(row));
   const id = row && row.find((c) => /^i-/.test(c));
   const det = await page.evaluate(async (id) => { const r = await fetch("/api/ec2/instances/" + id); return { status: r.status, body: await r.json().catch(() => null) }; }, id);
   check("instance detail by its i-… id answers 200 with the same id", det.status === 200 && det.body && det.body.instance_id === id, `status ${det.status}`);
