@@ -1082,7 +1082,7 @@ async function renderList(main){
   toolbar.append(fi, stats);
   let curTable = null;
   const listKey = gridKeyOf(svc.columns.map(c => c[1]));
-  if (svc.columns.length > 2) toolbar.append(columnsMenu(listKey, svc.columns.map(c => c[1]), () => curTable));
+  const colMenuHolder = el("span",{}); toolbar.append(colMenuHolder);
   tableWrap.append(toolbar);
   const tableHolder = el("div",{}); tableWrap.append(tableHolder);
   wrap.append(tableWrap);
@@ -1104,17 +1104,19 @@ async function renderList(main){
               || (Array.isArray(data) ? data : []);
   if (svc.key === "pubsub") await decoratePubsubTopics(items, fullPath);
   decorateGcpItems(svc, items);
+  const cols = svc.columns.concat(autoColumns(items, svc.columns));
+  if (cols.length > 2) colMenuHolder.append(columnsMenu(listKey, cols.map(c => c[1]), () => curTable));
 
   const state = {filter:"", sortBy:null, sortDir:1};
   function paint(){
     tableHolder.innerHTML = "";
     let filtered = items.slice();
     const q = state.filter.trim().toLowerCase();
-    if (q) filtered = filtered.filter(it => svc.columns.some(c => {
-      const v = getPath(it, c[0]); return v != null && String(v).toLowerCase().includes(q);
+    if (q) filtered = filtered.filter(it => cols.some(c => {
+      const v = getPath(it, c[0]); return v != null && (c[3] ? c[2](v) : String(v)).toLowerCase().includes(q);
     }));
     if (state.sortBy != null) {
-      const path = svc.columns[state.sortBy][0];
+      const path = cols[state.sortBy][0];
       filtered.sort((a,b) => String(getPath(a,path)||"").localeCompare(String(getPath(b,path)||"")) * state.sortDir);
     }
     const chip = document.getElementById("countChip");
@@ -1136,9 +1138,9 @@ async function renderList(main){
     const t = el("table",{class:"gc"});
     const hdr = el("tr",{});
     hdr.append(el("th",{class:"chk"}, el("input",{type:"checkbox"})));
-    svc.columns.forEach((c, idx) => {
+    cols.forEach((c, idx) => {
       const arr = state.sortBy === idx ? (state.sortDir === 1 ? " ▲" : " ▼") : "";
-      hdr.append(el("th",{class:"sortable","data-label": c[1],onclick:()=>{
+      hdr.append(el("th",{class:"sortable","data-label": c[1],...(c[3] ? {"data-auto":"1"} : {}),onclick:()=>{
         if (state.sortBy === idx) state.sortDir = -state.sortDir;
         else { state.sortBy = idx; state.sortDir = 1; } paint();
       }}, c[1] + arr));
@@ -1151,13 +1153,14 @@ async function renderList(main){
       const rowName = String(getPath(it, svc.name_field) || it.name || "");
       const tr = el("tr",{"data-row-name": rowName});
       tr.append(el("td",{class:"chk"}, el("input",{type:"checkbox",onclick:e=>e.stopPropagation()})));
-      svc.columns.forEach((c,i) => {
+      cols.forEach((c,i) => {
         const v = getPath(it, c[0]);
-        const td = el("td",{"data-label": c[1]});
-        if (i === 0) td.append(el("a",{class:"id",onclick:()=>navigate({view:"detail", item:it, detailTab:0})},
+        const td = el("td",{"data-label": c[1], ...(c[3] ? {"data-auto":"1"} : {})});
+        if (c[3]) td.append(document.createTextNode(c[2](v)));
+        else if (i === 0) td.append(el("a",{class:"id",onclick:()=>navigate({view:"detail", item:it, detailTab:0})},
           String(v||"—")));
         else if (c[0].endsWith("state") || c[0].endsWith("status")) td.append(stateBadge(v));
-        else td.append(document.createTextNode(String(v ?? "—")));
+        else td.append(document.createTextNode(String(gcpShort(v) ?? "—")));
         tr.append(td);
       });
       t.append(tr);
@@ -1705,6 +1708,59 @@ function applyColVis(table, hidden){
   if (!table) return;
   table.querySelectorAll("[data-label]").forEach(c => { c.style.display = hidden.has(c.getAttribute("data-label")) ? "none" : ""; });
 }
+
+// ── Show every field in the grids: besides the console's curated columns, each list also gets one column per
+//    remaining property / label / date the records carry (hidden or shown via the Columns menu). ──
+const AUTO_SKIP = /^(kind|etag|selfLink|selfLinkWithId|id|uid|fingerprint|labelFingerprint|_.*)$/i;
+// never put credentials in a list: passwords, secrets, tokens, private keys
+const AUTO_SECRET = /pass(word|wd)?|secret|token|private|credential|api_?key|auth(orization)?$/i;
+function autoHumanize(s){ return String(s).replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/[_-]+/g, " ").replace(/^./, c => c.toUpperCase()); }
+// The API returns resource references as self-links ("…/zones/us-central1-a", "projects/p/…/machineTypes/e2-medium");
+// the console shows the resource's name, as Google Cloud does.
+function gcpShort(v){
+  return (typeof v === "string" && /^(https?:\/\/|projects\/)\S*\/(zones|regions|machineTypes|networks|subnetworks|diskTypes|locations|instanceGroups)\/[^\/\s]+$/.test(v)) ? v.slice(v.lastIndexOf("/") + 1) : v;
+}
+function autoFmt(v){
+  v = gcpShort(v);
+  const empty = x => x === undefined || x === null || x === "" || (Array.isArray(x) && !x.length) || (typeof x === "object" && !Array.isArray(x) && !Object.keys(x).length);
+  const one = x => {   // one element: the field that names it, else a short "key: value" list
+    x = gcpShort(x);
+    if (x === null || typeof x !== "object") return String(x);
+    for (const k of ["name", "deviceName", "displayName", "email", "id", "key", "role", "type"]) if (!empty(x[k])) return String(gcpShort(x[k]));
+    const sc = Object.entries(x).filter(([k, y]) => y !== null && typeof y !== "object" && y !== "" && !/^(kind|etag|fingerprint)$/i.test(k)).slice(0, 3);
+    return sc.length ? sc.map(([k, y]) => k + ": " + gcpShort(y)).join(", ") : "…";
+  };
+  if (empty(v)) return "—";
+  if (Array.isArray(v)) return v.map(one).join(", ");
+  if (typeof v === "object") {
+    const ks = Object.keys(v).filter(k => !/^(kind|etag|fingerprint)$/i.test(k) && !empty(v[k]));
+    if (!ks.length) return "—";
+    if (ks.length === 1 && Array.isArray(v[ks[0]])) return v[ks[0]].map(one).join(", ");
+    return ks.map(k => k + ": " + (Array.isArray(v[k]) ? v[k].map(one).join("; ") : typeof v[k] === "object" ? one(v[k]) : gcpShort(v[k]))).join(", ");
+  }
+  return String(v);
+}
+function autoColumns(items, base){
+  if (!items || !items.length) return [];
+  const used = new Set(base.map(c => String(c[0]).split(".")[0]));
+  const labels = new Set(base.map(c => String(c[1]).toLowerCase()));
+  const out = [], seen = new Set();
+  const add = (path, label) => {
+    let l = label, n = 2; while (labels.has(l.toLowerCase())) l = label + " (" + n++ + ")";
+    if (seen.has(path) || out.length >= 40) return; seen.add(path); labels.add(l.toLowerCase());
+    out.push([path, l, autoFmt, true]);
+  };
+  const keys = []; items.forEach(it => Object.keys(it || {}).forEach(k => { if (!keys.includes(k)) keys.push(k); }));
+  keys.forEach(k => {
+    if (used.has(k) || AUTO_SKIP.test(k) || AUTO_SECRET.test(k) || /^__/.test(k)) return;
+    const sample = (items.map(it => it[k]).find(v => v !== undefined && v !== null && v !== "")) ;
+    if (sample && typeof sample === "object" && !Array.isArray(sample) && !/label|tag/i.test(k)) {
+      const subs = []; items.forEach(it => Object.keys((it && it[k]) || {}).forEach(s => { if (!subs.includes(s)) subs.push(s); }));
+      subs.forEach(s => { if (!AUTO_SKIP.test(s) && !AUTO_SECRET.test(s)) add(k + "." + s, autoHumanize(k) + " " + autoHumanize(s).toLowerCase()); });
+    } else add(k, autoHumanize(k));
+  });
+  return out;
+}
 // labels: column headers in order; the first (the row's name/link) stays visible. getTable(): the table to update.
 function columnsMenu(key, labels, getTable){
   const hidden = hiddenCols(key);
@@ -1738,6 +1794,8 @@ function toggleEl(on, onChange){
 // opts.select = {can(row)->bool, onChange()}: a leading checkbox column; opts.ctx is handed to cell renderers.
 function tableOf(cols, rows, actions, opts){
   opts = opts || {};
+  if (cols.length >= 3 && !opts.noAuto && rows && rows.length && rows.every(r => r && typeof r === "object" && !(r instanceof Node)))
+    cols = cols.concat(autoColumns(rows, cols).map(c => [c[0], c[1], row => c[2](getPath(row, c[0])), true]));
   const t = el("table",{class:"gc"});
   const sel = opts.select;
   const hr = el("tr",{});
@@ -1747,7 +1805,7 @@ function tableOf(cols, rows, actions, opts){
     all.addEventListener("change", () => { boxes.forEach(b => { if (!b.disabled) b.checked = all.checked; }); sel.onChange(); });
     hr.append(el("th",{class:"chk"}, all));
   }
-  cols.forEach(c => hr.append(el("th",{"data-label": c[1]}, c[1])));
+  cols.forEach(c => hr.append(el("th",{"data-label": c[1], ...(c[3] ? {"data-auto":"1"} : {})}, c[1])));
   if (actions && actions.length) hr.append(el("th",{}, "Actions"));
   t.append(hr);
   rows.forEach((row, i) => {
@@ -1759,7 +1817,7 @@ function tableOf(cols, rows, actions, opts){
     }
     cols.forEach(c => {
       const v = c[2] ? c[2](row, opts.ctx || {}) : getPath(row, c[0]);
-      tr.append(el("td",{"data-label": c[1]}, v instanceof Node ? v : fmtVal(v)));
+      tr.append(el("td",{"data-label": c[1], ...(c[3] ? {"data-auto":"1"} : {})}, v instanceof Node ? v : (c[3] ? String(v) : fmtVal(v))));
     });
     if (actions && actions.length) tr.append(el("td",{style:"white-space:nowrap"},
       ...actions.filter(a => !a.when || a.when(row)).map(a =>

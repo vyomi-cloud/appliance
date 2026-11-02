@@ -127,6 +127,8 @@ const PLACEHOLDER_CELLS = (page) => page.evaluate(() => {
         const col = heads[ci] || `column ${ci + 1}`;
         // Checkbox / action columns legitimately have no text.
         if (td.querySelector("input,button,svg,[role=checkbox]") || !col || /^(actions?|select)$/i.test(col)) return;
+        // "Show every field" columns the console adds beside its curated ones: a record's optional properties are legitimately empty.
+        if (td.hasAttribute("data-auto")) return;
         if (isPh(td.innerText || "")) out.push({ row: ri + 1, col });
       });
     });
