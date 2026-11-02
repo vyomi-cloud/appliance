@@ -18088,6 +18088,9 @@ def _vpc_query_describe_route_tables(params: dict[str, Any]) -> Response:
                 route_table_ids.extend([str(v) for v in value if v])
             else:
                 route_table_ids.append(str(value))
+    for missing in route_table_ids:
+        if missing not in {r["route_table_id"] for r in vpc_state["route_tables"].values()}:
+            return _ec2_error_response("InvalidRouteTableID.NotFound", f"The routeTable ID '{missing}' does not exist", 400)
     filters = _ec2_parse_filters(params)
     route_tables = []
     for rt in vpc_state["route_tables"].values():
