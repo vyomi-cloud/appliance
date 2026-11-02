@@ -437,6 +437,23 @@ main#main{background:#fff;padding:0;margin:12px;border-radius:16px;display:flex;
 .wrap.detail-card > .detail-inner{flex:1 0 auto;display:flex;flex-direction:column}
 .wrap.detail-card > .detail-inner > .sub-layout{flex:1 0 auto}
 aside#rail{position:sticky;top:56px;align-self:flex-start;height:calc(100vh - 56px - 44px);overflow-y:auto}
+/* side menu — current Google Cloud look: 272px, Google Sans 14px, slate items, 36px rows, pill selection */
+aside#rail{width:272px}
+aside#rail.collapsed{width:56px}
+aside#rail .rail-h,aside#rail .group,aside#rail a.item{font-family:'Google Sans','Google Sans Text',Roboto,Arial,sans-serif}
+aside#rail .rail-h{font-size:14px;font-weight:500;padding:14px 18px 4px 21px}
+aside#rail .group{display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none;font-size:14px;font-weight:500;color:#1f1f1f;padding:12px 16px 6px 21px;text-transform:none;letter-spacing:0}
+aside#rail .group:hover{color:#041e49}
+aside#rail .group .chev{font-size:20px;color:#444746;transition:transform .15s}
+aside#rail .group.closed .chev{transform:rotate(180deg)}
+aside#rail a.item{min-height:36px;padding:0 16px 0 18px;margin-right:12px;gap:14px;font-size:14px;color:#444746;border-radius:0 18px 18px 0}
+aside#rail a.item .ic{font-size:20px;width:20px;color:#444746}
+aside#rail a.item.active,aside#rail a.item.active .ic{color:#041e49}
+aside#rail a.item.active{font-weight:500}
+aside#rail.collapsed a.item{margin-right:0;border-radius:0;padding:0;justify-content:center}
+aside#rail.collapsed .group .chev{display:none}
+aside#rail a.item[hidden]{display:none}
+aside#rail.collapsed a.item[hidden]{display:flex}
 /* toolbar buttons: sentence case, pill-shaped */
 .btn{height:36px;border-radius:20px;text-transform:none;letter-spacing:.1px;font-size:14px;font-family:'Google Sans',Roboto,Arial,sans-serif;border-color:var(--m3-outline);color:var(--m3-primary);background:transparent}
 .btn:hover{background:rgba(11,87,208,.08);color:var(--m3-primary)}
@@ -780,15 +797,37 @@ function renderRail(){
     ["IAM & ADMIN",   ["iam", "iamcredentials"]],
     ["OPERATIONS",    ["monitoring"]],
   ];
-  groups.forEach(([, keys]) => {
+  // Section headers collapse like Google Cloud's ("Storage Intelligence ⌃"); the choice is remembered.
+  let closed = []; try { closed = JSON.parse(localStorage.getItem("vyomi.gcp.rail.closed") || "[]"); } catch (_) {}
+  const sentence = s => (s.charAt(0) + s.slice(1).toLowerCase()).replace(/^Iam\b/, "IAM");
+  groups.forEach(([gname, keys]) => {
+    const present = keys.map(svcByKey).filter(Boolean); if (!present.length) return;
+    const head = el("div",{class:"group", role:"button", tabindex:"0", "aria-expanded":"true"}, sentence(gname),
+      el("span",{class:"material-symbols-outlined chev"}, "expand_less"));
+    const links = [];
+    const paint = () => {
+      const shut = closed.includes(gname);
+      head.classList.toggle("closed", shut); head.setAttribute("aria-expanded", String(!shut));
+      links.forEach(a => { a.hidden = shut && !a.classList.contains("active"); });   // the open service stays visible
+    };
+    const toggle = () => {
+      closed = closed.includes(gname) ? closed.filter(x => x !== gname) : closed.concat(gname);
+      try { localStorage.setItem("vyomi.gcp.rail.closed", JSON.stringify(closed)); } catch (_) {}
+      paint();
+    };
+    head.addEventListener("click", toggle);
+    head.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); } });
+    rail.append(head);
     keys.forEach(k => {
       const s = svcByKey(k); if (!s) return;
       const isActive = STATE.service === k;
-      rail.append(el("a",{class:"item"+(isActive?" active":""), title:s.label, "aria-label":s.label,
+      const a = el("a",{class:"item"+(isActive?" active":""), title:s.label, "aria-label":s.label, "data-group":gname,
         onclick:()=>navigate({view:"list", service:k, item:null})},
         el("span",{class:"material-symbols-outlined ic"}, s.icon),
-        el("span",{class:"lbl"}, s.label)));
+        el("span",{class:"lbl"}, s.label));
+      links.push(a); rail.append(a);
     });
+    paint();
   });
 }
 
