@@ -61,7 +61,7 @@ export default function Users() {
       />
       <DeleteModal visible={del} onDismiss={() => setDel(false)} resourceType="user"
         names={sel.map((x) => x.UserName)}
-        onConfirm={async () => { for (const x of sel) await api.deleteUser(x.UserName); notify.success("User(s) deleted."); setSel([]); u.reload(); }} />
+        onConfirm={async () => { for (const x of sel) await api.deleteUserWithCredentials(x.UserName); notify.success("User(s) deleted."); setSel([]); u.reload(); }} />
     </>
   );
 }

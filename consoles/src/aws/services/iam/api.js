@@ -77,8 +77,11 @@ export const updateAccessKey = (UserName, AccessKeyId, Status) => call("UpdateAc
 export const deleteAccessKey = (UserName, AccessKeyId) => call("DeleteAccessKey", { UserName, AccessKeyId });
 
 // ── multi-factor authentication (virtual MFA devices) ───────────────────
-export const createVirtualMfaDevice = async (VirtualMFADeviceName) =>
-  (await call("CreateVirtualMFADevice", { VirtualMFADeviceName })).CreateVirtualMFADeviceResponse.CreateVirtualMFADeviceResult.VirtualMFADevice;
+export const createVirtualMfaDevice = async (VirtualMFADeviceName) => {
+  const d = (await call("CreateVirtualMFADevice", { VirtualMFADeviceName })).CreateVirtualMFADeviceResponse.CreateVirtualMFADeviceResult.VirtualMFADevice;
+  // The seed is a base64 blob on the wire (BootstrapDatum); show the base32 secret an authenticator app takes.
+  return { ...d, Base32StringSeed: atob(d.Base32StringSeed || "") };
+};
 export const deleteVirtualMfaDevice = (SerialNumber) => call("DeleteVirtualMFADevice", { SerialNumber });
 export const enableMfaDevice = (UserName, SerialNumber, AuthenticationCode1, AuthenticationCode2) =>
   call("EnableMFADevice", { UserName, SerialNumber, AuthenticationCode1, AuthenticationCode2 });
@@ -214,3 +217,49 @@ export const deleteTrustAnchor = (TrustAnchorArn) => call("DeleteTrustAnchor", {
 export const createProfile = async (Name, RoleArns = []) => (await call("CreateProfile", { Name, ...members("RoleArns", RoleArns) })).CreateProfileResponse.CreateProfileResult.ProfileDetail;
 export const listProfiles = async () => asList((await call("ListProfiles", {})).ListProfilesResponse.ListProfilesResult.Profiles?.ProfileDetail);
 export const deleteProfile = (ProfileArn) => call("DeleteProfile", { ProfileArn });
+
+// ── credentials lifecycle + account-level (sweep IAM-1) — see core/iam_core.py ──
+export const getAccessKeyLastUsed = async (AccessKeyId) => (await call("GetAccessKeyLastUsed", { AccessKeyId })).GetAccessKeyLastUsedResponse.GetAccessKeyLastUsedResult.AccessKeyLastUsed;
+export const getAccountSummary = async () => {
+  const r = (await call("GetAccountSummary", {})).GetAccountSummaryResponse.GetAccountSummaryResult.SummaryMap;
+  const out = {};
+  asList(r?.entry).forEach((e) => { out[e.key] = Number(e.value); });
+  return out;
+};
+export const getSecurityRecommendations = async () => {
+  const r = (await call("GetSecurityRecommendations", {})).GetSecurityRecommendationsResponse.GetSecurityRecommendationsResult.Recommendations;
+  return asList(r?.member).map((m) => ({ ...m, Resources: asList(m.Resources?.member) }));
+};
+export const listIamEvents = async (MaxItems = 100) => asList((await call("ListIamEvents", { MaxItems })).ListIamEventsResponse.ListIamEventsResult.Events?.member);
+export const changePassword = (OldPassword, NewPassword) => call("ChangePassword", { OldPassword, NewPassword });
+export const setStsPreferences = (GlobalEndpointTokenVersion) => call("SetSecurityTokenServicePreferences", { GlobalEndpointTokenVersion });
+
+export const listSshPublicKeys = async (UserName) => asList((await call("ListSSHPublicKeys", { UserName })).ListSSHPublicKeysResponse.ListSSHPublicKeysResult.SSHPublicKeys?.member);
+export const uploadSshPublicKey = async (UserName, SSHPublicKeyBody) => (await call("UploadSSHPublicKey", { UserName, SSHPublicKeyBody })).UploadSSHPublicKeyResponse.UploadSSHPublicKeyResult.SSHPublicKey;
+export const getSshPublicKey = async (UserName, SSHPublicKeyId) => (await call("GetSSHPublicKey", { UserName, SSHPublicKeyId, Encoding: "SSH" })).GetSSHPublicKeyResponse.GetSSHPublicKeyResult.SSHPublicKey;
+export const updateSshPublicKey = (UserName, SSHPublicKeyId, Status) => call("UpdateSSHPublicKey", { UserName, SSHPublicKeyId, Status });
+export const deleteSshPublicKey = (UserName, SSHPublicKeyId) => call("DeleteSSHPublicKey", { UserName, SSHPublicKeyId });
+
+export const listServiceCredentials = async (UserName) => asList((await call("ListServiceSpecificCredentials", { UserName })).ListServiceSpecificCredentialsResponse.ListServiceSpecificCredentialsResult.ServiceSpecificCredentials?.member);
+export const createServiceCredential = async (UserName, ServiceName) => (await call("CreateServiceSpecificCredential", { UserName, ServiceName })).CreateServiceSpecificCredentialResponse.CreateServiceSpecificCredentialResult.ServiceSpecificCredential;
+export const resetServiceCredential = async (UserName, ServiceSpecificCredentialId) => (await call("ResetServiceSpecificCredential", { UserName, ServiceSpecificCredentialId })).ResetServiceSpecificCredentialResponse.ResetServiceSpecificCredentialResult.ServiceSpecificCredential;
+export const updateServiceCredential = (UserName, ServiceSpecificCredentialId, Status) => call("UpdateServiceSpecificCredential", { UserName, ServiceSpecificCredentialId, Status });
+export const deleteServiceCredential = (UserName, ServiceSpecificCredentialId) => call("DeleteServiceSpecificCredential", { UserName, ServiceSpecificCredentialId });
+
+export const listSigningCertificates = async (UserName) => asList((await call("ListSigningCertificates", { UserName })).ListSigningCertificatesResponse.ListSigningCertificatesResult.Certificates?.member);
+export const uploadSigningCertificate = async (UserName, CertificateBody) => (await call("UploadSigningCertificate", { UserName, CertificateBody })).UploadSigningCertificateResponse.UploadSigningCertificateResult.Certificate;
+export const updateSigningCertificate = (UserName, CertificateId, Status) => call("UpdateSigningCertificate", { UserName, CertificateId, Status });
+export const deleteSigningCertificate = (UserName, CertificateId) => call("DeleteSigningCertificate", { UserName, CertificateId });
+
+/** What the real console's "Delete user" does: remove the user's credentials first (the IAM API refuses
+ *  DeleteUser while access keys, MFA devices, certificates or service credentials remain), then the user. */
+export async function deleteUserWithCredentials(UserName) {
+  const quiet = (p) => p.catch(() => {});
+  for (const k of await listAccessKeys(UserName)) await deleteAccessKey(UserName, k.AccessKeyId);
+  for (const k of await listSshPublicKeys(UserName)) await deleteSshPublicKey(UserName, k.SSHPublicKeyId);
+  for (const c of await listSigningCertificates(UserName)) await deleteSigningCertificate(UserName, c.CertificateId);
+  for (const c of await listServiceCredentials(UserName)) await deleteServiceCredential(UserName, c.ServiceSpecificCredentialId);
+  for (const d of await listMfaDevices(UserName)) { await deactivateMfaDevice(UserName, d.SerialNumber); await deleteVirtualMfaDevice(d.SerialNumber); }
+  await quiet(deleteLoginProfile(UserName));
+  await deleteUser(UserName);
+}

@@ -1,6 +1,7 @@
 /* IAM Dashboard — IAM resource counts + AWS Account (account id/alias/sign-in URL) are
- * real, backed by List* calls. "Security recommendations" and "What's new" are
- * root-account/marketing content Vyomi doesn't model — small honest panels. */
+ * real, backed by List* calls. "Security recommendations" are computed server-side from real
+ * state (root MFA/keys, users without MFA, key age/last-used, password policy). "What's new" is
+ * AWS marketing content - a small honest panel. */
 import { useState } from "react";
 import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
@@ -16,7 +17,10 @@ import Link from "@cloudscape-design/components/link";
 import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import { navigate, follow } from "../../../common/router.js";
-import { ErrorAlert, NotSimulatedContainer } from "../../kit/common.jsx";
+import Alert from "@cloudscape-design/components/alert";
+import StatusIndicator from "@cloudscape-design/components/status-indicator";
+import { ErrorAlert } from "../../kit/common.jsx";
+import { CapabilityContainer } from "../../kit/Capability.jsx";
 import * as api from "./api.js";
 
 const ACCOUNT_ID = "123456789012";
@@ -34,22 +38,32 @@ export default function Dashboard() {
   const notify = useNotify();
   const d = useAsync(() => Promise.all([
     api.listGroups(), api.listUsers(), api.listRoles(), api.listPolicies(),
-    api.listSamlProviders(), api.listOidcProviders(), api.listAccountAliases(),
+    api.listSamlProviders(), api.listOidcProviders(), api.listAccountAliases(), api.getSecurityRecommendations(),
   ]), []);
   const [aliasModal, setAliasModal] = useState(false);
   const [alias, setAlias] = useState("");
 
   if (d.loading) return <Box padding="l">Loading…</Box>;
   if (d.error) return <ErrorAlert error={d.error} />;
-  const [groups, users, roles, policies, saml, oidc, aliases] = d.data;
+  const [groups, users, roles, policies, saml, oidc, aliases, recs] = d.data;
   const idpCount = saml.length + oidc.length;
   const signInUrl = aliases[0] ? `https://${aliases[0]}.signin.aws.amazon.com/console` : `https://${ACCOUNT_ID}.signin.aws.amazon.com/console`;
 
   return (
     <ContentLayout header={<Header variant="h1">IAM Dashboard</Header>}>
       <SpaceBetween size="l">
-        <NotSimulatedContainer title="Security recommendations"
-          note="Root user has MFA, and Deactivate or delete access keys for root user: Vyomi models IAM users and roles, not a distinct root principal with its own MFA/access-key state to recommend against." />
+        <CapabilityContainer id="iam.security-recommendations" title="Security recommendations" counter={`(${recs.length})`}>
+          {recs.length === 0
+            ? <StatusIndicator type="success">No security recommendations - your account follows the checks Vyomi evaluates.</StatusIndicator>
+            : <SpaceBetween size="s">
+              {recs.map((r) => (
+                <Alert key={r.Id} type={r.Severity === "High" ? "error" : r.Severity === "Medium" ? "warning" : "info"} header={r.Title}
+                  data-rec={r.Id}>
+                  {r.Remediation} <Box variant="small" color="text-body-secondary">Affected: {r.Resources.slice(0, 4).join(", ")}{r.Resources.length > 4 ? ` and ${r.Resources.length - 4} more` : ""}</Box>
+                </Alert>
+              ))}
+            </SpaceBetween>}
+        </CapabilityContainer>
         <Grid gridDefinition={[{ colspan: 6 }, { colspan: 6 }]}>
           <Container header={<Header variant="h2">IAM resources</Header>}>
             <Grid gridDefinition={[{ colspan: 2.4 }, { colspan: 2.4 }, { colspan: 2.4 }, { colspan: 2.4 }, { colspan: 2.4 }]}>
@@ -79,7 +93,12 @@ export default function Dashboard() {
           <Container header={<Header variant="h2">Tools</Header>}>
             <Button onClick={() => navigate("iam", "policy-simulator")}>Policy simulator</Button>
           </Container>
-          <NotSimulatedContainer title="What's new" />
+          <Container header={<Header variant="h2">What's new</Header>}>
+            <SpaceBetween size="xs">
+              <Link external href="https://aws.amazon.com/about-aws/whats-new/security_identity_and_compliance/">AWS Identity and Access Management announcements</Link>
+              <Box variant="small" color="text-body-secondary">Vyomi tracks the IAM API surface; see this release's notes for what changed in the simulator.</Box>
+            </SpaceBetween>
+          </Container>
         </Grid>
       </SpaceBetween>
       <Modal visible={aliasModal} onDismiss={() => setAliasModal(false)} header="Create account alias"

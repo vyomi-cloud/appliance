@@ -8,7 +8,9 @@
  * panel and score "honest". */
 import Box from "@cloudscape-design/components/box";
 import { capability } from "../../kit/Capability.jsx";
+import SpaceBetween from "@cloudscape-design/components/space-between";
 import { NotSimulatedContainer } from "../../kit/common.jsx";
+import { EventLog } from "./CredentialSections.jsx";
 
 function gapNote(id, note) {
   const c = capability(id);
@@ -27,6 +29,13 @@ export const AssignDelegatedAdministrator = () => <OrgPage title="Assign delegat
   note="Field: AWS account ID. Submit: Assign." />;
 export const RootAccessManagement = () => <OrgPage title="Root access management"
   note="Header action: Take privileged action. Organization tree (Hierarchy / List) of member accounts." />;
-export const OrganizationActivity = () => <OrgPage title="Organization activity"
-  note="Organization structure tree (Hierarchy / List) of service activity across member accounts." />;
+// Single account: the per-member-account service activity tree is the gap; the account's own IAM
+// admin-action log (real, ListIamEvents) is shown below it.
+export const OrganizationActivity = () => (
+  <SpaceBetween size="l">
+    <OrgPage title="Organization activity"
+      note="Organization structure tree (Hierarchy / List) of service activity across member accounts." />
+    <Box padding={{ horizontal: "l", bottom: "l" }}><EventLog /></Box>
+  </SpaceBetween>
+);
 export const AccountAccessManager = () => <OrgPage title="Account access manager" note="Multi-account access management across an AWS Organization." />;

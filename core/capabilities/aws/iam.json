@@ -230,6 +230,14 @@
   ],
   "tests": ["tests/conformance/test_iam_sweepiam_core.py"]
  },
+ "iam.account-settings.sts": {
+  "title": "Security Token Service (STS) global endpoint token version",
+  "level": {"nano": "limited", "offline": "limited"},
+  "limitations": [
+   "The v1/v2 global-endpoint token version is a real stored account setting (SetSecurityTokenServicePreferences, reported by GetAccountSummary), but Vyomi's STS does not mint region-scoped tokens, so the setting does not change which regions accept a session token."
+  ],
+  "tests": ["tests/conformance/test_iam_sweepiam_core.py"]
+ },
  "iam.account-summary": {
   "title": "Account summary and Dashboard resource counts",
   "level": {"nano": "full", "offline": "full"},

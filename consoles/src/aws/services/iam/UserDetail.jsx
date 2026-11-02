@@ -1,7 +1,7 @@
-/* IAM user detail — Summary + 5 tabs, all backed by real native calls except the
- * declared gap (non-CodeCommit/Keyspaces/X.509 credential sections — see
- * iam.security-credentials.codecommit). MFA devices are real (assignment + resync),
- * limited only by there being no console sign-in flow to challenge the code against.
+/* IAM user detail — Summary + 5 tabs, all backed by real native calls. MFA devices are real
+ * (assignment + resync with TOTP verification), limited only by there being no console sign-in
+ * flow to challenge the code against; SSH keys, service-specific credentials and signing
+ * certificates have a real lifecycle (CredentialSections.jsx).
  * Last Accessed and the CloudTrail policy generator are real too, mined from Vyomi's
  * own native-wire activity log rather than CloudTrail (see LastAccessed.jsx). */
 import { useState } from "react";
@@ -32,6 +32,7 @@ import { ErrorAlert, KeyValue, NotSimulatedContainer, fmtDate } from "../../kit/
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import DeleteModal from "../../kit/DeleteModal.jsx";
 import { LastAccessedTab, CloudTrailPolicyGenerator } from "./LastAccessed.jsx";
+import { SshKeysSection, ServiceCredentialsSection, SigningCertsSection } from "./CredentialSections.jsx";
 import * as api from "./api.js";
 
 function PermissionsTab({ userName, reload }) {
@@ -192,9 +193,12 @@ function TagsTab({ userName }) {
   );
 }
 
-function AccessKeysSection({ userName }) {
+export function AccessKeysSection({ userName }) {
   const notify = useNotify();
-  const k = useAsync(() => api.listAccessKeys(userName), [userName]);
+  const k = useAsync(async () => {
+    const keys = await api.listAccessKeys(userName);
+    return Promise.all(keys.map(async (ak) => ({ ...ak, lastUsed: await api.getAccessKeyLastUsed(ak.AccessKeyId).catch(() => null) })));
+  }, [userName]);
   const [created, setCreated] = useState(null);
   const create = async () => {
     try { const ak = await api.createAccessKey(userName); setCreated(ak); k.reload(); }
@@ -220,7 +224,8 @@ function AccessKeysSection({ userName }) {
           }>{ak.AccessKeyId}</Header>}>
             <KeyValue columns={3} items={[
               ["Description", "-"], ["Status", <StatusIndicator key="s" type={ak.Status === "Active" ? "success" : "stopped"}>{ak.Status}</StatusIndicator>],
-              ["Last used", "-"], ["Created", fmtDate(ak.CreateDate)], ["Last used region", "-"], ["Last used service", "-"],
+              ["Last used", ak.lastUsed?.LastUsedDate ? fmtDate(ak.lastUsed.LastUsedDate) : "Never"], ["Created", fmtDate(ak.CreateDate)],
+              ["Last used region", ak.lastUsed?.LastUsedDate ? ak.lastUsed.Region : "N/A"], ["Last used service", ak.lastUsed?.LastUsedDate ? ak.lastUsed.ServiceName : "N/A"],
             ]} />
           </Container>
         ))}
@@ -237,7 +242,7 @@ function AccessKeysSection({ userName }) {
   );
 }
 
-function ConsoleSignInSection({ userName, reload }) {
+export function ConsoleSignInSection({ userName, reload }) {
   const notify = useNotify();
   const lp = useAsync(() => api.getLoginProfile(userName), [userName]);
   const [enable, setEnable] = useState(false);
@@ -246,7 +251,7 @@ function ConsoleSignInSection({ userName, reload }) {
   const [resetRequired, setResetRequired] = useState(true);
   const [result, setResult] = useState(null);
   const submit = async () => {
-    const pw = pwType === "auto" ? Math.random().toString(36).slice(2, 10) + "Aa1!" : customPw;
+    const pw = pwType === "auto" ? Math.random().toString(36).slice(2, 14) + Math.random().toString(36).slice(2, 8).toUpperCase() + "1!" : customPw;
     try { await api.createLoginProfile(userName, pw, resetRequired); setResult(pw); lp.reload(); }
     catch (e) { notify.error(e); }
   };
@@ -277,7 +282,7 @@ function ConsoleSignInSection({ userName, reload }) {
   );
 }
 
-function MfaSection({ userName }) {
+export function MfaSection({ userName }) {
   const notify = useNotify();
   const m = useAsync(() => api.listMfaDevices(userName), [userName]);
   const [sel, setSel] = useState([]);
@@ -361,11 +366,9 @@ function SecurityCredentialsTab({ userName }) {
       <ConsoleSignInSection userName={userName} />
       <MfaSection userName={userName} />
       <AccessKeysSection userName={userName} />
-      <CapabilityContainer id="iam.security-credentials.codecommit" title="API keys" />
-      <CapabilityContainer id="iam.security-credentials.codecommit" title="SSH public keys for AWS CodeCommit" />
-      <CapabilityContainer id="iam.security-credentials.codecommit" title="HTTPS Git credentials for AWS CodeCommit" />
-      <CapabilityContainer id="iam.security-credentials.codecommit" title="Credentials for Amazon Keyspaces (for Apache Cassandra)" />
-      <CapabilityContainer id="iam.security-credentials.codecommit" title="X.509 Signing certificates" />
+      <SshKeysSection userName={userName} />
+      <ServiceCredentialsSection userName={userName} />
+      <SigningCertsSection userName={userName} />
     </SpaceBetween>
   );
 }
@@ -397,7 +400,7 @@ export default function UserDetail({ params }) {
         ]} />
       </SpaceBetween>
       <DeleteModal visible={delModal} onDismiss={() => setDelModal(false)} resourceType="user" names={[userName]}
-        onConfirm={async () => { await api.deleteUser(userName); notify.success(`User "${userName}" deleted.`); navigate("iam", "users"); }} />
+        onConfirm={async () => { await api.deleteUserWithCredentials(userName); notify.success(`User "${userName}" deleted.`); navigate("iam", "users"); }} />
     </ContentLayout>
   );
 }

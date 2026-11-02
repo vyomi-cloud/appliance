@@ -631,6 +631,8 @@ def _attach_group_policy(store, params):
 # ── access keys ──────────────────────────────────────────────────────────────
 def _require_access_key(store, akid, user_name=None):
     k = store.access_keys.get(akid)
+    if user_name and user_name.lower() == "root":
+        user_name = ROOT_USER
     if not k or (user_name and k["user_name"] != user_name):
         raise IamError("NoSuchEntity", f"Access key {akid} not found.", 404)
     return k
@@ -2230,10 +2232,19 @@ def _sum_stats(store) -> dict:
         "AttachedPoliciesPerGroupQuota": 10, "AttachedPoliciesPerRoleQuota": 10, "AttachedPoliciesPerUserQuota": 10,
         "Policies": sum(1 for p in store.policies.values()), "PoliciesQuota": 1500, "PolicySizeQuota": 6144,
         "PolicyVersionsInUse": sum(len(p.get("versions") or {"v1": 1}) for p in store.policies.values()),
-        "PolicyVersionsInUseQuota": 10000, "VersionsPerPolicyQuota": 5, "GlobalEndpointTokenVersion": 1,
+        "PolicyVersionsInUseQuota": 10000, "VersionsPerPolicyQuota": 5, "GlobalEndpointTokenVersion": 2 if x.get("sts_token_version") == "v2Token" else 1,
         "Roles": len(store.roles), "RolesQuota": 1000, "RolePolicySizeQuota": 10240,
         "InstanceProfiles": 0, "InstanceProfilesQuota": 1000,
     }
+
+
+def _set_sts_preferences(store, params):
+    v = str(params.get("GlobalEndpointTokenVersion", "")).strip()
+    if v not in ("v1Token", "v2Token"):
+        raise IamError("ValidationError", "GlobalEndpointTokenVersion must be v1Token or v2Token.", 400)
+    _x(store)["sts_token_version"] = v
+    store.persist()
+    return _envelope("SetSecurityTokenServicePreferences")
 
 
 def _get_account_summary(store, params):
@@ -2392,7 +2403,7 @@ _OPS_NEW = {
     "UploadServerCertificate": _upload_server_certificate, "GetServerCertificate": _get_server_certificate,
     "ListServerCertificates": _list_server_certificates, "UpdateServerCertificate": _update_server_certificate,
     "DeleteServerCertificate": _delete_server_certificate,
-    "GetAccountSummary": _get_account_summary,
+    "GetAccountSummary": _get_account_summary, "SetSecurityTokenServicePreferences": _set_sts_preferences,
     "GetSecurityRecommendations": _get_security_recommendations, "ListIamEvents": _list_iam_events,
 }
 

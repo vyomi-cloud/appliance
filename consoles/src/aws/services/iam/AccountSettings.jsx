@@ -1,5 +1,5 @@
 /* Account settings — Password policy is real (Edit navigates to the edit page). Role
- * manager, Centralized root access, and STS sections are AWS-Organizations / multi-account
+ * manager and Centralized root access sections are AWS-Organizations / multi-account
  * features Vyomi (single account) doesn't model. */
 import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
@@ -7,6 +7,7 @@ import ContentLayout from "@cloudscape-design/components/content-layout";
 import Header from "@cloudscape-design/components/header";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import { useAsync } from "../../../common/useAsync.js";
+import { useNotify } from "../../../common/notify.jsx";
 import { navigate } from "../../../common/router.js";
 import { ErrorAlert, KeyValue } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
@@ -21,6 +22,22 @@ const describeOther = (pol) => {
   if (pol.RequireLowercaseCharacters === "true") reqs.push("at least one lowercase letter");
   return reqs.length ? `Requires ${reqs.join(", ")}` : "No additional requirements";
 };
+
+function StsPanel() {
+  const notify = useNotify();
+  const sm = useAsync(() => api.getAccountSummary(), []);
+  const v = sm.data?.GlobalEndpointTokenVersion === 2 ? "v2Token" : "v1Token";
+  const set = async (next) => { try { await api.setStsPreferences(next); notify.success("STS global endpoint token version updated."); sm.reload(); } catch (e) { notify.error(e); } };
+  return (
+    <CapabilityContainer id="iam.account-settings.sts" title="Security Token Service (STS)"
+      actions={<Button onClick={() => set(v === "v1Token" ? "v2Token" : "v1Token")}>{v === "v1Token" ? "Change to version 2 tokens" : "Change to version 1 tokens"}</Button>}>
+      <KeyValue columns={2} items={[
+        ["Global endpoint session tokens", v === "v1Token" ? "Valid only in AWS Regions enabled by default (version 1)" : "Valid in all AWS Regions (version 2)"],
+        ["Global endpoint", "https://sts.amazonaws.com"],
+      ]} />
+    </CapabilityContainer>
+  );
+}
 
 export default function AccountSettings() {
   const p = useAsync(() => api.getAccountPasswordPolicy(), []);
@@ -38,7 +55,7 @@ export default function AccountSettings() {
         ]} />
         <CapabilityContainer id="iam.organizations" title="Role manager" />
         <CapabilityContainer id="iam.organizations" title="Centralized root access for member accounts" />
-        <CapabilityContainer id="iam.organizations" title="Security Token Service (STS)" />
+        <StsPanel />
       </SpaceBetween>
     </ContentLayout>
   );
