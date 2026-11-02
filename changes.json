@@ -1,5 +1,5 @@
 {
- "at": "2026-11-02T17:28:03+00:00",
+ "at": "2026-11-02T18:28:15+00:00",
  "baseline": false,
  "changes": [
   {
@@ -10,10 +10,17 @@
    "title": "Azure compute: [Compute] Clarify Auto zone placement and Any-only disk alignment documentation (#47457)",
    "link": "https://github.com/Azure/azure-rest-api-specs/commit/05ff20f36d7d4de3a774e5c6b37e1e58a66eaadf",
    "actionable": false
+  },
+  {
+   "cloud": "sdk",
+   "service": "go:github.com/Azure/azure-sdk-for-go/sdk/storage/azblob",
+   "kind": "release",
+   "key": "ver:go:github.com/Azure/azure-sdk-for-go/sdk/storage/azblob:v1.8.3",
+   "title": "go:github.com/Azure/azure-sdk-for-go/sdk/storage/azblob: v1.8.2 \u2192 v1.8.3",
+   "actionable": false
   }
  ],
  "errors": [
-  "maven/software.amazon.awssdk:dynamodb: The read operation timed out",
-  "maven/com.azure:azure-storage-blob: The read operation timed out"
+  "maven/com.google.cloud:google-cloud-storage: The read operation timed out"
  ]
 }
