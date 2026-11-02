@@ -428,9 +428,15 @@ aside#rail a.item{color:#1f1f1f}
 aside#rail a.item:hover{background:rgba(0,0,0,.05)}
 aside#rail a.item.active{background:var(--shell-sel);color:#041e49;border-left-color:var(--shell-bar);font-weight:500}
 aside#rail a.item.active .ic{color:#041e49}
-main#main{background:var(--shell);padding:0 12px 12px 0}
-.wrap,.wizard-page{margin:0 0 0 8px;border-radius:16px;box-shadow:none}
-.wrap.detail-card{padding:12px}
+/* The content area is one white panel that runs the full height of the window (rounded only at its top-left,
+   against the tinted shell); the side menu is a full-height column that scrolls on its own. */
+.body{align-items:stretch}
+main#main{background:#fff;padding:0;border-radius:16px 0 0 0;display:flex;flex-direction:column;min-width:0}
+.wrap,.wizard-page{flex:1 0 auto;margin:0;border-radius:0;box-shadow:none;max-width:none;width:100%}
+.wrap.detail-card{padding:12px;display:flex;flex-direction:column}
+.wrap.detail-card > .detail-inner{flex:1 0 auto;display:flex;flex-direction:column}
+.wrap.detail-card > .detail-inner > .sub-layout{flex:1 0 auto}
+aside#rail{position:sticky;top:56px;align-self:flex-start;height:calc(100vh - 56px - 44px);overflow-y:auto}
 /* toolbar buttons: sentence case, pill-shaped */
 .btn{height:36px;border-radius:20px;text-transform:none;letter-spacing:.1px;font-size:14px;font-family:'Google Sans',Roboto,Arial,sans-serif;border-color:var(--m3-outline);color:var(--m3-primary);background:transparent}
 .btn:hover{background:rgba(11,87,208,.08);color:var(--m3-primary)}
