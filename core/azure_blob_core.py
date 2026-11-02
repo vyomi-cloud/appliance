@@ -121,6 +121,11 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import unquote
+
+try:                                              # host: package import
+    from core import azure_storage_net as storage_net
+except ImportError:                               # Pyodide: cores are flat on sys.path
+    import azure_storage_net as storage_net        # type: ignore
 from xml.sax.saxutils import escape
 
 X_MS_VERSION = "2021-12-02"
@@ -626,6 +631,11 @@ def dispatch(store: AzureBlobStore, method: str, path: str,
     if props.get("publicNetworkAccess") == "Disabled":
         return _err(403, "AuthorizationFailure",
                     "Public network access is disabled for this storage account.")
+    if storage_net.network_denied(props, headers):
+        return _err(403, "AuthorizationFailure",
+                    "This request is not authorized to perform this operation: the storage "
+                    "account's firewall denies the caller (no matching IP, virtual network or "
+                    "resource-instance rule).")
     auth_header = headers.get("authorization", "") or ""
     if _SHAREDKEY_RE.match(auth_header) and props.get("allowSharedKeyAccess") is False:
         return _err(403, "KeyBasedAuthenticationNotPermitted",

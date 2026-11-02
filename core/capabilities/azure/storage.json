@@ -50,9 +50,9 @@
  },
  "azure.storage.networking": {
   "title": "Networking (public network access / firewall default action / routing preference)",
-  "level": { "nano": "limited", "offline": "limited" },
-  "limitations": ["ENFORCED: publicNetworkAccess=\"Disabled\" really rejects every Blob data-plane request for that account (403 AuthorizationFailure) — the account has no private endpoint in this simulator, so \"disabled\" means unreachable, same as the real service with no private endpoint configured. Still not simulated: virtual network rules, IP firewall rules, private endpoints and the networkAcls.defaultAction allow-list (which needs a real client network identity to match against — core/netsim models inter-VNet reachability, not a public-Internet client's source IP) and routingPreference."],
-  "tests": ["tests/conformance/test_azure_arm_core.py", "tests/conformance/test_azure_storage_depth_core.py"]
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": ["ENFORCED on the Blob data plane: publicNetworkAccess=Disabled rejects every request (403 AuthorizationFailure), and with defaultAction=Deny a request is admitted only if it matches an IP rule (caller IP = x-vyomi-client-ip, default 127.0.0.1), a virtual network rule (x-vyomi-source-subnet), the AzureServices exception (x-vyomi-azure-service) or a resource instance rule (x-vyomi-resource-id). Queue/Table data planes are not gated. Private endpoints are not simulated."],
+  "tests": ["tests/conformance/test_azure_storage_network_core.py"]
  },
  "azure.storage.encryption": {
   "title": "Encryption (key source)",
@@ -257,6 +257,48 @@
   "title": "Support + Troubleshooting",
   "level": { "nano": "not_simulated", "offline": "not_simulated" },
   "limitations": ["Opens a real Microsoft support ticket workflow — outside what a local simulator can run."],
+  "tests": []
+ },
+ "azure.storage.networking.vnets": {
+  "title": "Virtual network rules",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": ["The rule must name an existing subnet in this subscription (400 otherwise). A request matches a rule through the x-vyomi-source-subnet header, the simulator's stand-in for traffic originating in that subnet; service endpoints are not required on the subnet."],
+  "tests": ["tests/conformance/test_azure_storage_network_core.py"]
+ },
+ "azure.storage.networking.firewall": {
+  "title": "Firewall IP rules",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": ["ENFORCED: invalid, IPv6, private-range and /31-/32 rules are rejected like real ARM; the Blob data plane admits only callers whose IP is in a rule. The caller IP is the x-vyomi-client-ip header (default 127.0.0.1)."],
+  "tests": ["tests/conformance/test_azure_storage_network_core.py"]
+ },
+ "azure.storage.networking.resources": {
+  "title": "Resource instances",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": ["Matched through the x-vyomi-resource-id request header; tenantId is stored but not validated."],
+  "tests": ["tests/conformance/test_azure_storage_network_core.py"]
+ },
+ "azure.storage.networking.exceptions": {
+  "title": "Exceptions (trusted services, logging, metrics)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["AzureServices bypass is enforced via the x-vyomi-azure-service header; Logging/Metrics bypass values are stored only (there is no separate read path for logs/metrics through the firewall)."],
+  "tests": ["tests/conformance/test_azure_storage_network_core.py"]
+ },
+ "azure.storage.networking.routing": {
+  "title": "Routing preference + route-specific endpoints",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["routingChoice and publishMicrosoftEndpoints/publishInternetEndpoints are validated and stored; the route-specific hostnames are shown but there is no real Microsoft/Internet routing, so they carry no distinct network path."],
+  "tests": ["tests/conformance/test_azure_storage_network_core.py"]
+ },
+ "azure.storage.networking.customdomain": {
+  "title": "Custom domain",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["The domain name is validated and stored on properties.customDomain; no DNS CNAME verification is performed and the domain does not resolve to the account."],
+  "tests": ["tests/conformance/test_azure_storage_network_core.py"]
+ },
+ "azure.storage.networking.privateendpoints": {
+  "title": "Private endpoint connections",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["Private endpoints (Microsoft.Network/privateEndpoints with a private link service connection) are not modelled; a storage account has no private network path in Vyomi."],
   "tests": []
  }
 }

@@ -35,6 +35,11 @@ try:                                              # host: package import
 except ImportError:                               # Pyodide: cores are flat on sys.path
     from azure_arm_data import CATALOG, ROLES      # type: ignore
 
+try:                                              # storage account network rules (azure.storage.networking)
+    from core import azure_storage_net as storage_net
+except ImportError:
+    import azure_storage_net as storage_net        # type: ignore
+
 try:                                              # Container Apps engine (Microsoft.App)
     from core import azure_app_core as app_engine
 except ImportError:
@@ -1413,6 +1418,9 @@ class AzureArm:
             blocked = self._storage_hns_block(type_chain, names, payload, sub, rg)
             if blocked:
                 return blocked
+            blocked = self._storage_network_block(type_chain, payload)
+            if blocked:
+                return blocked
             blocked = self._cosmos_validate_block(type_chain, names, payload, sub, rg)
             if blocked:
                 return blocked
@@ -2192,6 +2200,14 @@ class AzureArm:
                         f"The Key Vault referenced by encryption.keyvaultproperties.keyvaulturi "
                         f"('{uri}') does not exist in this subscription.")
         return None
+
+    def _storage_network_block(self, type_chain, payload):
+        # azure.storage.networking: networkAcls / customDomain / routingPreference validation
+        if len(type_chain) != 2 or type_chain[0].lower() != "microsoft.storage" \
+                or type_chain[1].lower() != "storageaccounts":
+            return None
+        bad = storage_net.validate_network_properties((payload or {}).get("properties") or {}, self.state)
+        return _err(bad[0], bad[1], bad[2]) if bad else None
 
     def _storage_hns_block(self, type_chain, names, payload, sub, rg):
         # v4 WAVE 5b (azure.storage.datalakegen2upgrade): the Data Lake Gen2 upgrade flips
@@ -3003,6 +3019,21 @@ class AzureArm:
         typ = type_chain[1].lower() if len(type_chain) > 1 else ""
         if ns == "microsoft.resources" and typ == "deployments" and action in ("cancel", "redeploy"):
             return self._deployment_action(action, resource_name, parent_rid, sub, rg)
+        if ns == "microsoft.storage" and typ == "storageaccounts" and action in ("listkeys", "regeneratekey"):
+            # azure.storage.accesskeys: real per-account key material + rotation (regenerateKey)
+            rec = self.state.get(parent_rid.lower()) if parent_rid else None
+            if not rec:
+                return _err(404, "ResourceNotFound", f"Storage account '{resource_name}' not found.")
+            now = _now()
+            ks = rec.setdefault("_keys", {n: {"value": base64.b64encode(uuid.uuid4().bytes + uuid.uuid4().bytes + uuid.uuid4().bytes + uuid.uuid4().bytes).decode(), "created": now} for n in ("key1", "key2")})
+            if action == "regeneratekey":
+                kn = (payload or {}).get("keyName")
+                if kn not in ks:
+                    return _err(400, "InvalidKeyName", "keyName must be 'key1' or 'key2'.")
+                ks[kn] = {"value": base64.b64encode(uuid.uuid4().bytes + uuid.uuid4().bytes + uuid.uuid4().bytes + uuid.uuid4().bytes).decode(), "created": now}
+                rec.setdefault("properties", {})["keyCreationTime"] = {**(rec["properties"].get("keyCreationTime") or {}), kn: now}
+                self._record_activity(parent_rid, "Microsoft.Storage/storageAccounts/regenerateKey/action", sub or DEFAULT_SUBSCRIPTION)
+            return _ok({"keys": [{"keyName": n, "value": k["value"], "permissions": "FULL", "creationTime": k["created"]} for n, k in ks.items()]})
         if ns == "microsoft.containerregistry" and typ == "registries" and action in ("listcredentials", "regeneratecredential"):
             rec = self.state.get(parent_rid.lower()) if parent_rid else None
             if not rec:

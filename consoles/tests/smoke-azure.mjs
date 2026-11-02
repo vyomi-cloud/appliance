@@ -252,6 +252,25 @@ try {
   const after = JSON.parse((await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.Storage/storageAccounts/${SA}`)).text);
   check("Configuration save → ARM properties.accessTier", after.properties?.accessTier === "Cool", after.properties?.accessTier);
 
+  // ── Networking: firewall rules saved in the UI are ENFORCED on the Blob data plane ────
+  const SANET = `vynet${n}`;
+  await arm("PUT", `/resourceGroups/${RG}/providers/Microsoft.Storage/storageAccounts/${SANET}`, { location: "eastus", kind: "StorageV2", sku: { name: "Standard_LRS" } });
+  await page.goto(UI + `#/storage/${RG}/${SANET}/networking`);
+  await page.getByRole("radio", { name: "Enabled from selected virtual networks and IP addresses" }).check();
+  await page.getByLabel("IP address or CIDR").fill("8.8.8.0/24");
+  await page.getByRole("button", { name: "Add IP range" }).click();
+  await page.getByRole("button", { name: "Save" }).first().click();
+  await page.waitForTimeout(800);
+  const net1 = JSON.parse((await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.Storage/storageAccounts/${SANET}`)).text);
+  check("Networking save → ARM networkAcls Deny + ipRule", net1.properties?.networkAcls?.defaultAction === "Deny" && net1.properties.networkAcls.ipRules?.[0]?.value === "8.8.8.0/24", JSON.stringify(net1.properties?.networkAcls));
+  check("firewall denies a caller outside the rules (Blob 403)", (await blob("GET", SANET, "", { query: "?comp=list" })).status === 403);
+  await page.getByRole("button", { name: "Add your client IP address" }).click();
+  await page.getByRole("button", { name: "Save" }).first().click();
+  await page.waitForTimeout(800);
+  check("firewall admits the added client IP (Blob 200)", (await blob("GET", SANET, "", { query: "?comp=list" })).status === 200);
+  const badIp = await arm("PATCH", `/resourceGroups/${RG}/providers/Microsoft.Storage/storageAccounts/${SANET}`, { properties: { networkAcls: { defaultAction: "Deny", ipRules: [{ value: "10.0.0.0/24" }] } } });
+  check("ARM rejects a private-range IP rule", badIp.status === 400, `HTTP ${badIp.status}`);
+
   // ── Resource + blob created over the wire → visible in the UI (CLI → UI) ───────────────
   const put = await arm("PUT", `/resourceGroups/${RG}/providers/Microsoft.Storage/storageAccounts/${SA2}`, { location: "eastus", kind: "StorageV2", sku: { name: "Standard_LRS" } });
   check("ARM PUT storage account over wire", put.status === 200 || put.status === 201, `HTTP ${put.status}`);

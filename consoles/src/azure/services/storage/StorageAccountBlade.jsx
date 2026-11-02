@@ -24,6 +24,7 @@ import { ErrorBar, Essentials, fmtBytes, fmtDate, Glyph, InfoBar, KV, Loading, N
 import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 import { TagRows } from "./CreateStorageAccount.jsx";
+import Networking from "./StorageNetworking.jsx";
 import * as api from "./api.js";
 
 const ENFORCEMENT = "These settings are stored on the storage account (ARM) and returned to your SDKs and the az CLI. The Vyomi Blob data plane does not enforce them.";
@@ -89,7 +90,7 @@ export default function StorageAccountBlade({ params, query }) {
       configuration: () => <Configuration a={a} reload={reload} />,
       endpoints: () => <Endpoints a={a} />,
       redundancy: () => <Redundancy a={a} self={self} />,
-      networking: () => <Networking a={a} />,
+      networking: () => <Networking a={a} reload={reload} />,
       encryption: () => <Encryption a={a} reload={reload} />,
       dataprotection: () => <DataProtection a={a} />,
       objectreplication: () => <ObjectReplication a={a} />,
@@ -666,41 +667,6 @@ function Redundancy({ a, self }) {
       </section>
       <NotSimulatedContainer title="Geo-replication" feature="Geo-replication lag, the secondary region's own storage and customer-managed failover" note="Vyomi stores data once, locally — only the read-only secondary ENDPOINT above is real." />
     </CapabilityContainer>
-  );
-}
-
-function Networking({ a }) {
-  const p = a.properties || {};
-  const [tab, setTab] = useState("public");
-  const net = p.publicNetworkAccess === "Disabled" ? "Disabled" : p.networkAcls?.defaultAction === "Deny" ? "Enable from selected networks" : "Enable from all networks";
-  return (
-    <>
-      <div className="vy-panel-title">{a.name} | Networking</div>
-      <InfoBar>{ENFORCEMENT}</InfoBar>
-      <TabList selectedValue={tab} onTabSelect={(_, d) => setTab(d.value)} aria-label="Networking tabs">
-        <Tab value="public">Public access</Tab>
-        <Tab value="private">Private access</Tab>
-        <Tab value="advanced">Advanced</Tab>
-      </TabList>
-      {tab === "public" && <div style={{ display: "flex", flexDirection: "column", gap: 16, marginTop: 12 }}>
-        <section className="vy-section"><h3>Public network access</h3>
-          <KV label="Public network access" value={p.publicNetworkAccess === "Disabled" ? "Disabled" : "Enabled"} />
-          <KV label="Public network access scope" value={net} />
-        </section>
-        <NotSimulatedContainer title="Virtual networks" feature="Virtual network rules for storage accounts" />
-        <NotSimulatedContainer title="Firewall" feature="Address range IP firewall rules for storage accounts" />
-        <NotSimulatedContainer title="Resource instances" feature="Resource instances (trusted Azure resource access by resource ID)" />
-        <NotSimulatedContainer title="Exceptions" feature="Allow Azure services on the trusted services list to access this storage account" />
-      </div>}
-      {tab === "private" && <NotSimulatedContainer title="Private endpoint connections" feature="Private endpoints for storage accounts" />}
-      {tab === "advanced" && <div style={{ display: "flex", flexDirection: "column", gap: 16, marginTop: 12 }}>
-        <section className="vy-section"><h3>Network routing</h3>
-          <KV label="Routing preference" value={p.routingPreference?.routingChoice === "InternetRouting" ? "Internet routing" : "Microsoft network routing"} />
-          <NotSimulated feature="Publish route-specific endpoints for Microsoft network routing and Internet routing" />
-        </section>
-        <NotSimulatedContainer title="Custom domain" feature="Custom domain mapping — Domain name and Use indirect CNAME validation for storage accounts" />
-      </div>}
-    </>
   );
 }
 
