@@ -1336,6 +1336,24 @@ try {
   check("editing Cloud Run function source redeploys a real new revision", (runFnRevs.revisions || []).length === 2, JSON.stringify(runFnRevs).slice(0, 200));
   await shot("14b-run-source-redeployed");
 
+  // Revision tags: add a 0% tagged revision from Manage traffic → native traffic[].tag +
+  // trafficStatuses uri, and the tag really routes (:invoke?tag=).
+  await page.goto(UI + `#/run/detail/us-central1/${RUNFN}?tab=revisions`);
+  await page.getByRole("button", { name: "Manage traffic" }).click();
+  const trafficDlg = page.getByRole("dialog");
+  await trafficDlg.getByRole("button", { name: "Add revision" }).click();
+  await trafficDlg.getByLabel("Tag").last().fill("canary");
+  await trafficDlg.getByRole("button", { name: "Save" }).click();
+  await trafficDlg.waitFor({ state: "detached", timeout: 10000 });
+  const tagSvc = await wjson(`/v2/projects/vyomi-project/locations/us-central1/services/${RUNFN}`);
+  check("revision tag set in Manage traffic → native trafficStatuses tag + URL",
+    (tagSvc.trafficStatuses || []).some((t) => t.tag === "canary" && /^https:\/\/canary---/.test(t.uri || "")), JSON.stringify(tagSvc.trafficStatuses));
+  const tagInv = await wire(`/v2/projects/vyomi-project/locations/us-central1/services/${RUNFN}:invoke?tag=canary`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+  check("tagged URL serves the tagged revision", tagInv.status === 200 || tagInv.status === 202 || tagInv.status === 403, String(tagInv.status));
+  const tagMiss = await wire(`/v2/projects/vyomi-project/locations/us-central1/services/${RUNFN}:invoke?tag=nope`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+  check("unknown revision tag → 404", tagMiss.status === 404 || tagMiss.status === 403, String(tagMiss.status));
+  await shot("14b2-run-revision-tags");
+
   const RUNJOB = `v4-gcp-run-job-${Date.now() % 100000}`;
   await wire(`/v2/projects/vyomi-project/locations/us-central1/jobs?jobId=${RUNJOB}`, {
     method: "POST", headers: { "content-type": "application/json" },

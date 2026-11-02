@@ -20,6 +20,7 @@ import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { ErrorAlert, fmtDate, NotSimulated, NotSimulatedContainer, PageHeader } from "../../kit/common.jsx";
 import { Link, hashHref } from "../../link.jsx";
 import * as api from "./api.js";
+import { TrafficDialog, tagsFor } from "../run/TrafficManager.jsx";
 
 const TABS = [["observability", "Observability"], ["revisions", "Revisions"], ["source", "Source"],
   ["networking", "Networking"], ["security", "Security"], ["triggers", "Triggers"], ["yaml", "YAML"]];
@@ -261,7 +262,7 @@ function Revisions({ region, name, service, reload }) {
           { id: "name", header: "Name", sortField: "name", cell: (r) => r.name.split("/").pop() },
           { id: "traffic", header: "Traffic", cell: (r) => `${trafficFor(r.name.split("/").pop())}%` },
           { id: "deployed", header: "Deployed", sortField: "createTime", cell: (r) => fmtDate(r.createTime) },
-          { id: "tags", header: "Revision tags", cell: () => "—" },
+          { id: "tags", header: "Revision tags", cell: (r) => tagsFor(service, r.name.split("/").pop()).join(", ") || "—" },
           { id: "actions", header: "Actions", cell: (r) => (
             <Button size="small" color="error" disabled={r.name.split("/").pop() === latest}
               onClick={async () => { await api.deleteRevision(region, name, r.name.split("/").pop()); notify.success("Revision deleted"); revs.reload(); }}>
@@ -270,55 +271,9 @@ function Revisions({ region, name, service, reload }) {
           ) },
         ]}
       />
-      <NotSimulated compact feature="Revision tags" note="Vyomi serves traffic by percentage split only; named revision tags aren't modelled." />
-      {traffic && <TrafficDialog region={region} name={name} service={service} revisions={revs.data || []}
+      {traffic && <TrafficDialog service={service} revisions={revs.data || []} patch={(b, m) => api.patchService(region, name, b, m).then(() => notify.success("Traffic updated"))}
         onClose={() => setTraffic(false)} onSaved={() => { reload(); revs.reload(); }} />}
     </Stack>
-  );
-}
-
-function TrafficDialog({ region, name, service, revisions, onClose, onSaved }) {
-  const notify = useNotify();
-  const latest = (service.latestReadyRevision || "").split("/").pop();
-  const [mode, setMode] = useState(service.trafficStatuses?.some((t) => t.type !== "TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST") ? "pinned" : "latest");
-  const [pinned, setPinned] = useState(service.trafficStatuses?.find((t) => t.type !== "TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST")?.revision || latest);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(null);
-  const save = async () => {
-    setBusy(true); setError(null);
-    try {
-      const traffic = mode === "latest"
-        ? [{ type: "TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST", percent: 100 }]
-        : [{ type: "TRAFFIC_TARGET_ALLOCATION_TYPE_REVISION", revision: pinned, percent: 100 }];
-      await api.patchService(region, name, { traffic }, "traffic");
-      notify.success("Traffic updated");
-      onSaved(); onClose();
-    } catch (e) { setError(e); } finally { setBusy(false); }
-  };
-  return (
-    <Dialog open onClose={busy ? undefined : onClose} maxWidth="sm" fullWidth aria-label="Manage traffic">
-      <DialogTitle>Manage traffic</DialogTitle>
-      <DialogContent>
-        <Stack spacing={2} sx={{ pt: 1 }}>
-          <RadioGroup value={mode} onChange={(e) => setMode(e.target.value)}>
-            <FormControlLabel value="latest" control={<Radio size="small" />} label="Route 100% of traffic to the latest ready revision" />
-            <FormControlLabel value="pinned" control={<Radio size="small" />} label="Pin 100% of traffic to a specific revision" />
-          </RadioGroup>
-          {mode === "pinned" && (
-            <FormControl sx={{ maxWidth: 420 }}><InputLabel id="pin-l">Revision</InputLabel>
-              <Select labelId="pin-l" label="Revision" value={pinned} onChange={(e) => setPinned(e.target.value)}>
-                {revisions.map((r) => { const rid = r.name.split("/").pop(); return <MenuItem key={rid} value={rid}>{rid}</MenuItem>; })}
-              </Select>
-            </FormControl>
-          )}
-          {error && <Alert severity="error">{error.message}</Alert>}
-        </Stack>
-      </DialogContent>
-      <DialogActions sx={{ px: 3, pb: 2 }}>
-        <Button onClick={onClose} disabled={busy}>Cancel</Button>
-        <Button variant="contained" disabled={busy} onClick={save}>Save</Button>
-      </DialogActions>
-    </Dialog>
   );
 }
 

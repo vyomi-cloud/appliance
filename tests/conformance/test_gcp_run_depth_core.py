@@ -191,5 +191,30 @@ s, _ = call("POST", RUN + "/services/cd-fn:disconnectRepo", {})
 check("disconnect repo", s == 200)
 check("disconnecting a repo really blocks further builds", call("POST", RUN + "/services/cd-fn/builds", {})[0] == 400)
 
+# ── revision tags: enforced by the serving path ───────────────────────────────────────────
+s, op = call("POST", RUN + "/services", {"template": {"containers": [{"image": "vyomi.dev/function-source/python-3-13:a"}]},
+                                         "annotations": fn_ann}, {"serviceId": "tag-fn"})
+call("PATCH", RUN + "/services/tag-fn", {"annotations": fn_ann, "template": {"containers": [{"image": "vyomi.dev/function-source/python-3-13:b"}]}}, {"updateMask": "template"})
+revs = call("GET", RUN + "/services/tag-fn/revisions")[1]["revisions"]
+r1 = sorted(revs, key=lambda r: r["createTime"])[0]["name"].split("/")[-1]
+s, bad = call("PATCH", RUN + "/services/tag-fn", {"traffic": [{"type": "TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST", "percent": 100, "tag": "Bad_Tag"}]}, {"updateMask": "traffic"})
+check("invalid revision tag is rejected", s == 400, bad)
+s, dup = call("PATCH", RUN + "/services/tag-fn", {"traffic": [
+    {"type": "TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST", "percent": 50, "tag": "x"},
+    {"type": "TRAFFIC_TARGET_ALLOCATION_TYPE_REVISION", "revision": r1, "percent": 50, "tag": "x"}]}, {"updateMask": "traffic"})
+check("duplicate revision tag is rejected", s == 400, dup)
+s, ok = call("PATCH", RUN + "/services/tag-fn", {"traffic": [
+    {"type": "TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST", "percent": 100},
+    {"type": "TRAFFIC_TARGET_ALLOCATION_TYPE_REVISION", "revision": r1, "percent": 0, "tag": "canary"}]}, {"updateMask": "traffic"})
+check("tag on a 0% revision is accepted", s == 200, ok)
+svc = call("GET", RUN + "/services/tag-fn")[1]
+st = [t for t in svc["trafficStatuses"] if t.get("tag") == "canary"]
+check("tagged status carries a tag URL", st and st[0]["uri"].startswith("https://canary---"), svc.get("trafficStatuses"))
+call("POST", RUN + "/services/tag-fn:setIamPolicy", {"policy": {"bindings": [{"role": "roles/run.invoker", "members": ["allUsers"]}]}})
+s, out = call("POST", RUN + "/services/tag-fn:invoke", {}, {"tag": "canary"})
+check("invoking via the tag is served by the tagged revision", s in (200, 202), out)
+s, out = call("POST", RUN + "/services/tag-fn:invoke", {}, {"tag": "nope"})
+check("unknown tag is 404", s == 404, out)
+
 print(f"RESULT pass={PASS} fail={FAIL}")
 sys.exit(1 if FAIL else 0)

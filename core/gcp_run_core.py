@@ -442,7 +442,7 @@ def _check_invoker(store, full, headers):
                  "or include a valid Authorization: Bearer token.")
 
 
-def invoke_service(store, project, location, sid, event=None, headers=None, internal=False):
+def invoke_service(store, project, location, sid, event=None, headers=None, internal=False, tag=None):
     """Deliver one real request to `sid`'s currently-serving revision, after the IAM invoker
     check. The mechanism Observability's metrics/logs are fed from: a direct :invoke call, or
     an Eventarc trigger firing for real (deliver_event). Internal callers (Eventarc delivery)
@@ -451,7 +451,15 @@ def invoke_service(store, project, location, sid, event=None, headers=None, inte
     full, svc = _get_service(store, project, location, sid)
     if not internal:
         _check_invoker(store, full, headers)
-    revision = _pick_revision(svc)
+    if tag:
+        # A tagged URL (https://TAG---svc-...run.app) serves exactly the tagged target.
+        hit = next((st for st in (svc.get("trafficStatuses") or []) if st.get("tag") == tag), None)
+        if hit is None:
+            return {"status": 404, "body": {"error": {"code": 404, "status": "NOT_FOUND",
+                    "message": "No revision tag %r on service %s." % (tag, sid)}}}
+        revision = hit["revision"]
+    else:
+        revision = _pick_revision(svc)
     t0 = time.perf_counter()
     out = _run_function_source(svc.get("annotations"), event if isinstance(event, dict) else {"raw": event})
     latency_ms = (time.perf_counter() - t0) * 1000
@@ -505,8 +513,16 @@ def _traffic_check(store, svc_full, traffic):
     if not isinstance(traffic, list):
         raise _E(400, "INVALID_ARGUMENT", "Invalid traffic.")
     total = 0
+    seen_tags = set()
     for tt in traffic:
         total += int(tt.get("percent", 0) or 0)
+        tg = tt.get("tag")
+        if tg:
+            if not re.fullmatch(r"[a-z][a-z0-9-]{0,45}[a-z0-9]|[a-z]", str(tg)):
+                raise _E(400, "INVALID_ARGUMENT", "Invalid revision tag %r: use lowercase letters, digits and hyphens, starting with a letter." % tg)
+            if tg in seen_tags:
+                raise _E(400, "INVALID_ARGUMENT", "Revision tag %r is assigned to more than one traffic target." % tg)
+            seen_tags.add(tg)
         if tt.get("type") == REVISION or tt.get("revision"):
             rn = "%s/revisions/%s" % (svc_full, tt.get("revision", ""))
             if rn not in store.revisions:
@@ -1310,7 +1326,7 @@ def _services(store, method, project, location, rest, verb, query, payload, log_
         sid = rest[0]
         full = service_name(project, location, sid)
         if verb == "invoke" and method == "POST":
-            out = invoke_service(store, project, location, sid, payload, headers=headers)
+            out = invoke_service(store, project, location, sid, payload, headers=headers, tag=(query or {}).get("tag"))
             body = out["body"]
             return _json(out["status"], body if isinstance(body, (dict, list)) else {"result": body})
         if verb == "connectRepo" and method == "POST":
