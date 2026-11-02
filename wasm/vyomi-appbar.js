@@ -42,12 +42,18 @@
     '#vy-modal .hd button:hover{background:#f2f4f7}' +
     '#vy-modal.sm .box{width:min(560px,94vw);height:min(660px,92vh);background:transparent;box-shadow:none}#vy-modal.sm .hd{display:none}' +
     '#vy-modal iframe{flex:1;border:0;width:100%}' +
-    '#vy-acct-btn{flex:none;width:30px;height:30px;margin-left:8px;padding:0;border:0;border-radius:50%;background:#4d8cf3;color:#fff;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;box-shadow:0 0 0 2px rgba(255,255,255,.25)}' +
+    '#vy-acct-btn{flex:none;width:30px;height:30px;overflow:hidden;margin-left:8px;padding:0;border:0;border-radius:50%;background:#4d8cf3;color:#fff;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;box-shadow:0 0 0 2px rgba(255,255,255,.25)}' +
     '#vy-acct-btn:hover,#vy-acct-btn[aria-expanded=true]{background:#2f6fdc}' +
     '#vy-acct-btn svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}' +
     '#vy-acct-menu{position:fixed;z-index:250;min-width:250px;display:none;padding:6px;background:#fff;color:#101828;border:1px solid #e4e7ec;border-radius:12px;box-shadow:0 16px 40px rgba(0,0,0,.28);font-family:Inter,system-ui,sans-serif}' +
     '#vy-acct-menu.open{display:block}' +
-    '#vy-acct-menu .vy-who{padding:8px 12px 10px;font-size:12px;color:#667085;word-break:break-all}' +
+    '#vy-acct-menu .vy-who{display:flex;align-items:center;gap:10px;padding:8px 12px 10px;font-size:12px;color:#667085;word-break:break-all}' +
+    '#vy-acct-menu .vy-av{width:40px;height:40px;flex:none;border-radius:50%;overflow:hidden;background:#4d8cf3;color:#fff;display:inline-flex;align-items:center;justify-content:center;font:700 16px Inter,system-ui,sans-serif}' +
+    '#vy-acct-menu .vy-av img,#vy-acct-btn img{width:100%;height:100%;object-fit:cover;border-radius:50%;display:block}' +
+    '#vy-acct-menu .vy-av svg{width:22px;height:22px;fill:none;stroke:#fff;stroke-width:2}' +
+    '#vy-acct-menu .vy-wt{display:flex;flex-direction:column;min-width:0}#vy-acct-menu .vy-wt b{font-size:14px;color:#101828}' +
+    '#vy-acct-menu .vy-wt small{font-size:12px;color:#667085}#vy-acct-menu .vy-wt .vy-via{color:#475467;font-weight:600}' +
+    '#vy-acct-btn .vy-ini{font:700 13px Inter,system-ui,sans-serif}' +
     '#vy-acct-menu .vy-hr{height:1px;background:#e4e7ec;margin:4px 0}' +
     '#vy-acct-menu a{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:8px;font-size:13.5px;color:#101828;text-decoration:none;cursor:pointer}' +
     '#vy-acct-menu a:hover{background:#f2f4f7}' +
@@ -81,11 +87,13 @@
       m.classList.add('open');
     }
     // ---- account menu: a button in the console's main header (top-right) -> Activate appliance · GitHub ★ · Sign out
-    var nav = bar.querySelector('.vy-notch'), NANO = CL !== '/clouds', st = { tier: 'free', trial: null }, authed = false, who = '';
+    var nav = bar.querySelector('.vy-notch'), NANO = CL !== '/clouds', st = { tier: 'free', trial: null }, authed = false, who = '', prof = { email: '', name: '', avatar: '', via: '' };
+    function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+    var PERSON = '<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg>';
     var hdr = document.querySelector('header'), host = document.querySelector('header .right') || (function () { var h = document.querySelectorAll('header .hicons'); return h.length ? h[h.length - 1] : hdr; })();
     var ab = document.getElementById('avatarBtn'); if (ab && ab.classList.contains('avatar')) ab.style.display = 'none';   // GCP's inert "U" avatar: ours replaces it
     var btn = document.createElement('button'); btn.type = 'button'; btn.id = 'vy-acct-btn'; btn.title = 'Vyomi account'; btn.setAttribute('aria-haspopup', 'true'); btn.setAttribute('aria-expanded', 'false');
-    btn.innerHTML = '<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg>';
+    btn.innerHTML = PERSON;
     if (host) host.appendChild(btn);
     var menu = document.createElement('div'); menu.id = 'vy-acct-menu'; menu.setAttribute('role', 'menu');
     var who$ = document.createElement('div'); who$.className = 'vy-who';
@@ -111,7 +119,10 @@
       else if (t && t.ended) { act.title = 'Your free trial has ended — upgrade'; act.setAttribute('data-act', 'upgrade'); act.innerHTML = ic + '<span>Trial ended · Upgrade</span>'; }
       else if (st.tier && st.tier !== 'free') { act.title = 'Appliance activated — re-bind to a different account'; act.setAttribute('data-act', 'activate'); act.innerHTML = ic + '<span>Activated · ' + String(st.tier).toUpperCase() + '</span>'; }
       else { act.title = 'Sign in to activate — starts your free 14-day Pro trial'; act.setAttribute('data-act', 'activate'); act.innerHTML = ic + '<span>Activate appliance</span>'; }
-      who$.textContent = who || (authed || st.tier !== 'free' ? 'Signed in' : 'Not signed in');
+      var em = prof.email || who, nm = prof.name || (em ? em.split('@')[0] : ''), signed = authed || (!NANO && st.tier && st.tier !== 'free');
+      var av = prof.avatar ? '<img src="' + esc(prof.avatar) + '" alt="" referrerpolicy="no-referrer">' : (em ? '<span class="vy-ini">' + esc(em.charAt(0).toUpperCase()) + '</span>' : PERSON);
+      btn.innerHTML = av; btn.title = signed && em ? 'Vyomi account \u2014 ' + em : 'Vyomi account';
+      who$.innerHTML = signed ? '<span class="vy-av">' + av + '</span><span class="vy-wt"><b>' + esc(nm || 'Signed in') + '</b>' + (em && em !== nm ? '<small>' + esc(em) + '</small>' : '') + (prof.via ? '<small class="vy-via">Signed in with ' + esc(prof.via) + '</small>' : '') + '</span>' : '<span class="vy-wt"><small>Not signed in</small></span>';
       so.style.display = (authed || (!NANO && st.tier && st.tier !== 'free') || (!NANO && t && t.activated)) ? '' : 'none';
     }
     function refreshAcct() {
@@ -119,7 +130,7 @@
         st = { tier: d && d.active_tier, trial: d && d.trial }; who = (d && (d.issued_to || (d.license && (d.license.email || d.license.issued_to)))) || who; paintAcct();
       }).catch(function () { paintAcct(); });
       if (NANO) { try { var x = new XMLHttpRequest(); x.open('GET', '/api/auth/me', true); x.withCredentials = true;
-        x.onload = function () { try { var j = JSON.parse(x.responseText); authed = !!j.authenticated; if (j.email) who = j.email; } catch (e) {} paintAcct(); }; x.send(); } catch (e) {} }
+        x.onload = function () { try { var j = JSON.parse(x.responseText); authed = !!j.authenticated; if (j.email) { who = j.email; prof.email = j.email; } prof.avatar = j.avatar_url || ''; prof.name = j.name || j.github_login || ''; prof.via = j.provider || ((j.github_login || /githubusercontent|github\.com/.test(j.avatar_url || '')) ? 'GitHub' : ''); } catch (e) {} paintAcct(); }; x.send(); } catch (e) {} }
     }
     paintAcct(); refreshAcct();
     try {                                                    // live GitHub star count (cached for the tab session, same key as the Spaces page)

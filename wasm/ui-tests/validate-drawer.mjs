@@ -40,6 +40,35 @@ for (const cloud of ["aws", "gcp", "azure"]) {
   check(`${cloud}: no page errors`, errs.filter(e => !/ResizeObserver/.test(e)).length === 0, JSON.stringify(errs.slice(0, 2)));
   await ctx.close();
 }
+// signed in with a social login (mocked portal /api/auth/me): avatar on the button, profile + provider in the menu, Sign out works
+{
+  const ctx = await b.newContext({ viewport: { width: 1440, height: 860 } }); const p = await ctx.newPage();
+  const AV = "data:image/svg+xml;utf8," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><rect width="40" height="40" fill="#0a0"/></svg>');
+  // XHR (not fetch) is what the portal auth calls use, and the Nano service worker swallows them before Playwright can route -> mock in-page
+  await p.addInitScript((AVATAR) => {
+    const O = XMLHttpRequest.prototype.open, S = XMLHttpRequest.prototype.send;
+    XMLHttpRequest.prototype.open = function (m, u) { this.__u = String(u); return O.apply(this, arguments); };
+    XMLHttpRequest.prototype.send = function () {
+      const u = this.__u || "", self = this;
+      const fake = (body) => { Object.defineProperty(self, "responseText", { value: body }); Object.defineProperty(self, "status", { value: 200 }); setTimeout(() => { self.onload && self.onload(); self.onloadend && self.onloadend(); }, 0); };
+      if (/\/api\/auth\/me$/.test(u)) return fake(JSON.stringify({ authenticated: true, email: "ada@example.com", github_login: "adal", avatar_url: AVATAR }));
+      if (/\/api\/auth\/logout$/.test(u)) { window.__loggedOut = true; return fake('{"ok":true}'); }
+      return S.apply(this, arguments);
+    };
+  }, AV);
+  await p.route("**/dashboard", r => r.fulfill({ status: 200, contentType: "text/html", body: "<title>dash</title>" }));
+  p.on("dialog", d => d.accept());
+  await bootConsole(p, base, "/aws-console.html"); await p.waitForSelector("#vy-acct-btn", { timeout: 60000 });
+  await p.waitForSelector("#vy-acct-btn img", { timeout: 20000 }).catch(() => {});
+  check("social login: the avatar image is on the header button", (await p.locator("#vy-acct-btn img").count()) === 1);
+  await p.click("#vy-acct-btn");
+  const mt = await p.locator("#vy-acct-menu").innerText();
+  check("social login: menu shows name, email and 'Signed in with GitHub'", /adal/.test(mt) && /ada@example\.com/.test(mt) && /Signed in with GitHub/.test(mt), mt.replace(/\n/g, " | "));
+  check("social login: menu avatar image + Sign out visible", (await p.locator("#vy-acct-menu .vy-av img").count()) === 1 && await p.locator('#vy-acct-menu a[data-act="signout"]').isVisible());
+  await p.click('#vy-acct-menu a[data-act="signout"]'); await sleep(1500);
+  check("social login: Sign out posts the logout and returns to the portal dashboard", /\/dashboard/.test(p.url()), p.url());
+  await ctx.close();
+}
 // a session opened on #spaces shows Spaces
 const p2 = await (await b.newContext()).newPage(); await p2.goto(base + "/clouds.html#spaces"); await sleep(4000);
 check("opening #spaces shows the Spaces view", await p2.locator("#view-spaces").isVisible());
