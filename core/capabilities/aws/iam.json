@@ -175,20 +175,31 @@
   "tests": ["tests/conformance/test_iam_core.py"]
  },
  "iam.organizations": {
-  "title": "AWS Organizations multi-account features (root access management, organization activity, account access manager)",
-  "level": {"nano": "not_simulated", "offline": "not_simulated"},
-  "limitations": [
-   "Vyomi is a single-tenant, single-account appliance: every resource, ARN and store in the simulator (not just IAM's) is scoped to one account with no concept of member accounts, cross-account trust or consolidated billing. Modeling AWS Organizations for real would mean giving every service's core a multi-account resource namespace and cross-account evaluation, not a self-contained IAM change — so, unlike the other IAM gaps above, this one is left not simulated rather than built on an activity log or a resource-policy scan."
-  ]
- },
- "iam.organizations.policies": {
-  "title": "Service control policies (SCPs) and resource control policies (RCPs)",
+  "title": "AWS Organizations (organization, root, OUs, member accounts, handshakes, service access, delegated administrators, tags)",
   "level": {"nano": "limited", "offline": "limited"},
   "limitations": [
-   "Vyomi stores and returns SCP/RCP documents (create, list, describe, delete) on IAM's native wire — real AWS routes these through a separate Organizations service.",
-   "Vyomi simulates a single AWS account, so attachment to organizational units/accounts and cross-account enforcement are not modeled; policies are validated as JSON but not evaluated."
+   "The management-account control plane is real on the native Organizations wire (AWSOrganizationsV20161128 JSON 1.1; boto3/CLI/Terraform): CreateOrganization, root, OU tree (create/rename/delete, not-empty checks), CreateAccount (completes immediately; AWS finishes asynchronously), invite/accept/decline/cancel handshakes, MoveAccount, RemoveAccountFromOrganization, CloseAccount, trusted service access, delegated administrators and tags — all persisted.",
+   "Vyomi is still a single-account simulator: a member account is a record (id, email, name, parent, status) with NO resources, principals, credentials or traffic of its own, so the per-account service activity, member-account root credentials and cross-account access that AWS shows for them are not modeled. Consolidated billing and AWS-side email verification do not exist."
   ],
-  "tests": ["tests/conformance/test_iam_core.py"]
+  "tests": ["tests/conformance/test_organizations_core.py"]
+ },
+ "iam.organizations.policies": {
+  "title": "Service control policies (SCPs), resource control policies (RCPs) and the other organization policy types",
+  "level": {"nano": "limited", "offline": "limited"},
+  "limitations": [
+   "Real on the Organizations wire for every policy type (SCP, RCP, tag, backup, AI-services opt-out, declarative, ...): create/update/delete/describe, attach/detach to the root, OUs and accounts, ListTargetsForPolicy / ListPoliciesForTarget, EnablePolicyType / DisablePolicyType, with AWS's rules (disabled type cannot be attached, last SCP on a target cannot be detached, in-use policy cannot be deleted, FullAWSAccess is AWS managed and read-only).",
+   "SCP/RCP documents are stored and validated as JSON, and the attached chain root -> OUs -> account can be evaluated (organizations_core.effective_scp_decision, AWS allow-at-every-level / deny-anywhere semantics), but because every IAM principal and resource in Vyomi belongs to the management account — which SCPs never restrict, as in AWS — no live request is ever denied by an SCP/RCP. Tag/backup/opt-out policy documents are not interpreted."
+  ],
+  "tests": ["tests/conformance/test_organizations_core.py", "tests/conformance/test_iam_core.py"]
+ },
+ "iam.organizations.root-access": {
+  "title": "Centralized root access (EnableOrganizationsRootCredentialsManagement / RootSessions, delegated administrator)",
+  "level": {"nano": "limited", "offline": "limited"},
+  "limitations": [
+   "Real: the IAM API ListOrganizationsFeatures / Enable- and DisableOrganizationsRootCredentialsManagement / Enable- and DisableOrganizationsRootSessions, with AWS's preconditions (an organization with all features and trusted access for iam.amazonaws.com), and delegating the capability through RegisterDelegatedAdministrator.",
+   "Member accounts have no root credentials or resources, so the root-credential inventory per member account and privileged root actions (sts:AssumeRoot -> delete credentials, unlock bucket policy, ...) have nothing to act on; Vyomi has no STS AssumeRoot."
+  ],
+  "tests": ["tests/conformance/test_organizations_core.py"]
  },
  "iam.organizations.access-requests": {
   "title": "Temporary delegation requests (centralized root access)",

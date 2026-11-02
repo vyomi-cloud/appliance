@@ -1236,6 +1236,47 @@ def _list_account_access_requests(store, params):
     return _envelope("ListAccountAccessRequests", inner)
 
 
+# ── Organizations-integrated features (centralized root access) — real IAM API ──
+# EnableOrganizationsRootCredentialsManagement / RootSessions and ListOrganizationsFeatures operate on
+# the organization held by core/organizations_core.py (store.extras["org"]). As in AWS they require an
+# organization with all features and trusted access for iam.amazonaws.com (EnableAWSServiceAccess).
+_ORG_FEATURES = ("RootCredentialsManagement", "RootSessions")
+
+
+def _org_for_features(store):
+    o = store.extras.get("org")
+    if not o:
+        raise IamError("OrganizationNotFoundException", "The request was rejected because no organization is associated with your account.", 404)
+    if o.get("feature_set") != "ALL":
+        raise IamError("OrganizationNotInAllFeaturesModeException", "The request was rejected because your organization does not have all features enabled.", 409)
+    return o
+
+
+def _features_result(action: str, o: dict) -> IamResponse:
+    feats = "".join(f"<member>{f}</member>" for f in o.get("iam_features", []))
+    return _envelope(action, _el("OrganizationId", o["id"]) + f"<EnabledFeatures>{feats}</EnabledFeatures>")
+
+
+def _list_organizations_features(store, params):
+    return _features_result("ListOrganizationsFeatures", _org_for_features(store))
+
+
+def _set_org_feature(action: str, feature: str, on: bool):
+    def op(store, params):
+        o = _org_for_features(store)
+        if "iam.amazonaws.com" not in o.get("service_access", {}):
+            raise IamError("ServiceAccessNotEnabledException", "The request was rejected because trusted access is not enabled for IAM in AWS Organizations.", 409)
+        cur = list(o.get("iam_features", []))
+        if on and feature not in cur:
+            cur.append(feature)
+        if not on:
+            cur = [f for f in cur if f != feature]
+        o["iam_features"] = cur
+        store.persist()
+        return _features_result(action, o)
+    return op
+
+
 # ── native-wire activity log (Vyomi-only) ───────────────────────────────────
 # Recorded by core/aws_wire_router.py for every request signed with an IAM USER's own
 # access key (a real aws-cli/boto3 caller configured with CreateAccessKey credentials —
@@ -2462,6 +2503,11 @@ _OPS = {
     "CreateOrgPolicy": _create_org_policy, "ListOrgPolicies": _list_org_policies,
     "DescribeOrgPolicy": _describe_org_policy, "DeleteOrgPolicy": _delete_org_policy,
     "RequestAccountAccess": _request_account_access,
+    "ListOrganizationsFeatures": _list_organizations_features,
+    "EnableOrganizationsRootCredentialsManagement": _set_org_feature("EnableOrganizationsRootCredentialsManagement", "RootCredentialsManagement", True),
+    "DisableOrganizationsRootCredentialsManagement": _set_org_feature("DisableOrganizationsRootCredentialsManagement", "RootCredentialsManagement", False),
+    "EnableOrganizationsRootSessions": _set_org_feature("EnableOrganizationsRootSessions", "RootSessions", True),
+    "DisableOrganizationsRootSessions": _set_org_feature("DisableOrganizationsRootSessions", "RootSessions", False),
     "ListAccountAccessRequests": _list_account_access_requests,
     # Real IAM API: service last-accessed data (see iam.last-accessed).
     "GenerateServiceLastAccessedDetails": _generate_service_last_accessed_details,
