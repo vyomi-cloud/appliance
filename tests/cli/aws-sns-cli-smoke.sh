@@ -160,7 +160,10 @@ print("verified")
 PY
 # a free port: a fixed SFX-derived one collided with a busy port (EADDRINUSE) and the receiver never started
 RPORT=$(python3 -c "import socket; s=socket.socket(); s.bind(('0.0.0.0',0)); print(s.getsockname()[1])")
-RHOST="${SNS_RECEIVER_HOST:-$(hostname -I 2>/dev/null | awk '{print $1}')}"; RHOST="${RHOST:-172.17.0.1}"
+# the address the appliance container reaches this receiver on: Linux = the host's IP (docker0 172.17.0.1
+# fallback); Docker Desktop (macOS) has no `hostname -I` and no docker0 route, only host.docker.internal
+if [ "$(uname -s)" = "Darwin" ]; then _RDEF=host.docker.internal; else _RDEF=$(hostname -I 2>/dev/null | awk '{print $1}'); fi
+RHOST="${SNS_RECEIVER_HOST:-$_RDEF}"; RHOST="${RHOST:-172.17.0.1}"
 python3 "$RDIR/recv.py" "$RPORT" "$RDIR" & RPID=$!
 sleep 1
 rlog() { python3 -c "

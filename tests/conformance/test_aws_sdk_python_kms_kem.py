@@ -10,6 +10,14 @@ from botocore.exceptions import ClientError
 EP = os.environ.get("VYOMI_BASE_URL", "http://localhost:9000")
 kms = boto3.client("kms", endpoint_url=EP, region_name="us-east-1", aws_access_key_id="test", aws_secret_access_key="test")
 failed = False
+if not hasattr(kms, "encapsulate"):
+    # Encapsulate/Decapsulate only exist in recent botocore, which needs Python >= 3.10; on an older
+    # interpreter pip silently stops at a botocore without them. That is the runner's SDK, not the
+    # simulator — say so instead of five AttributeErrors.
+    import botocore
+    print(f"[FAIL] SDK too old: botocore {botocore.__version__} on Python {sys.version.split()[0]} has no "
+          "kms.encapsulate — run with Python >= 3.10 and a current boto3 (pip install -U boto3)")
+    sys.exit(1)
 
 
 def check(name, fn):

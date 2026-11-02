@@ -49,6 +49,10 @@ services:
       - vyomi-gcs
     environment:
       CLOUDLEARN_STATE_FILE: /data/cloudlearn_state.sqlite3
+      # The URL SNS HTTP/S deliveries point back at (SigningCertURL, SubscribeURL, UnsubscribeURL):
+      # it must be the PUBLISHED port, or an endpoint verifying the signature fetches another
+      # appliance's certificate (or nothing) when VYOMI_SIMULATOR_PORT is not 9000.
+      VYOMI_PUBLIC_URL: ${VYOMI_PUBLIC_URL:-http://localhost:${VYOMI_SIMULATOR_PORT:-9000}}
       CLOUDLEARN_LICENSE_SECRET: ${VYOMI_LICENSE_SECRET:-cloudlearn-dev-secret}
       CLOUDLEARN_LICENSE_BACKEND_URL: ${VYOMI_LICENSE_BACKEND_URL:-https://vyomi.cloud}
       # Opt out of install registration (users; always set in CI/test boots).
