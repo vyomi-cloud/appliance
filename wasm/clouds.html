@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <script>if(/[?&]embed=1/.test(location.search))document.documentElement.classList.add("vy-embed");</script>
-  <script>window.__vyHash=location.hash;try{if(!/[?&]embed=1/.test(location.search)&&!location.hash&&localStorage.getItem("vyomi.defaultCloud"))document.documentElement.classList.add("vy-entering")}catch(e){}</script>
+  <script>window.__vyHash=location.hash;try{if(!/[?&]embed=1/.test(location.search)&&!location.hash&&localStorage.getItem("vyomi.defaultSpace"))document.documentElement.classList.add("vy-entering")}catch(e){}</script>
   <script src="nano-rates.js"></script>
   <script>
   (function(){
@@ -126,6 +126,11 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
       box-shadow: 0 0 0 1px #10b981 inset,
                   0 4px 12px rgba(16,185,129,0.10);
     }
+    .space-star { margin-left: 6px; flex: none; width: 28px; height: 28px; border: 0; border-radius: 50%; background: transparent; cursor: pointer; color: #94a3b8; display: inline-flex; align-items: center; justify-content: center; }
+    .space-star:hover { background: rgba(148,163,184,.2); color: #f59e0b; }
+    .space-star.on { color: #f59e0b; }
+    .space-star svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linejoin: round; }
+    .space-star.on svg { fill: currentColor; }
     .space-row {
       display: flex; align-items: center; gap: 10px; margin-bottom: 6px;
     }
@@ -3325,6 +3330,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
                 <span class="space-logo ${ provider }" title="${ ({aws: "AWS", gcp: "Google Cloud", azure: "Microsoft Azure"})[provider] || provider }">${ SPACE_LOGOS[provider] || provider }</span>
                 <span class="space-name">${ s.name || s.space_id }</span>
                 ${ _statusPillHtml(s, isActive) }
+                <button type="button" class="space-star ${ s.space_id === _defaultSpace() ? 'on' : '' }" title="${ s.space_id === _defaultSpace() ? 'Default space — Vyomi opens here' : 'Make this the default space' }" aria-label="${ s.space_id === _defaultSpace() ? 'Default space' : 'Make default space' }" aria-pressed="${ s.space_id === _defaultSpace() }" data-star="${ s.space_id }" onclick="event.preventDefault();event.stopPropagation();setDefaultSpace('${ s.space_id }')"><svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg></button>
               </div>
               <div class="space-meta">
                 ${ region }<span class="dot">·</span>${ totalRes } resource${ totalRes === 1 ? '' : 's' }
@@ -3409,6 +3415,13 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     document.addEventListener('keydown', (ev) => {
       if (ev.key === 'Escape') closeClModal();
     });
+
+    // One space is the default (per browser): Vyomi opens straight into it. Set from the star on a space card.
+    function _defaultSpace() { try { return localStorage.getItem('vyomi.defaultSpace') || ''; } catch (_) { return ''; } }
+    function setDefaultSpace(id) {
+      try { localStorage.setItem('vyomi.defaultSpace', id); } catch (_) {}
+      loadSpaces();
+    }
 
     async function switchAndOpen(spaceId, provider) {
       // Pre-check the tier policy: if the user's subscription doesn't

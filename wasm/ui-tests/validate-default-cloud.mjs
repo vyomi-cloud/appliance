@@ -1,6 +1,6 @@
-/* Nano: first launch shows the forced "default cloud" dialog on clouds.html; after a pick the browser remembers
- * it and clouds.html opens straight into that cloud's console; an explicit #spaces view isn't redirected; the
- * drawer's "Default cloud" item reopens the dialog (dismissible) and changes it.
+/* Nano: first launch shows the forced, opaque "default space" dialog on clouds.html; after a pick the browser
+ * remembers the space and clouds.html opens straight into its console; an explicit #spaces view isn't redirected;
+ * the drawer has no "Default cloud" item - Spaces is the only switcher and a star on a card sets the default.
  * Run: NANO_DIR=<worktree>/wasm node validate-default-cloud.mjs */
 import { startServer, bootConsole, chromium, sleep } from "./lib.mjs";
 const { server, base } = await startServer();
@@ -8,25 +8,40 @@ const b = await chromium.launch(); let ok = 0, bad = 0;
 const check = (n, c, note = "") => { console.log(`[${c ? "PASS" : "FAIL"}] ${n}${c ? "" : " " + note}`); c ? ok++ : bad++; };
 const ctx = await b.newContext({ viewport: { width: 1440, height: 860 } });
 const p = await ctx.newPage(); const errs = []; p.on("pageerror", e => errs.push(String(e)));
-await p.goto(base + "/clouds.html"); await p.waitForSelector("#vy-pick .tile", { timeout: 60000 });
-check("first launch shows the dialog with 3 tiles", (await p.locator("#vy-pick .tile").count()) === 3);
-check("no Cancel when forced; Continue disabled", (await p.locator("#vy-pick .cancel").count()) === 0 && await p.locator("#vy-pick .go").isDisabled());
+const KEY = () => p.evaluate(() => localStorage.getItem("vyomi.defaultSpace"));
+await p.goto(base + "/clouds.html"); await p.waitForSelector("#vy-pick .news .opt", { timeout: 60000 });
+check("first launch shows the dialog with 3 'new space' options", (await p.locator("#vy-pick .news .opt").count()) === 3);
+check("no Cancel; Continue disabled", (await p.locator("#vy-pick .ft button:not(.go)").count()) === 0 && await p.locator("#vy-pick .go").isDisabled());
+const cov = await p.evaluate(() => { const g = document.getElementById("spaces-grid"); const t = document.elementFromPoint(8, 8); return !!t && !!t.closest("#vy-pick") && (!g || getComputedStyle(g).visibility === "hidden"); });
+check("the old Spaces page is not visible behind the dialog", cov);
 await p.keyboard.press("Escape"); await p.mouse.click(8, 8); await sleep(300);
 check("Esc / backdrop do not close it", await p.locator("#vy-pick").isVisible());
-await p.click('#vy-pick .tile[data-c="gcp"]'); await p.click("#vy-pick .go");
+await p.click('#vy-pick .opt[data-n="gcp"]'); await p.click("#vy-pick .go");
 await p.waitForURL(/gcp-console\.html/, { timeout: 60000 });
-check("Continue opens the GCP console", /gcp-console\.html/.test(p.url()), p.url());
-check("default remembered", (await p.evaluate(() => localStorage.getItem("vyomi.defaultCloud"))) === "gcp");
+check("Continue creates a GCP space and opens its console", /gcp-console\.html/.test(p.url()), p.url());
+const gcpId = await KEY();
+check("default = that space's id", !!gcpId);
 const p2 = await ctx.newPage(); await p2.goto(base + "/clouds.html"); await p2.waitForURL(/gcp-console\.html/, { timeout: 60000 });
-check("a later launch goes straight to the default cloud", /gcp-console\.html/.test(p2.url()) && (await p2.locator("#vy-pick").count()) === 0, p2.url());
+check("a later launch goes straight to the default space", /gcp-console\.html/.test(p2.url()) && (await p2.locator("#vy-pick").count()) === 0, p2.url());
+await p2.close();
 const p3 = await ctx.newPage(); await p3.goto(base + "/clouds.html#spaces"); await sleep(3000);
 check("clouds.html#spaces is not redirected", /clouds\.html/.test(p3.url()) && (await p3.locator("#vy-pick").count()) === 0, p3.url());
-await p.waitForSelector("#vy-appbar .vy-notch a", { timeout: 60000 }); await p.click('#vy-appbar a[data-v="default"]'); await p.waitForSelector("#vy-pick .tile");
-check("drawer: dialog is cancellable and badges the current default", (await p.locator("#vy-pick .cancel").count()) === 1 && (await p.locator('#vy-pick .tile[data-c="gcp"] .badge').count()) === 1);
-await p.keyboard.press("Escape"); await sleep(200);
-check("drawer: Esc closes it", (await p.locator("#vy-pick").count()) === 0);
-await p.click('#vy-appbar a[data-v="default"]'); await p.waitForSelector("#vy-pick .tile");
-await p.click('#vy-pick .tile[data-c="azure"]'); await p.click("#vy-pick .go"); await p.waitForURL(/azure-console\.html/, { timeout: 60000 });
-check("changing the default opens that cloud and saves it", /azure-console\.html/.test(p.url()) && (await p.evaluate(() => localStorage.getItem("vyomi.defaultCloud"))) === "azure", p.url());
+await p3.close();
+await p.waitForSelector("#vy-appbar .vy-notch a", { timeout: 60000 });
+check("no separate 'Default cloud' drawer item", (await p.locator('#vy-appbar a[data-v="default"]').count()) === 0);
+const mk = await p.evaluate(async () => { const r = await fetch("/api/spaces", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ provider: "azure", name: "Azure star test" }) }); const j = await r.json().catch(() => ({})); return (j.space && j.space.space_id) || null; });
+check("a second (Azure) space exists", !!mk);
+await p.click('#vy-appbar a[data-v="spaces"]');
+const fr = p.frameLocator("#vy-modal iframe");
+await fr.locator(`[data-star="${mk}"]`).waitFor({ timeout: 60000 });
+check("exactly one starred space - the GCP default", (await fr.locator(".space-star.on").count()) === 1 && (await fr.locator(`[data-star="${gcpId}"].on`).count()) === 1);
+await fr.locator(`[data-star="${mk}"]`).click(); await sleep(1000);
+check("starring another space moves the default, no navigation", (await KEY()) === mk && /gcp-console\.html/.test(p.url()) && (await fr.locator(".space-star.on").count()) === 1, p.url());
+const p4 = await ctx.newPage(); await p4.goto(base + "/clouds.html"); await p4.waitForURL(/azure-console\.html/, { timeout: 60000 });
+check("the next launch opens the newly starred space", /azure-console\.html/.test(p4.url()), p4.url());
+await p4.close();
+await p.evaluate(() => localStorage.setItem("vyomi.defaultSpace", "space-does-not-exist"));
+const p5 = await ctx.newPage(); await p5.goto(base + "/clouds.html"); await p5.locator("#vy-pick").waitFor({ timeout: 60000 });
+check("a stale default brings the dialog back", await p5.locator("#vy-pick .go").isDisabled());
 check("no page errors", errs.filter(e => !/ResizeObserver/.test(e)).length === 0, JSON.stringify(errs.slice(0, 2)));
 console.log(`${ok} pass / ${bad} fail`); await b.close(); server.close(); process.exit(bad ? 1 : 0);

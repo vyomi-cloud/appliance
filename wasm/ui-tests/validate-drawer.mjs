@@ -1,6 +1,6 @@
 /* Nano: the bottom drawer (vyomi-appbar.js) on all three consoles — each icon opens its appliance page in a
  * modal (clouds.html?embed=1) without leaving the console; Esc/✕ close it; no appliance chrome inside; the
- * console's own back-to-spaces / api / usage links are gone; a fresh session lands on Spaces.
+ * console's own back-to-spaces / api / usage links are gone; a a session opened on #spaces shows Spaces.
  * Run: NANO_DIR=<worktree>/wasm node validate-drawer.mjs */
 import { startServer, bootConsole, chromium, sleep } from "./lib.mjs";
 const { server, base } = await startServer();
@@ -11,7 +11,7 @@ for (const cloud of ["aws", "gcp", "azure"]) {
   const errs = []; p.on("pageerror", e => errs.push(String(e)));
   await bootConsole(p, base, `/${cloud}-console.html`);
   await p.waitForSelector("#vy-appbar .vy-notch a", { timeout: 60000 });
-  check(`${cloud}: drawer has 6 items (5 appliance pages + Default cloud)`, (await p.locator("#vy-appbar .vy-notch a").count()) === 6);
+  check(`${cloud}: drawer has 5 items (no separate Default cloud)`, (await p.locator("#vy-appbar .vy-notch a").count()) === 5);
   check(`${cloud}: old back-to-spaces/api/usage header links removed`,
     (await p.locator("header .back-spaces, header .az-back-spaces, header a[href$='#api'], header a[href$='#usage']").count()) === 0);
   const url0 = p.url();
@@ -28,7 +28,7 @@ for (const cloud of ["aws", "gcp", "azure"]) {
   check(`${cloud}: no page errors`, errs.filter(e => !/ResizeObserver/.test(e)).length === 0, JSON.stringify(errs.slice(0, 2)));
   await ctx.close();
 }
-// fresh session lands on Spaces
-const p2 = await (await b.newContext()).newPage(); await p2.goto(base + "/clouds.html"); await sleep(4000);
-check("fresh session: Spaces view visible", await p2.locator("#view-spaces").isVisible());
+// a session opened on #spaces shows Spaces
+const p2 = await (await b.newContext()).newPage(); await p2.goto(base + "/clouds.html#spaces"); await sleep(4000);
+check("opening #spaces shows the Spaces view", await p2.locator("#view-spaces").isVisible());
 console.log(`${ok} pass / ${bad} fail`); await b.close(); server.close(); process.exit(bad ? 1 : 0);
