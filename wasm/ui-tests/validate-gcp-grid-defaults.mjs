@@ -52,6 +52,24 @@ try {
       check(`${k}: column '${label}' filled`, !bad, JSON.stringify(v));
     }
   }
+  // Every grid ends in a Created column; wherever the service already has rows, each row must carry a real timestamp.
+  const created = await page.evaluate(async () => {
+    const cat = await (await fetch("/api/gcp/catalog")).json(), out = {};
+    for (const k of ["compute", "cloudsql", "functions", "vpc", "iam", "monitoring"]) {
+      const svc = cat.services.find((x) => x.key === k);
+      const col = svc && svc.columns.find((c) => c[1] === "Created");
+      if (!col) { out[k] = { col: false }; continue; }
+      const path = svc.collection_path.replace("{project}", cat.project).replace("{zone}", cat.zone).replace("{region}", cat.region).replace("{location}", cat.region);
+      let items = [];
+      try { const l = await (await fetch(path)).json(); items = Array.isArray(l) ? l : (Object.values(l).find(Array.isArray) || []); } catch (_) {}
+      out[k] = { col: true, rows: items.length, bad: items.filter((i) => !i[col[0]] || Number.isNaN(Date.parse(i[col[0]]))).length };
+    }
+    return out;
+  });
+  for (const [k, r] of Object.entries(created)) {
+    check(`${k}: grid has a Created column`, r.col);
+    if (r.col) check(`${k}: every row (${r.rows}) has a creation time`, r.bad === 0, `${r.bad} rows without one`);
+  }
 } catch (e) { check("run", false, String(e).split("\n")[0]); }
 await browser.close(); if (server) server.close();
 process.exit(checks.length && checks.every(Boolean) ? 0 : 1);

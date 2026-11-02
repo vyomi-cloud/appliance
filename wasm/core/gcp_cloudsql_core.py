@@ -168,6 +168,7 @@ def _insert_instance(store: SqlStore, project: str, body: dict) -> CloudSqlRespo
         "region": region,
         "gceZone": str(body.get("gceZone", f"{region}-a")),
         "settings": settings,
+        "createTime": _now_iso(),
         "etag": _etag(),
         "databases": {},  # name -> database metadata (control-plane view)
         # the instance's default admin user (postgres / root / sqlserver), as Cloud SQL creates it
