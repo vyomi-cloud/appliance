@@ -14,6 +14,7 @@ import Textarea from "@cloudscape-design/components/textarea";
 import DeleteModal from "../../kit/DeleteModal.jsx";
 import { ErrorAlert, KeyValue, NotSimulatedContainer, Status } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
+import MetricGraphs from "../../kit/MetricGraphs.jsx";
 import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import { follow, href, navigate } from "../../../common/router.js";
@@ -140,7 +141,7 @@ export default function RuleDetail({ params, query }) {
         <Tabs tabs={[
           { id: "pattern", label: "Event pattern", content: <EventPatternTab rule={d} reload={rule.reload} /> },
           { id: "targets", label: "Targets", content: <TargetsTab rule={d} reload={rule.reload} /> },
-          { id: "monitoring", label: "Monitoring", content: <NotSimulatedContainer title="Metrics" note="CloudWatch metrics for rule invocations aren't aggregated in Vyomi." /> },
+          { id: "monitoring", label: "Monitoring", content: <CapabilityContainer id="eventbridge.metrics" title="Metrics"><MetricGraphs bare graphs={["Invocations", "TriggeredRules", "MatchedEvents", "FailedInvocations"].map((n) => ({ title: n, namespace: "AWS/Events", name: n, dimensions: [{ Name: "RuleName", Value: d.Name }], unit: "Count" }))} /></CapabilityContainer> },
           { id: "tags", label: "Tags", content: <TagsTab arn={d.Arn} /> },
         ]} />
       </SpaceBetween>

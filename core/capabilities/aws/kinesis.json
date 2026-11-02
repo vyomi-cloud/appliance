@@ -1,5 +1,5 @@
 {
- "$doc": "Vyomi capability registry — Kinesis Data Streams. See s3.json for the contract.",
+ "$doc": "Vyomi capability registry \u2014 Kinesis Data Streams. See s3.json for the contract.",
  "kinesis.stream.crud": {
   "title": "Data streams (create, describe, list, delete)",
   "level": {
@@ -62,7 +62,7 @@
    "offline": "limited"
   },
   "limitations": [
-   "The resource policy document is stored and returned exactly as written, but Vyomi does not evaluate it — it never denies or allows a Kinesis call based on policy content."
+   "The resource policy document is stored and returned exactly as written, but Vyomi does not evaluate it \u2014 it never denies or allows a Kinesis call based on policy content."
   ],
   "tests": [
    "tests/conformance/test_kinesis_core.py"
@@ -91,7 +91,7 @@
   ]
  },
  "kinesis.stream.enhanced-monitoring": {
-  "title": "Enhanced (shard-level) CloudWatch metrics — enable/disable flag",
+  "title": "Enhanced (shard-level) CloudWatch metrics \u2014 enable/disable flag",
   "level": {
    "nano": "full",
    "offline": "full"
@@ -102,13 +102,14 @@
   ]
  },
  "kinesis.stream.monitoring-metrics": {
-  "title": "CloudWatch metric graphs (IncomingBytes, IncomingRecords, …)",
+  "title": "CloudWatch metric graphs (IncomingBytes, IncomingRecords, GetRecords.*, \u2026)",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "full",
+   "offline": "full"
   },
-  "limitations": [
-   "Vyomi records which shard-level metrics are enabled/disabled (a real, stateful flag an SDK can read back), but has no metrics-aggregation engine for Kinesis, so the CloudWatch graphs themselves aren't rendered."
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_kinesis_core.py"
   ]
  }
 }

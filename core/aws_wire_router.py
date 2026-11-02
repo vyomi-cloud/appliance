@@ -603,6 +603,7 @@ class AwsWireRouter:
         self.asg = s.get("asg") or asg.AutoScalingStore()   # EC2 Auto Scaling groups + scaling policies
         self.asg.vpc_store = self.vpc   # scaling really launches/terminates real EC2 instances
         self.cw.asg_store = self.asg    # real Auto Scaling alarm actions (aws.cloudwatch.alarms.actions.compute)
+        self.kinesis.cw_store = self.cw   # real AWS/Kinesis metrics (kinesis.stream.monitoring-metrics)
         self.rds.cw_store = self.cw   # real DatabaseConnections/ReadIOPS/WriteIOPS metrics (rds.monitoring)
         self.ddb.cw_store = self.cw            # real per-op CloudWatch metrics (aws.dynamodb.monitor)
         self.ddb.lam_store = self.lam          # DynamoDB Streams -> Lambda event-source mappings (dynamodb.lambda-triggers)

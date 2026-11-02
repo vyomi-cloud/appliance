@@ -110,3 +110,32 @@ export async function listAllTargets() {
   ]);
   return [...queues, ...topics, ...fns, ...machines, ...streams];
 }
+
+// ── Pipes (REST, signed as "pipes") ─────────────────────────────────────────
+const P = (method, path, opts = {}) => restJson(method, path, { ...opts, headers: { ...restHeaders("pipes"), ...(opts.headers || {}) } });
+export const listPipes = () => P("GET", "/v1/pipes").then((r) => r.Pipes || []);
+export const describePipe = (name) => P("GET", `/v1/pipes/${encodeURIComponent(name)}`);
+export const createPipe = (name, body) => P("POST", `/v1/pipes/${encodeURIComponent(name)}`, { body });
+export const updatePipe = (name, body) => P("PUT", `/v1/pipes/${encodeURIComponent(name)}`, { body });
+export const deletePipe = (name) => P("DELETE", `/v1/pipes/${encodeURIComponent(name)}`);
+export const startPipe = (name) => P("POST", `/v1/pipes/${encodeURIComponent(name)}/start`);
+export const stopPipe = (name) => P("POST", `/v1/pipes/${encodeURIComponent(name)}/stop`);
+
+// ── connections / API destinations / global endpoints / sandbox ──────────────
+export const listConnections = () => E("ListConnections", {}).then((r) => r.Connections || []);
+export const describeConnection = (name) => E("DescribeConnection", { Name: name });
+export const createConnection = (input) => E("CreateConnection", input);
+export const updateConnection = (input) => E("UpdateConnection", input);
+export const deauthorizeConnection = (name) => E("DeauthorizeConnection", { Name: name });
+export const deleteConnection = (name) => E("DeleteConnection", { Name: name });
+export const listApiDestinations = () => E("ListApiDestinations", {}).then((r) => r.ApiDestinations || []);
+export const describeApiDestination = (name) => E("DescribeApiDestination", { Name: name });
+export const createApiDestination = (input) => E("CreateApiDestination", input);
+export const updateApiDestination = (input) => E("UpdateApiDestination", input);
+export const deleteApiDestination = (name) => E("DeleteApiDestination", { Name: name });
+export const listEndpoints = () => E("ListEndpoints", {}).then((r) => r.Endpoints || []);
+export const describeEndpoint = (name) => E("DescribeEndpoint", { Name: name });
+export const createEndpoint = (input) => E("CreateEndpoint", input);
+export const updateEndpoint = (input) => E("UpdateEndpoint", input);
+export const deleteEndpoint = (name) => E("DeleteEndpoint", { Name: name });
+export const testEventPattern = (eventPattern, event) => E("TestEventPattern", { EventPattern: eventPattern, Event: event });

@@ -1043,7 +1043,7 @@ class AppStateComputeVmStore(_SlotStore, _gci.ComputeStore):
 # ── v4 C0e: SQS + SNS + EventBridge (+ Scheduler) — ONE messaging store ────────────
 from core.messaging_store import MessagingStore   # noqa: E402
 
-_EB_FACTORY = lambda: {"buses": {}, "rules": {}, "archives": {}, "replays": {}, "pipes": {}, "meta": {}}   # noqa: E731
+_EB_FACTORY = lambda: {"buses": {}, "rules": {}, "archives": {}, "replays": {}, "pipes": {}, "meta": {}, "connections": {}, "apidests": {}, "endpoints": {}}   # noqa: E731
 
 
 def _iso_epoch(ts, default: float | None = None) -> float:

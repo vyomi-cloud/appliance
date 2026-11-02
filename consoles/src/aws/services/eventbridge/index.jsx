@@ -14,6 +14,7 @@ import CreateScheduledRule from "./CreateScheduledRule.jsx";
 import Schedules from "./Schedules.jsx";
 import CreateSchedule from "./CreateSchedule.jsx";
 import ScheduleGroups from "./ScheduleGroups.jsx";
+import { Pipes, CreatePipe, PipeDetail, Connections, CreateConnection, ApiDestinations, CreateApiDestination, GlobalEndpoints, CreateGlobalEndpoint, Sandbox } from "./Integration.jsx";
 import GapRoutes from "./GapRoutes.jsx";
 
 const crumb = (text, href) => ({ text, href });
@@ -81,6 +82,17 @@ export default {
     { pattern: "/eventbridge/schedules", component: Schedules, crumbs: () => [...root, crumb("Scheduler", "#/eventbridge/schedules"), crumb("Schedules", "#/eventbridge/schedules")] },
     { pattern: "/eventbridge/create-schedule", component: CreateSchedule, crumbs: () => [...root, crumb("Schedules", "#/eventbridge/schedules"), crumb("Create schedule", "#/eventbridge/create-schedule")] },
     { pattern: "/eventbridge/schedule-groups", component: ScheduleGroups, crumbs: () => [...root, crumb("Scheduler", "#/eventbridge/schedules"), crumb("Schedule groups", "#/eventbridge/schedule-groups")] },
+
+    { pattern: "/eventbridge/pipes", component: Pipes, crumbs: () => [...root, crumb("Pipes", "#/eventbridge/pipes")] },
+    { pattern: "/eventbridge/create-pipe", component: CreatePipe, crumbs: () => [...root, crumb("Pipes", "#/eventbridge/pipes"), crumb("Create pipe", "#/eventbridge/create-pipe")] },
+    { pattern: "/eventbridge/pipes/:name", component: PipeDetail, crumbs: (p) => [...root, crumb("Pipes", "#/eventbridge/pipes"), crumb(p.name, `#/eventbridge/pipes/${p.name}`)] },
+    { pattern: "/eventbridge/connections", component: Connections, crumbs: () => [...root, crumb("Connections", "#/eventbridge/connections")] },
+    { pattern: "/eventbridge/create-connection", component: CreateConnection, crumbs: () => [...root, crumb("Connections", "#/eventbridge/connections"), crumb("Create connection", "#/eventbridge/create-connection")] },
+    { pattern: "/eventbridge/api-destinations", component: ApiDestinations, crumbs: () => [...root, crumb("API destinations", "#/eventbridge/api-destinations")] },
+    { pattern: "/eventbridge/create-api-destination", component: CreateApiDestination, crumbs: () => [...root, crumb("API destinations", "#/eventbridge/api-destinations"), crumb("Create API destination", "#/eventbridge/create-api-destination")] },
+    { pattern: "/eventbridge/global-endpoints", component: GlobalEndpoints, crumbs: () => [...root, crumb("Global endpoints", "#/eventbridge/global-endpoints")] },
+    { pattern: "/eventbridge/create-global-endpoint", component: CreateGlobalEndpoint, crumbs: () => [...root, crumb("Global endpoints", "#/eventbridge/global-endpoints"), crumb("Create global endpoint", "#/eventbridge/create-global-endpoint")] },
+    { pattern: "/eventbridge/sandbox", component: Sandbox, crumbs: () => [...root, crumb("Sandbox", "#/eventbridge/sandbox")] },
 
     ...GapRoutes.map(({ path, title, component }) => ({
       pattern: `/eventbridge/${path}`,

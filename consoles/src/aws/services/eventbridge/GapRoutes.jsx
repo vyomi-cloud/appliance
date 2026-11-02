@@ -6,18 +6,9 @@
 import GapPage from "./common.jsx";
 
 const PAGES = [
-  { id: "pipes", path: "pipes", title: "Pipes" },
-  { id: "create-pipe", path: "create-pipe", title: "Create pipe" },
   { id: "partner-event-sources", path: "partner-event-sources", title: "Partner event sources" },
-  { id: "api-destinations", path: "api-destinations", title: "API destinations" },
-  { id: "create-api-destination", path: "create-api-destination", title: "Create API destination" },
-  { id: "connections", path: "connections", title: "Connections" },
-  { id: "create-connection", path: "create-connection", title: "Create connection" },
   { id: "schemas", path: "schemas", title: "Schemas" },
-  { id: "global-endpoints", path: "global-endpoints", title: "Global endpoints" },
-  { id: "create-global-endpoint", path: "create-global-endpoint", title: "Create global endpoint" },
   { id: "learn", path: "learn", title: "Learn" },
-  { id: "sandbox", path: "sandbox", title: "Sandbox" },
   { id: "quick-starts", path: "quick-starts", title: "Quick starts" },
 ];
 

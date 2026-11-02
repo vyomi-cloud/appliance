@@ -45,11 +45,7 @@
       "portal-products"
     ],
     "eventbridge": [
-      "pipes",
-      "api-destinations",
-      "connections",
-      "schemas",
-      "global-endpoints"
+      "schemas"
     ],
     "ec2": [
       "events"

@@ -5,7 +5,8 @@ import ContentLayout from "@cloudscape-design/components/content-layout";
 import Header from "@cloudscape-design/components/header";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Tabs from "@cloudscape-design/components/tabs";
-import { NotSimulatedContainer } from "../../kit/common.jsx";
+import { CapabilityContainer } from "../../kit/Capability.jsx";
+import MetricGraphs from "../../kit/MetricGraphs.jsx";
 import { useAsync } from "../../../common/useAsync.js";
 import * as api from "./api.js";
 
@@ -46,7 +47,7 @@ export default function Dashboard() {
                   <Stat label="Subscribers" value={d.rules} />
                 </ColumnLayout>
               </Container>
-              <NotSimulatedContainer title="Account-level metrics" note="CloudWatch metrics for EventBridge aren't aggregated in Vyomi." />
+              <CapabilityContainer id="eventbridge.metrics" title="Account-level metrics"><MetricGraphs bare graphs={[{ title: "Invocations", namespace: "AWS/Events", name: "Invocations", dimensions: [], unit: "Count" }, { title: "Triggered rules", namespace: "AWS/Events", name: "TriggeredRules", dimensions: [], unit: "Count" }, { title: "Matched events", namespace: "AWS/Events", name: "MatchedEvents", dimensions: [], unit: "Count" }, { title: "Failed invocations", namespace: "AWS/Events", name: "FailedInvocations", dimensions: [], unit: "Count" }]} /></CapabilityContainer>
               <QuotaNote title="Service quotas for Custom event buses" lines={["Custom event buses per account — AWS default quota value: 100 (adjustable).", "Rules per event bus — AWS default quota value: 300 (adjustable)."]} />
             </SpaceBetween>
           ),
@@ -61,8 +62,8 @@ export default function Dashboard() {
                   <Stat label="API destinations" value={0} />
                 </ColumnLayout>
               </Container>
-              <NotSimulatedContainer title="Account-level metrics" note="CloudWatch metrics for EventBridge aren't aggregated in Vyomi." />
-              <NotSimulatedContainer title="Resource-level metrics" note="Per-rule CloudWatch metrics aren't aggregated in Vyomi." />
+              <CapabilityContainer id="eventbridge.metrics" title="Account-level metrics"><MetricGraphs bare graphs={[{ title: "Invocations", namespace: "AWS/Events", name: "Invocations", dimensions: [], unit: "Count" }, { title: "Triggered rules", namespace: "AWS/Events", name: "TriggeredRules", dimensions: [], unit: "Count" }, { title: "Matched events", namespace: "AWS/Events", name: "MatchedEvents", dimensions: [], unit: "Count" }, { title: "Failed invocations", namespace: "AWS/Events", name: "FailedInvocations", dimensions: [], unit: "Count" }]} /></CapabilityContainer>
+              <CapabilityContainer id="eventbridge.metrics" title="Resource-level metrics"><Box color="text-body-secondary">Per-rule metrics (Invocations, TriggeredRules, FailedInvocations) are on each rule's Monitoring tab.</Box></CapabilityContainer>
               <QuotaNote title="Service quotas for Event buses" lines={["Event buses per account — AWS default quota value: 100 (adjustable)."]} />
             </SpaceBetween>
           ),
@@ -71,8 +72,7 @@ export default function Dashboard() {
           id: "pipes", label: "Pipes", content: (
             <SpaceBetween size="l">
               <Container header={<Header variant="h2">Resources</Header>}><ColumnLayout columns={1} variant="text-grid"><Stat label="Pipes" value={0} /></ColumnLayout></Container>
-              <NotSimulatedContainer title="Account-level metrics" />
-              <NotSimulatedContainer title="Resource-level metrics" />
+              <CapabilityContainer id="eventbridge.pipes.metrics" title="Pipe metrics"><MetricGraphs bare graphs={["Execution", "ExecutionSucceeded", "ExecutionFailed"].map((n) => ({ title: n, namespace: "AWS/EventBridge/Pipes", name: n, dimensions: [], unit: "Count" }))} /></CapabilityContainer>
             </SpaceBetween>
           ),
         },
@@ -80,7 +80,7 @@ export default function Dashboard() {
           id: "scheduler", label: "Scheduler", content: (
             <SpaceBetween size="l">
               <Container header={<Header variant="h2">Resources</Header>}><ColumnLayout columns={1} variant="text-grid"><Stat label="Schedule groups" value={d.groups} /></ColumnLayout></Container>
-              <NotSimulatedContainer title="Account-level metrics" note="CloudWatch metrics for Scheduler aren't aggregated in Vyomi." />
+              <CapabilityContainer id="eventbridge.metrics" title="Account-level metrics"><MetricGraphs bare graphs={[{ title: "Invocation attempts", namespace: "AWS/Scheduler", name: "InvocationAttemptCount", dimensions: [], unit: "Count" }, { title: "Target errors", namespace: "AWS/Scheduler", name: "TargetErrorCount", dimensions: [], unit: "Count" }]} /></CapabilityContainer>
               <QuotaNote title="Service quotas for Scheduler" lines={[`Schedules per account — AWS default quota value: 1,000,000 (adjustable). Currently: ${d.schedules ?? "–"}.`]} />
             </SpaceBetween>
           ),
