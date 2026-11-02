@@ -1125,6 +1125,7 @@ class AppStateMessagingStore(MessagingStore):
         self._eb()["pipes"] = v
 
     logs_store = None   # runtime link set by the wire router (SNS delivery-status logging) — never persisted
+    cw_store = None     # runtime link set by the wire router (SNS SMS delivery metrics) — never persisted
 
     @property
     def sns(self):

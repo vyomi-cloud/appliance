@@ -22,6 +22,7 @@ import { useNotify } from "../../../common/notify.jsx";
 import { follow, href, navigate } from "../../../common/router.js";
 import { ErrorAlert, NotSimulatedContainer } from "../../kit/common.jsx";
 import { saveNotice } from "../../kit/Capability.jsx";
+import { CapabilityContainer } from "../../kit/Capability.jsx";
 import * as api from "./api.js";
 
 const ACCOUNT_ID = "123456789012";
@@ -151,7 +152,7 @@ export default function CreateTopic({ params, query }) {
               </SpaceBetween>
             </Container>
 
-            <NotSimulatedContainer title="Maximum message size" note="Amazon SNS doesn't let you configure a topic's maximum message size — it's fixed at 256 KiB." />
+            <CapabilityContainer id="sns.topic.max-message-size" title="Maximum message size" />
 
             <ExpandableSection headerText="Encryption - optional" variant="container" defaultExpanded={encryption}>
               <SpaceBetween size="l">

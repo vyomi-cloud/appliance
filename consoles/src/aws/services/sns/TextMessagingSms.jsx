@@ -1,6 +1,6 @@
 /* Mobile text messaging (SMS) — SMS attributes and the sandbox phone-number workflow are
- * real and stateful; Vyomi has no real carrier/SMPP gateway, so no SMS is ever actually
- * delivered and delivery statistics are not modeled (core/capabilities/aws/sns.json). */
+ * real and stateful; Vyomi has no real carrier/SMPP gateway, so no SMS reaches a phone;
+ * delivery statistics are the real AWS/SNS CloudWatch metrics of the SMS it accepted (core/capabilities/aws/sns.json). */
 import { useState } from "react";
 import Button from "@cloudscape-design/components/button";
 import Modal from "@cloudscape-design/components/modal";
@@ -18,7 +18,8 @@ import ResourceTable from "../../kit/ResourceTable.jsx";
 import DeleteModal from "../../kit/DeleteModal.jsx";
 import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
-import { ErrorAlert, KeyValue, NotSimulatedContainer } from "../../kit/common.jsx";
+import { ErrorAlert, KeyValue } from "../../kit/common.jsx";
+import { DeliveryByCountry, DeliveryStatistics } from "./SmsStats.jsx";
 import { CapabilityContainer, saveNotice } from "../../kit/Capability.jsx";
 import * as api from "./api.js";
 
@@ -38,10 +39,10 @@ export default function TextMessagingSms() {
     }>Mobile text messaging (SMS)</Header>}>
       <SpaceBetween size="l">
         <KeyValue title="Account information" columns={1} items={[["Status", <StatusIndicator type="info">In SMS Sandbox</StatusIndicator>]]} />
-        <NotSimulatedContainer title="Delivery statistics (UTC)" feature="SMS delivery statistics" note="Vyomi has no real carrier to deliver SMS through, so delivery-rate statistics aren't modeled." />
+        <DeliveryStatistics />
         <Preferences />
         <SandboxNumbers />
-        <NotSimulatedContainer title="Delivery statistics by country" feature="SMS delivery statistics by country" />
+        <DeliveryByCountry />
         <OptedOutNumbers />
       </SpaceBetween>
       <Modal visible={publishOpen} onDismiss={() => setPublishOpen(false)} header="Publish text message"
@@ -167,7 +168,7 @@ function SandboxNumbers() {
         </SpaceBetween></Box>}>
         <SpaceBetween size="m">
           {error && <ErrorAlert error={error} />}
-          <NotSimulatedContainer title="Verification code delivery" feature="SMS OTP delivery" note="Vyomi can't send a real text; it has no carrier to reach the phone with the code." />
+          <CapabilityContainer id="sns.sms.otp-delivery" title="Verification code delivery" />
           <FormField label="Verification code"><Input value={otp} onChange={({ detail }) => setOtp(detail.value)} ariaLabel="Verification code" /></FormField>
         </SpaceBetween>
       </Modal>

@@ -62,7 +62,7 @@ export default function TopicDetail({ params, query }) {
           { id: "delivery-status-logging", label: "Delivery status logging", content: <DeliveryStatusTab arn={arn} attrs={attrs} reload={t.reload} /> },
           { id: "encryption", label: "Encryption", content: <EncryptionTab arn={arn} attrs={attrs} reload={t.reload} /> },
           { id: "tags", label: "Tags", content: <TagsTab arn={arn} /> },
-          { id: "integrations", label: "Integrations", content: <NotSimulatedContainer title="Integrations" feature="SNS console service integrations (CloudWatch, EventBridge Pipes, …)" /> },
+          { id: "integrations", label: "Integrations", content: <CapabilityContainer id="sns.topic.integrations" title="Integrations" /> },
         ]} />
       </SpaceBetween>
       <DeleteModal visible={del} resourceType="topic" names={[name]} confirmText="delete me" onDismiss={() => setDel(false)}

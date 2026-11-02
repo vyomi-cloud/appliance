@@ -282,6 +282,14 @@ try {
   await page.getByRole("cell", { name: "v4-smoke-ap", exact: true }).waitFor({ timeout: 10000 });
   check("Account-level Access Points page lists the access point created through the bucket tab", true);
 
+  // SWEEP A (SNS): SMS delivery statistics are real CloudWatch-backed sections, not placeholders.
+  await page.goto(UI + "#/sns/mobile/text-messaging");
+  await page.getByTestId("sms-delivered").waitFor({ timeout: 10000 });
+  const smsDelivered = await page.getByTestId("sms-delivered").innerText();
+  const smsMetric = await cw("ListMetrics", { Namespace: "AWS/SNS" });
+  check("SNS SMS delivery statistics render from CloudWatch (count matches the metrics store)", /^\d+$/.test(smsDelivered) && Array.isArray(smsMetric.Metrics), smsDelivered);
+  await page.getByRole("heading", { name: "Delivery statistics by country" }).waitFor({ timeout: 10000 });
+
   // SWEEP A: upload-time ACL permissions, Object management overview, Account snapshot.
   const ACLB = `v4-aclup-${Date.now() % 100000}`;
   await wire(`/${ACLB}`, { method: "PUT", headers: { authorization: S3AUTH } });

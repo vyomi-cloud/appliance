@@ -16,6 +16,7 @@ import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import { follow, href, navigate } from "../../../common/router.js";
 import { ErrorAlert, NotSimulatedContainer } from "../../kit/common.jsx";
+import { CapabilityContainer } from "../../kit/Capability.jsx";
 import * as api from "./api.js";
 
 const TYPES = ["String", "Number", "Binary"];
@@ -72,7 +73,7 @@ export default function PublishMessage({ params }) {
               </SpaceBetween>
             </Container>
 
-            <NotSimulatedContainer title="Time to Live (TTL) - optional" note="Amazon SNS's native Publish API has no message TTL parameter for topic deliveries." />
+            <CapabilityContainer id="sns.publish.ttl" title="Time to Live (TTL) - optional" />
 
             <Container header={<Header variant="h2">Message body</Header>}>
               <SpaceBetween size="l">
