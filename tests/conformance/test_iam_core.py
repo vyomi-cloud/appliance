@@ -15,6 +15,7 @@ swap in behind the AuthzEngine seam. No network, no fastapi/boto3/cedarpy.
 Run on host:    python3 tests/conformance/test_iam_core.py
 Run in Pyodide: loaded by wasm/ harness (same file).
 """
+import base64
 import json
 
 # Allow running both as a repo script (host) and from a flat FS (Pyodide).
@@ -198,7 +199,7 @@ def run() -> int:
     _check("access key deleted", akid2 not in iam.dispatch(st, {"Action": "ListAccessKeys", "UserName": "bob"}).body)
 
     # 17. Login profile (console password) — limited: stored, never actually authenticates
-    iam.dispatch(st, {"Action": "CreateLoginProfile", "UserName": "alice", "PasswordResetRequired": "true"})
+    iam.dispatch(st, {"Action": "CreateLoginProfile", "UserName": "alice", "Password": "Sup3r-Secret!", "PasswordResetRequired": "true"})
     glp = iam.dispatch(st, {"Action": "GetLoginProfile", "UserName": "alice"}).body
     _check("login profile created", "<PasswordResetRequired>true</PasswordResetRequired>" in glp)
     iam.dispatch(st, {"Action": "DeleteLoginProfile", "UserName": "alice"})
@@ -326,8 +327,14 @@ def run() -> int:
     same_codes = iam.dispatch(st, {"Action": "EnableMFADevice", "UserName": "erin", "SerialNumber": serial,
                                    "AuthenticationCode1": "111111", "AuthenticationCode2": "111111"})
     _check("identical consecutive codes rejected", "<Code>InvalidAuthenticationCode</Code>" in same_codes.body)
+    wrong = iam.dispatch(st, {"Action": "EnableMFADevice", "UserName": "erin", "SerialNumber": serial,
+                              "AuthenticationCode1": "111111", "AuthenticationCode2": "222222"})
+    _check("codes that do not match the device seed rejected", "<Code>InvalidAuthenticationCode</Code>" in wrong.body)
+    import time as _t
+    seed = base64.b64decode(cvmd.split("<Base32StringSeed>")[1].split("</Base32StringSeed>")[0]).decode()
+    step = int(_t.time() // 30)
     enabled = iam.dispatch(st, {"Action": "EnableMFADevice", "UserName": "erin", "SerialNumber": serial,
-                                "AuthenticationCode1": "111111", "AuthenticationCode2": "222222"})
+                                "AuthenticationCode1": iam._totp(seed, step), "AuthenticationCode2": iam._totp(seed, step + 1)})
     _check("MFA device enabled", enabled.status == 200)
     _check("device now listed for erin", serial in iam.dispatch(st, {"Action": "ListMFADevices", "UserName": "erin"}).body)
     _check("device now in Assigned filter", "erin" in iam.dispatch(st, {"Action": "ListVirtualMFADevices", "AssignmentStatus": "Assigned"}).body)
@@ -359,8 +366,8 @@ def run() -> int:
     resync_bad = iam.dispatch(st, {"Action": "ResyncMFADevice", "UserName": "erin", "SerialNumber": serial, "AuthenticationCode1": "1", "AuthenticationCode2": "2"})
     _check("resync on unassigned device -> NoSuchEntity", "<Code>NoSuchEntity</Code>" in resync_bad.body)
     iam.dispatch(st, {"Action": "EnableMFADevice", "UserName": "erin", "SerialNumber": serial,
-                      "AuthenticationCode1": "333333", "AuthenticationCode2": "444444"})
-    resync_ok = iam.dispatch(st, {"Action": "ResyncMFADevice", "UserName": "erin", "SerialNumber": serial, "AuthenticationCode1": "333333", "AuthenticationCode2": "444444"})
+                      "AuthenticationCode1": iam._totp(seed, step - 1), "AuthenticationCode2": iam._totp(seed, step)})
+    resync_ok = iam.dispatch(st, {"Action": "ResyncMFADevice", "UserName": "erin", "SerialNumber": serial, "AuthenticationCode1": iam._totp(seed, step - 1), "AuthenticationCode2": iam._totp(seed, step)})
     _check("resync on assigned device succeeds", resync_ok.status == 200)
     iam.dispatch(st, {"Action": "DeactivateMFADevice", "UserName": "erin", "SerialNumber": serial})
     del_ok = iam.dispatch(st, {"Action": "DeleteVirtualMFADevice", "SerialNumber": serial})

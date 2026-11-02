@@ -2384,7 +2384,7 @@ _IAM_KEYS = {
     "saml_providers": dict, "oidc_providers": dict, "account_aliases": list,
     "password_policy": lambda: None, "credential_report": lambda: None,
     "org_policies": dict, "access_requests": dict, "virtual_mfa_devices": dict,
-    "activity": list, "trust_anchors": dict, "rolesanywhere_profiles": dict, "analyzers": dict,
+    "activity": list, "trust_anchors": dict, "rolesanywhere_profiles": dict, "analyzers": dict, "extras": dict,
 }
 
 
@@ -2416,6 +2416,7 @@ class AppStateIamStore(_SlotStore, _IamStoreBase):
     trust_anchors = _slot_attr("trust_anchors")
     rolesanywhere_profiles = _slot_attr("rolesanywhere_profiles")
     analyzers = _slot_attr("analyzers")
+    extras = _slot_attr("extras")
 
     def adopt(self) -> None:
         """Pre-v4 server.py IAM state (core.app_context.iam_state) -> this slot, once per space."""
