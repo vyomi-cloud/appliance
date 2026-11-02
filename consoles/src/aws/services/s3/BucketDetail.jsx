@@ -39,7 +39,7 @@ export default function BucketDetail({ params, query }) {
         onChange={({ detail }) => setTab(detail.activeTabId)}
         tabs={[
           { id: "objects", label: "Objects", content: <Objects bucket={bucket} prefix={query.prefix || ""} /> },
-          { id: "metadata", label: "Metadata", content: <NotSimulatedContainer title="Metadata configuration" note="S3 Metadata (the queryable metadata table for a bucket) isn't modeled in Vyomi." /> },
+          { id: "metadata", label: "Metadata", content: <CapabilityContainer id="s3.bucket.metadata-configuration" title="Metadata configuration" /> },
           { id: "properties", label: "Properties", content: <Properties bucket={bucket} /> },
           { id: "permissions", label: "Permissions", content: <Permissions bucket={bucket} /> },
           { id: "metrics", label: "Metrics", content: <Metrics bucket={bucket} /> },

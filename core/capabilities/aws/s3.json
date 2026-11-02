@@ -646,5 +646,115 @@
   "tests": [
    "tests/conformance/test_s3_sweepa_core.py"
   ]
+ },
+ "s3.account.table-buckets": {
+  "title": "Table buckets",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "S3 Tables (Apache Iceberg table buckets, namespaces, tables) is a separate analytics storage engine Vyomi does not implement."
+  ],
+  "api": []
+ },
+ "s3.account.access-grants": {
+  "title": "Access Grants",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "S3 Access Grants needs an IAM Identity Center directory integration and the s3control access-grants API, which Vyomi does not implement."
+  ],
+  "api": []
+ },
+ "s3.account.object-lambda-access-points": {
+  "title": "Object Lambda Access Points",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Object Lambda access points transform GetObject responses through a Lambda in the request path; the s3control object-lambda API is not implemented."
+  ],
+  "api": []
+ },
+ "s3.account.multi-region-access-points": {
+  "title": "Multi-Region Access Points",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Multi-Region Access Points route requests across buckets in several regions through a global endpoint; Vyomi is single-region and does not implement the MRAP API."
+  ],
+  "api": []
+ },
+ "s3.account.batch-operations": {
+  "title": "Batch Operations",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "S3 Batch Operations jobs (s3control CreateJob over an inventory/CSV manifest) are not implemented."
+  ],
+  "api": []
+ },
+ "s3.account.account-public-access-block": {
+  "title": "Block Public Access settings for this account",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Account-level Block Public Access (s3control PutPublicAccessBlock) is not implemented; per-bucket Block Public Access is fully enforced on each bucket's Permissions tab."
+  ],
+  "api": []
+ },
+ "s3.account.storage-lens": {
+  "title": "Storage Lens",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Storage Lens dashboards and groups are an account/organization analytics product Vyomi does not implement."
+  ],
+  "api": []
+ },
+ "s3.account.marketplace": {
+  "title": "AWS Marketplace for S3",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "AWS Marketplace listings are not part of Vyomi."
+  ],
+  "api": []
+ },
+ "s3.account.get-started": {
+  "title": "Amazon S3",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "This marketing/getting-started page has no backing resource."
+  ],
+  "api": []
+ },
+ "s3.bucket.metadata-configuration": {
+  "title": "Metadata configuration",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "S3 Metadata journal and live-inventory tables are delivered into an S3 Tables table bucket, which Vyomi does not implement."
+  ],
+  "api": []
  }
 }

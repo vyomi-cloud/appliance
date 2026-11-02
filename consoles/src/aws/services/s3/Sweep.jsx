@@ -240,9 +240,12 @@ export function ObjectManagementOverview({ bucket, objectKey, head }) {
   );
 }
 
-export function AccessPointsSection({ bucket }) {
+export function AccessPointsSection({ bucket: fixedBucket }) {
+  const [pickBucket, setPickBucket] = useState("");
+  const bucket = fixedBucket;
   const notify = useNotify();
   const aps = useAsync(() => sw.listAccessPoints(bucket), [bucket]);
+  const targetBucket = bucket || pickBucket;
   const [sel, setSel] = useState([]);
   const [create, setCreate] = useState(null);
   const [policy, setPolicy] = useState(null);
@@ -263,6 +266,7 @@ export function AccessPointsSection({ bucket }) {
         : <Table variant="embedded" items={rows} trackBy="name" selectionType="single" selectedItems={sel} onSelectionChange={({ detail }) => setSel(detail.selectedItems)}
             columnDefinitions={[
               { id: "name", header: "Name", cell: (a) => a.name },
+              ...(bucket ? [] : [{ id: "bucket", header: "Bucket", cell: (a) => a.bucket }]),
               { id: "origin", header: "Network origin", cell: (a) => a.networkOrigin + (a.vpcId ? ` (${a.vpcId})` : "") },
               { id: "alias", header: "Access point alias", cell: (a) => a.alias },
               { id: "arn", header: "Access point ARN", cell: (a) => a.arn },
@@ -271,16 +275,17 @@ export function AccessPointsSection({ bucket }) {
       <Modal visible={!!create} onDismiss={() => setCreate(null)} header="Create access point"
         footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs">
           <Button variant="link" onClick={() => setCreate(null)}>Cancel</Button>
-          <Button variant="primary" loading={saving} disabled={!create?.name} onClick={async () => {
+          <Button variant="primary" loading={saving} disabled={!create?.name || !targetBucket} onClick={async () => {
             setSaving(true);
             try {
-              await sw.createAccessPoint(bucket, create.name, create);
+              await sw.createAccessPoint(targetBucket, create.name, create);
               notify.success(`Successfully created access point ${create.name}.${saveNotice("s3.bucket.access-points")}`);
               setCreate(null); aps.reload();
             } catch (e) { notify.error(e); } finally { setSaving(false); }
           }}>Create access point</Button>
         </SpaceBetween></Box>}>
         {create && <SpaceBetween size="m">
+          {!bucket && <FormField label="Bucket name" description="The existing bucket this access point serves."><Input value={pickBucket} onChange={({ detail }) => setPickBucket(detail.value)} /></FormField>}
           <FormField label="Access point name" description="3-50 characters: lowercase letters, numbers and hyphens."><Input value={create.name} onChange={({ detail }) => setCreate({ ...create, name: detail.value })} /></FormField>
           <FormField label="VPC ID" description="Optional. Leave blank for an Internet network origin."><Input value={create.vpcId} onChange={({ detail }) => setCreate({ ...create, vpcId: detail.value })} /></FormField>
           <Checkbox checked={create.blockPublic} onChange={({ detail }) => setCreate({ ...create, blockPublic: detail.checked })}>Block all public access</Checkbox>

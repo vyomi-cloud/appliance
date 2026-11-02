@@ -80,7 +80,7 @@ const AP = (method, name, { sub = "", query, body } = {}) =>
 const CTL_NS = 'xmlns="http://awss3control.amazonaws.com/doc/2016-08-20/"';
 
 export async function listAccessPoints(bucket) {
-  const r = await AP("GET", "", { query: { bucket } });
+  const r = await AP("GET", "", { query: bucket ? { bucket } : undefined });
   return asList(r.ListAccessPointsResult?.AccessPointList?.AccessPoint).map((a) => ({
     name: a.Name, bucket: a.Bucket, networkOrigin: a.NetworkOrigin, vpcId: a.VpcConfiguration?.VpcId || "", arn: a.AccessPointArn, alias: a.Alias,
   }));

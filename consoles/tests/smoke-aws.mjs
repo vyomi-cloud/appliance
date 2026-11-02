@@ -278,6 +278,9 @@ try {
   const viaAlias = await wire(`/${apAlias}/hello.txt`, { headers: { authorization: S3AUTH, "x-amz-request-payer": "requester" } });
   check("Access point alias addresses the bucket (object readable through the alias)", viaAlias === "hello v4", viaAlias.slice(0, 100));
   await shot("05g-s3-access-points");
+  await page.goto(UI + "#/s3/access-points");
+  await page.getByRole("cell", { name: "v4-smoke-ap", exact: true }).waitFor({ timeout: 10000 });
+  check("Account-level Access Points page lists the access point created through the bucket tab", true);
 
   // SWEEP A: upload-time ACL permissions, Object management overview, Account snapshot.
   const ACLB = `v4-aclup-${Date.now() % 100000}`;
