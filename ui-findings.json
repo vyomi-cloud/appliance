@@ -1,7 +1,7 @@
 {
  "nano": {
   "target": "nano",
-  "at": "2026-11-02T15:16:45.226Z",
+  "at": "2026-11-02T17:29:52.512Z",
   "services": [
    {
     "target": "nano",
@@ -30,7 +30,7 @@
       "kind": "page",
       "name": "EC2",
       "state": "live",
-      "calls": 93
+      "calls": 102
      },
      {
       "kind": "create",
@@ -78,13 +78,13 @@
       "kind": "tab",
       "name": "Monitoring",
       "state": "live",
-      "calls": 2
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Networking",
       "state": "live",
-      "calls": 1
+      "calls": 2
      },
      {
       "kind": "tab",
@@ -108,13 +108,13 @@
       "kind": "tab",
       "name": "EC2 serial console",
       "state": "live",
-      "calls": 3
+      "calls": 2
      },
      {
       "kind": "tab",
       "name": "User data",
       "state": "live",
-      "calls": 1
+      "calls": 2
      },
      {
       "kind": "tab",
@@ -246,13 +246,13 @@
       "kind": "tab",
       "name": "Monitor",
       "state": "live",
-      "calls": 2
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Invocations",
       "state": "live",
-      "calls": 1
+      "calls": 2
      }
     ],
     "status": "ok"
@@ -1094,13 +1094,13 @@
       "kind": "tab",
       "name": "Authorization",
       "state": "live",
-      "calls": 2
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Stages",
       "state": "live",
-      "calls": 1
+      "calls": 2
      },
      {
       "kind": "tab",
@@ -2235,7 +2235,7 @@
       "kind": "page",
       "name": "Compute Engine",
       "state": "live",
-      "calls": 74
+      "calls": 99
      },
      {
       "kind": "create",
@@ -2429,7 +2429,7 @@
       "kind": "tab",
       "name": "Trigger",
       "state": "live",
-      "calls": 2
+      "calls": 1
      },
      {
       "kind": "tab",
@@ -2441,7 +2441,7 @@
       "kind": "tab",
       "name": "Testing",
       "state": "live",
-      "calls": 1
+      "calls": 2
      },
      {
       "kind": "tab",
@@ -2622,7 +2622,7 @@
       "kind": "tab",
       "name": "Labels",
       "state": "live",
-      "calls": 4
+      "calls": 2
      },
      {
       "kind": "tab",
@@ -2634,7 +2634,7 @@
       "kind": "tab",
       "name": "Lifecycle",
       "state": "live",
-      "calls": 1
+      "calls": 3
      },
      {
       "kind": "tab",
@@ -2720,7 +2720,7 @@
       "kind": "tab",
       "name": "Images",
       "state": "live",
-      "calls": 2
+      "calls": 1
      },
      {
       "kind": "tab",
@@ -2732,7 +2732,7 @@
       "kind": "tab",
       "name": "Versions",
       "state": "live",
-      "calls": 1
+      "calls": 2
      },
      {
       "kind": "tab",
@@ -3434,7 +3434,7 @@
       "kind": "page",
       "name": "Eventarc",
       "state": "live",
-      "calls": 2
+      "calls": 1
      },
      {
       "kind": "create",
@@ -3546,7 +3546,7 @@
       "kind": "detail",
       "name": "resource detail",
       "state": "live",
-      "calls": 3
+      "calls": 1
      },
      {
       "kind": "tab",
@@ -3740,7 +3740,7 @@
       "kind": "detail",
       "name": "resource detail",
       "state": "live",
-      "calls": 2
+      "calls": 1
      },
      {
       "kind": "tab",
@@ -3764,7 +3764,7 @@
       "kind": "tab",
       "name": "Labels",
       "state": "live",
-      "calls": 2
+      "calls": 3
      },
      {
       "kind": "tab",
@@ -3823,7 +3823,7 @@
       "kind": "page",
       "name": "IAM & Admin",
       "state": "live",
-      "calls": 2
+      "calls": 1
      },
      {
       "kind": "create",
@@ -3914,7 +3914,7 @@
       "kind": "detail",
       "name": "resource detail",
       "state": "live",
-      "calls": 3
+      "calls": 1
      },
      {
       "kind": "tab",
@@ -4079,7 +4079,7 @@
       "kind": "page",
       "name": "Resource groups",
       "state": "live",
-      "calls": 109
+      "calls": 73
      },
      {
       "kind": "detail",
@@ -5265,13 +5265,13 @@
       "kind": "tab",
       "name": "Application Insights",
       "state": "live",
-      "calls": 1
+      "calls": 3
      },
      {
       "kind": "tab",
       "name": "Metrics",
       "state": "live",
-      "calls": 3
+      "calls": 1
      }
     ],
     "status": "ok"
@@ -6808,7 +6808,7 @@
  },
  "offline": {
   "target": "offline",
-  "at": "2026-11-02T15:16:02.762Z",
+  "at": "2026-11-02T17:30:24.292Z",
   "services": [
    {
     "target": "offline",
@@ -6909,7 +6909,7 @@
       "kind": "tab",
       "name": "Connect",
       "state": "live",
-      "calls": 1
+      "calls": 2
      },
      {
       "kind": "tab",
@@ -10922,7 +10922,12 @@
      "Alerts",
      "Metrics"
     ],
-    "findings": [],
+    "findings": [
+     {
+      "type": "CREATE_NO_ROW",
+      "detail": "create with defaults added no resource to the list"
+     }
+    ],
     "surfaces": [
      {
       "kind": "page",
@@ -10933,13 +10938,7 @@
      {
       "kind": "create",
       "name": "create with defaults",
-      "state": "live",
-      "calls": 1
-     },
-     {
-      "kind": "detail",
-      "name": "resource detail",
-      "state": "live",
+      "state": "unimplemented",
       "calls": 1
      },
      {
@@ -11076,7 +11075,7 @@
       "carried": true
      }
     ],
-    "status": "ok"
+    "status": "broken"
    },
    {
     "target": "offline",
@@ -11103,24 +11102,23 @@
      "Insights",
      "Metrics"
     ],
-    "findings": [],
+    "findings": [
+     {
+      "type": "CREATE_NO_ROW",
+      "detail": "create with defaults added no resource to the list"
+     }
+    ],
     "surfaces": [
      {
       "kind": "page",
       "name": "Storage accounts",
       "state": "live",
-      "calls": 26
+      "calls": 4
      },
      {
       "kind": "create",
       "name": "create with defaults",
-      "state": "live",
-      "calls": 1
-     },
-     {
-      "kind": "detail",
-      "name": "resource detail",
-      "state": "live",
+      "state": "unimplemented",
       "calls": 1
      },
      {
@@ -11257,7 +11255,7 @@
       "carried": true
      }
     ],
-    "status": "ok"
+    "status": "broken"
    },
    {
     "target": "offline",
@@ -11290,7 +11288,7 @@
       "kind": "page",
       "name": "SQL servers",
       "state": "live",
-      "calls": 26
+      "calls": 1
      },
      {
       "kind": "create",
@@ -12054,7 +12052,7 @@
       "kind": "tab",
       "name": "Backup",
       "state": "live",
-      "calls": 2
+      "calls": 1
      },
      {
       "kind": "tab",
