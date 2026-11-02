@@ -700,26 +700,37 @@ def _acl_blocked_by_ownership(store: ObjectStore, bucket: str) -> S3Response | N
     return None
 
 
+_PAB_KEYS = ("BlockPublicAcls", "IgnorePublicAcls", "BlockPublicPolicy", "RestrictPublicBuckets")
+
+
+def _account_pab(store: ObjectStore) -> dict:
+    """The account-level Block Public Access settings (s3control PutPublicAccessBlock)."""
+    acct = getattr(store, "account", None) or {}
+    return {k: bool((acct.get("pab") or {}).get(k)) for k in _PAB_KEYS}
+
+
 def _public_access_block(store: ObjectStore, bucket: str) -> dict:
+    """EFFECTIVE Block Public Access for a bucket: the bucket's own settings OR'd with the
+    account's (real S3: a setting on either level is enforced)."""
     meta = store.buckets.get(bucket) or {}
     doc = meta.get("cfg", {}).get("publicAccessBlock")
-    flags = {"BlockPublicAcls": False, "IgnorePublicAcls": False,
-             "BlockPublicPolicy": False, "RestrictPublicBuckets": False}
-    if not doc:
-        return flags
-    try:
-        root = ET.fromstring(doc)
-    except ET.ParseError:
-        return flags
-    for k in flags:
-        flags[k] = _child_text(root, k).strip().lower() == "true"
-    return flags
+    flags = dict.fromkeys(_PAB_KEYS, False)
+    if doc:
+        try:
+            root = ET.fromstring(doc)
+            for k in flags:
+                flags[k] = _child_text(root, k).strip().lower() == "true"
+        except ET.ParseError:
+            pass
+    acct = _account_pab(store)
+    return {k: flags[k] or acct[k] for k in _PAB_KEYS}
 
 
 def _acl_blocked_by_pab(store: ObjectStore, bucket: str, canned: str | None) -> S3Response | None:
     if canned in _PUBLIC_CANNED_ACLS and _public_access_block(store, bucket)["BlockPublicAcls"]:
+        level = "account" if _account_pab(store)["BlockPublicAcls"] else "bucket"
         return _error_xml("AccessDenied",
-                          "This request is not allowed because the bucket owner enforced the "
+                          f"This request is not allowed because the {level} owner enforced the "
                           "Block Public Access setting that disallows public ACLs.", f"/{bucket}", 403)
     return None
 
@@ -2101,6 +2112,8 @@ def list_all_buckets(store: ObjectStore) -> S3Response:
     buckets = getattr(store, "buckets", {}) or {}
     for name in sorted(buckets):
         meta = buckets.get(name) if hasattr(buckets, "get") else None
+        if isinstance(meta, dict) and meta.get("bucket_type") == "Directory":
+            continue      # directory buckets are listed by ListDirectoryBuckets only
         created = ((meta.get("creation_date") or meta.get("created")) if isinstance(meta, dict) else None) or _now()
         rows.append(f"<Bucket><Name>{_xml_escape(name)}</Name>"
                     f"<CreationDate>{created}</CreationDate></Bucket>")
@@ -2531,6 +2544,10 @@ def delete_objects(store: ObjectStore, bucket: str, body: bytes, headers: dict |
 
 
 def _create_bucket(store: ObjectStore, bucket: str, headers: dict, body: bytes) -> S3Response:
+    text = (body or b"").decode("utf-8", "replace")
+    dir_cfg = re.search(r"<Type>\s*Directory\s*</Type>", text) is not None
+    if dir_cfg or bucket.endswith(_DIR_SUFFIX):
+        return _create_directory_bucket(store, bucket, text, dir_cfg)
     bad = _validate_bucket_name(bucket)
     if bad:
         return bad
@@ -2675,6 +2692,133 @@ def website_dispatch(store: ObjectStore, method: str, bucket: str, key: str, hea
     return _website_html_error(404, "NoSuchKey", "The specified key does not exist.")
 
 
+# ── S3 Express One Zone: directory buckets ─────────────────────────────────────────────
+# A directory bucket is a general bucket record in the SAME store (so object CRUD, list,
+# delete, multipart all reuse the one engine) tagged meta["bucket_type"] = "Directory",
+# named `<base>--<zone-id>--x-s3`, living in ONE Availability Zone. Differences enforced:
+# no versioning/ACL/lifecycle-style sub-resources, only EXPRESS_ONEZONE storage, "/" is the
+# only list delimiter, listed by ListDirectoryBuckets (not ListBuckets), CreateSession.
+_DIR_SUFFIX = "--x-s3"
+_DIR_NAME_RE = re.compile(r"^([a-z0-9][a-z0-9-]*[a-z0-9])--([a-z0-9]+(?:-[a-z0-9]+)?-az\d+)--x-s3$")
+_AZ_REGIONS = {"use1": "us-east-1", "use2": "us-east-2", "usw1": "us-west-1", "usw2": "us-west-2",
+               "euw1": "eu-west-1", "euw2": "eu-west-2", "euw3": "eu-west-3", "euc1": "eu-central-1",
+               "eun1": "eu-north-1", "apne1": "ap-northeast-1", "apne2": "ap-northeast-2",
+               "apse1": "ap-southeast-1", "apse2": "ap-southeast-2", "aps1": "ap-south-1",
+               "sae1": "sa-east-1", "cac1": "ca-central-1"}
+_DIR_UNSUPPORTED_SUB = ("versioning", "acl", "object-lock", "versions", "website", "logging", "requestPayment",
+                        "notification", "replication", "accelerate", "analytics", "metrics", "inventory",
+                        "intelligent-tiering")
+
+
+def is_directory_bucket(store: ObjectStore, bucket: str) -> bool:
+    meta = (getattr(store, "buckets", {}) or {}).get(bucket)
+    return isinstance(meta, dict) and meta.get("bucket_type") == "Directory"
+
+
+def _create_directory_bucket(store: ObjectStore, bucket: str, text: str, dir_cfg: bool) -> S3Response:
+    m = _DIR_NAME_RE.match(bucket) if len(bucket) <= 63 else None
+    if not m:
+        return _error_xml("InvalidBucketName",
+                          "The specified bucket is not valid. Directory bucket names must be of the form "
+                          "base-name--zone-id--x-s3 (e.g. my-bucket--usw2-az1--x-s3), at most 63 characters, "
+                          "lowercase letters, numbers and hyphens.", f"/{bucket}", 400)
+    base, zone = m.group(1), m.group(2)
+    if len(base) < 3:
+        return _error_xml("InvalidBucketName", "The base name of a directory bucket must be at least 3 characters.", f"/{bucket}", 400)
+    loc = re.search(r"<Location>\s*<Name>\s*([\w-]+)\s*</Name>\s*<Type>\s*([\w]+)\s*</Type>\s*</Location>"
+                    r"|<Location>\s*<Type>\s*([\w]+)\s*</Type>\s*<Name>\s*([\w-]+)\s*</Name>\s*</Location>", text)
+    if not dir_cfg or not loc:
+        return _error_xml("InvalidRequest",
+                          "Directory buckets can only be created with a CreateBucketConfiguration that specifies "
+                          "both Location (Name + Type=AvailabilityZone) and Bucket (Type=Directory).", f"/{bucket}", 400)
+    loc_name = loc.group(1) or loc.group(4)
+    loc_type = loc.group(2) or loc.group(3)
+    if loc_type not in ("AvailabilityZone", "LocalZone"):
+        return _error_xml("MalformedXML", "The XML you provided was not well-formed or did not validate against our published schema.", f"/{bucket}", 400)
+    if loc_name != zone:
+        return _error_xml("InvalidRequest",
+                          f"The Location.Name ({loc_name}) must match the zone id in the bucket name ({zone}).", f"/{bucket}", 400)
+    red = re.search(r"<DataRedundancy>\s*(\w+)\s*</DataRedundancy>", text)
+    redundancy = red.group(1) if red else ("SingleLocalZone" if loc_type == "LocalZone" else "SingleAvailabilityZone")
+    if redundancy not in ("SingleAvailabilityZone", "SingleLocalZone"):
+        return _error_xml("MalformedXML", "The XML you provided was not well-formed or did not validate against our published schema.", f"/{bucket}", 400)
+    if store.bucket_exists(bucket):
+        return _error_xml("BucketAlreadyOwnedByYou",
+                          "Your previous request to create the named bucket succeeded and you already own it.", f"/{bucket}", 409)
+    store.enforce_quantity_cap("bucket")
+    region = _AZ_REGIONS.get(zone.split("-")[0], "us-east-1")
+    store.create_bucket(bucket)
+    now = _now()
+    meta = store.buckets[bucket]
+    meta.update({"region": region, "created": now, "creation_date": now, "access": "Bucket and objects not public",
+                 "versioning": "Disabled", "arn": f"arn:aws:s3express:{region}:{_ACCOUNT_ID}:bucket/{bucket}",
+                 "tags": {}, "notifications": default_notifications(), "bucket_type": "Directory",
+                 "location": {"name": zone, "type": loc_type}, "data_redundancy": redundancy})
+    store.bucket_objects(bucket)
+    return _done(store, _empty_response(200, {"Location": f"/{bucket}"}))
+
+
+def _is_express_control(lheaders: dict) -> bool:
+    return "/s3express/" in (lheaders.get("authorization") or "") or str(lheaders.get("host") or "").startswith("s3express-control")
+
+
+def list_directory_buckets(store: ObjectStore, query: dict) -> S3Response:
+    """GET / on the s3express control endpoint -> ListDirectoryBuckets (paginated)."""
+    try:
+        limit = int((query or {}).get("max-directory-buckets") or 1000)
+    except ValueError:
+        limit = 0
+    if not 0 < limit <= 1000:
+        return _error_xml("InvalidArgument", "max-directory-buckets must be between 1 and 1000.", "/", 400)
+    token = str((query or {}).get("continuation-token") or "")
+    names = sorted(n for n in store.buckets if is_directory_bucket(store, n) and (not token or n > token))
+    page, more = names[:limit], len(names) > limit
+    rows = "".join(f"<Bucket><Name>{_xml_escape(n)}</Name><CreationDate>{store.buckets[n].get('creation_date') or _now()}</CreationDate>"
+                   f"<BucketRegion>{store.buckets[n].get('region', 'us-east-1')}</BucketRegion></Bucket>" for n in page)
+    nxt = f"<ContinuationToken>{_xml_escape(page[-1])}</ContinuationToken>" if more else ""
+    return _xml_response('<?xml version="1.0" encoding="UTF-8"?><ListAllMyDirectoryBucketsResult '
+                         f'xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><Buckets>{rows}</Buckets>{nxt}</ListAllMyDirectoryBucketsResult>')
+
+
+def _create_session(store: ObjectStore, bucket: str, lheaders: dict) -> S3Response:
+    if not store.bucket_exists(bucket):
+        return _error_xml("NoSuchBucket", "The specified bucket does not exist.", f"/{bucket}", 404)
+    if not is_directory_bucket(store, bucket):
+        return _error_xml("InvalidRequest", "CreateSession is only supported on directory buckets.", f"/{bucket}", 400)
+    mode = lheaders.get("x-amz-create-session-mode") or "ReadWrite"
+    if mode not in ("ReadOnly", "ReadWrite"):
+        return _error_xml("InvalidArgument", "x-amz-create-session-mode must be ReadOnly or ReadWrite.", f"/{bucket}", 400)
+    exp = (datetime.now(timezone.utc) + timedelta(minutes=5)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return _xml_response('<?xml version="1.0" encoding="UTF-8"?><CreateSessionResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">'
+                         f"<Credentials><SessionToken>{uuid.uuid4().hex}{uuid.uuid4().hex}</SessionToken>"
+                         f"<SecretAccessKey>{uuid.uuid4().hex}{uuid.uuid4().hex[:8]}</SecretAccessKey>"
+                         f"<AccessKeyId>ASIA{uuid.uuid4().hex[:16].upper()}</AccessKeyId><Expiration>{exp}</Expiration></Credentials>"
+                         "</CreateSessionResult>")
+
+
+def _directory_guard(store: ObjectStore, method: str, bucket: str, key: str, query: dict, headers: dict) -> S3Response | None:
+    """Realistic S3 Express restrictions for a request addressed at a directory bucket."""
+    if not key:
+        sub = next((k for k in _DIR_UNSUPPORTED_SUB if k in query), None)
+        if sub:
+            return _error_xml("NotImplemented", f"Directory buckets do not support the '{sub}' bucket configuration.", f"/{bucket}", 501)
+        if method == "GET" and str(query.get("list-type", "")) != "2" and "session" not in query and "location" not in query:
+            return _error_xml("InvalidRequest", "Directory buckets only support ListObjectsV2 (list-type=2).", f"/{bucket}", 400)
+        delim = query.get("delimiter")
+        if method == "GET" and delim not in (None, "", "/"):
+            return _error_xml("InvalidArgument", "Directory buckets only support '/' as the delimiter.", f"/{bucket}", 400)
+        return None
+    if method in ("PUT", "POST"):
+        sc = headers.get("x-amz-storage-class")
+        if sc and sc != "EXPRESS_ONEZONE":
+            return _error_xml("InvalidStorageClass", "The storage class you specified is not valid for a directory bucket (only EXPRESS_ONEZONE).", f"/{bucket}/{key}", 400)
+        if headers.get("x-amz-acl") or any(h.startswith("x-amz-grant-") for h in headers):
+            return _error_xml("NotImplemented", "Directory buckets do not support ACLs.", f"/{bucket}/{key}", 501)
+    if "acl" in query or "tagging" in query or ("versionId" in query and query.get("versionId") not in ("", "null")):
+        return _error_xml("NotImplemented", "This operation is not supported for directory buckets.", f"/{bucket}/{key}", 501)
+    return None
+
+
 # ── S3 Control: Access Points (restXml /v20180820/accesspoint…) ───────────────────────
 # An access point is a named endpoint onto ONE bucket. Records live in the parent bucket's
 # meta["access_points"] (so they persist wherever bucket config persists, offline and Nano).
@@ -2729,11 +2873,15 @@ def _ap_xml(name: str, bucket: str, rec: dict, tag: str, full: bool) -> str:
 
 def _s3control(store: ObjectStore, method: str, raw: str, query: dict, lheaders: dict, body: bytes) -> S3Response:
     segs = [urllib.parse.unquote(x) for x in raw.split("/") if x]      # v20180820, accesspoint, name, [policy|policyStatus]
-    if len(segs) < 2 or segs[1] != "accesspoint":
-        return _s3c_error("NotImplemented", "This S3 Control operation is not implemented by Vyomi.", 501)
     acct = lheaders.get("x-amz-account-id")
     if acct and acct != _ACCOUNT_ID:
         return _s3c_error("AccessDenied", "Account ID does not match the caller's account.", 403)
+    if len(segs) >= 3 and segs[1] == "configuration" and segs[2] == "publicAccessBlock" and len(segs) == 3:
+        return _s3c_account_pab(store, method, body)
+    if len(segs) >= 2 and segs[1].lower() == "accesspointforobjectlambda":
+        return _s3c_olap(store, method, segs, body)
+    if len(segs) < 2 or segs[1] != "accesspoint":
+        return _s3c_error("NotImplemented", "This S3 Control operation is not implemented by Vyomi.", 501)
     hdr = '<?xml version="1.0" encoding="UTF-8"?>'
     if len(segs) == 2:                                                  # list
         if method != "GET":
@@ -2750,6 +2898,8 @@ def _s3control(store: ObjectStore, method: str, raw: str, query: dict, lheaders:
     if method == "PUT" and not sub:
         if bucket is not None:
             return _s3c_error("AccessPointAlreadyOwnedByYou", "Your previous request to create the named access point succeeded and you already own it.", 409)
+        if name in ((getattr(store, "account", None) or {}).get("olaps") or {}):
+            return _s3c_error("AccessPointAlreadyOwnedByYou", "An Object Lambda access point with this name already exists.", 409)
         if not _AP_NAME_RE.match(name):
             return _s3c_error("InvalidRequest", "Access point names must be 3-50 characters of lowercase letters, numbers and hyphens.", 400)
         try:
@@ -2799,6 +2949,251 @@ def _s3control(store: ObjectStore, method: str, raw: str, query: dict, lheaders:
     return _s3c_error("MethodNotAllowed", method, 405)
 
 
+
+# ── S3 Control: account-level Block Public Access (restXml /v20180820/configuration/publicAccessBlock)
+def _s3c_account_pab(store: ObjectStore, method: str, body: bytes) -> S3Response:
+    acct = store.account
+    hdr = '<?xml version="1.0" encoding="UTF-8"?>'
+    if method == "GET":
+        if "pab" not in acct:
+            return _s3c_error("NoSuchPublicAccessBlockConfiguration", "The public access block configuration was not found.", 404)
+        inner = "".join(f"<{k}>{'true' if acct['pab'].get(k) else 'false'}</{k}>" for k in _PAB_KEYS)
+        return _xml_response(f'{hdr}<PublicAccessBlockConfiguration xmlns="{_S3C_NS}">{inner}</PublicAccessBlockConfiguration>')
+    if method == "PUT":
+        try:
+            root = ET.fromstring(body or b"")
+        except ET.ParseError:
+            return _s3c_error("MalformedXML", "The XML you provided was not well-formed or did not validate against our published schema.", 400)
+        pab = {}
+        for k in _PAB_KEYS:
+            v = _child_text(root, k).strip().lower()
+            if v not in ("", "true", "false"):
+                return _s3c_error("MalformedXML", f"{k} must be true or false.", 400)
+            pab[k] = v == "true"
+        if not any(_child(root, k) is not None for k in _PAB_KEYS):
+            return _s3c_error("InvalidRequest", "At least one Block Public Access setting must be specified.", 400)
+        acct["pab"] = pab
+        return _done(store, _empty_response(200))
+    if method == "DELETE":
+        if "pab" not in acct:
+            return _s3c_error("NoSuchPublicAccessBlockConfiguration", "The public access block configuration was not found.", 404)
+        acct.pop("pab", None)
+        return _done(store, _empty_response(204))
+    return _s3c_error("MethodNotAllowed", method, 405)
+
+
+# ── S3 Control: Object Lambda Access Points (restXml /v20180820/accesspointforobjectlambda…)
+# An OLAP is a control-plane record in store.account["olaps"] layered on a standard access
+# point (its SupportingAccessPoint). GetObject through the OLAP alias/ARN reads the object via
+# the supporting access point's bucket, invokes the configured Lambda with the real event
+# shape, and returns the Lambda's transformed body (see _olap_get_object for the contract).
+_OLAP_ACTIONS = ("GetObject", "HeadObject", "ListObjects", "ListObjectsV2")
+_OLAP_FEATURES = ("GetObject-Range", "GetObject-PartNumber", "HeadObject-Range", "HeadObject-PartNumber")
+
+
+def _olaps(store: ObjectStore) -> dict:
+    return store.account.setdefault("olaps", {})
+
+
+def _olap_config_xml(c: dict) -> str:
+    feats = "".join(f"<AllowedFeature>{f}</AllowedFeature>" for f in c["allowed"])
+    trans = "".join(
+        "<TransformationConfiguration><Actions>" + "".join(f"<Action>{a}</Action>" for a in t["actions"]) + "</Actions>"
+        f"<ContentTransformation><AwsLambda><FunctionArn>{_xml_escape(t['function_arn'])}</FunctionArn>"
+        + (f"<FunctionPayload>{_xml_escape(t['payload'])}</FunctionPayload>" if t.get("payload") else "")
+        + "</AwsLambda></ContentTransformation></TransformationConfiguration>" for t in c["transformations"])
+    return (f"<SupportingAccessPoint>{_xml_escape(c['supporting'])}</SupportingAccessPoint>"
+            f"<CloudWatchMetricsEnabled>{'true' if c['metrics'] else 'false'}</CloudWatchMetricsEnabled>"
+            f"<AllowedFeatures>{feats}</AllowedFeatures><TransformationConfigurations>{trans}</TransformationConfigurations>")
+
+
+def _parse_olap_config(store: ObjectStore, root) -> tuple[dict | None, S3Response | None]:
+    sup = _child_text(root, "SupportingAccessPoint").strip()
+    m = re.match(r"^arn:aws:s3:[a-z0-9-]+:(\d{12}):accesspoint/([a-z0-9-]{3,50})$", sup)
+    if not m:
+        return None, _s3c_error("InvalidRequest", "SupportingAccessPoint must be the ARN of a standard access point.", 400)
+    if m.group(1) != _ACCOUNT_ID or _find_access_point(store, m.group(2))[0] is None:
+        return None, _s3c_error("InvalidRequest", "The supporting access point does not exist.", 400)
+    allowed = [(e.text or "").strip() for e in _children(_child(root, "AllowedFeatures"), "AllowedFeature")]
+    if any(f not in _OLAP_FEATURES for f in allowed):
+        return None, _s3c_error("MalformedXML", f"AllowedFeature must be one of {', '.join(_OLAP_FEATURES)}.", 400)
+    trans = []
+    for t in _children(_child(root, "TransformationConfigurations"), "TransformationConfiguration"):
+        actions = [(e.text or "").strip() for e in _children(_child(t, "Actions"), "Action")]
+        if not actions or any(a not in _OLAP_ACTIONS for a in actions):
+            return None, _s3c_error("MalformedXML", f"Actions must be a non-empty subset of {', '.join(_OLAP_ACTIONS)}.", 400)
+        lam = _child(_child(t, "ContentTransformation"), "AwsLambda") if _child(t, "ContentTransformation") is not None else None
+        fn = _child_text(lam, "FunctionArn").strip() if lam is not None else ""
+        if not re.match(r"^arn:aws:lambda:[a-z0-9-]+:\d{12}:function:[\w-]+(:[\w$-]+)?$", fn):
+            return None, _s3c_error("InvalidRequest", "ContentTransformation.AwsLambda.FunctionArn must be a Lambda function ARN.", 400)
+        trans.append({"actions": actions, "function_arn": fn, "payload": _child_text(lam, "FunctionPayload")})
+    if not trans:
+        return None, _s3c_error("MalformedXML", "At least one TransformationConfiguration is required.", 400)
+    return {"supporting": sup, "metrics": _child_text(root, "CloudWatchMetricsEnabled").strip().lower() == "true",
+            "allowed": allowed, "transformations": trans}, None
+
+
+def _s3c_olap(store: ObjectStore, method: str, segs: list, body: bytes) -> S3Response:
+    hdr = '<?xml version="1.0" encoding="UTF-8"?>'
+    olaps = _olaps(store)
+    if len(segs) == 2:
+        if method != "GET":
+            return _s3c_error("MethodNotAllowed", method, 405)
+        rows = "".join(f"<ObjectLambdaAccessPoint><Name>{n}</Name><ObjectLambdaAccessPointArn>{r['arn']}</ObjectLambdaAccessPointArn>"
+                       f"<Alias><Value>{r['alias']}</Value><Status>READY</Status></Alias></ObjectLambdaAccessPoint>"
+                       for n, r in sorted(olaps.items()))
+        return _xml_response(f'{hdr}<ListAccessPointsForObjectLambdaResult xmlns="{_S3C_NS}"><ObjectLambdaAccessPointList>{rows}</ObjectLambdaAccessPointList></ListAccessPointsForObjectLambdaResult>')
+    name, sub = segs[2], (segs[3] if len(segs) > 3 else "")
+    if sub not in ("", "configuration", "policy", "policyStatus") or len(segs) > 4:
+        return _s3c_error("NotImplemented", f"Object Lambda access point sub-resource '{sub}' is not implemented by Vyomi.", 501)
+    rec = olaps.get(name)
+    if method == "PUT" and not sub:
+        if rec is not None or _find_access_point(store, name)[0] is not None:
+            return _s3c_error("AccessPointAlreadyOwnedByYou", "An access point with this name already exists.", 409)
+        if not re.match(r"^[a-z0-9][a-z0-9-]{1,43}[a-z0-9]$", name):
+            return _s3c_error("InvalidRequest", "Object Lambda access point names must be 3-45 characters of lowercase letters, numbers and hyphens.", 400)
+        try:
+            root = ET.fromstring(body or b"")
+        except ET.ParseError:
+            return _s3c_error("MalformedXML", "The XML you provided was not well-formed or did not validate against our published schema.", 400)
+        cfg, err = _parse_olap_config(store, _child(root, "Configuration") if _child(root, "Configuration") is not None else root)
+        if err:
+            return err
+        rec = {"alias": f"{name}-{uuid.uuid4().hex[:10]}--ol-s3", "created": _now(), "config": cfg, "policy": None,
+               "arn": f"arn:aws:s3-object-lambda:us-east-1:{_ACCOUNT_ID}:accesspoint/{name}"}
+        olaps[name] = rec
+        return _done(store, _xml_response(f'{hdr}<CreateAccessPointForObjectLambdaResult xmlns="{_S3C_NS}"><ObjectLambdaAccessPointArn>{rec["arn"]}</ObjectLambdaAccessPointArn>'
+                                          f'<Alias><Value>{rec["alias"]}</Value><Status>READY</Status></Alias></CreateAccessPointForObjectLambdaResult>'))
+    if rec is None:
+        return _s3c_error("NoSuchAccessPoint", "The specified object lambda access point does not exist.", 404)
+    if not sub:
+        if method == "GET":
+            pab = "".join(f"<{k}>true</{k}>" for k in _PAB_KEYS)
+            return _xml_response(f'{hdr}<GetAccessPointForObjectLambdaResult xmlns="{_S3C_NS}"><Name>{name}</Name>'
+                                 f'<PublicAccessBlockConfiguration>{pab}</PublicAccessBlockConfiguration><CreationDate>{rec["created"]}</CreationDate>'
+                                 f'<Alias><Value>{rec["alias"]}</Value><Status>READY</Status></Alias></GetAccessPointForObjectLambdaResult>')
+        if method == "DELETE":
+            del olaps[name]
+            return _done(store, _empty_response(204))
+    elif sub == "configuration":
+        if method == "GET":
+            return _xml_response(f'{hdr}<GetAccessPointConfigurationForObjectLambdaResult xmlns="{_S3C_NS}"><Configuration>{_olap_config_xml(rec["config"])}</Configuration></GetAccessPointConfigurationForObjectLambdaResult>')
+        if method == "PUT":
+            try:
+                root = ET.fromstring(body or b"")
+            except ET.ParseError:
+                return _s3c_error("MalformedXML", "The XML you provided was not well-formed or did not validate against our published schema.", 400)
+            cfg, err = _parse_olap_config(store, _child(root, "Configuration") if _child(root, "Configuration") is not None else root)
+            if err:
+                return err
+            rec["config"] = cfg
+            return _done(store, _empty_response(200))
+    elif sub == "policy":
+        if method == "GET":
+            if not rec.get("policy"):
+                return _s3c_error("NoSuchAccessPointPolicy", "The specified accesspoint policy does not exist.", 404)
+            return _xml_response(f'{hdr}<GetAccessPointPolicyForObjectLambdaResult xmlns="{_S3C_NS}"><Policy>{_xml_escape(rec["policy"])}</Policy></GetAccessPointPolicyForObjectLambdaResult>')
+        if method == "PUT":
+            try:
+                doc = _child_text(ET.fromstring(body or b""), "Policy")
+                json.loads(doc)
+            except Exception:
+                return _s3c_error("MalformedPolicy", "Policies must be valid JSON and the first byte must be '{'", 400)
+            rec["policy"] = doc
+            return _done(store, _empty_response(200))
+        if method == "DELETE":
+            rec["policy"] = None
+            return _done(store, _empty_response(204))
+    elif sub == "policyStatus" and method == "GET":
+        if not rec.get("policy"):
+            return _s3c_error("NoSuchAccessPointPolicy", "The specified accesspoint policy does not exist.", 404)
+        public = _policy_is_public(json.loads(rec["policy"]))
+        return _xml_response(f'{hdr}<GetAccessPointPolicyStatusForObjectLambdaResult xmlns="{_S3C_NS}"><PolicyStatus><IsPublic>{"true" if public else "false"}</IsPublic></PolicyStatus></GetAccessPointPolicyStatusForObjectLambdaResult>')
+    return _s3c_error("MethodNotAllowed", method, 405)
+
+
+def _olap_lookup(store: ObjectStore, raw: str):
+    """(record, name, key) when the request addresses an OLAP by alias or ARN, else (None, '', '')."""
+    olaps = (getattr(store, "account", None) or {}).get("olaps") or {}
+    if not olaps:
+        return None, "", ""
+    head, _, rest = raw.partition("/")
+    if raw.startswith("arn:aws:s3-object-lambda:") and ":accesspoint/" in raw:
+        tail = raw.split(":accesspoint/", 1)[1]
+        name, _, key = tail.partition("/")
+        return olaps.get(name), name, key
+    head = urllib.parse.unquote(head)
+    if head.endswith("--ol-s3"):
+        for n, r in olaps.items():
+            if r["alias"] == head:
+                return r, n, rest
+    return None, "", ""
+
+
+def _olap_dispatch(store: ObjectStore, rec: dict, name: str, method: str, key: str, query: dict, headers: dict, lheaders: dict) -> S3Response:
+    """Data plane through an Object Lambda access point. Only GetObject is transformed."""
+    cfg = rec["config"]
+    if method == "GET" and key and not any(k in query for k in ("uploadId", "tagging", "acl", "attributes")):
+        t = next((t for t in cfg["transformations"] if "GetObject" in t["actions"]), None)
+        if t is None:
+            return _error_xml("InvalidRequest", "This Object Lambda access point has no GetObject transformation configured.", f"/{key}", 400)
+        return _olap_get_object(store, rec, name, t, key, query, headers, lheaders)
+    configured = {a for t in cfg["transformations"] for a in t["actions"]}
+    if method == "HEAD" and "HeadObject" in configured or (method == "GET" and not key and configured & {"ListObjects", "ListObjectsV2"}):
+        return _error_xml("NotImplemented", "HeadObject / ListObjects transformations through an Object Lambda access point are not implemented by Vyomi (GetObject is).", f"/{key}", 501)
+    return _error_xml("InvalidRequest", "This operation is not supported through an Object Lambda access point.", f"/{key}", 400)
+
+
+def _olap_get_object(store, rec, name, t, key, query, headers, lheaders) -> S3Response:
+    cfg = rec["config"]
+    if "range" in lheaders and "GetObject-Range" not in cfg["allowed"]:
+        return _error_xml("InvalidRequest", "Range requests are not enabled on this Object Lambda access point (AllowedFeatures: GetObject-Range).", f"/{key}", 400)
+    if "partNumber" in query and "GetObject-PartNumber" not in cfg["allowed"]:
+        return _error_xml("InvalidRequest", "partNumber is not enabled on this Object Lambda access point (AllowedFeatures: GetObject-PartNumber).", f"/{key}", 400)
+    sup_name = cfg["supporting"].rsplit("/", 1)[-1]
+    bucket, _ap = _find_access_point(store, sup_name)
+    if bucket is None:
+        return _error_xml("NoSuchAccessPoint", "The supporting access point of this Object Lambda access point no longer exists.", f"/{key}", 404)
+    src = get_object(store, bucket, key, query, headers)
+    if src.status >= 300:
+        return src
+    lam = getattr(store, "lam_store", None)
+    if lam is None:
+        return _error_xml("InternalError", "No Lambda backend is attached to this store.", f"/{key}", 500)
+    try:
+        from core import lambda_core as _lam
+    except ImportError:  # pragma: no cover - flat vendoring
+        import lambda_core as _lam  # type: ignore
+    host = lheaders.get("host") or "localhost"
+    token = uuid.uuid4().hex
+    event = {"xAmzRequestId": uuid.uuid4().hex,
+             "getObjectContext": {"inputS3Url": f"http://{host}/{bucket}/{urllib.parse.quote(key)}?X-Amz-Expires=61",
+                                  "outputRoute": f"io-use1-{uuid.uuid4().hex[:6]}", "outputToken": token,
+                                  # Vyomi extension: the original object, so a Lambda needs no network round-trip
+                                  "vyomiInputBase64": base64.b64encode(src.body or b"").decode(),
+                                  "vyomiInputContentType": src.media_type or "application/octet-stream"},
+             "configuration": {"accessPointArn": rec["arn"], "supportingAccessPointArn": cfg["supporting"], "payload": t.get("payload") or ""},
+             "userRequest": {"url": f"/{rec['alias']}/{key}", "headers": {k: v for k, v in lheaders.items() if k in ("host", "range", "user-agent")}},
+             "userIdentity": {"type": "IAMUser", "accountId": _ACCOUNT_ID, "arn": f"arn:aws:iam::{_ACCOUNT_ID}:root"},
+             "protocolVersion": "1.00"}
+    out = _lam._invoke(lam, _lam._norm_name(t["function_arn"]), json.dumps(event).encode())
+    if out.status == 404:
+        return _error_xml("InternalError", f"The Object Lambda transformation function {t['function_arn']} does not exist.", f"/{key}", 500)
+    fn_err = (out.headers or {}).get("X-Amz-Function-Error")
+    try:
+        res = json.loads(out.body or b"null")
+    except ValueError:
+        res = None
+    if out.status != 200 or fn_err or not isinstance(res, dict) or "body" not in res:
+        why = (res or {}).get("errorMessage") if isinstance(res, dict) and fn_err else "the Lambda did not return {statusCode, body}"
+        return _error_xml("InternalError", f"Object Lambda transformation failed: {why}", f"/{key}", 500)
+    raw_body = res["body"]
+    data = base64.b64decode(raw_body) if res.get("isBase64Encoded") else (raw_body if isinstance(raw_body, bytes) else str(raw_body if raw_body is not None else "").encode())
+    hdrs = {str(k): str(v) for k, v in (res.get("headers") or {}).items() if str(k).lower() != "content-type"}
+    ctype = next((str(v) for k, v in (res.get("headers") or {}).items() if str(k).lower() == "content-type"), src.media_type)
+    return S3Response(status=int(res.get("statusCode") or 200), headers=hdrs, body=data, media_type=ctype)
+
+
 def dispatch(store: ObjectStore, method: str, path: str,
              query: dict | None = None, headers: dict | None = None,
              body: bytes = b"") -> S3Response:
@@ -2811,14 +3206,25 @@ def dispatch(store: ObjectStore, method: str, path: str,
     method = (method or "GET").upper()
     if bucket == "v20180820":     # S3 Control (access points; every other control op -> NotImplemented)
         return _s3control(store, method, raw, query, lheaders, body)
+    olap, olap_name, olap_key = _olap_lookup(store, raw)
+    if olap is not None:
+        return _olap_dispatch(store, olap, olap_name, method, olap_key, query, headers, lheaders)
     bucket = _resolve_access_point(store, bucket)
     if method == "OPTIONS":
         return _cors_preflight(store, bucket, lheaders)
     if not bucket:
         # Service-level root: GET / lists all buckets; others are genuinely invalid.
         if method == "GET":
-            return list_all_buckets(store)
+            return list_directory_buckets(store, query) if _is_express_control(lheaders) else list_all_buckets(store)
         return _error_xml("InvalidRequest", "Missing bucket.", "/", 400)
+    if "session" in query and not key and method == "GET":
+        return _create_session(store, bucket, lheaders)
+    if is_directory_bucket(store, bucket):
+        bad = _directory_guard(store, method, bucket, key, query, lheaders)
+        if bad is not None:
+            return bad
+        if method in ("PUT", "POST") and key:
+            headers = {**headers, "x-amz-storage-class": "EXPRESS_ONEZONE"}
     if not key:
         # bucket-level
         sr = _bucket_subresource(store, method, bucket, query, lheaders, body)
