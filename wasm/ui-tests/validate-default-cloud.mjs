@@ -9,18 +9,22 @@ const check = (n, c, note = "") => { console.log(`[${c ? "PASS" : "FAIL"}] ${n}$
 const ctx = await b.newContext({ viewport: { width: 1440, height: 860 } });
 const p = await ctx.newPage(); const errs = []; p.on("pageerror", e => errs.push(String(e)));
 const KEY = () => p.evaluate(() => localStorage.getItem("vyomi.defaultSpace"));
-await p.goto(base + "/clouds.html"); await p.waitForSelector("#vy-pick .news .opt", { timeout: 60000 });
-check("first launch shows the dialog with 3 'new space' options", (await p.locator("#vy-pick .news .opt").count()) === 3);
-check("no Cancel; Continue disabled", (await p.locator("#vy-pick .ft button:not(.go)").count()) === 0 && await p.locator("#vy-pick .go").isDisabled());
+await p.goto(base + "/clouds.html"); await p.waitForSelector("#vy-pick iframe", { timeout: 60000 });
+const pfr = p.frameLocator("#vy-pick iframe");
+await pfr.locator("#view-spaces").waitFor({ state: "visible", timeout: 60000 });
+check("first launch shows the Spaces dialog (same as the drawer's), no close button", (await p.locator("#vy-pick .hd button").count()) === 0);
+check("a hint says to choose the default space", /Choose your default space/.test(await pfr.locator("body").innerText()));
 const cov = await p.evaluate(() => { const g = document.getElementById("spaces-grid"); const t = document.elementFromPoint(8, 8); return !!t && !!t.closest("#vy-pick") && (!g || getComputedStyle(g).visibility === "hidden"); });
 check("the old Spaces page is not visible behind the dialog", cov);
 await p.keyboard.press("Escape"); await p.mouse.click(8, 8); await sleep(300);
 check("Esc / backdrop do not close it", await p.locator("#vy-pick").isVisible());
-await p.click('#vy-pick .opt[data-n="gcp"]'); await p.click("#vy-pick .go");
+// Open (or, on an empty Nano, create) a GCP space from the dialog -> it becomes the default
+if ((await pfr.locator('.space-card[data-provider="gcp"]').count()) > 0) await pfr.locator('.space-card[data-provider="gcp"]').first().click();
+else { await pfr.getByText("Create Space").first().click(); await pfr.locator("#csm-name").fill("GCP first"); await pfr.locator('input[name="csm-provider"][value="gcp"]').check({ force: true }); await pfr.locator("#csm-submit").click(); }
 await p.waitForURL(/gcp-console\.html/, { timeout: 60000 });
-check("Continue creates a GCP space and opens its console", /gcp-console\.html/.test(p.url()), p.url());
+check("opening/creating a space goes to its console", /gcp-console\.html/.test(p.url()), p.url());
 const gcpId = await KEY();
-check("default = that space's id", !!gcpId);
+check("it became the default", !!gcpId);
 const p2 = await ctx.newPage(); await p2.goto(base + "/clouds.html"); await p2.waitForURL(/gcp-console\.html/, { timeout: 60000 });
 check("a later launch goes straight to the default space", /gcp-console\.html/.test(p2.url()) && (await p2.locator("#vy-pick").count()) === 0, p2.url());
 await p2.close();
@@ -42,6 +46,7 @@ check("the next launch opens the newly starred space", /azure-console\.html/.tes
 await p4.close();
 await p.evaluate(() => localStorage.setItem("vyomi.defaultSpace", "space-does-not-exist"));
 const p5 = await ctx.newPage(); await p5.goto(base + "/clouds.html"); await p5.locator("#vy-pick").waitFor({ timeout: 60000 });
-check("a stale default brings the dialog back", await p5.locator("#vy-pick .go").isDisabled());
+await p5.locator("#vy-pick iframe").waitFor();
+check("a stale default brings the dialog back", (await p5.locator("#vy-pick iframe").count()) === 1);
 check("no page errors", errs.filter(e => !/ResizeObserver/.test(e)).length === 0, JSON.stringify(errs.slice(0, 2)));
 console.log(`${ok} pass / ${bad} fail`); await b.close(); server.close(); process.exit(bad ? 1 : 0);

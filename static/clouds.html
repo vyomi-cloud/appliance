@@ -3239,10 +3239,19 @@
 
     // One space is the default (per browser): Vyomi opens straight into it. Set from the star on a space card.
     function _defaultSpace() { try { return localStorage.getItem('vyomi.defaultSpace') || ''; } catch (_) { return ''; } }
+    const _PICK = /[?&]pick=1/.test(location.search);   // first-visit chooser: the same Spaces view, forced
     function setDefaultSpace(id) {
       try { localStorage.setItem('vyomi.defaultSpace', id); } catch (_) {}
+      if (_PICK) { const c = document.querySelector('[data-space-id="' + id + '"]'); if (c) { switchAndOpen(id, c.dataset.provider); return; } }
       loadSpaces();
     }
+    if (_PICK) document.addEventListener('DOMContentLoaded', () => {
+      const g = document.getElementById('spaces-grid'); if (!g) return;
+      const h = document.createElement('div');
+      h.style.cssText = 'margin:0 0 12px;padding:10px 14px;border-radius:10px;background:#eff6ff;border:1px solid #bfdbfe;color:#1e3a8a;font-size:13.5px;line-height:1.5';
+      h.innerHTML = '<b>Choose your default space.</b> Click a space to open it, or press its \u2606 star to make it the default. Vyomi opens straight into it next time \u2014 change it any time from <b>Spaces</b> in the drawer.';
+      g.parentNode.insertBefore(h, g);
+    });
 
     async function switchAndOpen(spaceId, provider) {
       // Pre-check the tier policy: if the user's subscription doesn't
@@ -3254,6 +3263,7 @@
         openClModal(provider, policy);
         return;
       }
+      try { if (!_defaultSpace()) localStorage.setItem('vyomi.defaultSpace', spaceId); } catch (_) {}
       try {
         await fetch(`/api/spaces/${ spaceId }/switch`, { method: 'POST' });
       } catch (e) { /* swallow — opening console works without explicit switch */ }
@@ -3324,6 +3334,7 @@
         const newId = d?.space?.space_id;
         if (newId) {
           // Switch active context to the new space, then jump to console.
+          try { if (!_defaultSpace()) localStorage.setItem('vyomi.defaultSpace', newId); } catch (_) {}
           try { await fetch(`/api/spaces/${newId}/switch`, { method: 'POST' }); } catch (_) {}
           window.location.href = PROVIDER_PATHS[provider] || '/ui';
           return;

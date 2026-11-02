@@ -1,4 +1,4 @@
-/* Offline: the first-visit "default space" dialog, and the star on Spaces cards.
+/* Offline: the first-visit "default space" dialog (the drawer's Spaces dialog, forced), and the star on Spaces cards.
  *   first visit  -> forced, OPAQUE dialog on /ui (nothing of the page behind it; no close/Esc; Continue disabled until chosen)
  *   after a pick -> the browser remembers the space and /ui opens straight into its cloud's console
  *   drawer       -> no separate "Default cloud" item: Spaces is the only way to switch; a star there picks the default
@@ -26,10 +26,11 @@ const KEY = () => p.evaluate(() => localStorage.getItem("vyomi.defaultSpace"));
 // 1. first visit: forced, opaque dialog
 await p.goto(`${BASE}/ui`); await dlg().waitFor({ timeout: 20000 });
 check(await dlg().isVisible(), "first visit shows the dialog");
-await p.waitForSelector("#vy-pick .news .opt", { timeout: 10000 });
-check((await p.locator("#vy-pick .news .opt").count()) === 3, "three 'new space' options (AWS / Google Cloud / Azure)");
-check((await p.locator("#vy-pick .cancel, #vy-pick .ft button:not(.go)").count()) === 0, "no Cancel button");
-check(await p.locator("#vy-pick .go").isDisabled(), "Continue is disabled until a space is chosen");
+const pfr = p.frameLocator("#vy-pick iframe");
+await pfr.locator(".space-card").first().waitFor({ timeout: 30000 });
+check((await p.locator("#vy-pick .hd button").count()) === 0, "no close button");
+check((await pfr.locator("#view-spaces").isVisible()) && (await pfr.locator(".space-card").count()) >= 1, "it is the same Spaces dialog as the drawer's (space cards with stars)");
+check(/Choose your default space/.test(await pfr.locator("body").innerText()), "a hint says to choose the default space");
 const covered = await p.evaluate(() => {
   const top = document.elementFromPoint(8, 8), grid = document.getElementById("spaces-grid");
   const bg = getComputedStyle(document.getElementById("vy-pick")).backgroundColor;
@@ -38,16 +39,13 @@ const covered = await p.evaluate(() => {
 check(covered.topIsDialog && covered.gridHidden && covered.opaque, "the old Spaces page is not visible behind the dialog", JSON.stringify(covered));
 await p.keyboard.press("Escape"); await p.mouse.click(8, 8); await p.waitForTimeout(300);
 check(await dlg().isVisible(), "Esc and a backdrop click do not close it");
-// 2. pick an existing GCP space as the default
-check((await p.locator('#vy-pick .opt[data-s][data-c="gcp"]').count()) >= 1, "existing spaces are listed to pick from");
-await p.click('#vy-pick .opt[data-s][data-c="gcp"]');
-check(!(await p.locator("#vy-pick .go").isDisabled()), "choosing enables Continue");
-await p.click("#vy-pick .go"); await p.waitForURL(/\/console\/gcp/, { timeout: 30000 });
-check(/\/console\/gcp/.test(p.url()), "Continue opens that space's console", p.url());
+// 2. open a GCP space from it -> becomes the default
+await pfr.locator('.space-card[data-provider="gcp"]').first().click(); await p.waitForURL(/\/console\/gcp/, { timeout: 30000 });
+check(/\/console\/gcp/.test(p.url()), "opening a space goes to its console", p.url());
 const gcpId = await KEY();
 const spaces = async () => (await (await p.request.get(`${BASE}/api/spaces`)).json());
 let d = await spaces();
-check(!!gcpId && (d.spaces || []).some(s => s.space_id === gcpId && /gcp/i.test(s.provider || s.provider_id || "")), "the default is the chosen GCP space's id", gcpId);
+check(!!gcpId && (d.spaces || []).some(s => s.space_id === gcpId && /gcp/i.test(s.provider || s.provider_id || "")), "the opened space became the default", gcpId);
 // 3. later visit: straight in
 const p2 = await ctx.newPage(); await p2.goto(`${BASE}/ui`); await p2.waitForURL(/\/console\/gcp/, { timeout: 30000 });
 check(/\/console\/gcp/.test(p2.url()) && (await p2.locator("#vy-pick").count()) === 0, "a later visit goes straight to the default space, no dialog", p2.url());
@@ -73,6 +71,12 @@ await p4.close();
 // 6. a default that no longer exists -> dialog again
 await p.evaluate(() => localStorage.setItem("vyomi.defaultSpace", "space-does-not-exist"));
 const p5 = await ctx.newPage(); await p5.goto(`${BASE}/ui`); await p5.locator("#vy-pick").waitFor({ timeout: 20000 });
-check(/\/clouds|\/ui/.test(p5.url()) && (await p5.locator("#vy-pick .go").isDisabled()), "a stale default brings the dialog back", p5.url());
+await p5.locator("#vy-pick iframe").waitFor();
+check(/\/clouds|\/ui/.test(p5.url()) && (await p5.locator("#vy-pick iframe").count()) === 1, "a stale default brings the dialog back", p5.url());
+// 7. starring from the first-visit dialog also makes it the default and opens it
+const c2 = await b.newContext({ viewport: { width: 1440, height: 860 } }); const p6 = await c2.newPage();
+await p6.goto(`${BASE}/ui`); const f6 = p6.frameLocator("#vy-pick iframe");
+await f6.locator('.space-card[data-provider="azure"] .space-star').first().click({ timeout: 30000 }); await p6.waitForURL(/\/console\/azure/, { timeout: 30000 });
+check(/\/console\/azure/.test(p6.url()) && !!(await p6.evaluate(() => localStorage.getItem("vyomi.defaultSpace"))), "starring in the first-visit dialog sets the default and opens it", p6.url());
 check(errs.length === 0, "no page errors", errs.slice(0, 2).join(" | "));
 await b.close(); process.exit(fails ? 1 : 0);
