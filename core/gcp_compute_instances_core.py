@@ -39,6 +39,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
@@ -85,6 +86,7 @@ class ComputeStore:
         self.instance_groups: dict = {}    # "projects/p/zones/z/instanceGroups/n" -> resource
         self.instance_group_managers: dict = {}  # "projects/p/zones/z/instanceGroupManagers/n" -> resource
         self.health_checks: dict = {}      # "projects/p/global/healthChecks/n" -> resource
+        self.resource_policies: dict = {}  # "projects/p/regions/r/resourcePolicies/n" -> resource (snapshot / instance schedules)
         self.operations: dict = {}         # "projects/p/(zones/z|global)/operations/n" -> resource
         self.project_metadata: dict = {}   # project -> commonInstanceMetadata
         self.seq = {"op": 0, "id": 1000}
@@ -576,7 +578,7 @@ def create_snapshot(store, project, zone, disk_name, payload):
 
 def snapshot_view(store, full):
     s = store.snapshots[full]
-    v = _copy(s)
+    v = _copy({k: x for k, x in s.items() if not k.startswith("_")})
     v["_display"] = {"location": v.get("storageLocations", [None])[0], "sourceDiskName": _last(v.get("sourceDisk", ""))}
     return v
 
@@ -1123,10 +1125,337 @@ def set_common_instance_metadata(store, project, payload):
     return _operation(store, project, None, "setMetadata", project, _selflink("projects/%s" % project))
 
 
+
+# ── resource policies: snapshot schedules + instance schedules (ENFORCED) ────────────────
+# A snapshot schedule attached to a disk really takes snapshots when its ticks fall due and
+# really expires them by maxRetentionDays; an instance schedule really starts/stops attached
+# VMs on its cron ticks. Vyomi has no background scheduler thread, so due ticks are evaluated
+# lazily at the top of every Compute request (like the lifecycle sweep in Storage): the
+# resulting snapshots/starts carry the TICK's timestamp, exactly as if a timer had fired.
+_CLOCK_OVERRIDE = None      # tests pin the clock (epoch seconds)
+
+
+def _clock():
+    return _CLOCK_OVERRIDE if _CLOCK_OVERRIDE is not None else time.time()
+
+
+def _iso(epoch):
+    return datetime.fromtimestamp(epoch, timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
+
+def _hhmm(s, what):
+    m = re.fullmatch(r"([01]?\d|2[0-3]):([0-5]\d)", str(s or ""))
+    if not m:
+        raise _E(400, "INVALID_ARGUMENT", "Invalid value for field '%s': %r. Expected HH:MM in UTC." % (what, s))
+    return int(m.group(1)) * 3600 + int(m.group(2)) * 60
+
+
+_DOW = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"]
+
+
+def _snapshot_ticks(sched):
+    """(anchor_epoch_seconds, period_seconds) pairs for a snapshotSchedulePolicy.schedule."""
+    out = []
+    if sched.get("hourlySchedule"):
+        h = sched["hourlySchedule"]
+        n = int(h.get("hoursInCycle") or 0)
+        if not 1 <= n <= 23:
+            raise _E(400, "INVALID_ARGUMENT", "hourlySchedule.hoursInCycle must be between 1 and 23.")
+        # real API: startTime must be on the hour
+        st = _hhmm(h.get("startTime"), "hourlySchedule.startTime")
+        out.append((st, n * 3600))
+    elif sched.get("dailySchedule"):
+        d = sched["dailySchedule"]
+        n = int(d.get("daysInCycle") or 0)
+        if n < 1:
+            raise _E(400, "INVALID_ARGUMENT", "dailySchedule.daysInCycle must be at least 1.")
+        out.append((_hhmm(d.get("startTime"), "dailySchedule.startTime"), n * 86400))
+    elif sched.get("weeklySchedule"):
+        days = sched["weeklySchedule"].get("dayOfWeeks") or []
+        if not days:
+            raise _E(400, "INVALID_ARGUMENT", "weeklySchedule.dayOfWeeks must not be empty.")
+        for d in days:
+            if d.get("day") not in _DOW:
+                raise _E(400, "INVALID_ARGUMENT", "Invalid weeklySchedule day %r." % d.get("day"))
+            # 1970-01-01 was a Thursday; Monday-based index of the epoch day is 3
+            off = ((_DOW.index(d["day"]) - 3) % 7) * 86400 + _hhmm(d.get("startTime"), "weeklySchedule.startTime")
+            out.append((off, 7 * 86400))
+    else:
+        raise _E(400, "INVALID_ARGUMENT", "snapshotSchedulePolicy.schedule needs an hourly, daily or weekly schedule.")
+    return out
+
+
+def _latest_tick(ticks, now):
+    best = None
+    for anchor, period in ticks:
+        k = int((now - anchor) // period)
+        t = anchor + k * period
+        if t <= now and (best is None or t > best):
+            best = t
+    return best
+
+
+def _cron_fields(expr, what):
+    parts = str(expr or "").split()
+    if len(parts) != 5:
+        raise _E(400, "INVALID_ARGUMENT", "Invalid value for field '%s': %r. Expected a 5-field unix-cron expression." % (what, expr))
+    ranges = [(0, 59), (0, 23), (1, 31), (1, 12), (0, 7)]
+    out = []
+    for part, (lo, hi) in zip(parts, ranges):
+        vals = set()
+        for item in part.split(","):
+            step = 1
+            if "/" in item:
+                item, st = item.split("/", 1)
+                if not st.isdigit() or int(st) < 1:
+                    raise _E(400, "INVALID_ARGUMENT", "Invalid cron step in %r." % expr)
+                step = int(st)
+            if item == "*":
+                a, b = lo, hi
+            elif "-" in item:
+                x, y = item.split("-", 1)
+                if not (x.isdigit() and y.isdigit()):
+                    raise _E(400, "INVALID_ARGUMENT", "Invalid cron range in %r." % expr)
+                a, b = int(x), int(y)
+            elif item.isdigit():
+                a = b = int(item)
+            else:
+                raise _E(400, "INVALID_ARGUMENT", "Invalid value for field '%s': %r." % (what, expr))
+            if a < lo or b > hi or a > b:
+                raise _E(400, "INVALID_ARGUMENT", "Cron value out of range in %r." % expr)
+            vals.update(range(a, b + 1, step))
+        out.append(vals)
+    out[4] = {v % 7 for v in out[4]}
+    return out
+
+
+def _tz(name):
+    if not name or name == "UTC":
+        return timezone.utc
+    try:
+        from zoneinfo import ZoneInfo
+        return ZoneInfo(name)
+    except Exception:
+        raise _E(400, "INVALID_ARGUMENT", "Invalid value for field 'timeZone': %r." % name)
+
+
+def _cron_latest(fields, tz, since, now):
+    """Latest minute in (since, now] matching the cron fields, or None. Scans backwards,
+    bounded to 8 days."""
+    mins, hrs, doms, mons, dows = fields
+    t = int(now // 60) * 60
+    floor = max(int(since), t - 8 * 86400)
+    while t > floor:
+        dt = datetime.fromtimestamp(t, tz)
+        if (dt.minute in mins and dt.hour in hrs and dt.month in mons
+                and dt.day in doms and (dt.isoweekday() % 7) in dows):
+            return t
+        t -= 60
+    return None
+
+
+def _policy_region_key(project, region, name):
+    return "projects/%s/regions/%s/resourcePolicies/%s" % (project, region, name)
+
+
+def insert_resource_policy(store, project, region, payload):
+    if region not in REGIONS:
+        raise _E(400, "INVALID_ARGUMENT", "Invalid value for field 'region': %r." % region)
+    name = payload.get("name") or ""
+    _check_name(name, "resource.name")
+    full = _policy_region_key(project, region, name)
+    if full in store.resource_policies:
+        raise _E(409, "ALREADY_EXISTS", "The resource '%s' already exists." % full)
+    kinds = [k for k in ("snapshotSchedulePolicy", "instanceSchedulePolicy", "groupPlacementPolicy", "diskConsistencyGroupPolicy")
+             if payload.get(k) is not None]
+    if len(kinds) != 1:
+        raise _E(400, "INVALID_ARGUMENT", "Exactly one of snapshotSchedulePolicy, instanceSchedulePolicy or groupPlacementPolicy must be set.")
+    if kinds[0] == "snapshotSchedulePolicy":
+        sp = payload["snapshotSchedulePolicy"]
+        _snapshot_ticks(sp.get("schedule") or {})
+        rp = sp.get("retentionPolicy") or {}
+        if rp.get("maxRetentionDays") is not None and int(rp["maxRetentionDays"]) < 1:
+            raise _E(400, "INVALID_ARGUMENT", "retentionPolicy.maxRetentionDays must be at least 1.")
+        if rp.get("onSourceDiskDelete") not in (None, "KEEP_AUTO_SNAPSHOTS", "APPLY_RETENTION_POLICY"):
+            raise _E(400, "INVALID_ARGUMENT", "Invalid retentionPolicy.onSourceDiskDelete %r." % rp.get("onSourceDiskDelete"))
+    elif kinds[0] == "instanceSchedulePolicy":
+        ip = payload["instanceSchedulePolicy"]
+        if not (ip.get("vmStartSchedule") or ip.get("vmStopSchedule")):
+            raise _E(400, "INVALID_ARGUMENT", "instanceSchedulePolicy needs a vmStartSchedule or a vmStopSchedule.")
+        _tz(ip.get("timeZone"))
+        for key in ("vmStartSchedule", "vmStopSchedule"):
+            if ip.get(key):
+                _cron_fields(ip[key].get("schedule"), "instanceSchedulePolicy.%s.schedule" % key)
+    else:
+        raise _E(501, "UNIMPLEMENTED", "%s resource policies are not implemented." % kinds[0])
+    pol = {"id": _next_id(store), "kind": "compute#resourcePolicy", "name": name, "description": payload.get("description", ""),
+           "region": _selflink("projects/%s/regions/%s" % (project, region)), "status": "READY",
+           "creationTimestamp": _ts(), "selfLink": _selflink(full), kinds[0]: payload[kinds[0]], "_region": region}
+    store.resource_policies[full] = pol
+    return _operation(store, project, region, "insert", name, _selflink(full))
+
+
+def _policy(store, project, region, name):
+    full = _policy_region_key(project, region, name)
+    return full, _get(store, store.resource_policies, full, "resourcePolicy")
+
+
+def _policy_view(store, project, full):
+    v = _copy({k: x for k, x in store.resource_policies[full].items() if not k.startswith("_")})
+    link = _selflink(full)
+    v["_display"] = {"attachedTo": [_last(n) for n, d in store.disks.items() if link in (d.get("resourcePolicies") or [])]
+                     + [_last(n) for n, i in store.instances.items() if link in (i.get("resourcePolicies") or [])]}
+    return v
+
+
+def list_resource_policies(store, project, region=None):
+    pre = "projects/%s/regions/%s/resourcePolicies/" % (project, region) if region else "projects/%s/regions/" % project
+    return [_policy_view(store, project, n) for n in sorted(store.resource_policies) if n.startswith(pre)]
+
+
+def delete_resource_policy(store, project, region, name):
+    full, _ = _policy(store, project, region, name)
+    link = _selflink(full)
+    for n, d in list(store.disks.items()) + list(store.instances.items()):
+        if link in (d.get("resourcePolicies") or []):
+            raise _E(400, "RESOURCE_IN_USE_BY_ANOTHER_RESOURCE",
+                     "The resource '%s' is already being used by '%s'." % (full, n))
+    del store.resource_policies[full]
+    return _operation(store, project, region, "delete", name, _selflink(full))
+
+
+def _attach_policies(store, project, zone, target, names, add, payload):
+    refs = payload.get("resourcePolicies") or []
+    if not refs:
+        raise _E(400, "INVALID_ARGUMENT", "resourcePolicies must not be empty.")
+    cur = target.setdefault("resourcePolicies", [])
+    region = _region_of(zone)
+    is_disk = target.get("kind") == "compute#disk"
+    for ref in refs:
+        pname = _last(ref)
+        full, pol = _policy(store, project, region, pname)
+        if add:
+            snap = "snapshotSchedulePolicy" in pol
+            inst = "instanceSchedulePolicy" in pol
+            if (is_disk and not snap) or (not is_disk and not inst):
+                raise _E(400, "INVALID_ARGUMENT", "Resource policy '%s' cannot be attached to a %s." % (pname, "disk" if is_disk else "instance"))
+            link = _selflink(full)
+            if link in cur:
+                raise _E(400, "INVALID_ARGUMENT", "Resource policy '%s' is already attached." % pname)
+            if is_disk and snap and any("snapshotSchedulePolicy" in store.resource_policies.get("projects/" + c.split("/projects/", 1)[-1], {}) for c in cur):
+                raise _E(400, "INVALID_ARGUMENT", "A disk can have at most one snapshot schedule.")
+            cur.append(link)
+            target.setdefault("_sched", {})[link] = _clock()      # first tick is the next one, no backfill
+        else:
+            link = _selflink(full)
+            if link not in cur:
+                raise _E(400, "INVALID_ARGUMENT", "Resource policy '%s' is not attached." % pname)
+            cur.remove(link)
+            target.get("_sched", {}).pop(link, None)
+
+
+def policies_verb(store, project, zone, coll, name, verb, payload):
+    if coll == "disks":
+        full, target = _disk(store, project, zone, name)
+    else:
+        full, target = _instance(store, project, zone, name)
+    _attach_policies(store, project, zone, target, None, verb == "addResourcePolicies", payload)
+    return _operation(store, project, zone, verb, name, _selflink(full))
+
+
+def run_schedules(store, now=None):
+    """Evaluate every attached resource policy's due ticks (see section comment)."""
+    if not store.resource_policies:
+        return
+    now = _clock() if now is None else now
+    # snapshot schedules
+    for dfull, disk in list(store.disks.items()):
+        for link in list(disk.get("resourcePolicies") or []):
+            pfull = "projects/" + link.split("/projects/", 1)[-1]
+            pol = store.resource_policies.get(pfull)
+            if not pol or "snapshotSchedulePolicy" not in pol:
+                continue
+            sp = pol["snapshotSchedulePolicy"]
+            tick = _latest_tick(_snapshot_ticks(sp.get("schedule") or {}), now)
+            last = disk.setdefault("_sched", {}).get(link, now)
+            if tick is not None and tick > last:
+                props = sp.get("snapshotProperties") or {}
+                sname = ("%s-%s-%s" % (pol["name"], disk["name"], time.strftime("%Y%m%d-%H%M", time.gmtime(tick))))[:62].rstrip("-")
+                sfull = "projects/%s/global/snapshots/%s" % (dfull.split("/")[1], sname)
+                if sfull not in store.snapshots:
+                    store.snapshots[sfull] = {
+                        "id": _next_id(store), "name": sname, "kind": "compute#snapshot", "status": "READY",
+                        "sourceDisk": _selflink(dfull), "diskSizeGb": disk["sizeGb"],
+                        "storageBytes": str(int(disk["sizeGb"]) * 1024 * 1024 * 50), "snapshotType": "STANDARD",
+                        "creationTimestamp": _iso(tick), "labels": dict(props.get("labels") or {}),
+                        "autoCreated": True, "selfLink": _selflink(sfull),
+                        "storageLocations": list(props.get("storageLocations") or [_region_of(disk["_zone"])]),
+                        "_policy": pfull,
+                    }
+                disk["_sched"][link] = tick
+    # snapshot retention
+    for sfull, snap in list(store.snapshots.items()):
+        pfull = snap.get("_policy")
+        pol = store.resource_policies.get(pfull) if pfull else None
+        if not pol:
+            continue
+        rp = (pol["snapshotSchedulePolicy"].get("retentionPolicy") or {})
+        days = rp.get("maxRetentionDays")
+        if not days:
+            continue
+        src_gone = "projects/" + str(snap.get("sourceDisk", "")).split("/projects/", 1)[-1] not in store.disks
+        if src_gone and rp.get("onSourceDiskDelete", "KEEP_AUTO_SNAPSHOTS") == "KEEP_AUTO_SNAPSHOTS":
+            continue
+        try:
+            created = datetime.strptime(snap["creationTimestamp"][:19], "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc).timestamp()
+        except Exception:
+            continue
+        if now - created > int(days) * 86400:
+            del store.snapshots[sfull]
+    # instance schedules
+    for ifull, inst in list(store.instances.items()):
+        for link in list(inst.get("resourcePolicies") or []):
+            pfull = "projects/" + link.split("/projects/", 1)[-1]
+            pol = store.resource_policies.get(pfull)
+            if not pol or "instanceSchedulePolicy" not in pol:
+                continue
+            ip = pol["instanceSchedulePolicy"]
+            tz = _tz(ip.get("timeZone"))
+            last = inst.setdefault("_sched", {}).get(link, now)
+            if ip.get("startTime") and now < _parse_rfc3339(ip["startTime"]):
+                continue
+            if ip.get("expirationTime") and now > _parse_rfc3339(ip["expirationTime"]):
+                continue
+            ticks = {}
+            for key, action in (("vmStartSchedule", "start"), ("vmStopSchedule", "stop")):
+                if ip.get(key):
+                    t = _cron_latest(_cron_fields(ip[key]["schedule"], key), tz, last, now)
+                    if t:
+                        ticks[action] = t
+            if ticks:
+                action = max(ticks, key=ticks.get)         # the most recent tick wins
+                zone = inst["_zone"]
+                try:
+                    set_instance_status(store, ifull.split("/")[1], zone, inst["name"], action)
+                except _E:
+                    pass                                    # already in the target state
+                inst["_sched"][link] = max(ticks.values())
+            elif last == now:
+                pass
+
+
+def _parse_rfc3339(s):
+    try:
+        return datetime.fromisoformat(str(s).replace("Z", "+00:00")).timestamp()
+    except Exception:
+        raise _E(400, "INVALID_ARGUMENT", "Invalid timestamp %r." % s)
+
+
 # ── dispatch ───────────────────────────────────────────────────────────────
 def dispatch(store, method, path, query=None, headers=None, body=b""):
     query, headers = query or {}, headers or {}
     try:
+        run_schedules(store)
         r = _dispatch(store, method.upper(), path, query, headers, body)
     except _E as e:
         return _err(e.status, e.gcp_status, e.message)
@@ -1180,6 +1509,12 @@ def _dispatch(store, method, path, query, headers, body):
               "instanceGroupManagers": aggregated_instance_group_managers}.get(rest[1])
         if fn:
             return _json(200, fn(store, project))
+        if rest[1] == "resourcePolicies":
+            items = {}
+            for rg in REGIONS:
+                lst = list_resource_policies(store, project, rg)
+                items["regions/%s" % rg] = {"resourcePolicies": lst} if lst else {"warning": {"code": "NO_RESULTS_ON_PAGE", "message": "no results"}}
+            return _json(200, {"kind": "compute#resourcePolicyAggregatedList", "items": items})
         if rest[1] == "operations":
             return _json(200, {"kind": "compute#operationAggregatedList", "items": {"global": {"operations": list_all_operations(store, project)}}})
         return _err(404, "NOT_FOUND", "Unknown path: %s" % path)
@@ -1190,6 +1525,17 @@ def _dispatch(store, method, path, query, headers, body):
         if len(rest) == 3:
             return _json(200, {"kind": "compute#operationList", "items": list_operations(store, project, rest[1])})
         return _json(200, get_operation(store, project, rest[1], rest[3]))
+    if rest[0] == "regions" and len(rest) >= 3 and rest[2] == "resourcePolicies":
+        region, rp = rest[1], rest[3:]
+        if not rp and method == "POST":
+            return _json(200, insert_resource_policy(store, project, region, payload))
+        if not rp and method == "GET":
+            return _json(200, {"kind": "compute#resourcePolicyList", "items": list_resource_policies(store, project, region)})
+        if len(rp) == 1 and method == "GET":
+            full, _ = _policy(store, project, region, rp[0])
+            return _json(200, _policy_view(store, project, full))
+        if len(rp) == 1 and method == "DELETE":
+            return _json(200, delete_resource_policy(store, project, region, rp[0]))
     if rest[0] == "global":
         return _global(store, method, project, rest[1:], verb, payload)
     if rest[0] == "zones" and len(rest) >= 2:
@@ -1299,6 +1645,8 @@ def _zonal(store, method, project, zone, rest, verb, payload, query=None):
                 return _json(200, delete_instance(store, project, zone, name))
         elif len(rest2) == 1 and verb:
             name = rest2[0]
+            if verb in ("addResourcePolicies", "removeResourcePolicies") and method == "POST":
+                return _json(200, policies_verb(store, project, zone, "instances", name, verb, payload))
             if verb in ("start", "stop", "suspend", "resume", "reset") and method == "POST":
                 return _json(200, set_instance_status(store, project, zone, name, verb))
             if verb in ("setLabels", "setMetadata", "setDeletionProtection", "setMachineType", "setTags") and method == "POST":
@@ -1315,6 +1663,8 @@ def _zonal(store, method, project, zone, rest, verb, payload, query=None):
                 _instance(store, project, zone, name)
                 raise _E(400, "FAILED_PRECONDITION", "Guest attributes aren't available: no guest OS or agent runs behind an instance in Vyomi.")
     elif coll == "disks":
+        if len(rest2) == 1 and verb in ("addResourcePolicies", "removeResourcePolicies") and method == "POST":
+            return _json(200, policies_verb(store, project, zone, "disks", rest2[0], verb, payload))
         if not rest2:
             if method == "POST":
                 return _json(200, insert_disk(store, project, zone, payload))

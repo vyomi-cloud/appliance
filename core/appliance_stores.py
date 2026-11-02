@@ -922,12 +922,13 @@ class AppStateComputeVmStore(_SlotStore, _gci.ComputeStore):
     _KEYS = {"instances": dict, "disks": dict, "images": dict, "snapshots": dict,
              "machine_images": dict, "instance_templates": dict, "instance_groups": dict,
              "instance_group_managers": dict,
-             "health_checks": dict, "operations": dict, "project_metadata": dict,
+             "health_checks": dict, "resource_policies": dict, "operations": dict, "project_metadata": dict,
              "seq": lambda: {"op": 0, "id": 1000}}
 
     def __init__(self, proxy):
         self._bind(proxy)
 
+    resource_policies = _slot_attr("resource_policies")
     instances = _slot_attr("instances")
     disks = _slot_attr("disks")
     images = _slot_attr("images")
