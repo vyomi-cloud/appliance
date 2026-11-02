@@ -409,6 +409,46 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
 #disk-widget-slot .disk-popover .dp-close:hover { color: #0f1b2d; }
   .vy-co{display:inline-flex;align-items:center;flex:none;text-decoration:none}.vy-co img{height:22px;width:auto;display:block}.vy-co-sep{width:1px;height:26px;background:#dadce0;flex:none;margin:0 -2px}
 </style>
+<style id="vy-gcp-m3">
+/* ── Current Google Cloud look (Material 3): tinted shell, white rounded content card, pill controls,
+      sentence-case buttons and grid headers. Sampled from the real console captures. ── */
+:root{--shell:#f0f5fe;--shell-sel:#dbedfc;--shell-bar:#545f72;--m3-primary:#0b57d0;--m3-outline:#747775;--m3-field:#e9eef6}
+html,body{background:var(--shell)}
+header.gc-top{background:var(--shell);border-bottom:none}
+header .hamb:hover{background:rgba(0,0,0,.06)}
+header .proj-btn{border-radius:20px;border:1px solid var(--m3-outline);background:transparent;height:34px;padding:0 14px}
+header .proj-btn:hover{background:rgba(11,87,208,.06);border-color:var(--m3-outline)}
+header .proj-btn .label{display:none}
+header .search{background:var(--m3-field);border-radius:24px;height:44px}
+header .search:focus-within{background:#fff;box-shadow:0 1px 6px rgba(32,33,36,.28)}
+aside#rail{background:var(--shell);border-right:none;padding-bottom:56px}
+aside#rail .rail-h{border-bottom:none;color:var(--ink)}
+aside#rail .group{text-transform:none;letter-spacing:0;font-size:14px;font-weight:500;color:var(--ink);padding:16px 18px 6px}
+aside#rail a.item{color:#1f1f1f}
+aside#rail a.item:hover{background:rgba(0,0,0,.05)}
+aside#rail a.item.active{background:var(--shell-sel);color:#041e49;border-left-color:var(--shell-bar);font-weight:500}
+aside#rail a.item.active .ic{color:#041e49}
+main#main{background:var(--shell);padding:0 12px 12px 0}
+.wrap,.wizard-page{margin:0 0 0 8px;border-radius:16px;box-shadow:none}
+.wrap.detail-card{padding:12px}
+/* toolbar buttons: sentence case, pill-shaped */
+.btn{height:36px;border-radius:20px;text-transform:none;letter-spacing:.1px;font-size:14px;font-family:'Google Sans',Roboto,Arial,sans-serif;border-color:var(--m3-outline);color:var(--m3-primary);background:transparent}
+.btn:hover{background:rgba(11,87,208,.08);color:var(--m3-primary)}
+.btn.primary{background:var(--m3-primary);border-color:var(--m3-primary);color:#fff}
+.btn.primary:hover{background:#0a4dba;color:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3)}
+.btn.danger{color:#b3261e;border-color:#b3261e}.btn.danger:hover{background:rgba(179,38,30,.08)}
+.btn-text{text-transform:none;letter-spacing:.1px;font-size:14px;font-family:'Google Sans',Roboto,Arial,sans-serif;color:var(--m3-primary);border-radius:20px}
+.btn-text:hover{background:rgba(11,87,208,.08)}
+/* grids: sentence-case headers on white, quiet rules */
+table.gc th{text-transform:none;letter-spacing:0;font-size:13px;font-weight:500;color:var(--ink);background:#fff;border-bottom:1px solid var(--line-d)}
+table.gc th.sortable:hover{background:#f6f8fc}
+table.gc tr:hover td{background:#f6f8fc}
+.table-wrap,.wrap .table-wrap{border-radius:12px}
+.table-toolbar input.search{border-radius:20px;border-color:var(--m3-outline);height:36px}
+.vy-colmenu > .btn{height:32px}
+/* dialogs: rounded, tinted surface */
+.proj-modal .box{border-radius:28px;background:#f8fafd}
+</style>
 </head>
 <body>
 
