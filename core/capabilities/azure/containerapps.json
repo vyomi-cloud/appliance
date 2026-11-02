@@ -116,5 +116,18 @@
   ],
   "api": ["RoleAssignments_ListForScope (resource-scoped)", "RoleDefinitions_List"],
   "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.containerapps.exporttemplate_formats": {
+  "title": "Export template - ARM, Bicep and Terraform formats",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Template generation (ARM, Bicep, Terraform via azapi_resource) is done client-side from the resource's live ARM JSON; Add to library, Deploy and Visualize template are not available."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_app_core.py"
+  ]
  }
 }

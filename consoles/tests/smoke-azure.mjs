@@ -3141,6 +3141,27 @@ try {
   await page.getByRole("heading", { name: "Container Apps", exact: true }).waitFor({ timeout: 10000 });
   const caGone = await armApp("GET", `/resourceGroups/${RG}/providers/Microsoft.App/containerApps/${CA}`);
   check("UI delete Container App → ARM GET 404", caGone.status === 404, `HTTP ${caGone.status}`);
+
+  // ── sweep-E: Export template Bicep/Terraform for App Service, Function App, AKS, Cosmos, Container Apps ──
+  {
+    const E = `vyexp${n}`;
+    await armWeb("PUT", `/resourceGroups/${RG}/providers/Microsoft.Web/serverfarms/${E}`, { location: "eastus", sku: { name: "B1" } });
+    await armWeb("PUT", `/resourceGroups/${RG}/providers/Microsoft.Web/sites/${E}`, { location: "eastus", kind: "app", properties: { serverFarmId: `/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Web/serverfarms/${E}` } });
+    await armWeb("PUT", `/resourceGroups/${RG}/providers/Microsoft.Web/sites/${E}fn`, { location: "eastus", kind: "functionapp", properties: { serverFarmId: `/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Web/serverfarms/${E}` } });
+    await armAks("PUT", `/resourceGroups/${RG}/providers/Microsoft.ContainerService/managedClusters/${E}`, { location: "eastus" });
+    await armApp("PUT", `/resourceGroups/${RG}/providers/Microsoft.App/containerApps/${E}`, { location: "eastus", properties: { template: { containers: [{ image: "nginx" }] } } });
+    for (const [label, route, rtype] of [["App Service", `appservices/${RG}/${E}/exporttemplate`, "Microsoft.Web/sites@"], ["Function App", `functionapp/${RG}/${E}fn/export-template`, "Microsoft.Web/sites@"],
+      ["AKS", `aks/${RG}/${E}/exporttemplate`, "Microsoft.ContainerService/managedClusters@"], ["Container App", `containerapps/${RG}/${E}/exporttemplate`, "Microsoft.App/containerApps@"]]) {
+      await page.goto(UI + `#/${route}`);
+      await page.getByRole("tab", { name: "Bicep" }).click();
+      const bt = await page.getByTestId("export-bicep").innerText({ timeout: 10000 });
+      check(`${label} Export template Bicep rendered from the live resource`, bt.includes(rtype) && bt.includes(`'${E}`), bt.slice(0, 80));
+      await page.getByRole("tab", { name: "Terraform" }).click();
+      const tt = await page.getByTestId("export-terraform").innerText({ timeout: 10000 });
+      check(`${label} Export template Terraform (azapi) rendered`, tt.includes("azapi_resource") && tt.includes(rtype), tt.slice(0, 80));
+    }
+    // sweep-E-marker
+  }
 } catch (e) {
   const at = ((e.stack || "").match(/(?:smoke|dbg)-[a-z]+\.mjs:(\d+)/) || [])[1];   // the failing step's line
   check("smoke run", false, e.message.split("\n")[0] + (at ? ` (smoke line ${at})` : ""));

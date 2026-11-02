@@ -151,5 +151,18 @@
   "level": { "nano": "not_simulated", "offline": "not_simulated" },
   "limitations": ["No diagnostics engine, Event Grid wiring, resource visualizer, resource-health telemetry or support-ticket flow."],
   "api": []
+ },
+ "azure.appservices.exporttemplate_formats": {
+  "title": "Export template - ARM, Bicep and Terraform formats",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Template generation (ARM, Bicep, Terraform via azapi_resource) is done client-side from the resource's live ARM JSON; Add to library, Deploy and Visualize template are not available."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_webapp_core.py"
+  ]
  }
 }

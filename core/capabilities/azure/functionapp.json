@@ -388,5 +388,18 @@
    "Opening a support request requires real Microsoft support staff to receive and work an actual ticket; there is no local equivalent to a real human support engineer."
   ],
   "api": []
+ },
+ "azure.functionapp.exporttemplate_formats": {
+  "title": "Export template - ARM, Bicep and Terraform formats",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Template generation (ARM, Bicep, Terraform via azapi_resource) is done client-side from the resource's live ARM JSON; Add to library, Deploy and Visualize template are not available."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_functionapp_core.py"
+  ]
  }
 }

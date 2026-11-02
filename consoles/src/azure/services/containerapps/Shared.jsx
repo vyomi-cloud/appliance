@@ -14,6 +14,7 @@ import { useAsync } from "../../../common/useAsync.js";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import BrowseGrid from "../../kit/BrowseGrid.jsx";
 import { ErrorBar, Loading, NotSimulatedContainer, fmtDate } from "../../kit/common.jsx";
+import { ConvertedTemplate } from "../../kit/templateConvert.jsx";
 import * as api from "./api.js";
 
 export function MiniTable({ columns, rows, empty }) {
@@ -263,8 +264,8 @@ export function ExportTemplate({ a, name, type, extra }) {
           <pre className="vy-mono" style={{ maxHeight: 360, overflow: "auto", background: "var(--colorNeutralBackground3)", padding: 10, borderRadius: 4, fontSize: 12 }}>{JSON.stringify(template, null, 2)}</pre>
         </section>
       )}
-      {tab === "bicep" && <NotSimulatedContainer feature="ARM-to-Bicep decompilation" />}
-      {tab === "terraform" && <NotSimulatedContainer feature="ARM-to-Terraform export" />}
+      {tab === "bicep" && <ConvertedTemplate capId="azure.containerapps.exporttemplate_formats" template={template} format="bicep" />}
+      {tab === "terraform" && <ConvertedTemplate capId="azure.containerapps.exporttemplate_formats" template={template} format="terraform" rg={a.resourceGroup} />}
     </>
   );
 }

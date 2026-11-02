@@ -181,5 +181,18 @@
    "Check access, Role assignments and Deny assignments are REAL and scoped to this AKS cluster's resource id: Check access runs core/azure_iam_core.py's evaluator (explicit-deny-wins, scope inheritance from the subscription/resource group), the lists filter the shared RBAC store to assignments whose scope covers it, and new assignments are created scoped to it. Principal IDs are free text (Vyomi has no real directory); 'My access' and Classic administrators stay honest gaps."
   ],
   "tests": ["tests/conformance/test_azure_rbac_core.py"]
+ },
+ "azure.aks.exporttemplate_formats": {
+  "title": "Export template - ARM, Bicep and Terraform formats",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Template generation (ARM, Bicep, Terraform via azapi_resource) is done client-side from the resource's live ARM JSON; Add to library, Deploy and Visualize template are not available."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_aks_core.py"
+  ]
  }
 }

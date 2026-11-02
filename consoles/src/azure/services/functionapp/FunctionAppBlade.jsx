@@ -22,6 +22,7 @@ import ResourceBlade from "../../kit/ResourceBlade.jsx";
 import { ErrorBar, Essentials, fmtDate, Glyph, InfoBar, KV, Loading, NotSimulated, NotSimulatedContainer } from "../../kit/common.jsx";
 import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
+import { ConvertedTemplate } from "../../kit/templateConvert.jsx";
 import * as api from "./api.js";
 import { ResourceRecommendations } from "../defender/Pages.jsx";
 
@@ -704,8 +705,8 @@ function ExportTemplate({ a }) {
           </section>
         </>
       )}
-      {tab === "bicep" && <NotSimulatedContainer feature="ARM-to-Bicep decompilation" />}
-      {tab === "terraform" && <NotSimulatedContainer feature="ARM-to-Terraform export" />}
+      {tab === "bicep" && <ConvertedTemplate capId="azure.functionapp.exporttemplate_formats" template={template} format="bicep" />}
+      {tab === "terraform" && <ConvertedTemplate capId="azure.functionapp.exporttemplate_formats" template={template} format="terraform" rg={a.resourceGroup} />}
     </>
   );
 }

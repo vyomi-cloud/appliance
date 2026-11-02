@@ -83,5 +83,18 @@
    "Role assignments and role definitions are real ARM resources (Microsoft.Authorization/roleAssignments, roleDefinitions). The Role assignments list is now ENFORCED scoped to this account (plus its subscription/resource-group ancestors, matching real Azure's inherited-access view) instead of the whole subscription; Roles stays subscription-wide, which matches real Azure (built-in role definitions are listed tenant-wide too). 'Check access' / 'My access' evaluation is still not modelled — Vyomi never denies a console action based on a role assignment."
   ],
   "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.cosmos.exporttemplate_formats": {
+  "title": "Export template - ARM, Bicep and Terraform formats",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Template generation (ARM, Bicep, Terraform via azapi_resource) is done client-side from the resource's live ARM JSON; Add to library, Deploy and Visualize template are not available."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_cosmos_core.py"
+  ]
  }
 }
