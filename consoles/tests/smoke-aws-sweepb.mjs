@@ -145,6 +145,71 @@ check("Kinesis Monitoring tab renders metric graphs, no Not-simulated badge", (a
 await shot("sweepb-kinesis-metrics");
 await wireJson("kinesis", "Kinesis_20131202.DeleteStream", { StreamName: KS, EnforceConsumerDeletion: true });
 
+
+// ── VPC: Transit gateways ────────────────────────────────────────────────────
+const ec2q = (action, p = {}) => page.evaluate(async ([u, a, p, au]) => {
+  const r = await fetch(u + "/", { method: "POST", headers: { authorization: au, "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ Action: a, Version: "2016-11-15", ...p }).toString() });
+  return { status: r.status, text: await r.text() };
+}, [WIRE, action, p, sign("ec2")]);
+const tag1 = (t, n) => (t.match(new RegExp(`<${n}>([^<]*)</${n}>`)) || [])[1];
+const TV = (await ec2q("CreateVpc", { CidrBlock: "10.88.0.0/16" })).text, TV2 = (await ec2q("CreateVpc", { CidrBlock: "10.89.0.0/16" })).text;
+const tvA = tag1(TV, "vpcId"), tvB = tag1(TV2, "vpcId");
+const tsA = tag1((await ec2q("CreateSubnet", { VpcId: tvA, CidrBlock: "10.88.1.0/24" })).text, "subnetId"), tsB = tag1((await ec2q("CreateSubnet", { VpcId: tvB, CidrBlock: "10.89.1.0/24" })).text, "subnetId");
+await go("#/vpc/transit-gateways", "Transit gateways");
+check("Transit gateways page has no Not-simulated badge", (await badges()) === 0);
+await page.getByRole("button", { name: "Create transit gateway" }).first().click();
+await page.getByRole("textbox", { name: "Description" }).fill(`hub-${N}`);
+await page.getByRole("dialog").getByRole("button", { name: "Create", exact: true }).click();
+await page.getByText(`hub-${N}`).first().waitFor({ timeout: 20000 });
+const dt = (await ec2q("DescribeTransitGateways")).text;
+const myTgw = dt.split("<item>").find((x) => x.includes(`hub-${N}`));
+const tgwid = tag1(myTgw, "transitGatewayId"), defRt = tag1(myTgw, "associationDefaultRouteTableId");
+check("TGW created via UI is available with a default route table", !!tgwid && tag1(myTgw, "state") === "available" && !!defRt);
+await go("#/vpc/transit-gateway-attachments", "Transit gateway attachments");
+check("Attachments page has no badge", (await badges()) === 0);
+await page.getByRole("button", { name: "Create transit gateway attachment" }).first().click();
+await page.getByRole("button", { name: /Select a transit gateway/ }).click();
+await page.getByRole("option", { name: tgwid }).click();
+await page.getByRole("button", { name: /Select a VPC/ }).click();
+await page.getByRole("option", { name: tvA, exact: true }).click();
+await page.getByRole("button", { name: /Select subnets/ }).click();
+await page.getByRole("option", { name: tsA }).click();
+await page.keyboard.press("Escape");
+await page.getByRole("dialog").getByRole("button", { name: "Create", exact: true }).click();
+let att = "";
+for (let i = 0; i < 40 && !att.includes(tvA); i++) { att = (await ec2q("DescribeTransitGatewayVpcAttachments")).text; if (!att.includes(tvA)) await page.waitForTimeout(500); }
+check("Attachment created via UI is available and auto-associated with the default route table", att.includes(tvA) && (await ec2q("GetTransitGatewayRouteTableAssociations", { TransitGatewayRouteTableId: defRt })).text.includes(tvA));
+const attB = tag1((await ec2q("CreateTransitGatewayVpcAttachment", { TransitGatewayId: tgwid, VpcId: tvB, "SubnetIds.1": tsB })).text, "transitGatewayAttachmentId");
+await go(`#/vpc/transit-gateway-route-tables/${defRt}`, defRt);
+await page.getByText("10.89.0.0/16").first().waitFor({ timeout: 20000 });
+check("TGW route table detail lists both VPC CIDRs as propagated routes, no badge", (await badges()) === 0 && (await body()).includes("10.88.0.0/16") && (await body()).includes("propagated"));
+await page.getByRole("button", { name: "Create static route" }).click();
+await page.getByRole("textbox", { name: "CIDR" }).fill("192.168.0.0/16");
+await page.getByRole("button", { name: /Choose attachment or blackhole/ }).click();
+await page.getByRole("option", { name: "Blackhole" }).click();
+await page.getByRole("dialog").getByRole("button", { name: "Create", exact: true }).click();
+await page.getByText("192.168.0.0/16").first().waitFor({ timeout: 20000 });
+const sr = (await ec2q("SearchTransitGatewayRoutes", { TransitGatewayRouteTableId: defRt, "Filter.1.Name": "state", "Filter.1.Value.1": "blackhole" })).text;
+check("Static blackhole route created via UI is a blackhole route over the wire", sr.includes("192.168.0.0/16") && sr.includes("<type>static</type>"));
+await shot("sweepb-tgw-rt");
+await ec2q("DeleteTransitGatewayVpcAttachment", { TransitGatewayAttachmentId: attB });
+for (const a of (att.match(/transitGatewayAttachmentId>(tgw-attach-[a-z0-9]+)/g) || [])) await ec2q("DeleteTransitGatewayVpcAttachment", { TransitGatewayAttachmentId: a.split(">")[1] });
+await ec2q("DeleteTransitGateway", { TransitGatewayId: tgwid });
+
+// ── EC2: security group Related resources ────────────────────────────────────
+const rvpc = tag1((await ec2q("CreateVpc", { CidrBlock: "10.87.0.0/16" })).text, "vpcId");
+const rsn = tag1((await ec2q("CreateSubnet", { VpcId: rvpc, CidrBlock: "10.87.1.0/24" })).text, "subnetId");
+const rsgA = tag1((await ec2q("CreateSecurityGroup", { GroupName: `rel-a-${N}`, GroupDescription: "d", VpcId: rvpc })).text, "groupId");
+const rsgB = tag1((await ec2q("CreateSecurityGroup", { GroupName: `rel-b-${N}`, GroupDescription: "d", VpcId: rvpc })).text, "groupId");
+await ec2q("AuthorizeSecurityGroupIngress", { GroupId: rsgB, "IpPermissions.1.IpProtocol": "tcp", "IpPermissions.1.FromPort": "443", "IpPermissions.1.ToPort": "443", "IpPermissions.1.Groups.1.GroupId": rsgA });
+const reni = tag1((await ec2q("CreateNetworkInterface", { SubnetId: rsn, "SecurityGroupId.1": rsgA })).text, "networkInterfaceId");
+await go(`#/ec2/security-groups/${rsgA}`, rsgA);
+await page.getByRole("tab", { name: /Related resources/ }).click();
+await page.getByText(reni).first().waitFor({ timeout: 20000 });
+check("SG Related resources lists the ENI that carries it and the other group's rule that names it", (await body()).includes(rsgB) && (await badges()) === 0);
+await shot("sweepb-sg-related");
+await ec2q("DeleteNetworkInterface", { NetworkInterfaceId: reni });
+
 console.log("page errors:", errors.length ? errors.slice(0, 3).join(" | ") : "none");
 await browser.close();
 const failed = results.filter((r) => !r.ok);

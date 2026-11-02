@@ -244,10 +244,21 @@
   "tests": ["tests/conformance/test_vpc_core.py"]
  },
  "aws.vpc.transit-gateway": {
-  "title": "Transit Gateway (gateways, attachments, policy/route tables, multicast, metering policies)",
+  "title": "Transit Gateway (gateways, VPC attachments, route tables, static/propagated routes, associations, propagations)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "VPC attachments only; peering, VPN, Connect and Direct Connect attachments are not modelled. Forwarding between attached VPCs is evaluated by the Reachability Analyzer and enforced by the netsim rules (route-table association, longest-prefix match, propagation, return routes in both the TGW tables and the VPC route tables), but no real packets traverse a transit gateway and no TGW flow logs or metrics are produced. Cross-account sharing and appliance-mode flow stickiness are stored, not enforced."
+  ],
+  "tests": [
+   "tests/conformance/test_awsb_sweep_core.py",
+   "tests/conformance/test_vpc_netsim_core.py"
+  ]
+ },
+ "aws.vpc.transit-gateway-advanced": {
+  "title": "Transit Gateway policy tables, multicast domains, metering policies, peering/VPN/Connect attachments",
   "level": { "nano": "not_simulated", "offline": "not_simulated" },
   "limitations": [
-   "AWS Transit Gateway is a separate AWS service surfaced under the VPC nav — vpc_core.py's docstring lists it as future scope."
+   "These Transit Gateway products have no backing model in Vyomi (no multicast data plane, no dynamic policy evaluation, no inter-region peering or tunnel attachments)."
   ]
  },
  "aws.vpc.traffic-mirroring": {

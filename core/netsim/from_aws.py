@@ -86,6 +86,8 @@ def _route_kind(m: dict, target: str):
     if t.startswith("vpce-"):
         ep = m.get("vpc_endpoints", {}).get(t)
         return (GATEWAY_ENDPOINT, t) if ep and ep.get("type") == "Gateway" and ep.get("state") == "available" else (BLACKHOLE, t)
+    if t.startswith("tgw-"):
+        return ("tgw", t) if t in m.get("tgws", {}) else (BLACKHOLE, t)
     if t == "blackhole":
         return BLACKHOLE, ""
     return None, t                    # tgw-/vgw-/eigw- … not simulated yet
@@ -115,6 +117,13 @@ def from_aws(store_or_model) -> Topology:
                       available=g.get("state", "available") == "available", ip=g.get("private_ip", "")))
     for pid, p in m.get("peering_connections", {}).items():
         t.add(Peering(id=pid, a=p["requester_vpc_id"], b=p["accepter_vpc_id"], active=p.get("status") == "active"))
+
+    for tid in m.get("tgws", {}):
+        atts = {a["id"]: {"network": a["resource_id"], "rt": a.get("assoc_rt", ""), "state": a.get("state", "available")}
+                for a in m.get("tgw_attachments", {}).values() if a["tgw_id"] == tid and a.get("resource_type") == "vpc"}
+        rts = {r["id"]: [{"cidr": x["cidr"], "att": x.get("attachment_id", ""), "state": x["state"]} for x in r["routes"]]
+               for r in m.get("tgw_rts", {}).values() if r["tgw_id"] == tid}
+        t.tgws[tid] = {"atts": atts, "rts": rts}
 
     for rid, rt in m.get("route_tables", {}).items():
         vpc = vpcs.get(rt.get("vpc_id"), {})

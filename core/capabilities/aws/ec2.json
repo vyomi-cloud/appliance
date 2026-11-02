@@ -207,11 +207,14 @@
  "ec2.security-groups.related-resources": {
   "title": "Related resources",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "The console's cross-service 'what else references this security group' map isn't modeled."
+   "The map is derived live from the services Vyomi models (EC2 instances, network interfaces, other security groups' rules, Elastic Load Balancing). References from services that do not store security group IDs - for example RDS DB instances, Lambda VPC configs, ElastiCache - are not listed."
+  ],
+  "tests": [
+   "tests/conformance/test_awsb_sweep_core.py"
   ]
  },
  "ec2.elastic-ips": {

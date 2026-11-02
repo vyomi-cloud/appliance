@@ -506,3 +506,36 @@ export async function getNatGatewayMetrics(natGatewayId, metricName, hours = 3) 
   });
   return r.Datapoints || [];
 }
+
+// ── Transit gateways ─────────────────────────────────────────────────────────
+const tgwFromXml = (x) => ({
+  TransitGatewayId: x.transitGatewayId, TransitGatewayArn: x.transitGatewayArn, State: x.state, Description: x.description || "",
+  CreationTime: x.creationTime, AmazonSideAsn: x.options?.amazonSideAsn, DnsSupport: x.options?.dnsSupport,
+  DefaultRouteTableAssociation: x.options?.defaultRouteTableAssociation, DefaultRouteTablePropagation: x.options?.defaultRouteTablePropagation,
+  AssociationDefaultRouteTableId: x.options?.associationDefaultRouteTableId, PropagationDefaultRouteTableId: x.options?.propagationDefaultRouteTableId,
+  Tags: tagsFromXml(x.tagSet),
+});
+export const describeTransitGateways = () => call("DescribeTransitGateways").then((r) => asList(r.transitGatewaySet?.item).map(tgwFromXml));
+export const createTransitGateway = (description, asn) => call("CreateTransitGateway", { Description: description || undefined, Options: asn ? { AmazonSideAsn: asn } : undefined }).then((r) => tgwFromXml(r.transitGateway));
+export const deleteTransitGateway = (id) => call("DeleteTransitGateway", { TransitGatewayId: id });
+const tgwAttFromXml = (x) => ({
+  AttachmentId: x.transitGatewayAttachmentId, TransitGatewayId: x.transitGatewayId, ResourceType: x.resourceType || "vpc",
+  ResourceId: x.resourceId || x.vpcId, State: x.state, AssociatedRouteTableId: x.association?.transitGatewayRouteTableId || "", CreationTime: x.creationTime,
+});
+export const describeTransitGatewayAttachments = () => call("DescribeTransitGatewayAttachments").then((r) => asList(r.transitGatewayAttachments?.item).map(tgwAttFromXml));
+export const createTransitGatewayVpcAttachment = (tgwId, vpcId, subnetIds) => call("CreateTransitGatewayVpcAttachment", { TransitGatewayId: tgwId, VpcId: vpcId, SubnetIds: subnetIds });
+export const deleteTransitGatewayVpcAttachment = (id) => call("DeleteTransitGatewayVpcAttachment", { TransitGatewayAttachmentId: id });
+const tgwRtFromXml = (x) => ({ RouteTableId: x.transitGatewayRouteTableId, TransitGatewayId: x.transitGatewayId, State: x.state, DefaultAssociation: x.defaultAssociationRouteTable === "true", DefaultPropagation: x.defaultPropagationRouteTable === "true", CreationTime: x.creationTime });
+export const describeTransitGatewayRouteTables = () => call("DescribeTransitGatewayRouteTables").then((r) => asList(r.transitGatewayRouteTables?.item).map(tgwRtFromXml));
+export const createTransitGatewayRouteTable = (tgwId) => call("CreateTransitGatewayRouteTable", { TransitGatewayId: tgwId });
+export const deleteTransitGatewayRouteTable = (id) => call("DeleteTransitGatewayRouteTable", { TransitGatewayRouteTableId: id });
+export const searchTransitGatewayRoutes = (rtId) => call("SearchTransitGatewayRoutes", { TransitGatewayRouteTableId: rtId, Filter: [{ Name: "state", Value: ["active", "blackhole"] }] })
+  .then((r) => asList(r.routeSet?.item).map((x) => ({ Cidr: x.destinationCidrBlock, Type: x.type, State: x.state, AttachmentId: asList(x.transitGatewayAttachments?.item)[0]?.transitGatewayAttachmentId || "", ResourceId: asList(x.transitGatewayAttachments?.item)[0]?.resourceId || "" })));
+export const createTransitGatewayRoute = (rtId, cidr, attId, blackhole) => call("CreateTransitGatewayRoute", { TransitGatewayRouteTableId: rtId, DestinationCidrBlock: cidr, TransitGatewayAttachmentId: attId || undefined, Blackhole: blackhole ? "true" : undefined });
+export const deleteTransitGatewayRoute = (rtId, cidr) => call("DeleteTransitGatewayRoute", { TransitGatewayRouteTableId: rtId, DestinationCidrBlock: cidr });
+export const getTransitGatewayRouteTableAssociations = (rtId) => call("GetTransitGatewayRouteTableAssociations", { TransitGatewayRouteTableId: rtId }).then((r) => asList(r.associations?.item).map((x) => ({ AttachmentId: x.transitGatewayAttachmentId, ResourceId: x.resourceId, State: x.state })));
+export const getTransitGatewayRouteTablePropagations = (rtId) => call("GetTransitGatewayRouteTablePropagations", { TransitGatewayRouteTableId: rtId }).then((r) => asList(r.transitGatewayRouteTablePropagations?.item).map((x) => ({ AttachmentId: x.transitGatewayAttachmentId, ResourceId: x.resourceId, State: x.state })));
+export const associateTransitGatewayRouteTable = (rtId, attId) => call("AssociateTransitGatewayRouteTable", { TransitGatewayRouteTableId: rtId, TransitGatewayAttachmentId: attId });
+export const disassociateTransitGatewayRouteTable = (rtId, attId) => call("DisassociateTransitGatewayRouteTable", { TransitGatewayRouteTableId: rtId, TransitGatewayAttachmentId: attId });
+export const enableTransitGatewayRouteTablePropagation = (rtId, attId) => call("EnableTransitGatewayRouteTablePropagation", { TransitGatewayRouteTableId: rtId, TransitGatewayAttachmentId: attId });
+export const disableTransitGatewayRouteTablePropagation = (rtId, attId) => call("DisableTransitGatewayRouteTablePropagation", { TransitGatewayRouteTableId: rtId, TransitGatewayAttachmentId: attId });

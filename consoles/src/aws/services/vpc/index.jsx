@@ -1,3 +1,4 @@
+import { TransitGateways, TransitGatewayAttachments, TransitGatewayRouteTables, TransitGatewayRouteTableDetail } from "./TransitGateways.jsx";
 import Dashboard from "./Dashboard.jsx";
 import { Vpcs, VpcDetail, CreateVpc, EditVpcSettings } from "./Vpcs.jsx";
 import { Subnets, SubnetDetail, CreateSubnet } from "./Subnets.jsx";
@@ -176,10 +177,11 @@ export default {
     { pattern: "/vpc/verified-access-groups", component: VerifiedAccessGroups, crumbs: () => [crumb("VPC", ""), crumb("Verified Access groups", "verified-access-groups")] },
     { pattern: "/vpc/verified-access-endpoints", component: VerifiedAccessEndpoints, crumbs: () => [crumb("VPC", ""), crumb("Verified Access endpoints", "verified-access-endpoints")] },
 
-    { pattern: "/vpc/transit-gateways", component: Honest.TransitGateways, crumbs: () => [crumb("VPC", ""), crumb("Transit gateways", "transit-gateways")] },
-    { pattern: "/vpc/transit-gateway-attachments", component: Honest.TransitGatewayAttachments, crumbs: () => [crumb("VPC", ""), crumb("Transit gateway attachments", "transit-gateway-attachments")] },
+    { pattern: "/vpc/transit-gateways", component: TransitGateways, crumbs: () => [crumb("VPC", ""), crumb("Transit gateways", "transit-gateways")] },
+    { pattern: "/vpc/transit-gateway-route-tables/:id", component: TransitGatewayRouteTableDetail, crumbs: (p) => [crumb("VPC", ""), crumb("Transit gateway route tables", "transit-gateway-route-tables"), crumb(p.id, `transit-gateway-route-tables/${p.id}`)] },
+    { pattern: "/vpc/transit-gateway-attachments", component: TransitGatewayAttachments, crumbs: () => [crumb("VPC", ""), crumb("Transit gateway attachments", "transit-gateway-attachments")] },
     { pattern: "/vpc/transit-gateway-policy-tables", component: Honest.TransitGatewayPolicyTables, crumbs: () => [crumb("VPC", ""), crumb("Transit gateway policy tables", "transit-gateway-policy-tables")] },
-    { pattern: "/vpc/transit-gateway-route-tables", component: Honest.TransitGatewayRouteTables, crumbs: () => [crumb("VPC", ""), crumb("Transit gateway route tables", "transit-gateway-route-tables")] },
+    { pattern: "/vpc/transit-gateway-route-tables", component: TransitGatewayRouteTables, crumbs: () => [crumb("VPC", ""), crumb("Transit gateway route tables", "transit-gateway-route-tables")] },
     { pattern: "/vpc/transit-gateway-multicast", component: Honest.TransitGatewayMulticast, crumbs: () => [crumb("VPC", ""), crumb("Transit gateway multicast", "transit-gateway-multicast")] },
     { pattern: "/vpc/metering-policies", component: Honest.MeteringPolicies, crumbs: () => [crumb("VPC", ""), crumb("Metering policies", "metering-policies")] },
 

@@ -50,10 +50,10 @@ export const ClientVpnEndpoints = page("Client VPN endpoints", "aws.vpc.vpn");
 // Transit gateways
 export const TransitGateways = page("Transit gateways", "aws.vpc.transit-gateway");
 export const TransitGatewayAttachments = page("Transit gateway attachments", "aws.vpc.transit-gateway");
-export const TransitGatewayPolicyTables = page("Transit gateway policy tables", "aws.vpc.transit-gateway");
+export const TransitGatewayPolicyTables = page("Transit gateway policy tables", "aws.vpc.transit-gateway-advanced");
 export const TransitGatewayRouteTables = page("Transit gateway route tables", "aws.vpc.transit-gateway");
-export const TransitGatewayMulticast = page("Transit gateway multicast", "aws.vpc.transit-gateway");
-export const MeteringPolicies = page("Metering policies", "aws.vpc.transit-gateway");
+export const TransitGatewayMulticast = page("Transit gateway multicast", "aws.vpc.transit-gateway-advanced");
+export const MeteringPolicies = page("Metering policies", "aws.vpc.transit-gateway-advanced");
 
 // Traffic Mirroring
 export const MirrorSessions = page("Mirror sessions", "aws.vpc.traffic-mirroring");

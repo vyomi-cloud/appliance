@@ -34,6 +34,37 @@ const TYPES = [
 ];
 const typeLabel = (p) => TYPES.find((t) => t.protocol === p.IpProtocol && (t.from === undefined || t.from === p.FromPort))?.label || "Custom TCP";
 
+/* Everything in the account that actually references this security group, derived live from the
+ * EC2 / ELBv2 wires: instances and network interfaces that carry it, other groups' rules that
+ * name it as a source/destination, and load balancers that use it. */
+function RelatedResources({ g }) {
+  const r = useAsync(async () => {
+    const [instances, enis, sgs, lbs] = await Promise.all([api.describeInstances(), api.describeNetworkInterfaces(), api.describeSecurityGroups(), api.describeLoadBalancers().catch(() => [])]);
+    return {
+      instances: instances.filter((i) => (i.GroupSet || []).some((x) => x.groupId === g.GroupId) && i.instanceState?.name !== "terminated"),
+      enis: enis.filter((e) => (e.Groups || []).some((x) => x.groupId === g.GroupId)),
+      rules: sgs.filter((o) => o.GroupId !== g.GroupId).flatMap((o) => [
+        ...o.IpPermissions.filter((p) => p.groupIds.includes(g.GroupId)).map((p) => ({ key: `${o.GroupId}-in-${p.RuleId || p.IpProtocol}`, group: o.GroupId, dir: "Inbound", proto: p.IpProtocol, ports: p.FromPort === undefined ? "All" : `${p.FromPort}-${p.ToPort}` })),
+        ...o.IpPermissionsEgress.filter((p) => p.groupIds.includes(g.GroupId)).map((p) => ({ key: `${o.GroupId}-out-${p.RuleId || p.IpProtocol}`, group: o.GroupId, dir: "Outbound", proto: p.IpProtocol, ports: p.FromPort === undefined ? "All" : `${p.FromPort}-${p.ToPort}` })),
+      ]),
+      lbs: lbs.filter((l) => (l.SecurityGroups || []).includes(g.GroupId)),
+    };
+  }, [g.GroupId]);
+  const d = r.data || { instances: [], enis: [], rules: [], lbs: [] };
+  const tbl = (title, items, cols, trackBy) => (
+    <Table variant="container" loading={r.loading} items={items} trackBy={trackBy} header={<Header variant="h2" counter={`(${items.length})`}>{title}</Header>}
+      columnDefinitions={cols} empty={<Box textAlign="center" color="inherit">None reference this security group</Box>} />
+  );
+  return (
+    <SpaceBetween size="l">
+      {tbl("Instances", d.instances, [{ id: "i", header: "Instance ID", cell: (x) => <Link href={href("ec2", "instances", x.instanceId)} onFollow={follow}>{x.instanceId}</Link> }, { id: "s", header: "State", cell: (x) => x.instanceState?.name }], "instanceId")}
+      {tbl("Network interfaces", d.enis, [{ id: "i", header: "Network interface ID", cell: (x) => x.networkInterfaceId }, { id: "s", header: "Subnet", cell: (x) => x.subnetId }, { id: "ip", header: "Private IPv4", cell: (x) => x.privateIpAddress || "-" }], "networkInterfaceId")}
+      {tbl("Security group rules in other groups", d.rules, [{ id: "g", header: "Security group", cell: (x) => <Link href={href("ec2", "security-groups", x.group)} onFollow={follow}>{x.group}</Link> }, { id: "d", header: "Direction", cell: (x) => x.dir }, { id: "p", header: "Protocol", cell: (x) => x.proto }, { id: "pt", header: "Port range", cell: (x) => x.ports }], "key")}
+      {tbl("Load balancers", d.lbs, [{ id: "n", header: "Name", cell: (x) => x.LoadBalancerName }, { id: "t", header: "Type", cell: (x) => x.Type }], "LoadBalancerArn")}
+    </SpaceBetween>
+  );
+}
+
 export function SecurityGroups() {
   const notify = useNotify();
   const [sel, setSel] = useState([]);
@@ -119,7 +150,7 @@ export function SecurityGroupDetail({ params }) {
           { id: "out", label: "Outbound rules", content: <RulesTable g={g} direction="egress" reload={t.reload} /> },
           { id: "share", label: "Sharing", content: <CapabilityContainer id="ec2.security-groups.ram-sharing" title="Shared with" /> },
           { id: "vpc", label: "VPC associations", content: <VpcAssociationsTab g={g} /> },
-          { id: "rel", label: "Related resources - new", content: <CapabilityContainer id="ec2.security-groups.related-resources" title="Related resources" /> },
+          { id: "rel", label: "Related resources - new", content: <CapabilityContainer id="ec2.security-groups.related-resources" title="Related resources"><RelatedResources g={g} /></CapabilityContainer> },
           { id: "tags", label: "Tags", content: <TagsTable resourceId={g.GroupId} tags={g.Tags} onSave={saveTags} /> },
         ]} />
       </SpaceBetween>

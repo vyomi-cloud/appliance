@@ -225,6 +225,17 @@ class _Compiler:
                         if back is not None and back.kind == PEERING and back.target == p.id:
                             lines.append(f"ip daddr {T.cidr} return comment {_q(c + ' (return route ok)')}")
                 lines.append(f"{_dst(r.dest)}counter goto deny comment {_q(c + ' (non-transitive / no return route)')}")
+            elif r.kind == "tgw":
+                for T in (x for x in t.subnets.values() if x.network != N.id):
+                    if not cidr_covers(r.dest, T.cidr):
+                        continue
+                    ok, dnet, _c, _w = ev.tgw_path(t, N.id, r.target, str(ipaddress.ip_network(T.cidr, strict=False).network_address + 1))
+                    if not ok or dnet != T.network or not ev.tgw_return_ok(t, r.target, dnet, N.id, iface.ip):
+                        continue
+                    back = ev.route_lookup(t, T, iface.ip)
+                    if back is not None and back.kind == "tgw" and back.target == r.target:
+                        lines.append(f"ip daddr {T.cidr} return comment {_q(c + ' (return route ok)')}")
+                lines.append(f"{_dst(r.dest)}counter goto deny comment {_q(c + ' (no TGW path / no return route)')}")
             elif r.kind in (IGW, NAT):
                 net = ipaddress.ip_network(r.dest, strict=False)
                 sample = "198.51.100.1" if net.prefixlen == 0 else str(net.network_address + (1 if net.num_addresses > 1 else 0))
