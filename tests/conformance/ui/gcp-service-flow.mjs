@@ -23,6 +23,21 @@ export async function runGcpServiceFlow(page, { service, label, check, pushActio
     same = n === before ? same + 1 : 0;
     before = n;
   }
+  // Earlier beds in the same space (the UI crawl's create-with-defaults) leave default-named
+  // resources behind; the real cloud answers 409 AlreadyExists for a second create with the
+  // wizard's default name, so start from a clean service the way a fresh project would be.
+  page.on("dialog", (d) => d.accept().catch(() => {}));
+  for (let i = 0; i < 10 && before > 0; i++) {
+    const opened = await page.evaluate(() => { const a = document.querySelector("#main table.gc tr[data-row-name] a.id"); if (a) { a.click(); return true; } return false; });
+    if (!opened) break;
+    await sleep(1200);
+    const del = page.locator("#main button.danger").filter({ hasText: /Delete/ }).first();
+    if (!(await del.count())) break;
+    await del.click({ timeout: 5000 }).catch(() => {});
+    await sleep(1200);
+    await open();
+    before = await countRows();
+  }
   const existing = await page.evaluate(() => [...document.querySelectorAll("#main table.gc tr[data-row-name]")].map((r) => r.getAttribute("data-row-name")));
   await page.locator("#main button").filter({ hasText: /^\s*(add\s*)?Create/i }).first().click({ timeout: 8000 });
   await sleep(1000);
@@ -81,7 +96,6 @@ export async function runGcpServiceFlow(page, { service, label, check, pushActio
     check(filled.rows > 0 && filled.blank === 0, `${service}: ${pushAction.tab} rows are filled after the push`, JSON.stringify(filled));
   }
 
-  page.on("dialog", (d) => d.accept().catch(() => {}));
   await page.locator("#main button.danger").filter({ hasText: /Delete/ }).first().click({ timeout: 5000 });
   await sleep(1500);
   await open();

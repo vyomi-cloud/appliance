@@ -74,6 +74,22 @@
       "timeout": 300
     },
     {
+      "id": "offline-sdk-python-aws-ops4",
+      "target": "offline",
+      "cloud": "aws",
+      "kind": "sdk-python",
+      "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/test_aws_sdk_python_ops4.py",
+      "timeout": 300
+    },
+    {
+      "id": "offline-sdk-python-aws-ops3",
+      "target": "offline",
+      "cloud": "aws",
+      "kind": "sdk-python",
+      "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/test_aws_sdk_python_ops3.py",
+      "timeout": 300
+    },
+    {
       "id": "offline-sdk-python-aws-ops2",
       "target": "offline",
       "cloud": "aws",
@@ -263,6 +279,22 @@
       "kind": "core",
       "cmd": "rc=0; for f in tests/conformance/test_*_core.py; do PYTHONPATH=wasm:wasm/core python3 $f && echo \"PASS $f\" || { echo \"FAIL $f\"; rc=1; }; done; exit $rc",
       "timeout": 900
+    },
+    {
+      "id": "nano-gcp-kms-core",
+      "target": "nano",
+      "cloud": "gcp",
+      "kind": "core",
+      "cmd": "PYTHONPATH=$PWD python3 tests/conformance/test_gcp_kms_core.py",
+      "timeout": 120
+    },
+    {
+      "id": "nano-gcp-cloudsql-core",
+      "target": "nano",
+      "cloud": "gcp",
+      "kind": "core",
+      "cmd": "PYTHONPATH=$PWD python3 tests/conformance/test_gcp_cloudsql_core.py",
+      "timeout": 120
     },
     {
       "id": "nano-gcp-compute-core",
