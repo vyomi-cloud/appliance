@@ -235,6 +235,7 @@ class Topology:
     route_tables: dict = field(default_factory=dict)
     gateways: dict = field(default_factory=dict)
     peerings: dict = field(default_factory=dict)
+    tgws: dict = field(default_factory=dict)     # AWS transit gateways: {tgw: {atts:{att:{network,rt,state}}, rts:{rt:[{cidr,att,state}]}}}
     cloud: str = ""
     warnings: list = field(default_factory=list)
 

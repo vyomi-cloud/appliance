@@ -41,6 +41,7 @@ import hashlib
 import json
 import re
 import struct
+import time
 import uuid
 from xml.sax.saxutils import escape as _xml_escape
 from dataclasses import dataclass, field
@@ -184,7 +185,10 @@ def _fire_triggers(store, lam_store, q: dict, msg: dict) -> None:
     from core import eventbridge_core as _eb
     for pipe in _eb.active_pipes_for_source(store, arn):
         record = _sqs_event_record(q, msg)
-        if _eb.deliver(store, lam_store, pipe["Target"], msg["body"], record):
+        _t0 = time.time()
+        ok = _eb.deliver(store, lam_store, pipe["Target"], msg["body"], record)
+        _eb.emit_pipe_metrics(store, pipe.get("Name", ""), ok, (time.time() - _t0) * 1000.0)
+        if ok:
             consumed = True
     if consumed:
         msg["deleted"] = True

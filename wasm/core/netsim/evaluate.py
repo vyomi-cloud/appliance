@@ -250,6 +250,49 @@ def route_lookup(topo: Topology, subnet, dst_ip: str, iface: Interface | None = 
     return cands[0]
 
 
+def tgw_path(topo: Topology, src_net: str, tgw_id: str, dst_ip: str):
+    """AWS Transit Gateway hop: (ok, dst_network, code, why). The source VPC must be attached; the TGW route
+    table ASSOCIATED with that attachment must hold an active route to dst_ip whose attachment is a
+    VPC that contains dst_ip; the destination attachment's own associated table must route back to the
+    source VPC (TGW tables are directional)."""
+    tg = topo.tgws.get(tgw_id)
+    if tg is None:
+        return False, "", "BLACKHOLE_ROUTE", f"transit gateway {tgw_id} does not exist (blackhole)"
+    src_att = next((a for a, x in tg["atts"].items() if x["network"] == src_net and x["state"] == "available"), None)
+    if src_att is None:
+        return False, "", "TGW_NOT_ATTACHED", f"{src_net} has no available attachment to {tgw_id}"
+    rt_id = tg["atts"][src_att]["rt"]
+    if not rt_id:
+        return False, "", "TGW_NO_ASSOCIATION", f"attachment {src_att} is not associated with any {tgw_id} route table"
+
+    def best(rt, ip):
+        c = [r for r in tg["rts"].get(rt, []) if ip_in(ip, r["cidr"])]
+        c.sort(key=lambda r: -prefix_len(r["cidr"]))
+        return c[0] if c else None
+    fwd = best(rt_id, dst_ip)
+    if fwd is None:
+        return False, "", "TGW_NO_ROUTE", f"{rt_id} has no route to {dst_ip}"
+    if fwd["state"] != "active" or not fwd["att"] or fwd["att"] not in tg["atts"]:
+        return False, "", "TGW_BLACKHOLE_ROUTE", f"{rt_id} route {fwd['cidr']} is a blackhole"
+    dst_net = tg["atts"][fwd["att"]]["network"]
+    N2 = topo.networks.get(dst_net)
+    if N2 is None or not any(ip_in(dst_ip, c) for c in N2.cidrs):
+        return False, dst_net, "NO_DESTINATION", f"{dst_ip} is not in {dst_net} (route {fwd['cidr']} -> {fwd['att']})"
+    back_rt = tg["atts"][fwd["att"]]["rt"]
+    return True, dst_net, "", (f"{src_net} -> {tgw_id} ({rt_id}: {fwd['cidr']} -> {fwd['att']}) -> {dst_net}"
+                                f"{'' if back_rt else ' [destination attachment has no association: return path checked later]'}")
+
+
+def tgw_return_ok(topo: Topology, tgw_id: str, dst_net: str, src_net: str, src_ip: str):
+    tg = topo.tgws.get(tgw_id) or {"atts": {}, "rts": {}}
+    d_att = next((a for a, x in tg["atts"].items() if x["network"] == dst_net), None)
+    s_att = next((a for a, x in tg["atts"].items() if x["network"] == src_net), None)
+    rt_id = tg["atts"].get(d_att, {}).get("rt") if d_att else None
+    c = [r for r in tg["rts"].get(rt_id or "", []) if ip_in(src_ip, r["cidr"])]
+    c.sort(key=lambda r: -prefix_len(r["cidr"]))
+    return bool(c) and c[0]["state"] == "active" and c[0]["att"] == s_att
+
+
 def _igw_ok(topo, gw_id, network_id):
     g = topo.gateways.get(gw_id)
     return g is not None and g.kind == IGW and g.available and (not g.network or g.network == network_id)
@@ -432,6 +475,23 @@ def reach(topo: Topology, src, dst, protocol: str = "tcp", port=None, src_port=N
                                                       f"does not route {s.ip} via {p.id}", topo.subnet_of(d).route_table or "")
         v.add("peering", p.id, "pass", f"{N.id} → {other.id}")
         v.path = "peering"
+    elif route.kind == "tgw":
+        ok, dst_net, code, why = tgw_path(topo, N.id, route.target, dst_ip)
+        v.add("transit-gateway", route.target, "pass" if ok else "deny", why)
+        if not ok:
+            return v.block(code, why, route.target)
+        if d is None:
+            return v.block("NO_DESTINATION", f"no interface at {dst_ip} in {dst_net}")
+        if not tgw_return_ok(topo, route.target, dst_net, N.id, s.ip):
+            v.add("transit-gateway", route.target, "deny", f"no TGW route back to {s.ip}")
+            return v.block("TGW_NO_RETURN_ROUTE", f"return route missing: the route table associated with {dst_net}'s attachment "
+                                                  f"does not route {s.ip} back via {route.target}", route.target)
+        back = route_lookup(topo, topo.subnet_of(d), s.ip, d)
+        if back is None or back.kind != "tgw" or back.target != route.target:
+            v.add("transit-gateway", route.target, "deny", f"{topo.subnet_of(d).route_table} has no route back to {s.ip} via {route.target}")
+            return v.block("TGW_NO_VPC_RETURN_ROUTE", f"return route missing: {topo.subnet_of(d).id}'s route table "
+                                                      f"does not route {s.ip} via {route.target}", topo.subnet_of(d).route_table or "")
+        v.path = "transit-gateway"
     elif route.kind in (IGW, NAT):
         if topo.is_internal(dst_ip):
             return v.block("PRIVATE_DEST_VIA_GATEWAY",

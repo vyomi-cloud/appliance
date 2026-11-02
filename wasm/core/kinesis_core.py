@@ -26,6 +26,11 @@ import re
 import time
 from dataclasses import dataclass, field
 
+try:
+    from core import cloudwatch_core as _cw_core
+except ImportError:  # pragma: no cover - Pyodide flat layout
+    import cloudwatch_core as _cw_core  # type: ignore
+
 REGION = "us-east-1"
 DEFAULT_ACCOUNT_ID = "000000000000"
 MAX_HASH = (1 << 128) - 1
@@ -45,6 +50,9 @@ class KinesisStore:
         self.streams: dict = {}
         self.policies: dict = {}      # resource ARN -> policy document (JSON text)
         self.seq: dict = {"n": 0}     # global monotonic counter (sequence numbers)
+        # runtime link (never persisted) the wire router / nano_registry sets: CloudWatch store
+        # that receives the real AWS/Kinesis metrics derived from actual Put/Get activity
+        self.cw_store = None
 
     def persist(self) -> None:      # overridden by file-backed substrates
         pass
@@ -399,9 +407,44 @@ def _append(store, st: dict, data, pk, explicit) -> tuple[dict, dict]:
     return sh, rec
 
 
+def _emit(store, st: dict, metric: str, value: float, unit: str, shard: str | None = None) -> None:
+    """kinesis.stream.monitoring-metrics: real AWS/Kinesis datapoints from actual activity.
+    Stream-level always; shard-level (StreamName+ShardId) only for metrics enabled through
+    EnableEnhancedMonitoring, exactly like the service."""
+    cw = getattr(store, "cw_store", None)
+    if cw is None:
+        return
+    dims = [{"Name": "StreamName", "Value": st["name"]}]
+    if shard is None:
+        _cw_core.ingest_internal_metric(cw, "AWS/Kinesis", metric, dims, value, unit=unit)
+        return
+    enabled = {m for e in _enhanced(st) for m in e.get("ShardLevelMetrics", [])}
+    if metric in enabled or "ALL" in enabled:
+        _cw_core.ingest_internal_metric(cw, "AWS/Kinesis", metric,
+                                        dims + [{"Name": "ShardId", "Value": shard}], value, unit=unit)
+
+
+def _emit_put(store, st: dict, recs: list, calls: str) -> None:
+    ok = [(sh, r) for sh, r in recs]
+    nbytes = float(sum(r["size"] for _, r in ok))
+    _emit(store, st, "IncomingBytes", nbytes, "Bytes")
+    _emit(store, st, "IncomingRecords", float(len(ok)), "Count")
+    _emit(store, st, calls + ".Success", 1.0, "Count")
+    _emit(store, st, calls + ".Records", float(len(ok)), "Count")
+    _emit(store, st, calls + ".Bytes", nbytes, "Bytes")
+    per: dict = {}
+    for sh, r in ok:
+        b = per.setdefault(sh["id"], [0, 0])
+        b[0] += r["size"]; b[1] += 1
+    for sid, (b, n) in per.items():
+        _emit(store, st, "IncomingBytes", float(b), "Bytes", sid)
+        _emit(store, st, "IncomingRecords", float(n), "Count", sid)
+
+
 def put_record(store, p):
     st = _resolve(store, p)
     sh, rec = _append(store, st, p.get("Data"), p.get("PartitionKey"), p.get("ExplicitHashKey"))
+    _emit_put(store, st, [(sh, rec)], "PutRecord")
     _persist(store)
     return {"ShardId": sh["id"], "SequenceNumber": rec["seq"], "EncryptionType": st["encryption"]}
 
@@ -411,14 +454,19 @@ def put_records(store, p):
     entries = p.get("Records") or []
     if not entries or len(entries) > 500:
         raise _E("InvalidArgumentException", "Records must contain between 1 and 500 entries.")
-    out, failed = [], 0
+    out, failed, okrecs = [], 0, []
     for e in entries:
         try:
             sh, rec = _append(store, st, e.get("Data"), e.get("PartitionKey"), e.get("ExplicitHashKey"))
+            okrecs.append((sh, rec))
             out.append({"ShardId": sh["id"], "SequenceNumber": rec["seq"]})
         except _E as ex:
             failed += 1
             out.append({"ErrorCode": ex.code, "ErrorMessage": ex.message})
+    if okrecs:
+        _emit_put(store, st, okrecs, "PutRecords")
+    _emit(store, st, "PutRecords.FailedRecords", float(failed), "Count")
+    _emit(store, st, "PutRecords.TotalRecords", float(len(entries)), "Count")
     _persist(store)
     return {"FailedRecordCount": failed, "Records": out, "EncryptionType": st["encryption"]}
 
@@ -493,6 +541,14 @@ def get_records(store, p):
         out["NextShardIterator"] = _enc_iter(name, shard_id, npos)
     behind = 0 if drained else int(max(0.0, (sh["records"][-1]["ts"] - chunk[-1]["ts"]) * 1000)) if chunk else 0
     out["MillisBehindLatest"] = behind
+    _emit(store, st, "GetRecords.Success", 1.0, "Count")
+    _emit(store, st, "GetRecords.Records", float(len(chunk)), "Count")
+    _emit(store, st, "GetRecords.Bytes", float(sum(r["size"] for r in chunk)), "Bytes")
+    _emit(store, st, "GetRecords.IteratorAgeMilliseconds", float(behind), "Milliseconds")
+    _emit(store, st, "GetRecords.Latency", 1.0, "Milliseconds")
+    _emit(store, st, "OutgoingBytes", float(sum(r["size"] for r in chunk)), "Bytes", shard_id)
+    _emit(store, st, "OutgoingRecords", float(len(chunk)), "Count", shard_id)
+    _emit(store, st, "IteratorAgeMilliseconds", float(behind), "Milliseconds", shard_id)
     return out
 
 

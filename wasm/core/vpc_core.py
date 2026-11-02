@@ -30,6 +30,7 @@ gateways and full NACL return-path/ephemeral evaluation slot in behind the same 
 from __future__ import annotations
 
 import ipaddress
+import re
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -249,7 +250,7 @@ def _delete_vpc(store, params):
         raise VpcError("DependencyViolation", f"The vpc '{vpc_id}' has dependencies and cannot be deleted.")
     if any(sg.get("vpc_id") == vpc_id and not sg.get("is_default") for sg in m["sgs"].values()):
         raise VpcError("DependencyViolation", f"The vpc '{vpc_id}' has dependencies and cannot be deleted.")
-    if m["vpcs"][vpc_id].get("igw"):
+    if m["vpcs"][vpc_id].get("igw") or any(a["resource_id"] == vpc_id for a in m.get("tgw_attachments", {}).values()):
         raise VpcError("DependencyViolation", f"The vpc '{vpc_id}' has dependencies and cannot be deleted.")
     for rt_id in [k for k, rt in m["route_tables"].items() if rt["vpc_id"] == vpc_id]:
         m["route_tables"].pop(rt_id)
@@ -426,7 +427,7 @@ def _delete_internet_gateway(store, params):
 
 # ── route tables ─────────────────────────────────────────────────────────
 _ROUTE_TARGET_TAG = (("nat-", "natGatewayId"), ("pcx-", "vpcPeeringConnectionId"), ("eni-", "networkInterfaceId"),
-                     ("i-", "instanceId"))
+                     ("tgw-", "transitGatewayId"), ("i-", "instanceId"))
 
 
 def _route_xml(r: dict) -> str:
@@ -501,12 +502,14 @@ def _create_route(store, params):
     except ValueError:
         raise VpcError("InvalidParameterValue", f"Value ({dest}) for parameter destinationCidrBlock is invalid.")
     target = str(params.get("GatewayId") or params.get("NatGatewayId") or params.get("VpcPeeringConnectionId")
-                 or params.get("NetworkInterfaceId") or params.get("InstanceId") or "")
+                 or params.get("TransitGatewayId") or params.get("NetworkInterfaceId") or params.get("InstanceId") or "")
     if not target:
         raise VpcError("MissingParameter", "The request must contain exactly one of gatewayId, natGatewayId, "
                                            "networkInterfaceId, vpcPeeringConnectionId or instanceId")
     if target.startswith("i-"):
         _find_instance(m, target)
+    elif target.startswith("tgw-") and target not in m.setdefault("tgws", {}):
+        raise VpcError("InvalidTransitGatewayID.NotFound", f"Transit gateway {target} does not exist.")
     elif target.startswith("eni-") and target not in m["enis"]:
         raise VpcError("InvalidNetworkInterfaceID.NotFound", f"The networkInterface ID '{target}' does not exist")
     if any(r["dest"] == dest for r in rt["routes"]):
@@ -1166,6 +1169,12 @@ _CODE_TEXT = {
     "NAT_PRIVATE": "private NAT gateway cannot reach the internet",
     "PEERING_INACTIVE": "VPC peering connection not active", "PEERING_NOT_TRANSITIVE": "VPC peering is not transitive",
     "PEERING_NO_RETURN_ROUTE": "no return route over the VPC peering connection",
+    "TGW_NOT_ATTACHED": "the VPC has no available attachment to the transit gateway",
+    "TGW_NO_ASSOCIATION": "the attachment is not associated with a transit gateway route table",
+    "TGW_NO_ROUTE": "the transit gateway route table has no route to the destination",
+    "TGW_BLACKHOLE_ROUTE": "the transit gateway route is a blackhole",
+    "TGW_NO_RETURN_ROUTE": "no return route in the destination attachment's transit gateway route table",
+    "TGW_NO_VPC_RETURN_ROUTE": "no return route over the transit gateway in the destination VPC's route table",
     "PRIVATE_DEST_VIA_GATEWAY": "private destination is not routable via a gateway",
     "SOURCE_DEST_CHECK": "appliance has source/destination check enabled",
     "NOT_PUBLIC": "destination has no public IPv4 address", "NO_DESTINATION": "no network interface at the destination",
@@ -1178,6 +1187,8 @@ _EXPLANATION_CODE = {
     "ACL_INGRESS_DENIED": "SUBNET_ACL_RESTRICTION", "ACL_EGRESS_DENIED": "SUBNET_ACL_RESTRICTION",
     "ACL_RETURN_DENIED": "SUBNET_ACL_RESTRICTION", "NO_ROUTE": "NO_ROUTE_TO_DESTINATION",
     "PRIVATE_DEST_VIA_GATEWAY": "NO_ROUTE_TO_DESTINATION", "BLACKHOLE_ROUTE": "NO_ROUTE_TO_DESTINATION",
+    "TGW_NOT_ATTACHED": "NO_ROUTE_TO_DESTINATION", "TGW_NO_ASSOCIATION": "NO_ROUTE_TO_DESTINATION", "TGW_NO_ROUTE": "NO_ROUTE_TO_DESTINATION",
+    "TGW_BLACKHOLE_ROUTE": "NO_ROUTE_TO_DESTINATION",
 }
 
 
@@ -2213,6 +2224,7 @@ def _taggable_collections(m: dict) -> list:
             m["addresses"], m["enis"], m["placement_groups"], m["launch_templates"], m["key_pairs"],
             m["vpcs"], m["subnets"], m["route_tables"], m["igws"], m["nacls"], m["nat_gateways"],
             m["eigws"], m["dhcp_options"], m["prefix_lists"], m["peering_connections"], m["route_servers"],
+            m.get("tgws", {}), m.get("tgw_attachments", {}), m.get("tgw_rts", {}),
             m.get("flow_logs", {}), m.get("insights_paths", {}), m.get("insights_analyses", {})]
 
 
@@ -3714,6 +3726,468 @@ def _modify_default_credit_specification(store, params):
 
 
 # ── dispatch (EC2 Query protocol) ──────────────────────────────────────────
+# ── Transit gateways (control plane + route-table semantics) ──────────────────────────
+# Real state: gateways with a default association/propagation route table, VPC attachments,
+# TGW route tables with static + PROPAGATED routes (a propagation copies the attached VPC's
+# CIDRs into the table and follows later attach/detach), blackhole routes when an attachment
+# disappears, one-association-per-attachment, dependency checks on delete. Packet forwarding
+# through a TGW is not evaluated by the Reachability Analyzer (see aws.vpc.transit-gateway).
+def _tg(m):
+    return m.setdefault("tgws", {}), m.setdefault("tgw_attachments", {}), m.setdefault("tgw_rts", {})
+
+
+def _now_utc():
+    import datetime as _dt
+    return _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
+
+def _x(tag, v):
+    return f"<{tag}>{_xml_escape(str(v))}</{tag}>"
+
+
+def _filters(params):
+    out = {}
+    for k, v in params.items():
+        mm = re.match(r"Filter\.(\d+)\.Name$", k)
+        if mm:
+            out[v] = [params[kk] for kk in sorted(params) if kk.startswith(f"Filter.{mm.group(1)}.Value.")]
+    return out
+
+
+def _tg_ids(params, prefix):
+    return [v for k, v in params.items() if k.startswith(prefix + ".")]
+
+
+def _tgw_opts(tg):
+    o = tg["options"]
+    return ("<options>" + _x("amazonSideAsn", o["asn"]) + _x("autoAcceptSharedAttachments", o["auto_accept"])
+            + _x("defaultRouteTableAssociation", o["def_assoc"]) + _x("defaultRouteTablePropagation", o["def_prop"])
+            + _x("vpnEcmpSupport", o["vpn_ecmp"]) + _x("dnsSupport", o["dns"]) + _x("multicastSupport", o["multicast"])
+            + (_x("associationDefaultRouteTableId", tg["assoc_rt"]) if tg.get("assoc_rt") else "")
+            + (_x("propagationDefaultRouteTableId", tg["prop_rt"]) if tg.get("prop_rt") else "") + "</options>")
+
+
+def _tgw_xml(tg):
+    return ("<item>" + _x("transitGatewayId", tg["id"]) + _x("transitGatewayArn", f"arn:aws:ec2:us-east-1:{OWNER_ID}:transit-gateway/{tg['id']}")
+            + _x("state", tg["state"]) + _x("ownerId", OWNER_ID) + _x("description", tg.get("description", ""))
+            + _x("creationTime", tg["created"]) + _tgw_opts(tg) + _tags_xml(tg.get("tags", {})) + "</item>")
+
+
+def _att_xml(a, tgws):
+    return ("<item>" + _x("transitGatewayAttachmentId", a["id"]) + _x("transitGatewayId", a["tgw_id"])
+            + _x("transitGatewayOwnerId", OWNER_ID) + _x("resourceOwnerId", OWNER_ID) + _x("resourceType", a["resource_type"])
+            + _x("resourceId", a["resource_id"]) + _x("state", a["state"])
+            + ("<association>" + _x("transitGatewayRouteTableId", a["assoc_rt"]) + _x("state", "associated") + "</association>" if a.get("assoc_rt") else "")
+            + _x("creationTime", a["created"]) + _tags_xml(a.get("tags", {})) + "</item>")
+
+
+def _vpc_att_xml(a):
+    return ("<item>" + _x("transitGatewayAttachmentId", a["id"]) + _x("transitGatewayId", a["tgw_id"]) + _x("vpcId", a["resource_id"])
+            + _x("vpcOwnerId", OWNER_ID) + _x("state", a["state"])
+            + "<subnetIds>" + "".join(f"<item>{_xml_escape(x)}</item>" for x in a["subnet_ids"]) + "</subnetIds>"
+            + _x("creationTime", a["created"]) + "<options>" + _x("dnsSupport", "enable") + _x("ipv6Support", "disable")
+            + _x("applianceModeSupport", a.get("appliance_mode", "disable")) + "</options>" + _tags_xml(a.get("tags", {})) + "</item>")
+
+
+def _rt_tg_xml(rt):
+    return ("<item>" + _x("transitGatewayRouteTableId", rt["id"]) + _x("transitGatewayId", rt["tgw_id"]) + _x("state", "available")
+            + _x("defaultAssociationRouteTable", str(rt["def_assoc"]).lower()) + _x("defaultPropagationRouteTable", str(rt["def_prop"]).lower())
+            + _x("creationTime", rt["created"]) + _tags_xml(rt.get("tags", {})) + "</item>")
+
+
+def _tgw_route_xml(r):
+    atts = ""
+    if r.get("attachment_id"):
+        atts = ("<transitGatewayAttachments><item>" + _x("resourceId", r.get("resource_id", "")) + _x("transitGatewayAttachmentId", r["attachment_id"])
+                + _x("resourceType", "vpc") + "</item></transitGatewayAttachments>")
+    return "<item>" + _x("destinationCidrBlock", r["cidr"]) + atts + _x("type", r["type"]) + _x("state", r["state"]) + "</item>"
+
+
+def _need_tgw(m, tid):
+    tgws, _, _ = _tg(m)
+    if tid not in tgws or tgws[tid]["state"] == "deleted":
+        raise VpcError("InvalidTransitGatewayID.NotFound", f"The transit gateway ID '{tid}' does not exist.")
+    return tgws[tid]
+
+
+def _need_tgw_rt(m, rid):
+    _, _, rts = _tg(m)
+    if rid not in rts:
+        raise VpcError("InvalidRouteTableID.NotFound", f"The transit gateway route table '{rid}' does not exist.")
+    return rts[rid]
+
+
+def _need_att(m, aid):
+    _, atts, _ = _tg(m)
+    if aid not in atts:
+        raise VpcError("InvalidTransitGatewayAttachmentID.NotFound", f"The transit gateway attachment '{aid}' does not exist.")
+    return atts[aid]
+
+
+def _att_cidrs(m, att):
+    v = m["vpcs"].get(att["resource_id"])
+    return ([v["cidr"]] + list(v.get("secondary_cidrs", []))) if v else []
+
+
+def _propagate(m, rt, att):
+    """Copy the attached VPC's CIDRs into rt as propagated routes (a static route for the same CIDR wins)."""
+    rt["propagations"][att["id"]] = "enabled"
+    for c in _att_cidrs(m, att):
+        if not any(r["cidr"] == c and r["type"] == "static" for r in rt["routes"]) and not any(r["cidr"] == c and r.get("attachment_id") == att["id"] for r in rt["routes"]):
+            rt["routes"].append({"cidr": c, "type": "propagated", "state": "active", "attachment_id": att["id"], "resource_id": att["resource_id"]})
+
+
+def _unpropagate(rt, att_id):
+    rt["propagations"].pop(att_id, None)
+    rt["routes"] = [r for r in rt["routes"] if not (r["type"] == "propagated" and r.get("attachment_id") == att_id)]
+
+
+def _new_tgw_rt(m, tgw_id, def_assoc=False, def_prop=False, tags=None):
+    _, _, rts = _tg(m)
+    rid = _rid("tgw-rtb", 17)
+    rts[rid] = {"id": rid, "tgw_id": tgw_id, "def_assoc": def_assoc, "def_prop": def_prop, "created": _now_utc(),
+                "routes": [], "associations": {}, "propagations": {}, "tags": tags or {}}
+    return rts[rid]
+
+
+def _create_transit_gateway(store, params):
+    m = _model(store)
+    tgws, _, _ = _tg(m)
+    asn = int(params.get("Options.AmazonSideAsn") or 64512)
+    if not (64512 <= asn <= 65534 or 4200000000 <= asn <= 4294967294 or 1 <= asn <= 2147483647) or asn in (7224, 9059, 10124, 17943, 24940, 16509):
+        raise VpcError("InvalidParameterValue", f"Value ({asn}) for parameter AmazonSideAsn is invalid.")
+    def flag(k, d="enable"):
+        v = str(params.get(f"Options.{k}") or d).lower()
+        if v not in ("enable", "disable"):
+            raise VpcError("InvalidParameterValue", f"Value ({v}) for parameter {k} is invalid. Must be enable or disable.")
+        return v
+    tid = _rid("tgw", 17)
+    tg = {"id": tid, "state": "available", "description": str(params.get("Description") or ""), "created": _now_utc(),
+          "options": {"asn": asn, "auto_accept": flag("AutoAcceptSharedAttachments", "disable"), "def_assoc": flag("DefaultRouteTableAssociation"),
+                      "def_prop": flag("DefaultRouteTablePropagation"), "vpn_ecmp": flag("VpnEcmpSupport"), "dns": flag("DnsSupport"),
+                      "multicast": flag("MulticastSupport", "disable")},
+          "tags": _parse_tag_specifications(params).get("transit-gateway", {}), "assoc_rt": "", "prop_rt": ""}
+    tgws[tid] = tg
+    o = tg["options"]
+    if o["def_assoc"] == "enable" or o["def_prop"] == "enable":
+        rt = _new_tgw_rt(m, tid, o["def_assoc"] == "enable", o["def_prop"] == "enable")
+        if o["def_assoc"] == "enable":
+            tg["assoc_rt"] = rt["id"]
+        if o["def_prop"] == "enable":
+            tg["prop_rt"] = rt["id"]
+    return _envelope("CreateTransitGateway", "<transitGateway>" + _tgw_xml(tg)[len("<item>"):-len("</item>")] + "</transitGateway>")
+
+
+def _describe_transit_gateways(store, params):
+    m = _model(store)
+    tgws, _, _ = _tg(m)
+    ids = _tg_ids(params, "TransitGatewayIds")
+    rows = [t for t in tgws.values() if (not ids or t["id"] in ids)]
+    f = _filters(params)
+    if "state" in f:
+        rows = [t for t in rows if t["state"] in f["state"]]
+    if "transit-gateway-id" in f:
+        rows = [t for t in rows if t["id"] in f["transit-gateway-id"]]
+    for tid in ids:
+        if tid not in tgws:
+            raise VpcError("InvalidTransitGatewayID.NotFound", f"The transit gateway ID '{tid}' does not exist.")
+    return _envelope("DescribeTransitGateways", "<transitGatewaySet>" + "".join(_tgw_xml(t) for t in rows) + "</transitGatewaySet>")
+
+
+def _modify_transit_gateway(store, params):
+    m = _model(store)
+    tg = _need_tgw(m, str(params.get("TransitGatewayId", "")))
+    if "Description" in params:
+        tg["description"] = str(params["Description"])
+    for k, ok in (("AutoAcceptSharedAttachments", "auto_accept"), ("DefaultRouteTableAssociation", "def_assoc"),
+                  ("DefaultRouteTablePropagation", "def_prop"), ("VpnEcmpSupport", "vpn_ecmp"), ("DnsSupport", "dns")):
+        v = params.get(f"Options.{k}")
+        if v:
+            if v not in ("enable", "disable"):
+                raise VpcError("InvalidParameterValue", f"Value ({v}) for parameter {k} is invalid.")
+            tg["options"][ok] = v
+    for k, key in (("Options.AssociationDefaultRouteTableId", "assoc_rt"), ("Options.PropagationDefaultRouteTableId", "prop_rt")):
+        if params.get(k):
+            rt = _need_tgw_rt(m, str(params[k]))
+            if rt["tgw_id"] != tg["id"]:
+                raise VpcError("InvalidParameterValue", "The route table belongs to another transit gateway.")
+            tg[key] = rt["id"]
+    return _envelope("ModifyTransitGateway", "<transitGateway>" + _tgw_xml(tg)[len("<item>"):-len("</item>")] + "</transitGateway>")
+
+
+def _delete_transit_gateway(store, params):
+    m = _model(store)
+    tg = _need_tgw(m, str(params.get("TransitGatewayId", "")))
+    tgws, atts, rts = _tg(m)
+    if any(a["tgw_id"] == tg["id"] for a in atts.values()):
+        raise VpcError("IncorrectState", f"Transit gateway {tg['id']} has attachments and cannot be deleted.")
+    for rid in [r for r, rt in rts.items() if rt["tgw_id"] == tg["id"]]:
+        rts.pop(rid)
+    tgws.pop(tg["id"])
+    tg["state"] = "deleted"
+    return _envelope("DeleteTransitGateway", "<transitGateway>" + _tgw_xml(tg)[len("<item>"):-len("</item>")] + "</transitGateway>")
+
+
+def _create_tgw_vpc_attachment(store, params):
+    m = _model(store)
+    tg = _need_tgw(m, str(params.get("TransitGatewayId", "")))
+    _, atts, rts = _tg(m)
+    vpc_id = str(params.get("VpcId", ""))
+    if vpc_id not in m["vpcs"]:
+        raise VpcError("InvalidVpcID.NotFound", f"VPC {vpc_id} not found.")
+    subnet_ids = _tg_ids(params, "SubnetIds")
+    if not subnet_ids:
+        raise VpcError("MissingParameter", "The request must contain the parameter SubnetIds.")
+    azs = set()
+    for sid in subnet_ids:
+        sn = m["subnets"].get(sid)
+        if sn is None or sn["vpc_id"] != vpc_id:
+            raise VpcError("InvalidSubnetID.NotFound", f"The subnet ID '{sid}' does not exist in {vpc_id}.")
+        if sn.get("az") in azs:
+            raise VpcError("DuplicateSubnetsInSameZone", "Only one subnet per Availability Zone can be attached.")
+        azs.add(sn.get("az"))
+    if any(a["tgw_id"] == tg["id"] and a["resource_id"] == vpc_id for a in atts.values()):
+        raise VpcError("DuplicateTransitGatewayAttachment", f"{vpc_id} is already attached to {tg['id']}.")
+    aid = _rid("tgw-attach", 17)
+    att = {"id": aid, "tgw_id": tg["id"], "resource_type": "vpc", "resource_id": vpc_id, "subnet_ids": subnet_ids, "state": "available",
+           "assoc_rt": "", "created": _now_utc(), "tags": _parse_tag_specifications(params).get("transit-gateway-attachment", {}),
+           "appliance_mode": str(params.get("Options.ApplianceModeSupport") or "disable")}
+    atts[aid] = att
+    if tg["options"]["def_assoc"] == "enable" and tg.get("assoc_rt") in rts:
+        att["assoc_rt"] = tg["assoc_rt"]
+        rts[tg["assoc_rt"]]["associations"][aid] = "associated"
+    if tg["options"]["def_prop"] == "enable" and tg.get("prop_rt") in rts:
+        _propagate(m, rts[tg["prop_rt"]], att)
+    return _envelope("CreateTransitGatewayVpcAttachment", "<transitGatewayVpcAttachment>" + _vpc_att_xml(att)[len("<item>"):-len("</item>")] + "</transitGatewayVpcAttachment>")
+
+
+def _describe_tgw_vpc_attachments(store, params):
+    m = _model(store)
+    _, atts, _ = _tg(m)
+    ids = _tg_ids(params, "TransitGatewayAttachmentIds")
+    f = _filters(params)
+    rows = [a for a in atts.values() if a["resource_type"] == "vpc" and (not ids or a["id"] in ids)
+            and (not f.get("transit-gateway-id") or a["tgw_id"] in f["transit-gateway-id"])
+            and (not f.get("vpc-id") or a["resource_id"] in f["vpc-id"])]
+    return _envelope("DescribeTransitGatewayVpcAttachments", "<transitGatewayVpcAttachments>" + "".join(_vpc_att_xml(a) for a in rows) + "</transitGatewayVpcAttachments>")
+
+
+def _describe_tgw_attachments(store, params):
+    m = _model(store)
+    tgws, atts, _ = _tg(m)
+    ids = _tg_ids(params, "TransitGatewayAttachmentIds")
+    f = _filters(params)
+    rows = [a for a in atts.values() if (not ids or a["id"] in ids)
+            and (not f.get("transit-gateway-id") or a["tgw_id"] in f["transit-gateway-id"])
+            and (not f.get("resource-id") or a["resource_id"] in f["resource-id"])
+            and (not f.get("resource-type") or a["resource_type"] in f["resource-type"])
+            and (not f.get("state") or a["state"] in f["state"])]
+    return _envelope("DescribeTransitGatewayAttachments", "<transitGatewayAttachments>" + "".join(_att_xml(a, tgws) for a in rows) + "</transitGatewayAttachments>")
+
+
+def _delete_tgw_vpc_attachment(store, params):
+    m = _model(store)
+    att = _need_att(m, str(params.get("TransitGatewayAttachmentId", "")))
+    _, atts, rts = _tg(m)
+    for rt in rts.values():
+        rt["associations"].pop(att["id"], None)
+        _unpropagate(rt, att["id"])
+        for r in rt["routes"]:
+            if r.get("attachment_id") == att["id"]:
+                r["state"] = "blackhole"
+    atts.pop(att["id"])
+    att["state"] = "deleted"
+    return _envelope("DeleteTransitGatewayVpcAttachment", "<transitGatewayVpcAttachment>" + _vpc_att_xml(att)[len("<item>"):-len("</item>")] + "</transitGatewayVpcAttachment>")
+
+
+def _modify_tgw_vpc_attachment(store, params):
+    m = _model(store)
+    att = _need_att(m, str(params.get("TransitGatewayAttachmentId", "")))
+    add, rem = _tg_ids(params, "AddSubnetIds"), _tg_ids(params, "RemoveSubnetIds")
+    for sid in add:
+        sn = m["subnets"].get(sid)
+        if sn is None or sn["vpc_id"] != att["resource_id"]:
+            raise VpcError("InvalidSubnetID.NotFound", f"The subnet ID '{sid}' does not exist in {att['resource_id']}.")
+    ids = [x for x in att["subnet_ids"] if x not in rem] + [x for x in add if x not in att["subnet_ids"]]
+    if not ids:
+        raise VpcError("InvalidParameterValue", "An attachment must keep at least one subnet.")
+    att["subnet_ids"] = ids
+    if params.get("Options.ApplianceModeSupport"):
+        att["appliance_mode"] = str(params["Options.ApplianceModeSupport"])
+    return _envelope("ModifyTransitGatewayVpcAttachment", "<transitGatewayVpcAttachment>" + _vpc_att_xml(att)[len("<item>"):-len("</item>")] + "</transitGatewayVpcAttachment>")
+
+
+def _create_tgw_route_table(store, params):
+    m = _model(store)
+    tg = _need_tgw(m, str(params.get("TransitGatewayId", "")))
+    rt = _new_tgw_rt(m, tg["id"], tags=_parse_tag_specifications(params).get("transit-gateway-route-table", {}))
+    return _envelope("CreateTransitGatewayRouteTable", "<transitGatewayRouteTable>" + _rt_tg_xml(rt)[len("<item>"):-len("</item>")] + "</transitGatewayRouteTable>")
+
+
+def _describe_tgw_route_tables(store, params):
+    m = _model(store)
+    _, _, rts = _tg(m)
+    ids = _tg_ids(params, "TransitGatewayRouteTableIds")
+    f = _filters(params)
+    rows = [r for r in rts.values() if (not ids or r["id"] in ids) and (not f.get("transit-gateway-id") or r["tgw_id"] in f["transit-gateway-id"])]
+    return _envelope("DescribeTransitGatewayRouteTables", "<transitGatewayRouteTables>" + "".join(_rt_tg_xml(r) for r in rows) + "</transitGatewayRouteTables>")
+
+
+def _delete_tgw_route_table(store, params):
+    m = _model(store)
+    rt = _need_tgw_rt(m, str(params.get("TransitGatewayRouteTableId", "")))
+    tgws, _, rts = _tg(m)
+    if rt["associations"]:
+        raise VpcError("IncorrectState", f"Transit gateway route table {rt['id']} has associations and cannot be deleted.")
+    for tg in tgws.values():
+        if rt["id"] in (tg.get("assoc_rt"), tg.get("prop_rt")):
+            tg["assoc_rt" if tg.get("assoc_rt") == rt["id"] else "prop_rt"] = ""
+    rts.pop(rt["id"])
+    return _envelope("DeleteTransitGatewayRouteTable", "<transitGatewayRouteTable>" + _rt_tg_xml(rt)[len("<item>"):-len("</item>")] + "</transitGatewayRouteTable>")
+
+
+def _create_tgw_route(store, params):
+    m = _model(store)
+    rt = _need_tgw_rt(m, str(params.get("TransitGatewayRouteTableId", "")))
+    cidr = str(params.get("DestinationCidrBlock", ""))
+    try:
+        ipaddress.ip_network(cidr, strict=False)
+    except ValueError:
+        raise VpcError("InvalidParameterValue", f"Value ({cidr}) for parameter destinationCidrBlock is invalid.")
+    blackhole = str(params.get("Blackhole", "")).lower() == "true"
+    aid = str(params.get("TransitGatewayAttachmentId", ""))
+    if blackhole == bool(aid):
+        raise VpcError("InvalidParameterCombination", "Specify exactly one of TransitGatewayAttachmentId or Blackhole=true.")
+    att = None
+    if aid:
+        att = _need_att(m, aid)
+        if att["tgw_id"] != rt["tgw_id"]:
+            raise VpcError("InvalidParameterValue", "The attachment belongs to another transit gateway.")
+    if any(r["cidr"] == cidr and r["type"] == "static" for r in rt["routes"]):
+        raise VpcError("TransitGatewayRouteAlreadyExists", f"The route {cidr} already exists in {rt['id']}.")
+    rt["routes"] = [r for r in rt["routes"] if not (r["cidr"] == cidr and r["type"] == "propagated")]   # static beats propagated
+    route = {"cidr": cidr, "type": "static", "state": "blackhole" if blackhole else "active", "attachment_id": aid, "resource_id": att["resource_id"] if att else ""}
+    rt["routes"].append(route)
+    return _envelope("CreateTransitGatewayRoute", "<route>" + _tgw_route_xml(route)[len("<item>"):-len("</item>")] + "</route>")
+
+
+def _delete_tgw_route(store, params):
+    m = _model(store)
+    rt = _need_tgw_rt(m, str(params.get("TransitGatewayRouteTableId", "")))
+    cidr = str(params.get("DestinationCidrBlock", ""))
+    r = next((x for x in rt["routes"] if x["cidr"] == cidr and x["type"] == "static"), None)
+    if r is None:
+        raise VpcError("InvalidRoute.NotFound", f"The static route {cidr} does not exist in {rt['id']}.")
+    rt["routes"].remove(r)
+    # a propagation that was shadowed by the static route re-appears
+    for aid in list(rt["propagations"]):
+        att = m["tgw_attachments"].get(aid)
+        if att:
+            _propagate(m, rt, att)
+    return _envelope("DeleteTransitGatewayRoute", "<route>" + _tgw_route_xml(r)[len("<item>"):-len("</item>")] + "</route>")
+
+
+def _search_tgw_routes(store, params):
+    m = _model(store)
+    rt = _need_tgw_rt(m, str(params.get("TransitGatewayRouteTableId", "")))
+    f = _filters(params)
+    rows = rt["routes"]
+    for key, field in (("type", "type"), ("state", "state"), ("attachment.transit-gateway-attachment-id", "attachment_id"),
+                       ("attachment.resource-id", "resource_id")):
+        if key in f:
+            rows = [r for r in rows if r.get(field) in f[key]]
+    for key in ("route-search.exact-match", "route-search.subnet-of-match", "route-search.supernet-of-match"):
+        if key in f:
+            q = ipaddress.ip_network(f[key][0], strict=False)
+            ck = {"route-search.exact-match": lambda n: n == q, "route-search.subnet-of-match": lambda n: n.subnet_of(q) if n.version == q.version else False,
+                  "route-search.supernet-of-match": lambda n: q.subnet_of(n) if n.version == q.version else False}[key]
+            rows = [r for r in rows if ck(ipaddress.ip_network(r["cidr"], strict=False))]
+    mx = int(params.get("MaxResults") or 1000)
+    return _envelope("SearchTransitGatewayRoutes", "<routeSet>" + "".join(_tgw_route_xml(r) for r in rows[:mx]) + f"</routeSet><additionalRoutesAvailable>{'true' if len(rows) > mx else 'false'}</additionalRoutesAvailable>")
+
+
+def _assoc_tgw_rt(store, params):
+    m = _model(store)
+    rt = _need_tgw_rt(m, str(params.get("TransitGatewayRouteTableId", "")))
+    att = _need_att(m, str(params.get("TransitGatewayAttachmentId", "")))
+    if att["tgw_id"] != rt["tgw_id"]:
+        raise VpcError("InvalidParameterValue", "The attachment and route table belong to different transit gateways.")
+    if att.get("assoc_rt"):
+        raise VpcError("Resource.AlreadyAssociated", f"{att['id']} is already associated with {att['assoc_rt']}.")
+    att["assoc_rt"] = rt["id"]
+    rt["associations"][att["id"]] = "associated"
+    return _envelope("AssociateTransitGatewayRouteTable", "<association>" + _x("transitGatewayRouteTableId", rt["id"]) + _x("transitGatewayAttachmentId", att["id"])
+                     + _x("resourceId", att["resource_id"]) + _x("resourceType", att["resource_type"]) + _x("state", "associated") + "</association>")
+
+
+def _disassoc_tgw_rt(store, params):
+    m = _model(store)
+    rt = _need_tgw_rt(m, str(params.get("TransitGatewayRouteTableId", "")))
+    att = _need_att(m, str(params.get("TransitGatewayAttachmentId", "")))
+    if att.get("assoc_rt") != rt["id"]:
+        raise VpcError("InvalidAssociation.NotFound", f"{att['id']} is not associated with {rt['id']}.")
+    att["assoc_rt"] = ""
+    rt["associations"].pop(att["id"], None)
+    return _envelope("DisassociateTransitGatewayRouteTable", "<association>" + _x("transitGatewayRouteTableId", rt["id"]) + _x("transitGatewayAttachmentId", att["id"])
+                     + _x("resourceId", att["resource_id"]) + _x("resourceType", att["resource_type"]) + _x("state", "disassociated") + "</association>")
+
+
+def _enable_tgw_prop(store, params):
+    m = _model(store)
+    rt = _need_tgw_rt(m, str(params.get("TransitGatewayRouteTableId", "")))
+    att = _need_att(m, str(params.get("TransitGatewayAttachmentId", "")))
+    if att["tgw_id"] != rt["tgw_id"]:
+        raise VpcError("InvalidParameterValue", "The attachment and route table belong to different transit gateways.")
+    if att["id"] in rt["propagations"]:
+        raise VpcError("TransitGatewayRouteTablePropagation.Duplicate", f"{att['id']} already propagates to {rt['id']}.")
+    _propagate(m, rt, att)
+    return _envelope("EnableTransitGatewayRouteTablePropagation", "<propagation>" + _x("transitGatewayAttachmentId", att["id"]) + _x("resourceId", att["resource_id"])
+                     + _x("resourceType", att["resource_type"]) + _x("transitGatewayRouteTableId", rt["id"]) + _x("state", "enabled") + "</propagation>")
+
+
+def _disable_tgw_prop(store, params):
+    m = _model(store)
+    rt = _need_tgw_rt(m, str(params.get("TransitGatewayRouteTableId", "")))
+    att = _need_att(m, str(params.get("TransitGatewayAttachmentId", "")))
+    if att["id"] not in rt["propagations"]:
+        raise VpcError("TransitGatewayRouteTablePropagation.NotFound", f"{att['id']} does not propagate to {rt['id']}.")
+    _unpropagate(rt, att["id"])
+    return _envelope("DisableTransitGatewayRouteTablePropagation", "<propagation>" + _x("transitGatewayAttachmentId", att["id"]) + _x("resourceId", att["resource_id"])
+                     + _x("resourceType", att["resource_type"]) + _x("transitGatewayRouteTableId", rt["id"]) + _x("state", "disabled") + "</propagation>")
+
+
+def _get_tgw_rt_assocs(store, params):
+    m = _model(store)
+    rt = _need_tgw_rt(m, str(params.get("TransitGatewayRouteTableId", "")))
+    items = "".join("<item>" + _x("transitGatewayAttachmentId", a) + _x("resourceId", m["tgw_attachments"][a]["resource_id"]) + _x("resourceType", "vpc") + _x("state", st) + "</item>"
+                    for a, st in rt["associations"].items() if a in m["tgw_attachments"])
+    return _envelope("GetTransitGatewayRouteTableAssociations", f"<associations>{items}</associations>")
+
+
+def _get_tgw_rt_props(store, params):
+    m = _model(store)
+    rt = _need_tgw_rt(m, str(params.get("TransitGatewayRouteTableId", "")))
+    items = "".join("<item>" + _x("transitGatewayAttachmentId", a) + _x("resourceId", m["tgw_attachments"][a]["resource_id"]) + _x("resourceType", "vpc") + _x("state", st) + "</item>"
+                    for a, st in rt["propagations"].items() if a in m["tgw_attachments"])
+    return _envelope("GetTransitGatewayRouteTablePropagations", f"<transitGatewayRouteTablePropagations>{items}</transitGatewayRouteTablePropagations>")
+
+
+_TGW_OPS = {
+    "CreateTransitGateway": _create_transit_gateway, "DescribeTransitGateways": _describe_transit_gateways,
+    "ModifyTransitGateway": _modify_transit_gateway, "DeleteTransitGateway": _delete_transit_gateway,
+    "CreateTransitGatewayVpcAttachment": _create_tgw_vpc_attachment, "DescribeTransitGatewayVpcAttachments": _describe_tgw_vpc_attachments,
+    "DescribeTransitGatewayAttachments": _describe_tgw_attachments, "DeleteTransitGatewayVpcAttachment": _delete_tgw_vpc_attachment,
+    "ModifyTransitGatewayVpcAttachment": _modify_tgw_vpc_attachment,
+    "CreateTransitGatewayRouteTable": _create_tgw_route_table, "DescribeTransitGatewayRouteTables": _describe_tgw_route_tables,
+    "DeleteTransitGatewayRouteTable": _delete_tgw_route_table,
+    "CreateTransitGatewayRoute": _create_tgw_route, "DeleteTransitGatewayRoute": _delete_tgw_route,
+    "SearchTransitGatewayRoutes": _search_tgw_routes,
+    "AssociateTransitGatewayRouteTable": _assoc_tgw_rt, "DisassociateTransitGatewayRouteTable": _disassoc_tgw_rt,
+    "EnableTransitGatewayRouteTablePropagation": _enable_tgw_prop, "DisableTransitGatewayRouteTablePropagation": _disable_tgw_prop,
+    "GetTransitGatewayRouteTableAssociations": _get_tgw_rt_assocs, "GetTransitGatewayRouteTablePropagations": _get_tgw_rt_props,
+}
+
+
 _OPS = {
     "CreateVpc": _create_vpc, "CreateSubnet": _create_subnet,
     "CreateSecurityGroup": _create_security_group,
@@ -4017,6 +4491,9 @@ def adopt_legacy_slot(service_states: dict, legacy: dict | None = None):
     model["_adopted_counts"] = counts
     service_states["ec2_vpc_core"] = model
     return model
+
+
+_OPS.update(_TGW_OPS)   # the offline server (server.py) routes by `action in _OPS`
 
 
 def dispatch(store, params: dict | None = None) -> VpcResponse:

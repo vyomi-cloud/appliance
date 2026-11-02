@@ -212,8 +212,13 @@ def _advance(store: SchedulerStore, msg_store=None, lam_store=None, now: datetim
         except Exception:
             payload = {"raw": tgt.get("Input")}
         if msg_store is not None:
-            eb.deliver(msg_store, lam_store, tgt.get("Arn", ""), json.dumps(payload), payload if isinstance(payload, dict) else {},
-                       kinesis_store=kinesis_store, sfn_store=sfn_store)
+            ok = eb.deliver(msg_store, lam_store, tgt.get("Arn", ""), json.dumps(payload), payload if isinstance(payload, dict) else {},
+                            kinesis_store=kinesis_store, sfn_store=sfn_store)
+            gd = [{"Name": "ScheduleGroup", "Value": sched["group"]}]
+            for d in (gd, []):
+                eb.emit_metric(msg_store, "AWS/Scheduler", "InvocationAttemptCount", d)
+                if not ok:
+                    eb.emit_metric(msg_store, "AWS/Scheduler", "TargetErrorCount", d)
         sched["last_run"] = _now_iso()
         one_time = sched["expr"].strip().startswith("at(")
         if one_time and sched.get("action_after_completion") == "DELETE":

@@ -137,6 +137,8 @@ def get() -> dict:
         _REG["cw"].msg_store, _REG["cw"].lam_store = _REG["msg"], _REG["compute"]   # real SNS / Lambda alarm actions
         _REG["cw"].vpc_store = _REG["vpc_net"]   # real EC2 alarm actions (aws.cloudwatch.alarms.actions.ec2)
         _REG["vpc_net"].cw_store = _REG["cw"]   # real StatusCheckFailed metrics (ec2.instances.monitoring / .alarms-metrics)
+        _REG["msg"].cw_store = _REG["cw"]   # real AWS/Events + AWS/Scheduler metrics (eventbridge.metrics)
+        _REG["kinesis"].cw_store = _REG["cw"]   # real AWS/Kinesis metrics (kinesis.stream.monitoring-metrics)
         _REG["rds"].cw_store = _REG["cw"]   # real DatabaseConnections/ReadIOPS/WriteIOPS metrics (rds.monitoring)
         _REG["vpc_net"].ram_store = _REG["ram"]   # DeleteSubnet/DeleteSecurityGroup refuse while actively shared
         _REG["ram"].vpc_store = _REG["vpc_net"]   # AssociateResourceShare validates the subnet/SG exists

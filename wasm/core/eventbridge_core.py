@@ -35,6 +35,7 @@ from core import sns_core as sns_mod
 from core import lambda_core as lam_mod
 from core import kinesis_core as kinesis_mod
 from core import stepfunctions_core as sfn_mod
+from core import cloudwatch_core as _cw_core
 
 EVENT_LOG_MAX = 500  # per bus — bounds the archive/replay window (documented limitation)
 
@@ -129,27 +130,74 @@ def _archive_arn(store, name: str) -> str:
 
 
 # ── event-pattern matching (a faithful subset) ─────────────────────────────
+def _numeric(ops, value) -> bool:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return False
+    it = iter(ops)
+    for op in it:
+        try:
+            n = float(next(it))
+        except (StopIteration, TypeError, ValueError):
+            return False
+        if not {"=": value == n, ">": value > n, ">=": value >= n, "<": value < n, "<=": value <= n}.get(op, False):
+            return False
+    return True
+
+
+def _wild(pat: str, value: str) -> bool:
+    return re.fullmatch(".*".join(re.escape(x) for x in pat.split("*")), value, re.S) is not None
+
+
 def _match_value(cond, value) -> bool:
+    if isinstance(value, list) and not isinstance(cond, dict):
+        return any(_match_value(cond, v) for v in value)
     if isinstance(cond, dict):
         if "prefix" in cond:
-            return isinstance(value, str) and value.startswith(str(cond["prefix"]))
+            pre = cond["prefix"]
+            if isinstance(pre, dict):
+                return isinstance(value, str) and value.lower().startswith(str(pre.get("equals-ignore-case", "")).lower())
+            return isinstance(value, str) and value.startswith(str(pre))
+        if "suffix" in cond:
+            suf = cond["suffix"]
+            if isinstance(suf, dict):
+                return isinstance(value, str) and value.lower().endswith(str(suf.get("equals-ignore-case", "")).lower())
+            return isinstance(value, str) and value.endswith(str(suf))
+        if "equals-ignore-case" in cond:
+            return isinstance(value, str) and value.lower() == str(cond["equals-ignore-case"]).lower()
+        if "wildcard" in cond:
+            return isinstance(value, str) and _wild(str(cond["wildcard"]), value)
+        if "numeric" in cond:
+            return _numeric(cond["numeric"], value)
         if "anything-but" in cond:
             ab = cond["anything-but"]
+            if isinstance(ab, dict):
+                return value is not None and not _match_value(ab, value)
             ab = ab if isinstance(ab, list) else [ab]
-            return value not in ab
+            vals = value if isinstance(value, list) else [value]
+            return value is not None and not any(v in ab for v in vals)
         if "exists" in cond:
             return (value is not None) == bool(cond["exists"])
         return False
     return cond == value
 
 
+_LEAF_OPS = ("prefix", "suffix", "anything-but", "exists", "equals-ignore-case", "wildcard", "numeric")
+
+
 def _match_pattern(pattern: dict, event: dict) -> bool:
     """Every key in the pattern must match; a key matches if the event's value is
-    in the listed set (OR). Nested dicts (e.g. `detail`) recurse."""
+    in the listed set (OR). Nested dicts (e.g. `detail`) recurse. `$or` alternates sub-patterns."""
     for key, expected in pattern.items():
+        if key == "$or":
+            if not any(_match_pattern(alt, event) for alt in expected if isinstance(alt, dict)):
+                return False
+            continue
         actual = event.get(key)
-        if isinstance(expected, dict) and not any(k in expected for k in ("prefix", "anything-but", "exists")):
-            if not isinstance(actual, dict) or not _match_pattern(expected, actual):
+        if isinstance(expected, dict) and not any(k in expected for k in _LEAF_OPS):
+            if isinstance(actual, list):
+                if not any(isinstance(a, dict) and _match_pattern(expected, a) for a in actual):
+                    return False
+            elif not isinstance(actual, dict) or not _match_pattern(expected, actual):
                 return False
             continue
         options = expected if isinstance(expected, list) else [expected]
@@ -206,7 +254,27 @@ def deliver(store, lam_store, arn: str, body_str: str, event_obj: dict, group_id
             return True
         except Exception:
             return False
+    if ":api-destination/" in arn:
+        return deliver_api_destination(store, arn, body_str)
     return False  # target type Vyomi doesn't deliver to (stored, never invoked — see capability doc)
+
+
+def emit_metric(store, namespace: str, metric: str, dims: list, value: float = 1.0, unit: str = "Count") -> None:
+    """eventbridge.metrics: real AWS/Events + AWS/Scheduler datapoints derived from actual
+    matching/delivery. `store.cw_store` is a runtime link set by the wire router / nano_registry;
+    absent (bare conformance store) it is a no-op."""
+    cw = getattr(store, "cw_store", None)
+    if cw is not None:
+        _cw_core.ingest_internal_metric(cw, namespace, metric, dims, value, unit=unit)
+
+
+def emit_pipe_metrics(store, pipe_name: str, ok: bool, duration_ms: float) -> None:
+    """eventbridge.pipes.metrics: real AWS/EventBridge/Pipes datapoints per actual pipe execution."""
+    d = [{"Name": "PipeName", "Value": pipe_name}]
+    for dims in (d,):
+        emit_metric(store, "AWS/EventBridge/Pipes", "Execution", dims)
+        emit_metric(store, "AWS/EventBridge/Pipes", "ExecutionSucceeded" if ok else "ExecutionFailed", dims)
+        emit_metric(store, "AWS/EventBridge/Pipes", "Duration", dims, max(duration_ms, 0.0), unit="Milliseconds")
 
 
 def _json_path(doc, path: str):
@@ -289,14 +357,24 @@ def _deliver_to_bus(store, lam_store, bus: str, envelope: dict, event_obj: dict,
             continue
         if not _match_pattern(rule.get("pattern", {}), event_obj):
             continue
+        rname = rule.get("name", "")
+        rdims = [{"Name": "RuleName", "Value": rname}]
+        bdims = [{"Name": "EventBusName", "Value": bus}, {"Name": "RuleName", "Value": rname}]
+        for d in (rdims, bdims, [{"Name": "EventBusName", "Value": bus}], []):
+            emit_metric(store, "AWS/Events", "TriggeredRules", d)
+            emit_metric(store, "AWS/Events", "MatchedEvents", d)
         for tgt in list(rule["targets"].values()):
             body_str = target_payload(dict(tgt, _rule_arn=rule.get("arn", "")), envelope)
             group = (tgt.get("SqsParameters") or {}).get("MessageGroupId")
             pk_path = (tgt.get("KinesisParameters") or {}).get("PartitionKeyPath")
             partition_key = _json_path(envelope, pk_path) if pk_path else None
-            deliver(store, lam_store, tgt["Arn"], body_str, event_obj, group_id=group,
-                    kinesis_store=kinesis_store, sfn_store=sfn_store,
-                    partition_key=partition_key or envelope.get("id"))
+            ok = deliver(store, lam_store, tgt["Arn"], body_str, event_obj, group_id=group,
+                         kinesis_store=kinesis_store, sfn_store=sfn_store,
+                         partition_key=partition_key or envelope.get("id"))
+            for d in (rdims, bdims, [{"Name": "EventBusName", "Value": bus}], []):
+                emit_metric(store, "AWS/Events", "Invocations", d)
+                if not ok:
+                    emit_metric(store, "AWS/Events", "FailedInvocations", d)
             _notify(store, "target", rule.get("name", ""), tgt.get("Id", ""), envelope)
             n += 1
     return n
@@ -689,6 +767,310 @@ def _list_tags_for_resource(store, body):
     return EventsResponse(body={"Tags": [{"Key": k, "Value": v} for k, v in tags.items()]})
 
 
+# ── Connections / API destinations / Global endpoints / TestEventPattern ─────────────────
+def _bag(store, key: str) -> dict:
+    eb = getattr(store, "_eb", None)
+    if callable(eb):
+        return eb().setdefault(key, {})
+    return store.__dict__.setdefault("eb_bag", {}).setdefault(key, {})
+
+
+def _auth_view(ctype: str, params: dict) -> dict:
+    """DescribeConnection never echoes secrets — only the non-secret identifying fields."""
+    params = params or {}
+    if ctype == "API_KEY":
+        return {"ApiKeyAuthParameters": {"ApiKeyName": (params.get("ApiKeyAuthParameters") or {}).get("ApiKeyName", "")}}
+    if ctype == "BASIC":
+        return {"BasicAuthParameters": {"Username": (params.get("BasicAuthParameters") or {}).get("Username", "")}}
+    o = params.get("OAuthParameters") or {}
+    return {"OAuthParameters": {"AuthorizationEndpoint": o.get("AuthorizationEndpoint", ""), "HttpMethod": o.get("HttpMethod", "POST"),
+                                "ClientParameters": {"ClientID": (o.get("ClientParameters") or {}).get("ClientID", "")}}}
+
+
+def _conn_view(c: dict) -> dict:
+    return {"ConnectionArn": c["arn"], "Name": c["name"], "Description": c.get("description", ""),
+            "ConnectionState": c["state"], "AuthorizationType": c["auth_type"],
+            "AuthParameters": _auth_view(c["auth_type"], c["auth"]), "SecretArn": c["secret_arn"],
+            "CreationTime": c["created"], "LastModifiedTime": c["modified"], "LastAuthorizedTime": c["authorized"]}
+
+
+def _require_conn(store, name):
+    c = _bag(store, "connections").get(name)
+    if c is None:
+        raise _E("ResourceNotFoundException", f"Failed to describe the connection(s). Connection '{name}' does not exist.")
+    return c
+
+
+def _create_connection(store, body):
+    name = str(body.get("Name", "")).strip()
+    atype = body.get("AuthorizationType")
+    if not name or not re.fullmatch(r"[\.\-_A-Za-z0-9]{1,64}", name):
+        raise _E("ValidationException", "Name must match [\\.\\-_A-Za-z0-9]+ and be 1-64 characters.")
+    if atype not in ("BASIC", "OAUTH_CLIENT_CREDENTIALS", "API_KEY"):
+        raise _E("ValidationException", "AuthorizationType must be one of BASIC, OAUTH_CLIENT_CREDENTIALS, API_KEY.")
+    auth = body.get("AuthParameters") or {}
+    need = {"API_KEY": "ApiKeyAuthParameters", "BASIC": "BasicAuthParameters", "OAUTH_CLIENT_CREDENTIALS": "OAuthParameters"}[atype]
+    if need not in auth:
+        raise _E("ValidationException", f"AuthParameters.{need} is required for AuthorizationType {atype}.")
+    bag = _bag(store, "connections")
+    if name in bag:
+        raise _E("ResourceAlreadyExistsException", f"Connection {name} already exists.")
+    uid = str(uuid.uuid4())
+    now = _now_iso()
+    bag[name] = {"name": name, "arn": f"arn:aws:events:{REGION}:{store.account_id}:connection/{name}/{uid}",
+                 "description": body.get("Description", ""), "auth_type": atype, "auth": auth, "state": "AUTHORIZED",
+                 "secret_arn": f"arn:aws:secretsmanager:{REGION}:{store.account_id}:secret:events!connection/{name}/{uid}-{uid[:6]}",
+                 "created": now, "modified": now, "authorized": now}
+    store.persist()
+    c = bag[name]
+    return EventsResponse(body={"ConnectionArn": c["arn"], "ConnectionState": c["state"], "CreationTime": now, "LastModifiedTime": now})
+
+
+def _describe_connection(store, body):
+    return EventsResponse(body=_conn_view(_require_conn(store, str(body.get("Name", "")))))
+
+
+def _list_connections(store, body):
+    pre, st = str(body.get("NamePrefix") or ""), body.get("ConnectionState")
+    out = [{k: v for k, v in _conn_view(c).items() if k not in ("AuthParameters", "SecretArn", "Description")}
+           for c in _bag(store, "connections").values() if c["name"].startswith(pre) and (not st or c["state"] == st)]
+    return EventsResponse(body={"Connections": out})
+
+
+def _update_connection(store, body):
+    c = _require_conn(store, str(body.get("Name", "")))
+    if body.get("Description") is not None:
+        c["description"] = body["Description"]
+    if body.get("AuthorizationType"):
+        if body["AuthorizationType"] not in ("BASIC", "OAUTH_CLIENT_CREDENTIALS", "API_KEY"):
+            raise _E("ValidationException", "Invalid AuthorizationType.")
+        c["auth_type"] = body["AuthorizationType"]
+    if body.get("AuthParameters"):
+        c["auth"] = {**(c["auth"] if c["auth_type"] == body.get("AuthorizationType", c["auth_type"]) else {}), **body["AuthParameters"]}
+    c["modified"] = c["authorized"] = _now_iso()
+    c["state"] = "AUTHORIZED"
+    store.persist()
+    return EventsResponse(body={"ConnectionArn": c["arn"], "ConnectionState": c["state"], "CreationTime": c["created"],
+                                "LastModifiedTime": c["modified"], "LastAuthorizedTime": c["authorized"]})
+
+
+def _deauthorize_connection(store, body):
+    c = _require_conn(store, str(body.get("Name", "")))
+    c["state"], c["modified"] = "DEAUTHORIZED", _now_iso()
+    store.persist()
+    return EventsResponse(body={"ConnectionArn": c["arn"], "ConnectionState": c["state"], "CreationTime": c["created"],
+                                "LastModifiedTime": c["modified"], "LastAuthorizedTime": c["authorized"]})
+
+
+def _delete_connection(store, body):
+    c = _require_conn(store, str(body.get("Name", "")))
+    used = [d["name"] for d in _bag(store, "apidests").values() if d["connection_arn"] == c["arn"]]
+    if used:
+        raise _E("ResourceInUseException", f"Connection {c['name']} is used by API destination(s): {', '.join(sorted(used))}.")
+    del _bag(store, "connections")[c["name"]]
+    store.persist()
+    return EventsResponse(body={"ConnectionArn": c["arn"], "ConnectionState": "DELETING", "CreationTime": c["created"],
+                                "LastModifiedTime": _now_iso(), "LastAuthorizedTime": c["authorized"]})
+
+
+_HTTP = ("GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS")
+
+
+def _dest_view(d: dict) -> dict:
+    return {"ApiDestinationArn": d["arn"], "Name": d["name"], "ApiDestinationState": d["state"], "ConnectionArn": d["connection_arn"],
+            "InvocationEndpoint": d["endpoint"], "HttpMethod": d["method"], "InvocationRateLimitPerSecond": d["rate"],
+            "Description": d.get("description", ""), "CreationTime": d["created"], "LastModifiedTime": d["modified"]}
+
+
+def _require_dest(store, name):
+    d = _bag(store, "apidests").get(name)
+    if d is None:
+        raise _E("ResourceNotFoundException", f"An api-destination '{name}' does not exist.")
+    return d
+
+
+def _check_dest(body, d=None):
+    ep, m = body.get("InvocationEndpoint", (d or {}).get("endpoint")), body.get("HttpMethod", (d or {}).get("method"))
+    if not ep or not re.match(r"^https?://", str(ep)):
+        raise _E("ValidationException", "InvocationEndpoint must be a valid http(s) URL.")
+    if m not in _HTTP:
+        raise _E("ValidationException", f"HttpMethod must be one of {', '.join(_HTTP)}.")
+    rate = int(body.get("InvocationRateLimitPerSecond", (d or {}).get("rate") or 300))
+    if rate < 1:
+        raise _E("ValidationException", "InvocationRateLimitPerSecond must be at least 1.")
+    return ep, m, rate
+
+
+def _create_api_destination(store, body):
+    name = str(body.get("Name", "")).strip()
+    if not name or not re.fullmatch(r"[\.\-_A-Za-z0-9]{1,64}", name):
+        raise _E("ValidationException", "Name must match [\\.\\-_A-Za-z0-9]+ and be 1-64 characters.")
+    ep, m, rate = _check_dest(body)
+    conn_arn = str(body.get("ConnectionArn", ""))
+    if not any(c["arn"] == conn_arn for c in _bag(store, "connections").values()):
+        raise _E("ResourceNotFoundException", f"Connection {conn_arn} does not exist.")
+    bag = _bag(store, "apidests")
+    if name in bag:
+        raise _E("ResourceAlreadyExistsException", f"ApiDestination {name} already exists.")
+    now = _now_iso()
+    bag[name] = {"name": name, "arn": f"arn:aws:events:{REGION}:{store.account_id}:api-destination/{name}/{uuid.uuid4()}",
+                 "state": "ACTIVE", "connection_arn": conn_arn, "endpoint": ep, "method": m, "rate": rate,
+                 "description": body.get("Description", ""), "created": now, "modified": now}
+    store.persist()
+    d = bag[name]
+    return EventsResponse(body={"ApiDestinationArn": d["arn"], "ApiDestinationState": d["state"], "CreationTime": now, "LastModifiedTime": now})
+
+
+def _describe_api_destination(store, body):
+    return EventsResponse(body=_dest_view(_require_dest(store, str(body.get("Name", "")))))
+
+
+def _list_api_destinations(store, body):
+    pre, ca = str(body.get("NamePrefix") or ""), body.get("ConnectionArn")
+    return EventsResponse(body={"ApiDestinations": [
+        {k: v for k, v in _dest_view(d).items() if k != "Description"}
+        for d in _bag(store, "apidests").values() if d["name"].startswith(pre) and (not ca or d["connection_arn"] == ca)]})
+
+
+def _update_api_destination(store, body):
+    d = _require_dest(store, str(body.get("Name", "")))
+    ep, m, rate = _check_dest(body, d)
+    if body.get("ConnectionArn"):
+        if not any(c["arn"] == body["ConnectionArn"] for c in _bag(store, "connections").values()):
+            raise _E("ResourceNotFoundException", f"Connection {body['ConnectionArn']} does not exist.")
+        d["connection_arn"] = body["ConnectionArn"]
+    d.update(endpoint=ep, method=m, rate=rate, modified=_now_iso())
+    if body.get("Description") is not None:
+        d["description"] = body["Description"]
+    store.persist()
+    return EventsResponse(body={"ApiDestinationArn": d["arn"], "ApiDestinationState": d["state"], "CreationTime": d["created"], "LastModifiedTime": d["modified"]})
+
+
+def _delete_api_destination(store, body):
+    d = _require_dest(store, str(body.get("Name", "")))
+    del _bag(store, "apidests")[d["name"]]
+    store.persist()
+    return EventsResponse(body={})
+
+
+def _endpoint_view(e: dict) -> dict:
+    return {"Name": e["name"], "Description": e.get("description", ""), "Arn": e["arn"], "RoutingConfig": e["routing"],
+            "ReplicationConfig": e["replication"], "EventBuses": e["buses"], "RoleArn": e.get("role_arn", ""),
+            "EndpointId": e["id"], "EndpointUrl": f"https://{e['id']}.endpoint.events.amazonaws.com",
+            "State": "ACTIVE", "StateReason": "", "CreationTime": e["created"], "LastModifiedTime": e["modified"]}
+
+
+def _check_endpoint(body):
+    rc = body.get("RoutingConfig") or {}
+    fo = rc.get("FailoverConfig") or {}
+    if not (fo.get("Primary") or {}).get("HealthCheck") or not (fo.get("Secondary") or {}).get("Route"):
+        raise _E("ValidationException", "RoutingConfig.FailoverConfig needs Primary.HealthCheck and Secondary.Route.")
+    buses = body.get("EventBuses") or []
+    if len(buses) != 2:
+        raise _E("ValidationException", "EventBuses must contain exactly two event bus ARNs (primary and secondary region).")
+    return rc, buses
+
+
+def _create_endpoint(store, body):
+    name = str(body.get("Name", "")).strip()
+    if not name or not re.fullmatch(r"[\.\-_A-Za-z0-9]{1,64}", name):
+        raise _E("ValidationException", "Name must match [\\.\\-_A-Za-z0-9]+ and be 1-64 characters.")
+    rc, buses = _check_endpoint(body)
+    bag = _bag(store, "endpoints")
+    if name in bag:
+        raise _E("ResourceAlreadyExistsException", f"Endpoint {name} already exists.")
+    repl = body.get("ReplicationConfig") or {"State": "ENABLED"}
+    now = _now_iso()
+    eid = uuid.uuid4().hex[:5] + ".veo"
+    bag[name] = {"name": name, "arn": f"arn:aws:events:{REGION}:{store.account_id}:endpoint/{name}", "id": eid, "routing": rc,
+                 "replication": repl, "buses": buses, "role_arn": body.get("RoleArn", ""),
+                 "description": body.get("Description", ""), "created": now, "modified": now}
+    store.persist()
+    e = bag[name]
+    return EventsResponse(body={"Name": name, "Arn": e["arn"], "RoutingConfig": rc, "ReplicationConfig": repl,
+                                "EventBuses": buses, "RoleArn": e["role_arn"], "State": "ACTIVE"})
+
+
+def _require_endpoint(store, name):
+    e = _bag(store, "endpoints").get(name)
+    if e is None:
+        raise _E("ResourceNotFoundException", f"Endpoint {name} does not exist.")
+    return e
+
+
+def _describe_endpoint(store, body):
+    return EventsResponse(body=_endpoint_view(_require_endpoint(store, str(body.get("Name", "")))))
+
+
+def _list_endpoints(store, body):
+    pre = str(body.get("NamePrefix") or "")
+    return EventsResponse(body={"Endpoints": [_endpoint_view(e) for e in _bag(store, "endpoints").values() if e["name"].startswith(pre)]})
+
+
+def _update_endpoint(store, body):
+    e = _require_endpoint(store, str(body.get("Name", "")))
+    if body.get("RoutingConfig") or body.get("EventBuses"):
+        rc, buses = _check_endpoint({"RoutingConfig": body.get("RoutingConfig") or e["routing"], "EventBuses": body.get("EventBuses") or e["buses"]})
+        e["routing"], e["buses"] = rc, buses
+    for src, dst in (("ReplicationConfig", "replication"), ("RoleArn", "role_arn"), ("Description", "description")):
+        if body.get(src) is not None:
+            e[dst] = body[src]
+    e["modified"] = _now_iso()
+    store.persist()
+    return EventsResponse(body={"Name": e["name"], "Arn": e["arn"], "RoutingConfig": e["routing"], "ReplicationConfig": e["replication"],
+                                "EventBuses": e["buses"], "RoleArn": e["role_arn"], "EndpointId": e["id"],
+                                "EndpointUrl": _endpoint_view(e)["EndpointUrl"], "State": "ACTIVE"})
+
+
+def _delete_endpoint(store, body):
+    e = _require_endpoint(store, str(body.get("Name", "")))
+    del _bag(store, "endpoints")[e["name"]]
+    store.persist()
+    return EventsResponse(body={})
+
+
+def _test_event_pattern(store, body):
+    try:
+        pattern = json.loads(body.get("EventPattern") or "")
+        event = json.loads(body.get("Event") or "")
+    except Exception:
+        raise _E("InvalidEventPatternException", "Event pattern and event must be valid JSON.")
+    if not isinstance(pattern, dict) or not isinstance(event, dict):
+        raise _E("InvalidEventPatternException", "Event pattern and event must be JSON objects.")
+    for req in ("id", "account", "source", "time", "region", "resources", "detail-type"):
+        if req not in event:
+            raise _E("ValidationException", f"Parameter Event is not valid. Reason: {req} not found")
+    return EventsResponse(body={"Result": bool(_match_pattern(pattern, event))})
+
+
+def deliver_api_destination(store, arn: str, body_str: str) -> bool:
+    """A rule/pipe/schedule target that is an API destination: a real HTTP request to
+    InvocationEndpoint with the Connection's auth applied. Offline only has sockets; in the
+    browser (Nano) the request cannot leave the sandbox and counts as a FailedInvocation."""
+    d = next((x for x in _bag(store, "apidests").values() if x["arn"] == arn), None)
+    if d is None or d["state"] != "ACTIVE":
+        return False
+    c = next((x for x in _bag(store, "connections").values() if x["arn"] == d["connection_arn"]), None)
+    if c is None or c["state"] != "AUTHORIZED":
+        return False
+    headers = {"Content-Type": "application/json", "User-Agent": "Amazon/EventBridge/ApiDestinations"}
+    a = c["auth"]
+    if c["auth_type"] == "API_KEY":
+        k = a.get("ApiKeyAuthParameters") or {}
+        headers[k.get("ApiKeyName", "x-api-key")] = k.get("ApiKeyValue", "")
+    elif c["auth_type"] == "BASIC":
+        b = a.get("BasicAuthParameters") or {}
+        headers["Authorization"] = "Basic " + base64.b64encode(f"{b.get('Username','')}:{b.get('Password','')}".encode()).decode()
+    try:
+        import urllib.request
+        req = urllib.request.Request(d["endpoint"], data=body_str.encode() if d["method"] not in ("GET", "HEAD") else None,
+                                     headers=headers, method=d["method"])
+        with urllib.request.urlopen(req, timeout=5) as r:
+            return 200 <= r.status < 300
+    except Exception:
+        return False
+
+
 class _E(Exception):
     def __init__(self, code, message):
         super().__init__(message)
@@ -707,6 +1089,14 @@ _OPS = {
     "CreateArchive": _create_archive, "DescribeArchive": _describe_archive,
     "ListArchives": _list_archives, "DeleteArchive": _delete_archive, "UpdateArchive": _update_archive,
     "StartReplay": _start_replay, "DescribeReplay": _describe_replay, "ListReplays": _list_replays,
+    "CreateConnection": _create_connection, "DescribeConnection": _describe_connection,
+    "ListConnections": _list_connections, "UpdateConnection": _update_connection,
+    "DeauthorizeConnection": _deauthorize_connection, "DeleteConnection": _delete_connection,
+    "CreateApiDestination": _create_api_destination, "DescribeApiDestination": _describe_api_destination,
+    "ListApiDestinations": _list_api_destinations, "UpdateApiDestination": _update_api_destination,
+    "DeleteApiDestination": _delete_api_destination,
+    "CreateEndpoint": _create_endpoint, "DescribeEndpoint": _describe_endpoint, "ListEndpoints": _list_endpoints,
+    "UpdateEndpoint": _update_endpoint, "DeleteEndpoint": _delete_endpoint, "TestEventPattern": _test_event_pattern,
     "TagResource": _tag_resource, "UntagResource": _untag_resource, "ListTagsForResource": _list_tags_for_resource,
 }
 
