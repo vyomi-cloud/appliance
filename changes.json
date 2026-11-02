@@ -1,7 +1,63 @@
 {
- "at": "2026-11-02T20:28:06+00:00",
+ "at": "2026-11-02T21:28:17+00:00",
  "baseline": false,
  "changes": [
+  {
+   "cloud": "gcp",
+   "service": "sqladmin/v1beta4",
+   "kind": "operation-flapping",
+   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.start:1910d4526f14",
+   "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.start changed",
+   "detail": {
+    "request": {
+     "was": "WorkloadCapturesStartRequest",
+     "now": "SqlWorkloadCapturesStartRequest"
+    }
+   },
+   "actionable": false
+  },
+  {
+   "cloud": "gcp",
+   "service": "sqladmin/v1beta4",
+   "kind": "operation-flapping",
+   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.startReplay:2cfe2f793adc",
+   "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.startReplay changed",
+   "detail": {
+    "request": {
+     "was": "WorkloadCapturesStartReplayRequest",
+     "now": "SqlWorkloadCapturesStartReplayRequest"
+    }
+   },
+   "actionable": false
+  },
+  {
+   "cloud": "gcp",
+   "service": "sqladmin/v1beta4",
+   "kind": "operation-flapping",
+   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.stop:ee7fdfd4ca9e",
+   "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.stop changed",
+   "detail": {
+    "request": {
+     "was": "WorkloadCapturesStopRequest",
+     "now": "SqlWorkloadCapturesStopRequest"
+    }
+   },
+   "actionable": false
+  },
+  {
+   "cloud": "gcp",
+   "service": "sqladmin/v1beta4",
+   "kind": "operation-flapping",
+   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.stopReplay:fff14efd9e7d",
+   "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.stopReplay changed",
+   "detail": {
+    "request": {
+     "was": "WorkloadCapturesStopReplayRequest",
+     "now": "SqlWorkloadCapturesStopReplayRequest"
+    }
+   },
+   "actionable": false
+  },
   {
    "cloud": "azure",
    "service": "compute",
@@ -13,34 +69,36 @@
   },
   {
    "cloud": "aws",
-   "service": "Aurora",
+   "service": "AWS Lambda",
    "kind": "announcement",
-   "key": "feed:aws:62c682a56c21",
-   "title": "Amazon Aurora MySQL 3.14 (compatible with MySQL 8.0.46) is generally available",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-aurora-mysql-314-available/",
-   "detail": "Starting today, Amazon Aurora MySQL-Compatible Edition 3 (compatible with MySQL 8.0) supports MySQL 8.0.46, which includes community MySQL fixes and Aurora-specific improvements. In addition to operational improvements, Aurora MySQL 3.14 introduces support for post-quantum TLS (PQ-TLS) key exchange, providing you with post-quantum cryptography options for encrypting your data in-transit. For detailed information on this release, refer to Aurora MySQL 3 and MySQL 8.0.46 release notes. You can upgrade your databases during scheduled maintenance windows using automatic minor version upgrades. To ",
+   "key": "feed:aws:1885c9705c16",
+   "title": "AWS Lambda now supports queues for Apache Kafka in self-managed Kafka event sources",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/aws-lambda-queue-kafka-esm/",
+   "detail": "AWS Lambda now supports queues for Apache Kafka in self-managed Kafka event source mappings (ESM), for Kafka clusters that customers run themselves and for managed offerings such as Confluent Cloud. Customers can now scale processing for Kafka workloads beyond the partition count of a topic, increasing throughput during traffic spikes and improving processing resilience. Customers building event-driven Kafka workloads for use cases such as image and video encoding, fraud detection, notification delivery, and telemetry ingestion treat each event as an independent unit of work, where processing ",
    "actionable": false
   },
   {
    "cloud": "aws",
-   "service": "Aurora",
+   "service": "CloudWatch",
    "kind": "announcement",
-   "key": "feed:aws:cf7c8400c168",
-   "title": "Amazon Aurora MySQL 8.4.10 is now generally available",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-aurora-mysql-8410-available/",
-   "detail": "Starting today, Amazon Aurora MySQL-Compatible Edition 8.4 supports MySQL 8.4.10. We recommend upgrading to the newer minor versions to accept fixes for Common Vulnerabilities and Exposures (CVEs) in prior versions of MySQL and to benefit from bug fixes, performance improvements, and new functionality added by the MySQL community. For more details, refer to the Aurora MySQL 8.4 and MySQL 8.4.10 release notes. Aurora MySQL 8.4.10 adds support for global transaction identifiers (GTID) tags, which lets you assign a user-defined tag to GTIDs to help you identify and group related transactions in b",
+   "key": "feed:aws:77e8ba15d21a",
+   "title": "Amazon CloudFront now supports self-service increases in AWS Service Quotas",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/cloudfront-self-service-quotas/",
+   "detail": "Amazon CloudFront now supports AWS Service Quotas, so you can view, monitor, and request increases for 28 CloudFront quotas from the Service Quotas console or API. Until now, increasing a quota on resources such as distributions, cache policies, origins, or alternate domain names meant opening a support case and waiting for manual review. If you have AWS Business Support or higher, requests for limit increases within published thresholds are now approved automatically. For example, you can raise your distribution quota from 500 to 1,000, or the number of alternate domain names per distribution",
    "actionable": false
   },
   {
-   "cloud": "azure",
-   "service": "Virtual Network",
+   "cloud": "gcp",
+   "service": "Cloud Run functions",
    "kind": "announcement",
-   "key": "feed:azure:2deca0a0adba",
-   "title": "[Launched] Generally Available: Change from virtual network integration to a private endpoint capable network configuration in Azure Database for PostgreSQL flexible server  ",
-   "link": "https://azure.microsoft.com/updates?id=574541",
-   "detail": "You now have greater flexibility in network design for Azure Database for PostgreSQL Flexible Server workloads. Now you can change existing VNet-integrated servers from delegated-subnet networking to a private endpoint-capable configuration, enabling secu",
+   "key": "feed:gcp:ce79fc5c0fde",
+   "title": "Cloud Run functions: Feature (November 02, 2026)",
+   "link": "https://docs.cloud.google.com/release-notes#November_02_2026",
+   "detail": "Support for the Python 3.15 runtime is in Preview .",
    "actionable": false
   }
  ],
- "errors": []
+ "errors": [
+  "maven/com.azure.resourcemanager:azure-resourcemanager-loganalytics: The read operation timed out"
+ ]
 }
