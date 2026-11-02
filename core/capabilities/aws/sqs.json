@@ -126,5 +126,21 @@
   "tests": [
    "tests/conformance/test_sqs_eventbridge_pipe_core.py"
   ]
+ },
+ "sqs.queue.metrics": {
+  "title": "Historical CloudWatch metrics",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Published to CloudWatch (AWS/SQS, dimension QueueName) from real queue activity as it happens: NumberOfMessagesSent/Received/Deleted, SentMessageSize, NumberOfEmptyReceives (counters) and the Approximate*Visible/NotVisible/Delayed + AgeOfOldestMessage gauges recomputed from the queue's contents whenever they change. There is no 1-minute publish schedule, so a gauge only has points when the queue changed."
+  ],
+  "api": [
+   "GetMetricStatistics"
+  ],
+  "tests": [
+   "tests/conformance/test_sqs_sweepa_core.py"
+  ]
  }
 }

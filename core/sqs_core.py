@@ -188,6 +188,49 @@ def _fire_triggers(store, lam_store, q: dict, msg: dict) -> None:
         msg["deleted"] = True
 
 
+def _cw(store):
+    return getattr(store, "cw_store", None)
+
+
+def _qdims(q: dict) -> list:
+    return [{"Name": "QueueName", "Value": q.get("queue_name", "")}]
+
+
+def _metric(store, q: dict, name: str, value: float, unit: str = "Count") -> None:
+    cw = _cw(store)
+    if cw is None:
+        return
+    try:
+        from core import cloudwatch_core as _cwc
+        _cwc.ingest_internal_metric(cw, "AWS/SQS", name, _qdims(q), float(value), unit=unit)
+    except Exception:
+        pass
+
+
+def _gauges(store, q: dict) -> None:
+    """Queue-depth gauges (visible / not visible / delayed / age of oldest message), recorded
+    from the queue's ACTUAL contents whenever they change; skipped when nothing moved."""
+    if _cw(store) is None:
+        return
+    now = store.now()
+    live = [m for m in q.get("messages", []) if not m.get("deleted")]
+    visible = [m for m in live if _available(m, now)]
+    delayed = sum(1 for m in live if not m.get("receive_count") and not _available(m, now))
+    not_visible = max(0, len(live) - len(visible) - delayed)
+    age = max((now - float(m.get("sent_epoch") or now) for m in visible), default=0.0)
+    snap = (len(visible), not_visible, delayed, int(age))
+    cache = getattr(store, "_sqs_gauge_last", None)
+    if cache is None:
+        cache = store._sqs_gauge_last = {}
+    if cache.get(q.get("queue_name")) == snap:
+        return
+    cache[q.get("queue_name")] = snap
+    _metric(store, q, "ApproximateNumberOfMessagesVisible", len(visible))
+    _metric(store, q, "ApproximateNumberOfMessagesNotVisible", not_visible)
+    _metric(store, q, "ApproximateNumberOfMessagesDelayed", delayed)
+    _metric(store, q, "ApproximateAgeOfOldestMessage", age, unit="Seconds")
+
+
 def enqueue(store: MessagingStore, queue: dict, body: str,
             message_attributes: dict | None = None, delay_seconds: int = 0,
             message_group_id: str | None = None,
@@ -209,6 +252,9 @@ def enqueue(store: MessagingStore, queue: dict, body: str,
         "message_dedup_id": message_dedup_id,
     }
     queue.setdefault("messages", []).append(msg)
+    _metric(store, queue, "NumberOfMessagesSent", 1)
+    _metric(store, queue, "SentMessageSize", len(body.encode("utf-8")), unit="Bytes")
+    _gauges(store, queue)
     return msg
 
 
@@ -799,11 +845,36 @@ def dispatch(store: MessagingStore, target: str, payload: dict | None = None, la
     if op is None:
         return _error("com.amazonaws.sqs#UnknownOperation", f"Unknown operation {action}.", 400)
     try:
-        if action in _NEEDS_LAMBDA:
-            return op(store, body, lam_store)
-        return op(store, body)
+        resp = op(store, body, lam_store) if action in _NEEDS_LAMBDA else op(store, body)
+        _record_op_metrics(store, action, body, resp)
+        return resp
     except SqsError as e:
         return _error(e.code, e.message, e.status)
+
+
+def _record_op_metrics(store, action: str, body: dict, resp) -> None:
+    """Receive/delete counters (sends are counted in enqueue) plus depth gauges, per queue."""
+    if _cw(store) is None:
+        return
+    try:
+        url = body.get("QueueUrl")
+        q = store.get_queue(_name_from_url(url)) if url else None
+        if not q:
+            return
+        if action == "ReceiveMessage":
+            n = len((getattr(resp, "body", None) or {}).get("Messages") or [])
+            _metric(store, q, "NumberOfMessagesReceived", n)
+            if not n:
+                _metric(store, q, "NumberOfEmptyReceives", 1)
+        elif action == "DeleteMessage":
+            _metric(store, q, "NumberOfMessagesDeleted", 1)
+        elif action == "DeleteMessageBatch":
+            ok = len((getattr(resp, "body", None) or {}).get("Successful") or [])
+            if ok:
+                _metric(store, q, "NumberOfMessagesDeleted", ok)
+        _gauges(store, q)
+    except Exception:
+        pass
 
 
 def _error(code: str, message: str, status: int = 400) -> SqsResponse:

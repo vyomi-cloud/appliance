@@ -290,6 +290,18 @@ try {
   check("SNS SMS delivery statistics render from CloudWatch (count matches the metrics store)", /^\d+$/.test(smsDelivered) && Array.isArray(smsMetric.Metrics), smsDelivered);
   await page.getByRole("heading", { name: "Delivery statistics by country" }).waitFor({ timeout: 10000 });
 
+  // SWEEP A (SQS): Monitoring tab charts the real AWS/SQS metrics produced by actual sends.
+  const MQ = `v4smokemet${Date.now() % 100000}`;
+  const mqUrl = (await sqs("CreateQueue", { QueueName: MQ })).QueueUrl;
+  await sqs("SendMessage", { QueueUrl: mqUrl, MessageBody: "m1" });
+  await sqs("SendMessage", { QueueUrl: mqUrl, MessageBody: "m2" });
+  await page.goto(UI + `#/sqs/queues/${MQ}?tab=monitor`);
+  await page.getByRole("tab", { name: "Monitoring" }).click();
+  await page.getByTestId("sqs-metric-NumberOfMessagesSent").waitFor({ timeout: 10000 });
+  const mSent = await page.getByTestId("sqs-metric-NumberOfMessagesSent").innerText();
+  check("SQS Monitoring tab shows real NumberOfMessagesSent from the sends above", mSent === "2", mSent);
+  await shot("13c-sqs-monitoring");
+
   // SWEEP A: upload-time ACL permissions, Object management overview, Account snapshot.
   const ACLB = `v4-aclup-${Date.now() % 100000}`;
   await wire(`/${ACLB}`, { method: "PUT", headers: { authorization: S3AUTH } });

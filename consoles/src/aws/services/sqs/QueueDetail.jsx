@@ -21,6 +21,7 @@ import { CapabilityContainer, saveNotice } from "../../kit/Capability.jsx";
 import SnsSubscribeModal from "./SnsSubscribeModal.jsx";
 import LambdaTriggerModal from "./LambdaTriggerModal.jsx";
 import ConnectPipeModal from "./ConnectPipeModal.jsx";
+import QueueMetrics from "./QueueMetrics.jsx";
 import * as api from "./api.js";
 
 export default function QueueDetail({ params, query }) {
@@ -64,7 +65,7 @@ export default function QueueDetail({ params, query }) {
           { id: "lambda", label: "Lambda triggers", content: <LambdaTriggersTab queueArn={attrs.QueueArn} /> },
           { id: "pipes", label: "EventBridge Pipes", content: <PipesTab queueArn={attrs.QueueArn} /> },
           { id: "dlq", label: "Dead-letter queue", content: <DlqTab name={name} attrs={attrs} /> },
-          { id: "monitor", label: "Monitoring", content: <MonitoringTab attrs={attrs} /> },
+          { id: "monitor", label: "Monitoring", content: <MonitoringTab name={name} attrs={attrs} /> },
           { id: "tags", label: "Tagging", content: <TaggingTab name={name} url={url} /> },
           { id: "policy", label: "Access policy", content: <AccessPolicyTab name={name} attrs={attrs} /> },
           { id: "encryption", label: "Encryption", content: <EncryptionTab name={name} attrs={attrs} /> },
@@ -161,18 +162,15 @@ function DlqTab({ name, attrs }) {
   );
 }
 
-function MonitoringTab({ attrs }) {
+function MonitoringTab({ name, attrs }) {
   return (
-    <Box>
-      <KeyValue title="CloudWatch metrics" columns={2} items={[
+    <SpaceBetween size="l">
+      <KeyValue title="Queue depth" columns={2} items={[
         ["Approximate number of messages visible", attrs.ApproximateNumberOfMessages ?? "0"],
         ["Approximate number of messages not visible", attrs.ApproximateNumberOfMessagesNotVisible ?? "0"],
       ]} />
-      <Box padding={{ top: "l" }}>
-        <NotSimulated feature="Historical CloudWatch metrics"
-          note="Number of messages sent, Number of messages received, Number of messages deleted and Approximate age of oldest message are historical CloudWatch time-series metrics; Vyomi reports live queue depth above but does not aggregate metric history." />
-      </Box>
-    </Box>
+      <QueueMetrics queue={name} />
+    </SpaceBetween>
   );
 }
 
