@@ -418,7 +418,9 @@ async function crawlConsole(browser, base, con, needsSW) {
   const errs = [];         // uncaught page errors since the last drain
   page.on("response", async (r) => {
     const s = r.status(), u = r.url();
-    if (s >= 400 && !/favicon|\.map$|hot-update/.test(u)) {
+    // /api/auth/me is the PORTAL's route (the account menu asks it who is signed in); the bare local
+    // Nano server has no portal, so it answers 501 there while the real portal answers it.
+    if (s >= 400 && !/favicon|\.map$|hot-update|\/api\/auth\/me(\?|$)/.test(u)) {
       // 5xx: keep the start of the body so the finding says why, not just that it failed.
       const body = s >= 500 ? (await r.text().catch(() => "")).replace(/\s+/g, " ").slice(0, 200) : "";
       net.push({ status: s, url: u.replace(base, "").slice(0, 200), body });
