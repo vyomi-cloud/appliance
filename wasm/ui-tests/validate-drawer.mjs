@@ -15,14 +15,15 @@ for (const cloud of ["aws", "gcp", "azure"]) {
   check(`${cloud}: old back-to-spaces/api/usage header links removed`,
     (await p.locator("header .back-spaces, header .az-back-spaces, header a[href$='#api'], header a[href$='#usage']").count()) === 0);
   const url0 = p.url();
-  check(`${cloud}: Activate appliance + GitHub in the drawer, Sign out hidden when signed out`,
-    (await p.locator('#vy-appbar a[data-act="activate"], #vy-appbar a[data-act="upgrade"]').count()) === 1 && (await p.locator('#vy-appbar a[href="https://github.com/vyomi-cloud/appliance"]').count()) === 1 && !(await p.locator('#vy-appbar a[data-act="signout"]').isVisible()));
-  if ((await p.locator('#vy-appbar a[data-act="activate"]').count()) === 1) {
-    await p.click('#vy-appbar a[data-act="activate"]');
+  check(`${cloud}: drawer holds no account items; account button is in the header's top-right`, (await p.locator("#vy-appbar a[data-act], #vy-appbar a[href*='github.com']").count()) === 0 && await (async () => { const hb = await p.locator("#vy-acct-btn").boundingBox(); return !!hb && hb.y < 60 && hb.x + hb.width > p.viewportSize().width - 80; })());
+  await p.click("#vy-acct-btn");
+  check(`${cloud}: menu has Activate appliance + GitHub; Sign out hidden when signed out`, (await p.locator('#vy-acct-menu.open a[data-act="activate"], #vy-acct-menu.open a[data-act="upgrade"]').count()) === 1 && (await p.locator('#vy-acct-menu.open a[href="https://github.com/vyomi-cloud/appliance"]').count()) === 1 && !(await p.locator('#vy-acct-menu a[data-act="signout"]').isVisible()));
+  if ((await p.locator('#vy-acct-menu a[data-act="activate"]').count()) === 1) {
+    await p.click('#vy-acct-menu a[data-act="activate"]');
     let ok = false; try { await p.frameLocator("#vy-modal iframe").locator("#activate-modal.open .am-card").waitFor({ state: "visible", timeout: 45000 }); ok = true; } catch (_) {}
     check(`${cloud}: Activate opens the real activation dialog in a modal`, ok && p.url() === url0);
     await p.keyboard.press("Escape"); await sleep(250);
-  }
+  } else await p.keyboard.press("Escape");
   await p.click("a.vy-co"); let lv = false; try { await p.frameLocator("#vy-modal iframe").locator("#view-spaces").waitFor({ state: "visible", timeout: 45000 }); lv = true; } catch (_) {}
   check(`${cloud}: vyomi logo opens the Spaces dialog, console not navigated`, lv && p.url() === url0, p.url());
   await p.keyboard.press("Escape"); await sleep(250);

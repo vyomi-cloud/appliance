@@ -25,12 +25,19 @@ await p.goto(`${BASE}/console/${CLOUD}`); await p.waitForSelector("#vy-appbar .v
 check((await p.locator("#vy-appbar .vy-notch a[data-v]").count()) === 5, "five items in the drawer (Spaces, Health, Knowledge Center, SDK & CLI usage, API reference)");
 check((await p.locator("header .back-spaces, header .az-back-spaces, header a[href$='#api'], header a[href$='#usage']").count()) === 0, "old back-to-spaces/api/usage header links are gone");
 const url0 = p.url();
-// account group: Activate appliance, GitHub (stars), Sign out (only when signed in)
-check((await p.locator('#vy-appbar a[data-act="activate"], #vy-appbar a[data-act="upgrade"]').count()) === 1, "Activate appliance is in the drawer");
-check((await p.locator('#vy-appbar a[href="https://github.com/vyomi-cloud/appliance"]').count()) === 1, "GitHub link is in the drawer");
-check(!(await p.locator('#vy-appbar a[data-act="signout"]').isVisible()), "Sign out is hidden while signed out");
-if ((await p.locator('#vy-appbar a[data-act="activate"]').count()) === 1) {
-  await p.click('#vy-appbar a[data-act="activate"]');
+// account menu: a button in the console's main header (top-right) - not in the drawer
+check((await p.locator("#vy-appbar a[data-act], #vy-appbar a[href*='github.com']").count()) === 0, "the bottom drawer holds no account items");
+const hb = await p.locator("#vy-acct-btn").boundingBox(); const vw = p.viewportSize().width;
+check(!!hb && hb.y < 60 && hb.x + hb.width > vw - 80, "account button sits in the header's top-right corner", JSON.stringify(hb));
+await p.click("#vy-acct-btn");
+check((await p.locator('#vy-acct-menu.open a[data-act="activate"], #vy-acct-menu.open a[data-act="upgrade"]').count()) === 1, "menu: Activate appliance");
+check((await p.locator('#vy-acct-menu.open a[href="https://github.com/vyomi-cloud/appliance"]').count()) === 1, "menu: GitHub star link");
+check(!(await p.locator('#vy-acct-menu a[data-act="signout"]').isVisible()), "menu: Sign out hidden while signed out");
+await p.keyboard.press("Escape"); await p.waitForTimeout(150);
+check((await p.locator("#vy-acct-menu.open").count()) === 0, "Esc closes the menu");
+await p.click("#vy-acct-btn");
+if ((await p.locator('#vy-acct-menu a[data-act="activate"]').count()) === 1) {
+  await p.click('#vy-acct-menu a[data-act="activate"]');
   const af = p.frameLocator("#vy-modal iframe");
   let ok = false; try { await af.locator("#activate-modal.open .am-card").waitFor({ state: "visible", timeout: 20000 }); ok = true; } catch (_) {}
   check(ok && p.url() === url0, "Activate opens the real activation dialog in a modal");

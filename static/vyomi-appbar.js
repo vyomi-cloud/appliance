@@ -42,8 +42,18 @@
     '#vy-modal .hd button:hover{background:#f2f4f7}' +
     '#vy-modal.sm .box{width:min(560px,94vw);height:min(660px,92vh);background:transparent;box-shadow:none}#vy-modal.sm .hd{display:none}' +
     '#vy-modal iframe{flex:1;border:0;width:100%}' +
-    '#vy-appbar .vy-notch a.vy-acct-act{color:#fff}' +
-    '#vy-appbar .vy-notch a .vy-n{opacity:.75;font-size:11px}' +
+    '#vy-acct-btn{flex:none;width:30px;height:30px;margin-left:8px;padding:0;border:0;border-radius:50%;background:#4d8cf3;color:#fff;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;box-shadow:0 0 0 2px rgba(255,255,255,.25)}' +
+    '#vy-acct-btn:hover,#vy-acct-btn[aria-expanded=true]{background:#2f6fdc}' +
+    '#vy-acct-btn svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}' +
+    '#vy-acct-menu{position:fixed;z-index:250;min-width:250px;display:none;padding:6px;background:#fff;color:#101828;border:1px solid #e4e7ec;border-radius:12px;box-shadow:0 16px 40px rgba(0,0,0,.28);font-family:Inter,system-ui,sans-serif}' +
+    '#vy-acct-menu.open{display:block}' +
+    '#vy-acct-menu .vy-who{padding:8px 12px 10px;font-size:12px;color:#667085;word-break:break-all}' +
+    '#vy-acct-menu .vy-hr{height:1px;background:#e4e7ec;margin:4px 0}' +
+    '#vy-acct-menu a{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:8px;font-size:13.5px;color:#101828;text-decoration:none;cursor:pointer}' +
+    '#vy-acct-menu a:hover{background:#f2f4f7}' +
+    '#vy-acct-menu a svg{width:17px;height:17px;flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;color:#475467}' +
+    '#vy-acct-menu a .vy-n{margin-left:auto;font-weight:600;font-size:12px;color:#475467}' +
+    '#vy-acct-menu a[data-act=signout]{color:#b42318}#vy-acct-menu a[data-act=signout] svg{color:#b42318}' +
     '@media(max-width:900px){#vy-appbar .vy-notch a span{display:none}#vy-appbar .vy-cloud{display:none}}';
   function build() {
     if (document.getElementById('vy-appbar')) return;
@@ -70,29 +80,46 @@
       fr.src = CL + '?embed=1' + (view === 'acct' ? '&acct=1' : '') + '#' + (view === 'acct' ? 'spaces' : view);
       m.classList.add('open');
     }
-    // ---- account group (right of the disk chip): Activate appliance · GitHub ★ · Sign out
-    var nav = bar.querySelector('.vy-notch'), NANO = CL !== '/clouds', st = { tier: 'free', trial: null }, authed = false;
-    var sep2 = document.createElement('span'); sep2.className = 'vy-sep'; nav.appendChild(sep2);
-    var act = document.createElement('a'); act.href = '#'; act.setAttribute('data-act', 'activate'); act.className = 'vy-acct-act';
-    var gh = document.createElement('a'); gh.href = 'https://github.com/vyomi-cloud/appliance'; gh.target = '_blank'; gh.rel = 'noopener noreferrer'; gh.title = 'Star Vyomi on GitHub';
-    gh.innerHTML = '<svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg><span>GitHub <b class="vy-n"></b></span>';
-    var so = document.createElement('a'); so.href = '#'; so.setAttribute('data-act', 'signout'); so.title = 'Sign out'; so.style.display = 'none';
+    // ---- account menu: a button in the console's main header (top-right) -> Activate appliance · GitHub ★ · Sign out
+    var nav = bar.querySelector('.vy-notch'), NANO = CL !== '/clouds', st = { tier: 'free', trial: null }, authed = false, who = '';
+    var hdr = document.querySelector('header'), host = document.querySelector('header .right') || (function () { var h = document.querySelectorAll('header .hicons'); return h.length ? h[h.length - 1] : hdr; })();
+    var ab = document.getElementById('avatarBtn'); if (ab && ab.classList.contains('avatar')) ab.style.display = 'none';   // GCP's inert "U" avatar: ours replaces it
+    var btn = document.createElement('button'); btn.type = 'button'; btn.id = 'vy-acct-btn'; btn.title = 'Vyomi account'; btn.setAttribute('aria-haspopup', 'true'); btn.setAttribute('aria-expanded', 'false');
+    btn.innerHTML = '<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg>';
+    if (host) host.appendChild(btn);
+    var menu = document.createElement('div'); menu.id = 'vy-acct-menu'; menu.setAttribute('role', 'menu');
+    var who$ = document.createElement('div'); who$.className = 'vy-who';
+    var act = document.createElement('a'); act.href = '#'; act.setAttribute('data-act', 'activate'); act.setAttribute('role', 'menuitem');
+    var gh = document.createElement('a'); gh.href = 'https://github.com/vyomi-cloud/appliance'; gh.target = '_blank'; gh.rel = 'noopener noreferrer'; gh.setAttribute('role', 'menuitem');
+    gh.innerHTML = '<svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg><span>Star on GitHub</span><b class="vy-n"></b>';
+    var so = document.createElement('a'); so.href = '#'; so.setAttribute('data-act', 'signout'); so.setAttribute('role', 'menuitem'); so.style.display = 'none';
     so.innerHTML = '<svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg><span>Sign out</span>';
-    nav.appendChild(act); nav.appendChild(gh); nav.appendChild(so);
+    var hr = document.createElement('div'); hr.className = 'vy-hr';
+    [who$, act, gh, hr, so].forEach(function (n) { menu.appendChild(n); }); document.body.appendChild(menu);
+    function closeMenu() { menu.classList.remove('open'); btn.setAttribute('aria-expanded', 'false'); }
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      if (menu.classList.contains('open')) { closeMenu(); return; }
+      var r = btn.getBoundingClientRect(); menu.style.top = (r.bottom + 8) + 'px'; menu.style.right = Math.max(8, window.innerWidth - r.right) + 'px';
+      menu.classList.add('open'); btn.setAttribute('aria-expanded', 'true');
+    });
+    document.addEventListener('click', function (e) { if (!menu.contains(e.target)) closeMenu(); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeMenu(); });
     function paintAcct() {
       var t = st.trial, ic = '<svg viewBox="0 0 24 24"><path d="M9 12l2 2 4-4M12 2l2.4 1.8 3-.2.9 2.9 2.5 1.7-.9 2.9.9 2.9-2.5 1.7-.9 2.9-3-.2L12 22l-2.4-1.8-3 .2-.9-2.9-2.5-1.7.9-2.9-.9-2.9 2.5-1.7.9-2.9 3 .2z"/></svg>';
       if (t && t.active) { act.title = 'Free trial running — upgrade'; act.setAttribute('data-act', 'upgrade'); act.innerHTML = ic + '<span>' + String(st.tier || 'pro').toUpperCase() + ' trial · Upgrade</span>'; }
       else if (t && t.ended) { act.title = 'Your free trial has ended — upgrade'; act.setAttribute('data-act', 'upgrade'); act.innerHTML = ic + '<span>Trial ended · Upgrade</span>'; }
       else if (st.tier && st.tier !== 'free') { act.title = 'Appliance activated — re-bind to a different account'; act.setAttribute('data-act', 'activate'); act.innerHTML = ic + '<span>Activated · ' + String(st.tier).toUpperCase() + '</span>'; }
       else { act.title = 'Sign in to activate — starts your free 14-day Pro trial'; act.setAttribute('data-act', 'activate'); act.innerHTML = ic + '<span>Activate appliance</span>'; }
+      who$.textContent = who || (authed || st.tier !== 'free' ? 'Signed in' : 'Not signed in');
       so.style.display = (authed || (!NANO && st.tier && st.tier !== 'free') || (!NANO && t && t.activated)) ? '' : 'none';
     }
     function refreshAcct() {
       fetch('/api/license/status', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (d) {
-        st = { tier: d && d.active_tier, trial: d && d.trial, upgrade: d && d.trial && d.trial.upgrade_url }; paintAcct();
+        st = { tier: d && d.active_tier, trial: d && d.trial }; who = (d && (d.issued_to || (d.license && (d.license.email || d.license.issued_to)))) || who; paintAcct();
       }).catch(function () { paintAcct(); });
       if (NANO) { try { var x = new XMLHttpRequest(); x.open('GET', '/api/auth/me', true); x.withCredentials = true;
-        x.onload = function () { try { authed = !!JSON.parse(x.responseText).authenticated; } catch (e) {} paintAcct(); }; x.send(); } catch (e) {} }
+        x.onload = function () { try { var j = JSON.parse(x.responseText); authed = !!j.authenticated; if (j.email) who = j.email; } catch (e) {} paintAcct(); }; x.send(); } catch (e) {} }
     }
     paintAcct(); refreshAcct();
     try {                                                    // live GitHub star count (cached for the tab session, same key as the Spaces page)
@@ -109,8 +136,8 @@
       try { var l = new XMLHttpRequest(); l.open('POST', '/api/auth/logout', true); l.withCredentials = true; l.onloadend = done; l.send(); } catch (e) { done(); }
     }
     window.addEventListener('message', function (e) { if (e.data && e.data.vy === 'close-modal') { close(); refreshAcct(); } });
-    nav.addEventListener('click', function (e) {
-      var l = e.target.closest('a'); if (!l) return;
+    function onItem(e) {
+      var l = e.target.closest('a'); if (!l) return; if (menu.contains(l)) closeMenu();
       var ac = l.getAttribute('data-act');
       if (ac === 'activate') { e.preventDefault(); openView('acct', 'Activate this appliance', true); return; }
       if (ac === 'upgrade') { e.preventDefault(); window.open((st.trial && st.trial.upgrade_url) || 'https://vyomi.cloud/pricing', '_blank', 'noopener'); return; }
@@ -118,7 +145,8 @@
       if (!l.getAttribute('data-v')) return;
       e.preventDefault();
       openView(l.getAttribute('data-v'), l.title, false);
-    });
+    }
+    nav.addEventListener('click', onItem); menu.addEventListener('click', onItem);
     // The vyomi logo in a console header opens the same Spaces dialog (never the old full-page UI).
     document.addEventListener('click', function (e) {
       var lg = e.target.closest && e.target.closest('a.vy-co'); if (!lg) return;
