@@ -513,6 +513,10 @@ table.gc tr:hover td{background:#f6f8fc}
 .wizard-page .field input[type=radio],.wizard-page .field input[type=checkbox]{accent-color:#0b57d0;width:18px;height:18px;margin:0 10px 0 0;vertical-align:middle}
 .wizard-page label.radio{display:flex;align-items:center;font:400 14px "Google Sans",Roboto,Arial,sans-serif;color:#1f1f1f;padding:6px 0}
 .wizard-page .info-pill{background:#f0f4f9;border-radius:4px;border:none;max-width:560px}
+
+.crumbs-inline a,.crumbs-inline .current{display:inline-flex;align-items:center;gap:6px}
+.crumbs-inline .ci{font-size:18px;line-height:1}
+.crumbs-inline .sep{font-size:18px;line-height:1;color:#747775}
 </style>
 </head>
 <body>
@@ -799,19 +803,19 @@ function render(){
 
 function renderCrumbs(){}   // breadcrumbs now live inside each page's title card (crumbsEl)
 function crumbsEl(){
+  const mi = (n,c) => el("span",{class:"material-symbols-outlined "+(c||"ci")}, n);
+  const sep = () => mi("chevron_right","sep");
   const c = el("div",{class:"crumbs-inline"});
-  c.append(el("a",{onclick:()=>navigate({view:"home", service:null, item:null})}, PROJECT));
+  c.append(el("a",{onclick:()=>navigate({view:"home", service:null, item:null})}, mi("folder_open"), PROJECT));
   if (!STATE.service) return c;
   const svc = svcByKey(STATE.service);
   if (!svc) return c;
-  c.append(el("span",{class:"sep"}, "›"),
-    el("a",{onclick:()=>navigate({view:"list", item:null})}, svc.label));
+  c.append(sep(), el("a",{onclick:()=>navigate({view:"list", item:null})}, mi(svc.icon||"apps"), svc.label));
   if (STATE.view === "detail" && STATE.item) {
     const name = String(getPath(STATE.item, svc.name_field) || STATE.item.name || "");
-    c.append(el("span",{class:"sep"}, "›"), el("span",{class:"current"}, name));
+    c.append(sep(), el("span",{class:"current"}, mi(svc.icon||"article"), name));
   } else if (STATE.view === "create") {
-    c.append(el("span",{class:"sep"}, "›"),
-      el("span",{class:"current"}, createTitle(svc)));
+    c.append(sep(), el("span",{class:"current"}, mi("add_circle"), createTitle(svc)));
   }
   return c;
 }
