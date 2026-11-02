@@ -402,7 +402,10 @@ async function createWithDefaults(page, drain, cloud, backToList, service) {
     f.push({ type: "CREATE_REJECTED", detail: `create with default values was rejected: "${(msg.match(/[^\n]*(error|failed|invalid)[^\n]*/i) || [""])[0].slice(0, 140)}"` });
   }
   await backToList();
-  const rowsAfter = await rowCount(page);
+  let rowsAfter = await rowCount(page);
+  // A create that is still provisioning (Azure VM/storage LRO under a loaded stack) lands in the list a
+  // few seconds late: give the list the time a user would wait, re-opening it, before calling it missing.
+  for (let i = 0; i < 4 && rowsAfter <= rowsBefore; i++) { await sleep(2500); await backToList(); rowsAfter = await rowCount(page); }
   if (rowsAfter <= rowsBefore) f.push({ type: "CREATE_NO_ROW", detail: "create with defaults added no resource to the list" });
   f.push(...(await placeholderFindings(page, "after create")));
   if (rowsAfter > rowsBefore) {
