@@ -9,6 +9,7 @@ import DeleteBucketPage from "./DeleteBucketPage.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { AccessPointsSection } from "./Sweep.jsx";
 import { AccountPublicAccessBlock, DirectoryBuckets, ObjectLambdaAccessPoints } from "./AccountPages.jsx";
+import { AccessGrants, BatchOperations, MultiRegionAccessPoints } from "./BatchPages.jsx";
 
 // Account-level pages Vyomi has no backend for: each is a registered capability gap (core/capabilities/aws/s3.json).
 const ns = (title, id) => () => <CapabilityContainer id={`s3.account.${id}`} title={title} />;
@@ -45,9 +46,10 @@ export default {
     { pattern: "/s3/directory-buckets", component: DirectoryBuckets, crumbs: () => [{ text: "Directory buckets", href: "#/s3/directory-buckets" }] },
     { pattern: "/s3/olap", component: ObjectLambdaAccessPoints, crumbs: () => [{ text: "Object Lambda Access Points", href: "#/s3/olap" }] },
     { pattern: "/s3/settings", component: AccountPublicAccessBlock, crumbs: () => [{ text: "Block Public Access settings for this account", href: "#/s3/settings" }] },
+    { pattern: "/s3/mrap", component: MultiRegionAccessPoints, crumbs: () => [{ text: "Multi-Region Access Points", href: "#/s3/mrap" }] },
+    { pattern: "/s3/access-grants", component: AccessGrants, crumbs: () => [{ text: "Access Grants", href: "#/s3/access-grants" }] },
+    { pattern: "/s3/batch-operations", component: BatchOperations, crumbs: () => [{ text: "Batch Operations", href: "#/s3/batch-operations" }] },
     ...[["table-buckets", "Table buckets", "table-buckets"],
-      ["access-grants", "Access Grants", "access-grants"],
-      ["mrap", "Multi-Region Access Points", "multi-region-access-points"], ["batch-operations", "Batch Operations", "batch-operations"],
       ["access-analyzer", "IAM Access Analyzer for S3", "external-access"],
       ["lens/dashboards", "Storage Lens dashboards", "storage-lens"], ["lens/groups", "Storage Lens groups", "storage-lens"],
       ["marketplace", "AWS Marketplace for S3", "marketplace"], ["get-started", "Amazon S3", "get-started"]]
