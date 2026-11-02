@@ -4,6 +4,14 @@ All notable changes to Vyomi will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+
+## [3.0.40] — 2026-11-03
+
+### Nano / console
+- Nano footer Logs pane: **Local tunnel** and **Cloudflare** tabs, each with live status.
+- Install-tunnel notification dots on the SDK & CLI usage drawer item and the Local Vyomi tunnel card (hidden once the tunnel is seen running).
+- GCP console: light-gray shell (`#f8fafd`), gray hover/active tints, restyled sub-nav (offline + Nano).
+
 ## [3.0.39] — 2026-11-02
 
 Daily conformance release. **110 product fixes** (AWS 19, GCP 47, Azure 10, all clouds 34); 80 reach Nano and 101 reach the offline appliance; 13 test and harness improvements.
