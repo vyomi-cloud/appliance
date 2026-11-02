@@ -268,6 +268,35 @@ def keyvault_network_denied(state: dict | None, vault: str) -> bool:
     return (p.get("networkAcls") or {}).get("defaultAction") == "Deny"
 
 
+def servicebus_namespace_record(state: dict | None, namespace: str) -> dict | None:
+    """The Microsoft.ServiceBus/namespaces record by namespace name alone (the Service Bus data
+    plane never learns the subscription/resource group; the console names the namespace it is
+    showing with the `x-vyomi-namespace` header — same seam as `vault_properties`)."""
+    if not state or not namespace:
+        return None
+    want = f"/namespaces/{namespace}".lower()
+    for rec in state.values():
+        if isinstance(rec, dict) and rec.get("_type", "").lower() == "microsoft.servicebus/namespaces" \
+                and rec.get("id", "").lower().endswith(want):
+            return rec
+    return None
+
+
+def servicebus_network_denied(state: dict | None, namespace: str) -> bool:
+    """True when this namespace's ARM networking (azure.servicebus.namespace.networking) would
+    reject a public data-plane call: publicNetworkAccess Disabled, or its default network rule
+    set action is Deny. Vyomi has no caller IP/VNet to match an allow-list entry against, so
+    Deny blocks unconditionally (same simplification as keyvault_network_denied)."""
+    rec = servicebus_namespace_record(state, namespace)
+    if rec is None:
+        return False
+    if (rec.get("properties") or {}).get("publicNetworkAccess") == "Disabled":
+        return True
+    rs = state.get(rec["id"].lower() + "/networkrulesets/default") if state else None
+    return bool(rs and (rs.get("properties") or {}).get("defaultAction") == "Deny") or \
+        ((rs or {}).get("properties") or {}).get("publicNetworkAccess") == "Disabled"
+
+
 def acr_registry_properties(state: dict | None, registry: str) -> dict:
     """Look up a Microsoft.ContainerRegistry/registries resource's `properties` by registry
     name alone (the registry's own data plane — core/azure_acr_core.py — never learns the
@@ -1178,6 +1207,23 @@ class AzureArm:
         if (namespace.lower() == "microsoft.servicebus" and len(chain) >= 3
                 and chain[0].lower() == "namespaces" and chain[2].lower() == "disasterrecoveryconfigs"):
             return self._servicebus_georecovery(method, sub, rg, chain, payload)
+
+        # Microsoft.ServiceBus/namespaces/{ns}/networkRuleSets/default: a namespace that never
+        # configured a firewall still has the (open) default rule set on GET, as the real API
+        # does (azure.servicebus.namespace.networking). PUT/list/delete use the generic engine.
+        if (namespace.lower() == "microsoft.servicebus" and len(chain) == 4 and method == "GET"
+                and chain[0].lower() == "namespaces" and chain[2].lower() == "networkrulesets"
+                and chain[3].lower() == "default"):
+            ns_rid = _canonical_id(sub, rg, ["Microsoft.ServiceBus", "namespaces"], [chain[1]])
+            ns_rec = self.state.get(ns_rid.lower())
+            if ns_rec is None:
+                return _err(404, "ResourceNotFound", f"Namespace '{chain[1]}' not found.")
+            if (ns_rid + "/networkRuleSets/default").lower() not in self.state:
+                return _ok({"id": ns_rid + "/networkRuleSets/default", "name": "default",
+                            "type": "Microsoft.ServiceBus/namespaces/networkRuleSets",
+                            "properties": {"publicNetworkAccess": (ns_rec.get("properties") or {}).get("publicNetworkAccess") or "Enabled",
+                                           "defaultAction": "Allow", "trustedServiceAccessEnabled": False,
+                                           "ipRules": [], "virtualNetworkRules": []}})
 
         # Microsoft.Authorization/locks scoped directly to the RESOURCE GROUP (or, with no
         # resourceGroups segment, the SUBSCRIPTION) itself — not a resource inside it:

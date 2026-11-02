@@ -522,6 +522,14 @@ def _dispatch_azure(service: str, r: AwsWireRouter, method: str, path: str, quer
                     days = acr_retention_days(r.az_arm.state, reg0)
                     if days is not None:
                         kwargs["retention_days"] = days
+            if service == "azure_servicebus":
+                from core.azure_arm_core import servicebus_network_denied
+                nsn = {str(k).lower(): v for k, v in (headers or {}).items()}.get("x-vyomi-namespace", "")
+                if nsn and servicebus_network_denied(r.az_arm.state, nsn):
+                    import json as _json
+                    return {"status": 403, "headers": {"content-type": "application/json"},
+                            "body": _json.dumps({"error": {"code": "Forbidden",
+                                "message": f"40301: Public network access is disabled or blocked by the firewall on namespace '{nsn}'. Connect through a private endpoint."}}).encode()}
             resp = mod.dispatch(st, method, path, query or {}, headers or {}, body or b"", **kwargs)
             hdrs = dict(resp.headers or {})
             if resp.media_type and not any(k.lower() == "content-type" for k in hdrs):

@@ -22,6 +22,7 @@ const fmtSize = (mb) => (mb >= 1024 && mb % 1024 === 0 ? `${mb / 1024} GB` : `${
 export default function QueueBlade({ params }) {
   const { rg, name, queue } = params;
   const panel = params.panel || "overview";
+  api.setActiveNamespace(name);
   const q = useAsync(() => api.getQueueArm(rg, name, queue), [rg, name, queue]);
   const self = `#/servicebus/${encodeURIComponent(rg)}/${encodeURIComponent(name)}/queues/${encodeURIComponent(queue)}`;
   const nsHref = `#/servicebus/${encodeURIComponent(rg)}/${encodeURIComponent(name)}/queues`;

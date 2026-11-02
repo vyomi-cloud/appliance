@@ -215,7 +215,7 @@ from core import azure_table_core as az_table
 from core.azure_table_core import AzureTableStore
 from core.azure_arm_core import (AzureArm, keyvault_network_denied, keyvault_access_denied,
                                   classify_keyvault_operation, CALLER_PRINCIPAL_ID,
-                                  acr_network_denied, acr_retention_days)
+                                  acr_network_denied, acr_retention_days, servicebus_network_denied)
 from core import azure_servicebus_core as az_sb
 from core import eventbridge_core as events
 from core import scheduler_core as sched
@@ -1101,6 +1101,16 @@ class AwsWireRouter:
                 # managementPolicies/default) — the single source of truth the Configuration/
                 # CORS/Lifecycle/Static website panels already write through ARM.
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), arm_state=self.az_arm.state)
+            elif svc == "az-servicebus":
+                # azure.servicebus.namespace.networking: publicNetworkAccess Disabled / default
+                # network rule set Deny rejects the data plane. The console sends
+                # `x-vyomi-namespace` (servicebus/api.js setActiveNamespace).
+                nsn = lheaders.get("x-vyomi-namespace", "")
+                if nsn and servicebus_network_denied(self.az_arm.state, nsn):
+                    body_json = json.dumps({"error": {"code": "Forbidden",
+                        "message": f"40301: Public network access is disabled or blocked by the firewall on namespace '{nsn}'. Connect through a private endpoint."}}).encode()
+                    return {"status": 403, "headers": {"content-type": "application/json"}, "body": body_json}
+                r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body))
             elif svc == "az-acr":
                 # Same registry-scoped networking/retention enforcement as the offline substrate
                 # (core/wire_ingress.py) — see azure.acr.networking / azure.acr.retention. The

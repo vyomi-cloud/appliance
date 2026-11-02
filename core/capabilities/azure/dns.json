@@ -63,16 +63,18 @@
  },
  "azure.dns.export_template": {
   "title": "Export template",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "ARM/Bicep/Terraform template export for a DNS zone is not built."
-  ]
+   "ARM, Bicep and Terraform (azapi) text is generated in the console from the zone's real properties and its record sets (the SOA and apex NS record sets are zone-managed and omitted). Download saves the ARM JSON; Add to library, Deploy and Visualize template are not offered."
+  ],
+  "tests": ["tests/conformance/test_azure_dns_core.py"]
  },
  "azure.dns.diagnose": {
   "title": "Diagnose and solve problems",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "The guided DNS diagnostic tiles are not modelled."
-  ]
+   "Health tiles (delegation, apex NS/SOA, CNAME conflicts, TTLs, empty record sets, record-set quota, private-zone links) are computed from the zone's own state. Azure's proprietary guided troubleshooters and live query-log analysis are not modelled."
+  ],
+  "tests": ["tests/conformance/test_azure_dns_core.py"]
  }
 }

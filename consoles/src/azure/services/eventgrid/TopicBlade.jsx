@@ -19,6 +19,7 @@ import { CapabilityContainer } from "../../kit/Capability.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
 import ResourceBlade from "../../kit/ResourceBlade.jsx";
 import { downloadCsv, Essentials, fmtDate, Glyph, InfoBar, KV, Loading, ErrorBar, NotSimulated, NotSimulatedContainer } from "../../kit/common.jsx";
+import { convertTemplate } from "../../kit/templateConvert.js";
 import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 import { TagRows } from "./TagRows.jsx";
@@ -531,7 +532,7 @@ function ExportTemplate({ t }) {
       <section className="vy-section" style={{ marginTop: 12 }}><h3>Template</h3>
         <Checkbox label="Include parameters" checked={params} onChange={(_, d) => setParams(!!d.checked)} />
         {tab === "arm" && <Textarea readOnly value={text} style={{ width: "100%", minHeight: 320, fontFamily: "monospace" }} />}
-        {tab !== "arm" && <NotSimulatedContainer feature={`${tab === "bicep" ? "Bicep" : "Terraform"} template export`} />}
+        {tab !== "arm" && <Textarea readOnly aria-label={`${tab} template`} value={convertTemplate(tab, template)} style={{ width: "100%", minHeight: 320, fontFamily: "monospace" }} />}
       </section>
     </>
   );

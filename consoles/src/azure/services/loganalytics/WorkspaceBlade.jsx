@@ -19,6 +19,7 @@ import BrowseGrid from "../../kit/BrowseGrid.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
 import ResourceBlade from "../../kit/ResourceBlade.jsx";
 import { Essentials, ErrorBar, Glyph, KV, Loading, NotSimulated, NotSimulatedContainer, downloadCsv, fmtDate } from "../../kit/common.jsx";
+import { convertTemplate } from "../../kit/templateConvert.js";
 import ResourceIam from "../../kit/ResourceIam.jsx";
 import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
@@ -762,7 +763,7 @@ function ExportTemplate({ a }) {
       <CapabilityContainer id="azure.loganalytics.workspace.exporttemplate" title="Template">
         <Checkbox label="Include parameters" checked={params} onChange={(_, d) => setParams(!!d.checked)} />
         {tab === "arm" && <Textarea readOnly value={text} style={{ width: "100%", minHeight: 320, fontFamily: "monospace" }} />}
-        {tab !== "arm" && <NotSimulatedContainer feature={`${tab === "bicep" ? "Bicep" : "Terraform"} template export`} />}
+        {tab !== "arm" && <Textarea readOnly aria-label={`${tab} template`} value={convertTemplate(tab, template)} style={{ width: "100%", minHeight: 320, fontFamily: "monospace" }} />}
       </CapabilityContainer>
     </>
   );

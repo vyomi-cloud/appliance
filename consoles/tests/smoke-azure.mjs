@@ -1323,6 +1323,20 @@ try {
   await page.getByRole("link", { name: SBQ, exact: true }).waitFor({ state: "detached", timeout: 10000 });
   const sbQGone = await arm("GET", `${sbArm}/queues/${SBQ}`);
   check("UI delete queue → ARM GET 404", sbQGone.status === 404, `HTTP ${sbQGone.status}`);
+  // ── Service Bus Networking: Disabled is stored over ARM AND enforced on the data plane ──
+  await page.goto(UI + `#/servicebus/${RG}/${SBNS}/networking`);
+  await page.getByRole("radio", { name: "Disabled" }).click();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await page.waitForTimeout(800);
+  const sbRs = await arm("GET", `${sbArm}/networkRuleSets/default`);
+  check("Service Bus networking Disabled → ARM networkRuleSets/default", sbRs.status === 200 && JSON.parse(sbRs.text).properties.publicNetworkAccess === "Disabled", sbRs.text);
+  const sbBlocked = await wire(`/${SBT2}`, { headers: { "x-vyomi-namespace": SBNS } });
+  check("Service Bus data plane rejects a Disabled namespace (403)", sbBlocked.status === 403, `HTTP ${sbBlocked.status}`);
+  await page.getByRole("radio", { name: "All networks" }).click();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await page.waitForTimeout(800);
+  const sbOpen = await wire(`/${SBT2}`, { headers: { "x-vyomi-namespace": SBNS } });
+  check("Service Bus data plane admits the namespace again", sbOpen.status !== 403, `HTTP ${sbOpen.status}`);
   // ── Kubernetes service created through the wizard → visible over native ARM ───────────
   await page.goto(UI + "#/aks/create");
   await page.getByLabel("Kubernetes cluster name", { exact: true }).fill(AKS);
@@ -2748,6 +2762,18 @@ try {
   const dnsRecGet = await armDns("GET", `/resourceGroups/${DEFAULT_RG}/providers/Microsoft.Network/dnsZones/${DNSZONE}/A/${DNSREC}`);
   check("UI add A record set → visible over native ARM", dnsRecGet.status === 200 && JSON.parse(dnsRecGet.text).properties?.ARecords?.[0]?.ipv4Address === "10.20.30.40", dnsRecGet.text);
   await shot("34-dns-zone-recordsets");
+
+  // ── Export template (ARM/Bicep/Terraform) + Diagnose tiles, generated from the zone's state ──
+  await openPanel("Export template");
+  await page.getByRole("tab", { name: "Bicep" }).click();
+  const dnsBicep = await page.getByLabel("bicep template").inputValue();
+  check("DNS export template Bicep carries the zone + record set", dnsBicep.includes("Microsoft.Network/dnszones@") && dnsBicep.includes(DNSREC) && dnsBicep.includes("10.20.30.40"), dnsBicep.slice(0, 200));
+  await page.getByRole("tab", { name: "Terraform" }).click();
+  const dnsTf = await page.getByLabel("terraform template").inputValue();
+  check("DNS export template Terraform is azapi HCL", dnsTf.includes('resource "azapi_resource"') && dnsTf.includes(DNSREC), dnsTf.slice(0, 200));
+  await openPanel("Diagnose and solve problems");
+  await page.locator('[data-diag="apexns"][data-status="ok"]').waitFor({ timeout: 10000 });
+  check("DNS diagnose tiles render health from zone state", (await page.locator("[data-diag]").count()) >= 8);
 
   // ── Lock created through the UI, scoped to this zone → visible over native ARM ─────────
   await openPanel("Locks");

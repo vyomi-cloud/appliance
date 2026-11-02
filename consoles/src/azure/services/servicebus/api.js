@@ -146,12 +146,17 @@ export function namespaceArmBody(f) {
 // Vyomi's Service Bus data plane (core/azure_servicebus_core.py) is scoped by entity name
 // only, like the AWS lens's shared KMS/Secrets Manager stores — two namespaces sharing a
 // queue name would share its backlog in this simulator. Acceptable for a single-tenant sim.
+// The data plane carries no namespace identity; the blade tells the wire router which namespace
+// it is showing so that namespace's Networking settings are ENFORCED (x-vyomi-namespace).
+let activeNamespace = "";
+export const setActiveNamespace = (name) => { activeNamespace = name || ""; };
+
 async function sbFetch(method, path, { headers = {}, body } = {}) {
-  const res = await fetch(`${WIRE_BASE}${path}`, { method, headers, body });
+  const res = await fetch(`${WIRE_BASE}${path}`, { method, headers: { ...headers, ...(activeNamespace ? { "x-vyomi-namespace": activeNamespace } : {}) }, body });
   const text = res.status === 204 ? "" : await res.text();
   if (!res.ok) {
     let detail = text;
-    try { detail = JSON.parse(text).detail || text; } catch { /* not JSON */ }
+    try { const j = JSON.parse(text); detail = j.detail || j.error?.message || text; } catch { /* not JSON */ }
     throw new WireError(res.status, `HTTP${res.status}`, detail, text);
   }
   return text ? JSON.parse(text) : {};
@@ -244,3 +249,13 @@ export const pairGeoRecovery = (rg, name, alias, partnerNamespaceId) =>
   restJson("PUT", drPath(rg, name, alias), { query: { "api-version": DR_API }, body: { properties: { partnerNamespace: partnerNamespaceId } } });
 export const breakGeoRecoveryPairing = (rg, name, alias) => restJson("DELETE", drPath(rg, name, alias), { query: { "api-version": DR_API } });
 export const failoverGeoRecovery = (rg, name, alias) => restJson("POST", `${drPath(rg, name, alias)}/failOver`, { query: { "api-version": DR_API }, body: {} });
+
+// ── Networking: namespace publicNetworkAccess + networkRuleSets/default + private endpoint connections ──
+const NET_API = "2022-10-01-preview";
+const nrsPath = (rg, ns) => `${ARM.path(rg, ns)}/networkRuleSets/default`;
+export const getNetworkRuleSet = (rg, ns) => restJson("GET", nrsPath(rg, ns), { query: { "api-version": NET_API } });
+export const putNetworkRuleSet = (rg, ns, properties) => restJson("PUT", nrsPath(rg, ns), { query: { "api-version": NET_API }, body: { properties } });
+const pecPath = (rg, ns, name) => `${ARM.path(rg, ns)}/privateEndpointConnections${name ? `/${encodeURIComponent(name)}` : ""}`;
+export const listPrivateEndpointConnections = async (rg, ns) => (await restJson("GET", pecPath(rg, ns), { query: { "api-version": NET_API } })).value || [];
+export const putPrivateEndpointConnection = (rg, ns, name, properties) => restJson("PUT", pecPath(rg, ns, name), { query: { "api-version": NET_API }, body: { properties } });
+export const deletePrivateEndpointConnection = (rg, ns, name) => restJson("DELETE", pecPath(rg, ns, name), { query: { "api-version": NET_API } });

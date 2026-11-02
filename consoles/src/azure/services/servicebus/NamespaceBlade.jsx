@@ -19,9 +19,11 @@ import BrowseGrid from "../../kit/BrowseGrid.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
 import ResourceBlade from "../../kit/ResourceBlade.jsx";
 import { Essentials, ErrorBar, Glyph, KV, Loading, NotSimulated, NotSimulatedContainer, downloadCsv, fmtDate } from "../../kit/common.jsx";
+import { convertTemplate } from "../../kit/templateConvert.js";
 import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
+import Networking from "./Networking.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -74,6 +76,7 @@ const CAP_FOR_PANEL = {
 export default function NamespaceBlade({ params, query }) {
   const { rg, name } = params;
   const panel = params.panel || "overview";
+  api.setActiveNamespace(name);
   const ns = useAsync(() => api.getNamespace(rg, name), [rg, name]);
   const self = `#/servicebus/${encodeURIComponent(rg)}/${encodeURIComponent(name)}`;
   useEffect(() => { if (ns.data) remember({ name, type: "Service Bus namespace", href: self }); }, [!!ns.data, self]);
@@ -100,6 +103,7 @@ export default function NamespaceBlade({ params, query }) {
       alerts: () => <Alerts a={a} />,
       logs: () => <LogsPanel a={a} />,
       georecovery: () => <GeoRecovery a={a} reload={reload} />,
+      networking: () => <Networking a={a} reload={reload} />,
     }[panel];
     body = P ? P() : <CapabilityContainer id={CAP_FOR_PANEL[panel] || "azure.servicebus.namespace.tools"} title={`${a.name} | ${LABEL[panel] || panel}`} />;
   }
@@ -950,7 +954,7 @@ function ExportTemplate({ a }) {
       <CapabilityContainer id="azure.servicebus.namespace.exporttemplate" title="Template">
         <Checkbox label="Include parameters" checked={params} onChange={(_, d) => setParams(!!d.checked)} />
         {tab === "arm" && <Textarea readOnly value={text} style={{ width: "100%", minHeight: 320, fontFamily: "monospace" }} />}
-        {tab !== "arm" && <NotSimulatedContainer feature={`${tab === "bicep" ? "Bicep" : "Terraform"} template export`} />}
+        {tab !== "arm" && <Textarea readOnly aria-label={`${tab} template`} value={convertTemplate(tab, template)} style={{ width: "100%", minHeight: 320, fontFamily: "monospace" }} />}
       </CapabilityContainer>
     </>
   );
