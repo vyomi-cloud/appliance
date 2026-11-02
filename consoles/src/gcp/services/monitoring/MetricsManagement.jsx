@@ -8,6 +8,7 @@ import { PageHeader } from "../../kit/common.jsx";
 import { CapabilityBadge, CapabilityContainer } from "../../kit/Capability.jsx";
 import { useProject } from "../../project.js";
 import * as api from "./api.js";
+import ScrollTable from "../../kit/ScrollTable.jsx";
 
 export default function MetricsManagement() {
   const project = useProject();
@@ -35,7 +36,7 @@ export default function MetricsManagement() {
             <Button size="small" disabled>Exclude metric</Button>
           </Stack>
           <Paper variant="outlined" sx={{ borderRadius: 2, overflow: "hidden" }}>
-          <Table size="small">
+          <ScrollTable size="small">
             <TableHead>
               <TableRow>
                 <TableCell>Metric</TableCell>
@@ -68,7 +69,7 @@ export default function MetricsManagement() {
                 </TableRow>
               )) : <TableRow><TableCell colSpan={11}><Typography variant="body2" color="text.secondary">No rows to display</Typography></TableCell></TableRow>}
             </TableBody>
-          </Table>
+          </ScrollTable>
           </Paper>
         </Stack>
       )}

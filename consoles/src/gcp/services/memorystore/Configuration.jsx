@@ -13,6 +13,7 @@ import { useNotify } from "../../../common/notify.jsx";
 import { ErrorAlert, KeyValue, Section } from "../../kit/common.jsx";
 import InstanceNav from "./InstanceNav.jsx";
 import * as api from "./api.js";
+import ScrollTable from "../../kit/ScrollTable.jsx";
 
 export default function Configuration({ params }) {
   const { location: loc, id } = params;
@@ -31,12 +32,12 @@ export default function Configuration({ params }) {
       {i && (
         <Stack spacing={2}>
           <Section title="Redis configuration parameters">
-            <Table size="small" aria-label="Redis configuration parameters">
+            <ScrollTable size="small" aria-label="Redis configuration parameters">
               <TableHead><TableRow><TableCell>Parameter</TableCell><TableCell>Value</TableCell></TableRow></TableHead>
               <TableBody>
                 {Object.entries(i.redisConfigs || {}).map(([k, v]) => <TableRow key={k}><TableCell>{k}</TableCell><TableCell>{v}</TableCell></TableRow>)}
               </TableBody>
-            </Table>
+            </ScrollTable>
           </Section>
           <Section title="Data persistence">
             <KeyValue items={[

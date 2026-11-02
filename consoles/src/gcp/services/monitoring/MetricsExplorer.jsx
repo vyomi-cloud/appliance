@@ -10,6 +10,7 @@ import { useNotify } from "../../../common/notify.jsx";
 import { ErrorAlert, PageHeader, Section } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import * as api from "./api.js";
+import ScrollTable from "../../kit/ScrollTable.jsx";
 
 const WIDGETS = ["Line chart", "Stacked bar chart", "Heatmap chart", "Table", "Scorecard", "Text", "Alert chart", "Logs panel"];
 const ANALYSIS_MODES = ["None", "Rate of change", "Cumulative"];
@@ -138,7 +139,7 @@ export default function MetricsExplorer() {
             {!results ? <Typography variant="body2" color="text.secondary">Run a query to see results.</Typography> : !seriesRows.length ? (
               <Typography variant="body2" color="text.secondary">No time series matched this query.</Typography>
             ) : (
-              <Table size="small">
+              <ScrollTable size="small">
                 <TableHead><TableRow>
                   <TableCell>Series</TableCell>
                   {(view === "Chart" || view === "Both") && <TableCell>Chart</TableCell>}
@@ -155,7 +156,7 @@ export default function MetricsExplorer() {
                     </TableRow>
                   ))}
                 </TableBody>
-              </Table>
+              </ScrollTable>
             )}
           </Stack>
         </Section>

@@ -8,6 +8,7 @@ import { PageHeader, Section } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { useProject } from "../../project.js";
 import * as api from "./api.js";
+import ScrollTable from "../../kit/ScrollTable.jsx";
 
 export default function ErrorReporting() {
   const project = useProject();
@@ -18,7 +19,7 @@ export default function ErrorReporting() {
       <PageHeader title="Error reporting" />
       <CapabilityContainer id="gcp.monitoring.error-reporting" title="Error groups">
         <Section title="Recent errors" noPad>
-          <Table size="small">
+          <ScrollTable size="small">
             <TableHead><TableRow><TableCell>Timestamp</TableCell><TableCell>Log</TableCell><TableCell>Message</TableCell></TableRow></TableHead>
             <TableBody>
               {entries.length ? entries.map((e, i) => (
@@ -29,7 +30,7 @@ export default function ErrorReporting() {
                 </TableRow>
               )) : <TableRow><TableCell colSpan={3}><Typography variant="body2" color="text.secondary">No ERROR-severity log entries yet.</Typography></TableCell></TableRow>}
             </TableBody>
-          </Table>
+          </ScrollTable>
         </Section>
       </CapabilityContainer>
     </>

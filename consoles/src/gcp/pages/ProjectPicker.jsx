@@ -7,6 +7,7 @@ import {
 } from "@mui/material";
 import { knownProjects, setProject } from "../project.js";
 import { NotSimulated } from "../kit/common.jsx";
+import ScrollTable from "../kit/ScrollTable.jsx";
 
 const VALID = /^[a-z][a-z0-9-]{4,28}[a-z0-9]$/;
 
@@ -22,7 +23,7 @@ export default function ProjectPicker({ open, onClose, project }) {
       <DialogContent>
         <Stack spacing={2}>
           <TextField placeholder="Search projects and folders" value={q} onChange={(e) => setQ(e.target.value)} inputProps={{ "aria-label": "Search projects" }} />
-          <Table size="small">
+          <ScrollTable size="small">
             <TableHead><TableRow><TableCell padding="checkbox" /><TableCell>Name</TableCell><TableCell>ID</TableCell></TableRow></TableHead>
             <TableBody>
               {list.map((p) => (
@@ -33,7 +34,7 @@ export default function ProjectPicker({ open, onClose, project }) {
                 </TableRow>
               ))}
             </TableBody>
-          </Table>
+          </ScrollTable>
           <Stack direction="row" spacing={1} alignItems="flex-start">
             <TextField label="Use another project ID" value={add} onChange={(e) => setAdd(e.target.value.trim())}
               error={!!add && !VALID.test(add)} helperText={add && !VALID.test(add) ? "6–30 characters: lowercase letters, digits, hyphens; start with a letter." : " "} />

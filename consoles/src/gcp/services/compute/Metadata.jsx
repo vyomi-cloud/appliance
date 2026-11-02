@@ -14,6 +14,7 @@ import { useNotify } from "../../../common/notify.jsx";
 import { ErrorAlert, PageHeader } from "../../kit/common.jsx";
 import { useProject } from "../../project.js";
 import * as api from "./api.js";
+import ScrollTable from "../../kit/ScrollTable.jsx";
 
 export default function Metadata() {
   const project = useProject();
@@ -56,24 +57,24 @@ export default function Metadata() {
       </Tabs>
       {tab === "metadata" && (
         <Paper variant="outlined">
-          <Table size="small">
+          <ScrollTable size="small">
             <TableHead><TableRow><TableCell>Key</TableCell><TableCell>Value</TableCell></TableRow></TableHead>
             <TableBody>
               {metaItems.map((i) => <TableRow key={i.key}><TableCell>{i.key}</TableCell><TableCell sx={{ wordBreak: "break-word" }}>{i.value}</TableCell></TableRow>)}
               {!loading && !metaItems.length && <TableRow><TableCell colSpan={2}><Typography variant="body2" color="text.secondary">No custom metadata.</Typography></TableCell></TableRow>}
             </TableBody>
-          </Table>
+          </ScrollTable>
         </Paper>
       )}
       {tab === "ssh" && (
         <Paper variant="outlined">
-          <Table size="small">
+          <ScrollTable size="small">
             <TableHead><TableRow><TableCell>Key</TableCell><TableCell>Value</TableCell></TableRow></TableHead>
             <TableBody>
               {sshLines.map((r, i) => <TableRow key={i}><TableCell>{r.user}</TableCell><TableCell sx={{ wordBreak: "break-word" }}>{r.key}</TableCell></TableRow>)}
               {!loading && !sshLines.length && <TableRow><TableCell colSpan={2}><Typography variant="body2" color="text.secondary">No project-wide SSH keys.</Typography></TableCell></TableRow>}
             </TableBody>
-          </Table>
+          </ScrollTable>
         </Paper>
       )}
 

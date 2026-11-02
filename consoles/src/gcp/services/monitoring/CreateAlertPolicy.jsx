@@ -16,6 +16,7 @@ import { useNotify } from "../../../common/notify.jsx";
 import { ErrorAlert, PageHeader, Section, SECTION_TABLE_BLEED } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import * as api from "./api.js";
+import ScrollTable from "../../kit/ScrollTable.jsx";
 
 const STEPS = ["New condition", "Configure trigger", "Notifications and name", "Review alert"];
 const AUTOCLOSE = [["30 minutes", 1800], ["1 hour", 3600], ["1 day", 86400], ["1 week", 604800]];
@@ -206,13 +207,13 @@ export default function CreateAlertPolicy() {
             <Box><Typography variant="body2" color="text.secondary">Severity</Typography><Typography>{severity}</Typography></Box>
             <Box>
               <Typography variant="body2" sx={{ mb: 0.5 }}>Notification channels</Typography>
-              <Table size="small" sx={SECTION_TABLE_BLEED}>
+              <ScrollTable size="small" sx={SECTION_TABLE_BLEED}>
                 <TableHead><TableRow><TableCell>Display name</TableCell><TableCell>Type</TableCell></TableRow></TableHead>
                 <TableBody>
                   {useChannel && channelIds.length ? channelIds.map((id) => { const c = channels.find((x) => x.name === id); return <TableRow key={id}><TableCell>{api.channelLabel(c || {})}</TableCell><TableCell>{c?.type}</TableCell></TableRow>; })
                     : <TableRow><TableCell colSpan={2}><Typography variant="body2" color="text.secondary">No notification channels</Typography></TableCell></TableRow>}
                 </TableBody>
-              </Table>
+              </ScrollTable>
             </Box>
             <Box><Typography variant="body2" color="text.secondary">Documentation</Typography><Typography>{documentation || "No documentation"}</Typography></Box>
           </Stack>

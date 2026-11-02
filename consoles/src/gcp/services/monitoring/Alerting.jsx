@@ -7,6 +7,7 @@ import { PageHeader, Section } from "../../kit/common.jsx";
 import { CapabilityBadge } from "../../kit/Capability.jsx";
 import { useProject } from "../../project.js";
 import * as api from "./api.js";
+import ScrollTable from "../../kit/ScrollTable.jsx";
 
 const SEVERITY_LABEL = { CRITICAL: "Critical", ERROR: "Error", WARNING: "Warning" };
 
@@ -43,7 +44,7 @@ export default function Alerting() {
 
         <Section title={<Stack component="span" direction="row" spacing={1} alignItems="center"><span>Alerts</span><CapabilityBadge id="gcp.monitoring.incidents" /></Stack>}
           actions={<Button size="small" onClick={() => setShowClosed((v) => !v)}>{showClosed ? "Hide closed alerts" : "Show closed alerts"}</Button>}>
-          <Table size="small">
+          <ScrollTable size="small">
             <TableHead><TableRow><TableCell>State</TableCell><TableCell>Severity</TableCell><TableCell>Policy name</TableCell><TableCell>Alert summary</TableCell><TableCell>Opened</TableCell></TableRow></TableHead>
             <TableBody>
               {visibleIncidents.length ? visibleIncidents.map((i) => (
@@ -56,12 +57,12 @@ export default function Alerting() {
                 </TableRow>
               )) : <TableRow><TableCell colSpan={5}><Typography variant="body2" color="text.secondary">No rows to display</Typography></TableCell></TableRow>}
             </TableBody>
-          </Table>
+          </ScrollTable>
         </Section>
 
         <Section title="Snoozes" actions={<Button size="small" href="#/monitoring/alerting/snooze/create">Create snooze</Button>}>
           <FormControlLabel control={<Switch size="small" checked={showPast} onChange={(e) => setShowPast(e.target.checked)} />} label="Show past snoozes" />
-          <Table size="small">
+          <ScrollTable size="small">
             <TableHead><TableRow><TableCell>State</TableCell><TableCell>Name</TableCell><TableCell>Start time</TableCell><TableCell>End time</TableCell></TableRow></TableHead>
             <TableBody>
               {visibleSnoozes.length ? visibleSnoozes.map((s) => (
@@ -73,11 +74,11 @@ export default function Alerting() {
                 </TableRow>
               )) : <TableRow><TableCell colSpan={4}><Typography variant="body2" color="text.secondary">No rows to display</Typography></TableCell></TableRow>}
             </TableBody>
-          </Table>
+          </ScrollTable>
         </Section>
 
         <Section title="Policies" actions={<Button size="small" href="#/monitoring/alerting/policies/create">Create policy</Button>}>
-          <Table size="small">
+          <ScrollTable size="small">
             <TableHead><TableRow><TableCell>Display name</TableCell><TableCell>Type</TableCell><TableCell>Last modified on</TableCell><TableCell>Labels</TableCell><TableCell>Enabled</TableCell></TableRow></TableHead>
             <TableBody>
               {policies.length ? policies.map((p) => (
@@ -90,7 +91,7 @@ export default function Alerting() {
                 </TableRow>
               )) : <TableRow><TableCell colSpan={5}><Typography variant="body2" color="text.secondary">No policies yet.</Typography></TableCell></TableRow>}
             </TableBody>
-          </Table>
+          </ScrollTable>
         </Section>
       </Stack>
     </>

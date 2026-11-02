@@ -75,8 +75,8 @@ export default function ResourceTable({
         </Menu>
       </Stack>
       {loading && <LinearProgress sx={{ height: 2 }} />}
-      <TableContainer>
-        <Table size={dense ? "small" : "medium"} stickyHeader>
+      <TableContainer sx={{ maxHeight: "calc(100vh - 300px)", minHeight: 160, overflow: "auto" }} tabIndex={0}>
+        <Table size={dense ? "small" : "medium"} stickyHeader sx={{ minWidth: 640 }}>
           <TableHead>
             <TableRow>
               {selectable && (

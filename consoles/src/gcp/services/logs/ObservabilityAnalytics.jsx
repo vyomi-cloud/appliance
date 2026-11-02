@@ -10,6 +10,7 @@ import DeleteIcon from "@mui/icons-material/esm/Delete.js";
 import { useAsync } from "../../../common/useAsync.js";
 import { ErrorAlert, fmtDate, PageHeader, Section } from "../../kit/common.jsx";
 import * as api from "./api.js";
+import ScrollTable from "../../kit/ScrollTable.jsx";
 
 const COLUMNS = [["timestamp", "Timestamp"], ["severity", "Severity"], ["logName", "Log name"], ["textPayload", "Payload"], ["resourceType", "Resource type"]];
 const value = (en, col) => (col === "resourceType" ? en.resource?.type : col === "textPayload" ? api.summary(en) : en[col]) ?? "";
@@ -119,7 +120,7 @@ export default function ObservabilityAnalytics() {
 
         <Section title="Results">
           <ErrorAlert error={entries.error} title="Failed to load log entries" />
-          <Table size="small">
+          <ScrollTable size="small">
             <TableHead><TableRow>{shownCols.map((c) => <TableCell key={c}>{COLUMNS.find(([id]) => id === c)?.[1] || c}</TableCell>)}</TableRow></TableHead>
             <TableBody>
               {shownRows.map((en, i) => (
@@ -127,7 +128,7 @@ export default function ObservabilityAnalytics() {
               ))}
               {!shownRows.length && <TableRow><TableCell colSpan={shownCols.length || 1}><Typography variant="body2" color="text.secondary">No rows to display</Typography></TableCell></TableRow>}
             </TableBody>
-          </Table>
+          </ScrollTable>
         </Section>
       </Stack>
     </>

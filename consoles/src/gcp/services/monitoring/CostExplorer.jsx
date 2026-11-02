@@ -9,6 +9,7 @@ import { PageHeader } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { useProject } from "../../project.js";
 import * as api from "./api.js";
+import ScrollTable from "../../kit/ScrollTable.jsx";
 
 export default function CostExplorer() {
   const project = useProject();
@@ -32,14 +33,14 @@ export default function CostExplorer() {
         {!data ? <Typography variant="body2" color="text.secondary">Loading…</Typography>
           : rows.length === 0 ? <Typography variant="body2" color="text.secondary">No billable resources in this project yet.</Typography>
           : (
-            <Table size="small">
+            <ScrollTable size="small">
               <TableHead><TableRow><TableCell>Service</TableCell><TableCell align="right">Cost</TableCell></TableRow></TableHead>
               <TableBody>
                 {rows.map((r) => (
                   <TableRow key={r.service}><TableCell>{r.service}</TableCell><TableCell align="right">${r.cost.toFixed(2)}</TableCell></TableRow>
                 ))}
               </TableBody>
-            </Table>
+            </ScrollTable>
           )}
       </CapabilityContainer>
     </Box>

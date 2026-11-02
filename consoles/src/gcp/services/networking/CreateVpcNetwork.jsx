@@ -189,8 +189,8 @@ export default function CreateVpcNetwork() {
 
       <Step n={3} title="Firewall rules">
         <Typography variant="body2" color="text.secondary">IPv4 firewall rules — select the default rules to create alongside this network.</Typography>
-        <TableContainer component={Paper} variant="outlined" sx={{ maxWidth: 880, borderRadius: 2 }}>
-          <Table size="small">
+        <TableContainer component={Paper} variant="outlined" sx={{ maxWidth: 880, borderRadius: 2, maxHeight: "min(70vh, 640px)", overflow: "auto" }}>
+          <Table size="small" stickyHeader>
             <TableHead>
               <TableRow>
                 <TableCell padding="checkbox" />

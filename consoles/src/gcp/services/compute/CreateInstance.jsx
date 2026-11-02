@@ -14,6 +14,7 @@ import { ErrorAlert, NotSimulated, PageHeader } from "../../kit/common.jsx";
 import { hashHref } from "../../link.jsx";
 import { useProject } from "../../project.js";
 import * as api from "./api.js";
+import ScrollTable from "../../kit/ScrollTable.jsx";
 
 function Step({ n, title, children }) {
   return (
@@ -153,7 +154,7 @@ export default function CreateInstance() {
         </Sub>
         <Sub title="Series">
           <Paper variant="outlined">
-            <Table size="small">
+            <ScrollTable size="small">
               <TableHead><TableRow><TableCell>Series</TableCell><TableCell>Description</TableCell><TableCell>vCPUs</TableCell><TableCell>Memory</TableCell><TableCell>CPU Platform</TableCell></TableRow></TableHead>
               <TableBody>
                 {[...new Set(series.map((m) => api.seriesLabel(m.name.split("-")[0])))].map((s) => (
@@ -161,7 +162,7 @@ export default function CreateInstance() {
                 ))}
                 {!series.length && <TableRow><TableCell colSpan={5}><Typography variant="body2" color="text.secondary">No series available for this family in {zone}.</Typography></TableCell></TableRow>}
               </TableBody>
-            </Table>
+            </ScrollTable>
           </Paper>
         </Sub>
         <FormControl sx={{ minWidth: 420 }}>
@@ -216,10 +217,10 @@ export default function CreateInstance() {
         <FormControlLabel control={<Checkbox size="small" checked={ipForward} onChange={(e) => setIpForward(e.target.checked)} />} label="IP forwarding" />
         <Sub title="Network interfaces">
           <Paper variant="outlined">
-            <Table size="small">
+            <ScrollTable size="small">
               <TableHead><TableRow><TableCell>Network</TableCell><TableCell>Subnetwork</TableCell><TableCell>IP stack type</TableCell><TableCell>Primary internal IPv4 address</TableCell><TableCell>External IPv4 address</TableCell></TableRow></TableHead>
               <TableBody><TableRow><TableCell>default</TableCell><TableCell>default</TableCell><TableCell>IPv4 (single-stack)</TableCell><TableCell>Ephemeral (auto)</TableCell><TableCell>Ephemeral (auto)</TableCell></TableRow></TableBody>
-            </Table>
+            </ScrollTable>
           </Paper>
           <NotSimulated compact feature="Add a network interface" note="Only a single default network interface is modeled." />
         </Sub>
