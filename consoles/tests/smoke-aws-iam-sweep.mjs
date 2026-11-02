@@ -60,7 +60,7 @@ await shot("iam-dashboard");
 
 // ── 2. Account settings: password policy + STS are real
 await go("#/iam/account-settings", "Account settings");
-check("Password policy + STS panels are real (only the 2 multi-account panels carry the badge)", (await badges()) === 2 && (await body()).includes("Global endpoint session tokens"));
+check("Password policy + STS + centralized root access panels are real (only Role manager carries the badge)", (await badges()) === 1 && (await body()).includes("Global endpoint session tokens"));
 await page.getByRole("button", { name: /Change to version 2 tokens/ }).click();
 await page.getByText("Valid in all AWS Regions (version 2)").waitFor({ timeout: 10000 });
 check("STS token version change persisted (native GetAccountSummary)", (await iam("GetAccountSummary")).text.includes("<key>GlobalEndpointTokenVersion</key><value>2</value>"));
@@ -147,10 +147,10 @@ await page.getByRole("dialog").getByRole("button", { name: "Done" }).click();
 await page.getByText("Never").first().waitFor({ timeout: 10000 });
 check("access key shows 'Never' used until a request is signed with it", true);
 
-// ── 5. Organization activity: honest multi-account gap + real IAM event log
+// ── 5. Organization activity: real organization tree + real IAM event log (sweep 2 covers the Organizations CRUD)
 await go("#/iam/organization-activity", "Organization activity");
 await page.getByRole("cell", { name: "CreateUser", exact: true }).first().waitFor({ timeout: 15000 });
-check("Organization activity: multi-account tree stays an honest gap (1 badge); account IAM event log is real", (await badges()) === 1 && (await body()).includes("Recent IAM activity in this account"));
+check("Organization activity: real organization tree (no badge); account IAM event log is real", (await badges()) === 0 && (await body()).includes("Recent IAM activity in this account"));
 await shot("iam-org-activity");
 
 // ── 6. Delete user from the UI removes its credentials first (as the real console does)

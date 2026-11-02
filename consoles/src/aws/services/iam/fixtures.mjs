@@ -4,6 +4,12 @@
  * protocol params to the "iam" service and returns the parsed XML-as-object body. */
 const Q = (Action, body) => ({ svc: "iam", body: new URLSearchParams({ Action, ...body }).toString(), headers: { "content-type": "application/x-www-form-urlencoded; charset=utf-8" } });
 
+const org = (wire, op, payload = {}) => wire("POST", "/", { svc: "organizations", body: JSON.stringify(payload),
+  headers: { "content-type": "application/x-amz-json-1.1", "x-amz-target": `AWSOrganizationsV20161128.${op}` } });
+const ensureOrg = (wire) => org(wire, "CreateOrganization", { FeatureSet: "ALL" }).catch(() => {});
+const orgPolicy = (wire, name, type) => org(wire, "CreatePolicy", { Name: name, Description: "", Type: type,
+  Content: JSON.stringify({ Version: "2012-10-17", Statement: [{ Effect: "Deny", Action: "s3:DeleteBucket", Resource: "*" }] }) });
+
 async function ensureUser(wire, name) {
   await wire("POST", "/", Q("CreateUser", { UserName: name })).catch(() => {});
 }
@@ -41,13 +47,13 @@ export default {
     return alias;
   },
 
-  // Vyomi-only (core/iam_core.py): Organizations SCP/RCP + account access requests.
-  "live-scp": async (wire, uniq) => {
-    await wire("POST", "/", Q("CreateOrgPolicy", { Name: uniq, Type: "SERVICE_CONTROL_POLICY", Content: JSON.stringify({ Version: "2012-10-17", Statement: [{ Effect: "Deny", Action: "*", Resource: "*" }] }) }));
-    return uniq;
-  },
+  // AWS Organizations (core/organizations_core.py, native JSON 1.1): ensure the organization, then create the policy.
+  "live-scp": async (wire, uniq) => { await ensureOrg(wire); await orgPolicy(wire, uniq, "SERVICE_CONTROL_POLICY"); return uniq; },
   "live-rcp": async (wire, uniq) => {
-    await wire("POST", "/", Q("CreateOrgPolicy", { Name: uniq, Type: "RESOURCE_CONTROL_POLICY", Content: JSON.stringify({ Version: "2012-10-17", Statement: [{ Effect: "Deny", Action: "*", Resource: "*" }] }) }));
+    await ensureOrg(wire);
+    const r = (await org(wire, "ListRoots")).Roots[0];
+    await org(wire, "EnablePolicyType", { RootId: r.Id, PolicyType: "RESOURCE_CONTROL_POLICY" }).catch(() => {});
+    await orgPolicy(wire, uniq, "RESOURCE_CONTROL_POLICY");
     return uniq;
   },
   "live-access-request": async (wire, uniq) => {

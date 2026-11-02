@@ -24,7 +24,7 @@ import ServiceControlPolicyDetail from "./ServiceControlPolicyDetail.jsx";
 import ResourceControlPolicies from "./ResourceControlPolicies.jsx";
 import {
   AssignDelegatedAdministrator, RootAccessManagement, OrganizationActivity, AccountAccessManager,
-} from "./HonestPages.jsx";
+} from "./OrgPages.jsx";
 import AccessAnalyzer from "./AccessAnalyzer.jsx";
 import ResourceAnalysis from "./ResourceAnalysis.jsx";
 import UnusedAccess from "./UnusedAccess.jsx";
@@ -98,6 +98,7 @@ export default {
     { pattern: "/iam/service-control-policies", component: ServiceControlPolicies, crumbs: () => [iamCrumb, { text: "AWS Organizations: Service control policies (SCPs)", href: "#/iam/service-control-policies" }] },
     { pattern: "/iam/service-control-policies/:name", component: ServiceControlPolicyDetail, crumbs: (p) => [iamCrumb, { text: "AWS Organizations: Service control policies (SCPs)", href: "#/iam/service-control-policies" }, { text: p.name, href: `#/iam/service-control-policies/${p.name}` }] },
     { pattern: "/iam/resource-control-policies", component: ResourceControlPolicies, crumbs: () => [iamCrumb, { text: "AWS Organizations: Resource control policies (RCPs)", href: "#/iam/resource-control-policies" }] },
+    { pattern: "/iam/resource-control-policies/:name", component: (props) => <ServiceControlPolicyDetail {...props} type="RESOURCE_CONTROL_POLICY" />, crumbs: (p) => [iamCrumb, { text: "AWS Organizations: Resource control policies (RCPs)", href: "#/iam/resource-control-policies" }, { text: p.name, href: `#/iam/resource-control-policies/${p.name}` }] },
     { pattern: "/iam/account-access-manager", component: AccountAccessManager, crumbs: () => [iamCrumb, { text: "Account access manager", href: "#/iam/account-access-manager" }] },
 
     { pattern: "/iam/access-analyzer", component: AccessAnalyzer, crumbs: () => [iamCrumb, { text: "Access Analyzer", href: "#/iam/access-analyzer" }] },

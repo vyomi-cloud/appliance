@@ -1,6 +1,5 @@
-/* Account settings — Password policy is real (Edit navigates to the edit page). Role
- * manager and Centralized root access sections are AWS-Organizations / multi-account
- * features Vyomi (single account) doesn't model. */
+/* Account settings — Password policy, STS and Centralized root access (real Organizations/IAM APIs)
+ * are real; the Role manager section is a registered gap (iam.organizations.role-manager). */
 import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
 import ContentLayout from "@cloudscape-design/components/content-layout";
@@ -11,6 +10,7 @@ import { useNotify } from "../../../common/notify.jsx";
 import { navigate } from "../../../common/router.js";
 import { ErrorAlert, KeyValue } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
+import { CentralizedRootAccessPanel } from "./OrgPages.jsx";
 import * as api from "./api.js";
 
 const describeOther = (pol) => {
@@ -53,8 +53,8 @@ export default function AccountSettings() {
           ["Password strength", pol ? "Custom" : "IAM default"],
           ["Other requirements", describeOther(pol)],
         ]} />
-        <CapabilityContainer id="iam.organizations" title="Role manager" />
-        <CapabilityContainer id="iam.organizations" title="Centralized root access for member accounts" />
+        <CapabilityContainer id="iam.organizations.role-manager" title="Role manager" />
+        <CentralizedRootAccessPanel />
         <StsPanel />
       </SpaceBetween>
     </ContentLayout>

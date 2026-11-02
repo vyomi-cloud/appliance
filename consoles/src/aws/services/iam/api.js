@@ -1,7 +1,7 @@
 /* IAM over the native Query protocol (form POST, XML response). See core/iam_core.py
  * for the exact action set and XML shapes; awsQuery() in common/wire.js parses the XML
  * response into a plain JS object keyed by `${Action}Response`. */
-import { asList, awsQuery } from "../../../common/wire.js";
+import { asList, awsJson, awsQuery } from "../../../common/wire.js";
 
 const call = (action, params = {}) => awsQuery("iam", action, params);
 
@@ -263,3 +263,50 @@ export async function deleteUserWithCredentials(UserName) {
   await quiet(deleteLoginProfile(UserName));
   await deleteUser(UserName);
 }
+
+
+// ── AWS Organizations (native JSON 1.1 wire, core/organizations_core.py) ─────────────
+const org = (op, payload = {}) => awsJson("organizations", `AWSOrganizationsV20161128.${op}`, payload, { version: "1.1" });
+export const describeOrganization = async () => {
+  try { return (await org("DescribeOrganization")).Organization; }
+  catch (e) { if (e.code === "AWSOrganizationsNotInUseException") return null; throw e; }
+};
+export const createOrganization = async (FeatureSet = "ALL") => (await org("CreateOrganization", { FeatureSet })).Organization;
+export const deleteOrganization = () => org("DeleteOrganization");
+export const listRoots = async () => (await org("ListRoots")).Roots;
+export const enablePolicyType = (RootId, PolicyType) => org("EnablePolicyType", { RootId, PolicyType });
+export const listOUsForParent = async (ParentId) => (await org("ListOrganizationalUnitsForParent", { ParentId })).OrganizationalUnits;
+export const createOU = async (ParentId, Name) => (await org("CreateOrganizationalUnit", { ParentId, Name })).OrganizationalUnit;
+export const renameOU = (OrganizationalUnitId, Name) => org("UpdateOrganizationalUnit", { OrganizationalUnitId, Name });
+export const deleteOU = (OrganizationalUnitId) => org("DeleteOrganizationalUnit", { OrganizationalUnitId });
+export const listAccounts = async () => (await org("ListAccounts")).Accounts;
+export const createAccount = async (Email, AccountName) => (await org("CreateAccount", { Email, AccountName })).CreateAccountStatus;
+export const inviteAccount = async (Id, Type = "ACCOUNT") => (await org("InviteAccountToOrganization", { Target: { Id, Type } })).Handshake;
+export const listHandshakes = async () => (await org("ListHandshakesForOrganization")).Handshakes;
+export const acceptHandshake = (HandshakeId) => org("AcceptHandshake", { HandshakeId });
+export const cancelHandshake = (HandshakeId) => org("CancelHandshake", { HandshakeId });
+export const moveAccount = (AccountId, SourceParentId, DestinationParentId) => org("MoveAccount", { AccountId, SourceParentId, DestinationParentId });
+export const removeAccount = (AccountId) => org("RemoveAccountFromOrganization", { AccountId });
+export const closeAccount = (AccountId) => org("CloseAccount", { AccountId });
+export const listParents = async (ChildId) => (await org("ListParents", { ChildId })).Parents;
+export const orgListPolicies = async (Filter) => (await org("ListPolicies", { Filter })).Policies;
+export const orgDescribePolicy = async (PolicyId) => (await org("DescribePolicy", { PolicyId })).Policy;
+export const orgCreatePolicy = async (Name, Description, Type, Content) => (await org("CreatePolicy", { Name, Description, Type, Content })).Policy;
+export const orgUpdatePolicy = (PolicyId, params) => org("UpdatePolicy", { PolicyId, ...params });
+export const orgDeletePolicy = (PolicyId) => org("DeletePolicy", { PolicyId });
+export const orgAttachPolicy = (PolicyId, TargetId) => org("AttachPolicy", { PolicyId, TargetId });
+export const orgDetachPolicy = (PolicyId, TargetId) => org("DetachPolicy", { PolicyId, TargetId });
+export const listTargetsForPolicy = async (PolicyId) => (await org("ListTargetsForPolicy", { PolicyId })).Targets;
+export const enableServiceAccess = (ServicePrincipal) => org("EnableAWSServiceAccess", { ServicePrincipal });
+export const disableServiceAccess = (ServicePrincipal) => org("DisableAWSServiceAccess", { ServicePrincipal });
+export const listServiceAccess = async () => (await org("ListAWSServiceAccessForOrganization")).EnabledServicePrincipals;
+export const registerDelegatedAdmin = (AccountId, ServicePrincipal) => org("RegisterDelegatedAdministrator", { AccountId, ServicePrincipal });
+export const deregisterDelegatedAdmin = (AccountId, ServicePrincipal) => org("DeregisterDelegatedAdministrator", { AccountId, ServicePrincipal });
+export const listDelegatedAdmins = async (ServicePrincipal) => (await org("ListDelegatedAdministrators", ServicePrincipal ? { ServicePrincipal } : {})).DelegatedAdministrators;
+
+// ── centralized root access (real IAM API on the organization) ───────────────────────
+export const listOrganizationsFeatures = async () => {
+  try { return asList((await call("ListOrganizationsFeatures", {})).ListOrganizationsFeaturesResponse.ListOrganizationsFeaturesResult.EnabledFeatures?.member); }
+  catch (e) { if (e.code === "OrganizationNotFoundException") return []; throw e; }
+};
+export const setOrganizationsFeature = (feature, on) => call(`${on ? "Enable" : "Disable"}Organizations${feature}`, {});

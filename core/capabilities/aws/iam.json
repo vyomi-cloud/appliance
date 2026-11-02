@@ -201,6 +201,20 @@
   ],
   "tests": ["tests/conformance/test_organizations_core.py"]
  },
+ "iam.organizations.role-manager": {
+  "title": "Role manager (IAM account setting)",
+  "level": {"nano": "not_simulated", "offline": "not_simulated"},
+  "limitations": [
+   "The IAM Role manager account setting has no public API and no Vyomi backing; it is not simulated."
+  ]
+ },
+ "iam.organizations.service-access-report": {
+  "title": "Service access report for an SCP",
+  "level": {"nano": "not_simulated", "offline": "not_simulated"},
+  "limitations": [
+   "The service access report is derived from CloudTrail activity of member accounts. Vyomi member accounts have no resources and generate no activity, so there is nothing to report."
+  ]
+ },
  "iam.organizations.access-requests": {
   "title": "Temporary delegation requests (centralized root access)",
   "level": {"nano": "limited", "offline": "limited"},
