@@ -29,7 +29,7 @@ try {
     start: () => call("POST", `${vm}/start?api-version=2023-09-01`),
     del: () => call("DELETE", `${vm}?api-version=2023-09-01`),
     openConnect: async (page) => {   // Virtual machines -> the VM -> Connect dialog
-      await page.goto(nano.base + "/azure-console.html"); await page.waitForSelector("a.az-svc", { timeout: 120000 });
+      await page.waitForSelector("a.az-svc", { timeout: 120000 });
       await page.locator("a.az-svc[title='Virtual Machines']").first().click();
       await page.locator("a.reslink", { hasText: name }).first().click({ timeout: 30000 });
       await sleep(1500);
