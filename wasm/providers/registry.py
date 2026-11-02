@@ -582,7 +582,8 @@ def _handler_resource_name(params: dict) -> str:
 # this list: one entry per EC2 instance / Compute Engine instance / Azure VM in the
 # stores, with the state it should be in and the cloud-specific login user + the
 # public keys the user asked for at launch (GCE metadata ssh-keys, Azure osProfile).
-_VM_MEM_MB = {"nano": 256, "micro": 256, "small": 256, "medium": 256, "large": 512}
+# The VM's root filesystem lives in RAM, so memory is also the disk for `apk add` (OpenJDK 8 alone is ~100 MB).
+_VM_MEM_MB = {"nano": 256, "micro": 512, "small": 512, "medium": 768, "large": 1024}
 
 
 def _vm_mem(itype: str) -> int:
@@ -590,7 +591,7 @@ def _vm_mem(itype: str) -> int:
     for k, v in _VM_MEM_MB.items():
         if k in t:
             return v
-    return 512 if any(x in t for x in ("xlarge", "standard_b2", "standard_d", "e2-standard", "n2-")) else 256
+    return 1024 if any(x in t for x in ("xlarge", "standard_b2", "standard_d", "e2-standard", "n2-")) else 512
 
 
 def _vms_list(backends: Backends) -> dict:

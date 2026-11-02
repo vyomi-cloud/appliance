@@ -29,6 +29,8 @@
  *   env: RELAY_PORT (default 8090), RELAY_HOST (default 127.0.0.1; set 0.0.0.0 for LAN),
  *        VM_PORT_MIN / VM_PORT_MAX (ssh ports for in-browser VMs)
  */
+import { egress } from "./egress.mjs";
+import { Readable } from "node:stream";
 import http from "node:http";
 import net from "node:net";
 import crypto from "node:crypto";
@@ -86,9 +88,25 @@ const server = http.createServer((req, res) => {
       ok: true, relay: "vyomi-local", version: VERSION,
       tab: open > 0, tabs: open,
       // vm-tcp: this tunnel bridges host TCP ports to in-browser VMs (ssh to Nano EC2/GCE/Azure VMs).
-      features: ["http", "vm-tcp"],
+      features: ["http", "vm-tcp", "vm-egress"],
       vms: [...vmHosts.values()].map((v) => ({ vm: v.vm, port: v.port, host_port: v.hostPort })),
     }));
+  }
+  // Nano VM egress: allow-listed package-manager / toolchain fetches for the in-browser VMs (wasm/relay/egress.mjs).
+  if (url.pathname === "/egress") {
+    const body = [];
+    req.on("data", (c) => body.push(c));
+    req.on("end", async () => {
+      try {
+        const headers = new Headers(); for (const [k, v] of Object.entries(req.headers)) if (typeof v === "string") headers.set(k, v);
+        const r = await egress(new Request("http://relay" + req.url, { method: req.method, headers,
+          body: ["GET", "HEAD"].includes(req.method) ? undefined : Buffer.concat(body) }));
+        res.writeHead(r.status, Object.fromEntries(r.headers));
+        if (!r.body) return res.end();
+        Readable.fromWeb(r.body).on("error", () => res.destroy()).pipe(res);
+      } catch (e) { cors(res, 500, { "content-type": "text/plain" }); res.end("egress error: " + (e && e.message)); }
+    });
+    return;
   }
   // Collect the external request body, forward to the tab, await the response.
   const chunks = [];

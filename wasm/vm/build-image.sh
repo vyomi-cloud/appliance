@@ -11,12 +11,16 @@
 set -eu
 WITH_PY="${WITH_PY:-1}"
 apk add --no-cache linux-virt cpio kmod >/dev/null
-PKGS="dropbear dropbear-scp busybox-extras sudo"
+# apk (package manager) + the standard CLI tools; anything bigger (Java 8, Go, PHP, Node, pip...) is `apk add`-ed by the
+# user over SSH, so the image stays small and boots fast. (Alpine only builds OpenJDK 8 for 32-bit x86: apk add openjdk8-jre)
+PKGS="dropbear dropbear-scp busybox-extras sudo apk-tools alpine-keys ca-certificates bash curl nano less coreutils findutils grep sed gawk tar gzip unzip procps-ng openssl"
 [ "$WITH_PY" = 1 ] && PKGS="$PKGS python3"
 R=/tmp/rootfs
 rm -rf "$R"; mkdir -p "$R"
 apk add --no-cache --root "$R" --initdb --keys-dir /etc/apk/keys \
   --repositories-file /etc/apk/repositories alpine-baselayout busybox musl-utils alpine-release $PKGS >/dev/null
+# apk inside the guest needs its repository list
+mkdir -p "$R/etc/apk"; sed "s,https://,http://," /etc/apk/repositories > "$R/etc/apk/repositories"   # guest TLS cannot go through the in-browser fetch network; the relay /egress fetches over https upstream
 KV=$(ls /lib/modules)
 # Only the NIC drivers v86 emulates (virtio-net preferred, ne2k-pci fallback) + deps.
 for m in drivers/net/virtio_net drivers/net/net_failover net/core/failover \

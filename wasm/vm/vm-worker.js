@@ -25,7 +25,7 @@
 importScripts("engine/libv86.js");
 
 const HERE = new URL("./", self.location.href).href;
-const IMAGE_VERSION = "alpine3.21-i386-v3";
+const IMAGE_VERSION = "alpine3.21-i386-v5";
 const DB_NAME = "nano-vm", DB_STORE = "blobs";
 const CMDLINE = "console=ttyS0 rdinit=/init quiet tsc=reliable mitigations=off random.trust_cpu=on";
 
@@ -85,7 +85,8 @@ function makeEmulator(opts) {
     autostart: true,
     disable_keyboard: true, disable_mouse: true, disable_speaker: true,
     uart1: true,
-    net_device: { type: "virtio", relay_url: "fetch" },
+    // Guest HTTP goes out via the browser fetch; the CORS-less package mirrors are reached through the relay's allow-listed /egress.
+    net_device: { type: "virtio", relay_url: "fetch", ...(inst && inst.relay ? { cors_proxy: inst.relay.replace(/\/$/, "") + "/egress?u=" } : {}) },
     preserve_mac_from_state_image: true,
     ...opts,
   });
