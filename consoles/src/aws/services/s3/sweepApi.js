@@ -1,5 +1,5 @@
 /* S3 sweep-A native-wire calls: event notifications (+ EventBridge), CloudWatch metrics. */
-import { asList, awsJson, s3 } from "../../../common/wire.js";
+import { asList, authHeader, awsJson, awsRest, s3 } from "../../../common/wire.js";
 
 const esc = (s) => String(s).replace(/[<>&'"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", "'": "&apos;", '"': "&quot;" }[c]));
 const NS = 'xmlns="http://s3.amazonaws.com/doc/2006-03-01/"';
@@ -101,3 +101,84 @@ export const putAccessPointPolicy = (name, policy) => AP("PUT", name, {
   sub: "policy", body: `<?xml version="1.0" encoding="UTF-8"?><PutAccessPointPolicyRequest ${CTL_NS}><Policy>${esc(policy)}</Policy></PutAccessPointPolicyRequest>`,
 });
 export const deleteAccessPointPolicy = (name) => AP("DELETE", name, { sub: "policy" });
+
+// ── S3 Control: account-level Block Public Access ──
+const PAB_KEYS = ["BlockPublicAcls", "IgnorePublicAcls", "BlockPublicPolicy", "RestrictPublicBuckets"];
+export const ACCOUNT_PAB_KEYS = PAB_KEYS;
+const ACCT = (method, path, opts = {}) => s3(method, `/v20180820/${path}`, { ...opts, headers: { "x-amz-account-id": ACCOUNT, ...(opts.headers || {}) } });
+
+/** -> {BlockPublicAcls, …} booleans, or null when the account has no configuration. */
+export async function getAccountPab() {
+  try {
+    const r = await ACCT("GET", "configuration/publicAccessBlock");
+    const c = r.PublicAccessBlockConfiguration || {};
+    return Object.fromEntries(PAB_KEYS.map((k) => [k, String(c[k]) === "true"]));
+  } catch (e) { if (e.status === 404) return null; throw e; }
+}
+export const putAccountPab = (cfg) => ACCT("PUT", "configuration/publicAccessBlock", {
+  body: `<?xml version="1.0" encoding="UTF-8"?><PublicAccessBlockConfiguration ${CTL_NS}>${PAB_KEYS.map((k) => `<${k}>${!!cfg[k]}</${k}>`).join("")}</PublicAccessBlockConfiguration>`,
+});
+export const deleteAccountPab = () => ACCT("DELETE", "configuration/publicAccessBlock");
+
+// ── S3 Express One Zone: directory buckets ──
+export const directoryBucketName = (base, zone) => `${base}--${zone}--x-s3`;
+export async function listDirectoryBuckets() {
+  const out = [];
+  let token;
+  do {
+    const r = await s3("GET", "/", { query: { "continuation-token": token }, headers: authHeader("s3express") });
+    const res = r.ListAllMyDirectoryBucketsResult || {};
+    out.push(...asList(res.Buckets?.Bucket).map((b) => ({ name: b.Name, created: b.CreationDate, region: b.BucketRegion })));
+    token = res.ContinuationToken || null;
+  } while (token);
+  return out;
+}
+export const createDirectoryBucket = (name, zone) => s3("PUT", `/${name}`, {
+  body: `<?xml version="1.0" encoding="UTF-8"?><CreateBucketConfiguration ${NS}><Location><Name>${esc(zone)}</Name><Type>AvailabilityZone</Type></Location>`
+    + "<Bucket><DataRedundancy>SingleAvailabilityZone</DataRedundancy><Type>Directory</Type></Bucket></CreateBucketConfiguration>",
+});
+export const createSession = async (bucket) => (await s3("GET", `/${bucket}`, { query: { session: "" }, headers: { "x-amz-create-session-mode": "ReadWrite" } })).CreateSessionResult?.Credentials || {};
+
+// ── S3 Control: Object Lambda Access Points ──
+const OL = (method, name, { sub = "", body } = {}) => ACCT(method, `accesspointforobjectlambda${name ? `/${name}` : ""}${sub ? `/${sub}` : ""}`, { body });
+export async function listObjectLambdaAccessPoints() {
+  const r = await OL("GET", "");
+  return asList(r.ListAccessPointsForObjectLambdaResult?.ObjectLambdaAccessPointList?.ObjectLambdaAccessPoint).map((a) => ({
+    name: a.Name, arn: a.ObjectLambdaAccessPointArn, alias: a.Alias?.Value, aliasStatus: a.Alias?.Status,
+  }));
+}
+export async function getObjectLambdaAccessPoint(name) {
+  const [g, c] = await Promise.all([OL("GET", name), OL("GET", name, { sub: "configuration" })]);
+  const cfg = c.GetAccessPointConfigurationForObjectLambdaResult?.Configuration || {};
+  const t = asList(cfg.TransformationConfigurations?.TransformationConfiguration);
+  return {
+    name, created: g.GetAccessPointForObjectLambdaResult?.CreationDate, alias: g.GetAccessPointForObjectLambdaResult?.Alias?.Value,
+    supporting: cfg.SupportingAccessPoint, metrics: cfg.CloudWatchMetricsEnabled === "true",
+    allowed: asList(cfg.AllowedFeatures?.AllowedFeature),
+    transformations: t.map((x) => ({ actions: asList(x.Actions?.Action), functionArn: x.ContentTransformation?.AwsLambda?.FunctionArn, payload: x.ContentTransformation?.AwsLambda?.FunctionPayload || "" })),
+  };
+}
+const olapBody = (root, { supporting, functionArn, payload = "", actions = ["GetObject"], allowed = [], metrics = false }) =>
+  `<?xml version="1.0" encoding="UTF-8"?><${root} ${CTL_NS}><Configuration><SupportingAccessPoint>${esc(supporting)}</SupportingAccessPoint>`
+  + `<CloudWatchMetricsEnabled>${!!metrics}</CloudWatchMetricsEnabled><AllowedFeatures>${allowed.map((f) => `<AllowedFeature>${f}</AllowedFeature>`).join("")}</AllowedFeatures>`
+  + `<TransformationConfigurations><TransformationConfiguration><Actions>${actions.map((a) => `<Action>${a}</Action>`).join("")}</Actions><ContentTransformation><AwsLambda>`
+  + `<FunctionArn>${esc(functionArn)}</FunctionArn>${payload ? `<FunctionPayload>${esc(payload)}</FunctionPayload>` : ""}</AwsLambda></ContentTransformation></TransformationConfiguration></TransformationConfigurations></Configuration></${root}>`;
+export const createObjectLambdaAccessPoint = (name, cfg) => OL("PUT", name, { body: olapBody("CreateAccessPointForObjectLambdaRequest", cfg) });
+export const deleteObjectLambdaAccessPoint = (name) => OL("DELETE", name);
+export async function listLambdaFunctions() {
+  const r = await awsRest("lambda", "GET", "/2015-03-31/functions");
+  return (r.Functions || []).map((f) => ({ name: f.FunctionName, arn: f.FunctionArn }));
+}
+
+/** Flat (no delimiter) ListObjectsV2 of a directory bucket -> [{key, size, modified, storageClass}]. */
+export async function listBucketObjectsFlat(bucket) {
+  const out = [];
+  let token;
+  do {
+    const r = await s3("GET", `/${bucket}`, { query: { "list-type": "2", "continuation-token": token } });
+    const res = r.ListBucketResult || {};
+    out.push(...asList(res.Contents).map((o) => ({ key: o.Key, size: Number(o.Size || 0), modified: o.LastModified, storageClass: o.StorageClass || "STANDARD" })));
+    token = res.IsTruncated === "true" ? res.NextContinuationToken : null;
+  } while (token);
+  return out;
+}

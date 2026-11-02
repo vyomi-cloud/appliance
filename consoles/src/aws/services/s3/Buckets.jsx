@@ -7,6 +7,7 @@ import ResourceTable from "../../kit/ResourceTable.jsx";
 import { fmtDate } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { AccountSnapshot } from "./Sweep.jsx";
+import { DirectoryBuckets } from "./AccountPages.jsx";
 import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import { follow, href } from "../../../common/router.js";
@@ -58,7 +59,7 @@ export default function Buckets() {
               />
             ),
           },
-          { id: "directory", label: "Directory buckets", content: <CapabilityContainer id="s3.account.directory-buckets" title="Directory buckets" /> },
+          { id: "directory", label: "Directory buckets", content: <DirectoryBuckets /> },
         ]}
       />
       <AccountSnapshot buckets={data} loading={loading} />

@@ -115,7 +115,7 @@ def _olap_body(sup, fn, actions=("GetObject",), features=()):
 
 def object_lambda_access_points():
     r = AwsWireRouter()
-    P = "/v20180820/accessPointForObjectLambda"
+    P = "/v20180820/accesspointforobjectlambda"
     SUP = "arn:aws:s3:us-east-1:123456789012:accesspoint/sup-ap"
     FN = "arn:aws:lambda:us-east-1:123456789012:function:upper-fn"
     s3(r, "PUT", "/olap-bkt")

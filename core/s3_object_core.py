@@ -2876,7 +2876,7 @@ def _s3control(store: ObjectStore, method: str, raw: str, query: dict, lheaders:
         return _s3c_error("AccessDenied", "Account ID does not match the caller's account.", 403)
     if len(segs) >= 3 and segs[1] == "configuration" and segs[2] == "publicAccessBlock" and len(segs) == 3:
         return _s3c_account_pab(store, method, body)
-    if len(segs) >= 2 and segs[1] == "accessPointForObjectLambda":
+    if len(segs) >= 2 and segs[1].lower() == "accesspointforobjectlambda":
         return _s3c_olap(store, method, segs, body)
     if len(segs) < 2 or segs[1] != "accesspoint":
         return _s3c_error("NotImplemented", "This S3 Control operation is not implemented by Vyomi.", 501)
@@ -2980,7 +2980,7 @@ def _s3c_account_pab(store: ObjectStore, method: str, body: bytes) -> S3Response
     return _s3c_error("MethodNotAllowed", method, 405)
 
 
-# ── S3 Control: Object Lambda Access Points (restXml /v20180820/accessPointForObjectLambda…)
+# ── S3 Control: Object Lambda Access Points (restXml /v20180820/accesspointforobjectlambda…)
 # An OLAP is a control-plane record in store.account["olaps"] layered on a standard access
 # point (its SupportingAccessPoint). GetObject through the OLAP alias/ARN reads the object via
 # the supporting access point's bucket, invokes the configured Lambda with the real event
