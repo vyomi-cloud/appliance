@@ -273,6 +273,14 @@
       "timeout": 900
     },
     {
+      "id": "nano-gcp-kms-core",
+      "target": "nano",
+      "cloud": "gcp",
+      "kind": "core",
+      "cmd": "PYTHONPATH=$PWD python3 tests/conformance/test_gcp_kms_core.py",
+      "timeout": 120
+    },
+    {
       "id": "nano-gcp-compute-core",
       "target": "nano",
       "cloud": "gcp",
