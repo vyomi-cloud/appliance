@@ -119,6 +119,18 @@ check("AzureArm: unknown job → 404", j["status"] == 404)
 print(f"\n{PASS} passed, {FAIL} failed")
 
 
+# a runtime that reports no docker network must not leave a null in the record (console Properties tab)
+_saved = dict(ac.RUNTIME)
+ac.RUNTIME["start"] = lambda *a, **k: {"id": "c1", "host": "127.0.0.1", "port": 32768}
+ac.RUNTIME["stop"] = lambda h: None
+st2 = {}
+rr = call(st2, "PUT", ["containerApps", "rt"], APP)
+rt = rr["body"]["properties"].get("vyomiRuntime", {})
+check("vyomiRuntime has no null values (network omitted when unknown)",
+      rt.get("backend") == "docker" and "network" not in rt and None not in rt.values(), rt)
+ac.RUNTIME.clear(); ac.RUNTIME.update(_saved)
+
+
 def test_all_checks_pass():
     assert FAIL == 0
 
