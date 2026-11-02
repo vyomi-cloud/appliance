@@ -165,8 +165,17 @@ const BLANK_LIKE_REAL = [
   { cloud: "aws", service: "API Gateway", column: /^description$/i, why: "Description is optional; real AWS shows - when unset" },
   { cloud: "aws", service: "EventBridge", column: /^description$/i, why: "rule Description is optional; real AWS shows - when unset" },
   { cloud: "aws", service: "VPC", column: /^name$/i, why: "Name is just the Name tag; untagged VPCs/subnets/route tables show - in real AWS" },
+  { cloud: "aws", service: "EC2", column: /^iam role$/i, why: "no instance profile at launch (defaults); real AWS shows - for IAM Role" },
+  { cloud: "aws", service: "EC2", column: /^key pair assigned at launch$/i, why: "launched without a key pair (defaults); real AWS shows -" },
+  { cloud: "aws", service: "EC2", column: /^state transition reason$/i, why: "a running instance that never changed state has no reason; real AWS shows -" },
+  { cloud: "aws", service: "EC2", column: /^description$/i, why: "ENI / security-group-rule descriptions are optional; real AWS shows - when unset" },
+  { cloud: "aws", service: "Lambda", column: /^description$/i, why: "function / version Description is optional; real AWS shows - when unset" },
+  { cloud: "aws", service: "Secrets Manager", column: /^description$/i, why: "secret Description is optional; real AWS shows - when unset" },
+  { cloud: "aws", service: "KMS", column: /^description$/i, why: "key Description is optional (empty by default); real AWS shows - when unset" },
+  { cloud: "aws", service: "Systems Manager", column: /^labels$/i, why: "a parameter version without labels; real AWS Parameter Store history shows - " },
 ];
 let CURRENT = { cloud: "", service: "" };
+const BUILT_IN_ROW = /\bBuiltInRole\b/;
 const blankLikeReal = (col) => BLANK_LIKE_REAL.some((e) => e.why && e.cloud === CURRENT.cloud && e.service === CURRENT.service && e.column.test(col));
 
 async function placeholderFindings(page, where) {
@@ -301,8 +310,10 @@ async function createWithDefaults(page, drain, cloud, backToList, service) {
   }
   f.push(...drain().map((x) => ({ ...x, detail: `during create: ${x.detail}` })));
   const s = await snap(page);
-  if (/\b(error|failed|invalid)\b/i.test(s.text.slice(0, 800))) {
-    f.push({ type: "CREATE_REJECTED", detail: `create with default values was rejected: "${(s.text.match(/[^\n]*(error|failed|invalid)[^\n]*/i) || [""])[0].slice(0, 140)}"` });
+  // a word, not a hostname label: GKE shows its control-plane-only endpoint as `….invalid` (RFC 2606)
+  const REJECT = /(?<!\w\.)\b(error|failed|invalid)\b(?!\.\w)/i;
+  if (REJECT.test(s.text.slice(0, 800))) {
+    f.push({ type: "CREATE_REJECTED", detail: `create with default values was rejected: "${(s.text.split("\n").find((l) => REJECT.test(l)) || "").slice(0, 140)}"` });
   }
   await backToList();
   const rowsAfter = await rowCount(page);
@@ -450,7 +461,12 @@ async function crawlConsole(browser, base, con, needsSW) {
           if (hasCreate) surface("create", "create with defaults", cf, 1, "");
           // Values that identify the first resource (names, ids): a tab that
           // shows them is rendering this resource's data, not static text.
-          tokens = await page.locator("#main table tr:has(td)").first().locator("td").allInnerTexts().catch(() => []);
+          // Built-in rows the cloud seeds (Azure built-in roles like Owner) are read-only catalogue
+          // entries listed before what the crawl created: walk a resource of the account's own.
+          const rowTexts = await page.locator("#main table tr:has(td)").allInnerTexts().catch(() => []);
+          const own = rowTexts.findIndex((t) => !BUILT_IN_ROW.test(t));
+          const firstRow = page.locator("#main table tr:has(td)").nth(Math.max(0, own));
+          tokens = await firstRow.locator("td").allInnerTexts().catch(() => []);
           tokens = tokens.map((t) => t.trim()).filter((t) => t.length >= 4 && /[a-z]/i.test(t) && /[\d_.:\/-]/.test(t)).slice(0, 6);
           if (process.env.DEBUG_CRAWL) console.log(`[debug] ${svc.label}: tokens=${JSON.stringify(tokens)}`);
           // Open the first resource so its detail tabs (where most unfilled
@@ -458,7 +474,8 @@ async function crawlConsole(browser, base, con, needsSW) {
           drain(); calls();
           // Resource links first (as the wasm/ui-tests validators open them);
           // a plain cell only if the row has no link.
-          let link = page.locator("#main a.id, #main table tr:has(td) td a, #main [role=row] a").first();
+          let link = (await firstRow.locator("a").count()) ? firstRow.locator("a").first()
+            : page.locator("#main a.id, #main table tr:has(td) td a, #main [role=row] a").first();
           if (!(await link.count())) link = page.locator("#main table tr:has(td) td:not(.chk)").first();
           if (process.env.DEBUG_CRAWL) console.log(`[debug] ${svc.label}: resource links=${await page.locator("#main a.id, #main table tr:has(td) td a").count()}`);
           if (await link.count()) {
