@@ -57,7 +57,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
   /* Search bar — 40px tall inside the 56px header = 8px breathing room
      top/bottom (via flex align-center). Horizontal margin 24px keeps it
      from crowding the project picker + utility icons. */
-  header .search{flex:1;max-width:720px;display:flex;align-items:center;background:#f1f3f4;border-radius:8px;height:40px;padding:0 16px;color:var(--ink);margin:0 24px}
+  header .search{flex:1;min-width:0;display:flex;align-items:center;background:#f1f3f4;border-radius:8px;height:40px;padding:0 16px;color:var(--ink);margin:0 24px}
   header .search:focus-within{background:#fff;box-shadow:0 1px 6px rgba(32,33,36,.28)}
   header .search .ic{color:var(--sub);font-size:20px;margin-right:12px}
   header .search input{flex:1;border:none;outline:none;font-size:14px;background:transparent;color:var(--ink);height:38px}
