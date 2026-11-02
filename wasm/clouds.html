@@ -1,6 +1,8 @@
 <!doctype html>
 <html lang="en">
 <head>
+  <script>if(/[?&]embed=1/.test(location.search))document.documentElement.classList.add("vy-embed");</script>
+  <script>window.__vyHash=location.hash;try{if(!/[?&]embed=1/.test(location.search)&&!location.hash&&localStorage.getItem("vyomi.defaultSpace"))document.documentElement.classList.add("vy-entering")}catch(e){}</script>
   <script src="nano-rates.js"></script>
   <script>
   (function(){
@@ -124,6 +126,11 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
       box-shadow: 0 0 0 1px #10b981 inset,
                   0 4px 12px rgba(16,185,129,0.10);
     }
+    .space-star { margin-left: 6px; flex: none; width: 28px; height: 28px; border: 0; border-radius: 50%; background: transparent; cursor: pointer; color: #94a3b8; display: inline-flex; align-items: center; justify-content: center; }
+    .space-star:hover { background: rgba(148,163,184,.2); color: #f59e0b; }
+    .space-star.on { color: #f59e0b; }
+    .space-star svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linejoin: round; }
+    .space-star.on svg { fill: currentColor; }
     .space-row {
       display: flex; align-items: center; gap: 10px; margin-bottom: 6px;
     }
@@ -1276,6 +1283,19 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     .kc-frame-head h2 { color: #e4e4e7 !important; }
     /* Modals → dark surface (readable on the dark backdrop). */
     .modal, #modal-body, .cl-box { background: #0d1228 !important; color: #e4e4e7 !important; border: 1px solid rgba(255,255,255,0.10) !important; }
+
+    /* Embedded in a console's drawer modal (?embed=1): just the view, no app chrome. */
+    html.vy-embed #app-topbar, html.vy-embed #app-sidebar, html.vy-embed .side-collapse, html.vy-embed #side-scrim,
+    html.vy-embed #update-banner, html.vy-embed #vyomi-readiness-mount, html.vy-embed #nano-foot { display: none !important; }
+    html.vy-embed #app-main { margin: 0 !important; border-radius: 0 !important; }
+    html.vy-embed:not(.vy-acct) #activate-modal, html.vy-embed:not(.vy-acct) .am-overlay { display: none !important; }
+    /* ?embed=1&acct=1: the drawer's "Activate appliance" dialog - only the real activation dialog, nothing else. */
+    html.vy-acct #app-main { visibility: hidden !important; }
+    html.vy-acct #activate-modal, html.vy-acct #activate-modal * { visibility: visible; }
+    html.vy-acct, html.vy-acct body { background: transparent !important; }
+    html.vy-acct #activate-modal.am-overlay { background: transparent; padding-top: 12px; }
+
+    html.vy-entering body { visibility: hidden; }   /* default cloud set: no flash of the appliance page before redirecting */
 </style>
   <style>#host-util-card .stat-actions{display:none!important}</style>   <!-- Free up space / Grow disk are appliance-only -->
   <script src="./nano-sw.js" defer></script>
@@ -2720,10 +2740,10 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
       var items = document.querySelectorAll('#app-sidebar .side-item[data-view]');
       for (var i = 0; i < items.length; i++)
         items[i].classList.toggle('active', items[i].getAttribute('data-view') === view);
-      try { localStorage.setItem('vyomi.appview', view); } catch (_) {}
+      if (!document.documentElement.classList.contains('vy-embed')) try { sessionStorage.setItem('vyomi.appview', view); } catch (_) {}
       // Keep the URL on the current view, so a refresh lands right back here (the
       // boot code below restores the hash first). replaceState adds no history entries.
-      if (location.hash !== '#' + view) try { history.replaceState(history.state, '', location.pathname + location.search + '#' + view); } catch (_) {}
+      if (!document.documentElement.classList.contains('vy-embed') && location.hash !== '#' + view) try { history.replaceState(history.state, '', location.pathname + location.search + '#' + view); } catch (_) {}
     }
     window.addEventListener('hashchange', function () {   // a #view link on the page itself
       var hv = (location.hash || '').replace('#', '');
@@ -2792,7 +2812,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
       // A URL hash (e.g. clouds.html#spaces from a console "back to spaces" link) wins over the last-used view.
       var hv = (location.hash || '').replace('#', '');
       if (APP_VIEWS[hv]) { showAppView(hv); return; }
-      try { var v = localStorage.getItem('vyomi.appview'); if (v && v !== 'spaces') showAppView(v); } catch (_) {}
+      try { var v = sessionStorage.getItem('vyomi.appview'); if (v && v !== 'spaces') showAppView(v); } catch (_) {}
     })();
 
     // ── API (Swagger) native renderer — fetch the OpenAPI spec per cloud and
@@ -3040,7 +3060,10 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
       openActivateModal();
     }
     function openActivateModal(){ var m = document.getElementById('activate-modal'); if(m) m.classList.add('open'); }
-    function closeActivateModal(){ var m = document.getElementById('activate-modal'); if(m) m.classList.remove('open'); }
+    function closeActivateModal(){ var m = document.getElementById('activate-modal'); if(m) m.classList.remove('open');
+      if (document.documentElement.classList.contains('vy-acct')) { try { parent.postMessage({ vy: 'close-modal' }, '*'); } catch (_) {} } }
+    if (/[?&]acct=1/.test(location.search)) { document.documentElement.classList.add('vy-acct');
+      document.addEventListener('DOMContentLoaded', function(){ setTimeout(openActivateModal, 50); }); }
     // Shared post-activation: mark signed in, hide the chip, and sync the workspace
     // (merge any spaces saved on another device, then save the union).
     function _onActivated(){
@@ -3315,6 +3338,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
                 <span class="space-logo ${ provider }" title="${ ({aws: "AWS", gcp: "Google Cloud", azure: "Microsoft Azure"})[provider] || provider }">${ SPACE_LOGOS[provider] || provider }</span>
                 <span class="space-name">${ s.name || s.space_id }</span>
                 ${ _statusPillHtml(s, isActive) }
+                <button type="button" class="space-star ${ s.space_id === _defaultSpace() ? 'on' : '' }" title="${ s.space_id === _defaultSpace() ? 'Default space — Vyomi opens here' : 'Make this the default space' }" aria-label="${ s.space_id === _defaultSpace() ? 'Default space' : 'Make default space' }" aria-pressed="${ s.space_id === _defaultSpace() }" data-star="${ s.space_id }" onclick="event.preventDefault();event.stopPropagation();setDefaultSpace('${ s.space_id }')"><svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg></button>
               </div>
               <div class="space-meta">
                 ${ region }<span class="dot">·</span>${ totalRes } resource${ totalRes === 1 ? '' : 's' }
@@ -3400,6 +3424,22 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
       if (ev.key === 'Escape') closeClModal();
     });
 
+    // One space is the default (per browser): Vyomi opens straight into it. Set from the star on a space card.
+    function _defaultSpace() { try { return localStorage.getItem('vyomi.defaultSpace') || ''; } catch (_) { return ''; } }
+    const _PICK = /[?&]pick=1/.test(location.search);   // first-visit chooser: the same Spaces view, forced
+    function setDefaultSpace(id) {
+      try { localStorage.setItem('vyomi.defaultSpace', id); } catch (_) {}
+      if (_PICK) { const c = document.querySelector('[data-space-id="' + id + '"]'); if (c) { switchAndOpen(id, c.dataset.provider); return; } }
+      loadSpaces();
+    }
+    if (_PICK) document.addEventListener('DOMContentLoaded', () => {
+      const g = document.getElementById('spaces-grid'); if (!g) return;
+      const h = document.createElement('div');
+      h.style.cssText = 'margin:0 0 12px;padding:10px 14px;border-radius:10px;background:#eff6ff;border:1px solid #bfdbfe;color:#1e3a8a;font-size:13.5px;line-height:1.5';
+      h.innerHTML = '<b>Choose your default space.</b> Click a space to open it, or press its \u2606 star to make it the default. Vyomi opens straight into it next time \u2014 change it any time from <b>Spaces</b> in the drawer.';
+      g.parentNode.insertBefore(h, g);
+    });
+
     async function switchAndOpen(spaceId, provider) {
       // Pre-check the tier policy: if the user's subscription doesn't
       // include this cloud, surface a friendly modal instead of letting
@@ -3410,10 +3450,11 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
         openClModal(provider, policy);
         return;
       }
+      try { if (!_defaultSpace()) localStorage.setItem('vyomi.defaultSpace', spaceId); } catch (_) {}
       try {
         await fetch(`/api/spaces/${ spaceId }/switch`, { method: 'POST' });
       } catch (e) { /* swallow — opening console works without explicit switch */ }
-      window.location.href = PROVIDER_PATHS[provider] || '/ui';
+      (window.top || window).location.href = PROVIDER_PATHS[provider] || '/ui';
     }
 
     // ── Create Space modal ──────────────────────────────────────────
@@ -3480,8 +3521,9 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
         const newId = d?.space?.space_id;
         if (newId) {
           // Switch active context to the new space, then jump to console.
+          try { if (!_defaultSpace()) localStorage.setItem('vyomi.defaultSpace', newId); } catch (_) {}
           try { await fetch(`/api/spaces/${newId}/switch`, { method: 'POST' }); } catch (_) {}
-          window.location.href = PROVIDER_PATHS[provider] || '/ui';
+          (window.top || window).location.href = PROVIDER_PATHS[provider] || '/ui';
           return;
         }
         // Fallback: reload page so it shows the new card.
@@ -4347,5 +4389,6 @@ function nanoLogout(){
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", apply); else apply();
 })();
 </script>
+<script src="./vyomi-cloudpick.js" data-nano data-entry defer></script>
 </body>
 </html>

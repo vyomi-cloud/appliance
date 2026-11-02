@@ -85,7 +85,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
   /* Search bar — 40px tall inside the 56px header = 8px breathing room
      top/bottom (via flex align-center). Horizontal margin 24px keeps it
      from crowding the project picker + utility icons. */
-  header .search{flex:1;max-width:720px;display:flex;align-items:center;background:#f1f3f4;border-radius:8px;height:40px;padding:0 16px;color:var(--ink);margin:0 24px}
+  header .search{flex:1;min-width:0;display:flex;align-items:center;background:#f1f3f4;border-radius:8px;height:40px;padding:0 16px;color:var(--ink);margin:0 24px}
   header .search:focus-within{background:#fff;box-shadow:0 1px 6px rgba(32,33,36,.28)}
   header .search .ic{color:var(--sub);font-size:20px;margin-right:12px}
   header .search input{flex:1;border:none;outline:none;font-size:14px;background:transparent;color:var(--ink);height:38px}
@@ -450,10 +450,6 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     <svg class="cube" viewBox="0 0 32 28" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Google Cloud"><path fill="#ea4335" d="M21.85,7.41l1,0,2.85-2.85.14-1.21A12.81,12.81,0,0,0,5,9.6a1.55,1.55,0,0,1,1-.06l5.7-.94s.29-.48.44-.45a7.11,7.11,0,0,1,9.73-.74Z"/><path fill="#4285f4" d="M29.76,9.6a12.84,12.84,0,0,0-3.87-6.24l-4,4A7.11,7.11,0,0,1,24.5,13v.71a3.56,3.56,0,1,1,0,7.12H17.38l-.71.72v4.27l.71.71H24.5A9.26,9.26,0,0,0,29.76,9.6Z"/><path fill="#34a853" d="M10.25,26.49h7.12v-5.7H10.25a3.54,3.54,0,0,1-1.47-.32l-1,.31L4.91,23.63l-.25,1A9.21,9.21,0,0,0,10.25,26.49Z"/><path fill="#fbbc05" d="M10.25,8A9.26,9.26,0,0,0,4.66,24.6l4.13-4.13a3.56,3.56,0,1,1,4.71-4.71l4.13-4.13A9.25,9.25,0,0,0,10.25,8Z"/></svg>
     Google Cloud
   </a>
-  <a class="back-spaces" href="clouds.html#spaces" title="Return to the Simulation Spaces view (switch provider or pick a different project)">
-    <span class="material-symbols-outlined">arrow_back</span>
-    Go back to Spaces
-  </a>
   <button class="proj-btn" id="projBtn" title="Select a project">
     <span class="material-symbols-outlined icon">folder_open</span>
     <span style="display:flex;flex-direction:column;align-items:flex-start;line-height:1.1">
@@ -467,8 +463,6 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     <span class="kbd">/</span>
   </div>
   <div class="right">
-    <a href="clouds.html#api" title="API (Swagger) — REST API reference"><span class="material-symbols-outlined" style="font-size:20px">api</span></a>
-    <a href="clouds.html#usage" title="SDK &amp; CLI usage"><span class="material-symbols-outlined" style="font-size:20px">code</span></a>
     <button title="Cloud Shell" id="cloudShellBtn"><span class="material-symbols-outlined" style="font-size:20px">terminal</span></button>
     <button class="bell" id="notifBtn" title="Notifications">
       <span class="material-symbols-outlined" style="font-size:20px">notifications</span>
@@ -4384,5 +4378,6 @@ setInterval(fetchDiskHealth, 30000);
     document.addEventListener("keydown", function(e){ if(e.key==="Escape") docs.classList.remove("open"); });
   }
 })();
-</script></body>
+</script><script src="./vyomi-appbar.js" data-cloud="gcp" data-clouds="clouds.html" defer></script>
+</body>
 </html>

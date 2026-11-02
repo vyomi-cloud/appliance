@@ -22,7 +22,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
   header{height:48px;background:#0b1b2b;color:#fff;display:flex;align-items:center;gap:14px;padding:0 14px;position:sticky;top:0;z-index:30}
   .logo{display:flex;align-items:center;gap:8px;font-size:15px;font-weight:600;white-space:nowrap}
   .logo svg{display:block}
-  .search{flex:1;max-width:560px;background:#0f2233;border:1px solid #1d3a55;border-radius:3px;height:30px;display:flex;align-items:center;padding:0 10px;color:#9fb6cc;gap:8px;font-size:13px}
+  .search{flex:1;min-width:0;background:#0f2233;border:1px solid #1d3a55;border-radius:3px;height:30px;display:flex;align-items:center;padding:0 10px;color:#9fb6cc;gap:8px;font-size:13px}
   .search input{flex:1;background:transparent;border:none;outline:none;color:#dfe9f2;font-size:13px}
   .hicons{display:flex;align-items:center;gap:4px;margin-left:auto}
   .hicons button,.hicons a{background:transparent;border:none;color:#cfe0ee;width:34px;height:34px;border-radius:3px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
@@ -448,29 +448,11 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     <svg width="22" height="22" role="img" aria-label="Microsoft Azure" viewBox="0 0 96 96" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="e399c19f-b68f-429d-b176-18c2117ff73c" x1="-1032.172" x2="-1059.213" y1="145.312" y2="65.426" gradientTransform="matrix(1 0 0 -1 1075 158)" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#114a8b"/><stop offset="1" stop-color="#0669bc"/></linearGradient><linearGradient id="ac2a6fc2-ca48-4327-9a3c-d4dcc3256e15" x1="-1023.725" x2="-1029.98" y1="108.083" y2="105.968" gradientTransform="matrix(1 0 0 -1 1075 158)" gradientUnits="userSpaceOnUse"><stop offset="0" stop-opacity=".3"/><stop offset=".071" stop-opacity=".2"/><stop offset=".321" stop-opacity=".1"/><stop offset=".623" stop-opacity=".05"/><stop offset="1" stop-opacity="0"/></linearGradient><linearGradient id="a7fee970-a784-4bb1-af8d-63d18e5f7db9" x1="-1027.165" x2="-997.482" y1="147.642" y2="68.561" gradientTransform="matrix(1 0 0 -1 1075 158)" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#3ccbf4"/><stop offset="1" stop-color="#2892df"/></linearGradient></defs><path fill="url(#e399c19f-b68f-429d-b176-18c2117ff73c)" d="M33.338 6.544h26.038l-27.03 80.087a4.152 4.152 0 0 1-3.933 2.824H8.149a4.145 4.145 0 0 1-3.928-5.47L29.404 9.368a4.152 4.152 0 0 1 3.934-2.825z"/><path fill="#0078d4" d="M71.175 60.261h-41.29a1.911 1.911 0 0 0-1.305 3.309l26.532 24.764a4.171 4.171 0 0 0 2.846 1.121h23.38z"/><path fill="url(#ac2a6fc2-ca48-4327-9a3c-d4dcc3256e15)" d="M33.338 6.544a4.118 4.118 0 0 0-3.943 2.879L4.252 83.917a4.14 4.14 0 0 0 3.908 5.538h20.787a4.443 4.443 0 0 0 3.41-2.9l5.014-14.777 17.91 16.705a4.237 4.237 0 0 0 2.666.972H81.24L71.024 60.261l-29.781.007L59.47 6.544z"/><path fill="url(#a7fee970-a784-4bb1-af8d-63d18e5f7db9)" d="M66.595 9.364a4.145 4.145 0 0 0-3.928-2.82H33.648a4.146 4.146 0 0 1 3.928 2.82l25.184 74.62a4.146 4.146 0 0 1-3.928 5.472h29.02a4.146 4.146 0 0 0 3.927-5.472z"/></svg>
     Microsoft Azure
   </a>
-  <!-- Back to Spaces — mirrors aws-console.html's .back-spaces link.
-       Inline-styled (no shared stylesheet) to avoid touching the Azure
-       portal-style theme tokens. Returns the user to /clouds where they
-       can switch space/provider or create a new one. -->
-  <a class="az-back-spaces" href="/ui#spaces"
-     title="Return to Workspaces — switch space, provider, or create a new one"
-     style="display:inline-flex; align-items:center; gap:6px;
-            margin-left:8px; padding:6px 12px; border-radius:6px;
-            background:rgba(255,255,255,0.08); color:#cfe0ee;
-            text-decoration:none; font-size:13px; font-weight:500;
-            white-space:nowrap; transition:background 0.15s, color 0.15s;"
-     onmouseover="this.style.background='rgba(60,203,244,0.18)'; this.style.color='#fff';"
-     onmouseout="this.style.background='rgba(255,255,255,0.08)'; this.style.color='#cfe0ee';">
-    <span class="material-symbols-outlined" style="font-size:16px">arrow_back</span>
-    <span>Back to Spaces</span>
-  </a>
   <div class="search"><span class="material-symbols-outlined" style="font-size:18px">search</span>
     <input placeholder="Search resources, services, and docs (simulated)"></div>
   <div class="hicons">
     <span class="subchip" id="budgetChip" title="Simulator host budget" style="display:none">budget…</span>
     <span class="subchip" id="subChip">subscription…</span>
-    <a href="/ui#api" title="API (Swagger) — REST API reference"><span class="material-symbols-outlined">api</span></a>
-    <a href="/ui#usage" title="SDK &amp; CLI usage"><span class="material-symbols-outlined">code</span></a>
     <a href="/docs" title="All consoles"><span class="material-symbols-outlined">apps</span></a>
     <button title="Cloud Shell"><span class="material-symbols-outlined">terminal</span></button>
     <button title="Notifications" id="notifBtn" style="position:relative">
@@ -6484,5 +6466,6 @@ setInterval(fetchDiskHealth, 30000);
 boot();
 </script>
 <script src="/assets/lazy_backends.js"></script>
+<script src="/assets/vyomi-appbar.js" data-cloud="azure" defer></script>
 </body>
 </html>

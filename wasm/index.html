@@ -2266,7 +2266,7 @@
       // Spaces console — this login-gated landing is not a place to sit, and the
       // sidebar already defaults to "Spaces". Bounded so a slow ping never strands
       // the page; keepalive (above) lets the ping finish after navigation.
-      function _spaces(){ if (_spaces.done) return; _spaces.done = true; try { location.replace((window.__NANO_BASE || "") + "/clouds.html#spaces"); } catch (e) { location.replace("clouds.html#spaces"); } }
+      function _spaces(){ if (_spaces.done) return; _spaces.done = true; try { location.replace((window.__NANO_BASE || "") + "/clouds.html"); } catch (e) { location.replace("clouds.html"); } }
       function _recGo(){ Promise.resolve().then(record).catch(function(){}).finally(_spaces); setTimeout(_spaces, 1200); }
       if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", _recGo); else _recGo();
     })();
