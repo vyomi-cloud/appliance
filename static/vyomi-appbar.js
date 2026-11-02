@@ -17,19 +17,17 @@
     ['api', 'API reference', 'M16 18l6-6-6-6M8 6l-6 6 6 6']
   ];
   var css = '' +
-    '#vy-appbar{position:relative;z-index:70;height:44px;background:#fff;display:flex;justify-content:center;font-family:Inter,system-ui,sans-serif}' +
-    '#vy-appbar::before{content:"";position:absolute;left:0;right:0;top:0;height:2px;background:#0f121c}' +   /* the line:  ------ */
-    '#vy-appbar .vy-cloud{position:absolute;left:14px;top:10px;display:flex;align-items:center;gap:6px;font-size:12px;color:#667085}' +
-    '#vy-appbar .vy-cloud b{color:#101828;font-weight:600}' +
-    '#vy-appbar .vy-notch{height:44px;padding:0 44px;display:flex;align-items:center;gap:2px;position:relative;isolation:isolate}' +   /* the dip:  \\____/ */
-    '#vy-appbar .vy-notch::before{content:"";position:absolute;inset:0;z-index:-1;background:#0f121c;clip-path:polygon(0 0,100% 0,calc(100% - 30px) 100%,30px 100%)}' +
+    '#vy-appbar{position:fixed;left:0;right:0;bottom:0;height:0;z-index:70;display:flex;justify-content:center;pointer-events:none;font-family:Inter,system-ui,sans-serif}' +
+    '#vy-appbar::before{content:"";position:absolute;left:0;right:0;bottom:0;height:2px;background:#0f121c}' +   /* the line along the bottom edge */
+    '#vy-appbar .vy-notch{pointer-events:auto;position:absolute;bottom:0;height:44px;padding:0 44px;display:flex;align-items:center;gap:2px;isolation:isolate}' +
+    '#vy-appbar .vy-notch::before{content:"";position:absolute;inset:0;z-index:-1;background:#0f121c;clip-path:polygon(30px 0,calc(100% - 30px) 0,100% 100%,0 100%)}' +
     '#vy-appbar .vy-notch .vy-sep{width:1px;height:20px;background:rgba(255,255,255,.18);margin:0 6px}' +
     '#vy-appbar #disk-widget-slot{position:relative !important;top:auto !important;right:auto !important;left:auto !important;z-index:5 !important;display:inline-block}' +
     '#vy-appbar #disk-widget-slot .disk-chip{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 10px;font:400 12px Inter,system-ui,sans-serif;border:0 !important;border-radius:8px;background:transparent !important;color:#b4b8cc !important;box-shadow:none !important}' +
     '#vy-appbar #disk-widget-slot .disk-chip:hover,#vy-appbar #disk-widget-slot.open .disk-chip{background:rgba(255,255,255,.08) !important;color:#fff !important}' +
     '#vy-appbar #disk-widget-slot .disk-chip *{color:inherit !important;font:inherit !important}' +
     '#vy-appbar #disk-widget-slot .disk-chip .disk-chip-caret{display:none}' +
-    '#vy-appbar #disk-widget-slot .disk-popover{top:calc(100% + 14px) !important;right:auto !important;left:50% !important;transform:translateX(-50%)}' +
+    '#vy-appbar #disk-widget-slot .disk-popover{top:auto !important;bottom:calc(100% + 14px) !important;right:auto !important;left:50% !important;transform:translateX(-50%)}' +
     '#vy-appbar .vy-notch a{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 10px;border-radius:8px;color:#b4b8cc;font-size:12px;text-decoration:none;white-space:nowrap}' +
     '#vy-appbar .vy-notch a:hover{background:rgba(255,255,255,.08);color:#fff}' +
     '#vy-appbar .vy-notch a svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}' +
@@ -50,7 +48,7 @@
       return '<a href="/ui#' + i[0] + '" data-v="' + i[0] + '" title="' + i[1] + '"><svg viewBox="0 0 24 24"><path d="' + i[2] + '"/></svg><span>' + i[1] + '</span></a>';
     }).join('');
     bar.innerHTML = '<nav class="vy-notch" aria-label="Appliance">' + links + '</nav>';
-    document.body.insertBefore(bar, document.body.firstChild);
+    document.body.appendChild(bar);
     var disk = document.getElementById('disk-widget-slot');          // the disk-usage chip lives in the drawer too
     if (disk) { var nav = bar.querySelector('.vy-notch'); var sp = document.createElement('span'); sp.className = 'vy-sep'; nav.appendChild(sp); nav.appendChild(disk); }
     var m = document.createElement('div'); m.id = 'vy-modal';
