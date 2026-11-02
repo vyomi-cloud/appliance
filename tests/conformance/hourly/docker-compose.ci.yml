@@ -7,3 +7,8 @@ services:
       CLOUDLEARN_TIER_ENFORCE: "0"
       # Test boots must not count as installs in the traction numbers.
       VYOMI_NO_TELEMETRY: "1"
+    # The runner's docker.sock is owned by the host `docker` group, whose gid
+    # varies; the default non-root `cloudlearn` user isn't in it, so every VM
+    # (EC2/GCE/Azure) got "permission denied" from docker, fell back to
+    # `stopped` and the post-create SSH probes failed. Run as root in CI.
+    user: "0:0"
