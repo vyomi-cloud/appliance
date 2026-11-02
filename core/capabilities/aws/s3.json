@@ -603,15 +603,21 @@
   ]
  },
  "s3.account.external-access": {
-  "title": "External access summary",
+  "title": "External access summary / IAM Access Analyzer for S3",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "IAM Access Analyzer external-access findings for S3 are not modeled; Vyomi has no Access Analyzer service."
+   "Findings are COMPUTED ON EVERY READ from each general purpose bucket's and access point's effective configuration, so they never go stale: Allow statements in the bucket / access point policy (Principal * or accounts other than yours, with aws:PrincipalOrgID / aws:SourceOrgID, aws:SourceAccount / aws:PrincipalAccount / aws:SourceArn / aws:PrincipalArn conditions narrowing the reach and aws:SourceVpc / aws:SourceVpce marking it VPC-only), bucket ACL grants (AllUsers / AuthenticatedUsers = Public; other canonical users / e-mail grantees = shared) and the effective Block Public Access (bucket OR account; RestrictPublicBuckets neutralises public policy statements, IgnorePublicAcls neutralises public ACL grants, both listed as suppressed). Each finding states the statement or grant that causes it, can be archived/unarchived (archive state is kept per finding and a changed finding re-activates), and disappears when the cause is removed. Not modelled: Deny statements, NotPrincipal / NotAction reasoning, negated condition operators, object ACLs, Multi-Region and Object Lambda access points, KMS/IAM-role/other-service findings and the standalone accessanalyzer service API (analyzers, archive rules, unused access, policy validation, CreateAnalyzer, ListFindings) - those return NotImplemented. The console reads a Vyomi-internal route (/v20180820/_vyomi/access-analysis), not an AWS API."
   ],
-  "api": []
+  "api": [
+   "(Vyomi-internal) GET /v20180820/_vyomi/access-analysis",
+   "(Vyomi-internal) PUT /v20180820/_vyomi/access-analysis/findings/{id}/archive|unarchive"
+  ],
+  "tests": [
+   "tests/conformance/test_s3_sweeps3c_core.py"
+  ]
  },
  "s3.account.directory-buckets": {
   "title": "Directory buckets",
@@ -664,13 +670,53 @@
  "s3.account.table-buckets": {
   "title": "Table buckets",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "S3 Tables (Apache Iceberg table buckets, namespaces, tables) is a separate analytics storage engine Vyomi does not implement."
+   "Amazon S3 Tables control plane (service s3tables, rest-json): Create/Get/List/DeleteTableBucket (name rules, ConflictException, deleting a bucket that still has namespaces is refused), Put/Get/DeleteTableBucketPolicy, Put/Get/DeleteTableBucketEncryption, Put/GetTableBucketStorageClass, Put/GetTableBucketMaintenanceConfiguration, Create/Get/List/DeleteNamespace (refused while tables exist), CreateTable (ICEBERG, optional schema), GetTable, ListTables, DeleteTable, RenameTable (versionToken checked), Get/UpdateTableMetadataLocation (versionToken compare-and-swap; the new metadata file must exist in the table's warehouse), Put/Get/DeleteTablePolicy, Put/GetTableMaintenanceConfiguration, GetTableMaintenanceJobStatus, GetTableEncryption/StorageClass, and Tag/Untag/ListTagsForResource. Every table owns a hidden warehouse bucket <uuid>--table-s3 in the same object store (omitted from ListBuckets): CreateTable writes a real Iceberg v2 metadata JSON there and files you upload through the S3 API under data/ and metadata/ are the table's files. Vyomi has no Iceberg catalog or query engine: it never reads or writes Parquet/manifest contents, no snapshots are created, and maintenance (compaction, snapshot management, unreferenced-file removal) is configured and returned but never runs (job status stays Not_Yet_Run). Resource policies and encryption are stored, never enforced against a caller. The Iceberg REST catalog endpoint (s3tables.<region>.amazonaws.com/iceberg), table/bucket replication, record expiration, bucket metrics configuration and the AWS-managed metadata tables are not implemented (NotImplementedException)."
   ],
-  "api": []
+  "api": [
+   "CreateTableBucket",
+   "GetTableBucket",
+   "ListTableBuckets",
+   "DeleteTableBucket",
+   "PutTableBucketPolicy",
+   "GetTableBucketPolicy",
+   "DeleteTableBucketPolicy",
+   "PutTableBucketEncryption",
+   "GetTableBucketEncryption",
+   "DeleteTableBucketEncryption",
+   "PutTableBucketStorageClass",
+   "GetTableBucketStorageClass",
+   "PutTableBucketMaintenanceConfiguration",
+   "GetTableBucketMaintenanceConfiguration",
+   "CreateNamespace",
+   "GetNamespace",
+   "ListNamespaces",
+   "DeleteNamespace",
+   "CreateTable",
+   "GetTable",
+   "ListTables",
+   "DeleteTable",
+   "RenameTable",
+   "GetTableMetadataLocation",
+   "UpdateTableMetadataLocation",
+   "PutTablePolicy",
+   "GetTablePolicy",
+   "DeleteTablePolicy",
+   "PutTableMaintenanceConfiguration",
+   "GetTableMaintenanceConfiguration",
+   "GetTableMaintenanceJobStatus",
+   "GetTableEncryption",
+   "GetTableStorageClass",
+   "TagResource",
+   "UntagResource",
+   "ListTagsForResource"
+  ],
+  "tests": [
+   "tests/conformance/test_s3_sweeps3c_core.py"
+  ]
  },
  "s3.account.access-grants": {
   "title": "Access Grants",
@@ -803,13 +849,33 @@
  "s3.account.storage-lens": {
   "title": "Storage Lens",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Storage Lens dashboards and groups are an account/organization analytics product Vyomi does not implement."
+   "s3control Put/Get/List/DeleteStorageLensConfiguration (+ Get/Put/DeleteStorageLensConfigurationTagging), Create/Get/List/Update/DeleteStorageLensGroup and TagResource/UntagResource/ListTagsForResource for dashboards and groups are real, with validation (id and Id must match, Include XOR Exclude, prefix delimiter / depth / percentage bounds, data-export destination bucket must exist, group filters: exactly one of a single condition, And or Or; prefix / suffix / tag / age / size with consistent bounds) and the built-in default-account-dashboard (cannot be deleted). Dashboard DATA is computed from the real object store on every read: total storage, object count, average object size, % current-version bytes, noncurrent bytes, delete markers, incomplete multipart upload bytes, and breakdowns by bucket, storage class and prefix (top N, depth / delimiter / minimum-percentage from the configuration); Include/Exclude bucket and region filters are applied; dashboards that select Storage Lens groups report the bytes/objects each group's filter matches; a group can also be applied as a filter to the whole dashboard. A daily snapshot (last 30) is recorded lazily when a dashboard is read, so the trend starts when the dashboard is first opened. Not modelled: activity metrics (requests, bytes uploaded/downloaded, error rates - Vyomi keeps no account-wide request counters, the page says so instead of inventing numbers), advanced cost-optimization / data-protection / performance metric groups, organization (AwsOrg) dashboards, data-export delivery (CSV/Parquet reports, CloudWatch publishing, S3 Tables export) and the 15-month retention - exports are stored and validated but never written. The dashboard data route (/v20180820/_vyomi/storage-lens/{id}) is Vyomi-internal."
   ],
-  "api": []
+  "api": [
+   "PutStorageLensConfiguration",
+   "GetStorageLensConfiguration",
+   "ListStorageLensConfigurations",
+   "DeleteStorageLensConfiguration",
+   "PutStorageLensConfigurationTagging",
+   "GetStorageLensConfigurationTagging",
+   "DeleteStorageLensConfigurationTagging",
+   "CreateStorageLensGroup",
+   "GetStorageLensGroup",
+   "ListStorageLensGroups",
+   "UpdateStorageLensGroup",
+   "DeleteStorageLensGroup",
+   "TagResource",
+   "UntagResource",
+   "ListTagsForResource",
+   "(Vyomi-internal) GET /v20180820/_vyomi/storage-lens/{id}"
+  ],
+  "tests": [
+   "tests/conformance/test_s3_sweeps3c_core.py"
+  ]
  },
  "s3.account.marketplace": {
   "title": "AWS Marketplace for S3",

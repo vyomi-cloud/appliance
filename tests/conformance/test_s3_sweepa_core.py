@@ -158,7 +158,7 @@ def access_points():
     _check("PutAccessPointPolicy", pp["status"] == 200)
     _check("GetAccessPointPolicy round-trips", b"s3:GetObject" in s3(r, "GET", "/v20180820/accesspoint/my-ap/policy", headers=H)["body"])
     _check("PolicyStatus not public", b"<IsPublic>false</IsPublic>" in s3(r, "GET", "/v20180820/accesspoint/my-ap/policyStatus", headers=H)["body"])
-    ni = s3(r, "GET", "/v20180820/storagelens", headers=H)
+    ni = s3(r, "GET", "/v20180820/bucket", headers=H)     # ListRegionalBuckets (S3 on Outposts): never modelled
     _check("unmodelled s3control op -> NotImplemented 501", ni["status"] == 501 and b"NotImplemented" in ni["body"])
     d = s3(r, "DELETE", "/v20180820/accesspoint/my-ap", headers=H)
     _check("DeleteAccessPoint", d["status"] == 204)

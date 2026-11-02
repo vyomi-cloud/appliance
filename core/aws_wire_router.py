@@ -344,6 +344,7 @@ _SIGNING = {
     "events": "events", "lambda": "lambda", "ec2": "vpc", "kinesis": "kinesis", "monitoring": "cloudwatch", "logs": "logs", "states": "stepfunctions",
     "autoscaling": "asg",
     "dlm": "dlm",
+    "s3tables": "s3tables",   # Amazon S3 Tables (rest-json /buckets, /namespaces, /tables, /tag) -> core/s3_tables_core via the S3 store
     "elasticloadbalancing": "elbv2",
     "cloudformation": "cloudformation",
     "ssm": "ssm", "scheduler": "scheduler", "pipes": "pipes", "ram": "ram",
@@ -920,6 +921,13 @@ class AwsWireRouter:
             r = s3.dispatch(self.s3, method, path, query or {}, headers or {}, bytes(body))
             return {"status": r.status, "headers": dict(r.headers or {}),
                     "body": r.body or b""}
+
+        if svc == "s3tables":
+            r = s3.dispatch(self.s3, method, "/__s3tables__" + path, query or {}, headers or {}, bytes(body))
+            hdrs = dict(r.headers or {})
+            if r.media_type and r.body and not any(k.lower() == "content-type" for k in hdrs):
+                hdrs["content-type"] = r.media_type
+            return {"status": r.status, "headers": hdrs, "body": r.body or b""}
 
         if svc == "s3-website":
             rest = path[len("/__s3_website__/"):]

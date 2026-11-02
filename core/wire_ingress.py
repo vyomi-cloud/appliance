@@ -260,8 +260,12 @@ async def serve(router: AwsWireRouter, request, path: str | None = None, body: b
     """Dispatch one FastAPI request through the router (path override for aliases)."""
     if body is None:
         body = await request.body()
+    query = dict(request.query_params)
+    keys = request.query_params.getlist("tagKeys")       # S3 Tables / S3 Control UntagResource: repeated tagKeys=a&tagKeys=b
+    if len(keys) > 1:
+        query["tagKeys"] = ",".join(keys)
     out = await router.ahandle(request.method, path or request.url.path,
-                               dict(request.query_params), dict(request.headers), body)
+                               query, dict(request.headers), body)
     return to_response(out)
 
 

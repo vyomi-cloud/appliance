@@ -2116,6 +2116,8 @@ def list_all_buckets(store: ObjectStore) -> S3Response:
         meta = buckets.get(name) if hasattr(buckets, "get") else None
         if isinstance(meta, dict) and meta.get("bucket_type") == "Directory":
             continue      # directory buckets are listed by ListDirectoryBuckets only
+        if isinstance(meta, dict) and meta.get("internal"):
+            continue      # S3 Tables warehouse buckets (<uuid>--table-s3) are not customer buckets
         created = ((meta.get("creation_date") or meta.get("created")) if isinstance(meta, dict) else None) or _now()
         rows.append(f"<Bucket><Name>{_xml_escape(name)}</Name>"
                     f"<CreationDate>{created}</CreationDate></Bucket>")
@@ -2873,6 +2875,15 @@ def _ap_xml(name: str, bucket: str, rec: dict, tag: str, full: bool) -> str:
             f"<BucketAccountId>{_ACCOUNT_ID}</BucketAccountId></{tag}>")
 
 
+def _load_core(name: str):
+    """Sibling core module (flat on Pyodide, package on the appliance)."""
+    import importlib
+    try:
+        return importlib.import_module("core." + name)
+    except ImportError:
+        return importlib.import_module(name)
+
+
 def _s3control(store: ObjectStore, method: str, raw: str, query: dict, lheaders: dict, body: bytes) -> S3Response:
     segs = [urllib.parse.unquote(x) for x in raw.split("/") if x]      # v20180820, accesspoint, name, [policy|policyStatus]
     acct = lheaders.get("x-amz-account-id")
@@ -2888,6 +2899,15 @@ def _s3control(store: ObjectStore, method: str, raw: str, query: dict, lheaders:
         return _s3c_grants(store, method, segs, query, body)
     if len(segs) >= 2 and segs[1] == "jobs":
         return _s3c_jobs(store, method, segs, query, body)
+    if len(segs) >= 2 and segs[1] in ("storagelens", "storagelensgroup", "tags", "_vyomi"):
+        ins = _load_core("s3_insights_core")
+        if segs[1] == "storagelens":
+            return ins.s3control_lens(store, method, segs, query, body)
+        if segs[1] == "storagelensgroup":
+            return ins.s3control_group(store, method, segs, query, body)
+        if segs[1] == "tags":
+            return ins.s3control_tags(store, method, segs, query, body)
+        return ins.s3_vyomi(store, method, segs, query, body)
     if len(segs) < 2 or segs[1] != "accesspoint":
         return _s3c_error("NotImplemented", "This S3 Control operation is not implemented by Vyomi.", 501)
     hdr = '<?xml version="1.0" encoding="UTF-8"?>'
@@ -4269,6 +4289,8 @@ def _dispatch_inner(store: ObjectStore, method: str, path: str,
     bucket, _, key = raw.partition("/")
     bucket = urllib.parse.unquote(bucket)
     method = (method or "GET").upper()
+    if bucket == "__s3tables__":  # Amazon S3 Tables REST (SigV4 signing name s3tables), routed by AwsWireRouter
+        return _load_core("s3_tables_core").dispatch(store, method, "/" + raw.partition("/")[2], query, headers, body)
     if bucket == "v20180820":     # S3 Control (access points; every other control op -> NotImplemented)
         return _s3control(store, method, raw, query, lheaders, body)
     guard = _grant_cred_guard(store, method, raw, query, lheaders)
