@@ -1,8 +1,6 @@
 /* Policy simulator — real SimulatePrincipalPolicy. Principal picker (user or role),
- * editable action/resource lists, results table colored by EvalDecision. Global request
- * conditions: aws:MultiFactorAuthPresent is wired to a real ContextEntries override
- * (core/iam_core.py _context_entries) — other condition keys (aws:SourceIp, aws:CurrentTime,
- * …) aren't, since nothing in Vyomi produces them. */
+ * editable action/resource lists, arbitrary condition keys (sent as ContextEntries), an optional
+ * resource policy, results table colored by EvalDecision with MissingContextValues surfaced. */
 import { useState } from "react";
 import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
@@ -19,7 +17,8 @@ import ExpandableSection from "@cloudscape-design/components/expandable-section"
 import StatusIndicator from "@cloudscape-design/components/status-indicator";
 import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
-import { NotSimulated } from "../../kit/common.jsx";
+import Textarea from "@cloudscape-design/components/textarea";
+import { asList } from "../../../common/wire.js";
 import * as api from "./api.js";
 
 const decisionType = (d) => (d === "allowed" ? "success" : "error");
@@ -33,6 +32,10 @@ export default function PolicySimulator() {
   const [resources, setResources] = useState(["*"]);
   const [newResource, setNewResource] = useState("");
   const [mfaPresent, setMfaPresent] = useState(false);
+  const [ctxKey, setCtxKey] = useState("");
+  const [ctxVal, setCtxVal] = useState("");
+  const [ctx, setCtx] = useState({});
+  const [resourcePolicy, setResourcePolicy] = useState("");
   const [results, setResults] = useState(null);
   const [busy, setBusy] = useState(false);
 
@@ -46,9 +49,10 @@ export default function PolicySimulator() {
   const simulate = async () => {
     setBusy(true);
     try {
-      const contextEntries = [{ key: "aws:MultiFactorAuthPresent", value: mfaPresent ? "true" : "false" }];
-      const evaluations = await api.simulatePrincipalPolicy(principal.value, actions, resources, contextEntries);
-      setResults(evaluations.map((r) => ({ ...r, _mfaPresent: mfaPresent })));
+      const contextEntries = [{ key: "aws:MultiFactorAuthPresent", value: mfaPresent ? "true" : "false" },
+        ...Object.entries(ctx).map(([key, value]) => ({ key, value }))];
+      const evaluations = await api.simulatePrincipalPolicy(principal.value, actions, resources, contextEntries, resourcePolicy);
+      setResults(evaluations.map((r) => ({ ...r, _cond: contextEntries.map((e) => `${e.key}=${e.value}`).join(", "), _missing: asList(r.MissingContextValues?.member) })));
     }
     catch (e) { notify.error(e); } finally { setBusy(false); }
   };
@@ -76,7 +80,18 @@ export default function PolicySimulator() {
             <Checkbox checked={mfaPresent} onChange={({ detail }) => setMfaPresent(detail.checked)}>
               aws:MultiFactorAuthPresent
             </Checkbox>
-            <NotSimulated feature="Other global condition keys" note="aws:SourceIp, aws:CurrentTime and the rest of the per-request condition keys aren't wired in — nothing in Vyomi produces them. aws:MultiFactorAuthPresent above is real: it is sent as a SimulatePrincipalPolicy ContextEntries override and evaluated against the policy's Condition block." />
+            <SpaceBetween direction="horizontal" size="xs">
+              <Input value={ctxKey} onChange={({ detail }) => setCtxKey(detail.value)} placeholder="Condition key, e.g. aws:SourceIp" ariaLabel="Condition key" />
+              <Input value={ctxVal} onChange={({ detail }) => setCtxVal(detail.value)} placeholder="Value" ariaLabel="Condition value" />
+              <Button disabled={!ctxKey} onClick={() => { setCtx({ ...ctx, [ctxKey]: ctxVal }); setCtxKey(""); setCtxVal(""); }}>Add condition key</Button>
+            </SpaceBetween>
+            {Object.entries(ctx).map(([k, v]) => (
+              <SpaceBetween key={k} direction="horizontal" size="xs"><Box variant="code">{k} = {v}</Box>
+                <Button variant="inline-link" onClick={() => { const { [k]: _, ...rest } = ctx; setCtx(rest); }}>Remove</Button></SpaceBetween>
+            ))}
+            <FormField label="Resource policy (optional)" description="A resource-based policy document evaluated together with the identity policies.">
+              <Textarea rows={5} value={resourcePolicy} onChange={({ detail }) => setResourcePolicy(detail.value)} ariaLabel="Resource policy" spellcheck={false} />
+            </FormField>
           </SpaceBetween>
         </ExpandableSection>
         <Container header={<Header variant="h2" counter={`(${(results || []).length})`} actions={
@@ -92,7 +107,7 @@ export default function PolicySimulator() {
               <Button onClick={() => { if (newResource) { setResources([...new Set([...resources, newResource])]); setNewResource(""); } }}>Add resource</Button>
             </SpaceBetween>
             <Table variant="embedded"
-              items={(results || []).map((r, i) => ({ id: i, service: (r.EvalActionName || "").split(":")[0], action: r.EvalActionName, resourceType: "-", resource: r.EvalResourceName, conditions: `aws:MultiFactorAuthPresent=${r._mfaPresent}`, result: r.EvalDecision }))}
+              items={(results || []).map((r, i) => ({ id: i, service: (r.EvalActionName || "").split(":")[0], action: r.EvalActionName, resourceType: "-", resource: r.EvalResourceName, conditions: r._cond, missing: r._missing, result: r.EvalDecision }))}
               columnDefinitions={[
                 { id: "service", header: "Service", cell: (r) => r.service },
                 { id: "action", header: "Action", cell: (r) => r.action },
@@ -100,7 +115,7 @@ export default function PolicySimulator() {
                 { id: "resource", header: "Resource", cell: (r) => r.resource },
                 { id: "cond", header: "Conditions", cell: (r) => r.conditions },
                 { id: "result", header: "Result", cell: (r) => <StatusIndicator type={decisionType(r.result)}>{r.result}</StatusIndicator> },
-                { id: "details", header: "Result details", cell: (r) => (r.result === "allowed" ? "Allowed by policy" : "Denied by policy") },
+                { id: "details", header: "Result details", cell: (r) => (r.result === "allowed" ? "Allowed by policy" : "Denied by policy") + (r.missing?.length ? ` - missing context values: ${r.missing.join(", ")}` : "") },
               ]}
               empty={<Box textAlign="center" color="inherit"><b>Add an identity to start</b><Box variant="p" color="inherit">Add actions above, choose a principal, then Simulate.</Box></Box>} />
           </SpaceBetween>

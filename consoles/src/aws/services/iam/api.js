@@ -169,10 +169,10 @@ const contextEntriesParams = (entries = []) => {
   });
   return out;
 };
-export const simulatePrincipalPolicy = async (PolicySourceArn, actionNames = [], resourceArns = [], contextEntries = []) => {
+export const simulatePrincipalPolicy = async (PolicySourceArn, actionNames = [], resourceArns = [], contextEntries = [], resourcePolicy = "") => {
   const r = (await call("SimulatePrincipalPolicy", {
     PolicySourceArn, ...members("ActionNames", actionNames), ...members("ResourceArns", resourceArns),
-    ...contextEntriesParams(contextEntries),
+    ...contextEntriesParams(contextEntries), ...(resourcePolicy ? { ResourcePolicy: resourcePolicy } : {}),
   })).SimulatePrincipalPolicyResponse.SimulatePrincipalPolicyResult;
   return asList(r.EvaluationResults?.member);
 };

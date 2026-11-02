@@ -249,6 +249,30 @@ await page.getByRole("dialog").getByRole("button", { name: "Cancel" }).click();
 for (const m of (await iamq("ListVirtualMFADevices")).text.matchAll(/<SerialNumber>([^<]+)</g)) await iamq("DeleteVirtualMFADevice", { SerialNumber: m[1] });
 await iamq("DeleteUser", { UserName: MU });
 
+// ── 8. Policy simulator: arbitrary condition keys, MissingContextValues, resource policy
+const SU = `sim-u-${N}`;
+await iamq("CreateUser", { UserName: SU });
+await iamq("PutUserPolicy", { UserName: SU, PolicyName: "ip", PolicyDocument: JSON.stringify({ Version: "2012-10-17", Statement: [{ Effect: "Allow", Action: "s3:GetObject", Resource: "*", Condition: { IpAddress: { "aws:SourceIp": "10.0.0.0/8" } } }] }) });
+await go("#/iam/policy-simulator", "Policy simulator");
+check("Policy simulator has no Not-simulated badge (arbitrary condition keys are real)", (await badges()) === 0);
+await page.getByRole("button", { name: /Choose a user or role/ }).click();
+await page.getByRole("option", { name: `User: ${SU}` }).click();
+await page.getByRole("textbox", { name: "Action name" }).fill("s3:GetObject");
+await page.getByRole("button", { name: "Add actions" }).click();
+await page.getByRole("button", { name: "Simulate" }).click();
+await page.getByText(/missing context values: aws:SourceIp/).waitFor({ timeout: 10000 });
+check("Simulating without aws:SourceIp is implicitDeny and names the missing key", (await body()).includes("implicitDeny"));
+await page.getByText("Global request conditions").click();
+await page.getByRole("textbox", { name: "Condition key" }).fill("aws:SourceIp");
+await page.getByRole("textbox", { name: "Condition value" }).fill("10.9.8.7");
+await page.getByRole("button", { name: "Add condition key" }).click();
+await page.getByRole("button", { name: "Simulate" }).click();
+await page.getByText("Allowed by policy").waitFor({ timeout: 10000 });
+check("Supplying aws:SourceIp in the UI flips the result to allowed (real CIDR condition evaluation)", (await body()).includes("allowed"));
+await shot("iam2-policy-simulator");
+await iamq("DeleteUserPolicy", { UserName: SU, PolicyName: "ip" });
+await iamq("DeleteUser", { UserName: SU });
+
 console.log("page errors:", errors.length ? errors.slice(0, 3).join(" | ") : "none");
 await browser.close();
 const failed = results.filter((r) => !r.ok);

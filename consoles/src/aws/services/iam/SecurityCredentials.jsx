@@ -7,7 +7,8 @@ import ContentLayout from "@cloudscape-design/components/content-layout";
 import Header from "@cloudscape-design/components/header";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import { useAsync } from "../../../common/useAsync.js";
-import { ErrorAlert, KeyValue, NotSimulatedContainer } from "../../kit/common.jsx";
+import { ErrorAlert, KeyValue } from "../../kit/common.jsx";
+import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { MfaSection, AccessKeysSection } from "./UserDetail.jsx";
 import { SigningCertsSection } from "./CredentialSections.jsx";
 import * as api from "./api.js";
@@ -28,7 +29,7 @@ export default function SecurityCredentials() {
         ]} />
         <MfaSection userName="root" />
         <AccessKeysSection userName="root" />
-        <NotSimulatedContainer title="CloudFront key pairs" note="CloudFront signed-URL key pairs for the account root user are legacy and not issued by Vyomi." />
+        <CapabilityContainer id="iam.root.cloudfront-key-pairs" title="CloudFront key pairs" />
         <SigningCertsSection userName="root" />
       </SpaceBetween>
     </ContentLayout>
