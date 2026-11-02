@@ -176,6 +176,7 @@ const BLANK_LIKE_REAL = [
   { cloud: "aws", service: "Lambda", column: /^description$/i, why: "function / version Description is optional; real AWS shows - when unset" },
   { cloud: "aws", service: "Secrets Manager", column: /^description$/i, why: "secret Description is optional; real AWS shows - when unset" },
   { cloud: "aws", service: "KMS", column: /^description$/i, why: "key Description is optional; real AWS shows - when unset" },
+  { cloud: "aws", service: "KMS", column: /^alias(es)?$/i, why: "keys created through the API (CreateKey) have no alias until one is added; real AWS shows - in Aliases" },
   { cloud: "aws", service: "Systems Manager", column: /^labels$/i, why: "parameter versions carry no labels until you add one; real AWS shows - in History" },
 ];
 let CURRENT = { cloud: "", service: "" };
@@ -288,8 +289,7 @@ async function createWithDefaults(page, drain, cloud, backToList, service) {
         if (await inp.count() && !(await inp.inputValue().catch(() => "x"))) await inp.fill(`crawl-${Date.now().toString(36)}`).catch(() => {});
       }
     };
-    // Only name fields are renamed: the first text field of the form/step, or one labelled
-    // "... name" / "... ID" (a log class "Standard" equal to a listed cell is not a name).
+    // Only name fields are renamed (a log class "Standard" equal to a listed cell is not a name).
     const renameIn = async (where) => {
       const inps = await where.locator("input[type=text], input:not([type])").all();   // a bare <input> is text too
       for (let i = 0; i < inps.length; i++) {
@@ -300,7 +300,9 @@ async function createWithDefaults(page, drain, cloud, backToList, service) {
           const f = e.closest(".field, .wiz-field, .form-field, .fld, label") || e.parentElement;
           return ((f && f.innerText) || e.getAttribute("aria-label") || e.placeholder || "").split("\n")[0];
         }).catch(() => "");
-        if (i === 0 || /\bname\b|\bid\b/i.test(label)) await inp.fill(freshName(v)).catch(() => {});
+        // labelled "... name" / "... ID"; an unlabelled first field is taken to be the name. A
+        // labelled non-name field (Azure VNet "Address space" 10.0.0.0/16) is never touched.
+        if (/\bname\b|\bid\b/i.test(label) || (i === 0 && !label.trim())) await inp.fill(freshName(v)).catch(() => {});
       }
     };
     if (await blade.count()) {
@@ -388,7 +390,11 @@ async function createWithDefaults(page, drain, cloud, backToList, service) {
   const s = await snap(page);
   // Host names are data, not messages: a GKE endpoint such as
   // "kubernetes-api-not-running.control-plane-only.invalid" (RFC 2606 .invalid) is not an error.
-  const msg = s.text.slice(0, 800).replace(/[\w-]+(\.[\w-]+)+/g, "");
+  // Rows already in the list are resource data too: a Cloud Scheduler job that ran shows its
+  // real last-attempt status ("Failed: … 405" from example.com). A rejection is a message
+  // outside the list (form error / toast), so drop the list rows' lines before looking.
+  const rowLines = new Set((await page.locator(ROW_SEL).allInnerTexts().catch(() => [])).flatMap((t) => t.split("\n")).map((l) => l.trim()).filter(Boolean));
+  const msg = s.text.slice(0, 800).split("\n").filter((l) => !rowLines.has(l.trim())).join("\n").replace(/[\w-]+(\.[\w-]+)+/g, "");
   if (/\b(error|failed|invalid)\b/i.test(msg)) {
     f.push({ type: "CREATE_REJECTED", detail: `create with default values was rejected: "${(msg.match(/[^\n]*(error|failed|invalid)[^\n]*/i) || [""])[0].slice(0, 140)}"` });
   }
