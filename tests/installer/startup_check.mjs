@@ -84,7 +84,7 @@ page.on("pageerror", (e) => errors.push(String(e.message).split("\n")[0]));
 page.on("response", (r) => { if (r.status() >= 500) bad.push(`${r.status()} ${r.url().replace(BASE, "")}`); });
 
 try {
-  await page.goto(BASE + "/clouds", { waitUntil: "domcontentloaded" });
+  await page.goto(BASE + "/clouds#spaces", { waitUntil: "domcontentloaded" });
   const title = page.locator("#vyr-title");
   await title.waitFor({ state: "attached", timeout: 60_000 });   // lives in the banner's collapsed panel
   await page.waitForFunction(() => /Appliance is Ready/.test(document.querySelector("#vyr-title")?.textContent || ""), null, { timeout: 120_000 }).catch(() => {});

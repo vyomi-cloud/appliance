@@ -2194,6 +2194,22 @@
       "kind": "ui",
       "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-drawer.mjs",
       "timeout": 600
+    },
+    {
+      "id": "offline-ui-default-cloud",
+      "target": "offline",
+      "cloud": "all",
+      "kind": "ui",
+      "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/drawer/default_cloud.mjs",
+      "timeout": 300
+    },
+    {
+      "id": "nano-ui-default-cloud",
+      "target": "nano",
+      "cloud": "all",
+      "kind": "ui",
+      "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-default-cloud.mjs",
+      "timeout": 600
     }
   ]
 }

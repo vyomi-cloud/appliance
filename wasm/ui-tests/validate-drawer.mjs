@@ -11,7 +11,7 @@ for (const cloud of ["aws", "gcp", "azure"]) {
   const errs = []; p.on("pageerror", e => errs.push(String(e)));
   await bootConsole(p, base, `/${cloud}-console.html`);
   await p.waitForSelector("#vy-appbar .vy-notch a", { timeout: 60000 });
-  check(`${cloud}: drawer has 5 appliance links`, (await p.locator("#vy-appbar .vy-notch a").count()) === 5);
+  check(`${cloud}: drawer has 6 items (5 appliance pages + Default cloud)`, (await p.locator("#vy-appbar .vy-notch a").count()) === 6);
   check(`${cloud}: old back-to-spaces/api/usage header links removed`,
     (await p.locator("header .back-spaces, header .az-back-spaces, header a[href$='#api'], header a[href$='#usage']").count()) === 0);
   const url0 = p.url();

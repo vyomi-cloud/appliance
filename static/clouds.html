@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
   <script>if(/[?&]embed=1/.test(location.search))document.documentElement.classList.add("vy-embed");</script>
+  <script>window.__vyHash=location.hash;try{if(!/[?&]embed=1/.test(location.search)&&!location.hash&&localStorage.getItem("vyomi.defaultCloud"))document.documentElement.classList.add("vy-entering")}catch(e){}</script>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Workspaces — vyomi</title>
@@ -1296,6 +1297,8 @@
     html.vy-embed #update-banner, html.vy-embed #vyomi-readiness-mount, html.vy-embed #nano-foot { display: none !important; }
     html.vy-embed #app-main { margin: 0 !important; border-radius: 0 !important; }
     html.vy-embed #activate-modal, html.vy-embed .am-overlay { display: none !important; }
+
+    html.vy-entering body { visibility: hidden; }   /* default cloud set: no flash of the appliance page before redirecting */
 </style>
   <style id="vy-light-theme">
     /* ═══════════ Light theme — the whole console page (Spaces, Health, Knowledge Center,
@@ -3908,5 +3911,6 @@
     } catch(e) { /* fail-open — server still enforces */ }
   })();
   </script>
+<script src="/assets/vyomi-cloudpick.js" data-entry defer></script>
 </body>
 </html>

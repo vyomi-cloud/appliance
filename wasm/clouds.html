@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
   <script>if(/[?&]embed=1/.test(location.search))document.documentElement.classList.add("vy-embed");</script>
+  <script>window.__vyHash=location.hash;try{if(!/[?&]embed=1/.test(location.search)&&!location.hash&&localStorage.getItem("vyomi.defaultCloud"))document.documentElement.classList.add("vy-entering")}catch(e){}</script>
   <script src="nano-rates.js"></script>
   <script>
   (function(){
@@ -1283,6 +1284,8 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     html.vy-embed #update-banner, html.vy-embed #vyomi-readiness-mount, html.vy-embed #nano-foot { display: none !important; }
     html.vy-embed #app-main { margin: 0 !important; border-radius: 0 !important; }
     html.vy-embed #activate-modal, html.vy-embed .am-overlay { display: none !important; }
+
+    html.vy-entering body { visibility: hidden; }   /* default cloud set: no flash of the appliance page before redirecting */
 </style>
   <style>#host-util-card .stat-actions{display:none!important}</style>   <!-- Free up space / Grow disk are appliance-only -->
   <script src="./nano-sw.js" defer></script>
@@ -4354,5 +4357,6 @@ function nanoLogout(){
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", apply); else apply();
 })();
 </script>
+<script src="./vyomi-cloudpick.js" data-nano data-entry defer></script>
 </body>
 </html>

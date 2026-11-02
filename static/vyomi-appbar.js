@@ -15,7 +15,8 @@
     ['workspace', 'Health', 'M3 3v18h18M7 12h3v6H7zM12 8h3v10h-3zM17 4h3v14h-3z'],
     ['kc', 'Knowledge Center', 'M4 19.5A2.5 2.5 0 0 1 6.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z'],
     ['usage', 'SDK & CLI usage', 'M4 17l6-6-6-6M12 19h8'],
-    ['api', 'API reference', 'M16 18l6-6-6-6M8 6l-6 6 6 6']
+    ['api', 'API reference', 'M16 18l6-6-6-6M8 6l-6 6 6 6'],
+    ['default', 'Default cloud', 'M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z']
   ];
   var css = '' +
     '#vy-appbar{position:fixed;left:0;right:0;bottom:0;height:0;z-index:70;display:flex;justify-content:center;pointer-events:none;font-family:Inter,system-ui,sans-serif}' +
@@ -61,9 +62,17 @@
     m.addEventListener('click', function (e) { if (e.target === m) close(); });
     m.querySelector('.hd button').addEventListener('click', close);
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); });
+    function openPick() {                       // the default-cloud dialog lives in its own script; load it on first use
+      if (window.VyomiCloudPick) { window.VyomiCloudPick.open({ forced: false }); return; }
+      var sc = document.createElement('script'); sc.src = (s && s.src ? s.src : 'vyomi-appbar.js').replace('vyomi-appbar.js', 'vyomi-cloudpick.js');
+      if (CL !== '/clouds') sc.setAttribute('data-nano', '');
+      sc.onload = function () { window.VyomiCloudPick.open({ forced: false }); };
+      document.head.appendChild(sc);
+    }
     bar.querySelector('.vy-notch').addEventListener('click', function (e) {
       var a = e.target.closest('a[data-v]'); if (!a) return;
       e.preventDefault();
+      if (a.getAttribute('data-v') === 'default') { openPick(); return; }
       m.querySelector('#vy-modal-t').textContent = a.title;
       fr.src = CL + '?embed=1#' + a.getAttribute('data-v');
       m.classList.add('open');

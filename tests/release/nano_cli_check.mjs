@@ -56,7 +56,7 @@ if (RELAY_PORT !== 8090) {   // the bundle auto-detects :8090; point it at a rel
 }
 const page = await context.newPage();
 page.on("pageerror", (e) => console.log("[nano pageerror]", e.message));
-await page.goto(base + "/clouds.html", { waitUntil: "domcontentloaded" });
+await page.goto(base + "/clouds.html#spaces", { waitUntil: "domcontentloaded" });
 await page.waitForFunction(() => navigator.serviceWorker && navigator.serviceWorker.controller
   && document.querySelector("#nano-foot-toggle"), null, { timeout: 180000, polling: 500 });
 // Up to 6 min: the worker downloads Pyodide, PGlite and the cores before it registers.
