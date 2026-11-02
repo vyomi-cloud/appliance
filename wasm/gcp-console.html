@@ -501,6 +501,18 @@ table.gc tr:hover td{background:#f6f8fc}
 .vy-colmenu > .btn{height:32px}
 /* dialogs: rounded, tinted surface */
 .proj-modal .box{border-radius:28px;background:#f8fafd}
+
+/* create forms — Material outlined fields */
+.wizard-page .field{margin-bottom:20px}
+.wizard-page .field>label:not(.radio){font:500 12px/16px "Google Sans",Roboto,Arial,sans-serif;color:#444746;letter-spacing:.1px;margin-bottom:6px;display:block}
+.wizard-page .field input[type=text],.wizard-page .field input[type=number],.wizard-page .field input[type=password],.wizard-page .field input:not([type]),.wizard-page .field select,.wizard-page .field textarea{height:40px;box-sizing:border-box;border:1px solid #747775;border-radius:4px;background:#fff;color:#1f1f1f;font:400 14px "Google Sans",Roboto,Arial,sans-serif;padding:0 12px;max-width:560px;width:100%;transition:border-color .12s,box-shadow .12s}
+.wizard-page .field textarea{height:auto;padding:10px 12px}
+.wizard-page .field select{appearance:none;-webkit-appearance:none;padding-right:36px;background:#fff url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'><path fill='%23444746' d='M7 10l5 5 5-5z'/></svg>") no-repeat right 8px center}
+.wizard-page .field input:hover,.wizard-page .field select:hover,.wizard-page .field textarea:hover{border-color:#1f1f1f}
+.wizard-page .field input:focus,.wizard-page .field select:focus,.wizard-page .field textarea:focus{outline:none;border-color:#0b57d0;box-shadow:inset 0 0 0 1px #0b57d0}
+.wizard-page .field input[type=radio],.wizard-page .field input[type=checkbox]{accent-color:#0b57d0;width:18px;height:18px;margin:0 10px 0 0;vertical-align:middle}
+.wizard-page label.radio{display:flex;align-items:center;font:400 14px "Google Sans",Roboto,Arial,sans-serif;color:#1f1f1f;padding:6px 0}
+.wizard-page .info-pill{background:#f0f4f9;border-radius:4px;border:none;max-width:560px}
 </style>
 </head>
 <body>
@@ -799,7 +811,7 @@ function crumbsEl(){
     c.append(el("span",{class:"sep"}, "›"), el("span",{class:"current"}, name));
   } else if (STATE.view === "create") {
     c.append(el("span",{class:"sep"}, "›"),
-      el("span",{class:"current"}, "Create " + svc.label.replace(/s$/,"").toLowerCase()));
+      el("span",{class:"current"}, createTitle(svc)));
   }
   return c;
 }
@@ -3977,6 +3989,10 @@ GT.evdestination = async function(host, svc, item){
 // ========== END DETAIL TABS =================================================
 
 // ========== CREATE — collapsible-sections form + right summary card =========
+function createTitle(svc){
+  const T={compute:"Create an instance",cloudsql:"Create a Cloud SQL instance",storage:"Create a bucket",container:"Create a cluster",pubsub:"Create a topic",functions:"Create function",vpc:"Create a VPC network",secretmanager:"Create secret",kms:"Create a key ring",cloudscheduler:"Create a job",iam:"Create service account",iamcredentials:"Create credential",monitoring:"Create alerting policy",redis:"Create a Redis instance",firestore:"Create a database",artifactregistry:"Create repository",eventarc:"Create trigger",apigateway:"Create gateway"};
+  return T[svc.key] || ("Create " + svc.label.replace(/s$/,""));
+}
 function renderCreate(main){
   main.innerHTML = "";  // self-clear so any caller is safe
   const svc = svcByKey(STATE.service);
@@ -3984,7 +4000,7 @@ function renderCreate(main){
   const wrap = el("div",{class:"wizard-page"});
   wrap.append(crumbsEl());
   wrap.append(el("div",{class:"page-head"}, el("h1",{},
-    svc.key === "compute" ? "Create an instance" : "Create " + svc.label.replace(/s$/,"").toLowerCase())));
+    createTitle(svc))));
   if (svc.wizard && Array.isArray(svc.wizard.tabs)) {
     renderCollapsibleWizard(wrap, svc);
   } else {
