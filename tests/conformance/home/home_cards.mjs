@@ -25,6 +25,8 @@ const check = (ok, what, detail = "") => {
   if (!ok) fails++;
   return ok;
 };
+// Service keys whose card label is not a prefix of the key (azure.vm -> "Virtual Machines").
+const ALIAS = { vm: ["virtualmachines"], sql: ["sqldatabase", "sqlserver"], kv: ["keyvault"], fn: ["functions"] };
 const money = (s) => { const m = /\$\s*([\d,]+(?:\.\d+)?)/.exec(s || ""); return m ? Number(m[1].replace(/,/g, "")) : null; };
 
 const api = await (await fetch(`${BASE}/api/spaces`)).json();
@@ -78,7 +80,8 @@ try {
   const cut = ranked.length > 4 ? Number(ranked[4][1]) : -Infinity;
   const named = ranked.filter(([, v]) => Number(v) > cut);
   const flat = card.text.toLowerCase().replace(/[^a-z0-9]+/g, "");   // "Pub/Sub" -> "pubsub"
-  const svcMissing = named.filter(([k]) => !flat.includes(k.split(".")[1].replace(/[^a-z0-9]+/gi, "").slice(0, 4).toLowerCase())).map(([k]) => k);
+  const svcMissing = named.filter(([k]) => !(flat.includes(k.split(".")[1].replace(/[^a-z0-9]+/gi, "").slice(0, 4).toLowerCase()) || (ALIAS[k.split(".")[1]] || []).some((a) => flat.includes(a)))).map(([k]) => k);
+  if (svcMissing.length) console.log("card text:", card.text.replace(/\n/g, " | ").slice(0, 400));
   check(svcMissing.length === 0, "every top-ranked service the API credits appears as a row", `missing: ${svcMissing.join(", ")}`);
   if (ranked.length > 4)
     check(card.text.includes(`Other (${ranked.length - 4})`), "the remaining credited services fold into one Other row",
