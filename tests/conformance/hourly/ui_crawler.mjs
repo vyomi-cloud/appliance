@@ -165,14 +165,19 @@ const BLANK_LIKE_REAL = [
   { cloud: "aws", service: "API Gateway", column: /^description$/i, why: "Description is optional; real AWS shows - when unset" },
   { cloud: "aws", service: "EventBridge", column: /^description$/i, why: "rule Description is optional; real AWS shows - when unset" },
   { cloud: "aws", service: "VPC", column: /^name$/i, why: "Name is just the Name tag; untagged VPCs/subnets/route tables show - in real AWS" },
-  { cloud: "aws", service: "EC2", column: /^iam role$/i, why: "no instance profile at launch (defaults); real AWS shows - for IAM Role" },
-  { cloud: "aws", service: "EC2", column: /^key pair assigned at launch$/i, why: "launched without a key pair (defaults); real AWS shows -" },
-  { cloud: "aws", service: "EC2", column: /^state transition reason$/i, why: "a running instance that never changed state has no reason; real AWS shows -" },
-  { cloud: "aws", service: "EC2", column: /^description$/i, why: "ENI / security-group-rule descriptions are optional; real AWS shows - when unset" },
+  // EC2 detail tabs (010f88ca) show the instance's real DescribeInstances fields; a default
+  // launch attaches no instance profile and no key pair, and a running instance has no
+  // state-transition reason: the real console shows - for each. ENI and security-group-rule
+  // descriptions are optional and blank unless set.
+  { cloud: "aws", service: "EC2", column: /^iam role$/i, why: "no instance profile attached at launch; real AWS shows - for IAM Role" },
+  { cloud: "aws", service: "EC2", column: /^key pair assigned at launch$/i, why: "launched without a key pair; real AWS shows -" },
+  { cloud: "aws", service: "EC2", column: /^state transition reason$/i, why: "a running instance has no state transition reason; real AWS shows -" },
+  { cloud: "aws", service: "EC2", column: /^description$/i, why: "ENI / security-group rule Description is optional; real AWS shows - when unset" },
   { cloud: "aws", service: "Lambda", column: /^description$/i, why: "function / version Description is optional; real AWS shows - when unset" },
   { cloud: "aws", service: "Secrets Manager", column: /^description$/i, why: "secret Description is optional; real AWS shows - when unset" },
-  { cloud: "aws", service: "KMS", column: /^description$/i, why: "key Description is optional (empty by default); real AWS shows - when unset" },
-  { cloud: "aws", service: "Systems Manager", column: /^labels$/i, why: "a parameter version without labels; real AWS Parameter Store history shows - " },
+  { cloud: "aws", service: "KMS", column: /^description$/i, why: "key Description is optional; real AWS shows - when unset" },
+  { cloud: "aws", service: "KMS", column: /^alias(es)?$/i, why: "keys created through the API (CreateKey) have no alias until one is added; real AWS shows - in Aliases" },
+  { cloud: "aws", service: "Systems Manager", column: /^labels$/i, why: "parameter versions carry no labels until you add one; real AWS shows - in History" },
 ];
 let CURRENT = { cloud: "", service: "" };
 const BUILT_IN_ROW = /\bBuiltInRole\b/;
@@ -238,7 +243,21 @@ async function dismissPopups(page) {
 // Data rows only: consoles often append <tr>s straight to <table> (no <tbody>),
 // so match any <tr> holding a <td>, not just "tbody tr".
 const ROW_SEL = "#main table tr:has(td), #main [role=row]:has([role=cell],[role=gridcell])";
-const rowCount = (page) => page.locator(ROW_SEL).count();
+// Lists page (AWS shows 10 rows by default), so once a service holds a page-full the visible
+// row count cannot grow; use the list's own total ("15 items") when it states one.
+const rowCount = async (page) => {
+  const rows = await page.locator(ROW_SEL).count();
+  const t = await page.locator("#main").innerText().catch(() => "");
+  const m = /\b(\d+)\s+items?\b/i.exec(t);
+  return m ? Math.max(rows, +m[1]) : rows;
+};
+
+// A fresh variant of a taken name that keeps its character class: names without separators
+// (Azure storage accounts: lowercase letters and digits only) get a plain suffix.
+const freshName = (v) => {
+  const sfx = Date.now().toString(36).slice(-4);
+  return /[-_.\/]/.test(v) ? `${v}-${sfx}` : `${v}${sfx}`;
+};
 
 // Create a resource accepting every form default, return to the service list
 // (create pages navigate away from it), and check the new row is there, fully
@@ -249,7 +268,13 @@ async function createWithDefaults(page, drain, cloud, backToList, service) {
   if (!(await btn.count())) return f;
   const rowsBefore = await rowCount(page);
   const savBefore = await savingsSnapshot(page);
-  const listText = await page.locator("#main").innerText().catch(() => "");
+  // What the list already shows, cell by cell (and each cell's last path segment: GCP lists
+  // full resource names, …/functions/<id>). A form NAME whose value equals a listed cell is
+  // taken. Matching anywhere in the list text instead also renamed ordinary field values that
+  // merely appear in it (CloudWatch "CPUUtilization", "300", "80" → an invalid alarm).
+  const listNames = new Set(await page.evaluate((sel) => [...document.querySelectorAll(sel)].flatMap((tr) =>
+    [...tr.querySelectorAll("td,[role=cell],[role=gridcell]")].map((c) => (c.innerText || "").trim()).filter(Boolean)
+  ).flatMap((t) => [t, t.split("/").pop(), t.split("@")[0]]), ROW_SEL).catch(() => []));   // …/<id>, <id>@project.iam…
   try {
     await btn.click({ timeout: 3000 });
     await sleep(1200);
@@ -265,8 +290,25 @@ async function createWithDefaults(page, drain, cloud, backToList, service) {
         if (await inp.count() && !(await inp.inputValue().catch(() => "x"))) await inp.fill(`crawl-${Date.now().toString(36)}`).catch(() => {});
       }
     };
+    // Only name fields are renamed (a log class "Standard" equal to a listed cell is not a name).
+    const renameIn = async (where) => {
+      const inps = await where.locator("input[type=text], input:not([type])").all();   // a bare <input> is text too
+      for (let i = 0; i < inps.length; i++) {
+        const inp = inps[i];
+        const v = await inp.inputValue().catch(() => "");
+        if (!v || !/^[\/a-z0-9][\/a-z0-9._-]*$/i.test(v) || !listNames.has(v)) continue;
+        const label = await inp.evaluate((e) => {
+          const f = e.closest(".field, .wiz-field, .form-field, .fld, label") || e.parentElement;
+          return ((f && f.innerText) || e.getAttribute("aria-label") || e.placeholder || "").split("\n")[0];
+        }).catch(() => "");
+        // labelled "... name" / "... ID"; an unlabelled first field is taken to be the name. A
+        // labelled non-name field (Azure VNet "Address space" 10.0.0.0/16) is never touched.
+        if (/\bname\b|\bid\b/i.test(label) || (i === 0 && !label.trim())) await inp.fill(freshName(v)).catch(() => {});
+      }
+    };
     if (await blade.count()) {
       for (let step = 0; step < 12; step++) {
+        await renameIn(blade);   // each wizard tab renders only its own fields (the name is on Basics)
         await fillWizardRequired();
         const fin = blade.locator("button").filter({ hasText: /^\s*create\s*$/i });
         if (await fin.count()) break;
@@ -284,9 +326,17 @@ async function createWithDefaults(page, drain, cloud, backToList, service) {
     // A default name that already exists (an earlier crawl created it) would be
     // rejected or overwritten by the real cloud; give it a fresh suffix so the
     // create adds a row.
-    for (const inp of await scope.locator("input[type=text]").all()) {
-      const v = await inp.inputValue().catch(() => "");
-      if (v && /^[a-z0-9][a-z0-9._-]*$/i.test(v) && listText.includes(v)) await inp.fill(`${v}-${Date.now().toString(36).slice(-4)}`).catch(() => {});
+    const renameTaken = () => renameIn(scope);
+    await renameTaken();
+    // AWS create pages are step wizards (Choose secret type → Configure secret → …) that only
+    // render the current step's fields, so the name may sit on a later step: walk the
+    // "Next: …" buttons, renaming on each step, then submit from the last one.
+    for (let step = 0; step < 8 && !(await blade.count()); step++) {
+      const next = scope.locator("button:visible").filter({ hasText: /^\s*next\s*:/i }).first();   // wizard "Next: <step>", not a list pager
+      if (!(await next.count())) break;
+      await next.click({ timeout: 3000 }).catch(() => {});
+      await sleep(400);
+      await renameTaken();
     }
     for (const inp of await scope.locator("input[type=password]").all()) {
       if (!(await inp.inputValue().catch(() => "x"))) await inp.fill("Vyomi-Crawl-1a!").catch(() => {});
@@ -302,18 +352,52 @@ async function createWithDefaults(page, drain, cloud, backToList, service) {
     }
     const submit = scope.locator("button, [type=submit]").filter({ hasText: SUBMIT_BTN }).filter({ hasNotText: NOT_SUBMIT }).last();
     if (!(await submit.count())) { f.push({ type: "CREATE_NO_SUBMIT", detail: "create form has no submit button" }); return f; }
+    const TAKEN = /already exists|ResourceInUse|ResourceExists|AlreadyExists|name is (already )?(taken|in use)/i;
+    let taken = false;
+    const onResp = async (r) => {
+      if (r.status() < 400 || !["POST", "PUT"].includes(r.request().method())) return;
+      if (r.status() === 409 || TAKEN.test(await r.text().catch(() => ""))) taken = true;
+    };
+    page.on("response", onResp);
     await submit.click({ timeout: 3000 });
     await sleep(3000);
+    page.off("response", onResp);
+    // The list only shows its first page, so a default name left by an earlier crawl can be
+    // taken without being visible above (DynamoDB "Music" behind 10+ tables). The cloud then
+    // rightly refuses it ("already exists"): as a user would, rename it once and resubmit.
+    if (taken) {
+      const first = scope.locator("button:visible").filter({ hasText: /^\s*1\s*[A-Za-z]/ }).first();   // step "1 Table details"
+      if (await first.count()) { await first.click({ timeout: 3000 }).catch(() => {}); await sleep(400); }
+      const nameInp = scope.locator("input[type=text]:visible, input:not([type]):visible").first();
+      const v = await nameInp.inputValue().catch(() => "");
+      if (v) {
+        // "(default)" (Firestore's one default database) cannot take a suffix: use a fresh id.
+        await nameInp.fill(/^[\/a-z0-9][\/a-z0-9._-]*$/i.test(v) ? freshName(v) : `crawl-${Date.now().toString(36)}`).catch(() => {});
+        for (let step = 0; step < 8 && !(await blade.count()); step++) {
+          const next = scope.locator("button:visible").filter({ hasText: /^\s*next\s*:/i }).first();   // wizard "Next: <step>", not a list pager
+          if (!(await next.count())) break;
+          await next.click({ timeout: 3000 }).catch(() => {});
+          await sleep(400);
+        }
+        await submit.click({ timeout: 3000 }).catch(() => {});
+        await sleep(3000);
+      }
+    }
   } catch (e) {
     f.push({ type: "CREATE_FAILED", detail: `create with defaults failed: ${String(e.message || e).split("\n")[0].slice(0, 200)}` });
     return f;
   }
   f.push(...drain().map((x) => ({ ...x, detail: `during create: ${x.detail}` })));
   const s = await snap(page);
-  // a word, not a hostname label: GKE shows its control-plane-only endpoint as `….invalid` (RFC 2606)
-  const REJECT = /(?<!\w\.)\b(error|failed|invalid)\b(?!\.\w)/i;
-  if (REJECT.test(s.text.slice(0, 800))) {
-    f.push({ type: "CREATE_REJECTED", detail: `create with default values was rejected: "${(s.text.split("\n").find((l) => REJECT.test(l)) || "").slice(0, 140)}"` });
+  // Host names are data, not messages: a GKE endpoint such as
+  // "kubernetes-api-not-running.control-plane-only.invalid" (RFC 2606 .invalid) is not an error.
+  // Rows already in the list are resource data too: a Cloud Scheduler job that ran shows its
+  // real last-attempt status ("Failed: … 405" from example.com). A rejection is a message
+  // outside the list (form error / toast), so drop the list rows' lines before looking.
+  const rowLines = new Set((await page.locator(ROW_SEL).allInnerTexts().catch(() => [])).flatMap((t) => t.split("\n")).map((l) => l.trim()).filter(Boolean));
+  const msg = s.text.slice(0, 800).split("\n").filter((l) => !rowLines.has(l.trim())).join("\n").replace(/[\w-]+(\.[\w-]+)+/g, "");
+  if (/\b(error|failed|invalid)\b/i.test(msg)) {
+    f.push({ type: "CREATE_REJECTED", detail: `create with default values was rejected: "${(msg.match(/[^\n]*(error|failed|invalid)[^\n]*/i) || [""])[0].slice(0, 140)}"` });
   }
   await backToList();
   const rowsAfter = await rowCount(page);
@@ -533,7 +617,11 @@ async function crawlConsole(browser, base, con, needsSW) {
           // that tab's real data: it inherits its liveness rather than reading as static.
           const prevLive = row.surfaces.at(-1)?.state === "live" && row.surfaces.at(-1)?.kind === "tab";
           const samePanel = t > 0 && prevLive && added.trim() === "" && !tf.some((f) => f.type === "DEAD_TAB");
-          surface("tab", label, tf, calls() + tagEditor + (samePanel ? 1 : 0), added, tokens, editable);
+          // Azure tabs render into their own panel (.sub-content). A line the tab shares with the
+          // Overview before it (the full resource id, now in Overview's essentials too) is still
+          // this resource's data: look for its identifying values in the tab's own panel as well.
+          const panel = await page.locator("#main .sub-content, #blade .sub-content").first().innerText({ timeout: 1000 }).catch(() => "");
+          surface("tab", label, tf, calls() + tagEditor + (samePanel ? 1 : 0), added + "\n" + panel, tokens, editable);
           if (process.env.DEBUG_CRAWL && row.surfaces.at(-1).state === "static") console.log(`[debug] ${svc.label}/${label} static: ${JSON.stringify(added.slice(0, 160))}`);
         }
       } catch (e) {

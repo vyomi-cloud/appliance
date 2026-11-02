@@ -1354,6 +1354,12 @@ def _register_aws_console(app: FastAPI) -> None:
         # well as the plain `value` / native `SecretString`.
         value = (body.get("value") or body.get("SecretString")
                  or body.get("secret_string") or "changeme")
+        # Create never overwrites: real Secrets Manager (and Nano's core/secrets_core) reject
+        # an existing name; updating a value is PUT /api/aws/secrets/{name}.
+        if name in _aws_secret_index_get(space) or vc.kv_get("aws", space, name) is not None:
+            return JSONResponse(status_code=400, content={
+                "ok": False, "code": "ResourceExistsException",
+                "error": f"The operation failed because the secret {name} already exists."})
         if vc.kv_put("aws", space, name, value) is None:
             return _vault_unavailable_response("aws.secrets")
         _aws_secret_index_add(space, name)

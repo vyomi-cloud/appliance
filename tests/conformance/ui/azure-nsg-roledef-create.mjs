@@ -28,6 +28,13 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const NSG = `${BASE}/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/networkSecurityGroups/nsg-cloudlearn?api-version=2023-11-01`;
 const dropNsg = () => fetch(NSG, { method: "DELETE" }).catch(() => {});
 await dropNsg();   // the default name is fixed: a leftover from an earlier run would hide the new row
+// Earlier suites leave another cloud's space active; the console would then auto-switch and
+// reload mid-test. Activate the Azure space up front, as a user arriving from Spaces would.
+try {
+  const sp = ((await (await fetch(`${BASE}/api/spaces`)).json()).spaces || [])
+    .find((s) => String(s.provider).toLowerCase() === "azure" && s.status === "running");
+  if (sp) await fetch(`${BASE}/api/spaces/${sp.space_id || sp.id}/switch`, { method: "POST" });
+} catch (_) {}
 
 const browser = await chromium.launch();
 const page = await (await browser.newContext()).newPage();
@@ -39,7 +46,14 @@ try {
   for (const [svc, nameRe] of [[/Network Security Group/i, /^nsg-/], [/Role Definition/i, /^[0-9a-f-]{36}$/]]) {
     const label = String(svc);
     const rail = page.locator(RAIL_SEL).filter({ hasText: svc }).first();
-    if (!(await rail.count())) { check(false, `${label} is on the console rail`); continue; }
+    // the rail is built after the console's first API answers; on a busy appliance that is
+    // well past the 3 s settle above, so wait for the entry instead of sampling once
+    await rail.waitFor({ state: "attached", timeout: 30000 }).catch(() => {});
+    if (!(await rail.count())) {
+      const body = ((await page.locator("body").innerText().catch(() => "")) || "").slice(0, 160).replace(/\n+/g, " | ");
+      check(false, `${label} is on the console rail`, body);
+      continue;
+    }
     await rail.click({ timeout: 5000 });
     await sleep(1500);
     await page.locator("#main button").filter({ hasText: /create/i }).first().click({ timeout: 5000 });

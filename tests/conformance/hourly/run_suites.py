@@ -128,10 +128,15 @@ def run_suite(s: dict, subs: dict) -> dict:
     cwd = os.path.join(ROOT, s.get("cwd", ""))
     os.makedirs(os.path.join(OUT, "logs"), exist_ok=True)
     log_path = os.path.join(OUT, "logs", f"{s['id']}{s.get('log_suffix', '')}.log")
+    timeout = s.get("timeout", 600)
+    # A crawl's timeout budgets ONE console (CI runs it per cloud shard); run unsharded, the
+    # same suite walks all three consoles in turn, so give it each console's budget.
+    if is_crawl(s) and not s.get("log_suffix") and "CLOUDS=" not in cmd:
+        timeout *= len(CLOUDS)
     t0 = time.time()
     try:
         p = subprocess.run(cmd, shell=True, cwd=cwd, capture_output=True, text=True,
-                           timeout=s.get("timeout", 600), executable="/bin/bash", env=env)
+                           timeout=timeout, executable="/bin/bash", env=env)
         log, code = (p.stdout or "") + (p.stderr or ""), p.returncode
     except subprocess.TimeoutExpired as e:
         log = ((e.stdout or b"").decode(errors="replace") if isinstance(e.stdout, bytes) else (e.stdout or "")) + "\nTIMEOUT"
