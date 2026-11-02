@@ -1,63 +1,8 @@
 {
- "at": "2026-11-02T02:27:36+00:00",
+ "at": "2026-11-02T03:27:42+00:00",
  "baseline": false,
- "changes": [
-  {
-   "cloud": "gcp",
-   "service": "sqladmin/v1beta4",
-   "kind": "operation-flapping",
-   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.start:fd389969f2ca",
-   "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.start changed",
-   "detail": {
-    "request": {
-     "was": "SqlWorkloadCapturesStartRequest",
-     "now": "WorkloadCapturesStartRequest"
-    }
-   },
-   "actionable": false
-  },
-  {
-   "cloud": "gcp",
-   "service": "sqladmin/v1beta4",
-   "kind": "operation-flapping",
-   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.startReplay:f421c3d61dc0",
-   "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.startReplay changed",
-   "detail": {
-    "request": {
-     "was": "SqlWorkloadCapturesStartReplayRequest",
-     "now": "WorkloadCapturesStartReplayRequest"
-    }
-   },
-   "actionable": false
-  },
-  {
-   "cloud": "gcp",
-   "service": "sqladmin/v1beta4",
-   "kind": "operation-flapping",
-   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.stop:c8c00d855f73",
-   "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.stop changed",
-   "detail": {
-    "request": {
-     "was": "SqlWorkloadCapturesStopRequest",
-     "now": "WorkloadCapturesStopRequest"
-    }
-   },
-   "actionable": false
-  },
-  {
-   "cloud": "gcp",
-   "service": "sqladmin/v1beta4",
-   "kind": "operation-flapping",
-   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.stopReplay:acd5b7e919b1",
-   "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.stopReplay changed",
-   "detail": {
-    "request": {
-     "was": "SqlWorkloadCapturesStopReplayRequest",
-     "now": "WorkloadCapturesStopReplayRequest"
-    }
-   },
-   "actionable": false
-  }
- ],
- "errors": []
+ "changes": [],
+ "errors": [
+  "maven/com.azure.resourcemanager:azure-resourcemanager-dns: The read operation timed out"
+ ]
 }
