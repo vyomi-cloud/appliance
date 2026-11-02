@@ -23,7 +23,8 @@ BANNED = ("urllib.request", "http.client", "socket", "requests", "httpx", "boto3
 EXPORT_CORES = ("sql_store.py", "rds_core.py", "rds_data_core.py", "gcp_cloudsql_core.py", "azure_sql_core.py",
                 "azure_arm_core.py", "s3_object_core.py", "gcp_storage_core.py", "azure_blob_core.py",
                 "dynamodb_core.py", "gcp_firestore_core.py", "object_store.py", "parquet_pyarrow.py")
-ALLOWED = {("apigateway_core.py", "urllib.request")}   # HTTP integration → the user's own endpoint
+ALLOWED = {("apigateway_core.py", "urllib.request"),   # HTTP integration → the user's own endpoint
+           ("eventbridge_core.py", "urllib.request")}  # API destination → the user's own endpoint
 
 
 def _check(name, cond, detail=""):
