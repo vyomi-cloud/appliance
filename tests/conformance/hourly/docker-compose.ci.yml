@@ -3,11 +3,6 @@
 # and keep CI boots out of the install/traction numbers.
 services:
   simulator:
-    # The CI boot doesn't export VYOMI_DOCKER_GID, so the non-root `cloudlearn` user
-    # can't open the host's docker socket (group 118 on runners) and every EC2/VM
-    # launch fails with DockerUnavailable. Run as root in CI so the Docker compute
-    # backend works; real users set VYOMI_DOCKER_GID (docker-compose.yml group_add).
-    user: "0:0"
     environment:
       CLOUDLEARN_TIER_ENFORCE: "0"
       # Test boots must not count as installs in the traction numbers.
