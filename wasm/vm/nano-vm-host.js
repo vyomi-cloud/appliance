@@ -335,6 +335,53 @@
   function onSerial(fn) { serialSubs.add(fn); return () => serialSubs.delete(fn); }
   function serialSend(cloud, ref, data) { const it = readReg()[vmId(cloud, ref)]; if (it) attach(it.id).port.postMessage({ type: "serial-in", data }); }
 
+
+  // ── console view: show the VM's real power state ─────────────────────────
+  // The cloud record says "running" the moment an instance is created, but the in-browser VM only exists when VM
+  // compute is on and it has booted. Console-only: the page's fetch of the three consoles' instance records is
+  // rewritten to "stopped" (VM compute off / VM not running: start it manually from Connect) or "pending" (booting).
+  // The SDK/CLI/service-worker paths never go through this fetch, so their instance states are unchanged.
+  const vmPower = (cloud, ref) => {
+    if (!enabled()) return "stopped";
+    const s = (handles.get(vmId(cloud, ref)) || {}).status;
+    const st = s && s.state;
+    return st === "running" ? "running" : (!st || st === "booting" || st === "launching" || st === "starting") ? "pending" : "stopped";
+  };
+  const AWS_S = { stopped: "stopped", pending: "pending" }, GCP_S = { stopped: "TERMINATED", pending: "PROVISIONING" };
+  const AZ_S = { stopped: "stopped", pending: "starting" };
+  function viewFix(node, depth) {
+    if (!node || typeof node !== "object" || depth > 6) return;
+    if (Array.isArray(node)) { node.forEach((x) => viewFix(x, depth + 1)); return; }
+    try {
+      if (typeof node.instance_id === "string" && /^running$/i.test(String(node.state || ""))) {            // EC2
+        const v = vmPower("aws", node.instance_id); if (v !== "running") { node.state = AWS_S[v]; node.vm_note = "In-browser VM is " + (v === "pending" ? "starting" : "not running — start it from Connect"); }
+      } else if (typeof node.machineType === "string" && /^RUNNING$/i.test(String(node.status || ""))) {     // Compute Engine
+        const n = String(node.name || "").split("/").pop(), v = vmPower("gcp", n); if (v !== "running") node.status = GCP_S[v];
+      } else if (/virtualMachines$/i.test(String(node.type || "")) && node.properties) {                    // Azure VM
+        const v = vmPower("azure", node.name || ""), ps = String(node.properties.powerState || "");
+        if (v !== "running" && (!ps || /running$/i.test(ps))) node.properties.powerState = "PowerState/" + AZ_S[v];
+      } else if (Array.isArray(node.statuses) && node.statuses.some((s) => /^PowerState\/running$/i.test(String(s && s.code)))) { // Azure instanceView
+        const ref = (/\/virtualMachines\/([^/]+)\/instanceView/i.exec(viewFix.url || "") || [])[1];
+        if (ref) { const v = vmPower("azure", decodeURIComponent(ref)); if (v !== "running") node.statuses.forEach((s) => { if (/^PowerState\/running$/i.test(String(s.code))) { s.code = "PowerState/" + AZ_S[v]; s.displayStatus = "VM " + AZ_S[v]; } }); }
+      }
+    } catch (_) {}
+    for (const k of Object.keys(node)) if (node[k] && typeof node[k] === "object") viewFix(node[k], depth + 1);
+  }
+  const VM_URL = /\/api\/ec2\/instances(\/|\?|$)|\/compute\/v1\/projects\/[^/]+\/zones\/[^/]+\/instances|\/Microsoft\.Compute\/virtualMachines/i;
+  if (!window.__vmViewFetch) {
+    window.__vmViewFetch = true;
+    const of = window.fetch.bind(window);
+    window.fetch = async function (input, init) {
+      const res = await of(input, init);
+      try {
+        const u = typeof input === "string" ? input : (input && input.url) || "";
+        const m = ((init && init.method) || (input && input.method) || "GET").toUpperCase();
+        if (m !== "GET" || !VM_URL.test(u) || /private-key|connect-info|\/exec|vm-status/.test(u) || !/json/i.test(res.headers.get("content-type") || "")) return res;
+        const j = await res.clone().json(); viewFix.url = u; viewFix(j, 0);
+        return new Response(JSON.stringify(j), { status: res.status, statusText: res.statusText, headers: res.headers });
+      } catch (_) { return res; }
+    };
+  }
   window.NanoVM = {
     enabled, kick, resume, handle, onSerial, serialSend, accountKey, vmId, renderConnect,
     registry: readReg,
