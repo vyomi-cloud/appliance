@@ -10,6 +10,7 @@ import Input from "@cloudscape-design/components/input";
 import Textarea from "@cloudscape-design/components/textarea";
 import RadioGroup from "@cloudscape-design/components/radio-group";
 import Select from "@cloudscape-design/components/select";
+import Checkbox from "@cloudscape-design/components/checkbox";
 import Toggle from "@cloudscape-design/components/toggle";
 import StatusIndicator from "@cloudscape-design/components/status-indicator";
 import SpaceBetween from "@cloudscape-design/components/space-between";
@@ -19,7 +20,7 @@ import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import { follow, href } from "../../../common/router.js";
 import DeleteModal from "../../kit/DeleteModal.jsx";
-import { ErrorAlert, fmtBytes, fmtDate, KeyValue, NotSimulatedContainer } from "../../kit/common.jsx";
+import { ErrorAlert, fmtBytes, fmtDate, KeyValue } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { attrType, capacity, keyOf, statusOf, tableClass } from "./Tables.jsx";
 import { getLayoutSettings, TABLE_TAB_ID } from "./prefs.js";
@@ -61,12 +62,17 @@ function CapacityModal({ d, visible, onDismiss, onDone }) {
   const [mode, setMode] = useState(capacity(d) === "On-demand" ? "PAY_PER_REQUEST" : "PROVISIONED");
   const [rcu, setRcu] = useState(String(d.ProvisionedThroughput?.ReadCapacityUnits || 5));
   const [wcu, setWcu] = useState(String(d.ProvisionedThroughput?.WriteCapacityUnits || 5));
+  const od = d.OnDemandThroughput || {};
+  const [capOn, setCapOn] = useState((od.MaxReadRequestUnits ?? -1) >= 0 || (od.MaxWriteRequestUnits ?? -1) >= 0);
+  const [capR, setCapR] = useState(String(od.MaxReadRequestUnits >= 0 ? od.MaxReadRequestUnits : 100));
+  const [capW, setCapW] = useState(String(od.MaxWriteRequestUnits >= 0 ? od.MaxWriteRequestUnits : 100));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const submit = async () => {
     setBusy(true); setError(null);
     try {
-      await api.updateTable({ TableName: d.TableName, BillingMode: mode, ...(mode === "PROVISIONED" ? { ProvisionedThroughput: { ReadCapacityUnits: Number(rcu), WriteCapacityUnits: Number(wcu) } } : {}) });
+      await api.updateTable({ TableName: d.TableName, BillingMode: mode, ...(mode === "PROVISIONED" ? { ProvisionedThroughput: { ReadCapacityUnits: Number(rcu), WriteCapacityUnits: Number(wcu) } }
+        : { OnDemandThroughput: capOn ? { MaxReadRequestUnits: Number(capR), MaxWriteRequestUnits: Number(capW) } : { MaxReadRequestUnits: -1, MaxWriteRequestUnits: -1 } }) });
       notify.success("Capacity settings updated."); onDone(); onDismiss();
     } catch (e) { setError(e); } finally { setBusy(false); }
   };
@@ -79,6 +85,15 @@ function CapacityModal({ d, visible, onDismiss, onDone }) {
           <RadioGroup value={mode} onChange={({ detail }) => setMode(detail.value)}
             items={[{ value: "PAY_PER_REQUEST", label: "On-demand" }, { value: "PROVISIONED", label: "Provisioned" }]} />
         </FormField>
+        {mode === "PAY_PER_REQUEST" && (
+          <SpaceBetween size="xs">
+            <Checkbox checked={capOn} onChange={({ detail }) => setCapOn(detail.checked)}>Set maximum table throughput</Checkbox>
+            {capOn && <SpaceBetween direction="horizontal" size="l">
+              <FormField label="Maximum read request units"><Input type="number" value={capR} onChange={({ detail }) => setCapR(detail.value)} ariaLabel="Maximum read request units" /></FormField>
+              <FormField label="Maximum write request units"><Input type="number" value={capW} onChange={({ detail }) => setCapW(detail.value)} ariaLabel="Maximum write request units" /></FormField>
+            </SpaceBetween>}
+          </SpaceBetween>
+        )}
         {mode === "PROVISIONED" && (
           <SpaceBetween direction="horizontal" size="l">
             <FormField label="Read capacity units"><Input type="number" value={rcu} onChange={({ detail }) => setRcu(detail.value)} ariaLabel="Read capacity units" /></FormField>
@@ -87,6 +102,46 @@ function CapacityModal({ d, visible, onDismiss, onDone }) {
         )}
       </SpaceBetween>
     </Modal>
+  );
+}
+
+function StreamTriggers({ d }) {
+  const notify = useNotify();
+  const arn = d.LatestStreamArn;
+  const t = useAsync(() => (arn ? api.listStreamTriggers(arn) : Promise.resolve([])), [arn]);
+  const fns = useAsync(() => api.listFunctionNames(), []);
+  const [modal, setModal] = useState(null);
+  const [sel, setSel] = useState([]);
+  const rows = t.data || [];
+  return (
+    <CapabilityContainer id="dynamodb.lambda-triggers" title="Trigger" counter={`(${rows.length})`}
+      description="Lambda functions invoked with the change records of this table's DynamoDB stream."
+      actions={<SpaceBetween direction="horizontal" size="xs">
+        <Button disabled={!sel.length} onClick={async () => { try { for (const e of sel) await api.deleteStreamTrigger(e.UUID); notify.success("Trigger deleted."); setSel([]); t.reload(); } catch (e) { notify.error(e); } }}>Delete</Button>
+        <Button variant="primary" disabled={!arn} onClick={() => setModal({ fn: "" })}>Create trigger</Button>
+      </SpaceBetween>}>
+      {!arn ? <Box color="text-body-secondary">Turn on the DynamoDB stream for this table to create triggers.</Box> : (
+        <Table variant="embedded" items={rows} trackBy="UUID" loading={t.loading} selectionType="multi" selectedItems={sel} onSelectionChange={({ detail }) => setSel(detail.selectedItems)}
+          columnDefinitions={[
+            { id: "fn", header: "Lambda function", cell: (e) => e.FunctionName },
+            { id: "state", header: "Status", cell: (e) => <StatusIndicator type={e.State === "Enabled" ? "success" : "stopped"}>{e.State}</StatusIndicator> },
+            { id: "batch", header: "Batch size", cell: (e) => e.BatchSize },
+            { id: "last", header: "Last processing result", cell: (e) => e.LastProcessingResult },
+          ]}
+          empty={<Box textAlign="center" color="inherit"><b>No triggers</b></Box>} />
+      )}
+      <Modal visible={!!modal} onDismiss={() => setModal(null)} header="Create trigger"
+        footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs"><Button variant="link" onClick={() => setModal(null)}>Cancel</Button>
+          <Button variant="primary" disabled={!modal?.fn} onClick={async () => {
+            try { await api.createStreamTrigger(arn, modal.fn); notify.success("Trigger created."); setModal(null); t.reload(); } catch (e) { notify.error(e); }
+          }}>Create trigger</Button></SpaceBetween></Box>}>
+        {modal && <FormField label="Lambda function" description="An existing function in this Vyomi environment.">
+          <Select selectedOption={modal.fn ? { value: modal.fn, label: modal.fn } : null} options={(fns.data || []).map((n) => ({ value: n, label: n }))}
+            placeholder="Choose a function" statusType={fns.loading ? "loading" : "finished"} empty="No Lambda functions"
+            onChange={({ detail }) => setModal({ fn: detail.selectedOption.value })} ariaLabel="Lambda function" />
+        </FormField>}
+      </Modal>
+    </CapabilityContainer>
   );
 }
 
@@ -389,7 +444,7 @@ function ExportsAndStreamsTab({ d, reload }) {
         <KeyValue columns={2} items={[["Stream status", stream?.StreamEnabled ? "On" : "Off"], ["View type", stream?.StreamViewType || "-"],
           ["Latest stream ARN", d.LatestStreamArn || "-"]]} />
       </CapabilityContainer>
-      <NotSimulatedContainer title="Trigger" feature="DynamoDB stream triggers (Lambda)" />
+      <StreamTriggers d={d} />
       <KinesisModal name={name} dest={dest} visible={kinesisModal} onDismiss={() => setKinesisModal(false)} onDone={() => { reload(); kd.reload(); }} />
       <StreamModal name={name} enabled={!!stream?.StreamEnabled} viewType={stream?.StreamViewType} visible={streamModal} onDismiss={() => setStreamModal(false)} onDone={reload} />
     </SpaceBetween>
@@ -492,7 +547,7 @@ function Backups({ name }) {
   const [restoring, setRestoring] = useState(null);
   const [del, setDel] = useState(false);
   if (b.loading) return <Spinner />;
-  if (b.data === null) return <NotSimulatedContainer title="Point-in-time recovery (PITR)" />;
+  if (b.data === null) return <CapabilityContainer id="dynamodb.table.pitr" title="Point-in-time recovery (PITR)"><Box color="text-body-secondary">The connected backend did not answer this setting.</Box></CapabilityContainer>;
   const pitrOn = b.data?.PointInTimeRecoveryDescription?.PointInTimeRecoveryStatus === "ENABLED";
   return (
     <SpaceBetween size="l">
@@ -569,13 +624,15 @@ function Settings({ d, reload }) {
   const [ttlModal, setTtlModal] = useState(false);
   return (
     <SpaceBetween size="l">
-      <KeyValue title="Read/write capacity" columns={2} items={[["Capacity mode", capacity(d)], ["Read capacity", d.ProvisionedThroughput?.ReadCapacityUnits || "On-demand"], ["Write capacity", d.ProvisionedThroughput?.WriteCapacityUnits || "On-demand"]]} />
-      {ttl.data === null ? <NotSimulatedContainer title="Time to Live (TTL)" /> : (
+      <KeyValue title="Read/write capacity" columns={2} items={[["Capacity mode", capacity(d)], ["Read capacity", d.ProvisionedThroughput?.ReadCapacityUnits || "On-demand"], ["Write capacity", d.ProvisionedThroughput?.WriteCapacityUnits || "On-demand"],
+        ...(d.OnDemandThroughput ? [["Maximum read request units", d.OnDemandThroughput.MaxReadRequestUnits < 0 ? "No limit" : d.OnDemandThroughput.MaxReadRequestUnits], ["Maximum write request units", d.OnDemandThroughput.MaxWriteRequestUnits < 0 ? "No limit" : d.OnDemandThroughput.MaxWriteRequestUnits]] : []),
+        ["Warm read units per second", d.WarmThroughput?.ReadUnitsPerSecond], ["Warm write units per second", d.WarmThroughput?.WriteUnitsPerSecond], ["Warm throughput status", d.WarmThroughput?.Status]]} />
+      {ttl.data === null ? <CapabilityContainer id="dynamodb.table.ttl" title="Time to Live (TTL)"><Box color="text-body-secondary">The connected backend did not answer this setting.</Box></CapabilityContainer> : (
         <KeyValue title="Time to Live (TTL)" actions={<Button onClick={() => setTtlModal(true)}>{ttl.data?.TimeToLiveStatus === "ENABLED" ? "Turn off" : "Turn on"}</Button>}
           columns={2} items={[["TTL status", ttl.data?.TimeToLiveStatus === "ENABLED" ? "On" : "Off"], ["TTL attribute", ttl.data?.AttributeName]]} />
       )}
       <KeyValue title="Encryption" columns={2} items={[["Key management", d.SSEDescription?.SSEType === "KMS" ? "AWS managed key" : "Owned by Amazon DynamoDB"]]} />
-      {tags.data === null ? <NotSimulatedContainer title="Tags" /> : (
+      {tags.data === null ? <CapabilityContainer id="dynamodb.table.tags" title="Tags"><Box color="text-body-secondary">The connected backend did not answer this setting.</Box></CapabilityContainer> : (
         <Table variant="container" header={<Header variant="h2" counter={`(${tags.data?.length || 0})`}>Tags</Header>} items={tags.data || []} loading={tags.loading}
           columnDefinitions={[{ id: "k", header: "Key", cell: (x) => x.Key }, { id: "v", header: "Value", cell: (x) => x.Value || "-" }]}
           empty={<Box textAlign="center" color="inherit"><b>No tags</b></Box>} />

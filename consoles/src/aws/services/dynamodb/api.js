@@ -1,5 +1,5 @@
 /* DynamoDB over the native JSON wire (X-Amz-Target DynamoDB_20120810.*). */
-import { awsJson, awsQuery, asList } from "../../../common/wire.js";
+import { awsJson, awsQuery, asList, restJson } from "../../../common/wire.js";
 
 const call = (op, body) => awsJson("dynamodb", `DynamoDB_20120810.${op}`, body, { version: "1.0" });
 
@@ -177,3 +177,12 @@ export function marshal(v) {
 }
 export const marshalItem = (o) => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, marshal(v)]));
 export const avType = (av) => Object.keys(av || {})[0] || "-";
+
+// ── Stream triggers: Lambda event-source mappings on the table's stream ARN (native Lambda REST) ──
+export const listFunctionNames = async () => ((await restJson("GET", "/2015-03-31/functions")).Functions || []).map((f) => f.FunctionName);
+export const listStreamTriggers = async (streamArn) =>
+  (await restJson("GET", "/2015-03-31/event-source-mappings", { query: { EventSourceArn: streamArn } })).EventSourceMappings || [];
+export const createStreamTrigger = (streamArn, functionName, { batchSize = 100, enabled = true } = {}) =>
+  restJson("POST", "/2015-03-31/event-source-mappings", { body: { EventSourceArn: streamArn, FunctionName: functionName, BatchSize: batchSize, StartingPosition: "LATEST", Enabled: enabled } });
+export const updateStreamTrigger = (uuid, body) => restJson("PUT", `/2015-03-31/event-source-mappings/${encodeURIComponent(uuid)}`, { body });
+export const deleteStreamTrigger = (uuid) => restJson("DELETE", `/2015-03-31/event-source-mappings/${encodeURIComponent(uuid)}`);

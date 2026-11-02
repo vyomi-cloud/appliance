@@ -19,7 +19,8 @@ import TagEditor from "@cloudscape-design/components/tag-editor";
 import ContentLayout from "@cloudscape-design/components/content-layout";
 import { useNotify } from "../../../common/notify.jsx";
 import { follow, navigate } from "../../../common/router.js";
-import { ErrorAlert, NotSimulated, NotSimulatedContainer } from "../../kit/common.jsx";
+import { ErrorAlert } from "../../kit/common.jsx";
+import { CapabilityContainer } from "../../kit/Capability.jsx";
 import * as api from "./api.js";
 
 const TYPES = [{ value: "S", label: "String" }, { value: "N", label: "Number" }, { value: "B", label: "Binary" }];
@@ -87,6 +88,8 @@ export default function CreateTable() {
   const [settings, setSettings] = useState("default");
   const [mode, setMode] = useState("PAY_PER_REQUEST");
   const [rcu, setRcu] = useState("5"); const [wcu, setWcu] = useState("5");
+  const [capOn, setCapOn] = useState(false); const [capR, setCapR] = useState("100"); const [capW, setCapW] = useState("100");
+  const [warmR, setWarmR] = useState(""); const [warmW, setWarmW] = useState("");
   const [tableClass, setTableClass] = useState("STANDARD");
   const [sseType, setSseType] = useState("OWNED");
   const [deletionProtection, setDeletionProtection] = useState(false);
@@ -126,6 +129,8 @@ export default function CreateTable() {
         KeySchema: [{ AttributeName: pk, KeyType: "HASH" }, ...(sk ? [{ AttributeName: sk, KeyType: "RANGE" }] : [])],
         BillingMode: billing,
         ...(billing === "PROVISIONED" ? { ProvisionedThroughput: { ReadCapacityUnits: Number(rcu), WriteCapacityUnits: Number(wcu) } } : {}),
+        ...(custom && billing === "PAY_PER_REQUEST" && capOn ? { OnDemandThroughput: { MaxReadRequestUnits: Number(capR), MaxWriteRequestUnits: Number(capW) } } : {}),
+        ...(custom && (warmR || warmW) ? { WarmThroughput: { ...(warmR ? { ReadUnitsPerSecond: Number(warmR) } : {}), ...(warmW ? { WriteUnitsPerSecond: Number(warmW) } : {}) } } : {}),
         ...(custom ? { TableClass: tableClass, DeletionProtectionEnabled: deletionProtection } : {}),
         ...(custom && sseType !== "OWNED" ? { SSESpecification: { Enabled: true, SSEType: "KMS" } } : {}),
         ...(indexes.length ? { GlobalSecondaryIndexes: indexes } : {}),
@@ -195,8 +200,13 @@ export default function CreateTable() {
                         {mode === "PAY_PER_REQUEST" ? (
                           <FormField label="Maximum table throughput">
                             <SpaceBetween size="xs">
-                              <Checkbox checked={false} disabled>Set maximum table throughput</Checkbox>
-                              <NotSimulated feature="Maximum table throughput" note="On-demand throughput caps aren't enforced by Vyomi." />
+                              <Checkbox checked={capOn} onChange={({ detail }) => setCapOn(detail.checked)}>Set maximum table throughput</Checkbox>
+                              {capOn && (
+                                <Grid gridDefinition={[{ colspan: 6 }, { colspan: 6 }]}>
+                                  <FormField label="Maximum read request units"><Input type="number" value={capR} onChange={({ detail }) => setCapR(detail.value)} ariaLabel="Maximum read request units" /></FormField>
+                                  <FormField label="Maximum write request units"><Input type="number" value={capW} onChange={({ detail }) => setCapW(detail.value)} ariaLabel="Maximum write request units" /></FormField>
+                                </Grid>
+                              )}
                             </SpaceBetween>
                           </FormField>
                         ) : (
@@ -207,17 +217,19 @@ export default function CreateTable() {
                                 <FormField label="Write capacity units"><Input type="number" value={wcu} onChange={({ detail }) => setWcu(detail.value)} ariaLabel="Write capacity units" /></FormField>
                               </Grid>
                             </FormField>
-                            <SpaceBetween size="xs">
-                              <Toggle checked disabled>Read capacity auto scaling</Toggle>
-                              <Toggle checked disabled>Write capacity auto scaling</Toggle>
-                              <NotSimulated feature="Auto scaling" note="Application Auto Scaling for provisioned capacity isn't modeled by Vyomi; set fixed units above." />
-                            </SpaceBetween>
+                            <CapabilityContainer id="dynamodb.autoscaling" title="Auto scaling" />
                           </SpaceBetween>
                         )}
                       </SpaceBetween>
                     </Container>
 
-                    <NotSimulatedContainer title="Warm throughput" note="Computed warm-throughput values aren't modeled by Vyomi." />
+                    <CapabilityContainer id="dynamodb.table.warm-throughput" title="Warm throughput"
+                      description="Pre-warm the table to a read/write level. A table is always warm to at least 12,000 read and 4,000 write units per second; a higher value can only raise it.">
+                      <Grid gridDefinition={[{ colspan: 6 }, { colspan: 6 }]}>
+                        <FormField label="Warm read units per second" description="Default 12000"><Input type="number" value={warmR} placeholder="12000" onChange={({ detail }) => setWarmR(detail.value)} ariaLabel="Warm read units per second" /></FormField>
+                        <FormField label="Warm write units per second" description="Default 4000"><Input type="number" value={warmW} placeholder="4000" onChange={({ detail }) => setWarmW(detail.value)} ariaLabel="Warm write units per second" /></FormField>
+                      </Grid>
+                    </CapabilityContainer>
 
                     <Container header={<Header variant="h3">Secondary indexes</Header>}>
                       <SpaceBetween size="l">

@@ -275,6 +275,20 @@ def _enforce_throughput(store: NoSqlStore, table: dict, *, rcu: float = 0.0, wcu
     tables never throttle. Raises ProvisionedThroughputExceededException the way real
     DynamoDB does, after pushing ThrottledRequests/Read|WriteThrottleEvents."""
     if str(table.get("billing_mode", "PAY_PER_REQUEST")).upper() == "PAY_PER_REQUEST":
+        # On-demand: never throttles unless a maximum table throughput (OnDemandThroughput) is set.
+        od = table.get("on_demand_throughput") or {}
+        tname = table.get("table_name", "")
+        r_throttled = w_throttled = False
+        if rcu and od.get("MaxReadRequestUnits", -1) >= 0 and not _throughput_bucket(
+                store, (tname, None, "odr"), max(od["MaxReadRequestUnits"], 0)).consume(rcu):
+            r_throttled = True
+        if wcu and od.get("MaxWriteRequestUnits", -1) >= 0 and not _throughput_bucket(
+                store, (tname, None, "odw"), max(od["MaxWriteRequestUnits"], 0)).consume(wcu):
+            w_throttled = True
+        if r_throttled or w_throttled:
+            _emit_throttle_metrics(store, tname, r_throttled, w_throttled)
+            raise DdbError("ThrottlingException",
+                           "Throughput exceeds the maximum table throughput (OnDemandThroughput) configured for the table.", 400)
         return
     tname = table.get("table_name", "")
     pt = table.get("provisioned_throughput") or {}
@@ -560,6 +574,9 @@ def _table_view(store: NoSqlStore, table: dict, include_items: bool = True) -> d
     # billing mode was ever changed; a table created PROVISIONED has none.
     if ppr or table.get("billing_mode_summary"):
         view["BillingModeSummary"] = {"BillingMode": table.get("billing_mode", "PAY_PER_REQUEST")}
+    if ppr:
+        view["OnDemandThroughput"] = dict(table.get("on_demand_throughput") or {"MaxReadRequestUnits": -1, "MaxWriteRequestUnits": -1})
+    view["WarmThroughput"] = {**(table.get("warm_throughput") or _WARM_DEFAULT), "Status": "ACTIVE"}
     sse_type = table.get("sse_type", "")
     if sse_type:
         view["SSEDescription"] = {"Status": "ENABLED", "SSEType": sse_type}
@@ -668,6 +685,37 @@ def _validate_create_table(payload: dict, native: bool) -> None:
         raise _validation("One or more parameter values were invalid: Duplicate index name")
 
 
+_WARM_DEFAULT = {"ReadUnitsPerSecond": 12000, "WriteUnitsPerSecond": 4000}
+
+
+def _od_throughput(spec: Any, billing_mode: str) -> dict | None:
+    """Validate an OnDemandThroughput {MaxReadRequestUnits, MaxWriteRequestUnits} (-1 = unlimited)."""
+    if spec is None:
+        return None
+    if str(billing_mode).upper() != "PAY_PER_REQUEST":
+        raise DdbError("ValidationException", "OnDemandThroughput can only be set on a table with BillingMode PAY_PER_REQUEST.", 400)
+    out = {}
+    for k in ("MaxReadRequestUnits", "MaxWriteRequestUnits"):
+        v = (spec or {}).get(k, -1)
+        if not isinstance(v, int) or isinstance(v, bool) or v < -1:
+            raise DdbError("ValidationException", f"{k} must be -1 (no limit) or a non-negative integer.", 400)
+        out[k] = v
+    return out
+
+
+def _warm_throughput(spec: Any, current: dict | None = None) -> dict:
+    """WarmThroughput: a table is always at least at the default warm level; a request can only raise it."""
+    base = dict(current or _WARM_DEFAULT)
+    for k in ("ReadUnitsPerSecond", "WriteUnitsPerSecond"):
+        v = (spec or {}).get(k)
+        if v is None:
+            continue
+        if not isinstance(v, int) or isinstance(v, bool) or v < 1:
+            raise DdbError("ValidationException", f"{k} must be a positive integer.", 400)
+        base[k] = max(base[k], v)
+    return base
+
+
 def _create_table_record(store: NoSqlStore, payload: dict[str, Any]) -> dict:
     table_name = str(payload.get("TableName") or payload.get("table_name") or "").strip()
     if not table_name:
@@ -730,6 +778,8 @@ def _create_table_record(store: NoSqlStore, payload: dict[str, Any]) -> dict:
         },
         "table_class": table_class,
         "deletion_protection_enabled": deletion_protection,
+        "on_demand_throughput": _od_throughput(payload.get("OnDemandThroughput"), billing_mode),
+        "warm_throughput": _warm_throughput(payload.get("WarmThroughput")),
         "sse_type": sse_type,
         "tags": copy.deepcopy(tags or {}),
         "indexes": indexes,
@@ -786,6 +836,12 @@ def _update_table_record(store: NoSqlStore, table: dict, payload: dict[str, Any]
             "ReadCapacityUnits": int(pt.get("ReadCapacityUnits", current.get("ReadCapacityUnits", 5)) or 5),
             "WriteCapacityUnits": int(pt.get("WriteCapacityUnits", current.get("WriteCapacityUnits", 5)) or 5),
         }
+    if "OnDemandThroughput" in payload:
+        table["on_demand_throughput"] = _od_throughput(payload["OnDemandThroughput"], table.get("billing_mode", "PAY_PER_REQUEST"))
+    if str(table.get("billing_mode", "")).upper() != "PAY_PER_REQUEST":
+        table["on_demand_throughput"] = None       # leaving on-demand drops its caps
+    if "WarmThroughput" in payload:
+        table["warm_throughput"] = _warm_throughput(payload["WarmThroughput"], table.get("warm_throughput"))
     if "DeletionProtectionEnabled" in payload or "deletion_protection_enabled" in payload:
         table["deletion_protection_enabled"] = bool(payload.get("DeletionProtectionEnabled",
                                                                  payload.get("deletion_protection_enabled")))
@@ -1220,7 +1276,41 @@ def _emit_stream_record(table: dict, event_name: str, old_av: dict | None, new_a
     st["start_seq"] = st["records"][0]["seq"] if st["records"] else seq
 
 
+def _fire_lambda_triggers(store: NoSqlStore, table: dict, event_name: str) -> None:
+    """DynamoDB Streams -> Lambda: every Enabled event-source mapping on this table's stream
+    ARN invokes its function with the real DynamoDB-Streams event shape for the record that
+    was JUST appended to the stream. Delivery is synchronous (no poller process) with a batch
+    of one record; LastProcessingResult reflects the invocation outcome."""
+    st = table.get("stream") or {}
+    lam = getattr(store, "lam_store", None)
+    if not st.get("enabled") or lam is None or not st.get("records"):
+        return
+    depth = getattr(store, "_ddb_trigger_depth", 0)
+    if depth >= 3:          # a function writing back into its own table must not recurse forever
+        return
+    try:
+        from core import lambda_core as _lam
+        maps = _lam.active_mappings_for_source(lam, st["arn"])
+        if not maps:
+            return
+        r = st["records"][-1]
+        event = {"Records": [{
+            "eventID": str(r["seq"]), "eventName": r["event_name"], "eventVersion": "1.1",
+            "eventSource": "aws:dynamodb", "awsRegion": "us-east-1",
+            "dynamodb": {**r["dynamodb"], "ApproximateCreationDateTime": r["ts"], "SequenceNumber": _seq_str(r["seq"])},
+            "eventSourceARN": st["arn"]}]}
+        store._ddb_trigger_depth = depth + 1
+        try:
+            for m in maps:
+                _lam.invoke_trigger_mapping(lam, m, event)
+        finally:
+            store._ddb_trigger_depth = depth
+    except Exception:
+        pass
+
+
 def _push_kinesis_record(store: NoSqlStore, table: dict, event_name: str, old_av: dict | None, new_av: dict | None) -> None:
+    _fire_lambda_triggers(store, table, event_name)
     dest = table.get("kinesis_dest")
     if not dest or dest.get("status") != "ACTIVE":
         return

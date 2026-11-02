@@ -16,11 +16,11 @@ import DaxClusters from "./DaxClusters.jsx";
 import DaxSubnetGroups from "./DaxSubnetGroups.jsx";
 import DaxParameterGroups from "./DaxParameterGroups.jsx";
 import DaxEvents from "./DaxEvents.jsx";
-import { NotSimulatedContainer } from "../../kit/common.jsx";
+import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { getLayoutSettings } from "./prefs.js";
 
-const ns = (title) => () => <NotSimulatedContainer title={title} />;
-const NS = [["update-settings", "Update settings"], ["integrations", "Integrations"], ["reserved-capacity", "Reserved capacity"]];
+const ns = (title, id) => () => <CapabilityContainer id={`dynamodb.account.${id}`} title={title} />;
+const NS = [["update-settings", "Update settings", "update-settings"], ["integrations", "Integrations", "zero-etl"], ["reserved-capacity", "Reserved capacity", "reserved-capacity"]];
 
 // The bare "/dynamodb" entry route honours the "Default entry page" console preference
 // (Dashboard / Tables / Explore items) — Tables.jsx renders both the Tables and Explore
@@ -69,6 +69,6 @@ export default {
     { pattern: "/dynamodb/dax/subnet-groups", component: DaxSubnetGroups, crumbs: () => [{ text: "DAX", href: "#/dynamodb/dax/clusters" }, { text: "Subnet groups", href: "#/dynamodb/dax/subnet-groups" }] },
     { pattern: "/dynamodb/dax/parameter-groups", component: DaxParameterGroups, crumbs: () => [{ text: "DAX", href: "#/dynamodb/dax/clusters" }, { text: "Parameter groups", href: "#/dynamodb/dax/parameter-groups" }] },
     { pattern: "/dynamodb/dax/events", component: DaxEvents, crumbs: () => [{ text: "DAX", href: "#/dynamodb/dax/clusters" }, { text: "Events", href: "#/dynamodb/dax/events" }] },
-    ...NS.map(([p, t]) => ({ pattern: `/dynamodb/${p}`, component: ns(t), crumbs: () => [{ text: t, href: `#/dynamodb/${p}` }] })),
+    ...NS.map(([p, t, id]) => ({ pattern: `/dynamodb/${p}`, component: ns(t, id), crumbs: () => [{ text: t, href: `#/dynamodb/${p}` }] })),
   ],
 };

@@ -601,6 +601,7 @@ class AwsWireRouter:
         self.cw.asg_store = self.asg    # real Auto Scaling alarm actions (aws.cloudwatch.alarms.actions.compute)
         self.rds.cw_store = self.cw   # real DatabaseConnections/ReadIOPS/WriteIOPS metrics (rds.monitoring)
         self.ddb.cw_store = self.cw            # real per-op CloudWatch metrics (aws.dynamodb.monitor)
+        self.ddb.lam_store = self.lam          # DynamoDB Streams -> Lambda event-source mappings (dynamodb.lambda-triggers)
         self.ddb.kinesis_store = self.kinesis  # real Kinesis Data Streams destination (aws.dynamodb.kinesis)
         self.s3.events_store = self.events   # S3 -> EventBridge notifications (default bus)
         self.s3.cw_store = self.cw    # real AWS/S3 request metrics (s3.bucket.metrics), derived from actual activity

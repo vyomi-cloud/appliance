@@ -397,6 +397,40 @@ try {
   check("DynamoDB local secondary index → shown on table detail Indexes tab", true);
   await shot("12b-ddb-lsi");
 
+  // SWEEP A (DynamoDB): maximum on-demand table throughput set in the create form → native DescribeTable.
+  const TCAP = `v4smokecap${Date.now() % 100000}`;
+  await page.goto(UI + "#/dynamodb/create-table");
+  await page.getByLabel("Table name").fill(TCAP);
+  await page.getByRole("textbox", { name: "Partition key", exact: true }).fill("id");
+  await page.getByRole("radio", { name: "Customize settings" }).check();
+  await page.getByRole("checkbox", { name: "Set maximum table throughput" }).check();
+  await page.getByLabel("Maximum read request units").fill("40");
+  await page.getByLabel("Maximum write request units").fill("30");
+  await page.getByLabel("Warm write units per second").fill("5000");
+  await page.getByRole("button", { name: "Create table" }).last().click();
+  await page.getByPlaceholder("Find tables by table name").fill(TCAP);
+  await page.getByRole("link", { name: TCAP }).waitFor({ timeout: 10000 });
+  const tcap = await ddb("DescribeTable", { TableName: TCAP });
+  check("DynamoDB max table throughput + warm throughput (UI create form) → native DescribeTable",
+        tcap.Table?.OnDemandThroughput?.MaxReadRequestUnits === 40 && tcap.Table?.OnDemandThroughput?.MaxWriteRequestUnits === 30 && tcap.Table?.WarmThroughput?.WriteUnitsPerSecond === 5000, JSON.stringify([tcap.Table?.OnDemandThroughput, tcap.Table?.WarmThroughput]));
+
+  // SWEEP A (DynamoDB): stream trigger — UI creates the event-source mapping, a write invokes the function.
+  const TTRG = `v4smoketrg${Date.now() % 100000}`;
+  const TFN = `v4smoketrgfn${Date.now() % 100000}`;
+  await ddb("CreateTable", { TableName: TTRG, BillingMode: "PAY_PER_REQUEST", KeySchema: [{ AttributeName: "id", KeyType: "HASH" }], AttributeDefinitions: [{ AttributeName: "id", AttributeType: "S" }], StreamSpecification: { StreamEnabled: true, StreamViewType: "NEW_AND_OLD_IMAGES" } });
+  await lam("POST", "/2015-03-31/functions", { FunctionName: TFN, Runtime: "python3.12", Code: { Source: "def handler(event, context):\n    return {'n': len(event['Records'])}\n" } });
+  await page.goto(UI + `#/dynamodb/tables/${TTRG}`);
+  await page.getByRole("tab", { name: "Exports and streams" }).click();
+  await page.getByRole("button", { name: "Create trigger" }).first().click();
+  await page.getByRole("dialog").getByRole("button", { name: /Lambda function|Choose a function/ }).first().click();
+  await page.getByRole("option", { name: TFN }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Create trigger" }).click();
+  await page.getByRole("cell", { name: TFN, exact: true }).waitFor({ timeout: 10000 });
+  await ddb("PutItem", { TableName: TTRG, Item: { id: { S: "t1" } } });
+  const trgInv = await lam("GET", `/2015-03-31/functions/${TFN}/invocations`);
+  check("DynamoDB stream trigger created in UI → PutItem really invokes the Lambda function", (trgInv.Invocations || []).length === 1 && !trgInv.Invocations[0].Error, JSON.stringify(trgInv).slice(0, 200));
+  await shot("12c-ddb-trigger");
+
   // DynamoDB Streams (DEPTH wave 5b): turn the stream on through the UI, then verify the
   // write it makes over the wire really lands in GetRecords (UI → wire direction).
   await page.goto(UI + `#/dynamodb/tables/${T}`);
