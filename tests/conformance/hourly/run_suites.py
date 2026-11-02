@@ -171,6 +171,8 @@ def main() -> int:
     ap.add_argument("--only", default="")
     ap.add_argument("--cloud", default="all", choices=["all", *CLOUDS],
                     help="one detect shard: needs --target offline|nano")
+    ap.add_argument("--kind", default="", help="only suites of this kind (e.g. ui) — the release checks run the UI suites")
+    ap.add_argument("--strict", action="store_true", help="exit 1 if any suite fails (release checks)")
     a = ap.parse_args()
     if a.cloud != "all" and a.target == "all":
         ap.error("--cloud needs --target offline or nano")
@@ -182,7 +184,8 @@ def main() -> int:
 
     suites = json.load(open(os.path.join(HERE, "suites.json")))["suites"]
     only = {x for x in a.only.split(",") if x}
-    suites = [s for s in suites if (a.target == "all" or s["target"] == a.target) and (not only or s["id"] in only)]
+    suites = [s for s in suites if (a.target == "all" or s["target"] == a.target) and (not only or s["id"] in only)
+              and (not a.kind or s.get("kind") == a.kind)]
     if a.cloud != "all":
         suites = [for_shard(s, a.cloud) for s in suites if in_shard(s, a.cloud)]
 
@@ -206,13 +209,14 @@ def main() -> int:
     if a.cloud != "all":
         name = f"results-{a.target}-{a.cloud}.json"   # a detect shard (merge_shards.py joins them)
     else:
-        name = "results.json" if (a.target == "all" and not only) else "results-partial.json"
+        name = "results.json" if (a.target == "all" and not only and not a.kind) else "results-partial.json"
     json.dump(out, open(os.path.join(OUT, name), "w"), indent=1)
     pend = [r["id"] for r in results if r["status"] == "pending"]
     bad = [r["id"] for r in results if r["status"] not in ("pass", "pending")]
     print(f"\n{len(results) - len(bad) - len(pend)}/{len(results)} suites green"
           + (f"; failing: {', '.join(bad)}" if bad else "") + (f"; pending: {', '.join(pend)}" if pend else ""))
-    return 0  # the agent and the page decide what to do with failures
+    # The agent and the page decide what to do with failures; only the release checks ask for an exit code.
+    return 1 if (a.strict and bad) else 0
 
 
 if __name__ == "__main__":
