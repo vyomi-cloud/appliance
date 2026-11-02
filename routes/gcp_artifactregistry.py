@@ -237,6 +237,14 @@ def register(app: FastAPI) -> None:
         if op in ("listPackages", "listVersions", "listTags", "listImages"):
             await run_in_threadpool(_sync_registry)
             return {"ok": True, "items": ar.console_children(_STORE, name, op[4:].lower())}
+        from core import gcp_console_tabs as _tabs
+        if op in _tabs.META_OPS:   # editable Properties grid + last-modified times (shared engine, every service)
+            from providers.gcp_tabs_console import tab_state
+            try:
+                out = _tabs.meta_op(tab_state, "artifactregistry", op, name, await _json(request) if op == "setProperties" else {})
+            except _tabs.TabError as e:
+                return JSONResponse({"ok": False, "code": e.code, "message": e.message}, status_code=e.status)
+            return out
         if op in ("getLabels", "setLabels"):   # the repository's Labels tab (repositories.patch labels)
             from core import gcp_console_tabs as _tabs
             full, repo = ar.console_find(_STORE, name)
@@ -249,6 +257,8 @@ def register(app: FastAPI) -> None:
                     return JSONResponse({"ok": False, "code": e.code, "message": e.message}, status_code=e.status)
                 ar.dispatch(_STORE, "PATCH", "/v1/" + full, {"updateMask": "labels"}, {}, __import__("json").dumps({"labels": labels}).encode())
                 _usage("set_labels", name)
+                from providers.gcp_tabs_console import tab_state
+                _tabs.stamp_labels(tab_state, "artifactregistry", name)
             return {"ok": True, "item": {"name": name, "labels": dict(_STORE.repos[full].get("labels") or {})}}
         if op == "getPushpull":                # the Push / pull tab (schedkv: get + tab key)
             out = ar.console_pushpull(_STORE, name)

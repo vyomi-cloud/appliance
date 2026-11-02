@@ -517,6 +517,10 @@ table.gc tr:hover td{background:#f6f8fc}
 .crumbs-inline a,.crumbs-inline .current{display:inline-flex;align-items:center;gap:6px}
 .crumbs-inline .ci{font-size:18px;line-height:1}
 .crumbs-inline .sep{font-size:18px;line-height:1;color:#747775}
+
+.ov-grid td.ov-k{width:300px;color:#444746;font-weight:500;vertical-align:top}
+.ov-grid td.ov-v{white-space:pre-line;overflow-wrap:anywhere;vertical-align:top}
+.ov-grid tr.ov-sec td{background:#f0f4f9;color:#1f1f1f;font:500 12px "Google Sans",Roboto,Arial,sans-serif;letter-spacing:.3px;text-transform:uppercase;padding:8px 16px}
 </style>
 </head>
 <body>
@@ -1922,7 +1926,7 @@ function renderOverviewTab(host, svc, item, mode){
   const rows = [["Project", PROJECT], ["Region", REGION]];
   const facts = [];   // [label, value, isState] for the tiles: the state first, then the next columns
   svc.columns.forEach((c, i) => {
-    const v = getPath(item, c[0]); if (v == null) return;
+    const v = gcpShort(getPath(item, c[0])); if (v == null) return;
     rows.push([c[1], String(v)]);
     if (i === 0) return;   // the name is the page title
     const isState = /(state|status)$/i.test(c[0]);
@@ -1932,18 +1936,59 @@ function renderOverviewTab(host, svc, item, mode){
   // fields as cards; Properties lists every field.
   const card = (label, v, big) => el("div",{class:"fld-card" + (big ? " key" : "")},
     el("div",{class:"fld-k"}, label), el("div",{class:"fld-v"}, v instanceof Node ? v : fmtVal(v)));
-  let shown = rows;
-  if (mode !== "properties" && facts.length) {
-    const key = facts.slice(0, 4);
-    const tiles = el("div",{class:"fld-grid keys"});
-    key.forEach(([label, v, isState]) => tiles.append(card(label, isState ? stateBadge(v) : v, true)));
-    host.append(tiles);
-    const used = new Set(key.map(k => k[0]));
-    shown = rows.filter(r => !used.has(r[0]));
-  }
-  const grid = el("div",{class:"fld-grid"});
-  shown.forEach(([label, v]) => grid.append(card(label, v, false)));
-  host.append(grid);
+  // Overview = one read-only grid of everything (no summary chips); the state shows as a badge in its row.
+  const shown = rows.map(([k, v]) => /(state|status)$/i.test(k) ? [k, stateBadge(v)] : [k, v]);
+  host.append(overviewGrid(svc, item, shown));
+}
+// Overview: every field of the resource in one read-only grid (Property | Value), grouped by section.
+// General = the console's own summary fields; each top-level API field then gets its own section, with
+// nested objects flattened to "Parent › child". Credentials are never shown.
+function overviewGrid(svc, item, general){
+  const sections = [{title: "General", rows: general.map(([k, v]) => [k, v])}];
+  const empty = x => x === undefined || x === null || x === "" || (Array.isArray(x) && !x.length) || (typeof x === "object" && !Array.isArray(x) && !Object.keys(x).length);
+  const details = {title: "Details", rows: []};
+  const taken = new Set(svc.columns.map(c => String(c[0]).split(".")[0]));
+  taken.add("connect_help");
+  const walk = (obj, prefix, rows, depth) => {
+    Object.keys(obj).forEach(k => {
+      if (AUTO_SKIP.test(k) || AUTO_SECRET.test(k) || /^__/.test(k)) return;
+      const v = obj[k], label = (prefix ? prefix + " › " : "") + autoHumanize(k);
+      if (v && typeof v === "object" && !Array.isArray(v) && depth < 3 && Object.keys(v).length) walk(v, label, rows, depth + 1);
+      else rows.push([label, empty(v) ? "Not set" : (Array.isArray(v) && v.some(x => x && typeof x === "object") && v.length > 1
+          ? v.map(x => autoFmt(x)).join("\n") : autoFmt(v))]);
+    });
+  };
+  Object.keys(item || {}).forEach(k => {
+    if (AUTO_SKIP.test(k) || AUTO_SECRET.test(k) || /^__/.test(k) || taken.has(k)) return;
+    const v = item[k], rows = [];
+    if (v && typeof v === "object" && !Array.isArray(v)) walk(v, "", rows, 1); else rows.push([autoHumanize(k), empty(v) ? "Not set" : (Array.isArray(v) && v.length > 1 && v.some(x => x && typeof x === "object") ? v.map(x => autoFmt(x)).join("\n") : autoFmt(v))]);
+    if (!rows.length) return;
+    if (rows.length === 1 && rows[0][0] === autoHumanize(k)) details.rows.push(rows[0]); else sections.push({title: autoHumanize(k), rows});
+  });
+  if (details.rows.length) sections.splice(1, 0, details);
+  const seen = new Set(general.map(r => String(r[0]).toLowerCase()));
+  sections.slice(1).forEach(s => { s.rows = s.rows.filter(r => !(s.title === "Details" && seen.has(String(r[0]).toLowerCase()))); });
+  const wrap = el("div",{class:"table-wrap"});
+  const tb = el("div",{class:"table-toolbar"});
+  const fi = el("input",{class:"search",placeholder:"Filter properties…"}); const stats = el("span",{class:"stats"});
+  tb.append(fi, stats); wrap.append(tb);
+  const holder = el("div",{class:"ov-scroll"}); wrap.append(holder);
+  const paint = () => {
+    holder.innerHTML = ""; const q = fi.value.trim().toLowerCase(); let n = 0;
+    const t = el("table",{class:"gc ov-grid","data-auto":"1"});
+    t.append(el("tr",{}, el("th",{}, "Property"), el("th",{}, "Value")));
+    sections.forEach(s => {
+      const rows = s.rows.filter(([k, v]) => !q || (k + " " + (v instanceof Node ? v.textContent : v) + " " + s.title).toLowerCase().includes(q));
+      if (!rows.length) return;
+      t.append(el("tr",{class:"ov-sec"}, el("td",{colspan:"2"}, s.title)));
+      rows.forEach(([k, v]) => { n++; t.append(el("tr",{}, el("td",{class:"ov-k"}, k),
+        el("td",{class:"ov-v"}, v instanceof Node ? v : fmtVal(v)))); });
+    });
+    stats.textContent = n + " propert" + (n === 1 ? "y" : "ies");
+    holder.append(n ? t : el("div",{class:"empty"}, "No matching properties."));
+  };
+  fi.addEventListener("input", paint); paint();
+  return wrap;
 }
 // Cloud Scheduler — key/value detail panes; `fields` = [[field,label],…] off the job view.
 function renderSchedKvTab(host, item, fields){
