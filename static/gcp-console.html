@@ -428,10 +428,10 @@ aside#rail a.item{color:#1f1f1f}
 aside#rail a.item:hover{background:rgba(0,0,0,.05)}
 aside#rail a.item.active{background:var(--shell-sel);color:#041e49;border-left-color:var(--shell-bar);font-weight:500}
 aside#rail a.item.active .ic{color:#041e49}
-/* The content area is one white panel that runs the full height of the window (rounded only at its top-left,
-   against the tinted shell); the side menu is a full-height column that scrolls on its own. */
+/* The content area is one white panel filling the window, inset by the same 12px on all four sides with all four
+   corners rounded, against the tinted shell; the side menu is a full-height column that scrolls on its own. */
 .body{align-items:stretch}
-main#main{background:#fff;padding:0;border-radius:16px 0 0 0;display:flex;flex-direction:column;min-width:0}
+main#main{background:#fff;padding:0;margin:12px;border-radius:16px;display:flex;flex-direction:column;min-width:0;min-height:calc(100vh - 56px - 44px - 24px)}
 .wrap,.wizard-page{flex:1 0 auto;margin:0;border-radius:0;box-shadow:none;max-width:none;width:100%}
 .wrap.detail-card{padding:12px;display:flex;flex-direction:column}
 .wrap.detail-card > .detail-inner{flex:1 0 auto;display:flex;flex-direction:column}
