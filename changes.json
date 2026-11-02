@@ -1,8 +1,66 @@
 {
- "at": "2026-11-02T00:27:51+00:00",
+ "at": "2026-11-02T01:27:38+00:00",
  "baseline": false,
- "changes": [],
+ "changes": [
+  {
+   "cloud": "gcp",
+   "service": "sqladmin/v1beta4",
+   "kind": "operation-flapping",
+   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.start:1910d4526f14",
+   "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.start changed",
+   "detail": {
+    "request": {
+     "was": "WorkloadCapturesStartRequest",
+     "now": "SqlWorkloadCapturesStartRequest"
+    }
+   },
+   "actionable": false
+  },
+  {
+   "cloud": "gcp",
+   "service": "sqladmin/v1beta4",
+   "kind": "operation-flapping",
+   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.startReplay:2cfe2f793adc",
+   "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.startReplay changed",
+   "detail": {
+    "request": {
+     "was": "WorkloadCapturesStartReplayRequest",
+     "now": "SqlWorkloadCapturesStartReplayRequest"
+    }
+   },
+   "actionable": false
+  },
+  {
+   "cloud": "gcp",
+   "service": "sqladmin/v1beta4",
+   "kind": "operation-flapping",
+   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.stop:ee7fdfd4ca9e",
+   "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.stop changed",
+   "detail": {
+    "request": {
+     "was": "WorkloadCapturesStopRequest",
+     "now": "SqlWorkloadCapturesStopRequest"
+    }
+   },
+   "actionable": false
+  },
+  {
+   "cloud": "gcp",
+   "service": "sqladmin/v1beta4",
+   "kind": "operation-flapping",
+   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.stopReplay:fff14efd9e7d",
+   "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.stopReplay changed",
+   "detail": {
+    "request": {
+     "was": "WorkloadCapturesStopReplayRequest",
+     "now": "SqlWorkloadCapturesStopReplayRequest"
+    }
+   },
+   "actionable": false
+  }
+ ],
  "errors": [
-  "maven/com.azure.resourcemanager:azure-resourcemanager-cognitiveservices: The read operation timed out"
+  "maven/software.amazon.awssdk:dynamodb: The read operation timed out",
+  "maven/com.azure.resourcemanager:azure-resourcemanager-loganalytics: The read operation timed out"
  ]
 }
