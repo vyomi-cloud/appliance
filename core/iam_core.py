@@ -659,21 +659,24 @@ def _delete_access_key(store, params):
 
 # ── multi-factor authentication (virtual MFA devices) — limited: assignment is real,
 # there is no console sign-in flow to challenge the code against (see console-password) ──
-def _virtual_mfa_device_xml(d: dict, with_seed: bool = False) -> str:
+def _virtual_mfa_device_xml(store, d: dict, with_seed: bool = False) -> str:
     inner = _el("SerialNumber", d["serial_number"])
     if with_seed:
         # BootstrapDatum blobs are base64 on the wire (boto3/the SDKs decode them back to the base32 text)
         inner += (_el("Base32StringSeed", base64.b64encode(d["base32_seed"].encode()).decode())
-                  + _el("QRCodePNG", base64.b64encode(_qr_stub()).decode()))
+                  + _el("QRCodePNG", base64.b64encode(_qr_png(store, d)).decode()))
     if d.get("user_name"):
         inner += "<User>" + _el("UserName", d["user_name"]) + "</User>" + _el("EnableDate", d["enable_date"])
     return f"<VirtualMFADevice>{inner}</VirtualMFADevice>"
 
 
-def _qr_stub() -> bytes:
-    """No QR renderer ships in the core (pure-stdlib, Pyodide-safe): an empty PNG signature placeholder; the
-    consoles show the secret key / otpauth URI instead (real authenticator apps accept manual key entry)."""
-    return b"\x89PNG\r\n\x1a\n"
+def _qr_png(store, d: dict) -> bytes:
+    """A real, scannable QR code (core/qr_png.py, pure stdlib) of the otpauth:// URI an authenticator app enrolls."""
+    from urllib.parse import quote
+    from core.qr_png import qr_png
+    issuer = "Amazon Web Services"
+    label = f"{quote(issuer)}:{quote(d['device_name'])}@{store.account_id}"
+    return qr_png(f"otpauth://totp/{label}?secret={d['base32_seed']}&issuer={quote(issuer)}")
 
 
 def _create_virtual_mfa_device(store, params):
@@ -688,7 +691,7 @@ def _create_virtual_mfa_device(store, params):
          "base32_seed": seed, "created": _now(), "user_name": None, "enable_date": None}
     store.virtual_mfa_devices[arn] = d
     store.persist()
-    return _envelope("CreateVirtualMFADevice", _virtual_mfa_device_xml(d, with_seed=True))
+    return _envelope("CreateVirtualMFADevice", _virtual_mfa_device_xml(store, d, with_seed=True))
 
 
 def _require_virtual_mfa_device(store, serial):
@@ -714,7 +717,7 @@ def _list_virtual_mfa_devices(store, params):
         devices = [d for d in devices if d.get("user_name")]
     elif status == "Unassigned":
         devices = [d for d in devices if not d.get("user_name")]
-    items = "".join(_virtual_mfa_device_xml(d) for d in sorted(devices, key=lambda d: d["created"]))
+    items = "".join(_virtual_mfa_device_xml(store, d) for d in sorted(devices, key=lambda d: d["created"]))
     return _envelope("ListVirtualMFADevices", f"<VirtualMFADevices>{items}</VirtualMFADevices>")
 
 
@@ -926,7 +929,7 @@ def _create_saml_provider(store, params):
     if arn in store.saml_providers:
         raise IamError("EntityAlreadyExists", f"SAML provider {name} already exists.", 409)
     p = {"name": name, "arn": arn, "created": _now(),
-         "metadata_document": params.get("SAMLMetadataDocument", "")}
+         "metadata_document": params.get("SAMLMetadataDocument", ""), "tags": _parse_tags(params)}
     store.saml_providers[arn] = p
     store.persist()
     return _envelope("CreateSAMLProvider", _el("SAMLProviderArn", arn))
@@ -937,7 +940,8 @@ def _get_saml_provider(store, params):
     p = store.saml_providers.get(arn)
     if not p:
         raise IamError("NoSuchEntity", f"SAML provider {arn} not found.", 404)
-    inner = _el("CreateDate", p["created"]) + f"<SAMLMetadataDocument>{_xml_escape(p['metadata_document'])}</SAMLMetadataDocument>"
+    inner = (_el("CreateDate", p["created"]) + f"<SAMLMetadataDocument>{_xml_escape(p['metadata_document'])}</SAMLMetadataDocument>"
+             + _tags_xml(p.get("tags") or {}))
     return _envelope("GetSAMLProvider", inner)
 
 
@@ -966,7 +970,7 @@ def _create_open_id_connect_provider(store, params):
         raise IamError("EntityAlreadyExists", f"OIDC provider {host} already exists.", 409)
     store.oidc_providers[arn] = {"url": url, "arn": arn, "created": _now(),
                                 "client_ids": _members(params, "ClientIDList"),
-                                "thumbprints": _members(params, "ThumbprintList")}
+                                "thumbprints": _members(params, "ThumbprintList"), "tags": _parse_tags(params)}
     store.persist()
     return _envelope("CreateOpenIDConnectProvider", _el("OpenIDConnectProviderArn", arn))
 
@@ -978,7 +982,8 @@ def _get_open_id_connect_provider(store, params):
         raise IamError("NoSuchEntity", f"OIDC provider {arn} not found.", 404)
     inner = (_el("Url", p["url"]) + _el("CreateDate", p["created"])
              + "<ClientIDList>" + "".join(_el("member", c) for c in p["client_ids"]) + "</ClientIDList>"
-             + "<ThumbprintList>" + "".join(_el("member", t) for t in p["thumbprints"]) + "</ThumbprintList>")
+             + "<ThumbprintList>" + "".join(_el("member", t) for t in p["thumbprints"]) + "</ThumbprintList>"
+             + _tags_xml(p.get("tags") or {}))
     return _envelope("GetOpenIDConnectProvider", inner)
 
 
@@ -1234,6 +1239,284 @@ def _list_account_access_requests(store, params):
     inner = "<AccountAccessRequests>" + "".join(
         _access_request_xml(r) for r in sorted(store.access_requests.values(), key=lambda r: r["created"])) + "</AccountAccessRequests>"
     return _envelope("ListAccountAccessRequests", inner)
+
+
+# ── IAM sweep 2: identity-provider detail operations (real IAM API) ─────────
+def _oidc(store, params):
+    arn = str(params.get("OpenIDConnectProviderArn", "")).strip()
+    p = store.oidc_providers.get(arn)
+    if not p:
+        raise IamError("NoSuchEntity", f"OIDC provider {arn} not found.", 404)
+    return p
+
+
+def _saml(store, params):
+    arn = str(params.get("SAMLProviderArn", "")).strip()
+    p = store.saml_providers.get(arn)
+    if not p:
+        raise IamError("NoSuchEntity", f"SAML provider {arn} not found.", 404)
+    return p
+
+
+def _add_client_id(store, params):
+    p = _oidc(store, params)
+    cid = str(params.get("ClientID", "")).strip()
+    if not cid:
+        raise IamError("ValidationError", "ClientID is required.", 400)
+    if cid not in p["client_ids"]:
+        if len(p["client_ids"]) >= 100:
+            raise IamError("LimitExceeded", "An OpenID Connect provider can have at most 100 client IDs.", 409)
+        p["client_ids"].append(cid)
+    store.persist()
+    return _envelope("AddClientIDToOpenIDConnectProvider")
+
+
+def _remove_client_id(store, params):
+    p = _oidc(store, params)
+    cid = str(params.get("ClientID", "")).strip()
+    p["client_ids"] = [c for c in p["client_ids"] if c != cid]
+    store.persist()
+    return _envelope("RemoveClientIDFromOpenIDConnectProvider")
+
+
+def _update_oidc_thumbprint(store, params):
+    p = _oidc(store, params)
+    tps = _members(params, "ThumbprintList")
+    if not tps or any(len(t) != 40 or not all(c in "0123456789abcdefABCDEF" for c in t) for t in tps):
+        raise IamError("InvalidInput", "ThumbprintList must contain 40-character hexadecimal SHA-1 thumbprints.", 400)
+    if len(tps) > 5:
+        raise IamError("LimitExceeded", "An OpenID Connect provider can have at most 5 thumbprints.", 409)
+    p["thumbprints"] = tps
+    store.persist()
+    return _envelope("UpdateOpenIDConnectProviderThumbprint")
+
+
+def _update_saml_provider(store, params):
+    p = _saml(store, params)
+    doc = params.get("SAMLMetadataDocument", "")
+    if not str(doc).strip():
+        raise IamError("InvalidInput", "SAMLMetadataDocument is required.", 400)
+    p["metadata_document"] = doc
+    store.persist()
+    return _envelope("UpdateSAMLProvider", _el("SAMLProviderArn", p["arn"]))
+
+
+def _provider_tagging(kind: str):
+    getter = _oidc if kind == "OpenIDConnect" else _saml
+    tag_op, untag_op, list_op = f"Tag{kind}Provider", f"Untag{kind}Provider", f"List{kind}ProviderTags"
+
+    def tag(store, params):
+        p = getter(store, params)
+        p.setdefault("tags", {}).update(_parse_tags(params))
+        store.persist()
+        return _envelope(tag_op)
+
+    def untag(store, params):
+        p = getter(store, params)
+        for k in _members(params, "TagKeys"):
+            p.setdefault("tags", {}).pop(k, None)
+        store.persist()
+        return _envelope(untag_op)
+
+    def lst(store, params):
+        return _envelope(list_op, _tags_xml(getter(store, params).get("tags") or {}) + "<IsTruncated>false</IsTruncated>")
+    return {tag_op: tag, untag_op: untag, list_op: lst}
+
+
+# ── IAM sweep 2: GetAccountAuthorizationDetails (real, straight from the store) ─
+def _pdoc(doc) -> str:
+    return _xml_escape(json.dumps(doc))
+
+
+def _attached_xml(store, arns) -> str:
+    out = []
+    for arn in arns:
+        pol = store.get_policy(arn)
+        out.append("<member>" + _el("PolicyName", pol["policy_name"] if pol else arn.rsplit("/", 1)[-1]) + _el("PolicyArn", arn) + "</member>")
+    return "<AttachedManagedPolicies>" + "".join(out) + "</AttachedManagedPolicies>"
+
+
+def _inline_xml(inline: dict) -> str:
+    return "<{0}>".format("POLICYLIST") + "".join(
+        "<member>" + _el("PolicyName", n) + f"<PolicyDocument>{_pdoc(d)}</PolicyDocument></member>" for n, d in inline.items()) + "</POLICYLIST>"
+
+
+def _managed_detail_xml(store, p: dict) -> str:
+    versions = "".join(
+        "<member>" + f"<Document>{_pdoc(v['document'])}</Document>" + _el("VersionId", vid)
+        + _el("IsDefaultVersion", "true" if vid == p.get("default_version_id", "v1") else "false") + _el("CreateDate", v["created"]) + "</member>"
+        for vid, v in (p.get("versions") or {"v1": {"document": p.get("document"), "created": p["created"]}}).items())
+    bound = sum(1 for e in list(store.users.values()) + list(store.roles.values()) if e.get("permissions_boundary") == p["arn"])
+    return ("<member>" + _el("PolicyName", p["policy_name"]) + _el("PolicyId", p["policy_id"]) + _el("Arn", p["arn"])
+            + _el("Path", p.get("path", "/")) + _el("DefaultVersionId", p.get("default_version_id", "v1"))
+            + _el("AttachmentCount", p.get("attachment_count", 0)) + _el("PermissionsBoundaryUsageCount", bound)
+            + _el("IsAttachable", "true") + _el("CreateDate", p["created"]) + _el("UpdateDate", p.get("updated", p["created"]))
+            + f"<PolicyVersionList>{versions}</PolicyVersionList></member>")
+
+
+def _get_account_authorization_details(store, params):
+    filt = set(_members(params, "Filter")) or {"User", "Role", "Group", "LocalManagedPolicy", "AWSManagedPolicy"}
+    parts = []
+    if "User" in filt:
+        us = []
+        for n in sorted(store.users):
+            u = store.users[n]
+            us.append("<member>" + _el("Path", u.get("path", "/")) + _el("UserName", n) + _el("UserId", u["user_id"]) + _el("Arn", u["arn"])
+                      + _el("CreateDate", u["created"])
+                      + _inline_xml(u["inline_policies"]).replace("POLICYLIST", "UserPolicyList")
+                      + "<GroupList>" + "".join(_el("member", g) for g in u.get("groups", [])) + "</GroupList>"
+                      + _attached_xml(store, u["attached_policies"])
+                      + (f"<PermissionsBoundary>{_el('PermissionsBoundaryType', 'Policy')}{_el('PermissionsBoundaryArn', u['permissions_boundary'])}</PermissionsBoundary>" if u.get("permissions_boundary") else "")
+                      + _tags_xml(u.get("tags") or {}) + "</member>")
+        parts.append("<UserDetailList>" + "".join(us) + "</UserDetailList>")
+    if "Group" in filt:
+        gs = []
+        for n in sorted(store.groups):
+            g = store.groups[n]
+            gs.append("<member>" + _el("Path", g.get("path", "/")) + _el("GroupName", n) + _el("GroupId", g["group_id"]) + _el("Arn", g["arn"])
+                      + _el("CreateDate", g["created"]) + _inline_xml(g["inline_policies"]).replace("POLICYLIST", "GroupPolicyList")
+                      + _attached_xml(store, g["attached_policies"]) + "</member>")
+        parts.append("<GroupDetailList>" + "".join(gs) + "</GroupDetailList>")
+    if "Role" in filt:
+        rs = []
+        for n in sorted(store.roles):
+            r = store.roles[n]
+            rs.append("<member>" + _el("Path", r.get("path", "/")) + _el("RoleName", n) + _el("RoleId", r["role_id"]) + _el("Arn", r["arn"])
+                      + _el("CreateDate", r["created"])
+                      + f"<AssumeRolePolicyDocument>{_pdoc(r.get('assume_role_policy_document') or {})}</AssumeRolePolicyDocument>"
+                      + "<InstanceProfileList></InstanceProfileList>"
+                      + _inline_xml(r["inline_policies"]).replace("POLICYLIST", "RolePolicyList")
+                      + _attached_xml(store, r["attached_policies"])
+                      + (f"<PermissionsBoundary>{_el('PermissionsBoundaryType', 'Policy')}{_el('PermissionsBoundaryArn', r['permissions_boundary'])}</PermissionsBoundary>" if r.get("permissions_boundary") else "")
+                      + _tags_xml(r.get("tags") or {}) + "</member>")
+        parts.append("<RoleDetailList>" + "".join(rs) + "</RoleDetailList>")
+    if filt & {"LocalManagedPolicy", "AWSManagedPolicy"}:
+        pol = []
+        for arn in sorted(store.policies):
+            aws_managed = arn.startswith("arn:aws:iam::aws:")
+            if ("AWSManagedPolicy" if aws_managed else "LocalManagedPolicy") in filt:
+                pol.append(_managed_detail_xml(store, store.policies[arn]))
+        parts.append("<Policies>" + "".join(pol) + "</Policies>")
+    return _envelope("GetAccountAuthorizationDetails", "".join(parts) + "<IsTruncated>false</IsTruncated>")
+
+
+# ── IAM sweep 2: action-level + with-entities last-accessed, policies granting access ──
+def _la_job(arn: str, granularity: str) -> str:
+    return "vyomi-" + base64.urlsafe_b64encode(f"{arn}|{granularity}".encode()).decode().rstrip("=")
+
+
+def _la_decode(job_id: str):
+    raw = _decode_last_accessed_job(job_id)
+    arn, _, gran = raw.partition("|")
+    return arn, gran or "SERVICE_LEVEL"
+
+
+def _generate_sla_v2(store, params):
+    arn = str(params.get("Arn", "")).strip()
+    if not arn:
+        raise IamError("ValidationError", "Arn is required.", 400)
+    gran = str(params.get("Granularity", "SERVICE_LEVEL") or "SERVICE_LEVEL")
+    if gran not in ("SERVICE_LEVEL", "ACTION_LEVEL"):
+        raise IamError("InvalidInput", "Granularity must be SERVICE_LEVEL or ACTION_LEVEL.", 400)
+    return _envelope("GenerateServiceLastAccessedDetails", _el("JobId", _la_job(arn, gran)))
+
+
+def _tracked_actions(store, names: list[str]) -> dict[str, list[dict]]:
+    per: dict[str, dict] = {}
+    for e in store.activity:
+        if e["principal_arn"].rsplit("/", 1)[-1] not in names or not e.get("action"):
+            continue
+        rec = per.setdefault(_namespace(e["service"]), {}).setdefault(e["action"], {"time": e["time"], "who": e["principal_arn"]})
+        if e["time"] > rec["time"]:
+            rec["time"], rec["who"] = e["time"], e["principal_arn"]
+    return {ns: [{"ActionName": a, "LastAccessedTime": r["time"], "LastAccessedEntity": r["who"]} for a, r in sorted(acts.items())]
+            for ns, acts in per.items()}
+
+
+def _get_sla_v2(store, params):
+    arn, gran = _la_decode(str(params.get("JobId", "")).strip())
+    names = _principal_names_for_last_accessed(store, arn)
+    report = _service_last_accessed_report(store, names)
+    tracked = _tracked_actions(store, names) if gran == "ACTION_LEVEL" else {}
+    now = _now()
+    items = []
+    for r in report:
+        acts = "".join("<member>" + _el("ActionName", a["ActionName"]) + _el("LastAccessedEntity", a["LastAccessedEntity"])
+                       + _el("LastAccessedTime", a["LastAccessedTime"]) + "</member>" for a in tracked.get(r["ServiceNamespace"], []))
+        items.append("<member>" + _el("ServiceNamespace", r["ServiceNamespace"]) + _el("ServiceName", r["ServiceName"])
+                     + _el("LastAuthenticated", r["LastAuthenticated"]) + _el("LastAuthenticatedEntity", r["LastAuthenticatedEntity"])
+                     + _el("TotalAuthenticatedEntities", r["TotalAuthenticatedEntities"])
+                     + (f"<TrackedActionsLastAccessed>{acts}</TrackedActionsLastAccessed>" if gran == "ACTION_LEVEL" else "") + "</member>")
+    inner = (_el("JobStatus", "COMPLETED") + _el("JobType", gran) + _el("JobCreationDate", now) + _el("JobCompletionDate", now)
+             + f"<ServicesLastAccessed>{''.join(items)}</ServicesLastAccessed>" + "<IsTruncated>false</IsTruncated>")
+    return _envelope("GetServiceLastAccessedDetails", inner)
+
+
+def _get_sla_with_entities(store, params):
+    arn, gran = _la_decode(str(params.get("JobId", "")).strip())
+    ns = str(params.get("ServiceNamespace", "")).strip()
+    if not ns:
+        raise IamError("ValidationError", "ServiceNamespace is required.", 400)
+    names = _principal_names_for_last_accessed(store, arn)
+    last: dict[str, str] = {}
+    for e in store.activity:
+        if e["principal_arn"].rsplit("/", 1)[-1] in names and _namespace(e["service"]) == ns:
+            last[e["principal_arn"]] = max(last.get(e["principal_arn"], ""), e["time"])
+    ents = []
+    for parn, t in sorted(last.items()):
+        kind = "USER" if ":user/" in parn else "ROLE" if ":role/" in parn else "GROUP"
+        name = parn.rsplit("/", 1)[-1]
+        rec = (store.users.get(name) if kind == "USER" else store.roles.get(name)) or {}
+        ents.append("<member><EntityInfo>" + _el("Arn", parn) + _el("Name", name) + _el("Type", kind)
+                    + _el("Id", rec.get("user_id") or rec.get("role_id") or "") + _el("Path", rec.get("path", "/")) + "</EntityInfo>"
+                    + _el("LastAuthenticated", t) + "</member>")
+    now = _now()
+    return _envelope("GetServiceLastAccessedDetailsWithEntities",
+                     _el("JobStatus", "COMPLETED") + _el("JobCreationDate", now) + _el("JobCompletionDate", now)
+                     + f"<EntityDetailsList>{''.join(ents)}</EntityDetailsList><IsTruncated>false</IsTruncated>")
+
+
+def _list_policies_granting_service_access(store, params):
+    arn = str(params.get("Arn", "")).strip()
+    nss = _members(params, "ServiceNamespaces")
+    if not arn or not nss:
+        raise IamError("ValidationError", "Arn and ServiceNamespaces are required.", 400)
+    name = arn.rsplit("/", 1)[-1]
+    ent = (store.users.get(name) if ":user/" in arn else store.roles.get(name) if ":role/" in arn else store.groups.get(name) if ":group/" in arn else None)
+    if ent is None:
+        raise IamError("NoSuchEntity", f"The entity {arn} cannot be found.", 404)
+    etype = "USER" if ":user/" in arn else "ROLE" if ":role/" in arn else "GROUP"
+
+    def grants(doc, ns):
+        for st in (doc or {}).get("Statement") or []:
+            if str(st.get("Effect", "")).lower() != "allow":
+                continue
+            acts = st.get("Action") or []
+            for a in ([acts] if isinstance(acts, str) else acts):
+                if a == "*" or a.lower().startswith(ns.lower() + ":") or (a.endswith("*") and ns.lower().startswith(a[:-1].lower())):
+                    return True
+        return False
+
+    def sources():
+        for n, d in (ent.get("inline_policies") or {}).items():
+            yield {"PolicyName": n, "PolicyType": "INLINE", "EntityType": etype, "EntityName": name}, d
+        for parn in ent.get("attached_policies", []):
+            p = store.get_policy(parn)
+            if p:
+                yield {"PolicyName": p["policy_name"], "PolicyType": "MANAGED", "PolicyArn": parn}, p.get("document")
+        for g in ent.get("groups", []):
+            ge = store.groups.get(g) or {}
+            for n, d in (ge.get("inline_policies") or {}).items():
+                yield {"PolicyName": n, "PolicyType": "INLINE", "EntityType": "GROUP", "EntityName": g}, d
+            for parn in ge.get("attached_policies", []):
+                p = store.get_policy(parn)
+                if p:
+                    yield {"PolicyName": p["policy_name"], "PolicyType": "MANAGED", "PolicyArn": parn}, p.get("document")
+    out = []
+    for ns in nss:
+        pols = "".join("<member>" + "".join(_el(k, v) for k, v in meta.items()) + "</member>" for meta, d in sources() if grants(d, ns))
+        out.append("<member>" + _el("ServiceNamespace", ns) + f"<Policies>{pols}</Policies></member>")
+    return _envelope("ListPoliciesGrantingServiceAccess", f"<PoliciesGrantingServiceAccess>{''.join(out)}</PoliciesGrantingServiceAccess><IsTruncated>false</IsTruncated>")
 
 
 # ── Organizations-integrated features (centralized root access) — real IAM API ──
@@ -2504,14 +2787,19 @@ _OPS = {
     "DescribeOrgPolicy": _describe_org_policy, "DeleteOrgPolicy": _delete_org_policy,
     "RequestAccountAccess": _request_account_access,
     "ListOrganizationsFeatures": _list_organizations_features,
+    "AddClientIDToOpenIDConnectProvider": _add_client_id, "RemoveClientIDFromOpenIDConnectProvider": _remove_client_id,
+    "UpdateOpenIDConnectProviderThumbprint": _update_oidc_thumbprint, "UpdateSAMLProvider": _update_saml_provider,
+    **_provider_tagging("OpenIDConnect"), **_provider_tagging("SAML"),
+    "GetAccountAuthorizationDetails": _get_account_authorization_details,
+    "GenerateServiceLastAccessedDetails": _generate_sla_v2, "GetServiceLastAccessedDetails": _get_sla_v2,
+    "GetServiceLastAccessedDetailsWithEntities": _get_sla_with_entities,
+    "ListPoliciesGrantingServiceAccess": _list_policies_granting_service_access,
     "EnableOrganizationsRootCredentialsManagement": _set_org_feature("EnableOrganizationsRootCredentialsManagement", "RootCredentialsManagement", True),
     "DisableOrganizationsRootCredentialsManagement": _set_org_feature("DisableOrganizationsRootCredentialsManagement", "RootCredentialsManagement", False),
     "EnableOrganizationsRootSessions": _set_org_feature("EnableOrganizationsRootSessions", "RootSessions", True),
     "DisableOrganizationsRootSessions": _set_org_feature("DisableOrganizationsRootSessions", "RootSessions", False),
     "ListAccountAccessRequests": _list_account_access_requests,
     # Real IAM API: service last-accessed data (see iam.last-accessed).
-    "GenerateServiceLastAccessedDetails": _generate_service_last_accessed_details,
-    "GetServiceLastAccessedDetails": _get_service_last_accessed_details,
     # Vyomi-only (see the functions' docstrings above): policy-from-activity generator,
     # Access Analyzer, Roles Anywhere.
     "GeneratePolicyFromActivity": _generate_policy_from_activity,

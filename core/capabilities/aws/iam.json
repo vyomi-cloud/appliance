@@ -42,7 +42,7 @@
   "title": "Multi-factor authentication (MFA) devices",
   "level": {"nano": "limited", "offline": "limited"},
   "limitations": [
-   "Virtual MFA devices are real: EnableMFADevice and ResyncMFADevice verify two consecutive RFC 6238 TOTP codes (HMAC-SHA1, 30 s) against the device's secret seed (use any authenticator app, or iam_core.current_totp), and the resulting aws:MultiFactorAuthPresent condition key is evaluated by SimulatePrincipalPolicy and is_authorized. The root user's MFA device is modeled too (UserName root) and drives the account summary and Dashboard recommendations. There is no console sign-in flow to challenge a code at, and the QR code returned by CreateVirtualMFADevice is a placeholder (enter the secret key manually).",
+   "Virtual MFA devices are real (QRCodePNG is a genuine scannable QR of the otpauth:// URI, generated in pure Python): EnableMFADevice and ResyncMFADevice verify two consecutive RFC 6238 TOTP codes (HMAC-SHA1, 30 s) against the device's secret seed (use any authenticator app, or iam_core.current_totp), and the resulting aws:MultiFactorAuthPresent condition key is evaluated by SimulatePrincipalPolicy and is_authorized. The root user's MFA device is modeled too (UserName root) and drives the account summary and Dashboard recommendations. There is no console sign-in flow to challenge a code at,.",
    "Hardware MFA devices, security keys (FIDO) and passkeys are not modeled — only the virtual (authenticator app) device type."
   ],
   "tests": ["tests/conformance/test_iam_core.py", "tests/conformance/test_iam_sweepiam_core.py"]
@@ -112,10 +112,10 @@
   "tests": ["tests/conformance/test_iam_core.py"]
  },
  "iam.identity-providers": {
-  "title": "Identity providers (SAML, OpenID Connect)",
+  "title": "Identity providers (SAML, OpenID Connect): create/list/delete, OIDC client IDs + thumbprints, SAML metadata update, tags",
   "level": {"nano": "full", "offline": "full"},
   "limitations": [],
-  "tests": ["tests/conformance/test_iam_core.py"]
+  "tests": ["tests/conformance/test_iam_core.py", "tests/conformance/test_iam_sweepiam2_core.py"]
  },
  "iam.account-settings.password-policy": {
   "title": "Account password policy",
@@ -142,9 +142,9 @@
   "level": {"nano": "limited", "offline": "limited"},
   "limitations": [
    "Generated from Vyomi's own native-wire activity log, not AWS's background telemetry: only requests signed with an IAM USER's own access key (a real aws-cli/boto3/SDK caller configured with CreateAccessKey credentials) are attributable. The console's own operator session and roles (which get temporary AssumeRole credentials Vyomi does not mint) never show activity.",
-   "Service-level granularity only (Granularity=ACTION_LEVEL is not modeled)."
+   "SERVICE_LEVEL and ACTION_LEVEL (TrackedActionsLastAccessed) are both real, plus GetServiceLastAccessedDetailsWithEntities and ListPoliciesGrantingServiceAccess; actions are only known for query/JSON-protocol services (REST services such as S3 record the service, not the operation), and region is not recorded."
   ],
-  "tests": ["tests/conformance/test_iam_core.py"]
+  "tests": ["tests/conformance/test_iam_core.py", "tests/conformance/test_iam_sweepiam2_core.py"]
  },
  "iam.cloudtrail-policy-generator": {
   "title": "Generate policy based on CloudTrail events",
@@ -173,6 +173,12 @@
    "Vyomi simulates a single AWS account: organization-wide analyzers and cross-account zone-of-trust membership are not modeled (see iam.organizations)."
   ],
   "tests": ["tests/conformance/test_iam_core.py"]
+ },
+ "iam.account-authorization-details": {
+  "title": "GetAccountAuthorizationDetails (users, groups, roles, managed policies with versions)",
+  "level": {"nano": "full", "offline": "full"},
+  "limitations": [],
+  "tests": ["tests/conformance/test_iam_sweepiam2_core.py"]
  },
  "iam.organizations": {
   "title": "AWS Organizations (organization, root, OUs, member accounts, handshakes, service access, delegated administrators, tags)",
