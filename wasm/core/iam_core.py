@@ -250,6 +250,14 @@ def _list_users(store, params):
 def _delete_user(store, params):
     name = str(params.get("UserName", "")).strip()
     _require_user(store, name)
+    x = _x(store)
+    for what, coll in (("access keys", store.access_keys.values()), ("SSH public keys", x["ssh_keys"].values()),
+                       ("signing certificates", x["signing_certs"].values()),
+                       ("service-specific credentials", x["service_creds"].values())):
+        if any(i["user_name"] == name for i in coll):
+            raise IamError("DeleteConflict", f"Cannot delete entity, must delete {what} first.", 409)
+    if any(d.get("user_name") == name for d in store.virtual_mfa_devices.values()):
+        raise IamError("DeleteConflict", "Cannot delete entity, must delete MFA device first.", 409)
     del store.users[name]
     store.persist()
     return _envelope("DeleteUser")
@@ -471,37 +479,6 @@ def _delete_user_permissions_boundary(store, params):
 
 
 # ── console sign-in (login profile) — limited: stored, never actually authenticated ──
-def _create_login_profile(store, params):
-    u = _require_user(store, str(params.get("UserName", "")).strip())
-    if u["login_profile"]:
-        raise IamError("EntityAlreadyExists", "Login profile already exists.", 409)
-    u["login_profile"] = {"created": _now(),
-                          "password_reset_required": str(params.get("PasswordResetRequired", "false")).lower() == "true"}
-    store.persist()
-    inner = ("<LoginProfile>" + _el("UserName", u["user_name"]) + _el("CreateDate", u["login_profile"]["created"])
-             + _el("PasswordResetRequired", str(u["login_profile"]["password_reset_required"]).lower()) + "</LoginProfile>")
-    return _envelope("CreateLoginProfile", inner)
-
-
-def _get_login_profile(store, params):
-    u = _require_user(store, str(params.get("UserName", "")).strip())
-    if not u["login_profile"]:
-        raise IamError("NoSuchEntity", "Login profile not found.", 404)
-    inner = ("<LoginProfile>" + _el("UserName", u["user_name"]) + _el("CreateDate", u["login_profile"]["created"])
-             + _el("PasswordResetRequired", str(u["login_profile"]["password_reset_required"]).lower()) + "</LoginProfile>")
-    return _envelope("GetLoginProfile", inner)
-
-
-def _update_login_profile(store, params):
-    u = _require_user(store, str(params.get("UserName", "")).strip())
-    if not u["login_profile"]:
-        raise IamError("NoSuchEntity", "Login profile not found.", 404)
-    if "PasswordResetRequired" in params:
-        u["login_profile"]["password_reset_required"] = str(params["PasswordResetRequired"]).lower() == "true"
-    store.persist()
-    return _envelope("UpdateLoginProfile")
-
-
 def _delete_login_profile(store, params):
     u = _require_user(store, str(params.get("UserName", "")).strip())
     u["login_profile"] = None
@@ -654,32 +631,10 @@ def _attach_group_policy(store, params):
 
 
 # ── access keys ──────────────────────────────────────────────────────────────
-def _create_access_key(store, params):
-    u = _require_user(store, str(params.get("UserName", "")).strip())
-    akid = "AKIA" + uuid.uuid4().hex[:16].upper()
-    secret = uuid.uuid4().hex + uuid.uuid4().hex[:8]
-    store.access_keys[akid] = {"access_key_id": akid, "user_name": u["user_name"],
-                              "status": "Active", "secret_access_key": secret, "created": _now()}
-    store.persist()
-    inner = ("<AccessKey>" + _el("UserName", u["user_name"]) + _el("AccessKeyId", akid)
-             + _el("Status", "Active") + _el("SecretAccessKey", secret)
-             + _el("CreateDate", store.access_keys[akid]["created"]) + "</AccessKey>")
-    return _envelope("CreateAccessKey", inner)
-
-
-def _list_access_keys(store, params):
-    name = str(params.get("UserName", "")).strip()
-    _require_user(store, name)
-    items = []
-    for k in store.access_keys.values():
-        if k["user_name"] == name:
-            items.append("<member>" + _el("UserName", name) + _el("AccessKeyId", k["access_key_id"])
-                         + _el("Status", k["status"]) + _el("CreateDate", k["created"]) + "</member>")
-    return _envelope("ListAccessKeys", f"<AccessKeyMetadata>{''.join(items)}</AccessKeyMetadata>")
-
-
 def _require_access_key(store, akid, user_name=None):
     k = store.access_keys.get(akid)
+    if user_name and user_name.lower() == "root":
+        user_name = ROOT_USER
     if not k or (user_name and k["user_name"] != user_name):
         raise IamError("NoSuchEntity", f"Access key {akid} not found.", 404)
     return k
@@ -706,21 +661,21 @@ def _delete_access_key(store, params):
 
 # ── multi-factor authentication (virtual MFA devices) — limited: assignment is real,
 # there is no console sign-in flow to challenge the code against (see console-password) ──
-def _check_mfa_codes(code1, code2):
-    c1, c2 = str(code1 or "").strip(), str(code2 or "").strip()
-    if not (len(c1) == 6 and c1.isdigit()) or not (len(c2) == 6 and c2.isdigit()):
-        raise IamError("InvalidAuthenticationCode", "Authentication codes must be two consecutive 6-digit codes.", 403)
-    if c1 == c2:
-        raise IamError("InvalidAuthenticationCode", "The two authentication codes must be different (consecutive codes).", 403)
-
-
 def _virtual_mfa_device_xml(d: dict, with_seed: bool = False) -> str:
     inner = _el("SerialNumber", d["serial_number"])
     if with_seed:
-        inner += _el("Base32StringSeed", d["base32_seed"]) + "<QRCodePNG></QRCodePNG>"
+        # BootstrapDatum blobs are base64 on the wire (boto3/the SDKs decode them back to the base32 text)
+        inner += (_el("Base32StringSeed", base64.b64encode(d["base32_seed"].encode()).decode())
+                  + _el("QRCodePNG", base64.b64encode(_qr_stub()).decode()))
     if d.get("user_name"):
         inner += "<User>" + _el("UserName", d["user_name"]) + "</User>" + _el("EnableDate", d["enable_date"])
     return f"<VirtualMFADevice>{inner}</VirtualMFADevice>"
+
+
+def _qr_stub() -> bytes:
+    """No QR renderer ships in the core (pure-stdlib, Pyodide-safe): an empty PNG signature placeholder; the
+    consoles show the secret key / otpauth URI instead (real authenticator apps accept manual key entry)."""
+    return b"\x89PNG\r\n\x1a\n"
 
 
 def _create_virtual_mfa_device(store, params):
@@ -752,47 +707,6 @@ def _delete_virtual_mfa_device(store, params):
     del store.virtual_mfa_devices[d["serial_number"]]
     store.persist()
     return _envelope("DeleteVirtualMFADevice")
-
-
-def _enable_mfa_device(store, params):
-    u = _require_user(store, str(params.get("UserName", "")).strip())
-    d = _require_virtual_mfa_device(store, params.get("SerialNumber"))
-    if d.get("user_name"):
-        raise IamError("EntityAlreadyExists", "MFA device is already assigned to a user.", 409)
-    _check_mfa_codes(params.get("AuthenticationCode1"), params.get("AuthenticationCode2"))
-    d["user_name"] = u["user_name"]
-    d["enable_date"] = _now()
-    store.persist()
-    return _envelope("EnableMFADevice")
-
-
-def _deactivate_mfa_device(store, params):
-    u = _require_user(store, str(params.get("UserName", "")).strip())
-    d = _require_virtual_mfa_device(store, params.get("SerialNumber"))
-    if d.get("user_name") != u["user_name"]:
-        raise IamError("NoSuchEntity", "MFA device is not assigned to this user.", 404)
-    d["user_name"] = None
-    d["enable_date"] = None
-    store.persist()
-    return _envelope("DeactivateMFADevice")
-
-
-def _resync_mfa_device(store, params):
-    u = _require_user(store, str(params.get("UserName", "")).strip())
-    d = _require_virtual_mfa_device(store, params.get("SerialNumber"))
-    if d.get("user_name") != u["user_name"]:
-        raise IamError("NoSuchEntity", "MFA device is not assigned to this user.", 404)
-    _check_mfa_codes(params.get("AuthenticationCode1"), params.get("AuthenticationCode2"))
-    return _envelope("ResyncMFADevice")
-
-
-def _list_mfa_devices(store, params):
-    name = str(params.get("UserName", "")).strip()
-    _require_user(store, name)
-    items = [("<member>" + _el("UserName", name) + _el("SerialNumber", d["serial_number"])
-              + _el("EnableDate", d["enable_date"]) + "</member>")
-             for d in store.virtual_mfa_devices.values() if d.get("user_name") == name]
-    return _envelope("ListMFADevices", f"<MFADevices>{''.join(items)}</MFADevices>")
 
 
 def _list_virtual_mfa_devices(store, params):
@@ -1136,26 +1050,6 @@ def _delete_account_alias(store, params):
 
 
 # ── credential report — generated synchronously (no background job) ────────
-def _credential_report_csv(store) -> str:
-    header = ("user,arn,user_creation_time,password_enabled,password_last_used,mfa_active,"
-              "access_key_1_active,access_key_1_last_rotated,access_key_2_active,access_key_2_last_rotated\n")
-    rows = []
-    for name in sorted(store.users):
-        u = store.users[name]
-        keys = [k for k in store.access_keys.values() if k["user_name"] == name]
-        k1 = keys[0] if len(keys) > 0 else None
-        k2 = keys[1] if len(keys) > 1 else None
-        rows.append(",".join([
-            name, u["arn"], u["created"],
-            "true" if u.get("login_profile") else "false", "N/A", "false",
-            "true" if k1 and k1["status"] == "Active" else "false", k1["created"] if k1 else "N/A",
-            "true" if k2 and k2["status"] == "Active" else "false", k2["created"] if k2 else "N/A",
-        ]))
-    root = store.account_id
-    rows.insert(0, f"<root_account>,arn:aws:iam::{root}:root,N/A,not_supported,N/A,false,false,N/A,false,N/A")
-    return header + "\n".join(rows) + "\n"
-
-
 def _generate_credential_report(store, params):
     store.credential_report = {"generated": _now(), "content": _credential_report_csv(store)}
     store.persist()
@@ -1359,7 +1253,11 @@ def _list_account_access_requests(store, params):
 _ACTIVITY_CAP = 5000
 
 
-def record_activity(store, user_name: str, service: str, action: str | None) -> None:
+def record_activity(store, user_name: str, service: str, action: str | None,
+                    access_key_id: str | None = None, region: str | None = None) -> None:
+    if access_key_id and access_key_id in store.access_keys:
+        store.access_keys[access_key_id]["last_used"] = {"time": _now(), "service": _namespace(service),
+                                                          "region": region or "us-east-1"}
     store.activity.append({"principal_arn": _user_arn(store, user_name), "service": service,
                            "action": action, "time": _now()})
     if len(store.activity) > _ACTIVITY_CAP:
@@ -1741,6 +1639,777 @@ def _delete_profile(store, params):
     return _envelope("DeleteProfile")
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# Sweep IAM-1: real credentials lifecycle + account-level behaviour.
+#   * virtual MFA codes are VERIFIED (RFC 6238 TOTP, HMAC-SHA1, 30 s step) against the seed
+#   * the account password policy is ENFORCED on CreateLoginProfile/UpdateLoginProfile/ChangePassword
+#   * GetAccountSummary / GetAccessKeyLastUsed / full credential report are computed from real state
+#   * SSH public keys, service-specific credentials, signing + server certificates (real lifecycle)
+#   * root principal state (root MFA, root access keys) so the Dashboard recommendations are real
+#   * an IAM admin-action event log (Vyomi-only) and security recommendations (Vyomi-only)
+# ═══════════════════════════════════════════════════════════════════════════
+import hmac as _hmac
+import re as _re
+import struct as _struct
+import time as _time
+
+ROOT_USER = "<root_account>"
+_ROOT_ALIASES = ("", ROOT_USER, "root")
+
+
+def _x(store) -> dict:
+    """Mutable bag for the credential kinds that have no first-class store dict."""
+    x = store.extras
+    for k, v in (("ssh_keys", {}), ("service_creds", {}), ("signing_certs", {}), ("server_certs", {}), ("events", [])):
+        if k not in x:
+            x[k] = v
+    x.setdefault("root_created", _now())
+    return x
+
+
+def _totp(seed_b32: str, step: int) -> str:
+    seed = seed_b32.strip().upper()
+    key = base64.b32decode(seed + "=" * (-len(seed) % 8))
+    h = _hmac.new(key, _struct.pack(">Q", step), hashlib.sha1).digest()
+    o = h[-1] & 15
+    return f"{(_struct.unpack('>I', h[o:o + 4])[0] & 0x7fffffff) % 1000000:06d}"
+
+
+def current_totp(seed_b32: str, at: float | None = None) -> str:
+    """The code an authenticator app would show right now (tests / tooling)."""
+    return _totp(seed_b32, int((_time.time() if at is None else at) // 30))
+
+
+def _verify_mfa_codes(device: dict, code1, code2, window: int) -> None:
+    c1, c2 = str(code1 or "").strip(), str(code2 or "").strip()
+    if not (len(c1) == 6 and c1.isdigit() and len(c2) == 6 and c2.isdigit()):
+        raise IamError("InvalidAuthenticationCode", "Authentication codes must be two consecutive 6-digit codes.", 403)
+    now = int(_time.time() // 30)
+    for s in range(now - window, now + window + 1):
+        if _totp(device["base32_seed"], s) == c1 and _totp(device["base32_seed"], s + 1) == c2:
+            return
+    raise IamError("InvalidAuthenticationCode", "The authentication codes do not match this device's current "
+                   "one-time passwords. Enter two consecutive codes from the virtual MFA application.", 403)
+
+
+# ── account password policy enforcement ────────────────────────────────────
+def _hash_pw(salt: str, pw: str) -> str:
+    return hashlib.sha256((salt + pw).encode()).hexdigest()
+
+
+def _check_password_policy(store, pw) -> None:
+    pw = str(pw or "")
+    pol = store.password_policy
+    problems = []
+    if pol:
+        if len(pw) < int(pol.get("MinimumPasswordLength", 8)):
+            problems.append(f"at least {pol.get('MinimumPasswordLength', 8)} characters")
+        if pol.get("RequireSymbols") and not _re.search(r"[^A-Za-z0-9]", pw):
+            problems.append("a non-alphanumeric character")
+        if pol.get("RequireNumbers") and not _re.search(r"[0-9]", pw):
+            problems.append("a number")
+        if pol.get("RequireUppercaseCharacters") and not _re.search(r"[A-Z]", pw):
+            problems.append("an uppercase letter")
+        if pol.get("RequireLowercaseCharacters") and not _re.search(r"[a-z]", pw):
+            problems.append("a lowercase letter")
+    else:   # the IAM default policy: 8+ characters, at least 3 of the 4 character types
+        kinds = sum(bool(_re.search(p, pw)) for p in (r"[A-Z]", r"[a-z]", r"[0-9]", r"[^A-Za-z0-9]"))
+        if len(pw) < 8:
+            problems.append("at least 8 characters")
+        if kinds < 3:
+            problems.append("at least three of: uppercase, lowercase, number, non-alphanumeric")
+    if problems:
+        raise IamError("PasswordPolicyViolation", "Password does not conform to the account password policy. "
+                       "It must contain " + "; ".join(problems) + ".", 400)
+
+
+def _set_password(store, u: dict, pw: str, enforce_reuse: bool) -> None:
+    _check_password_policy(store, pw)
+    lp = u["login_profile"]
+    n = int((store.password_policy or {}).get("PasswordReusePrevention", 0))
+    hist = lp.get("history") or []
+    if enforce_reuse and n and any(_hash_pw(lp["salt"], pw) == h for h in hist[-n:]):
+        raise IamError("PasswordPolicyViolation", f"Password cannot match any of your last {n} passwords.", 400)
+    lp["salt"] = lp.get("salt") or uuid.uuid4().hex[:16]
+    h = _hash_pw(lp["salt"], pw)
+    lp["pw_hash"] = h
+    lp["history"] = (hist + [h])[-24:]
+    lp["password_last_changed"] = _now()
+
+
+def _create_login_profile(store, params):
+    u = _require_user(store, str(params.get("UserName", "")).strip())
+    if u["login_profile"]:
+        raise IamError("EntityAlreadyExists", "Login profile already exists.", 409)
+    pw = params.get("Password")
+    if not pw:
+        raise IamError("ValidationError", "Password is required.", 400)
+    _check_password_policy(store, pw)
+    u["login_profile"] = {"created": _now(),
+                          "password_reset_required": str(params.get("PasswordResetRequired", "false")).lower() == "true"}
+    _set_password(store, u, pw, enforce_reuse=False)
+    store.persist()
+    return _envelope("CreateLoginProfile", _login_profile_xml(u))
+
+
+def _login_profile_xml(u: dict) -> str:
+    return ("<LoginProfile>" + _el("UserName", u["user_name"]) + _el("CreateDate", u["login_profile"]["created"])
+            + _el("PasswordResetRequired", str(u["login_profile"]["password_reset_required"]).lower()) + "</LoginProfile>")
+
+
+def _get_login_profile(store, params):
+    u = _require_user(store, str(params.get("UserName", "")).strip())
+    if not u["login_profile"]:
+        raise IamError("NoSuchEntity", "Login profile not found.", 404)
+    return _envelope("GetLoginProfile", _login_profile_xml(u))
+
+
+def _update_login_profile(store, params):
+    u = _require_user(store, str(params.get("UserName", "")).strip())
+    if not u["login_profile"]:
+        raise IamError("NoSuchEntity", "Login profile not found.", 404)
+    if params.get("Password"):
+        _set_password(store, u, params["Password"], enforce_reuse=True)
+    if "PasswordResetRequired" in params:
+        u["login_profile"]["password_reset_required"] = str(params["PasswordResetRequired"]).lower() == "true"
+    store.persist()
+    return _envelope("UpdateLoginProfile")
+
+
+def _change_password(store, params):
+    """ChangePassword acts on the CALLING IAM user: requests signed with that user's own access key
+    (the wire router injects __caller). The console operator has no IAM user identity to change."""
+    name = str(params.get("__caller") or "").strip()
+    if not name or name not in store.users:
+        raise IamError("InvalidUserType", "ChangePassword must be called with an IAM user's own access key "
+                       "(the console operator session is not an IAM user).", 400)
+    u = store.users[name]
+    if not u.get("login_profile"):
+        raise IamError("NoSuchEntity", "Login profile not found.", 404)
+    pol = store.password_policy
+    if pol is not None and not pol.get("AllowUsersToChangePassword"):
+        raise IamError("AccessDenied", "The account password policy does not allow users to change their own password.", 403)
+    lp = u["login_profile"]
+    if _hash_pw(lp.get("salt", ""), str(params.get("OldPassword", ""))) != lp.get("pw_hash"):
+        raise IamError("InvalidUserType", "The old password is incorrect.", 400)
+    _set_password(store, u, params.get("NewPassword"), enforce_reuse=True)
+    lp["password_reset_required"] = False
+    store.persist()
+    return _envelope("ChangePassword")
+
+
+# ── root principal (MFA + access keys) ─────────────────────────────────────
+def _is_root(name) -> bool:
+    return str(name or "").strip() in _ROOT_ALIASES
+
+
+def _root_mfa_serial(store):
+    for d in store.virtual_mfa_devices.values():
+        if d.get("user_name") == ROOT_USER:
+            return d["serial_number"]
+    return None
+
+
+def _enable_mfa_device(store, params):
+    uname = str(params.get("UserName", "")).strip()
+    root = _is_root(uname) or uname.lower() == "root"
+    u = {"user_name": ROOT_USER} if root else _require_user(store, uname)
+    d = _require_virtual_mfa_device(store, params.get("SerialNumber"))
+    if d.get("user_name"):
+        raise IamError("EntityAlreadyExists", "MFA device is already assigned to a user.", 409)
+    if root and _root_mfa_serial(store):
+        raise IamError("EntityAlreadyExists", "The root user already has an MFA device.", 409)
+    _verify_mfa_codes(d, params.get("AuthenticationCode1"), params.get("AuthenticationCode2"), 3)
+    d["user_name"] = u["user_name"]
+    d["enable_date"] = _now()
+    store.persist()
+    return _envelope("EnableMFADevice")
+
+
+def _deactivate_mfa_device(store, params):
+    uname = str(params.get("UserName", "")).strip()
+    name = ROOT_USER if (_is_root(uname) or uname.lower() == "root") else _require_user(store, uname)["user_name"]
+    d = _require_virtual_mfa_device(store, params.get("SerialNumber"))
+    if d.get("user_name") != name:
+        raise IamError("NoSuchEntity", "MFA device is not assigned to this user.", 404)
+    d["user_name"] = None
+    d["enable_date"] = None
+    store.persist()
+    return _envelope("DeactivateMFADevice")
+
+
+def _resync_mfa_device(store, params):
+    uname = str(params.get("UserName", "")).strip()
+    name = ROOT_USER if (_is_root(uname) or uname.lower() == "root") else _require_user(store, uname)["user_name"]
+    d = _require_virtual_mfa_device(store, params.get("SerialNumber"))
+    if d.get("user_name") != name:
+        raise IamError("NoSuchEntity", "MFA device is not assigned to this user.", 404)
+    _verify_mfa_codes(d, params.get("AuthenticationCode1"), params.get("AuthenticationCode2"), 20)
+    return _envelope("ResyncMFADevice")
+
+
+def _list_mfa_devices(store, params):
+    uname = str(params.get("UserName", "")).strip()
+    name = ROOT_USER if (uname.lower() == "root" or uname == ROOT_USER) else _require_user(store, uname)["user_name"]
+    items = [("<member>" + _el("UserName", name) + _el("SerialNumber", d["serial_number"])
+              + _el("EnableDate", d["enable_date"]) + "</member>")
+             for d in store.virtual_mfa_devices.values() if d.get("user_name") == name]
+    return _envelope("ListMFADevices", f"<MFADevices>{''.join(items)}</MFADevices>")
+
+
+def _key_owner(store, params) -> str:
+    """Access-key operations default to the CALLER when UserName is omitted (as real IAM does);
+    with no IAM-user caller the target is the account root user."""
+    name = str(params.get("UserName", "")).strip()
+    if not name:
+        name = str(params.get("__caller") or "").strip() or ROOT_USER
+    if name == ROOT_USER or name.lower() == "root":
+        return ROOT_USER
+    return _require_user(store, name)["user_name"]
+
+
+def _create_access_key(store, params):
+    owner = _key_owner(store, params)
+    if sum(1 for k in store.access_keys.values() if k["user_name"] == owner) >= 2:
+        raise IamError("LimitExceeded", "Cannot exceed quota for AccessKeysPerUser: 2", 409)
+    akid = "AKIA" + uuid.uuid4().hex[:16].upper()
+    secret = uuid.uuid4().hex + uuid.uuid4().hex[:8]
+    store.access_keys[akid] = {"access_key_id": akid, "user_name": owner,
+                              "status": "Active", "secret_access_key": secret, "created": _now()}
+    store.persist()
+    inner = ("<AccessKey>" + _el("UserName", owner) + _el("AccessKeyId", akid)
+             + _el("Status", "Active") + _el("SecretAccessKey", secret)
+             + _el("CreateDate", store.access_keys[akid]["created"]) + "</AccessKey>")
+    return _envelope("CreateAccessKey", inner)
+
+
+def _list_access_keys(store, params):
+    name = _key_owner(store, params)
+    items = []
+    for k in store.access_keys.values():
+        if k["user_name"] == name:
+            items.append("<member>" + _el("UserName", name) + _el("AccessKeyId", k["access_key_id"])
+                         + _el("Status", k["status"]) + _el("CreateDate", k["created"]) + "</member>")
+    return _envelope("ListAccessKeys", f"<AccessKeyMetadata>{''.join(items)}</AccessKeyMetadata>")
+
+
+def _get_access_key_last_used(store, params):
+    k = _require_access_key(store, str(params.get("AccessKeyId", "")).strip())
+    lu = k.get("last_used")
+    inner = _el("UserName", k["user_name"]) + "<AccessKeyLastUsed>"
+    if lu:
+        inner += _el("LastUsedDate", lu["time"]) + _el("ServiceName", lu["service"]) + _el("Region", lu["region"])
+    else:
+        inner += _el("ServiceName", "N/A") + _el("Region", "N/A")
+    return _envelope("GetAccessKeyLastUsed", inner + "</AccessKeyLastUsed>")
+
+
+# ── SSH public keys (CodeCommit) ───────────────────────────────────────────
+def _ssh_fingerprint(body: str) -> str:
+    parts = body.split()
+    if len(parts) < 2 or not parts[0].startswith(("ssh-", "ecdsa-")):
+        raise IamError("InvalidPublicKey", "The SSH public key is malformed (expected 'ssh-rsa AAAA… [comment]').", 400)
+    try:
+        blob = base64.b64decode(parts[1], validate=True)
+    except Exception:
+        raise IamError("InvalidPublicKey", "The SSH public key is malformed (key data is not valid base64).", 400)
+    d = hashlib.md5(blob).hexdigest()
+    return ":".join(d[i:i + 2] for i in range(0, 32, 2))
+
+
+def _ssh_xml(k: dict, full: bool) -> str:
+    inner = _el("UserName", k["user_name"]) + _el("SSHPublicKeyId", k["id"])
+    if full:
+        inner += _el("Fingerprint", k["fingerprint"]) + _el("SSHPublicKeyBody", k["body"])
+    return inner + _el("Status", k["status"]) + _el("UploadDate", k["uploaded"])
+
+
+def _require_ssh(store, params):
+    k = _x(store)["ssh_keys"].get(str(params.get("SSHPublicKeyId", "")).strip())
+    if not k or k["user_name"] != str(params.get("UserName", "")).strip():
+        raise IamError("NoSuchEntity", "The SSH public key does not exist.", 404)
+    return k
+
+
+def _upload_ssh_public_key(store, params):
+    u = _require_user(store, str(params.get("UserName", "")).strip())
+    body = str(params.get("SSHPublicKeyBody", "")).strip()
+    fp = _ssh_fingerprint(body)
+    keys = _x(store)["ssh_keys"]
+    mine = [k for k in keys.values() if k["user_name"] == u["user_name"]]
+    if len(mine) >= 5:
+        raise IamError("LimitExceeded", "Cannot exceed quota for SSHPublicKeysPerUser: 5", 409)
+    if any(k["fingerprint"] == fp for k in mine):
+        raise IamError("DuplicateSSHPublicKey", "The SSH public key is already associated with the specified IAM user.", 400)
+    kid = "APKA" + uuid.uuid4().hex[:17].upper()
+    keys[kid] = {"id": kid, "user_name": u["user_name"], "body": body, "fingerprint": fp, "status": "Active", "uploaded": _now()}
+    store.persist()
+    return _envelope("UploadSSHPublicKey", f"<SSHPublicKey>{_ssh_xml(keys[kid], True)}</SSHPublicKey>")
+
+
+def _get_ssh_public_key(store, params):
+    k = _require_ssh(store, params)
+    if str(params.get("Encoding", "")).strip() not in ("SSH", "PEM"):
+        raise IamError("ValidationError", "Encoding must be SSH or PEM.", 400)
+    return _envelope("GetSSHPublicKey", f"<SSHPublicKey>{_ssh_xml(k, True)}</SSHPublicKey>")
+
+
+def _list_ssh_public_keys(store, params):
+    name = str(params.get("UserName", "")).strip() or None
+    if name:
+        _require_user(store, name)
+    items = "".join(f"<member>{_ssh_xml(k, False)}</member>" for k in _x(store)["ssh_keys"].values()
+                    if not name or k["user_name"] == name)
+    return _envelope("ListSSHPublicKeys", f"<SSHPublicKeys>{items}</SSHPublicKeys>")
+
+
+def _update_ssh_public_key(store, params):
+    k = _require_ssh(store, params)
+    st = str(params.get("Status", "")).strip()
+    if st not in ("Active", "Inactive"):
+        raise IamError("ValidationError", "Status must be Active or Inactive.", 400)
+    k["status"] = st
+    store.persist()
+    return _envelope("UpdateSSHPublicKey")
+
+
+def _delete_ssh_public_key(store, params):
+    k = _require_ssh(store, params)
+    del _x(store)["ssh_keys"][k["id"]]
+    store.persist()
+    return _envelope("DeleteSSHPublicKey")
+
+
+# ── service-specific credentials (CodeCommit HTTPS Git, Keyspaces, Bedrock API keys) ──
+_SERVICE_CRED_SERVICES = ("codecommit.amazonaws.com", "cassandra.amazonaws.com", "bedrock.amazonaws.com")
+
+
+def _svc_cred_xml(c: dict, with_password: bool) -> str:
+    inner = (_el("CreateDate", c["created"]) + _el("ServiceName", c["service"]) + _el("ServiceUserName", c["service_user"]))
+    if with_password:
+        inner += _el("ServicePassword", c["password"])
+    return inner + _el("ServiceSpecificCredentialId", c["id"]) + _el("UserName", c["user_name"]) + _el("Status", c["status"])
+
+
+def _require_svc_cred(store, params):
+    c = _x(store)["service_creds"].get(str(params.get("ServiceSpecificCredentialId", "")).strip())
+    uname = str(params.get("UserName", "")).strip()
+    if not c or (uname and c["user_name"] != uname):
+        raise IamError("NoSuchEntity", "The service-specific credential does not exist.", 404)
+    return c
+
+
+def _create_service_specific_credential(store, params):
+    u = _require_user(store, str(params.get("UserName", "")).strip())
+    svc = str(params.get("ServiceName", "")).strip()
+    if svc not in _SERVICE_CRED_SERVICES:
+        raise IamError("NoSuchEntity", f"ServiceName must be one of {', '.join(_SERVICE_CRED_SERVICES)}.", 404)
+    creds = _x(store)["service_creds"]
+    if sum(1 for c in creds.values() if c["user_name"] == u["user_name"] and c["service"] == svc) >= 2:
+        raise IamError("LimitExceeded", "Cannot exceed quota for ServiceSpecificCredentialsPerUser: 2", 409)
+    cid = "ACCA" + uuid.uuid4().hex[:17].upper()
+    creds[cid] = {"id": cid, "user_name": u["user_name"], "service": svc, "status": "Active", "created": _now(),
+                  "service_user": f"{u['user_name']}-at-{store.account_id}", "password": base64.b64encode(uuid.uuid4().bytes + uuid.uuid4().bytes[:8]).decode()}
+    store.persist()
+    return _envelope("CreateServiceSpecificCredential", f"<ServiceSpecificCredential>{_svc_cred_xml(creds[cid], True)}</ServiceSpecificCredential>")
+
+
+def _list_service_specific_credentials(store, params):
+    name = str(params.get("UserName", "")).strip() or None
+    if name:
+        _require_user(store, name)
+    svc = str(params.get("ServiceName", "")).strip() or None
+    items = "".join(f"<member>{_svc_cred_xml(c, False)}</member>" for c in _x(store)["service_creds"].values()
+                    if (not name or c["user_name"] == name) and (not svc or c["service"] == svc))
+    return _envelope("ListServiceSpecificCredentials", f"<ServiceSpecificCredentials>{items}</ServiceSpecificCredentials>")
+
+
+def _reset_service_specific_credential(store, params):
+    c = _require_svc_cred(store, params)
+    c["password"] = base64.b64encode(uuid.uuid4().bytes + uuid.uuid4().bytes[:8]).decode()
+    store.persist()
+    return _envelope("ResetServiceSpecificCredential", f"<ServiceSpecificCredential>{_svc_cred_xml(c, True)}</ServiceSpecificCredential>")
+
+
+def _update_service_specific_credential(store, params):
+    c = _require_svc_cred(store, params)
+    st = str(params.get("Status", "")).strip()
+    if st not in ("Active", "Inactive"):
+        raise IamError("ValidationError", "Status must be Active or Inactive.", 400)
+    c["status"] = st
+    store.persist()
+    return _envelope("UpdateServiceSpecificCredential")
+
+
+def _delete_service_specific_credential(store, params):
+    c = _require_svc_cred(store, params)
+    del _x(store)["service_creds"][c["id"]]
+    store.persist()
+    return _envelope("DeleteServiceSpecificCredential")
+
+
+# ── X.509 certificates: user signing certificates + server certificates ────
+def _pem_der(text: str, label: str = "CERTIFICATE") -> bytes:
+    m = _re.search(r"-----BEGIN %s-----(.+?)-----END %s-----" % (label, label), str(text or ""), _re.S)
+    if not m:
+        raise IamError("MalformedCertificate", f"The certificate is not a well-formed PEM {label} block.", 400)
+    try:
+        return base64.b64decode("".join(m.group(1).split()), validate=True)
+    except Exception:
+        raise IamError("MalformedCertificate", "The certificate body is not valid base64.", 400)
+
+
+def _der_read(b: bytes, i: int):
+    tag = b[i]
+    n = b[i + 1]
+    i += 2
+    if n & 0x80:
+        k = n & 0x7F
+        n = int.from_bytes(b[i:i + k], "big")
+        i += k
+    return tag, i, n   # tag, content start, content length
+
+
+def _cert_not_after(der: bytes):
+    """notAfter of an X.509 certificate (minimal DER walk); None if it doesn't parse."""
+    try:
+        _, i, _ = _der_read(der, 0)                 # Certificate
+        _, i, _ = _der_read(der, i)                 # TBSCertificate
+        tag, j, n = _der_read(der, i)
+        if tag == 0xA0:                             # [0] version
+            i = j + n
+        for _skip in range(3):                      # serial, signature alg, issuer
+            _, j, n = _der_read(der, i)
+            i = j + n
+        _, i, _ = _der_read(der, i)                 # Validity
+        _, j, n = _der_read(der, i)                 # notBefore
+        i = j + n
+        tag, j, n = _der_read(der, i)               # notAfter
+        t = der[j:j + n].decode()
+        fmt = "%y%m%d%H%M%SZ" if tag == 0x17 else "%Y%m%d%H%M%SZ"
+        return datetime.strptime(t, fmt).replace(tzinfo=timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+    except Exception:
+        return None
+
+
+def _cert_xml(c: dict, full: bool) -> str:
+    inner = _el("UserName", c["user_name"]) + _el("CertificateId", c["id"])
+    if full:
+        inner += _el("CertificateBody", c["body"])
+    return inner + _el("Status", c["status"]) + _el("UploadDate", c["uploaded"])
+
+
+def _require_cert(store, params):
+    c = _x(store)["signing_certs"].get(str(params.get("CertificateId", "")).strip())
+    uname = str(params.get("UserName", "")).strip()
+    if not c or (uname and c["user_name"] != uname):
+        raise IamError("NoSuchEntity", "The signing certificate does not exist.", 404)
+    return c
+
+
+def _upload_signing_certificate(store, params):
+    u = _require_user(store, str(params.get("UserName", "")).strip())
+    body = str(params.get("CertificateBody", "")).strip()
+    _pem_der(body)
+    certs = _x(store)["signing_certs"]
+    if sum(1 for c in certs.values() if c["user_name"] == u["user_name"]) >= 2:
+        raise IamError("LimitExceeded", "Cannot exceed quota for SigningCertificatesPerUser: 2", 409)
+    if any(c["body"] == body for c in certs.values()):
+        raise IamError("DuplicateCertificate", "The certificate is already uploaded.", 409)
+    cid = uuid.uuid4().hex.upper()[:24] + uuid.uuid4().hex.upper()[:8]
+    certs[cid] = {"id": cid, "user_name": u["user_name"], "body": body, "status": "Active", "uploaded": _now()}
+    store.persist()
+    return _envelope("UploadSigningCertificate", f"<Certificate>{_cert_xml(certs[cid], True)}</Certificate>")
+
+
+def _list_signing_certificates(store, params):
+    name = _key_owner(store, params) if (params.get("UserName") or params.get("__caller")) else None
+    items = "".join(f"<member>{_cert_xml(c, True)}</member>" for c in _x(store)["signing_certs"].values()
+                    if not name or c["user_name"] == name)
+    return _envelope("ListSigningCertificates", f"<Certificates>{items}</Certificates>")
+
+
+def _update_signing_certificate(store, params):
+    c = _require_cert(store, params)
+    st = str(params.get("Status", "")).strip()
+    if st not in ("Active", "Inactive"):
+        raise IamError("ValidationError", "Status must be Active or Inactive.", 400)
+    c["status"] = st
+    store.persist()
+    return _envelope("UpdateSigningCertificate")
+
+
+def _delete_signing_certificate(store, params):
+    c = _require_cert(store, params)
+    del _x(store)["signing_certs"][c["id"]]
+    store.persist()
+    return _envelope("DeleteSigningCertificate")
+
+
+def _sc_meta_xml(store, c: dict) -> str:
+    return ("<ServerCertificateMetadata>" + _el("Path", c["path"]) + _el("ServerCertificateName", c["name"])
+            + _el("ServerCertificateId", c["id"])
+            + _el("Arn", f"arn:aws:iam::{store.account_id}:server-certificate{c['path']}{c['name']}")
+            + _el("UploadDate", c["uploaded"]) + _el("Expiration", c["expiration"]) + "</ServerCertificateMetadata>")
+
+
+def _require_server_cert(store, name):
+    c = _x(store)["server_certs"].get(str(name or "").strip())
+    if not c:
+        raise IamError("NoSuchEntity", f"The Server Certificate with name {name} cannot be found.", 404)
+    return c
+
+
+def _upload_server_certificate(store, params):
+    name = str(params.get("ServerCertificateName", "")).strip()
+    if not name:
+        raise IamError("ValidationError", "ServerCertificateName is required.", 400)
+    cert_body = str(params.get("CertificateBody", ""))
+    der = _pem_der(cert_body)
+    if "PRIVATE KEY" not in str(params.get("PrivateKey", "")):
+        raise IamError("MalformedCertificate", "The private key is not a well-formed PEM private key block.", 400)
+    certs = _x(store)["server_certs"]
+    if name in certs:
+        raise IamError("EntityAlreadyExists", f"The Server Certificate with name {name} already exists.", 409)
+    path = str(params.get("Path", "/") or "/")
+    now = _now()
+    certs[name] = {"name": name, "path": path, "id": "ASCA" + uuid.uuid4().hex[:17].upper(), "body": cert_body.strip(),
+                   "chain": str(params.get("CertificateChain", "")).strip(), "uploaded": now,
+                   "expiration": _cert_not_after(der) or now}
+    store.persist()
+    return _envelope("UploadServerCertificate", _sc_meta_xml(store, certs[name]))
+
+
+def _get_server_certificate(store, params):
+    c = _require_server_cert(store, params.get("ServerCertificateName"))
+    inner = ("<ServerCertificate>" + _sc_meta_xml(store, c) + _el("CertificateBody", c["body"])
+             + (_el("CertificateChain", c["chain"]) if c["chain"] else "") + "</ServerCertificate>")
+    return _envelope("GetServerCertificate", inner)
+
+
+def _list_server_certificates(store, params):
+    prefix = str(params.get("PathPrefix", "/") or "/")
+    items = "".join(f"<member>{_sc_meta_xml(store, c)[len('<ServerCertificateMetadata>'):-len('</ServerCertificateMetadata>')]}</member>"
+                    for c in sorted(_x(store)["server_certs"].values(), key=lambda c: c["name"]) if c["path"].startswith(prefix))
+    return _envelope("ListServerCertificates", f"<ServerCertificateMetadataList>{items}</ServerCertificateMetadataList>")
+
+
+def _update_server_certificate(store, params):
+    c = _require_server_cert(store, params.get("ServerCertificateName"))
+    certs = _x(store)["server_certs"]
+    new = str(params.get("NewServerCertificateName", "")).strip()
+    if new and new != c["name"]:
+        if new in certs:
+            raise IamError("EntityAlreadyExists", f"The Server Certificate with name {new} already exists.", 409)
+        del certs[c["name"]]
+        c["name"] = new
+        certs[new] = c
+    if params.get("NewPath"):
+        c["path"] = str(params["NewPath"])
+    store.persist()
+    return _envelope("UpdateServerCertificate")
+
+
+def _delete_server_certificate(store, params):
+    c = _require_server_cert(store, params.get("ServerCertificateName"))
+    del _x(store)["server_certs"][c["name"]]
+    store.persist()
+    return _envelope("DeleteServerCertificate")
+
+
+# ── account summary + security recommendations (computed from real state) ──
+def _sum_stats(store) -> dict:
+    x = _x(store)
+    mfa_in_use = sum(1 for d in store.virtual_mfa_devices.values() if d.get("user_name"))
+    root_keys = sum(1 for k in store.access_keys.values() if k["user_name"] == ROOT_USER)
+    return {
+        "Users": len(store.users), "UsersQuota": 5000, "Groups": len(store.groups), "GroupsQuota": 300,
+        "ServerCertificates": len(x["server_certs"]), "ServerCertificatesQuota": 20,
+        "UserPolicySizeQuota": 2048, "GroupPolicySizeQuota": 5120, "GroupsPerUserQuota": 10,
+        "SigningCertificatesPerUserQuota": 2, "AccessKeysPerUserQuota": 2,
+        "MFADevices": len(store.virtual_mfa_devices), "MFADevicesInUse": mfa_in_use,
+        "AccountMFAEnabled": 1 if _root_mfa_serial(store) else 0,
+        "AccountAccessKeysPresent": root_keys,
+        "AccountSigningCertificatesPresent": sum(1 for c in x["signing_certs"].values() if c["user_name"] == ROOT_USER),
+        "AttachedPoliciesPerGroupQuota": 10, "AttachedPoliciesPerRoleQuota": 10, "AttachedPoliciesPerUserQuota": 10,
+        "Policies": sum(1 for p in store.policies.values()), "PoliciesQuota": 1500, "PolicySizeQuota": 6144,
+        "PolicyVersionsInUse": sum(len(p.get("versions") or {"v1": 1}) for p in store.policies.values()),
+        "PolicyVersionsInUseQuota": 10000, "VersionsPerPolicyQuota": 5, "GlobalEndpointTokenVersion": 2 if x.get("sts_token_version") == "v2Token" else 1,
+        "Roles": len(store.roles), "RolesQuota": 1000, "RolePolicySizeQuota": 10240,
+        "InstanceProfiles": 0, "InstanceProfilesQuota": 1000,
+    }
+
+
+def _set_sts_preferences(store, params):
+    v = str(params.get("GlobalEndpointTokenVersion", "")).strip()
+    if v not in ("v1Token", "v2Token"):
+        raise IamError("ValidationError", "GlobalEndpointTokenVersion must be v1Token or v2Token.", 400)
+    _x(store)["sts_token_version"] = v
+    store.persist()
+    return _envelope("SetSecurityTokenServicePreferences")
+
+
+def _get_account_summary(store, params):
+    entries = "".join("<entry>" + _el("key", k) + _el("value", v) + "</entry>" for k, v in _sum_stats(store).items())
+    return _envelope("GetAccountSummary", f"<SummaryMap>{entries}</SummaryMap>")
+
+
+def _key_last_used_time(k: dict):
+    return (k.get("last_used") or {}).get("time")
+
+
+def _recommendations(store) -> list[dict]:
+    recs = []
+
+    def add(rid, title, severity, resources, fix):
+        recs.append({"id": rid, "title": title, "severity": severity, "resources": resources, "fix": fix})
+
+    if not _root_mfa_serial(store):
+        add("root-mfa", "Add MFA for the root user", "High", [f"arn:aws:iam::{store.account_id}:root"],
+            "Register a virtual MFA device for the root user under My security credentials.")
+    root_keys = [k["access_key_id"] for k in store.access_keys.values() if k["user_name"] == ROOT_USER]
+    if root_keys:
+        add("root-keys", "Deactivate or delete access keys for the root user", "High", root_keys,
+            "Create IAM users or roles with scoped permissions and delete the root access keys.")
+    no_mfa = [u["arn"] for n, u in store.users.items() if u.get("login_profile") and not _has_mfa(store, n)]
+    if no_mfa:
+        add("user-mfa", "Enable MFA for IAM users with a console password", "Medium", no_mfa,
+            "Assign a virtual MFA device on each user's Security credentials tab.")
+    old = [k["access_key_id"] for k in store.access_keys.values()
+           if k["user_name"] != ROOT_USER and k["status"] == "Active" and _age_days(k["created"]) >= 90]
+    if old:
+        add("key-rotation", "Rotate access keys older than 90 days", "Medium", old,
+            "Create a second key, move workloads to it, then deactivate and delete the old key.")
+    unused = [k["access_key_id"] for k in store.access_keys.values()
+              if k["status"] == "Active" and not _key_last_used_time(k) and _age_days(k["created"]) >= 45]
+    if unused:
+        add("unused-keys", "Delete unused access keys (never used, 45+ days old)", "Low", unused,
+            "Keys that have never signed a request should be deleted.")
+    if store.password_policy is None and any(u.get("login_profile") for u in store.users.values()):
+        add("password-policy", "Set an account password policy", "Low", [f"arn:aws:iam::{store.account_id}:account"],
+            "Account settings > Password policy: require length, character types and rotation.")
+    elif store.password_policy and int(store.password_policy.get("MinimumPasswordLength", 8)) < 14:
+        add("password-length", "Raise the minimum password length to 14", "Low", [f"arn:aws:iam::{store.account_id}:account"],
+            "Account settings > Password policy.")
+    return recs
+
+
+def _get_security_recommendations(store, params):
+    items = "".join("<member>" + _el("Id", r["id"]) + _el("Title", r["title"]) + _el("Severity", r["severity"])
+                    + _el("Remediation", r["fix"]) + "<Resources>" + "".join(_el("member", x) for x in r["resources"])
+                    + "</Resources></member>" for r in _recommendations(store))
+    return _envelope("GetSecurityRecommendations", f"<Recommendations>{items}</Recommendations>")
+
+
+# ── IAM admin-action event log (Vyomi-only) ────────────────────────────────
+_MUTATING = ("Create", "Delete", "Update", "Put", "Attach", "Detach", "Add", "Remove", "Tag", "Untag", "Enable",
+             "Deactivate", "Resync", "Upload", "Reset", "Set", "Change", "Request")
+_EVENT_CAP = 2000
+_TARGET_KEYS = ("UserName", "RoleName", "GroupName", "PolicyArn", "PolicyName", "SerialNumber", "AccessKeyId",
+                "ServerCertificateName", "AccountAlias", "VirtualMFADeviceName", "AnalyzerName", "ProviderName")
+
+
+def _record_event(store, action: str, params: dict, ok: bool, code: str = "") -> None:
+    if not action.startswith(_MUTATING):
+        return
+    target = next((str(params[k]) for k in _TARGET_KEYS if params.get(k)), "")
+    ev = _x(store)["events"]
+    ev.append({"time": _now(), "action": action, "principal": str(params.get("__caller") or "operator"),
+               "resource": target, "status": "Success" if ok else (code or "Failed")})
+    if len(ev) > _EVENT_CAP:
+        del ev[: len(ev) - _EVENT_CAP]
+    store.persist()
+
+
+def _list_iam_events(store, params):
+    try:
+        limit = max(1, min(500, int(params.get("MaxItems", 100))))
+    except Exception:
+        limit = 100
+    ev = list(reversed(_x(store)["events"]))
+    name = str(params.get("EventName", "")).strip()
+    if name:
+        ev = [e for e in ev if e["action"] == name]
+    items = "".join("<member>" + _el("EventTime", e["time"]) + _el("EventName", e["action"]) + _el("Principal", e["principal"])
+                    + _el("Resource", e["resource"]) + _el("Status", e["status"]) + "</member>" for e in ev[:limit])
+    return _envelope("ListIamEvents", f"<Events>{items}</Events><TotalEvents>{len(ev)}</TotalEvents>")
+
+
+# ── credential report (full AWS column set, with real last-used) ───────────
+_CRED_COLS = ("user,arn,user_creation_time,password_enabled,password_last_used,password_last_changed,"
+              "password_next_rotation,mfa_active,access_key_1_active,access_key_1_last_rotated,"
+              "access_key_1_last_used_date,access_key_1_last_used_region,access_key_1_last_used_service,"
+              "access_key_2_active,access_key_2_last_rotated,access_key_2_last_used_date,"
+              "access_key_2_last_used_region,access_key_2_last_used_service,cert_1_active,cert_1_last_rotated,"
+              "cert_2_active,cert_2_last_rotated\n")
+
+
+def _credential_report_csv(store) -> str:
+    x = _x(store)
+
+    def key_cols(k):
+        if not k:
+            return ["false", "N/A", "N/A", "N/A", "N/A"]
+        lu = k.get("last_used") or {}
+        return ["true" if k["status"] == "Active" else "false", k["created"], lu.get("time", "N/A"),
+                lu.get("region", "N/A"), lu.get("service", "N/A")]
+
+    def cert_cols(c):
+        return ["true" if c["status"] == "Active" else "false", c["uploaded"]] if c else ["false", "N/A"]
+
+    def row(name, arn, created, pw, last_changed, next_rot, mfa, owner):
+        keys = [k for k in store.access_keys.values() if k["user_name"] == owner]
+        certs = [c for c in x["signing_certs"].values() if c["user_name"] == owner]
+        return ",".join([name, arn, created, pw, "N/A", last_changed, next_rot, mfa]
+                        + key_cols(keys[0] if keys else None) + key_cols(keys[1] if len(keys) > 1 else None)
+                        + cert_cols(certs[0] if certs else None) + cert_cols(certs[1] if len(certs) > 1 else None))
+
+    maxage = int((store.password_policy or {}).get("MaxPasswordAge", 0) or 0)
+    rows = []
+    for name in sorted(store.users):
+        u = store.users[name]
+        lp = u.get("login_profile")
+        changed = (lp.get("password_last_changed") or lp["created"]) if lp else "N/A"
+        nxt = "N/A"
+        if lp and maxage:
+            try:
+                t = datetime.strptime(changed, "%Y-%m-%dT%H:%M:%S.000Z").replace(tzinfo=timezone.utc)
+                nxt = (t + __import__("datetime").timedelta(days=maxage)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+            except Exception:
+                pass
+        rows.append(row(name, u["arn"], u["created"], "true" if lp else "false", changed, nxt,
+                        "true" if _has_mfa(store, name) else "false", name))
+    rows.insert(0, row("<root_account>", f"arn:aws:iam::{store.account_id}:root", x.get("root_created", "N/A"),
+                       "not_supported", "not_supported", "not_supported", "true" if _root_mfa_serial(store) else "false", ROOT_USER))
+    return _CRED_COLS + "\n".join(rows) + "\n"
+
+
+# `ChangePassword` etc. are reached through the same Query-protocol dispatcher.
+_OPS_NEW = {
+    "CreateLoginProfile": _create_login_profile, "GetLoginProfile": _get_login_profile,
+    "UpdateLoginProfile": _update_login_profile, "ChangePassword": _change_password,
+    "EnableMFADevice": _enable_mfa_device, "DeactivateMFADevice": _deactivate_mfa_device,
+    "ResyncMFADevice": _resync_mfa_device, "ListMFADevices": _list_mfa_devices,
+    "CreateAccessKey": _create_access_key, "ListAccessKeys": _list_access_keys,
+    "GetAccessKeyLastUsed": _get_access_key_last_used,
+    "UploadSSHPublicKey": _upload_ssh_public_key, "GetSSHPublicKey": _get_ssh_public_key,
+    "ListSSHPublicKeys": _list_ssh_public_keys, "UpdateSSHPublicKey": _update_ssh_public_key,
+    "DeleteSSHPublicKey": _delete_ssh_public_key,
+    "CreateServiceSpecificCredential": _create_service_specific_credential,
+    "ListServiceSpecificCredentials": _list_service_specific_credentials,
+    "ResetServiceSpecificCredential": _reset_service_specific_credential,
+    "UpdateServiceSpecificCredential": _update_service_specific_credential,
+    "DeleteServiceSpecificCredential": _delete_service_specific_credential,
+    "UploadSigningCertificate": _upload_signing_certificate, "ListSigningCertificates": _list_signing_certificates,
+    "UpdateSigningCertificate": _update_signing_certificate, "DeleteSigningCertificate": _delete_signing_certificate,
+    "UploadServerCertificate": _upload_server_certificate, "GetServerCertificate": _get_server_certificate,
+    "ListServerCertificates": _list_server_certificates, "UpdateServerCertificate": _update_server_certificate,
+    "DeleteServerCertificate": _delete_server_certificate,
+    "GetAccountSummary": _get_account_summary, "SetSecurityTokenServicePreferences": _set_sts_preferences,
+    "GetSecurityRecommendations": _get_security_recommendations, "ListIamEvents": _list_iam_events,
+}
+
+
 # ── native-wire dispatcher (Query-protocol Action → operation) ─────────────
 _OPS = {
     "CreateUser": _create_user, "GetUser": _get_user, "ListUsers": _list_users, "DeleteUser": _delete_user,
@@ -1809,6 +2478,7 @@ _OPS = {
     "DeleteTrustAnchor": _delete_trust_anchor,
     "CreateProfile": _create_profile, "ListProfiles": _list_profiles, "DeleteProfile": _delete_profile,
 }
+_OPS.update(_OPS_NEW)
 
 
 def dispatch(store: IamStore, params: dict | None = None, s3_store=None) -> IamResponse:
@@ -1824,10 +2494,11 @@ def dispatch(store: IamStore, params: dict | None = None, s3_store=None) -> IamR
     if op is None:
         return _error("InvalidAction", f"The action {action} is not implemented.", 400)
     try:
-        if action in _NEEDS_S3_STORE:
-            return op(store, params, s3_store=s3_store)
-        return op(store, params)
+        r = op(store, params, s3_store=s3_store) if action in _NEEDS_S3_STORE else op(store, params)
+        _record_event(store, action, params, True)
+        return r
     except IamError as e:
+        _record_event(store, action, params, False, e.code)
         return _error(e.code, e.message, e.status)
 
 

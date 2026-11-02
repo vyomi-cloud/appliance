@@ -44,6 +44,7 @@ State shapes (record shapes owned by iam_core):
     trust_anchors : { arn -> IAM Roles Anywhere trust anchor }      (Vyomi-only)
     rolesanywhere_profiles : { arn -> IAM Roles Anywhere profile }  (Vyomi-only)
     analyzers : { analyzer_name -> Access Analyzer analyzer }       (Vyomi-only)
+    extras : { ssh_keys, service_creds, signing_certs, server_certs, events } — see iam_core._x
 """
 from __future__ import annotations
 
@@ -180,6 +181,7 @@ class IamStore:
         self.trust_anchors: dict[str, dict[str, Any]] = {}         # keyed by ARN (Roles Anywhere, Vyomi-only)
         self.rolesanywhere_profiles: dict[str, dict[str, Any]] = {}   # keyed by ARN (Roles Anywhere, Vyomi-only)
         self.analyzers: dict[str, dict[str, Any]] = {}             # keyed by analyzer name (Access Analyzer, Vyomi-only)
+        self.extras: dict[str, Any] = {}   # ssh_keys/service_creds/signing_certs/server_certs/events (see iam_core._x)
         self.engine: AuthzEngine = engine or NativeIamEvaluator()
         self.account_id = account_id
 

@@ -882,7 +882,8 @@ class AwsWireRouter:
         key = self.iam.access_keys.get(akid_m.group(1))
         if not key:   # not an IAM user's own access key (console operator / unsigned / unknown)
             return
-        iam.record_activity(self.iam, key["user_name"], svc, self._action_name(svc, lheaders, query, body))
+        iam.record_activity(self.iam, key["user_name"], svc, self._action_name(svc, lheaders, query, body),
+                            access_key_id=akid_m.group(1))
 
     # ── dispatch ───────────────────────────────────────────────────────
     async def ahandle(self, method, path, query, headers, body):
@@ -1185,6 +1186,11 @@ class AwsWireRouter:
         # Query-protocol / XML services
         params = self._query_params(query, body)
         if svc == "iam":
+            params.pop("__caller", None)   # never trust a client-supplied caller; derive it from the signing key
+            akid_m = _AKID_RE.search(lheaders.get("authorization", "") or "")
+            ckey = self.iam.access_keys.get(akid_m.group(1)) if akid_m else None
+            if ckey and ckey["user_name"] in self.iam.users:
+                params["__caller"] = ckey["user_name"]
             r = iam.dispatch(self.iam, params, s3_store=self.s3)
         elif svc == "rds":
             r = rds.dispatch(self.rds, params, msg_store=self.msg, s3_store=self.s3)
