@@ -236,6 +236,12 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
   .vy-colfoot{border-top:1px solid var(--line);margin-top:4px;padding:8px 14px 4px;font-size:12.5px}
   .vy-colfoot a{color:var(--blue);cursor:pointer}
   table.gc{width:100%;border-collapse:collapse;font-size:13px;background:#fff}
+  /* Every grid scrolls inside its own frame: horizontal for wide column sets, vertical with a pinned header. */
+  .vy-scroll{overflow:auto;max-width:100%;max-height:max(220px,calc(100vh - 330px));overscroll-behavior:contain}
+  .vy-scroll > table.gc{width:max-content;min-width:100%}
+  .vy-scroll > table.gc th{position:sticky;top:0;z-index:2;white-space:nowrap}
+  .vy-scroll > table.gc td{white-space:nowrap;max-width:420px;overflow:hidden;text-overflow:ellipsis}
+  .vy-scroll > table.gc td.chk,.vy-scroll > table.gc td:last-child{overflow:visible}
   table.gc th{text-align:left;padding:11px 14px;font-weight:500;color:var(--sub);background:var(--blue-bg);font-size:12px;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--line)}
   table.gc th.sortable{cursor:pointer;user-select:none}
   table.gc th.sortable:hover{background:#eaf2fb}
@@ -4379,5 +4385,18 @@ setInterval(fetchDiskHealth, 30000);
   }
 })();
 </script><script src="./vyomi-appbar.js" data-cloud="gcp" data-clouds="clouds.html" defer></script>
+<script>
+/* Wrap every grid (table.gc) in a .vy-scroll frame as it is rendered, so wide/long grids scroll
+   (horizontal + vertical, header pinned) instead of being clipped by the card. */
+(function(){
+  function wrap(t){ var p=t.parentNode; if(!p||(p.classList&&p.classList.contains('vy-scroll')))return;
+    var d=document.createElement('div'); d.className='vy-scroll'; p.insertBefore(d,t); d.appendChild(t); }
+  function scan(n){ if(n.nodeType!==1)return; if(n.matches&&n.matches('table.gc'))wrap(n);
+    if(n.querySelectorAll){var l=n.querySelectorAll('table.gc');for(var i=0;i<l.length;i++)wrap(l[i]);} }
+  new MutationObserver(function(ms){ for(var i=0;i<ms.length;i++)for(var j=0;j<ms[i].addedNodes.length;j++)scan(ms[i].addedNodes[j]); })
+    .observe(document.documentElement,{childList:true,subtree:true});
+  scan(document.documentElement);
+})();
+</script>
 </body>
 </html>
