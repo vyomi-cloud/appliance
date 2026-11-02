@@ -1738,6 +1738,8 @@ def head_object(store: ObjectStore, bucket: str, key: str, query: dict, headers:
         h["x-amz-replication-status"] = obj["replication_status"]
     if obj.get("archive_tier"):
         h["x-amz-archive-status"] = obj["archive_tier"]
+    if obj.get("restore"):
+        h["x-amz-restore"] = f'ongoing-request="false", expiry-date="{obj["restore"]["expiry"]}"'
     for k, v in obj.get("metadata", {}).items():
         h[f"x-amz-meta-{k}"] = v
     h.update(_sse_headers(store, bucket))
@@ -1793,6 +1795,8 @@ def get_object(store: ObjectStore, bucket: str, key: str, query: dict, headers: 
         h["x-amz-replication-status"] = obj["replication_status"]
     if obj.get("archive_tier"):
         h["x-amz-archive-status"] = obj["archive_tier"]
+    if obj.get("restore"):
+        h["x-amz-restore"] = f'ongoing-request="false", expiry-date="{obj["restore"]["expiry"]}"'
     for k, v in obj.get("metadata", {}).items():
         h[f"x-amz-meta-{k}"] = v
     h.update(_sse_headers(store, bucket))
@@ -2880,6 +2884,12 @@ def _s3control(store: ObjectStore, method: str, raw: str, query: dict, lheaders:
         return _s3c_account_pab(store, method, body)
     if len(segs) >= 2 and segs[1].lower() == "accesspointforobjectlambda":
         return _s3c_olap(store, method, segs, body)
+    if len(segs) >= 2 and segs[1] in ("mrap", "async-requests"):
+        return _s3c_mrap(store, method, segs, query, body)
+    if len(segs) >= 2 and segs[1] in ("accessgrantsinstance", "accessgrantsinstances"):
+        return _s3c_grants(store, method, segs, query, body)
+    if len(segs) >= 2 and segs[1] == "jobs":
+        return _s3c_jobs(store, method, segs, query, body)
     if len(segs) < 2 or segs[1] != "accesspoint":
         return _s3c_error("NotImplemented", "This S3 Control operation is not implemented by Vyomi.", 501)
     hdr = '<?xml version="1.0" encoding="UTF-8"?>'
@@ -3194,9 +3204,1066 @@ def _olap_get_object(store, rec, name, t, key, query, headers, lheaders) -> S3Re
     return S3Response(status=int(res.get("statusCode") or 200), headers=hdrs, body=data, media_type=ctype)
 
 
+# ── S3 Control: shared helpers for the batch-2 control planes (MRAP / Access Grants / Batch Operations)
+def _s3c_root(body: bytes):
+    """Parse a restXml request body into an element tree with the namespaces stripped (None if malformed)."""
+    try:
+        root = ET.fromstring(body or b"<x/>")
+    except ET.ParseError:
+        return None
+    for e in root.iter():
+        if isinstance(e.tag, str) and "}" in e.tag:
+            e.tag = e.tag.split("}", 1)[1]
+    return root
+
+
+def _s3c_malformed() -> S3Response:
+    return _s3c_error("MalformedXML", "The XML you provided was not well-formed or did not validate against our published schema.", 400)
+
+
+def _s3c_ok(op: str, inner: str = "") -> S3Response:
+    return _xml_response(f'<?xml version="1.0" encoding="UTF-8"?><{op}Result xmlns="{_S3C_NS}">{inner}</{op}Result>')
+
+
+def _inner_xml(el) -> str:
+    return "".join(ET.tostring(c, encoding="unicode") for c in list(el)) if el is not None else ""
+
+
+def _tags_of(el) -> list:
+    return [(_child_text(t, "Key"), _child_text(t, "Value")) for t in list(el)] if el is not None else []
+
+
+def _tags_xml(tags: list, wrapper: str = "Tags", member: str = "member") -> str:
+    return f"<{wrapper}>" + "".join(f"<{member}><Key>{_xml_escape(k)}</Key><Value>{_xml_escape(v)}</Value></{member}>" for k, v in tags) + f"</{wrapper}>"
+
+
+def _page(items: list, query: dict, default: int = 1000):
+    """(slice, next_token) from nextToken/maxResults (offset tokens)."""
+    try:
+        start = int(query.get("nextToken") or 0)
+        size = max(1, min(int(query.get("maxResults") or default), default))
+    except (TypeError, ValueError):
+        start, size = 0, default
+    nxt = str(start + size) if start + size < len(items) else ""
+    return items[start:start + size], nxt
+
+
+def _next_xml(tok: str) -> str:
+    return f"<NextToken>{tok}</NextToken>" if tok else ""
+
+
+_REGIONS = {"us-east-1", "us-east-2", "us-west-1", "us-west-2", "af-south-1", "ap-east-1", "ap-south-1", "ap-south-2",
+            "ap-southeast-1", "ap-southeast-2", "ap-southeast-3", "ap-southeast-4", "ap-northeast-1", "ap-northeast-2",
+            "ap-northeast-3", "ca-central-1", "ca-west-1", "eu-central-1", "eu-central-2", "eu-west-1", "eu-west-2",
+            "eu-west-3", "eu-south-1", "eu-south-2", "eu-north-1", "il-central-1", "me-south-1", "me-central-1", "sa-east-1"}
+_ROLE_RE = re.compile(r"^arn:aws(-[a-z]+)*:iam::(\d{12}):role/[\w+=,.@/-]+$")
+
+
+# ── S3 Control: Multi-Region Access Points (restXml /v20180820/mrap/…, /async-requests/mrap/…)
+# An MRAP is a control-plane record in store.account["mrap"] over buckets in DISTINCT regions.
+# Create/Delete/PutPolicy are asynchronous in real S3 (a RequestTokenARN you poll with
+# DescribeMultiRegionAccessPointOperation); here they complete inline and the operation record
+# is already SUCCEEDED. Data-plane requests addressed to the alias (<id>.mrap) or the MRAP ARN
+# go to the highest-dial member bucket (that has the object, for reads); writes are mirrored to
+# every other member bucket synchronously (real MRAP replication is asynchronous).
+def _mraps(store: ObjectStore) -> dict:
+    return store.account.setdefault("mrap", {})
+
+
+def _mrap_ops(store: ObjectStore) -> dict:
+    return store.account.setdefault("mrap_ops", {})
+
+
+def _bucket_region(store: ObjectStore, bucket: str) -> str:
+    return (store.buckets.get(bucket) or {}).get("region") or "us-east-1"
+
+
+def _mrap_arn(alias: str) -> str:
+    return f"arn:aws:s3::{_ACCOUNT_ID}:accesspoint/{alias}"
+
+
+def _mrap_report_xml(store: ObjectStore, tag: str, r: dict) -> str:
+    pab = "<PublicAccessBlock>" + "".join(f"<{k}>{'true' if r['pab'].get(k) else 'false'}</{k}>" for k in _PAB_KEYS) + "</PublicAccessBlock>"
+    regs = "<Regions>" + "".join(f"<Region><Bucket>{_xml_escape(b)}</Bucket><Region>{_bucket_region(store, b)}</Region>"
+                                 f"<BucketAccountId>{_ACCOUNT_ID}</BucketAccountId></Region>" for b in r["buckets"]) + "</Regions>"
+    return (f"<{tag}><Name>{_xml_escape(r['name'])}</Name><Alias>{r['alias']}</Alias><CreatedAt>{r['created']}</CreatedAt>"
+            f"{pab}<Status>{r['status']}</Status>{regs}</{tag}>")
+
+
+def _mrap_find(store: ObjectStore, ident: str):
+    """By name, alias (<id>.mrap) or ARN."""
+    ident = ident.rsplit("accesspoint/", 1)[-1] if "accesspoint/" in ident else ident
+    m = _mraps(store)
+    if ident in m:
+        return m[ident]
+    return next((r for r in m.values() if r["alias"] == ident), None)
+
+
+_MRAP_VERB = {"CreateMultiRegionAccessPoint": "create", "DeleteMultiRegionAccessPoint": "delete", "PutMultiRegionAccessPointPolicy": "put-policy"}
+
+
+def _mrap_new_op(store: ObjectStore, op: str, params_tag: str, params_xml: str, regions: list) -> str:
+    token = f"arn:aws:s3:us-west-2:{_ACCOUNT_ID}:async-request/mrap/{_MRAP_VERB[op]}/{uuid.uuid4().hex}"
+    _mrap_ops(store)[token] = {"created": _now(), "operation": op, "params_tag": params_tag, "params": params_xml, "regions": regions}
+    return token
+
+
+def _mrap_dials(store: ObjectStore, r: dict) -> dict:
+    return {b: int(r["routes"].get(b, 100)) for b in r["buckets"]}
+
+
+def _s3c_mrap(store: ObjectStore, method: str, segs: list, query: dict, body: bytes) -> S3Response:
+    rest = segs[2:]
+    if segs[1] == "async-requests":
+        if len(rest) < 2 or rest[0] != "mrap":
+            return _s3c_error("NotImplemented", "Unknown async request operation.", 501)
+        if method == "GET":
+            tok = "/".join(rest[1:])
+            op = _mrap_ops(store).get(tok)
+            if op is None:
+                return _s3c_error("NoSuchAsyncRequest", "The specified async request does not exist.", 404)
+            regs = "".join(f"<Region><Name>{x}</Name><RequestStatus>SUCCEEDED</RequestStatus></Region>" for x in op["regions"])
+            return _s3c_ok("DescribeMultiRegionAccessPointOperation",
+                           f"<AsyncOperation><CreationTime>{op['created']}</CreationTime><Operation>{op['operation']}</Operation>"
+                           f"<RequestTokenARN>{tok}</RequestTokenARN><RequestParameters>{op['params']}</RequestParameters>"
+                           f"<RequestStatus>SUCCEEDED</RequestStatus><ResponseDetails><MultiRegionAccessPointDetails><Regions>{regs}</Regions>"
+                           f"</MultiRegionAccessPointDetails></ResponseDetails></AsyncOperation>")
+        if method == "POST" and len(rest) == 2:
+            return _mrap_async(store, rest[1], body)
+        return _s3c_error("MethodNotAllowed", method, 405)
+    # /mrap/instances[/{name+}[/policy|/policystatus|/routes]]
+    if not rest or rest[0] != "instances":
+        return _s3c_error("NotImplemented", "Unknown MultiRegionAccessPoint operation.", 501)
+    rest = rest[1:]
+    if not rest:
+        if method != "GET":
+            return _s3c_error("MethodNotAllowed", method, 405)
+        rows, nxt = _page([_mraps(store)[n] for n in sorted(_mraps(store))], query)
+        return _s3c_ok("ListMultiRegionAccessPoints", "<AccessPoints>" + "".join(_mrap_report_xml(store, "AccessPoint", r) for r in rows) + f"</AccessPoints>{_next_xml(nxt)}")
+    sub = rest[-1] if rest[-1] in ("policy", "policystatus", "routes") and len(rest) > 1 else ""
+    ident = "/".join(rest[:-1] if sub else rest)
+    r = _mrap_find(store, ident)
+    if r is None:
+        return _s3c_error("NoSuchMultiRegionAccessPoint", "The specified Multi-Region Access Point does not exist.", 404)
+    if not sub and method == "GET":
+        return _s3c_ok("GetMultiRegionAccessPoint", _mrap_report_xml(store, "AccessPoint", r))
+    if sub == "policy" and method == "GET":
+        if not r.get("policy"):
+            return _s3c_error("NoSuchMultiRegionAccessPointPolicy", "The specified Multi-Region Access Point policy does not exist.", 404)
+        return _s3c_ok("GetMultiRegionAccessPointPolicy", f"<Policy><Established><Policy>{_xml_escape(r['policy'])}</Policy></Established><Proposed/></Policy>")
+    if sub == "policystatus" and method == "GET":
+        if not r.get("policy"):
+            return _s3c_error("NoSuchMultiRegionAccessPointPolicy", "The specified Multi-Region Access Point policy does not exist.", 404)
+        pub = _policy_is_public(json.loads(r["policy"]))
+        return _s3c_ok("GetMultiRegionAccessPointPolicyStatus", f"<Established><IsPublic>{'true' if pub else 'false'}</IsPublic></Established>")
+    if sub == "routes":
+        if method == "GET":
+            d = _mrap_dials(store, r)
+            return _s3c_ok("GetMultiRegionAccessPointRoutes", f"<Mrap>{_mrap_arn(r['alias'])}</Mrap><Routes>" + "".join(
+                f"<Route><Bucket>{_xml_escape(b)}</Bucket><Region>{_bucket_region(store, b)}</Region><TrafficDialPercentage>{d[b]}</TrafficDialPercentage></Route>"
+                for b in r["buckets"]) + "</Routes>")
+        if method == "PATCH":
+            root = _s3c_root(body)
+            if root is None:
+                return _s3c_malformed()
+            upd = {}
+            for el in _children(_child(root, "RouteUpdates"), "Route"):
+                b = _child_text(el, "Bucket")
+                if not b and _child_text(el, "Region"):     # a route can be addressed by its region
+                    b = next((x for x in r["buckets"] if _bucket_region(store, x) == _child_text(el, "Region")), "")
+                try:
+                    pct = int(_child_text(el, "TrafficDialPercentage"))
+                except ValueError:
+                    return _s3c_error("InvalidRequest", "TrafficDialPercentage must be an integer between 0 and 100.", 400)
+                if b not in r["buckets"]:
+                    return _s3c_error("InvalidRequest", f"Route bucket/region is not part of Multi-Region Access Point {r['name']}.", 400)
+                if not 0 <= pct <= 100:
+                    return _s3c_error("InvalidRequest", "TrafficDialPercentage must be between 0 and 100.", 400)
+                upd[b] = pct
+            if not upd:
+                return _s3c_error("InvalidRequest", "RouteUpdates must contain at least one route.", 400)
+            merged = {**_mrap_dials(store, r), **upd}
+            if not any(merged.values()):
+                return _s3c_error("InvalidRequest", "At least one route must be active (TrafficDialPercentage > 0).", 400)
+            r["routes"] = merged
+            return _done(store, _empty_response(200))
+    return _s3c_error("MethodNotAllowed", method, 405)
+
+
+def _mrap_async(store: ObjectStore, op: str, body: bytes) -> S3Response:
+    root = _s3c_root(body)
+    if root is None:
+        return _s3c_malformed()
+    det = _child(root, "Details")
+    name = _child_text(det, "Name")
+    ms = _mraps(store)
+    if op == "create":
+        if not re.match(r"^[a-z0-9][a-z0-9-]{1,48}[a-z0-9]$", name):
+            return _s3c_error("InvalidRequest", "Multi-Region Access Point names must be 3-50 characters of lowercase letters, numbers and hyphens.", 400)
+        if name in ms:
+            return _s3c_error("MultiRegionAccessPointAlreadyExists", "A Multi-Region Access Point with this name already exists.", 409)
+        regs = _children(_child(det, "Regions"), "Region")
+        if not regs:
+            return _s3c_error("InvalidRequest", "At least one bucket (Regions) is required.", 400)
+        buckets, seen = [], {}
+        for el in regs:
+            b, acct = _child_text(el, "Bucket"), _child_text(el, "BucketAccountId", _ACCOUNT_ID)
+            if acct != _ACCOUNT_ID:
+                return _s3c_error("InvalidRequest", "Buckets owned by other accounts are not supported.", 400)
+            if not b or not store.bucket_exists(b) or is_directory_bucket(store, b):
+                return _s3c_error("NoSuchBucket", f"The specified bucket does not exist: {b}", 404)
+            rg = _bucket_region(store, b)
+            if rg not in _REGIONS:
+                return _s3c_error("InvalidRequest", f"{rg} is not a valid region.", 400)
+            if rg in seen:
+                return _s3c_error("InvalidRequest", f"Buckets {seen[rg]} and {b} are in the same region ({rg}); a Multi-Region Access Point needs one bucket per region.", 400)
+            if any(b in m["buckets"] for m in ms.values()):
+                return _s3c_error("InvalidRequest", f"Bucket {b} is already part of a Multi-Region Access Point.", 400)
+            seen[rg] = b
+            buckets.append(b)
+        pab_el = _child(det, "PublicAccessBlock")
+        pab = {k: (_child_text(pab_el, k).lower() == "true" if pab_el is not None else True) for k in _PAB_KEYS}
+        alias = uuid.uuid4().hex[:13].translate(str.maketrans("0123456789abcdef", "abcdefghijklmnop")) + ".mrap"
+        ms[name] = {"name": name, "alias": alias, "created": _now(), "pab": pab, "buckets": buckets, "routes": {b: 100 for b in buckets},
+                    "status": "READY", "policy": None}
+        regions = [_bucket_region(store, b) for b in buckets]
+        params = ("<CreateMultiRegionAccessPointRequest>" + f"<Name>{_xml_escape(name)}</Name>" + _inner_xml(pab_el and pab_el).join(["<PublicAccessBlock>", "</PublicAccessBlock>"])
+                  + "<Regions>" + "".join(f"<Region><Bucket>{_xml_escape(b)}</Bucket><BucketAccountId>{_ACCOUNT_ID}</BucketAccountId></Region>" for b in buckets)
+                  + "</Regions></CreateMultiRegionAccessPointRequest>")
+        tok = _mrap_new_op(store, "CreateMultiRegionAccessPoint", "", params, regions)
+    elif op == "delete":
+        r = ms.get(name)
+        if r is None:
+            return _s3c_error("NoSuchMultiRegionAccessPoint", "The specified Multi-Region Access Point does not exist.", 404)
+        regions = [_bucket_region(store, b) for b in r["buckets"]]
+        del ms[name]
+        tok = _mrap_new_op(store, "DeleteMultiRegionAccessPoint", "", f"<DeleteMultiRegionAccessPointRequest><Name>{_xml_escape(name)}</Name></DeleteMultiRegionAccessPointRequest>", regions)
+    elif op == "put-policy":
+        r = ms.get(name)
+        if r is None:
+            return _s3c_error("NoSuchMultiRegionAccessPoint", "The specified Multi-Region Access Point does not exist.", 404)
+        doc = _child_text(det, "Policy")
+        try:
+            if not isinstance(json.loads(doc), dict):
+                raise ValueError
+        except Exception:
+            return _s3c_error("MalformedPolicy", "Policies must be valid JSON and the first byte must be '{'", 400)
+        r["policy"] = doc
+        tok = _mrap_new_op(store, "PutMultiRegionAccessPointPolicy", "",
+                           f"<PutMultiRegionAccessPointPolicyRequest><Name>{_xml_escape(name)}</Name><Policy>{_xml_escape(doc)}</Policy></PutMultiRegionAccessPointPolicyRequest>",
+                           [_bucket_region(store, b) for b in r["buckets"]])
+    else:
+        return _s3c_error("NotImplemented", "Unknown async request operation.", 501)
+    verb = {"create": "CreateMultiRegionAccessPoint", "delete": "DeleteMultiRegionAccessPoint", "put-policy": "PutMultiRegionAccessPointPolicy"}[op]
+    return _done(store, _s3c_ok(verb, f"<RequestTokenARN>{tok}</RequestTokenARN>"))
+
+
+def _mrap_lookup(store: ObjectStore, raw: str):
+    """(record, key) when the path addresses an MRAP by alias (<id>.mrap) or ARN, else (None, '')."""
+    ms = (getattr(store, "account", None) or {}).get("mrap")
+    if not ms:
+        return None, ""
+    if raw.startswith("arn:aws:s3::") and ":accesspoint/" in raw:
+        tail = raw.split(":accesspoint/", 1)[1]
+        alias, _, key = tail.partition("/")
+    else:
+        alias, _, key = urllib.parse.unquote(raw.partition("/")[0]), "", raw.partition("/")[2]
+    if not alias.endswith(".mrap"):
+        return None, ""
+    return next(((r, key) for r in ms.values() if r["alias"] == alias), (None, ""))
+
+
+def _mrap_dispatch(store: ObjectStore, r: dict, method: str, key: str, query: dict, headers: dict, body: bytes) -> S3Response:
+    """Data plane through an MRAP: object operations only (like real S3, no bucket listing)."""
+    if not key:
+        return _error_xml("InvalidRequest", "Bucket-level operations are not supported through a Multi-Region Access Point.", "/", 400)
+    dials = _mrap_dials(store, r)
+    active = [b for b in r["buckets"] if dials[b] > 0 and store.bucket_exists(b)]
+    active.sort(key=lambda b: (-dials[b], r["buckets"].index(b)))
+    if not active:
+        return _error_xml("NoSuchBucket", "No active bucket behind this Multi-Region Access Point.", f"/{key}", 404)
+    lh = {str(k).lower(): v for k, v in headers.items()}
+    if method in ("GET", "HEAD"):
+        pick = next((b for b in active if (_ensure_object_entry(store, b, key, create=False) or {}).get("versions")), active[0])
+        return _dispatch_inner(store, method, f"/{pick}/{key}", query, headers, body)
+    primary = active[0]
+    resp = _dispatch_inner(store, method, f"/{primary}/{key}", query, headers, body)
+    if resp.status >= 300 or "tagging" in query or "acl" in query:
+        return resp
+    completes_write = (method == "PUT" and not query.get("uploadId") and not query.get("partNumber")) or \
+                      (method == "POST" and query.get("uploadId")) or method == "DELETE" and not query.get("uploadId")
+    if completes_write:
+        for other in r["buckets"]:
+            if other == primary or not store.bucket_exists(other):
+                continue
+            if method == "DELETE":
+                delete_object(store, other, key, {}, lh)
+            else:
+                copy_object(store, other, key, {"x-amz-copy-source": f"/{primary}/{urllib.parse.quote(key)}"})
+    return resp
+
+
+# ── S3 Control: Access Grants (restXml /v20180820/accessgrantsinstance…)
+# One Access Grants instance per account holds locations (a bucket/prefix an IAM role can reach)
+# and grants (grantee + READ/WRITE/READWRITE + prefix scope under a location). GetDataAccess
+# returns temporary credentials (ASIA… key, secret, session token) that the data plane ENFORCES:
+# a request signed with such a key id is limited to the grant's bucket/prefix and permission and
+# is refused after expiry. The secret/signature are not verified (the simulator never
+# authenticates), and grantee identity is not matched against a caller.
+def _ag(store: ObjectStore) -> dict | None:
+    return store.account.get("grants")
+
+
+def _ag_no_instance() -> S3Response:
+    return _s3c_error("NoSuchAccessGrantsInstanceError", "The S3 Access Grants instance does not exist in this account.", 404)
+
+
+def _ag_inst_fields(i: dict) -> str:
+    out = f"<CreatedAt>{i['created']}</CreatedAt><AccessGrantsInstanceId>default</AccessGrantsInstanceId><AccessGrantsInstanceArn>{i['arn']}</AccessGrantsInstanceArn>"
+    if i.get("idc"):
+        out += (f"<IdentityCenterArn>{_xml_escape(i['idc'])}</IdentityCenterArn><IdentityCenterInstanceArn>{_xml_escape(i['idc'])}</IdentityCenterInstanceArn>"
+                f"<IdentityCenterApplicationArn>arn:aws:sso::{_ACCOUNT_ID}:application/ssoins-vyomi/apl-{i['arn'].rsplit('/', 1)[-1]}0000</IdentityCenterApplicationArn>")
+    return out
+
+
+def _ag_loc_fields(loc: dict) -> str:
+    return (f"<CreatedAt>{loc['created']}</CreatedAt><AccessGrantsLocationId>{loc['id']}</AccessGrantsLocationId><AccessGrantsLocationArn>{loc['arn']}</AccessGrantsLocationArn>"
+            f"<LocationScope>{_xml_escape(loc['scope'])}</LocationScope><IAMRoleArn>{_xml_escape(loc['role'])}</IAMRoleArn>")
+
+
+def _ag_grant_fields(g: dict) -> str:
+    app = f"<ApplicationArn>{_xml_escape(g['app'])}</ApplicationArn>" if g.get("app") else ""
+    return (f"<CreatedAt>{g['created']}</CreatedAt><AccessGrantId>{g['id']}</AccessGrantId><AccessGrantArn>{g['arn']}</AccessGrantArn>"
+            f"<Grantee><GranteeType>{g['gtype']}</GranteeType><GranteeIdentifier>{_xml_escape(g['gid'])}</GranteeIdentifier></Grantee>"
+            f"<Permission>{g['perm']}</Permission><AccessGrantsLocationId>{g['loc']}</AccessGrantsLocationId>"
+            f"<AccessGrantsLocationConfiguration><S3SubPrefix>{_xml_escape(g['sub'])}</S3SubPrefix></AccessGrantsLocationConfiguration>"
+            f"<GrantScope>{_xml_escape(g['scope'])}</GrantScope>{app}")
+
+
+def _s3c_grants(store: ObjectStore, method: str, segs: list, query: dict, body: bytes) -> S3Response:
+    s0, rest = segs[1], segs[2:]
+    if s0 == "accessgrantsinstances":
+        if method != "GET":
+            return _s3c_error("MethodNotAllowed", method, 405)
+        inst = (_ag(store) or {}).get("instance")
+        return _s3c_ok("ListAccessGrantsInstances", "<AccessGrantsInstancesList>" + (f"<AccessGrantsInstance>{_ag_inst_fields(inst)}</AccessGrantsInstance>" if inst else "") + "</AccessGrantsInstancesList>")
+    ag = _ag(store)
+    sub = rest[0] if rest else ""
+    if not sub:                                                        # the instance itself
+        if method == "POST":
+            if ag and ag.get("instance"):
+                return _s3c_error("AccessGrantsInstanceAlreadyExists", "An S3 Access Grants instance already exists in this account.", 409)
+            root = _s3c_root(body)
+            if root is None:
+                return _s3c_malformed()
+            idc = _child_text(root, "IdentityCenterArn")
+            ag = store.account["grants"] = {"instance": {"created": _now(), "arn": f"arn:aws:s3:us-east-1:{_ACCOUNT_ID}:access-grants/default", "idc": idc,
+                                                          "tags": _tags_of(_child(root, "Tags"))},
+                                            "locations": {}, "grants": {}, "policy": None, "creds": {}}
+            return _done(store, _s3c_ok("CreateAccessGrantsInstance", _ag_inst_fields(ag["instance"])))
+        if not ag or not ag.get("instance"):
+            return _ag_no_instance()
+        if method == "GET":
+            return _s3c_ok("GetAccessGrantsInstance", _ag_inst_fields(ag["instance"]))
+        if method == "DELETE":
+            if ag["locations"] or ag["grants"]:
+                return _s3c_error("InvalidRequest", "Delete all access grants and locations before deleting the S3 Access Grants instance.", 409)
+            store.account.pop("grants", None)
+            return _done(store, _empty_response(204))
+        return _s3c_error("MethodNotAllowed", method, 405)
+    if not ag or not ag.get("instance"):
+        return _ag_no_instance()
+    inst = ag["instance"]
+    if sub == "prefix" and method == "GET":
+        return _s3c_ok("GetAccessGrantsInstanceForPrefix", f"<AccessGrantsInstanceArn>{inst['arn']}</AccessGrantsInstanceArn><AccessGrantsInstanceId>default</AccessGrantsInstanceId>")
+    if sub == "identitycenter":
+        if method == "POST":
+            root = _s3c_root(body)
+            arn = _child_text(root, "IdentityCenterArn") if root is not None else ""
+            if not arn.startswith("arn:aws:sso"):
+                return _s3c_error("InvalidRequest", "IdentityCenterArn must be an IAM Identity Center instance ARN (arn:aws:sso:::instance/…).", 400)
+            inst["idc"] = arn
+            return _done(store, _empty_response(200))
+        if method == "DELETE":
+            inst["idc"] = ""
+            return _done(store, _empty_response(200))
+    if sub == "resourcepolicy":
+        if method == "PUT":
+            root = _s3c_root(body)
+            doc = _child_text(root, "Policy") if root is not None else ""
+            try:
+                if not isinstance(json.loads(doc), dict):
+                    raise ValueError
+            except Exception:
+                return _s3c_error("MalformedPolicy", "Policies must be valid JSON and the first byte must be '{'", 400)
+            ag["policy"] = {"doc": doc, "org": _child_text(root, "Organization"), "created": _now()}
+            p = ag["policy"]
+            return _done(store, _s3c_ok("PutAccessGrantsInstanceResourcePolicy", f"<Policy>{_xml_escape(p['doc'])}</Policy><Organization>{_xml_escape(p['org'])}</Organization><CreatedAt>{p['created']}</CreatedAt>"))
+        if method == "GET":
+            p = ag.get("policy")
+            if not p:
+                return _s3c_error("NoSuchResourcePolicy", "The S3 Access Grants instance has no resource policy.", 404)
+            return _s3c_ok("GetAccessGrantsInstanceResourcePolicy", f"<Policy>{_xml_escape(p['doc'])}</Policy><Organization>{_xml_escape(p['org'])}</Organization><CreatedAt>{p['created']}</CreatedAt>")
+        if method == "DELETE":
+            ag["policy"] = None
+            return _done(store, _empty_response(204))
+    if sub == "locations" and method == "GET":
+        locs = sorted(ag["locations"].values(), key=lambda x: x["scope"])
+        want = query.get("locationscope")
+        if want:
+            locs = [x for x in locs if x["scope"].startswith(want.rstrip("*"))]
+        rows, nxt = _page(locs, query)
+        return _s3c_ok("ListAccessGrantsLocations", "<AccessGrantsLocationsList>" + "".join(f"<AccessGrantsLocation>{_ag_loc_fields(x)}</AccessGrantsLocation>" for x in rows) + f"</AccessGrantsLocationsList>{_next_xml(nxt)}")
+    if sub == "location":
+        return _ag_location(store, ag, method, rest[1:], body)
+    if sub == "grants" and method == "GET":
+        gs = sorted(ag["grants"].values(), key=lambda x: x["created"])
+        for q, f in (("granteetype", "gtype"), ("granteeidentifier", "gid"), ("permission", "perm"), ("grantscope", "scope"), ("application_arn", "app")):
+            if query.get(q):
+                gs = [g for g in gs if g.get(f) == query[q]]
+        rows, nxt = _page(gs, query)
+        return _s3c_ok("ListAccessGrants", "<AccessGrantsList>" + "".join(f"<AccessGrant>{_ag_grant_fields(g)}</AccessGrant>" for g in rows) + f"</AccessGrantsList>{_next_xml(nxt)}")
+    if sub == "grant":
+        return _ag_grant(store, ag, method, rest[1:], body)
+    if sub == "dataaccess" and method == "GET":
+        return _ag_data_access(store, ag, query)
+    return _s3c_error("NotImplemented", f"Access Grants operation '{sub}' is not implemented by Vyomi.", 501)
+
+
+def _ag_location(store, ag, method, rest, body) -> S3Response:
+    if method == "POST" and not rest:
+        root = _s3c_root(body)
+        if root is None:
+            return _s3c_malformed()
+        scope, role = _child_text(root, "LocationScope"), _child_text(root, "IAMRoleArn")
+        m = re.match(r"^s3://([a-z0-9][a-z0-9.-]{1,61}[a-z0-9])?(/.*)?$", scope)
+        if not m or (m.group(2) and not m.group(1)):
+            return _s3c_error("InvalidRequest", "LocationScope must be s3://, s3://<bucket> or s3://<bucket>/<prefix>*.", 400)
+        if m.group(1) and not store.bucket_exists(m.group(1)):
+            return _s3c_error("NoSuchBucket", "The bucket of this location does not exist.", 404)
+        if not _ROLE_RE.match(role):
+            return _s3c_error("InvalidRequest", "IAMRoleArn must be the ARN of an IAM role.", 400)
+        if any(x["scope"] == scope for x in ag["locations"].values()):
+            return _s3c_error("InvalidRequest", "A location with this scope is already registered.", 409)
+        lid = "default" if scope == "s3://" else uuid.uuid4().hex[:8] + "-" + uuid.uuid4().hex[:4]
+        loc = {"id": lid, "scope": scope, "role": role, "created": _now(), "tags": _tags_of(_child(root, "Tags")),
+               "arn": f"arn:aws:s3:us-east-1:{_ACCOUNT_ID}:access-grants/default/location/{lid}"}
+        ag["locations"][lid] = loc
+        return _done(store, _s3c_ok("CreateAccessGrantsLocation", _ag_loc_fields(loc)))
+    loc = ag["locations"].get(rest[0]) if rest else None
+    if loc is None:
+        return _s3c_error("NoSuchAccessGrantsLocation", "The specified access grants location does not exist.", 404)
+    if method == "GET":
+        return _s3c_ok("GetAccessGrantsLocation", _ag_loc_fields(loc))
+    if method == "PUT":
+        root = _s3c_root(body)
+        role = _child_text(root, "IAMRoleArn") if root is not None else ""
+        if not _ROLE_RE.match(role):
+            return _s3c_error("InvalidRequest", "IAMRoleArn must be the ARN of an IAM role.", 400)
+        loc["role"] = role
+        return _done(store, _s3c_ok("UpdateAccessGrantsLocation", _ag_loc_fields(loc)))
+    if method == "DELETE":
+        if any(g["loc"] == loc["id"] for g in ag["grants"].values()):
+            return _s3c_error("InvalidRequest", "Delete the access grants of this location first.", 409)
+        del ag["locations"][loc["id"]]
+        return _done(store, _empty_response(204))
+    return _s3c_error("MethodNotAllowed", method, 405)
+
+
+def _ag_base(loc_scope: str) -> str:
+    base = loc_scope[:-1] if loc_scope.endswith("*") else loc_scope
+    return base + "/" if re.match(r"^s3://[^/]+$", base) else base
+
+
+def _ag_grant(store, ag, method, rest, body) -> S3Response:
+    if method == "POST" and not rest:
+        root = _s3c_root(body)
+        if root is None:
+            return _s3c_malformed()
+        loc = ag["locations"].get(_child_text(root, "AccessGrantsLocationId"))
+        if loc is None:
+            return _s3c_error("NoSuchAccessGrantsLocation", "The specified access grants location does not exist.", 404)
+        gr = _child(root, "Grantee")
+        gtype, gid = _child_text(gr, "GranteeType"), _child_text(gr, "GranteeIdentifier")
+        perm = _child_text(root, "Permission")
+        if gtype not in ("IAM", "DIRECTORY_USER", "DIRECTORY_GROUP") or not gid:
+            return _s3c_error("InvalidRequest", "Grantee.GranteeType must be IAM, DIRECTORY_USER or DIRECTORY_GROUP, with a GranteeIdentifier.", 400)
+        if gtype != "IAM" and not ag["instance"].get("idc"):
+            return _s3c_error("InvalidRequest", "Directory grantees need an IAM Identity Center instance associated with the Access Grants instance.", 400)
+        if gtype == "IAM" and not re.match(r"^arn:aws(-[a-z]+)*:iam::\d{12}:(role|user|root)", gid) and not re.match(r"^\d{12}$", gid):
+            return _s3c_error("InvalidRequest", "An IAM grantee must be an IAM user/role ARN or an account id.", 400)
+        if perm not in ("READ", "WRITE", "READWRITE"):
+            return _s3c_error("InvalidRequest", "Permission must be READ, WRITE or READWRITE.", 400)
+        sub = _child_text(_child(root, "AccessGrantsLocationConfiguration"), "S3SubPrefix")
+        ptype = _child_text(root, "S3PrefixType")
+        if ptype not in ("", "Object"):
+            return _s3c_error("InvalidRequest", "S3PrefixType must be Object when specified.", 400)
+        if ptype == "Object" and not sub:
+            return _s3c_error("InvalidRequest", "S3SubPrefix is the object key when S3PrefixType is Object.", 400)
+        scope = _ag_base(loc["scope"]) + (sub if (sub or ptype) else "*")
+        if ptype == "Object":
+            scope = scope.rstrip("*") if not sub.endswith("*") else scope
+        gid_new = uuid.uuid4().hex[:8] + "-" + uuid.uuid4().hex[:4]
+        g = {"id": gid_new, "arn": f"arn:aws:s3:us-east-1:{_ACCOUNT_ID}:access-grants/default/grant/{gid_new}", "created": _now(), "gtype": gtype, "gid": gid,
+             "perm": perm, "loc": loc["id"], "sub": sub, "scope": scope, "app": _child_text(root, "ApplicationArn"), "tags": _tags_of(_child(root, "Tags")),
+             "object": ptype == "Object"}
+        ag["grants"][gid_new] = g
+        return _done(store, _s3c_ok("CreateAccessGrant", _ag_grant_fields(g)))
+    g = ag["grants"].get(rest[0]) if rest else None
+    if g is None:
+        return _s3c_error("NoSuchAccessGrant", "The specified access grant does not exist.", 404)
+    if method == "GET":
+        return _s3c_ok("GetAccessGrant", _ag_grant_fields(g))
+    if method == "DELETE":
+        del ag["grants"][g["id"]]
+        return _done(store, _empty_response(204))
+    return _s3c_error("MethodNotAllowed", method, 405)
+
+
+def _ag_covers(scope: str, target: str, is_object: bool) -> bool:
+    """Does a grant scope (s3://bucket/prefix* or an exact object) cover a target s3:// path?"""
+    if scope.endswith("*"):
+        return target.startswith(scope[:-1])
+    return target == scope
+
+
+def _ag_data_access(store, ag, query) -> S3Response:
+    target = query.get("target") or ""
+    perm = query.get("permission") or ""
+    ttype = query.get("targetType") or ""
+    if not target.startswith("s3://") or perm not in ("READ", "WRITE", "READWRITE"):
+        return _s3c_error("InvalidRequest", "Target must be an s3:// path and Permission READ, WRITE or READWRITE.", 400)
+    try:
+        dur = int(query.get("durationSeconds") or 3600)
+    except ValueError:
+        dur = -1
+    if not 900 <= dur <= 43200:
+        return _s3c_error("InvalidRequest", "DurationSeconds must be between 900 and 43200.", 400)
+    wild = target.endswith("*")
+    probe = target[:-1] if wild else target
+    cands = []
+    for g in ag["grants"].values():
+        if g["perm"] != "READWRITE" and g["perm"] != perm:
+            continue
+        if wild:       # a prefix target needs a grant at least as broad
+            if g["scope"].endswith("*") and probe.startswith(g["scope"][:-1]):
+                cands.append(g)
+        elif _ag_covers(g["scope"], probe, False):
+            cands.append(g)
+    if not cands:
+        return _s3c_error("AccessDenied", "No access grant covers the requested target and permission.", 403)
+    g = max(cands, key=lambda x: len(x["scope"]))
+    # credentials are limited to the matched grant, narrowed to the requested permission
+    granted = perm if g["perm"] == "READWRITE" else g["perm"]
+    akid, secret, token = "ASIA" + uuid.uuid4().hex[:16].upper(), uuid.uuid4().hex + uuid.uuid4().hex[:8], uuid.uuid4().hex + uuid.uuid4().hex
+    exp_dt = datetime.now(timezone.utc) + timedelta(seconds=dur)
+    m = re.match(r"^s3://([^/]+)/?(.*)$", g["scope"])
+    ag["creds"][akid] = {"bucket": m.group(1), "prefix": m.group(2).rstrip("*"), "exact": not g["scope"].endswith("*"), "perm": granted,
+                         "expires": exp_dt.timestamp(), "token": token, "grant": g["id"]}
+    matched = g["scope"][:-1] if g["scope"].endswith("*") else g["scope"]
+    return _done(store, _s3c_ok("GetDataAccess",
+        f"<Credentials><AccessKeyId>{akid}</AccessKeyId><SecretAccessKey>{secret}</SecretAccessKey><SessionToken>{token}</SessionToken>"
+        f"<Expiration>{exp_dt.strftime('%Y-%m-%dT%H:%M:%S.000Z')}</Expiration></Credentials><MatchedGrantTarget>{_xml_escape(matched)}</MatchedGrantTarget>"
+        f"<Grantee><GranteeType>{g['gtype']}</GranteeType><GranteeIdentifier>{_xml_escape(g['gid'])}</GranteeIdentifier></Grantee>"))
+
+
+def _grant_cred_guard(store: ObjectStore, method: str, raw: str, query: dict, lheaders: dict) -> S3Response | None:
+    """Requests signed with an Access Grants (GetDataAccess) key id are confined to the grant."""
+    auth = lheaders.get("authorization") or ""
+    m = re.search(r"Credential=(ASIA[A-Z0-9]{16})/", auth)
+    creds = (store.account.get("grants") or {}).get("creds") if m else None
+    c = (creds or {}).get(m.group(1)) if m else None
+    if c is None:
+        return None
+    deny = lambda msg: _error_xml("AccessDenied", msg, "/" + raw, 403)
+    if time.time() > c["expires"]:
+        return _error_xml("ExpiredToken", "The provided token has expired.", "/" + raw, 400)
+    tok = lheaders.get("x-amz-security-token")
+    if tok and tok != c["token"]:
+        return _error_xml("InvalidToken", "The provided token is malformed or otherwise invalid.", "/" + raw, 400)
+    bucket, _, key = raw.partition("/")
+    bucket = _resolve_access_point(store, urllib.parse.unquote(bucket))
+    write = method not in ("GET", "HEAD")
+    need = "WRITE" if write else "READ"
+    if c["perm"] != "READWRITE" and c["perm"] != need:
+        return deny(f"The Access Grants credentials only allow {c['perm']}.")
+    if bucket != c["bucket"]:
+        return deny("The Access Grants credentials do not cover this bucket.")
+    if key:
+        if (c["exact"] and key != c["prefix"]) or (not c["exact"] and not key.startswith(c["prefix"])):
+            return deny("The Access Grants credentials do not cover this key.")
+    elif method == "GET" and not c["exact"] and not any(k in query for k in ("acl", "policy", "versioning", "uploads")):
+        if not str(query.get("prefix") or "").startswith(c["prefix"]):
+            return deny("ListObjects needs a prefix within the Access Grants scope.")
+    else:
+        return deny("Bucket-level operations are outside the Access Grants scope.")
+    return None
+
+
+# ── S3 Control: Batch Operations (restXml /v20180820/jobs…)
+# A job = manifest (CSV of bucket,key[,version] or an inventory CSV) + one operation that is
+# EXECUTED against the store for every row + a completion report written to the report bucket.
+# Lifecycle: Suspended (ConfirmationRequired) -> Ready -> Active -> Complete/Failed (Cancelled).
+# There is no worker thread (Nano has none and the offline loop must not block): jobs advance
+# one stage per control-plane or object request (a poll of DescribeJob/ListJobs is enough), and
+# the Active->Complete stage runs every task synchronously, in-process, against the store.
+_JOB_OPS = ("LambdaInvoke", "S3PutObjectCopy", "S3PutObjectAcl", "S3PutObjectTagging", "S3DeleteObjectTagging", "S3InitiateRestoreObject",
+            "S3PutObjectLegalHold", "S3PutObjectRetention", "S3ReplicateObject")
+_JOB_UNSUPPORTED = ("S3ComputeObjectChecksum", "S3UpdateObjectEncryption")
+_JOB_TERMINAL = ("Complete", "Failed", "Cancelled")
+_JOBS_BUSY = [False]
+
+
+def _jobs(store: ObjectStore) -> dict:
+    return store.account.setdefault("jobs", {})
+
+
+def _job_progress_xml(j: dict) -> str:
+    p = j["progress"]
+    return (f"<ProgressSummary><TotalNumberOfTasks>{p['total']}</TotalNumberOfTasks><NumberOfTasksSucceeded>{p['ok']}</NumberOfTasksSucceeded>"
+            f"<NumberOfTasksFailed>{p['fail']}</NumberOfTasksFailed><Timers><ElapsedTimeInActiveSeconds>{int(j.get('active_secs', 0))}</ElapsedTimeInActiveSeconds></Timers></ProgressSummary>")
+
+
+def _job_xml(j: dict) -> str:
+    fr = "".join(f"<member><FailureCode>{_xml_escape(c)}</FailureCode><FailureReason>{_xml_escape(m)}</FailureReason></member>" for c, m in j.get("failures", []))
+    out = (f"<JobId>{j['id']}</JobId><ConfirmationRequired>{'true' if j['confirm'] else 'false'}</ConfirmationRequired>"
+           f"<Description>{_xml_escape(j['description'])}</Description><JobArn>{j['arn']}</JobArn><Status>{j['status']}</Status>"
+           f"<Manifest>{j['manifest_xml']}</Manifest><Operation>{j['operation_xml']}</Operation><Priority>{j['priority']}</Priority>{_job_progress_xml(j)}"
+           f"<StatusUpdateReason>{_xml_escape(j.get('reason', ''))}</StatusUpdateReason>"
+           + (f"<FailureReasons>{fr}</FailureReasons>" if fr else "")
+           + f"<Report>{j['report_xml']}</Report><CreationTime>{j['created']}</CreationTime>"
+           + (f"<TerminationDate>{j['terminated']}</TerminationDate>" if j.get("terminated") else "")
+           + f"<RoleArn>{_xml_escape(j['role'])}</RoleArn>")
+    if j["status"] == "Suspended":
+        out += f"<SuspendedDate>{j['created']}</SuspendedDate><SuspendedCause>Job is waiting for confirmation.</SuspendedCause>"
+    return out
+
+
+def _job_summary_xml(j: dict) -> str:
+    return (f"<member><JobId>{j['id']}</JobId><Description>{_xml_escape(j['description'])}</Description><Operation>{j['op']}</Operation>"
+            f"<Priority>{j['priority']}</Priority><Status>{j['status']}</Status><CreationTime>{j['created']}</CreationTime>"
+            + (f"<TerminationDate>{j['terminated']}</TerminationDate>" if j.get("terminated") else "") + f"{_job_progress_xml(j)}</member>")
+
+
+def _s3c_jobs(store: ObjectStore, method: str, segs: list, query: dict, body: bytes) -> S3Response:
+    rest = segs[2:]
+    js = _jobs(store)
+    if not rest:
+        if method == "GET":
+            want = query.get("jobStatuses") or query.get("jobstatuses") or ""
+            want = [w for w in (want if isinstance(want, (list, tuple)) else str(want).split(",")) if w]
+            rows = sorted(js.values(), key=lambda j: j["created"], reverse=True)
+            if want:
+                rows = [j for j in rows if j["status"] in want]
+            page, nxt = _page(rows, query)
+            return _s3c_ok("ListJobs", f"<Jobs>{''.join(_job_summary_xml(j) for j in page)}</Jobs>{_next_xml(nxt)}")
+        if method == "POST":
+            return _job_create(store, body)
+        return _s3c_error("MethodNotAllowed", method, 405)
+    j = js.get(rest[0])
+    if j is None:
+        return _s3c_error("NoSuchJob", "The specified job does not exist.", 404)
+    sub = rest[1] if len(rest) > 1 else ""
+    if not sub and method == "GET":
+        return _s3c_ok("DescribeJob", f"<Job>{_job_xml(j)}</Job>")
+    if sub == "tagging":
+        if method == "GET":
+            return _s3c_ok("GetJobTagging", _tags_xml(j["tags"]))
+        if method == "PUT":
+            root = _s3c_root(body)
+            if root is None:
+                return _s3c_malformed()
+            tags = _tags_of(_child(root, "Tags"))
+            if len(tags) > 50 or len({k for k, _ in tags}) != len(tags) or any(not k for k, _ in tags):
+                return _s3c_error("InvalidTag", "Tags must have unique non-empty keys and there can be at most 50.", 400)
+            j["tags"] = tags
+            return _done(store, _empty_response(204))
+        if method == "DELETE":
+            j["tags"] = []
+            return _done(store, _empty_response(204))
+    if sub == "priority" and method == "POST":
+        try:
+            pr = int(query.get("priority"))
+            if pr < 0 or pr > 2147483647:
+                raise ValueError
+        except (TypeError, ValueError):
+            return _s3c_error("InvalidRequest", "priority must be an integer between 0 and 2147483647.", 400)
+        if j["status"] in _JOB_TERMINAL:
+            return _s3c_error("JobStatusException", f"The job is {j['status']} and its priority can no longer be changed.", 409)
+        j["priority"] = pr
+        return _done(store, _s3c_ok("UpdateJobPriority", f"<JobId>{j['id']}</JobId><Priority>{pr}</Priority>"))
+    if sub == "status" and method == "POST":
+        req = query.get("requestedJobStatus")
+        if req not in ("Ready", "Cancelled"):
+            return _s3c_error("InvalidRequest", "RequestedJobStatus must be Ready or Cancelled.", 400)
+        ok_from = ("Suspended",) if req == "Ready" else ("Suspended", "Ready", "Active", "Preparing", "New", "Paused")
+        if j["status"] not in ok_from:
+            return _s3c_error("JobStatusException", f"Job {j['id']} is {j['status']}; it cannot move to {req}.", 409)
+        j["status"] = req
+        j["reason"] = query.get("statusUpdateReason") or ""
+        if req == "Cancelled":
+            j["terminated"] = _now()
+            j.pop("tasks", None)
+        return _done(store, _s3c_ok("UpdateJobStatus", f"<JobId>{j['id']}</JobId><Status>{j['status']}</Status><StatusUpdateReason>{_xml_escape(j['reason'])}</StatusUpdateReason>"))
+    return _s3c_error("MethodNotAllowed", method, 405)
+
+
+def _arn_bucket(arn: str):
+    m = re.match(r"^arn:aws[a-z-]*:s3:::([^/]+)(?:/(.*))?$", arn or "")
+    return (m.group(1), m.group(2) or "") if m else (None, None)
+
+
+def _job_create(store: ObjectStore, body: bytes) -> S3Response:
+    root = _s3c_root(body)
+    if root is None:
+        return _s3c_malformed()
+    js = _jobs(store)
+    token = _child_text(root, "ClientRequestToken")
+    if token:
+        prior = next((j for j in js.values() if j.get("token") == token), None)
+        if prior:
+            return _s3c_ok("CreateJob", f"<JobId>{prior['id']}</JobId>")
+    bad = lambda m, c="InvalidRequest", s=400: _s3c_error(c, m, s)
+    op_el, man_el, rep_el = _child(root, "Operation"), _child(root, "Manifest"), _child(root, "Report")
+    if op_el is None or not list(op_el):
+        return bad("Operation is required.")
+    op = list(op_el)[0].tag
+    if len(list(op_el)) != 1:
+        return bad("Exactly one operation must be specified.")
+    if op in _JOB_UNSUPPORTED:
+        return _s3c_error("NotImplemented", f"The {op} batch operation is not implemented by Vyomi.", 501)
+    if op not in _JOB_OPS:
+        return bad(f"Unknown operation {op}.")
+    if _child(root, "ManifestGenerator") is not None and man_el is None:
+        return _s3c_error("NotImplemented", "Generated manifests (ManifestGenerator) are not implemented by Vyomi; supply a CSV manifest.", 501)
+    if man_el is None:
+        return bad("Manifest is required.")
+    if rep_el is None:
+        return bad("Report is required (set Enabled=false for no report).")
+    role = _child_text(root, "RoleArn")
+    rm = _ROLE_RE.match(role)
+    if not rm:
+        return bad("RoleArn must be the ARN of an IAM role.")
+    if rm.group(2) != _ACCOUNT_ID:
+        return bad("The role must belong to this account.", "InvalidRequest")
+    try:
+        prio = int(_child_text(root, "Priority"))
+        if prio < 0 or prio > 2147483647:
+            raise ValueError
+    except ValueError:
+        return bad("Priority is required and must be an integer between 0 and 2147483647.")
+    fmt = _child_text(_child(man_el, "Spec"), "Format")
+    if fmt not in ("S3BatchOperations_CSV_20180820", "S3InventoryReport_CSV_20161130"):
+        return bad("Manifest.Spec.Format must be S3BatchOperations_CSV_20180820 or S3InventoryReport_CSV_20161130.")
+    loc = _child(man_el, "Location")
+    mb, mk = _arn_bucket(_child_text(loc, "ObjectArn"))
+    if not mb or not mk:
+        return bad("Manifest.Location.ObjectArn must be an S3 object ARN.")
+    if fmt == "S3BatchOperations_CSV_20180820" and not _children(_child(_child(man_el, "Spec"), "Fields"), "member"):
+        return bad("Manifest.Spec.Fields (Bucket, Key[, VersionId]) is required for CSV manifests.")
+    rep_on = _child_text(rep_el, "Enabled").lower() == "true"
+    if rep_on:
+        rb, _ = _arn_bucket(_child_text(rep_el, "Bucket"))
+        if not rb or not store.bucket_exists(rb):
+            return bad("Report.Bucket must be the ARN of an existing bucket.")
+        if _child_text(rep_el, "Format") != "Report_CSV_20180820":
+            return bad("Report.Format must be Report_CSV_20180820.")
+        if _child_text(rep_el, "ReportScope") not in ("AllTasks", "FailedTasksOnly"):
+            return bad("Report.ReportScope must be AllTasks or FailedTasksOnly.")
+    tags = _tags_of(_child(root, "Tags"))
+    if len(tags) > 50 or len({k for k, _ in tags}) != len(tags):
+        return bad("Tags must have unique keys and there can be at most 50.", "InvalidTag")
+    spec = {}
+    if op == "S3PutObjectCopy":
+        c = _child(op_el, "S3PutObjectCopy")
+        tb, _ = _arn_bucket(_child_text(c, "TargetResource"))
+        if not tb:
+            return bad("S3PutObjectCopy.TargetResource must be a bucket ARN.")
+        if not store.bucket_exists(tb):
+            return bad("The copy target bucket does not exist.", "NoSuchBucket", 404)
+        if _child(c, "ModifiedSinceConstraint") is not None or _child(c, "UnModifiedSinceConstraint") is not None:
+            return _s3c_error("NotImplemented", "Modified-since constraints on S3PutObjectCopy are not implemented by Vyomi.", 501)
+    elif op == "LambdaInvoke":
+        if not _child_text(_child(op_el, "LambdaInvoke"), "FunctionArn"):
+            return bad("LambdaInvoke.FunctionArn is required.")
+    elif op == "S3PutObjectTagging":
+        if not _tags_of(_child(_child(op_el, "S3PutObjectTagging"), "TagSet")):
+            return bad("S3PutObjectTagging.TagSet is required.")
+    elif op == "S3PutObjectRetention":
+        r = _child(_child(op_el, "S3PutObjectRetention"), "Retention")
+        if _child_text(r, "Mode") not in ("GOVERNANCE", "COMPLIANCE") or not _child_text(r, "RetainUntilDate"):
+            return bad("Retention.Mode (GOVERNANCE|COMPLIANCE) and RetainUntilDate are required.")
+    elif op == "S3PutObjectLegalHold":
+        if _child_text(_child(_child(op_el, "S3PutObjectLegalHold"), "LegalHold"), "Status") not in ("ON", "OFF"):
+            return bad("LegalHold.Status must be ON or OFF.")
+    j = {"id": str(uuid.uuid4()), "token": token, "op": op, "confirm": _child_text(root, "ConfirmationRequired").lower() == "true",
+         "description": _child_text(root, "Description"), "priority": prio, "role": role, "created": _now(), "tags": tags,
+         "manifest_xml": _inner_xml(man_el), "operation_xml": _inner_xml(op_el), "report_xml": _inner_xml(rep_el),
+         "progress": {"total": 0, "ok": 0, "fail": 0}, "failures": [], "reason": "", "active_secs": 0, "report_keys": []}
+    j["arn"] = f"arn:aws:s3:us-east-1:{_ACCOUNT_ID}:job/{j['id']}"
+    tasks, err = _job_read_manifest(store, man_el, fmt, mb, mk, _child_text(loc, "ObjectVersionId"), _child_text(loc, "ETag"))
+    if err:
+        j["status"], j["terminated"] = "Failed", _now()
+        j["failures"] = [("ManifestError", err)]
+    else:
+        j["tasks"] = tasks
+        j["progress"]["total"] = len(tasks)
+        j["status"] = "Suspended" if j["confirm"] else "Ready"
+    js[j["id"]] = j
+    return _done(store, _s3c_ok("CreateJob", f"<JobId>{j['id']}</JobId>"))
+
+
+def _job_read_manifest(store, man_el, fmt, mb, mk, vid, etag):
+    if not store.bucket_exists(mb):
+        return None, f"Manifest bucket {mb} does not exist."
+    obj = _find_version(_ensure_object_entry(store, mb, mk, create=False), vid or None)
+    if not obj or obj.get("is_delete_marker"):
+        return None, f"Manifest object s3://{mb}/{mk} was not found."
+    if etag and etag.strip('"') != str(obj.get("etag", "")).strip('"'):
+        return None, "The manifest ETag does not match the object's ETag."
+    fields = [(f.text or "").strip() for f in _children(_child(_child(man_el, "Spec"), "Fields"), "member")] or ["Bucket", "Key"]
+    try:
+        text = _version_bytes(store, mb, mk, obj).decode("utf-8")
+        rows = list(csv.reader(io.StringIO(text)))
+    except Exception:
+        return None, "The manifest could not be read as a UTF-8 CSV."
+    if "Bucket" not in fields or "Key" not in fields:
+        return None, "Manifest fields must include Bucket and Key."
+    ib, ik, iv = fields.index("Bucket"), fields.index("Key"), (fields.index("VersionId") if "VersionId" in fields else None)
+    tasks = []
+    for n, row in enumerate(rows, 1):
+        if not row or not any(c.strip() for c in row):
+            continue
+        if len(row) <= max(ib, ik):
+            return None, f"Manifest line {n} has fewer columns than Spec.Fields."
+        v = row[iv].strip() if iv is not None and len(row) > iv else ""
+        tasks.append([row[ib].strip(), urllib.parse.unquote_plus(row[ik].strip()), v])
+    if not tasks:
+        return None, "The manifest has no rows."
+    return tasks, ""
+
+
+def _jobs_tick(store: ObjectStore) -> None:
+    """Advance every pending job one stage: Ready -> Active -> (run all tasks) Complete/Failed."""
+    js = (getattr(store, "account", None) or {}).get("jobs")
+    if not js or _JOBS_BUSY[0]:
+        return
+    pend = sorted((j for j in js.values() if j["status"] in ("Ready", "Active")), key=lambda j: (-j["priority"], j["created"]))
+    if not pend:
+        return
+    _JOBS_BUSY[0] = True
+    try:
+        for j in pend:
+            if j["status"] == "Ready":
+                j["status"], j["started"] = "Active", time.time()
+            elif j["status"] == "Active":
+                _job_run(store, j)
+    finally:
+        _JOBS_BUSY[0] = False
+    store.persist()
+
+
+def _task_err(resp: S3Response):
+    m = re.search(rb"<Code>([^<]+)</Code>", resp.body or b"")
+    msg = re.search(rb"<Message>([^<]*)</Message>", resp.body or b"")
+    return (m.group(1).decode() if m else "InternalError"), (msg.group(1).decode() if msg else "")
+
+
+def _job_run(store: ObjectStore, j: dict) -> None:
+    t0 = time.time()
+    results, ok, fail = [], 0, 0
+    op_el = _s3c_root(f"<Operation>{j['operation_xml']}</Operation>".encode())
+    cfg = _child(op_el, j["op"])
+    lam_cache: dict = {}
+    for b, k, v in j.get("tasks") or []:
+        try:
+            res = _job_task(store, j, cfg, b, k, v, lam_cache)
+        except Exception as e:    # a task bug must fail that task, never the loop
+            res = ("failed", "InternalError", 500, str(e))
+        results.append((b, k, v) + res)
+        if res[0] == "succeeded":
+            ok += 1
+        else:
+            fail += 1
+    total = ok + fail
+    j["progress"] = {"total": total, "ok": ok, "fail": fail}
+    j["active_secs"] = max(0, int(time.time() - j.get("started", t0)))
+    j["terminated"] = _now()
+    over = total >= 1000 and fail / total > 0.5          # real S3: >50% failures after 1000 tasks fails the job
+    j["status"] = "Failed" if over else "Complete"
+    if over:
+        j["failures"] = [("JobFailureThresholdExceeded", "More than 50% of the tasks failed.")]
+    j.pop("tasks", None)
+    _job_report(store, j, results)
+
+
+def _job_report(store, j, results) -> None:
+    rep = _s3c_root(f"<Report>{j['report_xml']}</Report>".encode())
+    if _child_text(rep, "Enabled").lower() != "true":
+        return
+    rb, _ = _arn_bucket(_child_text(rep, "Bucket"))
+    if not rb or not store.bucket_exists(rb):
+        j["failures"].append(("ReportError", "The report bucket no longer exists."))
+        return
+    pre = _child_text(rep, "Prefix").strip("/")
+    base = (pre + "/" if pre else "") + f"job-{j['id']}/"
+    rows = [r for r in results if _child_text(rep, "ReportScope") == "AllTasks" or r[3] != "succeeded"]
+    sio = io.StringIO()
+    w = csv.writer(sio, quoting=csv.QUOTE_ALL, lineterminator="\n")
+    for b, k, v, st, code, http, msg in rows:
+        w.writerow([b, urllib.parse.quote(k), v, st, code, http, msg])
+    data = sio.getvalue().encode()
+    rkey = f"{base}results/{uuid.uuid4().hex}.csv"
+    put_object(store, rb, rkey, data, {"content-type": "text/csv"})
+    man = json.dumps({"Format": "Report_CSV_20180820", "ReportCreationDate": _now(), "Results": [
+        {"TaskExecutionStatus": "succeeded" if any(r[3] == "succeeded" for r in rows) else "failed", "Bucket": rb, "MD5Checksum": hashlib.md5(data).hexdigest(), "Key": rkey}]}).encode()
+    mkey = base + "manifest.json"
+    put_object(store, rb, mkey, man, {"content-type": "application/json"})
+    j["report_keys"] = [f"s3://{rb}/{mkey}", f"s3://{rb}/{rkey}"]
+
+
+def _job_task(store, j, cfg, bucket, key, vid, lam_cache):
+    """Run ONE task -> (status, code, http, message)."""
+    op = j["op"]
+    if not store.bucket_exists(bucket):
+        return ("failed", "NoSuchBucket", 404, f"Bucket {bucket} does not exist.")
+    vq = {"versionId": vid} if vid else {}
+    path = f"/{bucket}/{key}"
+    if not _find_version(_ensure_object_entry(store, bucket, key, create=False), vid or None):
+        return ("failed", "NoSuchKey", 404, "The specified key does not exist.")
+
+    def fin(resp):
+        if resp.status < 300:
+            return ("succeeded", "200", resp.status, "Successful")
+        code, msg = _task_err(resp)
+        return ("failed", code, resp.status, msg)
+
+    if op == "S3PutObjectTagging":
+        tags = _tags_of(_child(cfg, "TagSet"))
+        xml = "<Tagging><TagSet>" + "".join(f"<Tag><Key>{_xml_escape(k)}</Key><Value>{_xml_escape(v)}</Value></Tag>" for k, v in tags) + "</TagSet></Tagging>"
+        return fin(_dispatch_inner(store, "PUT", path, {"tagging": "", **vq}, {}, xml.encode()))
+    if op == "S3DeleteObjectTagging":
+        return fin(_dispatch_inner(store, "DELETE", path, {"tagging": "", **vq}, {}, b""))
+    if op == "S3PutObjectLegalHold":
+        st = _child_text(_child(cfg, "LegalHold"), "Status")
+        return fin(_dispatch_inner(store, "PUT", path, {"legal-hold": "", **vq}, {}, f"<LegalHold><Status>{st}</Status></LegalHold>".encode()))
+    if op == "S3PutObjectRetention":
+        r = _child(cfg, "Retention")
+        h = {"x-amz-bypass-governance-retention": "true"} if _child_text(cfg, "BypassGovernanceRetention").lower() == "true" else {}
+        return fin(_dispatch_inner(store, "PUT", path, {"retention": "", **vq}, h,
+                                   f"<Retention><Mode>{_child_text(r, 'Mode')}</Mode><RetainUntilDate>{_child_text(r, 'RetainUntilDate')}</RetainUntilDate></Retention>".encode()))
+    if op == "S3PutObjectAcl":
+        pol = _child(cfg, "AccessControlPolicy")
+        canned = _child_text(pol, "CannedAccessControlList")
+        if canned:
+            return fin(_dispatch_inner(store, "PUT", path, {"acl": "", **vq}, {"x-amz-acl": canned}, b""))
+        acl = _child(pol, "AccessControlList")
+        grants = ""
+        for g in _children(_child(acl, "Grants"), "member"):
+            gr = _child(g, "Grantee")
+            t, ident = _child_text(gr, "TypeIdentifier"), _child_text(gr, "Identifier")
+            if t == "id":
+                gx = f'<Grantee xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="CanonicalUser"><ID>{_xml_escape(ident)}</ID><DisplayName>{_xml_escape(_child_text(gr, "DisplayName"))}</DisplayName></Grantee>'
+            elif t == "uri":
+                gx = f'<Grantee xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="Group"><URI>{_xml_escape(ident)}</URI></Grantee>'
+            else:
+                gx = f'<Grantee xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="AmazonCustomerByEmail"><EmailAddress>{_xml_escape(ident)}</EmailAddress></Grantee>'
+            grants += f"<Grant>{gx}<Permission>{_child_text(g, 'Permission')}</Permission></Grant>"
+        owner = _child(acl, "Owner")
+        oid = _child_text(owner, "ID") or _ACCOUNT_ID
+        body = f"<AccessControlPolicy><Owner><ID>{_xml_escape(oid)}</ID></Owner><AccessControlList>{grants}</AccessControlList></AccessControlPolicy>"
+        return fin(_dispatch_inner(store, "PUT", path, {"acl": "", **vq}, {}, body.encode()))
+    if op == "S3InitiateRestoreObject":
+        obj = _find_version(_ensure_object_entry(store, bucket, key, create=False), vid or None)
+        if obj.get("storage_class") not in ("GLACIER", "DEEP_ARCHIVE", "GLACIER_IR"):
+            return ("failed", "InvalidObjectState", 403, "Restore is only valid for objects in GLACIER, GLACIER_IR or DEEP_ARCHIVE.")
+        days = int(_child_text(cfg, "ExpirationInDays") or 1)
+        obj["restore"] = {"expiry": (datetime.now(timezone.utc) + timedelta(days=days)).strftime("%a, %d %b %Y %H:%M:%S GMT"),
+                          "tier": _child_text(cfg, "GlacierJobTier") or "STANDARD"}
+        return ("succeeded", "202", 202, "Successful")
+    if op == "S3ReplicateObject":
+        rules = [r for r in _replication_rules(store, bucket) if r["status"] == "Enabled" and key.startswith(r.get("prefix") or "")
+                 and r["destination"] and store.bucket_exists(r["destination"])]
+        if not rules:
+            return ("failed", "ReplicationConfigurationNotFoundError", 404, "The bucket has no enabled replication rule covering this key with an existing destination.")
+        _replicate(store, bucket, key, _ensure_object_entry(store, bucket, key, create=False))
+        return ("succeeded", "200", 200, "Successful")
+    if op == "S3PutObjectCopy":
+        tb, _ = _arn_bucket(_child_text(cfg, "TargetResource"))
+        if not store.bucket_exists(tb):
+            return ("failed", "NoSuchBucket", 404, f"Target bucket {tb} does not exist.")
+        h = {"x-amz-copy-source": f"/{bucket}/{urllib.parse.quote(key)}" + (f"?versionId={vid}" if vid else "")}
+        sc = _child_text(cfg, "StorageClass")
+        if sc:
+            h["x-amz-storage-class"] = sc
+        acl = _child_text(cfg, "CannedAccessControlList")
+        if acl:
+            h["x-amz-acl"] = acl
+        nm = _child(cfg, "NewObjectMetadata")
+        if nm is not None and _child_text(cfg, "MetadataDirective") != "COPY":
+            h["x-amz-metadata-directive"] = "REPLACE"
+            if _child_text(nm, "ContentType"):
+                h["content-type"] = _child_text(nm, "ContentType")
+            for e in list(_child(nm, "UserMetadata") or []):
+                h[f"x-amz-meta-{_child_text(e, 'key')}"] = _child_text(e, "value")
+        nt = _tags_of(_child(cfg, "NewObjectTagging"))
+        if nt:
+            h["x-amz-tagging-directive"] = "REPLACE"
+            h["x-amz-tagging"] = urllib.parse.urlencode(nt)
+        for src, dst in (("ObjectLockMode", "x-amz-object-lock-mode"), ("ObjectLockRetainUntilDate", "x-amz-object-lock-retain-until-date"),
+                         ("ObjectLockLegalHoldStatus", "x-amz-object-lock-legal-hold")):
+            if _child_text(cfg, src):
+                h[dst] = _child_text(cfg, src)
+        if h.get("x-amz-object-lock-legal-hold"):
+            h["x-amz-object-lock-legal-hold-status"] = h.pop("x-amz-object-lock-legal-hold")
+        return fin(_dispatch_inner(store, "PUT", f"/{tb}/{_child_text(cfg, 'TargetKeyPrefix')}{key}", {}, h, b""))
+    if op == "LambdaInvoke":
+        lam = getattr(store, "lam_store", None)
+        if lam is None:
+            return ("failed", "InternalError", 500, "No Lambda backend is attached to this store.")
+        try:
+            from core import lambda_core as _lam
+        except ImportError:  # pragma: no cover - flat vendoring
+            import lambda_core as _lam  # type: ignore
+        arn = _child_text(cfg, "FunctionArn")
+        ver = _child_text(cfg, "InvocationSchemaVersion") or "1.0"
+        ua = {_child_text(e, "key"): _child_text(e, "value") for e in list(_child(cfg, "UserArguments") or [])}
+        tid = uuid.uuid4().hex
+        task = {"taskId": tid, "s3Key": key, "s3VersionId": vid or None, "s3BucketArn": f"arn:aws:s3:::{bucket}"}
+        if ver == "2.0":
+            task["s3Bucket"] = bucket
+        event = {"invocationSchemaVersion": ver, "invocationId": uuid.uuid4().hex, "job": {"id": j["id"], **({"userArguments": ua} if ver == "2.0" else {})}, "tasks": [task]}
+        out = _lam._invoke(lam, _lam._norm_name(arn), json.dumps(event).encode())
+        if out.status == 404:
+            return ("failed", "InternalError", 500, f"Lambda function {arn} does not exist.")
+        try:
+            res = json.loads(out.body or b"null")
+        except ValueError:
+            res = None
+        if out.status != 200 or (out.headers or {}).get("X-Amz-Function-Error") or not isinstance(res, dict):
+            return ("failed", "PermanentFailure", 500, (res or {}).get("errorMessage", "The Lambda invocation failed.") if isinstance(res, dict) else "The Lambda invocation failed.")
+        r0 = next((r for r in res.get("results") or [] if r.get("taskId") == tid), None)
+        if r0 is None:
+            return ("failed", "PermanentFailure", 500, "The Lambda response has no result for the task.")
+        code = r0.get("resultCode")
+        if code == "Succeeded":
+            return ("succeeded", "200", 200, str(r0.get("resultString") or "Successful"))
+        return ("failed", code or "PermanentFailure", 500, str(r0.get("resultString") or ""))
+    return ("failed", "NotImplemented", 501, f"{op} is not implemented.")
+
+
 def dispatch(store: ObjectStore, method: str, path: str,
              query: dict | None = None, headers: dict | None = None,
              body: bytes = b"") -> S3Response:
+    """Public entry: one request, then a Batch Operations tick (jobs advance a stage per request)."""
+    resp = _dispatch_inner(store, method, path, query, headers, body)
+    _jobs_tick(store)
+    return resp
+
+
+def _dispatch_inner(store: ObjectStore, method: str, path: str,
+                    query: dict | None = None, headers: dict | None = None,
+                    body: bytes = b"") -> S3Response:
     query = query or {}
     headers = headers or {}
     lheaders = {str(k).lower(): v for k, v in headers.items()}
@@ -3206,9 +4273,15 @@ def dispatch(store: ObjectStore, method: str, path: str,
     method = (method or "GET").upper()
     if bucket == "v20180820":     # S3 Control (access points; every other control op -> NotImplemented)
         return _s3control(store, method, raw, query, lheaders, body)
+    guard = _grant_cred_guard(store, method, raw, query, lheaders)
+    if guard is not None:
+        return guard
     olap, olap_name, olap_key = _olap_lookup(store, raw)
     if olap is not None:
         return _olap_dispatch(store, olap, olap_name, method, olap_key, query, headers, lheaders)
+    mrap, mrap_key = _mrap_lookup(store, raw)
+    if mrap is not None:
+        return _mrap_dispatch(store, mrap, method, mrap_key, query, headers, body)
     bucket = _resolve_access_point(store, bucket)
     if method == "OPTIONS":
         return _cors_preflight(store, bucket, lheaders)
