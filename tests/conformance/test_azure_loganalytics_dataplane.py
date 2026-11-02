@@ -60,6 +60,22 @@ check("built-in table queries cleanly (empty)", q("Heartbeat | count")["body"]["
 print(f"{PASS} passed, {FAIL} failed")
 
 
+
+# RunKql (core run_kql): the engine entry the /api/query route calls, exercised directly.
+from core import azure_operationalinsights_core as _oi  # noqa: E402
+_ws = next(r for k, r in arm.state.items() if k.lower().endswith("/workspaces/law-dp"))
+_t = q("MyApp_CL | count")["body"]["tables"][0]
+try:
+    _r = _oi.run_kql(_ws, "MyApp_CL | count")
+    _rows = (_r.get("tables") or [{}])[0].get("rows")
+    check("RunKql returns the same table as the /api/query route", _rows == _t["rows"], _r)
+except Exception as e:  # noqa: BLE001
+    check("RunKql returns the same table as the /api/query route", False, e)
+try:
+    _oi.run_kql(_ws, "NoSuchTable_CL | count"); check("RunKql unknown table -> SemanticError", False)
+except _oi.KqlError as e:
+    check("RunKql unknown table -> SemanticError", e.semantic, e)
+
 def test_all_checks_pass():
     assert FAIL == 0
 
