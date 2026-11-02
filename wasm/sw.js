@@ -1253,6 +1253,10 @@ self.addEventListener("fetch", (event) => {
         try { await metaPut("license_jwt", key); } catch (_) {}
         return json({ ok: true, active_tier: c.tier, issued_to: c.sub || c.issued_to || "" });
       }
+      // Who is signed in is the PORTAL's call (served at the portal origin, outside this SW's scope in
+      // production). Where this SW does see it (a bare local Nano server) there is no portal: say "not
+      // signed in" rather than a 501 that every console's account menu would trip over.
+      if (apiPath === "/api/auth/me" && method === "GET") return json({ authenticated: false });
       if (apiPath === "/api/auth/logout" && method === "POST") {
         try { await metaPut("license_jwt", ""); } catch (_) {}
         return json({ ok: true });
