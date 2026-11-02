@@ -2,7 +2,7 @@
 
 Hourly diff of the real clouds for the services Vyomi simulates. Actionable changes are filed as [`upstream-drift` issues](https://github.com/vyomi-cloud/appliance/issues?q=label%3Aupstream-drift) and worked by the conformance agent. Every run: [log.md](log.md).
 
-### Upstream watch — 2026-11-02T04:27:44+00:00
+### Upstream watch — 2026-11-02T05:27:45+00:00
 
 Tracking 4252 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
 
@@ -12,6 +12,6 @@ Tracking 4252 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and
 - · `operation-flapping` GCP sqladmin/v1beta4: operation sql.workloadCaptures.stop changed
 - · `operation-flapping` GCP sqladmin/v1beta4: operation sql.workloadCaptures.stopReplay changed
 
-Sources that failed this run (2): maven/software.amazon.awssdk:dynamodb: The read operation timed out; maven/com.azure.resourcemanager:azure-resourcemanager-appconfiguration: The read operation timed out
+Sources that failed this run (2): maven/com.azure:azure-security-keyvault-secrets: The read operation timed out; maven/com.azure.resourcemanager:azure-resourcemanager-dns: The read operation timed out
 
 Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
