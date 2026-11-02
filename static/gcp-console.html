@@ -15,7 +15,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
   :root{
     /* GCP-faithful tokens — verified in the audit (matches real console) */
     --blue:#1a73e8; --blue-d:#1765cc; --blue-l:#e8f0fe; --blue-tint:#cfe2ff;
-    --blue-bg:#f8fbff;  /* lightest blue for hovers */
+    --blue-bg:#f8f9fa;  /* lightest blue for hovers */
     --ink:#202124; --sub:#5f6368; --hint:#80868b;
     --line:#e8eaed; --line-d:#dadce0; --border-blue:#d2e3fc;
     --bg:#f8f9fa;  --panel:#fff;
@@ -163,7 +163,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
 
   /* Buttons — Material Design rounded rectangles (4px), uppercase labels */
   .btn{display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 16px;font-size:13px;font-weight:500;text-transform:uppercase;letter-spacing:.5px;border:1px solid var(--line-d);background:#fff;color:var(--sub);border-radius:4px;cursor:pointer;font-family:'Google Sans',sans-serif}
-  .btn:hover{background:#f1f6fe;color:var(--ink)}
+  .btn:hover{background:#f1f3f4;color:var(--ink)}
   .btn:disabled{opacity:.5;cursor:not-allowed}
   .btn.primary{background:var(--blue);color:#fff;border-color:var(--blue)}
   .btn.primary:hover{background:var(--blue-d);color:#fff}
@@ -412,7 +412,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
 <style id="vy-gcp-m3">
 /* ── Current Google Cloud look (Material 3): tinted shell, white rounded content card, pill controls,
       sentence-case buttons and grid headers. Sampled from the real console captures. ── */
-:root{--shell:#f0f5fe;--shell-sel:#dbedfc;--shell-bar:#545f72;--m3-primary:#0b57d0;--m3-outline:#747775;--m3-field:#e9eef6}
+:root{--shell:#f8fafd;--shell-sel:#e3e5e8;--shell-bar:#545f72;--m3-primary:#0b57d0;--m3-outline:#747775;--m3-field:#e8eaed}
 html,body{background:var(--shell)}
 header.gc-top{background:var(--shell);border-bottom:none}
 header .hamb:hover{background:rgba(0,0,0,.06)}
@@ -470,7 +470,7 @@ table.gc tr:hover td{background:#f6f8fc}
 .table-toolbar input.search{border-radius:20px;border-color:var(--m3-outline);height:36px}
 .vy-colmenu > .btn{height:32px}
 /* dialogs: rounded, tinted surface */
-.proj-modal .box{border-radius:28px;background:#f8fafd}
+.proj-modal .box{border-radius:28px;background:#f8f9fa}
 
 /* create forms — Material outlined fields */
 .wizard-page .field{margin-bottom:20px}
@@ -482,7 +482,7 @@ table.gc tr:hover td{background:#f6f8fc}
 .wizard-page .field input:focus,.wizard-page .field select:focus,.wizard-page .field textarea:focus{outline:none;border-color:#0b57d0;box-shadow:inset 0 0 0 1px #0b57d0}
 .wizard-page .field input[type=radio],.wizard-page .field input[type=checkbox]{accent-color:#0b57d0;width:18px;height:18px;margin:0 10px 0 0;vertical-align:middle}
 .wizard-page label.radio{display:flex;align-items:center;font:400 14px "Google Sans",Roboto,Arial,sans-serif;color:#1f1f1f;padding:6px 0}
-.wizard-page .info-pill{background:#f0f4f9;border-radius:4px;border:none;max-width:560px}
+.wizard-page .info-pill{background:#f1f3f4;border-radius:4px;border:none;max-width:560px}
 
 .crumbs-inline a,.crumbs-inline .current{display:inline-flex;align-items:center;gap:6px}
 .crumbs-inline .ci{font-size:18px;line-height:1}
@@ -490,7 +490,27 @@ table.gc tr:hover td{background:#f6f8fc}
 
 .ov-grid td.ov-k{width:300px;color:#444746;font-weight:500;vertical-align:top}
 .ov-grid td.ov-v{white-space:pre-line;overflow-wrap:anywhere;vertical-align:top}
-.ov-grid tr.ov-sec td{background:#f0f4f9;color:#1f1f1f;font:500 12px "Google Sans",Roboto,Arial,sans-serif;letter-spacing:.3px;text-transform:uppercase;padding:8px 16px}
+.ov-grid tr.ov-sec td{background:#f1f3f4;color:#1f1f1f;font:500 12px "Google Sans",Roboto,Arial,sans-serif;letter-spacing:.3px;text-transform:uppercase;padding:8px 16px}
+
+/* detail inner side menu — classic Google Cloud nav */
+.sub-nav{padding:8px 8px 8px 0;width:248px}
+.sub-nav .group{font:500 11px "Google Sans",Roboto,Arial,sans-serif;letter-spacing:.8px;text-transform:uppercase;color:#5f6368;padding:16px 24px 6px}
+.sub-nav a.nav-item{height:40px;box-sizing:border-box;padding:0 16px 0 24px;gap:14px;font:400 14px "Google Sans",Roboto,Arial,sans-serif;color:#202124;border-left:none;border-radius:0 20px 20px 0;margin-right:0}
+.sub-nav a.nav-item:hover{background:#f1f3f4}
+.sub-nav a.nav-item.active{background:#e8eaed;color:#1f1f1f;font-weight:500}
+.sub-nav a.nav-item .ic{font-size:20px;width:20px;color:#5f6368}
+.sub-nav a.nav-item.active .ic{color:#1f1f1f}
+/* Overview: the grid sits directly in the outer card (no inner box) */
+.sub-content .ov-flat{border:none;border-radius:0;background:none;overflow:visible}
+.sub-content .ov-flat .table-toolbar{padding:0 0 12px;border:none;background:none}
+.sub-content .ov-flat table.gc{border:none;border-radius:0;width:100%}
+.sub-content .ov-flat .ov-scroll{border:1px solid #dadce0;border-radius:12px;overflow:hidden;padding:0;margin:0}
+.sub-content .ov-flat .ov-scroll table.gc{margin:0}
+.sub-content .ov-flat tr:last-child td{border-bottom:none}
+
+/* grids keep their rounded border while scrolling horizontally: the border lives on the scroller */
+.sub-content .vy-scroll{border:1px solid var(--line);border-radius:8px;overflow-x:auto;overflow-y:hidden}
+.sub-content .vy-scroll table.gc{border:none;border-radius:0;margin:0}
 </style>
 </head>
 <body>
@@ -1631,7 +1651,7 @@ function overviewGrid(svc, item, general){
   if (details.rows.length) sections.splice(1, 0, details);
   const seen = new Set(general.map(r => String(r[0]).toLowerCase()));
   sections.slice(1).forEach(s => { s.rows = s.rows.filter(r => !(s.title === "Details" && seen.has(String(r[0]).toLowerCase()))); });
-  const wrap = el("div",{class:"table-wrap"});
+  const wrap = el("div",{class:"table-wrap ov-flat"});
   const tb = el("div",{class:"table-toolbar"});
   const fi = el("input",{class:"search",placeholder:"Filter properties…"}); const stats = el("span",{class:"stats"});
   tb.append(fi, stats); wrap.append(tb);
@@ -1935,7 +1955,7 @@ function tableOf(cols, rows, actions, opts){
   if (cols.length < 3) { t.selectedRows = selectedRows; return t; }   // a two-column key/value list has nothing to hide
   const key = gridKeyOf(cols.map(c => c[1]));
   const menu = columnsMenu(key, cols.map(c => c[1]), () => t);
-  const box = el("div",{class:"vy-grid"}, el("div",{class:"vy-grid-tools"}, menu), t);
+  const box = el("div",{class:"vy-grid"}, el("div",{class:"vy-grid-tools"}, menu), el("div",{class:"vy-scroll"}, t));
   applyColVis(t, hiddenCols(key));
   box.selectedRows = selectedRows;
   return box;

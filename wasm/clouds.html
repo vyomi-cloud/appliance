@@ -916,6 +916,13 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     @media (max-width: 600px) { #view-usage .u-cloud-tab { font-size: 15px; padding: 0 8px 10px; gap: 7px; } }
     #view-usage .u-tunnel .sc-desc code { background: #f2f4f7; padding: 1px 5px; border-radius: 4px; }
     #view-usage .u-tunnel-card pre.u-code { min-height: 0; }
+    @keyframes u-tun { 0% { box-shadow: 0 0 0 0 rgba(37,99,235,.55); } 70% { box-shadow: 0 0 0 12px rgba(37,99,235,0); } 100% { box-shadow: 0 0 0 0 rgba(37,99,235,0); } }
+    #view-usage .u-tunnel-card.u-tun { border-color: #2563eb; animation: u-tun 1.6s ease-out infinite; }
+    /* notification dot: install-the-tunnel nudge on the SDK & CLI usage drawer item and the tunnel card */
+    #view-usage .u-tunnel-card { position: relative; }
+    #view-usage .u-tunnel-card.u-tun::after, .side-item.vy-tun .side-ic::after { content: ""; position: absolute; top: -5px; right: -5px; width: 12px; height: 12px; border-radius: 50%; background: #f59e0b; box-shadow: 0 0 0 2px #fff; }
+    .side-item.vy-tun .side-ic { position: relative; }
+    .side-item.vy-tun .side-ic::after { top: -3px; right: -3px; width: 9px; height: 9px; }
     #view-usage .u-panel > .sc-desc { margin: 12px 0 16px; font-size: 13px; color: #a1a1aa; }
     #view-usage .u-card { background: #1f2937; border-radius: 14px; padding: 16px 18px 18px; min-width: 0; display: flex; flex-direction: column; }
     #view-usage .u-card .u-head { margin-bottom: 4px; }
@@ -2633,6 +2640,14 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
       }
       function wireTunnel(){
         var card = grid.querySelector('.u-tunnel-card'); if(!card) return;
+        (function pulse(){
+          var seen = function(){ try{ return localStorage.getItem('vyomi.tunnel.seen')==='1'; }catch(_){ return false; } };
+          if(seen()){ card.classList.remove('u-tun'); return; }
+          card.classList.add('u-tun');
+          fetch('http://127.0.0.1:8090/health',{mode:'no-cors',cache:'no-store'}).then(function(){
+            try{ localStorage.setItem('vyomi.tunnel.seen','1'); }catch(_){} card.classList.remove('u-tun');
+          }).catch(function(){ if(card.isConnected) setTimeout(pulse, 6000); });
+        })();
         var codeEl = card.querySelector('pre.u-code code'), cp = card.querySelector('.u-cp');
         card.querySelectorAll('.u-tab').forEach(function(t){
           t.onclick = function(){
@@ -4390,5 +4405,14 @@ function nanoLogout(){
 })();
 </script>
 <script src="./vyomi-cloudpick.js" data-nano data-entry defer></script>
+<script src="./nano-tunnel-tabs.js" defer></script>
+<script>
+/* Nano: dot on the SDK & CLI usage drawer item until the local vyomi-tunnel has been seen running */
+(function(){ var it=document.querySelector('.side-item[data-view="usage"]'); if(!it) return;
+  function seen(){ try{ return localStorage.getItem('vyomi.tunnel.seen')==='1'; }catch(_){ return false; } }
+  function probe(){ if(seen()){ it.classList.remove('vy-tun'); return; } it.classList.add('vy-tun');
+    fetch('http://127.0.0.1:8090/health',{mode:'no-cors',cache:'no-store'}).then(function(){ try{ localStorage.setItem('vyomi.tunnel.seen','1'); }catch(_){} it.classList.remove('vy-tun'); }).catch(function(){}); }
+  probe(); setInterval(probe,6000); })();
+</script>
 </body>
 </html>

@@ -33,6 +33,9 @@
     '#vy-appbar .vy-notch a{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 10px;border-radius:8px;color:#b4b8cc;font-size:12px;text-decoration:none;white-space:nowrap}' +
     '#vy-appbar .vy-notch a:hover{background:rgba(255,255,255,.08);color:#fff}' +
     '#vy-appbar .vy-notch a svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}' +
+    '@keyframes vy-tun{0%{box-shadow:0 0 0 0 rgba(77,140,243,.75)}70%{box-shadow:0 0 0 9px rgba(77,140,243,0)}100%{box-shadow:0 0 0 0 rgba(77,140,243,0)}}' +
+    '#vy-appbar .vy-notch a.vy-tun{position:relative;color:#fff;animation:vy-tun 1.6s ease-out infinite}' +
+    '#vy-appbar .vy-notch a.vy-tun::after{content:"";position:absolute;top:1px;right:1px;width:10px;height:10px;border-radius:50%;background:#f59e0b;box-shadow:0 0 0 2px #0f121c}' +
     '#vy-appbar .vy-notch a.on{background:rgba(77,140,243,.18);color:#fff}' +
     '#vy-modal{position:fixed;inset:0;z-index:200;background:rgba(10,12,24,.62);display:none;align-items:center;justify-content:center}' +
     '#vy-modal.open{display:flex}' +
@@ -123,6 +126,20 @@
     }
     // ---- account menu: a button in the console's main header (top-right) -> Activate appliance · GitHub ★ · Sign out
     var nav = bar.querySelector('.vy-notch'), NANO = CL !== '/clouds', st = { tier: 'free', trial: null }, authed = false, who = '', prof = { email: '', name: '', avatar: '', via: '' };
+    // Nano: pulse the SDK & CLI usage item until the local vyomi-tunnel has been seen running on this machine.
+    if (NANO) {
+      var tl = nav.querySelector('a[data-v="usage"]');
+      var seen = function () { try { return localStorage.getItem('vyomi.tunnel.seen') === '1'; } catch (_) { return false; } };
+      var probe = function () {
+        if (seen()) { tl && tl.classList.remove('vy-tun'); return; }
+        tl && tl.classList.add('vy-tun');
+        fetch('http://127.0.0.1:8090/health', { mode: 'no-cors', cache: 'no-store' }).then(function () {
+          try { localStorage.setItem('vyomi.tunnel.seen', '1'); } catch (_) {}
+          tl && tl.classList.remove('vy-tun');
+        }).catch(function () {});
+      };
+      probe(); setInterval(probe, 6000);
+    }
     function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
     var PERSON = '<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg>';
     var hdr = document.querySelector('header'), host = document.querySelector('header .right') || (function () { var h = document.querySelectorAll('header .hicons'); return h.length ? h[h.length - 1] : hdr; })();
