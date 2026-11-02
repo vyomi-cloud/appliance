@@ -31,6 +31,9 @@ class ObjectStore:
     def __init__(self) -> None:
         self.buckets: dict[str, dict[str, Any]] = {}
         self.objects: dict[str, dict[str, Any]] = {}
+        # Account-level S3 settings (s3control): {"pab": {...}, "olaps": {name: record}}.
+        # A PUBLIC attr so Nano's generic store snapshot persists it.
+        self.account: dict[str, Any] = {}
 
     # ── bucket helpers ────────────────────────────────────────────────
     def bucket_exists(self, name: str) -> bool:

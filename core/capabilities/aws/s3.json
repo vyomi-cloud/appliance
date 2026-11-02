@@ -616,13 +616,27 @@
  "s3.account.directory-buckets": {
   "title": "Directory buckets",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "S3 Express One Zone directory buckets (zonal endpoints, CreateSession auth) are not modeled; only general purpose buckets exist."
+   "S3 Express One Zone directory buckets are real records in the same store: CreateBucket with the --<zone-id>--x-s3 name and Location/Bucket-type configuration (validated), ListDirectoryBuckets (paginated, separate from ListBuckets), CreateSession (returns session credentials), object CRUD/list/delete/empty with EXPRESS_ONEZONE storage, and realistic errors (ListObjectsV2 only, '/' delimiter only, no ACLs / versioning / lifecycle-style configurations). Everything lives in one simulated store: there is no zonal endpoint, no single-digit-millisecond latency, and session credentials are issued but never verified (Vyomi does not authenticate requests). Directory-bucket bucket policy, lifecycle and tagging sub-resources are not modeled."
   ],
-  "api": []
+  "api": [
+   "CreateBucket (directory)",
+   "ListDirectoryBuckets",
+   "CreateSession",
+   "PutObject",
+   "GetObject",
+   "HeadObject",
+   "DeleteObject",
+   "DeleteObjects",
+   "ListObjectsV2",
+   "DeleteBucket"
+  ],
+  "tests": [
+   "tests/conformance/test_s3_sweeps3_core.py"
+  ]
  },
  "s3.bucket.access-points": {
   "title": "Access Points",
@@ -672,13 +686,28 @@
  "s3.account.object-lambda-access-points": {
   "title": "Object Lambda Access Points",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Object Lambda access points transform GetObject responses through a Lambda in the request path; the s3control object-lambda API is not implemented."
+   "Create/Get/List/Delete AccessPointForObjectLambda, Put/Get AccessPointConfigurationForObjectLambda and Put/Get/Delete AccessPointPolicyForObjectLambda (+PolicyStatus) are real s3control operations, layered on an existing standard access point (validated). GetObject through the OLAP alias (name-<id>--ol-s3) or ARN invokes the configured Lambda synchronously with the real event shape and returns the Lambda's response. Vyomi contract: the Lambda returns {statusCode, body, headers, isBase64Encoded} (the transformed bytes), and the event carries the original object as getObjectContext.vyomiInputBase64; the real WriteGetObjectResponse call-back and the presigned inputS3Url GET are not usable because the Lambda runs inside the request. HeadObject / ListObjects / ListObjectsV2 transformations are stored but answered NotImplemented; PutObject etc. through an OLAP are rejected like real S3. Simulator requests are not authenticated, so the OLAP policy is stored, never evaluated."
   ],
-  "api": []
+  "api": [
+   "CreateAccessPointForObjectLambda",
+   "GetAccessPointForObjectLambda",
+   "ListAccessPointsForObjectLambda",
+   "DeleteAccessPointForObjectLambda",
+   "PutAccessPointConfigurationForObjectLambda",
+   "GetAccessPointConfigurationForObjectLambda",
+   "PutAccessPointPolicyForObjectLambda",
+   "GetAccessPointPolicyForObjectLambda",
+   "DeleteAccessPointPolicyForObjectLambda",
+   "GetAccessPointPolicyStatusForObjectLambda",
+   "GetObject (via OLAP)"
+  ],
+  "tests": [
+   "tests/conformance/test_s3_sweeps3_core.py"
+  ]
  },
  "s3.account.multi-region-access-points": {
   "title": "Multi-Region Access Points",
@@ -705,13 +734,20 @@
  "s3.account.account-public-access-block": {
   "title": "Block Public Access settings for this account",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Account-level Block Public Access (s3control PutPublicAccessBlock) is not implemented; per-bucket Block Public Access is fully enforced on each bucket's Permissions tab."
+   "s3control Get/Put/DeletePublicAccessBlock are real and the four account toggles are persisted per account. BlockPublicAcls and BlockPublicPolicy are ENFORCED: the effective setting of every bucket is its own Block Public Access OR the account's, so public ACLs (bucket, object and upload-time) and public bucket policies are rejected with the account-level error. IgnorePublicAcls and RestrictPublicBuckets are stored and returned but have no observable effect because Vyomi has no anonymous (unauthenticated) callers to ignore or restrict."
   ],
-  "api": []
+  "api": [
+   "GetPublicAccessBlock",
+   "PutPublicAccessBlock",
+   "DeletePublicAccessBlock"
+  ],
+  "tests": [
+   "tests/conformance/test_s3_sweeps3_core.py"
+  ]
  },
  "s3.account.storage-lens": {
   "title": "Storage Lens",

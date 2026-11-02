@@ -117,10 +117,11 @@ class AppStateObjectStore(ObjectStore):
     """ObjectStore whose state dicts are the appliance's space-scoped state."""
 
     def __init__(self, buckets, objects, multiparts=None, *, mirror=None, events=None,
-                 fetch=None, storage_cap=None, quantity_cap=None):
+                 fetch=None, storage_cap=None, quantity_cap=None, account=None):
         # NB: no super().__init__() — buckets/objects are the shared proxies, not new dicts.
         self._b, self._o = buckets, objects
         self._m = multiparts
+        self._acct = account if account is not None else {}   # s3control account settings (space-scoped)
         self._mirror = mirror            # (put(bucket,key,data,ct,meta), delete(bucket,key)) or None
         self._events = events
         self._fetch = fetch
@@ -129,6 +130,7 @@ class AppStateObjectStore(ObjectStore):
 
     buckets = property(lambda self: self._b)
     objects = property(lambda self: self._o)
+    account = property(lambda self: self._acct)
 
     @property
     def _multipart_uploads(self):
@@ -1529,7 +1531,8 @@ def s3_store() -> AppStateObjectStore:
 
         _S3 = AppStateObjectStore(ctx.buckets, ctx.objects, ctx.multiparts, mirror=(put, delete),
                                   events=events, fetch=fetch, storage_cap=storage_cap,
-                                  quantity_cap=quantity_cap)
+                                  quantity_cap=quantity_cap,
+                                  account=_proxy("s3", lambda: {"buckets": {}, "objects": {}, "multiparts": {}}, "account"))
     return _S3
 
 
