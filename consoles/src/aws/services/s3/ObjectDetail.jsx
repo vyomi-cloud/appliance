@@ -3,6 +3,7 @@
  * encryption and Object Lock legal hold/retention are real round trips through the
  * native API (capability-gated); per-object tagging and additional checksums aren't
  * modeled, so they render as declared gaps rather than fake success. */
+import { ObjectManagementOverview } from "./Sweep.jsx";
 import { useState } from "react";
 import Header from "@cloudscape-design/components/header";
 import Tabs from "@cloudscape-design/components/tabs";
@@ -86,7 +87,7 @@ function Properties({ bucket, objectKey, head, region, url }) {
         ["Entity tag (Etag)", d?.etag],
         ["Object URL", <Link href={url} external>{url}</Link>],
       ]} />
-      <NotSimulatedContainer title="Object management overview" />
+      <ObjectManagementOverview bucket={bucket} objectKey={objectKey} head={d} />
       <KeyValue title="Storage class" items={[["Storage class", d?.storageClass]]} />
       <CapabilityContainer id="s3.bucket.encryption" title="Server-side encryption settings">
         <SpaceBetween size="s">

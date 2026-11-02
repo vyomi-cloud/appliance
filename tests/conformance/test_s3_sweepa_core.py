@@ -94,7 +94,41 @@ def replication_metrics():
     _check("object really replicated", s3(r, "GET", "/rm-dst/o")["body"] == b"data")
 
 
+def upload_acl():
+    r = AwsWireRouter()
+    s3(r, "PUT", "/acl-bkt")
+    s3(r, "PUT", "/acl-bkt/pub.txt", body=b"x", headers={"x-amz-acl": "public-read"})
+    acl = s3(r, "GET", "/acl-bkt/pub.txt", {"acl": ""})["body"]
+    _check("PutObject x-amz-acl public-read stored as the object ACL", b"AllUsers" in acl and b"READ" in acl)
+    s3(r, "PUT", "/acl-bkt/plain.txt", body=b"x")
+    _check("no ACL header -> default owner-only ACL", b"AllUsers" not in s3(r, "GET", "/acl-bkt/plain.txt", {"acl": ""})["body"])
+    s3(r, "PUT", "/acl-bkt/grant.txt", body=b"x", headers={"x-amz-grant-read": 'uri="http://acs.amazonaws.com/groups/global/AuthenticatedUsers"'})
+    g = s3(r, "GET", "/acl-bkt/grant.txt", {"acl": ""})["body"]
+    _check("x-amz-grant-read header builds a READ grant", b"AuthenticatedUsers" in g and b"READ" in g)
+    bad = s3(r, "PUT", "/acl-bkt/bad.txt", body=b"x", headers={"x-amz-acl": "no-such-acl"})
+    _check("unknown canned ACL rejected", bad["status"] == 400 and b"InvalidArgument" in bad["body"])
+    both = s3(r, "PUT", "/acl-bkt/both.txt", body=b"x", headers={"x-amz-acl": "private", "x-amz-grant-read": 'id="a"'})
+    _check("canned ACL + header grants rejected", both["status"] == 400)
+    s3(r, "PUT", "/acl-bkt", {"ownershipControls": ""}, f'<OwnershipControls {NS}><Rule><ObjectOwnership>BucketOwnerEnforced</ObjectOwnership></Rule></OwnershipControls>'.encode())
+    enf = s3(r, "PUT", "/acl-bkt/e.txt", body=b"x", headers={"x-amz-acl": "public-read"})
+    _check("BucketOwnerEnforced rejects ACL headers", enf["status"] == 400 and b"AccessControlListNotSupported" in enf["body"])
+    ok = s3(r, "PUT", "/acl-bkt/e2.txt", body=b"x", headers={"x-amz-acl": "bucket-owner-full-control"})
+    _check("BucketOwnerEnforced accepts bucket-owner-full-control", ok["status"] == 200)
+    s3(r, "PUT", "/acl-b2")
+    s3(r, "PUT", "/acl-b2", {"publicAccessBlock": ""}, f'<PublicAccessBlockConfiguration {NS}><BlockPublicAcls>true</BlockPublicAcls></PublicAccessBlockConfiguration>'.encode())
+    pab = s3(r, "PUT", "/acl-b2/p.txt", body=b"x", headers={"x-amz-acl": "public-read"})
+    _check("Block Public Access refuses a public upload ACL", pab["status"] == 403)
+    s3(r, "PUT", "/acl-b3")
+    u = s3(r, "POST", "/acl-b3/m.bin", {"uploads": ""}, headers={"x-amz-acl": "authenticated-read"})
+    import re
+    uid = re.search(rb"<UploadId>(\w+)</UploadId>", u["body"]).group(1).decode()
+    s3(r, "PUT", "/acl-b3/m.bin", {"partNumber": "1", "uploadId": uid}, b"abc")
+    s3(r, "POST", "/acl-b3/m.bin", {"uploadId": uid}, b"<CompleteMultipartUpload><Part><PartNumber>1</PartNumber></Part></CompleteMultipartUpload>")
+    _check("multipart upload keeps the creation ACL", b"AuthenticatedUsers" in s3(r, "GET", "/acl-b3/m.bin", {"acl": ""})["body"])
+
+
 def run():
+    upload_acl()
     eventbridge_notifications()
     storage_metrics()
     replication_metrics()

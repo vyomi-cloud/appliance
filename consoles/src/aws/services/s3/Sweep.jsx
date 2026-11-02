@@ -13,7 +13,7 @@ import Table from "@cloudscape-design/components/table";
 import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import { CapabilityContainer, saveNotice } from "../../kit/Capability.jsx";
-import { ErrorAlert, fmtBytes } from "../../kit/common.jsx";
+import { ErrorAlert, fmtBytes, KeyValue } from "../../kit/common.jsx";
 import { LineChart } from "../cloudwatch/common.jsx";
 import * as api from "./api.js";
 import * as sw from "./sweepApi.js";
@@ -191,6 +191,50 @@ export function DataTransferSection({ bucket }) {
               <Series title={`Bytes downloaded - ${x.cfg.id}`} series={x.down} format={fmtBytes} />
               <Series title={`Bytes uploaded - ${x.cfg.id}`} series={x.up} format={fmtBytes} />
             </SpaceBetween>))}</SpaceBetween>}
+    </CapabilityContainer>
+  );
+}
+
+export function AccountSnapshot({ buckets, loading }) {
+  const snap = useAsync(() => sw.accountSnapshot(buckets.map((b) => b.name)), [buckets.map((b) => b.name).join(",")]);
+  const d = snap.data;
+  return (
+    <CapabilityContainer id="s3.account.snapshot" title="Account snapshot" description="Storage and object totals across all general purpose buckets in this environment."
+      actions={<Button iconName="refresh" onClick={snap.reload}>Refresh</Button>}>
+      {loading || snap.loading ? <StatusIndicator type="loading">Calculating</StatusIndicator>
+        : snap.error ? <ErrorAlert error={snap.error} />
+        : <SpaceBetween size="s">
+            <KeyValue columns={4} items={[
+              ["Total storage", <span data-testid="snapshot-storage">{fmtBytes(d.bytes)}</span>],
+              ["Object count", <span data-testid="snapshot-objects">{d.objects}</span>],
+              ["Average object size", d.objects ? fmtBytes(Math.round(d.bytes / d.objects)) : "-"],
+              ["General purpose buckets", <span data-testid="snapshot-buckets">{d.buckets}</span>],
+            ]} />
+            {d.truncated && <Box color="text-body-secondary">Very large buckets were counted up to the first {50 * 1000} objects.</Box>}
+          </SpaceBetween>}
+    </CapabilityContainer>
+  );
+}
+
+export function ObjectManagementOverview({ bucket, objectKey, head }) {
+  const m = useAsync(async () => ({
+    versioning: await api.getVersioning(bucket), replication: await api.getReplication(bucket), lifecycle: await api.getLifecycle(bucket),
+  }), [bucket, objectKey]);
+  const applies = (r) => !r.prefix || objectKey.startsWith(r.prefix);
+  const repl = (m.data?.replication?.rules || []).filter((r) => r.status === "Enabled" && applies(r));
+  const life = (m.data?.lifecycle?.rules || []).filter((r) => r.status === "Enabled" && applies(r));
+  return (
+    <CapabilityContainer id="s3.object.management-overview" title="Object management overview"
+      description="The bucket management configurations that are in effect for this object.">
+      {m.loading ? <StatusIndicator type="loading">Loading</StatusIndicator>
+        : m.error ? <ErrorAlert error={m.error} />
+        : <KeyValue columns={3} items={[
+            ["Bucket Versioning", m.data.versioning?.status || "Disabled"],
+            ["Replication rules", repl.length ? repl.map((r) => `${r.id} -> ${r.destination}`).join(", ") : "None apply to this object"],
+            ["Replication status", head?.replicationStatus || (repl.length ? "-" : "Not replicated")],
+            ["Lifecycle rules", life.length ? life.map((r) => r.id).join(", ") : "None apply to this object"],
+            ["Current storage class", head?.storageClass],
+          ]} />}
     </CapabilityContainer>
   );
 }

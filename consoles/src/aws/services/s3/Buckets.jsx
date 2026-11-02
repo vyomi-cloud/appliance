@@ -4,7 +4,9 @@ import Link from "@cloudscape-design/components/link";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Tabs from "@cloudscape-design/components/tabs";
 import ResourceTable from "../../kit/ResourceTable.jsx";
-import { fmtDate, NotSimulated, NotSimulatedContainer } from "../../kit/common.jsx";
+import { fmtDate } from "../../kit/common.jsx";
+import { CapabilityContainer } from "../../kit/Capability.jsx";
+import { AccountSnapshot } from "./Sweep.jsx";
 import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import { follow, href } from "../../../common/router.js";
@@ -56,11 +58,11 @@ export default function Buckets() {
               />
             ),
           },
-          { id: "directory", label: "Directory buckets", content: <NotSimulated feature="Directory buckets (S3 Express One Zone)" /> },
+          { id: "directory", label: "Directory buckets", content: <CapabilityContainer id="s3.account.directory-buckets" title="Directory buckets" /> },
         ]}
       />
-      <NotSimulatedContainer title="Account snapshot" note="Storage/object counts and cost summaries aren't aggregated in Vyomi." />
-      <NotSimulatedContainer title="External access summary" note="IAM Access Analyzer findings for S3 aren't modeled in Vyomi." />
+      <AccountSnapshot buckets={data} loading={loading} />
+      <CapabilityContainer id="s3.account.external-access" title="External access summary" />
     </SpaceBetween>
   );
 }

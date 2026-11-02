@@ -53,3 +53,22 @@ export async function metricSeries(namespace, metricName, dims, { statistic = "M
   return (r.Datapoints || []).map((p) => ({ t: new Date(p.Timestamp).getTime(), v: Number(p[statistic]), unit: p.Unit }))
     .sort((a, b) => a.t - b.t);
 }
+
+/** Account snapshot: totals over every bucket, counted from real ListObjectsV2 pages. */
+export async function accountSnapshot(buckets, { maxPages = 50 } = {}) {
+  let objects = 0, bytes = 0, truncated = false;
+  const perBucket = [];
+  for (const b of buckets) {
+    let n = 0, sz = 0, token, pages = 0;
+    do {
+      const r = await s3("GET", `/${b}`, { query: { "list-type": "2", "continuation-token": token } });
+      const res = r.ListBucketResult || {};
+      for (const o of asList(res.Contents)) { n += 1; sz += Number(o.Size || 0); }
+      token = res.IsTruncated === "true" ? res.NextContinuationToken : null;
+      pages += 1;
+    } while (token && pages < maxPages);
+    if (token) truncated = true;
+    objects += n; bytes += sz; perBucket.push({ name: b, objects: n, bytes: sz });
+  }
+  return { buckets: buckets.length, objects, bytes, truncated, perBucket };
+}

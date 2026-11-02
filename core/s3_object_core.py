@@ -616,6 +616,65 @@ def _canned_acl_xml(canned: str) -> str:
             f"<AccessControlList>{owner_grant}{grants}</AccessControlList></AccessControlPolicy>")
 
 
+_GRANT_HEADERS = (("x-amz-grant-read", "READ"), ("x-amz-grant-read-acp", "READ_ACP"),
+                  ("x-amz-grant-write-acp", "WRITE_ACP"), ("x-amz-grant-full-control", "FULL_CONTROL"))
+
+
+def _acl_headers(headers: dict) -> dict:
+    """The upload-time permission headers (x-amz-acl, x-amz-grant-*) of a request."""
+    return {k: v for k, v in (headers or {}).items()
+            if k.lower() == "x-amz-acl" or k.lower().startswith("x-amz-grant-")}
+
+
+def _grants_acl_xml(headers: dict) -> str | None:
+    """AccessControlPolicy for explicit x-amz-grant-* headers (id=/uri=/emailAddress= lists)."""
+    grants = []
+    for h, perm in _GRANT_HEADERS:
+        for part in str((headers or {}).get(h, "")).split(","):
+            m = re.match(r'\s*(id|uri|emailAddress)\s*=\s*"?([^"]+?)"?\s*$', part)
+            if not m:
+                continue
+            kind, val = m.groups()
+            xsi = 'xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"'
+            if kind == "uri":
+                g = f'<Grantee {xsi} xsi:type="Group"><URI>{_xml_escape(val)}</URI></Grantee>'
+            elif kind == "id":
+                g = f'<Grantee {xsi} xsi:type="CanonicalUser"><ID>{_xml_escape(val)}</ID></Grantee>'
+            else:
+                g = f'<Grantee {xsi} xsi:type="AmazonCustomerByEmail"><EmailAddress>{_xml_escape(val)}</EmailAddress></Grantee>'
+            grants.append(f"<Grant>{g}<Permission>{perm}</Permission></Grant>")
+    if not grants:
+        return None
+    owner = ('<Grant><Grantee xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="CanonicalUser">'
+             "<ID>simulator</ID><DisplayName>cloudlearn-simulator</DisplayName></Grantee>"
+             "<Permission>FULL_CONTROL</Permission></Grant>")
+    return (f'<?xml version="1.0" encoding="UTF-8"?><AccessControlPolicy xmlns="{S3_NS}">{_OWNER_XML}'
+            f"<AccessControlList>{owner}{''.join(grants)}</AccessControlList></AccessControlPolicy>")
+
+
+def _upload_acl(store: ObjectStore, bucket: str, key: str, headers: dict):
+    """Upload-time permissions (PutObject / CreateMultipartUpload x-amz-acl + x-amz-grant-*):
+    returns (acl_xml | None, error | None). Enforced like real S3 — a bucket with
+    BucketOwnerEnforced rejects ACL headers (bucket-owner-full-control is the one allowed
+    value), Block Public Access refuses public canned ACLs, an unknown canned ACL is invalid."""
+    hdrs = {k.lower(): v for k, v in _acl_headers(headers).items()}
+    if not hdrs:
+        return None, None
+    canned = hdrs.get("x-amz-acl")
+    if canned is not None and canned not in _CANNED_ACL_GRANTS:
+        return None, _error_xml("InvalidArgument", "Invalid canned ACL value", f"/{bucket}/{key}", 400)
+    if canned is not None and len(hdrs) > 1:
+        return None, _error_xml("InvalidRequest", "Specifying both Canned ACLs and Header Grants is not allowed", f"/{bucket}/{key}", 400)
+    if _object_ownership(store, bucket) == "BucketOwnerEnforced" and canned != "bucket-owner-full-control":
+        return None, _error_xml("AccessControlListNotSupported", "The bucket does not allow ACLs", f"/{bucket}/{key}", 400)
+    blocked = _acl_blocked_by_pab(store, bucket, canned)
+    if blocked:
+        return None, blocked
+    if canned is not None:
+        return _canned_acl_xml(canned), None
+    return _grants_acl_xml(hdrs), None
+
+
 def _object_ownership(store: ObjectStore, bucket: str) -> str | None:
     meta = store.buckets.get(bucket) or {}
     doc = meta.get("cfg", {}).get("ownershipControls")
@@ -1557,6 +1616,11 @@ def put_object(store: ObjectStore, bucket: str, key: str, body: bytes, headers: 
                                    version_id=vid, delete_marker=False)
     if checksum:
         version["checksum"] = checksum
+    acl_xml, acl_err = _upload_acl(store, bucket, key, headers)
+    if acl_err:
+        return acl_err
+    if acl_xml:
+        version["acl"] = acl_xml
     _apply_object_lock_on_write(store, bucket, headers, version)
     replace = "__overwrite__" if vstatus == "Disabled" else ("null" if vstatus == "Suspended" else None)
     entry = _write_object_version(store, bucket, key, version, replace_version_id=replace)
@@ -1907,9 +1971,12 @@ def create_multipart_upload(store, bucket, key, headers) -> S3Response:
     headers = {k.lower(): v for k, v in (headers or {}).items()}
     if not store.bucket_exists(bucket):
         return _error_xml("NoSuchBucket", "The specified bucket does not exist.", f"/{bucket}", 404)
+    acl_xml, acl_err = _upload_acl(store, bucket, key, headers)
+    if acl_err:
+        return acl_err
     upload_id = uuid.uuid4().hex + uuid.uuid4().hex
     _mpu(store)[upload_id] = {
-        "bucket": bucket, "key": key,
+        "bucket": bucket, "key": key, "acl": acl_xml,
         "content_type": headers.get("content-type", "application/octet-stream"),
         "metadata": {h[11:]: v for h, v in headers.items() if h.startswith("x-amz-meta-")},
         "storage_class": headers.get("x-amz-storage-class", "STANDARD"),
@@ -2009,6 +2076,8 @@ def complete_multipart_upload(store, bucket, key, query, body) -> S3Response:
                                    storage_class=up.get("storage_class", "STANDARD"),
                                    metadata=up.get("metadata") or {},
                                    version_id=vid, delete_marker=False, etag=etag)
+    if up.get("acl"):
+        version["acl"] = up["acl"]
     _apply_object_lock_on_write(store, bucket, up.get("lock_headers") or {}, version)
     replace = "__overwrite__" if vstatus == "Disabled" else ("null" if vstatus == "Suspended" else None)
     entry = _write_object_version(store, bucket, key, version, replace_version_id=replace)

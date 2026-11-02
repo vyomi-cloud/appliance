@@ -1,6 +1,6 @@
 /* Upload — its own page, like the real console (not a modal). Every row becomes a real
- * PutObject; "Permissions" (per-object ACL grants at upload time) isn't modeled, so it's a
- * declared gap rather than a checkbox that does nothing. */
+ * PutObject; "Permissions" sends the canned ACL as x-amz-acl, which the backend enforces
+ * (Object Ownership / Block Public Access) and stores as the object's ACL. */
 import { useRef, useState } from "react";
 import Header from "@cloudscape-design/components/header";
 import Container from "@cloudscape-design/components/container";
@@ -14,9 +14,18 @@ import Form from "@cloudscape-design/components/form";
 import ContentLayout from "@cloudscape-design/components/content-layout";
 import { useNotify } from "../../../common/notify.jsx";
 import { follow, href } from "../../../common/router.js";
-import { ErrorAlert, fmtBytes, NotSimulatedContainer } from "../../kit/common.jsx";
+import { ErrorAlert, fmtBytes } from "../../kit/common.jsx";
+import { CapabilityContainer } from "../../kit/Capability.jsx";
 import * as api from "./api.js";
 
+const CANNED_ACLS = [
+  ["private", "Private (default) - only the object owner has access"],
+  ["public-read", "Grant public-read - Everyone (public access) can read the object"],
+  ["public-read-write", "Grant public-read-write - Everyone (public access) can read and write the object"],
+  ["authenticated-read", "Grant authenticated-read - Authenticated users group can read the object"],
+  ["bucket-owner-read", "Grant bucket-owner-read - the bucket owner can read the object"],
+  ["bucket-owner-full-control", "Grant bucket-owner-full-control - the bucket owner has full control"],
+];
 const STORAGE_CLASSES = ["Standard", "Intelligent-Tiering", "Standard-IA", "One Zone-IA", "Glacier Instant Retrieval", "Glacier Flexible Retrieval", "Glacier Deep Archive", "Reduced redundancy"];
 
 export default function UploadPage({ params, query }) {
@@ -29,6 +38,7 @@ export default function UploadPage({ params, query }) {
   const [sel, setSel] = useState([]);
   const [storageClass, setStorageClass] = useState("Standard");
   const [checksumAlgo, setChecksumAlgo] = useState("");
+  const [acl, setAcl] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
 
@@ -42,7 +52,7 @@ export default function UploadPage({ params, query }) {
     setBusy(true); setError(null);
     try {
       for (const r of rows) {
-        await api.putObject(bucket, prefix + r.key, r.file, r.file.type, { "x-amz-storage-class": storageClass.toUpperCase().replace(/[ -]/g, "_"), ...(checksumAlgo ? { "x-amz-sdk-checksum-algorithm": checksumAlgo } : {}) });
+        await api.putObject(bucket, prefix + r.key, r.file, r.file.type, { "x-amz-storage-class": storageClass.toUpperCase().replace(/[ -]/g, "_"), ...(checksumAlgo ? { "x-amz-sdk-checksum-algorithm": checksumAlgo } : {}), ...(acl ? { "x-amz-acl": acl } : {}) });
       }
       notify.success(`Successfully uploaded ${rows.length} file${rows.length === 1 ? "" : "s"} to ${bucket}`);
       location.hash = `${href("s3", "buckets", bucket).slice(1)}${prefix ? `?prefix=${encodeURIComponent(prefix)}` : ""}`;
@@ -89,7 +99,12 @@ export default function UploadPage({ params, query }) {
           <Container header={<Header variant="h2">Destination</Header>}>
             <FormField label="Destination"><Box>{`s3://${bucket}/${prefix}`}</Box></FormField>
           </Container>
-          <NotSimulatedContainer title="Permissions" note="Per-object ACL grants at upload time aren't modeled; uploaded objects use the bucket's Object Ownership setting." />
+          <CapabilityContainer id="s3.object.upload-acl" title="Permissions" description="Grant access to the objects being uploaded. Buckets with ACLs disabled (Bucket owner enforced) only accept bucket-owner-full-control.">
+            <FormField label="Access control list (ACL)">
+              <RadioGroup value={acl} onChange={({ detail }) => setAcl(detail.value)}
+                items={[{ value: "", label: "Use the bucket's default (no ACL sent)" }, ...CANNED_ACLS.map(([value, label]) => ({ value, label }))]} />
+            </FormField>
+          </CapabilityContainer>
           <Container header={<Header variant="h2">Properties</Header>}>
             <FormField label="Storage class">
               <RadioGroup value={storageClass} onChange={({ detail }) => setStorageClass(detail.value)} items={STORAGE_CLASSES.map((v) => ({ value: v, label: v }))} />

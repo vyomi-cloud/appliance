@@ -264,6 +264,29 @@ try {
   check("Metrics tab shows real NumberOfObjects (UI value matches native CloudWatch)", cnt !== "no data" && cwOut.Datapoints.length > 0, `${cnt} vs ${JSON.stringify(cwOut.Datapoints.slice(-1))}`);
   await shot("05f-s3-metrics");
 
+  // SWEEP A: upload-time ACL permissions, Object management overview, Account snapshot.
+  const ACLB = `v4-aclup-${Date.now() % 100000}`;
+  await wire(`/${ACLB}`, { method: "PUT", headers: { authorization: S3AUTH } });
+  await page.goto(UI + `#/s3/upload/${ACLB}`);
+  await page.getByRole("heading", { name: "Upload", exact: true }).waitFor({ timeout: 10000 });
+  await page.locator('input[type=file]:not([webkitdirectory])').setInputFiles({ name: "acl.txt", mimeType: "text/plain", buffer: Buffer.from("acl body") });
+  await page.getByRole("radio", { name: /Grant public-read - Everyone/ }).check();
+  await page.getByRole("button", { name: "Upload" }).click();
+  await page.getByRole("link", { name: "acl.txt" }).waitFor({ timeout: 10000 });
+  const objAcl = await wire(`/${ACLB}/acl.txt?acl=`, { headers: { authorization: S3AUTH } });
+  check("Upload page Permissions: public-read ACL chosen in UI → stored object ACL over native GetObjectAcl",
+    objAcl.includes("AllUsers") && objAcl.includes("<Permission>READ</Permission>"), objAcl.slice(0, 200));
+  await page.getByRole("link", { name: "acl.txt" }).click();
+  await page.getByRole("heading", { name: "acl.txt" }).waitFor({ timeout: 10000 });
+  await page.getByRole("heading", { name: "Object management overview" }).waitFor({ timeout: 10000 });
+  await page.getByText("Current storage class").waitFor({ timeout: 10000 });
+  check("Object detail: Object management overview is a real section (versioning/replication/lifecycle)", true);
+  await page.goto(UI + "#/s3");
+  await page.getByTestId("snapshot-buckets").waitFor({ timeout: 15000 });
+  const snapCount = Number(await page.getByTestId("snapshot-objects").innerText());
+  check("Buckets page: Account snapshot object count is a real aggregate (>= objects uploaded above)", snapCount >= 4, String(snapCount));
+  await shot("06b-s3-account-snapshot");
+
   // Bucket list shows it
   await page.goto(UI + "#/s3");
   // The list paginates (as the native console does), so find it the way a user would.

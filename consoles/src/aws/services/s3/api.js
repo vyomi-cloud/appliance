@@ -78,6 +78,7 @@ export async function headObject(bucket, key) {
     lastModified: r.headers.get("last-modified") || "",
     storageClass: r.headers.get("x-amz-storage-class") || "STANDARD",
     versionId: r.headers.get("x-amz-version-id") || "null",
+    replicationStatus: r.headers.get("x-amz-replication-status") || null,
     encryption: r.headers.get("x-amz-server-side-encryption") || null,
     kmsKeyId: r.headers.get("x-amz-server-side-encryption-aws-kms-key-id") || null,
     metadata: meta,

@@ -553,5 +553,75 @@
    "Storage Lens dashboards are an account/organization-level analytics product Vyomi does not implement."
   ],
   "api": []
+ },
+ "s3.object.upload-acl": {
+  "title": "Upload-time permissions (ACLs)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": [
+   "PutObject",
+   "CreateMultipartUpload",
+   "GetObjectAcl"
+  ],
+  "tests": [
+   "tests/conformance/test_s3_sweepa_core.py"
+  ]
+ },
+ "s3.account.snapshot": {
+  "title": "Account snapshot",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": [
+   "ListBuckets",
+   "ListObjectsV2"
+  ],
+  "tests": [
+   "tests/conformance/test_s3_core.py"
+  ]
+ },
+ "s3.object.management-overview": {
+  "title": "Object management overview",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": [
+   "GetBucketVersioning",
+   "GetBucketReplication",
+   "GetBucketLifecycleConfiguration",
+   "HeadObject"
+  ],
+  "tests": [
+   "tests/conformance/test_s3_core.py"
+  ]
+ },
+ "s3.account.external-access": {
+  "title": "External access summary",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "IAM Access Analyzer external-access findings for S3 are not modeled; Vyomi has no Access Analyzer service."
+  ],
+  "api": []
+ },
+ "s3.account.directory-buckets": {
+  "title": "Directory buckets",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "S3 Express One Zone directory buckets (zonal endpoints, CreateSession auth) are not modeled; only general purpose buckets exist."
+  ],
+  "api": []
  }
 }
