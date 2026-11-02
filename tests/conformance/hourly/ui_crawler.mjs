@@ -289,7 +289,14 @@ async function createWithDefaults(page, drain, cloud, backToList, service) {
     const fillWizardRequired = async () => {
       for (const w of await blade.locator(".wiz-field:has(.req)").all()) {
         const inp = w.locator("input[type=text], input:not([type])").first();
-        if (await inp.count() && !(await inp.inputValue().catch(() => "x"))) await inp.fill(`crawl-${Date.now().toString(36)}`).catch(() => {});
+        // lowercase letters+digits only: valid for every Azure name rule (a storage account
+        // rejects hyphens), as a user typing a real name would
+        if (await inp.count() && !(await inp.inputValue().catch(() => "x"))) await inp.fill(`crawl${Date.now().toString(36)}`).catch(() => {});
+      }
+      // A VM's admin password sits on Basics, a step the walk has left by the time the
+      // generic password fill below runs: fill it where the user would.
+      for (const inp of await blade.locator(".wiz-field:has(.req) input[type=password]").all()) {
+        if (!(await inp.inputValue().catch(() => "x"))) await inp.fill("Vyomi-Crawl-1a!").catch(() => {});
       }
     };
     // Only name fields are renamed (a log class "Standard" equal to a listed cell is not a name).
