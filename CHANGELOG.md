@@ -4,6 +4,195 @@ All notable changes to Vyomi will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.39] — 2026-11-02
+
+Daily conformance release. **110 product fixes** (AWS 19, GCP 47, Azure 10, all clouds 34); 80 reach Nano and 101 reach the offline appliance; 13 test and harness improvements.
+
+### Highlights
+
+- **EC2, Compute Engine and Azure VMs now run as real in-browser VMs in Nano.** You can SSH in through the vyomi-tunnel bridge, the VM image includes apk and standard CLI tools with allow-listed network access so apk, pip and npm work, and consoles show the true power state and a Connect panel that names the instance. SSH to GCE and Azure VMs also works in the offline appliance.
+- **The GCP console has a new look that matches current Google Cloud.** The side menu, create forms, header and detail pages follow the current style. Every grid now scrolls inside its own frame, shows all fields, and has a Columns button to show or hide columns. This applies to both Nano and offline.
+- **Event-driven setups now work end to end.** EventBridge delivers to SQS and Lambda with the full pattern language, and Step Functions Lambda tasks run your Lambdas. Eventarc and Event Grid triggers fire, and HTTP Cloud Functions return their own responses. Lambda runs uploaded zip code.
+- **Endpoints and connection strings now work from your machine.** Key Vault, Service Bus, SQL, Event Grid, Memorystore and Artifact Registry show URLs you can reach. Managed databases and SQS queue URLs use the address your client actually connected to.
+- **Azure gains a Log Analytics data plane and simulated OpenAI deployments.** You can ingest data with the Data Collector and Logs Ingestion APIs and query it with a KQL subset, and you can create OpenAI deployments that serve a clearly labelled simulated chat, completions and embeddings endpoint. Container Apps run their image in a real Docker container.
+- **A new account menu and default-space dialog make the consoles easier to navigate.** The account menu sits at the top right of the console header and shows your social-login profile. The first visit asks you to choose a default space, and later visits open straight into it.
+- **More than 100 conformance fixes across AWS, GCP and Azure.** Examples include IAM policy and access-key calls, EC2 DeleteSecurityGroup and DeleteVpc dependency checks, KMS GenerateDataKey and Decrypt working with boto3, Firestore queries, GCP subnetworks, and Azure role assignments and subscription keys.
+
+### Fixes — AWS
+
+- **[offline]** EC2 DescribeRouteTables for a deleted/unknown RouteTableId returns InvalidRouteTableID.NotFound like AWS (was an empty list); boto3 coverage for Step Functions aliases/versions/activities, SSM labels/commands (untested ops); suite offline-sdk-python-aws-ops4
+- **[offline]** SNS delivery URLs follow the published simulator port
+- **[Nano + offline]** Create/launch wizard failures say why
+- **[offline]** Create rejects an existing name instead of overwriting it
+- **[Nano + offline]** Keep detail-page actions clear of the Disk chip; cloudwatch UI test reads its own tab on the wire
+- **[Nano]** Truthful Connect tabs for EC2, Compute Engine and Azure VMs
+- **[Nano]** EC2 / Compute Engine / Azure VMs run as real in-browser VMs
+- **[Nano + offline]** Breadcrumb moves from the bar under the header to above each page's feature header
+- **[Nano + offline]** SDK-shaped ListFunctions/GetFunction/CreateFunction, Function URLs, LogType=Tail LogResult and /aws/lambda/<fn> log group (offline + shared core for Nano)
+- **[offline]** Local forwarding URL /elb/<name>/ to a registered target; register endpoint-reachable suites
+- **[offline]** DeleteSecurityGroup implemented on the offline EC2 query path; DeleteVpc enforces DependencyViolation instead of 500
+- **[Nano + offline]** REST invoke URL /restapis/<id>/<stage>/_user_request_/<path>; v2 ApiEndpoint on the simulator origin
+- **[offline]** Offline GenerateDataKey blob is base64 (boto3 works); Decrypt recovers the key from the blob, errors instead of empty plaintext
+- **[Nano + offline]** AttachUserPolicy, PutUserPolicy, CreateAccessKey, Simulate{Principal,Custom}Policy (offline server + Nano core)
+- **[Nano + offline]** EventBridge Lambda targets + invocation count in the Nano console; Nano event-delivery UI test
+- **[Nano + offline]** EventBridge delivers to SQS+Lambda with the full pattern language; Step Functions Lambda tasks run the appliance's Lambdas; shared with Nano
+- **[offline]** CreateFunction runs the uploaded zip (handler module, extra files, real context), errors as FunctionError, LogType=Tail
+- **[offline]** Queue URL uses the origin the client reached, not a hard-coded 127.0.0.1:9000
+- **[offline]** SSH command that works from the user's machine on Docker Desktop
+
+### Fixes — GCP
+
+- **[Nano + offline]** Overview = one read-only grid of every field; fix Artifact Registry getMeta/getProperties
+- **[Nano + offline]** Material icons in the breadcrumb
+- **[Nano + offline]** Create forms in the current Google Cloud style — outlined fields, blue radios, proper titles
+- **[Nano + offline]** Side menu in the current Google Cloud style — 272px, Google Sans 14px, slate items, 36px rows, pill selection, collapsible sections
+- **[Nano + offline]** Content panel inset 12px on all four sides with all four corners rounded
+- **[Nano + offline]** Content area is one full-height white panel; the side menu is a full-height column
+- **[Nano + offline]** Properties is an editable grid; Labels and Properties show when they were last modified
+- **[Nano + offline]** Grids show every field — extra property/label/date columns (credentials excluded), resource links shown as names
+- **[Nano + offline]** Created column on the Compute, Cloud SQL, Functions, VPC, IAM and Monitoring grids
+- **[Nano + offline]** Current Google Cloud look — tinted shell, white rounded content card, pill project/search, sentence-case pill buttons and grid headers
+- **[Nano + offline]** Every grid scrolls (horizontal + vertical, pinned header) inside its own frame
+- **[Nano + offline]** GCP/Azure header search fills the width (no dead space on wide screens), like AWS
+- **[Nano + offline]** The Push / pull tab has a backend (no more 404 per open)
+- **[offline]** Shared notch appbar in the GCP console; fresh session always lands on Spaces
+- **[offline]** One unreadable registry entry no longer hides every docker push
+- **[Nano + offline]** Serve the Push / pull tab's read (getPushpull) offline + Nano
+- **[Nano + offline]** Equal-width field chips; Dashboard Resources split into three cards
+- **[Nano + offline]** Overview and Properties - every field is its own card
+- **[Nano + offline]** Overview = key-fact tiles + Details card; Properties = the full list only
+- **[Nano + offline]** Classic GCP detail lists - label left, value right, thin rules (Overview, Properties, Configuration, ...)
+- **[Nano + offline]** Every grid gets a Columns button to show/hide columns (remembered per grid)
+- **[Nano + offline]** Remove the Monthly estimate card from the create view
+- **[Nano + offline]** Routes/Subnets selection - every row selectable, select-all works; Subnets get checkbox + Delete instead of Actions
+- **[Nano + offline]** VPC tabs - Private Google Access and Flow logs are switches; Routes get row checkboxes + a Delete button on top
+- **[Nano + offline]** Inner detail box - horizontal and vertical rules connect edge to edge
+- **[Nano + offline]** Detail page - borderless outer white card, inner rounded border around the full detail area
+- **[Nano + offline]** Detail card border uses Google's #dadce0 so it is visible
+- **[Nano + offline]** One common rounded border around a detail page (breadcrumb, title, side menu, config area)
+- **[Nano + offline]** Revert "style(gcp-console): each detail tab's content pane is one rounded bordered section"
+- **[Nano + offline]** Each detail tab's content pane is one rounded bordered section
+- **[Nano + offline]** Tab lists and empty states (Objects, Lifecycle, Permissions, Labels, Activity, ...) get the rounded border
+- **[Nano + offline]** Every panel, section and configuration block keeps its rounded border
+- **[Nano + offline]** No border on the white feature card
+- **[Nano + offline]** Dashboard panels keep their rounded border
+- **[Nano + offline]** Grids keep a rounded border; their horizontal rules run edge to edge
+- **[Nano + offline]** The feature area is one white rounded bordered card; inner panels borderless
+- **[Nano + offline]** Breadcrumb moves from the bar under the header into each page's title card
+- **[Nano + offline]** Flat side menu, no group headings (GCP classic design)
+- **[Nano + offline]** Drop the 'Project' caption from the header project picker
+- **[Nano + offline]** Eventarc + Event Grid delivery, /gcf HTTP trigger and function apps in the in-browser sandbox; shared flask/functions_framework/azure.functions shims
+- **[offline]** Offline :runQuery reads the same documents create/list use and evaluates structuredQuery with the shared core (where/orderBy/limit)
+- **[offline]** Subnetwork GET/DELETE routes, network.subnetworks populated, network delete refused while custom subnets exist (matches the Nano core)
+- **[offline]** Eventarc triggers fire (storage finalized, Pub/Sub) with a CloudEvent; HTTP Cloud Functions get a real request and return their own response; triggerId honoured
+- **[offline]** Shown gateway hostname invokes the gateway; native create/get/configs match the REST shape
+- **[Nano + offline]** No fake RUNNING-with-public-IP; cluster says control plane only (endpoint .invalid, statusMessage, conditions)
+- **[Nano + offline]** Memorystore and Artifact Registry endpoints reachable from the user's machine
+- **[Nano + offline]** Working SSH for GCE and Azure VMs; GCE delete no longer leaks the container
+
+### Fixes — Azure
+
+- **[Nano + offline]** Honest Runtime row on Overview when nothing actually runs
+- **[offline]** Event Grid delivers to webhook/storage-queue/function destinations in the subscription's schema; function apps run zip-deployed code and resolve across spaces; event-delivery probe suites
+- **[Nano + offline]** ARM role assignments and built-in roles feed checkAccess; roleDefinitions list the built-ins
+- **[Nano + offline]** Real subscription keys (listSecrets), wrong key 401, unknown API 404, httpx dep + stdlib fallback, find service in the Azure space
+- **[Nano + offline]** Creatable OpenAI deployments + a simulated, labelled inference endpoint (chat, completions, embeddings)
+- **[Nano + offline]** Log Analytics data plane - Data Collector + Logs Ingestion ingest and a KQL-subset query (offline + Nano)
+- **[Nano + offline]** RG delete cascades to VM containers + Key Vault data; ARM never echoes SQL admin password (offline + Nano)
+- **[Nano + offline]** Key Vault / Service Bus / SQL / Event Grid show URLs that work in Nano
+- **[offline]** Shown Key Vault / Event Grid / Service Bus / SQL endpoints work from the user's machine
+- **[Nano + offline]** Container Apps run their image in a real Docker container; honest control-plane-only note elsewhere
+
+### Fixes — all clouds
+
+- **[Nano]** VM image ships apk + standard CLI tools; allow-listed egress in the local relay so apk/pip/npm work inside the VM
+- **[Nano]** Consoles show the in-browser VM's real power state (stopped until it is started)
+- **[Nano]** Download key fetches through the service worker (a plain link 404'd under the portal's /nano/ prefix)
+- **[Nano]** Answer /api/auth/me ('not signed in') where there is no portal instead of a 501
+- **[Nano + offline]** Reserve the bottom drawer's 44px so it never covers console content (Azure blades, GCP/AWS page bottoms)
+- **[Nano + offline]** Account menu + sign-out dialog styled per cloud (AWS / Google account card / Azure flyout)
+- **[Nano + offline]** Show the social-login profile (avatar, name, email, provider) in the account menu
+- **[Nano + offline]** Account menu in the console header (top-right), drawer stays clean
+- **[Nano + offline]** Drawer gets Activate appliance, GitHub stars and Sign out; logo opens Spaces dialog
+- **[Nano + offline]** First-visit dialog is the drawer's Spaces dialog, forced
+- **[Nano + offline]** Default SPACE instead of default cloud; opaque forced chooser
+- **[Nano]** Post-login landing goes to clouds.html so the default-cloud dialog runs
+- **[Nano + offline]** First-visit forced default-cloud dialog; later visits open straight into the default; drawer 'Default cloud' item (offline + Nano)
+- **[Nano + offline]** Bottom drawer on AWS/Azure (offline) and all three Nano consoles; Nano embed mode; drawer + Nano suites
+- **[offline]** Drawer docked at the bottom edge (line along the bottom, drawer rises), floats over the page
+- **[offline]** Back to the always-visible drawer (no auto-hide), no header top border
+- **[offline]** Auto-hide drawer (expands on hover), plain diagonal shape, no top border on the cloud header
+- **[offline]** Drawer is a rounded button shape (straight sides), not diagonal
+- **[offline]** Rounded bottom corners on the notch drawer
+- **[offline]** Drop the 'Cloud: X' label from the notch bar
+- **[offline]** Black top line matching the drawer; top border on the cloud header
+- **[offline]** Disk chip styled as a regular notch item
+- **[offline]** Notch is a line with a dip (----\____/----), not a full-width ribbon
+- **[offline]** Console header sits below the notch bar; disk chip lives in the notch
+- **[Nano]** Connect panel names the instance it connects to
+- **[offline]** Notch icons open the appliance pages in a modal (clouds ?embed=1), console stays put
+- **[offline]** Keep large byte values out of the signed state JSON
+- **[Nano]** In-browser VM engine (v86) + vyomi-tunnel TCP bridge for real ssh
+- **[Nano + offline]** 'Dashboard' is the landing page label in the AWS, GCP and Azure consoles
+- **[Nano + offline]** Remove the intro text under the page titles
+- **[Nano + offline]** Remove the page titles (eyebrow + heading) from every dashboard view
+- **[Nano + offline]** Host utilization above Appliance health in the Health view (Nano + offline)
+- **[offline]** Managed databases reachable from the user's machine; post-create DB probe
+- **[Nano + offline]** Nano-store-delete-sync import path; UI create-with-defaults survives leftover default names
+
+<details><summary>Platform and release pipeline (25)</summary>
+
+- Ec2 row expects the VM power state; Connect check matches the in-browser VM panel
+- Pubsub grid test skips the auto-added columns
+- Ec2 Connect expects the account key (vyomi-<id>.pem), not the launch key pair
+- Match services by label alias (azure.vm shows as Virtual Machines)
+- Gcp-redis Connection tab expects the truthful 'no data plane' text
+- Ignore the portal-only /api/auth/me (501 on the bare local Nano server)
+- Run every console UI suite (offline per cloud + Nano per cloud) as release checks and list them in RELEASE-CHECKS.md
+- No false CREATE_REJECTED from list rows; rename only named fields; KMS alias
+- Taken-name rename that works on repeat runs in every console
+- Rename only genuinely taken names; only wizard 'Next:' steps
+- Stop flagging faithful UI as broken; give the unsharded crawl its full budget
+- Blank-like-real AWS optional fields; walk the account's own row, not a built-in
+- Find the new row through the list filter when it is past page 1
+- Portable SNS receiver host, clear KMS-KEM SDK precondition, diagnosable tab checks
+- Nsg/roledef + monitor no longer race the console under a full run
+- CREATE_REJECTED ignores error words that are hostname labels
+- Keys and Endpoint must show the endpoint ARM reports
+- Wait for the savings card to fill; match its top-4 + Other layout
+- Score nano-store-delete-sync + nano-gcp-compute-core correctly
+- Accept the published data-plane port (16379 offline) instead of a hard-coded 6379
+- Vyomi-tunnel 1.1.0 package copy (VM ssh bridge), docs
+- Core runQuery orderBy/limit guard (Nano substrate)
+- VaultUri is the simulator data-plane URL, not a fake azure hostname
+- Console Home page checks (cost savings + connect cards) for AWS, GCP, Azure
+- UI<->SDK bi-directional round-trip suite (AWS SNS + SQS)
+
+</details>
+
+<details><summary>Test and harness improvements (13)</summary>
+
+- Untested-ops detector no longer reports dispatch-table handler functions as extra ops (Kinesis/SSM/etc. handlers like CreateWindow were counted untested next to their tested SDK names)
+- Cloud SQL instances.patch settings merge/404 core checks (untested ops PatchInstance/PatchSettings); suite nano-gcp-cloudsql-core
+- KMS import jobs create/get/list/duplicate/bad-method core checks (untested ops ImportJob*); suite nano-gcp-kms-core
+- Untested-ops detector maps GCP Artifact Registry/Monitoring ops to the Go/Java SDK calls that already exercise them (harness reported 28 tested ops as untested)
+- Boto3 coverage for Kinesis consumers/encryption/monitoring and SSM maintenance windows/patch baselines (untested ops); suite offline-sdk-python-aws-ops3
+- Gcp service UI flow starts from a clean service (leftover default-named repo from the crawl made Artifact Registry create 409; offline-ui-gcp-artifactregistry flaky)
+- Nano-gcp-compute-core test finds repo root (ModuleNotFoundError: core)
+- Make nano-store-delete-sync importable when run as a script (core path bootstrap)
+- VM ssh probes for EC2, Compute Engine and Azure VMs
+- Nano-core-triggers runs with PYTHONPATH=. and prints [PASS] lines the runner recognises
+- 'pending' suite status + Nano twin of the EC2 post-create probe
+- Post-create 'use it' checks on offline + Nano, run every cycle
+- Allowlist optional columns real AWS also shows as '-'
+
+</details>
+
+### How to upgrade
+
+- **Offline appliance:** `vyomi update` (Homebrew installs older than 3.0.24: run `brew trust vyomi-cloud/tap && brew upgrade vyomi-docker` once first). Docker: `docker pull vyomi/appliance:3.0.39`.
+- **Nano** ([vyomi.cloud](https://vyomi.cloud)): updates with this release; close all Nano tabs and reopen to load it.
+
 ## [3.0.38] — 2026-11-01
 
 Daily conformance release. **3 product fixes** (all clouds 3); 3 reach Nano and 3 reach the offline appliance.
