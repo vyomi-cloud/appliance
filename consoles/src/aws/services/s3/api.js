@@ -58,10 +58,18 @@ export const deleteObject = (bucket, key, versionId) => s3("DELETE", `/${bucket}
 export const createFolder = (bucket, key) => s3("PUT", `/${bucket}/${enc(key.endsWith("/") ? key : key + "/")}`, { body: "" });
 export const objectUrl = (bucket, key) => `/${bucket}/${enc(key)}`;
 
+export const CHECKSUM_LABEL = { crc32: "CRC-32", crc32c: "CRC-32C", crc64nvme: "CRC-64/NVME", sha1: "SHA-1", sha256: "SHA-256" };
+export const CHECKSUM_ALGOS = [["", "None"], ["CRC32", "CRC-32"], ["CRC32C", "CRC-32C"], ["CRC64NVME", "CRC-64/NVME"], ["SHA1", "SHA-1"], ["SHA256", "SHA-256"]];
+
 /** HeadObject — real per-object metadata (size, type, etag, storage class, version, custom x-amz-meta-*). */
 export async function headObject(bucket, key) {
-  const r = await s3("HEAD", `/${bucket}/${enc(key)}`, { raw: true });
+  const r = await s3("HEAD", `/${bucket}/${enc(key)}`, { raw: true, headers: { "x-amz-checksum-mode": "ENABLED" } });
   const meta = {};
+  let checksum = null;
+  for (const [k, v] of r.headers.entries()) {
+    const m = /^x-amz-checksum-(crc32|crc32c|crc64nvme|sha1|sha256)$/.exec(k);
+    if (m) checksum = { algorithm: CHECKSUM_LABEL[m[1]], value: v, type: r.headers.get("x-amz-checksum-type") || "FULL_OBJECT" };
+  }
   for (const [k, v] of r.headers.entries()) if (k.startsWith("x-amz-meta-")) meta[k.slice(11)] = v;
   return {
     size: Number(r.headers.get("content-length") || 0),
@@ -73,6 +81,7 @@ export async function headObject(bucket, key) {
     encryption: r.headers.get("x-amz-server-side-encryption") || null,
     kmsKeyId: r.headers.get("x-amz-server-side-encryption-aws-kms-key-id") || null,
     metadata: meta,
+    checksum,
   };
 }
 

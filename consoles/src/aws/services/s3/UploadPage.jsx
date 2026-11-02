@@ -28,6 +28,7 @@ export default function UploadPage({ params, query }) {
   const [rows, setRows] = useState([]);
   const [sel, setSel] = useState([]);
   const [storageClass, setStorageClass] = useState("Standard");
+  const [checksumAlgo, setChecksumAlgo] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
 
@@ -41,7 +42,7 @@ export default function UploadPage({ params, query }) {
     setBusy(true); setError(null);
     try {
       for (const r of rows) {
-        await api.putObject(bucket, prefix + r.key, r.file, r.file.type, { "x-amz-storage-class": storageClass.toUpperCase().replace(/[ -]/g, "_") });
+        await api.putObject(bucket, prefix + r.key, r.file, r.file.type, { "x-amz-storage-class": storageClass.toUpperCase().replace(/[ -]/g, "_"), ...(checksumAlgo ? { "x-amz-sdk-checksum-algorithm": checksumAlgo } : {}) });
       }
       notify.success(`Successfully uploaded ${rows.length} file${rows.length === 1 ? "" : "s"} to ${bucket}`);
       location.hash = `${href("s3", "buckets", bucket).slice(1)}${prefix ? `?prefix=${encodeURIComponent(prefix)}` : ""}`;
@@ -92,6 +93,11 @@ export default function UploadPage({ params, query }) {
           <Container header={<Header variant="h2">Properties</Header>}>
             <FormField label="Storage class">
               <RadioGroup value={storageClass} onChange={({ detail }) => setStorageClass(detail.value)} items={STORAGE_CLASSES.map((v) => ({ value: v, label: v }))} />
+            </FormField>
+          </Container>
+          <Container header={<Header variant="h2">Additional checksums</Header>}>
+            <FormField label="Checksum function" description="The server computes and stores the checksum with each uploaded object.">
+              <RadioGroup value={checksumAlgo} onChange={({ detail }) => setChecksumAlgo(detail.value)} items={api.CHECKSUM_ALGOS.map(([value, label]) => ({ value, label }))} />
             </FormField>
           </Container>
         </SpaceBetween>

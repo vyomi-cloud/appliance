@@ -465,5 +465,13 @@
    "tests/conformance/test_s3_depth2_core.py",
    "tests/conformance/test_s3_depth4_core.py"
   ]
+ },
+ "s3.object.checksums": {
+  "title": "Additional checksums (x-amz-checksum-*)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "CRC-32, CRC-32C, CRC-64/NVME, SHA-1 and SHA-256 are computed against the standard algorithms and VERIFIED on PutObject (a mismatch is rejected with 400 BadDigest and the object is not stored), whether sent as a header or as an aws-chunked trailer; they are stored with the version, returned on Put/Copy, and on Head/Get when x-amz-checksum-mode is ENABLED. Multipart uploads do not yet carry per-part/composite checksums, and GetObjectAttributes is not implemented."
+  ],
+  "tests": ["tests/conformance/test_s3_checksums_core.py"]
  }
 }

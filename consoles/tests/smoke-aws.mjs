@@ -88,10 +88,13 @@ try {
   await page.getByRole("link", { name: "Upload" }).first().click();
   await page.getByRole("heading", { name: "Upload", exact: true }).waitFor({ timeout: 10000 });
   await page.locator('input[type=file]:not([webkitdirectory])').setInputFiles({ name: "hello.txt", mimeType: "text/plain", buffer: Buffer.from("hello v4") });
+  await page.getByText("SHA-256", { exact: true }).click();
   await page.getByRole("button", { name: "Upload" }).click();
   await page.getByRole("link", { name: "hello.txt" }).waitFor({ timeout: 10000 });
   const obj = await wire(`/${B}/hello.txt`);
   check("S3 upload → object readable over native wire", obj === "hello v4", obj);
+  const sha = await page.evaluate(async (u) => (await fetch(u, { method: "HEAD", headers: { "x-amz-checksum-mode": "ENABLED" } })).headers.get("x-amz-checksum-sha256"), WIRE + `/${B}/hello.txt`);
+  check("UI upload with SHA-256 → checksum stored + returned over native HeadObject", sha === (await import("node:crypto")).createHash("sha256").update("hello v4").digest("base64"), sha);
   await shot("04-s3-uploaded");
   for (const tab of ["Properties", "Permissions", "Management"]) {
     await page.getByRole("tab", { name: tab }).click();
@@ -121,6 +124,7 @@ try {
   await page.getByRole("dialog").getByRole("button", { name: "Save changes" }).click();
   await page.getByRole("cell", { name: "smoke", exact: true }).waitFor({ timeout: 10000 });
   const objTags = await wire(`/${B}/hello.txt?tagging`);
+  check("object Properties shows the Additional checksums value", await page.getByText("SHA-256", { exact: true }).first().isVisible());
   check("UI edit object tags -> visible over native ?tagging", objTags.includes("<Key>env</Key>") && objTags.includes("<Value>smoke</Value>"), objTags.slice(0, 160));
   await page.goBack();
 

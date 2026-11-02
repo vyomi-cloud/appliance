@@ -94,7 +94,9 @@ function Properties({ bucket, objectKey, head, region, url }) {
           {d?.kmsKeyId && <div><Box variant="awsui-key-label">AWS KMS key</Box><div>{d.kmsKeyId}</div></div>}
         </SpaceBetween>
       </CapabilityContainer>
-      <NotSimulatedContainer title="Additional checksums" />
+      <KeyValue title="Additional checksums" columns={3} items={d?.checksum
+        ? [["Checksum function", d.checksum.algorithm], ["Checksum type", d.checksum.type === "FULL_OBJECT" ? "Full object" : "Composite"], ["Checksum value", d.checksum.value]]
+        : [["Checksum function", "-"], ["Checksum value", "No additional checksum was stored when this object was uploaded."]]} />
       <TagsContainer state={tags} save={(t) => api.putObjectTags(bucket, objectKey, t)} limit={10} />
       <Table
         variant="container"

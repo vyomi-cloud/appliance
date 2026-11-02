@@ -28,6 +28,8 @@ import csv
 import hashlib
 import io
 import json
+import zlib
+import base64
 import re
 import urllib.parse
 import uuid
@@ -80,13 +82,17 @@ def _req_id() -> str:
 
 
 def _decode_aws_chunked(body: bytes, headers: dict) -> bytes:
+    return _decode_aws_chunked_full(body, headers)[0]
+
+
+def _decode_aws_chunked_full(body: bytes, headers: dict) -> tuple[bytes, dict]:
     """Strip AWS SDK v2 ``aws-chunked`` framing (see routes/aws_s3.py for the
     full rationale — modern SDKs stream PutObject with chunk-signature headers
     that would corrupt the stored object if kept)."""
     ce = (headers.get("content-encoding") or "").lower()
     sha = headers.get("x-amz-content-sha256", "") or ""
     if "aws-chunked" not in ce and not sha.startswith("STREAMING"):
-        return body
+        return body, {}
     out = bytearray()
     i, n = 0, len(body)
     while i < n:
@@ -100,12 +106,18 @@ def _decode_aws_chunked(body: bytes, headers: dict) -> bytes:
         except ValueError:
             break
         if size == 0:
-            break
+            # trailing headers after the last chunk (x-amz-checksum-*: value)
+            trailers = {}
+            for line in body[i:].split(b"\r\n"):
+                if b":" in line:
+                    k, _, v = line.partition(b":")
+                    trailers[k.decode("latin-1").strip().lower()] = v.decode("latin-1").strip()
+            return bytes(out), trailers
         out += body[i:i + size]
         i += size
         if body[i:i + 2] == b"\r\n":
             i += 2
-    return bytes(out)
+    return bytes(out), {}
 
 
 # ── response builders (return S3Response, not FastAPI Response) ────────────
@@ -185,6 +197,75 @@ def _ensure_object_entry(store: ObjectStore, bucket: str, key: str, create: bool
     if entry["versions"]:
         _refresh_object_entry(entry)
     return entry
+
+
+# ── additional checksums (x-amz-checksum-*): CRC32 / CRC32C / CRC64NVME / SHA1 / SHA256 ──────
+_CHECKSUM_ALGOS = ("CRC32", "CRC32C", "CRC64NVME", "SHA1", "SHA256")
+
+
+def _crc_table(poly: int, width: int) -> list:
+    t = []
+    for n in range(256):
+        c = n
+        for _ in range(8):
+            c = (c >> 1) ^ poly if c & 1 else c >> 1
+        t.append(c & ((1 << width) - 1))
+    return t
+
+
+_CRC32C_T = _crc_table(0x82F63B78, 32)
+_CRC64NVME_T = _crc_table(0x9A6C9329AC4BC9B5, 64)   # reflected form of 0xAD93D23594C93659
+
+
+def _crc(table: list, width: int, data: bytes) -> int:
+    mask = (1 << width) - 1
+    c = mask
+    for byte in data:
+        c = table[(c ^ byte) & 0xFF] ^ (c >> 8)
+    return c ^ mask
+
+
+def _checksum_value(algo: str, data: bytes) -> str:
+    """Base64 of the big-endian checksum, exactly the x-amz-checksum-* wire value."""
+    if algo == "CRC32":
+        raw = (zlib.crc32(data) & 0xFFFFFFFF).to_bytes(4, "big")
+    elif algo == "CRC32C":
+        raw = _crc(_CRC32C_T, 32, data).to_bytes(4, "big")
+    elif algo == "CRC64NVME":
+        raw = _crc(_CRC64NVME_T, 64, data).to_bytes(8, "big")
+    elif algo == "SHA1":
+        raw = hashlib.sha1(data).digest()
+    else:
+        raw = hashlib.sha256(data).digest()
+    return base64.b64encode(raw).decode()
+
+
+def _request_checksum(headers: dict, trailers: dict, data: bytes):
+    """-> (record | None, error_response | None). A supplied x-amz-checksum-<algo> (header or
+    aws-chunked trailer) is VERIFIED against the body (BadDigest on mismatch); a bare
+    x-amz-sdk-checksum-algorithm / x-amz-checksum-algorithm asks the server to compute it."""
+    for algo in _CHECKSUM_ALGOS:
+        want = headers.get(f"x-amz-checksum-{algo.lower()}") or trailers.get(f"x-amz-checksum-{algo.lower()}")
+        if want:
+            got = _checksum_value(algo, data)
+            if want != got:
+                return None, _error_xml("BadDigest", f"The {algo} you specified did not match the calculated checksum.", "", 400)
+            return {"algorithm": algo, "value": got, "type": "FULL_OBJECT"}, None
+    asked = (headers.get("x-amz-sdk-checksum-algorithm") or headers.get("x-amz-checksum-algorithm") or "").upper()
+    if asked in _CHECKSUM_ALGOS:
+        return {"algorithm": asked, "value": _checksum_value(asked, data), "type": "FULL_OBJECT"}, None
+    if asked:
+        return None, _error_xml("InvalidRequest", f"Checksum algorithm provided is unsupported. Please try again with any of the valid types: [{', '.join(_CHECKSUM_ALGOS)}]", "", 400)
+    return None, None
+
+
+def _checksum_headers(record: dict | None, headers: dict, always: bool = False) -> dict:
+    if not record:
+        return {}
+    if not always and (headers.get("x-amz-checksum-mode") or "").upper() != "ENABLED":
+        return {}
+    return {f"x-amz-checksum-{record['algorithm'].lower()}": record["value"],
+            "x-amz-checksum-type": record.get("type", "FULL_OBJECT")}
 
 
 def _make_version_record(*, data: bytes = b"", content_type: str = "application/octet-stream",
@@ -1361,7 +1442,10 @@ def put_object(store: ObjectStore, bucket: str, key: str, body: bytes, headers: 
     headers = {k.lower(): v for k, v in (headers or {}).items()}
     if not store.bucket_exists(bucket):
         return _error_xml("NoSuchBucket", "The specified bucket does not exist.", f"/{bucket}", 404)
-    data = _decode_aws_chunked(body or b"", headers)
+    data, trailers = _decode_aws_chunked_full(body or b"", headers)
+    checksum, bad = _request_checksum(headers, trailers, data)
+    if bad:
+        return bad
     content_type = headers.get("content-type", "application/octet-stream")
     storage_class = headers.get("x-amz-storage-class", "STANDARD")
     user_meta = {h[11:]: v for h, v in headers.items() if h.startswith("x-amz-meta-")}
@@ -1371,12 +1455,15 @@ def put_object(store: ObjectStore, bucket: str, key: str, body: bytes, headers: 
     version = _make_version_record(data=data, content_type=content_type,
                                    storage_class=storage_class, metadata=user_meta, tags=tags,
                                    version_id=vid, delete_marker=False)
+    if checksum:
+        version["checksum"] = checksum
     _apply_object_lock_on_write(store, bucket, headers, version)
     replace = "__overwrite__" if vstatus == "Disabled" else ("null" if vstatus == "Suspended" else None)
     entry = _write_object_version(store, bucket, key, version, replace_version_id=replace)
     _replicate(store, bucket, key, entry)
     _emit(store, bucket, key, "s3:ObjectCreated:Put", entry, "PutObject")
     extra = {"ETag": version["etag"], "x-amz-version-id": entry.get("current_version_id", vid)}
+    extra.update(_checksum_headers(checksum, headers, always=True))
     extra.update(_sse_headers(store, bucket))
     extra.update(_cors_response_headers(store, bucket, headers, "PUT"))
     _record_request_metrics(store, bucket, key, "PUT", 200, bytes_up=len(data))
@@ -1427,6 +1514,8 @@ def copy_object(store: ObjectStore, bucket: str, key: str, headers: dict) -> S3R
                                    content_type=content_type,
                                    storage_class=storage_class, metadata=user_meta, tags=tags,
                                    version_id=vid, delete_marker=False)
+    if src_obj.get("checksum"):
+        version["checksum"] = dict(src_obj["checksum"])
     _apply_object_lock_on_write(store, bucket, headers, version)
     replace = "__overwrite__" if vstatus == "Disabled" else ("null" if vstatus == "Suspended" else None)
     entry = _write_object_version(store, bucket, key, version, replace_version_id=replace)
@@ -1446,6 +1535,7 @@ def copy_object(store: ObjectStore, bucket: str, key: str, headers: dict) -> S3R
 
 
 def head_object(store: ObjectStore, bucket: str, key: str, query: dict, headers: dict) -> S3Response:
+    headers = {k.lower(): v for k, v in (headers or {}).items()}
     if not store.bucket_exists(bucket):
         return _error_xml("NoSuchBucket", "The specified bucket does not exist.", f"/{bucket}/{key}", 404)
     blocked = _request_payer_block(store, bucket, headers)
@@ -1474,6 +1564,7 @@ def head_object(store: ObjectStore, bucket: str, key: str, query: dict, headers:
     for k, v in obj.get("metadata", {}).items():
         h[f"x-amz-meta-{k}"] = v
     h.update(_sse_headers(store, bucket))
+    h.update(_checksum_headers(obj.get("checksum"), headers))
     h.update(_cors_response_headers(store, bucket, headers, "HEAD"))
     h.update(_request_charged_header(headers))
     _record_request_metrics(store, bucket, key, "HEAD", 200)
@@ -1528,6 +1619,7 @@ def get_object(store: ObjectStore, bucket: str, key: str, query: dict, headers: 
     for k, v in obj.get("metadata", {}).items():
         h[f"x-amz-meta-{k}"] = v
     h.update(_sse_headers(store, bucket))
+    h.update(_checksum_headers(obj.get("checksum"), headers))
     h.update(_cors_response_headers(store, bucket, headers, "GET"))
     h.update(_request_charged_header(headers))
     _record_request_metrics(store, bucket, key, "GET", status, bytes_down=len(data))
