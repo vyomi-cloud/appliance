@@ -4,7 +4,11 @@ Each context holds a full in-memory copy and saves the whole snapshot, so a copy
 deleted key brings it back on its next save. Runs on host CPython.
 """
 import json
+import os
+import sys
 import types
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 try:
     from core import nano_persist as np

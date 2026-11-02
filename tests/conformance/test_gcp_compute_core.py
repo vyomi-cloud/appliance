@@ -1,8 +1,10 @@
 """Compute Engine REST (the wire of `gcloud compute`) over the console's records. Host CPython."""
 import json
+import os
 import sys
 import types
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 from core import gcp_compute_core as c
 
 P = {"projectId": "p1", "projectNumber": "123"}
