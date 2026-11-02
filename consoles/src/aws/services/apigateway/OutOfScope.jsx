@@ -11,13 +11,12 @@
  * genuine, documented control plane for them (CreatePortal, CreatePortalProduct, …) —
  * see core/apigatewayv2_core.py — so they are built for real, not honest gaps. */
 import Box from "@cloudscape-design/components/box";
-import { NotSimulatedContainer } from "../../kit/common.jsx";
+import { CapabilityContainer } from "../../kit/Capability.jsx";
 
 export function AgentcoreTargets() {
   return (
     <Box padding="l">
-      <NotSimulatedContainer title="AgentCore targets" feature="Bedrock AgentCore gateway targets"
-        note="Vyomi does not implement Bedrock AgentCore. The Target, AgentCore gateway, Status, Description, Last synchronized and Date created columns, the Create new AgentCore gateway and Add AgentCore target actions, and the How to enable MCP access to your APIs using AgentCore section aren't modeled." />
+      <CapabilityContainer id="apigateway.agentcore-targets" title="AgentCore targets" />
     </Box>
   );
 }

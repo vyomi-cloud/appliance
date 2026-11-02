@@ -12,7 +12,8 @@ import SpaceBetween from "@cloudscape-design/components/space-between";
 import Button from "@cloudscape-design/components/button";
 import { follow, navigate } from "../../../common/router.js";
 import { useNotify } from "../../../common/notify.jsx";
-import { ErrorAlert, NotSimulatedContainer } from "../../kit/common.jsx";
+import { ErrorAlert } from "../../kit/common.jsx";
+import { CapabilityContainer } from "../../kit/Capability.jsx";
 import * as api from "./api.js";
 
 const TEMPLATES = ["From scratch", "Serverless API backend", "File processing", "Scheduled job", "Notifications processing", "Queue processing"];
@@ -66,9 +67,9 @@ export default function CreateApplication() {
   return (
     <ContentLayout header={<Header variant="h1">Create application</Header>}>
       <Tabs tabs={[
-        { id: "cicd", label: "CI/CD pipeline application", content: <NotSimulatedContainer title="CI/CD pipeline application" feature="Lambda application CI/CD pipelines" note="A CI/CD pipeline application wires a CodePipeline/CodeBuild/CodeDeploy pipeline around a stack — Vyomi has no CI/CD pipeline core. Use the Serverless application tab." /> },
+        { id: "cicd", label: "CI/CD pipeline application", content: <CapabilityContainer id="lambda.application.cicd-pipeline" title="CI/CD pipeline application" /> },
         { id: "serverless", label: "Serverless application", content: serverlessApplicationTab },
-        { id: "composer", label: "Build with Infrastructure Composer", content: <NotSimulatedContainer title="Build with Infrastructure Composer" feature="AWS Infrastructure Composer" note="Infrastructure Composer is a visual drag-and-drop canvas for authoring a SAM template — Vyomi has no visual template designer. Use the Serverless application tab." /> },
+        { id: "composer", label: "Build with Infrastructure Composer", content: <CapabilityContainer id="lambda.application.infrastructure-composer" title="Build with Infrastructure Composer" /> },
       ]} />
     </ContentLayout>
   );

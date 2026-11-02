@@ -132,5 +132,16 @@
   "tests": [
    "tests/conformance/test_kms_console_v4_core.py"
   ]
+ },
+ "kms.custom-key-store-keys": {
+  "title": "Keys backed by a custom key store (CloudHSM / external)",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Creating a key with CloudHSM or external key store origin needs a CONNECTED custom key store; the CloudHSM cluster / external key manager proxy does not exist in Vyomi, so ConnectCustomKeyStore always ends FAILED."
+  ],
+  "api": []
  }
 }

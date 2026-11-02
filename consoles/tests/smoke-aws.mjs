@@ -864,6 +864,19 @@ try {
   check("Lambda function created over wire (CLI) → shown in Functions list", true);
   await shot("17-lambda-functions");
 
+  // Lambda Configuration > State machines: a Step Functions machine created over the native wire
+  // that invokes this function is listed in the console.
+  {
+    const SMN = `v4smoke-sm-${Date.now() % 100000}`;
+    const fnArn = (await lam("GET", `/2015-03-31/functions/${FN2}`)).Configuration?.FunctionArn || `arn:aws:lambda:us-east-1:123456789012:function:${FN2}`;
+    const sfnR = JSON.parse(await wire("/", { method: "POST", headers: { "x-amz-target": "AWSStepFunctions.CreateStateMachine", "content-type": "application/x-amz-json-1.0", authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/states/aws4_request, SignedHeaders=host, Signature=0" },
+      body: JSON.stringify({ name: SMN, roleArn: "arn:aws:iam::123456789012:role/r", definition: JSON.stringify({ StartAt: "A", States: { A: { Type: "Task", Resource: fnArn, End: true } } }) }) }));
+    await page.goto(UI + `#/lambda/functions/${FN2}`);
+    await page.getByRole("tab", { name: "Configuration" }).click();
+    await page.getByText(SMN, { exact: true }).waitFor({ timeout: 10000 });
+    check("Lambda Configuration lists the Step Functions state machine that invokes it (wire -> UI)", !!sfnR.stateMachineArn);
+  }
+
   // Lambda: an async (Event) Test invoke really delivers to the function's configured
   // OnSuccess destination — the "Asynchronous" radio used to be wired to nothing.
   const DESTQ = `v4smoke-lambda-dest-${Date.now() % 100000}`;

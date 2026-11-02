@@ -20,7 +20,7 @@ import { useNotify } from "../../../common/notify.jsx";
 import { follow, href } from "../../../common/router.js";
 import DeleteModal from "../../kit/DeleteModal.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
-import { ErrorAlert, fmtBytes, fmtDate, KeyValue, NotSimulatedContainer } from "../../kit/common.jsx";
+import { ErrorAlert, fmtBytes, fmtDate, KeyValue } from "../../kit/common.jsx";
 import * as api from "./api.js";
 
 const EVENT_KEY = (name) => `vyomi.lambda.testEvents.${name}`;
@@ -436,7 +436,7 @@ function ConfigurationTab({ name, cfg, reload }) {
         <FormField label="Security groups" description="Comma-separated security group IDs — required together with at least one subnet."><Input value={sgs} onChange={({ detail }) => setSgs(detail.value)} placeholder="sg-0123456789abcdef0" /></FormField>
       </EditModal>
 
-      <NotSimulatedContainer title="RDS databases" feature="Lambda RDS database connectivity helper" />
+      <CapabilityContainer id="lambda.function.rds-databases" title="RDS databases" />
 
       <KeyValue title="Monitoring and operations tools" actions={<Button onClick={() => setEditOps(true)}>Edit</Button>}
         columns={3} items={[["CloudWatch Logs", "Enabled"], ["Log format", cfg.LoggingConfig?.LogFormat], ["Log group", `/aws/lambda/${name}`], ["AWS X-Ray", cfg.TracingConfig?.Mode === "Active" ? "Active" : "PassThrough"], ["Enhanced monitoring", "Disabled"]]} />
@@ -524,12 +524,37 @@ function ConfigurationTab({ name, cfg, reload }) {
         <FormField label="Local mount path" description="Must be an absolute path under /mnt/."><Input value={mount} onChange={({ detail }) => setMount(detail.value)} /></FormField>
       </EditModal>
 
-      <NotSimulatedContainer title="State machines" feature="Step Functions state machines using this function as a task" />
+      <StateMachinesUsing arn={cfg.FunctionArn} name={name} />
     </SpaceBetween>
   );
 }
 
 // ── Aliases ────────────────────────────────────────────────────────────────────────────
+function StateMachinesUsing({ arn, name }) {
+  // Step Functions state machines whose definition invokes this function (as the task Resource
+  // or a lambda:invoke Parameters.FunctionName), found via native ListStateMachines + DescribeStateMachine.
+  const t = useAsync(async () => {
+    const all = await api.listStateMachines();
+    const described = await Promise.all(all.map((m) => api.describeStateMachine(m.stateMachineArn).catch(() => null)));
+    return described.filter((d) => d && ((d.definition || "").includes(arn) || (d.definition || "").includes(`:function:${name}`)));
+  }, [arn, name]);
+  return (
+    <CapabilityContainer id="lambda.function.state-machines" title="State machines" counter={t.data ? `(${t.data.length})` : undefined}
+      description="Step Functions state machines that use this function as a task.">
+      {t.error ? <ErrorAlert error={t.error} /> : (
+        <Table variant="embedded" loading={t.loading} loadingText="Loading state machines" items={t.data || []} trackBy="stateMachineArn"
+          empty={<Box color="text-body-secondary">No state machine uses this function.</Box>}
+          columnDefinitions={[
+            { id: "n", header: "Name", cell: (m) => m.name },
+            { id: "t", header: "Type", cell: (m) => m.type },
+            { id: "s", header: "Status", cell: (m) => m.status },
+            { id: "c", header: "Created", cell: (m) => fmtDate(m.creationDate) },
+          ]} />
+      )}
+    </CapabilityContainer>
+  );
+}
+
 function AliasesTab({ name }) {
   const notify = useNotify();
   const t = useAsync(() => api.listAliases(name), [name]);

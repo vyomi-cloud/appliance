@@ -19,8 +19,8 @@ import Box from "@cloudscape-design/components/box";
 import TagEditor from "@cloudscape-design/components/tag-editor";
 import { useNotify } from "../../../common/notify.jsx";
 import { navigate } from "../../../common/router.js";
-import { ErrorAlert, NotSimulated } from "../../kit/common.jsx";
-import { capability } from "../../kit/Capability.jsx";
+import { ErrorAlert } from "../../kit/common.jsx";
+import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { PrincipalTable, OtherAccountsTable, useIamPrincipals } from "./PrincipalPicker.jsx";
 import { DEFAULT_ACCOUNT_ID, buildKeyPolicy } from "./policy.js";
 import * as api from "./api.js";
@@ -59,7 +59,7 @@ function ConfigureKeyStep({ s, set }) {
               { value: "CLOUDHSM", label: "AWS CloudHSM key store", disabled: true, description: "Requires a connected custom key store." },
               { value: "XKS", label: "External key store", disabled: true, description: "Requires a connected custom key store." },
             ]} />
-            {(s.origin === "CLOUDHSM" || s.origin === "XKS") && <NotSimulated feature="Custom key stores" note={capability("kms.custom-key-stores")?.limitations?.join(" ")} />}
+            {(s.origin === "CLOUDHSM" || s.origin === "XKS") && <CapabilityContainer id="kms.custom-key-store-keys" title="Custom key stores" />}
           </FormField>
           <FormField label="Regionality">
             <Tiles value={s.regionality} onChange={({ detail }) => set({ regionality: detail.value })} columns={1} items={[

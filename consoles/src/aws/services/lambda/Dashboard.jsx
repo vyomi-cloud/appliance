@@ -11,7 +11,8 @@ import Spinner from "@cloudscape-design/components/spinner";
 import { getRegion } from "../../../common/wire.js";
 import { follow } from "../../../common/router.js";
 import { useAsync } from "../../../common/useAsync.js";
-import { ErrorAlert, fmtBytes, KeyValue, NotSimulatedContainer } from "../../kit/common.jsx";
+import { ErrorAlert, fmtBytes, KeyValue } from "../../kit/common.jsx";
+import { CapabilityContainer } from "../../kit/Capability.jsx";
 import * as api from "./api.js";
 
 const ACCOUNT_LIMIT = 1000;
@@ -32,7 +33,7 @@ export default function Dashboard() {
   return (
     <ContentLayout header={<Header variant="h1">Dashboard</Header>}>
       <SpaceBetween size="l">
-        <NotSimulatedContainer title="Set up your agent to build with Lambda" feature="Lambda's AI coding-agent onboarding (MCP server + agent prompt)" />
+        <CapabilityContainer id="lambda.dashboard.agent-onboarding" title="Set up your agent to build with Lambda" />
 
         <Tabs tabs={[
           {

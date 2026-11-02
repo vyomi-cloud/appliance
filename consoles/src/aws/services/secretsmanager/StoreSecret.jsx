@@ -26,7 +26,7 @@ import Button from "@cloudscape-design/components/button";
 import Table from "@cloudscape-design/components/table";
 import { useNotify } from "../../../common/notify.jsx";
 import { navigate } from "../../../common/router.js";
-import { ErrorAlert, NotSimulatedContainer, fmtDate } from "../../kit/common.jsx";
+import { ErrorAlert, fmtDate } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import KeyValueOrPlaintext from "./KeyValueOrPlaintext.jsx";
 import * as api from "./api.js";
@@ -67,8 +67,7 @@ function SecretTypeStep({ s, set, dbAliases, dbInstances, dbInstancesLoading }) 
             items={SECRET_TYPES.map((v) => ({ value: v, label: v }))} />
         </FormField>
       </Container>
-      {isManaged && <NotSimulatedContainer title="Managed external secret"
-        note="Managed external secrets are provisioned on your behalf by another AWS service (e.g. Amazon Redshift, RDS Managed Secrets) — Vyomi doesn't model that provisioning flow. Store the credential manually using 'Other type of secret' instead." />}
+      {isManaged && <CapabilityContainer id="secretsmanager.secret.managed-external" title="Managed external secret" />}
       {(isDb || isOther) && (
         <Container header={<Header variant="h2">{isOther ? "Key/value pairs" : "Credentials"}</Header>}>
           {isOther ? (
@@ -116,8 +115,7 @@ function SecretTypeStep({ s, set, dbAliases, dbInstances, dbInstancesLoading }) 
         </CapabilityContainer>
       )}
       {isDb && !isOtherDb && !isRds && (
-        <NotSimulatedContainer title="Database" feature="DocumentDB/Redshift instance picker"
-          note="Vyomi has no DocumentDB or Redshift core, so browsing and selecting an existing instance of either isn't modeled — enter the connecting credentials above and connect manually. Amazon RDS database instances ARE modeled; pick 'Credentials for Amazon RDS database' to browse real DB instances." />
+        <CapabilityContainer id="secretsmanager.secret.docdb-redshift-picker" title="Database" />
       )}
       <CapabilityContainer id="secretsmanager.secret.encryption" title="Encryption key">
         <FormField label="Encryption key" description="KMS key Vyomi creates, or a customer managed KMS key.">
@@ -212,8 +210,7 @@ function ConfigureRotationStep({ s, set }) {
         </SpaceBetween>
       </CapabilityContainer>
       {s.rotation && (
-        <NotSimulatedContainer title="Rotation function" feature="Lambda rotation function"
-          note="Rotation normally invokes a Lambda rotation function to generate the new secret value. Vyomi has no Lambda runtime wired to Secrets Manager, so both the schedule firing on its own and 'Rotate immediately' carry the current value forward into a fresh version — the same AWSCURRENT/AWSPREVIOUS transition a real rotation performs — without a Lambda step. Create function isn't available." />
+        <CapabilityContainer id="secretsmanager.rotation.lambda-function" title="Rotation function" />
       )}
     </SpaceBetween>
   );

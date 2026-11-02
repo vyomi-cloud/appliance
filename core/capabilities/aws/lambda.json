@@ -254,5 +254,63 @@
   "tests": [
    "tests/conformance/test_stepfunctions_core.py"
   ]
+ },
+ "lambda.function.state-machines": {
+  "title": "Step Functions state machines using a function",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "Derived live from the real Step Functions core: ListStateMachines + DescribeStateMachine, filtered to definitions that reference the function ARN or name."
+  ],
+  "api": [],
+  "tests": [
+   "tests/conformance/test_stepfunctions_core.py"
+  ]
+ },
+ "lambda.function.rds-databases": {
+  "title": "Lambda RDS database connectivity helper",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "The RDS proxy/connection helper creates an RDS Proxy and rewires the function's VPC and IAM auth. Vyomi has no RDS Proxy; RDS instances are modeled but a Lambda cannot be attached to them through this helper. Configure VPC and environment variables manually."
+  ],
+  "api": []
+ },
+ "lambda.dashboard.agent-onboarding": {
+  "title": "AI coding-agent onboarding (MCP server + agent prompt)",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "The onboarding card connects a hosted AI coding agent to Lambda. That needs the Bedrock/agent product family, which Vyomi does not implement."
+  ],
+  "api": []
+ },
+ "lambda.application.cicd-pipeline": {
+  "title": "Lambda application CI/CD pipelines",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "A CI/CD pipeline application wires a CodePipeline/CodeBuild/CodeDeploy pipeline around a stack. Vyomi has no CI/CD pipeline core. Use the Serverless application tab."
+  ],
+  "api": []
+ },
+ "lambda.application.infrastructure-composer": {
+  "title": "AWS Infrastructure Composer",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Infrastructure Composer is a visual drag-and-drop canvas for authoring a SAM template. Vyomi has no visual template designer. Use the Serverless application tab."
+  ],
+  "api": []
  }
 }

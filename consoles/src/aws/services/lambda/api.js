@@ -141,4 +141,5 @@ export const replicateFunction = (name, regions) => restJson("PUT", `${F}/${enc(
 const SFN_ROLE_ARN = `arn:aws:iam::${"123456789012"}:role/service-role/StepFunctions-vyomi-role`;
 const sfn = (action, body) => awsJson("stepfunctions", `AWSStepFunctions.${action}`, body);
 export const listStateMachines = async () => (await sfn("ListStateMachines", {})).stateMachines || [];
+export const describeStateMachine = (arn) => sfn("DescribeStateMachine", { stateMachineArn: arn });
 export const createStateMachine = (name, definition) => sfn("CreateStateMachine", { name, roleArn: SFN_ROLE_ARN, definition: JSON.stringify(definition) });
