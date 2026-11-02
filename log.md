@@ -1,3 +1,18 @@
+### Upstream watch — 2026-11-02T22:28:09+00:00
+
+Tracking 4252 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**5 change(s), 0 actionable.**
+- · `spec-commit` Azure compute: [Compute] Clarify Auto zone placement and Any-only disk alignment documentation (#47457) ([link](https://github.com/Azure/azure-rest-api-specs/commit/05ff20f36d7d4de3a774e5c6b37e1e58a66eaadf))
+- · `operation-flapping` GCP sqladmin/v1beta4: operation sql.workloadCaptures.start changed
+- · `operation-flapping` GCP sqladmin/v1beta4: operation sql.workloadCaptures.startReplay changed
+- · `operation-flapping` GCP sqladmin/v1beta4: operation sql.workloadCaptures.stop changed
+- · `operation-flapping` GCP sqladmin/v1beta4: operation sql.workloadCaptures.stopReplay changed
+
+Sources that failed this run (2): maven/com.azure:azure-security-keyvault-secrets: The read operation timed out; maven/com.azure:azure-data-appconfiguration: The read operation timed out
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-02T21:28:17+00:00
 
 Tracking 4252 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
