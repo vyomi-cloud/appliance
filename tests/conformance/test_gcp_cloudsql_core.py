@@ -138,6 +138,24 @@ def run() -> int:
     pm = csql.dispatch(st, "PATCH", PROJ + "/ghost", {}, {"content-type": "application/json"}, b"{}")
     _check("patch unknown instance 404", pm.status == 404)
 
+    # workloadCaptures start/stop/startReplay/stopReplay (sqladmin v1beta4; stopReplay now needs workloadId)
+    def wc(verb, body=None, q=None, inst="shopdb"):
+        return csql.dispatch(st, "POST", PROJ + "/%s/workloadCaptures/%s" % (inst, verb), q or {},
+                             {"content-type": "application/json"}, json.dumps(body or {}).encode())
+    r = wc("start", {"workloadCapture": {"captureDurationSeconds": 60}})
+    _check("workloadCaptures.start 200 sql#operation", r.status == 200 and _jbody(r)["kind"] == "sql#operation")
+    _check("workloadCaptures.start operationType", _jbody(r)["operationType"] == "START_WORKLOAD_CAPTURE")
+    _check("workloadCaptures.start twice 400", wc("start").status == 400)
+    _check("workloadCaptures.stop 200", wc("stop").status == 200)
+    _check("workloadCaptures.stop when idle 400", wc("stop").status == 400)
+    _check("workloadCaptures.startReplay 200", wc("startReplay", q={"workloadId": "w1"}).status == 200)
+    _check("workloadCaptures.stopReplay without workloadId 400", wc("stopReplay").status == 400)
+    _check("workloadCaptures.stopReplay wrong workloadId 400", wc("stopReplay", q={"workloadId": "zz"}).status == 400)
+    _check("workloadCaptures.stopReplay 200", wc("stopReplay", q={"workloadId": "w1"}).status == 200)
+    _check("workloadCaptures unknown instance 404", wc("start", inst="ghost").status == 404)
+    ops = _jbody(csql.dispatch(st, "GET", "/sql/v1beta4/projects/demo-proj/operations", {"instance": "shopdb"}, {}, b""))
+    _check("workload ops in operation log", "STOP_WORKLOAD_REPLAY" in [o["operationType"] for o in ops["items"]])
+
     print("\nRESULT: PASS — GCP Cloud SQL control-plane core conforms "
           "(native Cloud SQL Admin REST wire) on this substrate.")
     return 0

@@ -593,6 +593,45 @@ def _backup_runs(store, project, instance, method, payload, run_id) -> CloudSqlR
 # ── native-wire dispatcher (REST path + method → operation) ────────────────
 # Single routing point for the native Cloud SQL Admin REST API — what an
 # unmodified google-cloud-sql-admin / gcloud sql client speaks.
+_WORKLOAD_OPS = {"start": "START_WORKLOAD_CAPTURE", "stop": "STOP_WORKLOAD_CAPTURE",
+                 "startReplay": "START_WORKLOAD_REPLAY", "stopReplay": "STOP_WORKLOAD_REPLAY"}
+
+
+def _workload_capture(store: SqlStore, project: str, instance: str, verb: str,
+                      payload: dict, query: dict) -> CloudSqlResponse:
+    """sql.workloadCaptures.{start,stop,startReplay,stopReplay} (sqladmin v1beta4).
+
+    Request body is WorkloadCapturesStartRequest (start); stopReplay now takes the
+    workloadId query parameter. State is tracked on the instance record."""
+    rec = _get_instance(store, project, instance)
+    if not rec:
+        return _not_found(f"The Cloud SQL instance does not exist. Instance: {instance}")
+    wl = rec.setdefault("workloadCaptures", {})
+    if verb == "start":
+        if wl.get("active"):
+            return _err(400, "FAILED_PRECONDITION", "A workload capture is already running on this instance.")
+        wid = str(uuid.uuid4())
+        wl.update({"active": wid, "config": payload.get("workloadCapture") or payload or {}})
+    elif verb == "stop":
+        if not wl.get("active"):
+            return _err(400, "FAILED_PRECONDITION", "No workload capture is running on this instance.")
+        wl["last"] = wl.pop("active")
+    else:
+        wid = str(query.get("workloadId") or payload.get("workloadId") or "")
+        if verb == "stopReplay" and not wid:
+            return _err(400, "INVALID_ARGUMENT", "Missing required parameter: workloadId")
+        if verb == "startReplay":
+            wl["replay"] = wid or wl.get("last") or ""
+        elif wl.get("replay") != wid:
+            return _err(400, "FAILED_PRECONDITION", "No workload replay with that workloadId is running.")
+        else:
+            wl.pop("replay", None)
+    op = _op(rec, _WORKLOAD_OPS[verb])
+    store.put_instance(_key(project, instance), rec)
+    store.persist()
+    return _json(200, op)
+
+
 def dispatch(store: SqlStore, method: str, path: str,
              query: dict | None = None, headers: dict | None = None,
              body: bytes = b"") -> CloudSqlResponse:
@@ -632,6 +671,8 @@ def dispatch(store: SqlStore, method: str, path: str,
         return _patch_instance(store, project, segs[3], payload)
     if len(segs) == 5 and segs[4] == "promoteReplica" and method == "POST":
         return _promote_replica(store, project, segs[3])
+    if len(segs) == 6 and segs[4] == "workloadCaptures" and segs[5] in _WORKLOAD_OPS and method == "POST":
+        return _workload_capture(store, project, segs[3], segs[5], payload, query)
     if len(segs) == 5 and segs[4] == "users":
         return _users(store, project, segs[3], method, payload, query)
     if len(segs) in (5, 6) and segs[4] == "backupRuns":
