@@ -34,6 +34,7 @@ from datetime import datetime, timezone
 from xml.sax.saxutils import escape as _xml_escape
 
 from core.iam_store import IamStore
+from core.iam_store import NativeIamEvaluator as _NativeEval
 
 IAM_NS = "https://iam.amazonaws.com/doc/2010-05-08/"
 
@@ -1096,7 +1097,7 @@ def _resolve_policy_docs(store, principal: str) -> tuple[dict, list[dict], dict 
                     if p:
                         docs.append(p["document"])
                 docs.extend(g.get("inline_policies", {}).values())
-        return ({"arn": u["arn"], "type": "user", "name": u["user_name"]}, docs, boundary_doc(u))
+        return ({"arn": u["arn"], "type": "user", "name": u["user_name"], "tags": u.get("tags") or {}, "id": u.get("user_id", "")}, docs, boundary_doc(u))
     r = store.get_role(name)
     if r:
         for arn in r["attached_policies"]:
@@ -1104,7 +1105,7 @@ def _resolve_policy_docs(store, principal: str) -> tuple[dict, list[dict], dict 
             if p:
                 docs.append(p["document"])
         docs.extend(r["inline_policies"].values())
-        return ({"arn": r["arn"], "type": "role", "name": r["role_name"]}, docs, boundary_doc(r))
+        return ({"arn": r["arn"], "type": "role", "name": r["role_name"], "tags": r.get("tags") or {}, "id": r.get("role_id", "")}, docs, boundary_doc(r))
     return ({"arn": ref, "type": "unknown", "name": name}, [], None)
 
 
@@ -1120,6 +1121,101 @@ def _apply_boundary(store, boundary_doc: dict | None, decision: str, action: str
     return b_decision if b_decision != "allowed" else "allowed"
 
 
+def _principal_matches(principal, caller_arn: str, account_id: str) -> str | None:
+    """How a resource-policy statement's Principal relates to the caller: "direct" (names the caller, or "*"),
+    "delegate" (the account root: defers to identity policies) or None (someone else)."""
+    if principal in (None, ""):
+        return None
+    vals = []
+    if principal == "*":
+        return "direct"
+    if isinstance(principal, dict):
+        for v in principal.values():
+            vals.extend(v if isinstance(v, list) else [v])
+    else:
+        vals = principal if isinstance(principal, list) else [principal]
+    for v in vals:
+        if v == "*" or v == caller_arn:
+            return "direct"
+    if any(v == f"arn:aws:iam::{account_id}:root" or v == account_id for v in vals):
+        return "delegate"
+    return None
+
+
+def _resource_policy_decision(store, rdoc: dict | None, caller_arn: str, action: str, resource: str, ctx: dict):
+    """(effect, ) of a resource-based policy for this caller: "explicitDeny", "allowed" (an Allow naming the caller
+    directly) or None (no applicable statement / only an account-root delegation)."""
+    if not rdoc:
+        return None
+    stmts = rdoc.get("Statement") or []
+    stmts = [stmts] if isinstance(stmts, dict) else stmts
+    allow = False
+    for st in stmts:
+        rel = _principal_matches(st.get("Principal"), caller_arn, store.account_id)
+        if rel is None:
+            continue
+        if not _NativeEval._statement_matches(st, action, resource, ctx):
+            continue
+        eff = str(st.get("Effect", "")).lower()
+        if eff == "deny":
+            return "explicitDeny"
+        if eff == "allow" and rel == "direct":
+            allow = True
+    return "allowed" if allow else None
+
+
+def _missing_context(docs: list, action: str, resource: str, ctx: dict) -> list[str]:
+    """Condition keys referenced by statements that match the action/resource but have no value in the
+    simulation context (AWS reports these as MissingContextValues so the caller can supply them)."""
+    miss = []
+    ev = _NativeEval
+    for doc in docs:
+        stmts = (doc or {}).get("Statement") or []
+        for st in ([stmts] if isinstance(stmts, dict) else stmts):
+            if not isinstance(st, dict) or not (st.get("Condition") or {}):
+                continue
+            if not ev._statement_matches({k: v for k, v in st.items() if k != "Condition"}, action, resource, ctx):
+                continue
+            for operands in st["Condition"].values():
+                for key in (operands or {}):
+                    if key not in ctx and key not in miss and not key.startswith("aws:PrincipalTag/"):
+                        miss.append(key)
+    return miss
+
+
+def _evaluation_results(store, actions, resources, docs, boundary, rdoc, caller_arn, ctx) -> str:
+    out = []
+    for action in actions:
+        for resource in resources:
+            ctx_r = dict(ctx, **{"aws:ResourceArn": resource})
+            decision, _ = store.engine.evaluate(docs, action, resource, ctx_r)
+            decision = _apply_boundary(store, boundary, decision, action, resource, ctx_r)
+            rp = _resource_policy_decision(store, rdoc, caller_arn, action, resource, ctx_r)
+            if rp == "explicitDeny":
+                decision = "explicitDeny"
+            elif rp == "allowed" and decision == "implicitDeny":
+                decision = "allowed"       # same-account: a resource policy naming the caller is sufficient on its own
+            missing = _missing_context(docs + ([boundary] if boundary else []) + ([rdoc] if rdoc else []), action, resource, ctx_r)
+            out.append("<member>" + _el("EvalActionName", action) + _el("EvalResourceName", resource)
+                       + _el("EvalDecision", decision)
+                       + ("<MissingContextValues>" + "".join(_el("member", k) for k in missing) + "</MissingContextValues>" if missing else "")
+                       + "</member>")
+    return "".join(out)
+
+
+def _base_context(store, identity: dict, mfa_present: bool) -> dict:
+    ctx = {"aws:PrincipalArn": identity["arn"], "aws:PrincipalType": identity["type"].capitalize(),
+           "aws:username": identity["name"], "aws:RequestedRegion": "us-east-1",
+           "aws:MultiFactorAuthPresent": str(mfa_present).lower(), "aws:PrincipalAccount": store.account_id,
+           "aws:SecureTransport": "true", "aws:CurrentTime": _now(), "aws:userid": identity.get("id", "")}
+    org = store.extras.get("org")
+    if org:
+        ctx["aws:PrincipalOrgID"] = org["id"]
+    for k, v in (identity.get("tags") or {}).items():
+        ctx[f"aws:PrincipalTag/{k}"] = v
+    return ctx
+
+
 def _simulate_principal_policy(store, params):
     source = str(params.get("PolicySourceArn", "")).strip()
     if not source:
@@ -1127,22 +1223,50 @@ def _simulate_principal_policy(store, params):
     actions = _members(params, "ActionNames")
     resources = _members(params, "ResourceArns") or ["*"]
     identity, docs, boundary = _resolve_policy_docs(store, source)
+    docs = docs + [_parse_policy_input(d) for d in _members(params, "PolicyInputList")]
     mfa_present = identity["type"] == "user" and _has_mfa(store, identity["name"])
-    ctx = {"aws:PrincipalArn": identity["arn"], "aws:PrincipalType": identity["type"],
-           "aws:username": identity["name"], "aws:RequestedRegion": "us-east-1",
-           "aws:MultiFactorAuthPresent": str(mfa_present).lower()}
+    ctx = _base_context(store, identity, mfa_present)
     for entry in _context_entries(params):
         ctx[entry["key"]] = entry["value"]
-    results = []
-    for action in actions:
-        for resource in resources:
-            ctx_r = dict(ctx, **{"aws:ResourceArn": resource})
-            decision, _ = store.engine.evaluate(docs, action, resource, ctx_r)
-            decision = _apply_boundary(store, boundary, decision, action, resource, ctx_r)
-            results.append("<member>" + _el("EvalActionName", action)
-                           + _el("EvalResourceName", resource)
-                           + _el("EvalDecision", decision) + "</member>")
-    return _envelope("SimulatePrincipalPolicy", f"<EvaluationResults>{''.join(results)}</EvaluationResults>")
+    rdoc = _parse_policy_input(params["ResourcePolicy"]) if params.get("ResourcePolicy") else None
+    caller = str(params.get("CallerArn", "")).strip() or identity["arn"]
+    return _envelope("SimulatePrincipalPolicy", "<EvaluationResults>"
+                     + _evaluation_results(store, actions, resources, docs, boundary, rdoc, caller, ctx) + "</EvaluationResults>")
+
+
+def _parse_policy_input(raw) -> dict:
+    try:
+        d = json.loads(raw) if isinstance(raw, str) else raw
+    except Exception:
+        raise IamError("InvalidInput", "A policy input is not valid JSON.", 400)
+    if not isinstance(d, dict):
+        raise IamError("InvalidInput", "A policy input must be a JSON policy document.", 400)
+    return d
+
+
+def _simulate_custom_policy(store, params):
+    """SimulateCustomPolicy: evaluate caller-supplied policy documents (no stored principal needed)."""
+    docs = [_parse_policy_input(d) for d in _members(params, "PolicyInputList")]
+    if not docs:
+        raise IamError("ValidationError", "PolicyInputList is required.", 400)
+    actions = _members(params, "ActionNames")
+    resources = _members(params, "ResourceArns") or ["*"]
+    bl = _members(params, "PermissionsBoundaryPolicyInputList")
+    boundary = None
+    if bl:   # several boundary documents combine as one allow-set (any may allow, any deny wins)
+        stmts = []
+        for d in bl:
+            st = _parse_policy_input(d).get("Statement") or []
+            stmts.extend([st] if isinstance(st, dict) else st)
+        boundary = {"Version": "2012-10-17", "Statement": stmts}
+    caller = str(params.get("CallerArn", "")).strip() or f"arn:aws:iam::{store.account_id}:user/simulated"
+    ctx = {"aws:PrincipalArn": caller, "aws:RequestedRegion": "us-east-1", "aws:PrincipalAccount": store.account_id,
+           "aws:SecureTransport": "true", "aws:CurrentTime": _now()}
+    for entry in _context_entries(params):
+        ctx[entry["key"]] = entry["value"]
+    rdoc = _parse_policy_input(params["ResourcePolicy"]) if params.get("ResourcePolicy") else None
+    return _envelope("SimulateCustomPolicy", "<EvaluationResults>"
+                     + _evaluation_results(store, actions, resources, docs, boundary, rdoc, caller, ctx) + "</EvaluationResults>")
 
 
 # ── Organizations policies (SCP/RCP) — Vyomi-only ───────────────────────────
@@ -2781,7 +2905,7 @@ _OPS = {
     "ListAccountAliases": _list_account_aliases, "CreateAccountAlias": _create_account_alias,
     "DeleteAccountAlias": _delete_account_alias,
     "GenerateCredentialReport": _generate_credential_report, "GetCredentialReport": _get_credential_report,
-    "SimulatePrincipalPolicy": _simulate_principal_policy,
+    "SimulatePrincipalPolicy": _simulate_principal_policy, "SimulateCustomPolicy": _simulate_custom_policy,
     # Vyomi-only (see the functions' docstrings above): SCP/RCP + account access requests.
     "CreateOrgPolicy": _create_org_policy, "ListOrgPolicies": _list_org_policies,
     "DescribeOrgPolicy": _describe_org_policy, "DeleteOrgPolicy": _delete_org_policy,

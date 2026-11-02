@@ -83,29 +83,98 @@ class NativeIamEvaluator(AuthzEngine):
         return fnmatch.fnmatchcase(value.lower(), pattern.lower())
 
     @staticmethod
+    def _expand(value: Any, context: dict) -> Any:
+        """Policy variables: ${aws:username}, ${aws:PrincipalTag/team}, … resolved from the request context."""
+        if isinstance(value, list):
+            return [NativeIamEvaluator._expand(v, context) for v in value]
+        if not isinstance(value, str) or "${" not in value:
+            return value
+        import re
+        return re.sub(r"\$\{([^}]+)\}", lambda m: str(context.get(m.group(1), m.group(0))), value)
+
+    @staticmethod
+    def _cmp_values(base: str, actual: str, wanted: list[str]) -> bool:
+        """True if `actual` satisfies the POSITIVE form of operator `base` against ANY wanted value."""
+        if base in ("stringequals", "arnequals"):
+            return actual in wanted
+        if base == "stringequalsignorecase":
+            return actual.lower() in [w.lower() for w in wanted]
+        if base in ("stringlike", "arnlike"):
+            return NativeIamEvaluator._value_matches(wanted, actual)
+        if base.startswith("numeric"):
+            try:
+                a = float(actual)
+                nums = [float(w) for w in wanted]
+            except ValueError:
+                return False
+            fn = {"numericequals": lambda n: a == n, "numericlessthan": lambda n: a < n, "numericlessthanequals": lambda n: a <= n,
+                  "numericgreaterthan": lambda n: a > n, "numericgreaterthanequals": lambda n: a >= n}.get(base)
+            return bool(fn) and any(fn(n) for n in nums)
+        if base.startswith("date"):
+            def ts(v):
+                v = str(v).strip()
+                try:
+                    return float(v)
+                except ValueError:
+                    from datetime import datetime, timezone
+                    d = datetime.fromisoformat(v.replace("Z", "+00:00"))
+                    return (d if d.tzinfo else d.replace(tzinfo=timezone.utc)).timestamp()
+            try:
+                a = ts(actual)
+                dates = [ts(w) for w in wanted]
+            except ValueError:
+                return False
+            fn = {"dateequals": lambda d: a == d, "datelessthan": lambda d: a < d, "datelessthanequals": lambda d: a <= d,
+                  "dategreaterthan": lambda d: a > d, "dategreaterthanequals": lambda d: a >= d}.get(base)
+            return bool(fn) and any(fn(d) for d in dates)
+        if base == "ipaddress":
+            import ipaddress
+            try:
+                ip = ipaddress.ip_address(actual)
+                return any(ip in ipaddress.ip_network(str(w), strict=False) for w in wanted)
+            except ValueError:
+                return False
+        if base == "bool":
+            return actual.lower() in [w.lower() for w in wanted]
+        if base == "binaryequals":
+            return actual in wanted
+        return False
+
+    _NEGATED = {"stringnotequals": "stringequals", "stringnotequalsignorecase": "stringequalsignorecase", "stringnotlike": "stringlike",
+                "arnnotequals": "arnequals", "arnnotlike": "arnlike", "numericnotequals": "numericequals",
+                "notipaddress": "ipaddress"}
+
+    @staticmethod
     def _condition_matches(condition: dict, context: dict[str, str]) -> bool:
         if not condition:
             return True
         for operator, operands in condition.items():
             if not isinstance(operands, dict):
                 return False
-            op = operator.lower()
+            op = operator
+            qualifier = ""
+            if ":" in op:
+                qualifier, op = op.split(":", 1)
+            op = op.lower()
+            if_exists = op.endswith("ifexists")
+            if if_exists:
+                op = op[: -len("ifexists")]
+            negated = op in NativeIamEvaluator._NEGATED
+            base = NativeIamEvaluator._NEGATED.get(op, op)
             for key, expected in operands.items():
-                actual = context.get(key, "")
-                if op in {"stringequals", "arnequals"}:
-                    if isinstance(expected, list):
-                        if actual not in [str(i) for i in expected]:
-                            return False
-                    elif actual != str(expected):
+                present = key in context and context[key] is not None
+                if op == "null":
+                    want_absent = str(expected[0] if isinstance(expected, list) else expected).lower() == "true"
+                    if (not present) != want_absent:
                         return False
-                elif op in {"stringlike", "arnlike"}:
-                    if not NativeIamEvaluator._value_matches(expected, actual):
-                        return False
-                elif op == "bool":
-                    wanted = [str(v).lower() for v in expected] if isinstance(expected, list) else [str(expected).lower()]
-                    if str(actual).lower() not in wanted:
-                        return False
-                else:
+                    continue
+                if not present:
+                    if if_exists or negated or qualifier.lower() == "forallvalues":
+                        continue       # IfExists / negated operators / ForAllValues are true for an absent key
+                    return False
+                wanted = NativeIamEvaluator._expand(expected if isinstance(expected, list) else [expected], context)
+                hit = NativeIamEvaluator._cmp_values(base, str(context[key]), [str(w) for w in wanted])
+                if hit == negated:
                     return False
         return True
 

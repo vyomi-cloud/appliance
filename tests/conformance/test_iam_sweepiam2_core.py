@@ -115,6 +115,53 @@ def run():
     _check("SAML tags", "<Key>k</Key>" in b)
     iam(r, "UntagSAMLProvider", SAMLProviderArn=sarn, **{"TagKeys.member.1": "k"})
     _check("SAML untag", "<Key>k</Key>" not in iam(r, "ListSAMLProviderTags", SAMLProviderArn=sarn)[1])
+    # ── policy simulator fidelity: SimulateCustomPolicy, resource policy, context keys, principal tags ──
+    pol_s3 = json.dumps({"Version": "2012-10-17", "Statement": [{"Effect": "Allow", "Action": "s3:*", "Resource": "*",
+                                                                  "Condition": {"StringEquals": {"aws:PrincipalTag/team": "sec"}}}]})
+    s, b = iam(r, "SimulateCustomPolicy", **{"PolicyInputList.member.1": pol_s3, "ActionNames.member.1": "s3:GetObject", "ResourceArns.member.1": "arn:aws:s3:::b/k"})
+    _check("SimulateCustomPolicy: condition on a missing key -> implicitDeny + MissingContextValues",
+           "<EvalDecision>implicitDeny</EvalDecision>" in b and "<member>aws:PrincipalTag/team</member>" not in b)
+    pol_ip = json.dumps({"Version": "2012-10-17", "Statement": [{"Effect": "Allow", "Action": "s3:*", "Resource": "*",
+                                                                  "Condition": {"IpAddress": {"aws:SourceIp": "10.0.0.0/8"}}}]})
+    s, b = iam(r, "SimulateCustomPolicy", **{"PolicyInputList.member.1": pol_ip, "ActionNames.member.1": "s3:GetObject", "ResourceArns.member.1": "*"})
+    _check("SimulateCustomPolicy reports the missing condition key", "<MissingContextValues><member>aws:SourceIp</member></MissingContextValues>" in b)
+    s, b = iam(r, "SimulateCustomPolicy", **{"PolicyInputList.member.1": pol_ip, "ActionNames.member.1": "s3:GetObject", "ResourceArns.member.1": "*",
+                                              "ContextEntries.member.1.ContextKeyName": "aws:SourceIp", "ContextEntries.member.1.ContextKeyType": "ip",
+                                              "ContextEntries.member.1.ContextKeyValues.member.1": "10.1.2.3"})
+    _check("supplying the context key flips it to allowed", "<EvalDecision>allowed</EvalDecision>" in b and "MissingContextValues" not in b)
+    boundary = json.dumps({"Version": "2012-10-17", "Statement": [{"Effect": "Allow", "Action": "ec2:*", "Resource": "*"}]})
+    pol_all = json.dumps({"Version": "2012-10-17", "Statement": [{"Effect": "Allow", "Action": "*", "Resource": "*"}]})
+    s, b = iam(r, "SimulateCustomPolicy", **{"PolicyInputList.member.1": pol_all, "PermissionsBoundaryPolicyInputList.member.1": boundary,
+                                              "ActionNames.member.1": "s3:GetObject", "ActionNames.member.2": "ec2:DescribeVpcs", "ResourceArns.member.1": "*"})
+    _check("custom boundary clips identity allow (s3 denied, ec2 allowed)", b.count("<EvalDecision>allowed</EvalDecision>") == 1 and b.count("implicitDeny") == 1)
+    rp = json.dumps({"Version": "2012-10-17", "Statement": [{"Effect": "Allow", "Principal": {"AWS": "arn:aws:iam::123456789012:user/alice"}, "Action": "s3:GetObject", "Resource": "arn:aws:s3:::b/*"}]})
+    s, b = iam(r, "SimulatePrincipalPolicy", PolicySourceArn=arn, ResourcePolicy=rp, **{"ActionNames.member.1": "s3:GetObject", "ResourceArns.member.1": "arn:aws:s3:::b/k"})
+    _check("a resource policy naming the caller grants access on its own (same account)", "<EvalDecision>allowed</EvalDecision>" in b)
+    rp_deny = json.dumps({"Version": "2012-10-17", "Statement": [{"Effect": "Deny", "Principal": "*", "Action": "s3:*", "Resource": "*"}]})
+    s, b = iam(r, "SimulatePrincipalPolicy", PolicySourceArn=arn, ResourcePolicy=rp_deny, **{"ActionNames.member.1": "s3:GetObject", "ResourceArns.member.1": "arn:aws:s3:::b/k"})
+    _check("a resource-policy explicit Deny wins over the identity allow", "<EvalDecision>explicitDeny</EvalDecision>" in b)
+    iam(r, "TagUser", UserName="alice", **{"Tags.member.1.Key": "team", "Tags.member.1.Value": "sec"})
+    s, b = iam(r, "PutUserPolicy", UserName="alice", PolicyName="tagged", PolicyDocument=pol_s3)
+    s, b = iam(r, "SimulatePrincipalPolicy", PolicySourceArn=arn, **{"ActionNames.member.1": "s3:GetObject", "ResourceArns.member.1": "arn:aws:s3:::b/k"})
+    _check("aws:PrincipalTag/<key> is derived from the principal's real tags", "<EvalDecision>allowed</EvalDecision>" in b)
+
+    # ── condition operators: numeric, date, ip, Null, IfExists, negations, policy variables ──
+    from core.iam_store import NativeIamEvaluator as E
+    cm = E._condition_matches
+    _check("NumericLessThan", cm({"NumericLessThan": {"s3:max-keys": "10"}}, {"s3:max-keys": "5"}) and not cm({"NumericLessThan": {"s3:max-keys": "10"}}, {"s3:max-keys": "50"}))
+    _check("DateGreaterThan (ISO + epoch)", cm({"DateGreaterThan": {"aws:CurrentTime": "2020-01-01T00:00:00Z"}}, {"aws:CurrentTime": "2026-11-02T00:00:00Z"})
+           and not cm({"DateGreaterThan": {"aws:CurrentTime": "2030-01-01T00:00:00Z"}}, {"aws:CurrentTime": "2026-11-02T00:00:00Z"}))
+    _check("IpAddress / NotIpAddress CIDR", cm({"IpAddress": {"aws:SourceIp": ["10.0.0.0/8", "192.168.0.0/16"]}}, {"aws:SourceIp": "192.168.4.5"})
+           and cm({"NotIpAddress": {"aws:SourceIp": "10.0.0.0/8"}}, {"aws:SourceIp": "172.16.0.1"})
+           and not cm({"NotIpAddress": {"aws:SourceIp": "10.0.0.0/8"}}, {"aws:SourceIp": "10.9.9.9"}))
+    _check("Null checks key presence", cm({"Null": {"aws:TokenIssueTime": "true"}}, {}) and not cm({"Null": {"aws:TokenIssueTime": "true"}}, {"aws:TokenIssueTime": "x"}))
+    _check("StringNotEquals is true when the key is absent (AWS semantics); StringEquals is false", cm({"StringNotEquals": {"k": "v"}}, {}) and not cm({"StringEquals": {"k": "v"}}, {}))
+    _check("IfExists passes when absent, enforces when present", cm({"StringEqualsIfExists": {"k": "v"}}, {}) and not cm({"StringEqualsIfExists": {"k": "v"}}, {"k": "w"}))
+    _check("StringEqualsIgnoreCase + ForAnyValue qualifier", cm({"ForAnyValue:StringEqualsIgnoreCase": {"k": "VAL"}}, {"k": "val"}))
+    _check("policy variable ${aws:username}", cm({"StringEquals": {"s3:prefix": "home/${aws:username}"}}, {"s3:prefix": "home/alice", "aws:username": "alice"})
+           and not cm({"StringEquals": {"s3:prefix": "home/${aws:username}"}}, {"s3:prefix": "home/bob", "aws:username": "alice"}))
+    _check("Bool still works", cm({"Bool": {"aws:SecureTransport": "true"}}, {"aws:SecureTransport": "true"}))
+
     # ── CreateVirtualMFADevice returns a real QR code PNG of the otpauth:// URI ──
     import base64
     s, b = iam(r, "CreateVirtualMFADevice", VirtualMFADeviceName="qrdev")

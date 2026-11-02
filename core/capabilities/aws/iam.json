@@ -98,10 +98,13 @@
   "tests": ["tests/conformance/test_iam_core.py"]
  },
  "iam.policy.simulate": {
-  "title": "Policy simulator (SimulatePrincipalPolicy)",
-  "level": {"nano": "full", "offline": "full"},
-  "limitations": [],
-  "tests": ["tests/conformance/test_iam_core.py"]
+  "title": "Policy simulator (SimulatePrincipalPolicy, SimulateCustomPolicy)",
+  "level": {"nano": "limited", "offline": "limited"},
+  "limitations": [
+   "Evaluates identity policies (managed, inline, group), permissions boundaries, a supplied ResourcePolicy (same-account: an Allow naming the caller grants on its own, any Deny wins), caller-supplied ContextEntries and derived keys (aws:PrincipalTag/*, aws:username, aws:PrincipalOrgID, aws:MultiFactorAuthPresent, ...) with the full operator set (String/Arn/Numeric/Date/IpAddress/Bool/Null, IfExists, ForAnyValue/ForAllValues, ${policy variables}); unresolved condition keys come back as MissingContextValues.",
+   "Not evaluated: service control / resource control policies (every principal belongs to the management account, which SCPs never restrict), session policies, and resource policies are not fetched from the resource automatically (pass ResourcePolicy)."
+  ],
+  "tests": ["tests/conformance/test_iam_core.py", "tests/conformance/test_iam_sweepiam2_core.py"]
  },
  "iam.enforcement": {
   "title": "Cross-service authorization enforcement",
@@ -179,6 +182,13 @@
   "level": {"nano": "full", "offline": "full"},
   "limitations": [],
   "tests": ["tests/conformance/test_iam_sweepiam2_core.py"]
+ },
+ "iam.root.cloudfront-key-pairs": {
+  "title": "CloudFront key pairs (root user)",
+  "level": {"nano": "not_simulated", "offline": "not_simulated"},
+  "limitations": [
+   "Vyomi has no Amazon CloudFront service, so there is nothing for a root CloudFront signing key pair to sign. AWS itself has deprecated root-account CloudFront key pairs in favour of CloudFront public keys and key groups, which would live in a CloudFront control plane that does not exist here."
+  ]
  },
  "iam.organizations": {
   "title": "AWS Organizations (organization, root, OUs, member accounts, handshakes, service access, delegated administrators, tags)",
