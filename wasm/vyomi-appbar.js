@@ -92,7 +92,13 @@
     '@media(max-width:900px){#vy-appbar .vy-notch a span{display:none}#vy-appbar .vy-cloud{display:none}}';
   function build() {
     if (document.getElementById('vy-appbar')) return;
-    var st = document.createElement('style'); st.textContent = css; document.head.appendChild(st);
+    // The drawer is fixed over the bottom 44px: reserve that strip so nothing is hidden or unclickable under it
+    // (a 1280x720 window put e.g. the APIM "Metrics" sub-tab right under the drawer).
+    var RES = { aws: '.page{min-height:calc(100vh - 40px - 36px - 44px) !important}',
+                gcp: '.body{min-height:calc(100vh - 56px - 44px) !important}',
+                azure: '.body{height:calc(100vh - 48px - 44px) !important}#blade{bottom:44px !important;height:auto !important}' };
+    var st = document.createElement('style'); st.textContent = css + (RES[cloud] || ''); document.head.appendChild(st);
+    if (cloud !== 'azure' && !document.getElementById('vy-spacer')) { var spc = document.createElement('div'); spc.id = 'vy-spacer'; spc.style.cssText = 'height:44px;flex:none'; document.body.appendChild(spc); }
     var bar = document.createElement('div'); bar.id = 'vy-appbar';
     var links = ITEMS.map(function (i) {
       return '<a href="' + CL + '#' + i[0] + '" data-v="' + i[0] + '" title="' + i[1] + '"><svg viewBox="0 0 24 24"><path d="' + i[2] + '"/></svg><span>' + i[1] + '</span></a>';
