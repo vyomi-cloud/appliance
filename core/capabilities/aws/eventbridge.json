@@ -2,7 +2,10 @@
   "$doc": "Vyomi capability registry — EventBridge (+ EventBridge Scheduler). See s3.json for the contract.",
   "eventbridge.bus.crud": {
     "title": "Event buses (default + custom; create, describe, list, delete, tags)",
-    "level": { "nano": "full", "offline": "full" },
+    "level": {
+      "nano": "full",
+      "offline": "full"
+    },
     "limitations": [],
     "tests": [
       "tests/conformance/test_eventbridge_console_v4_core.py"
@@ -10,7 +13,10 @@
   },
   "eventbridge.rule.crud": {
     "title": "Rules (create with event pattern, describe, list, delete, enable/disable, tags)",
-    "level": { "nano": "full", "offline": "full" },
+    "level": {
+      "nano": "full",
+      "offline": "full"
+    },
     "limitations": [],
     "tests": [
       "tests/conformance/test_eventbridge_core.py",
@@ -19,7 +25,10 @@
   },
   "eventbridge.rule.targets": {
     "title": "Targets (SQS, SNS, Lambda, Step Functions, Kinesis)",
-    "level": { "nano": "limited", "offline": "limited" },
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
     "limitations": [
       "Only SQS, SNS, Lambda, Step Functions state machines and Kinesis data streams are actually invoked. Other target types (API destinations, ECS tasks, CodeBuild/CodePipeline, Batch, Systems Manager, ...) are accepted and stored by PutTargets like the real API, but PutEvents never delivers to them — there is no silent fake success, the delivery simply never happens."
     ],
@@ -29,7 +38,10 @@
   },
   "eventbridge.events.put": {
     "title": "PutEvents — pattern matching + fan-out to matching rules' targets",
-    "level": { "nano": "full", "offline": "full" },
+    "level": {
+      "nano": "full",
+      "offline": "full"
+    },
     "limitations": [],
     "tests": [
       "tests/conformance/test_eventbridge_core.py",
@@ -38,7 +50,10 @@
   },
   "eventbridge.archives": {
     "title": "Archives (capture a bus's events matching a pattern)",
-    "level": { "nano": "limited", "offline": "limited" },
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
     "limitations": [
       "An archive filters the bus's most recent 500 events (a bounded in-memory log), not a true unlimited-retention store, so RetentionDays can only be enforced within that window — it cannot bring back events the 500-event cap already dropped."
     ],
@@ -48,7 +63,10 @@
   },
   "eventbridge.replay": {
     "title": "Replay — redeliver archived events to their original rule targets",
-    "level": { "nano": "limited", "offline": "limited" },
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
     "limitations": [
       "Replay is synchronous (completes inside the StartReplay call, not asynchronously over minutes) and is bounded by the same 500-event archive window as eventbridge.archives."
     ],
@@ -58,7 +76,10 @@
   },
   "eventbridge.scheduler.schedule": {
     "title": "Scheduler: schedules (one-time at(), rate(), cron()) and schedule groups",
-    "level": { "nano": "full", "offline": "full" },
+    "level": {
+      "nano": "full",
+      "offline": "full"
+    },
     "limitations": [],
     "tests": [
       "tests/conformance/test_scheduler_core.py"
@@ -66,12 +87,36 @@
   },
   "eventbridge.scheduler.firing": {
     "title": "Scheduler: target delivery (SQS, SNS, Lambda, Step Functions, Kinesis) when a schedule's time arrives",
-    "level": { "nano": "limited", "offline": "limited" },
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
     "limitations": [
       "Vyomi has no background timer. A schedule's firing is computed and delivered the next time any Scheduler API call is made after its due time (console navigation and the periodic list/describe calls it makes are usually enough) — it does not fire on the wall clock while nothing is polling."
     ],
     "tests": [
       "tests/conformance/test_scheduler_core.py"
+    ]
+  },
+  "eventbridge.metrics": {
+    "title": "CloudWatch metrics (Invocations, TriggeredRules, MatchedEvents, FailedInvocations; Scheduler attempts/errors)",
+    "level": {
+      "nano": "full",
+      "offline": "full"
+    },
+    "limitations": [],
+    "tests": [
+      "tests/conformance/test_eventbridge_core.py"
+    ]
+  },
+  "eventbridge.pipes.metrics": {
+    "title": "Pipe metrics",
+    "level": {
+      "nano": "not_simulated",
+      "offline": "not_simulated"
+    },
+    "limitations": [
+      "Pipes deliver but Vyomi does not aggregate per-pipe CloudWatch metrics (Executions, Duration, Failed) yet."
     ]
   }
 }

@@ -665,6 +665,15 @@ try {
   const ebExecs = await sfn("ListExecutions", { stateMachineArn: smArn });
   check("EventBridge PutEvents over wire → really started a Step Functions execution on the UI-created rule's target", (ebExecs.executions || []).length > 0, JSON.stringify(ebExecs));
 
+  // EventBridge rule Monitoring tab: the PutEvents above produced real AWS/Events datapoints (wire) the rule's graph draws (UI)
+  const ebNow = Math.floor(Date.now() / 1000);
+  const ebMet = await cw("GetMetricStatistics", { Namespace: "AWS/Events", MetricName: "Invocations", Dimensions: [{ Name: "RuleName", Value: R2 }], StartTime: ebNow - 3600, EndTime: ebNow + 60, Period: 60, Statistics: ["Sum"] });
+  check("EventBridge PutEvents (wire) → AWS/Events Invocations datapoints for the rule over CloudWatch wire", (ebMet.Datapoints || []).reduce((a, d) => a + d.Sum, 0) >= 2, JSON.stringify(ebMet).slice(0, 200));
+  await page.goto(UI + `#/eventbridge/rules/${R2}?bus=default`);
+  await page.getByRole("tab", { name: "Monitoring" }).click();
+  await page.locator('[data-testid="metric-Invocations"] svg path, [data-testid="metric-Invocations"] svg circle').first().waitFor({ timeout: 10000 });
+  check("EventBridge rule Monitoring tab draws the real Invocations series (UI)", true);
+
   // Custom event bus created over the wire (CLI direction) must show up in the UI (wire → UI).
   const EBUS = `v4smoke-bus-${Date.now() % 100000}`;
   await events("CreateEventBus", { Name: EBUS });
@@ -1237,6 +1246,15 @@ try {
   await page.getByText("hello-kinesis").first().waitFor({ timeout: 10000 });
   check("Kinesis PutRecord over wire → shown in Data viewer (Get records)", true);
   await shot("25-kinesis-data-viewer");
+
+  // Kinesis Monitoring tab: the PutRecord above produced a real AWS/Kinesis datapoint (wire) that the graph draws (UI)
+  const kNow = Math.floor(Date.now() / 1000);
+  const kMet = await cw("GetMetricStatistics", { Namespace: "AWS/Kinesis", MetricName: "IncomingRecords", Dimensions: [{ Name: "StreamName", Value: KS }], StartTime: kNow - 3600, EndTime: kNow + 60, Period: 60, Statistics: ["Sum"] });
+  check("Kinesis PutRecord (wire) → AWS/Kinesis IncomingRecords datapoint over CloudWatch wire", (kMet.Datapoints || []).reduce((a, d) => a + d.Sum, 0) >= 1, JSON.stringify(kMet).slice(0, 200));
+  await page.getByRole("tab", { name: "Monitoring" }).click();
+  await page.locator('[data-testid="metric-IncomingRecords"] svg path, [data-testid="metric-IncomingRecords"] svg circle').first().waitFor({ timeout: 10000 });
+  check("Kinesis Monitoring tab draws the real IncomingRecords series (UI)", true);
+  await shot("25-kinesis-monitoring");
   // Step Functions: create a state machine through the UI (UI → CLI direction), then
   // confirm it over the native wire.
   const SM1 = `v4smoke-sm-${Date.now() % 100000}`;

@@ -8,6 +8,8 @@ import Tabs from "@cloudscape-design/components/tabs";
 import TagEditor from "@cloudscape-design/components/tag-editor";
 import ContentLayout from "@cloudscape-design/components/content-layout";
 import { ErrorAlert, KeyValue, NotSimulatedContainer } from "../../kit/common.jsx";
+import { CapabilityContainer } from "../../kit/Capability.jsx";
+import MetricGraphs from "../../kit/MetricGraphs.jsx";
 import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import { follow, href } from "../../../common/router.js";
@@ -71,7 +73,7 @@ export default function EventBusDetail({ params }) {
           { id: "rules", label: "Rules", content: <RulesTable eventBusName={name} resourceName="Event pattern rules" createHref={`${href("eventbridge", "create-rule")}?bus=${encodeURIComponent(name)}`} /> },
           { id: "encryption", label: "Encryption", content: <NotSimulatedContainer title="Encryption" note="Events are stored unencrypted inside Vyomi's own store." /> },
           { id: "permissions", label: "Permissions", content: <NotSimulatedContainer title="Resource-based policy" note="A policy document can be stored via UpdateEventBus, but Vyomi never evaluates it against a cross-account PutEvents call." /> },
-          { id: "monitoring", label: "Monitoring", content: <NotSimulatedContainer title="Monitoring" note="Metrics dashboard: CloudWatch metrics for EventBridge aren't aggregated in Vyomi." /> },
+          { id: "monitoring", label: "Monitoring", content: <CapabilityContainer id="eventbridge.metrics" title="Monitoring"><MetricGraphs bare graphs={["Invocations", "TriggeredRules", "MatchedEvents", "FailedInvocations"].map((n) => ({ title: n, namespace: "AWS/Events", name: n, dimensions: [{ Name: "EventBusName", Value: d.Name }], unit: "Count" }))} /></CapabilityContainer> },
           { id: "logs", label: "Logs", content: <NotSimulatedContainer title="Logs" note="Delivering bus logs to CloudWatch Logs isn't modeled." /> },
           { id: "archives", label: "Archives & Replays", content: <ArchivesTable eventBusArn={d.Arn} resourceName="Archives" createHref={href("eventbridge", "create-archive")} /> },
           { id: "tags", label: "Tags", content: <TagsTab arn={d.Arn} /> },

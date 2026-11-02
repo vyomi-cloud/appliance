@@ -33,6 +33,7 @@ from core import sns_core as sns_mod
 from core import lambda_core as lam_mod
 from core import kinesis_core as kinesis_mod
 from core import stepfunctions_core as sfn_mod
+from core import cloudwatch_core as _cw_core
 
 EVENT_LOG_MAX = 500  # per bus — bounds the archive/replay window (documented limitation)
 
@@ -207,6 +208,15 @@ def deliver(store, lam_store, arn: str, body_str: str, event_obj: dict, group_id
     return False  # target type Vyomi doesn't deliver to (stored, never invoked — see capability doc)
 
 
+def emit_metric(store, namespace: str, metric: str, dims: list, value: float = 1.0, unit: str = "Count") -> None:
+    """eventbridge.metrics: real AWS/Events + AWS/Scheduler datapoints derived from actual
+    matching/delivery. `store.cw_store` is a runtime link set by the wire router / nano_registry;
+    absent (bare conformance store) it is a no-op."""
+    cw = getattr(store, "cw_store", None)
+    if cw is not None:
+        _cw_core.ingest_internal_metric(cw, namespace, metric, dims, value, unit=unit)
+
+
 def _json_path(doc, path: str):
     """The JSONPath subset EventBridge's InputPath / InputPathsMap use: `$`, `$.a.b`,
     `$.a[0]`, `$['a']`."""
@@ -287,14 +297,24 @@ def _deliver_to_bus(store, lam_store, bus: str, envelope: dict, event_obj: dict,
             continue
         if not _match_pattern(rule.get("pattern", {}), event_obj):
             continue
+        rname = rule.get("name", "")
+        rdims = [{"Name": "RuleName", "Value": rname}]
+        bdims = [{"Name": "EventBusName", "Value": bus}, {"Name": "RuleName", "Value": rname}]
+        for d in (rdims, bdims, [{"Name": "EventBusName", "Value": bus}], []):
+            emit_metric(store, "AWS/Events", "TriggeredRules", d)
+            emit_metric(store, "AWS/Events", "MatchedEvents", d)
         for tgt in list(rule["targets"].values()):
             body_str = target_payload(dict(tgt, _rule_arn=rule.get("arn", "")), envelope)
             group = (tgt.get("SqsParameters") or {}).get("MessageGroupId")
             pk_path = (tgt.get("KinesisParameters") or {}).get("PartitionKeyPath")
             partition_key = _json_path(envelope, pk_path) if pk_path else None
-            deliver(store, lam_store, tgt["Arn"], body_str, event_obj, group_id=group,
-                    kinesis_store=kinesis_store, sfn_store=sfn_store,
-                    partition_key=partition_key or envelope.get("id"))
+            ok = deliver(store, lam_store, tgt["Arn"], body_str, event_obj, group_id=group,
+                         kinesis_store=kinesis_store, sfn_store=sfn_store,
+                         partition_key=partition_key or envelope.get("id"))
+            for d in (rdims, bdims, [{"Name": "EventBusName", "Value": bus}], []):
+                emit_metric(store, "AWS/Events", "Invocations", d)
+                if not ok:
+                    emit_metric(store, "AWS/Events", "FailedInvocations", d)
             _notify(store, "target", rule.get("name", ""), tgt.get("Id", ""), envelope)
             n += 1
     return n

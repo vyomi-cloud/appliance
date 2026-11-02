@@ -28,6 +28,7 @@ import { useNotify } from "../../../common/notify.jsx";
 import { navigate } from "../../../common/router.js";
 import { ErrorAlert, KeyValue, fmtDate } from "../../kit/common.jsx";
 import DeleteModal from "../../kit/DeleteModal.jsx";
+import MetricGraphs from "../../kit/MetricGraphs.jsx";
 import { CapabilityContainer, saveNotice } from "../../kit/Capability.jsx";
 import * as api from "./api.js";
 
@@ -261,7 +262,16 @@ function MonitoringTab({ summary, reload }) {
   };
   return (
     <SpaceBetween size="l">
-      <CapabilityContainer id="kinesis.stream.monitoring-metrics" title="CloudWatch metrics" />
+      <CapabilityContainer id="kinesis.stream.monitoring-metrics" title="CloudWatch metrics">
+        <MetricGraphs bare graphs={[
+          { title: "Incoming data (bytes)", namespace: "AWS/Kinesis", name: "IncomingBytes", dimensions: [{ Name: "StreamName", Value: summary.StreamName }], unit: "Bytes" },
+          { title: "Incoming data (records)", namespace: "AWS/Kinesis", name: "IncomingRecords", dimensions: [{ Name: "StreamName", Value: summary.StreamName }], unit: "Count" },
+          { title: "PutRecord success", namespace: "AWS/Kinesis", name: "PutRecord.Success", dimensions: [{ Name: "StreamName", Value: summary.StreamName }], unit: "Count" },
+          { title: "PutRecords success", namespace: "AWS/Kinesis", name: "PutRecords.Success", dimensions: [{ Name: "StreamName", Value: summary.StreamName }], unit: "Count" },
+          { title: "GetRecords (records)", namespace: "AWS/Kinesis", name: "GetRecords.Records", dimensions: [{ Name: "StreamName", Value: summary.StreamName }], unit: "Count" },
+          { title: "GetRecords iterator age (ms)", namespace: "AWS/Kinesis", name: "GetRecords.IteratorAgeMilliseconds", dimensions: [{ Name: "StreamName", Value: summary.StreamName }], stat: "Maximum", unit: "Milliseconds" },
+        ]} />
+      </CapabilityContainer>
       <Container header={<Header variant="h2" actions={<Button onClick={() => { setChecked(current); setEditOpen(true); }}>Edit</Button>}>Enhanced (shard-level) metrics</Header>}>
         <KeyValue columns={1} items={[["Shard-level metrics", current.length ? current.join(", ") : "Basic (stream-level) metrics only"]]} />
       </Container>
