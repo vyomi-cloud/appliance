@@ -1,5 +1,5 @@
 {
- "at": "2026-11-02T19:28:05+00:00",
+ "at": "2026-11-02T20:28:06+00:00",
  "baseline": false,
  "changes": [
   {
@@ -13,52 +13,32 @@
   },
   {
    "cloud": "aws",
-   "service": "Amazon RDS",
+   "service": "Aurora",
    "kind": "announcement",
-   "key": "feed:aws:a2fe0ef4658f",
-   "title": "Amazon RDS now supports per snapshot billing",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-rds-per-snapshot-billing/",
-   "detail": "Starting today, Amazon RDS supports per snapshot billing for Amazon RDS snapshots. Per snapshot billing allows you to get the cost of each individual snapshot. Previously, RDS snapshot charges were aggregated at the database instance level on the Cost and Usage report as well as the Cost Explorer. This meant that while understanding the snapshot charges, you could only see the aggregate view at the database instance instead of drilling down to each individual snapshot. Now, you can use cost allocation tags on your snapshots to see exactly how much each snapshot costs, giving you a better under",
+   "key": "feed:aws:62c682a56c21",
+   "title": "Amazon Aurora MySQL 3.14 (compatible with MySQL 8.0.46) is generally available",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-aurora-mysql-314-available/",
+   "detail": "Starting today, Amazon Aurora MySQL-Compatible Edition 3 (compatible with MySQL 8.0) supports MySQL 8.0.46, which includes community MySQL fixes and Aurora-specific improvements. In addition to operational improvements, Aurora MySQL 3.14 introduces support for post-quantum TLS (PQ-TLS) key exchange, providing you with post-quantum cryptography options for encrypting your data in-transit. For detailed information on this release, refer to Aurora MySQL 3 and MySQL 8.0.46 release notes. You can upgrade your databases during scheduled maintenance windows using automatic minor version upgrades. To ",
+   "actionable": false
+  },
+  {
+   "cloud": "aws",
+   "service": "Aurora",
+   "kind": "announcement",
+   "key": "feed:aws:cf7c8400c168",
+   "title": "Amazon Aurora MySQL 8.4.10 is now generally available",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-aurora-mysql-8410-available/",
+   "detail": "Starting today, Amazon Aurora MySQL-Compatible Edition 8.4 supports MySQL 8.4.10. We recommend upgrading to the newer minor versions to accept fixes for Common Vulnerabilities and Exposures (CVEs) in prior versions of MySQL and to benefit from bug fixes, performance improvements, and new functionality added by the MySQL community. For more details, refer to the Aurora MySQL 8.4 and MySQL 8.4.10 release notes. Aurora MySQL 8.4.10 adds support for global transaction identifiers (GTID) tags, which lets you assign a user-defined tag to GTIDs to help you identify and group related transactions in b",
    "actionable": false
   },
   {
    "cloud": "azure",
-   "service": "Blob Storage, Azure Storage",
+   "service": "Virtual Network",
    "kind": "announcement",
-   "key": "feed:azure:224be3aa83df",
-   "title": "[Launched] Generally Available: Azure Storage Actions adds automatic task updates, execution controls, and case-sensitive matching",
-   "link": "https://azure.microsoft.com/updates?id=578628",
-   "detail": "Azure Storage Actions is introducing three enhancements to simplify task management and give you more control over automated data operations across Azure Blob and Data Lake Storage:Automatic propagation of task definition updates: When you update a storag",
-   "actionable": false
-  },
-  {
-   "cloud": "azure",
-   "service": "Azure SQL",
-   "kind": "announcement",
-   "key": "feed:azure:9cfaa06baeae",
-   "title": "[Launched] Generally Available: Restart databases in Azure SQL DB via the Azure portal ",
-   "link": "https://azure.microsoft.com/updates?id=577992",
-   "detail": "You can now restart or fail over databases directly from the Azure portal, including single databases, Hyperscale databases, and databases in elastic pools, without writing scripts against the Rest API or contacting support. Learn more.",
-   "actionable": false
-  },
-  {
-   "cloud": "azure",
-   "service": "Service Bus",
-   "kind": "announcement",
-   "key": "feed:azure:ad32f5438874",
-   "title": "[Launched] Generally Available: Geo-Replication on partitioned namespaces for Azure Service Bus Premium",
-   "link": "https://azure.microsoft.com/updates?id=579021",
-   "detail": "Geo-Replication on partitioned namespaces for Azure Service Bus Premium is now generally available. You can now combine the throughput benefits of partitioning with the reliability of replicating your messages and metadata to a secondary Azure region. Par",
-   "actionable": false
-  },
-  {
-   "cloud": "azure",
-   "service": "Virtual Machines",
-   "kind": "announcement",
-   "key": "feed:azure:0ee6afa9969c",
-   "title": "[Launched] Generally Available: Azure Site Recovery for Azure Local",
-   "link": "https://azure.microsoft.com/updates?id=579111",
-   "detail": "Azure Site Recovery support for Azure Local is now generally available, making enterprise-grade disaster recovery simpler, accessible, easier to setup and secure than ever before. Customers can protect supported Windows and Linux virtual machines by repli",
+   "key": "feed:azure:2deca0a0adba",
+   "title": "[Launched] Generally Available: Change from virtual network integration to a private endpoint capable network configuration in Azure Database for PostgreSQL flexible server  ",
+   "link": "https://azure.microsoft.com/updates?id=574541",
+   "detail": "You now have greater flexibility in network design for Azure Database for PostgreSQL Flexible Server workloads. Now you can change existing VNet-integrated servers from delegated-subnet networking to a private endpoint-capable configuration, enabling secu",
    "actionable": false
   }
  ],
