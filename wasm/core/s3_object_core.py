@@ -28,6 +28,7 @@ import csv
 import hashlib
 import io
 import json
+import time
 import zlib
 import base64
 import re
@@ -615,6 +616,65 @@ def _canned_acl_xml(canned: str) -> str:
                    "<Permission>FULL_CONTROL</Permission></Grant>")
     return (f'<?xml version="1.0" encoding="UTF-8"?><AccessControlPolicy xmlns="{S3_NS}">{_OWNER_XML}'
             f"<AccessControlList>{owner_grant}{grants}</AccessControlList></AccessControlPolicy>")
+
+
+_GRANT_HEADERS = (("x-amz-grant-read", "READ"), ("x-amz-grant-read-acp", "READ_ACP"),
+                  ("x-amz-grant-write-acp", "WRITE_ACP"), ("x-amz-grant-full-control", "FULL_CONTROL"))
+
+
+def _acl_headers(headers: dict) -> dict:
+    """The upload-time permission headers (x-amz-acl, x-amz-grant-*) of a request."""
+    return {k: v for k, v in (headers or {}).items()
+            if k.lower() == "x-amz-acl" or k.lower().startswith("x-amz-grant-")}
+
+
+def _grants_acl_xml(headers: dict) -> str | None:
+    """AccessControlPolicy for explicit x-amz-grant-* headers (id=/uri=/emailAddress= lists)."""
+    grants = []
+    for h, perm in _GRANT_HEADERS:
+        for part in str((headers or {}).get(h, "")).split(","):
+            m = re.match(r'\s*(id|uri|emailAddress)\s*=\s*"?([^"]+?)"?\s*$', part)
+            if not m:
+                continue
+            kind, val = m.groups()
+            xsi = 'xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"'
+            if kind == "uri":
+                g = f'<Grantee {xsi} xsi:type="Group"><URI>{_xml_escape(val)}</URI></Grantee>'
+            elif kind == "id":
+                g = f'<Grantee {xsi} xsi:type="CanonicalUser"><ID>{_xml_escape(val)}</ID></Grantee>'
+            else:
+                g = f'<Grantee {xsi} xsi:type="AmazonCustomerByEmail"><EmailAddress>{_xml_escape(val)}</EmailAddress></Grantee>'
+            grants.append(f"<Grant>{g}<Permission>{perm}</Permission></Grant>")
+    if not grants:
+        return None
+    owner = ('<Grant><Grantee xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="CanonicalUser">'
+             "<ID>simulator</ID><DisplayName>cloudlearn-simulator</DisplayName></Grantee>"
+             "<Permission>FULL_CONTROL</Permission></Grant>")
+    return (f'<?xml version="1.0" encoding="UTF-8"?><AccessControlPolicy xmlns="{S3_NS}">{_OWNER_XML}'
+            f"<AccessControlList>{owner}{''.join(grants)}</AccessControlList></AccessControlPolicy>")
+
+
+def _upload_acl(store: ObjectStore, bucket: str, key: str, headers: dict):
+    """Upload-time permissions (PutObject / CreateMultipartUpload x-amz-acl + x-amz-grant-*):
+    returns (acl_xml | None, error | None). Enforced like real S3 — a bucket with
+    BucketOwnerEnforced rejects ACL headers (bucket-owner-full-control is the one allowed
+    value), Block Public Access refuses public canned ACLs, an unknown canned ACL is invalid."""
+    hdrs = {k.lower(): v for k, v in _acl_headers(headers).items()}
+    if not hdrs:
+        return None, None
+    canned = hdrs.get("x-amz-acl")
+    if canned is not None and canned not in _CANNED_ACL_GRANTS:
+        return None, _error_xml("InvalidArgument", "Invalid canned ACL value", f"/{bucket}/{key}", 400)
+    if canned is not None and len(hdrs) > 1:
+        return None, _error_xml("InvalidRequest", "Specifying both Canned ACLs and Header Grants is not allowed", f"/{bucket}/{key}", 400)
+    if _object_ownership(store, bucket) == "BucketOwnerEnforced" and canned != "bucket-owner-full-control":
+        return None, _error_xml("AccessControlListNotSupported", "The bucket does not allow ACLs", f"/{bucket}/{key}", 400)
+    blocked = _acl_blocked_by_pab(store, bucket, canned)
+    if blocked:
+        return None, blocked
+    if canned is not None:
+        return _canned_acl_xml(canned), None
+    return _grants_acl_xml(hdrs), None
 
 
 def _object_ownership(store: ObjectStore, bucket: str) -> str | None:
@@ -1300,8 +1360,85 @@ def _done(store: ObjectStore, resp: S3Response) -> S3Response:
     return resp
 
 
+_EB_TYPES = {"ObjectCreated": "Object Created", "ObjectRemoved": "Object Deleted",
+             "LifecycleExpiration": "Object Deleted", "LifecycleTransition": "Object Storage Class Changed"}
+_STORAGE_TYPE = {"STANDARD": "StandardStorage", "STANDARD_IA": "StandardIAStorage",
+                 "ONEZONE_IA": "OneZoneIAStorage", "REDUCED_REDUNDANCY": "ReducedRedundancyStorage",
+                 "GLACIER": "GlacierStorage", "GLACIER_IR": "GlacierInstantRetrievalStorage",
+                 "DEEP_ARCHIVE": "DeepArchiveStorage", "INTELLIGENT_TIERING": "IntelligentTieringFAStorage"}
+
+
+def _eventbridge_deliver(store: ObjectStore, bucket: str, key: str, event_name: str,
+                          version: dict | None, source: str) -> None:
+    """Amazon EventBridge notifications: a bucket with EventBridgeConfiguration publishes a
+    real "Object Created" / "Object Deleted" / "Delete Marker Created" event (source aws.s3,
+    the native detail shape) onto the account's DEFAULT event bus, where the account's
+    rules/targets match and fan out through the real eventbridge core."""
+    eb = getattr(store, "events_store", None)
+    if eb is None or event_name == "s3:TestEvent" or not store.bucket_exists(bucket):
+        return
+    if not bucket_notifications(store, bucket).get("eventBridgeEnabled"):
+        return
+    parts = event_name.replace("s3:", "").split(":")
+    detail_type = _EB_TYPES.get(parts[0])
+    if detail_type is None:
+        return
+    if len(parts) > 1 and parts[1] == "DeleteMarkerCreated":
+        detail_type = "Object Deleted"
+    detail = {"version": "0", "bucket": {"name": bucket},
+              "object": {"key": key, "size": int((version or {}).get("size", 0) or 0),
+                         "etag": ((version or {}).get("etag", "") or "").strip('"'),
+                         "version-id": (version or {}).get("version_id", "null"),
+                         "sequencer": uuid.uuid4().hex[:16]},
+              "request-id": _req_id(), "requester": "123456789012",
+              "source-ip-address": "127.0.0.1", "reason": source or parts[-1]}
+    if parts[0] == "ObjectRemoved":
+        detail["deletion-type"] = ("Delete Marker Created" if parts[-1] == "DeleteMarkerCreated"
+                                   else "Permanently Deleted")
+        detail.get("object", {}).pop("etag", None)
+    from core import eventbridge_core as _eb
+    _eb.dispatch(eb, "AWSEvents.PutEvents", {"Entries": [{
+        "Source": "aws.s3", "DetailType": detail_type, "Detail": json.dumps(detail),
+        "Resources": [f"arn:aws:s3:::{bucket}"], "EventBusName": "default"}]},
+        lam_store=getattr(store, "lam_store", None))
+
+
+def _record_storage_metrics(store: ObjectStore, bucket: str) -> None:
+    """Real AWS/S3 storage metrics (BucketSizeBytes per StorageType, NumberOfObjects), computed
+    from the bucket's ACTUAL contents each time its contents change (real S3 publishes them
+    once a day; here the point lands the instant the change does)."""
+    cw = getattr(store, "cw_store", None)
+    if cw is None or not store.bucket_exists(bucket):
+        return
+    try:
+        from core import cloudwatch_core as _cw_core
+    except ImportError:
+        return
+    sizes: dict[str, int] = {"StandardStorage": 0}
+    count = 0
+    for entry in store.bucket_objects(bucket).values():
+        for v in (entry or {}).get("versions") or []:
+            if v.get("is_delete_marker"):
+                continue
+            st_type = _STORAGE_TYPE.get(v.get("storage_class") or "STANDARD", "StandardStorage")
+            sizes[st_type] = sizes.get(st_type, 0) + int(v.get("size", 0) or 0)
+            count += 1
+    base = [{"Name": "BucketName", "Value": bucket}]
+    for st_type, n in sizes.items():
+        _cw_core.ingest_internal_metric(cw, "AWS/S3", "BucketSizeBytes",
+                                         base + [{"Name": "StorageType", "Value": st_type}], float(n), unit="Bytes")
+    _cw_core.ingest_internal_metric(cw, "AWS/S3", "NumberOfObjects",
+                                     base + [{"Name": "StorageType", "Value": "AllStorageTypes"}], float(count), unit="Count")
+
+
 def _emit(store: ObjectStore, bucket: str, key: str, event: str, entry: dict | None, source: str) -> None:
     version = (entry or {}).get("versions", [None])[0] if isinstance(entry, dict) and entry.get("versions") else None
+    for hook in (lambda: _eventbridge_deliver(store, bucket, key, event, version, source),
+                 lambda: _record_storage_metrics(store, bucket) if event != "s3:TestEvent" else None):
+        try:
+            hook()
+        except Exception:   # best-effort; never fail the data-plane write
+            pass
     try:
         store.emit_event(bucket, key, event, version, source)
     except Exception:   # delivery is best-effort; never fail the data-plane write
@@ -1329,7 +1466,11 @@ def _replication_rules(store: ObjectStore, bucket: str) -> list:
         filt = _child(r, "Filter")
         prefix = _child_text(filt, "Prefix") if filt is not None else _child_text(r, "Prefix")
         dmr = _child(r, "DeleteMarkerReplication")
+        mt = _child(dest_el, "Metrics") if dest_el is not None else None
+        rtc = _child(dest_el, "ReplicationTime") if dest_el is not None else None
         rules.append({
+            "metrics": (mt is not None and _child_text(mt, "Status") == "Enabled")
+                       or (rtc is not None and _child_text(rtc, "Status") == "Enabled"),
             "id": _child_text(r, "ID"),
             "status": _child_text(r, "Status", "Disabled"),
             "prefix": prefix,
@@ -1337,6 +1478,23 @@ def _replication_rules(store: ObjectStore, bucket: str) -> list:
             "delete_marker_replication": dmr is not None and _child_text(dmr, "Status") == "Enabled",
         })
     return rules
+
+
+def _record_replication_metrics(store: ObjectStore, src: str, dest: str, rule_id: str, latency: float) -> None:
+    """Real AWS/S3 replication metrics for a rule with Metrics/ReplicationTime enabled: the
+    measured copy latency; replication is synchronous here so nothing is ever pending."""
+    cw = getattr(store, "cw_store", None)
+    if cw is None:
+        return
+    try:
+        from core import cloudwatch_core as _cw_core
+        dims = [{"Name": "DestinationBucket", "Value": dest}, {"Name": "RuleId", "Value": rule_id},
+                {"Name": "SourceBucket", "Value": src}]   # name-sorted, as the CloudWatch API keys series
+        _cw_core.ingest_internal_metric(cw, "AWS/S3", "ReplicationLatency", dims, round(latency, 6), unit="Seconds")
+        _cw_core.ingest_internal_metric(cw, "AWS/S3", "BytesPendingReplication", dims, 0.0, unit="Bytes")
+        _cw_core.ingest_internal_metric(cw, "AWS/S3", "OperationsPendingReplication", dims, 0.0, unit="Count")
+    except Exception:
+        pass
 
 
 def _replicate(store: ObjectStore, bucket: str, key: str, entry: dict | None) -> None:
@@ -1349,6 +1507,7 @@ def _replicate(store: ObjectStore, bucket: str, key: str, entry: dict | None) ->
     if cur.get("is_delete_marker"):
         return
     applied = False
+    t0 = time.monotonic()
     for rule in _replication_rules(store, bucket):
         if rule["status"] != "Enabled":
             continue
@@ -1367,6 +1526,8 @@ def _replicate(store: ObjectStore, bucket: str, key: str, entry: dict | None) ->
         replace = "__overwrite__" if vstatus_dest == "Disabled" else ("null" if vstatus_dest == "Suspended" else None)
         _write_object_version(store, dest, key, version, replace_version_id=replace)
         applied = True
+        if rule.get("metrics"):
+            _record_replication_metrics(store, bucket, dest, rule["id"], time.monotonic() - t0)
     if applied:
         cur["replication_status"] = "COMPLETED"
 
@@ -1457,6 +1618,11 @@ def put_object(store: ObjectStore, bucket: str, key: str, body: bytes, headers: 
                                    version_id=vid, delete_marker=False)
     if checksum:
         version["checksum"] = checksum
+    acl_xml, acl_err = _upload_acl(store, bucket, key, headers)
+    if acl_err:
+        return acl_err
+    if acl_xml:
+        version["acl"] = acl_xml
     _apply_object_lock_on_write(store, bucket, headers, version)
     replace = "__overwrite__" if vstatus == "Disabled" else ("null" if vstatus == "Suspended" else None)
     entry = _write_object_version(store, bucket, key, version, replace_version_id=replace)
@@ -1807,9 +1973,12 @@ def create_multipart_upload(store, bucket, key, headers) -> S3Response:
     headers = {k.lower(): v for k, v in (headers or {}).items()}
     if not store.bucket_exists(bucket):
         return _error_xml("NoSuchBucket", "The specified bucket does not exist.", f"/{bucket}", 404)
+    acl_xml, acl_err = _upload_acl(store, bucket, key, headers)
+    if acl_err:
+        return acl_err
     upload_id = uuid.uuid4().hex + uuid.uuid4().hex
     _mpu(store)[upload_id] = {
-        "bucket": bucket, "key": key,
+        "bucket": bucket, "key": key, "acl": acl_xml,
         "content_type": headers.get("content-type", "application/octet-stream"),
         "metadata": {h[11:]: v for h, v in headers.items() if h.startswith("x-amz-meta-")},
         "storage_class": headers.get("x-amz-storage-class", "STANDARD"),
@@ -1909,6 +2078,8 @@ def complete_multipart_upload(store, bucket, key, query, body) -> S3Response:
                                    storage_class=up.get("storage_class", "STANDARD"),
                                    metadata=up.get("metadata") or {},
                                    version_id=vid, delete_marker=False, etag=etag)
+    if up.get("acl"):
+        version["acl"] = up["acl"]
     _apply_object_lock_on_write(store, bucket, up.get("lock_headers") or {}, version)
     replace = "__overwrite__" if vstatus == "Disabled" else ("null" if vstatus == "Suspended" else None)
     entry = _write_object_version(store, bucket, key, version, replace_version_id=replace)
@@ -2504,6 +2675,130 @@ def website_dispatch(store: ObjectStore, method: str, bucket: str, key: str, hea
     return _website_html_error(404, "NoSuchKey", "The specified key does not exist.")
 
 
+# ── S3 Control: Access Points (restXml /v20180820/accesspoint…) ───────────────────────
+# An access point is a named endpoint onto ONE bucket. Records live in the parent bucket's
+# meta["access_points"] (so they persist wherever bucket config persists, offline and Nano).
+# The access point's ALIAS (<name>-<id>-s3alias) is accepted anywhere a bucket name is — it is
+# resolved to the real bucket before dispatch, so objects are reachable through it. The
+# access point policy / Block Public Access settings are stored and returned (the simulator
+# does not authenticate principals, so a policy is never evaluated against a caller).
+_S3C_NS = "http://awss3control.amazonaws.com/doc/2016-08-20/"
+_ACCOUNT_ID = "123456789012"
+_AP_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,48}[a-z0-9]$")
+_AP_PAB_KEYS = ("BlockPublicAcls", "IgnorePublicAcls", "BlockPublicPolicy", "RestrictPublicBuckets")
+
+
+def _s3c_error(code: str, message: str, status: int) -> S3Response:
+    return _xml_response(f'<?xml version="1.0" encoding="UTF-8"?><ErrorResponse><Error><Code>{code}</Code>'
+                         f"<Message>{_xml_escape(message)}</Message></Error><RequestId>{_req_id()}</RequestId></ErrorResponse>", status)
+
+
+def _access_points(store: ObjectStore):
+    """Yield (bucket, name, record) for every access point in the account."""
+    for b, meta in list(store.buckets.items()):
+        for n, rec in ((meta or {}).get("access_points") or {}).items():
+            yield b, n, rec
+
+
+def _find_access_point(store: ObjectStore, name: str):
+    return next(((b, rec) for b, n, rec in _access_points(store) if n == name), (None, None))
+
+
+def _resolve_access_point(store: ObjectStore, bucket: str) -> str:
+    """An access point alias (…-s3alias) addresses its bucket."""
+    if bucket.endswith("-s3alias"):
+        for b, _n, rec in _access_points(store):
+            if rec.get("alias") == bucket:
+                return b
+    return bucket
+
+
+def _ap_xml(name: str, bucket: str, rec: dict, tag: str, full: bool) -> str:
+    vpc = (f"<VpcConfiguration><VpcId>{_xml_escape(rec['vpc'])}</VpcId></VpcConfiguration>" if rec.get("vpc") else "")
+    pab = "<PublicAccessBlockConfiguration>" + "".join(
+        f"<{k}>{'true' if rec['pab'].get(k) else 'false'}</{k}>" for k in _AP_PAB_KEYS) + "</PublicAccessBlockConfiguration>"
+    head = (f"<Name>{_xml_escape(name)}</Name><NetworkOrigin>{'VPC' if rec.get('vpc') else 'Internet'}</NetworkOrigin>{vpc}"
+            f"<Bucket>{bucket}</Bucket>")
+    if full:
+        return (f"<{tag}>{head}{pab}<CreationDate>{rec['created']}</CreationDate><Alias>{rec['alias']}</Alias>"
+                f"<AccessPointArn>{rec['arn']}</AccessPointArn><Endpoints><entry><key>ipv4</key><value>{name}-{_ACCOUNT_ID}.s3-accesspoint.us-east-1.amazonaws.com</value></entry></Endpoints>"
+                f"<BucketAccountId>{_ACCOUNT_ID}</BucketAccountId></{tag}>")
+    return (f"<{tag}>{head}<AccessPointArn>{rec['arn']}</AccessPointArn><Alias>{rec['alias']}</Alias>"
+            f"<BucketAccountId>{_ACCOUNT_ID}</BucketAccountId></{tag}>")
+
+
+def _s3control(store: ObjectStore, method: str, raw: str, query: dict, lheaders: dict, body: bytes) -> S3Response:
+    segs = [urllib.parse.unquote(x) for x in raw.split("/") if x]      # v20180820, accesspoint, name, [policy|policyStatus]
+    if len(segs) < 2 or segs[1] != "accesspoint":
+        return _s3c_error("NotImplemented", "This S3 Control operation is not implemented by Vyomi.", 501)
+    acct = lheaders.get("x-amz-account-id")
+    if acct and acct != _ACCOUNT_ID:
+        return _s3c_error("AccessDenied", "Account ID does not match the caller's account.", 403)
+    hdr = '<?xml version="1.0" encoding="UTF-8"?>'
+    if len(segs) == 2:                                                  # list
+        if method != "GET":
+            return _s3c_error("MethodNotAllowed", method, 405)
+        want = (query or {}).get("bucket")
+        rows = "".join(_ap_xml(n, b, rec, "AccessPoint", False) for b, n, rec in sorted(_access_points(store), key=lambda t: t[1])
+                       if not want or b == want)
+        return _xml_response(f'{hdr}<ListAccessPointsResult xmlns="{_S3C_NS}"><AccessPointList>{rows}</AccessPointList></ListAccessPointsResult>')
+    name = segs[2]
+    sub = segs[3] if len(segs) > 3 else ""
+    if sub not in ("", "policy", "policyStatus") or len(segs) > 4:
+        return _s3c_error("NotImplemented", f"Access point sub-resource '{sub}' is not implemented by Vyomi.", 501)
+    bucket, rec = _find_access_point(store, name)
+    if method == "PUT" and not sub:
+        if bucket is not None:
+            return _s3c_error("AccessPointAlreadyOwnedByYou", "Your previous request to create the named access point succeeded and you already own it.", 409)
+        if not _AP_NAME_RE.match(name):
+            return _s3c_error("InvalidRequest", "Access point names must be 3-50 characters of lowercase letters, numbers and hyphens.", 400)
+        try:
+            root = ET.fromstring(body or b"")
+        except ET.ParseError:
+            return _s3c_error("MalformedXML", "The XML you provided was not well-formed or did not validate against our published schema.", 400)
+        b = _child_text(root, "Bucket")
+        if not b or not store.bucket_exists(b):
+            return _s3c_error("NoSuchBucket", "The specified bucket does not exist.", 404)
+        vpc = _child_text(_child(root, "VpcConfiguration"), "VpcId") if _child(root, "VpcConfiguration") is not None else ""
+        pab_el = _child(root, "PublicAccessBlockConfiguration")
+        pab = {k: (_child_text(pab_el, k).lower() == "true" if pab_el is not None else not vpc) for k in _AP_PAB_KEYS}
+        rec = {"alias": f"{name}-{uuid.uuid4().hex[:10]}-s3alias", "vpc": vpc, "pab": pab, "created": _now(),
+               "arn": f"arn:aws:s3:us-east-1:{_ACCOUNT_ID}:accesspoint/{name}", "policy": None}
+        store.buckets[b].setdefault("access_points", {})[name] = rec
+        return _done(store, _xml_response(f'{hdr}<CreateAccessPointResult xmlns="{_S3C_NS}"><AccessPointArn>{rec["arn"]}</AccessPointArn><Alias>{rec["alias"]}</Alias></CreateAccessPointResult>'))
+    if bucket is None:
+        return _s3c_error("NoSuchAccessPoint", "The specified accesspoint does not exist.", 404)
+    if not sub:
+        if method == "GET":
+            return _xml_response(f'{hdr}' + _ap_xml(name, bucket, rec, "GetAccessPointResult", True).replace(
+                "<GetAccessPointResult>", f'<GetAccessPointResult xmlns="{_S3C_NS}">', 1))
+        if method == "DELETE":
+            del store.buckets[bucket]["access_points"][name]
+            return _done(store, _empty_response(204))
+    elif sub == "policy":
+        if method == "GET":
+            if not rec.get("policy"):
+                return _s3c_error("NoSuchAccessPointPolicy", "The specified accesspoint policy does not exist.", 404)
+            return _xml_response(f'{hdr}<GetAccessPointPolicyResult xmlns="{_S3C_NS}"><Policy>{_xml_escape(rec["policy"])}</Policy></GetAccessPointPolicyResult>')
+        if method == "PUT":
+            try:
+                doc = _child_text(ET.fromstring(body or b""), "Policy")
+                json.loads(doc)
+            except Exception:
+                return _s3c_error("MalformedPolicy", "Policies must be valid JSON and the first byte must be '{'", 400)
+            rec["policy"] = doc
+            return _done(store, _empty_response(200))
+        if method == "DELETE":
+            rec["policy"] = None
+            return _done(store, _empty_response(204))
+    elif sub == "policyStatus" and method == "GET":
+        if not rec.get("policy"):
+            return _s3c_error("NoSuchAccessPointPolicy", "The specified accesspoint policy does not exist.", 404)
+        public = _policy_is_public(json.loads(rec["policy"]))
+        return _xml_response(f'{hdr}<GetAccessPointPolicyStatusResult xmlns="{_S3C_NS}"><PolicyStatus><IsPublic>{"true" if public else "false"}</IsPublic></PolicyStatus></GetAccessPointPolicyStatusResult>')
+    return _s3c_error("MethodNotAllowed", method, 405)
+
+
 def dispatch(store: ObjectStore, method: str, path: str,
              query: dict | None = None, headers: dict | None = None,
              body: bytes = b"") -> S3Response:
@@ -2514,6 +2809,9 @@ def dispatch(store: ObjectStore, method: str, path: str,
     bucket, _, key = raw.partition("/")
     bucket = urllib.parse.unquote(bucket)
     method = (method or "GET").upper()
+    if bucket == "v20180820":     # S3 Control (access points; every other control op -> NotImplemented)
+        return _s3control(store, method, raw, query, lheaders, body)
+    bucket = _resolve_access_point(store, bucket)
     if method == "OPTIONS":
         return _cors_preflight(store, bucket, lheaders)
     if not bucket:

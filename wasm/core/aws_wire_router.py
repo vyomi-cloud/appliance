@@ -603,7 +603,9 @@ class AwsWireRouter:
         self.cw.asg_store = self.asg    # real Auto Scaling alarm actions (aws.cloudwatch.alarms.actions.compute)
         self.rds.cw_store = self.cw   # real DatabaseConnections/ReadIOPS/WriteIOPS metrics (rds.monitoring)
         self.ddb.cw_store = self.cw            # real per-op CloudWatch metrics (aws.dynamodb.monitor)
+        self.ddb.lam_store = self.lam          # DynamoDB Streams -> Lambda event-source mappings (dynamodb.lambda-triggers)
         self.ddb.kinesis_store = self.kinesis  # real Kinesis Data Streams destination (aws.dynamodb.kinesis)
+        self.s3.events_store = self.events   # S3 -> EventBridge notifications (default bus)
         self.s3.cw_store = self.cw    # real AWS/S3 request metrics (s3.bucket.metrics), derived from actual activity
         self.ram = s.get("ram") or _types.SimpleNamespace()   # Resource Access Manager (subnet/SG sharing)
         self.vpc.ram_store = self.ram   # DeleteSubnet/DeleteSecurityGroup refuse while actively shared
@@ -614,6 +616,7 @@ class AwsWireRouter:
         self.logs = s.get("logs") or logs.LogsStore()         # CloudWatch Logs
         self.logs.lam_store, self.logs.kinesis_store = self.lam, self.kinesis   # real subscription-filter delivery
         self.cw.logs_store = self.logs            # real log-based Contributor Insights rules
+        self.msg.cw_store = self.cw               # real AWS/SNS SMS delivery metrics (sns.sms.delivery-statistics)
         self.msg.logs_store = self.logs           # real SNS delivery-status logging (SQSSuccessFeedbackRoleArn/…)
         self.elbv2 = s.get("elbv2") or elbv2.Elbv2Store()
         self.elbv2.vpc_store = self.vpc    # target health reacts to real instance state

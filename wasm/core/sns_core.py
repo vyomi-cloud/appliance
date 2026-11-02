@@ -1095,7 +1095,41 @@ def _publish_to_phone(store, phone: str, msg: dict) -> str:
     message_id = str(uuid.uuid4())
     _log_delivery(store, kind="Notification", topic_arn="", protocol="sms", endpoint=phone,
                   subscription_arn="", subject="", message=msg["Message"], message_id=message_id)
+    _record_sms_metrics(store, phone, msg, s["sms_spend_usd"])
     return message_id
+
+
+_CALLING_CODES = (("1", "US"), ("7", "RU"), ("20", "EG"), ("27", "ZA"), ("31", "NL"), ("33", "FR"), ("34", "ES"), ("39", "IT"),
+                  ("44", "GB"), ("46", "SE"), ("49", "DE"), ("52", "MX"), ("55", "BR"), ("61", "AU"), ("62", "ID"),
+                  ("65", "SG"), ("81", "JP"), ("82", "KR"), ("86", "CN"), ("91", "IN"), ("971", "AE"), ("353", "IE"))
+
+
+def sms_country(phone: str) -> str:
+    """ISO country of an E.164 number from its calling code (longest prefix); "ZZ" if unknown."""
+    digits = phone.lstrip("+")
+    for code, iso in sorted(_CALLING_CODES, key=lambda t: -len(t[0])):
+        if digits.startswith(code):
+            return iso
+    return "ZZ"
+
+
+def _record_sms_metrics(store, phone: str, msg: dict, spend: float) -> None:
+    """Real AWS/SNS SMS metrics from the publishes that actually happened here: the simulator
+    "delivers" every accepted SMS into its own delivery log (there is no carrier), so each one
+    counts as a delivery. NumberOfNotificationsDelivered / SMSSuccessRate (aggregate and per
+    Country) and SMSMonthToDateSpentUSD land in CloudWatch for the console's statistics."""
+    cw = getattr(store, "cw_store", None)
+    if cw is None:
+        return
+    try:
+        from core import cloudwatch_core as _cw
+        country = sms_country(phone)
+        for dims in ([], [{"Name": "Country", "Value": country}]):
+            _cw.ingest_internal_metric(cw, "AWS/SNS", "NumberOfNotificationsDelivered", dims, 1.0, unit="Count")
+            _cw.ingest_internal_metric(cw, "AWS/SNS", "SMSSuccessRate", dims, 1.0, unit="None")
+        _cw.ingest_internal_metric(cw, "AWS/SNS", "SMSMonthToDateSpentUSD", [], round(spend, 6), unit="None")
+    except Exception:
+        pass
 
 
 def publish_arn(store, topic_arn: str, message: str) -> bool:
