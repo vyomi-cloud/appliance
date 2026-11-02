@@ -36,6 +36,7 @@ check(!(await p.locator('#vy-acct-menu a[data-act="signout"]').isVisible()), "me
 await p.keyboard.press("Escape"); await p.waitForTimeout(150);
 check((await p.locator("#vy-acct-menu.open").count()) === 0, "Esc closes the menu");
 await p.click("#vy-acct-btn");
+await p.locator("#vy-acct-menu.open").waitFor({ state: "visible", timeout: 5000 }).catch(() => {});
 if ((await p.locator('#vy-acct-menu a[data-act="activate"]').count()) === 1) {
   await p.click('#vy-acct-menu a[data-act="activate"]');
   const af = p.frameLocator("#vy-modal iframe");
