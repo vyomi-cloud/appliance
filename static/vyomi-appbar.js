@@ -17,13 +17,11 @@
     ['api', 'API reference', 'M16 18l6-6-6-6M8 6l-6 6 6 6']
   ];
   var css = '' +
-    '#vy-appbar{position:sticky;top:0;z-index:70;height:6px;background:#fff;font-family:Inter,system-ui,sans-serif}' +
-    '#vy-appbar::before{content:"";position:absolute;left:0;right:0;top:0;height:2px;background:#0f121c}' +   /* the line */
-    '#vy-appbar + header{top:6px !important}' +
-    '#vy-appbar .vy-notch{position:absolute;left:50%;top:0;height:44px;padding:0 44px;display:flex;align-items:center;gap:2px;isolation:isolate;transform:translate(-50%,-36px);transition:transform .18s ease .3s}' +   /* collapsed: 8px tab peeks out */
-    '#vy-appbar .vy-notch>*{opacity:0;transition:opacity .12s ease .3s}' +
-    '#vy-appbar:hover .vy-notch,#vy-appbar:focus-within .vy-notch,#vy-appbar:has(#disk-widget-slot.open) .vy-notch{transform:translate(-50%,0);transition-delay:0s}' +
-    '#vy-appbar:hover .vy-notch>*,#vy-appbar:focus-within .vy-notch>*,#vy-appbar:has(#disk-widget-slot.open) .vy-notch>*{opacity:1;transition-delay:.06s}' +
+    '#vy-appbar{position:relative;z-index:70;height:44px;background:#fff;display:flex;justify-content:center;font-family:Inter,system-ui,sans-serif}' +
+    '#vy-appbar::before{content:"";position:absolute;left:0;right:0;top:0;height:2px;background:#0f121c}' +   /* the line:  ------ */
+    '#vy-appbar .vy-cloud{position:absolute;left:14px;top:10px;display:flex;align-items:center;gap:6px;font-size:12px;color:#667085}' +
+    '#vy-appbar .vy-cloud b{color:#101828;font-weight:600}' +
+    '#vy-appbar .vy-notch{height:44px;padding:0 44px;display:flex;align-items:center;gap:2px;position:relative;isolation:isolate}' +   /* the dip:  \\____/ */
     '#vy-appbar .vy-notch::before{content:"";position:absolute;inset:0;z-index:-1;background:#0f121c;clip-path:polygon(0 0,100% 0,calc(100% - 30px) 100%,30px 100%)}' +
     '#vy-appbar .vy-notch .vy-sep{width:1px;height:20px;background:rgba(255,255,255,.18);margin:0 6px}' +
     '#vy-appbar #disk-widget-slot{position:relative !important;top:auto !important;right:auto !important;left:auto !important;z-index:5 !important;display:inline-block}' +
