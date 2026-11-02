@@ -645,7 +645,7 @@
    "offline": "limited"
   },
   "limitations": [
-   "Create/Get/List/Delete AccessPoint and Put/Get/Delete AccessPointPolicy (+PolicyStatus) are real s3control operations; the access point ALIAS is accepted anywhere a bucket name is and resolves to the bucket. Simulator requests are not authenticated, so an access point's policy, VPC origin and Block Public Access settings are stored and returned but never evaluated against a caller. Access points for object lambda, multi-region access points and access grants are not implemented (NotImplemented)."
+   "Create/Get/List/Delete AccessPoint and Put/Get/Delete AccessPointPolicy (+PolicyStatus) are real s3control operations; the access point ALIAS is accepted anywhere a bucket name is and resolves to the bucket. Simulator requests are not authenticated, so an access point's policy, VPC origin and Block Public Access settings are stored and returned but never evaluated against a caller. Object Lambda, Multi-Region Access Points and Access Grants are separate capabilities."
   ],
   "api": [
    "CreateAccessPoint",
@@ -675,13 +675,37 @@
  "s3.account.access-grants": {
   "title": "Access Grants",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "S3 Access Grants needs an IAM Identity Center directory integration and the s3control access-grants API, which Vyomi does not implement."
+   "Create/Get/List/Delete AccessGrantsInstance, Create/Get/List/Update/Delete AccessGrantsLocation, Create/Get/List/Delete AccessGrant, Put/Get/Delete the instance resource policy, Associate/Dissociate IAM Identity Center (ARN shape validated only; no directory is contacted), GetAccessGrantsInstanceForPrefix and GetDataAccess are real s3control operations with real ordering rules (grants before locations before the instance). GetDataAccess returns temporary credentials (ASIA key id, secret, session token) that the data plane ENFORCES: a request whose SigV4 Credential is that key id is confined to the matched grant's bucket/prefix and narrowed permission (READ/WRITE), cannot list outside the prefix, cannot use bucket-level operations, and is refused after expiry or with a wrong session token. The secret and signature are not verified (the simulator never authenticates) and the grantee is not matched against a caller identity, so any caller can request credentials for any existing grant. Directory (IAM Identity Center) users and groups are accepted as grantees when an Identity Center ARN is associated but no directory exists to resolve them. ListCallerAccessGrants, tagging of grants/locations/instance after creation, cross-account/organization resource-policy evaluation and CloudTrail data-event auditing (AuditContext) are not implemented."
   ],
-  "api": []
+  "api": [
+   "CreateAccessGrantsInstance",
+   "GetAccessGrantsInstance",
+   "ListAccessGrantsInstances",
+   "DeleteAccessGrantsInstance",
+   "AssociateAccessGrantsIdentityCenter",
+   "DissociateAccessGrantsIdentityCenter",
+   "GetAccessGrantsInstanceForPrefix",
+   "PutAccessGrantsInstanceResourcePolicy",
+   "GetAccessGrantsInstanceResourcePolicy",
+   "DeleteAccessGrantsInstanceResourcePolicy",
+   "CreateAccessGrantsLocation",
+   "GetAccessGrantsLocation",
+   "ListAccessGrantsLocations",
+   "UpdateAccessGrantsLocation",
+   "DeleteAccessGrantsLocation",
+   "CreateAccessGrant",
+   "GetAccessGrant",
+   "ListAccessGrants",
+   "DeleteAccessGrant",
+   "GetDataAccess"
+  ],
+  "tests": [
+   "tests/conformance/test_s3_sweeps3b_core.py"
+  ]
  },
  "s3.account.object-lambda-access-points": {
   "title": "Object Lambda Access Points",
@@ -712,24 +736,51 @@
  "s3.account.multi-region-access-points": {
   "title": "Multi-Region Access Points",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Multi-Region Access Points route requests across buckets in several regions through a global endpoint; Vyomi is single-region and does not implement the MRAP API."
+   "Create/Delete/PutPolicy are asynchronous in real S3; here they complete inline and DescribeMultiRegionAccessPointOperation returns the token already SUCCEEDED. Get/List/GetPolicy/GetPolicyStatus/GetRoutes/SubmitRoutes are real s3control operations; member buckets must exist in DISTINCT regions (bucket LocationConstraint) and each bucket can belong to one MRAP. Object requests addressed to the alias (<id>.mrap) or the MRAP ARN go to the highest-dial member bucket (reads: the first active bucket holding the key; dial 0 = passive, never read); PUT/DELETE/CompleteMultipartUpload are mirrored to every other member bucket synchronously (real MRAP replication is asynchronous and has latency/failover behaviour that is not modelled). Bucket-level operations (ListObjects) through an MRAP are refused like real S3. The SDK path needs SigV4A signing; Vyomi does not verify signatures, so it accepts a SigV4 request on the alias. The MRAP policy and Block Public Access settings are stored and returned, never evaluated against a caller. Failover controls beyond traffic dials, replication rules for MRAPs and MRAP metrics are not implemented."
   ],
-  "api": []
+  "api": [
+   "CreateMultiRegionAccessPoint",
+   "DescribeMultiRegionAccessPointOperation",
+   "GetMultiRegionAccessPoint",
+   "ListMultiRegionAccessPoints",
+   "DeleteMultiRegionAccessPoint",
+   "PutMultiRegionAccessPointPolicy",
+   "GetMultiRegionAccessPointPolicy",
+   "GetMultiRegionAccessPointPolicyStatus",
+   "GetMultiRegionAccessPointRoutes",
+   "SubmitMultiRegionAccessPointRoutes",
+   "GetObject/PutObject/HeadObject/DeleteObject (via MRAP alias/ARN)"
+  ],
+  "tests": [
+   "tests/conformance/test_s3_sweeps3b_core.py"
+  ]
  },
  "s3.account.batch-operations": {
   "title": "Batch Operations",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "S3 Batch Operations jobs (s3control CreateJob over an inventory/CSV manifest) are not implemented."
+   "CreateJob/DescribeJob/ListJobs/UpdateJobStatus/UpdateJobPriority/Put/Get/DeleteJobTagging are real s3control operations. Manifests are CSV (S3BatchOperations_CSV_20180820, Spec.Fields incl. VersionId) or inventory CSV (S3InventoryReport_CSV_20161130) read from the store, ETag-checked; a missing/unreadable manifest produces a Failed job. Operations really executed per row against the store: S3PutObjectCopy (target bucket/prefix, storage class, new tags/metadata, canned ACL, object-lock fields), S3PutObjectTagging, S3DeleteObjectTagging, S3PutObjectAcl (canned or explicit grants), S3InitiateRestoreObject (archived classes only; marks the version restored and HEAD returns x-amz-restore), S3PutObjectLegalHold, S3PutObjectRetention, S3ReplicateObject (runs the bucket's replication rules; fails per task when none applies) and LambdaInvoke (schema 1.0/2.0, one task per invocation through the Lambda core, Succeeded/TemporaryFailure/PermanentFailure honoured). Lifecycle Suspended (ConfirmationRequired) -> Ready -> Active -> Complete/Failed, Cancelled, priority, progress summary, >50% failures after 1000 tasks fails the job, and a CSV completion report + manifest.json are written to the report bucket/prefix. There is no worker: a job advances one stage per request to the simulator, so poll DescribeJob/ListJobs; tasks run synchronously inside the request that carries the job into Complete, so a very large manifest or slow Lambda delays that one request, and jobs run in priority order within a stage, not concurrently. The role is validated by ARN shape and account only (never assumed). Not implemented (501): S3ComputeObjectChecksum, S3UpdateObjectEncryption, ManifestGenerator-generated manifests, Modified-since constraints on S3PutObjectCopy, TemporaryFailure retries, job completion EventBridge/CloudWatch events and Batch Operations metrics."
   ],
-  "api": []
+  "api": [
+   "CreateJob",
+   "DescribeJob",
+   "ListJobs",
+   "UpdateJobStatus",
+   "UpdateJobPriority",
+   "PutJobTagging",
+   "GetJobTagging",
+   "DeleteJobTagging"
+  ],
+  "tests": [
+   "tests/conformance/test_s3_sweeps3b_core.py"
+  ]
  },
  "s3.account.account-public-access-block": {
   "title": "Block Public Access settings for this account",

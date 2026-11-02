@@ -1212,8 +1212,8 @@ def _register_unified_s3(app: FastAPI) -> None:
                     return await _wi.serve(_wi.new_services_router() or _wi.appliance_router(), request, path=path)
                 finally:
                     _ctx.REQUEST_PROVIDER.reset(_tok)
-        if request.method == "PATCH":
-            raise HTTPException(status_code=405, detail="Method Not Allowed")   # S3 has no PATCH
+        if request.method == "PATCH" and bucket != "v20180820":
+            raise HTTPException(status_code=405, detail="Method Not Allowed")   # S3 has no PATCH (S3 Control does: MRAP routes)
         if _is_reserved_bucket(bucket):
             raise HTTPException(status_code=404, detail="Not found")
         if request.method == "POST" and _wi.is_unified("rds"):
