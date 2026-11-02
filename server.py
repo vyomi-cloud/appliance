@@ -7801,6 +7801,21 @@ def _docker_connect_info(instance: dict, provider: str) -> dict:
     inst = _docker_instance_obj(instance)
     info = _docker_compute().ssh_info(inst)
     user = info.get("user") or "ubuntu"
+    if provider == "azure":
+        # Azure VMs log in as osProfile.adminUsername (azureuser by default), not the
+        # image's "ubuntu": create that account (same key, passwordless sudo).
+        _adm = str(((instance.get("properties") or {}).get("osProfile") or {}).get("adminUsername") or "azureuser")
+        if re.fullmatch(r"[a-z_][a-z0-9_-]{0,31}", _adm) and _adm != user:
+            try:
+                subprocess.run(["docker", "exec", inst.container_name, "sh", "-c",
+                    f"id {_adm} >/dev/null 2>&1 || useradd -m -s /bin/bash {_adm}; "
+                    f"mkdir -p /home/{_adm}/.ssh && cp /home/{user}/.ssh/authorized_keys /home/{_adm}/.ssh/authorized_keys && "
+                    f"chmod 700 /home/{_adm}/.ssh && chmod 600 /home/{_adm}/.ssh/authorized_keys && chown -R {_adm}:{_adm} /home/{_adm}/.ssh; "
+                    f"echo '{_adm} ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/90-{_adm}; passwd -u {_adm} >/dev/null 2>&1 || true"],
+                    capture_output=True, timeout=30)
+                user = _adm
+            except Exception:
+                pass
     key_path = _docker_ssh_key_path()
     container_ip = info.get("container_ip") or instance.get("private_ip") or ""
     published_port = info.get("published_port") or instance.get("ssh_host_port")

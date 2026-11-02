@@ -204,7 +204,16 @@ def ensure_instance_ssh_key(key_dir: str | os.PathLike | None = None) -> tuple[s
     """
     base = Path(key_dir or os.environ.get("VYOMI_INSTANCE_KEY_DIR")
                 or (Path.home() / ".vyomi" / "instance-keys"))
-    base.mkdir(parents=True, exist_ok=True)
+    try:
+        base.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        # The appliance runs as a non-root user whose HOME (/nonexistent) is not
+        # writable: without a key no instance gets an authorized_keys entry and
+        # ssh / key download fail. Fall back to the persistent data dir.
+        if key_dir or os.environ.get("VYOMI_INSTANCE_KEY_DIR"):
+            raise
+        base = Path(os.environ.get("CLOUDLEARN_DATA_DIR") or "/data") / "instance-keys"
+        base.mkdir(parents=True, exist_ok=True)
     priv = base / "id_ed25519"
     pub = base / "id_ed25519.pub"
     if not priv.exists() or not pub.exists():
