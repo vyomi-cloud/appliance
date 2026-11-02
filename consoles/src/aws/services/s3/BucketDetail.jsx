@@ -11,6 +11,7 @@ import StatusIndicator from "@cloudscape-design/components/status-indicator";
 import ContentLayout from "@cloudscape-design/components/content-layout";
 import Modal from "@cloudscape-design/components/modal";
 import FormField from "@cloudscape-design/components/form-field";
+import Checkbox from "@cloudscape-design/components/checkbox";
 import Input from "@cloudscape-design/components/input";
 import RadioGroup from "@cloudscape-design/components/radio-group";
 import { useAsync } from "../../../common/useAsync.js";
@@ -20,6 +21,7 @@ import ResourceTable from "../../kit/ResourceTable.jsx";
 import DeleteModal from "../../kit/DeleteModal.jsx";
 import { ErrorAlert, fmtBytes, fmtDate, KeyValue, NotSimulated, NotSimulatedContainer } from "../../kit/common.jsx";
 import * as api from "./api.js";
+import { EventNotificationsSection, EventBridgeSection, StorageMetricsSection, ReplicationMetricsSection, DataTransferSection } from "./Sweep.jsx";
 import TagsContainer from "./TagsContainer.jsx";
 import Permissions from "./Permissions.jsx";
 import { CapabilityContainer, saveNotice } from "../../kit/Capability.jsx";
@@ -141,9 +143,9 @@ function Properties({ bucket }) {
       <Encryption bucket={bucket} state={enc} />
       <IntelligentTieringSection bucket={bucket} />
       <LoggingSection bucket={bucket} />
-      <NotSimulatedContainer title="AWS CloudTrail data events" />
-      <CapabilityContainer id="s3.bucket.notification" title="Event notifications" />
-      <NotSimulatedContainer title="Amazon EventBridge" />
+      <CapabilityContainer id="s3.bucket.cloudtrail-data-events" title="AWS CloudTrail data events" />
+      <EventNotificationsSection bucket={bucket} />
+      <EventBridgeSection bucket={bucket} />
       <CapabilityContainer id="s3.bucket.accelerate" title="Transfer acceleration" />
       <ObjectLockSection bucket={bucket} />
       <RequestPaymentSection bucket={bucket} />
@@ -461,11 +463,11 @@ function MetricsConfigSection({ bucket }) {
 function Metrics({ bucket }) {
   return (
     <SpaceBetween size="l">
-      <NotSimulatedContainer title="Bucket metrics" feature="CloudWatch storage metrics for S3" />
-      <NotSimulatedContainer title="Storage Lens metrics" />
+      <StorageMetricsSection bucket={bucket} />
+      <CapabilityContainer id="s3.bucket.storage-lens" title="Storage Lens metrics" />
       <MetricsConfigSection bucket={bucket} />
-      <NotSimulatedContainer title="Replication metrics" />
-      <NotSimulatedContainer title="Data transfer metrics" />
+      <ReplicationMetricsSection bucket={bucket} />
+      <DataTransferSection bucket={bucket} />
     </SpaceBetween>
   );
 }
@@ -501,7 +503,7 @@ function ReplicationSection({ bucket }) {
           <Button variant="primary" loading={saving} onClick={async () => {
             setSaving(true);
             try {
-              const rule = { id: create.id || `rule-${Date.now()}`, status: "Enabled", prefix: create.prefix, destination: create.destination };
+              const rule = { id: create.id || `rule-${Date.now()}`, status: "Enabled", prefix: create.prefix, destination: create.destination, metrics: !!create.metrics };
               await api.putReplicationRules(bucket, [...rules, rule]);
               notify.success(`Successfully created replication rule.${saveNotice("s3.bucket.replication")}`);
               setCreate(null); rep.reload();
@@ -516,6 +518,8 @@ function ReplicationSection({ bucket }) {
           <FormField label="Prefix" description="Limit the scope of this rule to keys starting with this prefix. Leave blank to apply to the entire bucket.">
             <Input value={create.prefix} onChange={({ detail }) => setCreate({ ...create, prefix: detail.value })} />
           </FormField>
+          <Checkbox checked={!!create.metrics} onChange={({ detail }) => setCreate({ ...create, metrics: detail.checked })}
+            description="Publish replication metrics (ReplicationLatency, BytesPendingReplication, OperationsPendingReplication) to CloudWatch.">Replication metrics</Checkbox>
         </SpaceBetween>}
       </Modal>
     </CapabilityContainer>

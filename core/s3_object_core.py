@@ -26,6 +26,7 @@ import csv
 import hashlib
 import io
 import json
+import time
 import zlib
 import base64
 import re
@@ -1298,8 +1299,85 @@ def _done(store: ObjectStore, resp: S3Response) -> S3Response:
     return resp
 
 
+_EB_TYPES = {"ObjectCreated": "Object Created", "ObjectRemoved": "Object Deleted",
+             "LifecycleExpiration": "Object Deleted", "LifecycleTransition": "Object Storage Class Changed"}
+_STORAGE_TYPE = {"STANDARD": "StandardStorage", "STANDARD_IA": "StandardIAStorage",
+                 "ONEZONE_IA": "OneZoneIAStorage", "REDUCED_REDUNDANCY": "ReducedRedundancyStorage",
+                 "GLACIER": "GlacierStorage", "GLACIER_IR": "GlacierInstantRetrievalStorage",
+                 "DEEP_ARCHIVE": "DeepArchiveStorage", "INTELLIGENT_TIERING": "IntelligentTieringFAStorage"}
+
+
+def _eventbridge_deliver(store: ObjectStore, bucket: str, key: str, event_name: str,
+                          version: dict | None, source: str) -> None:
+    """Amazon EventBridge notifications: a bucket with EventBridgeConfiguration publishes a
+    real "Object Created" / "Object Deleted" / "Delete Marker Created" event (source aws.s3,
+    the native detail shape) onto the account's DEFAULT event bus, where the account's
+    rules/targets match and fan out through the real eventbridge core."""
+    eb = getattr(store, "events_store", None)
+    if eb is None or event_name == "s3:TestEvent" or not store.bucket_exists(bucket):
+        return
+    if not bucket_notifications(store, bucket).get("eventBridgeEnabled"):
+        return
+    parts = event_name.replace("s3:", "").split(":")
+    detail_type = _EB_TYPES.get(parts[0])
+    if detail_type is None:
+        return
+    if len(parts) > 1 and parts[1] == "DeleteMarkerCreated":
+        detail_type = "Object Deleted"
+    detail = {"version": "0", "bucket": {"name": bucket},
+              "object": {"key": key, "size": int((version or {}).get("size", 0) or 0),
+                         "etag": ((version or {}).get("etag", "") or "").strip('"'),
+                         "version-id": (version or {}).get("version_id", "null"),
+                         "sequencer": uuid.uuid4().hex[:16]},
+              "request-id": _req_id(), "requester": "123456789012",
+              "source-ip-address": "127.0.0.1", "reason": source or parts[-1]}
+    if parts[0] == "ObjectRemoved":
+        detail["deletion-type"] = ("Delete Marker Created" if parts[-1] == "DeleteMarkerCreated"
+                                   else "Permanently Deleted")
+        detail.get("object", {}).pop("etag", None)
+    from core import eventbridge_core as _eb
+    _eb.dispatch(eb, "AWSEvents.PutEvents", {"Entries": [{
+        "Source": "aws.s3", "DetailType": detail_type, "Detail": json.dumps(detail),
+        "Resources": [f"arn:aws:s3:::{bucket}"], "EventBusName": "default"}]},
+        lam_store=getattr(store, "lam_store", None))
+
+
+def _record_storage_metrics(store: ObjectStore, bucket: str) -> None:
+    """Real AWS/S3 storage metrics (BucketSizeBytes per StorageType, NumberOfObjects), computed
+    from the bucket's ACTUAL contents each time its contents change (real S3 publishes them
+    once a day; here the point lands the instant the change does)."""
+    cw = getattr(store, "cw_store", None)
+    if cw is None or not store.bucket_exists(bucket):
+        return
+    try:
+        from core import cloudwatch_core as _cw_core
+    except ImportError:
+        return
+    sizes: dict[str, int] = {"StandardStorage": 0}
+    count = 0
+    for entry in store.bucket_objects(bucket).values():
+        for v in (entry or {}).get("versions") or []:
+            if v.get("is_delete_marker"):
+                continue
+            st_type = _STORAGE_TYPE.get(v.get("storage_class") or "STANDARD", "StandardStorage")
+            sizes[st_type] = sizes.get(st_type, 0) + int(v.get("size", 0) or 0)
+            count += 1
+    base = [{"Name": "BucketName", "Value": bucket}]
+    for st_type, n in sizes.items():
+        _cw_core.ingest_internal_metric(cw, "AWS/S3", "BucketSizeBytes",
+                                         base + [{"Name": "StorageType", "Value": st_type}], float(n), unit="Bytes")
+    _cw_core.ingest_internal_metric(cw, "AWS/S3", "NumberOfObjects",
+                                     base + [{"Name": "StorageType", "Value": "AllStorageTypes"}], float(count), unit="Count")
+
+
 def _emit(store: ObjectStore, bucket: str, key: str, event: str, entry: dict | None, source: str) -> None:
     version = (entry or {}).get("versions", [None])[0] if isinstance(entry, dict) and entry.get("versions") else None
+    for hook in (lambda: _eventbridge_deliver(store, bucket, key, event, version, source),
+                 lambda: _record_storage_metrics(store, bucket) if event != "s3:TestEvent" else None):
+        try:
+            hook()
+        except Exception:   # best-effort; never fail the data-plane write
+            pass
     try:
         store.emit_event(bucket, key, event, version, source)
     except Exception:   # delivery is best-effort; never fail the data-plane write
@@ -1327,7 +1405,11 @@ def _replication_rules(store: ObjectStore, bucket: str) -> list:
         filt = _child(r, "Filter")
         prefix = _child_text(filt, "Prefix") if filt is not None else _child_text(r, "Prefix")
         dmr = _child(r, "DeleteMarkerReplication")
+        mt = _child(dest_el, "Metrics") if dest_el is not None else None
+        rtc = _child(dest_el, "ReplicationTime") if dest_el is not None else None
         rules.append({
+            "metrics": (mt is not None and _child_text(mt, "Status") == "Enabled")
+                       or (rtc is not None and _child_text(rtc, "Status") == "Enabled"),
             "id": _child_text(r, "ID"),
             "status": _child_text(r, "Status", "Disabled"),
             "prefix": prefix,
@@ -1335,6 +1417,23 @@ def _replication_rules(store: ObjectStore, bucket: str) -> list:
             "delete_marker_replication": dmr is not None and _child_text(dmr, "Status") == "Enabled",
         })
     return rules
+
+
+def _record_replication_metrics(store: ObjectStore, src: str, dest: str, rule_id: str, latency: float) -> None:
+    """Real AWS/S3 replication metrics for a rule with Metrics/ReplicationTime enabled: the
+    measured copy latency; replication is synchronous here so nothing is ever pending."""
+    cw = getattr(store, "cw_store", None)
+    if cw is None:
+        return
+    try:
+        from core import cloudwatch_core as _cw_core
+        dims = [{"Name": "DestinationBucket", "Value": dest}, {"Name": "RuleId", "Value": rule_id},
+                {"Name": "SourceBucket", "Value": src}]   # name-sorted, as the CloudWatch API keys series
+        _cw_core.ingest_internal_metric(cw, "AWS/S3", "ReplicationLatency", dims, round(latency, 6), unit="Seconds")
+        _cw_core.ingest_internal_metric(cw, "AWS/S3", "BytesPendingReplication", dims, 0.0, unit="Bytes")
+        _cw_core.ingest_internal_metric(cw, "AWS/S3", "OperationsPendingReplication", dims, 0.0, unit="Count")
+    except Exception:
+        pass
 
 
 def _replicate(store: ObjectStore, bucket: str, key: str, entry: dict | None) -> None:
@@ -1347,6 +1446,7 @@ def _replicate(store: ObjectStore, bucket: str, key: str, entry: dict | None) ->
     if cur.get("is_delete_marker"):
         return
     applied = False
+    t0 = time.monotonic()
     for rule in _replication_rules(store, bucket):
         if rule["status"] != "Enabled":
             continue
@@ -1365,6 +1465,8 @@ def _replicate(store: ObjectStore, bucket: str, key: str, entry: dict | None) ->
         replace = "__overwrite__" if vstatus_dest == "Disabled" else ("null" if vstatus_dest == "Suspended" else None)
         _write_object_version(store, dest, key, version, replace_version_id=replace)
         applied = True
+        if rule.get("metrics"):
+            _record_replication_metrics(store, bucket, dest, rule["id"], time.monotonic() - t0)
     if applied:
         cur["replication_status"] = "COMPLETED"
 

@@ -602,6 +602,7 @@ class AwsWireRouter:
         self.rds.cw_store = self.cw   # real DatabaseConnections/ReadIOPS/WriteIOPS metrics (rds.monitoring)
         self.ddb.cw_store = self.cw            # real per-op CloudWatch metrics (aws.dynamodb.monitor)
         self.ddb.kinesis_store = self.kinesis  # real Kinesis Data Streams destination (aws.dynamodb.kinesis)
+        self.s3.events_store = self.events   # S3 -> EventBridge notifications (default bus)
         self.s3.cw_store = self.cw    # real AWS/S3 request metrics (s3.bucket.metrics), derived from actual activity
         self.ram = s.get("ram") or _types.SimpleNamespace()   # Resource Access Manager (subnet/SG sharing)
         self.vpc.ram_store = self.ram   # DeleteSubnet/DeleteSecurityGroup refuse while actively shared

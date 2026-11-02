@@ -317,7 +317,7 @@
    "offline": "limited"
   },
   "limitations": [
-   "Events (ObjectCreated, ObjectRemoved, DeleteMarkerCreated, TestEvent) are delivered to the configured SQS queues, SNS topics and Lambda functions in this simulator on both substrates — Nano/dev_server delivers through the same in-context SQS/SNS/Lambda stores the native wire itself reaches; the offline appliance delivers through its own appliance-wide stores. EventBridge delivery and delivery retries/DLQ on failure are not modeled."
+   "Events (ObjectCreated, ObjectRemoved, DeleteMarkerCreated, TestEvent) are delivered to the configured SQS queues, SNS topics and Lambda functions in this simulator on both substrates — Nano/dev_server delivers through the same in-context SQS/SNS/Lambda stores the native wire itself reaches; the offline appliance delivers through its own appliance-wide stores. Delivery retries/DLQ on failure are not modeled."
   ],
   "api": [
    "PutBucketNotificationConfiguration",
@@ -448,7 +448,7 @@
    "offline": "limited"
   },
   "limitations": [
-   "Every PutObject/GetObject/HeadObject/DeleteObject/ListObjects(V2) request that matches a configured filter's prefix publishes real AWS/S3 CloudWatch datapoints AS IT HAPPENS — AllRequests, GetRequests/PutRequests/HeadRequests/DeleteRequests/ListRequests, 4xxErrors, BytesDownloaded, BytesUploaded, dimensioned by BucketName + FilterId — derived from actual request activity, never synthetic. There is no recurring publish schedule (real CloudWatch batches on ~1-minute boundaries; here a point lands the instant the request is served) and PostRequests/5xxErrors/FirstByteLatency/TotalRequestLatency/storage metrics (BucketSizeBytes, NumberOfObjects) are not yet produced."
+   "Every PutObject/GetObject/HeadObject/DeleteObject/ListObjects(V2) request that matches a configured filter's prefix publishes real AWS/S3 CloudWatch datapoints AS IT HAPPENS — AllRequests, GetRequests/PutRequests/HeadRequests/DeleteRequests/ListRequests, 4xxErrors, BytesDownloaded, BytesUploaded, dimensioned by BucketName + FilterId — derived from actual request activity, never synthetic. There is no recurring publish schedule (a point lands the instant the request is served) and PostRequests/5xxErrors/FirstByteLatency/TotalRequestLatency are not yet produced."
   ],
   "api": [
    "PutBucketMetricsConfiguration",
@@ -468,10 +468,90 @@
  },
  "s3.object.checksums": {
   "title": "Additional checksums (x-amz-checksum-*)",
-  "level": { "nano": "limited", "offline": "limited" },
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
   "limitations": [
    "CRC-32, CRC-32C, CRC-64/NVME, SHA-1 and SHA-256 are computed against the standard algorithms and VERIFIED on PutObject (a mismatch is rejected with 400 BadDigest and the object is not stored), whether sent as a header or as an aws-chunked trailer; they are stored with the version, returned on Put/Copy, and on Head/Get when x-amz-checksum-mode is ENABLED. Multipart uploads do not yet carry per-part/composite checksums, and GetObjectAttributes is not implemented."
   ],
-  "tests": ["tests/conformance/test_s3_checksums_core.py"]
+  "tests": [
+   "tests/conformance/test_s3_checksums_core.py"
+  ]
+ },
+ "s3.bucket.eventbridge": {
+  "title": "Amazon EventBridge notifications",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "With EventBridgeConfiguration on, every object create/delete publishes a real aws.s3 event (Object Created / Object Deleted, native detail shape) onto the account's default event bus, where rules and targets match it. Lifecycle-transition and restore event types are not published."
+  ],
+  "api": [
+   "PutBucketNotificationConfiguration",
+   "PutEvents"
+  ],
+  "probe": {
+   "s3_roundtrip": "notification",
+   "doc": "<NotificationConfiguration><EventBridgeConfiguration></EventBridgeConfiguration></NotificationConfiguration>"
+  },
+  "tests": [
+   "tests/conformance/test_s3_sweepa_core.py"
+  ]
+ },
+ "s3.bucket.storage-metrics": {
+  "title": "Storage metrics (BucketSizeBytes, NumberOfObjects)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Published to CloudWatch (AWS/S3) from the bucket's actual contents every time they change, per StorageType; real S3 publishes once a day."
+  ],
+  "api": [
+   "GetMetricStatistics"
+  ],
+  "tests": [
+   "tests/conformance/test_s3_sweepa_core.py"
+  ]
+ },
+ "s3.bucket.replication-metrics": {
+  "title": "Replication metrics",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Published for rules with Replication metrics (or Replication Time Control) enabled: measured ReplicationLatency; replication is synchronous so BytesPendingReplication/OperationsPendingReplication are always 0."
+  ],
+  "api": [
+   "GetMetricStatistics"
+  ],
+  "tests": [
+   "tests/conformance/test_s3_sweepa_core.py"
+  ]
+ },
+ "s3.bucket.cloudtrail-data-events": {
+  "title": "AWS CloudTrail data events",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Vyomi has no CloudTrail trail service to record S3 data events into, so data-event logging cannot be configured."
+  ],
+  "api": []
+ },
+ "s3.bucket.storage-lens": {
+  "title": "Storage Lens metrics",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Storage Lens dashboards are an account/organization-level analytics product Vyomi does not implement."
+  ],
+  "api": []
  }
 }

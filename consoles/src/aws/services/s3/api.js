@@ -369,9 +369,10 @@ export async function getReplication(b) {
   if (!r.value) return r;
   return { rules: asList(r.value.ReplicationConfiguration?.Rule).map((x) => ({
     id: x.ID, status: x.Status, prefix: x.Filter?.Prefix ?? "", destination: (x.Destination?.Bucket || "").split(":::").pop() || "",
+    metrics: x.Destination?.Metrics?.Status === "Enabled",
   })) };
 }
-const replicationRuleXml = (r) => `<Rule><ID>${esc(r.id)}</ID><Status>${r.status}</Status><Filter><Prefix>${esc(r.prefix || "")}</Prefix></Filter><Destination><Bucket>arn:aws:s3:::${esc(r.destination)}</Bucket></Destination></Rule>`;
+const replicationRuleXml = (r) => `<Rule><ID>${esc(r.id)}</ID><Status>${r.status}</Status><Filter><Prefix>${esc(r.prefix || "")}</Prefix></Filter><Destination><Bucket>arn:aws:s3:::${esc(r.destination)}</Bucket>${r.metrics ? "<Metrics><Status>Enabled</Status><EventThreshold><Minutes>15</Minutes></EventThreshold></Metrics>" : ""}</Destination></Rule>`;
 export const putReplicationRules = (b, rules) => rules.length
   ? s3("PUT", `/${b}`, { query: { replication: "" }, body: xml(`<ReplicationConfiguration ${NS}><Role>${REPLICATION_ROLE}</Role>${rules.map(replicationRuleXml).join("")}</ReplicationConfiguration>`) })
   : s3("DELETE", `/${b}`, { query: { replication: "" } });

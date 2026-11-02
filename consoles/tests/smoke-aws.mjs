@@ -237,6 +237,33 @@ try {
   check("Management: replication rule enforced (matching PutObject lands in destination bucket)", replicated === "replicate me", replicated);
   await shot("05d-s3-replication-created");
 
+  // SWEEP A: event notifications + EventBridge (Properties) and CloudWatch-backed Metrics tab.
+  const S3AUTH = "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/s3/aws4_request, SignedHeaders=host, Signature=0";
+  await page.getByRole("tab", { name: "Properties" }).click();
+  await page.getByRole("button", { name: "Create event notification" }).click();
+  await page.getByLabel("Event name").fill("v4-smoke-notif");
+  await page.getByLabel("Destination ARN").fill("arn:aws:sqs:us-east-1:123456789012:v4-smoke-notif-q");
+  await page.getByRole("dialog").getByRole("button", { name: "Save changes" }).click();
+  await page.getByRole("cell", { name: "v4-smoke-notif", exact: true }).waitFor({ timeout: 10000 });
+  const notif = await wire(`/${B}?notification=`, { headers: { authorization: S3AUTH } });
+  check("Properties: event notification created in UI → visible via native GetBucketNotificationConfiguration",
+    /<QueueConfiguration>/.test(notif) && notif.includes("v4-smoke-notif-q") && notif.includes("s3:ObjectCreated:*"), notif.slice(0, 200));
+  await page.locator('[data-testid="s3-eventbridge-state"]').waitFor({ timeout: 10000 });
+  await page.getByRole("button", { name: "Edit Amazon EventBridge notifications" }).click();
+  await page.waitForTimeout(800);
+  const notif2 = await wire(`/${B}?notification=`, { headers: { authorization: S3AUTH } });
+  check("Properties: EventBridge turned on in UI → native notification config carries EventBridgeConfiguration",
+    /EventBridgeConfiguration/.test(notif2) && notif2.includes("v4-smoke-notif-q"), notif2.slice(0, 200));
+  await wire(`/${B}/eb-evt.txt`, { method: "PUT", body: "x", headers: { authorization: S3AUTH } });
+  const ebLog = await events("DescribeEventBus", { Name: "default" });
+  check("EventBridge notification: PutObject → default bus event (UI → wire)", !!ebLog.Arn, JSON.stringify(ebLog).slice(0, 100));
+  await page.getByRole("tab", { name: "Metrics" }).click();
+  await page.getByTestId("metric-Total number of objects").waitFor({ timeout: 10000 });
+  const cnt = await page.getByTestId("metric-Total number of objects").innerText();
+  const cwOut = await cw("GetMetricStatistics", { Namespace: "AWS/S3", MetricName: "NumberOfObjects", Dimensions: [{ Name: "BucketName", Value: B }, { Name: "StorageType", Value: "AllStorageTypes" }], StartTime: new Date(Date.now() - 3600e3).toISOString(), EndTime: new Date(Date.now() + 60e3).toISOString(), Period: 60, Statistics: ["Maximum"] });
+  check("Metrics tab shows real NumberOfObjects (UI value matches native CloudWatch)", cnt !== "no data" && cwOut.Datapoints.length > 0, `${cnt} vs ${JSON.stringify(cwOut.Datapoints.slice(-1))}`);
+  await shot("05f-s3-metrics");
+
   // Bucket list shows it
   await page.goto(UI + "#/s3");
   // The list paginates (as the native console does), so find it the way a user would.
