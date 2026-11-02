@@ -19,7 +19,8 @@ import SpaceBetween from "@cloudscape-design/components/space-between";
 import Spinner from "@cloudscape-design/components/spinner";
 import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
-import { ErrorAlert, KeyValue, NotSimulatedContainer, fmtDate } from "../../kit/common.jsx";
+import { ErrorAlert, KeyValue, fmtDate } from "../../kit/common.jsx";
+import CanaryTab from "./CanaryTab.jsx";
 import * as api from "./api.js";
 
 function CreateStageModal({ apiId, visible, onDismiss, onDone, deployments }) {
@@ -101,7 +102,7 @@ function StageTabs({ apiId, stage, reload }) {
           columnDefinitions={[{ id: "id", header: "Deployment ID", cell: (x) => x.id }, { id: "d", header: "Description", cell: (x) => x.description || "-" }, { id: "c", header: "Created", cell: (x) => fmtDate(x.createdDate) }]}
           empty={<Box textAlign="center" color="inherit">No deployments</Box>} />
       ) },
-      { id: "canary", label: "Canary", content: <NotSimulatedContainer title="Canary" note="Canary release deployments (splitting traffic between two deployments on one stage) aren't modeled by Vyomi." /> },
+      { id: "canary", label: "Canary", content: <CanaryTab apiId={apiId} stage={stage} reload={reload} /> },
       { id: "tags", label: "Tags", content: (
         <Table variant="container" header={<Header variant="h2" counter={`(${Object.keys(stage.tags || {}).length})`} actions={<Button>Manage tags</Button>}>Tags</Header>}
           items={Object.entries(stage.tags || {}).map(([k, v]) => ({ k, v }))}

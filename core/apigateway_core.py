@@ -348,7 +348,7 @@ def _lambda_name_from_uri(uri: str) -> str:
     return uri.rsplit("/", 1)[-1]
 
 
-def _run_integration(integ, method, path, headers, query, path_params, body, lambda_store):
+def _run_integration(integ, method, path, headers, query, path_params, body, lambda_store, stage_ctx=None):
     """Execute one method's integration. Returns (status, headers, body_bytes, log_lines)."""
     log = [f"Starting execution for request", f"HTTP Method: {method}, Resource Path: {path}"]
     if integ["type"] == "MOCK":
@@ -369,6 +369,11 @@ def _run_integration(integ, method, path, headers, query, path_params, body, lam
             "headers": dict(headers or {}), "queryStringParameters": dict(query or {}) or None,
             "pathParameters": path_params or None, "body": req_body, "isBase64Encoded": False,
         }
+        if stage_ctx:
+            event["stageVariables"] = dict(stage_ctx.get("variables") or {}) or None
+            event["requestContext"] = {"stage": stage_ctx["stage"], "apiId": stage_ctx["apiId"],
+                                       "deploymentId": stage_ctx["deploymentId"], "resourcePath": path,
+                                       "httpMethod": (method or "GET").upper()}
         lam_out = lambda_core.dispatch(
             lambda_store, "POST", f"/2015-03-31/functions/{fn}/invocations", {}, {}, json.dumps(event).encode())
         if lam_out.headers.get("X-Amz-Function-Error"):
@@ -419,10 +424,29 @@ def _match_resource(api: dict, path: str):
     return None, {}
 
 
+_STAGE_VAR_RE = re.compile(r"\$\{stageVariables\.([A-Za-z0-9_]+)\}")
+
+
+def _canary_pick(st: dict, rnd=None) -> bool:
+    """True when this request is routed to the stage's canary deployment: canarySettings
+    percentTraffic is the probability (0-100) any one request goes to the canary."""
+    cs = st.get("canarySettings") or {}
+    pct = float(cs.get("percentTraffic") or 0)
+    if pct <= 0:
+        return False
+    if pct >= 100:
+        return True
+    import random
+    return (rnd or random.random)() * 100 < pct
+
+
 def invoke(store, api_id, stage, method, path, headers=None, query=None,
            body=b"", lambda_store=None):
     """Route a request through a DEPLOYED API: match resource → method → integration
-    → response. Returns an ApiGwResponse."""
+    → response. Returns an ApiGwResponse. Stage variables are substituted into the
+    integration URI (`${stageVariables.name}`) and passed to Lambda; a request picked for the
+    stage's canary (canarySettings.percentTraffic) sees the canary's stageVariableOverrides
+    and reports the canary deployment id."""
     api = _apis(store).get(api_id)
     if not api:
         return _err(403, "ForbiddenException", "Missing Authentication Token")
@@ -434,8 +458,22 @@ def invoke(store, api_id, stage, method, path, headers=None, query=None,
     m = res["methods"].get((method or "GET").upper()) or res["methods"].get("ANY")
     if not m or not m.get("integration"):
         return _err(403, "MissingAuthenticationTokenException", "Missing Authentication Token")
+    st = api["stages"][stage]
+    canary = _canary_pick(st)
+    variables = dict(st.get("variables") or {})
+    deployment_id = st.get("deploymentId")
+    if canary:
+        variables.update((st.get("canarySettings") or {}).get("stageVariableOverrides") or {})
+        deployment_id = (st.get("canarySettings") or {}).get("deploymentId") or deployment_id
+    integ = dict(m["integration"])
+    if isinstance(integ.get("uri"), str):
+        integ["uri"] = _STAGE_VAR_RE.sub(lambda mm: str(variables.get(mm.group(1), "")), integ["uri"])
+    ctx = {"stage": stage, "apiId": api_id, "deploymentId": deployment_id, "canary": canary, "variables": variables}
     status, out_headers, out_body, _log = _run_integration(
-        m["integration"], method, path, headers, query, path_params, body, lambda_store or store)
+        integ, method, path, headers, query, path_params, body, lambda_store or store, ctx)
+    out_headers = dict(out_headers or {})
+    if canary:
+        out_headers.setdefault("x-amzn-apigw-canary", "true")
     return ApiGwResponse(status=status, body=out_body, headers=out_headers)
 
 
@@ -479,8 +517,20 @@ def _create_deployment(store, api_id, body):
     dep = {"id": dep_id, "description": body.get("description") or "", "createdDate": _now()}
     api["deployments"][dep_id] = dep
     stage_name = body.get("stageName")
-    if stage_name:
-        _put_stage(api, stage_name, dep_id, body)
+    canary = body.get("canarySettings")
+    if stage_name and isinstance(canary, dict):
+        cs = _canary_settings(canary, dep_id)
+        cs["deploymentId"] = dep_id
+        existing = api["stages"].get(stage_name)
+        if existing is None:
+            st = _put_stage(api, stage_name, dep_id, body)        # first deployment: stage + canary on it
+        else:
+            st = existing                                           # stage keeps its live deployment
+            st["lastUpdatedDate"] = _now()
+        st["canarySettings"] = cs
+    elif stage_name:
+        st = _put_stage(api, stage_name, dep_id, body)
+        st["canarySettings"] = None                                 # a plain deployment promotes + clears the canary
     return _json(201, {"id": dep_id, "description": dep["description"], "createdDate": dep["createdDate"]})
 
 
@@ -496,6 +546,19 @@ def _get_deployment(store, api_id, dep_id):
     if not d:
         raise NotFound(f"Invalid Deployment identifier specified: {dep_id}")
     return _json(200, dict(d))
+
+
+def _canary_settings(spec: dict, deployment_id: str | None) -> dict:
+    pct = spec.get("percentTraffic", 0.0)
+    try:
+        pct = float(pct)
+    except (TypeError, ValueError):
+        raise BadRequest("Invalid canarySettings.percentTraffic")
+    if not 0.0 <= pct <= 100.0:
+        raise BadRequest("canarySettings.percentTraffic must be between 0.0 and 100.0")
+    return {"percentTraffic": pct, "deploymentId": spec.get("deploymentId") or deployment_id,
+            "stageVariableOverrides": {str(k): str(v) for k, v in (spec.get("stageVariableOverrides") or {}).items()},
+            "useStageCache": bool(spec.get("useStageCache", False))}
 
 
 def _put_stage(api, name, deployment_id, body):
@@ -543,9 +606,11 @@ def _create_stage(store, api_id, body):
     dep_id = body.get("deploymentId")
     if not dep_id or dep_id not in api["deployments"]:
         raise NotFound(f"Invalid Deployment identifier specified: {dep_id}")
+    cs = _canary_settings(body["canarySettings"], dep_id) if isinstance(body.get("canarySettings"), dict) else None
     st = _put_stage(api, name, dep_id, body)
     if body.get("variables"):
         st["variables"] = dict(body["variables"])
+    st["canarySettings"] = cs
     return _json(201, _stage_view(api, st))
 
 
@@ -584,6 +649,26 @@ def _update_stage(store, api_id, name, body):
                 st["variables"].pop(parts[1], None)
             else:
                 st["variables"][parts[1]] = value
+        elif parts[0] == "canarySettings":
+            if verb == "remove" and len(parts) == 1:
+                st["canarySettings"] = None
+            else:
+                cs = st.get("canarySettings") or _canary_settings({}, st.get("deploymentId"))
+                if len(parts) == 2:
+                    if parts[1] == "percentTraffic":
+                        cs = _canary_settings({**cs, "percentTraffic": value}, st.get("deploymentId"))
+                    elif parts[1] == "deploymentId":
+                        if value not in api["deployments"]:
+                            raise NotFound(f"Invalid Deployment identifier specified: {value}")
+                        cs["deploymentId"] = value
+                    elif parts[1] == "useStageCache":
+                        cs["useStageCache"] = str(value).lower() == "true"
+                elif len(parts) == 3 and parts[1] == "stageVariableOverrides":
+                    if verb == "remove":
+                        cs["stageVariableOverrides"].pop(parts[2], None)
+                    else:
+                        cs["stageVariableOverrides"][parts[2]] = str(value)
+                st["canarySettings"] = cs
         elif parts[0] in ("throttle/rateLimit", "throttle/burstLimit"):
             pass
         elif parts[0] == "throttle" and len(parts) == 2:

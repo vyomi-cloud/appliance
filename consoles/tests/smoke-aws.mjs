@@ -719,6 +719,24 @@ try {
   check("API Gateway create REST API (UI) → visible over native wire", !!createdApi, JSON.stringify(restApis.item?.slice(-1)));
   await shot("15-apigateway-rest-api");
 
+  // API Gateway: canary release on a stage (wire creates it, UI Canary tab shows + deletes it)
+  {
+    const gj = async (method, path, body) => JSON.parse(await page.evaluate(async ([u, a, m, b]) => (await fetch(u, { method: m, headers: { ...a, "content-type": "application/json" }, body: b ? JSON.stringify(b) : undefined })).text(), [WIRE + path, gwAuth, method, body]) || "{}");
+    const d1 = await gj("POST", `/restapis/${createdApi.id}/deployments`, { stageName: "prod" });
+    await gj("POST", `/restapis/${createdApi.id}/deployments`, { stageName: "prod", canarySettings: { percentTraffic: 25, stageVariableOverrides: { v: "canary" } } });
+    await page.goto(UI + `#/apigateway/apis/${createdApi.id}/stages`);
+    await page.getByText("prod", { exact: true }).first().click();
+    await page.getByRole("tab", { name: "Canary" }).click();
+    await page.getByTestId("canary-percent").waitFor({ timeout: 10000 });
+    const txt = await page.getByTestId("canary-percent").innerText();
+    check("API Gateway stage canary (wire) -> Canary tab shows 25% traffic", txt.includes("25%") && !!d1.id, txt);
+    await page.getByRole("button", { name: "Delete canary" }).click();
+    await page.getByRole("tab", { name: "Canary" }).click();
+    await page.getByRole("button", { name: "Create canary" }).waitFor({ timeout: 10000 });
+    const st = await gj("GET", `/restapis/${createdApi.id}/stages/prod`);
+    check("API Gateway delete canary (UI) -> removed on the wire", !st.canarySettings, JSON.stringify(st.canarySettings));
+  }
+
   // API Gateway: create an HTTP API over the wire (CLI → UI direction)
   const H = `v4smoke-http-${Date.now() % 100000}`;
   await page.evaluate(([u, a, name]) => fetch(u, { method: "POST", headers: { ...a, "content-type": "application/json" }, body: JSON.stringify({ name, protocolType: "HTTP" }) }),
