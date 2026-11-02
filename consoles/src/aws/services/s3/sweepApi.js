@@ -72,3 +72,32 @@ export async function accountSnapshot(buckets, { maxPages = 50 } = {}) {
   }
   return { buckets: buckets.length, objects, bytes, truncated, perBucket };
 }
+
+// ── S3 Control: access points (restXml /v20180820/accesspoint) ──
+const ACCOUNT = "123456789012";
+const AP = (method, name, { sub = "", query, body } = {}) =>
+  s3(method, `/v20180820/accesspoint${name ? `/${name}` : ""}${sub ? `/${sub}` : ""}`, { query, body, headers: { "x-amz-account-id": ACCOUNT } });
+const CTL_NS = 'xmlns="http://awss3control.amazonaws.com/doc/2016-08-20/"';
+
+export async function listAccessPoints(bucket) {
+  const r = await AP("GET", "", { query: { bucket } });
+  return asList(r.ListAccessPointsResult?.AccessPointList?.AccessPoint).map((a) => ({
+    name: a.Name, bucket: a.Bucket, networkOrigin: a.NetworkOrigin, vpcId: a.VpcConfiguration?.VpcId || "", arn: a.AccessPointArn, alias: a.Alias,
+  }));
+}
+export const createAccessPoint = (bucket, name, { vpcId = "", blockPublic = true } = {}) => AP("PUT", name, {
+  body: `<?xml version="1.0" encoding="UTF-8"?><CreateAccessPointRequest ${CTL_NS}><Bucket>${esc(bucket)}</Bucket>`
+    + (vpcId ? `<VpcConfiguration><VpcId>${esc(vpcId)}</VpcId></VpcConfiguration>` : "")
+    + `<PublicAccessBlockConfiguration>${["BlockPublicAcls", "IgnorePublicAcls", "BlockPublicPolicy", "RestrictPublicBuckets"].map((k) => `<${k}>${blockPublic}</${k}>`).join("")}</PublicAccessBlockConfiguration></CreateAccessPointRequest>`,
+});
+export const deleteAccessPoint = (name) => AP("DELETE", name);
+export async function getAccessPointPolicy(name) {
+  try {
+    const r = await AP("GET", name, { sub: "policy" });
+    return r.GetAccessPointPolicyResult?.Policy || "";
+  } catch (e) { if (e.status === 404) return ""; throw e; }
+}
+export const putAccessPointPolicy = (name, policy) => AP("PUT", name, {
+  sub: "policy", body: `<?xml version="1.0" encoding="UTF-8"?><PutAccessPointPolicyRequest ${CTL_NS}><Policy>${esc(policy)}</Policy></PutAccessPointPolicyRequest>`,
+});
+export const deleteAccessPointPolicy = (name) => AP("DELETE", name, { sub: "policy" });

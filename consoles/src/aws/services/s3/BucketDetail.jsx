@@ -21,7 +21,7 @@ import ResourceTable from "../../kit/ResourceTable.jsx";
 import DeleteModal from "../../kit/DeleteModal.jsx";
 import { ErrorAlert, fmtBytes, fmtDate, KeyValue, NotSimulated, NotSimulatedContainer } from "../../kit/common.jsx";
 import * as api from "./api.js";
-import { EventNotificationsSection, EventBridgeSection, StorageMetricsSection, ReplicationMetricsSection, DataTransferSection } from "./Sweep.jsx";
+import { AccessPointsSection, EventNotificationsSection, EventBridgeSection, StorageMetricsSection, ReplicationMetricsSection, DataTransferSection } from "./Sweep.jsx";
 import TagsContainer from "./TagsContainer.jsx";
 import Permissions from "./Permissions.jsx";
 import { CapabilityContainer, saveNotice } from "../../kit/Capability.jsx";
@@ -44,7 +44,7 @@ export default function BucketDetail({ params, query }) {
           { id: "permissions", label: "Permissions", content: <Permissions bucket={bucket} /> },
           { id: "metrics", label: "Metrics", content: <Metrics bucket={bucket} /> },
           { id: "management", label: "Management", content: <Management bucket={bucket} /> },
-          { id: "access-points", label: "Access Points", content: <NotSimulatedContainer title="Access Points" feature="S3 Access Points" /> },
+          { id: "access-points", label: "Access Points", content: <AccessPointsSection bucket={bucket} /> },
         ]}
       />
     </ContentLayout>

@@ -623,5 +623,28 @@
    "S3 Express One Zone directory buckets (zonal endpoints, CreateSession auth) are not modeled; only general purpose buckets exist."
   ],
   "api": []
+ },
+ "s3.bucket.access-points": {
+  "title": "Access Points",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Create/Get/List/Delete AccessPoint and Put/Get/Delete AccessPointPolicy (+PolicyStatus) are real s3control operations; the access point ALIAS is accepted anywhere a bucket name is and resolves to the bucket. Simulator requests are not authenticated, so an access point's policy, VPC origin and Block Public Access settings are stored and returned but never evaluated against a caller. Access points for object lambda, multi-region access points and access grants are not implemented (NotImplemented)."
+  ],
+  "api": [
+   "CreateAccessPoint",
+   "GetAccessPoint",
+   "ListAccessPoints",
+   "DeleteAccessPoint",
+   "PutAccessPointPolicy",
+   "GetAccessPointPolicy",
+   "DeleteAccessPointPolicy",
+   "GetAccessPointPolicyStatus"
+  ],
+  "tests": [
+   "tests/conformance/test_s3_sweepa_core.py"
+  ]
  }
 }

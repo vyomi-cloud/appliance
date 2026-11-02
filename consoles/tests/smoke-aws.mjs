@@ -264,6 +264,21 @@ try {
   check("Metrics tab shows real NumberOfObjects (UI value matches native CloudWatch)", cnt !== "no data" && cwOut.Datapoints.length > 0, `${cnt} vs ${JSON.stringify(cwOut.Datapoints.slice(-1))}`);
   await shot("05f-s3-metrics");
 
+  // SWEEP A: Access Points (UI → s3control wire, and the alias resolving back to the bucket).
+  await page.goto(UI + `#/s3/buckets/${B}`);
+  await page.getByRole("heading", { name: B }).waitFor({ timeout: 10000 });
+  await page.getByRole("tab", { name: "Access Points" }).click();
+  await page.getByRole("button", { name: "Create access point" }).first().click();
+  await page.getByLabel("Access point name").fill("v4-smoke-ap");
+  await page.getByRole("dialog").getByRole("button", { name: "Create access point" }).click();
+  await page.getByRole("cell", { name: "v4-smoke-ap", exact: true }).waitFor({ timeout: 10000 });
+  const apGet = await wire(`/v20180820/accesspoint/v4-smoke-ap`, { headers: { authorization: S3AUTH, "x-amz-account-id": "123456789012" } });
+  check("Access Points: created in UI → native s3control GetAccessPoint", apGet.includes(`<Bucket>${B}</Bucket>`) && apGet.includes("<Alias>"), apGet.slice(0, 160));
+  const apAlias = (apGet.match(/<Alias>([^<]+)<\/Alias>/) || [])[1];
+  const viaAlias = await wire(`/${apAlias}/hello.txt`, { headers: { authorization: S3AUTH, "x-amz-request-payer": "requester" } });
+  check("Access point alias addresses the bucket (object readable through the alias)", viaAlias === "hello v4", viaAlias.slice(0, 100));
+  await shot("05g-s3-access-points");
+
   // SWEEP A: upload-time ACL permissions, Object management overview, Account snapshot.
   const ACLB = `v4-aclup-${Date.now() % 100000}`;
   await wire(`/${ACLB}`, { method: "PUT", headers: { authorization: S3AUTH } });

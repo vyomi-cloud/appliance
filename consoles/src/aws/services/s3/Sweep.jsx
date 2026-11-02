@@ -9,6 +9,7 @@ import Modal from "@cloudscape-design/components/modal";
 import Select from "@cloudscape-design/components/select";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import StatusIndicator from "@cloudscape-design/components/status-indicator";
+import Textarea from "@cloudscape-design/components/textarea";
 import Table from "@cloudscape-design/components/table";
 import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
@@ -235,6 +236,63 @@ export function ObjectManagementOverview({ bucket, objectKey, head }) {
             ["Lifecycle rules", life.length ? life.map((r) => r.id).join(", ") : "None apply to this object"],
             ["Current storage class", head?.storageClass],
           ]} />}
+    </CapabilityContainer>
+  );
+}
+
+export function AccessPointsSection({ bucket }) {
+  const notify = useNotify();
+  const aps = useAsync(() => sw.listAccessPoints(bucket), [bucket]);
+  const [sel, setSel] = useState([]);
+  const [create, setCreate] = useState(null);
+  const [policy, setPolicy] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const rows = aps.data || [];
+  return (
+    <CapabilityContainer id="s3.bucket.access-points" title="Access Points" counter={`(${rows.length})`}
+      description="Named network endpoints attached to this bucket, each with its own policy."
+      actions={<SpaceBetween direction="horizontal" size="xs">
+        <Button disabled={sel.length !== 1} onClick={async () => setPolicy({ name: sel[0].name, text: await sw.getAccessPointPolicy(sel[0].name) })}>Edit policy</Button>
+        <Button disabled={!sel.length} onClick={async () => {
+          try { for (const a of sel) await sw.deleteAccessPoint(a.name); notify.success("Successfully deleted access point."); setSel([]); aps.reload(); } catch (e) { notify.error(e); }
+        }}>Delete</Button>
+        <Button variant="primary" onClick={() => setCreate({ name: "", vpcId: "", blockPublic: true })}>Create access point</Button>
+      </SpaceBetween>}>
+      {aps.loading ? <StatusIndicator type="loading">Loading</StatusIndicator>
+        : aps.error ? <ErrorAlert error={aps.error} />
+        : <Table variant="embedded" items={rows} trackBy="name" selectionType="single" selectedItems={sel} onSelectionChange={({ detail }) => setSel(detail.selectedItems)}
+            columnDefinitions={[
+              { id: "name", header: "Name", cell: (a) => a.name },
+              { id: "origin", header: "Network origin", cell: (a) => a.networkOrigin + (a.vpcId ? ` (${a.vpcId})` : "") },
+              { id: "alias", header: "Access point alias", cell: (a) => a.alias },
+              { id: "arn", header: "Access point ARN", cell: (a) => a.arn },
+            ]}
+            empty={<Box textAlign="center" color="inherit"><b>No access points</b><Box variant="p" color="inherit">The alias of an access point works anywhere a bucket name is accepted.</Box></Box>} />}
+      <Modal visible={!!create} onDismiss={() => setCreate(null)} header="Create access point"
+        footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs">
+          <Button variant="link" onClick={() => setCreate(null)}>Cancel</Button>
+          <Button variant="primary" loading={saving} disabled={!create?.name} onClick={async () => {
+            setSaving(true);
+            try {
+              await sw.createAccessPoint(bucket, create.name, create);
+              notify.success(`Successfully created access point ${create.name}.${saveNotice("s3.bucket.access-points")}`);
+              setCreate(null); aps.reload();
+            } catch (e) { notify.error(e); } finally { setSaving(false); }
+          }}>Create access point</Button>
+        </SpaceBetween></Box>}>
+        {create && <SpaceBetween size="m">
+          <FormField label="Access point name" description="3-50 characters: lowercase letters, numbers and hyphens."><Input value={create.name} onChange={({ detail }) => setCreate({ ...create, name: detail.value })} /></FormField>
+          <FormField label="VPC ID" description="Optional. Leave blank for an Internet network origin."><Input value={create.vpcId} onChange={({ detail }) => setCreate({ ...create, vpcId: detail.value })} /></FormField>
+          <Checkbox checked={create.blockPublic} onChange={({ detail }) => setCreate({ ...create, blockPublic: detail.checked })}>Block all public access</Checkbox>
+        </SpaceBetween>}
+      </Modal>
+      <Modal visible={!!policy} onDismiss={() => setPolicy(null)} header={policy ? `Access point policy - ${policy.name}` : ""} size="large"
+        footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs">
+          <Button variant="link" onClick={async () => { try { await sw.deleteAccessPointPolicy(policy.name); notify.success("Successfully deleted access point policy."); setPolicy(null); } catch (e) { notify.error(e); } }}>Delete policy</Button>
+          <Button variant="primary" onClick={async () => { try { await sw.putAccessPointPolicy(policy.name, policy.text); notify.success("Successfully edited access point policy."); setPolicy(null); } catch (e) { notify.error(e); } }}>Save changes</Button>
+        </SpaceBetween></Box>}>
+        {policy && <FormField label="Policy (JSON)"><Textarea rows={12} value={policy.text} onChange={({ detail }) => setPolicy({ ...policy, text: detail.value })} /></FormField>}
+      </Modal>
     </CapabilityContainer>
   );
 }

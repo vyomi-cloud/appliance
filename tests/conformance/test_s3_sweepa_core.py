@@ -127,7 +127,47 @@ def upload_acl():
     _check("multipart upload keeps the creation ACL", b"AuthenticatedUsers" in s3(r, "GET", "/acl-b3/m.bin", {"acl": ""})["body"])
 
 
+def access_points():
+    import re
+    r = AwsWireRouter()
+    s3(r, "PUT", "/ap-bkt")
+    H = {"x-amz-account-id": "123456789012"}
+    body = f'<CreateAccessPointRequest xmlns="http://awss3control.amazonaws.com/doc/2016-08-20/"><Bucket>ap-bkt</Bucket></CreateAccessPointRequest>'.encode()
+    c = s3(r, "PUT", "/v20180820/accesspoint/my-ap", body=body, headers=H)
+    _check("CreateAccessPoint", c["status"] == 200 and b"accesspoint/my-ap" in c["body"])
+    alias = re.search(rb"<Alias>([^<]+)</Alias>", c["body"]).group(1).decode()
+    _check("alias ends with -s3alias", alias.endswith("-s3alias"))
+    dup = s3(r, "PUT", "/v20180820/accesspoint/my-ap", body=body, headers=H)
+    _check("duplicate -> AccessPointAlreadyOwnedByYou 409", dup["status"] == 409 and b"AccessPointAlreadyOwnedByYou" in dup["body"])
+    miss = s3(r, "PUT", "/v20180820/accesspoint/other-ap", body=body.replace(b"ap-bkt", b"nope-bkt"), headers=H)
+    _check("unknown bucket -> NoSuchBucket", miss["status"] == 404)
+    g = s3(r, "GET", "/v20180820/accesspoint/my-ap", headers=H)
+    _check("GetAccessPoint returns bucket/network origin", b"<Bucket>ap-bkt</Bucket>" in g["body"] and b"<NetworkOrigin>Internet</NetworkOrigin>" in g["body"])
+    lst = s3(r, "GET", "/v20180820/accesspoint", {"bucket": "ap-bkt"}, headers=H)
+    _check("ListAccessPoints filters by bucket", b"<Name>my-ap</Name>" in lst["body"])
+    _check("ListAccessPoints other bucket empty", b"my-ap" not in s3(r, "GET", "/v20180820/accesspoint", {"bucket": "zzz-bkt"}, headers=H)["body"])
+    s3(r, "PUT", "/ap-bkt/k.txt", body=b"via bucket")
+    via = s3(r, "GET", f"/{alias}/k.txt")
+    _check("object readable through the access point alias", via["status"] == 200 and via["body"] == b"via bucket")
+    s3(r, "PUT", f"/{alias}/w.txt", body=b"via alias")
+    _check("object written through the alias lands in the bucket", s3(r, "GET", "/ap-bkt/w.txt")["body"] == b"via alias")
+    pol = json.dumps({"Version": "2012-10-17", "Statement": [{"Effect": "Allow", "Principal": {"AWS": "arn:aws:iam::123456789012:root"}, "Action": "s3:GetObject", "Resource": "arn:aws:s3:us-east-1:123456789012:accesspoint/my-ap/object/*"}]})
+    nop = s3(r, "GET", "/v20180820/accesspoint/my-ap/policy", headers=H)
+    _check("no policy -> NoSuchAccessPointPolicy", nop["status"] == 404)
+    pp = s3(r, "PUT", "/v20180820/accesspoint/my-ap/policy", body=f'<PutAccessPointPolicyRequest xmlns="http://awss3control.amazonaws.com/doc/2016-08-20/"><Policy>{pol.replace("<","&lt;")}</Policy></PutAccessPointPolicyRequest>'.encode(), headers=H)
+    _check("PutAccessPointPolicy", pp["status"] == 200)
+    _check("GetAccessPointPolicy round-trips", b"s3:GetObject" in s3(r, "GET", "/v20180820/accesspoint/my-ap/policy", headers=H)["body"])
+    _check("PolicyStatus not public", b"<IsPublic>false</IsPublic>" in s3(r, "GET", "/v20180820/accesspoint/my-ap/policyStatus", headers=H)["body"])
+    ni = s3(r, "GET", "/v20180820/storagelens", headers=H)
+    _check("unmodelled s3control op -> NotImplemented 501", ni["status"] == 501 and b"NotImplemented" in ni["body"])
+    d = s3(r, "DELETE", "/v20180820/accesspoint/my-ap", headers=H)
+    _check("DeleteAccessPoint", d["status"] == 204)
+    _check("deleted access point gone", s3(r, "GET", "/v20180820/accesspoint/my-ap", headers=H)["status"] == 404)
+    _check("deleted alias no longer resolves", s3(r, "GET", f"/{alias}/k.txt")["status"] == 404)
+
+
 def run():
+    access_points()
     upload_acl()
     eventbridge_notifications()
     storage_metrics()

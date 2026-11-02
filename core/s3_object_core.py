@@ -2673,6 +2673,130 @@ def website_dispatch(store: ObjectStore, method: str, bucket: str, key: str, hea
     return _website_html_error(404, "NoSuchKey", "The specified key does not exist.")
 
 
+# ── S3 Control: Access Points (restXml /v20180820/accesspoint…) ───────────────────────
+# An access point is a named endpoint onto ONE bucket. Records live in the parent bucket's
+# meta["access_points"] (so they persist wherever bucket config persists, offline and Nano).
+# The access point's ALIAS (<name>-<id>-s3alias) is accepted anywhere a bucket name is — it is
+# resolved to the real bucket before dispatch, so objects are reachable through it. The
+# access point policy / Block Public Access settings are stored and returned (the simulator
+# does not authenticate principals, so a policy is never evaluated against a caller).
+_S3C_NS = "http://awss3control.amazonaws.com/doc/2016-08-20/"
+_ACCOUNT_ID = "123456789012"
+_AP_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,48}[a-z0-9]$")
+_AP_PAB_KEYS = ("BlockPublicAcls", "IgnorePublicAcls", "BlockPublicPolicy", "RestrictPublicBuckets")
+
+
+def _s3c_error(code: str, message: str, status: int) -> S3Response:
+    return _xml_response(f'<?xml version="1.0" encoding="UTF-8"?><ErrorResponse><Error><Code>{code}</Code>'
+                         f"<Message>{_xml_escape(message)}</Message></Error><RequestId>{_req_id()}</RequestId></ErrorResponse>", status)
+
+
+def _access_points(store: ObjectStore):
+    """Yield (bucket, name, record) for every access point in the account."""
+    for b, meta in list(store.buckets.items()):
+        for n, rec in ((meta or {}).get("access_points") or {}).items():
+            yield b, n, rec
+
+
+def _find_access_point(store: ObjectStore, name: str):
+    return next(((b, rec) for b, n, rec in _access_points(store) if n == name), (None, None))
+
+
+def _resolve_access_point(store: ObjectStore, bucket: str) -> str:
+    """An access point alias (…-s3alias) addresses its bucket."""
+    if bucket.endswith("-s3alias"):
+        for b, _n, rec in _access_points(store):
+            if rec.get("alias") == bucket:
+                return b
+    return bucket
+
+
+def _ap_xml(name: str, bucket: str, rec: dict, tag: str, full: bool) -> str:
+    vpc = (f"<VpcConfiguration><VpcId>{_xml_escape(rec['vpc'])}</VpcId></VpcConfiguration>" if rec.get("vpc") else "")
+    pab = "<PublicAccessBlockConfiguration>" + "".join(
+        f"<{k}>{'true' if rec['pab'].get(k) else 'false'}</{k}>" for k in _AP_PAB_KEYS) + "</PublicAccessBlockConfiguration>"
+    head = (f"<Name>{_xml_escape(name)}</Name><NetworkOrigin>{'VPC' if rec.get('vpc') else 'Internet'}</NetworkOrigin>{vpc}"
+            f"<Bucket>{bucket}</Bucket>")
+    if full:
+        return (f"<{tag}>{head}{pab}<CreationDate>{rec['created']}</CreationDate><Alias>{rec['alias']}</Alias>"
+                f"<AccessPointArn>{rec['arn']}</AccessPointArn><Endpoints><entry><key>ipv4</key><value>{name}-{_ACCOUNT_ID}.s3-accesspoint.us-east-1.amazonaws.com</value></entry></Endpoints>"
+                f"<BucketAccountId>{_ACCOUNT_ID}</BucketAccountId></{tag}>")
+    return (f"<{tag}>{head}<AccessPointArn>{rec['arn']}</AccessPointArn><Alias>{rec['alias']}</Alias>"
+            f"<BucketAccountId>{_ACCOUNT_ID}</BucketAccountId></{tag}>")
+
+
+def _s3control(store: ObjectStore, method: str, raw: str, query: dict, lheaders: dict, body: bytes) -> S3Response:
+    segs = [urllib.parse.unquote(x) for x in raw.split("/") if x]      # v20180820, accesspoint, name, [policy|policyStatus]
+    if len(segs) < 2 or segs[1] != "accesspoint":
+        return _s3c_error("NotImplemented", "This S3 Control operation is not implemented by Vyomi.", 501)
+    acct = lheaders.get("x-amz-account-id")
+    if acct and acct != _ACCOUNT_ID:
+        return _s3c_error("AccessDenied", "Account ID does not match the caller's account.", 403)
+    hdr = '<?xml version="1.0" encoding="UTF-8"?>'
+    if len(segs) == 2:                                                  # list
+        if method != "GET":
+            return _s3c_error("MethodNotAllowed", method, 405)
+        want = (query or {}).get("bucket")
+        rows = "".join(_ap_xml(n, b, rec, "AccessPoint", False) for b, n, rec in sorted(_access_points(store), key=lambda t: t[1])
+                       if not want or b == want)
+        return _xml_response(f'{hdr}<ListAccessPointsResult xmlns="{_S3C_NS}"><AccessPointList>{rows}</AccessPointList></ListAccessPointsResult>')
+    name = segs[2]
+    sub = segs[3] if len(segs) > 3 else ""
+    if sub not in ("", "policy", "policyStatus") or len(segs) > 4:
+        return _s3c_error("NotImplemented", f"Access point sub-resource '{sub}' is not implemented by Vyomi.", 501)
+    bucket, rec = _find_access_point(store, name)
+    if method == "PUT" and not sub:
+        if bucket is not None:
+            return _s3c_error("AccessPointAlreadyOwnedByYou", "Your previous request to create the named access point succeeded and you already own it.", 409)
+        if not _AP_NAME_RE.match(name):
+            return _s3c_error("InvalidRequest", "Access point names must be 3-50 characters of lowercase letters, numbers and hyphens.", 400)
+        try:
+            root = ET.fromstring(body or b"")
+        except ET.ParseError:
+            return _s3c_error("MalformedXML", "The XML you provided was not well-formed or did not validate against our published schema.", 400)
+        b = _child_text(root, "Bucket")
+        if not b or not store.bucket_exists(b):
+            return _s3c_error("NoSuchBucket", "The specified bucket does not exist.", 404)
+        vpc = _child_text(_child(root, "VpcConfiguration"), "VpcId") if _child(root, "VpcConfiguration") is not None else ""
+        pab_el = _child(root, "PublicAccessBlockConfiguration")
+        pab = {k: (_child_text(pab_el, k).lower() == "true" if pab_el is not None else not vpc) for k in _AP_PAB_KEYS}
+        rec = {"alias": f"{name}-{uuid.uuid4().hex[:10]}-s3alias", "vpc": vpc, "pab": pab, "created": _now(),
+               "arn": f"arn:aws:s3:us-east-1:{_ACCOUNT_ID}:accesspoint/{name}", "policy": None}
+        store.buckets[b].setdefault("access_points", {})[name] = rec
+        return _done(store, _xml_response(f'{hdr}<CreateAccessPointResult xmlns="{_S3C_NS}"><AccessPointArn>{rec["arn"]}</AccessPointArn><Alias>{rec["alias"]}</Alias></CreateAccessPointResult>'))
+    if bucket is None:
+        return _s3c_error("NoSuchAccessPoint", "The specified accesspoint does not exist.", 404)
+    if not sub:
+        if method == "GET":
+            return _xml_response(f'{hdr}' + _ap_xml(name, bucket, rec, "GetAccessPointResult", True).replace(
+                "<GetAccessPointResult>", f'<GetAccessPointResult xmlns="{_S3C_NS}">', 1))
+        if method == "DELETE":
+            del store.buckets[bucket]["access_points"][name]
+            return _done(store, _empty_response(204))
+    elif sub == "policy":
+        if method == "GET":
+            if not rec.get("policy"):
+                return _s3c_error("NoSuchAccessPointPolicy", "The specified accesspoint policy does not exist.", 404)
+            return _xml_response(f'{hdr}<GetAccessPointPolicyResult xmlns="{_S3C_NS}"><Policy>{_xml_escape(rec["policy"])}</Policy></GetAccessPointPolicyResult>')
+        if method == "PUT":
+            try:
+                doc = _child_text(ET.fromstring(body or b""), "Policy")
+                json.loads(doc)
+            except Exception:
+                return _s3c_error("MalformedPolicy", "Policies must be valid JSON and the first byte must be '{'", 400)
+            rec["policy"] = doc
+            return _done(store, _empty_response(200))
+        if method == "DELETE":
+            rec["policy"] = None
+            return _done(store, _empty_response(204))
+    elif sub == "policyStatus" and method == "GET":
+        if not rec.get("policy"):
+            return _s3c_error("NoSuchAccessPointPolicy", "The specified accesspoint policy does not exist.", 404)
+        public = _policy_is_public(json.loads(rec["policy"]))
+        return _xml_response(f'{hdr}<GetAccessPointPolicyStatusResult xmlns="{_S3C_NS}"><PolicyStatus><IsPublic>{"true" if public else "false"}</IsPublic></PolicyStatus></GetAccessPointPolicyStatusResult>')
+    return _s3c_error("MethodNotAllowed", method, 405)
+
+
 def dispatch(store: ObjectStore, method: str, path: str,
              query: dict | None = None, headers: dict | None = None,
              body: bytes = b"") -> S3Response:
@@ -2683,6 +2807,9 @@ def dispatch(store: ObjectStore, method: str, path: str,
     bucket, _, key = raw.partition("/")
     bucket = urllib.parse.unquote(bucket)
     method = (method or "GET").upper()
+    if bucket == "v20180820":     # S3 Control (access points; every other control op -> NotImplemented)
+        return _s3control(store, method, raw, query, lheaders, body)
+    bucket = _resolve_access_point(store, bucket)
     if method == "OPTIONS":
         return _cors_preflight(store, bucket, lheaders)
     if not bucket:
