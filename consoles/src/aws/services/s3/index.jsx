@@ -10,6 +10,7 @@ import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { AccessPointsSection } from "./Sweep.jsx";
 import { AccountPublicAccessBlock, DirectoryBuckets, ObjectLambdaAccessPoints } from "./AccountPages.jsx";
 import { AccessGrants, BatchOperations, MultiRegionAccessPoints } from "./BatchPages.jsx";
+import { AccessAnalyzer, StorageLensDashboards, StorageLensGroups, TableBuckets } from "./InsightPages.jsx";
 
 // Account-level pages Vyomi has no backend for: each is a registered capability gap (core/capabilities/aws/s3.json).
 const ns = (title, id) => () => <CapabilityContainer id={`s3.account.${id}`} title={title} />;
@@ -49,10 +50,11 @@ export default {
     { pattern: "/s3/mrap", component: MultiRegionAccessPoints, crumbs: () => [{ text: "Multi-Region Access Points", href: "#/s3/mrap" }] },
     { pattern: "/s3/access-grants", component: AccessGrants, crumbs: () => [{ text: "Access Grants", href: "#/s3/access-grants" }] },
     { pattern: "/s3/batch-operations", component: BatchOperations, crumbs: () => [{ text: "Batch Operations", href: "#/s3/batch-operations" }] },
-    ...[["table-buckets", "Table buckets", "table-buckets"],
-      ["access-analyzer", "IAM Access Analyzer for S3", "external-access"],
-      ["lens/dashboards", "Storage Lens dashboards", "storage-lens"], ["lens/groups", "Storage Lens groups", "storage-lens"],
-      ["marketplace", "AWS Marketplace for S3", "marketplace"], ["get-started", "Amazon S3", "get-started"]]
+    { pattern: "/s3/table-buckets", component: TableBuckets, crumbs: () => [{ text: "Table buckets", href: "#/s3/table-buckets" }] },
+    { pattern: "/s3/access-analyzer", component: AccessAnalyzer, crumbs: () => [{ text: "IAM Access Analyzer for S3", href: "#/s3/access-analyzer" }] },
+    { pattern: "/s3/lens/dashboards", component: StorageLensDashboards, crumbs: () => [{ text: "Storage Lens dashboards", href: "#/s3/lens/dashboards" }] },
+    { pattern: "/s3/lens/groups", component: StorageLensGroups, crumbs: () => [{ text: "Storage Lens groups", href: "#/s3/lens/groups" }] },
+    ...[["marketplace", "AWS Marketplace for S3", "marketplace"], ["get-started", "Amazon S3", "get-started"]]
       .map(([p, t, id]) => ({ pattern: `/s3/${p}`, component: ns(t, id), crumbs: () => [{ text: t, href: `#/s3/${p}` }] })),
   ],
 };

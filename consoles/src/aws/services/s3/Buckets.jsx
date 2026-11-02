@@ -7,6 +7,7 @@ import ResourceTable from "../../kit/ResourceTable.jsx";
 import { fmtDate } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { AccountSnapshot } from "./Sweep.jsx";
+import { ExternalAccessSummary } from "./InsightPages.jsx";
 import { DirectoryBuckets } from "./AccountPages.jsx";
 import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
@@ -63,7 +64,7 @@ export default function Buckets() {
         ]}
       />
       <AccountSnapshot buckets={data} loading={loading} />
-      <CapabilityContainer id="s3.account.external-access" title="External access summary" />
+      <ExternalAccessSummary />
     </SpaceBetween>
   );
 }
