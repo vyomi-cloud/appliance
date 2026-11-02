@@ -230,6 +230,7 @@ from core import stepfunctions_core as sfn
 from core import vpc_core as vpc
 from core import autoscaling_core as asg
 from core import ram_core as ram
+from core import organizations_core as orgs
 from core import dlm_core as dlm
 from core import kinesis_core as kinesis
 from core import cloudwatch_core as cw
@@ -349,7 +350,7 @@ _SIGNING = {
     "s3tables": "s3tables",   # Amazon S3 Tables (rest-json /buckets, /namespaces, /tables, /tag) -> core/s3_tables_core via the S3 store
     "elasticloadbalancing": "elbv2",
     "cloudformation": "cloudformation",
-    "ssm": "ssm", "scheduler": "scheduler", "pipes": "pipes", "ram": "ram",
+    "ssm": "ssm", "scheduler": "scheduler", "pipes": "pipes", "ram": "ram", "organizations": "organizations",
     "apigateway": "apigateway",   # v1 REST control plane paths with no "/restapis" segment (apikeys, usageplans, clientcertificates, account)
 }
 
@@ -362,6 +363,7 @@ _TARGET_PREFIX = {
     "AmazonSSM": "ssm",
     "AWSStepFunctions": "stepfunctions",
     "AWSRAMFrontendService": "ram",
+    "AWSOrganizationsV20161128": "organizations",
 }
 
 # Native JSON content-types the real SDK expects back per service.
@@ -372,6 +374,7 @@ _JSON_CT = {
     "ssm": "application/x-amz-json-1.1",
     "stepfunctions": "application/x-amz-json-1.0",
     "ram": "application/x-amz-json-1.1",
+    "organizations": "application/x-amz-json-1.1",
 }
 
 # Query-protocol Action → service, for UNSIGNED query requests (signed ones route
@@ -1176,6 +1179,8 @@ class AwsWireRouter:
                 r = sfn.dispatch(self.sfn, target, payload, lambda_store=self.lam)
             elif svc == "ram":
                 r = ram.dispatch(self.ram, target, payload, vpc_store=self.vpc)
+            elif svc == "organizations":   # AWS Organizations (state in the IAM store: extras["org"] + org_policies)
+                r = orgs.dispatch(self.iam, target, payload)
             else:  # sqs
                 r = sqs.dispatch(self.msg, target, payload, lam_store=self.lam)
             hdrs = dict(r.headers or {})
