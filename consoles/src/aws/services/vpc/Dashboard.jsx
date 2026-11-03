@@ -61,9 +61,9 @@ export default function Dashboard() {
         <Container header={<Header variant="h2">Settings</Header>}>
           <SpaceBetween direction="horizontal" size="l">
             <GapButton text="Account-level encryption control" feature="Account-level encryption control" />
-            <GapButton text="Block Public Access" feature="VPC Block Public Access" />
-            <GapButton text="Zones" feature="Availability Zone opt-in settings" />
-            <GapButton text="Console Experiments" feature="Console Experiments" />
+            <Button href={href("vpc", "settings")} onFollow={follow}>Block Public Access</Button>
+            <Button href={href("vpc", "settings")} onFollow={follow}>Zones</Button>
+            <Button href={href("vpc", "settings")} onFollow={follow}>Console Experiments</Button>
           </SpaceBetween>
         </Container>
         <Container header={<Header variant="h2">Additional Information</Header>}>
