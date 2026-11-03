@@ -10,8 +10,9 @@ Every appliance release (daily conformance PR merge, or a manual `v*.*.*` tag). 
 ## vyomi-tunnel (the Nano local tunnel — versioned separately)
 The tunnel ships on npm + the Homebrew tap, not with the appliance. If `packaging/tunnel/package.json` changed in this release:
 - [ ] `packaging/tunnel/package.json` version and `const VERSION` in `bin/vyomi-tunnel.mjs` are bumped **together**.
-- [ ] **(auto)** `release.yml` → `tunnel-publish`: publishes to npm when `NPM_TOKEN` is set, then points `homebrew-tap` `Formula/vyomi-tunnel.rb` at the *settled* registry tarball (3 equal sha256 fetches — a fetch right after publish can be wrong).
-- [ ] If the secrets are not set, do it by hand: `cd packaging/tunnel && npm publish --access public --otp=<code>` → `python3 scripts/tunnel_sync.py sha <ver>` → update `url` + `sha256` in the tap formula and in `packaging/brew/vyomi-tunnel.rb` → push the tap.
+- [ ] **(auto)** `release.yml` → `tunnel-publish`: publishes to npm through **trusted publishing** (OIDC, no token), then points `homebrew-tap` `Formula/vyomi-tunnel.rb` at the *settled* registry tarball (3 equal sha256 fetches — a fetch right after publish can be wrong).
+- [ ] One-time: npmjs.com → `vyomi-tunnel` → Settings → **Trusted Publisher** → GitHub Actions, repo `vyomi-cloud/appliance`, workflow `release.yml`. (npm is retiring bypass-2FA publish tokens, so there is deliberately no `NPM_TOKEN`.)
+- [ ] If trusted publishing is not set up yet, do it by hand: `cd packaging/tunnel && npm publish --access public --otp=<code>` → `python3 scripts/tunnel_sync.py sha <ver>` → update `url` + `sha256` in the tap formula and in `packaging/brew/vyomi-tunnel.rb` → push the tap.
 - [ ] **(auto)** `release-checks.yml` → `tunnel` row in RELEASE-CHECKS.md: `python3 scripts/tunnel_sync.py status` must show npm ✅ and tap ✅ for the source version.
 - [ ] Anything in Nano that needs a minimum tunnel version (e.g. VM SSH needs `vm-tcp`, >= 1.1.0) names that version in its hint.
 - Users upgrading: `brew upgrade vyomi-tunnel` (or `npm i -g vyomi-tunnel@latest`). A stale `npm i -g` copy shadows brew's: `npm uninstall -g vyomi-tunnel && brew link --overwrite vyomi-tunnel && hash -r`.
@@ -29,4 +30,4 @@ The tunnel ships on npm + the Homebrew tap, not with the appliance. If `packagin
 | Secret | Purpose | Without it |
 |---|---|---|
 | `HOMEBREW_TAP_TOKEN` | push `vyomi*` formulae and the tunnel formula to `homebrew-tap` | brew bump skipped |
-| `NPM_TOKEN` | npm **automation** token (bypasses 2FA) to publish `vyomi-tunnel` | the job only reports the manual steps |
+| _(none)_ | npm uses trusted publishing (OIDC) — nothing stored | the job only reports the manual steps |

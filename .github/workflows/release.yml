@@ -19,7 +19,8 @@ name: Release
 # own secret being present. Adding a secret turns that PM's job on:
 #
 #   HOMEBREW_TAP_TOKEN        — PAT (contents:write) on the homebrew-tap repo
-#   NPM_TOKEN                 — npm automation token (bypasses 2FA) that publishes vyomi-tunnel
+#   (none for npm)            — vyomi-tunnel publishes via npm TRUSTED PUBLISHING (OIDC): no token. One-time setup on
+#                               npmjs.com → vyomi-tunnel → Settings → Trusted Publisher: repo vyomi-cloud/appliance, workflow release.yml
 #
 # Note: Chocolatey was dropped 2026-06-11, Scoop 2026-10-26. Windows users
 # install the MSI from the GitHub Release.
@@ -429,20 +430,23 @@ jobs:
   # ── vyomi-tunnel: publish the new version to npm + bump the Homebrew tap ─
   # The Nano local tunnel is versioned separately (packaging/tunnel/package.json). When
   # its version is not on npm yet, publish it, then point the tap's formula at the settled
-  # registry tarball. Without NPM_TOKEN / HOMEBREW_TAP_TOKEN the job only reports what a
+  # registry tarball. Without the npm Trusted Publisher / HOMEBREW_TAP_TOKEN the job only reports what a
   # human must run — it never turns the release red (the Snap lesson).
   tunnel-publish:
     needs: [build]
     runs-on: ubuntu-latest
     continue-on-error: true
+    permissions:
+      contents: read
+      id-token: write      # npm trusted publishing: GitHub proves this run's identity to npm, no stored token
     env:
-      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
       TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
     steps:
       - uses: actions/checkout@v4
         with: { path: src }
       - uses: actions/setup-node@v4
-        with: { node-version: '20' }
+        with: { node-version: '22' }
+      - run: npm install -g npm@^11.5.1     # trusted publishing needs npm >= 11.5.1
       - name: Is the tunnel version already published?
         id: st
         working-directory: src
@@ -453,11 +457,9 @@ jobs:
           echo "npm=$(python3 -c "import json;print(str(json.load(open('/tmp/st.json'))['npm_published']).lower())")" >> "$GITHUB_OUTPUT"
           echo "tap=$(python3 -c "import json;d=json.load(open('/tmp/st.json'));print(str(d['tap_version']==d['version']).lower())")" >> "$GITHUB_OUTPUT"
       - name: npm publish vyomi-tunnel
-        if: steps.st.outputs.npm == 'false' && env.NPM_TOKEN != ''
+        if: steps.st.outputs.npm == 'false'
         working-directory: src/packaging/tunnel
-        run: |
-          echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
-          npm publish --access public
+        run: npm publish --access public   # OIDC trusted publishing; fails (job is non-blocking) until the Trusted Publisher is set on npmjs.com
       - name: Bump the Homebrew tap formula
         if: steps.st.outputs.tap == 'false' && env.TAP_TOKEN != ''
         run: |
