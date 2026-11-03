@@ -985,6 +985,19 @@ class AzureArm:
             rg = rest_segs[1]
             idx = 2
 
+        # POST .../resourceGroups/{rg}/exportTemplate — every blade's "Export template" (ARM tab
+        # + Bicep/Terraform renderings), core/azure_templates_core.py.
+        if rg is not None and idx < len(rest_segs) and rest_segs[idx].lower() == "exporttemplate" and len(rest_segs) == idx + 1:
+            if method != "POST":
+                return _err(405, "MethodNotAllowed", "Use POST to export a template.")
+            from core import azure_templates_core as _tpl
+            r = _tpl.export_group(self.state, sub, rg, (payload or {}).get("resources"),
+                                  {c["type"].lower(): c["api_version"] for c in CATALOG},
+                                  (payload or {}).get("vyomiIncludeParameters", True) is not False)
+            if r["status"] >= 300:
+                return _err(r["status"], r["body"]["error"]["code"], r["body"]["error"]["message"])
+            return _ok(r["body"])
+
         # GET .../resourceGroups/{rg}/resources — the generic "resources in this group"
         # list every resource-group blade's Overview/Resources tab and delete confirmation
         # call (az resource list -g / Resources.list_by_resource_group), scoped across every

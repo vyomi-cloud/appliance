@@ -22,6 +22,7 @@ import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
 import { ResourceRecommendations } from "../defender/Pages.jsx";
+import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
 
 /** Resource menu: [id, label] | {group, items}. Matches the real Web App blade's nav exactly
  * (labels double as the "{name} | Label" page titles the captured spec records). */
@@ -102,7 +103,7 @@ export default function WebAppBlade({ params, query }) {
       appservicelogs: () => <AppServiceLogs rg={rg} name={name} />,
       logstream: () => <LogStream name={name} />,
       diagnosticsettings: () => <DiagnosticSettings a={a} rg={rg} name={name} />,
-      exporttemplate: () => <ExportTemplate a={a} />,
+      exporttemplate: () => <SharedExportTemplate id={a.id} name={a.name} resourceGroup={a.resourceGroup} />,
       identity: () => <Identity a={a} rg={rg} name={name} reload={reload} />,
       backups: () => <Backups rg={rg} name={name} />,
     }[panel];
@@ -934,48 +935,6 @@ function DiagnosticSettings({ a, rg, name }) {
 }
 
 // ── Export template ──────────────────────────────────────────────────────────────────────
-function ExportTemplate({ a }) {
-  const [tab, setTab] = useState("arm");
-  const [includeParams, setIncludeParams] = useState(true);
-  const planName = api.planName(a.properties?.serverFarmId);
-  const template = {
-    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#", contentVersion: "1.0.0.0",
-    parameters: includeParams ? { name: { type: "string", defaultValue: a.name } } : {},
-    resources: [
-      { type: "Microsoft.Web/serverfarms", apiVersion: "2023-12-01", name: planName, location: a.location },
-      { type: "Microsoft.Web/sites", apiVersion: "2023-12-01", name: includeParams ? "[parameters('name')]" : a.name, location: a.location, kind: a.kind,
-        dependsOn: [`[resourceId('Microsoft.Web/serverfarms', '${planName}')]`], properties: a.properties },
-    ],
-  };
-  return (
-    <>
-      <div className="vy-panel-title">{a.name} | Export template</div>
-      <div className="vy-cmdbar" role="toolbar" aria-label="Export template commands">
-        <ToolbarButton icon={<DocumentArrowDown20Regular />} onClick={() => {
-          const blob = new Blob([JSON.stringify(template, null, 2)], { type: "application/json" });
-          const u = URL.createObjectURL(blob); const el = document.createElement("a"); el.href = u; el.download = `${a.name}.json`; document.body.appendChild(el); el.click(); el.remove();
-          setTimeout(() => URL.revokeObjectURL(u), 1000);
-        }}>Download</ToolbarButton>
-        <ToolbarButton disabled>Add to library (preview)</ToolbarButton>
-        <ToolbarButton disabled>Deploy</ToolbarButton>
-        <ToolbarButton disabled>Visualize template</ToolbarButton>
-      </div>
-      <TabList selectedValue={tab} onTabSelect={(_, d) => setTab(d.value)} aria-label="Export template tabs">
-        <Tab value="arm">ARM Template</Tab><Tab value="bicep">Bicep</Tab><Tab value="terraform">Terraform</Tab>
-      </TabList>
-      {tab === "arm" && (
-        <>
-          <Checkbox style={{ marginTop: 8 }} checked={includeParams} onChange={(_, d) => setIncludeParams(!!d.checked)} label="Include parameters" />
-          <section className="vy-section"><h3>Template</h3>
-            <pre className="vy-mono" style={{ maxHeight: 360, overflow: "auto", background: "var(--colorNeutralBackground3)", padding: 10, borderRadius: 4, fontSize: 12 }}>{JSON.stringify(template, null, 2)}</pre>
-          </section>
-        </>
-      )}
-      {tab === "bicep" && <NotSimulatedContainer feature="ARM-to-Bicep decompilation" />}
-      {tab === "terraform" && <NotSimulatedContainer feature="ARM-to-Terraform export" />}
-    </>
-  );
-}
 
 // ── Identity ──────────────────────────────────────────────────────────────────────────────
 // `identity` is a top-level ARM field on the site (core/azure_webapp_core.py's _apply_identity):

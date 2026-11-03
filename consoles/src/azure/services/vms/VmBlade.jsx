@@ -27,6 +27,7 @@ import { Essentials, ErrorBar, Glyph, KV, Loading, NotSimulated, NotSimulatedCon
 import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
+import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -120,7 +121,7 @@ export default function VmBlade({ params }) {
       connect: () => <Connect a={a} />,
       networksettings: () => <NetworkSettings a={a} />,
       runcommand: () => <RunCommand a={a} reload={reload} />,
-      exporttemplate: () => <ExportTemplate a={a} />,
+      exporttemplate: () => <SharedExportTemplate id={a.id} name={a.name} resourceGroup={a.resourceGroup} />,
       resourcevisualizer: () => <ResourceVisualizer a={a} />,
       advisor: () => <Advisor a={a} />,
       diagnose: () => <Diagnose a={a} />,
@@ -1030,51 +1031,6 @@ function RunCommand({ a }) {
 
 // ── Export template (ARM/Bicep/Terraform all generated client-side from this VM's own live
 // resource — same approach as the Storage account blade's Export template) ────────────────
-function ExportTemplate({ a }) {
-  const [tab, setTab] = useState("arm");
-  const [params, setParams] = useState(true);
-  const template = {
-    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
-    contentVersion: "1.0.0.0",
-    ...(params ? { parameters: { vmName: { type: "string", defaultValue: a.name } } } : {}),
-    resources: [{ type: "Microsoft.Compute/virtualMachines", apiVersion: api.ARM.apiVersion, name: params ? "[parameters('vmName')]" : a.name, location: a.location, properties: a.properties }],
-  };
-  const vmSize = a.properties?.hardwareProfile?.vmSize;
-  const osDisk = a.properties?.storageProfile?.osDisk || {};
-  const img = a.properties?.storageProfile?.imageReference || {};
-  const adminUsername = a.properties?.osProfile?.adminUsername;
-  const bicepName = a.name.replace(/[^a-zA-Z0-9]/g, "");
-  const bicep = `resource ${bicepName} 'Microsoft.Compute/virtualMachines@${api.ARM.apiVersion}' = {\n  name: '${a.name}'\n  location: '${a.location}'\n  properties: {\n    hardwareProfile: {\n      vmSize: '${vmSize}'\n    }\n    osProfile: {\n      computerName: '${a.name}'\n      adminUsername: '${adminUsername}'\n    }\n    storageProfile: {\n      imageReference: {\n        publisher: '${img.publisher}'\n        offer: '${img.offer}'\n        sku: '${img.sku}'\n        version: '${img.version}'\n      }\n      osDisk: {\n        osType: '${osDisk.osType}'\n        managedDisk: {\n          storageAccountType: '${osDisk.managedDisk?.storageAccountType}'\n        }\n      }\n    }\n  }\n}\n`;
-  const terraform = `resource "azurerm_linux_virtual_machine" "${a.name.replace(/[^a-zA-Z0-9]/g, "_")}" {\n  name                = "${a.name}"\n  location            = "${a.location}"\n  resource_group_name = "${a.resourceGroup}"\n  size                = "${vmSize}"\n  admin_username      = "${adminUsername}"\n\n  os_disk {\n    storage_account_type = "${osDisk.managedDisk?.storageAccountType}"\n  }\n\n  source_image_reference {\n    publisher = "${img.publisher}"\n    offer     = "${img.offer}"\n    sku       = "${img.sku}"\n    version   = "${img.version}"\n  }\n}\n`;
-  const text = tab === "arm" ? JSON.stringify(template, null, 2) : tab === "bicep" ? bicep : terraform;
-  const ext = tab === "arm" ? "json" : tab === "bicep" ? "bicep" : "tf";
-  const download = () => {
-    const el = document.createElement("a");
-    el.href = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
-    el.download = `${a.name}.${ext}`;
-    document.body.appendChild(el); el.click(); el.remove();
-  };
-  return (
-    <>
-      <div className="vy-panel-title">Export template</div>
-      <div className="vy-cmdbar" role="toolbar" aria-label="Export template commands">
-        <ToolbarButton icon={<ArrowDownload20Regular />} onClick={download}>Download</ToolbarButton>
-        <ToolbarButton disabled>Add to library (preview)</ToolbarButton>
-        <ToolbarButton disabled>Deploy</ToolbarButton>
-        <ToolbarButton disabled>Visualize template</ToolbarButton>
-      </div>
-      <TabList selectedValue={tab} onTabSelect={(_, d) => setTab(d.value)} aria-label="Export template tabs">
-        <Tab value="arm">ARM Template</Tab>
-        <Tab value="bicep">Bicep</Tab>
-        <Tab value="terraform">Terraform</Tab>
-      </TabList>
-      <section className="vy-section" style={{ marginTop: 12 }}><h3>Template</h3>
-        {tab === "arm" && <Checkbox label="Include parameters" checked={params} onChange={(_, d) => setParams(!!d.checked)} />}
-        <Textarea readOnly value={text} style={{ width: "100%", minHeight: 320, fontFamily: "monospace" }} />
-      </section>
-    </>
-  );
-}
 
 // ── Resource visualizer — a real diagram of this VM's own ARM relationships (NIC, public IP,
 // attached NSG, OS/data disks): no new backend, just rendering data the console already reads

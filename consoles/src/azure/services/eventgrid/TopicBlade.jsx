@@ -23,6 +23,7 @@ import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 import { TagRows } from "./TagRows.jsx";
 import * as api from "./api.js";
+import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -69,7 +70,7 @@ export default function TopicBlade({ params, query }) {
       metrics: () => <Metrics t={t} />,
       diagnosticsettings: () => <DiagnosticSettings t={t} />,
       logs: () => <CapabilityContainer id="azure.eventgrid.topic.monitoring" title={`${name} | Logs`} />,
-      exporttemplate: () => <ExportTemplate t={t} />,
+      exporttemplate: () => <SharedExportTemplate id={t.id} name={t.name} resourceGroup={t.resourceGroup} />,
     }[panel];
     body = P ? P() : <><div className="vy-panel-title">{LABEL[panel] || panel}</div><CapabilityContainer id="azure.eventgrid.topic.tools" title={LABEL[panel] || panel} /></>;
   }
@@ -500,42 +501,6 @@ function Iam({ name }) {
 
 // ── Export template (ARM Template tab reflects this topic's own live resource JSON; Bicep
 // and Terraform output are an honest gap, same as the Cosmos DB account blade) ────────────
-function ExportTemplate({ t }) {
-  const [tab, setTab] = useState("arm");
-  const [params, setParams] = useState(true);
-  const template = {
-    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
-    contentVersion: "1.0.0.0",
-    ...(params ? { parameters: { topicName: { type: "string", defaultValue: t.name } } } : {}),
-    resources: [{ type: "Microsoft.EventGrid/topics", apiVersion: api.ARM.apiVersion, name: params ? "[parameters('topicName')]" : t.name, location: t.location, properties: t.properties }],
-  };
-  const text = JSON.stringify(template, null, 2);
-  const download = () => {
-    const el = document.createElement("a");
-    el.href = URL.createObjectURL(new Blob([text], { type: "application/json" }));
-    el.download = `${t.name}.json`;
-    document.body.appendChild(el); el.click(); el.remove();
-  };
-  return (
-    <>
-      <div className="vy-panel-title">{t.name} | Export template</div>
-      <div className="vy-cmdbar" role="toolbar" aria-label="Export template commands">
-        <ToolbarButton icon={<ArrowDownload20Regular />} onClick={download}>Download</ToolbarButton>
-        <ToolbarButton disabled>Add to library (preview)</ToolbarButton>
-        <ToolbarButton disabled>Deploy</ToolbarButton>
-        <ToolbarButton disabled>Visualize template</ToolbarButton>
-      </div>
-      <TabList selectedValue={tab} onTabSelect={(_, d) => setTab(d.value)} aria-label="Export template tabs">
-        <Tab value="arm">ARM Template</Tab><Tab value="bicep">Bicep</Tab><Tab value="terraform">Terraform</Tab>
-      </TabList>
-      <section className="vy-section" style={{ marginTop: 12 }}><h3>Template</h3>
-        <Checkbox label="Include parameters" checked={params} onChange={(_, d) => setParams(!!d.checked)} />
-        {tab === "arm" && <Textarea readOnly value={text} style={{ width: "100%", minHeight: 320, fontFamily: "monospace" }} />}
-        {tab !== "arm" && <NotSimulatedContainer feature={`${tab === "bicep" ? "Bicep" : "Terraform"} template export`} />}
-      </section>
-    </>
-  );
-}
 
 // ── Locks (resource-scoped Microsoft.Authorization/locks) ─────────────────────────────────
 const LOCK_TYPE_LABEL = { CanNotDelete: "Delete", ReadOnly: "Read-only" };

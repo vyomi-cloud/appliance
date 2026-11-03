@@ -25,6 +25,7 @@ import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 import { TagRows } from "./CreateStorageAccount.jsx";
 import * as api from "./api.js";
+import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
 
 const ENFORCEMENT = "These settings are stored on the storage account (ARM) and returned to your SDKs and the az CLI. The Vyomi Blob data plane does not enforce them.";
 
@@ -94,7 +95,7 @@ export default function StorageAccountBlade({ params, query }) {
       dataprotection: () => <DataProtection a={a} />,
       objectreplication: () => <ObjectReplication a={a} />,
       staticwebsite: () => <StaticWebsite a={a} />,
-      exporttemplate: () => <ExportTemplate a={a} />,
+      exporttemplate: () => <SharedExportTemplate id={a.id} name={a.name} resourceGroup={a.resourceGroup} />,
       iam: () => <Iam a={a} />,
       cors: () => <Cors a={a} />,
       lifecycle: () => <Lifecycle a={a} />,
@@ -1202,50 +1203,6 @@ function StaticWebsite({ a }) {
 }
 
 // ── Export template (client-side ARM/Bicep/Terraform generated from this resource) ────
-function ExportTemplate({ a }) {
-  const [tab, setTab] = useState("arm");
-  const [params, setParams] = useState(true);
-  const resource = { type: "Microsoft.Storage/storageAccounts", apiVersion: "2023-01-01", name: a.name, location: a.location, tags: a.tags || {}, sku: a.sku, kind: a.kind, properties: a.properties };
-  const arm = {
-    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
-    contentVersion: "1.0.0.0",
-    parameters: params ? { storageAccountName: { type: "string", defaultValue: a.name } } : {},
-    resources: [{ ...resource, name: params ? "[parameters('storageAccountName')]" : a.name }],
-  };
-  const bicep = `resource ${a.name.replace(/[^a-zA-Z0-9]/g, "")} 'Microsoft.Storage/storageAccounts@2023-01-01' = {\n  name: '${a.name}'\n  location: '${a.location}'\n  sku: {\n    name: '${a.sku?.name}'\n  }\n  kind: '${a.kind}'\n}\n`;
-  const terraform = `resource "azurerm_storage_account" "${a.name.replace(/[^a-zA-Z0-9]/g, "_")}" {\n  name                     = "${a.name}"\n  location                 = "${a.location}"\n  account_tier             = "${a.sku?.tier || "Standard"}"\n  account_replication_type = "${(a.sku?.name || "").split("_")[1] || "LRS"}"\n}\n`;
-  const text = tab === "arm" ? JSON.stringify(arm, null, 2) : tab === "bicep" ? bicep : terraform;
-  const [gap, setGap] = useState(null);
-  return (
-    <>
-      <div className="vy-panel-title">{a.name} | Export template</div>
-      <div className="vy-cmdbar" role="toolbar" aria-label="Export template commands">
-        <ToolbarButton icon={<ArrowDownload20Regular />} as="a" href={`data:text/plain,${encodeURIComponent(text)}`} download={`${a.name}-template.${tab === "arm" ? "json" : tab === "bicep" ? "bicep" : "tf"}`}>Download</ToolbarButton>
-        <ToolbarButton onClick={() => setGap("Add to library (preview)")}>Add to library (preview)</ToolbarButton>
-        <ToolbarButton onClick={() => setGap("Deploy")}>Deploy</ToolbarButton>
-        <ToolbarButton onClick={() => setGap("Visualize template")}>Visualize template</ToolbarButton>
-      </div>
-      <TabList selectedValue={tab} onTabSelect={(_, d) => setTab(d.value)} aria-label="Export template tabs">
-        <Tab value="arm">ARM Template</Tab>
-        <Tab value="bicep">Bicep</Tab>
-        <Tab value="terraform">Terraform</Tab>
-      </TabList>
-      <section className="vy-section" style={{ marginTop: 12 }}><h3>Template</h3>
-        {tab === "arm" && <Checkbox checked={params} onChange={(_, d) => setParams(!!d.checked)} label="Include parameters" />}
-        <pre className="vy-mono" style={{ maxHeight: 420, overflow: "auto", background: "var(--colorNeutralBackground3)", padding: 12, borderRadius: 4 }}>{text}</pre>
-      </section>
-      <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
-        <DialogSurface aria-label={gap || "Not simulated"}>
-          <DialogBody>
-            <DialogTitle>{gap}</DialogTitle>
-            <DialogContent><NotSimulated feature={gap} /></DialogContent>
-            <DialogActions><Button onClick={() => setGap(null)}>Close</Button></DialogActions>
-          </DialogBody>
-        </DialogSurface>
-      </Dialog>
-    </>
-  );
-}
 
 // ── Data protection (Microsoft.Storage/storageAccounts/blobServices/default) ───────────
 function DeletedContainers({ a }) {

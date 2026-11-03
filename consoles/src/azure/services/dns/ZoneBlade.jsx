@@ -21,6 +21,7 @@ import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 import { TagRows } from "./TagRows.jsx";
 import * as api from "./api.js";
+import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -52,7 +53,7 @@ export default function ZoneBlade({ params }) {
       locks: () => <Locks z={z} rg={rg} />,
       activitylog: () => <ActivityLog z={z} rg={rg} />,
       iam: () => <Iam z={z} />,
-      exporttemplate: () => <NotSimulatedContainer title={`${z.name} | Export template`} feature="ARM/Bicep/Terraform template export for a DNS zone" />,
+      exporttemplate: () => <SharedExportTemplate id={z.id} name={z.name} resourceGroup={z.resourceGroup || z.id.split("/")[4]} />,
       diagnose: () => <NotSimulatedContainer title={`${z.name} | Diagnose and solve problems`} feature="The guided DNS diagnostic tiles" />,
     }[panel];
     body = P ? P() : <NotSimulatedContainer title={`${z.name} | ${LABEL[panel] || panel}`} feature={`The ${LABEL[panel] || panel} panel`} />;

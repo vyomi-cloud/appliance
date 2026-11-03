@@ -38,6 +38,7 @@ import * as Deployment from "./Deployment.jsx";
 import * as Monitoring from "./Monitoring.jsx";
 import * as api from "./api.js";
 import { ResourceRecommendations } from "../defender/Pages.jsx";
+import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -112,7 +113,7 @@ export default function ApimBlade({ params, query }) {
       pricingtier: () => <PricingTier a={a} reload={reload} />,
       properties: () => <Properties a={a} />,
       locks: () => <Locks a={a} />,
-      exporttemplate: () => <ExportTemplate a={a} />,
+      exporttemplate: () => <SharedExportTemplate id={a.id} name={a.name} resourceGroup={a.resourceGroup} />,
       protocolsciphers: () => <ProtocolsCiphers a={a} reload={reload} />,
       mcpservers: () => <McpServers rg={rg} svc={name} />,
       workspaces: () => <Workspaces rg={rg} svc={name} />,
@@ -520,72 +521,6 @@ function ActivityLog({ a }) {
 }
 
 // ── Export template ────────────────────────────────────────────────────────────────────
-function ExportTemplate({ a }) {
-  const [tab, setTab] = useState("arm");
-  const [params, setParams] = useState(true);
-  const template = {
-    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
-    contentVersion: "1.0.0.0",
-    ...(params ? { parameters: { serviceName: { type: "string", defaultValue: a.name } } } : {}),
-    resources: [{ type: "Microsoft.ApiManagement/service", apiVersion: api.ARM.apiVersion, name: params ? "[parameters('serviceName')]" : a.name, location: a.location, sku: a.sku, properties: a.properties }],
-  };
-  const text = JSON.stringify(template, null, 2);
-  // Bicep / Terraform: the SAME live resource, mechanically rendered into each format's
-  // syntax (not a general ARM decompiler — just this one resource's known shape).
-  const nameExpr = params ? "serviceName" : `'${a.name}'`;
-  const bicepText = [
-    ...(params ? [`param serviceName string = '${a.name}'`, ""] : []),
-    `resource apimService 'Microsoft.ApiManagement/service@${api.ARM.apiVersion}' = {`,
-    `  name: ${nameExpr}`,
-    `  location: '${a.location}'`,
-    `  sku: {`,
-    `    name: '${a.sku?.name || "Developer"}'`,
-    `    capacity: ${a.sku?.capacity ?? 0}`,
-    `  }`,
-    `  properties: {`,
-    `    publisherEmail: '${a.properties?.publisherEmail || ""}'`,
-    `    publisherName: '${a.properties?.publisherName || ""}'`,
-    `  }`,
-    `}`,
-  ].join("\n");
-  const terraformText = [
-    `resource "azurerm_api_management" "this" {`,
-    `  name                = "${a.name}"`,
-    `  location            = "${a.location}"`,
-    `  resource_group_name = "${a.resourceGroup}"`,
-    `  publisher_name      = "${a.properties?.publisherName || ""}"`,
-    `  publisher_email     = "${a.properties?.publisherEmail || ""}"`,
-    `  sku_name            = "${a.sku?.name || "Developer"}_${a.sku?.capacity ?? 0}"`,
-    `}`,
-  ].join("\n");
-  const shown = tab === "arm" ? text : tab === "bicep" ? bicepText : terraformText;
-  const download = () => {
-    const ext = { arm: "json", bicep: "bicep", terraform: "tf" }[tab];
-    const el = document.createElement("a");
-    el.href = URL.createObjectURL(new Blob([shown], { type: "text/plain" }));
-    el.download = `${a.name}.${ext}`;
-    document.body.appendChild(el); el.click(); el.remove();
-  };
-  return (
-    <CapabilityContainer id="azure.apim.exporttemplate" title={`${a.name} | Export template`}>
-      <div className="vy-cmdbar" role="toolbar" aria-label="Export template commands">
-        <ToolbarButton icon={<ArrowDownload20Regular />} onClick={download}>Download</ToolbarButton>
-        <ToolbarButton disabled>Add to library (preview)</ToolbarButton>
-        <ToolbarButton disabled>Deploy</ToolbarButton>
-        <ToolbarButton disabled>Visualize template</ToolbarButton>
-      </div>
-      <TabList selectedValue={tab} onTabSelect={(_, d) => setTab(d.value)} aria-label="Export template tabs">
-        <Tab value="arm">ARM Template</Tab>
-        <Tab value="bicep">Bicep</Tab>
-        <Tab value="terraform">Terraform</Tab>
-      </TabList>
-      <section className="vy-section" style={{ marginTop: 12 }}><h3>Template</h3>
-        <Checkbox label="Include parameters" checked={params} onChange={(_, d) => setParams(!!d.checked)} />
-        <Textarea readOnly value={shown} style={{ width: "100%", minHeight: 320, fontFamily: "monospace" }} />
-      </section>
-    </CapabilityContainer>
-  );
-}
 
 // ── Scale out and up / Pricing tier (post-creation sku.capacity / sku.name over ARM — the
 // SAME generic sku merge the create wizard's Pricing tier step writes) ────────────────────

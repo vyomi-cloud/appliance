@@ -15,6 +15,7 @@ import { CapabilityContainer } from "../../kit/Capability.jsx";
 import BrowseGrid from "../../kit/BrowseGrid.jsx";
 import { ErrorBar, Loading, NotSimulatedContainer, fmtDate } from "../../kit/common.jsx";
 import * as api from "./api.js";
+import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
 
 export function MiniTable({ columns, rows, empty }) {
   return (
@@ -238,35 +239,8 @@ export function DiagnosticSettings({ resPath, name }) {
   );
 }
 
-export function ExportTemplate({ a, name, type, extra }) {
-  const [tab, setTab] = useState("arm");
-  const template = {
-    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#", contentVersion: "1.0.0.0",
-    resources: [{ type, apiVersion: api.API_VERSION, name: a.name, location: a.location, properties: a.properties, ...extra }],
-  };
-  return (
-    <>
-      <div className="vy-panel-title">{name} | Export template</div>
-      <div className="vy-cmdbar" role="toolbar" aria-label="Export template commands">
-        <ToolbarButton icon={<DocumentArrowDown20Regular />} onClick={() => {
-          const blob = new Blob([JSON.stringify(template, null, 2)], { type: "application/json" });
-          const u = URL.createObjectURL(blob); const el = document.createElement("a"); el.href = u; el.download = `${a.name}.json`; document.body.appendChild(el); el.click(); el.remove();
-          setTimeout(() => URL.revokeObjectURL(u), 1000);
-        }}>Download</ToolbarButton>
-        <ToolbarButton disabled>Deploy</ToolbarButton>
-      </div>
-      <TabList selectedValue={tab} onTabSelect={(_, d) => setTab(d.value)} aria-label="Export template tabs">
-        <Tab value="arm">ARM Template</Tab><Tab value="bicep">Bicep</Tab><Tab value="terraform">Terraform</Tab>
-      </TabList>
-      {tab === "arm" && (
-        <section className="vy-section"><h3>Template</h3>
-          <pre className="vy-mono" style={{ maxHeight: 360, overflow: "auto", background: "var(--colorNeutralBackground3)", padding: 10, borderRadius: 4, fontSize: 12 }}>{JSON.stringify(template, null, 2)}</pre>
-        </section>
-      )}
-      {tab === "bicep" && <NotSimulatedContainer feature="ARM-to-Bicep decompilation" />}
-      {tab === "terraform" && <NotSimulatedContainer feature="ARM-to-Terraform export" />}
-    </>
-  );
+export function ExportTemplate({ a, name }) {
+  return <SharedExportTemplate id={a.id} name={name || a.name} resourceGroup={a.resourceGroup} />;
 }
 
 export const activityLogFmt = fmtDate;

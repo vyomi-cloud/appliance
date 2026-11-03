@@ -1,0 +1,13 @@
+{
+ "$doc": "Vyomi capability registry — Azure blades shared by every service (Export template, Activity log, RBAC extras, Resource health, Tags/Locks, Diagnostics). See aws/s3.json for the contract.",
+ "azure.common.export_template": {
+  "title": "Export template (ARM, Bicep, Terraform) on every resource",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "The ARM template is built from the properties Vyomi stores for the resource (system/read-only properties such as provisioningState are dropped by a fixed list, not each resource provider's real schema), so it may omit or include properties real Azure would treat differently.",
+   "Bicep is a deterministic decompilation of that template (symbolic names, parameters, resource declarations); nested child resources are exported flat and no dependsOn is inferred.",
+   "Terraform output uses the generic azapi_resource form (Azure/azapi provider), not hand-mapped azurerm_* resources."
+  ],
+  "tests": ["tests/conformance/test_azure_templates_core.py"]
+ }
+}

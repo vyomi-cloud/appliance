@@ -861,6 +861,7 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
     if low[0] == "resourcegroups" and (
             len(low) <= 2
             or (len(low) == 3 and low[2] == "resources")
+            or (len(low) == 3 and low[2] == "exporttemplate")
             or (len(low) >= 5 and low[2] == "providers" and low[3] == "microsoft.authorization"
                 and low[4] in ("locks", "roleassignments", "roledefinitions", "checkaccess"))
             or (len(low) >= 4 and low[2] == "providers" and low[3] == "microsoft.security")):

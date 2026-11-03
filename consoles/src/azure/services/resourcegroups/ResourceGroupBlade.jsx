@@ -20,6 +20,7 @@ import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
+import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -97,7 +98,7 @@ export default function ResourceGroupBlade({ params }) {
       tags: () => <Tags a={a} reload={reload} />,
       deployments: () => <Deployments name={name} />,
       locks: () => <Locks name={name} />,
-      exporttemplate: () => <ExportTemplate a={a} name={name} />,
+      exporttemplate: () => <SharedExportTemplate all id={a.id} name={a.name} resourceGroup={a.name} />,
       properties: () => <Properties a={a} />,
       costanalysis: () => <CostAnalysis name={name} />,
       costalertspreview: () => <CostAlerts name={name} />,
@@ -678,45 +679,6 @@ function ActivityLog({ name }) {
 }
 
 // ── Export template ────────────────────────────────────────────────────────────────────
-function ExportTemplate({ a, name }) {
-  const [tab, setTab] = useState("arm");
-  const [params, setParams] = useState(true);
-  const resources = useAsync(() => api.listResources(name), [name]);
-  const template = {
-    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
-    contentVersion: "1.0.0.0",
-    ...(params ? { parameters: { resourceGroupTags: { type: "object", defaultValue: a.tags || {} } } } : {}),
-    resources: (resources.data || []).map((r) => ({ type: r.type, apiVersion: "2023-01-01", name: r.name, location: r.location, properties: r.properties })),
-  };
-  const text = JSON.stringify(template, null, 2);
-  const download = () => {
-    const el = document.createElement("a");
-    el.href = URL.createObjectURL(new Blob([text], { type: "application/json" }));
-    el.download = `${a.name}.json`;
-    document.body.appendChild(el); el.click(); el.remove();
-  };
-  return (
-    <>
-      <div className="vy-panel-title">Export template</div>
-      <div className="vy-cmdbar" role="toolbar" aria-label="Export template commands">
-        <ToolbarButton icon={<ArrowDownload20Regular />} onClick={download}>Download</ToolbarButton>
-        <ToolbarButton disabled>Add to library (preview)</ToolbarButton>
-        <ToolbarButton disabled>Deploy</ToolbarButton>
-        <ToolbarButton disabled>Visualize template</ToolbarButton>
-      </div>
-      <TabList selectedValue={tab} onTabSelect={(_, d) => setTab(d.value)} aria-label="Export template tabs">
-        <Tab value="arm">ARM Template</Tab>
-        <Tab value="bicep">Bicep</Tab>
-        <Tab value="terraform">Terraform</Tab>
-      </TabList>
-      <section className="vy-section" style={{ marginTop: 12 }}><h3>Template</h3>
-        <Checkbox label="Include parameters" checked={params} onChange={(_, d) => setParams(!!d.checked)} />
-        {tab === "arm" && <Textarea readOnly value={text} style={{ width: "100%", minHeight: 320, fontFamily: "monospace" }} />}
-        {tab !== "arm" && <NotSimulatedContainer feature={`${tab === "bicep" ? "Bicep" : "Terraform"} template export`} />}
-      </section>
-    </>
-  );
-}
 
 // ── Properties ─────────────────────────────────────────────────────────────────────────
 function Properties({ a }) {

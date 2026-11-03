@@ -27,6 +27,7 @@ import * as api from "./api.js";
 import { TagRows } from "../keyvaults/KeyVaultBlade.jsx";
 import * as kv from "../keyvaults/api.js";
 import { ResourceRecommendations } from "../defender/Pages.jsx";
+import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -75,7 +76,7 @@ export default function RegistryBlade({ params, query }) {
       repositories: () => <Repositories query={query} self={self} />,
       webhooks: () => <Webhooks a={a} />,
       activitylog: () => <ActivityLog a={a} />,
-      exporttemplate: () => <ExportTemplate a={a} />,
+      exporttemplate: () => <SharedExportTemplate id={a.id} name={a.name} resourceGroup={a.resourceGroup} />,
       diagnosticsettings: () => <DiagnosticSettings a={a} />,
       insights: () => <NotSimulatedContainer title={`${name} | Insights`} feature="Insights" />,
       alerts: () => <NotSimulatedContainer title={`${name} | Alerts`} feature="Alerts" />,
@@ -767,48 +768,6 @@ function ActivityLog({ a }) {
 
 // ── Export template (ARM/Bicep/Terraform all generated client-side from this registry's own
 // live resource — same approach as the Storage account/VM blades' Export template) ─────────
-function ExportTemplate({ a }) {
-  const [tab, setTab] = useState("arm");
-  const [params, setParams] = useState(true);
-  const template = {
-    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
-    contentVersion: "1.0.0.0",
-    ...(params ? { parameters: { registryName: { type: "string", defaultValue: a.name } } } : {}),
-    resources: [{ type: "Microsoft.ContainerRegistry/registries", apiVersion: api.ARM.apiVersion, name: params ? "[parameters('registryName')]" : a.name, location: a.location, sku: a.sku, properties: a.properties }],
-  };
-  const p = a.properties || {};
-  const bicepName = a.name.replace(/[^a-zA-Z0-9]/g, "");
-  const bicep = `resource ${bicepName} 'Microsoft.ContainerRegistry/registries@${api.ARM.apiVersion}' = {\n  name: '${a.name}'\n  location: '${a.location}'\n  sku: {\n    name: '${api.skuLabel(a.sku)}'\n  }\n  properties: {\n    adminUserEnabled: ${!!p.adminUserEnabled}\n    publicNetworkAccess: '${p.publicNetworkAccess || "Enabled"}'\n    zoneRedundancy: '${p.zoneRedundancy || "Disabled"}'\n  }\n}\n`;
-  const terraform = `resource "azurerm_container_registry" "${a.name.replace(/[^a-zA-Z0-9]/g, "_")}" {\n  name                = "${a.name}"\n  resource_group_name = "${a.resourceGroup}"\n  location            = "${a.location}"\n  sku                 = "${api.skuLabel(a.sku)}"\n  admin_enabled       = ${!!p.adminUserEnabled}\n  public_network_access_enabled = ${p.publicNetworkAccess !== "Disabled"}\n}\n`;
-  const text = tab === "arm" ? JSON.stringify(template, null, 2) : tab === "bicep" ? bicep : terraform;
-  const ext = tab === "arm" ? "json" : tab === "bicep" ? "bicep" : "tf";
-  const download = () => {
-    const el = document.createElement("a");
-    el.href = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
-    el.download = `${a.name}.${ext}`;
-    document.body.appendChild(el); el.click(); el.remove();
-  };
-  return (
-    <>
-      <div className="vy-panel-title">Export template</div>
-      <div className="vy-cmdbar" role="toolbar" aria-label="Export template commands">
-        <ToolbarButton icon={<ArrowDownload20Regular />} onClick={download}>Download</ToolbarButton>
-        <ToolbarButton disabled>Add to library (preview)</ToolbarButton>
-        <ToolbarButton disabled>Deploy</ToolbarButton>
-        <ToolbarButton disabled>Visualize template</ToolbarButton>
-      </div>
-      <TabList selectedValue={tab} onTabSelect={(_, d) => setTab(d.value)} aria-label="Export template tabs">
-        <Tab value="arm">ARM Template</Tab>
-        <Tab value="bicep">Bicep</Tab>
-        <Tab value="terraform">Terraform</Tab>
-      </TabList>
-      <section className="vy-section" style={{ marginTop: 12 }}><h3>Template</h3>
-        {tab === "arm" && <Checkbox label="Include parameters" checked={params} onChange={(_, d) => setParams(!!d.checked)} />}
-        <Textarea readOnly value={text} style={{ width: "100%", minHeight: 320, fontFamily: "monospace" }} />
-      </section>
-    </>
-  );
-}
 
 // ── Quick start — real docker/az-acr snippets generated from this registry's own live data
 // (login server, admin-user state) — nothing to simulate beyond what's already real. ────────
