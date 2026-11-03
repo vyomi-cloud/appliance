@@ -5,6 +5,7 @@
  * types Vyomi has no flow to generate (interactive/non-interactive user sign-ins,
  * managed identity sign-ins) stay honest gaps rather than a skeleton of empty rows. */
 import { useState } from "react";
+import { Button, Input } from "@fluentui/react-components";
 import {
   Table, TableBody, TableCell, TableHeader, TableHeaderCell, TableRow,
   Tab, TabList, ToolbarButton,
@@ -36,7 +37,10 @@ function downloadCsv(rows) {
 export default function SignInLogs() {
   const [tab, setTab] = useState("serviceprincipal");
   const { data, loading, error, reload } = useAsync(() => api.listSignInLogs(), []);
-  const rows = data || [];
+  const all = data || [];
+  const rows = tab === "noninteractive" ? all.filter((r) => (r.signInEventTypes || []).includes("nonInteractiveUser")) : all.filter((r) => !(r.signInEventTypes || []).includes("nonInteractiveUser"));
+  const [u, setU] = useState(""); const [pw, setPw] = useState(""); const [msg, setMsg] = useState(null);
+  const tryUser = async () => { try { await api.signInWithPassword(u, pw); setMsg("Sign-in succeeded - a real row was added below."); } catch (e) { setMsg(`Sign-in failed (${e.message}).`); } reload(); };
   return (
     <EntraShell active="signinlogs" title="Default Directory | Sign-in logs">
       <div className="vy-page">
@@ -52,8 +56,14 @@ export default function SignInLogs() {
           <Tab value="serviceprincipal">Service principal sign-ins</Tab>
           <Tab value="managedidentity">Managed identity sign-ins</Tab>
         </TabList>
-        {tab === "serviceprincipal" && (
-          <CapabilityContainer id="azure.entra.sign_in_logs" title="Service principal sign-ins">
+        {(tab === "serviceprincipal" || tab === "noninteractive") && (
+          <CapabilityContainer id="azure.entra.sign_in_logs" title={tab === "noninteractive" ? "User sign-ins (non-interactive)" : "Service principal sign-ins"}>
+            {tab === "noninteractive" && (
+              <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8, flexWrap: "wrap" }}>
+                <Input placeholder="user principal name" value={u} onChange={(_, d) => setU(d.value)} aria-label="Test sign-in user" />
+                <Input type="password" placeholder="password" value={pw} onChange={(_, d) => setPw(d.value)} aria-label="Test sign-in password" />
+                <Button onClick={tryUser}>Test sign-in</Button>{msg && <span role="status">{msg}</span>}
+              </div>)}
             {loading && <p>Loading...</p>}
             {error && <p>Failed to load sign-in logs.</p>}
             {!loading && !error && (
@@ -71,18 +81,17 @@ export default function SignInLogs() {
                       <TableCell>{r.ipAddress}</TableCell>
                       <TableCell>--</TableCell>
                       <TableCell>{r.conditionalAccessStatus}</TableCell>
-                      <TableCell>Application</TableCell>
+                      <TableCell>{tab === "noninteractive" ? "User" : "Application"}</TableCell>
                       <TableCell>{r.authenticationRequirement}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
             )}
-            {!loading && !rows.length && <p>No service principal sign-ins recorded yet. Request a token with a real application client secret (App registrations | Certificates &amp; secrets | Test sign-in) to see one here.</p>}
+            {!loading && !rows.length && <p>{tab === "noninteractive" ? "No user sign-ins recorded yet. Use Test sign-in with a directory user's password (or acquire a token with the password grant) to see one here." : "No service principal sign-ins recorded yet. Request a token with a real application client secret (App registrations | Certificates & secrets | Test sign-in) to see one here."}</p>}
           </CapabilityContainer>
         )}
         {tab === "interactive" && <NotSimulated feature="User sign-ins (interactive)" note="Vyomi has no interactive browser sign-in flow to generate this telemetry from." />}
-        {tab === "noninteractive" && <NotSimulated feature="User sign-ins (non-interactive)" note="Vyomi has no silent token-refresh flow (no browser session) to generate this telemetry from." />}
         {tab === "managedidentity" && <NotSimulated feature="Managed identity sign-ins" note="Vyomi does not simulate the Azure Instance Metadata Service (IMDS) a managed identity calls to get a token." />}
       </div>
     </EntraShell>

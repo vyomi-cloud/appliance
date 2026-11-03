@@ -66,6 +66,17 @@ export const updateDirectorySettings = (body) => graph("PATCH", "/settings/direc
 export const listAuditLogs = async () => (await graph("GET", "/auditLogs/directoryAudits")).value || [];
 export const listSignInLogs = async () => (await graph("GET", "/auditLogs/signIns")).value || [];
 
+/** Resource-owner password grant (MSAL acquire_token_by_username_password): a REAL password check
+ * against the directory user; appends a real "User sign-ins (non-interactive)" row either way. */
+export async function signInWithPassword(username, password) {
+  const form = new URLSearchParams({ grant_type: "password", client_id: "04b07795-8ddb-461a-bbee-02f9e1bf7b46", username, password, scope: "https://graph.microsoft.com/.default" });
+  const res = await fetch(`${WIRE_BASE}/${DEFAULT_TENANT_ID}/oauth2/v2.0/token`, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: form.toString() });
+  const text = await res.text();
+  const data = text ? JSON.parse(text) : {};
+  if (!res.ok) throw Object.assign(new Error(data.error_description || data.error), { code: data.error });
+  return data;
+}
+
 /** Client-credentials grant with a REAL client secret (the one addPassword returned) —
  * the one authentication Vyomi can model without an interactive browser. Appends a real
  * row to Sign-in logs (success or failure) rather than ever faking one. */

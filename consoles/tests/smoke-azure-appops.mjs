@@ -98,4 +98,14 @@ await pg.getByLabel("Connection name").fill("tostg"); await pg.getByLabel("Targe
 await pg.getByRole("button", { name: "Create", exact: true }).click(); await pg.waitForTimeout(1000);
 ok("function service connector wrote app settings", !!(await arm("GET", `${fsite}/config/appsettings`)).body.properties.AZURE_STORAGEBLOB_RESOURCEENDPOINT);
 for (const p of ["apimanagement", "webjobs", "certificates", "serviceconnector", "healthcheck", "authentication"]) { await go(p); }
+// ── Entra: user sign-ins (non-interactive) via the real ROPC grant ──
+const UPN = `appopsuser${n}@vyomilearn.onmicrosoft.com`;
+await pg.evaluate(async ([w, upn]) => fetch(`${w}/v1.0/users`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ displayName: "Appops User", userPrincipalName: upn, passwordProfile: { password: "Vy0mi!pass12", forceChangePasswordNextSignIn: false } }) }), [WIRE, UPN]);
+await pg.goto(`${UI}#/entra/signinlogs`); await pg.waitForTimeout(1500);
+await pg.getByRole("tab", { name: "User sign-ins (non-interactive)" }).click();
+await pg.getByLabel("Test sign-in user").fill(UPN); await pg.getByLabel("Test sign-in password").fill("wrong");
+await pg.getByRole("button", { name: "Test sign-in" }).click(); await pg.waitForTimeout(800);
+await pg.getByLabel("Test sign-in password").fill("Vy0mi!pass12"); await pg.getByRole("button", { name: "Test sign-in" }).click(); await pg.waitForTimeout(1000);
+const txt = await pg.locator("table").innerText();
+ok("non-interactive sign-ins show one failure and one success", txt.includes("Failure") && txt.includes("Success") && txt.includes("50126"), txt.slice(0, 300));
 await b.close(); console.log(`${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

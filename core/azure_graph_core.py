@@ -196,6 +196,27 @@ class GraphStore:
         })
 
 
+    def user_sign_in(self, user: dict | None, upn: str, app_id: str, success: bool, error_code: int, failure_reason: str | None) -> None:
+        """A real "User sign-ins (non-interactive)" row — appended only by the oauth2 token
+        endpoint's resource-owner-password grant (what MSAL ``acquire_token_by_username_password``
+        sends), after the password was really checked against the directory user."""
+        app = next((a for a in self.applications.values() if a["appId"] == app_id), None)
+        self.sign_in_logs.insert(0, {
+            "id": _guid(), "createdDateTime": _now(),
+            "userDisplayName": (user or {}).get("displayName"), "userPrincipalName": (user or {}).get("userPrincipalName") or upn,
+            "userId": (user or {}).get("id"),
+            "appDisplayName": (app or {}).get("displayName") or "Public client",
+            "appId": app_id,
+            "ipAddress": "127.0.0.1", "location": {"city": None, "state": None, "countryOrRegion": None},
+            "clientAppUsed": "Other clients",
+            "signInEventTypes": ["nonInteractiveUser"],
+            "isInteractive": False,
+            "conditionalAccessStatus": "notApplied",
+            "authenticationRequirement": "singleFactorAuthentication",
+            "status": {"errorCode": 0 if success else error_code, "failureReason": None if success else failure_reason, "additionalDetails": None},
+        })
+
+
 # ── users ────────────────────────────────────────────────────────────────────
 def _user_view(u: dict) -> dict:
     return {k: v for k, v in u.items() if not k.startswith("_")}
@@ -229,6 +250,7 @@ def _create_user(store: GraphStore, body: dict) -> Response:
         "isAgent": False,
         "createdDateTime": _now(),
         "passwordProfile": {"forceChangePasswordNextSignIn": pwd.get("forceChangePasswordNextSignIn", True)},
+        "_password": pwd.get("password"),     # never serialised (_user_view drops "_" keys); checked by the ROPC grant
     }
     store.users[uid] = user
     store.audit("Add user", "UserManagement", user["displayName"])
@@ -251,6 +273,11 @@ def _patch_user(store: GraphStore, uid: str, body: dict) -> Response:
     u = store.users.get(uid)
     if not u:
         return _err(404, "Request_ResourceNotFound", f"Resource '{uid}' does not exist.")
+    body = dict(body)
+    newpwd = (body.get("passwordProfile") or {}).get("password")
+    if newpwd:
+        u["_password"] = newpwd
+        body["passwordProfile"] = {"forceChangePasswordNextSignIn": (body["passwordProfile"] or {}).get("forceChangePasswordNextSignIn", False)}
     u.update({k: v for k, v in body.items() if k not in ("id",)})
     store.audit("Update user", "UserManagement", u["displayName"])
     return Response(status=204)
@@ -661,8 +688,10 @@ def _token(store: GraphStore, method: str, body: bytes) -> Response:
     from urllib.parse import parse_qs
     form = {k: v[0] for k, v in parse_qs((body or b"").decode("utf-8")).items()}
     client_id = form.get("client_id", "")
+    if form.get("grant_type") == "password":
+        return _token_password(store, form, client_id)
     if form.get("grant_type") != "client_credentials":
-        return _oauth_err(400, "unsupported_grant_type", "Vyomi only simulates the client_credentials grant.")
+        return _oauth_err(400, "unsupported_grant_type", "Vyomi simulates the client_credentials and password (ROPC) grants only; there is no interactive browser flow.")
     app = next((a for a in store.applications.values() if a["appId"] == client_id), None)
     if not app:
         store.sign_in(None, client_id, False, 700016, "Application not found in the directory.")
@@ -684,6 +713,27 @@ def _token(store: GraphStore, method: str, body: bytes) -> Response:
     token = "vyomi." + uuid.uuid4().hex + uuid.uuid4().hex
     return _json(200, {"token_type": "Bearer", "expires_in": 3599, "ext_expires_in": 3599,
                         "access_token": token, "scope": form.get("scope", "")})
+
+
+def _token_password(store: GraphStore, form: dict, client_id: str) -> Response:
+    """Resource-owner password credentials grant: the user's password is checked against the
+    directory user (set at create / by passwordProfile PATCH). Failure codes follow Entra ID:
+    50034 user not found, 50057 account disabled, 50126 wrong password."""
+    upn = form.get("username", "")
+    user = next((u for u in store.users.values() if u["userPrincipalName"].lower() == upn.lower()), None)
+    if user is None:
+        store.user_sign_in(None, upn, client_id, False, 50034, "The user does not exist in the directory.")
+        return _oauth_err(400, "invalid_grant", f"AADSTS50034: The user account {upn} does not exist in the directory.")
+    if user.get("accountEnabled") is False:
+        store.user_sign_in(user, upn, client_id, False, 50057, "The user account is disabled.")
+        return _oauth_err(400, "invalid_grant", "AADSTS50057: The user account is disabled.")
+    if not form.get("password") or user.get("_password") != form.get("password"):
+        store.user_sign_in(user, upn, client_id, False, 50126, "Error validating credentials due to invalid username or password.")
+        return _oauth_err(400, "invalid_grant", "AADSTS50126: Error validating credentials due to invalid username or password.")
+    store.user_sign_in(user, upn, client_id, True, 0, None)
+    token = "vyomi." + uuid.uuid4().hex + uuid.uuid4().hex
+    return _json(200, {"token_type": "Bearer", "expires_in": 3599, "ext_expires_in": 3599,
+                       "access_token": token, "scope": form.get("scope", "")})
 
 
 # ── dispatch ────────────────────────────────────────────────────────────────
