@@ -8,7 +8,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
@@ -17,6 +20,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/monitor/query/azlogs"
 	oi "github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/operationalinsights/armoperationalinsights/v2"
 )
 
@@ -24,6 +28,15 @@ type fakeCred struct{}
 
 func (fakeCred) GetToken(_ context.Context, _ policy.TokenRequestOptions) (azcore.AccessToken, error) {
 	return azcore.AccessToken{Token: "fake-token", ExpiresOn: time.Now().Add(time.Hour)}, nil
+}
+
+type rewriteTransport struct{ ep string }
+
+func (t rewriteTransport) Do(r *http.Request) (*http.Response, error) {
+	u, _ := url.Parse(t.ep)
+	r2 := r.Clone(r.Context())
+	r2.URL.Scheme, r2.URL.Host, r2.Host = u.Scheme, u.Host, u.Host
+	return http.DefaultClient.Do(r2)
 }
 
 var failed int
@@ -81,7 +94,7 @@ func main() {
 
 	// ── workspaces ──
 	poller, err := wsc.BeginCreateOrUpdate(ctx, rg, ws, oi.Workspace{Location: to.Ptr("eastus"),
-		Tags: map[string]*string{"env": to.Ptr("conf")},
+		Tags:       map[string]*string{"env": to.Ptr("conf")},
 		Properties: &oi.WorkspaceProperties{SKU: &oi.WorkspaceSKU{Name: to.Ptr(oi.WorkspaceSKUNameEnumPerGB2018)}, RetentionInDays: to.Ptr[int32](60)}}, nil)
 	var w oi.WorkspacesClientCreateOrUpdateResponse
 	if err == nil {
@@ -153,6 +166,33 @@ func main() {
 	check("IntelligencePacks.Enable", err == nil, fmt.Sprint(err))
 	_, err = ipc.Disable(ctx, rg, ws, "LogManagement", nil)
 	check("disabling LogManagement → 400", status(err) == 400, fmt.Sprint(err))
+
+	// ── KQL query (data plane, official azlogs client; engine op RunKql / run_kql) ──
+	wsID := ""
+	if w.Properties != nil && w.Properties.CustomerID != nil {
+		wsID = *w.Properties.CustomerID
+	}
+	lc, lerr := azlogs.NewClient(fakeCred{}, &azlogs.ClientOptions{ClientOptions: azcore.ClientOptions{
+		Cloud: cloud.Configuration{Services: map[cloud.ServiceName]cloud.ServiceConfiguration{
+			azlogs.ServiceName: {Endpoint: "https://vyomi.invalid/azure-data/loganalytics", Audience: ep}}},
+		// azlogs builds its bearer policy without the insecure-HTTP switch, so the SDK is pointed at an
+		// https name and the transport maps it to the plain-HTTP appliance.
+		Transport: rewriteTransport{ep}}})
+	if lerr != nil {
+		check("azlogs client", false, fmt.Sprint(lerr))
+	} else {
+		_, err = lc.QueryWorkspace(ctx, wsID, azlogs.QueryBody{Query: to.Ptr("GoApp_CL | count")}, nil)
+		check("Logs.QueryWorkspace on an unknown table → 400", status(err) == 400, fmt.Sprint(err))
+		ing, ierr := http.Post(ep+"/azure-data/loganalytics/"+wsID+"/api/logs?logType=GoApp",
+			"application/json", strings.NewReader(`[{"level":"error"},{"level":"info"},{"level":"info"}]`))
+		if ierr == nil {
+			ing.Body.Close()
+		}
+		check("HTTP Data Collector ingest accepted", ierr == nil && ing.StatusCode == 200, fmt.Sprint(ierr))
+		qr, err := lc.QueryWorkspace(ctx, wsID, azlogs.QueryBody{Query: to.Ptr("GoApp_CL | count")}, nil)
+		ok := err == nil && len(qr.Tables) == 1 && len(qr.Tables[0].Rows) == 1 && fmt.Sprint(qr.Tables[0].Rows[0][0]) == "3"
+		check("Logs.QueryWorkspace counts the ingested rows", ok, fmt.Sprint(err, qr.Tables))
+	}
 
 	// ── saved searches ──
 	ss, err := ssc.CreateOrUpdate(ctx, rg, ws, "top-computers", oi.SavedSearch{Properties: &oi.SavedSearchProperties{
