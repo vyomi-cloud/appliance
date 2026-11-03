@@ -15,6 +15,7 @@ import { Endpoints, EndpointServices, PrivatelinkGettingStarted } from "./Endpoi
 import { VerifiedAccessInstances, VerifiedAccessTrustProviders, VerifiedAccessGroups, VerifiedAccessEndpoints } from "./VerifiedAccess.jsx";
 import Settings from "./Settings.jsx";
 import * as Honest from "./HonestPages.jsx";
+import * as Vpn from "./VpnPages.jsx";
 
 const crumb = (text, ...path) => ({ text, href: `#/vpc/${path.join("/")}` });
 const base = [crumb("VPC", "")];
@@ -166,11 +167,11 @@ export default {
     { pattern: "/vpc/vpc-endpoint-associations", component: Honest.VpcEndpointAssociations, crumbs: () => [crumb("VPC", ""), crumb("VPC endpoint associations", "vpc-endpoint-associations")] },
     { pattern: "/vpc/container-associations", component: Honest.ContainerAssociations, crumbs: () => [crumb("VPC", ""), crumb("Container associations", "container-associations")] },
 
-    { pattern: "/vpc/customer-gateways", component: Honest.CustomerGateways, crumbs: () => [crumb("VPC", ""), crumb("Customer gateways", "customer-gateways")] },
-    { pattern: "/vpc/virtual-private-gateways", component: Honest.VirtualPrivateGateways, crumbs: () => [crumb("VPC", ""), crumb("Virtual private gateways", "virtual-private-gateways")] },
-    { pattern: "/vpc/vpn-concentrators", component: Honest.VpnConcentrators, crumbs: () => [crumb("VPC", ""), crumb("Site-to-Site VPN Concentrators", "vpn-concentrators")] },
-    { pattern: "/vpc/vpn-connections", component: Honest.VpnConnections, crumbs: () => [crumb("VPC", ""), crumb("Site-to-Site VPN connections", "vpn-connections")] },
-    { pattern: "/vpc/client-vpn-endpoints", component: Honest.ClientVpnEndpoints, crumbs: () => [crumb("VPC", ""), crumb("Client VPN endpoints", "client-vpn-endpoints")] },
+    { pattern: "/vpc/customer-gateways", component: Vpn.CustomerGateways, crumbs: () => [crumb("VPC", ""), crumb("Customer gateways", "customer-gateways")] },
+    { pattern: "/vpc/virtual-private-gateways", component: Vpn.VirtualPrivateGateways, crumbs: () => [crumb("VPC", ""), crumb("Virtual private gateways", "virtual-private-gateways")] },
+    { pattern: "/vpc/vpn-concentrators", component: Vpn.VpnConcentrators, crumbs: () => [crumb("VPC", ""), crumb("Site-to-Site VPN Concentrators", "vpn-concentrators")] },
+    { pattern: "/vpc/vpn-connections", component: Vpn.VpnConnections, crumbs: () => [crumb("VPC", ""), crumb("Site-to-Site VPN connections", "vpn-connections")] },
+    { pattern: "/vpc/client-vpn-endpoints", component: Vpn.ClientVpnEndpoints, crumbs: () => [crumb("VPC", ""), crumb("Client VPN endpoints", "client-vpn-endpoints")] },
 
     { pattern: "/vpc/verified-access-instances", component: VerifiedAccessInstances, crumbs: () => [crumb("VPC", ""), crumb("Verified Access instances", "verified-access-instances")] },
     { pattern: "/vpc/verified-access-trust-providers", component: VerifiedAccessTrustProviders, crumbs: () => [crumb("VPC", ""), crumb("Verified Access trust providers", "verified-access-trust-providers")] },
@@ -180,14 +181,14 @@ export default {
     { pattern: "/vpc/transit-gateways", component: TransitGateways, crumbs: () => [crumb("VPC", ""), crumb("Transit gateways", "transit-gateways")] },
     { pattern: "/vpc/transit-gateway-route-tables/:id", component: TransitGatewayRouteTableDetail, crumbs: (p) => [crumb("VPC", ""), crumb("Transit gateway route tables", "transit-gateway-route-tables"), crumb(p.id, `transit-gateway-route-tables/${p.id}`)] },
     { pattern: "/vpc/transit-gateway-attachments", component: TransitGatewayAttachments, crumbs: () => [crumb("VPC", ""), crumb("Transit gateway attachments", "transit-gateway-attachments")] },
-    { pattern: "/vpc/transit-gateway-policy-tables", component: Honest.TransitGatewayPolicyTables, crumbs: () => [crumb("VPC", ""), crumb("Transit gateway policy tables", "transit-gateway-policy-tables")] },
+    { pattern: "/vpc/transit-gateway-policy-tables", component: Vpn.TransitGatewayPolicyTables, crumbs: () => [crumb("VPC", ""), crumb("Transit gateway policy tables", "transit-gateway-policy-tables")] },
     { pattern: "/vpc/transit-gateway-route-tables", component: TransitGatewayRouteTables, crumbs: () => [crumb("VPC", ""), crumb("Transit gateway route tables", "transit-gateway-route-tables")] },
-    { pattern: "/vpc/transit-gateway-multicast", component: Honest.TransitGatewayMulticast, crumbs: () => [crumb("VPC", ""), crumb("Transit gateway multicast", "transit-gateway-multicast")] },
-    { pattern: "/vpc/metering-policies", component: Honest.MeteringPolicies, crumbs: () => [crumb("VPC", ""), crumb("Metering policies", "metering-policies")] },
+    { pattern: "/vpc/transit-gateway-multicast", component: Vpn.TransitGatewayMulticast, crumbs: () => [crumb("VPC", ""), crumb("Transit gateway multicast", "transit-gateway-multicast")] },
+    { pattern: "/vpc/metering-policies", component: Vpn.MeteringPolicies, crumbs: () => [crumb("VPC", ""), crumb("Metering policies", "metering-policies")] },
 
-    { pattern: "/vpc/mirror-sessions", component: Honest.MirrorSessions, crumbs: () => [crumb("VPC", ""), crumb("Mirror sessions", "mirror-sessions")] },
-    { pattern: "/vpc/mirror-targets", component: Honest.MirrorTargets, crumbs: () => [crumb("VPC", ""), crumb("Mirror targets", "mirror-targets")] },
-    { pattern: "/vpc/mirror-filters", component: Honest.MirrorFilters, crumbs: () => [crumb("VPC", ""), crumb("Mirror filters", "mirror-filters")] },
+    { pattern: "/vpc/mirror-sessions", component: Vpn.MirrorSessions, crumbs: () => [crumb("VPC", ""), crumb("Mirror sessions", "mirror-sessions")] },
+    { pattern: "/vpc/mirror-targets", component: Vpn.MirrorTargets, crumbs: () => [crumb("VPC", ""), crumb("Mirror targets", "mirror-targets")] },
+    { pattern: "/vpc/mirror-filters", component: Vpn.MirrorFilters, crumbs: () => [crumb("VPC", ""), crumb("Mirror filters", "mirror-filters")] },
 
     { pattern: "/vpc/settings", component: Settings, crumbs: () => [crumb("VPC", ""), crumb("Settings", "settings")] },
   ],

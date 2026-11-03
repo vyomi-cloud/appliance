@@ -41,21 +41,10 @@ export const VpcEndpointAssociations = page("VPC endpoint associations", "aws.vp
 export const ContainerAssociations = page("Container associations", "aws.vpc.network-firewall");
 
 // Site-to-Site VPN / Client VPN
-export const CustomerGateways = page("Customer gateways", "aws.vpc.vpn");
-export const VirtualPrivateGateways = page("Virtual private gateways", "aws.vpc.vpn");
-export const VpnConcentrators = page("Site-to-Site VPN Concentrators", "aws.vpc.vpn");
-export const VpnConnections = page("Site-to-Site VPN connections", "aws.vpc.vpn");
-export const ClientVpnEndpoints = page("Client VPN endpoints", "aws.vpc.vpn");
 
 // Transit gateways
 export const TransitGateways = page("Transit gateways", "aws.vpc.transit-gateway");
 export const TransitGatewayAttachments = page("Transit gateway attachments", "aws.vpc.transit-gateway");
-export const TransitGatewayPolicyTables = page("Transit gateway policy tables", "aws.vpc.transit-gateway-advanced");
 export const TransitGatewayRouteTables = page("Transit gateway route tables", "aws.vpc.transit-gateway");
-export const TransitGatewayMulticast = page("Transit gateway multicast", "aws.vpc.transit-gateway-advanced");
-export const MeteringPolicies = page("Metering policies", "aws.vpc.transit-gateway-advanced");
 
 // Traffic Mirroring
-export const MirrorSessions = page("Mirror sessions", "aws.vpc.traffic-mirroring");
-export const MirrorTargets = page("Mirror targets", "aws.vpc.traffic-mirroring");
-export const MirrorFilters = page("Mirror filters", "aws.vpc.traffic-mirroring");

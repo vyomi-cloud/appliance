@@ -64,11 +64,11 @@
   "vpc-endpoint-associations": { "route": "#/vpc/vpc-endpoint-associations", "honest_page": true },
   "container-associations": { "route": "#/vpc/container-associations", "honest_page": true },
 
-  "customer-gateways": { "route": "#/vpc/customer-gateways", "honest_page": true },
-  "virtual-private-gateways": { "route": "#/vpc/virtual-private-gateways", "honest_page": true },
-  "vpn-concentrators": { "route": "#/vpc/vpn-concentrators", "honest_page": true },
-  "vpn-connections": { "route": "#/vpc/vpn-connections", "honest_page": true },
-  "client-vpn-endpoints": { "route": "#/vpc/client-vpn-endpoints", "honest_page": true },
+  "customer-gateways": { "route": "#/vpc/customer-gateways" },
+  "virtual-private-gateways": { "route": "#/vpc/virtual-private-gateways" },
+  "vpn-concentrators": { "route": "#/vpc/vpn-concentrators" },
+  "vpn-connections": { "route": "#/vpc/vpn-connections" },
+  "client-vpn-endpoints": { "route": "#/vpc/client-vpn-endpoints" },
 
   "verified-access-instances": { "route": "#/vpc/verified-access-instances", "live": "live-verified-access-instance" },
   "verified-access-trust-providers": { "route": "#/vpc/verified-access-trust-providers", "live": "live-verified-access-trust-provider" },
@@ -77,14 +77,14 @@
 
   "transit-gateways": { "route": "#/vpc/transit-gateways", "honest_page": true },
   "transit-gateway-attachments": { "route": "#/vpc/transit-gateway-attachments", "honest_page": true },
-  "transit-gateway-policy-tables": { "route": "#/vpc/transit-gateway-policy-tables", "honest_page": true },
+  "transit-gateway-policy-tables": { "route": "#/vpc/transit-gateway-policy-tables" },
   "transit-gateway-route-tables": { "route": "#/vpc/transit-gateway-route-tables", "honest_page": true },
-  "transit-gateway-multicast": { "route": "#/vpc/transit-gateway-multicast", "honest_page": true },
-  "metering-policies": { "route": "#/vpc/metering-policies", "honest_page": true },
+  "transit-gateway-multicast": { "route": "#/vpc/transit-gateway-multicast" },
+  "metering-policies": { "route": "#/vpc/metering-policies" },
 
-  "mirror-sessions": { "route": "#/vpc/mirror-sessions", "honest_page": true },
-  "mirror-targets": { "route": "#/vpc/mirror-targets", "honest_page": true },
-  "mirror-filters": { "route": "#/vpc/mirror-filters", "honest_page": true },
+  "mirror-sessions": { "route": "#/vpc/mirror-sessions" },
+  "mirror-targets": { "route": "#/vpc/mirror-targets" },
+  "mirror-filters": { "route": "#/vpc/mirror-filters" },
 
   "settings": { "route": "#/vpc/settings" }
 }

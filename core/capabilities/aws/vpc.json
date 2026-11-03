@@ -1,138 +1,235 @@
 {
- "$doc": "Vyomi capability registry — VPC. See s3.json for the contract. Per the aws-vpc queue entry, ids here start with 'aws.vpc.' (the AWS convention predates this; newer AWS services follow the cross-cloud 'cloud.service.feature' namespace).",
+ "$doc": "Vyomi capability registry \u2014 VPC. See s3.json for the contract. Per the aws-vpc queue entry, ids here start with 'aws.vpc.' (the AWS convention predates this; newer AWS services follow the cross-cloud 'cloud.service.feature' namespace).",
  "aws.vpc.vpcs": {
   "title": "VPCs (create, describe, delete, DNS attribute settings)",
-  "level": { "nano": "full", "offline": "full" },
-  "limitations": [],
-  "tests": ["tests/conformance/test_vpc_core.py"]
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "Secondary IPv4 CIDR blocks (and an Amazon-provided IPv6 block) can be associated/disassociated with EC2 validation (/16-/28, private ranges, no overlap, max 5, blocked while subnets exist); local routes and netsim follow. IPAM pools/allocations are not simulated."
+  ],
+  "tests": [
+   "tests/conformance/test_vpc_core.py",
+   "tests/conformance/test_vpc_sweepvpc_core.py"
+  ]
  },
  "aws.vpc.subnets": {
   "title": "Subnets (create, describe, delete)",
-  "level": { "nano": "full", "offline": "full" },
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
   "limitations": [
    "Private IPv4s are allocated from the subnet CIDR like EC2 (.0-.3 and the broadcast address reserved); public IPv4 only with MapPublicIpOnLaunch / AssociatePublicIpAddress / an EIP."
   ],
-  "tests": ["tests/conformance/test_vpc_core.py", "tests/conformance/test_vpc_netsim_core.py"]
+  "tests": [
+   "tests/conformance/test_vpc_core.py",
+   "tests/conformance/test_vpc_netsim_core.py"
+  ]
  },
  "aws.vpc.route-tables": {
   "title": "Route tables (create, describe, delete, routes, subnet associations, main table)",
-  "level": { "nano": "full", "offline": "full" },
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
   "limitations": [
-   "Behaviour comes from the shared netsim evaluator (core/netsim): routes (longest prefix), IGW/NAT/peering semantics, the SG union and stateless NACLs incl. the ephemeral return path decide every Reachability Analyzer answer — on Nano that evaluated behaviour is the network (in-browser instances exchange no packets).",
+   "Behaviour comes from the shared netsim evaluator (core/netsim): routes (longest prefix), IGW/NAT/peering semantics, the SG union and stateless NACLs incl. the ephemeral return path decide every Reachability Analyzer answer \u2014 on Nano that evaluated behaviour is the network (in-browser instances exchange no packets).",
    "Offline, the rules are enforced on REAL packets (one Docker bridge per subnet + an nftables table per space, core/netsim/enforce.py) only when VYOMI_NETSIM_ENFORCE=1|auto and the instance runs on the Docker compute backend; with enforcement off (the default) or on LXD/Multipass runtimes they are evaluated, not enforced."
   ],
-  "tests": ["tests/conformance/test_vpc_core.py", "tests/conformance/test_vpc_netsim_core.py", "tests/netsim/test_aws.py"]
+  "tests": [
+   "tests/conformance/test_vpc_core.py",
+   "tests/conformance/test_vpc_netsim_core.py",
+   "tests/netsim/test_aws.py"
+  ]
  },
  "aws.vpc.internet-gateways": {
   "title": "Internet gateways (create, attach, detach, delete)",
-  "level": { "nano": "full", "offline": "full" },
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
   "limitations": [
-   "Behaviour comes from the shared netsim evaluator (core/netsim): routes (longest prefix), IGW/NAT/peering semantics, the SG union and stateless NACLs incl. the ephemeral return path decide every Reachability Analyzer answer — on Nano that evaluated behaviour is the network (in-browser instances exchange no packets).",
+   "Behaviour comes from the shared netsim evaluator (core/netsim): routes (longest prefix), IGW/NAT/peering semantics, the SG union and stateless NACLs incl. the ephemeral return path decide every Reachability Analyzer answer \u2014 on Nano that evaluated behaviour is the network (in-browser instances exchange no packets).",
    "Offline, the rules are enforced on REAL packets (one Docker bridge per subnet + an nftables table per space, core/netsim/enforce.py) only when VYOMI_NETSIM_ENFORCE=1|auto and the instance runs on the Docker compute backend; with enforcement off (the default) or on LXD/Multipass runtimes they are evaluated, not enforced."
   ],
-  "tests": ["tests/conformance/test_vpc_core.py", "tests/conformance/test_vpc_netsim_core.py", "tests/netsim/test_aws.py"]
+  "tests": [
+   "tests/conformance/test_vpc_core.py",
+   "tests/conformance/test_vpc_netsim_core.py",
+   "tests/netsim/test_aws.py"
+  ]
  },
  "aws.vpc.nat-gateways": {
   "title": "NAT gateways (create, describe, delete)",
-  "level": { "nano": "limited", "offline": "limited" },
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
   "limitations": [
-   "Evaluated like AWS: the route works only while the NAT gateway exists, is public and sits in a subnet that routes to an attached internet gateway, and that subnet's NACL applies in both directions. Offline with enforcement on, egress is really translated (masquerade) — but the internet sees the appliance host's address, not the NAT gateway's EIP, and the NAT keeps the client's source port (real NAT GW uses 1024-65535).",
+   "Evaluated like AWS: the route works only while the NAT gateway exists, is public and sits in a subnet that routes to an attached internet gateway, and that subnet's NACL applies in both directions. Offline with enforcement on, egress is really translated (masquerade) \u2014 but the internet sees the appliance host's address, not the NAT gateway's EIP, and the NAT keeps the client's source port (real NAT GW uses 1024-65535).",
    "Offline, the rules are enforced on REAL packets (one Docker bridge per subnet + an nftables table per space, core/netsim/enforce.py) only when VYOMI_NETSIM_ENFORCE=1|auto and the instance runs on the Docker compute backend; with enforcement off (the default) or on LXD/Multipass runtimes they are evaluated, not enforced."
   ],
-  "tests": ["tests/conformance/test_vpc_core.py", "tests/conformance/test_vpc_netsim_core.py", "tests/netsim/test_aws.py"]
+  "tests": [
+   "tests/conformance/test_vpc_core.py",
+   "tests/conformance/test_vpc_netsim_core.py",
+   "tests/netsim/test_aws.py"
+  ]
  },
  "aws.vpc.network-acls": {
   "title": "Network ACLs (create, describe, delete, numbered allow/deny entries, subnet associations)",
-  "level": { "nano": "full", "offline": "full" },
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
   "limitations": [
-   "Behaviour comes from the shared netsim evaluator (core/netsim): routes (longest prefix), IGW/NAT/peering semantics, the SG union and stateless NACLs incl. the ephemeral return path decide every Reachability Analyzer answer — on Nano that evaluated behaviour is the network (in-browser instances exchange no packets).",
+   "Behaviour comes from the shared netsim evaluator (core/netsim): routes (longest prefix), IGW/NAT/peering semantics, the SG union and stateless NACLs incl. the ephemeral return path decide every Reachability Analyzer answer \u2014 on Nano that evaluated behaviour is the network (in-browser instances exchange no packets).",
    "Offline, the rules are enforced on REAL packets (one Docker bridge per subnet + an nftables table per space, core/netsim/enforce.py) only when VYOMI_NETSIM_ENFORCE=1|auto and the instance runs on the Docker compute backend; with enforcement off (the default) or on LXD/Multipass runtimes they are evaluated, not enforced."
   ],
-  "tests": ["tests/conformance/test_vpc_core.py", "tests/conformance/test_vpc_netsim_core.py", "tests/netsim/test_aws.py"]
+  "tests": [
+   "tests/conformance/test_vpc_core.py",
+   "tests/conformance/test_vpc_netsim_core.py",
+   "tests/netsim/test_aws.py"
+  ]
  },
  "aws.vpc.security-groups": {
   "title": "Security groups (create, authorize/revoke rules, delete, default-SG protection)",
-  "level": { "nano": "full", "offline": "full" },
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
   "limitations": [
-   "Behaviour comes from the shared netsim evaluator (core/netsim): routes (longest prefix), IGW/NAT/peering semantics, the SG union and stateless NACLs incl. the ephemeral return path decide every Reachability Analyzer answer — on Nano that evaluated behaviour is the network (in-browser instances exchange no packets).",
+   "Behaviour comes from the shared netsim evaluator (core/netsim): routes (longest prefix), IGW/NAT/peering semantics, the SG union and stateless NACLs incl. the ephemeral return path decide every Reachability Analyzer answer \u2014 on Nano that evaluated behaviour is the network (in-browser instances exchange no packets).",
    "Offline, the rules are enforced on REAL packets (one Docker bridge per subnet + an nftables table per space, core/netsim/enforce.py) only when VYOMI_NETSIM_ENFORCE=1|auto and the instance runs on the Docker compute backend; with enforcement off (the default) or on LXD/Multipass runtimes they are evaluated, not enforced."
   ],
-  "tests": ["tests/conformance/test_vpc_core.py", "tests/conformance/test_vpc_netsim_core.py", "tests/netsim/test_aws.py"]
+  "tests": [
+   "tests/conformance/test_vpc_core.py",
+   "tests/conformance/test_vpc_netsim_core.py",
+   "tests/netsim/test_aws.py"
+  ]
  },
  "aws.vpc.elastic-ips": {
   "title": "Elastic IPs (allocate, associate, disassociate, release)",
-  "level": { "nano": "full", "offline": "full" },
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
   "limitations": [
    "Allocated addresses are synthetic (not real internet-routable IPs).",
    "An EIP gives an instance internet egress via the IGW; inbound to the public address is always evaluated, and enforced offline (1:1 DNAT, ingress SG/NACL apply) only with VYOMI_NETSIM_INBOUND_DNAT=1 on top of netsim enforcement."
   ],
-  "tests": ["tests/conformance/test_vpc_core.py"]
+  "tests": [
+   "tests/conformance/test_vpc_core.py"
+  ]
  },
  "aws.vpc.egress-only-internet-gateways": {
   "title": "Egress-only internet gateways (create, describe, delete)",
-  "level": { "nano": "full", "offline": "full" },
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
   "limitations": [],
-  "tests": ["tests/conformance/test_vpc_core.py"]
+  "tests": [
+   "tests/conformance/test_vpc_core.py"
+  ]
  },
  "aws.vpc.dhcp-option-sets": {
   "title": "DHCP option sets (create, describe, delete, associate)",
-  "level": { "nano": "limited", "offline": "limited" },
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
   "limitations": [
-   "Enforced, not stored config: DescribeVpcDnsResolution computes the VPC's effective DNS server(s) live from its DHCP option set + enableDnsSupport attribute (AmazonProvidedDNS → the VPC's reserved resolver address; a custom domain-name-servers value → those real IPs) — changing either really changes the answer, and whether a subnet can actually reach a custom resolver is a normal Reachability Analyzer check (route table + SG/NACL).",
-   "There is still no real DHCP server handing out leases over a simulated network stack — domain-name / ntp-servers / netbios-* are stored and returned but not consumed."
+   "Enforced, not stored config: DescribeVpcDnsResolution computes the VPC's effective DNS server(s) live from its DHCP option set + enableDnsSupport attribute (AmazonProvidedDNS \u2192 the VPC's reserved resolver address; a custom domain-name-servers value \u2192 those real IPs) \u2014 changing either really changes the answer, and whether a subnet can actually reach a custom resolver is a normal Reachability Analyzer check (route table + SG/NACL).",
+   "There is still no real DHCP server handing out leases over a simulated network stack \u2014 domain-name / ntp-servers / netbios-* are stored and returned but not consumed."
   ],
-  "tests": ["tests/conformance/test_vpc_core.py"]
+  "tests": [
+   "tests/conformance/test_vpc_core.py"
+  ]
  },
  "aws.vpc.managed-prefix-lists": {
   "title": "Managed prefix lists (create, describe, delete)",
-  "level": { "nano": "full", "offline": "full" },
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
   "limitations": [],
-  "tests": ["tests/conformance/test_vpc_core.py"]
+  "tests": [
+   "tests/conformance/test_vpc_core.py"
+  ]
  },
  "aws.vpc.peering-connections": {
   "title": "VPC peering connections (create, accept, describe, delete)",
-  "level": { "nano": "limited", "offline": "limited" },
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
   "limitations": [
    "The analyzer routes across an ACTIVE peering (non-transitive; the peer's route table needs the return route). Offline packet enforcement across peered VPCs is compiled but not yet covered by the real-packet test, and VPCs with overlapping CIDRs cannot be enforced on one Docker host.",
    "Offline, the rules are enforced on REAL packets (one Docker bridge per subnet + an nftables table per space, core/netsim/enforce.py) only when VYOMI_NETSIM_ENFORCE=1|auto and the instance runs on the Docker compute backend; with enforcement off (the default) or on LXD/Multipass runtimes they are evaluated, not enforced."
   ],
-  "tests": ["tests/conformance/test_vpc_core.py", "tests/conformance/test_vpc_netsim_core.py", "tests/netsim/test_aws.py"]
+  "tests": [
+   "tests/conformance/test_vpc_core.py",
+   "tests/conformance/test_vpc_netsim_core.py",
+   "tests/netsim/test_aws.py"
+  ]
  },
  "aws.vpc.route-servers": {
   "title": "VPC Route Server (create, describe, delete)",
-  "level": { "nano": "limited", "offline": "limited" },
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
   "limitations": [
-   "Only the resource lifecycle is modeled — no real BGP peering or route exchange."
+   "Only the resource lifecycle is modeled \u2014 no real BGP peering or route exchange."
   ],
-  "tests": ["tests/conformance/test_vpc_core.py"]
+  "tests": [
+   "tests/conformance/test_vpc_core.py"
+  ]
  },
  "aws.vpc.flow-logs": {
   "title": "VPC/subnet Flow logs",
-  "level": { "nano": "limited", "offline": "limited" },
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
   "limitations": [
-   "CreateFlowLogs / DescribeFlowLogs / DeleteFlowLogs manage real flow log resources (status, destination, format, tags) against a VPC, subnet or ENI, but Vyomi does not deliver records to CloudWatch Logs or S3 — the record stream is always empty here.",
+   "CreateFlowLogs / DescribeFlowLogs / DeleteFlowLogs manage real flow log resources (status, destination, format, tags) against a VPC, subnet or ENI, but Vyomi does not deliver records to CloudWatch Logs or S3 \u2014 the record stream is always empty here.",
    "Offline with netsim enforcement on (VYOMI_NETSIM_ENFORCE=1|auto, Docker compute backend), the enforcer does count real per-flow packets/bytes and core/netsim/flowlogs.py can render AWS v2 records from them, but that collector is not wired to this EC2 API yet."
   ],
-  "tests": ["tests/conformance/test_vpc_core.py"]
+  "tests": [
+   "tests/conformance/test_vpc_core.py"
+  ]
  },
  "aws.vpc.integrations": {
   "title": "VPC console third-party integrations (e.g. Transit Gateway Network Manager tiles)",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
   "limitations": [
-   "These dashboard tiles link out to genuinely separate things Vyomi cannot stand in for: AWS Network Manager (its own control plane over Transit Gateways) and real third-party network/observability partners (e.g. Aviatrix, Kentik) advertised in the console — not a resource this core could model, real external services."
+   "These dashboard tiles link out to genuinely separate things Vyomi cannot stand in for: AWS Network Manager (its own control plane over Transit Gateways) and real third-party network/observability partners (e.g. Aviatrix, Kentik) advertised in the console \u2014 not a resource this core could model, real external services."
   ]
  },
  "aws.vpc.create-vpc-and-more": {
   "title": "\"VPC and more\" wizard (auto-generated subnets/route tables/NAT gateways/endpoints)",
-  "level": { "nano": "full", "offline": "full" },
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
   "limitations": [
-   "Pure orchestration over primitives that are each already full (CreateVpc/CreateSubnet/CreateRouteTable/CreateInternetGateway/CreateNatGateway/CreateVpcEndpoint) — Name tag auto-generation, AZ/public/private subnet counts, NAT gateways ($) and the S3 Gateway VPC endpoint option all run real calls in sequence. IPAM-allocated CIDRs and the VPC encryption control ($) field are not modeled (same gaps as plain CreateVpc)."
+   "Pure orchestration over primitives that are each already full (CreateVpc/CreateSubnet/CreateRouteTable/CreateInternetGateway/CreateNatGateway/CreateVpcEndpoint) \u2014 Name tag auto-generation, AZ/public/private subnet counts, NAT gateways ($) and the S3 Gateway VPC endpoint option all run real calls in sequence. IPAM-allocated CIDRs and the VPC encryption control ($) field are not modeled (same gaps as plain CreateVpc)."
   ],
-  "tests": ["tests/conformance/test_vpc_core.py"]
+  "tests": [
+   "tests/conformance/test_vpc_core.py"
+  ]
  },
  "aws.vpc.cidr-reservations": {
   "title": "Subnet CIDR reservations",
-  "level": { "nano": "full", "offline": "full" },
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
   "limitations": [],
   "tests": [
    "tests/conformance/test_vpc_core.py"
@@ -140,112 +237,178 @@
  },
  "aws.vpc.resource-sharing": {
   "title": "Subnet sharing (AWS RAM)",
-  "level": { "nano": "limited", "offline": "limited" },
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
   "limitations": [
-   "core/ram_core.py models the real RAM object: resource shares, resource/principal associations and their state machine, with real validation (only subnet/security-group ARNs, must exist) and real owner-side enforcement (a shared subnet cannot be deleted while an association is ASSOCIATED — vpc_core._delete_subnet checks ram_store).",
-   "Vyomi is a single-account simulator: there is no second account to observe RAM's other half from (the invited principal's own Describe calls showing the resource) — only the owning account's object model and constraints are real."
+   "core/ram_core.py models the real RAM object: resource shares, resource/principal associations and their state machine, with real validation (only subnet/security-group ARNs, must exist) and real owner-side enforcement (a shared subnet cannot be deleted while an association is ASSOCIATED \u2014 vpc_core._delete_subnet checks ram_store).",
+   "Vyomi is a single-account simulator: there is no second account to observe RAM's other half from (the invited principal's own Describe calls showing the resource) \u2014 only the owning account's object model and constraints are real."
   ],
-  "tests": ["tests/conformance/test_ram_core.py"]
+  "tests": [
+   "tests/conformance/test_ram_core.py"
+  ]
  },
  "aws.vpc.edge-associations": {
-  "title": "Route table edge associations (Outposts / Local Gateway)",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "title": "Route table edge associations (internet gateway / virtual private gateway)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
   "limitations": [
-   "An AWS Outpost or Local Gateway is real physical hardware (an Outposts rack/server shipped to a customer site, or an on-prem gateway appliance) that Vyomi, a software-only simulator, cannot stand up — there is no local/offline substitute for the hardware itself, so edge routing targets have nothing to attach to."
+   "IGW and VGW edge associations are stored with AWS validation (the gateway must be attached to the table's VPC, one table per gateway). Gateway route tables (ingress routing) are not evaluated by netsim; Outposts / Local Gateway edge associations need physical hardware and are not simulated."
+  ],
+  "tests": [
+   "tests/conformance/test_vpc_sweepvpc_core.py"
   ]
  },
  "aws.vpc.route-propagation": {
   "title": "Route table route propagation (Virtual Private Gateway)",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
   "limitations": [
-   "Virtual Private Gateway route propagation isn't modeled — see aws.vpc.vpn."
+   "EnableVgwRoutePropagation copies the VGW's static VPN prefixes into the route table as propagated routes (origin EnableVgwRoutePropagation, listed in the Routes tab, updated on VPN route/attach/detach changes) and netsim honours them. BGP-learned prefixes need a real peer and are never propagated."
+  ],
+  "tests": [
+   "tests/conformance/test_vpc_sweepvpc_core.py"
   ]
  },
  "aws.vpc.network-access-analyzer": {
   "title": "Network Access Analyzer (scopes, findings)",
-  "level": { "nano": "limited", "offline": "limited" },
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
   "limitations": [
-   "Reuses the same netsim evaluator as Reachability Analyzer: an access scope's match paths name source/destination resource ids (empty = every ENI / the internet); StartNetworkInsightsAccessScopeAnalysis runs reach() over every resolved pair with protocol=tcp, port=None — \"is there an UNRESTRICTED path\" (the question the real built-in \"internet-accessible resources\" scope answers) — and records a finding per reachable pair.",
+   "Reuses the same netsim evaluator as Reachability Analyzer: an access scope's match paths name source/destination resource ids (empty = every ENI / the internet); StartNetworkInsightsAccessScopeAnalysis runs reach() over every resolved pair with protocol=tcp, port=None \u2014 \"is there an UNRESTRICTED path\" (the question the real built-in \"internet-accessible resources\" scope answers) \u2014 and records a finding per reachable pair.",
    "Simplified vs. real AWS: match paths are resource-id lists, not the full path-statement language (resource-type filters, port ranges, exclude-paths)."
   ],
-  "tests": ["tests/conformance/test_vpc_core.py"]
+  "tests": [
+   "tests/conformance/test_vpc_core.py"
+  ]
  },
  "aws.vpc.security-group-sharing": {
   "title": "Security group sharing (AWS RAM), VPC associations, related resources",
-  "level": { "nano": "limited", "offline": "limited" },
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
   "limitations": [
    "Same real RAM object model as aws.vpc.resource-sharing, scoped to security-group ARNs: a shared SG cannot be deleted while an association is ASSOCIATED (vpc_core._delete_security_group checks ram_store). \"Related resources\" lists real ENIs/instances using the group; \"VPC associations\" shows the owning VPC.",
-   "Vyomi is a single-account simulator: the invited principal's own view of the shared group can't be observed — only the owning account's object model and constraints are real."
+   "Vyomi is a single-account simulator: the invited principal's own view of the shared group can't be observed \u2014 only the owning account's object model and constraints are real."
   ],
-  "tests": ["tests/conformance/test_ram_core.py"]
+  "tests": [
+   "tests/conformance/test_ram_core.py"
+  ]
  },
  "aws.vpc.nat-gateway-monitoring": {
   "title": "NAT gateway CloudWatch monitoring",
-  "level": { "nano": "limited", "offline": "limited" },
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
   "limitations": [
-   "AWS/NATGateway metrics (ActiveConnectionCount, ConnectionEstablishedCount, BytesOutToDestination, PacketsOutToDestination) are real CloudWatch datapoints pushed by vpc_core._push_nat_metrics every time the shared reachability evaluator actually traverses this NAT gateway with a passing verdict (AnalyzeReachability / Reachability Analyzer / Network Access Analyzer) — never synthetic background data.",
-   "Byte/packet counts are a fixed per-check unit (one evaluated connection), not real per-flow payload sizes — there is no packet-level data plane in Nano, and offline enforcement's real nftables counters are not wired into this metric yet."
+   "AWS/NATGateway metrics (ActiveConnectionCount, ConnectionEstablishedCount, BytesOutToDestination, PacketsOutToDestination) are real CloudWatch datapoints pushed by vpc_core._push_nat_metrics every time the shared reachability evaluator actually traverses this NAT gateway with a passing verdict (AnalyzeReachability / Reachability Analyzer / Network Access Analyzer) \u2014 never synthetic background data.",
+   "Byte/packet counts are a fixed per-check unit (one evaluated connection), not real per-flow payload sizes \u2014 there is no packet-level data plane in Nano, and offline enforcement's real nftables counters are not wired into this metric yet."
   ],
-  "tests": ["tests/conformance/test_vpc_core.py"]
+  "tests": [
+   "tests/conformance/test_vpc_core.py"
+  ]
  },
  "aws.vpc.console-settings": {
   "title": "VPC console preferences",
-  "level": { "nano": "limited", "offline": "limited" },
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
   "limitations": [
    "VPC Block Public Access is real and enforced: ModifyVpcBlockPublicAccessOptions changes netsim's internet_egress()/_reach_from_external() decisions directly (block-bidirectional blocks IGW egress AND ingress, block-ingress blocks only inbound), honored by Reachability Analyzer and the offline packet enforcer alike; exclusions (CreateVpcBlockPublicAccessExclusion) really exempt a VPC/subnet.",
    "Local Zones opt-in only changes what the AZ picker shows (no Local Zone compute/network substrate exists to opt into). Console Experiments are, as in real AWS, display-only toggles with no backend effect. Default EBS encryption is a separate, already-full capability surfaced on the EC2 console's Settings page, not duplicated here."
   ],
-  "tests": ["tests/conformance/test_vpc_core.py"]
+  "tests": [
+   "tests/conformance/test_vpc_core.py"
+  ]
  },
  "aws.vpc.privatelink": {
   "title": "PrivateLink (VPC endpoints, endpoint services)",
-  "level": { "nano": "limited", "offline": "limited" },
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
   "limitations": [
    "Gateway endpoints (S3/DynamoDB) are real: CreateVpcEndpoint adds a route (dest = the service's address ranges, target = the vpce- id) to every chosen route table, and core/netsim's GATEWAY_ENDPOINT route kind makes Reachability Analyzer and the offline packet enforcer both honor it as a live hop.",
-   "Interface endpoints get a real ENI + a resolvable private DNS name, and endpoint services get a real connection/acceptance state machine, but neither proxies real L7 traffic to a target service — there is no second account/service running behind them to connect to."
+   "Interface endpoints get a real ENI + a resolvable private DNS name, and endpoint services get a real connection/acceptance state machine, but neither proxies real L7 traffic to a target service \u2014 there is no second account/service running behind them to connect to."
   ],
-  "tests": ["tests/conformance/test_vpc_core.py"]
+  "tests": [
+   "tests/conformance/test_vpc_core.py"
+  ]
  },
  "aws.vpc.lattice": {
   "title": "VPC Lattice (service networks, services, resource configurations/gateways, target groups, domain verifications)",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
   "limitations": [
-   "Amazon VPC Lattice is a separate AWS service surfaced under the VPC nav — not simulated."
+   "Amazon VPC Lattice is a separate AWS service surfaced under the VPC nav \u2014 not simulated."
   ]
  },
  "aws.vpc.dns-firewall": {
   "title": "Route 53 Resolver DNS Firewall (rule groups, domain lists)",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
   "limitations": [
-   "Route 53 Resolver DNS Firewall is a separate AWS service surfaced under the VPC nav — not simulated."
+   "Route 53 Resolver DNS Firewall is a separate AWS service surfaced under the VPC nav \u2014 not simulated."
   ]
  },
  "aws.vpc.network-firewall": {
   "title": "AWS Network Firewall (firewalls, policies, rule groups, TLS inspection, resource groups, endpoint/container associations)",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
   "limitations": [
-   "AWS Network Firewall is a separate AWS service surfaced under the VPC nav — not simulated."
+   "AWS Network Firewall is a separate AWS service surfaced under the VPC nav \u2014 not simulated."
   ]
  },
  "aws.vpc.vpn": {
-  "title": "Site-to-Site VPN and Client VPN (customer/virtual private gateways, VPN concentrators/connections, client endpoints)",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "title": "Site-to-Site VPN and Client VPN (customer/virtual private gateways, VPN connections, VPN concentrators, Client VPN endpoints)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
   "limitations": [
-   "AWS Site-to-Site VPN and Client VPN aren't simulated — no IPsec/TLS tunnel data plane."
+   "Control plane is real: customer gateways, virtual private gateways (attach/detach), VPN connections with generated tunnel options/PSKs, static routes and tunnel option edits, VPN concentrators, Client VPN endpoints with target networks, authorization rules and routes, all with AWS validation and dependency checks. VGW-propagated and static VPN prefixes are followed by the route tables and honoured by the netsim/Reachability Analyzer.",
+   "There is no IKE/IPsec or OpenVPN peer: tunnel telemetry always reports DOWN, BGP-learned prefixes are never received (a BGP connection propagates nothing), the Client VPN connections list is always empty and no tunnel data plane carries packets."
+  ],
+  "tests": [
+   "tests/conformance/test_vpc_sweepvpc_core.py"
   ]
  },
  "aws.vpc.verified-access": {
   "title": "AWS Verified Access (instances, trust providers, groups, endpoints)",
-  "level": { "nano": "limited", "offline": "limited" },
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
   "limitations": [
-   "Instances/trust providers/groups/endpoints are real objects over the native EC2 API (the same protocol real Verified Access uses), and VerifyAccessEndpointPolicy really evaluates the endpoint's/group's policy document against user-supplied context — the same thing the AWS console's own \"Test policy\" tool does, so policy logic is genuinely exercised.",
-   "Federating to a real external identity provider or device-trust provider (Okta, Azure AD, IAM Identity Center, Jamf, CrowdStrike) needs a real third party and is not simulated — trust providers store their declared type but issue no real identity; only the policy evaluator against test context is real."
+   "Instances/trust providers/groups/endpoints are real objects over the native EC2 API (the same protocol real Verified Access uses), and VerifyAccessEndpointPolicy really evaluates the endpoint's/group's policy document against user-supplied context \u2014 the same thing the AWS console's own \"Test policy\" tool does, so policy logic is genuinely exercised.",
+   "Federating to a real external identity provider or device-trust provider (Okta, Azure AD, IAM Identity Center, Jamf, CrowdStrike) needs a real third party and is not simulated \u2014 trust providers store their declared type but issue no real identity; only the policy evaluator against test context is real."
   ],
-  "tests": ["tests/conformance/test_vpc_core.py"]
+  "tests": [
+   "tests/conformance/test_vpc_core.py"
+  ]
  },
  "aws.vpc.transit-gateway": {
   "title": "Transit Gateway (gateways, VPC attachments, route tables, static/propagated routes, associations, propagations)",
-  "level": { "nano": "limited", "offline": "limited" },
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
   "limitations": [
    "VPC attachments only; peering, VPN, Connect and Direct Connect attachments are not modelled. Forwarding between attached VPCs is evaluated by the Reachability Analyzer and enforced by the netsim rules (route-table association, longest-prefix match, propagation, return routes in both the TGW tables and the VPC route tables), but no real packets traverse a transit gateway and no TGW flow logs or metrics are produced. Cross-account sharing and appliance-mode flow stickiness are stored, not enforced."
   ],
@@ -255,25 +418,43 @@
   ]
  },
  "aws.vpc.transit-gateway-advanced": {
-  "title": "Transit Gateway policy tables, multicast domains, metering policies, peering/VPN/Connect attachments",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "title": "Transit Gateway policy tables, multicast domains, metering policies",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
   "limitations": [
-   "These Transit Gateway products have no backing model in Vyomi (no multicast data plane, no dynamic policy evaluation, no inter-region peering or tunnel attachments)."
+   "Policy tables, multicast domains (subnet associations, static group members/sources, group search) and metering policies (+ entries) are real control-plane state with validation. Policy tables and metering rules are stored, not evaluated against traffic; there is no multicast data plane. Transit Gateway peering, Connect and VPN attachments are not modelled."
+  ],
+  "tests": [
+   "tests/conformance/test_vpc_sweepvpc_core.py"
   ]
  },
  "aws.vpc.traffic-mirroring": {
   "title": "Traffic Mirroring (mirror sessions, targets, filters)",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
   "limitations": [
-   "Traffic Mirroring has no packet-level data plane to mirror in Vyomi."
+   "Targets, filters with ordered accept/reject rules and sessions are real control-plane state with AWS validation (rule numbers, protocol/port rules, session number per source ENI, in-use checks) and the filter rules can be evaluated against a packet. No packets are captured or VXLAN-encapsulated to the target: there is no mirrored traffic."
+  ],
+  "tests": [
+   "tests/conformance/test_vpc_sweepvpc_core.py"
   ]
  },
  "aws.vpc.reachability-analyzer": {
   "title": "Reachability Analyzer (Network Insights paths + analyses, AnalyzeReachability)",
-  "level": { "nano": "full", "offline": "full" },
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
   "limitations": [
    "Answers come from the shared netsim evaluator (the same one the offline enforcer compiles to nftables and the real-packet test checks). Explanation codes map to the closest native code (ENI_SG_RULES_MISMATCH, SUBNET_ACL_RESTRICTION, NO_ROUTE_TO_DESTINATION); other blocks report the netsim code. Transit gateways, VPN, endpoints and load balancers are not path components."
   ],
-  "tests": ["tests/conformance/test_vpc_netsim_core.py", "tests/netsim/test_aws.py"]
+  "tests": [
+   "tests/conformance/test_vpc_netsim_core.py",
+   "tests/netsim/test_aws.py"
+  ]
  }
 }

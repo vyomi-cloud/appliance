@@ -218,7 +218,7 @@ def _vpn_xml(c, m):
             + (_x("transitGatewayId", c["tgw"]) if c.get("tgw") else "")
             + "<options>" + _x("staticRoutesOnly", "true" if c["static_only"] else "false") + _x("enableAcceleration", "false")
             + _x("localIpv4NetworkCidr", c.get("local_cidr", "0.0.0.0/0")) + _x("remoteIpv4NetworkCidr", c.get("remote_cidr", "0.0.0.0/0"))
-            + _x("tunnelInsideIpVersion", "ipv4") + f"<tunnelOptions>{tun}</tunnelOptions></options>"
+            + _x("tunnelInsideIpVersion", "ipv4") + f"<tunnelOptionSet>{tun}</tunnelOptionSet></options>"
             + f"<routes>{routes}</routes><vgwTelemetry>{tele}</vgwTelemetry>" + _V()._tags_xml(c.get("tags", {})) + "</item>")
 
 

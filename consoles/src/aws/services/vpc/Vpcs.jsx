@@ -25,6 +25,7 @@ import { useNotify } from "../../../common/notify.jsx";
 import { follow, href, navigate } from "../../../common/router.js";
 import { ErrorAlert, KeyValue, NotSimulated } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
+import { VpcCidrsTab } from "./VpnPages.jsx";
 import { CreateFlowLogModal, FlowLogsTab } from "./FlowLogs.jsx";
 import GapButton from "./GapButton.jsx";
 import { TAG_I18N } from "./tagI18n.js";
@@ -138,7 +139,7 @@ export function VpcDetail({ params }) {
     support: await api.describeVpcAttribute(params.id, "enableDnsSupport"),
   }), [params.id]);
   const [tags, setTags] = useState(false);
-  if (t.loading) return <Box textAlign="center" padding="xxl"><Spinner size="large" /></Box>;
+  if (t.loading && !t.data) return <Box textAlign="center" padding="xxl"><Spinner size="large" /></Box>;
   if (!t.data) return <ErrorAlert error={{ message: "VPC not found" }} />;
   const v = t.data;
   return (
@@ -161,16 +162,7 @@ export function VpcDetail({ params }) {
               ["VPC", v.VpcId], ["Subnets", subnets.data?.length ?? "-"], ["Route tables", rts.data?.length ?? "-"], ["Network connections", v.MainNetworkAclId ? 1 : 0],
             ]} />
           ) },
-          { id: "cidrs", label: "CIDRs", content: (
-            <SpaceBetween size="l">
-              <Table variant="container" items={[{ cidr: v.CidrBlock, status: "associated", reason: "" }]}
-                header={<Header variant="h2" actions={<GapButton text="Edit CIDRs" feature="Secondary/IPAM-allocated CIDR blocks" />}>IPv4 CIDRs</Header>}
-                columnDefinitions={[{ id: "c", header: "CIDR", cell: (r) => r.cidr }, { id: "s", header: "Status", cell: (r) => r.status }, { id: "r", header: "Status reason", cell: (r) => r.reason || "-" }]} />
-              <Table variant="container" items={[]} header={<Header variant="h2">IPv6 CIDRs</Header>}
-                columnDefinitions={[{ id: "c", header: "CIDR" }, { id: "p", header: "Address pool" }, { id: "g", header: "Network border group" }, { id: "s", header: "Status" }]}
-                empty={<Box textAlign="center" color="inherit">No IPv6 CIDRs</Box>} />
-            </SpaceBetween>
-          ) },
+          { id: "cidrs", label: "CIDRs", content: <VpcCidrsTab vpcId={v.VpcId} onChange={t.reload} /> },
           { id: "flow", label: "Flow logs", content: <FlowLogsTab resourceId={v.VpcId} resourceType="VPC" /> },
           { id: "tags", label: "Tags", content: (
             <Table variant="container" items={Object.entries(v.Tags || {}).map(([k, val]) => ({ k, val }))}

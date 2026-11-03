@@ -67,7 +67,7 @@ function parseXml(text) {
 
 function xmlError(status, text) {
   const o = parseXml(text);
-  const e = o.Error || o.ErrorResponse?.Error || {};
+  const e = o.Error || o.ErrorResponse?.Error || o.Response?.Errors?.Error || {};   // EC2 Query errors are <Response><Errors><Error>
   return new WireError(status, e.Code, e.Message, text);
 }
 

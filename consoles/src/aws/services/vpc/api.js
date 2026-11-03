@@ -70,8 +70,8 @@ export async function getSubnetCidrReservations(subnetId) {
 export const deleteSubnetCidrReservation = (id) => call("DeleteSubnetCidrReservation", { SubnetCidrReservationId: id });
 
 // ── route tables ────────────────────────────────────────────────────────
-const routeFromXml = (x) => ({ DestinationCidrBlock: x.destinationCidrBlock, GatewayId: x.gatewayId, State: x.state });
-const rtAssocFromXml = (x) => ({ RouteTableAssociationId: x.routeTableAssociationId, RouteTableId: x.routeTableId, SubnetId: x.subnetId, Main: x.main === "true" });
+const routeFromXml = (x) => ({ DestinationCidrBlock: x.destinationCidrBlock, GatewayId: x.gatewayId || x.natGatewayId || x.transitGatewayId || x.vpcPeeringConnectionId || x.networkInterfaceId || x.instanceId, State: x.state, Origin: x.origin, Propagated: x.origin === "EnableVgwRoutePropagation" });
+const rtAssocFromXml = (x) => ({ RouteTableAssociationId: x.routeTableAssociationId, RouteTableId: x.routeTableId, SubnetId: x.subnetId, GatewayId: x.gatewayId, Main: x.main === "true" });
 const rtFromXml = (x) => ({
   RouteTableId: x.routeTableId, VpcId: x.vpcId, Tags: tagsFromXml(x.tagSet),
   Routes: asList(x.routeSet?.item).map(routeFromXml), Associations: asList(x.associationSet?.item).map(rtAssocFromXml),
@@ -539,3 +539,5 @@ export const associateTransitGatewayRouteTable = (rtId, attId) => call("Associat
 export const disassociateTransitGatewayRouteTable = (rtId, attId) => call("DisassociateTransitGatewayRouteTable", { TransitGatewayRouteTableId: rtId, TransitGatewayAttachmentId: attId });
 export const enableTransitGatewayRouteTablePropagation = (rtId, attId) => call("EnableTransitGatewayRouteTablePropagation", { TransitGatewayRouteTableId: rtId, TransitGatewayAttachmentId: attId });
 export const disableTransitGatewayRouteTablePropagation = (rtId, attId) => call("DisableTransitGatewayRouteTablePropagation", { TransitGatewayRouteTableId: rtId, TransitGatewayAttachmentId: attId });
+
+export const ec2call = call;

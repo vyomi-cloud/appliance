@@ -22,6 +22,7 @@ import { useNotify } from "../../../common/notify.jsx";
 import { follow, href, navigate } from "../../../common/router.js";
 import { ErrorAlert, KeyValue } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
+import { EdgeAssociationsTab, RoutePropagationTab } from "./VpnPages.jsx";
 import { TagsModal } from "./Vpcs.jsx";
 import { TAG_I18N } from "./tagI18n.js";
 import * as api from "./api.js";
@@ -94,7 +95,7 @@ export function RouteTableDetail({ params }) {
   const t = useAsync(() => api.describeRouteTable(params.id), [params.id]);
   const subnets = useAsync(() => api.describeSubnets(), []);
   const [tags, setTags] = useState(false);
-  if (t.loading) return <Box textAlign="center" padding="xxl"><Spinner size="large" /></Box>;
+  if (t.loading && !t.data) return <Box textAlign="center" padding="xxl"><Spinner size="large" /></Box>;
   if (!t.data) return <ErrorAlert error={{ message: "Route table not found" }} />;
   const r = t.data;
   const assocSubnetIds = new Set(subnetAssoc(r).map((a) => a.SubnetId));
@@ -107,14 +108,14 @@ export function RouteTableDetail({ params }) {
       <SpaceBetween size="l">
         <KeyValue title="Details" columns={4} items={[
           ["Route table ID", r.RouteTableId], ["Main", mainAssoc(r) ? "Yes" : "No"], ["Explicit subnet associations", subnetAssoc(r).length],
-          ["Edge associations", 0], ["VPC", r.VpcId], ["Owner ID", "123456789012"],
+          ["Edge associations", (r.Associations || []).filter((a) => a.GatewayId).length], ["VPC", r.VpcId], ["Owner ID", "123456789012"],
         ]} />
         <Tabs tabs={[
           { id: "routes", label: "Routes", content: (
             <Table variant="container" items={r.Routes} header={<Header variant="h2" counter={`(${r.Routes.length})`} actions={<Button href={href("vpc", "route-tables", r.RouteTableId, "edit-routes")} onFollow={follow}>Edit routes</Button>}>Routes</Header>}
               columnDefinitions={[
                 { id: "d", header: "Destination", cell: (x) => x.DestinationCidrBlock }, { id: "t", header: "Target", cell: (x) => x.GatewayId },
-                { id: "s", header: "Status", cell: (x) => x.State }, { id: "p", header: "Propagated", cell: () => "No" }, { id: "o", header: "Route Origin", cell: (x) => (x.GatewayId === "local" ? "CreateVpc" : "CreateRoute") },
+                { id: "s", header: "Status", cell: (x) => x.State }, { id: "p", header: "Propagated", cell: (x) => (x.Propagated ? "Yes" : "No") }, { id: "o", header: "Route Origin", cell: (x) => (x.Propagated ? "Enable Virtual Private Gateway Route Propagation" : x.GatewayId === "local" ? "CreateRouteTable" : "CreateRoute") },
               ]} />
           ) },
           { id: "subnets", label: "Subnet associations", content: (
@@ -127,8 +128,8 @@ export function RouteTableDetail({ params }) {
                 empty={<Box textAlign="center" color="inherit">None</Box>} />
             </SpaceBetween>
           ) },
-          { id: "edge", label: "Edge associations", content: <CapabilityContainer id="aws.vpc.edge-associations" title="Edge associations" /> },
-          { id: "prop", label: "Route propagation", content: <CapabilityContainer id="aws.vpc.route-propagation" title="Route propagation" /> },
+          { id: "edge", label: "Edge associations", content: <EdgeAssociationsTab rt={r} onChange={t.reload} /> },
+          { id: "prop", label: "Route propagation", content: <RoutePropagationTab rt={r} onChange={t.reload} /> },
           { id: "tags", label: "Tags", content: (
             <Table variant="container" items={Object.entries(r.Tags || {}).map(([k, v]) => ({ k, v }))}
               header={<Header variant="h2" counter={`(${Object.keys(r.Tags || {}).length})`} actions={<Button onClick={() => setTags(true)}>Manage tags</Button>}>Tags</Header>}
@@ -151,13 +152,13 @@ export function EditRoutes({ params }) {
 
 function EditRoutesForm({ rt }) {
   const notify = useNotify();
-  const [rows, setRows] = useState(rt.Routes.filter((r) => r.GatewayId !== "local").map((r) => ({ dest: r.DestinationCidrBlock, target: r.GatewayId, orig: r.DestinationCidrBlock })));
+  const [rows, setRows] = useState(rt.Routes.filter((r) => r.GatewayId !== "local" && !r.Propagated).map((r) => ({ dest: r.DestinationCidrBlock, target: r.GatewayId, orig: r.DestinationCidrBlock })));
   const [busy, setBusy] = useState(false);
   const update = (i, patch) => setRows((xs) => xs.map((x, idx) => (idx === i ? { ...x, ...patch } : x)));
   const save = async () => {
     setBusy(true);
     try {
-      for (const r of rt.Routes) if (r.GatewayId !== "local" && !rows.some((x) => x.orig === r.DestinationCidrBlock)) await api.deleteRoute(rt.RouteTableId, r.DestinationCidrBlock);
+      for (const r of rt.Routes) if (r.GatewayId !== "local" && !r.Propagated && !rows.some((x) => x.orig === r.DestinationCidrBlock)) await api.deleteRoute(rt.RouteTableId, r.DestinationCidrBlock);
       for (const row of rows) { if (row.orig && row.orig !== row.dest) await api.deleteRoute(rt.RouteTableId, row.orig); await api.createRoute(rt.RouteTableId, row.dest, row.target); }
       notify.success("Routes saved."); navigate("vpc", "route-tables", rt.RouteTableId);
     } catch (e) { notify.error(e); } finally { setBusy(false); }
