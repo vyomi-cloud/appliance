@@ -347,6 +347,7 @@ _SIGNING = {
     "events": "events", "lambda": "lambda", "ec2": "vpc", "kinesis": "kinesis", "monitoring": "cloudwatch", "logs": "logs", "states": "stepfunctions",
     "autoscaling": "asg",
     "dlm": "dlm",
+    "cloudtrail": "cloudtrail",   # minimal CloudTrail (trails + S3 data-event selectors) -> core/s3_ext_core via the S3 store
     "s3tables": "s3tables",   # Amazon S3 Tables (rest-json /buckets, /namespaces, /tables, /tag) -> core/s3_tables_core via the S3 store
     "elasticloadbalancing": "elbv2",
     "cloudformation": "cloudformation",
@@ -367,6 +368,7 @@ _TARGET_PREFIX = {
     "AWSRAMFrontendService": "ram",
     "NetworkFirewall_20201112": "netfw",
     "Route53Resolver": "dnsfw",
+    "com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101": "cloudtrail",
     "AWSOrganizationsV20161128": "organizations",
 }
 
@@ -945,6 +947,10 @@ class AwsWireRouter:
             r = s3.dispatch(self.s3, method, path, query or {}, headers or {}, bytes(body))
             return {"status": r.status, "headers": dict(r.headers or {}),
                     "body": r.body or b""}
+
+        if svc == "cloudtrail":
+            r = s3.dispatch(self.s3, "POST", "/__cloudtrail__", {}, {"x-amz-target": lheaders.get("x-amz-target", "")}, bytes(body))
+            return {"status": r.status, "headers": {**dict(r.headers or {}), "content-type": "application/x-amz-json-1.1"}, "body": r.body or b""}
 
         if svc == "s3tables":
             r = s3.dispatch(self.s3, method, "/__s3tables__" + path, query or {}, headers or {}, bytes(body))

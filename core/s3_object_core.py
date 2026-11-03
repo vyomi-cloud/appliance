@@ -1449,6 +1449,10 @@ def _emit(store: ObjectStore, bucket: str, key: str, event: str, entry: dict | N
         except Exception:   # best-effort; never fail the data-plane write
             pass
     try:
+        _ext().on_emit(store, bucket, key, event, version, source)
+    except Exception:
+        pass
+    try:
         store.emit_event(bucket, key, event, version, source)
     except Exception:   # delivery is best-effort; never fail the data-plane write
         pass
@@ -2155,7 +2159,7 @@ _ID_KEYED_SUBRESOURCES = {
     "metrics": ("metrics_configs", "ListBucketMetricsConfigurationsResult", "NoSuchConfiguration"),
 }
 _SUBRESOURCES_UNSUPPORTED = (
-    "accelerate", "analytics", "object-lock",
+    "analytics", "object-lock",
 )
 _NS = 'xmlns="http://s3.amazonaws.com/doc/2006-03-01/"'
 
@@ -2181,6 +2185,12 @@ def _list_multipart_uploads(store: ObjectStore, bucket: str, query: dict) -> S3R
 
 def _bucket_subresource(store: ObjectStore, method: str, bucket: str, query: dict,
                         headers: dict, body: bytes) -> S3Response | None:
+    if any(k in query for k in ("accelerate", *_ext().META_SUBS)):
+        if not store.bucket_exists(bucket):
+            return _error_xml("NoSuchBucket", "The specified bucket does not exist", f"/{bucket}", 404)
+        if "accelerate" in query:
+            return _ext().accelerate(store, method, bucket, body)
+        return _ext().metadata_api(store, method, bucket, query, body)
     sub = next((k for k in ("versioning", "location", "acl", "object-lock", "versions", "notification",
                             "uploads", "website", "logging", "requestPayment",
                             *_ID_KEYED_SUBRESOURCES, *_SUBRESOURCES_STORED) if k in query), None)
@@ -2884,6 +2894,10 @@ def _load_core(name: str):
         return importlib.import_module(name)
 
 
+def _ext():
+    return _load_core("s3_ext_core")
+
+
 def _s3control(store: ObjectStore, method: str, raw: str, query: dict, lheaders: dict, body: bytes) -> S3Response:
     segs = [urllib.parse.unquote(x) for x in raw.split("/") if x]      # v20180820, accesspoint, name, [policy|policyStatus]
     acct = lheaders.get("x-amz-account-id")
@@ -2907,6 +2921,9 @@ def _s3control(store: ObjectStore, method: str, raw: str, query: dict, lheaders:
             return ins.s3control_group(store, method, segs, query, body)
         if segs[1] == "tags":
             return ins.s3control_tags(store, method, segs, query, body)
+        ext = _ext().vyomi_route(store, method, segs[2:], query)
+        if ext is not None:
+            return ext
         return ins.s3_vyomi(store, method, segs, query, body)
     if len(segs) < 2 or segs[1] != "accesspoint":
         return _s3c_error("NotImplemented", "This S3 Control operation is not implemented by Vyomi.", 501)
@@ -4274,8 +4291,19 @@ def dispatch(store: ObjectStore, method: str, path: str,
              query: dict | None = None, headers: dict | None = None,
              body: bytes = b"") -> S3Response:
     """Public entry: one request, then a Batch Operations tick (jobs advance a stage per request)."""
+    raw0 = (path or "/").lstrip("/")
+    lh = {str(k).lower(): v for k, v in (headers or {}).items()}
+    if raw0.startswith("__cloudtrail__"):      # minimal CloudTrail (JSON 1.1), routed from AwsWireRouter
+        return _ext().cloudtrail_dispatch(store, lh.get("x-amz-target", ""), body)
+    if lh.get("host"):                          # <bucket>.s3-accelerate.amazonaws.com
+        new_raw, bad = _ext().accelerate_host(store, raw0, lh)
+        if bad is not None:
+            return bad
+        if new_raw != raw0:
+            path = "/" + new_raw
     resp = _dispatch_inner(store, method, path, query, headers, body)
     _jobs_tick(store)
+    _ext().on_request(store, (method or "GET").upper(), path or "/", query or {}, lh, body, resp)
     return resp
 
 
