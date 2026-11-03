@@ -164,6 +164,21 @@ def main():
     vpc._model(s)["rbin_rules"][rid]["lock_end"] = time.time() - 1
     _check("after the delay the rule unlocks and deletes", rbin("DELETE", f"/rules/{rid}")[0] == 204)
     _check("list rules by type", [r["Identifier"] for r in rbin("POST", "/list-rules", {"ResourceType": "EC2_IMAGE"})[1]["Rules"]] == [ar["Identifier"]])
+    # ── IAM instance profiles (Create IAM profile) ──
+    from core import iam_core
+    from core.iam_store import IamStore
+    ist = IamStore()
+    d = lambda a, **k: iam_core.dispatch(ist, {"Action": a, **k})
+    d("CreateRole", RoleName="web", AssumeRolePolicyDocument='{"Version":"2012-10-17","Statement":[]}')
+    _check("create profile", "<InstanceProfileName>web-p</InstanceProfileName>" in d("CreateInstanceProfile", InstanceProfileName="web-p").body)
+    _check("duplicate 409", d("CreateInstanceProfile", InstanceProfileName="web-p").status == 409)
+    _check("add role", d("AddRoleToInstanceProfile", InstanceProfileName="web-p", RoleName="web").status == 200)
+    _check("one role per profile", d("AddRoleToInstanceProfile", InstanceProfileName="web-p", RoleName="web").status == 409)
+    _check("profile lists its role", "<RoleName>web</RoleName>" in d("GetInstanceProfile", InstanceProfileName="web-p").body)
+    _check("role in a profile can't be deleted", d("DeleteRole", RoleName="web").status == 409)
+    _check("non-empty profile can't be deleted", d("DeleteInstanceProfile", InstanceProfileName="web-p").status == 409)
+    d("RemoveRoleFromInstanceProfile", InstanceProfileName="web-p", RoleName="web")
+    _check("empty profile deletes", d("DeleteInstanceProfile", InstanceProfileName="web-p").status == 200)
     print("PASS")
 
 
