@@ -12,6 +12,7 @@ import { useNotify } from "../../../common/notify.jsx";
 import { ErrorAlert, NotSimulated, PageHeader } from "../../kit/common.jsx";
 import { hashHref } from "../../link.jsx";
 import * as api from "./api.js";
+import { getProject } from "../../project.js";
 
 function Step({ n, title, children }) {
   return (
@@ -48,8 +49,15 @@ export default function CreateDisk() {
   const [snapSchedule, setSnapSchedule] = useState(false);
   const [encryption, setEncryption] = useState("google");
   const [labels, setLabels] = useState([]);
+  const [policies, setPolicies] = useState([]);
+  const [policy, setPolicy] = useState("");
+  const [instantSnaps, setInstantSnaps] = useState([]);
+  const [instantSnap, setInstantSnap] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+
+  useEffect(() => { api.listPolicies().then(setPolicies).catch(() => setPolicies([])); api.listInstantSnapshots().then(setInstantSnaps).catch(() => setInstantSnaps([])); }, []);
+  useEffect(() => { setPolicy(""); setInstantSnap(""); }, [zone]);
 
   useEffect(() => { setZone(api.ZONES_BY_REGION[region]?.[0] || api.DEFAULT_ZONE); }, [region]);
 
@@ -63,6 +71,8 @@ export default function CreateDisk() {
     const body = {
       name, sizeGb: Number(size), type: diskType,
       labels: labels.length ? Object.fromEntries(labels.map((l) => [l.key, l.value])) : undefined,
+      ...(sourceType === "Instant snapshot" && instantSnap ? { sourceInstantSnapshot: `zones/${zone}/instantSnapshots/${instantSnap}`, sizeGb: undefined } : {}),
+      resourcePolicies: snapSchedule && policy ? [api.policyLink(region, policy)] : undefined,
     };
     try {
       await api.insertDisk(zone, body);
@@ -112,7 +122,15 @@ export default function CreateDisk() {
             {SOURCE_TYPES.map((s) => <MenuItem key={s} value={s}>{s}</MenuItem>)}
           </Select>
         </FormControl>
-        {sourceType !== "Blank disk" && (
+        {sourceType === "Instant snapshot" && (
+          <FormControl sx={{ minWidth: 320 }}>
+            <InputLabel id="isn-l">Instant snapshot in {zone}</InputLabel>
+            <Select labelId="isn-l" label={`Instant snapshot in ${zone}`} value={instantSnap} onChange={(e) => setInstantSnap(e.target.value)}>
+              {instantSnaps.filter((x) => x._scope === `zones/${zone}`).map((x) => <MenuItem key={x.name} value={x.name}>{x.name} ({x.diskSizeGb} GB)</MenuItem>)}
+            </Select>
+          </FormControl>
+        )}
+        {sourceType !== "Blank disk" && sourceType !== "Instant snapshot" && (
           <NotSimulated compact feature={`Create disk from ${sourceType}`} note="Sourcing a disk from an image, snapshot or another disk isn't modeled; a blank disk will be created instead." />
         )}
       </Step>
@@ -130,7 +148,15 @@ export default function CreateDisk() {
       <Divider />
 
       <Step n={4} title="Snapshot schedule">
-        <NotSimulated compact feature="Enable snapshot schedule" note="Automatic recurring snapshots aren't modeled; create snapshots manually from the Snapshots page." />
+        <FormControlLabel control={<Checkbox size="small" checked={snapSchedule} onChange={(e) => setSnapSchedule(e.target.checked)} />} label="Enable snapshot schedule" />
+        {snapSchedule && (
+          <FormControl sx={{ minWidth: 320 }}>
+            <InputLabel id="ss-l">Snapshot schedule in {region}</InputLabel>
+            <Select labelId="ss-l" label={`Snapshot schedule in ${region}`} value={policy} onChange={(e) => setPolicy(e.target.value)}>
+              {policies.filter((p) => p.snapshotSchedulePolicy && p._scope === `regions/${region}`).map((p) => <MenuItem key={p.name} value={p.name}>{p.name}</MenuItem>)}
+            </Select>
+          </FormControl>
+        )}
       </Step>
       <Divider />
 

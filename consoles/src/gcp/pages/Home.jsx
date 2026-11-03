@@ -24,6 +24,7 @@ import { restJson, WIRE_BASE } from "../../common/wire.js";
 import { useAsync } from "../../common/useAsync.js";
 import { useProject } from "../project.js";
 import { PRODUCTS, classicHref } from "../services/registry.js";
+import { RecommendationsTable } from "../services/compute/Ext.jsx";
 
 const store = {
   get: (k, d) => { try { return JSON.parse(localStorage.getItem(`vyomi.v4.gcp.${k}`)) ?? d; } catch { return d; } },
@@ -290,10 +291,10 @@ export default function Home() {
       )}
 
       {tab === 2 && (
-        <Paper variant="outlined" sx={{ borderRadius: 2, p: 3, textAlign: "center" }} data-vyomi-not-simulated="Recommender">
-          <Typography variant="h3" sx={{ fontSize: 18, mb: 1 }}>No recommendations</Typography>
-          <Typography variant="body2" color="text.secondary">Recommender isn't simulated in Vyomi.</Typography>
-        </Paper>
+        <Box>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>Compute Engine recommendations derived from this project's live resources.</Typography>
+          <RecommendationsTable />
+        </Box>
       )}
 
       <Dialog open={!!customize} onClose={() => setCustomize(null)}>

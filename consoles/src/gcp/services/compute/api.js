@@ -161,3 +161,79 @@ export const validResourceName = (n) => {
   if (!/^[a-z]([-a-z0-9]{0,61}[a-z0-9])?$/.test(n)) return "Use lowercase letters, numbers and hyphens; start with a letter.";
   return null;
 };
+
+// ── Compute extensions: resource policies, instant snapshots, reservations, sole-tenant,
+//    storage pools, NEGs, replication, Recommender (core/gcp_compute_ext_core) ──────────────
+const aggList = async (coll) => {
+  const r = await restJson("GET", `${base()}/aggregated/${coll}`);
+  return Object.entries(r.items || {}).flatMap(([scope, v]) => (v[coll] || []).map((x) => ({ ...x, _scope: scope })));
+};
+export const listPolicies = () => aggList("resourcePolicies");
+export const insertPolicy = (region, body) => restJson("POST", `${base()}/regions/${e(region)}/resourcePolicies`, { body });
+export const deletePolicy = (region, name) => restJson("DELETE", `${base()}/regions/${e(region)}/resourcePolicies/${e(name)}`);
+export const policyLink = (region, name) => `projects/${getProject()}/regions/${region}/resourcePolicies/${name}`;
+export const attachPolicy = (coll, zone, name, region, policy) =>
+  restJson("POST", `${base()}/zones/${e(zone)}/${coll}/${e(name)}:addResourcePolicies`, { body: { resourcePolicies: [policyLink(region, policy)] } });
+export const detachPolicy = (coll, zone, name, region, policy) =>
+  restJson("POST", `${base()}/zones/${e(zone)}/${coll}/${e(name)}:removeResourcePolicies`, { body: { resourcePolicies: [policyLink(region, policy)] } });
+export const listInstantSnapshots = () => aggList("instantSnapshots");
+export const insertInstantSnapshot = (zone, body) => restJson("POST", `${base()}/zones/${e(zone)}/instantSnapshots`, { body });
+export const deleteInstantSnapshot = (zone, name) => restJson("DELETE", `${base()}/zones/${e(zone)}/instantSnapshots/${e(name)}`);
+export const listReservations = () => aggList("reservations");
+export const insertReservation = (zone, body) => restJson("POST", `${base()}/zones/${e(zone)}/reservations`, { body });
+export const deleteReservation = (zone, name) => restJson("DELETE", `${base()}/zones/${e(zone)}/reservations/${e(name)}`);
+export const resizeReservation = (zone, name, n) => restJson("POST", `${base()}/zones/${e(zone)}/reservations/${e(name)}:resize`, { body: { specificSkuCount: String(n) } });
+export const listNodeTypes = async (zone) => (await restJson("GET", `${base()}/zones/${e(zone)}/nodeTypes`)).items || [];
+export const listNodeTemplates = () => aggList("nodeTemplates");
+export const insertNodeTemplate = (region, body) => restJson("POST", `${base()}/regions/${e(region)}/nodeTemplates`, { body });
+export const deleteNodeTemplate = (region, name) => restJson("DELETE", `${base()}/regions/${e(region)}/nodeTemplates/${e(name)}`);
+export const listNodeGroups = () => aggList("nodeGroups");
+export const insertNodeGroup = (zone, body, initialNodeCount) =>
+  restJson("POST", `${base()}/zones/${e(zone)}/nodeGroups`, { query: { initialNodeCount }, body });
+export const deleteNodeGroup = (zone, name) => restJson("DELETE", `${base()}/zones/${e(zone)}/nodeGroups/${e(name)}`);
+export const nodeGroupAction = (zone, name, verb, body) => restJson("POST", `${base()}/zones/${e(zone)}/nodeGroups/${e(name)}:${verb}`, { body });
+export const listStoragePools = () => aggList("storagePools");
+export const insertStoragePool = (zone, body) => restJson("POST", `${base()}/zones/${e(zone)}/storagePools`, { body });
+export const deleteStoragePool = (zone, name) => restJson("DELETE", `${base()}/zones/${e(zone)}/storagePools/${e(name)}`);
+export const listNegs = () => aggList("networkEndpointGroups");
+const negPath = (kind, scope) => kind === "global" ? "/global" : `/${kind}/${e(scope)}`;
+export const insertNeg = (kind, scope, body) => restJson("POST", `${base()}${negPath(kind, scope)}/networkEndpointGroups`, { body });
+export const deleteNeg = (kind, scope, name) => restJson("DELETE", `${base()}${negPath(kind, scope)}/networkEndpointGroups/${e(name)}`);
+export const negAction = (kind, scope, name, verb, body) => restJson("POST", `${base()}${negPath(kind, scope)}/networkEndpointGroups/${e(name)}:${verb}`, { body: body || {} });
+export const listNegEndpoints = async (kind, scope, name) => (await negAction(kind, scope, name, "listNetworkEndpoints")).items || [];
+export const startReplication = (zone, disk, secondary) =>
+  restJson("POST", `${base()}/zones/${e(zone)}/disks/${e(disk)}:startAsyncReplication`, { body: { asyncSecondaryDisk: secondary } });
+export const stopReplication = (zone, disk) => restJson("POST", `${base()}/zones/${e(zone)}/disks/${e(disk)}:stopAsyncReplication`, { body: {} });
+export const listVpcNetworks = async () => (await restJson("GET", `${base()}/global/networks`)).items || [];
+export const listSubnetsAll = async () => {
+  const r = await restJson("GET", `${base()}/aggregated/subnetworks`);
+  return Object.entries(r.items || {}).flatMap(([scope, v]) => (v.subnetworks || []).map((s) => ({ ...s, _scope: scope })));
+};
+export const listFirewalls = async () => (await restJson("GET", `${base()}/global/firewalls`)).items || [];
+export const insertFirewall = (body) => restJson("POST", `${base()}/global/firewalls`, { body });
+export const setInstanceTags = (zone, name, tags) => restJson("POST", `${base()}/zones/${e(zone)}/instances/${e(name)}:setTags`, { body: tags });
+
+export const RECOMMENDERS = {
+  "google.compute.disk.IdleResourceRecommender": "Idle persistent disk",
+  "vyomi.compute.disk.BackupCoverageRecommender": "Disk without backup",
+  "vyomi.compute.reservation.UnusedReservationRecommender": "Unused reservation",
+  "vyomi.compute.resourcePolicy.UnattachedPolicyRecommender": "Unattached resource policy",
+  "vyomi.compute.nodeGroup.EmptyNodeGroupRecommender": "Empty sole-tenant node group",
+};
+const zoneOfScope = (s) => (s || "").replace("zones/", "");
+/** Recommendations across every zone that holds something recommendable, deduped per target. */
+export async function listRecommendations() {
+  const [disks, res, groups, pols] = await Promise.all([listDisksAllZones(), listReservations(), listNodeGroups(), listPolicies()]);
+  const zones = new Set([...disks.map((d) => d._zoneScope), ...res.map((r) => zoneOfScope(r._scope)), ...groups.map((g) => zoneOfScope(g._scope)),
+    ...pols.map((p) => ZONES_BY_REGION[p._scope.replace("regions/", "")]?.[0]).filter(Boolean)]);
+  const out = [], seen = new Set();
+  const calls = [...zones].flatMap((zone) => Object.keys(RECOMMENDERS).map((rid) =>
+    restJson("GET", `/v1/projects/${e(getProject())}/locations/${e(zone)}/recommenders/${e(rid)}/recommendations`).then((r) => (r.recommendations || []).map((rec) => ({ ...rec, _recommender: rid, _zone: zone })))));
+  for (const rec of (await Promise.all(calls)).flat()) {
+    const key = rec._recommender + rec.targetResources?.[0];
+    if (!seen.has(key)) { seen.add(key); out.push(rec); }
+  }
+  return out;
+}
+export const markRecommendation = (rec, verb) =>
+  restJson("POST", `/v1/${rec.name}:${verb}`, { body: { etag: rec.etag } });

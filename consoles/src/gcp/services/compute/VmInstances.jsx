@@ -21,6 +21,7 @@ import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { Link } from "../../link.jsx";
 import { useProject } from "../../project.js";
 import * as api from "./api.js";
+import { InstanceSchedules, RecommendationsTable } from "./Ext.jsx";
 
 function TabPanel({ value, name, children }) {
   return value === name ? <Box sx={{ pt: 2 }}>{children}</Box> : null;
@@ -127,12 +128,17 @@ export default function VmInstances() {
               { id: "time", header: "Time", cell: (o) => fmtDate(o.endTime) },
             ]}
           />
-          <NotSimulated compact feature="Recommender & VM Manager"
-            note="Recommender suggestions and VM Manager (Patch, OS policies, VM Extension Manager) aren't modeled in Vyomi." />
         </CapabilityContainer>
+        <Box sx={{ mt: 2 }}>
+          <CapabilityContainer id="gcp.compute.recommender" title="Recommendations">
+            <RecommendationsTable />
+          </CapabilityContainer>
+        </Box>
+        <NotSimulated compact feature="VM Manager"
+          note="VM Manager (Patch, OS policies, VM Extension Manager) needs a guest OS and patch agent, which Vyomi doesn't run." />
       </TabPanel>
       <TabPanel value={tab} name="schedules">
-        <NotSimulated feature="Instance schedules" note="Scheduled start/stop policies aren't modeled." />
+        <InstanceSchedules instances={data} />
       </TabPanel>
 
       <Menu anchorEl={menu?.el} open={!!menu} onClose={() => setMenu(null)}>
