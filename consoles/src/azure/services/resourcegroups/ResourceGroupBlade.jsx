@@ -15,6 +15,7 @@ import { locationLabel } from "../../kit/arm.js";
 import BrowseGrid from "../../kit/BrowseGrid.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
 import ResourceBlade from "../../kit/ResourceBlade.jsx";
+import PolicyPanel from "../../kit/PolicyPanel.jsx";
 import { downloadCsv, Essentials, ErrorBar, Glyph, InfoBar, KV, Loading, NotSimulated, NotSimulatedContainer, fmtDate } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { remember, forget } from "../../kit/recent.js";
@@ -98,6 +99,7 @@ export default function ResourceGroupBlade({ params }) {
       deployments: () => <Deployments name={name} />,
       locks: () => <Locks name={name} />,
       exporttemplate: () => <ExportTemplate a={a} name={name} />,
+      policies: () => <PolicyPanel rg={name} title={`${name} | Policies`} />,
       properties: () => <Properties a={a} />,
       costanalysis: () => <CostAnalysis name={name} />,
       costalertspreview: () => <CostAlerts name={name} />,

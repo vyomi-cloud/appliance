@@ -79,6 +79,11 @@ try:                                              # Event Grid event subscriptio
 except ImportError:
     import azure_eventgrid_core as eventgrid_engine       # type: ignore
 
+try:                                              # Azure Policy rule engine (custom policyRule evaluation)
+    from core import azure_policy_core as policy_engine
+except ImportError:
+    import azure_policy_core as policy_engine      # type: ignore
+
 try:                                              # Management locks (Microsoft.Authorization/locks, scoped to ANY resource)
     from core import azure_locks_core as locks_engine
 except ImportError:
@@ -1124,7 +1129,14 @@ class AzureArm:
         # compliance of every resource in this subscription against every policyAssignment
         # (azure_arm_core._policy_block runs the SAME check at create time to actually enforce it).
         if namespace.lower() == "microsoft.policyinsights":
-            return self._policy_states(method, sub, chain)
+            return self._policy_states(method, sub, chain, rg, query)
+        # Microsoft.Authorization/policyDefinitions: built-ins (by real GUID) alongside custom ones.
+        if namespace.lower() == "microsoft.authorization" and chain and chain[0].lower() == "policydefinitions" and method == "GET" and rg is None:
+            if len(chain) == 1:
+                custom = [_view(r) for r in self.state.values() if r.get("_type", "").lower() == "microsoft.authorization/policydefinitions" and r.get("_sub") == sub]
+                return _ok({"value": list(policy_engine.BUILTINS.values()) + custom})
+            if len(chain) == 2 and chain[1].lower() in policy_engine.BUILTINS:
+                return _ok(policy_engine.BUILTINS[chain[1].lower()])
 
         # Microsoft.Billing/invoices (Billing > Invoices): derived from the real cost engine —
         # Vyomi keeps no historical cost ledger, so only the current, still-accruing period exists.
@@ -1428,7 +1440,11 @@ class AzureArm:
             blocked = self._acr_validate_block(type_chain, names, payload, sub, rg)
             if blocked:
                 return blocked
-            blocked = self._policy_block(sub, rg, full_type, payload)
+            if full_type.lower() == "microsoft.authorization/policydefinitions":
+                _pe = policy_engine.validate_definition(payload)
+                if _pe:
+                    return _err(400, "InvalidPolicyRule", _pe)
+            blocked = self._policy_block(sub, rg, full_type, payload, names[-1] if names else '', self.state.get(key))
             if blocked:
                 return blocked
             blocked = self._quota_block(sub, full_type, key, payload)
@@ -1538,31 +1554,52 @@ class AzureArm:
     # by its real GUID (POLICY_ALLOWED_LOCATIONS_ID) — a policyAssignment referencing it denies
     # any catalog resource PUT whose location isn't in its listOfAllowedLocations parameter.
     # Custom policyRule JSON is stored (generic catalog CRUD) but not evaluated — "limited". ──
-    def _policy_block(self, sub, rg, full_type, payload):
-        ft = full_type.lower()
-        if ft in ("microsoft.authorization/policyassignments", "microsoft.authorization/policydefinitions",
-                  "microsoft.resources/resourcegroups"):
-            return None
-        loc = str((payload or {}).get("location") or "").lower()
-        if not loc or loc == "global":
-            return None
+    def _policy_assignments_for(self, sub, rg):
+        out = []
         for r in self.state.values():
             if r.get("_type", "").lower() != "microsoft.authorization/policyassignments" or r.get("_sub") != sub:
                 continue
             rec_rg = r.get("_rg")
             if rec_rg is not None and (rg is None or rec_rg.lower() != rg.lower()):
                 continue
-            props = r.get("properties") or {}
-            if str(props.get("enforcementMode", "Default")).lower() == "donotenforce":
+            if str((r.get("properties") or {}).get("enforcementMode", "Default")).lower() == "donotenforce":
                 continue
-            defid = str(props.get("policyDefinitionId") or "")
-            if POLICY_ALLOWED_LOCATIONS_ID.lower() not in defid.lower():
+            out.append(r)
+        return out
+
+    def _policy_skip(self, defn, res):
+        """Allowed-locations never applies to region-less / global resources (budgets, role records…)."""
+        loc = str(res.get("location") or "").lower()
+        if (defn or {}).get("name", "").lower() == policy_engine.ALLOWED_LOCATIONS_ID and (not loc or loc == "global"):
+            return True
+        return False
+
+    def _policy_block(self, sub, rg, full_type, payload, name="", existing=None):
+        ft = full_type.lower()
+        if ft in ("microsoft.authorization/policyassignments", "microsoft.authorization/policydefinitions",
+                  "microsoft.resources/resourcegroups") or ft.startswith("microsoft.authorization/"):
+            return None
+        pl = payload or {}
+        res = {"type": full_type, "name": name, "location": pl.get("location") or (existing or {}).get("location"),
+               "kind": pl.get("kind") or (existing or {}).get("kind"), "tags": pl.get("tags") if "tags" in pl else (existing or {}).get("tags") or {},
+               "properties": {**((existing or {}).get("properties") or {}), **(pl.get("properties") or {})},
+               "sku": pl.get("sku") or (existing or {}).get("sku"), "identity": pl.get("identity") or (existing or {}).get("identity")}
+        for r in self._policy_assignments_for(sub, rg):
+            defn = policy_engine.find_definition(self.state, sub, (r.get("properties") or {}).get("policyDefinitionId"))
+            if not defn or self._policy_skip(defn, res):
                 continue
-            allowed = [str(x).lower() for x in ((props.get("parameters") or {}).get("listOfAllowedLocations") or {}).get("value") or []]
-            if allowed and loc not in allowed:
-                return _err(403, "RequestDisallowedByPolicy",
-                            f"Resource '{loc}' location is not permitted by the policy assignment "
-                            f"'{r.get('name')}'. Allowed locations: {', '.join(allowed)}.")
+            st, eff = policy_engine.evaluate(defn, r, res)
+            if st == "NonCompliant" and eff == "deny":
+                props = r.get("properties") or {}
+                allowed = ((props.get("parameters") or {}).get("listOfAllowedLocations") or {}).get("value")
+                if defn.get("name", "").lower() == policy_engine.ALLOWED_LOCATIONS_ID and allowed:
+                    msg = (f"Resource '{str(res.get('location')).lower()}' location is not permitted by the policy assignment "
+                           f"'{r.get('name')}'. Allowed locations: {', '.join(str(x).lower() for x in allowed)}.")
+                else:
+                    msg = (f"Resource '{name}' was disallowed by policy. Policy identifiers: "
+                           f"'[{{\"policyAssignment\":{{\"name\":\"{r.get('name')}\",\"id\":\"{r.get('id')}\"}},"
+                           f"\"policyDefinition\":{{\"name\":\"{(defn.get('properties') or {}).get('displayName') or defn.get('name')}\"}}}}]'.")
+                return _err(403, "RequestDisallowedByPolicy", msg)
         return None
 
     # ── Quota enforcement (Settings > Usage + quotas): counted LIVE off real provisioned
@@ -1661,7 +1698,7 @@ class AzureArm:
     # ── Policies compliance (Microsoft.PolicyInsights/policyStates): re-runs the SAME
     # allowed-locations check _policy_block enforces at create time, over every existing
     # resource, for the Policies blade's Compliance tab. ──
-    def _policy_states(self, method, sub, chain):
+    def _policy_states(self, method, sub, chain, rg=None, query=None):
         low = [c.lower() for c in chain]
         if not low or low[0] != "policystates":
             return _err(404, "NotFound", "Only policyStates/latest/queryResults is simulated.")
@@ -1669,26 +1706,37 @@ class AzureArm:
             return _err(405, "MethodNotAllowed", "Use POST for policyStates queryResults.")
         assignments = [r for r in self.state.values()
                        if r.get("_type", "").lower() == "microsoft.authorization/policyassignments" and r.get("_sub") == sub]
+        only = str((query or {}).get("$filter") or "").lower()
         results = []
         for key, rec in self.state.items():
             rtype = rec.get("_type", "").lower()
             loc = str(rec.get("location") or "").lower()
-            # "/__event__/" rows are Activity log entries, not resources (see the DELETE
-            # cascade's own exclusion above); a resource with no/global location (budgets,
-            # role catalog records, …) isn't region-scoped, so a locations policy never
-            # applies to it — _policy_block skips enforcement on these for the same reason.
-            if (rec.get("_sub") != sub or "/__event__/" in key or not loc or loc == "global"
-                    or rtype == "microsoft.resources/resourcegroups" or rtype.startswith("microsoft.authorization")):
+            if (rec.get("_sub") != sub or "/__event__/" in key or rtype == "microsoft.resources/resourcegroups"
+                    or rtype.startswith("microsoft.authorization") or rtype.startswith("microsoft.resources/")
+                    or (rg and (rec.get("_rg") or "").lower() != rg.lower())):
                 continue
+            if only and only.split("'")[1:2] and only.split("'")[1] not in str(rec.get("id", "")).lower():
+                continue
+            res = {"type": rec.get("_type"), "name": rec.get("name"), "location": rec.get("location"), "kind": rec.get("kind"),
+                   "tags": rec.get("tags") or {}, "properties": rec.get("properties") or {}, "sku": rec.get("sku"), "identity": rec.get("identity")}
             for a in assignments:
+                arg = a.get("_rg")
+                if arg is not None and (rec.get("_rg") or "").lower() != arg.lower():
+                    continue
                 props = a.get("properties") or {}
                 defid = str(props.get("policyDefinitionId") or "")
-                compliant = True
-                if POLICY_ALLOWED_LOCATIONS_ID.lower() in defid.lower():
-                    allowed = [str(x).lower() for x in ((props.get("parameters") or {}).get("listOfAllowedLocations") or {}).get("value") or []]
-                    compliant = (not allowed) or str(rec.get("location") or "").lower() in allowed
-                results.append({"resourceId": rec.get("id"), "policyAssignmentId": a.get("id"),
-                                "policyDefinitionId": defid, "complianceState": "Compliant" if compliant else "NonCompliant"})
+                defn = policy_engine.find_definition(self.state, sub, defid)
+                if not defn or self._policy_skip(defn, res):
+                    continue
+                st, eff = policy_engine.evaluate(defn, a, res)
+                if st == "Disabled":
+                    continue
+                state = {"Compliant": "Compliant", "NonCompliant": "NonCompliant"}.get(st, "NotStarted")
+                results.append({"resourceId": rec.get("id"), "resourceType": rec.get("_type"), "resourceGroup": rec.get("_rg"),
+                                "policyAssignmentId": a.get("id"), "policyAssignmentName": a.get("name"),
+                                "policyDefinitionId": defid, "policyDefinitionName": (defn.get("properties") or {}).get("displayName") or defn.get("name"),
+                                "policyDefinitionAction": eff or None, "complianceState": state,
+                                "isCompliant": state == "Compliant"})
         return _ok({"@odata.count": len(results), "value": results})
 
     # ── Invoices (Microsoft.Billing/invoices): derived from the real cost engine — Vyomi keeps

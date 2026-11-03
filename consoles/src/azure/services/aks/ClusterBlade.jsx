@@ -26,6 +26,7 @@ import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
+import PolicyPanel from "../../kit/PolicyPanel.jsx";
 import { ResourceRecommendations } from "../defender/Pages.jsx";
 
 export const MENU = [
@@ -104,6 +105,7 @@ export default function ClusterBlade({ params, query }) {
       runcommand: () => <RunCommand a={a} />,
       nodepools: () => <NodePools a={a} />,
       clusterconfiguration: () => <ClusterConfiguration a={a} reload={reload} />,
+      policies: () => <PolicyPanel rg={a.resourceGroup || String(a.id).split('/')[4]} resourceId={a.id} title={`${a.name} | Policies`} />,
       properties: () => <Properties a={a} />,
       locks: () => <Locks a={a} />,
       activitylog: () => <ActivityLog a={a} />,

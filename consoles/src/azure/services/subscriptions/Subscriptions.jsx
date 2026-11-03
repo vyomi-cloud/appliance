@@ -5,6 +5,7 @@ import { Add20Regular } from "@fluentui/react-icons";
 import { useAsync } from "../../../common/useAsync.js";
 import { getSubscription } from "../../kit/arm.js";
 import BrowseGrid from "../../kit/BrowseGrid.jsx";
+import PolicyPanel from "../../kit/PolicyPanel.jsx";
 import { Glyph, NotSimulated } from "../../kit/common.jsx";
 import { TitleRow } from "../../kit/ResourceBlade.jsx";
 import * as api from "./api.js";
@@ -56,7 +57,7 @@ export default function Subscriptions() {
         <DialogSurface aria-label={gap || "Not simulated"}>
           <DialogBody>
             <DialogTitle>{gap}</DialogTitle>
-            <DialogContent><NotSimulated feature={GAPS[gap] || gap} /></DialogContent>
+            <DialogContent>{gap === "Manage Policies" ? <PolicyPanel title="Manage Policies" /> : <NotSimulated feature={GAPS[gap] || gap} />}</DialogContent>
             <DialogActions><Button onClick={() => setGap(null)}>Close</Button></DialogActions>
           </DialogBody>
         </DialogSurface>

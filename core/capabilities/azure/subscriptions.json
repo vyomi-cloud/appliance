@@ -239,10 +239,12 @@
    "offline": "limited"
   },
   "limitations": [
-   "Definitions and assignments are real ARM resources (generic catalog CRUD). Of Azure's hundreds of built-ins, Vyomi evaluates and ENFORCES exactly one — the real 'Allowed locations' built-in (by its actual GUID, e56962a6-4747-49cd-b67b-bf8b01975c4c): an assignment referencing it denies any catalog resource create outside its listOfAllowedLocations, and the Compliance tab (policyStates) reports every existing resource against it. Custom policyRule JSON for any other definition is stored but never evaluated — it stays config_only."
+   "Real policy rule engine (core/azure_policy_core.py): built-in definitions by their real GUIDs (Allowed locations, Allowed / Not allowed resource types, Require a tag, Require a tag and its value, Secure transfer to storage accounts) plus CUSTOM policyDefinitions whose policyRule (if/then, allOf/anyOf/not, equals/in/like/exists/contains/…, tags['k'], property aliases, parameters) is evaluated. 'deny' blocks a create/update with RequestDisallowedByPolicy; 'audit' and deny rules feed the Compliance tab, at subscription, resource-group and resource scope.",
+   "Not modelled: count expressions, template functions other than parameters()/concat(), auditIfNotExists / deployIfNotExists / modify / append effects (these evaluate as 'NotStarted' and never block), policy initiatives (set definitions), exemptions, remediation tasks and the full Azure built-in catalog (only the six listed). Assignments scoped to a single resource are shown by filtering the resource-group assignments."
   ],
   "tests": [
-   "tests/conformance/test_azure_subscriptions_ext_core.py"
+   "tests/conformance/test_azure_subscriptions_ext_core.py",
+   "tests/conformance/test_azure_policy_core.py"
   ]
  },
  "azure.subscriptions.deployment_stacks": {
