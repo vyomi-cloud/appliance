@@ -23,7 +23,9 @@ try {
     start: () => call("POST", `${coll}/${name}/start`),
     del: () => call("DELETE", `${coll}/${name}`),
     openConnect: async (page) => {   // Compute Engine -> the instance -> Connect
-      await page.goto(nano.base + "/gcp-console.html"); await page.waitForSelector("a.res-l", { timeout: 120000 });
+      // No page.goto here: the console is already open, and reloading it drops the in-page VM
+      // (it would cold-boot without the file written before stop). The AWS probe navigates in-page too.
+      await page.waitForSelector("a.res-l", { timeout: 120000 });
       await page.locator("a.res-l", { hasText: "Compute Engine" }).first().click();
       await sleep(2000);
       await page.locator("#main a.id", { hasText: name }).first().click({ timeout: 15000 });
