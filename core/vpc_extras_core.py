@@ -458,6 +458,271 @@ def disassociate_edge(m, aid):
     return None
 
 
+# ── Traffic Mirroring ───────────────────────────────────────────────────
+# Targets (ENI / NLB / GWLB endpoint), filters + ordered accept/reject rules (CIDR/protocol/port
+# validated, rule numbers unique per direction), sessions (source ENI, target, filter, session number
+# unique per source ENI, packet length, VNI). `mirror_decision()` evaluates a packet against a
+# session's filter. No packets are captured/VXLAN-encapsulated in the simulator.
+_TM_SERVICES = ("amazon-dns",)
+
+
+def _tm_target_xml(t):
+    return {"trafficMirrorTargetId": t["id"], "networkInterfaceId": t.get("eni") or None, "networkLoadBalancerArn": t.get("nlb") or None,
+            "gatewayLoadBalancerEndpointId": t.get("gwlbe") or None, "type": t["type"], "description": t["description"],
+            "ownerId": _V().OWNER_ID, **tags(t["tags"])}
+
+
+def _tm_rule_xml(r, fid):
+    return {"trafficMirrorFilterRuleId": r["id"], "trafficMirrorFilterId": fid, "trafficDirection": r["direction"], "ruleNumber": r["number"],
+            "ruleAction": r["action"], "protocol": r["protocol"], "destinationPortRange": ({"fromPort": r["dport"][0], "toPort": r["dport"][1]} if r.get("dport") else None),
+            "sourcePortRange": ({"fromPort": r["sport"][0], "toPort": r["sport"][1]} if r.get("sport") else None),
+            "destinationCidrBlock": r["dst"], "sourceCidrBlock": r["src"], "description": r["description"]}
+
+
+def _tm_filter_xml(f):
+    return {"trafficMirrorFilterId": f["id"], "ingressFilterRuleSet": [_tm_rule_xml(r, f["id"]) for r in f["rules"] if r["direction"] == "ingress"] or None,
+            "egressFilterRuleSet": [_tm_rule_xml(r, f["id"]) for r in f["rules"] if r["direction"] == "egress"] or None,
+            "networkServiceSet": [x for x in f["services"]] or None, "description": f["description"], **tags(f["tags"])}
+
+
+def _tm_session_xml(s):
+    return {"trafficMirrorSessionId": s["id"], "trafficMirrorTargetId": s["target"], "trafficMirrorFilterId": s["filter"],
+            "networkInterfaceId": s["eni"], "ownerId": _V().OWNER_ID, "packetLength": s["packet_length"] or None,
+            "sessionNumber": s["number"], "virtualNetworkId": s["vni"], "description": s["description"], **tags(s["tags"])}
+
+
+def _tm_target_create(store, p):
+    V = _V(); m = V._model(store)
+    eni, nlb, gw = str(p.get("NetworkInterfaceId", "")), str(p.get("NetworkLoadBalancerArn", "")), str(p.get("GatewayLoadBalancerEndpointId", ""))
+    if sum(map(bool, (eni, nlb, gw))) != 1:
+        raise _err("InvalidParameterCombination", "Specify exactly one of NetworkInterfaceId, NetworkLoadBalancerArn or GatewayLoadBalancerEndpointId.")
+    if eni and eni not in m["enis"]:
+        raise _err("InvalidNetworkInterfaceID.NotFound", f"The networkInterface ID '{eni}' does not exist")
+    if nlb and ":loadbalancer/net/" not in nlb:
+        raise _err("InvalidParameterValue", f"{nlb} is not a Network Load Balancer ARN.")
+    tid = V._rid("tmt", 17)
+    bag(m, "tm_targets")[tid] = {"id": tid, "eni": eni, "nlb": nlb, "gwlbe": gw, "type": "network-interface" if eni else "network-load-balancer" if nlb else "gateway-load-balancer-endpoint",
+                                 "description": str(p.get("Description", "")), "tags": tag_of(p, "traffic-mirror-target")}
+    return V._envelope("CreateTrafficMirrorTarget", xml(_tm_target_xml(m["tm_targets"][tid]), "trafficMirrorTarget"))
+
+
+def _tm_target_describe(store, p):
+    m = _V()._model(store); t = bag(m, "tm_targets"); want = ids(p, "TrafficMirrorTargetId")
+    for i in want:
+        if i not in t:
+            raise _err("InvalidTrafficMirrorTargetId.NotFound", f"The traffic mirror target '{i}' does not exist")
+    return _V()._envelope("DescribeTrafficMirrorTargets", xml([_tm_target_xml(t[i]) for i in (want or t)], "trafficMirrorTargetSet"))
+
+
+def _tm_target_delete(store, p):
+    m = _V()._model(store); t = bag(m, "tm_targets"); i = str(p.get("TrafficMirrorTargetId", ""))
+    if i not in t:
+        raise _err("InvalidTrafficMirrorTargetId.NotFound", f"The traffic mirror target '{i}' does not exist")
+    if any(s["target"] == i for s in bag(m, "tm_sessions").values()):
+        raise _err("TrafficMirrorTargetInUse", f"{i} is used by a traffic mirror session.")
+    t.pop(i)
+    return _V()._envelope("DeleteTrafficMirrorTarget", xml({"trafficMirrorTargetId": i}))
+
+
+def _tm_filter_create(store, p):
+    V = _V(); m = V._model(store)
+    svcs = idx_list(p, "NetworkService")
+    for x in svcs:
+        if x not in _TM_SERVICES:
+            raise _err("InvalidParameterValue", f"Value ({x}) for NetworkService is invalid; supported: amazon-dns.")
+    fid = V._rid("tmf", 17)
+    bag(m, "tm_filters")[fid] = {"id": fid, "description": str(p.get("Description", "")), "services": svcs, "rules": [], "tags": tag_of(p, "traffic-mirror-filter")}
+    return V._envelope("CreateTrafficMirrorFilter", xml(_tm_filter_xml(m["tm_filters"][fid]), "trafficMirrorFilter"))
+
+
+def _tm_filter_describe(store, p):
+    m = _V()._model(store); f = bag(m, "tm_filters"); want = ids(p, "TrafficMirrorFilterId")
+    for i in want:
+        if i not in f:
+            raise _err("InvalidTrafficMirrorFilterId.NotFound", f"The traffic mirror filter '{i}' does not exist")
+    return _V()._envelope("DescribeTrafficMirrorFilters", xml([_tm_filter_xml(f[i]) for i in (want or f)], "trafficMirrorFilterSet"))
+
+
+def _tm_filter_delete(store, p):
+    m = _V()._model(store); f = bag(m, "tm_filters"); i = str(p.get("TrafficMirrorFilterId", ""))
+    if i not in f:
+        raise _err("InvalidTrafficMirrorFilterId.NotFound", f"The traffic mirror filter '{i}' does not exist")
+    if any(s["filter"] == i for s in bag(m, "tm_sessions").values()):
+        raise _err("TrafficMirrorFilterInUse", f"{i} is used by a traffic mirror session.")
+    f.pop(i)
+    return _V()._envelope("DeleteTrafficMirrorFilter", xml({"trafficMirrorFilterId": i}))
+
+
+def _tm_filter_modify_services(store, p):
+    m = _V()._model(store); f = bag(m, "tm_filters").get(str(p.get("TrafficMirrorFilterId", "")))
+    if not f:
+        raise _err("InvalidTrafficMirrorFilterId.NotFound", "The traffic mirror filter does not exist")
+    for x in idx_list(p, "AddNetworkService"):
+        if x not in _TM_SERVICES:
+            raise _err("InvalidParameterValue", f"Value ({x}) for NetworkService is invalid.")
+        if x not in f["services"]: f["services"].append(x)
+    f["services"] = [x for x in f["services"] if x not in idx_list(p, "RemoveNetworkService")]
+    return _V()._envelope("ModifyTrafficMirrorFilterNetworkServices", xml(_tm_filter_xml(f), "trafficMirrorFilter"))
+
+
+def _tm_rule_parse(p, base=None):
+    r = dict(base or {})
+    if "TrafficDirection" in p: r["direction"] = str(p["TrafficDirection"])
+    if "RuleNumber" in p: r["number"] = int(p["RuleNumber"])
+    if "RuleAction" in p: r["action"] = str(p["RuleAction"])
+    if "Protocol" in p: r["protocol"] = int(p["Protocol"])
+    if "DestinationCidrBlock" in p: r["dst"] = str(cidr4(p["DestinationCidrBlock"], "destinationCidrBlock")) if "/" in str(p["DestinationCidrBlock"]) else str(p["DestinationCidrBlock"])
+    if "SourceCidrBlock" in p: r["src"] = str(cidr4(p["SourceCidrBlock"], "sourceCidrBlock"))
+    for key, pre in (("dport", "DestinationPortRange"), ("sport", "SourcePortRange")):
+        if f"{pre}.FromPort" in p or f"{pre}.ToPort" in p:
+            lo, hi = int(p.get(f"{pre}.FromPort", 0)), int(p.get(f"{pre}.ToPort", 65535))
+            if not (0 <= lo <= hi <= 65535):
+                raise _err("InvalidParameterValue", f"Invalid {pre}: {lo}-{hi}.")
+            r[key] = (lo, hi)
+    if "Description" in p: r["description"] = str(p["Description"])
+    if r.get("direction") not in ("ingress", "egress"):
+        raise _err("InvalidParameterValue", "TrafficDirection must be ingress or egress.")
+    if r.get("action") not in ("accept", "reject"):
+        raise _err("InvalidParameterValue", "RuleAction must be accept or reject.")
+    if not (1 <= r.get("number", 0) <= 32766):
+        raise _err("InvalidParameterValue", "RuleNumber must be between 1 and 32766.")
+    if r.get("protocol") is not None and not (0 <= r["protocol"] <= 255):
+        raise _err("InvalidParameterValue", "Protocol must be an IANA protocol number (0-255).")
+    if (r.get("dport") or r.get("sport")) and r.get("protocol") not in (6, 17):
+        raise _err("InvalidParameterCombination", "Port ranges require protocol 6 (TCP) or 17 (UDP).")
+    return r
+
+
+def _tm_rule_create(store, p):
+    V = _V(); m = V._model(store); f = bag(m, "tm_filters").get(str(p.get("TrafficMirrorFilterId", "")))
+    if not f:
+        raise _err("InvalidTrafficMirrorFilterId.NotFound", "The traffic mirror filter does not exist")
+    if "DestinationCidrBlock" not in p or "SourceCidrBlock" not in p:
+        raise _err("MissingParameter", "DestinationCidrBlock and SourceCidrBlock are required.")
+    r = _tm_rule_parse(p, {"description": "", "protocol": None, "dst": "", "src": ""})
+    if any(x["direction"] == r["direction"] and x["number"] == r["number"] for x in f["rules"]):
+        raise _err("InvalidTrafficMirrorFilterRule.Duplicate", f"A {r['direction']} rule numbered {r['number']} already exists.")
+    r["id"] = V._rid("tmfr", 17)
+    f["rules"].append(r); f["rules"].sort(key=lambda x: (x["direction"], x["number"]))
+    return V._envelope("CreateTrafficMirrorFilterRule", xml(_tm_rule_xml(r, f["id"]), "trafficMirrorFilterRule"))
+
+
+def _tm_rule_describe(store, p):
+    m = _V()._model(store); fs = bag(m, "tm_filters")
+    want_f = str(p.get("TrafficMirrorFilterId", "")); want = ids(p, "TrafficMirrorFilterRuleId")
+    rows = [_tm_rule_xml(r, f["id"]) for f in fs.values() if not want_f or f["id"] == want_f for r in f["rules"] if not want or r["id"] in want]
+    return _V()._envelope("DescribeTrafficMirrorFilterRules", xml(rows, "trafficMirrorFilterRuleSet"))
+
+
+def _tm_rule_find(m, rid):
+    for f in bag(m, "tm_filters").values():
+        for r in f["rules"]:
+            if r["id"] == rid:
+                return f, r
+    raise _err("InvalidTrafficMirrorFilterRuleId.NotFound", f"The traffic mirror filter rule '{rid}' does not exist")
+
+
+def _tm_rule_modify(store, p):
+    m = _V()._model(store); f, r = _tm_rule_find(m, str(p.get("TrafficMirrorFilterRuleId", "")))
+    nr = _tm_rule_parse({k: v for k, v in p.items() if k != "TrafficDirection" or True}, r)
+    if any(x is not r and x["direction"] == nr["direction"] and x["number"] == nr["number"] for x in f["rules"]):
+        raise _err("InvalidTrafficMirrorFilterRule.Duplicate", "A rule with that number already exists.")
+    r.update(nr)
+    return _V()._envelope("ModifyTrafficMirrorFilterRule", xml(_tm_rule_xml(r, f["id"]), "trafficMirrorFilterRule"))
+
+
+def _tm_rule_delete(store, p):
+    m = _V()._model(store); f, r = _tm_rule_find(m, str(p.get("TrafficMirrorFilterRuleId", "")))
+    f["rules"].remove(r)
+    return _V()._envelope("DeleteTrafficMirrorFilterRule", xml({"trafficMirrorFilterRuleId": r["id"]}))
+
+
+def _tm_session_check(m, p, cur=None):
+    eni, tgt, flt = str(p.get("NetworkInterfaceId", cur and cur["eni"] or "")), str(p.get("TrafficMirrorTargetId", cur and cur["target"] or "")), str(p.get("TrafficMirrorFilterId", cur and cur["filter"] or ""))
+    if eni not in m["enis"]:
+        raise _err("InvalidNetworkInterfaceID.NotFound", f"The networkInterface ID '{eni}' does not exist")
+    t = bag(m, "tm_targets").get(tgt)
+    if not t:
+        raise _err("InvalidTrafficMirrorTargetId.NotFound", f"The traffic mirror target '{tgt}' does not exist")
+    if tgt and t.get("eni") == eni:
+        raise _err("InvalidParameterValue", "The mirror source and the mirror target cannot be the same network interface.")
+    if flt not in bag(m, "tm_filters"):
+        raise _err("InvalidTrafficMirrorFilterId.NotFound", f"The traffic mirror filter '{flt}' does not exist")
+    num = int(p.get("SessionNumber", cur and cur["number"] or 0) or 0)
+    if not (1 <= num <= 32766):
+        raise _err("InvalidParameterValue", "SessionNumber must be between 1 and 32766.")
+    if any(s is not cur and s["eni"] == eni and s["number"] == num for s in bag(m, "tm_sessions").values()):
+        raise _err("InvalidTrafficMirrorSession.Duplicate", f"{eni} already has a mirror session numbered {num}.")
+    if sum(1 for s in bag(m, "tm_sessions").values() if s["eni"] == eni and s is not cur) >= 3:
+        raise _err("TrafficMirrorSessionLimitExceeded", "A network interface can have at most 3 traffic mirror sessions.")
+    return eni, tgt, flt, num
+
+
+def _tm_session_create(store, p):
+    V = _V(); m = V._model(store)
+    eni, tgt, flt, num = _tm_session_check(m, p)
+    pl = int(p.get("PacketLength", 0) or 0)
+    if pl and not (1 <= pl <= 9001):
+        raise _err("InvalidParameterValue", "PacketLength must be between 1 and 9001.")
+    vni = int(p.get("VirtualNetworkId") or (abs(hash(eni + str(num))) % 16777215) + 1)
+    sid = V._rid("tms", 17)
+    bag(m, "tm_sessions")[sid] = {"id": sid, "eni": eni, "target": tgt, "filter": flt, "number": num, "packet_length": pl, "vni": vni,
+                                  "description": str(p.get("Description", "")), "tags": tag_of(p, "traffic-mirror-session")}
+    return V._envelope("CreateTrafficMirrorSession", xml(_tm_session_xml(m["tm_sessions"][sid]), "trafficMirrorSession"))
+
+
+def _tm_session_describe(store, p):
+    m = _V()._model(store); ss = bag(m, "tm_sessions"); want = ids(p, "TrafficMirrorSessionId")
+    for i in want:
+        if i not in ss:
+            raise _err("InvalidTrafficMirrorSessionId.NotFound", f"The traffic mirror session '{i}' does not exist")
+    return _V()._envelope("DescribeTrafficMirrorSessions", xml([_tm_session_xml(ss[i]) for i in (want or ss)], "trafficMirrorSessionSet"))
+
+
+def _tm_session_modify(store, p):
+    m = _V()._model(store); s = bag(m, "tm_sessions").get(str(p.get("TrafficMirrorSessionId", "")))
+    if not s:
+        raise _err("InvalidTrafficMirrorSessionId.NotFound", "The traffic mirror session does not exist")
+    eni, tgt, flt, num = _tm_session_check(m, {k: v for k, v in p.items() if k != "NetworkInterfaceId"}, s)
+    s.update({"target": tgt, "filter": flt, "number": num})
+    if "PacketLength" in p: s["packet_length"] = int(p["PacketLength"])
+    if "VirtualNetworkId" in p: s["vni"] = int(p["VirtualNetworkId"])
+    if "Description" in p: s["description"] = str(p["Description"])
+    return _V()._envelope("ModifyTrafficMirrorSession", xml(_tm_session_xml(s), "trafficMirrorSession"))
+
+
+def _tm_session_delete(store, p):
+    m = _V()._model(store); ss = bag(m, "tm_sessions"); i = str(p.get("TrafficMirrorSessionId", ""))
+    if i not in ss:
+        raise _err("InvalidTrafficMirrorSessionId.NotFound", f"The traffic mirror session '{i}' does not exist")
+    ss.pop(i)
+    return _V()._envelope("DeleteTrafficMirrorSession", xml({"trafficMirrorSessionId": i}))
+
+
+def mirror_decision(m, session, direction, proto, src_ip, dst_ip, src_port=None, dst_port=None):
+    """First matching rule (lowest number) of the session's filter for the direction -> 'accept' | 'reject' | None (no match = not mirrored)."""
+    f = bag(m, "tm_filters").get(session["filter"])
+    for r in sorted((x for x in (f["rules"] if f else []) if x["direction"] == direction), key=lambda x: x["number"]):
+        if r.get("protocol") not in (None, 0, proto):
+            continue
+        if r["src"] and ipaddress.ip_address(src_ip) not in ipaddress.ip_network(r["src"], strict=False):
+            continue
+        if r["dst"] and ipaddress.ip_address(dst_ip) not in ipaddress.ip_network(r["dst"], strict=False):
+            continue
+        if r.get("dport") and (dst_port is None or not r["dport"][0] <= dst_port <= r["dport"][1]):
+            continue
+        if r.get("sport") and (src_port is None or not r["sport"][0] <= src_port <= r["sport"][1]):
+            continue
+        return r["action"]
+    return None
+
+
 OPS = dict(CVPN_OPS)
+OPS.update({"CreateTrafficMirrorTarget": _tm_target_create, "DescribeTrafficMirrorTargets": _tm_target_describe, "DeleteTrafficMirrorTarget": _tm_target_delete,
+            "CreateTrafficMirrorFilter": _tm_filter_create, "DescribeTrafficMirrorFilters": _tm_filter_describe, "DeleteTrafficMirrorFilter": _tm_filter_delete,
+            "ModifyTrafficMirrorFilterNetworkServices": _tm_filter_modify_services, "CreateTrafficMirrorFilterRule": _tm_rule_create,
+            "DescribeTrafficMirrorFilterRules": _tm_rule_describe, "ModifyTrafficMirrorFilterRule": _tm_rule_modify, "DeleteTrafficMirrorFilterRule": _tm_rule_delete,
+            "CreateTrafficMirrorSession": _tm_session_create, "DescribeTrafficMirrorSessions": _tm_session_describe,
+            "ModifyTrafficMirrorSession": _tm_session_modify, "DeleteTrafficMirrorSession": _tm_session_delete})
 OPS.update({"AssociateVpcCidrBlock": _vpc_assoc, "DisassociateVpcCidrBlock": _vpc_disassoc})
 OPS.update({"CreateVpnConcentrator": _vc_create, "DescribeVpnConcentrators": _vc_describe, "DeleteVpnConcentrator": _vc_delete})

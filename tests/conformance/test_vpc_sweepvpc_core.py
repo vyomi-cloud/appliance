@@ -155,7 +155,40 @@ def cidrs_and_edge():
     _check("edge association removed", f"<gatewayId>{igw}</gatewayId><main>" not in c({"Action": "DescribeRouteTables", "RouteTableId.1": rtb}))
 
 
+def traffic_mirroring():
+    e = Env(); c = e.call
+    vpc_id = e.id(c({"Action": "CreateVpc", "CidrBlock": "10.74.0.0/16"}), "vpcId")
+    sub = e.id(c({"Action": "CreateSubnet", "VpcId": vpc_id, "CidrBlock": "10.74.1.0/24"}), "subnetId")
+    a = e.id(c({"Action": "CreateNetworkInterface", "SubnetId": sub}), "networkInterfaceId")
+    b = e.id(c({"Action": "CreateNetworkInterface", "SubnetId": sub}), "networkInterfaceId")
+    c({"Action": "CreateTrafficMirrorTarget", "NetworkInterfaceId": "eni-nope"}, ok=False)
+    c({"Action": "CreateTrafficMirrorTarget"}, ok=False)
+    tgt = e.id(c({"Action": "CreateTrafficMirrorTarget", "NetworkInterfaceId": b, "Description": "ids"}), "trafficMirrorTargetId")
+    flt = e.id(c({"Action": "CreateTrafficMirrorFilter", "Description": "web"}), "trafficMirrorFilterId")
+    rule = {"Action": "CreateTrafficMirrorFilterRule", "TrafficMirrorFilterId": flt, "TrafficDirection": "ingress", "RuleNumber": "100", "RuleAction": "accept",
+            "DestinationCidrBlock": "0.0.0.0/0", "SourceCidrBlock": "0.0.0.0/0", "Protocol": "6", "DestinationPortRange.FromPort": "443", "DestinationPortRange.ToPort": "443"}
+    rid = e.id(c(rule), "trafficMirrorFilterRuleId")
+    _check("duplicate rule number rejected", "Duplicate" in c(rule, ok=False))
+    c({**rule, "RuleNumber": "101", "Protocol": "1"}, ok=False)
+    c({**rule, "RuleNumber": "102", "RuleAction": "maybe"}, ok=False)
+    _check("rule listed", rid in c({"Action": "DescribeTrafficMirrorFilterRules", "TrafficMirrorFilterId": flt}))
+    c({"Action": "CreateTrafficMirrorSession", "NetworkInterfaceId": b, "TrafficMirrorTargetId": tgt, "TrafficMirrorFilterId": flt, "SessionNumber": "1"}, ok=False)
+    _check("source == target ENI rejected", True)
+    sid = e.id(c({"Action": "CreateTrafficMirrorSession", "NetworkInterfaceId": a, "TrafficMirrorTargetId": tgt, "TrafficMirrorFilterId": flt, "SessionNumber": "1", "PacketLength": "128"}), "trafficMirrorSessionId")
+    _check("duplicate session number per ENI rejected", "Duplicate" in c({"Action": "CreateTrafficMirrorSession", "NetworkInterfaceId": a, "TrafficMirrorTargetId": tgt, "TrafficMirrorFilterId": flt, "SessionNumber": "1"}, ok=False))
+    _check("target + filter in use cannot be deleted", "InUse" in c({"Action": "DeleteTrafficMirrorTarget", "TrafficMirrorTargetId": tgt}, ok=False) and "InUse" in c({"Action": "DeleteTrafficMirrorFilter", "TrafficMirrorFilterId": flt}, ok=False))
+    m = e.s._vpc_model; sess = m["tm_sessions"][sid]
+    from core import vpc_extras_core as x
+    _check("filter evaluator: tcp/443 ingress accepted", x.mirror_decision(m, sess, "ingress", 6, "1.2.3.4", "10.74.1.4", 5555, 443) == "accept")
+    _check("filter evaluator: tcp/80 not mirrored", x.mirror_decision(m, sess, "ingress", 6, "1.2.3.4", "10.74.1.4", 5555, 80) is None)
+    c({"Action": "DeleteTrafficMirrorSession", "TrafficMirrorSessionId": sid})
+    c({"Action": "DeleteTrafficMirrorFilterRule", "TrafficMirrorFilterRuleId": rid})
+    c({"Action": "DeleteTrafficMirrorFilter", "TrafficMirrorFilterId": flt})
+    c({"Action": "DeleteTrafficMirrorTarget", "TrafficMirrorTargetId": tgt})
+
+
 def main():
+    traffic_mirroring()
     cidrs_and_edge()
     vpn()
     client_vpn()

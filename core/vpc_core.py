@@ -2243,7 +2243,7 @@ def _taggable_collections(m: dict) -> list:
             m["eigws"], m["dhcp_options"], m["prefix_lists"], m["peering_connections"], m["route_servers"],
             m.get("tgws", {}), m.get("tgw_attachments", {}), m.get("tgw_rts", {}),
             m.get("customer_gateways", {}), m.get("vgws", {}), m.get("vpn_connections", {}), m.get("cvpn_endpoints", {}),
-            m.get("vpn_concentrators", {}),
+            m.get("vpn_concentrators", {}), m.get("tm_targets", {}), m.get("tm_filters", {}), m.get("tm_sessions", {}),
             m.get("flow_logs", {}), m.get("insights_paths", {}), m.get("insights_analyses", {})]
 
 
