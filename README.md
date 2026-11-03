@@ -1,6 +1,6 @@
 # Vyomi service pipeline
 
-_Updated 2026-11-03 23:00 UTC · refreshes after every pipeline run_
+_Updated 2026-11-03 23:20 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
@@ -9,7 +9,7 @@ _Updated 2026-11-03 23:00 UTC · refreshes after every pipeline run_
 - **In the gate / releasing:** Amazon Cognito Identity Provider (AWS), Amazon EC2 Container Service (AWS), Amazon Elastic Container Registry (AWS), Amazon ElastiCache (AWS), Amazon Kinesis (AWS), Amazon Route 53 (AWS), Amazon Simple Email Service (AWS), AWS CloudFormation (AWS), AWS Security Token Service (AWS), BigQuery API (GCP), Cloud DNS API (GCP), Cloud Logging API (GCP), Cloud Run Admin API (GCP), Cloud Tasks API (GCP), Workflows API (GCP), Application Insights (Azure), Container Registry (Azure), Azure Kubernetes Service (Azure), Event Hubs (Azure), Managed Identities (Azure), Azure Cache for Redis (Azure)
 - **Queued:** 41 services (P1 first, then P2)
 - **Consoles really implemented:** offline 97% · Nano 97%
-- **Hourly tests:** 268 of 277 suites passing (run 20:49 UTC)
+- **Hourly tests:** 269 of 277 suites passing (run 22:59 UTC)
 - **Upstream watch:** 63 open changes from the real clouds to adopt
 
 ## By cloud
@@ -1173,7 +1173,7 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 | offline-post-create-azure-openai | ✅ | 6/6 |
 | offline-post-create-aws-iam-actions | ✅ | 13/13 |
 | offline-post-create-azure-rbac-checkaccess | ✅ | 6/6 |
-| offline-ui-drawer | ❌ | 86/87 |
+| offline-ui-drawer | ✅ | 87/87 |
 | nano-ui-drawer | ✅ | 72/72 |
 | offline-ui-default-cloud | ✅ | 18/18 |
 | nano-ui-default-cloud | ✅ | 15/15 |
