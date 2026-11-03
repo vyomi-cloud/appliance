@@ -2303,6 +2303,14 @@
       "kind": "ui",
       "cmd": "VYOMI_CONSOLE_URL={ENDPOINT}/console/gcp node wasm/ui-tests/validate-gcp-properties.mjs",
       "timeout": 300
+    },
+    {
+      "id": "offline-api-gcp-console-tools-routes",
+      "target": "offline",
+      "cloud": "gcp",
+      "kind": "api",
+      "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/test_gcp_console_tools_routes_api.py",
+      "timeout": 120
     }
   ]
 }
