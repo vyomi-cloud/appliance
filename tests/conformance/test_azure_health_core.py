@@ -50,3 +50,17 @@ def test_advisor_rules_and_suppression():
     assert [x for x in again if x["name"] == rec["name"]][0]["properties"]["suppressionIds"] == ["snooze1"]
     assert a.handle("DELETE", f"/subscriptions/{SUB}/providers/Microsoft.Advisor/recommendations/{rec['name']}/suppressions/snooze1", q)["status"] == 204
     assert nsg
+
+
+if __name__ == "__main__":
+    import sys
+    _fails = 0
+    for _n, _f in sorted(globals().items()):
+        if _n.startswith("test_") and callable(_f):
+            try:
+                _f()
+                print("PASS", _n)
+            except Exception as _e:  # noqa: BLE001
+                _fails += 1
+                print("FAIL", _n, repr(_e))
+    sys.exit(1 if _fails else 0)

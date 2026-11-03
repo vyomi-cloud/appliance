@@ -1489,8 +1489,6 @@ def run() -> int:
     return 0
 
 
-if __name__ == "__main__":
-    raise SystemExit(run())
 
 
 def test_classic_administrators_listed_read_only():
@@ -1517,3 +1515,11 @@ def test_resource_graph_subscription_prefixed_and_tag_patch_merge():
     r = a.handle("POST", f"/subscriptions/{sub}/providers/Microsoft.ResourceGraph/resources", {"api-version": "2021-03-01"},
                  {"subscriptions": [sub], "query": "Resources | where type =~ 'microsoft.network/virtualnetworks' | project name, tags"})
     assert r["status"] == 200 and r["body"]["data"]["rows"][0][0] == "v1" and r["body"]["data"]["rows"][0][1] == {"a": "1", "b": "2"}
+
+
+if __name__ == "__main__":
+    for _n, _f in sorted(globals().items()):
+        if _n.startswith("test_") and callable(_f):
+            _f()
+            print("PASS", _n)
+    raise SystemExit(run())

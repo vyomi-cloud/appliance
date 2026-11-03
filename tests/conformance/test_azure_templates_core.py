@@ -46,3 +46,17 @@ def test_single_resource_and_no_params_and_missing():
 def test_bicep_literals():
     from core.azure_templates_core import _bval
     assert _bval({"a-b": [1, True, None, "it's"]}) == "{\n  'a-b': [\n    1\n    true\n    null\n    'it\\'s'\n  ]\n}"
+
+
+if __name__ == "__main__":
+    import sys
+    _fails = 0
+    for _n, _f in sorted(globals().items()):
+        if _n.startswith("test_") and callable(_f):
+            try:
+                _f()
+                print("PASS", _n)
+            except Exception as _e:  # noqa: BLE001
+                _fails += 1
+                print("FAIL", _n, repr(_e))
+    sys.exit(1 if _fails else 0)
