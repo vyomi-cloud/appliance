@@ -8002,7 +8002,9 @@ def _sync_docker_instance(instance: dict) -> None:
         instance["container_status"] = "missing"
         if str(instance.get("state") or "").strip().lower() not in {"terminated", "stopped"}:
             instance["state"] = "stopped"
-        if str(instance.get("launch_status") or "").strip().lower() in {"queued", "starting", "error", "pending"}:
+        # A failed launch (e.g. docker.sock unreachable) must stay visible as
+        # launch_status=error + launch_error, not be reset to a silent "ready".
+        if str(instance.get("launch_status") or "").strip().lower() in {"queued", "starting", "pending"}:
             instance["launch_status"] = "ready"
             instance["launch_error"] = ""
         return

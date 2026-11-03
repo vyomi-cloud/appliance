@@ -46,7 +46,7 @@ def provision(name):
                 if cur.get("state") == "running" and cur.get("launch_status") in (None, "ready", ""):
                     return True, ""
                 time.sleep(2)
-            return False, f"state={cur.get('state')} launch={cur.get('launch_status')}"
+            return False, f"state={cur.get('state')} launch={cur.get('launch_status')} error={cur.get('launch_error')}"
         return iid, wait, f"/api/aws/ec2/instances/{iid}/connect-info", lambda: call("DELETE", f"/api/ec2/instances/{iid}")
     if CLOUD == "gcp":
         proj = call("GET", "/v1/projects")["projects"][0]["projectId"]
