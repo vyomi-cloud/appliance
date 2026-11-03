@@ -959,6 +959,31 @@ def _check_capabilities(resources_def, capabilities):
 
 
 # ── events ───────────────────────────────────────────────────────────────────
+_RUNTIME: dict = {}   # per-dispatch links (msg store for stack notifications) — never persisted
+
+
+def _notify_event(stack, ev) -> None:
+    """Publish a stack event to every NotificationARN, in CloudFormation's real message shape."""
+    msg = _RUNTIME.get("msg")
+    arns = stack.get("notification_arns") or []
+    if msg is None or not arns:
+        return
+    from core import sns_core
+    def q(v):
+        return "'" + str(v) + "'"
+    body = ("StackId=" + q(ev["StackId"]) + "\nTimestamp=" + q(ev["Timestamp"]) + "\nEventId=" + q(ev["EventId"]) +
+            "\nLogicalResourceId=" + q(ev["LogicalResourceId"]) + "\nNamespace=" + q(ev["StackId"].split(":")[4]) +
+            "\nPhysicalResourceId=" + q(ev["PhysicalResourceId"]) + "\nPrincipalId=" + q("VYOMILOCAL") +
+            "\nResourceProperties=null\nResourceStatus=" + q(ev["ResourceStatus"]) +
+            "\nResourceStatusReason=" + q(ev.get("ResourceStatusReason", "")) + "\nResourceType=" + q(ev["ResourceType"]) +
+            "\nStackName=" + q(ev["StackName"]) + "\nClientRequestToken=null\n")
+    for arn in arns:
+        try:
+            sns_core.publish_arn(msg, arn, body)
+        except Exception:
+            pass
+
+
 def _emit_event(stack, logical_id, status, reason="", rtype=None, physical_id=None):
     is_stack_level = logical_id == stack["stack_name"]
     stack["events"].insert(0, {
@@ -969,6 +994,7 @@ def _emit_event(stack, logical_id, status, reason="", rtype=None, physical_id=No
         "Timestamp": _now_iso(), "ResourceStatus": status, "ResourceStatusReason": reason,
     })
     del stack["events"][500:]
+    _notify_event(stack, stack["events"][0])
 
 
 # ── stack record / resource application ─────────────────────────────────────
@@ -1157,6 +1183,137 @@ def _apply_update(stack, template, params_ctx, stores, store=None):
     stack["_ctx"] = ctx
 
 
+# ── stack policy / rollback triggers / notifications ─────────────────────────
+def _parse_stack_policy(text: str) -> dict:
+    try:
+        doc = json.loads(text)
+    except Exception:
+        raise CfnError("ValidationError", "Error validating stack policy: Invalid stack policy", 400)
+    stmts = doc.get("Statement") if isinstance(doc, dict) else None
+    if not isinstance(stmts, list) or not stmts:
+        raise CfnError("ValidationError", "Error validating stack policy: Statement is required", 400)
+    for st in stmts:
+        if st.get("Effect") not in ("Allow", "Deny"):
+            raise CfnError("ValidationError", "Error validating stack policy: Effect must be Allow or Deny", 400)
+        if not st.get("Action") or not st.get("Resource"):
+            raise CfnError("ValidationError", "Error validating stack policy: Action and Resource are required", 400)
+    return doc
+
+
+def _policy_allows(doc: dict, action: str, logical_id: str, rtype: str) -> tuple[bool, str]:
+    """Stack-policy decision for one resource action. Default deny once a policy exists."""
+    import fnmatch
+    allowed, deny = False, None
+    for i, st in enumerate(doc.get("Statement", []), 1):
+        acts = st.get("Action"); acts = acts if isinstance(acts, list) else [acts]
+        ress = st.get("Resource"); ress = ress if isinstance(ress, list) else [ress]
+        if not any(fnmatch.fnmatchcase(action, a) for a in acts):
+            continue
+        if not any(r == "*" or fnmatch.fnmatchcase(f"LogicalResourceId/{logical_id}", r) for r in ress):
+            continue
+        cond = st.get("Condition") or {}
+        ok = True
+        for op, kv in cond.items():
+            for k, vals in (kv or {}).items():
+                if k != "ResourceType":
+                    continue
+                vals = vals if isinstance(vals, list) else [vals]
+                hit = any((rtype == v) if op == "StringEquals" else fnmatch.fnmatchcase(rtype, v) for v in vals)
+                ok = ok and (hit if not op.endswith("NotEquals") and not op.endswith("NotLike") else not hit)
+        if not ok:
+            continue
+        if st["Effect"] == "Deny":
+            deny = i
+        else:
+            allowed = True
+    if deny:
+        return False, f"Statement [#{deny}] explicitly denies [{action}]"
+    if not allowed:
+        return False, f"Action [{action}] is not allowed by any statement"
+    return True, ""
+
+
+def _policy_violations(policy: dict, stack: dict, new_template: dict, changed_params: set) -> list:
+    out = []
+    old = _parse_template(stack["template_body"]).get("Resources") or {} if stack.get("template_body") else {}
+    new = new_template.get("Resources") or {}
+    for lid, odef in old.items():
+        rtype = odef.get("Type", "")
+        if lid not in new:
+            act = "Update:Delete"
+        elif new[lid].get("Type") != rtype:
+            act = "Update:Replace"
+        else:
+            nd, od = json.dumps(new[lid].get("Properties") or {}, sort_keys=True), json.dumps(odef.get("Properties") or {}, sort_keys=True)
+            touched = nd != od or any(f'"{p}"' in od for p in changed_params)
+            if not touched:
+                continue
+            act = "Update:Modify"
+        ok, why = _policy_allows(policy, act, lid, rtype)
+        if not ok:
+            out.append((lid, rtype, f"Action denied by stack policy: {why} for resource [{lid}]."))
+    return out
+
+
+def _trigger_alarms(params: dict) -> list:
+    out, i = [], 1
+    while f"RollbackConfiguration.RollbackTriggers.member.{i}.Arn" in params:
+        out.append({"Arn": params[f"RollbackConfiguration.RollbackTriggers.member.{i}.Arn"],
+                    "Type": params.get(f"RollbackConfiguration.RollbackTriggers.member.{i}.Type", "AWS::CloudWatch::Alarm")})
+        i += 1
+    return out
+
+
+def _alarms_in_alarm(stack: dict, stores: dict) -> list:
+    cw = stores.get("cw")
+    cfg = stack.get("rollback_config") or {}
+    if cw is None:
+        return []
+    bad = []
+    for t in cfg.get("RollbackTriggers", []):
+        name = t["Arn"].split(":alarm:", 1)[-1]
+        rec = cw.alarms.get(name) or getattr(cw, "composites", {}).get(name)
+        if rec and rec.get("StateValue") == "ALARM":
+            bad.append(t["Arn"])
+    return bad
+
+
+def _apply_rollback_config(stack: dict, params: dict) -> None:
+    triggers = _trigger_alarms(params)
+    if triggers or "RollbackConfiguration.MonitoringTimeInMinutes" in params:
+        stack["rollback_config"] = {"RollbackTriggers": triggers,
+                                    "MonitoringTimeInMinutes": int(params.get("RollbackConfiguration.MonitoringTimeInMinutes") or 0)}
+    for t in triggers:
+        if ":alarm:" not in t["Arn"]:
+            raise CfnError("ValidationError", f"Rollback trigger ARN [{t['Arn']}] is not a CloudWatch alarm ARN.", 400)
+
+
+def _apply_notifications(stack: dict, params: dict, stores: dict) -> None:
+    if any(k.startswith("NotificationARNs") for k in params) or "NotificationARNs.member.1" in params:
+        arns = _members(params, "NotificationARNs")
+        msg = stores.get("msg")
+        for a in arns:
+            if msg is not None and not msg.get_topic(a):
+                raise CfnError("ValidationError", f"Topic ARN [{a}] is not valid or the topic does not exist.", 400)
+        stack["notification_arns"] = arns
+
+
+def _get_stack_policy(store, params, stores):
+    stack = _require_stack(store, _p(params, "StackName"))
+    return _envelope("GetStackPolicy", _el("StackPolicyBody", stack.get("stack_policy") or "") if stack.get("stack_policy") else "")
+
+
+def _set_stack_policy(store, params, stores):
+    stack = _require_stack(store, _p(params, "StackName"))
+    body = _p(params, "StackPolicyBody")
+    if not body:
+        raise CfnError("ValidationError", "Either StackPolicyBody or StackPolicyURL must be specified.", 400)
+    _parse_stack_policy(body)
+    stack["stack_policy"] = body
+    store.persist()
+    return _envelope("SetStackPolicy")
+
+
 # ── stack-level actions ──────────────────────────────────────────────────────
 def _require_stack(store, name):
     stack_id = store.stack_names.get(name)
@@ -1201,6 +1358,11 @@ def _create_stack(store, params, stores):
     stack["termination_protection"] = _bool(params.get("EnableTerminationProtection"))
     stack["role_arn"] = _p(params, "RoleARN")
     stack["template_body"] = raw_template
+    if _p(params, "StackPolicyBody"):
+        _parse_stack_policy(_p(params, "StackPolicyBody"))
+        stack["stack_policy"] = _p(params, "StackPolicyBody")
+    _apply_rollback_config(stack, params)
+    _apply_notifications(stack, params, stores)
     store.stacks[stack_id] = stack
     store.stack_names[name] = stack_id
     _emit_event(stack, name, "CREATE_IN_PROGRESS", "User Initiated")
@@ -1209,6 +1371,9 @@ def _create_stack(store, params, stores):
         stack["parameters"] = params_ctx
         _apply_resources(stack, template, params_ctx, stores, store)
         _apply_outputs(store, stack, template, stack.pop("_ctx"))
+        tripped = _alarms_in_alarm(stack, stores)
+        if tripped:
+            raise CfnError("CREATE_FAILED", "The following resource(s) failed to create: rollback triggered by CloudWatch alarm(s) in ALARM state: " + ", ".join(tripped), 400)
         stack["status"] = "CREATE_COMPLETE"
         _emit_event(stack, name, "CREATE_COMPLETE")
     except CfnError as e:
@@ -1245,8 +1410,28 @@ def _update_stack(store, params, stores):
     _check_capabilities(template.get("Resources") or {}, capabilities)
     new_tags = _tag_pairs(params)
     _run_hooks(store, "UPDATE", name, new_tags or stack.get("tags", {}))
+    if _p(params, "StackPolicyBody"):
+        _parse_stack_policy(_p(params, "StackPolicyBody"))
+    _apply_rollback_config(stack, params)
+    _apply_notifications(stack, params, stores)
+    during = _p(params, "StackPolicyDuringUpdateBody")
+    active_policy = _parse_stack_policy(during) if during else (_parse_stack_policy(stack["stack_policy"]) if stack.get("stack_policy") else None)
     stack["status"] = "UPDATE_IN_PROGRESS"
     _emit_event(stack, name, "UPDATE_IN_PROGRESS", "User Initiated")
+    if active_policy is not None:
+        changed = {k for k in set(supplied) | set(stack.get("parameters", {})) if supplied.get(k) != stack.get("parameters", {}).get(k)}
+        bad = _policy_violations(active_policy, stack, template, changed)
+        if bad:
+            for lid, rtype, why in bad:
+                _emit_event(stack, lid, "UPDATE_FAILED", why, rtype, (stack["resources"].get(lid) or {}).get("PhysicalResourceId", ""))
+            reason = bad[0][2]
+            _emit_event(stack, name, "UPDATE_ROLLBACK_IN_PROGRESS", reason)
+            stack["status"] = "UPDATE_ROLLBACK_COMPLETE"
+            stack["status_reason"] = reason
+            _emit_event(stack, name, "UPDATE_ROLLBACK_COMPLETE")
+            store.persist()
+            return _envelope("UpdateStack", _el("StackId", stack["stack_id"]))
+    prev_template, prev_params = stack["template_body"], dict(stack.get("parameters", {}))
     try:
         params_ctx = _resolve_parameters(template, supplied)
         _apply_update(stack, template, params_ctx, stores, store)
@@ -1257,6 +1442,22 @@ def _update_stack(store, params, stores):
         if new_tags:
             stack["tags"] = new_tags
         _apply_outputs(store, stack, template, stack.pop("_ctx"))
+        tripped = _alarms_in_alarm(stack, stores)
+        if tripped:   # a rollback trigger fired: really re-apply the previous template + parameters
+            reason = "Rollback triggered by CloudWatch alarm(s) in ALARM state: " + ", ".join(tripped)
+            _emit_event(stack, name, "UPDATE_ROLLBACK_IN_PROGRESS", reason)
+            old_t = _parse_template(prev_template)
+            _apply_update(stack, old_t, _resolve_parameters(old_t, prev_params), stores, store)
+            _apply_outputs(store, stack, old_t, stack.pop("_ctx"))
+            stack["parameters"], stack["template_body"] = prev_params, prev_template
+            stack["description"] = str(old_t.get("Description", ""))[:1024]
+            stack["status"], stack["status_reason"] = "UPDATE_ROLLBACK_COMPLETE", reason
+            stack["last_updated_time"] = _now_iso()
+            _emit_event(stack, name, "UPDATE_ROLLBACK_COMPLETE")
+            store.persist()
+            return _envelope("UpdateStack", _el("StackId", stack["stack_id"]))
+        if _p(params, "StackPolicyBody"):
+            stack["stack_policy"] = _p(params, "StackPolicyBody")
         stack["status"] = "UPDATE_COMPLETE"
         stack["last_updated_time"] = _now_iso()
         _emit_event(stack, name, "UPDATE_COMPLETE")
@@ -1339,6 +1540,12 @@ def _stack_xml(stack, detail=True):
     parts.append("<Tags>" + "".join("<member>" + _el("Key", k) + _el("Value", v) + "</member>"
                                      for k, v in stack.get("tags", {}).items()) + "</Tags>")
     parts.append("<Capabilities>" + "".join(_el("member", c) for c in stack.get("capabilities", [])) + "</Capabilities>")
+    parts.append("<NotificationARNs>" + "".join(_el("member", a) for a in stack.get("notification_arns", [])) + "</NotificationARNs>")
+    rc = stack.get("rollback_config")
+    if rc:
+        parts.append("<RollbackConfiguration><RollbackTriggers>" + "".join(
+            "<member>" + _el("Arn", t["Arn"]) + _el("Type", t["Type"]) + "</member>" for t in rc["RollbackTriggers"]) +
+            "</RollbackTriggers>" + _el("MonitoringTimeInMinutes", str(rc.get("MonitoringTimeInMinutes", 0))) + "</RollbackConfiguration>")
     if detail:
         parts.append("<Outputs>" + "".join(
             "<member>" + _el("OutputKey", o["OutputKey"]) + _el("OutputValue", o["OutputValue"]) +
@@ -2350,6 +2557,7 @@ _ACTIONS = {
     "DescribeStacks": _describe_stacks, "ListStacks": _list_stacks,
     "ContinueUpdateRollback": _continue_update_rollback,
     "UpdateTerminationProtection": _update_termination_protection,
+    "GetStackPolicy": _get_stack_policy, "SetStackPolicy": _set_stack_policy,
     "GetTemplate": _get_template, "DescribeStackEvents": _describe_stack_events,
     "DescribeStackResources": _describe_stack_resources, "DescribeStackResource": _describe_stack_resource,
     "ListStackResources": _list_stack_resources, "ListExports": _list_exports,
@@ -2377,7 +2585,7 @@ _ACTIONS = {
 
 
 def dispatch(store: CloudFormationStore, params: dict | None = None,
-             s3_store=None, ddb_store=None, iam_store=None, msg_store=None, logs_store=None) -> CfnResponse:
+             s3_store=None, ddb_store=None, iam_store=None, msg_store=None, logs_store=None, cw_store=None) -> CfnResponse:
     params = params or {}
     action = str(params.get("Action", "")).strip()
     if not action:
@@ -2385,7 +2593,8 @@ def dispatch(store: CloudFormationStore, params: dict | None = None,
     fn = _ACTIONS.get(action)
     if fn is None:
         return _error("InvalidAction", f"The action {action} is not implemented.", 400)
-    stores = {"s3": s3_store, "ddb": ddb_store, "iam": iam_store, "msg": msg_store, "logs": logs_store}
+    stores = {"s3": s3_store, "ddb": ddb_store, "iam": iam_store, "msg": msg_store, "logs": logs_store, "cw": cw_store}
+    _RUNTIME["msg"] = msg_store
     try:
         return fn(store, params, stores)
     except CfnError as e:

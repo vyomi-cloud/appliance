@@ -190,8 +190,29 @@ def _kid_url(name: str, version: str) -> str:
 
 
 # ── views ──────────────────────────────────────────────────────────────────
+def _gate(meta: dict, op: str):
+    """Key Vault refuses a cryptographic operation on a disabled key and outside its
+    activation (nbf) / expiration (exp) window — the same 403 Forbidden real Key Vault returns."""
+    if not meta.get("enabled", True):
+        return _err(403, "Forbidden", f"Operation {op} is not allowed on a disabled key.")
+    now = _now()
+    if meta.get("nbf") is not None and now < int(meta["nbf"]):
+        return _err(403, "Forbidden", f"Operation {op} is not allowed: the key is not yet valid (nbf).")
+    if meta.get("exp") is not None and now >= int(meta["exp"]):
+        return _err(403, "Forbidden", f"Operation {op} is not allowed: the key has expired (exp).")
+    return None
+
+
+def _time_attrs(meta: dict, attrs: dict) -> None:
+    for k in ("nbf", "exp"):
+        if k in attrs:
+            meta[k] = int(attrs[k]) if attrs[k] is not None else None
+
+
 def _attributes(meta: dict) -> dict:
+    extra = {k: meta[k] for k in ("nbf", "exp") if meta.get(k) is not None}
     return {
+        **extra,
         "enabled": meta.get("enabled", True),
         "created": meta.get("created", _now()),
         "updated": meta.get("updated", _now()),
@@ -241,6 +262,7 @@ def _create_key(store: KeyStore, name: str, body: dict) -> KvResponse:
     attrs = body.get("attributes") or {}
     if "enabled" in attrs:
         meta["enabled"] = bool(attrs["enabled"])
+    _time_attrs(meta, attrs)
     if body.get("tags") is not None:
         meta["tags"] = dict(body.get("tags") or {})
     store.put_key(_kid_key(name, version), meta, material)
@@ -279,6 +301,9 @@ def _encrypt(store: KeyStore, name: str, version: str, body: dict) -> KvResponse
     if not meta:
         return _err(404, "KeyNotFound",
                     f"A key with (name/id) {name} was not found in this key vault.")
+    _g = _gate(meta, "encrypt")
+    if _g:
+        return _g
     version = meta["version"]
     try:
         plaintext = _b64url_decode(body.get("value", ""))
@@ -300,6 +325,9 @@ def _decrypt(store: KeyStore, name: str, version: str, body: dict) -> KvResponse
     if not meta:
         return _err(404, "KeyNotFound",
                     f"A key with (name/id) {name} was not found in this key vault.")
+    _g = _gate(meta, "decrypt")
+    if _g:
+        return _g
     version = meta["version"]
     try:
         blob = _b64url_decode(body.get("value", ""))
@@ -321,6 +349,9 @@ def _wrap_key(store: KeyStore, name: str, version: str, body: dict) -> KvRespons
     if not meta:
         return _err(404, "KeyNotFound",
                     f"A key with (name/id) {name} was not found in this key vault.")
+    _g = _gate(meta, "wrapKey")
+    if _g:
+        return _g
     version = meta["version"]
     try:
         key_bytes = _b64url_decode(body.get("value", ""))
@@ -342,6 +373,9 @@ def _unwrap_key(store: KeyStore, name: str, version: str, body: dict) -> KvRespo
     if not meta:
         return _err(404, "KeyNotFound",
                     f"A key with (name/id) {name} was not found in this key vault.")
+    _g = _gate(meta, "unwrapKey")
+    if _g:
+        return _g
     version = meta["version"]
     try:
         blob = _b64url_decode(body.get("value", ""))
@@ -368,6 +402,9 @@ def _sign(store: KeyStore, name: str, version: str, body: dict) -> KvResponse:
     if not meta:
         return _err(404, "KeyNotFound",
                     f"A key with (name/id) {name} was not found in this key vault.")
+    _g = _gate(meta, "sign")
+    if _g:
+        return _g
     version = meta["version"]
     alg = str(body.get("alg", "RS256"))
     try:
@@ -391,6 +428,9 @@ def _verify(store: KeyStore, name: str, version: str, body: dict) -> KvResponse:
     if not meta:
         return _err(404, "KeyNotFound",
                     f"A key with (name/id) {name} was not found in this key vault.")
+    _g = _gate(meta, "verify")
+    if _g:
+        return _g
     version = meta["version"]
     alg = str(body.get("alg", "RS256"))
     try:
@@ -438,6 +478,7 @@ def _update_key(store: KeyStore, name: str, version: str, body: dict) -> KvRespo
     attrs = body.get("attributes") or {}
     if "enabled" in attrs:
         meta["enabled"] = bool(attrs["enabled"])
+    _time_attrs(meta, attrs)
     if body.get("tags") is not None:
         meta["tags"] = dict(body.get("tags") or {})
     if body.get("key_ops"):

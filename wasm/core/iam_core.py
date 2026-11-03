@@ -296,6 +296,8 @@ def _list_roles(store, params):
 def _delete_role(store, params):
     name = str(params.get("RoleName", "")).strip()
     _require_role(store, name)
+    if any(name in ip["roles"] for ip in _ip_all(store).values()):
+        raise IamError("DeleteConflict", "Cannot delete entity, must remove role from instance profiles first.", 409)
     del store.roles[name]
     store.persist()
     return _envelope("DeleteRole")
@@ -2770,7 +2772,7 @@ def _sum_stats(store) -> dict:
         "PolicyVersionsInUse": sum(len(p.get("versions") or {"v1": 1}) for p in store.policies.values()),
         "PolicyVersionsInUseQuota": 10000, "VersionsPerPolicyQuota": 5, "GlobalEndpointTokenVersion": 2 if x.get("sts_token_version") == "v2Token" else 1,
         "Roles": len(store.roles), "RolesQuota": 1000, "RolePolicySizeQuota": 10240,
-        "InstanceProfiles": 0, "InstanceProfilesQuota": 1000,
+        "InstanceProfiles": len(_ip_all(store)), "InstanceProfilesQuota": 1000,
     }
 
 
@@ -3024,6 +3026,97 @@ _OPS = {
     "CreateProfile": _create_profile, "ListProfiles": _list_profiles, "DeleteProfile": _delete_profile,
 }
 _OPS.update(_OPS_NEW)
+
+
+# ── instance profiles (EC2 "Create IAM profile"; ec2.iam-instance-profiles) ──────────────────
+# A profile holds at most one role. Real state in store.extras["instance_profiles"]; EC2's
+# RunInstances records the profile name/ARN on the instance (core/vpc_core) but does NOT mint
+# role credentials into the instance (there is no metadata service credential vending).
+def _ip_all(store) -> dict:
+    return _x(store).setdefault("instance_profiles", {})
+
+
+def _ip_arn(store, name, path="/"):
+    return f"arn:aws:iam::{store.account_id}:instance-profile{path}{name}"
+
+
+def _ip_xml(store, ip) -> str:
+    roles = "".join(_role_xml(store, store.roles[r]) .replace("<Role>", "<member>", 1).replace("</Role>", "</member>") for r in ip["roles"] if r in store.roles)
+    return ("<InstanceProfile>" + _el("Path", ip["path"]) + _el("InstanceProfileName", ip["name"]) + _el("InstanceProfileId", ip["id"])
+            + _el("Arn", ip["arn"]) + _el("CreateDate", ip["created"]) + f"<Roles>{roles}</Roles>" + _tags_xml(ip.get("tags") or {}) + "</InstanceProfile>")
+
+
+def _ip_need(store, name):
+    ip = _ip_all(store).get(str(name or "").strip())
+    if ip is None:
+        raise IamError("NoSuchEntity", f"Instance Profile {name} cannot be found.", 404)
+    return ip
+
+
+def _create_instance_profile(store, params):
+    name = str(params.get("InstanceProfileName", "")).strip()
+    if not name or not _re.fullmatch(r"[\w+=,.@-]{1,128}", name):
+        raise IamError("ValidationError", "InstanceProfileName must be 1-128 characters of [\\w+=,.@-].", 400)
+    if name in _ip_all(store):
+        raise IamError("EntityAlreadyExists", f"Instance Profile {name} already exists.", 409)
+    path = params.get("Path", "/") or "/"
+    ip = {"name": name, "id": _id("AIPA"), "path": path, "arn": _ip_arn(store, name, path), "created": _now(), "roles": [], "tags": _parse_tags(params)}
+    _ip_all(store)[name] = ip
+    store.persist()
+    return _envelope("CreateInstanceProfile", _ip_xml(store, ip))
+
+
+def _get_instance_profile(store, params):
+    return _envelope("GetInstanceProfile", _ip_xml(store, _ip_need(store, params.get("InstanceProfileName"))))
+
+
+def _list_instance_profiles(store, params):
+    pfx = params.get("PathPrefix", "/")
+    rows = [ip for ip in sorted(_ip_all(store).values(), key=lambda i: i["name"]) if ip["path"].startswith(pfx)]
+    return _envelope("ListInstanceProfiles", "<InstanceProfiles>" + "".join(_ip_xml(store, i).replace("<InstanceProfile>", "<member>", 1).replace("</InstanceProfile>", "</member>") for i in rows) + "</InstanceProfiles><IsTruncated>false</IsTruncated>")
+
+
+def _list_instance_profiles_for_role(store, params):
+    rn = str(params.get("RoleName", "")).strip()
+    _require_role(store, rn)
+    rows = [ip for ip in _ip_all(store).values() if rn in ip["roles"]]
+    return _envelope("ListInstanceProfilesForRole", "<InstanceProfiles>" + "".join(_ip_xml(store, i).replace("<InstanceProfile>", "<member>", 1).replace("</InstanceProfile>", "</member>") for i in rows) + "</InstanceProfiles><IsTruncated>false</IsTruncated>")
+
+
+def _delete_instance_profile(store, params):
+    ip = _ip_need(store, params.get("InstanceProfileName"))
+    if ip["roles"]:
+        raise IamError("DeleteConflict", "Cannot delete entity, must remove roles from instance profile first.", 409)
+    del _ip_all(store)[ip["name"]]
+    store.persist()
+    return _envelope("DeleteInstanceProfile")
+
+
+def _add_role_to_instance_profile(store, params):
+    ip = _ip_need(store, params.get("InstanceProfileName"))
+    rn = str(params.get("RoleName", "")).strip()
+    _require_role(store, rn)
+    if ip["roles"]:
+        raise IamError("LimitExceeded", "Cannot exceed quota for InstanceSessionsPerInstanceProfile: 1", 409)
+    ip["roles"].append(rn)
+    store.persist()
+    return _envelope("AddRoleToInstanceProfile")
+
+
+def _remove_role_from_instance_profile(store, params):
+    ip = _ip_need(store, params.get("InstanceProfileName"))
+    rn = str(params.get("RoleName", "")).strip()
+    if rn not in ip["roles"]:
+        raise IamError("NoSuchEntity", f"The role with name {rn} cannot be found.", 404)
+    ip["roles"].remove(rn)
+    store.persist()
+    return _envelope("RemoveRoleFromInstanceProfile")
+
+
+_OPS.update({"CreateInstanceProfile": _create_instance_profile, "GetInstanceProfile": _get_instance_profile,
+             "ListInstanceProfiles": _list_instance_profiles, "ListInstanceProfilesForRole": _list_instance_profiles_for_role,
+             "DeleteInstanceProfile": _delete_instance_profile, "AddRoleToInstanceProfile": _add_role_to_instance_profile,
+             "RemoveRoleFromInstanceProfile": _remove_role_from_instance_profile})
 
 
 def dispatch(store: IamStore, params: dict | None = None, s3_store=None) -> IamResponse:

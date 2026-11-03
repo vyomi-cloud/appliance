@@ -86,6 +86,11 @@ try:                                              # Management locks (Microsoft.
 except ImportError:
     import azure_locks_core as locks_engine        # type: ignore
 
+try:                                              # Resource health + Advisor (derived from the stored resources)
+    from core import azure_health_core as health_engine
+except ImportError:
+    import azure_health_core as health_engine      # type: ignore
+
 try:                                              # checkAccess decision algorithm (wildcard + scope-inheritance +
     from core import azure_iam_core as iam_engine  # notActions/deny) — reused for role assignments created as real
 except ImportError:                               # ARM resources scoped to a resource group (this module's own store,
@@ -987,6 +992,19 @@ class AzureArm:
             rg = rest_segs[1]
             idx = 2
 
+        # POST .../resourceGroups/{rg}/exportTemplate — every blade's "Export template" (ARM tab
+        # + Bicep/Terraform renderings), core/azure_templates_core.py.
+        if rg is not None and idx < len(rest_segs) and rest_segs[idx].lower() == "exporttemplate" and len(rest_segs) == idx + 1:
+            if method != "POST":
+                return _err(405, "MethodNotAllowed", "Use POST to export a template.")
+            from core import azure_templates_core as _tpl
+            r = _tpl.export_group(self.state, sub, rg, (payload or {}).get("resources"),
+                                  {c["type"].lower(): c["api_version"] for c in CATALOG},
+                                  (payload or {}).get("vyomiIncludeParameters", True) is not False)
+            if r["status"] >= 300:
+                return _err(r["status"], r["body"]["error"]["code"], r["body"]["error"]["message"])
+            return _ok(r["body"])
+
         # GET .../resourceGroups/{rg}/resources — the generic "resources in this group"
         # list every resource-group blade's Overview/Resources tab and delete confirmation
         # call (az resource list -g / Resources.list_by_resource_group), scoped across every
@@ -1205,6 +1223,18 @@ class AzureArm:
             scope_rid = f"/subscriptions/{sub}/resourceGroups/{rg}" if rg is not None else f"/subscriptions/{sub}"
             return self._check_access(sub, scope_rid, payload)
 
+        # Microsoft.Authorization/classicAdministrators (subscription scope, GET-only like the real
+        # 2015-06-01 API): the legacy co-administrator list. A modern subscription has exactly its
+        # Account Administrator / Service Administrator — the one simulated signed-in user.
+        if (namespace.lower() == "microsoft.authorization" and chain
+                and chain[0].lower() == "classicadministrators" and rg is None and len(chain) == 1):
+            if method != "GET":
+                return _err(405, "MethodNotAllowed", "Classic administrators can only be listed (the legacy model is retired).")
+            return _ok({"value": [{
+                "id": f"/subscriptions/{sub}/providers/Microsoft.Authorization/classicAdministrators/admin@vyomi.local",
+                "name": "admin@vyomi.local", "type": "Microsoft.Authorization/classicAdministrators",
+                "properties": {"emailAddress": "admin@vyomi.local", "role": "ServiceAdministrator;AccountAdministrator"}}]})
+
         # Microsoft.Authorization/roleDefinitions collection GET: the built-in Owner /
         # Contributor / Reader / … roles (ROLES, core/azure_arm_data.py — never provisioned as
         # catalog records, so the generic engine's own store never carries them) merged with
@@ -1229,6 +1259,34 @@ class AzureArm:
             if self.state.get(scope_rid.lower()) is None:
                 return _err(404, "ResourceNotFound", f"Resource '{scope_rid}' not found.")
             return self._security(method, sub, rg, chain[sec_marker + 2:], payload, query, scope_rid)
+
+        # Microsoft.Advisor/recommendations (+ suppressions) and Microsoft.ResourceHealth/
+        # availabilityStatuses (subscription / resource-group scope, or re-entering any resource's
+        # own id): derived from the stored resources, core/azure_health_core.py.
+        if namespace.lower() == "microsoft.advisor" and chain and chain[0].lower() == "recommendations":
+            if len(chain) == 1 and method == "GET":
+                r = health_engine.recommendations(self.state, sub, query)
+            elif len(chain) == 4 and chain[2].lower() == "suppressions":
+                r = health_engine.suppress(self.state, sub, chain[1], chain[3], method, payload)
+            else:
+                return _err(405, "MethodNotAllowed", "Unsupported Advisor recommendations operation.")
+            return _ok(r["body"], r["status"]) if r["status"] < 300 else _err(r["status"], r["body"]["error"]["code"], r["body"]["error"]["message"])
+        if namespace.lower() == "microsoft.resourcehealth" and chain and chain[0].lower() == "availabilitystatuses":
+            if method != "GET":
+                return _err(405, "MethodNotAllowed", "Resource health is read-only.")
+            scope_rid = f"/subscriptions/{sub}/resourceGroups/{rg}" if rg is not None else None
+            r = health_engine.health(self.state, sub, scope_rid, False)
+            return _ok(r["body"], r["status"])
+        health_marker = health_engine.find_health_marker(chain)
+        if health_marker is not None:
+            if method != "GET":
+                return _err(405, "MethodNotAllowed", "Resource health is read-only.")
+            stc, snames = [namespace], []
+            for n, token in enumerate(chain[:health_marker]):
+                (stc if n % 2 == 0 else snames).append(token)
+            rest = chain[health_marker + 3:]
+            r = health_engine.health(self.state, sub, _canonical_id(sub, rg, stc, snames).lower(), bool(rest) and rest[0].lower() == "current")
+            return _ok(r["body"], r["status"]) if r["status"] < 300 else _err(r["status"], r["body"]["error"]["code"], r["body"]["error"]["message"])
 
         # Microsoft.Authorization/locks: a real ARM extension resource scoped to ANY other
         # resource's own id (the chain re-enters "providers", like Event Grid's event

@@ -66,7 +66,8 @@ NAMESPACE = "Microsoft.Web"
 API_VERSION = "2023-12-01"
 DEFAULT_LOCATION = "eastus"
 DOMAIN = "azurewebsites.net"
-TYPES = ("serverfarms", "sites")
+TYPES = ("serverfarms", "sites", "certificates")
+CERTS_TYPE = f"{NAMESPACE}/certificates"
 SITES_TYPE = f"{NAMESPACE}/sites"
 PLANS_TYPE = f"{NAMESPACE}/serverfarms"
 EVENT_TYPE = "microsoft.insights/eventtypes"
@@ -479,6 +480,8 @@ def _ensure(rec):
     rec.setdefault("_backupconfig", None)
     rec.setdefault("_invocationlog", [])
     rec.setdefault("_authsettingsv2", {"enabled": False, "token": None})
+    rec.setdefault("_webjobs", {"triggered": {}, "continuous": {}})
+    rec.setdefault("_linkers", {})
     return rec
 
 
@@ -649,6 +652,14 @@ def _site_subresource(state, rec, rest, method, payload):
         return _hostname_ops(rec, rest[1:], method, payload)
     if r0 == "backups":
         return _backup_ops(rec, rest[1:], method, payload)
+    if r0 in ("triggeredwebjobs", "continuouswebjobs"):
+        return _webjob_ops(rec, r0, rest[1:], method, payload)
+    if r0 == "providers" and len(rest) >= 3 and rest[1].lower() == "microsoft.servicelinker" and rest[2].lower() == "linkers":
+        return _linker_ops(state, rec, rest[3:], method, payload)
+    if r0 == "usages" and len(rest) == 1:
+        if method != "GET":
+            return _err(405, "MethodNotAllowed", "usages supports GET only.")
+        return _ok({"value": _site_usages(state, rec)})
     if r0 == "invocationlogs" and len(rest) == 1:
         if method != "GET":
             return _err(405, "MethodNotAllowed", "invocationlogs supports GET only.")
@@ -1175,6 +1186,235 @@ def _host_ops(rec, rest, method, payload):
     return _err(404, "ResourceTypeNotSupported", f"'{'/'.join(rest)}' is not supported on host.")
 
 
+# ── WebJobs (triggered + continuous) ─────────────────────────────────────────────────────
+# Real ARM exposes list/get/delete + run/history (triggered) and start/stop (continuous); the
+# job itself is uploaded through Kudu. Vyomi lets the console/ARM PUT the job definition. A
+# triggered Python job is REALLY executed in the same restricted sandbox as function invoke;
+# anything that is not Python is stored and refused at run time (no shell / no runtimes).
+def _webjob_doc(rec, kind, name, j):
+    typ = "triggeredwebjobs" if kind == "triggeredwebjobs" else "continuouswebjobs"
+    props = {"runCommand": j["runCommand"], "url": f"https://{rec['name']}.scm.{DOMAIN}/api/{typ}/{name}",
+             "jobType": "Triggered" if kind == "triggeredwebjobs" else "Continuous", "settings": j.get("settings") or {}}
+    if kind == "triggeredwebjobs":
+        props["latestRun"] = (j["history"][-1] if j["history"] else None)
+        props["historyUrl"] = f"https://{rec['name']}.scm.{DOMAIN}/vfs/data/jobs/triggered/{name}"
+        props["schedule"] = j.get("schedule")
+    else:
+        props["status"] = j["status"]
+    return {"id": f"{rec['id']}/{typ}/{name}", "name": name, "type": f"{SITES_TYPE}/{typ}", "properties": props}
+
+
+def _run_webjob(rec, name, j):
+    t0 = time.perf_counter()
+    started = _now()
+    out = []
+    sandbox = {"__builtins__": dict(_SAFE_BUILTINS, print=lambda *a, **k: out.append(" ".join(str(x) for x in a))), "json": json}
+    status, err = "Success", None
+    if str(j.get("runtime", "python")).lower() != "python":
+        status, err = "Failed", f"Runtime '{j.get('runtime')}' is not available: Vyomi runs Python WebJob scripts only."
+    else:
+        try:
+            exec(compile(j["script"], f"<webjob:{name}>", "exec"), sandbox)
+        except Exception as e:
+            status, err = "Failed", f"{type(e).__name__}: {e}"
+    run = {"id": _h(rec["id"], name, started, n=12), "status": status, "start_time": started, "end_time": _now(),
+           "duration": f"00:00:{round(time.perf_counter() - t0, 2):05.2f}", "output": "\n".join(out), "error": err}
+    j["history"].append(run)
+    del j["history"][:-50]
+    return run
+
+
+def _webjob_ops(rec, kind, rest, method, payload):
+    store = rec["_webjobs"]["triggered" if kind == "triggeredwebjobs" else "continuous"]
+    if not rest:
+        if method != "GET":
+            return _err(405, "MethodNotAllowed", "Collection supports GET only.")
+        return _ok({"value": [_webjob_doc(rec, kind, n, j) for n, j in store.items()]})
+    name = rest[0]
+    if not re.fullmatch(r"[A-Za-z0-9_.-]{1,60}", name):
+        return _err(400, "InvalidParameterValue", "WebJob names are 1-60 letters, digits, '.', '_' or '-'.")
+    j = store.get(name)
+    if len(rest) == 1:
+        if method == "GET":
+            if j is None:
+                raise _E(404, "WebJobNotFound", f"WebJob '{name}' was not found.")
+            return _ok(_webjob_doc(rec, kind, name, j))
+        if method == "PUT":
+            p = _props(payload)
+            script = p.get("script")
+            if script is None and j is None:
+                return _err(400, "InvalidParameterValue", "A WebJob needs a 'script' (the run command target).")
+            runtime = str(p.get("runtime", (j or {}).get("runtime", "python")))
+            store[name] = dict(j or {"history": [], "status": "Stopped"}, script=script if script is not None else j["script"],
+                               runtime=runtime, runCommand=p.get("runCommand") or (j or {}).get("runCommand") or f"run.{'py' if runtime == 'python' else 'sh'}",
+                               settings=p.get("settings") or (j or {}).get("settings") or {}, schedule=p.get("schedule", (j or {}).get("schedule")))
+            return _ok(_webjob_doc(rec, kind, name, store[name]), 200 if j else 201)
+        if method == "DELETE":
+            had = store.pop(name, None)
+            return _ok(None, 200 if had else 204)
+        return _err(405, "MethodNotAllowed", f"{method} not allowed.")
+    if j is None:
+        raise _E(404, "WebJobNotFound", f"WebJob '{name}' was not found.")
+    act = rest[1].lower()
+    if kind == "triggeredwebjobs" and act == "run" and method == "POST":
+        if rec["properties"].get("state") == "Stopped":
+            raise _E(409, "SiteStopped", "The app is stopped; start it before running a WebJob.")
+        run = _run_webjob(rec, name, j)
+        return _ok({"id": run["id"]}, 202)
+    if kind == "triggeredwebjobs" and act == "history" and method == "GET":
+        return _ok({"value": [{"id": f"{rec['id']}/triggeredwebjobs/{name}/history/{r['id']}", "name": r["id"],
+                               "properties": {k: r[k] for k in ("status", "start_time", "end_time", "duration", "output", "error")}}
+                              for r in reversed(j["history"])]})
+    if kind == "continuouswebjobs" and act in ("start", "stop") and method == "POST":
+        if act == "start" and rec["properties"].get("state") == "Stopped":
+            raise _E(409, "SiteStopped", "The app is stopped; start it before starting a WebJob.")
+        j["status"] = "Running" if act == "start" else "Stopped"
+        return _ok(None, 200)
+    return _err(404, "ResourceTypeNotSupported", f"'{'/'.join(rest)}' is not supported on {kind}.")
+
+
+# ── Service Connector (Microsoft.ServiceLinker/linkers, extension resource of the site) ───────
+# Creating a linker validates the target against the real ARM map and injects the same
+# connection app settings the real service does (names follow the Service Connector convention).
+_LINKER_TARGETS = (
+    ("microsoft.storage/storageaccounts", "AZURE_STORAGEBLOB", "https://{n}.blob.core.windows.net"),
+    ("microsoft.keyvault/vaults", "AZURE_KEYVAULT", "https://{n}.vault.azure.net/"),
+    ("microsoft.appconfiguration/configurationstores", "AZURE_APPCONFIGURATION", "https://{n}.azconfig.io"),
+    ("microsoft.servicebus/namespaces", "AZURE_SERVICEBUS", "{n}.servicebus.windows.net"),
+    ("microsoft.documentdb/databaseaccounts", "AZURE_COSMOS", "https://{n}.documents.azure.com:443/"),
+    ("microsoft.sql/servers", "AZURE_SQL", "{n}.database.windows.net"),
+    ("microsoft.cache/redis", "AZURE_REDIS", "{n}.redis.cache.windows.net"),
+)
+
+
+def _linker_doc(rec, name, l):
+    return {"id": f"{rec['id']}/providers/Microsoft.ServiceLinker/linkers/{name}", "name": name,
+            "type": "Microsoft.ServiceLinker/linkers",
+            "properties": {"provisioningState": "Succeeded", "targetService": l["targetService"], "authInfo": l["authInfo"],
+                           "clientType": l["clientType"], "vNetSolution": None, "appSettings": sorted(l["appSettings"])}}
+
+
+def _linker_ops(state, rec, rest, method, payload):
+    store = rec["_linkers"]
+    if not rest:
+        if method != "GET":
+            return _err(405, "MethodNotAllowed", "Collection supports GET only.")
+        return _ok({"value": [_linker_doc(rec, n, l) for n, l in store.items()]})
+    name = rest[0]
+    l = store.get(name)
+    if len(rest) == 2 and rest[1].lower() == "validate" and method == "POST":
+        if l is None:
+            raise _E(404, "LinkerNotFound", f"Linker '{name}' was not found.")
+        ok = str(l["targetService"]["id"]).lower() in state
+        return _ok({"linkerName": name, "isConnectionAvailable": ok, "reportStartTimeUtc": _now(),
+                    "validationDetail": [{"name": "The target existence", "description": "The target resource exists.",
+                                          "result": "success" if ok else "failure",
+                                          "errorMessage": None if ok else "The target resource no longer exists."}]})
+    if len(rest) != 1:
+        return _err(404, "ResourceTypeNotSupported", f"'{'/'.join(rest)}' is not supported on linkers.")
+    if method == "GET":
+        if l is None:
+            raise _E(404, "LinkerNotFound", f"Linker '{name}' was not found.")
+        return _ok(_linker_doc(rec, name, l))
+    if method == "PUT":
+        p = _props(payload)
+        tid = str((p.get("targetService") or {}).get("id") or "")
+        tgt = state.get(tid.lower())
+        if not tid or tgt is None:
+            return _err(400, "InvalidTargetService", f"The target resource '{tid or '(none)'}' does not exist in this subscription.")
+        t = str(tgt.get("_type", "")).lower()
+        hit = next((x for x in _LINKER_TARGETS if x[0] == t), None)
+        if hit is None:
+            return _err(400, "UnsupportedTargetService", f"Service Connector cannot connect to resource type '{tgt.get('_type')}'.")
+        auth = p.get("authInfo") or {"authType": "systemAssignedIdentity"}
+        if auth.get("authType") not in ("secret", "systemAssignedIdentity", "userAssignedIdentity", "servicePrincipalSecret"):
+            return _err(400, "InvalidAuthType", f"Unsupported authType '{auth.get('authType')}'.")
+        for old in (l or {}).get("appSettings", []):
+            rec["_appsettings"].pop(old, None)
+        base, tmpl = hit[1], hit[2]
+        settings = {f"{base}_RESOURCEENDPOINT": tmpl.format(n=tgt["name"])}
+        if auth["authType"] == "secret":
+            settings[f"{base}_SECRET"] = _h(tid, rec["id"], "linksecret", n=32)
+        rec["_appsettings"].update(settings)
+        store[name] = {"targetService": {"type": "AzureResource", "id": tgt["id"]}, "authInfo": auth,
+                       "clientType": p.get("clientType") or "none", "appSettings": list(settings)}
+        return _ok(_linker_doc(rec, name, store[name]), 200 if l else 201)
+    if method == "DELETE":
+        had = store.pop(name, None)
+        for k in (had or {}).get("appSettings", []):
+            rec["_appsettings"].pop(k, None)
+        return _ok(None, 200 if had else 204)
+    return _err(405, "MethodNotAllowed", f"{method} not allowed.")
+
+
+# ── Quotas (sites/usages) ─────────────────────────────────────────────────────────────────
+# File-system storage limit per plan tier is Azure's published figure; the current value is the
+# real size of the content Vyomi stores for this app (function code + WebJob scripts).
+_FS_LIMIT_MB = {"Free": 1024, "Shared": 1024, "Basic": 10240, "Standard": 51200, "PremiumV2": 256000,
+                "PremiumV3": 256000, "ElasticPremium": 256000, "Dynamic": 1024, "FlexConsumption": 1024}
+
+
+def _site_usages(state, rec):
+    plan = state.get(str(rec["properties"].get("serverFarmId", "")).lower()) or {}
+    tier = (plan.get("sku") or {}).get("tier", "Free")
+    used = sum(len(str(f.get("_code", ""))) for f in rec.get("_functions", {}).values())
+    used += sum(len(str(j.get("script", ""))) for d in rec["_webjobs"].values() for j in d.values())
+    limit = _FS_LIMIT_MB.get(tier, 1024)
+    return [{"name": {"value": "FileSystemStorage", "localizedValue": "File System Storage"}, "unit": "Bytes",
+             "currentValue": used, "limit": limit * 1024 * 1024, "nextResetTime": None},
+            {"name": {"value": "SlotCount", "localizedValue": "Deployment slots"}, "unit": "Count",
+             "currentValue": len(rec.get("_slots", {})), "limit": 0 if tier in ("Free", "Shared", "Basic") else (5 if tier == "Standard" else 20),
+             "nextResetTime": None}]
+
+
+# ── Certificates (Microsoft.Web/certificates) ──────────────────────────────────────────────
+def _cert_thumbprint(blob):
+    import base64
+    try:
+        raw = base64.b64decode(blob or "", validate=False)
+    except Exception:
+        raw = (blob or "").encode()
+    return hashlib.sha1(raw).hexdigest().upper()
+
+
+def _cert_ops(state, sub, rg, chain, method, payload):
+    if len(chain) == 1:
+        if method != "GET":
+            return _err(405, "MethodNotAllowed", "Collection supports GET only.")
+        return _ok({"value": [_view(r) for r in state.values() if _is_type(r, CERTS_TYPE) and r.get("_sub") == sub
+                              and (rg is None or (r.get("_rg") or "").lower() == rg.lower())]})
+    name = chain[1]
+    rid = _canon(sub, rg, ["certificates"], [name])
+    rec = state.get(rid.lower())
+    if method == "GET":
+        if rec is None:
+            raise _not_found("certificates", name, rg)
+        return _ok(_view(rec))
+    if method in ("PUT", "PATCH"):
+        if rg is None:
+            return _err(400, "InvalidResourceId", "Certificates must be created in a resource group.")
+        p = _props(payload)
+        managed = bool(p.get("canonicalName")) and not p.get("pfxBlob")
+        if not managed and not p.get("pfxBlob"):
+            return _err(400, "InvalidCertificate", "Provide 'pfxBlob' (+ 'password') to upload, or 'canonicalName' for an App Service managed certificate.")
+        hosts = list(p.get("hostNames") or ([p["canonicalName"]] if managed else []))
+        props = {"thumbprint": _cert_thumbprint(p.get("pfxBlob") or p.get("canonicalName")),
+                 "subjectName": hosts[0] if hosts else name, "hostNames": hosts, "issuer": "Vyomi App Service Managed Certificate" if managed else "(uploaded PFX)",
+                 "issueDate": _now(), "expirationDate": datetime.fromtimestamp(time.time() + (180 if managed else 365) * 86400, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                 "serverFarmId": p.get("serverFarmId"), "provisioningState": "Succeeded", "valid": True, "selfLink": None}
+        new = rec is None
+        rec = dict(rec or {}, id=rid, name=name, type=CERTS_TYPE, _type=CERTS_TYPE, _sub=sub, _rg=rg,
+                   location=payload.get("location") or DEFAULT_LOCATION, tags=payload.get("tags") or (rec or {}).get("tags") or {},
+                   properties=props)
+        state[rid.lower()] = rec
+        _record_event(state, sub, rg, rid, f"{CERTS_TYPE}/write", f"{'Create' if new else 'Update'} certificate '{name}'")
+        return _ok(_view(rec), 201 if new else 200)
+    if method == "DELETE":
+        had = state.pop(rid.lower(), None)
+        return _ok(None, 200 if had else 204)
+    return _err(405, "MethodNotAllowed", f"{method} not allowed.")
+
+
 # ── dispatch ─────────────────────────────────────────────────────────────────
 def dispatch(state, method, sub, rg, chain, names, payload=None, query=None):
     """Handle one ``Microsoft.Web`` ARM request.
@@ -1192,6 +1432,8 @@ def dispatch(state, method, sub, rg, chain, names, payload=None, query=None):
             return _plan_ops(state, sub, rg, chain, method, payload)
         if kind == "sites":
             return _site_ops(state, sub, rg, chain, method, payload)
+        if kind == "certificates":
+            return _cert_ops(state, sub, rg, chain, method, payload)
         return _err(404, "ResourceTypeNotSupported", f"The resource type '{NAMESPACE}/{chain[0] if chain else ''}' is not supported.")
     except _E as e:
         return _err(e.status, e.code, e.message)

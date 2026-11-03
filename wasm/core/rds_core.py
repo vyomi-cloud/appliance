@@ -254,6 +254,10 @@ def _db_instance_xml(db: dict) -> str:
         "<ReadReplicaDBInstanceIdentifiers>" +
         "".join(_el("ReadReplicaDBInstanceIdentifier", r) for r in db.get("read_replica_db_instance_identifiers", [])) +
         "</ReadReplicaDBInstanceIdentifiers>",
+        "<AssociatedRoles>",
+        "".join(f"<DBInstanceRole>{_el('RoleArn', r['RoleArn'])}{_el('FeatureName', r['FeatureName'])}{_el('Status', r.get('Status', 'ACTIVE'))}</DBInstanceRole>"
+                for r in db.get("associated_roles", [])),
+        "</AssociatedRoles>",
         "</DBInstance>",
     ]
     return "".join(parts)
@@ -333,6 +337,14 @@ def _proxy_xml(px: dict) -> str:
         _el("DBProxyArn", px.get("db_proxy_arn", "")),
         _el("EngineFamily", px.get("engine_family", "POSTGRESQL")),
         _el("Status", px.get("status", "available")),
+        (_el("RoleArn", px["role_arn"]) if px.get("role_arn") else ""),
+        (_el("Endpoint", px["endpoint"]) if px.get("endpoint") else ""),
+        "<VpcSubnetIds>" + "".join(_el("member", x) for x in px.get("vpc_subnet_ids", [])) + "</VpcSubnetIds>",
+        "<VpcSecurityGroupIds>" + "".join(_el("member", x) for x in px.get("vpc_security_group_ids", [])) + "</VpcSecurityGroupIds>",
+        "<Auth>" + "".join(f"<member>{_el('AuthScheme', a.get('AuthScheme', 'SECRETS'))}{_el('SecretArn', a.get('SecretArn', ''))}{_el('IAMAuth', a.get('IAMAuth', 'DISABLED'))}</member>"
+                           for a in px.get("auth", [])) + "</Auth>",
+        _el("RequireTLS", str(px.get("require_tls", False)).lower()),
+        _el("IdleClientTimeout", px.get("idle_client_timeout", 1800)),
         _el("CreatedDate", px.get("created", "")),
         "</DBProxy>",
     ])
@@ -581,6 +593,85 @@ def _create_db_instance(store: SqlStore, params: dict, msg_store=None) -> RdsRes
     store.persist()
     _log_event(store, db_id, "db-instance", f"DB instance {db_id} created.", ["creation"], msg_store)
     return _success("CreateDBInstance", _db_instance_xml(record))
+
+
+# Engine -> features whose IAM role association RDS accepts (AWS documents these per engine).
+_ROLE_FEATURES = {
+    "postgres": {"s3Import", "s3Export"}, "aurora-postgresql": {"s3Import", "s3Export", "Lambda"},
+    "mysql": {"s3Export"}, "aurora-mysql": {"s3Import", "s3Export", "Lambda"},
+    "oracle-ee": {"S3_INTEGRATION"}, "oracle-se2": {"S3_INTEGRATION"},
+    "sqlserver-ee": {"SQLSERVER_BACKUP_RESTORE"}, "sqlserver-se": {"SQLSERVER_BACKUP_RESTORE"},
+    "sqlserver-ex": {"SQLSERVER_BACKUP_RESTORE"}, "sqlserver-web": {"SQLSERVER_BACKUP_RESTORE"},
+}
+
+
+def _add_role_to_db_instance(store: SqlStore, params: dict) -> RdsResponse:
+    db_id = str(params.get("DBInstanceIdentifier", "")).strip()
+    db = store.get_instance(db_id) if db_id else None
+    if not db:
+        raise RdsError("DBInstanceNotFound", f"DBInstance {db_id} not found.", 404)
+    role_arn, feature = str(params.get("RoleArn", "")).strip(), str(params.get("FeatureName", "")).strip()
+    if not role_arn.startswith("arn:aws:iam::") or ":role/" not in role_arn or not feature:
+        raise RdsError("InvalidParameterValue", "RoleArn must be an IAM role ARN and FeatureName is required.", 400)
+    iam = getattr(store, "iam_store", None)
+    if iam is not None:
+        name = role_arn.split(":role/", 1)[1].split("/")[-1]
+        role = iam.get_role(name)
+        if role is None:
+            raise RdsError("InvalidParameterValue", f"IAM role {role_arn} does not exist.", 400)
+        trust = json.dumps(role.get("assume_role_policy_document") or role.get("AssumeRolePolicyDocument") or "")
+        if "rds.amazonaws.com" not in trust:
+            raise RdsError("InvalidParameterValue", f"IAM role {name} cannot be assumed by rds.amazonaws.com; its trust policy must name that service principal.", 400)
+    allowed = _ROLE_FEATURES.get(str(db.get("engine", "")))
+    if allowed is not None and feature not in allowed:
+        raise RdsError("InvalidParameterValue", f"Feature {feature} is not supported by engine {db.get('engine')}. Supported: {', '.join(sorted(allowed))}.", 400)
+    roles = db.setdefault("associated_roles", [])
+    if any(r["RoleArn"] == role_arn and r["FeatureName"] == feature for r in roles):
+        raise RdsError("DBInstanceRoleAlreadyExists", f"Role {role_arn} is already associated with feature {feature}.", 400)
+    if len(roles) >= 5:
+        raise RdsError("DBInstanceRoleQuotaExceeded", "A DB instance can have at most 5 associated roles.", 400)
+    roles.append({"RoleArn": role_arn, "FeatureName": feature, "Status": "ACTIVE"})
+    store.put_instance(db_id, db)
+    store.persist()
+    return _success("AddRoleToDBInstance", "")
+
+
+def _remove_role_from_db_instance(store: SqlStore, params: dict) -> RdsResponse:
+    db_id = str(params.get("DBInstanceIdentifier", "")).strip()
+    db = store.get_instance(db_id) if db_id else None
+    if not db:
+        raise RdsError("DBInstanceNotFound", f"DBInstance {db_id} not found.", 404)
+    role_arn, feature = str(params.get("RoleArn", "")), str(params.get("FeatureName", ""))
+    roles = db.get("associated_roles", [])
+    keep = [r for r in roles if not (r["RoleArn"] == role_arn and r["FeatureName"] == feature)]
+    if len(keep) == len(roles):
+        raise RdsError("DBInstanceRoleNotFound", f"Role {role_arn} is not associated with feature {feature}.", 404)
+    db["associated_roles"] = keep
+    store.put_instance(db_id, db)
+    store.persist()
+    return _success("RemoveRoleFromDBInstance", "")
+
+
+# Default RDS service quotas (us-east-1) — the real DescribeAccountAttributes names; usage is counted from the live store.
+_QUOTAS = [("DBInstances", 40), ("DBClusters", 40), ("DBParameterGroups", 50), ("DBSecurityGroups", 25), ("DBSubnetGroups", 50),
+           ("ReservedDBInstances", 40), ("AllocatedStorage", 100000), ("DBClusterParameterGroups", 50), ("DBInstanceRoles", 5),
+           ("ManualSnapshots", 100), ("EventSubscriptions", 20), ("ManualClusterSnapshots", 100), ("OptionGroups", 20),
+           ("SubnetsPerDBSubnetGroup", 20), ("ReadReplicasPerMaster", 15), ("DBClusterRoles", 10), ("DBProxies", 20)]
+
+
+def _describe_account_attributes(store: SqlStore, params: dict) -> RdsResponse:
+    insts = [store.get_instance(i) for i in store.instance_ids()]
+    insts = [d for d in insts if d]
+    snaps = [store.get_snapshot(i) for i in store.snapshot_ids()]
+    manual = [x for x in snaps if x and str(x.get("snapshot_type", "manual")) == "manual"]
+    used = {"DBInstances": len(insts), "AllocatedStorage": sum(int(d.get("allocated_storage", 0) or 0) for d in insts),
+            "DBSubnetGroups": len(store.subnet_groups), "ManualSnapshots": len(manual),
+            "ReadReplicasPerMaster": max([len(d.get("read_replica_db_instance_identifiers", [])) for d in insts] or [0]),
+            "DBInstanceRoles": max([len(d.get("associated_roles", [])) for d in insts] or [0]),
+            "DBProxies": len(getattr(store, "db_proxies", {}) or {})}
+    inner = "<AccountQuotas>" + "".join(
+        f"<AccountQuota>{_el('AccountQuotaName', n)}{_el('Used', used.get(n, 0))}{_el('Max', m)}</AccountQuota>" for n, m in _QUOTAS) + "</AccountQuotas>"
+    return _success("DescribeAccountAttributes", inner)
 
 
 def _describe_db_instances(store: SqlStore, params: dict) -> RdsResponse:
@@ -983,16 +1074,99 @@ def _create_db_proxy(store: SqlStore, params: dict) -> RdsResponse:
         raise RdsError("InvalidParameterValue", "DBProxyName is required.", 400)
     if store.get_proxy(name):
         raise RdsError("DBProxyAlreadyExistsFault", f"DB proxy {name} already exists.", 400)
+    family = str(params.get("EngineFamily", "POSTGRESQL")).upper()
+    if family not in ("MYSQL", "POSTGRESQL", "SQLSERVER"):
+        raise RdsError("InvalidParameterValue", "EngineFamily must be MYSQL, POSTGRESQL or SQLSERVER.", 400)
+    auth = []
+    i = 1
+    while f"Auth.member.{i}.SecretArn" in params or f"Auth.member.{i}.AuthScheme" in params:
+        auth.append({"AuthScheme": params.get(f"Auth.member.{i}.AuthScheme", "SECRETS"), "SecretArn": params.get(f"Auth.member.{i}.SecretArn", ""),
+                     "IAMAuth": params.get(f"Auth.member.{i}.IAMAuth", "DISABLED")})
+        i += 1
+    subnets = _members(params, "VpcSubnetIds")
+    if params.get("RoleArn") is not None and not str(params.get("RoleArn")).startswith("arn:aws:iam::"):
+        raise RdsError("InvalidParameterValue", "RoleArn must be an IAM role ARN.", 400)
+    if "VpcSubnetIds.member.1" in params and len(subnets) < 2:
+        raise RdsError("InvalidParameterValue", "An RDS Proxy needs at least two subnets (in different Availability Zones).", 400)
     record = {
         "db_proxy_name": name,
         "db_proxy_arn": _proxy_arn(store, name),
-        "engine_family": str(params.get("EngineFamily", "POSTGRESQL")),
+        "engine_family": family,
         "status": "available",
         "created": _now(),
+        "role_arn": str(params.get("RoleArn", "")),
+        "vpc_subnet_ids": subnets,
+        "vpc_security_group_ids": _members(params, "VpcSecurityGroupIds"),
+        "auth": auth,
+        "require_tls": str(params.get("RequireTLS", "false")).lower() == "true",
+        "idle_client_timeout": _int(params, "IdleClientTimeout", 1800),
+        "endpoint": f"{name}.proxy-nano.us-east-1.rds.amazonaws.com",
+        "targets": [],
     }
     store.put_proxy(name, record)
     store.persist()
     return _success("CreateDBProxy", _proxy_xml(record))
+
+
+_FAMILY_OF = {"postgres": "POSTGRESQL", "aurora-postgresql": "POSTGRESQL", "mysql": "MYSQL", "mariadb": "MYSQL", "aurora-mysql": "MYSQL"}
+
+
+def _register_db_proxy_targets(store: SqlStore, params: dict) -> RdsResponse:
+    name = str(params.get("DBProxyName", "")).strip()
+    px = store.get_proxy(name)
+    if not px:
+        raise RdsError("DBProxyNotFoundFault", f"DB proxy {name} not found.", 404)
+    ids = _members(params, "DBInstanceIdentifiers")
+    if not ids:
+        raise RdsError("InvalidParameterValue", "DBInstanceIdentifiers is required.", 400)
+    for db_id in ids:
+        db = store.get_instance(db_id)
+        if not db:
+            raise RdsError("DBInstanceNotFound", f"DBInstance {db_id} not found.", 404)
+        fam = _FAMILY_OF.get(str(db.get("engine", "")), "")
+        if fam != px.get("engine_family"):
+            raise RdsError("InvalidDBInstanceState", f"DB instance {db_id} ({db.get('engine')}) does not match the proxy's engine family {px.get('engine_family')}.", 400)
+        if any(t["RdsResourceId"] == db_id for t in px.setdefault("targets", [])):
+            raise RdsError("DBProxyTargetAlreadyRegisteredFault", f"{db_id} is already registered with proxy {name}.", 400)
+        px["targets"].append({"RdsResourceId": db_id, "Type": "RDS_INSTANCE", "Endpoint": db.get("endpoint_address", ""), "Port": db.get("endpoint_port", 0), "State": "AVAILABLE"})
+    store.put_proxy(name, px)
+    store.persist()
+    return _success("RegisterDBProxyTargets", _proxy_targets_xml(px, "DBProxyTargets"))
+
+
+def _proxy_targets_xml(px: dict, tag: str) -> str:
+    return f"<{tag}>" + "".join(
+        f"<member>{_el('RdsResourceId', t['RdsResourceId'])}{_el('Type', t['Type'])}{_el('Endpoint', t['Endpoint'])}{_el('Port', t['Port'])}"
+        f"{_el('TargetArn', _instance_arn_from(px, t['RdsResourceId']))}<TargetHealth>{_el('State', t['State'])}</TargetHealth></member>"
+        for t in px.get("targets", [])) + f"</{tag}>"
+
+
+def _instance_arn_from(px: dict, db_id: str) -> str:
+    acct = px.get("db_proxy_arn", "").split(":")[4] if px.get("db_proxy_arn", "").count(":") >= 4 else "123456789012"
+    return f"arn:aws:rds:us-east-1:{acct}:db:{db_id}"
+
+
+def _describe_db_proxy_targets(store: SqlStore, params: dict) -> RdsResponse:
+    name = str(params.get("DBProxyName", "")).strip()
+    px = store.get_proxy(name)
+    if not px:
+        raise RdsError("DBProxyNotFoundFault", f"DB proxy {name} not found.", 404)
+    return _success("DescribeDBProxyTargets", _proxy_targets_xml(px, "Targets"))
+
+
+def _deregister_db_proxy_targets(store: SqlStore, params: dict) -> RdsResponse:
+    name = str(params.get("DBProxyName", "")).strip()
+    px = store.get_proxy(name)
+    if not px:
+        raise RdsError("DBProxyNotFoundFault", f"DB proxy {name} not found.", 404)
+    ids = set(_members(params, "DBInstanceIdentifiers"))
+    left = [t for t in px.get("targets", []) if t["RdsResourceId"] not in ids]
+    if len(left) == len(px.get("targets", [])):
+        raise RdsError("DBProxyTargetNotFoundFault", "None of the DB instances are registered with the proxy.", 404)
+    px["targets"] = left
+    store.put_proxy(name, px)
+    store.persist()
+    return _success("DeregisterDBProxyTargets", "")
 
 
 def _describe_db_proxies(store: SqlStore, params: dict) -> RdsResponse:
@@ -1688,6 +1862,12 @@ def dispatch(store: SqlStore, params: dict | None = None, msg_store=None, s3_sto
             return _create_db_instance(store, params, msg_store)
         if action == "DescribeDBInstances":
             return _describe_db_instances(store, params)
+        if action == "AddRoleToDBInstance":
+            return _add_role_to_db_instance(store, params)
+        if action == "RemoveRoleFromDBInstance":
+            return _remove_role_from_db_instance(store, params)
+        if action == "DescribeAccountAttributes":
+            return _describe_account_attributes(store, params)
         if action == "ModifyDBInstance":
             return _modify_db_instance(store, params, msg_store)
         if action == "DeleteDBInstance":
@@ -1736,6 +1916,12 @@ def dispatch(store: SqlStore, params: dict | None = None, msg_store=None, s3_sto
             return _describe_db_proxies(store, params)
         if action == "DeleteDBProxy":
             return _delete_db_proxy(store, params)
+        if action == "RegisterDBProxyTargets":
+            return _register_db_proxy_targets(store, params)
+        if action == "DescribeDBProxyTargets":
+            return _describe_db_proxy_targets(store, params)
+        if action == "DeregisterDBProxyTargets":
+            return _deregister_db_proxy_targets(store, params)
         if action == "CreateOptionGroup":
             return _create_option_group(store, params)
         if action == "DescribeOptionGroups":

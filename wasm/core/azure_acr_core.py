@@ -246,6 +246,50 @@ def _split_acr_v1(rest: list[str]):
 
 
 # ── dispatch ──────────────────────────────────────────────────────────────
+def import_image(store: AcrRegistryStore, body: dict) -> Response:
+    """Registry import (the portal's "Import image" / `az acr import`): copy a manifest + every
+    blob it references from ``sourceImage`` ("repo:tag" or "repo@sha256:...") to each of
+    ``targetTags`` ("repo:tag"). The source must already exist in this simulator — there is no
+    internet, so docker.io / mcr.microsoft.com / ghcr.io sources are refused honestly. Mode
+    NoForce (default) refuses to overwrite an existing target tag, Force retags it."""
+    src = str(body.get("sourceImage") or "")
+    targets = list(body.get("targetTags") or [])
+    mode = body.get("mode") or "NoForce"
+    if not src or not targets:
+        return _err(400, "INVALID_REQUEST", "sourceImage and at least one targetTags entry are required.")
+    reg_uri = str(body.get("registryUri") or "")
+    if reg_uri and not reg_uri.lower().endswith(".azurecr.io") and reg_uri.lower() != "":
+        return _err(400, "SOURCE_UNREACHABLE", f"'{reg_uri}' is outside this simulator: Vyomi has no internet egress, so only images already in a Vyomi registry can be imported.")
+    if "@" in src:
+        srepo, ref = src.split("@", 1)
+    else:
+        srepo, _, ref = src.rpartition(":")
+        if not srepo:
+            srepo, ref = src, "latest"
+    srcrepo = store.repos.get(srepo)
+    if not _has_content(srcrepo):
+        return _err(404, "NOT_FOUND", f"The source image '{src}' was not found.")
+    digest = ref if ref.startswith("sha256:") else (srcrepo["tags"].get(ref) or {}).get("digest")
+    man = srcrepo["manifests"].get(digest) if digest else None
+    if man is None:
+        return _err(404, "NOT_FOUND", f"The source image '{src}' was not found.")
+    parsed = []
+    for t in targets:
+        trepo, _, ttag = str(t).rpartition(":")
+        if not trepo:
+            trepo, ttag = str(t), "latest"
+        existing = (store.repos.get(trepo) or {}).get("tags", {}).get(ttag)
+        if existing and mode != "Force" and existing["digest"] != digest:
+            return _err(409, "TAG_EXISTS", f"The tag '{trepo}:{ttag}' already exists with a different digest; use mode Force to overwrite it.")
+        parsed.append((trepo, ttag))
+    for trepo, ttag in parsed:
+        dst = _get_or_create_repo(store, trepo)
+        for d, blob in (srcrepo.get("blobs") or {}).items():
+            dst["blobs"].setdefault(d, blob)
+        _push_manifest(store, trepo, ttag, bytes(man["body"]), man["mediaType"])
+    return _json(200, {"digest": digest, "imported": [f"{r}:{t}" for r, t in parsed]})
+
+
 def dispatch(store: AcrRegistryStore, method: str, path: str,
              query: dict | None = None, headers: dict | None = None, body: bytes = b"",
              retention_days: int | None = None) -> Response:
@@ -259,6 +303,14 @@ def dispatch(store: AcrRegistryStore, method: str, path: str,
     segs = [unquote(s) for s in p.split("/") if s != ""]
     if not segs:
         return _err(404, "NOT_FOUND", f"Unknown path: {path}")
+
+    if segs == ["acr", "v1", "_import"]:   # Vyomi data-plane carrier for the ARM importImage action
+        if method != "POST":
+            return _err(405, "UNSUPPORTED", "Method not allowed.")
+        try:
+            return import_image(store, json.loads(body.decode("utf-8") or "{}"))
+        except ValueError:
+            return _err(400, "INVALID_REQUEST", "Body must be JSON.")
 
     if segs[0] == "v2":
         rest = segs[1:]

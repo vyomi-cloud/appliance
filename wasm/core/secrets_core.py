@@ -101,6 +101,7 @@ from core.kv_store import KvStore
 SM_REGION = "us-east-1"
 CURRENT = "AWSCURRENT"
 PREVIOUS = "AWSPREVIOUS"
+PENDING = "AWSPENDING"
 _STANDALONE_SEP = "\x00"  # internal key separator for a promoted replica (never user-visible)
 
 
@@ -423,6 +424,98 @@ def _carry_forward_rotation(store: KvStore, secret: dict, kms_store=None) -> str
     return res["VersionId"]
 
 
+def _run_rotation_lambda(store: KvStore, secret: dict, kms_store=None) -> str:
+    """Real Secrets Manager rotation: invoke the rotation function through the four steps with the
+    documented event {Step, SecretId, ClientRequestToken}, then require the new version to be AWSCURRENT.
+    A function that can call the Secrets Manager API (offline process runtime with the SDK) does its own staging;
+    one that cannot (Nano's in-browser sandbox has no SDK) returns {"SecretString": ...} from createSecret and
+    Vyomi performs the AWSPENDING/AWSCURRENT stage moves on its behalf."""
+    from core import lambda_core
+    lam = getattr(store, "lam_store", None)
+    arn = secret.get("rotation_lambda_arn")
+    if lam is None:
+        raise SecretsError("InvalidRequestException", "Lambda is not available in this runtime.", 400)
+    fn_name = lambda_core._norm_name(str(arn))
+    fn = lambda_core._functions(lam).get(fn_name)
+    if fn is None:
+        raise SecretsError("ResourceNotFoundException", f"Lambda function not found: {arn}", 400)
+    if not lambda_core.can_invoke(fn, principal="secretsmanager.amazonaws.com", source_arn=secret["arn"]):
+        raise SecretsError("InvalidRequestException",
+                           "Secrets Manager cannot invoke the specified Lambda function. Ensure that the function policy grants access to the principal secretsmanager.amazonaws.com.", 400)
+    token = uuid.uuid4().hex
+    prev = _stage_to_version(secret, CURRENT)
+    outputs = {}
+    for step in ("createSecret", "setSecret", "testSecret", "finishSecret"):
+        event = {"Step": step, "SecretId": secret["arn"], "ClientRequestToken": token}
+        r = lambda_core._invoke(lam, fn_name, json.dumps(event).encode())
+        failed = (r.headers or {}).get("X-Amz-Function-Error") or r.status >= 400
+        try:
+            payload = json.loads(r.body.decode() or "null")
+        except Exception:
+            payload = None
+        if failed:
+            msg = (payload or {}).get("errorMessage") if isinstance(payload, dict) else None
+            secret["rotation_last_error"] = f"{step}: {msg or 'rotation function failed'}"
+            store.persist()
+            raise SecretsError("InvalidRequestException", f"The rotation function failed at step {step}: {msg or 'error'}", 400)
+        outputs[step] = payload
+        if step == "createSecret":
+            if token not in secret["versions"] and isinstance(payload, dict) and (payload.get("SecretString") is not None or payload.get("SecretBinary") is not None):
+                _put_value(store, {"SecretId": secret["name"], "SecretString": payload.get("SecretString"), "SecretBinary": payload.get("SecretBinary"),
+                                   "ClientRequestToken": token, "VersionStages": [PENDING]}, kms_store=kms_store)
+            if token not in secret["versions"]:
+                secret["rotation_last_error"] = "createSecret: the function did not create an AWSPENDING version"
+                store.persist()
+                raise SecretsError("InvalidRequestException", "The rotation function did not create a new secret version (AWSPENDING) in createSecret.", 400)
+    ver = secret["versions"].get(token)
+    if ver is not None and CURRENT not in ver.get("stages", []):
+        # Vyomi finishes the staging for a function that cannot call UpdateSecretVersionStage itself.
+        _move_stage(secret, CURRENT, token)
+    if ver is not None:
+        ver["stages"] = [st for st in ver["stages"] if st != PENDING]
+    secret["rotation_last_error"] = ""
+    secret["last_rotated_date"] = time.time()
+    store.mirror_put(_storage_key_for(secret), secret)
+    store.persist()
+    return token
+
+
+def _move_stage(secret: dict, stage: str, to_vid: str, from_vid: str | None = None) -> None:
+    if from_vid is None:
+        from_vid = _stage_to_version(secret, stage)
+    if from_vid == to_vid:
+        return
+    if from_vid and from_vid in secret["versions"]:
+        secret["versions"][from_vid]["stages"] = [x for x in secret["versions"][from_vid]["stages"] if x != stage]
+        if stage == CURRENT:
+            for v in secret["versions"].values():
+                v["stages"] = [x for x in v.get("stages", []) if x != PREVIOUS]
+            secret["versions"][from_vid]["stages"].append(PREVIOUS)
+    secret["versions"][to_vid]["stages"] = list(dict.fromkeys(secret["versions"][to_vid].get("stages", []) + [stage]))
+
+
+def _update_secret_version_stage(store: KvStore, body: dict) -> dict:
+    secret = _require_writable(store, body.get("SecretId") or "")
+    stage = str(body.get("VersionStage") or "")
+    if not stage:
+        raise SecretsError("InvalidParameterException", "VersionStage is required.", 400)
+    to_v, from_v = body.get("MoveToVersionId"), body.get("RemoveFromVersionId")
+    holder = _stage_to_version(secret, stage)
+    if from_v and from_v not in secret["versions"]:
+        raise SecretsError("ResourceNotFoundException", f"Version {from_v} not found.", 400)
+    if to_v and to_v not in secret["versions"]:
+        raise SecretsError("ResourceNotFoundException", f"Version {to_v} not found.", 400)
+    if from_v and holder != from_v:
+        raise SecretsError("InvalidParameterException", f"Version {from_v} does not have the stage {stage}.", 400)
+    if to_v:
+        _move_stage(secret, stage, to_v, from_v or holder)
+    elif from_v:
+        secret["versions"][from_v]["stages"] = [x for x in secret["versions"][from_v]["stages"] if x != stage]
+    store.mirror_put(_storage_key_for(secret), secret)
+    store.persist()
+    return {"ARN": secret["arn"], "Name": secret["name"]}
+
+
 def _reschedule(secret: dict, anchor: float) -> None:
     interval = _rotation_interval_seconds(secret.get("rotation_rules") or {})
     secret["next_rotation_date"] = (anchor + interval) if interval is not None else None
@@ -434,7 +527,13 @@ def _auto_rotate_if_due(store: KvStore, secret: dict, kms_store=None) -> None:
     due = secret.get("next_rotation_date")
     if not secret.get("rotation_enabled") or secret.get("deleted_date") or due is None or time.time() < due:
         return
-    _carry_forward_rotation(store, secret, kms_store)
+    try:
+        if secret.get("rotation_lambda_arn"):
+            _run_rotation_lambda(store, secret, kms_store)
+        else:
+            _carry_forward_rotation(store, secret, kms_store)
+    except SecretsError:
+        pass   # a failed scheduled rotation leaves the secret unchanged (error is on DescribeSecret) and retries next interval
     _reschedule(secret, time.time())
 
 
@@ -456,7 +555,11 @@ def _rotate_secret(store: KvStore, body: dict, kms_store=None) -> dict:
     secret["rotation_enabled"] = True
     vid = _stage_to_version(secret, CURRENT)
     if body.get("RotateImmediately", True):
-        vid = _carry_forward_rotation(store, secret, kms_store)
+        if secret.get("rotation_lambda_arn"):
+            _run_rotation_lambda(store, secret, kms_store)
+            vid = _stage_to_version(secret, CURRENT)
+        else:
+            vid = _carry_forward_rotation(store, secret, kms_store)
     else:
         store.persist()
     _reschedule(secret, secret.get("last_rotated_date") or time.time())
@@ -806,6 +909,8 @@ def dispatch(store: KvStore, target: str, payload: dict | None = None, kms_store
             return _ok(_tag_resource(store, body))
         if action == "UntagResource":
             return _ok(_untag_resource(store, body))
+        if action == "UpdateSecretVersionStage":
+            return _ok(_update_secret_version_stage(store, body))
         if action == "RotateSecret":
             return _ok(_rotate_secret(store, body, kms_store))
         if action == "GetResourcePolicy":

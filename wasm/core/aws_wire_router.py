@@ -99,6 +99,8 @@ def _gcp_service(path):
         return "gcp-logging"
     if re.match(r"^/v2/projects/[^/]+/locations/[^/]+/buckets", path):
         return "gcp-logging"
+    if re.match(r"^/v1/projects/[^/]+/locations/[^/]+/recommenders([/:]|$)", path):
+        return "gcp-compute-vm"   # Recommender API v1 — recommendations computed from live Compute state (core/gcp_compute_ext_core)
     if path.startswith(("/compute/v1", "/compute/beta")):
         # VPC resources → the networking core; everything else (instances, disks, images,
         # templates, groups, health checks…) → the VM core.
@@ -350,6 +352,8 @@ _SIGNING = {
     "autoscaling": "asg",
     "dlm": "dlm",
     "cloudtrail": "cloudtrail",   # minimal CloudTrail (trails + S3 data-event selectors) -> core/s3_ext_core via the S3 store
+    "rbin": "rbin",   # EC2 Recycle Bin (rest-json /rules...) -> core/ec2_ops_core.rbin_dispatch over the shared EC2 model
+    "schemas": "schemas",   # EventBridge Schemas (rest-json /v1/registries, /v1/discoverers) -> core/eventbridge_schemas_core via the EventBridge store
     "s3vectors": "s3vectors",   # Amazon S3 Vectors (rest-json POST /<Operation>) -> core/s3_vectors_core via the S3 store
     "s3tables": "s3tables",   # Amazon S3 Tables (rest-json /buckets, /namespaces, /tables, /tag) -> core/s3_tables_core via the S3 store
     "elasticloadbalancing": "elbv2",
@@ -645,6 +649,9 @@ class AwsWireRouter:
         self.cw.logs_store = self.logs            # real log-based Contributor Insights rules
         self.msg.cw_store = self.cw               # real AWS/SNS SMS delivery metrics (sns.sms.delivery-statistics)
         self.msg.logs_store = self.logs           # real SNS delivery-status logging (SQSSuccessFeedbackRoleArn/…)
+        self.rds.iam_store = self.iam             # RDS IAM role association validates the role + its trust policy
+        self.sec.lam_store = self.lam             # Secrets Manager rotation really invokes the Lambda rotation function
+        self.msg.kms_store = self.kms             # EventBridge bus/archive KMS encryption (real Encrypt/Decrypt)
         self.elbv2 = s.get("elbv2") or elbv2.Elbv2Store()
         self.elbv2.vpc_store = self.vpc    # target health reacts to real instance state
         self.elbv2.cw_store = self.cw      # real AWS/ApplicationELB + AWS/NetworkELB metrics
@@ -955,6 +962,15 @@ class AwsWireRouter:
             r = s3.dispatch(self.s3, "POST", "/__cloudtrail__", {}, {"x-amz-target": lheaders.get("x-amz-target", "")}, bytes(body))
             return {"status": r.status, "headers": {**dict(r.headers or {}), "content-type": "application/x-amz-json-1.1"}, "body": r.body or b""}
 
+        if svc == "rbin":
+            from core import ec2_ops_core
+            r = ec2_ops_core.rbin_dispatch(self.vpc, method, path, query or {}, headers or {}, bytes(body))
+            return r
+        if svc == "schemas":
+            from core import eventbridge_schemas_core as _schemas
+            r = _schemas.dispatch(self.msg, method, path, query or {}, headers or {}, bytes(body))
+            return {"status": r.status, "headers": {**dict(r.headers or {}), "content-type": "application/json"}, "body": r.body or b""}
+
         if svc == "s3vectors":
             r = s3.dispatch(self.s3, method, "/__s3vectors__" + path, query or {}, headers or {}, bytes(body))
             hdrs = dict(r.headers or {})
@@ -1201,7 +1217,8 @@ class AwsWireRouter:
             elif svc == "secretsmanager":   # a customer KmsKeyId is really encrypted/decrypted through the KMS core
                 r = secrets.dispatch(self.sec, target, payload, kms_store=self.kms)
             elif svc == "events":
-                r = events.dispatch(self.events, target, payload, lam_store=self.lam, kinesis_store=self.kinesis, sfn_store=self.sfn)
+                r = events.dispatch(self.events, target, payload, lam_store=self.lam, kinesis_store=self.kinesis, sfn_store=self.sfn,
+                                    caller_account=lheaders.get("x-amz-account-id"))
             elif svc == "kinesis":
                 r = kinesis.dispatch(self.kinesis, target, payload)
             elif svc == "logs":
@@ -1244,7 +1261,7 @@ class AwsWireRouter:
             r = elbv2.dispatch(self.elbv2, params)
         elif svc == "cloudformation":
             r = cfn.dispatch(self.cfn, params, s3_store=self.s3, ddb_store=self.ddb,
-                              iam_store=self.iam, msg_store=self.msg, logs_store=self.logs)
+                              iam_store=self.iam, msg_store=self.msg, logs_store=self.logs, cw_store=self.cw)
         else:  # sns
             r = sns.dispatch(self.msg, params)
         hdrs = dict(r.headers or {})
