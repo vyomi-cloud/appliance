@@ -643,6 +643,7 @@ class AwsWireRouter:
         self.cw.logs_store = self.logs            # real log-based Contributor Insights rules
         self.msg.cw_store = self.cw               # real AWS/SNS SMS delivery metrics (sns.sms.delivery-statistics)
         self.msg.logs_store = self.logs           # real SNS delivery-status logging (SQSSuccessFeedbackRoleArn/…)
+        self.sec.lam_store = self.lam             # Secrets Manager rotation really invokes the Lambda rotation function
         self.msg.kms_store = self.kms             # EventBridge bus/archive KMS encryption (real Encrypt/Decrypt)
         self.elbv2 = s.get("elbv2") or elbv2.Elbv2Store()
         self.elbv2.vpc_store = self.vpc    # target health reacts to real instance state
