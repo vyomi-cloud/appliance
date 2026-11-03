@@ -1,61 +1,24 @@
 {
- "at": "2026-11-03T17:31:07+00:00",
+ "at": "2026-11-03T18:32:54+00:00",
  "baseline": false,
  "changes": [
   {
-   "cloud": "gcp",
-   "service": "sqladmin/v1beta4",
-   "kind": "operation-flapping",
-   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.start:fd389969f2ca",
-   "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.start changed",
-   "detail": {
-    "request": {
-     "was": "SqlWorkloadCapturesStartRequest",
-     "now": "WorkloadCapturesStartRequest"
-    }
-   },
-   "actionable": false
+   "cloud": "azure",
+   "service": "web",
+   "kind": "spec-commit",
+   "key": "azure:web:2d07da92bc",
+   "title": "Azure web: [Microsoft.Web] Introduce new api version \"2026-08-01\" and new resource type \"Microsoft.Web/sites/silos\", \"Microsoft.Web/serverfarms/silos\", \"Microsoft.Web/sites/managedTrafficConfig/default\", \"\"Micro",
+   "link": "https://github.com/Azure/azure-rest-api-specs/commit/2d07da92bcad212fdd5e2bffebf96563081ec250",
+   "actionable": true
   },
   {
-   "cloud": "gcp",
-   "service": "sqladmin/v1beta4",
-   "kind": "operation-flapping",
-   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.startReplay:f421c3d61dc0",
-   "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.startReplay changed",
-   "detail": {
-    "request": {
-     "was": "SqlWorkloadCapturesStartReplayRequest",
-     "now": "WorkloadCapturesStartReplayRequest"
-    }
-   },
-   "actionable": false
-  },
-  {
-   "cloud": "gcp",
-   "service": "sqladmin/v1beta4",
-   "kind": "operation-flapping",
-   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.stop:c8c00d855f73",
-   "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.stop changed",
-   "detail": {
-    "request": {
-     "was": "SqlWorkloadCapturesStopRequest",
-     "now": "WorkloadCapturesStopRequest"
-    }
-   },
-   "actionable": false
-  },
-  {
-   "cloud": "gcp",
-   "service": "sqladmin/v1beta4",
-   "kind": "operation-flapping",
-   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.stopReplay:acd5b7e919b1",
-   "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.stopReplay changed",
-   "detail": {
-    "request": {
-     "was": "SqlWorkloadCapturesStopReplayRequest",
-     "now": "WorkloadCapturesStopReplayRequest"
-    }
-   },
+   "cloud": "aws",
+   "service": "Amazon SQS, Secrets Manager, EventBridge",
+   "kind": "announcement",
+   "key": "feed:aws:031973e55734",
+   "title": "Amazon EKS Capabilities now supports Argo CD Notifications",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-eks-argo-cd-notifications",
+   "detail": "The Amazon Elastic Kubernetes Service (Amazon EKS) Capability for Argo CD now supports Argo CD Notifications, providing notifications when your applications sync, fail, or change health. You define triggers and message templates in your cluster and subscribe individual Applications with an annotation, the same way you do in upstream Argo CD. With this launch, you can deliver notifications to 16 notification services, including Slack, PagerDuty, Opsgenie, Amazon SQS, and Amazon EventBridge. The Amazon SQS and Amazon EventBridge services authenticate with your IAM Capability Role, so you can rou",
    "actionable": false
   }
  ],
