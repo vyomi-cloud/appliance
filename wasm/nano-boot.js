@@ -100,6 +100,7 @@ const CORES = [
   "azure_acr_core.py",   // Azure Container Registry engine (registries, repositories, webhooks) — loaded before azure_arm_core which delegates to it
   "azure_webapp_core.py",   // Azure App Service engine (Microsoft.Web: web apps + function apps, plans) — loaded before azure_arm_core which delegates to it
   "azure_eventgrid_core.py",   // Azure Event Grid event subscriptions (Microsoft.EventGrid, topic-scoped) — loaded before azure_arm_core which delegates to it
+  "azure_storage_ext_core.py", // storage key rotation + route endpoints
   "azure_policy_core.py", // Azure Policy rule engine — loaded before azure_arm_core which delegates to it
   "azure_locks_core.py",   // Management locks (Microsoft.Authorization/locks, scoped to ANY resource) — loaded before azure_arm_core which delegates to it
   "k8s_yaml.py",   // YAML reader for Kubernetes manifests — azure_aks_k8s_core imports it
