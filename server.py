@@ -22094,6 +22094,8 @@ _EC2_VPC_ACTIONS = {
     "CreateRouteTable", "DescribeRouteTables", "DeleteRouteTable",
     "CreateRoute", "AssociateRouteTable", "DisassociateRouteTable",
     "CreateInternetGateway", "DescribeInternetGateways", "AttachInternetGateway",
+    "DetachInternetGateway", "DeleteInternetGateway",
+    "CreateNetworkAcl", "DescribeNetworkAcls", "CreateNetworkAclEntry", "AssociateNetworkAcl", "DeleteNetworkAcl",
 }
 
 

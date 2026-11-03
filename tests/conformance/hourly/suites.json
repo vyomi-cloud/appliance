@@ -74,6 +74,22 @@
       "timeout": 300
     },
     {
+      "id": "offline-sdk-python-aws-ops5",
+      "target": "offline",
+      "cloud": "aws",
+      "kind": "sdk-python",
+      "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/test_aws_sdk_python_ops5.py",
+      "timeout": 300
+    },
+    {
+      "id": "offline-core-aws-vpc-nacl",
+      "target": "offline",
+      "cloud": "aws",
+      "kind": "api",
+      "cmd": "PYTHONPATH=. python3 tests/conformance/test_vpc_nacl_core.py",
+      "timeout": 60
+    },
+    {
       "id": "offline-sdk-python-aws-ops4",
       "target": "offline",
       "cloud": "aws",
