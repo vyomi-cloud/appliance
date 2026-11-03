@@ -137,6 +137,8 @@ def from_aws(store_or_model) -> Topology:
         routes = []
         if vpc:
             routes.append(Route(dest=vpc["cidr"], kind=LOCAL, origin="system", name="local"))
+            for sc in vpc.get("secondary_cidrs", []):
+                routes.append(Route(dest=sc, kind=LOCAL, origin="system", name="local"))
         for r in list(rt.get("routes", [])) + list(rt.get("propagated", [])):
             if r.get("target") == "local":
                 continue

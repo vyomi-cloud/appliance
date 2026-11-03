@@ -337,5 +337,127 @@ def _vc_delete(store, p):
     return _V()._envelope("DeleteVpnConcentrator", "<return>true</return>")
 
 
+# ── VPC CIDR associations (secondary IPv4 / Amazon-provided IPv6) ─────────────────────
+# Validated like EC2: /16-/28, RFC1918 / 100.64/10 only (primary-range class rules), no overlap with any
+# CIDR of the VPC or a peered/routed VPC range already used by this VPC, max 5 secondary, disassociation
+# blocked while a subnet lives in the block; local routes follow in every route table of the VPC, and
+# netsim treats the secondary block as part of the VPC network.
+def cidr_assoc_xml(v):
+    items = [{"associationId": "vpc-cidr-assoc-primary-" + v["id"][4:], "cidrBlock": v["cidr"], "cidrBlockState": {"state": "associated"}}]
+    items += [{"associationId": a["id"], "cidrBlock": a["cidr"], "cidrBlockState": {"state": "associated"}} for a in v.get("cidr_assocs", [])]
+    out = f"<cidrBlockAssociationSet>{xml(items)}</cidrBlockAssociationSet>"
+    v6 = v.get("ipv6_assocs", [])
+    if v6:
+        out += "<ipv6CidrBlockAssociationSet>" + xml([{"associationId": a["id"], "ipv6CidrBlock": a["cidr"], "ipv6CidrBlockState": {"state": "associated"},
+                                                         "networkBorderGroup": "us-east-1", "ipv6Pool": "Amazon"} for a in v6]) + "</ipv6CidrBlockAssociationSet>"
+    return out
+
+
+def _need_vpc(m, vid):
+    v = m["vpcs"].get(vid)
+    if not v:
+        raise _err("InvalidVpcID.NotFound", f"The vpc ID '{vid}' does not exist")
+    return v
+
+
+def _vpc_assoc(store, p):
+    V = _V(); m = V._model(store); v = _need_vpc(m, str(p.get("VpcId", "")))
+    if boolp(p, "AmazonProvidedIpv6CidrBlock") or p.get("Ipv6CidrBlock"):
+        if v.get("ipv6_assocs"):
+            raise _err("CidrConflict", "The VPC already has an IPv6 CIDR block.")
+        aid = V._rid("vpc-cidr-assoc", 17)
+        n = abs(hash(v["id"])) % 0xFF
+        v6 = str(p.get("Ipv6CidrBlock") or f"2600:1f18:{n:02x}ab:cd00::/56")
+        v.setdefault("ipv6_assocs", []).append({"id": aid, "cidr": v6})
+        return V._envelope("AssociateVpcCidrBlock", xml({"vpcId": v["id"], "ipv6CidrBlockAssociation": {"associationId": aid, "ipv6CidrBlock": v6, "ipv6CidrBlockState": {"state": "associated"}}}))
+    net = cidr4(p.get("CidrBlock", ""), "cidrBlock")
+    if not (16 <= net.prefixlen <= 28):
+        raise _err("InvalidVpc.Range", f"The CIDR '{net}' is invalid: block size must be between /16 and /28.")
+    if not any(net.subnet_of(r) for r in (ipaddress.ip_network("10.0.0.0/8"), ipaddress.ip_network("172.16.0.0/12"),
+                                          ipaddress.ip_network("192.168.0.0/16"), ipaddress.ip_network("100.64.0.0/10"))):
+        raise _err("InvalidVpc.Range", f"The CIDR '{net}' is not in a permitted private range (10/8, 172.16/12, 192.168/16, 100.64/10).")
+    existing = [ipaddress.ip_network(v["cidr"])] + [ipaddress.ip_network(a["cidr"]) for a in v.get("cidr_assocs", [])]
+    if any(net.overlaps(x) for x in existing):
+        raise _err("CidrConflict", f"The CIDR '{net}' conflicts with another CIDR of {v['id']}.")
+    if len(v.get("cidr_assocs", [])) >= 5:
+        raise _err("CidrLimitExceeded", "A VPC can have at most 5 secondary IPv4 CIDR blocks.")
+    for pc in m.get("peering_connections", {}).values():
+        if v["id"] in (pc["requester_vpc_id"], pc["accepter_vpc_id"]) and pc.get("status") in ("active", "pending-acceptance"):
+            other = m["vpcs"].get(pc["accepter_vpc_id"] if pc["requester_vpc_id"] == v["id"] else pc["requester_vpc_id"])
+            if other and net.overlaps(ipaddress.ip_network(other["cidr"])):
+                raise _err("CidrConflict", f"The CIDR '{net}' overlaps peer VPC {other['id']} ({other['cidr']}).")
+    aid = V._rid("vpc-cidr-assoc", 17)
+    v.setdefault("cidr_assocs", []).append({"id": aid, "cidr": str(net)})
+    v["secondary_cidrs"] = [a["cidr"] for a in v["cidr_assocs"]]
+    for rt in m["route_tables"].values():
+        if rt["vpc_id"] == v["id"]:
+            rt["routes"].append({"dest": str(net), "target": "local"})
+    return V._envelope("AssociateVpcCidrBlock", xml({"vpcId": v["id"], "cidrBlockAssociation": {"associationId": aid, "cidrBlock": str(net), "cidrBlockState": {"state": "associated"}}}))
+
+
+def _vpc_disassoc(store, p):
+    V = _V(); m = V._model(store); aid = str(p.get("AssociationId", ""))
+    for v in m["vpcs"].values():
+        a = next((x for x in v.get("cidr_assocs", []) if x["id"] == aid), None)
+        if a:
+            net = ipaddress.ip_network(a["cidr"])
+            if any(sn["vpc_id"] == v["id"] and ipaddress.ip_network(sn["cidr"]).subnet_of(net) for sn in m["subnets"].values()):
+                raise _err("OperationNotPermitted", f"The CIDR {a['cidr']} has subnets; delete them before disassociating.")
+            v["cidr_assocs"].remove(a)
+            v["secondary_cidrs"] = [x["cidr"] for x in v["cidr_assocs"]]
+            for rt in m["route_tables"].values():
+                if rt["vpc_id"] == v["id"]:
+                    rt["routes"] = [r for r in rt["routes"] if not (r["dest"] == a["cidr"] and r["target"] == "local")]
+            return V._envelope("DisassociateVpcCidrBlock", xml({"vpcId": v["id"], "cidrBlockAssociation": {"associationId": aid, "cidrBlock": a["cidr"], "cidrBlockState": {"state": "disassociating"}}}))
+        a6 = next((x for x in v.get("ipv6_assocs", []) if x["id"] == aid), None)
+        if a6:
+            v["ipv6_assocs"].remove(a6)
+            return V._envelope("DisassociateVpcCidrBlock", xml({"vpcId": v["id"], "ipv6CidrBlockAssociation": {"associationId": aid, "ipv6CidrBlock": a6["cidr"], "ipv6CidrBlockState": {"state": "disassociating"}}}))
+    if aid.startswith("vpc-cidr-assoc-primary-"):
+        raise _err("OperationNotPermitted", "The primary CIDR block cannot be disassociated.")
+    raise _err("InvalidVpcCidrBlockAssociationID.NotFound", f"The association ID '{aid}' does not exist")
+
+
+# ── route-table edge associations (internet / virtual private gateway) ────────────────────
+def edge_assoc_xml(rt):
+    return "".join(f"<item><routeTableAssociationId>{a['id']}</routeTableAssociationId><routeTableId>{rt['id']}</routeTableId>"
+                   f"<gatewayId>{a['gateway']}</gatewayId><main>false</main><associationState><state>associated</state></associationState></item>"
+                   for a in rt.get("edge_assocs", []))
+
+
+def associate_edge(m, rt, gw):
+    V = _V()
+    if gw.startswith("igw-"):
+        g = m["igws"].get(gw)
+        ok = bool(g) and (g.get("vpc_id") == rt["vpc_id"] or m["vpcs"].get(rt["vpc_id"], {}).get("igw") == gw)
+        if not g:
+            raise _err("InvalidInternetGatewayID.NotFound", f"The internetGateway ID '{gw}' does not exist")
+    elif gw.startswith("vgw-"):
+        g = m.get("vgws", {}).get(gw)
+        if not g:
+            raise _err("InvalidVpnGatewayID.NotFound", f"The virtual private gateway ID '{gw}' does not exist")
+        ok = rt["vpc_id"] in g["vpcs"]
+    else:
+        raise _err("InvalidParameterValue", f"Value ({gw}) for parameter gatewayId is invalid; only igw- and vgw- can be edge-associated.")
+    if not ok:
+        raise _err("InvalidParameterValue", f"{gw} is not attached to {rt['vpc_id']}.")
+    for r in m["route_tables"].values():
+        if any(a["gateway"] == gw for a in r.get("edge_assocs", [])):
+            raise _err("Resource.AlreadyAssociated", f"{gw} is already associated with route table {r['id']}.")
+    aid = V._rid("rtbassoc", 17)
+    rt.setdefault("edge_assocs", []).append({"id": aid, "gateway": gw})
+    return V._envelope("AssociateRouteTable", xml({"associationId": aid, "associationState": {"state": "associated"}}))
+
+
+def disassociate_edge(m, aid):
+    for rt in m["route_tables"].values():
+        a = next((x for x in rt.get("edge_assocs", []) if x["id"] == aid), None)
+        if a:
+            rt["edge_assocs"].remove(a)
+            return _V()._envelope("DisassociateRouteTable", "<return>true</return>")
+    return None
+
+
 OPS = dict(CVPN_OPS)
+OPS.update({"AssociateVpcCidrBlock": _vpc_assoc, "DisassociateVpcCidrBlock": _vpc_disassoc})
 OPS.update({"CreateVpnConcentrator": _vc_create, "DescribeVpnConcentrators": _vc_describe, "DeleteVpnConcentrator": _vc_delete})

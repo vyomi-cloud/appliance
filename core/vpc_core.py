@@ -267,6 +267,12 @@ def _create_subnet(store, params):
     m = _model(store)
     if vpc_id not in m["vpcs"]:
         raise VpcError("InvalidVpcID.NotFound", f"VPC {vpc_id} not found.")
+    try:
+        _sn = ipaddress.ip_network(cidr, strict=False)
+        if _sn.version == 4 and not any(_sn.subnet_of(ipaddress.ip_network(c)) for c in [m["vpcs"][vpc_id]["cidr"], *m["vpcs"][vpc_id].get("secondary_cidrs", [])]):
+            raise VpcError("InvalidSubnet.Range", f"The CIDR '{cidr}' is invalid (not within any CIDR block of {vpc_id}).")
+    except ValueError:
+        pass
     subnet_id = _rid("subnet")
     main_rt = next((rt["id"] for rt in m["route_tables"].values()
                     if rt["vpc_id"] == vpc_id and rt.get("main")), None)
@@ -450,6 +456,7 @@ def _rt_xml(rt: dict) -> str:
     assocs += "".join(f"<item><routeTableAssociationId>rtbassoc-{_xml_escape(sid)}</routeTableAssociationId>"
                        f"<routeTableId>{_xml_escape(rt['id'])}</routeTableId><subnetId>{_xml_escape(sid)}</subnetId>"
                        f"<main>false</main></item>" for sid in rt["subnets"])
+    assocs += _extras_core.edge_assoc_xml(rt)
     return ("<item>"
             f"<routeTableId>{_xml_escape(rt['id'])}</routeTableId><vpcId>{_xml_escape(rt['vpc_id'])}</vpcId>"
             f"<routeSet>{routes}</routeSet><associationSet>{assocs}</associationSet>"
@@ -544,6 +551,8 @@ def _associate_route_table(store, params):
     m = _model(store)
     rt_id = str(params.get("RouteTableId", ""))
     subnet_id = str(params.get("SubnetId", ""))
+    if params.get("GatewayId") and rt_id in m["route_tables"]:
+        return _extras_core.associate_edge(m, m["route_tables"][rt_id], str(params["GatewayId"]))
     if rt_id not in m["route_tables"] or subnet_id not in m["subnets"]:
         raise VpcError("InvalidParameterValue", "Route table or subnet not found.")
     _reassign_subnet_route_table(m, subnet_id, rt_id)
@@ -554,6 +563,9 @@ def _associate_route_table(store, params):
 def _disassociate_route_table(store, params):
     m = _model(store)
     assoc_id = str(params.get("AssociationId", ""))
+    _edge = _extras_core.disassociate_edge(m, assoc_id)
+    if _edge is not None:
+        return _edge
     if assoc_id.startswith("rtbassoc-main-"):
         raise VpcError("InvalidParameterValue", "The main route table association cannot be disassociated.")
     subnet_id = assoc_id[len("rtbassoc-"):]
@@ -1034,8 +1046,8 @@ def _vpc_xml(v: dict, m: dict) -> str:
             f"<isDefault>{str(bool(v.get('default'))).lower()}</isDefault>"
             f"<mainRouteTableId>{_xml_escape(main_rt)}</mainRouteTableId>"
             f"<mainNetworkAclId>{_xml_escape(v.get('default_nacl', ''))}</mainNetworkAclId>"
-            f"<ownerId>{OWNER_ID}</ownerId>{_tags_xml(v.get('tags', {}))}"
-            "</item>")
+            f"<ownerId>{OWNER_ID}</ownerId>"
+            + _extras_core.cidr_assoc_xml(v) + _tags_xml(v.get('tags', {})) + "</item>")
 
 
 def _describe_vpcs(store, params):

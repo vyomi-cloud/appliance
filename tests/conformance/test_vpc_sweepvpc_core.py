@@ -117,7 +117,46 @@ def client_vpn():
     _check("concentrator listed + deleted", vc in c({"Action": "DescribeVpnConcentrators"}) and (c({"Action": "DeleteVpnConcentrator", "VpnConcentratorId": vc}) and vc not in c({"Action": "DescribeVpnConcentrators"})))
 
 
+def cidrs_and_edge():
+    e = Env(); c = e.call
+    vpc_id = e.id(c({"Action": "CreateVpc", "CidrBlock": "10.72.0.0/16"}), "vpcId")
+    other = e.id(c({"Action": "CreateVpc", "CidrBlock": "10.73.0.0/16"}), "vpcId")
+    c({"Action": "CreateSubnet", "VpcId": vpc_id, "CidrBlock": "10.99.1.0/24"}, ok=False)
+    _check("subnet outside every VPC CIDR rejected", True)
+    for bad in ("10.72.5.0/24", "8.8.0.0/16", "10.80.0.0/8", "10.80.0.0/29"):
+        c({"Action": "AssociateVpcCidrBlock", "VpcId": vpc_id, "CidrBlock": bad}, ok=False)
+    _check("overlap / public range / size rejected", True)
+    body = c({"Action": "AssociateVpcCidrBlock", "VpcId": vpc_id, "CidrBlock": "10.80.0.0/16"})
+    aid = e.id(body, "associationId")
+    d = c({"Action": "DescribeVpcs", "VpcId.1": vpc_id})
+    _check("secondary CIDR in cidrBlockAssociationSet", "<cidrBlock>10.80.0.0/16</cidrBlock>" in d and d.count("<cidrBlockState>") == 2)
+    sn = e.id(c({"Action": "CreateSubnet", "VpcId": vpc_id, "CidrBlock": "10.80.1.0/24"}), "subnetId")
+    _check("subnet can use the secondary CIDR", sn.startswith("subnet-"))
+    _check("local route for the secondary CIDR", "<destinationCidrBlock>10.80.0.0/16</destinationCidrBlock><gatewayId>local</gatewayId>" in c({"Action": "DescribeRouteTables"}))
+    _check("disassociate blocked while a subnet lives there", "OperationNotPermitted" in c({"Action": "DisassociateVpcCidrBlock", "AssociationId": aid}, ok=False))
+    c({"Action": "DeleteSubnet", "SubnetId": sn})
+    c({"Action": "DisassociateVpcCidrBlock", "AssociationId": aid})
+    _check("disassociated CIDR gone", "10.80.0.0/16" not in c({"Action": "DescribeVpcs", "VpcId.1": vpc_id}))
+    _check("primary CIDR cannot be disassociated", "OperationNotPermitted" in c({"Action": "DisassociateVpcCidrBlock", "AssociationId": "vpc-cidr-assoc-primary-" + vpc_id[4:]}, ok=False))
+    v6 = c({"Action": "AssociateVpcCidrBlock", "VpcId": vpc_id, "AmazonProvidedIpv6CidrBlock": "true"})
+    _check("Amazon-provided IPv6 /56", "/56</ipv6CidrBlock>" in v6)
+    # edge associations
+    igw = e.id(c({"Action": "CreateInternetGateway"}), "internetGatewayId")
+    rtb = e.id(c({"Action": "CreateRouteTable", "VpcId": vpc_id}), "routeTableId")
+    c({"Action": "AssociateRouteTable", "RouteTableId": rtb, "GatewayId": igw}, ok=False)
+    c({"Action": "AttachInternetGateway", "InternetGatewayId": igw, "VpcId": vpc_id})
+    ea = e.id(c({"Action": "AssociateRouteTable", "RouteTableId": rtb, "GatewayId": igw}), "associationId")
+    rt = c({"Action": "DescribeRouteTables", "RouteTableId.1": rtb})
+    _check("edge association listed with gatewayId", f"<gatewayId>{igw}</gatewayId><main>false</main>" in rt)
+    rtb2 = e.id(c({"Action": "CreateRouteTable", "VpcId": vpc_id}), "routeTableId")
+    c({"Action": "AssociateRouteTable", "RouteTableId": rtb2, "GatewayId": igw}, ok=False)
+    c({"Action": "AssociateRouteTable", "RouteTableId": rtb2, "GatewayId": "eni-1"}, ok=False)
+    c({"Action": "DisassociateRouteTable", "AssociationId": ea})
+    _check("edge association removed", f"<gatewayId>{igw}</gatewayId><main>" not in c({"Action": "DescribeRouteTables", "RouteTableId.1": rtb}))
+
+
 def main():
+    cidrs_and_edge()
     vpn()
     client_vpn()
     print("\nVPC sweep: ALL GREEN")
