@@ -1,25 +1,8 @@
 {
- "at": "2026-11-03T01:28:26+00:00",
+ "at": "2026-11-03T02:28:19+00:00",
  "baseline": false,
- "changes": [
-  {
-   "cloud": "sdk",
-   "service": "cli:azure",
-   "kind": "release",
-   "key": "ver:cli:azure:azure-cli-2.92.0",
-   "title": "cli:azure: azure-cli-2.91.0 \u2192 azure-cli-2.92.0",
-   "actionable": false
-  },
-  {
-   "cloud": "aws",
-   "service": "Amazon RDS",
-   "kind": "announcement",
-   "key": "feed:aws:2a2bb1368d3a",
-   "title": "Amazon RDS for Oracle now supports M8i and R8i instances in additional AWS Regions",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/rds-oracle-m8i-r8i-instances-new-regions/",
-   "detail": "Amazon Relational Database Service (Amazon RDS) for Oracle now supports M8i and R8i instances in additional AWS Regions. Both M8i and R8i instances are now available in Asia Pacific (New Zealand) and Canada West (Calgary), and R8i instances are now available in Europe (Milan, Stockholm, and Zurich) and Israel (Tel Aviv). These instances are powered by custom Intel Xeon 6 processors, available only on AWS, delivering the highest performance and fastest memory bandwidth among comparable Intel processors in the cloud. The M8i and R8i instances offer up to 15% better price-performance, and 2.5x mo",
-   "actionable": false
-  }
- ],
- "errors": []
+ "changes": [],
+ "errors": [
+  "maven/software.amazon.awssdk:s3: The read operation timed out"
+ ]
 }
