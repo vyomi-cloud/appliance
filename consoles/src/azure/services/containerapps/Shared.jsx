@@ -16,6 +16,7 @@ import BrowseGrid from "../../kit/BrowseGrid.jsx";
 import { ErrorBar, Loading, NotSimulatedContainer, fmtDate } from "../../kit/common.jsx";
 import * as api from "./api.js";
 import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
+import SharedActivityLog from "../../kit/ActivityLog.jsx";
 
 export function MiniTable({ columns, rows, empty }) {
   return (
@@ -27,32 +28,7 @@ export function MiniTable({ columns, rows, empty }) {
 }
 
 export function ActivityLog({ resPath, name }) {
-  const { data, loading, error, reload } = useAsync(() => api.listActivityLog(resPath), [resPath]);
-  const rows = (data || []).map((e) => ({
-    key: e.id, op: e.operationName?.localizedValue || e.operationName?.value || "--",
-    status: e.status?.localizedValue || e.status?.value || "--",
-    time: e.eventTimestamp ? new Date(e.eventTimestamp).toLocaleString() : "--",
-    ts: e.eventTimestamp || "--", sub: e.subscriptionId || "--", caller: e.caller || "--",
-  }));
-  return (
-    <>
-      <div className="vy-panel-title">{name} | Activity log</div>
-      <div className="vy-cmdbar" role="toolbar" aria-label="Activity log commands">
-        <ToolbarButton icon={<ArrowClockwise20Regular />} onClick={reload}>Refresh</ToolbarButton>
-      </div>
-      {loading ? <Loading /> : error ? <ErrorBar error={error} title="Failed to load the activity log" /> : (
-        <table className="vy-grid" aria-label="Activity log">
-          <thead><tr><th>Operation name</th><th>Status</th><th>Time</th><th>Time stamp</th><th>Subscription</th><th>Event initiated by</th></tr></thead>
-          <tbody>
-            {rows.length === 0 ? <tr><td colSpan={6}>No events to display</td></tr>
-              : rows.map((r) => <tr key={r.key}><td>{r.op}</td><td>{r.status}</td><td>{r.time}</td><td>{r.ts}</td><td>{r.sub}</td><td>{r.caller}</td></tr>)}
-          </tbody>
-        </table>
-      )}
-      <NotSimulatedContainer feature="Activity log filters and export"
-        note="Filters (Management Group, Subscription, Event severity, Timespan, Resource group, Resource, Add Filter) and the Edit columns / Export Activity Logs / Download as CSV / Insights / Feedback / Pin current filters / Reset filters actions are not simulated; Vyomi lists the real create/update/delete/action operations performed on this resource." />
-    </>
-  );
+  return <SharedActivityLog scope={resPath || ""} name={name} />;
 }
 
 export function AccessControlIam({ resPath, name, capId }) {

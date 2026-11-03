@@ -26,6 +26,7 @@ import { useSubscription } from "../../kit/subscription.js";
 import { TagRows } from "./CreateStorageAccount.jsx";
 import * as api from "./api.js";
 import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
+import SharedActivityLog from "../../kit/ActivityLog.jsx";
 
 const ENFORCEMENT = "These settings are stored on the storage account (ARM) and returned to your SDKs and the az CLI. The Vyomi Blob data plane does not enforce them.";
 
@@ -100,7 +101,7 @@ export default function StorageAccountBlade({ params, query }) {
       cors: () => <Cors a={a} />,
       lifecycle: () => <Lifecycle a={a} />,
       sas: () => <Sas a={a} />,
-      activitylog: () => <ActivityLog a={a} />,
+      activitylog: () => <SharedActivityLog scope={a.id} name={a.name} />,
       locks: () => <Locks a={a} />,
       queues: () => (query.queue ? <QueueDetail name={query.queue} self={self} /> : <Queues self={self} />),
       tables: () => (query.table ? <TableDetail name={query.table} self={self} /> : <Tables self={self} />),
@@ -1406,50 +1407,6 @@ function AddLockDialog({ open, onClose, onCreate }) {
 }
 
 // ── Activity log (Microsoft.Insights/eventtypes/management/values, scoped to this account) ──
-function ActivityLog({ a }) {
-  const { data, loading, error, reload } = useAsync(() => api.listActivityLog(a.resourceGroup, a.name), [a.id]);
-  const [gap, setGap] = useState(null);
-  const rows = data || [];
-  return (
-    <CapabilityContainer id="azure.storage.activitylog" title={`${a.name} | Activity log`}
-      actions={<>
-        <ToolbarButton onClick={() => setGap("Edit columns")}>Edit columns</ToolbarButton>
-        <ToolbarButton icon={<ArrowClockwise20Regular />} onClick={reload}>Refresh</ToolbarButton>
-        <ToolbarButton onClick={() => setGap("Export Activity Logs")}>Export Activity Logs</ToolbarButton>
-        <ToolbarButton icon={<ArrowDownload20Regular />} onClick={() => setGap("Download as CSV")}>Download as CSV</ToolbarButton>
-        <ToolbarButton onClick={() => setGap("Feedback")}>Feedback</ToolbarButton>
-        <ToolbarButton onClick={() => setGap("Pin current filters")}>Pin current filters</ToolbarButton>
-        <ToolbarButton onClick={() => setGap("Reset filters")}>Reset filters</ToolbarButton>
-      </>}>
-      <ErrorBar error={error} />
-      <NotSimulated feature="Severity/category filtering and the Timespan picker" note="This list always shows everything recorded since the simulation booted." />
-      <table className="vy-grid">
-        <thead><tr><th>Operation name</th><th>Status</th><th>Time</th><th>Time stamp</th><th>Subscription</th><th>Event initiated by</th></tr></thead>
-        <tbody>
-          {loading ? <tr><td colSpan={6}><Spinner size="tiny" /></td></tr> : rows.length ? rows.map((r) => (
-            <tr key={r.id}>
-              <td>{r.operationName?.localizedValue || r.operationName?.value}</td>
-              <td>{r.status?.localizedValue || r.status?.value}</td>
-              <td>{fmtDate(r.eventTimestamp)}</td>
-              <td>{r.eventTimestamp}</td>
-              <td>{r.subscriptionId}</td>
-              <td>{r.caller}</td>
-            </tr>
-          )) : <tr><td colSpan={6} className="vy-muted">No events to display</td></tr>}
-        </tbody>
-      </table>
-      <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
-        <DialogSurface aria-label={gap || "Not simulated"}>
-          <DialogBody>
-            <DialogTitle>{gap}</DialogTitle>
-            <DialogContent><NotSimulated feature={gap === "Feedback" ? "Sending product feedback" : gap} /></DialogContent>
-            <DialogActions><Button onClick={() => setGap(null)}>Close</Button></DialogActions>
-          </DialogBody>
-        </DialogSurface>
-      </Dialog>
-    </CapabilityContainer>
-  );
-}
 
 // ── Queues (Azure Storage Queue REST, a global data plane — see api.js) ────────────────
 function Queues({ self }) {

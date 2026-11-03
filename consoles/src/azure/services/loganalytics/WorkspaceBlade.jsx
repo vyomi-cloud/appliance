@@ -24,6 +24,7 @@ import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
 import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
+import SharedActivityLog from "../../kit/ActivityLog.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -88,7 +89,7 @@ export default function WorkspaceBlade({ params }) {
     const a = ws.data, reload = ws.reload;
     const P = {
       overview: () => <Overview a={a} reload={reload} self={self} />,
-      activitylog: () => <ActivityLog a={a} />,
+      activitylog: () => <SharedActivityLog scope={a.id} name={a.name} />,
       iam: () => <AccessControlIam a={a} />,
       tags: () => <Tags a={a} reload={reload} />,
       agents: () => <Agents a={a} />,
@@ -694,40 +695,5 @@ const ACTIVITY_LOG_COLUMNS = [
   { key: "caller", label: "Event initiated by", value: (r) => r.caller },
 ];
 
-function ActivityLog({ a }) {
-  const { data, loading, error, reload } = useAsync(() => api.listActivityLog(a.resourceGroup, a.name), [a.id]);
-  const [gap, setGap] = useState(null);
-  const [filter, setFilter] = useState("");
-  const rows = data || [];
-  const filtered = filter.trim() ? rows.filter((r) => ACTIVITY_LOG_COLUMNS.some((c) => String(c.value(r) ?? "").toLowerCase().includes(filter.trim().toLowerCase()))) : rows;
-  return (
-    <CapabilityContainer id="azure.loganalytics.workspace.activitylog" title={`${a.name} | Activity log`}>
-      <div className="vy-cmdbar" role="toolbar" aria-label="Activity log commands">
-        <ToolbarButton icon={<ArrowClockwise20Regular />} onClick={reload}>Refresh</ToolbarButton>
-        <ToolbarButton onClick={() => setGap("Export Activity Logs")}>Export Activity Logs</ToolbarButton>
-        <ToolbarButton icon={<ArrowDownload20Regular />} disabled={!filtered.length} onClick={() => downloadCsv("activity-log.csv", ACTIVITY_LOG_COLUMNS, filtered)}>Download as CSV</ToolbarButton>
-        <ToolbarButton onClick={() => setFilter("")}>Reset filters</ToolbarButton>
-      </div>
-      <div className="vy-filters">
-        <Input size="small" style={{ width: 280 }} placeholder="Filter by operation, status or caller..."
-          value={filter} onChange={(_, d) => setFilter(d.value)} aria-label="Filter by operation, status or caller..." />
-      </div>
-      <ErrorBar error={error} />
-      <table className="vy-grid">
-        <thead><tr>{ACTIVITY_LOG_COLUMNS.map((c) => <th key={c.key}>{c.label}</th>)}</tr></thead>
-        <tbody>
-          {loading ? <tr><td colSpan={ACTIVITY_LOG_COLUMNS.length}><Spinner size="tiny" /></td></tr> : filtered.length
-            ? filtered.map((r) => <tr key={r.id}>{ACTIVITY_LOG_COLUMNS.map((c) => <td key={c.key}>{c.value(r)}</td>)}</tr>)
-            : <tr><td colSpan={ACTIVITY_LOG_COLUMNS.length} className="vy-muted">No events to display</td></tr>}
-        </tbody>
-      </table>
-      <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
-        <DialogSurface aria-label={gap || "Not simulated"}>
-          <DialogBody><CapabilityContainer id="azure.loganalytics.workspace.listactions" title={gap || ""} /></DialogBody>
-        </DialogSurface>
-      </Dialog>
-    </CapabilityContainer>
-  );
-}
 
 // ── Export template ────────────────────────────────────────────────────────────────────

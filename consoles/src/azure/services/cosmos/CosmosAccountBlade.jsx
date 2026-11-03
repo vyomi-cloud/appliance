@@ -23,6 +23,7 @@ import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
 import DataExplorer from "./DataExplorer.jsx";
 import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
+import SharedActivityLog from "../../kit/ActivityLog.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -106,7 +107,7 @@ export default function CosmosAccountBlade({ params }) {
     const a = data.data, reload = data.reload;
     const P = {
       overview: () => <Overview a={a} reload={reload} self={self} />,
-      activitylog: () => <ActivityLog a={a} />,
+      activitylog: () => <SharedActivityLog scope={a.id} name={a.name} />,
       iam: () => <Iam a={a} />,
       tags: () => <Tags a={a} reload={reload} />,
       dataexplorer: () => <DataExplorer />,
@@ -231,58 +232,6 @@ function Overview({ a, reload, self }) {
 // ── Activity log ──────────────────────────────────────────────────────────────────────
 const TIMESPANS = { "1h": 1, "6h": 6, "24h": 24, "7d": 24 * 7, "30d": 24 * 30 };
 
-function ActivityLog({ a }) {
-  const sub = useSubscription();
-  const resPath = api.resourcePath(a.resourceGroup, a.name);
-  const [timespan, setTimespan] = useState("24h");
-  const since = () => new Date(Date.now() - TIMESPANS[timespan] * 3600 * 1000).toISOString();
-  const { data, loading, error, reload } = useAsync(() => api.listActivityLog(resPath, sub.id, since()), [resPath, sub.id, timespan]);
-  const [gap, setGap] = useState(null);
-  const rows = data || [];
-  const GAPS = ["Edit columns", "Export Activity Logs", "Download as CSV", "Insights", "Feedback", "Pin current filters", "Reset filters"];
-  return (
-    <>
-      <div className="vy-panel-title">{a.name} | Activity log</div>
-      <div className="vy-cmdbar" role="toolbar" aria-label="Activity log commands">
-        <ToolbarButton onClick={reload}>Activity</ToolbarButton>
-        {GAPS.map((g) => <ToolbarButton key={g} onClick={() => setGap(g)}>{g}</ToolbarButton>)}
-        <ToolbarButton icon={<ArrowClockwise20Regular />} onClick={reload}>Refresh</ToolbarButton>
-        <Select size="small" value={timespan} onChange={(_, d) => setTimespan(d.value)} aria-label="Timespan" style={{ marginLeft: "auto", width: 160 }}>
-          <option value="1h">Last hour</option>
-          <option value="6h">Last 6 hours</option>
-          <option value="24h">Last 24 hours</option>
-          <option value="7d">Last 7 days</option>
-          <option value="30d">Last 30 days</option>
-        </Select>
-      </div>
-      <ErrorBar error={error} />
-      <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
-        <DialogSurface aria-label={gap || "Not simulated"}>
-          <DialogBody>
-            <DialogTitle>{gap}</DialogTitle>
-            <DialogContent><NotSimulated feature={gap === "Feedback" ? "Sending product feedback" : `${gap} on the activity log`} /></DialogContent>
-            <DialogActions><Button onClick={() => setGap(null)}>Close</Button></DialogActions>
-          </DialogBody>
-        </DialogSurface>
-      </Dialog>
-      <table className="vy-grid">
-        <thead><tr><th>Operation name</th><th>Status</th><th>Time</th><th>Time stamp</th><th>Subscription</th><th>Event initiated by</th></tr></thead>
-        <tbody>
-          {loading ? <tr><td colSpan={6}><Spinner size="tiny" /></td></tr> : rows.length ? rows.map((r) => (
-            <tr key={r.id}>
-              <td>{r.operationName?.localizedValue || r.operationName?.value}</td>
-              <td>{r.status?.localizedValue || r.status?.value}</td>
-              <td>{fmtDate(r.eventTimestamp)}</td>
-              <td>{r.eventTimestamp}</td>
-              <td>{r.subscriptionId}</td>
-              <td>{r.caller}</td>
-            </tr>
-          )) : <tr><td colSpan={6} className="vy-muted">No events to display</td></tr>}
-        </tbody>
-      </table>
-    </>
-  );
-}
 
 // ── Access control (IAM) ─────────────────────────────────────────────────────────────────
 function Iam({ a }) {

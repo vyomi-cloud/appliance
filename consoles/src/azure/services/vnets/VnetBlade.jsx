@@ -26,6 +26,7 @@ import * as api from "./api.js";
 import { SubnetsPanel, PeeringsPanel, ServiceEndpointsPanel, ConnectedDevicesPanel, TopologyPanel } from "./Networking.jsx";
 import NetworkWatcherTools, { ConnectionTroubleshootPanel } from "./NetworkWatcher.jsx";
 import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
+import SharedActivityLog from "../../kit/ActivityLog.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -82,7 +83,7 @@ export default function VnetBlade({ params }) {
       connecteddevices: () => <ConnectedDevicesPanel a={a} />,
       properties: () => <Properties a={a} />,
       locks: () => <Locks a={a} />,
-      activitylog: () => <ActivityLog a={a} />,
+      activitylog: () => <SharedActivityLog scope={a.id} name={a.name} />,
       exporttemplate: () => <SharedExportTemplate id={a.id} name={a.name} resourceGroup={a.resourceGroup} />,
       topology: () => <TopologyPanel a={a} />,
       diagnose: () => <Diagnose />,
@@ -510,43 +511,6 @@ function AddLockDialog({ open, onClose, onCreate }) {
 }
 
 // ── Activity log (Microsoft.Insights/eventtypes/management/values, scoped to this vnet) ──
-function ActivityLog({ a }) {
-  const { data, loading, error, reload } = useAsync(() => api.listActivityLog(a.resourceGroup, a.name), [a.id]);
-  const [gap, setGap] = useState(null);
-  const rows = data || [];
-  return (
-    <CapabilityContainer id="azure.vnets.activity_log" title={`${a.name} | Activity log`}
-      actions={<ToolbarButton icon={<ArrowClockwise20Regular />} onClick={reload}>Refresh</ToolbarButton>}>
-      <div className="vy-cmdbar" role="toolbar" aria-label="Activity log tools">
-        {["Activity", "Edit columns", "Export Activity Logs", "Download as CSV", "Insights", "Feedback", "Pin current filters", "Reset filters"].map((l) => (
-          <ToolbarButton key={l} onClick={() => setGap(l)}>{l}</ToolbarButton>
-        ))}
-      </div>
-      <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
-        <DialogSurface aria-label={gap || "Not simulated"}>
-          <DialogBody><DialogTitle>{gap}</DialogTitle><DialogContent><NotSimulatedContainer feature={gap || ""} /></DialogContent>
-            <DialogActions><Button onClick={() => setGap(null)}>Close</Button></DialogActions></DialogBody>
-        </DialogSurface>
-      </Dialog>
-      <ErrorBar error={error} />
-      <table className="vy-grid">
-        <thead><tr><th>Operation name</th><th>Status</th><th>Time</th><th>Time stamp</th><th>Subscription</th><th>Event initiated by</th></tr></thead>
-        <tbody>
-          {loading ? <tr><td colSpan={6}><Spinner size="tiny" /></td></tr> : rows.length ? rows.map((r) => (
-            <tr key={r.id}>
-              <td>{r.operationName?.localizedValue || r.operationName?.value}</td>
-              <td>{r.status?.localizedValue || r.status?.value}</td>
-              <td>{fmtDate(r.eventTimestamp)}</td>
-              <td>{r.eventTimestamp}</td>
-              <td>{r.subscriptionId}</td>
-              <td>{r.caller}</td>
-            </tr>
-          )) : <tr><td colSpan={6} className="vy-muted">No events to display</td></tr>}
-        </tbody>
-      </table>
-    </CapabilityContainer>
-  );
-}
 
 // ── Export template — all three tabs are generated client-side from this resource's live
 // ARM state (same source, three serializations); no linked/nested templates or deployment

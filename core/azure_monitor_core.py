@@ -1116,6 +1116,18 @@ def _activity_log_list(state, sub, query):
         rows = [r for r in rows if str(r.get("eventTimestamp") or "") >= ge.group(1)]
     if le:
         rows = [r for r in rows if str(r.get("eventTimestamp") or "") <= le.group(1)]
+    # Activity-log filter bar: real OData equality predicates on level / status / caller /
+    # eventName ("level eq 'Error' and status eq 'Failed'"). Matching is case-insensitive.
+    def _eq(field, getter):
+        nonlocal rows
+        mm = re.search(rf"\b{field}\s+eq\s+'([^']*)'", flt, re.I)
+        if mm:
+            want_v = mm.group(1).lower()
+            rows = [r for r in rows if str(getter(r) or "").lower() == want_v]
+    _eq("level", lambda r: r.get("level"))
+    _eq("status", lambda r: (r.get("status") or {}).get("value") if isinstance(r.get("status"), dict) else r.get("status"))
+    _eq("caller", lambda r: r.get("caller"))
+    _eq("eventName", lambda r: (r.get("eventName") or {}).get("value") if isinstance(r.get("eventName"), dict) else r.get("eventName"))
     rows.sort(key=lambda e: (e.get("eventTimestamp") or "", e.get("_seq", 0)), reverse=True)
     return _ok({"value": [_view(r) for r in rows]})
 

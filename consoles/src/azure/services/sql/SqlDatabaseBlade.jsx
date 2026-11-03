@@ -23,6 +23,7 @@ import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
 import ComputeStorageFields from "./ComputeStorageFields.jsx";
 import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
+import SharedActivityLog from "../../kit/ActivityLog.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -92,7 +93,7 @@ export default function SqlDatabaseBlade({ params }) {
       connectionstrings: () => <ConnectionStrings a={a} />,
       properties: () => <Properties a={a} />,
       locks: () => <Locks a={a} />,
-      activitylog: () => <ActivityLog a={a} />,
+      activitylog: () => <SharedActivityLog scope={a.id} name={a.name} />,
       tde: () => <Tde a={a} reload={reload} />,
       identity: () => <IdentityPanel a={a} reload={reload} />,
       autotuning: () => <AutomaticTuning a={a} reload={reload} />,
@@ -425,48 +426,6 @@ function AddLockDialog({ open, onClose, onCreate }) {
 }
 
 // ── Activity log ──────────────────────────────────────────────────────────────────────
-function ActivityLog({ a }) {
-  const resPath = api.databasePath(a.resourceGroup, a.server, a.name);
-  const { data, loading, error, reload } = useAsync(() => api.listActivityLog(resPath), [resPath]);
-  const [gap, setGap] = useState(null);
-  const rows = data || [];
-  const GAPS = ["Edit columns", "Export Activity Logs", "Download as CSV", "Insights", "Feedback", "Pin current filters", "Reset filters"];
-  return (
-    <>
-      <div className="vy-panel-title">{a.name} | Activity log</div>
-      <div className="vy-cmdbar" role="toolbar" aria-label="Activity log commands">
-        <ToolbarButton onClick={reload}>Activity</ToolbarButton>
-        {GAPS.map((g) => <ToolbarButton key={g} onClick={() => setGap(g)}>{g}</ToolbarButton>)}
-        <ToolbarButton icon={<ArrowClockwise20Regular />} onClick={reload}>Refresh</ToolbarButton>
-      </div>
-      <ErrorBar error={error} />
-      <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
-        <DialogSurface aria-label={gap || "Not simulated"}>
-          <DialogBody>
-            <DialogTitle>{gap}</DialogTitle>
-            <DialogContent><NotSimulated feature={gap === "Feedback" ? "Sending product feedback" : `${gap} on the activity log`} /></DialogContent>
-            <DialogActions><Button onClick={() => setGap(null)}>Close</Button></DialogActions>
-          </DialogBody>
-        </DialogSurface>
-      </Dialog>
-      <table className="vy-grid">
-        <thead><tr><th>Operation name</th><th>Status</th><th>Time</th><th>Time stamp</th><th>Subscription</th><th>Event initiated by</th></tr></thead>
-        <tbody>
-          {loading ? <tr><td colSpan={6}><Spinner size="tiny" /></td></tr> : rows.length ? rows.map((r) => (
-            <tr key={r.id}>
-              <td>{r.operationName?.localizedValue || r.operationName?.value}</td>
-              <td>{r.status?.localizedValue || r.status?.value}</td>
-              <td>{fmtDate(r.eventTimestamp)}</td>
-              <td>{r.eventTimestamp}</td>
-              <td>{r.subscriptionId}</td>
-              <td>{r.caller}</td>
-            </tr>
-          )) : <tr><td colSpan={6} className="vy-muted">No events to display</td></tr>}
-        </tbody>
-      </table>
-    </>
-  );
-}
 
 // ── Transparent data encryption ──────────────────────────────────────────────────────
 function Tde({ a, reload }) {

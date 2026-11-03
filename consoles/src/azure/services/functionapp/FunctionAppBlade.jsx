@@ -25,6 +25,7 @@ import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
 import { ResourceRecommendations } from "../defender/Pages.jsx";
 import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
+import SharedActivityLog from "../../kit/ActivityLog.jsx";
 
 const ROLE_ASSIGNMENTS = armType("Microsoft.Authorization", "roleAssignments", "2022-04-01");
 const ROLE_DEFINITIONS = armType("Microsoft.Authorization", "roleDefinitions", "2022-04-01");
@@ -96,7 +97,7 @@ export default function FunctionAppBlade({ params }) {
       "locks": () => <Locks a={a} />,
       "access-control-iam": () => <AccessControl a={a} />,
       "export-template": () => <SharedExportTemplate id={a.id} name={a.name} resourceGroup={a.resourceGroup} />,
-      "activity-log": () => <ActivityLog a={a} />,
+      "activity-log": () => <SharedActivityLog scope={a.id} name={a.name} />,
       "configuration": () => <Placeholder name={a.name} id="configuration" extra={<p style={{ fontSize: 13 }}>App settings and connection strings moved to <Link href={`${self}/environment-variables`}>Environment variables</Link>.</p>} />,
       "identity": () => <Identity a={a} reload={reload} />,
       "custom-domains": () => <CustomDomains a={a} />,
@@ -643,34 +644,6 @@ function AccessControl({ a }) {
 }
 
 // ── Activity log ─────────────────────────────────────────────────────────────────────────
-function ActivityLog({ a }) {
-  const { data, loading, error, reload } = useAsync(() => api.listActivityLog(a.resourceGroup, a.name), [a.id]);
-  const rows = data || [];
-  return (
-    <>
-      <div className="vy-panel-title">{a.name} | Activity log</div>
-      <div className="vy-cmdbar" role="toolbar" aria-label="Activity log commands">
-        <ToolbarButton icon={<ArrowClockwise20Regular />} onClick={reload}>Refresh</ToolbarButton>
-      </div>
-      <ErrorBar error={error} />
-      <table className="vy-grid">
-        <thead><tr><th>Operation name</th><th>Status</th><th>Time</th><th>Time stamp</th><th>Subscription</th><th>Event initiated by</th></tr></thead>
-        <tbody>
-          {loading ? <tr><td colSpan={6}><Spinner size="tiny" /></td></tr> : rows.length ? rows.map((r) => (
-            <tr key={r.id}>
-              <td>{r.operationName?.value}</td>
-              <td>{r.status?.localizedValue || r.status?.value}</td>
-              <td>{fmtDate(r.eventTimestamp)}</td>
-              <td>{r.eventTimestamp}</td>
-              <td>{r.subscriptionId}</td>
-              <td>{r.caller}</td>
-            </tr>
-          )) : <tr><td colSpan={6} className="vy-muted">No events to display</td></tr>}
-        </tbody>
-      </table>
-    </>
-  );
-}
 
 // ── Export template ──────────────────────────────────────────────────────────────────────
 

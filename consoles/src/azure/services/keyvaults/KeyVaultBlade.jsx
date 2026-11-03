@@ -21,6 +21,7 @@ import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
 import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
+import SharedActivityLog from "../../kit/ActivityLog.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -79,7 +80,7 @@ export default function KeyVaultBlade({ params, query }) {
       networking: () => <Networking a={a} reload={reload} />,
       properties: () => <Properties a={a} />,
       locks: () => <Locks a={a} />,
-      activitylog: () => <ActivityLog a={a} />,
+      activitylog: () => <SharedActivityLog scope={a.id} name={a.name} />,
       exporttemplate: () => <SharedExportTemplate id={a.id} name={a.name} resourceGroup={a.resourceGroup} />,
     }[panel];
     body = P ? P() : (
@@ -1044,56 +1045,5 @@ const timespanSinceIso = (code) => {
   return new Date(Date.now() - ms).toISOString();
 };
 
-function ActivityLog({ a }) {
-  const [timespan, setTimespan] = useState("90d");
-  const { data, loading, error, reload } = useAsync(() => api.listActivityLog(a.resourceGroup, a.name, timespanSinceIso(timespan)), [a.id, timespan]);
-  const [gap, setGap] = useState(null);
-  const rows = data || [];
-  return (
-    <CapabilityContainer id="azure.keyvaults.activity_log" title={`${a.name} | Activity log`}
-      actions={<>
-        <ToolbarButton onClick={() => setGap("Edit columns")}>Edit columns</ToolbarButton>
-        <ToolbarButton icon={<ArrowClockwise20Regular />} onClick={reload}>Refresh</ToolbarButton>
-        <ToolbarButton onClick={() => setGap("Export Activity Logs")}>Export Activity Logs</ToolbarButton>
-        <ToolbarButton icon={<ArrowDownload20Regular />} disabled={!rows.length}
-          onClick={() => downloadCsv("activity-log.csv", ACTIVITY_LOG_COLUMNS, rows)}>Download as CSV</ToolbarButton>
-        <ToolbarButton onClick={() => setGap("Feedback")}>Feedback</ToolbarButton>
-        <ToolbarButton onClick={() => setGap("Pin current filters")}>Pin current filters</ToolbarButton>
-        <ToolbarButton onClick={() => setGap("Reset filters")}>Reset filters</ToolbarButton>
-      </>}>
-      <ErrorBar error={error} />
-      <Field label="Timespan" style={{ maxWidth: 220, marginBottom: 8 }}>
-        <Select value={timespan} onChange={(_, d) => setTimespan(d.value)} aria-label="Timespan">
-          {TIMESPANS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-        </Select>
-      </Field>
-      <NotSimulated feature="Severity/category filtering" note="Every recorded event is Informational/Administrative, so there is nothing for that filter to narrow; only mutations made since the simulation booted are recorded (no historical backfill)." />
-      <table className="vy-grid">
-        <thead><tr>{ACTIVITY_LOG_COLUMNS.map((c) => <th key={c.key}>{c.label}</th>)}</tr></thead>
-        <tbody>
-          {loading ? <tr><td colSpan={6}><Spinner size="tiny" /></td></tr> : rows.length ? rows.map((r) => (
-            <tr key={r.id}>
-              <td>{r.operationName?.localizedValue || r.operationName?.value}</td>
-              <td>{r.status?.localizedValue || r.status?.value}</td>
-              <td>{fmtDate(r.eventTimestamp)}</td>
-              <td>{r.eventTimestamp}</td>
-              <td>{r.subscriptionId}</td>
-              <td>{r.caller}</td>
-            </tr>
-          )) : <tr><td colSpan={6} className="vy-muted">No events to display</td></tr>}
-        </tbody>
-      </table>
-      <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
-        <DialogSurface aria-label={gap || "Not simulated"}>
-          <DialogBody>
-            <DialogTitle>{gap}</DialogTitle>
-            <DialogContent><NotSimulated feature={gap === "Feedback" ? "Sending product feedback" : gap} /></DialogContent>
-            <DialogActions><Button onClick={() => setGap(null)}>Close</Button></DialogActions>
-          </DialogBody>
-        </DialogSurface>
-      </Dialog>
-    </CapabilityContainer>
-  );
-}
 
 // ── Export template ────────────────────────────────────────────────────────────────────

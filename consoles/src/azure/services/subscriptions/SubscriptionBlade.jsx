@@ -18,6 +18,7 @@ import ResourceBlade from "../../kit/ResourceBlade.jsx";
 import { downloadCsv, Essentials, ErrorBar, Glyph, InfoBar, Loading, NotSimulated, NotSimulatedContainer, fmtDate } from "../../kit/common.jsx";
 import { remember } from "../../kit/recent.js";
 import * as api from "./api.js";
+import SharedActivityLog from "../../kit/ActivityLog.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -82,7 +83,7 @@ export default function SubscriptionBlade({ params }) {
     const a = sub.data, reload = sub.reload;
     const P = {
       overview: () => <Overview a={a} reload={reload} id={id} name={name} self={self} />,
-      activitylog: () => <ActivityLog id={id} name={name} />,
+      activitylog: () => <SharedActivityLog scope="" name={name} capId="azure.subscriptions.activity_log" />,
       iam: () => <AccessControlIam id={id} />,
       tags: () => <Tags a={a} id={id} reload={reload} />,
       costanalysis: () => <CostAnalysis id={id} />,
@@ -490,48 +491,6 @@ function CheckAccessDialog({ open, mine, onClose, onCheck }) {
 }
 
 // ── Activity log (Microsoft.Insights/eventtypes/management/values, subscription-wide) ──
-function ActivityLog({ id, name }) {
-  const { data, loading, error, reload } = useAsync(() => api.listActivityLog(id), [id]);
-  const [gap, setGap] = useState(null);
-  const rows = data || [];
-  return (
-    <CapabilityContainer id="azure.subscriptions.activity_log" title={`${name} | Activity log`}
-      actions={<ToolbarButton icon={<ArrowClockwise20Regular />} onClick={reload}>Refresh</ToolbarButton>}>
-      <div className="vy-cmdbar" role="toolbar" aria-label="Activity log tools">
-        <ToolbarButton icon={<ArrowDownload20Regular />} onClick={() => downloadCsv("activity-log.csv",
-          [{ key: "op", label: "Operation name" }, { key: "status", label: "Status" }, { key: "ts", label: "Time stamp" }],
-          rows.map((r) => ({ op: r.operationName?.localizedValue || r.operationName?.value, status: r.status?.localizedValue || r.status?.value, ts: r.eventTimestamp })))}>
-          Download as CSV
-        </ToolbarButton>
-        {["Activity", "Edit columns", "Export Activity Logs", "Insights", "Feedback", "Pin current filters", "Reset filters"].map((l) => (
-          <ToolbarButton key={l} onClick={() => setGap(l)}>{l}</ToolbarButton>
-        ))}
-      </div>
-      <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
-        <DialogSurface aria-label={gap || "Not simulated"}>
-          <DialogBody><DialogTitle>{gap}</DialogTitle><DialogContent><NotSimulated feature={gap || ""} /></DialogContent>
-            <DialogActions><Button onClick={() => setGap(null)}>Close</Button></DialogActions></DialogBody>
-        </DialogSurface>
-      </Dialog>
-      <ErrorBar error={error} />
-      <table className="vy-grid">
-        <thead><tr><th>Operation name</th><th>Status</th><th>Time</th><th>Time stamp</th><th>Subscription</th><th>Event initiated by</th></tr></thead>
-        <tbody>
-          {loading ? <tr><td colSpan={6}><Spinner size="tiny" /></td></tr> : rows.length ? rows.map((r) => (
-            <tr key={r.id}>
-              <td>{r.operationName?.localizedValue || r.operationName?.value}</td>
-              <td>{r.status?.localizedValue || r.status?.value}</td>
-              <td>{fmtDate(r.eventTimestamp)}</td>
-              <td>{r.eventTimestamp}</td>
-              <td>{r.subscriptionId}</td>
-              <td>{r.caller}</td>
-            </tr>
-          )) : <tr><td colSpan={6} className="vy-muted">No events to display</td></tr>}
-        </tbody>
-      </table>
-    </CapabilityContainer>
-  );
-}
 
 // ── Cost Management, subscription scope ─────────────────────────────────────────────────
 const DOLLAR = (n) => `$${Number(n || 0).toFixed(2)}`;

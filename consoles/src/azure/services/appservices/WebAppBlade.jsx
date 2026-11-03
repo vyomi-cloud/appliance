@@ -23,6 +23,7 @@ import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
 import { ResourceRecommendations } from "../defender/Pages.jsx";
 import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
+import SharedActivityLog from "../../kit/ActivityLog.jsx";
 
 /** Resource menu: [id, label] | {group, items}. Matches the real Web App blade's nav exactly
  * (labels double as the "{name} | Label" page titles the captured spec records). */
@@ -88,7 +89,7 @@ export default function WebAppBlade({ params, query }) {
     const P = {
       overview: () => <Overview a={a} reload={reload} self={self} />,
       defender: () => <ResourceRecommendations resourceId={a.id} />,
-      activitylog: () => <ActivityLog rg={rg} name={name} />,
+      activitylog: () => <SharedActivityLog scope={a.id} name={a.name} />,
       iam: () => <AccessControl a={a} />,
       tags: () => <Tags a={a} reload={reload} />,
       slots: () => <Slots rg={rg} name={name} />,
@@ -239,40 +240,6 @@ function SwapDialog({ open, onClose, rg, name, onDone }) {
 }
 
 // ── Activity log ─────────────────────────────────────────────────────────────────────────
-function ActivityLog({ rg, name }) {
-  const { data, loading, error, reload } = useAsync(() => api.listActivityLog(rg, name), [rg, name]);
-  const rows = (data || []).map((e) => ({
-    key: `${e.id}`,
-    op: e.operationName?.localizedValue || e.operationName?.value || "--",
-    status: e.status?.localizedValue || e.status?.value || "--",
-    time: e.eventTimestamp ? new Date(e.eventTimestamp).toLocaleString() : "--",
-    ts: e.eventTimestamp || "--",
-    sub: e.subscriptionId || "--",
-    caller: e.caller || "--",
-  }));
-  return (
-    <>
-      <div className="vy-panel-title">{name} | Activity log</div>
-      <div className="vy-cmdbar" role="toolbar" aria-label="Activity log commands">
-        <ToolbarButton icon={<ArrowClockwise20Regular />} onClick={reload}>Refresh</ToolbarButton>
-      </div>
-      {loading ? <Loading /> : error ? <ErrorBar error={error} title="Failed to load the activity log" /> : (
-        <table className="vy-grid" aria-label="Activity log">
-          <thead><tr><th>Operation name</th><th>Status</th><th>Time</th><th>Time stamp</th><th>Subscription</th><th>Event initiated by</th></tr></thead>
-          <tbody>
-            {rows.length === 0
-              ? <tr><td colSpan={6}>No events to display</td></tr>
-              : rows.map((r) => <tr key={r.key}><td>{r.op}</td><td>{r.status}</td><td>{r.time}</td><td>{r.ts}</td><td>{r.sub}</td><td>{r.caller}</td></tr>)}
-          </tbody>
-        </table>
-      )}
-      <NotSimulatedContainer feature="Activity log filters and export"
-        note={("Filters (Management Group, Subscription, Event severity, Timespan, Resource group, Resource, Add Filter) and the "
-          + "Edit columns / Export Activity Logs / Download as CSV / Insights / Feedback / Pin current filters / Reset filters actions are "
-          + "not simulated; Vyomi lists the real create/update/delete/action operations performed on this Web App.")} />
-    </>
-  );
-}
 
 // ── Access control (IAM) ─────────────────────────────────────────────────────────────────
 // Role assignments are a real ARM extension resource (Microsoft.Authorization/roleAssignments)

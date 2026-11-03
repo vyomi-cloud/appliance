@@ -24,6 +24,7 @@ import { useSubscription } from "../../kit/subscription.js";
 import { TagRows } from "./TagRows.jsx";
 import * as api from "./api.js";
 import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
+import SharedActivityLog from "../../kit/ActivityLog.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -60,7 +61,7 @@ export default function TopicBlade({ params, query }) {
       configuration: () => <Configuration t={t} reload={reload} />,
       accesskeys: () => <AccessKeys t={t} />,
       properties: () => <Properties t={t} />,
-      activitylog: () => <ActivityLog t={t} name={name} />,
+      activitylog: () => <SharedActivityLog scope={t.id} name={t.name} />,
       accesscontrol: () => <Iam name={name} />,
       locks: () => <Locks rg={rg} topic={name} />,
       diagnose: () => <Diagnose t={t} rg={rg} name={name} />,
@@ -390,46 +391,6 @@ const ACTIVITY_LOG_COLUMNS = [
   { key: "caller", label: "Event initiated by", value: (e) => e.caller },
 ];
 
-function ActivityLog({ t, name }) {
-  const log = useAsync(() => api.listActivityLog(t.id), [t.id]);
-  const [filter, setFilter] = useState("");
-  const [gap, setGap] = useState(null);
-  const f = filter.trim().toLowerCase();
-  const rows = (log.data || []).filter((e) => !f || (ACTIVITY_LOG_COLUMNS.some((c) => String(c.value(e) ?? "").toLowerCase().includes(f))));
-  return (
-    <CapabilityContainer id="azure.eventgrid.topic.activitylog" title={`${name} | Activity log`}>
-      <div className="vy-cmdbar" role="toolbar" aria-label="Activity log commands">
-        <ToolbarButton onClick={() => setGap("Activity")}>Activity</ToolbarButton>
-        <ToolbarButton onClick={() => setGap("Edit columns")}>Edit columns</ToolbarButton>
-        <ToolbarButton icon={<ArrowClockwise20Regular />} onClick={log.reload}>Refresh</ToolbarButton>
-        <ToolbarButton onClick={() => setGap("Export Activity Logs")}>Export Activity Logs</ToolbarButton>
-        <ToolbarButton icon={<ArrowDownload20Regular />} disabled={!rows.length} onClick={() => downloadCsv("activity-log.csv", ACTIVITY_LOG_COLUMNS, rows)}>Download as CSV</ToolbarButton>
-        <ToolbarButton onClick={() => setGap("Insights")}>Insights</ToolbarButton>
-        <ToolbarButton onClick={() => setGap("Feedback")}>Feedback</ToolbarButton>
-        <ToolbarButton onClick={() => setGap("Pin current filters")}>Pin current filters</ToolbarButton>
-        <ToolbarButton onClick={() => setFilter("")}>Reset filters</ToolbarButton>
-      </div>
-      <Input size="small" style={{ width: 260, margin: "8px 0" }} placeholder="Filter by operation..." value={filter} onChange={(_, d) => setFilter(d.value)} aria-label="Filter by operation" />
-      <ErrorBar error={log.error} />
-      {log.loading ? <Loading /> : (
-        <table className="vy-grid" style={{ width: "100%" }}>
-          <thead><tr>{ACTIVITY_LOG_COLUMNS.map((c) => <th key={c.key}>{c.label}</th>)}</tr></thead>
-          <tbody>
-            {rows.map((e) => (
-              <tr key={e.id}>{ACTIVITY_LOG_COLUMNS.map((c) => <td key={c.key}>{c.value(e)}</td>)}</tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-      {!log.loading && !rows.length && <div className="vy-empty"><h3>No events to display</h3></div>}
-      <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
-        <DialogSurface aria-label={gap || ""}>
-          <DialogBody><CapabilityContainer id="azure.eventgrid.topic.listactions" title={gap || ""} /></DialogBody>
-        </DialogSurface>
-      </Dialog>
-    </CapabilityContainer>
-  );
-}
 
 // ── Access control (IAM): real ARM resources (Microsoft.Authorization/roleAssignments,
 // roleDefinitions), subscription-wide rather than scoped to this one topic — same honest

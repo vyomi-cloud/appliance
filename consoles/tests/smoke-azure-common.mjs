@@ -40,6 +40,24 @@ await page.getByRole("tab", { name: "Terraform" }).click();
 ok((await ta.inputValue()).includes('resource "azapi_resource"'), "Terraform tab is real HCL");
 ok(!(await page.content()).includes("isn't backed by a Vyomi backend"), "no Not-simulated panel on export");
 
+// Activity log (shared): real events for a vnet, edit columns, server-side filters
+const VN = `azcvn${n}`;
+ok((await arm("PUT", `/resourceGroups/${RG}/providers/Microsoft.Network/virtualNetworks/${VN}`, { location: "eastus", properties: { addressSpace: { addressPrefixes: ["10.7.0.0/16"] } } }, "2023-04-01")).status < 300, "vnet created over ARM");
+await page.goto(`${UI}#/vnets/${RG}/${VN}/activitylog`);
+await page.getByRole("table", { name: "Activity log" }).waitFor({ timeout: 20000 });
+await page.waitForFunction((v) => document.body.innerText.includes("virtualNetworks/write"), VN, { timeout: 15000 });
+ok(true, "activity log lists the vnet write event");
+await page.getByRole("button", { name: "Edit columns" }).click();
+await page.getByRole("checkbox", { name: "Severity" }).check();
+await page.getByRole("button", { name: "OK" }).click();
+ok((await page.locator("table.vy-grid th", { hasText: "Severity" }).count()) === 1, "Edit columns adds the Severity column");
+await page.getByLabel("Status", { exact: true }).selectOption("Failed");
+await page.waitForFunction(() => document.body.innerText.includes("No events to display"), null, { timeout: 10000 });
+ok(true, "status filter is applied server-side");
+await page.getByRole("button", { name: "Reset filters" }).click();
+await page.waitForFunction(() => document.body.innerText.includes("virtualNetworks/write"), null, { timeout: 10000 });
+ok(true, "Reset filters restores the events");
+
 await browser.close();
 console.log(fails ? `${fails} FAILED` : "ALL PASS");
 process.exit(fails ? 1 : 0);

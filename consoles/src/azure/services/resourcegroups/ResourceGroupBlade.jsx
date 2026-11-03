@@ -21,6 +21,7 @@ import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
 import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
+import SharedActivityLog from "../../kit/ActivityLog.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -93,7 +94,7 @@ export default function ResourceGroupBlade({ params }) {
     const a = group.data, reload = group.reload;
     const P = {
       overview: () => <Overview a={a} reload={reload} self={self} name={name} />,
-      activitylog: () => <ActivityLog name={name} />,
+      activitylog: () => <SharedActivityLog scope={a.id} name={name} />,
       iam: () => <AccessControlIam name={name} />,
       tags: () => <Tags a={a} reload={reload} />,
       deployments: () => <Deployments name={name} />,
@@ -643,40 +644,6 @@ function Deployments({ name }) {
 }
 
 // ── Activity log ─────────────────────────────────────────────────────────────────────────
-function ActivityLog({ name }) {
-  const { data, loading, error, reload } = useAsync(() => api.listActivityLog(name), [name]);
-  const rows = data || [];
-  return (
-    <>
-      <div className="vy-panel-title">{name} | Activity log</div>
-      <div className="vy-cmdbar" role="toolbar" aria-label="Activity log commands">
-        <ToolbarButton icon={<ArrowClockwise20Regular />} onClick={reload}>Refresh</ToolbarButton>
-        <ToolbarButton icon={<ArrowDownload20Regular />} onClick={() => downloadCsv("activity-log.csv",
-          [{ key: "op", label: "Operation name" }, { key: "status", label: "Status" }, { key: "ts", label: "Time stamp" }],
-          rows.map((r) => ({ op: r.operationName?.localizedValue || r.operationName?.value, status: r.status?.localizedValue || r.status?.value, ts: r.eventTimestamp })))}>
-          Download as CSV
-        </ToolbarButton>
-      </div>
-      <ErrorBar error={error} />
-      <table className="vy-grid">
-        <thead><tr><th>Operation name</th><th>Status</th><th>Time</th><th>Time stamp</th><th>Subscription</th><th>Event initiated by</th></tr></thead>
-        <tbody>
-          {loading ? <tr><td colSpan={6}><Spinner size="tiny" /></td></tr> : rows.length ? rows.map((r) => (
-            <tr key={r.id}>
-              <td>{r.operationName?.localizedValue || r.operationName?.value}</td>
-              <td>{r.status?.localizedValue || r.status?.value}</td>
-              <td>{fmtDate(r.eventTimestamp)}</td>
-              <td>{r.eventTimestamp}</td>
-              <td>{r.subscriptionId}</td>
-              <td>{r.caller}</td>
-            </tr>
-          )) : <tr><td colSpan={6} className="vy-muted">No events to display</td></tr>}
-        </tbody>
-      </table>
-      <NotSimulatedContainer feature="Activity, Edit columns, Export Activity Logs, Insights, Feedback, Pin current filters and Reset filters from the command bar" />
-    </>
-  );
-}
 
 // ── Export template ────────────────────────────────────────────────────────────────────
 

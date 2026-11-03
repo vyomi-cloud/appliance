@@ -1,13 +1,33 @@
 {
- "$doc": "Vyomi capability registry — Azure blades shared by every service (Export template, Activity log, RBAC extras, Resource health, Tags/Locks, Diagnostics). See aws/s3.json for the contract.",
+ "$doc": "Vyomi capability registry \u2014 Azure blades shared by every service (Export template, Activity log, RBAC extras, Resource health, Tags/Locks, Diagnostics). See aws/s3.json for the contract.",
  "azure.common.export_template": {
   "title": "Export template (ARM, Bicep, Terraform) on every resource",
-  "level": { "nano": "limited", "offline": "limited" },
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
   "limitations": [
    "The ARM template is built from the properties Vyomi stores for the resource (system/read-only properties such as provisioningState are dropped by a fixed list, not each resource provider's real schema), so it may omit or include properties real Azure would treat differently.",
    "Bicep is a deterministic decompilation of that template (symbolic names, parameters, resource declarations); nested child resources are exported flat and no dependsOn is inferred.",
    "Terraform output uses the generic azapi_resource form (Azure/azapi provider), not hand-mapped azurerm_* resources."
   ],
-  "tests": ["tests/conformance/test_azure_templates_core.py"]
+  "tests": [
+   "tests/conformance/test_azure_templates_core.py"
+  ]
+ },
+ "azure.common.activity_log": {
+  "title": "Activity log (filters, edit columns, insights, export) on every resource",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Events are the ARM control-plane mutations Vyomi itself records (write/delete/action on resources); there is no real Azure platform emitting service-health, autoscale, alert or policy events.",
+   "Export Activity Logs downloads the filtered events as a JSON file; continuous export to a storage account / Event Hub / Log Analytics (a diagnostic setting on the subscription) is not performed from this blade.",
+   "Insights shows counts computed from the loaded events, not the portal's Log Analytics-backed Activity log insights workbook; Feedback is not simulated."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_activity_log_core.py"
+  ]
  }
 }

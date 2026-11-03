@@ -28,6 +28,7 @@ import * as api from "./api.js";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { ResourceRecommendations } from "../defender/Pages.jsx";
 import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
+import SharedActivityLog from "../../kit/ActivityLog.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -107,7 +108,7 @@ export default function ClusterBlade({ params, query }) {
       clusterconfiguration: () => <ClusterConfiguration a={a} reload={reload} />,
       properties: () => <Properties a={a} />,
       locks: () => <Locks a={a} />,
-      activitylog: () => <ActivityLog a={a} />,
+      activitylog: () => <SharedActivityLog scope={a.id} name={a.name} />,
       exporttemplate: () => <SharedExportTemplate id={a.id} name={a.name} resourceGroup={a.resourceGroup} />,
     }[panel];
     body = P ? P() : (
@@ -944,55 +945,6 @@ function AddLockDialog({ open, onClose, onCreate }) {
 }
 
 // ── Activity log (Microsoft.Insights/eventtypes/management/values, scoped to this cluster) ──
-function ActivityLog({ a }) {
-  const { data, loading, error, reload } = useAsync(() => api.listActivityLog(a.resourceGroup, a.name), [a.id]);
-  const [filter, setFilter] = useState("");
-  const [pinned, setPinned] = useState(false);
-  const [gap, setGap] = useState(null);
-  const rows = (data || []).filter((r) => !filter || (r.operationName?.localizedValue || "").toLowerCase().includes(filter.toLowerCase()));
-  return (
-    <>
-      <div className="vy-panel-title">{a.name} | Activity log</div>
-      <div className="vy-cmdbar" role="toolbar" aria-label="Activity log commands">
-        <ToolbarButton onClick={() => setGap("Activity")}>Activity</ToolbarButton>
-        <ToolbarButton onClick={() => setGap("Edit columns")}>Edit columns</ToolbarButton>
-        <ToolbarButton icon={<ArrowClockwise20Regular />} onClick={reload}>Refresh</ToolbarButton>
-        <ToolbarButton onClick={() => setGap("Export Activity Logs")}>Export Activity Logs</ToolbarButton>
-        <ToolbarButton icon={<ArrowDownload20Regular />} onClick={() => downloadActivity(rows, a.name)}>Download as CSV</ToolbarButton>
-        <ToolbarButton onClick={() => setGap("Insights")}>Insights</ToolbarButton>
-        <ToolbarButton onClick={() => setGap("Feedback")}>Feedback</ToolbarButton>
-        <ToolbarButton onClick={() => setPinned((v) => !v)}>{pinned ? "Unpin current filters" : "Pin current filters"}</ToolbarButton>
-        <ToolbarButton onClick={() => setFilter("")}>Reset filters</ToolbarButton>
-      </div>
-      <Input size="small" style={{ margin: "8px 0", width: 240 }} placeholder="Filter by operation" value={filter} onChange={(_, d) => setFilter(d.value)} aria-label="Filter by operation" />
-      <ErrorBar error={error} />
-      <table className="vy-grid">
-        <thead><tr><th>Operation name</th><th>Status</th><th>Time</th><th>Time stamp</th><th>Subscription</th><th>Event initiated by</th></tr></thead>
-        <tbody>
-          {loading ? <tr><td colSpan={6}><Spinner size="tiny" /></td></tr> : rows.length ? rows.map((r) => (
-            <tr key={r.id}>
-              <td>{r.operationName?.localizedValue || r.operationName?.value}</td>
-              <td>{r.status?.localizedValue || r.status?.value}</td>
-              <td>{fmtDate(r.eventTimestamp)}</td>
-              <td>{r.eventTimestamp}</td>
-              <td>{r.subscriptionId}</td>
-              <td>{r.caller}</td>
-            </tr>
-          )) : <tr><td colSpan={6} className="vy-muted">No events to display</td></tr>}
-        </tbody>
-      </table>
-      <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
-        <DialogSurface aria-label={gap || "Not simulated"}>
-          <DialogBody>
-            <DialogTitle>{gap}</DialogTitle>
-            <DialogContent><NotSimulated feature={gap === "Feedback" ? "Sending product feedback" : gap || ""} /></DialogContent>
-            <DialogActions><Button onClick={() => setGap(null)}>Close</Button></DialogActions>
-          </DialogBody>
-        </DialogSurface>
-      </Dialog>
-    </>
-  );
-}
 
 function downloadActivity(rows, name) {
   const cols = [{ label: "Operation name" }, { label: "Status" }, { label: "Time stamp" }];

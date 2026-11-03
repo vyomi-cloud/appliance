@@ -28,6 +28,7 @@ import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
 import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
+import SharedActivityLog from "../../kit/ActivityLog.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -113,7 +114,7 @@ export default function VmBlade({ params }) {
       tags: () => <Tags a={a} reload={reload} />,
       properties: () => <Properties a={a} />,
       locks: () => <Locks a={a} />,
-      activitylog: () => <ActivityLog a={a} />,
+      activitylog: () => <SharedActivityLog scope={a.id} name={a.name} />,
       size: () => <Size a={a} reload={reload} />,
       disks: () => <Disks a={a} reload={reload} />,
       identity: () => <Identity a={a} reload={reload} />,
@@ -539,52 +540,6 @@ function AddLockDialog({ open, onClose, onCreate }) {
 // ── Activity log (Microsoft.Insights/eventtypes/management/values, scoped to this VM) ──
 const TIMESPANS = { "1h": 1, "6h": 6, "24h": 24, "7d": 24 * 7, "30d": 24 * 30 };
 
-function ActivityLog({ a }) {
-  const [timespan, setTimespan] = useState("24h");
-  const since = () => new Date(Date.now() - TIMESPANS[timespan] * 3600 * 1000).toISOString();
-  const { data, loading, error, reload } = useAsync(() => api.listActivityLog(a.resourceGroup, a.name, since()), [a.id, timespan]);
-  const [gap, setGap] = useState(null);
-  const rows = data || [];
-  return (
-    <CapabilityContainer id="azure.vms.activity_log" title={`${a.name} | Activity log`}
-      actions={<ToolbarButton icon={<ArrowClockwise20Regular />} onClick={reload}>Refresh</ToolbarButton>}>
-      <div className="vy-cmdbar" role="toolbar" aria-label="Activity log tools">
-        {["Activity", "Edit columns", "Export Activity Logs", "Download as CSV", "Insights", "Feedback", "Pin current filters", "Reset filters"].map((l) => (
-          <ToolbarButton key={l} onClick={() => setGap(l)}>{l}</ToolbarButton>
-        ))}
-        <Select size="small" value={timespan} onChange={(_, d) => setTimespan(d.value)} aria-label="Timespan" style={{ marginLeft: "auto", width: 160 }}>
-          <option value="1h">Last hour</option>
-          <option value="6h">Last 6 hours</option>
-          <option value="24h">Last 24 hours</option>
-          <option value="7d">Last 7 days</option>
-          <option value="30d">Last 30 days</option>
-        </Select>
-      </div>
-      <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
-        <DialogSurface aria-label={gap || "Not simulated"}>
-          <DialogBody><DialogTitle>{gap}</DialogTitle><DialogContent><NotSimulated feature={gap || ""} /></DialogContent>
-            <DialogActions><Button onClick={() => setGap(null)}>Close</Button></DialogActions></DialogBody>
-        </DialogSurface>
-      </Dialog>
-      <ErrorBar error={error} />
-      <table className="vy-grid">
-        <thead><tr><th>Operation name</th><th>Status</th><th>Time</th><th>Time stamp</th><th>Subscription</th><th>Event initiated by</th></tr></thead>
-        <tbody>
-          {loading ? <tr><td colSpan={6}><Spinner size="tiny" /></td></tr> : rows.length ? rows.map((r) => (
-            <tr key={r.id}>
-              <td>{r.operationName?.localizedValue || r.operationName?.value}</td>
-              <td>{r.status?.localizedValue || r.status?.value}</td>
-              <td>{fmtDate(r.eventTimestamp)}</td>
-              <td>{r.eventTimestamp}</td>
-              <td>{r.subscriptionId}</td>
-              <td>{r.caller}</td>
-            </tr>
-          )) : <tr><td colSpan={6} className="vy-muted">No events to display</td></tr>}
-        </tbody>
-      </table>
-    </CapabilityContainer>
-  );
-}
 
 // ── Size — real ARM GET .../virtualMachines/{vm}/vmSizes (azure.vms.size), backed by
 // core/instance_catalog.py's AZURE sample through the ARM engine. No size list in the console. ──

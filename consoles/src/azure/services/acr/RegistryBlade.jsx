@@ -28,6 +28,7 @@ import { TagRows } from "../keyvaults/KeyVaultBlade.jsx";
 import * as kv from "../keyvaults/api.js";
 import { ResourceRecommendations } from "../defender/Pages.jsx";
 import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
+import SharedActivityLog from "../../kit/ActivityLog.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -75,7 +76,7 @@ export default function RegistryBlade({ params, query }) {
       locks: () => <Locks a={a} />,
       repositories: () => <Repositories query={query} self={self} />,
       webhooks: () => <Webhooks a={a} />,
-      activitylog: () => <ActivityLog a={a} />,
+      activitylog: () => <SharedActivityLog scope={a.id} name={a.name} />,
       exporttemplate: () => <SharedExportTemplate id={a.id} name={a.name} resourceGroup={a.resourceGroup} />,
       diagnosticsettings: () => <DiagnosticSettings a={a} />,
       insights: () => <NotSimulatedContainer title={`${name} | Insights`} feature="Insights" />,
@@ -727,44 +728,6 @@ function DiagnosticSettings({ a }) {
 // ── Activity log (Microsoft.Insights/eventtypes/management/values, scoped to this registry) ──
 const ACTIVITY_LOG_GAPS = ["Activity", "Edit columns", "Export Activity Logs", "Download as CSV", "Insights", "Feedback", "Pin current filters", "Reset filters"];
 
-function ActivityLog({ a }) {
-  const { data, loading, error, reload } = useAsync(() => api.listActivityLog(a.resourceGroup, a.name), [a.id]);
-  const [gap, setGap] = useState(null);
-  const rows = data || [];
-  return (
-    <CapabilityContainer id="azure.acr.activity_log" title={`${a.name} | Activity log`}>
-      <div className="vy-cmdbar" role="toolbar" aria-label="Activity log commands">
-        {ACTIVITY_LOG_GAPS.map((g) => <ToolbarButton key={g} onClick={() => setGap(g)}>{g}</ToolbarButton>)}
-        <ToolbarButton icon={<ArrowClockwise20Regular />} onClick={reload}>Refresh</ToolbarButton>
-      </div>
-      <ErrorBar error={error} />
-      <table className="vy-grid">
-        <thead><tr><th>Operation name</th><th>Status</th><th>Time</th><th>Time stamp</th><th>Subscription</th><th>Event initiated by</th></tr></thead>
-        <tbody>
-          {loading ? <tr><td colSpan={6}><Spinner size="tiny" /></td></tr> : rows.length ? rows.map((r) => (
-            <tr key={r.id}>
-              <td>{r.operationName?.localizedValue || r.operationName?.value}</td>
-              <td>{r.status?.localizedValue || r.status?.value}</td>
-              <td>{fmtDate(r.eventTimestamp)}</td>
-              <td>{r.eventTimestamp}</td>
-              <td>{r.subscriptionId}</td>
-              <td>{r.caller}</td>
-            </tr>
-          )) : <tr><td colSpan={6} className="vy-muted">No events to display</td></tr>}
-        </tbody>
-      </table>
-      <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
-        <DialogSurface aria-label={gap || "Not simulated"}>
-          <DialogBody>
-            <DialogTitle>{gap}</DialogTitle>
-            <DialogContent><NotSimulated feature={gap === "Feedback" ? "Sending product feedback" : `Activity log: ${gap}`} /></DialogContent>
-            <DialogActions><Button onClick={() => setGap(null)}>Close</Button></DialogActions>
-          </DialogBody>
-        </DialogSurface>
-      </Dialog>
-    </CapabilityContainer>
-  );
-}
 
 // ── Export template (ARM/Bicep/Terraform all generated client-side from this registry's own
 // live resource — same approach as the Storage account/VM blades' Export template) ─────────

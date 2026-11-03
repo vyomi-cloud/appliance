@@ -39,6 +39,7 @@ import * as Monitoring from "./Monitoring.jsx";
 import * as api from "./api.js";
 import { ResourceRecommendations } from "../defender/Pages.jsx";
 import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
+import SharedActivityLog from "../../kit/ActivityLog.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -98,7 +99,7 @@ export default function ApimBlade({ params, query }) {
     const P = {
       overview: () => <Overview a={a} reload={reload} self={self} />,
       defenderforcloud: () => <ResourceRecommendations resourceId={a.id} />,
-      activitylog: () => <ActivityLog a={a} />,
+      activitylog: () => <SharedActivityLog scope={a.id} name={a.name} />,
       iam: () => <AccessControlIam a={a} />,
       tags: () => <Tags a={a} reload={reload} />,
       apis: () => <Apis rg={rg} svc={name} self={self} />,
@@ -469,56 +470,6 @@ const isoMicro = (d) => d.toISOString().replace(/(\.\d{3})Z$/, "$1000Z");
 const TIMESPANS = [["6h", "Last 6 hours", 6], ["24h", "Last 24 hours", 24], ["7d", "Last 7 days", 24 * 7], ["30d", "Last 30 days", 24 * 30], ["all", "All time", null]];
 
 // ── Activity log (Microsoft.Insights/eventtypes/management/values, scoped to this service) ──
-function ActivityLog({ a }) {
-  const [timespan, setTimespan] = useState("24h");
-  const hours = TIMESPANS.find(([k]) => k === timespan)?.[2];
-  const ge = hours ? isoMicro(new Date(Date.now() - hours * 3600e3)) : null;
-  const { data, loading, error, reload } = useAsync(() => api.listActivityLog(a.resourceGroup, a.name, ge ? { ge } : undefined), [a.id, timespan]);
-  const rows = data || [];
-  const [gap, setGap] = useState(null);
-  return (
-    <CapabilityContainer id="azure.apim.activity_log" title={`${a.name} | Activity log`}>
-      <div className="vy-cmdbar" role="toolbar" aria-label="Activity log commands">
-        <ToolbarButton onClick={() => setGap("Activity")}>Activity</ToolbarButton>
-        <ToolbarButton onClick={() => setGap("Edit columns")}>Edit columns</ToolbarButton>
-        <ToolbarButton icon={<ArrowClockwise20Regular />} onClick={reload}>Refresh</ToolbarButton>
-        <ToolbarButton onClick={() => setGap("Export Activity Logs")}>Export Activity Logs</ToolbarButton>
-        <ToolbarButton onClick={() => setGap("Download as CSV")}>Download as CSV</ToolbarButton>
-        <ToolbarButton onClick={() => setGap("Insights")}>Insights</ToolbarButton>
-        <ToolbarButton onClick={() => setGap("Feedback")}>Feedback</ToolbarButton>
-        <ToolbarButton onClick={() => setGap("Pin current filters")}>Pin current filters</ToolbarButton>
-        <ToolbarButton onClick={() => setGap("Reset filters")}>Reset filters</ToolbarButton>
-      </div>
-      <Field label="Timespan" style={{ maxWidth: 200, marginBottom: 8 }}>
-        <Select value={timespan} onChange={(_, d) => setTimespan(d.value)} aria-label="Timespan">
-          {TIMESPANS.map(([k, label]) => <option key={k} value={k}>{label}</option>)}
-        </Select>
-      </Field>
-      <ErrorBar error={error} />
-      <table className="vy-grid" style={{ width: "100%" }}>
-        <thead><tr><th>Operation name</th><th>Status</th><th>Time</th><th>Time stamp</th><th>Subscription</th><th>Event initiated by</th></tr></thead>
-        <tbody>
-          {loading ? <tr><td colSpan={6}><Spinner size="tiny" /></td></tr> : rows.length ? rows.map((r) => (
-            <tr key={r.id}>
-              <td>{r.operationName?.localizedValue || r.operationName?.value}</td>
-              <td>{r.status?.localizedValue || r.status?.value}</td>
-              <td>{fmtDate(r.eventTimestamp)}</td>
-              <td>{r.eventTimestamp}</td>
-              <td>{r.subscriptionId}</td>
-              <td>{r.caller}</td>
-            </tr>
-          )) : <tr><td colSpan={6} className="vy-muted">No events to display</td></tr>}
-        </tbody>
-      </table>
-      <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
-        <DialogSurface aria-label={gap || ""}>
-          <DialogBody><DialogTitle>{gap}</DialogTitle><DialogContent><NotSimulated feature={gap === "Feedback" ? "Sending product feedback" : `The ${gap} action`} /></DialogContent>
-            <DialogActions><Button onClick={() => setGap(null)}>Close</Button></DialogActions></DialogBody>
-        </DialogSurface>
-      </Dialog>
-    </CapabilityContainer>
-  );
-}
 
 // ── Export template ────────────────────────────────────────────────────────────────────
 
