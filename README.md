@@ -1,6 +1,6 @@
 # Vyomi service pipeline
 
-_Updated 2026-11-03 03:32 UTC · refreshes after every pipeline run_
+_Updated 2026-11-03 03:59 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
@@ -9,7 +9,7 @@ _Updated 2026-11-03 03:32 UTC · refreshes after every pipeline run_
 - **In the gate / releasing:** Amazon Cognito Identity Provider (AWS), Amazon EC2 Container Service (AWS), Amazon Elastic Container Registry (AWS), Amazon ElastiCache (AWS), Amazon Kinesis (AWS), Amazon Route 53 (AWS), Amazon Simple Email Service (AWS), AWS CloudFormation (AWS), AWS Security Token Service (AWS), BigQuery API (GCP), Cloud DNS API (GCP), Cloud Logging API (GCP), Cloud Run Admin API (GCP), Cloud Tasks API (GCP), Workflows API (GCP), Application Insights (Azure), Container Registry (Azure), Azure Kubernetes Service (Azure), Event Hubs (Azure), Managed Identities (Azure), Azure Cache for Redis (Azure)
 - **Queued:** 41 services (P1 first, then P2)
 - **Consoles really implemented:** offline 97% · Nano 97%
-- **Hourly tests:** 277 of 281 suites passing (run 01:44 UTC)
+- **Hourly tests:** 279 of 282 suites passing (run 03:40 UTC)
 - **Upstream watch:** 61 open changes from the real clouds to adopt
 
 ## By cloud
@@ -98,8 +98,6 @@ _Updated 2026-11-03 03:32 UTC · refreshes after every pipeline run_
 | API Gateway V2 | caddy · Lite | not audited | 🧩 12/13 · 🧩 12/13 | 0 · 0 | ✅ watched | [v3.0.25](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.25) |
 | Amazon CloudWatch | victoriametrics · Lite · + vmalert agent | not audited | — | – · – | ✅ watched | [v3.0.26](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.26) |
 | Amazon SNS | nats · Lite | not audited | 🧩 9/10 · 🧩 9/10 | 0 · 0 | ✅ watched | [v3.0.28](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.28) |
-
-- **Nano ↔ offline gaps:** vpc_core (offline-only)
 
 ### GCP
 
@@ -947,7 +945,7 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 | offline-cli-azure | ✅ | 6/6 |
 | offline-ui-core | ✅ | 9/9 |
 | nano-ui-crawl | ✅ | 63/63 |
-| nano-cores | ❌ | 346/347 |
+| nano-cores | ✅ | 346/346 |
 | nano-gcp-kms-core | ✅ | 35/35 |
 | nano-gcp-cloudsql-core | ✅ | 34/34 |
 | nano-gcp-compute-core | ✅ | 18/18 |
@@ -1194,6 +1192,7 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 | offline-api-gcp-kms-importjobs-ar-tags | ✅ | 17/17 |
 | offline-api-gcp-sql-patch-monitoring | ✅ | 10/10 |
 | offline-core-aws-vpc-nacl | ✅ | 6/6 |
+| offline-sdk-gcp-kms-python | ✅ | 5/5 |
 | offline-sdk-python-aws-ops5 | ❌ | 2/3 |
 
 </details>
