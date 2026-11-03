@@ -108,6 +108,23 @@ await pg.getByLabel("Microsoft.Storage").check(); await pg.getByLabel("Delegate 
 await pg.getByRole("button", { name: "Add", exact: true }).click(); await pg.waitForTimeout(1200);
 const sp = (await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.Network/virtualNetworks/${VN}/subnets/sn1`, null, "2023-11-01")).body?.properties || {};
 ok("subnet carries the service endpoint + delegation", sp.serviceEndpoints?.[0]?.service === "Microsoft.Storage" && sp.delegations?.[0]?.properties?.serviceName === "Microsoft.Web/serverFarms", JSON.stringify(sp));
+// ── Key Vault: key activation/expiration/tags + certificate policy in the create dialogs ──
+const KVN = `appopskv${n}`;
+await arm("PUT", `/resourceGroups/${RG}/providers/Microsoft.KeyVault/vaults/${KVN}`, { location: "eastus", properties: { tenantId: "00000000-0000-0000-0000-000000000000", sku: { family: "A", name: "standard" }, accessPolicies: [] } }, "2023-07-01");
+const kvData = (m, path, body) => pg.evaluate(async ([m, url, body, vault]) => { const r = await fetch(url, { method: m, headers: { "content-type": "application/json", "x-vyomi-vault": vault }, body: body ? JSON.stringify(body) : undefined }); const t = await r.text(); return { status: r.status, body: t ? JSON.parse(t) : null }; }, [m, `${WIRE}${path}${path.includes("?") ? "&" : "?"}api-version=7.4`, body, KVN]);
+await pg.goto(`${UI}#/keyvaults/${RG}/${KVN}/keys`); await pg.waitForTimeout(1500);
+await pg.getByRole("button", { name: "Generate/Import" }).click(); await pg.waitForTimeout(500);
+await pg.getByLabel("Name", { exact: true }).fill("expiredkey"); await pg.getByLabel("Expiration date").fill("2020-01-01T00:00"); await pg.getByLabel("Key tags").fill("env=dev, team=x");
+await pg.getByRole("button", { name: "Create", exact: true }).click(); await pg.waitForTimeout(1200);
+const kb = (await kvData("GET", "/keys/expiredkey")).body || {};
+ok("key stored with expiration + tags", kb.attributes?.exp === 1577836800 && kb.tags?.team === "x", JSON.stringify(kb).slice(0, 300));
+ok("crypto on the expired key is refused (403)", (await kvData("POST", "/keys/expiredkey/encrypt", { alg: "RSA-OAEP", value: "aGk" })).status === 403);
+await pg.goto(`${UI}#/keyvaults/${RG}/${KVN}/certificates`); await pg.waitForTimeout(1500);
+await pg.getByRole("button", { name: "Generate/Import" }).click(); await pg.waitForTimeout(500);
+await pg.getByLabel("Certificate Name").fill("polcert"); await pg.getByRole("radio", { name: "PEM" }).check(); await pg.getByLabel("Key size").selectOption("3072");
+await pg.getByRole("button", { name: "Create", exact: true }).click(); await pg.waitForTimeout(1500);
+const cp = (await kvData("GET", "/certificates/polcert/policy")).body || {};
+ok("certificate policy stored (content type, key size, lifetime action)", cp.secret_properties?.content_type === "application/x-pem-file" && cp.key_properties?.key_size === 3072 && cp.lifetime_actions?.[0]?.action?.action_type === "AutoRenew", JSON.stringify(cp).slice(0, 300));
 // ── Entra: user sign-ins (non-interactive) via the real ROPC grant ──
 const UPN = `appopsuser${n}@vyomilearn.onmicrosoft.com`;
 await pg.evaluate(async ([w, upn]) => fetch(`${w}/v1.0/users`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ displayName: "Appops User", userPrincipalName: upn, passwordProfile: { password: "Vy0mi!pass12", forceChangePasswordNextSignIn: false } }) }), [WIRE, UPN]);

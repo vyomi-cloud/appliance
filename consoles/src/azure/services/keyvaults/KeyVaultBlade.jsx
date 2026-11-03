@@ -466,12 +466,15 @@ function CreateKeyDialog({ open, onClose, onCreated }) {
   const [size, setSize] = useState("2048");
   const [curve, setCurve] = useState("P-256");
   const [exportable, setExportable] = useState(false);
+  const [nbf, setNbf] = useState(""); const [exp, setExp] = useState(""); const [enabled, setEnabled] = useState("Yes"); const [tagText, setTagText] = useState("");
   const [busy, setBusy] = useState(false);
-  const valid = /^[a-zA-Z0-9-]{1,127}$/.test(name);
+  const valid = /^[a-zA-Z0-9-]{1,127}$/.test(name) && !(nbf && exp && new Date(exp + "Z") <= new Date(nbf + "Z"));
   const go = async () => {
     setBusy(true);
     try {
-      await api.createKey(name, kty === "EC" ? { kty: "EC", crv: curve, exportable } : { kty: "RSA", key_size: Number(size), exportable });
+      const attributes = { enabled: enabled === "Yes", ...(nbf ? { nbf: Math.floor(new Date(nbf + "Z").getTime() / 1000) } : {}), ...(exp ? { exp: Math.floor(new Date(exp + "Z").getTime() / 1000) } : {}) };
+      const tags = Object.fromEntries(tagText.split(",").map((t) => t.split("=").map((x) => x.trim())).filter(([k]) => k));
+      await api.createKey(name, { ...(kty === "EC" ? { kty: "EC", crv: curve, exportable } : { kty: "RSA", key_size: Number(size), exportable }), attributes, ...(Object.keys(tags).length ? { tags } : {}) });
       notify.success(`Successfully created key '${name}'.`, "Key created");
       setName(""); onClose(); onCreated();
     } catch (e) { notify.error(e, "Failed to create key"); }
@@ -489,13 +492,14 @@ function CreateKeyDialog({ open, onClose, onCreated }) {
               <Field label="Key type"><RadioGroup layout="horizontal" value={kty} onChange={(_, d) => setKty(d.value)} aria-label="Key type"><Radio value="RSA" label="RSA" /><Radio value="EC" label="EC" /></RadioGroup></Field>
               <Field label="RSA key size"><RadioGroup disabled={kty !== "RSA"} layout="horizontal" value={size} onChange={(_, d) => setSize(d.value)} aria-label="RSA key size"><Radio value="2048" label="2048" /><Radio value="3072" label="3072" /><Radio value="4096" label="4096" /></RadioGroup></Field>
               <Field label="Elliptic curve name"><RadioGroup disabled={kty !== "EC"} layout="horizontal" value={curve} onChange={(_, d) => setCurve(d.value)} aria-label="Elliptic curve name">{EC_CURVES.map(([v, l]) => <Radio key={v} value={v} label={l} />)}</RadioGroup></Field>
-              <Checkbox label="Set activation date" disabled />
-              <Checkbox label="Set expiration date" disabled />
-              <Field label="Enabled"><RadioGroup layout="horizontal" value="Yes" aria-label="Enabled"><Radio value="Yes" label="Yes" /><Radio value="No" label="No" disabled /></RadioGroup></Field>
-              <div>Tags <span className="vy-muted">0 tags</span></div>
+              <CapabilityContainer id="azure.keyvaults.keys.attributes" title="Attributes">
+                <Field label="Activation date (UTC)"><Input type="datetime-local" value={nbf} onChange={(_, d) => setNbf(d.value)} aria-label="Activation date" /></Field>
+                <Field label="Expiration date (UTC)"><Input type="datetime-local" value={exp} onChange={(_, d) => setExp(d.value)} aria-label="Expiration date" /></Field>
+                <Field label="Enabled"><RadioGroup layout="horizontal" value={enabled} onChange={(_, d) => setEnabled(d.value)} aria-label="Enabled"><Radio value="Yes" label="Yes" /><Radio value="No" label="No" /></RadioGroup></Field>
+                <Field label="Tags" hint="name=value, comma separated"><Input value={tagText} onChange={(_, d) => setTagText(d.value)} aria-label="Key tags" /></Field>
+              </CapabilityContainer>
               <div>Enable rotation policy <span className="vy-muted">Not configured</span></div>
               <Field label="Exportable"><RadioGroup layout="horizontal" value={exportable ? "Yes" : "No"} onChange={(_, d) => setExportable(d.value === "Yes")} aria-label="Exportable"><Radio value="Yes" label="Yes" /><Radio value="No" label="No" /></RadioGroup></Field>
-              <NotSimulated feature="Activation/expiration dates and tags on a new key" />
             </div>
           </DialogContent>
           <DialogActions>
@@ -767,6 +771,9 @@ function CreateCertificateDialog({ open, onClose, onCreated }) {
   const [subject, setSubject] = useState("CN=vyomi.local");
   const [months, setMonths] = useState("12");
   const [file, setFile] = useState(null);
+  const [contentType, setContentType] = useState("application/x-pkcs12");
+  const [laKind, setLaKind] = useState("lifetime_percentage"); const [laValue, setLaValue] = useState("80"); const [laAction, setLaAction] = useState("AutoRenew");
+  const [keySize, setKeySize] = useState("2048"); const [exportable, setExportable] = useState(true);
   const [busy, setBusy] = useState(false);
   const valid = /^[a-zA-Z0-9-]{1,127}$/.test(name) && (method === "Generate" || !!file);
   const go = async () => {
@@ -777,6 +784,9 @@ function CreateCertificateDialog({ open, onClose, onCreated }) {
           policy: {
             x509_certificate_properties: { subject, validity_in_months: Number(months) },
             issuer_parameters: { name: "Self" },
+            secret_properties: { content_type: contentType },
+            key_properties: { key_type: "RSA", key_size: Number(keySize), exportable, reuse_key: false },
+            lifetime_actions: [{ trigger: { [laKind]: Number(laValue) }, action: { action_type: laAction } }],
           },
         });
       } else {
@@ -808,7 +818,13 @@ function CreateCertificateDialog({ open, onClose, onCreated }) {
                   <Field label="Type of Certificate Authority (CA)"><Select value="Self-signed certificate" aria-label="Type of Certificate Authority (CA)"><option>Self-signed certificate</option></Select></Field>
                   <Field label="Subject"><Input value={subject} onChange={(_, d) => setSubject(d.value)} aria-label="Subject" /></Field>
                   <Field label="Validity period (in months)"><Input type="number" value={months} onChange={(_, d) => setMonths(d.value)} aria-label="Validity period (in months)" /></Field>
-                  <NotSimulated feature="Content type, lifetime action and advanced policy configuration on a new certificate" />
+                  <CapabilityContainer id="azure.keyvaults.certificates.policy" title="Advanced policy configuration">
+                    <Field label="Content Type"><RadioGroup layout="horizontal" value={contentType} onChange={(_, d) => setContentType(d.value)} aria-label="Content Type"><Radio value="application/x-pkcs12" label="PKCS #12" /><Radio value="application/x-pem-file" label="PEM" /></RadioGroup></Field>
+                    <Field label="Key size"><Select value={keySize} onChange={(_, d) => setKeySize(d.value)} aria-label="Key size"><option>2048</option><option>3072</option><option>4096</option></Select></Field>
+                    <Field label="Exportable private key"><RadioGroup layout="horizontal" value={exportable ? "Yes" : "No"} onChange={(_, d) => setExportable(d.value === "Yes")} aria-label="Exportable private key"><Radio value="Yes" label="Yes" /><Radio value="No" label="No" /></RadioGroup></Field>
+                    <Field label="Lifetime action type"><Select value={laAction} onChange={(_, d) => setLaAction(d.value)} aria-label="Lifetime action type"><option value="AutoRenew">Automatically renew at a given time</option><option value="EmailContacts">Email all contacts at a given time</option></Select></Field>
+                    <Field label="Trigger"><div style={{ display: "flex", gap: 8 }}><Select value={laKind} onChange={(_, d) => setLaKind(d.value)} aria-label="Lifetime trigger"><option value="lifetime_percentage">Percentage lifetime</option><option value="days_before_expiry">Number of days before expiry</option></Select><Input type="number" value={laValue} onChange={(_, d) => setLaValue(d.value)} aria-label="Lifetime trigger value" /></div></Field>
+                  </CapabilityContainer>
                 </>
               ) : (
                 <>

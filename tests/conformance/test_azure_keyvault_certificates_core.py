@@ -125,6 +125,21 @@ def run() -> int:
                           {"content-type": "application/json"}, json.dumps({"value": "not-base64!!"}).encode())
     _check("import invalid base64 400", badimp.status == 400)
 
+    # 11. content type / lifetime action / key properties persist in the policy and are validated
+    pol = {"x509_certificate_properties": {"subject": "CN=app.local", "validity_in_months": 6},
+           "secret_properties": {"content_type": "application/x-pem-file"}, "key_properties": {"key_type": "RSA", "key_size": 3072, "exportable": True, "reuse_key": False},
+           "lifetime_actions": [{"trigger": {"lifetime_percentage": 80}, "action": {"action_type": "AutoRenew"}}], "issuer_parameters": {"name": "Self"}}
+    ok = kv.dispatch(st, "POST", "/certificates/pol-cert/create", API, {}, json.dumps({"policy": pol}).encode())
+    _check("advanced policy accepted", ok.status in (200, 202))
+    gp = _jbody(kv.dispatch(st, "GET", "/certificates/pol-cert/policy", API, {}, b""))
+    _check("GetCertificatePolicy returns content type + lifetime action", gp["secret_properties"]["content_type"] == "application/x-pem-file" and gp["lifetime_actions"][0]["trigger"]["lifetime_percentage"] == 80)
+    for bad in ({"secret_properties": {"content_type": "text/plain"}}, {"key_properties": {"key_type": "RSA", "key_size": 1024}},
+                {"lifetime_actions": [{"trigger": {"lifetime_percentage": 150}, "action": {"action_type": "AutoRenew"}}]},
+                {"lifetime_actions": [{"trigger": {"lifetime_percentage": 50}, "action": {"action_type": "Nope"}}]}):
+        _check(f"invalid policy rejected: {list(bad)[0]}", kv.dispatch(st, "POST", "/certificates/bad-pol/create", API, {}, json.dumps({"policy": bad}).encode()).status == 400)
+    up = kv.dispatch(st, "PATCH", "/certificates/pol-cert/policy", API, {}, json.dumps({"lifetime_actions": [{"trigger": {"days_before_expiry": 30}, "action": {"action_type": "EmailContacts"}}]}).encode())
+    _check("UpdateCertificatePolicy", up.status == 200 and _jbody(up)["lifetime_actions"][0]["trigger"]["days_before_expiry"] == 30)
+
     print("\nAzure Key Vault certificates-core conformance: ALL GREEN")
     return 0
 
