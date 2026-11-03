@@ -2,11 +2,10 @@
 
 Hourly diff of the real clouds for the services Vyomi simulates. Actionable changes are filed as [`upstream-drift` issues](https://github.com/vyomi-cloud/appliance/issues?q=label%3Aupstream-drift) and worked by the conformance agent. Every run: [log.md](log.md).
 
-### Upstream watch — 2026-11-03T13:28:30+00:00
+### Upstream watch — 2026-11-03T14:28:41+00:00
 
 Tracking 4252 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
 
-**1 change(s), 0 actionable.**
-- · `release` cli:gcloud: 591.0.0 → 592.0.0
+**0 change(s), 0 actionable.**
 
 Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
