@@ -1,6 +1,6 @@
 # Vyomi service pipeline
 
-_Updated 2026-11-03 17:41 UTC · refreshes after every pipeline run_
+_Updated 2026-11-03 18:35 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
@@ -10,7 +10,7 @@ _Updated 2026-11-03 17:41 UTC · refreshes after every pipeline run_
 - **Queued:** 41 services (P1 first, then P2)
 - **Consoles really implemented:** offline 97% · Nano 97%
 - **Hourly tests:** 285 of 286 suites passing (run 16:42 UTC)
-- **Upstream watch:** 61 open changes from the real clouds to adopt
+- **Upstream watch:** 62 open changes from the real clouds to adopt
 
 ## By cloud
 
@@ -131,7 +131,7 @@ _Updated 2026-11-03 17:41 UTC · refreshes after every pipeline run_
 | SQL servers | — | not audited | ✅ 22/22 · ✅ 22/22 | 0 · 0 | ✅ watched | before gate |
 | Service Bus | messaging-core · in-process · + nats agent · + amqp protocol | 🟡 REST management + messaging only; native SDKs need AMQP (in PRs #35-#45, not merged) | ✅ 17/17 · ✅ 17/17 | 0 · 0 | ✅ watched | before gate |
 | Cosmos DB | — | not audited | ✅ 20/20 · ✅ 20/20 | 0 · 0 | ✅ watched | before gate |
-| Function apps | — | not audited | ✅ 23/23 · ✅ 23/23 | 0 · 0 | ✅ watched | before gate |
+| Function apps | — | not audited | ✅ 23/23 · ✅ 23/23 | 0 · 0 | ⚠️ 1 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+web) | before gate |
 | API Management | caddy · Lite | not audited | ✅ 20/20 · ✅ 20/20 | 0 · 0 | ✅ watched | before gate |
 | Virtual networks | — | not audited | ✅ 17/17 · ✅ 17/17 | 0 · 0 | ✅ watched | before gate |
 | Network Security Group | — | not audited | ✅ 11/11 · ✅ 11/11 | 0 · 0 | ✅ watched | before gate |
