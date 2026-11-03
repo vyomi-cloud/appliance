@@ -1,9 +1,19 @@
 {
- "at": "2026-11-03T04:28:17+00:00",
+ "at": "2026-11-03T05:28:16+00:00",
  "baseline": false,
- "changes": [],
+ "changes": [
+  {
+   "cloud": "aws",
+   "service": "Amazon S3, CloudWatch Logs, CloudWatch, Kinesis",
+   "kind": "announcement",
+   "key": "feed:aws:3c2169c9f569",
+   "title": "Announcing AWS for Fluent Bit 3.0.0 based on Fluent Bit 4.1.1",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2025/10/aws-fluent-bit-3-0-0-based-4-1-1",
+   "detail": "AWS for Fluent Bit announces version 3.0.0 , based on Fluent Bit version 4.1.1 and Amazon Linux 2023. Container logging using AWS for Fluent Bit is now more performant and more feature-rich for AWS customers, including those using Amazon Elastic Container Services (Amazon ECS) and Amazon Elastic Kubernetes Service (Amazon EKS). AWS for Fluent Bit enables Amazon ECS and Amazon EKS customers to collect, process, and route container logs to destinations including Amazon CloudWatch Logs, Amazon Data Firehose, Amazon Kinesis Data Streams, and Amazon S3 without changing application code. AWS for Flu",
+   "actionable": false
+  }
+ ],
  "errors": [
-  "maven/software.amazon.awssdk:sqs: The read operation timed out",
-  "maven/com.google.cloud:google-cloud-storage: The read operation timed out"
+  "maven/com.azure:azure-data-appconfiguration: The read operation timed out"
  ]
 }
