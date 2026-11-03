@@ -1,24 +1,25 @@
 {
- "at": "2026-11-03T18:32:54+00:00",
+ "at": "2026-11-03T19:28:42+00:00",
  "baseline": false,
  "changes": [
   {
    "cloud": "azure",
-   "service": "web",
-   "kind": "spec-commit",
-   "key": "azure:web:2d07da92bc",
-   "title": "Azure web: [Microsoft.Web] Introduce new api version \"2026-08-01\" and new resource type \"Microsoft.Web/sites/silos\", \"Microsoft.Web/serverfarms/silos\", \"Microsoft.Web/sites/managedTrafficConfig/default\", \"\"Micro",
-   "link": "https://github.com/Azure/azure-rest-api-specs/commit/2d07da92bcad212fdd5e2bffebf96563081ec250",
-   "actionable": true
+   "service": "Azure SQL",
+   "kind": "announcement",
+   "key": "feed:azure:ac476672654b",
+   "title": "[In preview] Public Preview: Extend immutability for PITR backups for Azure SQL Database and Azure SQL Managed Instance",
+   "link": "https://azure.microsoft.com/updates?id=579305",
+   "detail": "With this enhancement, you have the ability to lock your retention to the configured PITR retention, beyond the default 7 days of immutable backups that are already available. This is especially useful for financial customers who typically have 35 days of",
+   "actionable": false
   },
   {
-   "cloud": "aws",
-   "service": "Amazon SQS, Secrets Manager, EventBridge",
+   "cloud": "azure",
+   "service": "Virtual Machines",
    "kind": "announcement",
-   "key": "feed:aws:031973e55734",
-   "title": "Amazon EKS Capabilities now supports Argo CD Notifications",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-eks-argo-cd-notifications",
-   "detail": "The Amazon Elastic Kubernetes Service (Amazon EKS) Capability for Argo CD now supports Argo CD Notifications, providing notifications when your applications sync, fail, or change health. You define triggers and message templates in your cluster and subscribe individual Applications with an annotation, the same way you do in upstream Argo CD. With this launch, you can deliver notifications to 16 notification services, including Slack, PagerDuty, Opsgenie, Amazon SQS, and Amazon EventBridge. The Amazon SQS and Amazon EventBridge services authenticate with your IAM Capability Role, so you can rou",
+   "key": "feed:azure:d2922680a4a7",
+   "title": "[Launched] Generally Available: Enhanced Azure Site Recovery support for VMSS Flex",
+   "link": "https://azure.microsoft.com/updates?id=578926",
+   "detail": "Azure Site Recovery now offers an enhanced disaster recovery experience for virtual machines in Virtual Machine Scale Sets with flexible orchestration. The update improves target configuration and end-to-end recovery workflows, including failover, reprote",
    "actionable": false
   }
  ],
