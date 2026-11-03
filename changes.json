@@ -1,26 +1,15 @@
 {
- "at": "2026-11-03T19:28:42+00:00",
+ "at": "2026-11-03T20:35:40+00:00",
  "baseline": false,
  "changes": [
   {
    "cloud": "azure",
-   "service": "Azure SQL",
-   "kind": "announcement",
-   "key": "feed:azure:ac476672654b",
-   "title": "[In preview] Public Preview: Extend immutability for PITR backups for Azure SQL Database and Azure SQL Managed Instance",
-   "link": "https://azure.microsoft.com/updates?id=579305",
-   "detail": "With this enhancement, you have the ability to lock your retention to the configured PITR retention, beyond the default 7 days of immutable backups that are already available. This is especially useful for financial customers who typically have 35 days of",
-   "actionable": false
-  },
-  {
-   "cloud": "azure",
-   "service": "Virtual Machines",
-   "kind": "announcement",
-   "key": "feed:azure:d2922680a4a7",
-   "title": "[Launched] Generally Available: Enhanced Azure Site Recovery support for VMSS Flex",
-   "link": "https://azure.microsoft.com/updates?id=578926",
-   "detail": "Azure Site Recovery now offers an enhanced disaster recovery experience for virtual machines in Virtual Machine Scale Sets with flexible orchestration. The update improves target configuration and end-to-end recovery workflows, including failover, reprote",
-   "actionable": false
+   "service": "cognitiveservices",
+   "kind": "spec-commit",
+   "key": "azure:cognitiveservices:0249a450b3",
+   "title": "Azure cognitiveservices: [CognitiveServices] Add project tool controls and private CA trust to 2026-09-15-preview (#47492)",
+   "link": "https://github.com/Azure/azure-rest-api-specs/commit/0249a450b30462c0c672fa6218750766667cce11",
+   "actionable": true
   }
  ],
  "errors": []

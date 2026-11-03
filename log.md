@@ -1,3 +1,12 @@
+### Upstream watch — 2026-11-03T20:35:40+00:00
+
+Tracking 4252 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**1 change(s), 1 actionable.**
+- 🔧 `spec-commit` Azure cognitiveservices: [CognitiveServices] Add project tool controls and private CA trust to 2026-09-15-preview (#47492) ([link](https://github.com/Azure/azure-rest-api-specs/commit/0249a450b30462c0c672fa6218750766667cce11))
+
+Filed 1 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-03T19:28:42+00:00
 
 Tracking 4252 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
