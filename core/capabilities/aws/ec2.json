@@ -344,8 +344,7 @@
    "Auto Scaling shows the real DescribeAccountLimits quotas (500 groups, 200 launch configurations) with live usage; Vyomi has no account-level Auto Scaling defaults to change, so none are shown."
   ],
   "tests": [
-   "tests/conformance/test_ec2_ops_core.py",
-   "consoles/tests/smoke-aws-ec2ops.mjs"
+   "tests/conformance/test_ec2_ops_core.py"
   ]
  },
  "ec2.load-balancers": {
@@ -456,8 +455,7 @@
    "There is no billing; prices are illustrative."
   ],
   "tests": [
-   "tests/conformance/test_ec2_ops_core.py",
-   "consoles/tests/smoke-aws-ec2ops.mjs"
+   "tests/conformance/test_ec2_ops_core.py"
   ]
  },
  "ec2.events": {
@@ -472,8 +470,7 @@
    "On the offline appliance, instances run through its separate Docker runtime (not this core), so launch coupling (Spot fulfilment, Capacity Reservation targeting, Dedicated Host placement, scheduled instance events) applies on Nano; offline records and describes these resources but does not couple them to Docker launches."
   ],
   "tests": [
-   "tests/conformance/test_ec2_ops_core.py",
-   "consoles/tests/smoke-aws-ec2ops.mjs"
+   "tests/conformance/test_ec2_ops_core.py"
   ]
  },
  "ec2.health-rollup": {
@@ -487,8 +484,7 @@
    "The offline appliance's DescribeInstanceStatus comes from its Docker runtime, so scheduled-event counts there stay 0."
   ],
   "tests": [
-   "tests/conformance/test_ec2_ops_core.py",
-   "consoles/tests/smoke-aws-ec2ops.mjs"
+   "tests/conformance/test_ec2_ops_core.py"
   ]
  },
  "ec2.volumes.fault-tolerance": {
@@ -501,8 +497,7 @@
    "Computed live from the account's real volumes and snapshots (recent = a snapshot started within 7 days). AWS's widget also factors in Data Lifecycle Manager coverage and Multi-AZ replication, which Vyomi doesn't model."
   ],
   "tests": [
-   "tests/conformance/test_ec2_ops_core.py",
-   "consoles/tests/smoke-aws-ec2ops.mjs"
+   "tests/conformance/test_ec2_ops_core.py"
   ]
  },
  "ec2.iam-instance-profiles": {
@@ -516,8 +511,7 @@
    "RunInstances records the profile on the instance, but Vyomi does not vend the role's credentials through the instance metadata service."
   ],
   "tests": [
-   "tests/conformance/test_ec2_ops_core.py",
-   "consoles/tests/smoke-aws-ec2ops.mjs"
+   "tests/conformance/test_ec2_ops_core.py"
   ]
  },
  "ec2.compare-sg-rules": {
@@ -528,8 +522,7 @@
   },
   "limitations": [],
   "tests": [
-   "tests/conformance/test_ec2_ops_core.py",
-   "consoles/tests/smoke-aws-ec2ops.mjs"
+   "tests/conformance/test_ec2_ops_core.py"
   ]
  },
  "ec2.instance-type-finder": {
@@ -542,8 +535,7 @@
    "Filters the live DescribeInstanceTypes catalog by workload family, architecture, vCPU and memory. Vyomi's catalog is a curated subset of AWS's instance types, and the finder does not rank by price or performance."
   ],
   "tests": [
-   "tests/conformance/test_ec2_ops_core.py",
-   "consoles/tests/smoke-aws-ec2ops.mjs"
+   "tests/conformance/test_ec2_ops_core.py"
   ]
  },
  "ec2.recycle-bin": {
@@ -557,8 +549,7 @@
    "Only EBS snapshots and AMIs are supported (not EBS volumes), and a restored AMI does not re-create its sourced snapshots' retention separately."
   ],
   "tests": [
-   "tests/conformance/test_ec2_ops_core.py",
-   "consoles/tests/smoke-aws-ec2ops.mjs"
+   "tests/conformance/test_ec2_ops_core.py"
   ]
  },
  "ec2.purchasing.spot": {
@@ -573,8 +564,7 @@
    "On the offline appliance, instances run through its separate Docker runtime (not this core), so launch coupling (Spot fulfilment, Capacity Reservation targeting, Dedicated Host placement, scheduled instance events) applies on Nano; offline records and describes these resources but does not couple them to Docker launches."
   ],
   "tests": [
-   "tests/conformance/test_ec2_ops_core.py",
-   "consoles/tests/smoke-aws-ec2ops.mjs"
+   "tests/conformance/test_ec2_ops_core.py"
   ]
  },
  "ec2.purchasing.reserved-instances": {
@@ -588,8 +578,7 @@
    "There is no billing: prices are illustrative multiples of Vyomi's on-demand rate and a reservation has no discount effect. Modify/exchange/Marketplace resale are not modeled."
   ],
   "tests": [
-   "tests/conformance/test_ec2_ops_core.py",
-   "consoles/tests/smoke-aws-ec2ops.mjs"
+   "tests/conformance/test_ec2_ops_core.py"
   ]
  },
  "ec2.purchasing.capacity-reservations": {
@@ -604,8 +593,7 @@
    "On the offline appliance, instances run through its separate Docker runtime (not this core), so launch coupling (Spot fulfilment, Capacity Reservation targeting, Dedicated Host placement, scheduled instance events) applies on Nano; offline records and describes these resources but does not couple them to Docker launches."
   ],
   "tests": [
-   "tests/conformance/test_ec2_ops_core.py",
-   "consoles/tests/smoke-aws-ec2ops.mjs"
+   "tests/conformance/test_ec2_ops_core.py"
   ]
  },
  "ec2.purchasing.dedicated-hosts": {
@@ -620,8 +608,7 @@
    "On the offline appliance, instances run through its separate Docker runtime (not this core), so launch coupling (Spot fulfilment, Capacity Reservation targeting, Dedicated Host placement, scheduled instance events) applies on Nano; offline records and describes these resources but does not couple them to Docker launches."
   ],
   "tests": [
-   "tests/conformance/test_ec2_ops_core.py",
-   "consoles/tests/smoke-aws-ec2ops.mjs"
+   "tests/conformance/test_ec2_ops_core.py"
   ]
  },
  "ec2.purchasing.savings-plans": {
@@ -632,8 +619,7 @@
   },
   "limitations": [
    "Savings Plans is a separate billing service; Vyomi has no billing or commitment model."
-  ],
-  "tests": []
+  ]
  },
  "ec2.purchasing.ultraservers": {
   "title": "UltraServers",
@@ -643,8 +629,7 @@
   },
   "limitations": [
    "UltraServer capacity (multi-host accelerator domains) is not modeled."
-  ],
-  "tests": []
+  ]
  },
  "ec2.purchasing.capacity-manager": {
   "title": "Capacity Manager",
@@ -654,7 +639,6 @@
   },
   "limitations": [
    "Capacity Manager's cross-account capacity analytics aren't modeled."
-  ],
-  "tests": []
+  ]
  }
 }
