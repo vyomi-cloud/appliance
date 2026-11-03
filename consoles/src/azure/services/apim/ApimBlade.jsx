@@ -3,6 +3,7 @@
  * Support + Troubleshooting (azure.apim.tools — Azure's own multi-tenant diagnostics/support
  * backends) and Managed identities / user-assigned (not catalogued in Vyomi, same as every
  * other service) — those render an honest NotSimulated panel via CAP_FOR. */
+import ResourceEvents from "../../kit/ResourceEvents.jsx";
 import { useEffect, useState } from "react";
 import {
   Button, Checkbox, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, Field, Input, Link,
@@ -115,6 +116,7 @@ export default function ApimBlade({ params, query }) {
       exporttemplate: () => <ExportTemplate a={a} />,
       protocolsciphers: () => <ProtocolsCiphers a={a} reload={reload} />,
       mcpservers: () => <McpServers rg={rg} svc={name} />,
+      events: () => <ResourceEvents scopeId={a.id} kind="apim" title={`${name} | Events`} />,
       workspaces: () => <Workspaces rg={rg} svc={name} />,
       credentialmanager: () => <CredentialManager rg={rg} svc={name} />,
       portaloverview: () => <DeveloperPortal.PortalOverview rg={rg} svc={name} self={self} />,

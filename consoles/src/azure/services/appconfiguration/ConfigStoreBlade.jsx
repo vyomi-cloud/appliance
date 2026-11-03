@@ -3,6 +3,7 @@
  * (access keys), Geo-replication, Networking, Properties, Locks and Export template are
  * backed by native ARM / App Configuration data-plane calls; everything else in the menu is
  * an honest NotSimulated panel. */
+import ResourceEvents from "../../kit/ResourceEvents.jsx";
 import { ManagedIdentityPage } from "../../kit/UserAssignedIdentities.jsx";
 import { useEffect, useState } from "react";
 import {
@@ -88,6 +89,7 @@ export default function ConfigStoreBlade({ params, query }) {
       iam: () => <AccessControlIam a={a} />,
       tags: () => <Tags a={a} reload={reload} />,
       identity: () => <ManagedIdentityPage resourceId={a.id} apiVersion="2024-05-15" name={a.name} onChanged={reload} />,
+      events: () => <ResourceEvents scopeId={a.id} kind="appconfiguration" title={`${a.name} | Events`} />,
       explorer: () => <ConfigExplorer self={self} query={query} />,
       features: () => <FeatureManager />,
       access: () => <AccessSettings a={a} reload={reload} />,

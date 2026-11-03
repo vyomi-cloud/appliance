@@ -5,6 +5,7 @@
  * the Monitoring group — Metrics/Insights/Alerts/Diagnostic settings/Logs/Workbooks); a
  * remaining handful (separate products, or genuinely unmodellable telemetry/hardware) are
  * honest NotSimulated panels — see NS_NOTES. */
+import ResourceEvents from "../../kit/ResourceEvents.jsx";
 import { useEffect, useState } from "react";
 import {
   Button, Checkbox, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, Field, Input, Link,
@@ -85,6 +86,7 @@ export default function StorageAccountBlade({ params, query }) {
       overview: () => <Overview a={a} reload={reload} self={self} />,
       tags: () => <Tags a={a} reload={reload} />,
       containers: () => (query.container ? <Container account={name} container={query.container} self={self} /> : <Containers account={name} self={self} />),
+      events: () => <ResourceEvents scopeId={a.id} kind="storage" title={`${a.name} | Events`} />,
       accesskeys: () => <AccessKeys a={a} reload={reload} />,
       configuration: () => <Configuration a={a} reload={reload} />,
       endpoints: () => <Endpoints a={a} />,

@@ -347,3 +347,124 @@ def publish(state: dict, sub: str, topic_name: str, events: list, *, sb_store=No
         _bump(metrics, "PublishSuccessCount")
         results.append({"event": ev.get("id"), "deliveries": deliver(state, topic_rid, ev, sb_store=sb_store)})
     return {"published": len(events), "results": results}
+
+
+# ── Resource-scoped event subscriptions (system events of ANY resource / resource group / subscription) ─────
+# PUT {scope}/providers/Microsoft.EventGrid/eventSubscriptions/{name} where scope is a storage account, key
+# vault, App Configuration store, API Management service, resource group or the subscription. Same record
+# shape as topic subscriptions (``_parent`` = the scope's lower-cased id) so matching/delivery is shared.
+SYSTEM_EVENT_TYPES = {
+    "microsoft.storage/storageaccounts": ["Microsoft.Storage.BlobCreated", "Microsoft.Storage.BlobDeleted", "Microsoft.Storage.BlobRenamed",
+                                          "Microsoft.Storage.DirectoryCreated", "Microsoft.Storage.DirectoryDeleted"],
+    "microsoft.keyvault/vaults": ["Microsoft.KeyVault.SecretNewVersionCreated", "Microsoft.KeyVault.SecretNearExpiry", "Microsoft.KeyVault.SecretExpired",
+                                  "Microsoft.KeyVault.KeyNewVersionCreated", "Microsoft.KeyVault.KeyNearExpiry", "Microsoft.KeyVault.KeyExpired",
+                                  "Microsoft.KeyVault.CertificateNewVersionCreated", "Microsoft.KeyVault.CertificateNearExpiry", "Microsoft.KeyVault.CertificateExpired"],
+    "microsoft.appconfiguration/configurationstores": ["Microsoft.AppConfiguration.KeyValueModified", "Microsoft.AppConfiguration.KeyValueDeleted",
+                                                      "Microsoft.AppConfiguration.SnapshotCreated", "Microsoft.AppConfiguration.SnapshotModified"],
+    "microsoft.apimanagement/service": ["Microsoft.ApiManagement.APICreated", "Microsoft.ApiManagement.APIUpdated", "Microsoft.ApiManagement.APIDeleted",
+                                        "Microsoft.ApiManagement.ProductCreated", "Microsoft.ApiManagement.ProductUpdated", "Microsoft.ApiManagement.ProductDeleted",
+                                        "Microsoft.ApiManagement.UserCreated", "Microsoft.ApiManagement.SubscriptionCreated"],
+    "microsoft.resources/resourcegroups": ["Microsoft.Resources.ResourceWriteSuccess", "Microsoft.Resources.ResourceDeleteSuccess",
+                                           "Microsoft.Resources.ResourceActionSuccess", "Microsoft.Resources.ResourceWriteFailure"],
+    "microsoft.resources/subscriptions": ["Microsoft.Resources.ResourceWriteSuccess", "Microsoft.Resources.ResourceDeleteSuccess",
+                                          "Microsoft.Resources.ResourceActionSuccess", "Microsoft.Resources.ResourceWriteFailure"],
+}
+
+
+def find_scoped_marker(chain):
+    """Index of ``providers/Microsoft.EventGrid/eventSubscriptions`` inside ``chain`` for a NON-topic scope."""
+    for i in range(len(chain) - 2):
+        if (chain[i].lower() == "providers" and chain[i + 1].lower() == "microsoft.eventgrid"
+                and chain[i + 2].lower() == "eventsubscriptions"):
+            return i
+    return None
+
+
+def scope_kind(scope_rid: str) -> str:
+    p = [x for x in scope_rid.strip("/").split("/")]
+    if len(p) == 2:
+        return "microsoft.resources/subscriptions"
+    if len(p) == 4:
+        return "microsoft.resources/resourcegroups"
+    i = next((j for j, x in enumerate(p) if x.lower() == "providers"), None)
+    if i is None or len(p) < i + 4:
+        return ""
+    return f"{p[i + 1]}/{p[i + 2]}".lower()
+
+
+def scoped_dispatch(state: dict, method: str, sub: str, scope_rid: str, rest, payload):
+    """``rest`` = everything after ``eventSubscriptions``: [], [name] or [name, action]."""
+    parent = scope_rid.lower()
+    _sweep_expired(state, scope_rid)
+    if state.get(parent) is None and "/providers/" in parent and parent.count("/") > 4:
+        return _err(404, "ResourceNotFound", f"The scope '{scope_rid}' was not found.")
+    if not rest:
+        if method != "GET":
+            return _err(405, "MethodNotAllowed", "Collection supports GET only.")
+        return _ok({"value": [_view(r) for r in state.values() if r.get("_parent") == parent]})
+    name = rest[0]
+    rid = f"{scope_rid}/providers/Microsoft.EventGrid/eventSubscriptions/{name}"
+    key = rid.lower()
+    if len(rest) >= 2:
+        rec = state.get(key)
+        if not rec:
+            return _err(404, "ResourceNotFound", f"Event subscription '{name}' was not found.")
+        action = rest[1].lower()
+        if action == "deliverystatus":
+            return _ok(rec.get("_delivery", {"matched": 0, "delivered": 0, "failed": 0, "deadLettered": 0, "dropped": 0}))
+        if action == "getfullurl":
+            return _ok({"endpointUrl": ((rec.get("properties") or {}).get("destination", {}).get("properties", {}) or {}).get("endpointUrl", "")})
+        return _ok({})
+    if method == "GET":
+        rec = state.get(key)
+        return _ok(_view(rec)) if rec else _err(404, "ResourceNotFound", f"Event subscription '{name}' was not found.")
+    if method in ("PUT", "PATCH"):
+        payload = payload if isinstance(payload, dict) else {}
+        existed = key in state
+        props = payload.get("properties") if isinstance(payload.get("properties"), dict) else {}
+        if not existed and not (props.get("destination") or {}).get("endpointType"):
+            return _err(400, "InvalidRequest", "properties.destination.endpointType is required to create an event subscription.")
+        known = SYSTEM_EVENT_TYPES.get(scope_kind(scope_rid))
+        bad = [t for t in ((props.get("filter") or {}).get("includedEventTypes") or [])
+               if known and t.lower() != "all" and t not in known]
+        if bad:
+            return _err(400, "InvalidRequest", f"Event type(s) {', '.join(bad)} are not valid for this resource. Valid: {', '.join(known)}.")
+        rec = state[key] if (method == "PATCH" and existed) else {
+            "id": rid, "name": name, "type": "Microsoft.EventGrid/eventSubscriptions",
+            "properties": {"eventDeliverySchema": "EventGridSchema",
+                           "retryPolicy": {"maxDeliveryAttempts": 30, "eventTimeToLiveInMinutes": 1440},
+                           "provisioningState": "Succeeded", "topic": scope_rid},
+            "systemData": {"createdAt": _now()}, "_parent": parent, "_sub": sub, "_rg": (scope_rid.split("/")[4] if scope_rid.count("/") >= 4 else None),
+            "_created": _now(),
+        }
+        if props:
+            rec["properties"] = _merge(rec.get("properties", {}), props)
+        state[key] = rec
+        return _ok(_view(rec), status=200 if existed else 201)
+    if method == "DELETE":
+        rec = state.pop(key, None)
+        return _ok(None, status=200 if rec is not None else 204)
+    return _err(405, "MethodNotAllowed", f"{method} not allowed.")
+
+
+def emit_system_event(state: dict, scope_rid: str, event_type: str, subject: str, data: dict, *, sb_store=None) -> list:
+    """Deliver a system event raised ON ``scope_rid`` to every matching subscription at that scope (and, for
+    ``Microsoft.Resources.*`` events, at the enclosing resource group / subscription). Returns outcomes."""
+    parts = scope_rid.strip("/").split("/")
+    targets = {scope_rid.lower()}
+    if event_type.startswith("Microsoft.Resources."):
+        targets |= {"/" + "/".join(parts[:2]).lower()}
+        if len(parts) >= 4:
+            targets.add("/" + "/".join(parts[:4]).lower())
+    event = {"id": str(uuid.uuid4()), "eventType": event_type, "subject": subject, "eventTime": _now(),
+             "data": data or {}, "dataVersion": "1", "metadataVersion": "1", "topic": scope_rid}
+    outcomes = []
+    for rec in [r for r in state.values() if r.get("_parent") in targets]:
+        exp = _parse_iso((rec.get("properties") or {}).get("expirationTimeUtc"))
+        if exp is not None and exp <= datetime.datetime.now(datetime.timezone.utc):
+            continue
+        if not matches_filter(event, (rec.get("properties") or {}).get("filter") or {}):
+            continue
+        rec.setdefault("_delivery", {"matched": 0, "delivered": 0, "failed": 0, "deadLettered": 0, "dropped": 0})["matched"] += 1
+        outcomes.append({"subscription": rec["name"], "result": _attempt_delivery(rec, event, sb_store=sb_store)})
+    return outcomes

@@ -946,8 +946,10 @@ async def _handle_arm_inner(request: Request, rest: str) -> JSONResponse:
     # control (IAM) blade lists the assignments at its own scope plus inherited ones).
     lowc = [c.lower() for c in chain]
     for i in range(1, len(lowc) - 1):
-        if lowc[i] == "providers" and lowc[i + 1] in ("microsoft.authorization", "microsoft.security") and i % 2 == 0:
+        if lowc[i] == "providers" and lowc[i + 1] in ("microsoft.authorization", "microsoft.security", "microsoft.eventgrid") and i % 2 == 0:
             return await _handle_core_arm(request, method, rest, base)
+    if namespace.lower() == "microsoft.eventgrid" and chain and chain[0].lower() == "eventsubscriptions":   # RG / subscription scope
+        return await _handle_core_arm(request, method, rest, base)
 
     # Microsoft.Compute/.../vmSizes (azure.vms.size): a derived read (location- or VM-scoped),
     # not a RESOURCE_CATALOG-stored resource — served by the shared core ARM engine, same as

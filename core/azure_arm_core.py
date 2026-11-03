@@ -881,6 +881,16 @@ class AzureArm:
     # through it, and anything else here can via _record_activity. Read back by the single
     # eventtypes handler in _arm, merged with the shared nano_events feed.
     def _record_activity(self, rid: str, operation_name: str, sub: str, status: str = "Succeeded"):
+        try:   # a real write/delete raises the resource group's (and subscription's) Event Grid system event
+            low = operation_name.lower()
+            if "eventgrid" not in low and (low.endswith("/write") or low.endswith("/delete")) and "/resourcegroups/" in rid.lower():
+                evt = "Microsoft.Resources.ResourceWriteSuccess" if low.endswith("/write") else "Microsoft.Resources.ResourceDeleteSuccess"
+                if status != "Succeeded":
+                    evt = "Microsoft.Resources.ResourceWriteFailure"
+                eventgrid_engine.emit_system_event(self.state, rid, evt, rid, {"operationName": operation_name, "resourceUri": rid,
+                                                                              "status": status}, sb_store=getattr(self, "sb_store", None))
+        except Exception:
+            pass
         web_engine._record_event(self.state, sub, _rg_from_id(rid), rid, operation_name, operation_name, status)
 
     def _activity_log(self, method: str, query: dict, sub: str = DEFAULT_SUBSCRIPTION):
@@ -1294,6 +1304,19 @@ class AzureArm:
             if self.state.get(scope_rid.lower()) is None:
                 return _err(404, "ResourceNotFound", f"Resource '{scope_rid}' not found.")
             return self._security(method, sub, rg, chain[sec_marker + 2:], payload, query, scope_rid)
+
+        # Microsoft.EventGrid/eventSubscriptions scoped to a resource group / the subscription (system events).
+        if namespace.lower() == "microsoft.eventgrid" and chain and chain[0].lower() == "eventsubscriptions":
+            scope_rid = f"/subscriptions/{sub}/resourceGroups/{rg}" if rg is not None else f"/subscriptions/{sub}"
+            return self._eg_scoped(method, sub, scope_rid, chain[1:], payload)
+        # …and scoped to any other (non-topic) resource: storage / key vault / App Configuration / API Management / …
+        if not (namespace.lower() == "microsoft.eventgrid" and chain and chain[0].lower() == "topics"):
+            _eg_marker = eventgrid_engine.find_scoped_marker(chain)
+            if _eg_marker is not None:
+                stc, snames = [namespace], []
+                for n, token in enumerate(chain[:_eg_marker]):
+                    (stc if n % 2 == 0 else snames).append(token)
+                return self._eg_scoped(method, sub, _canonical_id(sub, rg, stc, snames), chain[_eg_marker + 3:], payload)
 
         # Microsoft.Authorization/locks: a real ARM extension resource scoped to ANY other
         # resource's own id (the chain re-enters "providers", like Event Grid's event
@@ -2680,6 +2703,18 @@ class AzureArm:
             url = f"{self._base}/api/azure/operations/{op_id}?api-version={query.get('api-version') or cs.API_VERSION}"
             resp["headers"].update({"Azure-AsyncOperation": url, "Location": url, "Retry-After": "0"})
         return resp
+
+    def _eg_scoped(self, method, sub, scope_rid, rest, payload):
+        if method == "POST" and len(rest) == 1 and rest[0].lower() == "simulateevent":
+            # Simulator-internal: raise a system event ON this resource (a resource group's writes raise real ones).
+            p = payload or {}
+            if eventgrid_engine.scope_kind(scope_rid) not in eventgrid_engine.SYSTEM_EVENT_TYPES:
+                return _err(400, "InvalidRequest", "This resource type does not raise Event Grid system events in Vyomi.")
+            outs = eventgrid_engine.emit_system_event(self.state, scope_rid, str(p.get("eventType") or ""), str(p.get("subject") or scope_rid),
+                                                      p.get("data") or {}, sb_store=getattr(self, "sb_store", None))
+            return _ok({"deliveries": outs})
+        r = eventgrid_engine.scoped_dispatch(self.state, method, sub, scope_rid, rest, payload)
+        return {"status": r["status"], "headers": dict(r["headers"]), "body": r["body"]}
 
     def _eventgrid(self, method, sub, rg, chain, payload, query):
         r = eventgrid_engine.dispatch(self.state, method, sub, rg, chain, [], payload, query, base=self._base)

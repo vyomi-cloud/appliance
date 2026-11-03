@@ -157,6 +157,28 @@ try {
   check("Cosmos Identity page turns on system assigned identity over ARM", !!json(await armv("2024-05-15")("GET", `/resourceGroups/${RG}/providers/Microsoft.DocumentDB/databaseAccounts/${COS}`)).identity?.principalId);
   await noNS("Cosmos Identity");
 
+  // ── Event Grid subscriptions on resource events (storage + resource group) ─────────────
+  await page.goto(UI + `#/storage/${RG}s/${SA}/events`);
+  await page.getByRole("button", { name: "Add event subscription" }).click();
+  await page.getByLabel("Event subscription name").fill(`blobs${n}`);
+  await page.getByLabel("Microsoft.Storage.BlobCreated", { exact: true }).check();
+  await page.getByLabel("Endpoint", { exact: true }).fill("http://localhost:9/hook");
+  await page.getByRole("dialog").getByRole("button", { name: "Create" }).click();
+  await page.getByRole("cell", { name: `blobs${n}`, exact: true }).waitFor({ timeout: 10000 });
+  await page.getByLabel("Test event type").selectOption("Microsoft.Storage.BlobCreated");
+  await page.getByRole("button", { name: "Send test event" }).click();
+  await page.waitForTimeout(800);
+  const egs = json(await armv("2022-06-15")("GET", `/resourceGroups/${RG}s/providers/Microsoft.Storage/storageAccounts/${SA}/providers/Microsoft.EventGrid/eventSubscriptions/blobs${n}/deliveryStatus`));
+  check("storage Events: UI subscription + test event matched over native ARM", egs.matched === 1);
+  await noNS("Storage Events");
+  await armv("2022-06-15")("PUT", `/resourceGroups/${RG}/providers/Microsoft.EventGrid/eventSubscriptions/rgsub${n}`, { properties: { destination: { endpointType: "WebHook", properties: { endpointUrl: "http://localhost:9/h" } } } });
+  await armv("2023-11-01")("PUT", `/resourceGroups/${RG}/providers/Microsoft.Network/virtualNetworks/vyazvn${n}`, { location: "eastus" });
+  await page.goto(UI + `#/resourcegroups/${RG}/events`);
+  await page.getByRole("cell", { name: `rgsub${n}`, exact: true }).waitFor({ timeout: 10000 });
+  const rgd = json(await armv("2022-06-15")("GET", `/resourceGroups/${RG}/providers/Microsoft.EventGrid/eventSubscriptions/rgsub${n}/deliveryStatus`));
+  check("resource group subscription received real ResourceWriteSuccess from an ARM write", rgd.matched >= 1);
+  await noNS("RG Events");
+
   // @@GROUPS@@
 } catch (e) {
   const at = ((e.stack || "").match(/smoke-[a-z-]+\.mjs:(\d+)/) || [])[1];

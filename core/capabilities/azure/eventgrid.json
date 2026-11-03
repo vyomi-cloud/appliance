@@ -156,5 +156,14 @@
       "The ARM Template tab renders this topic's own live resource JSON (type/apiVersion/properties), the same data as Overview's JSON View, in the standard ARM deployment-template envelope — real, not a static sample. Bicep and Terraform output, and the Add to library / Deploy / Visualize template actions, are not modeled."
     ],
     "tests": ["tests/conformance/test_azure_eventgrid_core.py"]
-  }
+  },
+ "azure.eventgrid.resourceevents": {
+  "title": "Event subscriptions on a resource's own system events (storage, Key Vault, App Configuration, API Management, resource group)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Subscriptions are real Microsoft.EventGrid/eventSubscriptions scoped to the resource (create/list/get/delete, event types validated against what that resource type raises, expiration swept, per-subscription matched/delivered/failed counters). A resource group's (and the subscription's) subscriptions receive REAL Microsoft.Resources.ResourceWriteSuccess/ResourceDeleteSuccess events from every actual ARM write/delete in it.",
+   "Storage, Key Vault, App Configuration and API Management do not yet emit their data-plane system events on their own (BlobCreated, SecretNewVersionCreated, KeyValueModified, …): those fire only from the console's 'Send test event' (simulateEvent) action. Delivery is real only to Service Bus queue/topic destinations on the offline appliance; WebHook, Storage Queue and Event Hub destinations (and every destination on Nano) are unreachable and resolve to dead-lettered/dropped, as for topic subscriptions."
+  ],
+  "tests": ["tests/conformance/test_azure_eventgrid_scoped_core.py"]
+ }
 }
