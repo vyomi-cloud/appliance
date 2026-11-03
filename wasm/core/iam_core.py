@@ -1802,6 +1802,92 @@ def _get_service_last_accessed_details(store, params):
     return _envelope("GetServiceLastAccessedDetails", inner)
 
 
+# ── Organizations service access report (IAM GenerateOrganizationsAccessReport / GetOrganizationsAccessReport) ──
+# Real AWS reports, for an organization root/OU/account (EntityPath = "o-…/r-…/ou-…/<account>"), which services its
+# principals actually authenticated to, optionally scoped to the services an SCP allows. Vyomi derives it from the
+# same recorded native-wire activity as the user-level report above. HONEST scope: only the MANAGEMENT account has
+# principals and traffic, so member accounts contribute no activity; the report is empty unless the management
+# account sits under the chosen entity. Roles carry no attributable activity either (see record_activity).
+def _org_scope_accounts(o, entity_id):
+    if entity_id in o["accounts"]:
+        return {entity_id}
+    if entity_id not in o["roots"] and entity_id not in o["ous"]:
+        return None
+    out, stack = set(), [entity_id]
+    while stack:
+        cur = stack.pop()
+        out |= {a["id"] for a in o["accounts"].values() if a["parent"] == cur}
+        stack += [u["id"] for u in o["ous"].values() if u["parent"] == cur]
+    return out
+
+
+def _scp_allows_service(content_json: str, ns: str) -> bool:
+    import fnmatch
+    try:
+        doc = json.loads(content_json)
+    except Exception:
+        return False
+    stmts = doc.get("Statement", [])
+    stmts = [stmts] if isinstance(stmts, dict) else stmts
+    def hits(st):
+        acts = st.get("Action", [])
+        acts = [acts] if isinstance(acts, str) else acts
+        return any(fnmatch.fnmatchcase(f"{ns}:x", a) or fnmatch.fnmatchcase(f"{ns}:*", a) for a in acts)
+    allowed = any(st.get("Effect") == "Allow" and hits(st) for st in stmts)
+    denied = any(st.get("Effect") == "Deny" and hits(st) and not st.get("Condition") and st.get("Resource", "*") in ("*", ["*"]) for st in stmts)
+    return allowed and not denied
+
+
+def _generate_organizations_access_report(store, params):
+    path = str(params.get("EntityPath", "")).strip()
+    o = store.extras.get("org")
+    if not o:
+        raise IamError("NoSuchEntity", "Your account is not a member of an organization.", 404)
+    parts = [x for x in path.split("/") if x]
+    if len(parts) < 2 or parts[0] != o["id"]:
+        raise IamError("ValidationError", "EntityPath must look like o-<org>/r-<root>/[ou-…/]<id>.", 400)
+    if _org_scope_accounts(o, parts[-1]) is None:
+        raise IamError("NoSuchEntity", f"No organization root, OU or account {parts[-1]}.", 404)
+    pol = str(params.get("OrganizationsPolicyId", "")).strip()
+    if pol and pol not in store.org_policies:
+        raise IamError("NoSuchEntity", f"Policy {pol} not found.", 404)
+    job = "vyomi-oar-" + base64.urlsafe_b64encode(json.dumps([path, pol]).encode()).decode().rstrip("=")
+    return _envelope("GenerateOrganizationsAccessReport", _el("JobId", job))
+
+
+def _get_organizations_access_report(store, params):
+    job = str(params.get("JobId", "")).strip()
+    if not job.startswith("vyomi-oar-"):
+        raise IamError("NoSuchEntity", f"Job {job} not found.", 404)
+    rest = job[len("vyomi-oar-"):]
+    try:
+        path, pol = json.loads(base64.urlsafe_b64decode(rest + "=" * (-len(rest) % 4)).decode())
+    except Exception:
+        raise IamError("NoSuchEntity", f"Job {job} not found.", 404)
+    o = store.extras.get("org")
+    if not o:
+        raise IamError("NoSuchEntity", "Your account is not a member of an organization.", 404)
+    scope = _org_scope_accounts(o, path.rstrip("/").rsplit("/", 1)[-1]) or set()
+    content = store.org_policies[pol]["content"] if pol in store.org_policies else None
+    accessible = [ns for ns in sorted(_SERVICE_NAME) if content is None or _scp_allows_service(content, ns)]
+    seen = {}
+    if o["master_account_id"] in scope:
+        for e in store.activity:
+            ns = _namespace(e["service"])
+            if ns not in accessible:
+                continue
+            rec = seen.setdefault(ns, {"last": e["time"], "ents": set()})
+            rec["last"] = max(rec["last"], e["time"]); rec["ents"].add(e["principal_arn"])
+    items = "".join("<member>" + _el("ServiceName", _SERVICE_NAME.get(ns, ns)) + _el("ServiceNamespace", ns) + _el("EntityPath", path)
+                    + _el("LastAuthenticatedTime", r["last"]) + _el("TotalAuthenticatedEntities", len(r["ents"])) + "</member>"
+                    for ns, r in sorted(seen.items()))
+    now = _now()
+    inner = (_el("JobStatus", "COMPLETED") + _el("JobCreationDate", now) + _el("JobCompletionDate", now)
+             + _el("NumberOfServicesAccessible", len(accessible)) + _el("NumberOfServicesNotAccessed", len(accessible) - len(seen))
+             + f"<AccessDetails>{items}</AccessDetails>" + _el("IsTruncated", "false"))
+    return _envelope("GetOrganizationsAccessReport", inner)
+
+
 # ── policy generation from activity (Vyomi-only) ────────────────────────────
 # Real AWS mines CloudTrail management events for "Generate policy based on CloudTrail
 # events" (the IAM console routes it through Access Analyzer's StartPolicyGeneration /
@@ -2919,6 +3005,7 @@ _OPS = {
     "GetAccountAuthorizationDetails": _get_account_authorization_details,
     "GenerateServiceLastAccessedDetails": _generate_sla_v2, "GetServiceLastAccessedDetails": _get_sla_v2,
     "GetServiceLastAccessedDetailsWithEntities": _get_sla_with_entities,
+    "GenerateOrganizationsAccessReport": _generate_organizations_access_report, "GetOrganizationsAccessReport": _get_organizations_access_report,
     "ListPoliciesGrantingServiceAccess": _list_policies_granting_service_access,
     "EnableOrganizationsRootCredentialsManagement": _set_org_feature("EnableOrganizationsRootCredentialsManagement", "RootCredentialsManagement", True),
     "DisableOrganizationsRootCredentialsManagement": _set_org_feature("DisableOrganizationsRootCredentialsManagement", "RootCredentialsManagement", False),
