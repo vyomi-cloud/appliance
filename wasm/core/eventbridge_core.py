@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -337,13 +338,109 @@ def route_event(rules, bus, event_obj, envelope, send_sqs, invoke_lambda, publis
                 fn = lambda a=arn, b=body_str: publish_sns(a, b)
             elif ":lambda:" in arn or ":function:" in arn:
                 fn = lambda a=arn, b=body_str: invoke_lambda(a, b)
-            elif deliver_other is not None and (":event-bus/" in arn or ":stateMachine:" in arn):
+            elif deliver_other is not None and (":event-bus/" in arn or ":stateMachine:" in arn or ":api-destination/" in arn):
                 fn = lambda a=arn, b=body_str: deliver_other(a, b)
             else:
                 continue
             _deliver_with_retry(tgt, fn, send_sqs, base_str)
             n += 1
     return n
+
+
+def _store_map(store, attr):
+    m = getattr(store, attr, None)
+    if m is None:
+        m = {}
+        setattr(store, attr, m)
+    return m
+
+
+def _create_connection(store, body):
+    name = str(body.get("Name", "")).strip()
+    if not name:
+        raise _E("ValidationException", "Name is required.")
+    arn = f"arn:aws:events:{REGION}:{store.account_id}:connection/{name}/{uuid.uuid4()}"
+    _store_map(store, "event_connections")[name] = {
+        "Name": name, "ConnectionArn": arn, "ConnectionState": "AUTHORIZED",
+        "AuthorizationType": body.get("AuthorizationType", "API_KEY"),
+        "AuthParameters": body.get("AuthParameters") or {}, "Description": body.get("Description", ""),
+        "CreationTime": time.time(), "LastModifiedTime": time.time()}
+    store.persist()
+    return EventsResponse(body={"ConnectionArn": arn, "ConnectionState": "AUTHORIZED",
+                                "CreationTime": time.time(), "LastModifiedTime": time.time()})
+
+
+def _describe_connection(store, body):
+    c = _store_map(store, "event_connections").get(str(body.get("Name", "")))
+    if not c:
+        raise _E("ResourceNotFoundException", f"Connection {body.get('Name')} does not exist.")
+    return EventsResponse(body={k: v for k, v in c.items() if k != "AuthParameters"})
+
+
+def _delete_connection(store, body):
+    _store_map(store, "event_connections").pop(str(body.get("Name", "")), None)
+    store.persist()
+    return EventsResponse(body={})
+
+
+def _create_api_destination(store, body):
+    name = str(body.get("Name", "")).strip()
+    if not name or not body.get("InvocationEndpoint") or not body.get("ConnectionArn"):
+        raise _E("ValidationException", "Name, ConnectionArn, InvocationEndpoint and HttpMethod are required.")
+    arn = f"arn:aws:events:{REGION}:{store.account_id}:api-destination/{name}/{uuid.uuid4()}"
+    _store_map(store, "event_api_destinations")[name] = {
+        "Name": name, "ApiDestinationArn": arn, "ApiDestinationState": "ACTIVE",
+        "ConnectionArn": body["ConnectionArn"], "InvocationEndpoint": body["InvocationEndpoint"],
+        "HttpMethod": body.get("HttpMethod", "POST"), "Description": body.get("Description", ""),
+        "InvocationRateLimitPerSecond": body.get("InvocationRateLimitPerSecond", 300),
+        "CreationTime": time.time(), "LastModifiedTime": time.time()}
+    store.persist()
+    return EventsResponse(body={"ApiDestinationArn": arn, "ApiDestinationState": "ACTIVE",
+                                "CreationTime": time.time(), "LastModifiedTime": time.time()})
+
+
+def _describe_api_destination(store, body):
+    d = _store_map(store, "event_api_destinations").get(str(body.get("Name", "")))
+    if not d:
+        raise _E("ResourceNotFoundException", f"An api-destination '{body.get('Name')}' does not exist.")
+    return EventsResponse(body=dict(d))
+
+
+def _list_api_destinations(store, body):
+    return EventsResponse(body={"ApiDestinations": list(_store_map(store, "event_api_destinations").values())})
+
+
+def _delete_api_destination(store, body):
+    _store_map(store, "event_api_destinations").pop(str(body.get("Name", "")), None)
+    store.persist()
+    return EventsResponse(body={})
+
+
+def _deliver_api_destination(store, arn, body_str, tgt=None):
+    """POST/PUT/... the (transformed) event to the destination's endpoint with the connection's auth."""
+    import urllib.request
+    dest = next((d for d in _store_map(store, "event_api_destinations").values()
+                 if d["ApiDestinationArn"] == arn), None)
+    if dest is None:
+        raise LookupError(f"API destination {arn} does not exist")
+    headers = {"Content-Type": "application/json"}
+    conn = next((c for c in _store_map(store, "event_connections").values()
+                 if c["ConnectionArn"] == dest["ConnectionArn"]), None)
+    if conn:
+        ap = conn.get("AuthParameters") or {}
+        if conn["AuthorizationType"] == "API_KEY" and ap.get("ApiKeyAuthParameters"):
+            k = ap["ApiKeyAuthParameters"]
+            headers[k.get("ApiKeyName", "x-api-key")] = k.get("ApiKeyValue", "")
+        elif conn["AuthorizationType"] == "BASIC" and ap.get("BasicAuthParameters"):
+            import base64
+            b = ap["BasicAuthParameters"]
+            headers["Authorization"] = "Basic " + base64.b64encode(
+                f"{b.get('Username', '')}:{b.get('Password', '')}".encode()).decode()
+    req = urllib.request.Request(dest["InvocationEndpoint"], data=body_str.encode(),
+                                 method=dest.get("HttpMethod", "POST"), headers=headers)
+    with urllib.request.urlopen(req, timeout=10) as r:
+        if r.status >= 300:
+            raise RuntimeError(f"API destination returned {r.status}")
 
 
 def _put_events(store, body, lambda_store=None, depth=0):
@@ -386,6 +483,8 @@ def _put_events(store, body, lambda_store=None, depth=0):
                     "Source": ev2.get("source", source), "DetailType": ev2.get("detail-type", detail_type),
                     "Detail": json.dumps(ev2.get("detail", {})), "Resources": ev2.get("resources", []),
                     "EventBusName": arn.rsplit("/", 1)[-1]}]}, lambda_store, depth + 1)
+            elif ":api-destination/" in arn:
+                _deliver_api_destination(store, arn, body_str)
             else:  # Step Functions StartExecution with the event as input
                 try:
                     from core import stepfunctions_core as sfn
@@ -415,6 +514,10 @@ _OPS = {
     "PutRule": _put_rule, "DeleteRule": _delete_rule, "ListRules": _list_rules,
     "PutTargets": _put_targets, "RemoveTargets": _remove_targets,
     "ListTargetsByRule": _list_targets_by_rule, "PutEvents": _put_events,
+    "CreateConnection": _create_connection, "DescribeConnection": _describe_connection,
+    "DeleteConnection": _delete_connection, "CreateApiDestination": _create_api_destination,
+    "DescribeApiDestination": _describe_api_destination, "ListApiDestinations": _list_api_destinations,
+    "DeleteApiDestination": _delete_api_destination,
 }
 
 

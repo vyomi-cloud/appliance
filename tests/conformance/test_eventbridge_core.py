@@ -172,6 +172,32 @@ def run(store=None):
     d = sfn.dispatch(ss, "AWSStepFunctions.DescribeExecution", {"executionArn": ex[0]["executionArn"]}).body
     _check("execution input is the event", json.loads(d["input"])["detail"] == {"k": 9})
 
+    # API destination target: the transformed event is POSTed to the endpoint with the connection's auth.
+    import threading
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+    got = []
+
+    class H(BaseHTTPRequestHandler):
+        def do_POST(self):
+            got.append((self.headers.get("x-api-key"), self.rfile.read(int(self.headers["Content-Length"]))))
+            self.send_response(200); self.end_headers()
+
+        def log_message(self, *a):
+            pass
+    srv = HTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    conn = call("CreateConnection", {"Name": "c1", "AuthorizationType": "API_KEY", "AuthParameters": {
+        "ApiKeyAuthParameters": {"ApiKeyName": "x-api-key", "ApiKeyValue": "k123"}}}).body
+    ad = call("CreateApiDestination", {"Name": "d1", "ConnectionArn": conn["ConnectionArn"], "HttpMethod": "POST",
+                                       "InvocationEndpoint": f"http://127.0.0.1:{srv.server_port}/hook"}).body
+    _check("DescribeApiDestination", call("DescribeApiDestination", {"Name": "d1"}).body["ApiDestinationArn"] == ad["ApiDestinationArn"])
+    call("PutRule", {"Name": "rhttp", "EventPattern": json.dumps({"source": ["http.app"]})})
+    call("PutTargets", {"Rule": "rhttp", "Targets": [{"Id": "th", "Arn": ad["ApiDestinationArn"]}]})
+    call("PutEvents", {"Entries": [{"Source": "http.app", "DetailType": "x", "Detail": json.dumps({"k": 5})}]})
+    srv.shutdown()
+    _check("API destination receives event with API key", len(got) == 1 and got[0][0] == "k123"
+           and json.loads(got[0][1])["detail"] == {"k": 5})
+
     _check("ListRules",call("ListRules", {}).body["Rules"][0]["Name"] == "r1")
     _check("ListTargetsByRule", call("ListTargetsByRule", {"Rule": "r1"}).body["Targets"][0]["Id"] == "t1")
 
