@@ -1,6 +1,6 @@
 # Vyomi service pipeline
 
-_Updated 2026-11-03 20:57 UTC · refreshes after every pipeline run_
+_Updated 2026-11-03 21:16 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
@@ -9,7 +9,7 @@ _Updated 2026-11-03 20:57 UTC · refreshes after every pipeline run_
 - **In the gate / releasing:** Amazon Cognito Identity Provider (AWS), Amazon EC2 Container Service (AWS), Amazon Elastic Container Registry (AWS), Amazon ElastiCache (AWS), Amazon Kinesis (AWS), Amazon Route 53 (AWS), Amazon Simple Email Service (AWS), AWS CloudFormation (AWS), AWS Security Token Service (AWS), BigQuery API (GCP), Cloud DNS API (GCP), Cloud Logging API (GCP), Cloud Run Admin API (GCP), Cloud Tasks API (GCP), Workflows API (GCP), Application Insights (Azure), Container Registry (Azure), Azure Kubernetes Service (Azure), Event Hubs (Azure), Managed Identities (Azure), Azure Cache for Redis (Azure)
 - **Queued:** 41 services (P1 first, then P2)
 - **Consoles really implemented:** offline 97% · Nano 97%
-- **Hourly tests:** 283 of 286 suites passing (run 18:42 UTC)
+- **Hourly tests:** 268 of 277 suites passing (run 20:49 UTC)
 - **Upstream watch:** 63 open changes from the real clouds to adopt
 
 ## By cloud
@@ -17,7 +17,7 @@ _Updated 2026-11-03 20:57 UTC · refreshes after every pipeline run_
 | Cloud | Released | Building | In gate | Queued | Console live (offline · Nano) |
 |---|---|---|---|---|---|
 | AWS | 19 | 0 | 9 | 17 | 93% · 93% |
-| GCP | 18 | 0 | 6 | 12 | 99% · 100% |
+| GCP | 18 | 0 | 6 | 12 | 100% · 100% |
 | Azure | 18 | 0 | 6 | 12 | 100% · 100% |
 
 ## In progress
@@ -103,7 +103,7 @@ _Updated 2026-11-03 20:57 UTC · refreshes after every pipeline run_
 
 | Service | Real backend | Wired today | Console live | UI issues | Upstream | Release |
 |---|---|---|---|---|---|---|
-| Compute Engine | — | not audited | 🧩 16/17 · ✅ 18/18 | 2 · 0 | ⚠️ 1 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+compute/v1) | before gate |
+| Compute Engine | — | not audited | ✅ 18/18 · ✅ 18/18 | 0 · 0 | ⚠️ 1 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+compute/v1) | before gate |
 | Cloud Storage | — | not audited | ✅ 14/14 · ✅ 14/14 | 0 · 0 | ✅ watched | before gate |
 | Cloud SQL | — | not audited | ✅ 17/17 · ✅ 17/17 | 0 · 0 | ⚠️ 50 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+sqladmin/v1beta4) | before gate |
 | Pub/Sub | — | not audited | ✅ 13/13 · ✅ 13/13 | 0 · 0 | ✅ watched | before gate |
@@ -898,20 +898,12 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 
 </details>
 
-<details><summary>Console parts not live yet — GCP (1)</summary>
-
-| Service | Console | Part | State |
-|---|---|---|---|
-| Compute Engine | offline | create: create with defaults | unimplemented |
-
-</details>
-
 <details><summary>Latest hourly test results</summary>
 
 | Suite | Result | Checks |
 |---|---|---|
-| offline-ui-crawl | ❌ | 57/58 |
-| offline-console-actions | ✅ | 375/375 |
+| offline-ui-crawl | ✅ | 58/58 |
+| offline-console-actions | ✅ | 371/371 |
 | offline-api-ec2-instance-detail | ✅ | 3/3 |
 | offline-api-s3-bucket-creation-date | ✅ | 3/3 |
 | offline-sdk-python-azure-ops | ✅ | 8/8 |
@@ -1066,7 +1058,7 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 | offline-ui-gcp-redis | ✅ | 22/22 |
 | nano-ui-gcp-redis | ✅ | 22/22 |
 | offline-sdk-java-azure-app | ✅ | 15/15 |
-| offline-sdk-go-azure-app | ✅ | 29/29 |
+| offline-sdk-go-azure-app | ❌ | 28/29 |
 | offline-cli-azure-app | ✅ | 23/23 |
 | offline-ui-azure-app | ✅ | 29/29 |
 | nano-ui-azure-app | ✅ | 29/29 |
@@ -1091,7 +1083,7 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 | offline-ui-azure-monitor | ✅ | 30/30 |
 | nano-ui-azure-monitor | ✅ | 29/29 |
 | offline-sdk-java-azure-operationalinsights | ✅ | 23/23 |
-| offline-sdk-go-azure-operationalinsights | ❌ | 0/400 |
+| offline-sdk-go-azure-operationalinsights | ✅ | 33/33 |
 | offline-cli-azure-operationalinsights | ✅ | 20/20 |
 | offline-ui-azure-operationalinsights | ✅ | 34/34 |
 | nano-ui-azure-operationalinsights | ✅ | 33/33 |
@@ -1124,14 +1116,14 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 | offline-post-create-aws-event-delivery | ✅ | 6/6 |
 | offline-post-create-gcp-event-delivery | ✅ | 7/7 |
 | offline-post-create-azure-event-delivery | ✅ | 7/7 |
-| offline-post-create-aws-ec2-ssh | ✅ | 10/10 |
-| offline-post-create-gcp-gce-ssh | ❌ | 0/1 |
-| offline-post-create-azure-vm-ssh | ✅ | 10/10 |
+| offline-post-create-aws-ec2-ssh | ❌ | 1/3 |
+| offline-post-create-gcp-gce-ssh | ❌ | 1/3 |
+| offline-post-create-azure-vm-ssh | ❌ | 1/3 |
 | offline-post-create-aws-rds-db-connect | ✅ | 6/6 |
 | offline-post-create-gcp-cloudsql-db-connect | ✅ | 5/5 |
 | nano-post-create-aws-ec2-ssh | ✅ | 18/18 |
-| nano-post-create-gcp-gce-ssh | ✅ | 18/18 |
-| nano-post-create-azure-vm-ssh | ✅ | 18/18 |
+| nano-post-create-gcp-gce-ssh | ❌ | 17/18 |
+| nano-post-create-azure-vm-ssh | ❌ | 17/18 |
 | offline-ui-console-home | ✅ | 35/35 |
 | offline-ui-gcp-artifactregistry | ✅ | 16/16 |
 | offline-ui-gcp-metrics-tab | ✅ | 6/6 |
@@ -1164,7 +1156,7 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 | offline-ui-azure-resource-group-detail | ✅ | 6/6 |
 | nano-ui-azure-apim-appinsights | ✅ | 6/6 |
 | offline-ui-azure-apim-appinsights | ✅ | 6/6 |
-| offline-sweepA-azure | ✅ | 13/13 |
+| offline-sweepA-azure | ❌ | 12/13 |
 | nano-sweepA-azure | ✅ | 8/8 |
 | offline-sweepA-aws | ✅ | 14/14 |
 | offline-post-create-gcp-memorystore-reachable | ✅ | 5/5 |
@@ -1176,26 +1168,17 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 | offline-post-create-azure-sql-fqdn | ✅ | 2/2 |
 | offline-post-create-aws-apigateway-invoke | ✅ | 4/4 |
 | offline-post-create-aws-apigatewayv2-invoke | ✅ | 1/1 |
-| offline-post-create-azure-container-app | ✅ | 9/9 |
+| offline-post-create-azure-container-app | ❌ | 4/9 |
 | offline-post-create-azure-loganalytics | ✅ | 6/6 |
 | offline-post-create-azure-openai | ✅ | 6/6 |
 | offline-post-create-aws-iam-actions | ✅ | 13/13 |
 | offline-post-create-azure-rbac-checkaccess | ✅ | 6/6 |
-| offline-ui-drawer | ✅ | 87/87 |
+| offline-ui-drawer | ❌ | 86/87 |
 | nano-ui-drawer | ✅ | 72/72 |
 | offline-ui-default-cloud | ✅ | 18/18 |
 | nano-ui-default-cloud | ✅ | 15/15 |
 | nano-ui-gcp-properties | ✅ | 12/12 |
 | offline-ui-gcp-properties | ✅ | 12/12 |
-| offline-api-gcp-console-maintenance-routes | ✅ | 5/5 |
-| offline-api-gcp-console-tools-routes | ✅ | 16/16 |
-| offline-api-gcp-kms-importjobs-ar-tags | ✅ | 17/17 |
-| offline-api-gcp-provider-connect | ✅ | 15/15 |
-| offline-api-gcp-sql-patch-monitoring | ✅ | 10/10 |
-| offline-cli-gcp-scheduler-pubsub-gcloud | ✅ | 7/7 |
-| offline-core-aws-vpc-nacl | ✅ | 6/6 |
-| offline-sdk-gcp-kms-python | ✅ | 5/5 |
-| offline-sdk-python-aws-ops5 | ✅ | 4/4 |
 
 </details>
 
