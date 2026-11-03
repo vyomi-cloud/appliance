@@ -121,13 +121,14 @@ function Overview({ a, reload, self }) {
   const sub = useSubscription();
   const [tab, setTab] = useState("getstarted");
   const [del, setDel] = useState(false);
-  const [gap, setGap] = useState(null); // "Import image" | "Move" | "Feedback"
+  const [gap, setGap] = useState(null); // "Move" | "Feedback"
+  const [imp, setImp] = useState(false);
   const p = a.properties || {};
   const tags = Object.entries(a.tags || {});
   return (
     <>
       <div className="vy-cmdbar" role="toolbar" aria-label="Overview commands">
-        <ToolbarButton onClick={() => setGap("Import image")}>Import image</ToolbarButton>
+        <ToolbarButton onClick={() => setImp(true)}>Import image</ToolbarButton>
         <ToolbarButton onClick={() => setGap("Move")}>Move</ToolbarButton>
         <ToolbarButton icon={<Delete20Regular />} onClick={() => setDel(true)}>Delete</ToolbarButton>
         <ToolbarButton icon={<ArrowClockwise20Regular />} onClick={reload}>Refresh</ToolbarButton>
@@ -174,6 +175,7 @@ function Overview({ a, reload, self }) {
           notify.success(`Container registry '${a.name}' was deleted.`, "Delete succeeded");
           navigate("acr");
         }} />
+      <ImportImageDialog open={imp} onClose={() => setImp(false)} />
       <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
         <DialogSurface aria-label={gap || "Not simulated"}>
           <DialogBody>
@@ -1256,5 +1258,42 @@ function Retention({ a, reload }) {
       </div>
       <div className="vy-cmdbar" style={{ marginTop: 12 }}><Button appearance="primary" disabled={busy} onClick={save}>Save</Button></div>
     </CapabilityContainer>
+  );
+}
+
+// ── Import image: copy manifest + blobs to new tags (core/azure_acr_core.py import_image) ────────
+function ImportImageDialog({ open, onClose }) {
+  const notify = useNotify();
+  const [source, setSource] = useState("registry");
+  const [uri, setUri] = useState("");
+  const [image, setImage] = useState("");
+  const [target, setTarget] = useState("");
+  const [force, setForce] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const go = async () => {
+    setBusy(true);
+    try {
+      const r = await api.importImage({ sourceImage: image, targetTags: target.split(",").map((t) => t.trim()).filter(Boolean), mode: force ? "Force" : "NoForce", ...(source === "public" ? { registryUri: uri || "docker.io" } : {}) });
+      notify.success(`Imported ${r.imported.join(", ")}.`, "Import succeeded"); onClose();
+    } catch (e) { notify.error(e, "Import failed"); } finally { setBusy(false); }
+  };
+  return (
+    <Dialog open={open} onOpenChange={(_, d) => !d.open && onClose()}>
+      <DialogSurface aria-label="Import image">
+        <DialogBody>
+          <DialogTitle>Import image</DialogTitle>
+          <DialogContent>
+            <CapabilityContainer id="azure.acr.import" title="Source">
+              <Field label="Source type"><Select value={source} onChange={(_, d) => setSource(d.value)} aria-label="Source type"><option value="registry">Container registry in this subscription</option><option value="public">Public registry (Docker Hub, MCR, GHCR)</option></Select></Field>
+              {source === "public" && <Field label="Registry URI"><Input value={uri} placeholder="docker.io" onChange={(_, d) => setUri(d.value)} aria-label="Registry URI" /></Field>}
+              <Field label="Source image" required hint="repository:tag or repository@sha256:digest"><Input value={image} onChange={(_, d) => setImage(d.value)} aria-label="Source image" /></Field>
+              <Field label="Target tags" required hint="comma separated repository:tag"><Input value={target} onChange={(_, d) => setTarget(d.value)} aria-label="Target tags" /></Field>
+              <Checkbox label="Overwrite existing tags (Force)" checked={force} onChange={(_, d) => setForce(!!d.checked)} />
+            </CapabilityContainer>
+          </DialogContent>
+          <DialogActions><Button appearance="primary" disabled={busy || !image || !target} onClick={go}>Import</Button><Button onClick={onClose}>Cancel</Button></DialogActions>
+        </DialogBody>
+      </DialogSurface>
+    </Dialog>
   );
 }

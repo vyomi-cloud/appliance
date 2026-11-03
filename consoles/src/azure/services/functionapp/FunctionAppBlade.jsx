@@ -23,6 +23,8 @@ import ResourceBlade from "../../kit/ResourceBlade.jsx";
 import { ErrorBar, Essentials, fmtDate, Glyph, InfoBar, KV, Loading, NotSimulated, NotSimulatedContainer } from "../../kit/common.jsx";
 import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
+import * as ops from "../appservices/AppOps.jsx";
+import { Configuration as WebConfiguration } from "../appservices/WebAppBlade.jsx";
 import * as api from "./api.js";
 import { ResourceRecommendations } from "../defender/Pages.jsx";
 import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
@@ -68,10 +70,8 @@ const LABEL = Object.fromEntries(MENU.flatMap((m) => (m.group ? m.items : [m])).
 // the registry's limitations text.
 const GAPS = {
   "deployment-center": "azure.functionapp.deploymentcenter",
-  "service-connector": "azure.functionapp.serviceconnector",
   "advanced-tools": "azure.functionapp.advancedtools",
   "extensions": "azure.functionapp.extensions",
-  "api-management": "azure.functionapp.apimanagement",
   "tasks": "azure.functionapp.tasks",
   "new-support-request": "azure.functionapp.newsupportrequest",
 };
@@ -99,7 +99,10 @@ export default function FunctionAppBlade({ params }) {
       "access-control-iam": () => <AccessControl a={a} />,
       "export-template": () => <SharedExportTemplate id={a.id} name={a.name} resourceGroup={a.resourceGroup} />,
       "activity-log": () => <SharedActivityLog scope={a.id} name={a.name} />,
-      "configuration": () => <Placeholder name={a.name} id="configuration" extra={<p style={{ fontSize: 13 }}>App settings and connection strings moved to <Link href={`${self}/environment-variables`}>Environment variables</Link>.</p>} />,
+      "service-connector": () => <ops.ServiceConnector a={a} rg={rg} name={name} cap="azure.functionapp.serviceconnector" />,
+      "api-management": () => <ops.ApiManagement a={a} rg={rg} name={name} reload={reload} cap="azure.functionapp.apimanagement" />,
+      "configuration": () => <><WebConfiguration a={a} rg={rg} name={name} reload={reload} /><p style={{ fontSize: 13 }}>App settings and connection strings are under <Link href={`${self}/environment-variables`}>Environment variables</Link>.</p></>,
+      "configuration-old": () => <Placeholder name={a.name} id="configuration" extra={<p style={{ fontSize: 13 }}>App settings and connection strings moved to <Link href={`${self}/environment-variables`}>Environment variables</Link>.</p>} />,
       "identity": () => <Identity a={a} reload={reload} />,
       "custom-domains": () => <CustomDomains a={a} />,
       "certificates": () => <Certificates a={a} />,

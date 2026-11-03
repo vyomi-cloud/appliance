@@ -121,7 +121,8 @@
   },
   "limitations": [
    "Service principal sign-ins are real: POST /{tenant}/oauth2/v2.0/token validates the caller's actual client secret (set by addPassword/removePassword on the app, core/azure_graph_core.py) and appends a success or failure row for that exact attempt — never sample data.",
-   "'User sign-ins (interactive)', 'User sign-ins (non-interactive)' and 'Managed identity sign-ins' stay honestly empty — Vyomi has no interactive browser sign-in flow and no managed-identity token endpoint to drive them.",
+   "User sign-ins (non-interactive) are real: the oauth2/v2.0/token password (ROPC) grant checks the directory user's actual password and appends a success/failure row (AADSTS50126 wrong password, 50034 unknown user, 50057 disabled). Refresh-token and MFA flows are not modelled.",
+   "'User sign-ins (interactive)' and 'Managed identity sign-ins' stay honestly empty — Vyomi has no interactive browser sign-in flow and no managed-identity token endpoint to drive them.",
    "IP address and location are not derived from a real network topology; every row shows the simulator's own loopback address."
   ],
   "tests": [

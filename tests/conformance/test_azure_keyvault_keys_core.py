@@ -131,6 +131,23 @@ def run() -> int:
     gone = kv.dispatch(st, "GET", "/keys/mykey", API, {}, b"")
     _check("deleted key 404", gone.status == 404 and _jbody(gone)["error"]["code"] == "KeyNotFound")
 
+    # activation / expiration dates are stored, returned, and ENFORCED on crypto operations
+    import time as _t
+    now = int(_t.time())
+    mk = lambda nm, attrs: kv.dispatch(st, "POST", f"/keys/{nm}/create", API, {}, json.dumps({"kty": "RSA", "key_size": 2048, "attributes": attrs, "tags": {"env": "dev"}}).encode())
+    r = mk("future", {"nbf": now + 3600})
+    _check("create with nbf returns it + tags", _jbody(r)["attributes"]["nbf"] == now + 3600 and _jbody(r)["tags"] == {"env": "dev"})
+    enc = lambda nm: kv.dispatch(st, "POST", f"/keys/{nm}/encrypt", API, {}, json.dumps({"alg": "RSA-OAEP", "value": _b64url(b"hi")}).encode())
+    _check("encrypt before nbf -> 403 Forbidden", enc("future").status == 403)
+    mk("old", {"exp": now - 10})
+    _check("encrypt after exp -> 403 Forbidden", enc("old").status == 403)
+    mk("live", {"nbf": now - 10, "exp": now + 3600})
+    _check("encrypt inside the window works", enc("live").status == 200)
+    mk("off", {"enabled": False})
+    _check("encrypt on a disabled key -> 403", enc("off").status == 403)
+    kv.dispatch(st, "PATCH", "/keys/future", API, {}, json.dumps({"attributes": {"nbf": now - 1}}).encode())
+    _check("PATCH nbf into the past re-enables use", enc("future").status == 200)
+
     print("\nAzure Key Vault keys-core conformance: ALL GREEN")
     return 0
 

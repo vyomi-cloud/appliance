@@ -176,6 +176,25 @@ def run() -> int:
     _check("sweep purges a manifest untagged past the policy window", purged == 1)
     _check("the now-empty repository disappears with it", "retain" not in st.repos)
 
+    # import image: copy manifest + blobs between repositories (Vyomi data-plane carrier of importImage)
+    import hashlib, json as _j
+    st2 = AcrRegistryStore()
+    blob = b"layer-bytes"; bd = "sha256:" + hashlib.sha256(blob).hexdigest()
+    cfg = b"{}"; cd = "sha256:" + hashlib.sha256(cfg).hexdigest()
+    dispatch(st2, "POST", f"/v2/src/blobs/uploads/", {"digest": bd}, {}, blob); dispatch(st2, "POST", "/v2/src/blobs/uploads/", {"digest": cd}, {}, cfg)
+    man = _j.dumps({"schemaVersion": 2, "config": {"digest": cd}, "layers": [{"digest": bd}]}).encode()
+    dispatch(st2, "PUT", "/v2/src/manifests/v1", {}, {"content-type": "application/vnd.docker.distribution.manifest.v2+json"}, man)
+    imp = lambda b: dispatch(st2, "POST", "/acr/v1/_import", {}, {}, _j.dumps(b).encode())
+    r = imp({"sourceImage": "src:v1", "targetTags": ["copy/app:stable"]})
+    _check("import copies the tag", r.status == 200 and st2.repos["copy/app"]["tags"]["stable"]["digest"] == _jbody(r)["digest"])
+    _check("import copied the referenced blobs", bd in st2.repos["copy/app"]["blobs"])
+    dispatch(st2, "PUT", "/v2/other/manifests/x", {}, {"content-type": "application/vnd.oci.image.index.v1+json"}, b'{"manifests":[]}')
+    imp({"sourceImage": "other:x", "targetTags": ["copy/app:stable2"]})
+    _check("NoForce refuses to overwrite a tag that points elsewhere", imp({"sourceImage": "other:x", "targetTags": ["copy/app:stable"]}).status == 409)
+    _check("Force retags", imp({"sourceImage": "other:x", "targetTags": ["copy/app:stable"], "mode": "Force"}).status == 200)
+    _check("unknown source is 404", imp({"sourceImage": "nope:1", "targetTags": ["a:b"]}).status == 404)
+    _check("public registry source is refused honestly", imp({"registryUri": "docker.io", "sourceImage": "library/nginx:latest", "targetTags": ["nginx:latest"]}).status == 400)
+
     print("\nAzure Container Registry repository-core conformance: ALL GREEN")
     return 0
 

@@ -117,6 +117,32 @@ def _validity_months(policy: dict) -> int:
     return int(props.get("validity_in_months") or props.get("validityInMonths") or 12)
 
 
+_CONTENT_TYPES = ("application/x-pkcs12", "application/x-pem-file")
+
+
+def _validate_policy(policy: dict):
+    """The checks real Key Vault makes on a certificate policy (BadParameter, 400)."""
+    sp = policy.get("secret_properties") or policy.get("secretProperties") or {}
+    ct = sp.get("content_type") or sp.get("contentType")
+    if ct and ct not in _CONTENT_TYPES:
+        return f"Unsupported certificate content type '{ct}'; use one of {', '.join(_CONTENT_TYPES)}."
+    kp = policy.get("key_properties") or policy.get("keyProperties") or {}
+    kt, ks = str(kp.get("key_type") or kp.get("kty") or "RSA"), kp.get("key_size") or kp.get("keySize")
+    if kt.upper().startswith("RSA") and ks is not None and int(ks) not in (2048, 3072, 4096):
+        return "RSA key size must be 2048, 3072 or 4096."
+    for a in policy.get("lifetime_actions") or policy.get("lifetimeActions") or []:
+        trig, act = a.get("trigger") or {}, a.get("action") or {}
+        pct = trig.get("lifetime_percentage", trig.get("lifetimePercentage"))
+        days = trig.get("days_before_expiry", trig.get("daysBeforeExpiry"))
+        if (pct is None) == (days is None):
+            return "A lifetime action trigger needs exactly one of lifetime_percentage or days_before_expiry."
+        if pct is not None and not 1 <= int(pct) <= 99:
+            return "lifetime_percentage must be between 1 and 99."
+        if (act.get("action_type") or act.get("actionType")) not in ("AutoRenew", "EmailContacts"):
+            return "A lifetime action must be AutoRenew or EmailContacts."
+    return None
+
+
 def _bundle(name: str, version: str, rec: dict) -> dict:
     out = {"id": _cert_id(name, version), "x5t": rec["x5t"], "cer": rec["cer"], "attributes": rec["attributes"]}
     if rec.get("policy") is not None:
@@ -183,6 +209,9 @@ def dispatch(store: InMemoryKvStore, method: str, path: str,
         version = _new_version()
         now = _now()
         policy = payload.get("policy") or {}
+        bad = _validate_policy(policy)
+        if bad:
+            return _err(400, "BadParameter", bad)
         months = _validity_months(policy)
         req_attrs = payload.get("attributes") or {}
         rec = {
@@ -238,6 +267,27 @@ def dispatch(store: InMemoryKvStore, method: str, path: str,
         store.persist()
         store.mirror_put(name, rec)
         return _json(200, _bundle(name, version, rec))
+
+    # ---- /certificates/{name}/policy (GetCertificatePolicy / UpdateCertificatePolicy) ----
+    if len(segs) == 3 and segs[2] == "policy":
+        rec = store.get_secret(name)
+        if not rec or rec.get("deleted"):
+            return _err(404, "CertificateNotFound", f"A certificate with (name/id) {name} was not found in this key vault.")
+        if method == "PATCH":
+            try:
+                newp = json.loads(body.decode("utf-8")) if body else {}
+            except Exception:
+                return _err(400, "BadParameter", "Request body is not valid JSON.")
+            bad = _validate_policy(newp)
+            if bad:
+                return _err(400, "BadParameter", bad)
+            rec["policy"] = newp
+            store.put_secret(name, rec)
+            store.persist()
+            store.mirror_put(name, rec)
+        elif method != "GET":
+            return _err(405, "MethodNotAllowed", f"Unsupported method {method} on policy")
+        return _json(200, dict(rec.get("policy") or {}, id=f"{_cert_id(name)}/policy"))
 
     # ---- /certificates/{name}/pending (CertificateOperation — completes synchronously) ----
     if len(segs) == 3 and segs[2] == "pending":

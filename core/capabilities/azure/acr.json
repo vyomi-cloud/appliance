@@ -207,5 +207,11 @@
   "limitations": [
    "Opening a support request routes to Microsoft's own support ticketing system — a genuine third party Vyomi has no backing support organization to open a ticket against."
   ]
+ },
+ "azure.acr.import": {
+  "title": "Import image (copy between repositories/registries)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["Copies a manifest and every blob it references to the target tags (NoForce refuses to overwrite a different digest, Force retags). Sources outside Vyomi (Docker Hub, MCR, GHCR) are refused because there is no internet egress.", "Vyomi keeps one repository store shared by all its registries, so a source image is looked up by repository name across that shared store, and the action is carried on the data plane (POST /acr/v1/_import) rather than the ARM importImage action, so `az acr import` is not supported."],
+  "tests": ["tests/conformance/test_azure_acr_core.py"]
  }
 }

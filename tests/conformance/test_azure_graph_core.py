@@ -167,6 +167,22 @@ def run(store=None):
     _check("directory audit log recorded the mutations", len(audits) >= 8)
 
     print("\nMicrosoft Graph core conformance: ALL GREEN")
+    # oauth2/v2.0/token (password / ROPC) — real user sign-ins, logged as non-interactive
+    from urllib.parse import urlencode
+    def ropc(upn, pw):
+        f = {"grant_type": "password", "client_id": "04b07795-8ddb-461a-bbee-02f9e1bf7b46", "username": upn, "password": pw, "scope": "https://graph.microsoft.com/.default"}
+        return graph.dispatch(s, "POST", "/00000000-0000-0000-0000-000000000000/oauth2/v2.0/token", {}, {}, urlencode(f).encode())
+    call("POST", "/v1.0/users", {"displayName": "Bob", "userPrincipalName": "bob@vyomilearn.onmicrosoft.com", "passwordProfile": {"password": "S3cret!pass", "forceChangePasswordNextSignIn": False}})
+    _check("ROPC with the right password -> 200 + token", ropc("bob@vyomilearn.onmicrosoft.com", "S3cret!pass").status == 200)
+    r = ropc("bob@vyomilearn.onmicrosoft.com", "wrong")
+    _check("ROPC wrong password -> AADSTS50126", r.status == 400 and "AADSTS50126" in r.body.decode())
+    _check("ROPC unknown user -> AADSTS50034", "AADSTS50034" in ropc("nobody@vyomilearn.onmicrosoft.com", "x").body.decode())
+    call("PATCH", f"/v1.0/users/{body(call('GET', '/v1.0/users/bob@vyomilearn.onmicrosoft.com'))['id']}", {"accountEnabled": False})
+    _check("ROPC disabled user -> AADSTS50057", "AADSTS50057" in ropc("bob@vyomilearn.onmicrosoft.com", "S3cret!pass").body.decode())
+    logs = body(call("GET", "/v1.0/auditLogs/signIns"))["value"]
+    nonint = [x for x in logs if x["signInEventTypes"] == ["nonInteractiveUser"]]
+    _check("sign-in log has the 4 non-interactive user rows (1 success, 3 failures)", len(nonint) == 4 and sum(1 for x in nonint if x["status"]["errorCode"] == 0) == 1)
+    _check("the password never leaves the API", "S3cret" not in call("GET", "/v1.0/users").body.decode())
     return s
 
 

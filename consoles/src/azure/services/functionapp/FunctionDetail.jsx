@@ -11,6 +11,7 @@ import { useAsync } from "../../../common/useAsync.js";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
 import ResourceBlade from "../../kit/ResourceBlade.jsx";
 import { ErrorBar, Glyph, InfoBar, Loading, NotSimulatedContainer } from "../../kit/common.jsx";
+import { CapabilityContainer } from "../../kit/Capability.jsx";
 import * as api from "./api.js";
 
 const TABS = [["code", "Code + Test"], ["integration", "Integration"], ["invocations", "Invocations"], ["logs", "Logs"], ["metrics", "Metrics"]];
@@ -54,8 +55,8 @@ export default function FunctionDetail({ params }) {
         {TABS.map(([id, label]) => <Tab key={id} value={id}>{label}</Tab>)}
       </TabList>
       {tab === "code" && body}
-      {tab === "integration" && <NotSimulatedContainer feature="Function input/output bindings editor (Integration)" />}
-      {tab === "invocations" && <NotSimulatedContainer feature="The invocation history list (Invocations)" />}
+      {tab === "integration" && data && <Integration fn={data} rg={rg} name={name} fnName={fn} reload={reload} />}
+      {tab === "invocations" && <Invocations rg={rg} name={name} fnName={fn} />}
       {tab === "logs" && <NotSimulatedContainer feature="Live log streaming for a single function (Logs)" />}
       {tab === "metrics" && <NotSimulatedContainer feature="Per-function metrics charts (Metrics)" />}
 
@@ -157,5 +158,51 @@ function CodeTest({ fn, rg, name, fnName, reload }) {
         )}
       </div>
     </div>
+  );
+}
+
+// ── Integration: the function's bindings (function.json), stored on the function resource ──────
+const BIND_TYPES = ["httpTrigger", "http", "timerTrigger", "queueTrigger", "queue", "blobTrigger", "blob", "serviceBusTrigger", "serviceBus", "eventGridTrigger", "cosmosDBTrigger"];
+function Integration({ fn, rg, name, fnName, reload }) {
+  const notify = useNotify();
+  const [bindings, setBindings] = useState(() => (fn.properties?.config?.bindings || []).map((b) => ({ ...b })));
+  const [busy, setBusy] = useState(false);
+  const set = (i, k, v) => setBindings(bindings.map((b, j) => (j === i ? { ...b, [k]: v } : b)));
+  const save = async () => {
+    setBusy(true);
+    try {
+      await api.createFunction(rg, name, fnName, { properties: { config: { ...(fn.properties?.config || {}), bindings } } });
+      notify.success(`Bindings for '${fnName}' were saved. Vyomi stores them but only the HTTP trigger is executed.`, "Save succeeded"); reload();
+    } catch (e) { notify.error(e, "Save failed"); } finally { setBusy(false); }
+  };
+  return (
+    <CapabilityContainer id="azure.functionapp.bindingseditor" title="Integration (bindings)">
+      <table className="vy-table" aria-label="Bindings"><thead><tr><th>Direction</th><th>Type</th><th>Name</th><th /></tr></thead>
+        <tbody>{bindings.map((b, i) => (
+          <tr key={i}>
+            <td><Select size="small" value={b.direction} aria-label={`Binding ${i + 1} direction`} onChange={(_, d) => set(i, "direction", d.value)}><option value="in">in</option><option value="out">out</option></Select></td>
+            <td><Select size="small" value={b.type} aria-label={`Binding ${i + 1} type`} onChange={(_, d) => set(i, "type", d.value)}>{[...new Set([b.type, ...BIND_TYPES])].map((t) => <option key={t} value={t}>{t}</option>)}</Select></td>
+            <td><Input size="small" value={b.name || ""} aria-label={`Binding ${i + 1} name`} onChange={(_, d) => set(i, "name", d.value)} /></td>
+            <td><Button appearance="subtle" size="small" icon={<Delete20Regular />} aria-label={`Remove binding ${i + 1}`} onClick={() => setBindings(bindings.filter((_, j) => j !== i))} /></td>
+          </tr>))}</tbody></table>
+      <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+        <Button onClick={() => setBindings([...bindings, { type: "queue", direction: "out", name: "outputItem" }])}>Add output binding</Button>
+        <Button onClick={() => setBindings([...bindings, { type: "queueTrigger", direction: "in", name: "msg" }])}>Add input binding</Button>
+        <Button appearance="primary" icon={<Save20Regular />} disabled={busy} onClick={save}>{busy ? "Saving..." : "Save"}</Button>
+      </div>
+    </CapabilityContainer>
+  );
+}
+
+// ── Invocations: this function's real invoke attempts (site invocation log) ─────────────────────
+function Invocations({ rg, name, fnName }) {
+  const { data, loading, error, reload } = useAsync(async () => (await api.listInvocationLogs(rg, name)).filter((r) => r.function === fnName), [rg, name, fnName]);
+  return (
+    <CapabilityContainer id="azure.functionapp.invocations" title="Invocations" actions={<Button size="small" icon={<ArrowClockwise20Regular />} onClick={reload}>Refresh</Button>}>
+      {loading ? <Loading /> : error ? <ErrorBar error={error} /> : (
+        <table className="vy-table" aria-label="Invocations"><thead><tr><th>Date (UTC)</th><th>Success</th><th>Status</th><th>Duration (ms)</th><th>Error</th></tr></thead>
+          <tbody>{data.map((r, i) => <tr key={i}><td>{r.timestamp}</td><td>{r.ok ? "Success" : "Failed"}</td><td>{r.status}</td><td>{r.durationMs}</td><td>{r.error || ""}</td></tr>)}
+            {!data.length && <tr><td colSpan={5}>No invocations yet. Run the function from Code + Test.</td></tr>}</tbody></table>)}
+    </CapabilityContainer>
   );
 }

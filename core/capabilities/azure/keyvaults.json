@@ -163,5 +163,17 @@
   "tests": [
    "tests/conformance/test_azure_arm_core.py"
   ]
+ },
+ "azure.keyvaults.keys.attributes": {
+  "title": "Key activation/expiration dates, enabled state and tags",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["Activation (nbf), expiration (exp) and disabled state are ENFORCED: encrypt/decrypt/wrap/unwrap/sign/verify on a key outside its window or disabled returns 403 Forbidden.", "Key rotation policy is not modelled."],
+  "tests": ["tests/conformance/test_azure_keyvault_keys_core.py"]
+ },
+ "azure.keyvaults.certificates.policy": {
+  "title": "Certificate content type, lifetime actions and advanced policy",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["The policy (content type, key size/exportable, lifetime actions) is validated like real Key Vault and stored/returned by Get/UpdateCertificatePolicy, but lifetime actions never fire (no auto-renew or e-mail), and generated certificates are self-signed with placeholder bytes."],
+  "tests": ["tests/conformance/test_azure_keyvault_certificates_core.py"]
  }
 }
