@@ -972,7 +972,8 @@ def _update_continuous_backups(store: NoSqlStore, table: dict, spec: dict[str, A
     store.persist()
 
 
-# ── on-demand backups (snapshot copies inside the store) ───────────────────
+# ── on-demand backups (table definition + DynamoDB-JSON items written into the simulator's own S3,
+#    bucket vyomi-dynamodb-backups; in-store snapshot only when no S3 store is wired) ───────────────────
 def _backup_summary(backup: dict) -> dict:
     return {
         "TableName": backup["table_name"], "TableArn": backup["table_arn"],
@@ -1000,7 +1001,60 @@ def _backup_description(backup: dict) -> dict:
     }
 
 
-def _create_backup_record(store: NoSqlStore, payload: dict[str, Any]) -> dict:
+BACKUP_BUCKET = "vyomi-dynamodb-backups"
+
+
+def _s3c():
+    try:
+        from core import s3_object_core as m
+    except ImportError:  # pragma: no cover - Pyodide flat layout
+        import s3_object_core as m  # type: ignore
+    return m
+
+
+def backup_keys(prefix: str) -> tuple[str, str]:
+    return f"{prefix}/backup-metadata.json", f"{prefix}/data/1.json"
+
+
+def backup_write_artifact(s3_store: Any, bucket: str, prefix: str, meta: dict, data: bytes) -> bool:
+    """Write the backup's table definition + DynamoDB-JSON items into the simulator's own S3."""
+    s3c = _s3c()
+    if not s3_store.bucket_exists(bucket):
+        s3_store.create_bucket(bucket)
+    mk, dk = backup_keys(prefix)
+    if s3c.put_object(s3_store, bucket, dk, data, {"content-type": "application/json"}).status != 200:
+        return False
+    return s3c.put_object(s3_store, bucket, mk, json.dumps(meta).encode(), {"content-type": "application/json"}).status == 200
+
+
+def backup_read_artifact(s3_store: Any, backup: dict) -> tuple[dict, bytes]:
+    """Read a backup artifact back from S3; a missing/deleted object makes the backup unusable, as in AWS."""
+    if s3_store is None:
+        raise DdbError("BackupNotFoundException", "No S3 store is configured to read this backup from.", 400)
+    s3c = _s3c()
+    mk, dk = backup_keys(backup["s3_prefix"])
+    got = []
+    for k in (mk, dk):
+        r = s3c.get_object(s3_store, backup["s3_bucket"], k, {}, {})
+        if r.status != 200 or not isinstance(r.body, bytes):
+            raise DdbError("BackupNotFoundException",
+                           f"The backup data s3://{backup['s3_bucket']}/{k} is missing; the backup cannot be used.", 400)
+        got.append(r.body)
+    return json.loads(got[0]), got[1]
+
+
+def backup_delete_artifact(s3_store: Any, backup: dict) -> None:
+    if s3_store is None or not backup.get("s3_bucket"):
+        return
+    s3c = _s3c()
+    for k in backup_keys(backup["s3_prefix"]):
+        try:
+            s3c.delete_object(s3_store, backup["s3_bucket"], k, {}, {})
+        except Exception:
+            pass
+
+
+def _create_backup_record(store: NoSqlStore, payload: dict[str, Any], s3_store: Any = None) -> dict:
     table_name = str(payload.get("TableName") or "").strip()
     table = _require_table(store, table_name)
     backup_name = str(payload.get("BackupName") or "").strip()
@@ -1016,6 +1070,17 @@ def _create_backup_record(store: NoSqlStore, payload: dict[str, Any]) -> dict:
         "backup_creation_datetime": _now(),
         "source_table": copy.deepcopy(table),
     }
+    if s3_store is not None:
+        # The backup's data lives in the simulator's own S3 (a real, visible bucket) rather than inside the record.
+        prefix = f"AWSDynamoDB/backups/{table_name}/{backup_id}"
+        items = [_rec_av(r) for r in (table.get("items") or {}).values() if isinstance(r, dict)]
+        body = "".join(json.dumps({"Item": it}) + "\n" for it in items).encode()
+        meta = {k: v for k, v in backup["source_table"].items() if k != "items"}
+        meta["backup_arn"], meta["item_count"] = backup_arn, len(items)
+        if not backup_write_artifact(s3_store, BACKUP_BUCKET, prefix, meta, body):
+            raise DdbError("BackupInUseException", f"Could not write the backup to s3://{BACKUP_BUCKET}/{prefix}.", 400)
+        backup["source_table"]["items"] = {}
+        backup.update({"s3_bucket": BACKUP_BUCKET, "s3_prefix": prefix, "backup_size_bytes": len(body)})
     store.put_backup(backup_arn, backup)
     store.persist()
     return backup
@@ -1070,7 +1135,7 @@ def _restore_table_to_point_in_time(store: NoSqlStore, payload: dict[str, Any]) 
     return restored
 
 
-def _restore_table_from_backup(store: NoSqlStore, payload: dict[str, Any]) -> dict:
+def _restore_table_from_backup(store: NoSqlStore, payload: dict[str, Any], s3_store: Any = None) -> dict:
     arn = str(payload.get("BackupArn") or "").strip()
     target = str(payload.get("TargetTableName") or "").strip()
     backup = store.get_backup(arn)
@@ -1080,14 +1145,26 @@ def _restore_table_from_backup(store: NoSqlStore, payload: dict[str, Any]) -> di
         raise DdbError("ValidationException", "TargetTableName is required.", 400)
     if store.table_exists(target):
         raise DdbError("ResourceInUseException", f"Table already exists: {target}", 400)
+    rows: list[dict] = []
+    if backup.get("s3_bucket"):                      # S3-backed: the items come from the stored objects
+        _meta, data = backup_read_artifact(s3_store, backup)
+        for line in data.decode("utf-8", "replace").splitlines():
+            if line.strip():
+                rows.append(_validate_item(json.loads(line).get("Item", {})))
     restored = copy.deepcopy(backup.get("source_table") or {})
     restored["table_name"] = target
     restored["table_arn"] = _table_arn(store, target)
     restored["table_status"] = "ACTIVE"
     restored["created"] = _now()
     restored["last_modified"] = _now()
+    if backup.get("s3_bucket"):
+        restored["items"] = {}
     store.put_table(target, restored)
     store.mirror_create_table(target, restored)
+    for av_item in rows:
+        _store_av(store, restored, _storage_key(restored, {k: av_item[k] for k in _key_names(restored)}), av_item)
+    if rows:
+        _refresh_table_metrics(restored)
     store.persist()
     return restored
 
@@ -3159,7 +3236,7 @@ def dispatch(store: NoSqlStore, target: str, payload: dict | None = None, s3_sto
             return _ok({"ContinuousBackupsDescription": _continuous_backups_view(table)})
 
         if action == "CreateBackup":
-            backup = _create_backup_record(store, payload)
+            backup = _create_backup_record(store, payload, s3_store)
             return _ok({"BackupDetails": _backup_summary(backup)})
 
         if action == "ListBackups":
@@ -3182,12 +3259,13 @@ def dispatch(store: NoSqlStore, target: str, payload: dict | None = None, s3_sto
                 raise DdbError("BackupNotFoundException", f"Backup not found: {arn}", 400)
             backup["backup_status"] = "DELETED"
             desc = _backup_description(backup)
+            backup_delete_artifact(s3_store, backup)
             store.drop_backup(arn)
             store.persist()
             return _ok({"BackupDescription": desc})
 
         if action == "RestoreTableFromBackup":
-            restored = _restore_table_from_backup(store, payload)
+            restored = _restore_table_from_backup(store, payload, s3_store)
             return _ok({"TableDescription": _table_view(store, restored, include_items=False)})
 
         if action == "RestoreTableToPointInTime":

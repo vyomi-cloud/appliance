@@ -1,5 +1,5 @@
 /* DynamoDB over the native JSON wire (X-Amz-Target DynamoDB_20120810.*). */
-import { awsJson, awsQuery, asList, restJson } from "../../../common/wire.js";
+import { awsJson, awsQuery, asList, restJson, awsRest } from "../../../common/wire.js";
 
 const call = (op, body) => awsJson("dynamodb", `DynamoDB_20120810.${op}`, body, { version: "1.0" });
 
@@ -186,3 +186,12 @@ export const createStreamTrigger = (streamArn, functionName, { batchSize = 100, 
   restJson("POST", "/2015-03-31/event-source-mappings", { body: { EventSourceArn: streamArn, FunctionName: functionName, BatchSize: batchSize, StartingPosition: "LATEST", Enabled: enabled } });
 export const updateStreamTrigger = (uuid, body) => restJson("PUT", `/2015-03-31/event-source-mappings/${encodeURIComponent(uuid)}`, { body });
 export const deleteStreamTrigger = (uuid) => restJson("DELETE", `/2015-03-31/event-source-mappings/${encodeURIComponent(uuid)}`);
+
+// ── AWS Backup (service `backup`, rest-json): region settings + cross-Region/account copy jobs ──
+const BKP = (method, path, body) => awsRest("backup", method, path, body === undefined ? {} : { body });
+export const getBackupSettings = () => BKP("GET", "/account-settings");
+export const setBackupManagement = (enabled) => BKP("PUT", "/account-settings", { ResourceTypeManagementPreference: { DynamoDB: enabled }, ResourceTypeOptInPreference: { DynamoDB: enabled } });
+export const startBackupCopy = ({ backupArn, destRegion, destAccount, vault, roleArn }) => BKP("PUT", "/copy-jobs", {
+  RecoveryPointArn: backupArn, SourceBackupVaultName: "Default", IamRoleArn: roleArn || "arn:aws:iam::123456789012:role/service-role/AWSBackupDefaultServiceRole",
+  DestinationBackupVaultArn: `arn:aws:backup:${destRegion}:${destAccount || "123456789012"}:backup-vault:${vault || "Default"}` });
+export const listCopyJobs = async () => (await BKP("GET", "/copy-jobs")).CopyJobs || [];

@@ -138,14 +138,22 @@ export default function Backups() {
   const [details, setDetails] = useState(null);
   const backups = useAsync(() => api.listBackups(), []);
   const tables = useAsync(() => api.listTables(), []);
+  const settings = useAsync(() => api.getBackupSettings(), []);
+  const copyJobs = useAsync(() => api.listCopyJobs(), []);
+  const [copy, setCopy] = useState(null);
+  const [togglingBackup, setTogglingBackup] = useState(false);
+  const bkpOn = settings.data?.ResourceTypeManagementPreference?.DynamoDB !== false;
 
   return (
     <ContentLayout header={<Header variant="h1">Backups</Header>}>
       <SpaceBetween size="l">
         <Container header={<Header variant="h2" actions={
-          <span data-vyomi-not-simulated="Turn off AWS Backup integration for DynamoDB"><Button disabled>Turn off</Button></span>
+          <Button loading={togglingBackup} disabled={!settings.data} onClick={async () => {
+            setTogglingBackup(true);
+            try { await api.setBackupManagement(!bkpOn); notify.success(`AWS Backup advanced features for DynamoDB ${bkpOn ? "turned off" : "turned on"}.`); settings.reload(); } catch (e) { notify.error(e); } finally { setTogglingBackup(false); }
+          }}>{bkpOn ? "Turn off" : "Turn on"}</Button>
         }>Backup settings</Header>}>
-          <KeyValue columns={1} items={[["Advanced features with AWS Backup", "Activated"]]} />
+          <KeyValue columns={1} items={[["Advanced features with AWS Backup", settings.loading ? "Loading" : bkpOn ? "Activated" : "Not activated"]]} />
         </Container>
 
         <ResourceTable
@@ -171,14 +179,52 @@ export default function Backups() {
             <SpaceBetween direction="horizontal" size="xs">
               <Button disabled={sel.length !== 1} onClick={() => setDetails(sel[0].BackupArn)}>View details</Button>
               <Button disabled={sel.length !== 1} onClick={() => setRestore(sel[0])}>Restore</Button>
-              <span data-vyomi-not-simulated="Copy a backup to another account or Region"><Button disabled>Copy</Button></span>
+              <Button disabled={sel.length !== 1 || !bkpOn} onClick={() => setCopy({ backup: sel[0], region: "eu-west-1", account: "123456789012", vault: "Default" })}>Copy</Button>
               <Button disabled={!sel.length} onClick={() => setDel(true)}>Delete</Button>
               <Button variant="primary" onClick={() => setCreate(true)}>Create backup</Button>
             </SpaceBetween>
           }
           empty={{ title: "No backups", subtitle: "You have not created any backups yet.", action: <Button onClick={() => setCreate(true)}>Create backup</Button> }}
         />
+
+        <ResourceTable
+          resourceName="Copy jobs"
+          items={copyJobs.data || []}
+          loading={copyJobs.loading}
+          error={copyJobs.error}
+          onRefresh={copyJobs.reload}
+          trackBy="CopyJobId"
+          columns={[
+            { id: "id", header: "Copy job ID", isRowHeader: true, cell: (j) => j.CopyJobId },
+            { id: "state", header: "Status", cell: (j) => <StatusIndicator type={j.State === "COMPLETED" ? "success" : j.State === "FAILED" ? "error" : "in-progress"}>{j.State}</StatusIndicator> },
+            { id: "res", header: "Table", cell: (j) => j.ResourceName },
+            { id: "dest", header: "Destination vault", cell: (j) => j.DestinationBackupVaultArn },
+            { id: "drp", header: "Destination backup", cell: (j) => j.DestinationRecoveryPointArn || j.StatusMessage || "-" },
+          ]}
+          empty={{ title: "No copy jobs", subtitle: "Copy a backup to another Region or account to start a copy job." }}
+        />
       </SpaceBetween>
+
+      <Modal visible={!!copy} onDismiss={() => setCopy(null)} header="Copy backup"
+        footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs">
+          <Button variant="link" onClick={() => setCopy(null)}>Cancel</Button>
+          <Button variant="primary" onClick={async () => {
+            try {
+              const r = await api.startBackupCopy({ backupArn: copy.backup.BackupArn, destRegion: copy.region, destAccount: copy.account, vault: copy.vault });
+              notify.success(`Copy job ${r.CopyJobId} started.`); setCopy(null); copyJobs.reload(); backups.reload();
+            } catch (e) { notify.error(e); }
+          }}>Copy</Button>
+        </SpaceBetween></Box>}>
+        {copy && <SpaceBetween size="m">
+          <FormField label="Backup">{copy.backup.BackupName}</FormField>
+          <FormField label="Destination Region" description="Vyomi simulates one data plane: the copy is stored as its own object set in the simulator's S3 under this Region and registered as a new backup.">
+            <Select selectedOption={{ value: copy.region, label: copy.region }} onChange={({ detail }) => setCopy({ ...copy, region: detail.selectedOption.value })}
+              options={["us-east-1", "us-east-2", "us-west-2", "eu-west-1", "eu-central-1", "ap-south-1", "ap-southeast-1"].map((r) => ({ value: r, label: r }))} />
+          </FormField>
+          <FormField label="Destination account ID"><Input value={copy.account} ariaLabel="Destination account ID" onChange={({ detail }) => setCopy({ ...copy, account: detail.value })} /></FormField>
+          <FormField label="Destination backup vault"><Input value={copy.vault} ariaLabel="Destination backup vault" onChange={({ detail }) => setCopy({ ...copy, vault: detail.value })} /></FormField>
+        </SpaceBetween>}
+      </Modal>
 
       <CreateBackupModal visible={create} onDismiss={() => setCreate(false)} onCreated={backups.reload} tables={tables.data || []} />
       <RestoreModal backup={restore} onDismiss={() => setRestore(null)} onDone={backups.reload} />

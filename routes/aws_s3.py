@@ -1120,7 +1120,7 @@ def _aws_query_target_service(request: Request) -> str:
 # its durable stores (core/wire_ingress.appliance_router → offline_runtime_stores): the JSON /
 # Query ones on POST / and the REST ones whose paths would otherwise fall into the S3 catch-all.
 _ROUTER_QUERY_SERVICES = ("dax", "ram", "cloudformation", "network-firewall", "route53resolver", "cloudtrail")
-_ROUTER_REST_SERVICES = ("dlm", "pipes", "apigateway", "s3tables", "s3vectors", "rbin")
+_ROUTER_REST_SERVICES = ("dlm", "pipes", "apigateway", "s3tables", "s3vectors", "rbin", "backup")
 
 
 def _signed_service(request: Request) -> str:

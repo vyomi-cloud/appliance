@@ -133,14 +133,31 @@
   ]
  },
  "dynamodb.backups": {
-  "title": "On-demand backups",
+  "title": "On-demand backups + AWS Backup copy",
   "level": {
-   "nano": "full",
-   "offline": "full"
+   "nano": "limited",
+   "offline": "limited"
   },
-  "limitations": [],
+  "limitations": [
+   "CreateBackup writes the backup's table definition (backup-metadata.json) and every item as DynamoDB-JSON (data/1.json) into the simulator's own S3, in the visible bucket vyomi-dynamodb-backups under AWSDynamoDB/backups/<table>/<id>/. RestoreTableFromBackup reads those objects back, so deleting the S3 object makes the backup unusable (BackupNotFoundException) and DeleteBackup removes the objects. If no S3 store is wired the backup falls back to an in-store snapshot. BackupSizeBytes is the real size of the stored data.",
+   "AWS Backup subset (service backup): DescribeRegionSettings / UpdateRegionSettings (DynamoDB advanced features on/off; copy jobs are refused while off) and StartCopyJob / DescribeCopyJob / ListCopyJobs. A copy job copies the backup's S3 objects to a new location and registers a new backup (type AWS_BACKUP) under the destination Region/account ARN, which can be restored. Vyomi simulates one account and one data plane, so the destination Region/account is an ARN plus its own S3 object set, not an isolated Region; backup vaults, plans, selections, vault lock, restore jobs and other services' recovery points are not implemented, and the IAM role is accepted but not checked.",
+   "Backups are full copies taken synchronously (no incremental backup, no scheduled/continuous backup plan, no point-in-time change history)."
+  ],
+  "api": [
+   "CreateBackup",
+   "ListBackups",
+   "DescribeBackup",
+   "DeleteBackup",
+   "RestoreTableFromBackup",
+   "DescribeRegionSettings",
+   "UpdateRegionSettings",
+   "StartCopyJob",
+   "DescribeCopyJob",
+   "ListCopyJobs"
+  ],
   "tests": [
-   "tests/conformance/test_dynamodb_table_ops_core.py"
+   "tests/conformance/test_dynamodb_table_ops_core.py",
+   "tests/conformance/test_dynamodb_backup_s3.py"
   ]
  },
  "dynamodb.partiql": {
