@@ -248,7 +248,8 @@ def _delete_vpc(store, params):
         raise VpcError("DependencyViolation", f"The vpc '{vpc_id}' has dependencies and cannot be deleted.")
     if any(sg.get("vpc_id") == vpc_id and not sg.get("is_default") for sg in m["sgs"].values()):
         raise VpcError("DependencyViolation", f"The vpc '{vpc_id}' has dependencies and cannot be deleted.")
-    if m["vpcs"][vpc_id].get("igw") or any(a["resource_id"] == vpc_id for a in m.get("tgw_attachments", {}).values()):
+    if m["vpcs"][vpc_id].get("igw") or any(a["resource_id"] == vpc_id for a in m.get("tgw_attachments", {}).values()) \
+            or any(vpc_id in g["vpcs"] for g in m.get("vgws", {}).values()):
         raise VpcError("DependencyViolation", f"The vpc '{vpc_id}' has dependencies and cannot be deleted.")
     for rt_id in [k for k, rt in m["route_tables"].items() if rt["vpc_id"] == vpc_id]:
         m["route_tables"].pop(rt_id)
@@ -439,6 +440,9 @@ def _route_xml(r: dict) -> str:
 
 def _rt_xml(rt: dict) -> str:
     routes = "".join(_route_xml(r) for r in rt["routes"])
+    routes += "".join(f"<item><destinationCidrBlock>{_xml_escape(r['dest'])}</destinationCidrBlock><gatewayId>{_xml_escape(r['target'])}</gatewayId>"
+                      "<state>active</state><origin>EnableVgwRoutePropagation</origin></item>" for r in rt.get("propagated", []))
+    prop_set = "".join(f"<item><gatewayId>{_xml_escape(g)}</gatewayId></item>" for g in rt.get("propagating_vgws", []))
     assocs = ""
     if rt.get("main"):
         assocs += (f"<item><routeTableAssociationId>rtbassoc-main-{_xml_escape(rt['vpc_id'])}</routeTableAssociationId>"
@@ -449,7 +453,7 @@ def _rt_xml(rt: dict) -> str:
     return ("<item>"
             f"<routeTableId>{_xml_escape(rt['id'])}</routeTableId><vpcId>{_xml_escape(rt['vpc_id'])}</vpcId>"
             f"<routeSet>{routes}</routeSet><associationSet>{assocs}</associationSet>"
-            f"{_tags_xml(rt.get('tags', {}))}"
+            f"<propagatingVgwSet>{prop_set}</propagatingVgwSet>{_tags_xml(rt.get('tags', {}))}"
             "</item>")
 
 
@@ -1173,6 +1177,8 @@ _CODE_TEXT = {
     "TGW_BLACKHOLE_ROUTE": "the transit gateway route is a blackhole",
     "TGW_NO_RETURN_ROUTE": "no return route in the destination attachment's transit gateway route table",
     "TGW_NO_VPC_RETURN_ROUTE": "no return route over the transit gateway in the destination VPC's route table",
+    "VGW_NOT_ATTACHED": "the virtual private gateway is not attached to the VPC",
+    "VGW_NO_VPN_ROUTE": "no VPN connection on the virtual private gateway has a route to the destination",
     "PRIVATE_DEST_VIA_GATEWAY": "private destination is not routable via a gateway",
     "SOURCE_DEST_CHECK": "appliance has source/destination check enabled",
     "NOT_PUBLIC": "destination has no public IPv4 address", "NO_DESTINATION": "no network interface at the destination",
@@ -1186,7 +1192,8 @@ _EXPLANATION_CODE = {
     "ACL_RETURN_DENIED": "SUBNET_ACL_RESTRICTION", "NO_ROUTE": "NO_ROUTE_TO_DESTINATION",
     "PRIVATE_DEST_VIA_GATEWAY": "NO_ROUTE_TO_DESTINATION", "BLACKHOLE_ROUTE": "NO_ROUTE_TO_DESTINATION",
     "TGW_NOT_ATTACHED": "NO_ROUTE_TO_DESTINATION", "TGW_NO_ASSOCIATION": "NO_ROUTE_TO_DESTINATION", "TGW_NO_ROUTE": "NO_ROUTE_TO_DESTINATION",
-    "TGW_BLACKHOLE_ROUTE": "NO_ROUTE_TO_DESTINATION",
+    "TGW_BLACKHOLE_ROUTE": "NO_ROUTE_TO_DESTINATION", "VGW_NOT_ATTACHED": "NO_ROUTE_TO_DESTINATION",
+    "VGW_NO_VPN_ROUTE": "NO_ROUTE_TO_DESTINATION",
 }
 
 
@@ -2223,6 +2230,7 @@ def _taggable_collections(m: dict) -> list:
             m["vpcs"], m["subnets"], m["route_tables"], m["igws"], m["nacls"], m["nat_gateways"],
             m["eigws"], m["dhcp_options"], m["prefix_lists"], m["peering_connections"], m["route_servers"],
             m.get("tgws", {}), m.get("tgw_attachments", {}), m.get("tgw_rts", {}),
+            m.get("customer_gateways", {}), m.get("vgws", {}), m.get("vpn_connections", {}),
             m.get("flow_logs", {}), m.get("insights_paths", {}), m.get("insights_analyses", {})]
 
 
@@ -4492,6 +4500,8 @@ def adopt_legacy_slot(service_states: dict, legacy: dict | None = None):
 
 
 _OPS.update(_TGW_OPS)   # the offline server (server.py) routes by `action in _OPS`
+from core import vpc_vpn_core as _vpn_core   # noqa: E402  (lazy-imports vpc_core back; no cycle at import time)
+_OPS.update(_vpn_core.OPS)
 
 
 def dispatch(store, params: dict | None = None) -> VpcResponse:

@@ -428,6 +428,7 @@ _QUERY_ACTION = {
     "CreateTransitGatewayRoute": "vpc", "DeleteTransitGatewayRoute": "vpc", "SearchTransitGatewayRoutes": "vpc",
     "AssociateTransitGatewayRouteTable": "vpc", "DisassociateTransitGatewayRouteTable": "vpc", "EnableTransitGatewayRouteTablePropagation": "vpc",
     "DisableTransitGatewayRouteTablePropagation": "vpc", "GetTransitGatewayRouteTableAssociations": "vpc", "GetTransitGatewayRouteTablePropagations": "vpc",
+    "CreateCustomerGateway": "vpc", "DescribeCustomerGateways": "vpc", "DeleteCustomerGateway": "vpc", "CreateVpnGateway": "vpc", "DescribeVpnGateways": "vpc", "AttachVpnGateway": "vpc", "DetachVpnGateway": "vpc", "DeleteVpnGateway": "vpc", "CreateVpnConnection": "vpc", "DescribeVpnConnections": "vpc", "DeleteVpnConnection": "vpc", "CreateVpnConnectionRoute": "vpc", "DeleteVpnConnectionRoute": "vpc", "ModifyVpnTunnelOptions": "vpc", "ModifyVpnConnectionOptions": "vpc", "EnableVgwRoutePropagation": "vpc", "DisableVgwRoutePropagation": "vpc",
     "CreateFlowLogs": "vpc", "DescribeFlowLogs": "vpc", "DeleteFlowLogs": "vpc",
     "RunInstances": "vpc", "DescribeInstances": "vpc", "StartInstances": "vpc",
     "StopInstances": "vpc", "TerminateInstances": "vpc", "RebootInstances": "vpc",
