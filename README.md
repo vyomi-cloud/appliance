@@ -2,11 +2,15 @@
 
 Hourly diff of the real clouds for the services Vyomi simulates. Actionable changes are filed as [`upstream-drift` issues](https://github.com/vyomi-cloud/appliance/issues?q=label%3Aupstream-drift) and worked by the conformance agent. Every run: [log.md](log.md).
 
-### Upstream watch — 2026-11-03T20:35:40+00:00
+### Upstream watch — 2026-11-03T21:32:22+00:00
 
 Tracking 4252 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
 
-**1 change(s), 1 actionable.**
-- 🔧 `spec-commit` Azure cognitiveservices: [CognitiveServices] Add project tool controls and private CA trust to 2026-09-15-preview (#47492) ([link](https://github.com/Azure/azure-rest-api-specs/commit/0249a450b30462c0c672fa6218750766667cce11))
+**5 change(s), 0 actionable.**
+- · `announcement` [In preview] Public Preview: Advanced capacity insights are now available in Azure Storage Discovery ([link](https://azure.microsoft.com/updates?id=578655))
+- · `operation-flapping` GCP sqladmin/v1beta4: operation sql.workloadCaptures.start changed
+- · `operation-flapping` GCP sqladmin/v1beta4: operation sql.workloadCaptures.startReplay changed
+- · `operation-flapping` GCP sqladmin/v1beta4: operation sql.workloadCaptures.stop changed
+- · `operation-flapping` GCP sqladmin/v1beta4: operation sql.workloadCaptures.stopReplay changed
 
-Filed 1 backlog issue(s) labelled `upstream-drift`; 0 pending.
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.

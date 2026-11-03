@@ -1,3 +1,16 @@
+### Upstream watch — 2026-11-03T21:32:22+00:00
+
+Tracking 4252 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**5 change(s), 0 actionable.**
+- · `announcement` [In preview] Public Preview: Advanced capacity insights are now available in Azure Storage Discovery ([link](https://azure.microsoft.com/updates?id=578655))
+- · `operation-flapping` GCP sqladmin/v1beta4: operation sql.workloadCaptures.start changed
+- · `operation-flapping` GCP sqladmin/v1beta4: operation sql.workloadCaptures.startReplay changed
+- · `operation-flapping` GCP sqladmin/v1beta4: operation sql.workloadCaptures.stop changed
+- · `operation-flapping` GCP sqladmin/v1beta4: operation sql.workloadCaptures.stopReplay changed
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-03T20:35:40+00:00
 
 Tracking 4252 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
