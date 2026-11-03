@@ -85,9 +85,9 @@ export function CapabilityTab({ id }) {
   if (!c || c.level === "full" || c.level === "not_simulated") return null;
   return (
     <span data-vyomi-capability={c.level} data-vyomi-capability-id={id} data-vyomi-capability-tab=""
-      style={{ position: "absolute", right: 20, bottom: 0, zIndex: 1, display: "inline-flex", alignItems: "center", height: 26,
-        padding: "0 12px", background: "#e9ebed", border: "1px solid #c6c6cd", borderBottom: 0,
-        borderRadius: "8px 8px 0 0", fontSize: 12, lineHeight: "16px", color: "#414d5c" }}>
+      style={{ position: "absolute", right: -1, bottom: -1, zIndex: 1, display: "inline-flex", alignItems: "center", height: 26,
+        padding: "0 12px", background: "#e9ebed", border: "1px solid #c6c6cd",
+        borderRadius: "8px 0 8px 0", fontSize: 12, lineHeight: "16px", color: "#414d5c" }}>
       <Popover
         size="large"
         triggerType="custom"
