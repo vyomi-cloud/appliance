@@ -14314,6 +14314,8 @@ async def api_ec2_query(request: Request):
         if action == "DescribeRegions":
             return _ec2_query_describe_regions(params)
         if action == "DescribeAvailabilityZones":
+            if _vpc_engine_is_core():   # zones + Local/Wavelength Zone opt-in groups live in core/ec2_ops_core (same as Nano)
+                return api_vpc_core_query(params)
             return _ec2_query_describe_availability_zones(params)
         if action == "RunInstances":
             return _ec2_query_run_instances(params)

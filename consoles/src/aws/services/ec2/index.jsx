@@ -21,6 +21,7 @@ import { TrustStores, CreateTrustStore } from "./TrustStores.jsx";
 import { LifecycleManager, CreateLifecyclePolicy } from "./LifecycleManager.jsx";
 import { AutoScalingGroups, AutoScalingGroupDetail, CreateAutoScalingGroup } from "./AutoScaling.jsx";
 import * as Honest from "./HonestPages.jsx";
+import * as Ops from "./OpsPages.jsx";
 
 const crumb = (text, ...path) => ({ text, href: `#/ec2/${path.join("/")}` });
 const base = [crumb("EC2", "")];
@@ -71,7 +72,7 @@ export default {
     { pattern: "/ec2", component: Dashboard, crumbs: () => base },
     { pattern: "/ec2/home", component: Dashboard, crumbs: () => base },
     { pattern: "/ec2/dashboard", component: Dashboard, crumbs: () => [crumb("EC2", ""), crumb("Dashboard", "dashboard")] },
-    { pattern: "/ec2/events", component: Honest.Events, crumbs: () => [crumb("EC2", ""), crumb("Events", "events")] },
+    { pattern: "/ec2/events", component: Ops.Events, crumbs: () => [crumb("EC2", ""), crumb("Events", "events")] },
 
     { pattern: "/ec2/instances", component: Instances, crumbs: () => [crumb("EC2", ""), crumb("Instances", "instances")] },
     { pattern: "/ec2/instances/:id", component: InstanceDetail, crumbs: (p) => [crumb("EC2", ""), crumb("Instances", "instances"), crumb(p.id, "instances", p.id)] },
@@ -82,11 +83,11 @@ export default {
     { pattern: "/ec2/launch-templates", component: LaunchTemplates, crumbs: () => [crumb("EC2", ""), crumb("Launch templates", "launch-templates")] },
     { pattern: "/ec2/create-launch-template", component: CreateLaunchTemplate, crumbs: () => [crumb("EC2", ""), crumb("Launch templates", "launch-templates"), crumb("Create launch template", "create-launch-template")] },
 
-    { pattern: "/ec2/spot-requests", component: Honest.SpotRequests, crumbs: () => [crumb("EC2", ""), crumb("Spot Requests", "spot-requests")] },
+    { pattern: "/ec2/spot-requests", component: Ops.SpotRequests, crumbs: () => [crumb("EC2", ""), crumb("Spot Requests", "spot-requests")] },
     { pattern: "/ec2/savings-plans", component: Honest.SavingsPlans, crumbs: () => [crumb("EC2", ""), crumb("Savings Plans", "savings-plans")] },
-    { pattern: "/ec2/reserved-instances", component: Honest.ReservedInstances, crumbs: () => [crumb("EC2", ""), crumb("Reserved Instances", "reserved-instances")] },
-    { pattern: "/ec2/dedicated-hosts", component: Honest.DedicatedHosts, crumbs: () => [crumb("EC2", ""), crumb("Dedicated Hosts", "dedicated-hosts")] },
-    { pattern: "/ec2/capacity-reservations", component: Honest.CapacityReservations, crumbs: () => [crumb("EC2", ""), crumb("Capacity Reservations", "capacity-reservations")] },
+    { pattern: "/ec2/reserved-instances", component: Ops.ReservedInstances, crumbs: () => [crumb("EC2", ""), crumb("Reserved Instances", "reserved-instances")] },
+    { pattern: "/ec2/dedicated-hosts", component: Ops.DedicatedHosts, crumbs: () => [crumb("EC2", ""), crumb("Dedicated Hosts", "dedicated-hosts")] },
+    { pattern: "/ec2/capacity-reservations", component: Ops.CapacityReservations, crumbs: () => [crumb("EC2", ""), crumb("Capacity Reservations", "capacity-reservations")] },
     { pattern: "/ec2/ultraservers", component: Honest.UltraServers, crumbs: () => [crumb("EC2", ""), crumb("UltraServers", "ultraservers")] },
     { pattern: "/ec2/capacity-manager", component: Honest.CapacityManager, crumbs: () => [crumb("EC2", ""), crumb("Capacity Manager", "capacity-manager")] },
 
@@ -132,10 +133,10 @@ export default {
     { pattern: "/ec2/settings", component: Settings, crumbs: () => [crumb("EC2", ""), crumb("Settings", "settings")] },
 
     { pattern: "/ec2/migrate-a-server", component: Honest.MigrateAServer, crumbs: () => [crumb("EC2", ""), crumb("Migrate a server", "migrate-a-server")] },
-    { pattern: "/ec2/recycle-bin", component: Honest.RecycleBin, crumbs: () => [crumb("EC2", ""), crumb("Recycle Bin", "recycle-bin")] },
+    { pattern: "/ec2/recycle-bin", component: Ops.RecycleBin, crumbs: () => [crumb("EC2", ""), crumb("Recycle Bin", "recycle-bin")] },
     { pattern: "/ec2/image-builder", component: Honest.ImageBuilder, crumbs: () => [crumb("EC2", ""), crumb("EC2 Image Builder", "image-builder")] },
-    { pattern: "/ec2/instance-type-finder", component: Honest.InstanceTypeFinder, crumbs: () => [crumb("EC2", ""), crumb("Instance type finder", "instance-type-finder")] },
-    { pattern: "/ec2/create-iam-profile", component: Honest.CreateIamProfile, crumbs: () => [crumb("EC2", ""), crumb("Create IAM profile", "create-iam-profile")] },
-    { pattern: "/ec2/compare-security-group-rules", component: Honest.CompareSecurityGroupRules, crumbs: () => [crumb("EC2", ""), crumb("Compare security group rules", "compare-security-group-rules")] },
+    { pattern: "/ec2/instance-type-finder", component: Ops.InstanceTypeFinder, crumbs: () => [crumb("EC2", ""), crumb("Instance type finder", "instance-type-finder")] },
+    { pattern: "/ec2/create-iam-profile", component: Ops.CreateIamProfile, crumbs: () => [crumb("EC2", ""), crumb("Create IAM profile", "create-iam-profile")] },
+    { pattern: "/ec2/compare-security-group-rules", component: Ops.CompareSecurityGroupRules, crumbs: () => [crumb("EC2", ""), crumb("Compare security group rules", "compare-security-group-rules")] },
   ],
 };

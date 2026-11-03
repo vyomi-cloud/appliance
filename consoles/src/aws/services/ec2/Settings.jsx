@@ -18,6 +18,7 @@ import { href, follow } from "../../../common/router.js";
 import { KeyValue } from "../../kit/common.jsx";
 import { CapabilityContainer, saveNotice } from "../../kit/Capability.jsx";
 import * as api from "./api.js";
+import { ManagedResources, AsgAccountSettings } from "./OpsPages.jsx";
 
 export default function Settings() {
   return (
@@ -25,11 +26,11 @@ export default function Settings() {
       <Tabs tabs={[
         { id: "dps", label: "Data protection and security", content: <DataProtection /> },
         { id: "amis", label: "Allowed AMIs", content: <AllowedAmis /> },
-        { id: "managed", label: "Managed resources - new", content: <CapabilityContainer id="ec2.settings.other" title="Managed resources" /> },
+        { id: "managed", label: "Managed resources - new", content: <ManagedResources /> },
         { id: "zones", label: "Zones", content: <Zones /> },
         { id: "credit", label: "Default credit specification", content: <CreditSpecification /> },
         { id: "serial", label: "EC2 Serial Console", content: <SerialConsole /> },
-        { id: "asg", label: "Auto Scaling groups", content: <CapabilityContainer id="ec2.settings.other" title="Auto Scaling group defaults" /> },
+        { id: "asg", label: "Auto Scaling groups", content: <AsgAccountSettings /> },
         { id: "prefs", label: "EC2 console preferences", content: <ConsolePreferences /> },
       ]} />
     </ContentLayout>

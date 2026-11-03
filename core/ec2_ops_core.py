@@ -272,6 +272,11 @@ def _spot_xml(r):
                  "launchedAvailabilityZone": r.get("az") or None, **_tags(r.get("tags"))}, "item")
 
 
+def _offline_runtime(store):
+    """True on the offline appliance, whose instance/AMI runtime (server.py, Docker) is separate from this core model."""
+    return type(store).__name__ == "_Ec2CoreSpaceStore"
+
+
 def _launch_params(r):
     p = dict(r["launch"])
     p["MinCount"] = p["MaxCount"] = 1
@@ -301,6 +306,10 @@ def settle_spot(store, m):
             if price > r["max_price"]:
                 r.update(status="price-too-low", message="Your Spot request price is lower than the minimum required Spot request fulfillment price.", updated=now)
                 continue
+            if _offline_runtime(store):
+                r.update(state="failed", status="system-error", updated=now,
+                         message="The offline appliance launches instances through its Docker runtime, which Spot fulfilment is not wired into; Spot launches run on the shared core (Nano).")
+                continue
             try:
                 tags = dict(r.get("instance_tags", {}))
                 inst = _V()._launch_one(m, _launch_params(r), {"instance": tags}, 0)
@@ -328,7 +337,7 @@ def _request_spot(store, p):
         raise _err("MissingParameter", "The request must contain the parameter LaunchSpecification.ImageId.")
     if launch["ImageId"] not in m["images"]:
         _V()._seed_amis(m)
-    if launch["ImageId"] not in m["images"]:
+    if launch["ImageId"] not in m["images"] and not _offline_runtime(store):
         raise _err("InvalidAMIID.NotFound", f"The image id '[{launch['ImageId']}]' does not exist.")
     itype = launch.get("InstanceType", "t3.micro")
     if itype not in _V()._INSTANCE_TYPES:
