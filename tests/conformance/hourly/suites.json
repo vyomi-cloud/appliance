@@ -1115,6 +1115,14 @@
       "timeout": 300
     },
     {
+      "id": "offline-api-gcp-kms-importjobs-ar-tags",
+      "target": "offline",
+      "cloud": "gcp",
+      "kind": "api",
+      "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/test_gcp_kms_importjobs_ar_tags_api.py",
+      "timeout": 300
+    },
+    {
       "id": "offline-api-gcp-cloudscheduler-http",
       "target": "offline",
       "cloud": "gcp",

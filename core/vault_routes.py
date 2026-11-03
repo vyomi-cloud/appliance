@@ -604,6 +604,44 @@ def _register_gcp(app: FastAPI) -> None:
         return {"name": f"projects/{project}/locations/{loc}/keyRings/{ring}",
                 "createTime": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
 
+    # Cloud KMS importJobs (create / get / list) on the REST surface; the key-pair generation
+    # logic is the same gcp_kms_core code the console's Import jobs tab uses.
+    _gcp_import_jobs: dict = {}
+
+    def _gcp_ij_err(e):
+        return JSONResponse({"error": {"code": e.status, "message": e.message, "status": e.gcp_status}}, status_code=e.status)
+
+    @app.post("/v1/projects/{project}/locations/{loc}/keyRings/{ring}/importJobs")
+    async def gcp_kms_create_import_job(project: str, loc: str, ring: str, request: Request):
+        from core import gcp_kms_core as kc
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        jobs = _gcp_import_jobs.setdefault(_active_space_id(request), {})
+        rname = f"projects/{project}/locations/{loc}/keyRings/{ring}"
+        try:
+            return kc.import_job_create(jobs, rname, request.query_params.get("importJobId", ""), body or {}, 0.6)
+        except kc.KmsTabError as e:
+            return _gcp_ij_err(e)
+
+    @app.get("/v1/projects/{project}/locations/{loc}/keyRings/{ring}/importJobs")
+    async def gcp_kms_list_import_jobs(project: str, loc: str, ring: str, request: Request):
+        from core import gcp_kms_core as kc
+        jobs = _gcp_import_jobs.setdefault(_active_space_id(request), {})
+        out = kc.import_job_list(jobs, f"projects/{project}/locations/{loc}/keyRings/{ring}", 0.6)
+        return {"importJobs": out} if out else {}
+
+    @app.get("/v1/projects/{project}/locations/{loc}/keyRings/{ring}/importJobs/{job}")
+    async def gcp_kms_get_import_job(project: str, loc: str, ring: str, job: str, request: Request):
+        from core import gcp_kms_core as kc
+        jobs = _gcp_import_jobs.setdefault(_active_space_id(request), {})
+        name = f"projects/{project}/locations/{loc}/keyRings/{ring}/importJobs/{job}"
+        if name not in jobs:
+            return JSONResponse({"error": {"code": 404, "message": f"ImportJob {name} not found.", "status": "NOT_FOUND"}}, status_code=404)
+        kc._advance_keygen(jobs[name], 0.6)
+        return kc.import_job_view(name, jobs[name])
+
     def _gcp_cryptokey_view(project: str, loc: str, ring: str, key: str, meta: dict | None = None) -> dict:
         base = f"projects/{project}/locations/{loc}/keyRings/{ring}/cryptoKeys/{key}"
         now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
