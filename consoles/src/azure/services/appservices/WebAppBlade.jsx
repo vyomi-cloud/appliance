@@ -3,6 +3,7 @@
  * domains, Locks, App Service logs, Diagnostic settings, Access control (IAM), Export
  * template, Identity, Backups and Scale up/out/Change App Service plan are backed by native
  * ARM calls; everything else in the menu is an honest NotSimulated panel. */
+import { UserAssignedIdentities } from "../../kit/UserAssignedIdentities.jsx";
 import { useEffect, useState } from "react";
 import {
   Button, Checkbox, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, Field, Input, Link,
@@ -1019,7 +1020,7 @@ function Identity({ a, rg, name, reload }) {
       )}
       {tab === "userassigned" && (
         <div style={{ marginTop: 12 }}>
-          <NotSimulatedContainer feature="User assigned managed identities" note="Vyomi has no User Assigned Identity resource of its own to attach here." />
+          <UserAssignedIdentities resourceId={a.id} apiVersion="2023-12-01" capabilityId="azure.managedidentity.userassigned" onChanged={reload} />
         </div>
       )}
     </>

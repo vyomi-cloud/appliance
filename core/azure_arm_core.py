@@ -628,6 +628,35 @@ def _guid(*parts):
 _NO_IDENTITY = {"type": "None", "principalId": None, "tenantId": None, "userAssignedIdentities": None}
 
 
+def missing_identity_ref(state: dict, ua):
+    """First ``userAssignedIdentities`` key that is not an existing managed identity, else None."""
+    for rid in (ua or {}):
+        t = state.get(str(rid).lower())
+        if not t or t.get("_type", "").lower() != "microsoft.managedidentity/userassignedidentities":
+            return rid
+    return None
+
+
+def resolve_identity_refs(rec: dict, state: dict):
+    return _resolve_user_identities(rec, state)
+
+
+def _resolve_user_identities(rec: dict, state: dict):
+    """Fill every ``identity.userAssignedIdentities[<id>]`` with the referenced managed identity's real
+    principalId/clientId. Returns the first referenced id that does NOT exist (so the PUT/PATCH can fail like
+    ARM does), else ``None``."""
+    ua = (rec.get("identity") or {}).get("userAssignedIdentities")
+    if not isinstance(ua, dict):
+        return None
+    for rid in list(ua):
+        tgt = state.get(str(rid).lower())
+        if not tgt or tgt.get("_type", "").lower() != "microsoft.managedidentity/userassignedidentities":
+            return rid
+        p = tgt.get("properties") or {}
+        ua[rid] = {"principalId": p.get("principalId"), "clientId": p.get("clientId")}
+    return None
+
+
 def _apply_identity(rec: dict, ident: dict) -> None:
     """``identity`` is a top-level sibling of ``properties`` on ANY generic-catalog resource
     (real ARM shape) — generic over every type this engine serves (ACR, APIM, VMs, …), mirroring
@@ -644,7 +673,7 @@ def _apply_identity(rec: dict, ident: dict) -> None:
         return
     itype = str(ident.get("type") or "None")
     out = {"type": itype, "principalId": None, "tenantId": None,
-           "userAssignedIdentities": ident.get("userAssignedIdentities") or cur.get("userAssignedIdentities") or {}}
+           "userAssignedIdentities": (ident["userAssignedIdentities"] if isinstance(ident.get("userAssignedIdentities"), dict) else cur.get("userAssignedIdentities")) or {}}
     if "systemassigned" in itype.lower():
         out["principalId"] = cur.get("principalId") or _guid(rec["id"], "principal")
         out["tenantId"] = _guid(rec["_sub"], "tenant")
@@ -862,6 +891,27 @@ class AzureArm:
 
     # ── public entry ──────────────────────────────────────────────────────
     def handle(self, method: str, path: str, query=None, body=None):
+        """Every ARM request. Wraps the dispatcher with user-assigned identity validation/resolution that is
+        generic over EVERY engine (generic catalog, web apps, Cognitive Services, Container Apps, App Configuration …)."""
+        m = (method or "GET").upper()
+        ua = ((body or {}).get("identity") or {}).get("userAssignedIdentities") if m in ("PUT", "PATCH") and isinstance(body, dict) else None
+        missing = missing_identity_ref(self.state, ua)
+        if missing:
+            return _err(400, "ResourceNotFound", f"The Resource '{missing}' of type 'Microsoft.ManagedIdentity/userAssignedIdentities' was not found.")
+        out = self._handle_raw(method, path, query, body)
+        if ua and isinstance(out, dict) and out.get("status", 500) < 300:
+            self._resolve_identity_at(path, out)
+        return out
+
+    def _resolve_identity_at(self, path, out):
+        rid = "/subscriptions/" + str(path).split("?")[0].split("/subscriptions/", 1)[-1].strip("/")
+        rec = self.state.get(rid.lower())
+        if rec is not None:
+            resolve_identity_refs(rec, self.state)
+            if isinstance(out.get("body"), dict) and out["body"].get("identity") is not None:
+                out["body"]["identity"] = _view(rec).get("identity")
+
+    def _handle_raw(self, method: str, path: str, query=None, body=None):
         method = (method or "GET").upper()
         query = query or {}
         # LRO poll — every operation completes immediately in the sim.
@@ -2729,7 +2779,14 @@ class AzureArm:
         if isinstance(payload.get("sku"), dict):
             rec["sku"] = _merge(rec.get("sku", {}), payload["sku"])
         if isinstance(payload.get("identity"), dict):
+            _before_ident = rec.get("identity")
             _apply_identity(rec, payload["identity"])
+            _missing = _resolve_user_identities(rec, self.state)
+            if _missing:
+                rec["identity"] = _before_ident
+                if not existed:
+                    self.state.pop(key, None)
+                return _err(400, "ResourceNotFound", f"The Resource '{_missing}' of type 'Microsoft.ManagedIdentity/userAssignedIdentities' was not found.")
             if full_type.lower() == "microsoft.compute/virtualmachines":   # Run command's IMDS token subject
                 rec["identity"] = _vm_identity_view(rid, rec["identity"])
         if isinstance(payload.get("properties"), dict):

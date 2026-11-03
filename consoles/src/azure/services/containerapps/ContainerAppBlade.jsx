@@ -3,6 +3,7 @@
  * Authentication, Identity, Activity log, Access control (IAM), Tags, Diagnostic settings,
  * Export template and Locks are backed by native ARM calls (core/azure_app_core.py); the rest
  * render their honest capability level via CapabilityContainer. */
+import { UserAssignedIdentities } from "../../kit/UserAssignedIdentities.jsx";
 import { useEffect, useState } from "react";
 import {
   Button, Checkbox, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, Field, Input,
@@ -551,7 +552,7 @@ function Identity({ a, rg, name, reload }) {
           </table>
         )}
       </section>
-      <NotSimulatedContainer title="User assigned managed identities" feature="User assigned managed identities" />
+      <UserAssignedIdentities resourceId={a.id} apiVersion="2024-03-01" capabilityId="azure.managedidentity.userassigned" onChanged={reload} />
     </>
   );
 }

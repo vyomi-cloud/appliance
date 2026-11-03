@@ -132,6 +132,31 @@ try {
   await page.getByRole("tab", { name: "Public access" }).click();
   await noNS("storage Networking (public)", ["Virtual network", "firewall", "trusted services"]);
 
+  // ── Managed identity: user-assigned attach on ACR + Cosmos identity page ──────────────
+  const ACR = `vyazacr${n}`, COS = `vyazcos${n}`, MI = `vyazmi${n}`;
+  await armv("2023-07-01")("PUT", `/resourceGroups/${RG}/providers/Microsoft.ContainerRegistry/registries/${ACR}`, { location: "eastus", sku: { name: "Standard" } });
+  await page.goto(UI + `#/acr/${RG}/${ACR}/identity`);
+  await page.getByRole("tab", { name: "User assigned" }).click();
+  await page.getByRole("button", { name: "Add user assigned managed identity" }).click();
+  await page.getByLabel("New managed identity name").fill(MI);
+  await page.getByRole("dialog").getByRole("button", { name: "Add", exact: true }).click();
+  await page.getByRole("cell", { name: MI, exact: true }).waitFor({ timeout: 15000 });
+  const acr = json(await armv("2023-07-01")("GET", `/resourceGroups/${RG}/providers/Microsoft.ContainerRegistry/registries/${ACR}`));
+  const mi = json(await armv("2023-01-31")("GET", `/resourceGroups/${RG}/providers/Microsoft.ManagedIdentity/userAssignedIdentities/${MI}`));
+  const ref = Object.values(acr.identity?.userAssignedIdentities || {})[0] || {};
+  check("UI-created user-assigned identity attached; principalId resolved over ARM", !!mi.properties?.principalId && ref.principalId === mi.properties.principalId);
+  await noNS("ACR user assigned identities");
+  await page.getByLabel(`Select ${MI}`).check();
+  await page.getByRole("button", { name: "Remove user assigned managed identity" }).click();
+  await page.getByText("No user assigned managed identities.").waitFor({ timeout: 10000 });
+  check("UI detach clears the attachment over ARM", Object.keys(json(await armv("2023-07-01")("GET", `/resourceGroups/${RG}/providers/Microsoft.ContainerRegistry/registries/${ACR}`)).identity?.userAssignedIdentities || {}).length === 0);
+  await armv("2024-05-15")("PUT", `/resourceGroups/${RG}/providers/Microsoft.DocumentDB/databaseAccounts/${COS}`, { location: "eastus", kind: "GlobalDocumentDB", properties: { databaseAccountOfferType: "Standard", locations: [{ locationName: "eastus", failoverPriority: 0 }] } });
+  await page.goto(UI + `#/cosmos/${RG}/${COS}/identity`);
+  await page.getByLabel("System assigned status").selectOption("on");
+  await page.getByText("Object (principal) ID").waitFor({ timeout: 10000 });
+  check("Cosmos Identity page turns on system assigned identity over ARM", !!json(await armv("2024-05-15")("GET", `/resourceGroups/${RG}/providers/Microsoft.DocumentDB/databaseAccounts/${COS}`)).identity?.principalId);
+  await noNS("Cosmos Identity");
+
   // @@GROUPS@@
 } catch (e) {
   const at = ((e.stack || "").match(/smoke-[a-z-]+\.mjs:(\d+)/) || [])[1];

@@ -3,6 +3,7 @@
  * encryption, Identity, Automatic tuning, Performance recommendations and Export template
  * are backed by native ARM / the azure-sql data-plane wire; everything else in the menu is
  * an honest NotSimulated panel. */
+import { UserAssignedIdentities } from "../../kit/UserAssignedIdentities.jsx";
 import { useEffect, useState } from "react";
 import {
   Button, Checkbox, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, Field, Input, Link,
@@ -552,7 +553,7 @@ function IdentityPanel({ a, reload }) {
         </RadioGroup>
         {value === "SystemAssigned" && <div className="vy-props" style={{ marginTop: 8 }}><KV label="Object (principal) ID" value={a.identity?.principalId || "(assigned on save)"} /></div>}
       </CapabilityContainer>
-      <NotSimulatedContainer title="User assigned managed identity" feature="Attaching a user-assigned managed identity" />
+      <UserAssignedIdentities resourceId={a.id} apiVersion="2023-08-01" capabilityId="azure.managedidentity.userassigned" onChanged={reload} />
     </>
   );
 }

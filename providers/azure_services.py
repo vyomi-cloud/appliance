@@ -826,6 +826,28 @@ def _is_lro_type(namespace: str, type_chain: list[str]) -> bool:
 
 
 async def handle_arm(request: Request, rest: str) -> JSONResponse:
+    """ARM entry: user-assigned managed identity validation/resolution wraps EVERY offline engine."""
+    method = request.method.upper()
+    ua = None
+    if method in ("PUT", "PATCH"):
+        try:
+            ua = ((await _safe_json(request)).get("identity") or {}).get("userAssignedIdentities")
+        except Exception:
+            ua = None
+        from core.azure_arm_core import missing_identity_ref
+        missing = missing_identity_ref(_state, ua)
+        if missing:
+            return _error(400, "ResourceNotFound", f"The Resource '{missing}' of type 'Microsoft.ManagedIdentity/userAssignedIdentities' was not found.")
+    resp = await _handle_arm_inner(request, rest)
+    if ua and resp.status_code < 300:
+        from core.azure_arm_core import resolve_identity_refs
+        rec = _state.get(("/subscriptions/" + rest.split("?")[0].strip("/")).lower())
+        if rec is not None:
+            resolve_identity_refs(rec, _state)
+    return resp
+
+
+async def _handle_arm_inner(request: Request, rest: str) -> JSONResponse:
     """Parse `/subscriptions/{rest}` and CRUD the in-memory ARM store."""
     base = _public_base(request)
     method = request.method.upper()

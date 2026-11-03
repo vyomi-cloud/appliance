@@ -2,6 +2,7 @@
  * Environment variables, Scale and concurrency, Locks, Export template and Access control
  * (role assignments/roles) are backed by native ARM calls; everything else in the menu is an
  * honest NotSimulated panel (Vyomi has no diagnostics/telemetry/identity backend for them). */
+import { UserAssignedIdentities } from "../../kit/UserAssignedIdentities.jsx";
 import { useEffect, useState } from "react";
 import {
   Button, Checkbox, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, Field, Input, Link,
@@ -751,7 +752,7 @@ function Identity({ a, reload }) {
         </CapabilityContainer>
       )}
       {tab === "userassigned" && (
-        <NotSimulatedContainer feature="User assigned managed identities" note="Vyomi has no User Assigned Identity resource of its own to attach here." />
+        <UserAssignedIdentities resourceId={a.id} apiVersion="2023-12-01" capabilityId="azure.managedidentity.userassigned" onChanged={reload} />
       )}
     </>
   );

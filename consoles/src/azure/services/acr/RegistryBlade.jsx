@@ -6,6 +6,7 @@
  * Retention (Preview) are all backed by real native calls (ARM control plane + the registry's
  * own OCI/ACR REST data plane) — only Support + Troubleshooting (a real Microsoft support
  * ticket) stays an honest NotSimulated panel. */
+import { UserAssignedIdentities } from "../../kit/UserAssignedIdentities.jsx";
 import { useEffect, useState } from "react";
 import {
   Button, Checkbox, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, Field, Input, Link,
@@ -970,7 +971,7 @@ function Identity({ a, rg, name, reload }) {
       )}
       {tab === "userassigned" && (
         <div style={{ marginTop: 12 }}>
-          <NotSimulatedContainer feature="User assigned managed identities" note="Vyomi has no User Assigned Identity resource of its own to attach here." />
+          <UserAssignedIdentities resourceId={a.id} apiVersion="2023-07-01" capabilityId="azure.managedidentity.userassigned" onChanged={reload} />
         </div>
       )}
     </CapabilityContainer>

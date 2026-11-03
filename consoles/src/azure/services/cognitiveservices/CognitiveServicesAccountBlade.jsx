@@ -2,6 +2,7 @@
  * Keys and Endpoint, Model deployments, Quotas, Networking, Identity, Properties, Locks,
  * Activity log and Export template are backed by native ARM / Cognitive Services REST calls;
  * everything else in the menu is an honest NotSimulated panel. */
+import { UserAssignedIdentities } from "../../kit/UserAssignedIdentities.jsx";
 import { useEffect, useState } from "react";
 import {
   Button, Checkbox, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, Field, Input, Link,
@@ -431,7 +432,7 @@ function Identity({ a, reload }) {
         <Checkbox label="Status" disabled={busy} checked={on} onChange={(_, d) => toggle(!!d.checked)} />
         {on && <div style={{ marginTop: 8 }}><KV label="Object (principal) ID" value={a.identity?.principalId} /><KV label="Tenant ID" value={a.identity?.tenantId} /></div>}
       </section>
-      <NotSimulatedContainer title="User assigned managed identity" feature="Attaching a user-assigned managed identity (Microsoft.ManagedIdentity/userAssignedIdentities is not catalogued in Vyomi)" />
+      <UserAssignedIdentities resourceId={a.id} apiVersion="2024-10-01" capabilityId="azure.managedidentity.userassigned" onChanged={reload} />
     </>
   );
 }
