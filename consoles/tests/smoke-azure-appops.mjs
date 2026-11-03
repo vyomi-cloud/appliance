@@ -81,5 +81,21 @@ await go("cloneapp"); await pg.getByRole("button", { name: "Clone", exact: true 
 ok("clone created over wire", (await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.Web/sites/${APP}-clone`)).status === 200);
 const c = (await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.Web/sites/${APP}-clone/config/appsettings`)).body.properties;
 ok("clone copied app settings", !!c.AZURE_STORAGEBLOB_RESOURCEENDPOINT);
+// ── Function App: Service Connector, Integration editor, Invocations ──
+const FN = `appopsfn${n}`, fsite = `/resourceGroups/${RG}/providers/Microsoft.Web/sites/${FN}`;
+await arm("PUT", fsite, { location: "eastus", kind: "functionapp", properties: {} });
+await arm("PUT", `${fsite}/functions/f1`, { properties: { files: { "__init__.py": "def main(req):\n    return {'ok': 1}" } } });
+await arm("POST", `${fsite}/functions/f1/invoke`, { method: "GET" });
+await pg.goto(`${UI}#/functionapp/${RG}/${FN}/functions/f1`); await pg.waitForTimeout(1500);
+await pg.getByRole("tab", { name: "Invocations" }).click(); await pg.waitForTimeout(800);
+ok("invocations tab lists the real run", (await pg.locator("table[aria-label=Invocations] tbody tr").count()) >= 1 && (await pg.content()).includes("Success"));
+await pg.getByRole("tab", { name: "Integration" }).click(); await pg.waitForTimeout(500);
+await pg.getByRole("button", { name: "Add output binding" }).click();
+await pg.getByRole("button", { name: "Save", exact: true }).last().click(); await pg.waitForTimeout(1000);
+ok("bindings persisted over wire", ((await arm("GET", `${fsite}/functions/f1`)).body.properties.config.bindings || []).length >= 3);
+await pg.goto(`${UI}#/functionapp/${RG}/${FN}/service-connector`); await pg.waitForTimeout(1200);
+await pg.getByLabel("Connection name").fill("tostg"); await pg.getByLabel("Target service").selectOption({ label: `${STG} (storageAccounts)` });
+await pg.getByRole("button", { name: "Create", exact: true }).click(); await pg.waitForTimeout(1000);
+ok("function service connector wrote app settings", !!(await arm("GET", `${fsite}/config/appsettings`)).body.properties.AZURE_STORAGEBLOB_RESOURCEENDPOINT);
 for (const p of ["apimanagement", "webjobs", "certificates", "serviceconnector", "healthcheck", "authentication"]) { await go(p); }
 await b.close(); console.log(`${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

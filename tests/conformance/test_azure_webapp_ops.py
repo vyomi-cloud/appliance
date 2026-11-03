@@ -59,4 +59,15 @@ r = call("PUT", ["certificates", "m1"], {"location": "eastus", "properties": {"c
 check("managed certificate", r["status"] == 201 and r["body"]["properties"]["issuer"].startswith("Vyomi"))
 call("DELETE", ["certificates", "c1"])
 check("delete certificate", call("GET", ["certificates", "c1"])["status"] == 404)
+# function bindings + invocations
+call("PUT", ["sites", "fn1"], {"location": "eastus", "kind": "functionapp", "properties": {}})
+F = ["sites", "fn1", "functions", "f1"]
+call("PUT", F, {"properties": {"files": {"__init__.py": "def main(req):\n    return {'ok': 1}"}}})
+cfg = {"bindings": [{"type": "httpTrigger", "direction": "in", "name": "req"}, {"type": "queue", "direction": "out", "name": "out1", "queueName": "q"}]}
+call("PUT", F, {"properties": {"config": cfg}})
+g = call("GET", F)["body"]["properties"]
+check("bindings editor persists and keeps the code", len(g["config"]["bindings"]) == 2 and "def main" in str(g.get("files")), g)
+call("POST", F + ["invoke"], {"method": "GET"})
+log = call("GET", ["sites", "fn1", "invocationlogs"])["body"]["value"]
+check("invocation log lists the real run", log and log[0]["function"] == "f1" and log[0]["ok"] and log[0]["durationMs"] >= 0, log)
 print(f"\n{PASS} passed, {FAIL} failed"); sys.exit(1 if FAIL else 0)

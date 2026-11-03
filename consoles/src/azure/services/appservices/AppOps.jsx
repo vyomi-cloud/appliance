@@ -123,14 +123,14 @@ export function ApiDefinition({ a, rg, name, reload }) {
     </>
   );
 }
-export function ApiManagement({ a, rg, name, reload }) {
+export function ApiManagement({ a, rg, name, reload, cap = CFG }) {
   const svc = useAsync(async () => (await restJson("GET", `/subscriptions/${parseId(a.id).subscription}/providers/Microsoft.ApiManagement/service`, { query: { "api-version": "2022-08-01" } })).value || [], [a.id]);
   const [sel, setSel] = useState(a.properties?.siteConfig?.apiManagementConfig?.id || "");
   const [busy, save] = useSave(reload);
   return (
     <>
       {title(name, "API Management")}
-      <CapabilityContainer id={CFG} title="API Management">
+      <CapabilityContainer id={cap} title="API Management">
         <p style={{ fontSize: 13 }}>Link this app to an API Management instance. The link is recorded on the app; Vyomi does not import the API into the gateway for you.</p>
         {svc.loading ? <Loading /> : (
           <Field label="API Management instance">
@@ -138,7 +138,7 @@ export function ApiManagement({ a, rg, name, reload }) {
               <option value="">None</option>{(svc.data || []).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </Select>
           </Field>)}
-        <SaveBar busy={busy} onDiscard={reload} onSave={() => save(() => api.updateSiteConfig(rg, name, { apiManagementConfig: sel ? { id: sel } : null }), "API Management link was saved.", CFG)} />
+        <SaveBar busy={busy} onDiscard={reload} onSave={() => save(() => api.updateSiteConfig(rg, name, { apiManagementConfig: sel ? { id: sel } : null }), "API Management link was saved.", cap)} />
       </CapabilityContainer>
     </>
   );
@@ -332,7 +332,7 @@ export function WebJobs({ a, rg, name }) {
 // ── Service Connector ────────────────────────────────────────────────────────────────────
 const TARGETS = [["Microsoft.Storage", "storageAccounts", "2023-01-01"], ["Microsoft.KeyVault", "vaults", "2023-02-01"], ["Microsoft.AppConfiguration", "configurationStores", "2023-03-01"],
   ["Microsoft.ServiceBus", "namespaces", "2022-10-01"], ["Microsoft.DocumentDB", "databaseAccounts", "2023-11-15"], ["Microsoft.Sql", "servers", "2023-05-01-preview"]];
-export function ServiceConnector({ a, rg, name }) {
+export function ServiceConnector({ a, rg, name, cap = "azure.appservices.webapp.serviceconnector" }) {
   const sp = sitePath(rg, name);
   const lp = `${sp}/providers/Microsoft.ServiceLinker/linkers`;
   const lq = { "api-version": "2022-05-01" };
@@ -340,7 +340,7 @@ export function ServiceConnector({ a, rg, name }) {
   const targets = useAsync(async () => (await Promise.all(TARGETS.map(([p, t, v]) => armType(p, t, v).list().catch(() => [])))).flat(), []);
   const [tid, setTid] = useState(""); const [auth, setAuth] = useState("secret"); const [ln, setLn] = useState("");
   const [busy, save] = useSave(links.reload);
-  const SID = "azure.appservices.webapp.serviceconnector";
+  const SID = cap;
   return (
     <>
       {title(name, "Service Connector")}

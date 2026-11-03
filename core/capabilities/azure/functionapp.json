@@ -351,11 +351,10 @@
  },
  "azure.functionapp.apimanagement": {
   "title": "API Management integration",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": [
-   "Requires a separately provisioned, continuously-running API Management gateway — its own compute, SKU-based capacity and public network listener (often real cost and a 30-45 minute real provisioning time) — a distinct Azure resource type Vyomi does not run."
-  ],
-  "api": []
+  "level": { "nano": "config_only", "offline": "config_only" },
+  "limitations": ["The link to an API Management instance is recorded on the app (siteConfig.apiManagementConfig); Vyomi does not import the function's API into the gateway."],
+  "api": ["sites/config/web CreateOrUpdate"],
+  "tests": ["tests/conformance/test_azure_webapp_ops.py"]
  },
  "azure.functionapp.advancedtools": {
   "title": "Advanced Tools (Kudu / SCM site)",
@@ -367,11 +366,10 @@
  },
  "azure.functionapp.serviceconnector": {
   "title": "Service Connector",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": [
-   "A real connection requires discovering another already-provisioned resource's live secret (connection string/key) through that resource's own control plane and exchanging it for this app's managed identity via Entra ID — the cross-resource trust negotiation the real Service Connector resource provider brokers, which is beyond this app's own single-resource dispatch."
-  ],
-  "api": []
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["Creating a connection validates the target in this subscription and writes the real connection app settings (endpoint, plus a generated secret for secret auth); no network path, firewall rule or role assignment is created for the target."],
+  "api": ["Microsoft.ServiceLinker/linkers CreateOrUpdate/Get/List/Delete/Validate"],
+  "tests": ["tests/conformance/test_azure_webapp_ops.py"]
  },
  "azure.functionapp.tasks": {
   "title": "Tasks (Automation)",
@@ -388,5 +386,19 @@
    "Opening a support request requires real Microsoft support staff to receive and work an actual ticket; there is no local equivalent to a real human support engineer."
   ],
   "api": []
+ },
+ "azure.functionapp.bindingseditor": {
+  "title": "Function Integration (bindings editor)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["Bindings are stored as the function's function.json and returned by the API; only the HTTP trigger/return binding is executed, queue/blob/timer/service bus triggers never fire and output bindings write nothing."],
+  "api": ["sites/functions CreateOrUpdate (config.bindings)", "sites/functions Get"],
+  "tests": ["tests/conformance/test_azure_webapp_ops.py"]
+ },
+ "azure.functionapp.invocations": {
+  "title": "Invocations (per-function invocation history)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["Lists the real invoke attempts Vyomi ran for this function (status, measured duration, error); the history is capped at the last 200 invocations per app and there is no Application Insights trace or per-invocation log lines."],
+  "api": ["sites/invocationlogs"],
+  "tests": ["tests/conformance/test_azure_webapp_ops.py"]
  }
 }

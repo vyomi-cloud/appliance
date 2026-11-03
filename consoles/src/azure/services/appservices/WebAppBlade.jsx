@@ -522,7 +522,7 @@ function KvEditor({ rg, name, title, get, update, extraCol, connStrings }) {
 // ── Configuration (General settings) ────────────────────────────────────────────────────
 const STACKS = { "PYTHON": "Python", "NODE": "Node", "JAVA": "Java", "PHP": "PHP", "DOTNETCORE": "" };
 
-function Configuration({ a, rg, name, reload }) {
+export function Configuration({ a, rg, name, reload }) {
   const notify = useNotify();
   const [tab, setTab] = useState("general");
   const fx = a.properties?.siteConfig?.linuxFxVersion || "";
