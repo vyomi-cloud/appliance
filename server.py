@@ -7877,7 +7877,7 @@ def _docker_connect_info(instance: dict, provider: str) -> dict:
     key_url = {
         "aws":   f"/api/aws/ec2/instances/{iid}/private-key.pem",
         "gcp":   f"/api/gcp/compute/instances/{iid}/private-key.pem",
-        "azure": f"/api/azure/vm/{iid}/private-key.pem",
+        "azure": f"/api/azure/vm/{instance.get('name') or iid}/private-key.pem",
     }.get(provider) or f"/api/{provider}/instances/{iid}/private-key.pem"
 
     return {
@@ -23528,6 +23528,25 @@ def _find_instance_across_spaces(provider: str, instance_id: str) -> tuple[Optio
     return None, None
 
 
+def _flatten_azure_vm(inst: dict, instance_id: str) -> dict:
+    """Flatten an Azure VM ARM record to the flat instance dict the docker/LXD
+    connect paths expect (runtime fields live under properties.runtime)."""
+    _rt = (inst.get("properties") or {}).get("runtime") or {}
+    _cn = str(_rt.get("containerName") or "")
+    _iid = _cn[len("cloudlearn-"):] if _cn.startswith("cloudlearn-") else (inst.get("name") or instance_id)
+    if _rt.get("backend") == "docker" and _cn:
+        _iid = _rt.get("instanceId") or _cn[len("vyomi-i-"):]
+    return {
+        **inst,
+        "ssh_host_port": _rt.get("sshHostPort"),
+        "instance_id": _iid,
+        "container_name": _cn,
+        "container_id": _rt.get("containerId") or _cn,
+        "ami": "",
+        "state": _rt.get("state") or _rt.get("containerStatus") or "",
+    }
+
+
 def _connect_info_response(provider: str, instance_id: str) -> dict:
     inst, _ = _find_instance_across_spaces(provider, instance_id)
     if not inst:
@@ -23538,20 +23557,7 @@ def _connect_info_response(provider: str, instance_id: str) -> dict:
     # Flatten so Azure reaches the same lazy SSH-provisioning path (key inject +
     # lxc proxy) as AWS/GCP instead of 409/503-ing with no SSH command.
     if provider == "azure":
-        _rt = (inst.get("properties") or {}).get("runtime") or {}
-        _cn = str(_rt.get("containerName") or "")
-        _iid = _cn[len("cloudlearn-"):] if _cn.startswith("cloudlearn-") else (inst.get("name") or instance_id)
-        if _rt.get("backend") == "docker" and _cn:
-            _iid = _rt.get("instanceId") or _cn[len("vyomi-i-"):]
-        inst = {
-            **inst,
-            "ssh_host_port": _rt.get("sshHostPort"),
-            "instance_id": _iid,
-            "container_name": _cn,
-            "container_id": _rt.get("containerId") or _cn,
-            "ami": "",
-            "state": _rt.get("state") or _rt.get("containerStatus") or "",
-        }
+        inst = _flatten_azure_vm(inst, instance_id)
     state_running = inst.get("state") or inst.get("powerState") or ""
     if isinstance(state_running, dict):
         state_running = state_running.get("Name") or ""
@@ -23585,6 +23591,8 @@ def _private_key_pem_response(provider: str, instance_id: str) -> Response:
     pem = _vmc.read_private_key(instance_id)
     if not pem:
         inst, _ = _find_instance_across_spaces(provider, instance_id)
+        if inst and provider == "azure":
+            inst = _flatten_azure_vm(inst, instance_id)
         if inst and _docker_backed(inst):
             pem = _docker_private_key_pem(inst)
     if not pem:
