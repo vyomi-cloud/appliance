@@ -1,6 +1,6 @@
 # Vyomi service pipeline
 
-_Updated 2026-11-02 23:32 UTC · refreshes after every pipeline run_
+_Updated 2026-11-03 00:05 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
@@ -9,7 +9,7 @@ _Updated 2026-11-02 23:32 UTC · refreshes after every pipeline run_
 - **In the gate / releasing:** Amazon Cognito Identity Provider (AWS), Amazon EC2 Container Service (AWS), Amazon Elastic Container Registry (AWS), Amazon ElastiCache (AWS), Amazon Kinesis (AWS), Amazon Route 53 (AWS), Amazon Simple Email Service (AWS), AWS CloudFormation (AWS), AWS Security Token Service (AWS), BigQuery API (GCP), Cloud DNS API (GCP), Cloud Logging API (GCP), Cloud Run Admin API (GCP), Cloud Tasks API (GCP), Workflows API (GCP), Application Insights (Azure), Container Registry (Azure), Azure Kubernetes Service (Azure), Event Hubs (Azure), Managed Identities (Azure), Azure Cache for Redis (Azure)
 - **Queued:** 41 services (P1 first, then P2)
 - **Consoles really implemented:** offline 97% · Nano 97%
-- **Hourly tests:** 272 of 277 suites passing (run 21:58 UTC)
+- **Hourly tests:** 276 of 278 suites passing (run 23:57 UTC)
 - **Upstream watch:** 61 open changes from the real clouds to adopt
 
 ## By cloud
@@ -1069,7 +1069,7 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 | offline-sdk-java-azure-app | ✅ | 15/15 |
 | offline-sdk-go-azure-app | ✅ | 29/29 |
 | offline-cli-azure-app | ✅ | 23/23 |
-| offline-ui-azure-app | ❌ | 28/29 |
+| offline-ui-azure-app | ✅ | 29/29 |
 | nano-ui-azure-app | ✅ | 29/29 |
 | offline-sdk-java-azure-appconfiguration | ✅ | 28/28 |
 | offline-sdk-go-azure-appconfiguration | ✅ | 34/34 |
@@ -1132,7 +1132,7 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 | offline-post-create-gcp-cloudsql-db-connect | ✅ | 5/5 |
 | nano-post-create-aws-ec2-ssh | ✅ | 18/18 |
 | nano-post-create-gcp-gce-ssh | ✅ | 18/18 |
-| nano-post-create-azure-vm-ssh | ❌ | 17/18 |
+| nano-post-create-azure-vm-ssh | ✅ | 18/18 |
 | offline-ui-console-home | ✅ | 35/35 |
 | offline-ui-gcp-artifactregistry | ✅ | 16/16 |
 | offline-ui-gcp-metrics-tab | ✅ | 6/6 |
@@ -1182,12 +1182,13 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 | offline-post-create-azure-openai | ✅ | 6/6 |
 | offline-post-create-aws-iam-actions | ✅ | 13/13 |
 | offline-post-create-azure-rbac-checkaccess | ✅ | 6/6 |
-| offline-ui-drawer | ❌ | 65/66 |
+| offline-ui-drawer | ✅ | 87/87 |
 | nano-ui-drawer | ✅ | 72/72 |
 | offline-ui-default-cloud | ✅ | 18/18 |
 | nano-ui-default-cloud | ✅ | 15/15 |
 | nano-ui-gcp-properties | ✅ | 12/12 |
 | offline-ui-gcp-properties | ✅ | 12/12 |
+| offline-api-gcp-sql-patch-monitoring | ✅ | 10/10 |
 
 </details>
 
