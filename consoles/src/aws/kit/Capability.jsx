@@ -78,16 +78,16 @@ export function CapabilityBadge({ id }) {
   );
 }
 
-/** Gray tab attached to the bottom-right border of a capability container (replaces the
+/** Gray tab sitting inside a capability container, flush with its bottom-right border (replaces the
  *  header pill). Click for the limitations popover. */
 export function CapabilityTab({ id }) {
   const c = capability(id);
   if (!c || c.level === "full" || c.level === "not_simulated") return null;
   return (
     <span data-vyomi-capability={c.level} data-vyomi-capability-id={id} data-vyomi-capability-tab=""
-      style={{ position: "absolute", right: 20, top: "100%", zIndex: 1, display: "inline-flex", alignItems: "center", height: 26,
-        padding: "0 12px", marginTop: -1, background: "#e9ebed", border: "1px solid #c6c6cd", borderTop: "1px solid #e9ebed",
-        borderRadius: "0 0 8px 8px", fontSize: 12, lineHeight: "16px", color: "#414d5c" }}>
+      style={{ position: "absolute", right: 20, bottom: 0, zIndex: 1, display: "inline-flex", alignItems: "center", height: 26,
+        padding: "0 12px", background: "#e9ebed", border: "1px solid #c6c6cd", borderBottom: 0,
+        borderRadius: "8px 8px 0 0", fontSize: 12, lineHeight: "16px", color: "#414d5c" }}>
       <Popover
         size="large"
         triggerType="custom"
@@ -118,9 +118,10 @@ export function CapabilityContainer({ id, title, description, actions, counter, 
   }
   const tabbed = c.level === "limited" || c.level === "config_only";
   return (
-    <div style={{ position: "relative", marginBottom: tabbed ? 26 : 0 }}>
+    <div style={{ position: "relative" }}>
       <Container header={<Header variant="h2" counter={counter} description={description} actions={actions}>{title}</Header>}>
         {children}
+        {tabbed && <div aria-hidden="true" style={{ height: 14 }} />}
       </Container>
       <CapabilityTab id={id} />
     </div>
