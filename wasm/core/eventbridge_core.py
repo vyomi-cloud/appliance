@@ -270,6 +270,64 @@ def set_lambda_invoker(fn) -> None:
     _LAMBDA_INVOKER = fn
 
 
+# Stores for Kinesis / CloudWatch Logs targets (they live outside the messaging store);
+# installed by the offline appliance (server.py) and by Nano's registry.
+_TARGET_STORES: dict = {}
+
+
+def set_target_store(kind: str, store) -> None:
+    """kind: "kinesis" | "logs"."""
+    _TARGET_STORES[kind] = store
+
+
+def _deliver_kinesis(arn, body_str, tgt, event_id):
+    """Kinesis rule target: PutRecord of the (transformed) event; partition key from
+    KinesisParameters.PartitionKeyPath if present, else the event id."""
+    import base64
+    st = _TARGET_STORES.get("kinesis")
+    if st is None:
+        raise LookupError("Kinesis is not available")
+    try:
+        from core import kinesis_core
+    except ImportError:  # Pyodide flat layout
+        import kinesis_core  # type: ignore
+    pk = event_id
+    path = ((tgt or {}).get("KinesisParameters") or {}).get("PartitionKeyPath")
+    if path:
+        try:
+            found, v = _json_path(json.loads(body_str), path)
+            if found and v not in (None, ""):
+                pk = str(v)
+        except Exception:
+            pass
+    r = kinesis_core.dispatch(st, "Kinesis_20131202.PutRecord", {
+        "StreamName": arn.rsplit("stream/", 1)[-1], "PartitionKey": pk,
+        "Data": base64.b64encode(body_str.encode("utf-8")).decode()})
+    if r.status >= 300:
+        raise RuntimeError(f"Kinesis PutRecord failed: {r.body}")
+
+
+def _deliver_logs(arn, body_str):
+    """CloudWatch Logs rule target: one log event in a fresh stream of the group."""
+    st = _TARGET_STORES.get("logs")
+    if st is None:
+        raise LookupError("CloudWatch Logs is not available")
+    try:
+        from core import logs_core
+    except ImportError:  # Pyodide flat layout
+        import logs_core  # type: ignore
+    group = arn.split("log-group:", 1)[-1]
+    group = group[:-2] if group.endswith(":*") else group
+    stream = f"{datetime.now(timezone.utc):%Y/%m/%d}/{uuid.uuid4().hex}"
+    h = "Logs_20140328."
+    logs_core.dispatch(st, h + "CreateLogGroup", {"logGroupName": group})  # exists -> benign
+    logs_core.dispatch(st, h + "CreateLogStream", {"logGroupName": group, "logStreamName": stream})
+    r = logs_core.dispatch(st, h + "PutLogEvents", {"logGroupName": group, "logStreamName": stream,
+                           "logEvents": [{"timestamp": int(time.time() * 1000), "message": body_str}]})
+    if r.status >= 300:
+        raise RuntimeError(f"PutLogEvents failed: {r.body}")
+
+
 def _fn_name(arn: str) -> str:
     return arn.split(":function:", 1)[-1].split(":", 1)[0] if ":function:" in arn else arn
 
@@ -338,8 +396,9 @@ def route_event(rules, bus, event_obj, envelope, send_sqs, invoke_lambda, publis
                 fn = lambda a=arn, b=body_str: publish_sns(a, b)
             elif ":lambda:" in arn or ":function:" in arn:
                 fn = lambda a=arn, b=body_str: invoke_lambda(a, b)
-            elif deliver_other is not None and (":event-bus/" in arn or ":stateMachine:" in arn or ":api-destination/" in arn):
-                fn = lambda a=arn, b=body_str: deliver_other(a, b)
+            elif deliver_other is not None and (":event-bus/" in arn or ":stateMachine:" in arn or ":api-destination/" in arn
+                                                or ":kinesis:" in arn or ":log-group:" in arn):
+                fn = lambda a=arn, b=body_str, t=tgt: deliver_other(a, b, t)
             else:
                 continue
             _deliver_with_retry(tgt, fn, send_sqs, base_str)
@@ -468,8 +527,12 @@ def _put_events(store, body, lambda_store=None, depth=0):
                 raise LookupError(f"SQS queue {arn} does not exist")
             sqs_core.enqueue(store, queue, body_str)
 
-        def deliver_other(arn, body_str):
-            if ":event-bus/" in arn:
+        def deliver_other(arn, body_str, tgt=None):
+            if ":kinesis:" in arn:
+                _deliver_kinesis(arn, body_str, tgt, event_id)
+            elif ":log-group:" in arn:
+                _deliver_logs(arn, body_str)
+            elif ":event-bus/" in arn:
                 # Another event bus: re-route the (possibly transformed) event on that bus (depth-capped).
                 if depth >= 3:
                     return
@@ -484,7 +547,7 @@ def _put_events(store, body, lambda_store=None, depth=0):
                     "Detail": json.dumps(ev2.get("detail", {})), "Resources": ev2.get("resources", []),
                     "EventBusName": arn.rsplit("/", 1)[-1]}]}, lambda_store, depth + 1)
             elif ":api-destination/" in arn:
-                _deliver_api_destination(store, arn, body_str)
+                _deliver_api_destination(store, arn, body_str, tgt)
             else:  # Step Functions StartExecution with the event as input
                 try:
                     from core import stepfunctions_core as sfn

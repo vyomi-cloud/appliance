@@ -23923,6 +23923,10 @@ try:
     _nr_hooks.EB_HOOKS["sqs"] = _eb_send_sqs
     _nr_hooks.EB_HOOKS["lambda"] = _eb_invoke_lambda
     _sfn_hooks.set_lambda_invoker(_sfn_invoke_lambda)
+    from core import eventbridge_core as _ebc_hooks
+    from routes import aws_kinesis as _eb_kin, aws_logs as _eb_logs
+    _ebc_hooks.set_target_store("kinesis", _eb_kin.STORE)   # EventBridge Kinesis / Logs targets use the
+    _ebc_hooks.set_target_store("logs", _eb_logs.STORE)     # console-visible space stores
 except Exception as _e:   # never let this break appliance boot
     print(f"[eventing] delivery hooks skipped: {_e}")
 

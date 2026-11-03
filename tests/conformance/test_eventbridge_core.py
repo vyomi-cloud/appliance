@@ -206,6 +206,36 @@ def run(store=None):
     gone = call("DescribeConnection", {"Name": "c1"})
     _check("DeleteConnection removes it", "ResourceNotFound" in repr(vars(gone)) or "does not exist" in repr(vars(gone)))
 
+    # Kinesis + CloudWatch Logs targets.
+    try:
+        from core import kinesis_core as kin, logs_core as lg
+    except ImportError:  # pragma: no cover
+        import kinesis_core as kin, logs_core as lg  # type: ignore
+    import base64
+    ks, ls2 = kin.KinesisStore(), lg.LogsStore()
+    eb.set_target_store("kinesis", ks)
+    eb.set_target_store("logs", ls2)
+    kin.dispatch(ks, "Kinesis_20131202.CreateStream", {"StreamName": "ev-stream", "ShardCount": 1})
+    lg.dispatch(ls2, "Logs_20140328.CreateLogGroup", {"logGroupName": "/ev/logs"})
+    karn = f"arn:aws:kinesis:us-east-1:{s.account_id}:stream/ev-stream"
+    larn = f"arn:aws:logs:us-east-1:{s.account_id}:log-group:/ev/logs:*"
+    call("PutRule", {"Name": "rk", "EventPattern": json.dumps({"source": ["kl.app"]})})
+    call("PutTargets", {"Rule": "rk", "Targets": [
+        {"Id": "tk", "Arn": karn, "KinesisParameters": {"PartitionKeyPath": "$.detail.k"}},
+        {"Id": "tl", "Arn": larn}]})
+    call("PutEvents", {"Entries": [{"Source": "kl.app", "DetailType": "x", "Detail": json.dumps({"k": "abc"})}]})
+    sh = kin.dispatch(ks, "Kinesis_20131202.ListShards", {"StreamName": "ev-stream"}).body["Shards"][0]["ShardId"]
+    it = kin.dispatch(ks, "Kinesis_20131202.GetShardIterator", {"StreamName": "ev-stream", "ShardId": sh,
+                      "ShardIteratorType": "TRIM_HORIZON"}).body["ShardIterator"]
+    recs = kin.dispatch(ks, "Kinesis_20131202.GetRecords", {"ShardIterator": it}).body["Records"]
+    _check("Kinesis target receives the event",
+           len(recs) == 1 and recs[0]["PartitionKey"] == "abc"
+           and json.loads(base64.b64decode(recs[0]["Data"]))["source"] == "kl.app")
+    sts = lg.dispatch(ls2, "Logs_20140328.DescribeLogStreams", {"logGroupName": "/ev/logs"}).body["logStreams"]
+    evs = lg.dispatch(ls2, "Logs_20140328.GetLogEvents", {"logGroupName": "/ev/logs",
+                      "logStreamName": sts[0]["logStreamName"]}).body["events"]
+    _check("CloudWatch Logs target receives the event", len(evs) == 1 and json.loads(evs[0]["message"])["source"] == "kl.app")
+
     _check("ListRules",call("ListRules", {}).body["Rules"][0]["Name"] == "r1")
     _check("ListTargetsByRule", call("ListTargetsByRule", {"Rule": "r1"}).body["Targets"][0]["Id"] == "t1")
 
