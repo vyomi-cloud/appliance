@@ -849,7 +849,7 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
                      or (low0[1] == "microsoft.resources" and low0[2] == "tags")
                      or low0[1] == "microsoft.security"      # Defender for Cloud (core/azure_security_core.py)
                      or (low0[1] == "microsoft.authorization"
-                         and low0[2] in ("locks", "roleassignments", "roledefinitions", "checkaccess"))))):
+                         and low0[2] in ("locks", "roleassignments", "roledefinitions", "checkaccess", "classicadministrators"))))):
         return await _handle_core_arm(request, method, rest, base)
 
     # v4 C0f — resource groups themselves (collection / item with real tags + cascade

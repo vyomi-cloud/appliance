@@ -24,6 +24,7 @@ import * as api from "./api.js";
 import { ResourceRecommendations } from "../defender/Pages.jsx";
 import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
 import SharedActivityLog from "../../kit/ActivityLog.jsx";
+import { ClassicAdminsPanel, DenyAssignmentsPanel, MyAccess } from "../../kit/IamExtras.jsx";
 
 /** Resource menu: [id, label] | {group, items}. Matches the real Web App blade's nav exactly
  * (labels double as the "{name} | Label" page titles the captured spec records). */
@@ -273,7 +274,7 @@ function AccessControl({ a }) {
       </TabList>
       {tab === "checkaccess" && (
         <div style={{ marginTop: 12 }}>
-          <section className="vy-section"><h3>My access</h3><Button onClick={() => {}}>View my access</Button></section>
+          <MyAccess a={a} />
           <section className="vy-section"><h3>Check access</h3><Button onClick={() => {}}>Check access</Button></section>
         </div>
       )}
@@ -306,10 +307,10 @@ function AccessControl({ a }) {
         </div>
       )}
       {tab === "denyassignments" && (
-        <div style={{ marginTop: 12 }}><NotSimulatedContainer title="Deny assignments" feature="Deny assignments" /></div>
+        <div style={{ marginTop: 12 }}><DenyAssignmentsPanel a={a} /></div>
       )}
       {tab === "classicadministrators" && (
-        <div style={{ marginTop: 12 }}><NotSimulatedContainer title="Classic administrators" feature="Classic administrators" /></div>
+        <div style={{ marginTop: 12 }}><ClassicAdminsPanel /></div>
       )}
     </>
   );

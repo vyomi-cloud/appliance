@@ -1491,3 +1491,14 @@ def run() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(run())
+
+
+def test_classic_administrators_listed_read_only():
+    from core.azure_arm_core import AzureArm
+    a = AzureArm(); a._base = "http://x"
+    sub = "00000000-0000-0000-0000-cloudlearn01"
+    r = a.handle("GET", f"/subscriptions/{sub}/providers/Microsoft.Authorization/classicAdministrators", {"api-version": "2015-06-01"})
+    assert r["status"] == 200
+    v = r["body"]["value"]
+    assert v[0]["properties"]["role"] == "ServiceAdministrator;AccountAdministrator" and v[0]["properties"]["emailAddress"]
+    assert a.handle("PUT", f"/subscriptions/{sub}/providers/Microsoft.Authorization/classicAdministrators", {"api-version": "2015-06-01"}, {})["status"] == 405

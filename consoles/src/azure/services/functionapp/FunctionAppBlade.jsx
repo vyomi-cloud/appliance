@@ -2,6 +2,7 @@
  * Environment variables, Scale and concurrency, Locks, Export template and Access control
  * (role assignments/roles) are backed by native ARM calls; everything else in the menu is an
  * honest NotSimulated panel (Vyomi has no diagnostics/telemetry/identity backend for them). */
+import { ClassicAdminsPanel, DenyAssignmentsPanel, MyAccess } from "../../kit/IamExtras.jsx";
 import { useEffect, useState } from "react";
 import {
   Button, Checkbox, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, Field, Input, Link,
@@ -599,7 +600,7 @@ function AccessControl({ a }) {
       </TabList>
       {tab === "checkaccess" && (
         <div style={{ marginTop: 12 }}>
-          <section className="vy-section"><h3>My access</h3><Button onClick={() => {}}>View my access</Button></section>
+          <MyAccess a={a} />
           <section className="vy-section"><h3>Check access</h3><Button onClick={() => {}}>Check access</Button></section>
         </div>
       )}
@@ -631,14 +632,8 @@ function AccessControl({ a }) {
           </table>
         </section>
       )}
-      {tab === "denyassignments" && (
-        <section className="vy-section"><h3>Deny assignments</h3>
-          <table className="vy-grid"><thead><tr><th>Name</th><th>Description</th><th>Principal</th><th>Scope</th></tr></thead>
-            <tbody><tr><td colSpan={4} className="vy-muted">No deny assignments found.</td></tr></tbody>
-          </table>
-        </section>
-      )}
-      {tab === "classicadministrators" && <InfoBar>No classic administrators are configured for this subscription.</InfoBar>}
+      {tab === "denyassignments" && <DenyAssignmentsPanel a={a} />}
+      {tab === "classicadministrators" && <ClassicAdminsPanel />}
     </>
   );
 }

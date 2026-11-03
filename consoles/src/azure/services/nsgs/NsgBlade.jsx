@@ -27,6 +27,7 @@ import EffectiveSecurityRules from "./EffectiveSecurityRules.jsx";
 import NetworkWatcherTools from "./NetworkWatcher.jsx";
 import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
 import SharedActivityLog from "../../kit/ActivityLog.jsx";
+import { ClassicAdminsPanel, DenyAssignmentsPanel, MyAccess } from "../../kit/IamExtras.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -256,7 +257,7 @@ function AccessControlIam({ a }) {
       </TabList>
       {tab === "check" && (
         <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 16 }}>
-          <section className="vy-section"><h3>My access</h3><Button onClick={() => setDlg("mine")}>View my access</Button></section>
+          <MyAccess a={a} />
           <section className="vy-section"><h3>Check access</h3><Button onClick={() => { setDecision(null); setDlg("check"); }}>Check access</Button></section>
         </div>
       )}
@@ -318,8 +319,8 @@ function AccessControlIam({ a }) {
           />
         </section>
       )}
-      {tab === "deny" && <div style={{ marginTop: 12 }}><NotSimulatedContainer title="Deny assignments" feature="Deny assignments" /></div>}
-      {tab === "classic" && <div style={{ marginTop: 12 }}><NotSimulatedContainer title="Classic administrators" feature="Classic administrators" /></div>}
+      {tab === "deny" && <div style={{ marginTop: 12 }}><DenyAssignmentsPanel a={a} /></div>}
+      {tab === "classic" && <div style={{ marginTop: 12 }}><ClassicAdminsPanel /></div>}
     </CapabilityContainer>
   );
 }

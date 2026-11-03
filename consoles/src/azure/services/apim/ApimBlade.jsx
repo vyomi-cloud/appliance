@@ -40,6 +40,7 @@ import * as api from "./api.js";
 import { ResourceRecommendations } from "../defender/Pages.jsx";
 import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
 import SharedActivityLog from "../../kit/ActivityLog.jsx";
+import { ClassicAdminsPanel, DenyAssignmentsPanel, MyAccess } from "../../kit/IamExtras.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -276,7 +277,7 @@ function AccessControlIam({ a }) {
       </TabList>
       {tab === "checkaccess" && (
         <div style={{ display: "flex", gap: 24, marginTop: 12 }}>
-          <section className="vy-section"><h3>My access</h3><Button onClick={() => setGap("View my access")}>View my access</Button></section>
+          <MyAccess a={a} />
           <section className="vy-section"><h3>Check access</h3><Button onClick={() => setGap("Check access")}>Check access</Button></section>
         </div>
       )}
@@ -309,8 +310,8 @@ function AccessControlIam({ a }) {
           />
         </section>
       )}
-      {tab === "deny" && <div style={{ marginTop: 12 }}><NotSimulatedContainer title="Deny assignments" feature="Deny assignments" /></div>}
-      {tab === "classic" && <div style={{ marginTop: 12 }} />}
+      {tab === "deny" && <div style={{ marginTop: 12 }}><DenyAssignmentsPanel a={a} /></div>}
+      {tab === "classic" && <ClassicAdminsPanel />}
       <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
         <DialogSurface aria-label={gap || "Not simulated"}>
           <DialogBody><DialogTitle>{gap}</DialogTitle><DialogContent><NotSimulated feature={`${gap} evaluation`} /></DialogContent>

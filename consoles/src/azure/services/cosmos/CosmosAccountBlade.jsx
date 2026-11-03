@@ -24,6 +24,7 @@ import * as api from "./api.js";
 import DataExplorer from "./DataExplorer.jsx";
 import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
 import SharedActivityLog from "../../kit/ActivityLog.jsx";
+import { ClassicAdminsPanel, DenyAssignmentsPanel, MyAccess } from "../../kit/IamExtras.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -253,7 +254,7 @@ function Iam({ a }) {
       </TabList>
       {tab === "checkaccess" && (
         <div style={{ display: "flex", gap: 24, marginTop: 12 }}>
-          <section className="vy-section"><h3>My access</h3><Button onClick={() => setGap("View my access")}>View my access</Button></section>
+          <MyAccess a={a} />
           <section className="vy-section"><h3>Check access</h3><Button onClick={() => setGap("Check access")}>Check access</Button></section>
         </div>
       )}
@@ -285,8 +286,8 @@ function Iam({ a }) {
           />
         </section>
       )}
-      {tab === "denyassignments" && <NotSimulatedContainer title="Deny assignments" feature="Deny assignments" />}
-      {tab === "classicadmins" && <div style={{ marginTop: 12 }} />}
+      {tab === "denyassignments" && <DenyAssignmentsPanel a={a} />}
+      {tab === "classicadmins" && <ClassicAdminsPanel />}
       <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
         <DialogSurface aria-label={gap || "Not simulated"}>
           <DialogBody>

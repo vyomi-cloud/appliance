@@ -29,5 +29,18 @@
   "tests": [
    "tests/conformance/test_azure_activity_log_core.py"
   ]
+ },
+ "azure.common.classic_administrators": {
+  "title": "Classic administrators (subscription co-administrators)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Read-only list, exactly like the real Microsoft.Authorization/classicAdministrators API (the legacy co-administrator model is retired): a modern subscription shows only its Account Administrator / Service Administrator, which in Vyomi is the single simulated signed-in user. Adding or removing classic administrators is not possible and is not modelled."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py"
+  ]
  }
 }

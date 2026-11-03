@@ -1216,6 +1216,18 @@ class AzureArm:
             scope_rid = f"/subscriptions/{sub}/resourceGroups/{rg}" if rg is not None else f"/subscriptions/{sub}"
             return self._check_access(sub, scope_rid, payload)
 
+        # Microsoft.Authorization/classicAdministrators (subscription scope, GET-only like the real
+        # 2015-06-01 API): the legacy co-administrator list. A modern subscription has exactly its
+        # Account Administrator / Service Administrator — the one simulated signed-in user.
+        if (namespace.lower() == "microsoft.authorization" and chain
+                and chain[0].lower() == "classicadministrators" and rg is None and len(chain) == 1):
+            if method != "GET":
+                return _err(405, "MethodNotAllowed", "Classic administrators can only be listed (the legacy model is retired).")
+            return _ok({"value": [{
+                "id": f"/subscriptions/{sub}/providers/Microsoft.Authorization/classicAdministrators/admin@vyomi.local",
+                "name": "admin@vyomi.local", "type": "Microsoft.Authorization/classicAdministrators",
+                "properties": {"emailAddress": "admin@vyomi.local", "role": "ServiceAdministrator;AccountAdministrator"}}]})
+
         # Microsoft.Authorization/roleDefinitions collection GET: the built-in Owner /
         # Contributor / Reader / … roles (ROLES, core/azure_arm_data.py — never provisioned as
         # catalog records, so the generic engine's own store never carries them) merged with

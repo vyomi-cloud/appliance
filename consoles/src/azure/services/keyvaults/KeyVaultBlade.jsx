@@ -22,6 +22,7 @@ import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
 import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
 import SharedActivityLog from "../../kit/ActivityLog.jsx";
+import { ClassicAdminsPanel, DenyAssignmentsPanel } from "../../kit/IamExtras.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -246,10 +247,10 @@ function AccessControlIam({ a }) {
       {tab === "deny" && (
         <div style={{ marginTop: 12 }}>
           <div className="vy-panel-title">Deny assignments</div>
-          <NotSimulatedContainer feature="Deny assignments" />
+          <DenyAssignmentsPanel a={a} />
         </div>
       )}
-      {tab === "classic" && <div style={{ marginTop: 12 }}><NotSimulatedContainer title="Classic administrators" feature="Classic administrators (co-administrators)" /></div>}
+      {tab === "classic" && <div style={{ marginTop: 12 }}><ClassicAdminsPanel /></div>}
       <Dialog open={!!dlg} onOpenChange={(_, d) => !d.open && setDlg(null)}>
         <DialogSurface aria-label="Access check">
           <DialogBody>

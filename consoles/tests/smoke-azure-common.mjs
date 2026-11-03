@@ -58,6 +58,20 @@ await page.getByRole("button", { name: "Reset filters" }).click();
 await page.waitForFunction(() => document.body.innerText.includes("virtualNetworks/write"), null, { timeout: 10000 });
 ok(true, "Reset filters restores the events");
 
+// RBAC extras (shared): Classic administrators (real list), Deny assignments, My access
+await page.goto(`${UI}#/vnets/${RG}/${VN}/iam`);
+await page.getByRole("tab", { name: "Classic administrators" }).waitFor({ timeout: 20000 });
+await page.getByRole("tab", { name: "Classic administrators" }).click();
+await page.waitForFunction(() => document.body.innerText.includes("admin@vyomi.local"), null, { timeout: 15000 });
+ok(true, "Classic administrators lists the account administrator (real ARM read)");
+await page.getByRole("tab", { name: "Deny assignments" }).click();
+await page.waitForTimeout(800);
+ok(!(await page.content()).includes("isn't backed by a Vyomi backend"), "Deny assignments is a real grid, not a Not-simulated panel");
+await page.getByRole("tab", { name: "Check access" }).click();
+await page.getByRole("button", { name: "View my access" }).click();
+await page.waitForFunction(() => document.body.innerText.includes("Role assignments covering this resource"), null, { timeout: 15000 });
+ok(true, "My access evaluates the signed-in principal with checkAccess");
+
 await browser.close();
 console.log(fails ? `${fails} FAILED` : "ALL PASS");
 process.exit(fails ? 1 : 0);
