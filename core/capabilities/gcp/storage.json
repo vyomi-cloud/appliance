@@ -113,9 +113,9 @@
     "title": "Data encryption with customer-managed encryption keys (CMEK)",
     "level": { "nano": "limited", "offline": "limited" },
     "limitations": [
-      "Setting a bucket's default Cloud KMS key validates the CryptoKey resource-name shape and really stamps that kmsKeyName onto every object written to the bucket afterward, but Vyomi never calls Cloud KMS to confirm the key exists or is enabled, and object bytes are still stored under Google-managed encryption underneath — no real envelope encryption with that key ever happens."
+      "Setting a bucket's default Cloud KMS key validates the CryptoKey resource-name shape and really stamps that kmsKeyName onto every object written to the bucket afterward, and Vyomi checks the key exists in Cloud KMS and lives in the bucket's location (it does not check the key is enabled or that the bucket's service agent may use it); object bytes are still stored under Google-managed encryption underneath — no real envelope encryption with that key ever happens."
     ],
-    "tests": ["tests/conformance/test_gcp_storage_depth2_core.py"]
+    "tests": ["tests/conformance/test_gcp_storage_depth2_core.py", "tests/conformance/test_gcp_storage_config.py"]
   },
   "gcp.storage.hierarchical-namespace": {
     "title": "Hierarchical namespace (HNS buckets with true folders)",
@@ -193,5 +193,44 @@
       "HMAC key issuance, listing, the ACTIVE/INACTIVE state toggle and delete-when-INACTIVE round-trip for real under projects/{project}/hmacKeys, but Vyomi's wire layer never verifies an HMAC-signed request against the issued secret — the separate S3-compatible XML endpoint these keys authenticate against is not implemented."
     ],
     "tests": ["tests/conformance/test_gcp_storage_depth2_core.py"]
-  }
+  },
+ "gcp.storage.turbo-replication": {
+  "title": "Turbo replication (dual-region RPO ASYNC_TURBO)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "The rpo setting is validated (dual-region buckets only) and every change is recorded as a bucket operation; Vyomi keeps a single copy, so the 15-minute replication guarantee is not measured."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_storage_config.py"
+  ]
+ },
+ "gcp.storage.autoclass": {
+  "title": "Autoclass (automatic storage-class transitions)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Transitions run for real on each object's access clock (STANDARD to NEARLINE after 30 idle days; to COLDLINE at 90 and ARCHIVE at 365 with an ARCHIVE terminal class; a read returns the object to STANDARD) and are evaluated when the bucket's objects are listed or read, not by a background job. Storage classes do not change pricing or retrieval latency in Vyomi."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_storage_config.py"
+  ]
+ },
+ "gcp.storage.customer-supplied-keys": {
+  "title": "Per-object customer-supplied encryption keys (CSEK)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "The x-goog-encryption-* headers are validated; only the key's SHA-256 is stored, bytes at rest are encrypted with a SHA-256 counter-mode keystream derived from the key (not AES), reads need the same key, and compose/copy of such objects is not supported."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_storage_config.py"
+  ]
+ }
 }

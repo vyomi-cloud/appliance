@@ -11,7 +11,7 @@ import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
 import { ErrorAlert, fmtBytes, fmtDate, KeyValue, PageHeader, Section } from "../../kit/common.jsx";
-import { CapabilityContainer } from "../../kit/Capability.jsx";
+import { CapabilityBadge, CapabilityContainer } from "../../kit/Capability.jsx";
 import { Link, hashHref } from "../../link.jsx";
 import * as api from "./api.js";
 
@@ -24,6 +24,7 @@ export default function ObjectDetail({ params, query }) {
   const tab = TABS.some(([t]) => t === query.tab) ? query.tab : "live";
   const [del, setDel] = useState(false);
   const [editMeta, setEditMeta] = useState(false);
+  const [keyDl, setKeyDl] = useState(false);
   const { data: o, loading, error, reload } = useAsync(() => api.getObject(bucket, name), [bucket, name]);
   const bkt = useAsync(() => api.getBucket(bucket), [bucket]);
   const pol = useAsync(() => api.getIamPolicy(bucket).catch(() => null), [bucket]);
@@ -36,7 +37,9 @@ export default function ObjectDetail({ params, query }) {
     <>
       <PageHeader title="Object details" back={<IconButton aria-label="Back" href={back}><ArrowBackIcon /></IconButton>}
         actions={<>
-          <Button startIcon={<DownloadIcon />} href={api.downloadUrl(bucket, name)} download={parts[parts.length - 1]} disabled={!o}>Download</Button>
+          {o?.customerEncryption
+            ? <Button startIcon={<DownloadIcon />} onClick={() => setKeyDl(true)}>Download (key required)</Button>
+            : <Button startIcon={<DownloadIcon />} href={api.downloadUrl(bucket, name)} download={parts[parts.length - 1]} disabled={!o}>Download</Button>}
           <Button startIcon={<EditIcon />} disabled={!o} onClick={() => setEditMeta(true)}>Edit metadata</Button>
           <Button startIcon={<DeleteIcon />} onClick={() => setDel(true)} disabled={!o}>Delete</Button>
         </>} />
@@ -55,6 +58,7 @@ export default function ObjectDetail({ params, query }) {
         <LiveObject o={o} bucket={bucket} bucketMeta={bkt.data} policy={pol.data} onHoldChange={patch} />
       )}
       {tab === "versions" && <CapabilityContainer id="gcp.storage.versioning" title="Versions" />}
+      {keyDl && <KeyDownload bucket={bucket} name={name} fileName={parts[parts.length - 1]} onClose={() => setKeyDl(false)} />}
       {editMeta && o && <EditMetadataDialog o={o} onClose={() => setEditMeta(false)} onSave={(body) => patch(body, "Updated object metadata")} />}
       <DeleteDialog open={del} onClose={() => setDel(false)} title="Delete object?" confirmText="DELETE"
         onConfirm={async () => { await api.deleteObject(bucket, name); notify.success(`Deleted "${name}"`); location.hash = back.slice(1); }}>
@@ -87,7 +91,7 @@ function LiveObject({ o, bucket, bucketMeta, policy, onHoldChange }) {
           ["Hold status", [o.temporaryHold && "Temporary hold", o.eventBasedHold && "Event-based hold"].filter(Boolean).join(", ") || "None"],
           ["Version history", "Not enabled"],
           ["Retention expiration time", ret.retainUntilTime ? fmtDate(ret.retainUntilTime) : "None"],
-          ["Encryption type", "Google-managed key"],
+          ["Encryption type", o.customerEncryption ? `Customer-supplied key (${o.customerEncryption.encryptionAlgorithm}, SHA-256 ${o.customerEncryption.keySha256})` : o.kmsKeyName ? `Customer-managed key (${o.kmsKeyName})` : "Google-managed key"],
         ]} />
         <Stack useFlexGap direction="row" spacing={1} sx={{ mt: 1.5, flexWrap: "wrap", rowGap: 1 }}>
           <Button size="small" variant="outlined" onClick={() => onHoldChange({ temporaryHold: !o.temporaryHold }, o.temporaryHold ? "Removed temporary hold" : "Added temporary hold")}>
@@ -156,6 +160,32 @@ function EditMetadataDialog({ o, onClose, onSave }) {
         <Button onClick={onClose} disabled={busy}>Cancel</Button>
         <Button variant="contained" disabled={busy || bad} onClick={save}>Save</Button>
       </DialogActions>
+    </Dialog>
+  );
+}
+
+function KeyDownload({ bucket, name, fileName, onClose }) {
+  const [key, setKey] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const go = async () => {
+    setBusy(true); setError(null);
+    try {
+      const blob = await api.downloadWithKey(bucket, name, key);
+      const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = fileName; a.click(); URL.revokeObjectURL(a.href);
+      onClose();
+    } catch (e) { setError(e); } finally { setBusy(false); }
+  };
+  return (
+    <Dialog open onClose={busy ? undefined : onClose} maxWidth="sm" fullWidth aria-label="Download with customer-supplied key">
+      <DialogTitle>Download with your encryption key <CapabilityBadge id="gcp.storage.customer-supplied-keys" /></DialogTitle>
+      <DialogContent>
+        <Stack spacing={2} sx={{ pt: 1 }}>
+          {error && <Typography variant="body2" color="error" role="alert">{error.message}</Typography>}
+          <TextField label="Base64 AES-256 key" value={key} onChange={(e) => setKey(e.target.value.trim())} inputProps={{ "aria-label": "Encryption key" }} />
+        </Stack>
+      </DialogContent>
+      <DialogActions><Button onClick={onClose} disabled={busy}>Cancel</Button><Button variant="contained" disabled={!key || busy} onClick={go}>Download</Button></DialogActions>
     </Dialog>
   );
 }
