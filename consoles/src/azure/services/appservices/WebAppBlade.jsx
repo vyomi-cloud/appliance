@@ -21,6 +21,7 @@ import { ErrorBar, Essentials, Glyph, KV, Loading, NotSimulatedContainer } from 
 import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
+import * as ops from "./AppOps.jsx";
 import { ResourceRecommendations } from "../defender/Pages.jsx";
 
 /** Resource menu: [id, label] | {group, items}. Matches the real Web App blade's nav exactly
@@ -105,6 +106,16 @@ export default function WebAppBlade({ params, query }) {
       exporttemplate: () => <ExportTemplate a={a} />,
       identity: () => <Identity a={a} rg={rg} name={name} reload={reload} />,
       backups: () => <Backups rg={rg} name={name} />,
+      healthcheck: () => <ops.HealthCheck a={a} rg={rg} name={name} reload={reload} />,
+      apidefinition: () => <ops.ApiDefinition a={a} rg={rg} name={name} reload={reload} />,
+      apimanagement: () => <ops.ApiManagement a={a} rg={rg} name={name} reload={reload} />,
+      appserviceplan: () => <ops.PlanPage a={a} name={name} />,
+      quotas: () => <ops.Quotas a={a} rg={rg} name={name} />,
+      authentication: () => <ops.Authentication a={a} rg={rg} name={name} />,
+      certificates: () => <ops.Certificates a={a} rg={rg} name={name} />,
+      cloneapp: () => <ops.CloneApp a={a} rg={rg} name={name} />,
+      webjobs: () => <ops.WebJobs a={a} rg={rg} name={name} />,
+      serviceconnector: () => <ops.ServiceConnector a={a} rg={rg} name={name} />,
     }[panel];
     body = P ? P() : (
       <>
@@ -576,9 +587,9 @@ function Configuration({ a, rg, name, reload }) {
           </div>
         </div>
       )}
-      {tab === "defaultdocs" && <NotSimulatedContainer feature="Default documents" />}
-      {tab === "pathmappings" && <NotSimulatedContainer feature="Path mappings" />}
-      {tab === "errorpages" && <NotSimulatedContainer feature="Error pages (preview)" />}
+      {tab === "defaultdocs" && <ops.DefaultDocuments a={a} rg={rg} name={name} reload={reload} />}
+      {tab === "pathmappings" && <ops.PathMappings a={a} rg={rg} name={name} reload={reload} />}
+      {tab === "errorpages" && <ops.ErrorPages a={a} rg={rg} name={name} reload={reload} />}
     </>
   );
 }
@@ -721,7 +732,7 @@ function ScaleOut({ a, rg, name, reload }) {
         <Button appearance="primary" icon={<Save20Regular />} disabled={busy} onClick={save}>{busy ? "Saving..." : "Save"}</Button>
         <Button onClick={reload}>Discard</Button>
       </div>
-      <NotSimulatedContainer feature="Autoscale (rule-based/schedule-based scaling)" note="Vyomi does not run multiple instances or enforce the configured count; it is stored and returned exactly as set." />
+      <ops.Autoscale a={a} rg={rg} name={name} />
     </>
   );
 }

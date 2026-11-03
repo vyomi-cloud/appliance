@@ -151,5 +151,61 @@
   "level": { "nano": "not_simulated", "offline": "not_simulated" },
   "limitations": ["No diagnostics engine, Event Grid wiring, resource visualizer, resource-health telemetry or support-ticket flow."],
   "api": []
+ },
+ "azure.appservices.webapp.siteconfigpanels": {
+  "title": "Default documents, Path mappings, Error pages, Health check, API definition, API Management link",
+  "level": { "nano": "config_only", "offline": "config_only" },
+  "limitations": ["Stored on the site configuration and returned by the API exactly as set; Vyomi runs no web server, so documents are not served, mappings/error pages/health probes are not applied and the API Management link imports nothing."],
+  "api": ["sites/config/web CreateOrUpdate", "sites/config/web Get"],
+  "tests": ["tests/conformance/test_azure_webapp_ops.py"]
+ },
+ "azure.appservices.webapp.webjobs": {
+  "title": "WebJobs (triggered and continuous)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["Triggered Python scripts really execute in a restricted sandbox (no filesystem, network or subprocess); other runtimes are refused at run time.", "Continuous jobs only track Running/Stopped; schedules (CRON) are stored, not fired.", "Job definitions are created by ARM PUT (Vyomi addition); real Azure uploads them via Kudu."],
+  "api": ["sites/triggeredwebjobs List/Get/Run/History", "sites/continuouswebjobs List/Start/Stop"],
+  "tests": ["tests/conformance/test_azure_webapp_ops.py"]
+ },
+ "azure.appservices.webapp.serviceconnector": {
+  "title": "Service Connector",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["Creating a connection validates the target in this subscription and writes the real connection app settings (endpoint, plus a generated secret for secret auth); there is no network path, firewall rule or role assignment created for the target."],
+  "api": ["Microsoft.ServiceLinker/linkers CreateOrUpdate/Get/List/Delete/Validate"],
+  "tests": ["tests/conformance/test_azure_webapp_ops.py"]
+ },
+ "azure.appservices.webapp.quotas": {
+  "title": "Quotas",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["File system storage limit is the published figure per plan tier; usage counts only the content Vyomi stores for the app (function code, WebJob scripts). CPU, memory and bandwidth quotas are not reported."],
+  "api": ["sites/usages"],
+  "tests": ["tests/conformance/test_azure_webapp_ops.py"]
+ },
+ "azure.appservices.webapp.authentication": {
+  "title": "Authentication (App Service authentication)",
+  "level": { "nano": "config_only", "offline": "config_only" },
+  "limitations": ["Only the on/off platform switch and one shared bearer token exist (enforced on function invocation for function apps); identity providers and interactive sign-in are not simulated."],
+  "api": ["sites/config/authsettingsV2 Get/Update"],
+  "tests": ["tests/conformance/test_azure_webapp_ops.py"]
+ },
+ "azure.appservices.webapp.autoscale": {
+  "title": "Autoscale",
+  "level": { "nano": "config_only", "offline": "config_only" },
+  "limitations": ["Stored as a Microsoft.Insights/autoscaleSettings resource on the plan; Vyomi runs no instances, so profiles and rules are never evaluated and the instance count does not change."],
+  "api": ["autoscaleSettings CreateOrUpdate/Get/Delete"],
+  "tests": ["tests/conformance/test_azure_webapp_ops.py"]
+ },
+ "azure.appservices.webapp.certificates": {
+  "title": "Certificates",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["Uploaded PFX files are stored with a SHA-1 thumbprint of the file; Vyomi does not parse the certificate, so subject, issuer and expiry are not read from it.", "Managed certificates are issued locally (not by a public CA) and are not trusted by anything."],
+  "api": ["Microsoft.Web/certificates CreateOrUpdate/Get/List/Delete"],
+  "tests": ["tests/conformance/test_azure_webapp_ops.py"]
+ },
+ "azure.appservices.webapp.clone": {
+  "title": "Clone App",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["Copies the site configuration, app settings and connection strings into a new app; there is no site content to copy and slots, backups and custom domains are not cloned."],
+  "api": ["sites CreateOrUpdate", "sites/config/appsettings"],
+  "tests": ["tests/conformance/test_azure_webapp_ops.py"]
  }
 }
