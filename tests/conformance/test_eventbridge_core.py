@@ -198,6 +198,14 @@ def run(store=None):
     _check("API destination receives event with API key", len(got) == 1 and got[0][0] == "k123"
            and json.loads(got[0][1])["detail"] == {"k": 5})
 
+    _check("DescribeConnection", call("DescribeConnection", {"Name": "c1"}).body["ConnectionArn"] == conn["ConnectionArn"])
+    _check("ListApiDestinations", [d["Name"] for d in call("ListApiDestinations", {}).body["ApiDestinations"]] == ["d1"])
+    call("DeleteApiDestination", {"Name": "d1"})
+    _check("DeleteApiDestination", call("ListApiDestinations", {}).body["ApiDestinations"] == [])
+    call("DeleteConnection", {"Name": "c1"})
+    gone = call("DescribeConnection", {"Name": "c1"})
+    _check("DeleteConnection removes it", "ResourceNotFound" in repr(vars(gone)) or "does not exist" in repr(vars(gone)))
+
     _check("ListRules",call("ListRules", {}).body["Rules"][0]["Name"] == "r1")
     _check("ListTargetsByRule", call("ListTargetsByRule", {"Rule": "r1"}).body["Targets"][0]["Id"] == "t1")
 
