@@ -17,6 +17,7 @@ import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import { navigate } from "../../../common/router.js";
 import DeleteModal from "../../kit/DeleteModal.jsx";
+import { StackPolicyPanel, RollbackPanel, NotificationsPanel } from "./StackSettings.jsx";
 import { ErrorAlert, KeyValue, NotSimulatedContainer, fmtDate } from "../../kit/common.jsx";
 import { statusOf } from "./Stacks.jsx";
 import * as api from "./api.js";
@@ -46,9 +47,9 @@ function Overview({ d, reload }) {
         items={Object.entries(d.Tags || {}).map(([k, v]) => ({ k, v }))}
         columnDefinitions={[{ id: "k", header: "Key", cell: (x) => x.k }, { id: "v", header: "Value", cell: (x) => x.v }]}
         empty={<Box textAlign="center" color="inherit"><b>No tags</b></Box>} />
-      <NotSimulatedContainer title="Stack policy" note="Stack policies (protecting resources from accidental updates) are stored on CreateStack's StackPolicyBody but not enforced by Vyomi." />
-      <NotSimulatedContainer title="Rollback configuration" note="CloudWatch alarm-triggered rollback monitoring isn't modeled; rollback on provisioning failure still works." />
-      <NotSimulatedContainer title="Notification options" note="SNS notification ARNs for stack events are stored but Vyomi doesn't publish to them." />
+      <StackPolicyPanel name={d.StackName} />
+      <RollbackPanel d={d} reload={reload} />
+      <NotificationsPanel d={d} reload={reload} />
     </SpaceBetween>
   );
 }

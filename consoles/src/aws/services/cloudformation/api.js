@@ -1,7 +1,7 @@
 /* AWS CloudFormation over the native Query protocol (POST / with Action=<Op>, XML
  * response) — the same wire core/cloudformation_core.py proves against in
  * tests/conformance/test_cloudformation_core.py. */
-import { awsQuery, asList } from "../../../common/wire.js";
+import { awsJson, awsQuery, asList } from "../../../common/wire.js";
 
 const call = (action, params = {}) => awsQuery("cloudformation", action, params);
 const result = (resp, action) => resp[`${action}Response`]?.[`${action}Result`] || {};
@@ -28,6 +28,24 @@ function tagsOf(tags = [], prefix = "Tags") {
   return out;
 }
 
+export const rollbackParams = (alarms = [], minutes) => {
+  const out = {};
+  alarms.filter(Boolean).forEach((a, i) => { out[`RollbackConfiguration.RollbackTriggers.member.${i + 1}.Arn`] = a; out[`RollbackConfiguration.RollbackTriggers.member.${i + 1}.Type`] = "AWS::CloudWatch::Alarm"; });
+  if (alarms.filter(Boolean).length || minutes) out["RollbackConfiguration.MonitoringTimeInMinutes"] = String(minutes || 0);
+  return out;
+};
+export const getStackPolicy = async (name) => (result(await call("GetStackPolicy", { StackName: name }), "GetStackPolicy").StackPolicyBody) || "";
+export const setStackPolicy = (name, body) => call("SetStackPolicy", { StackName: name, StackPolicyBody: body });
+export async function updateStackSettings(name, { rollbackAlarms, monitoringMinutes, notificationArns }) {
+  // UpdateStack with UsePreviousTemplate: only the settings change, no resource is touched.
+  return result(await call("UpdateStack", { StackName: name, UsePreviousTemplate: "true",
+    ...(rollbackAlarms ? rollbackParams(rollbackAlarms, monitoringMinutes) : {}), ...(notificationArns ? listParams(notificationArns, "NotificationARNs") : {}) }), "UpdateStack");
+}
+export async function listAlarms() {
+  const r = await awsJson("monitoring", "GraniteServiceVersion20100801.DescribeAlarms", { AlarmTypes: ["MetricAlarm"] }).catch(() => ({}));
+  return (r.MetricAlarms || []).map((a) => ({ name: a.AlarmName, arn: a.AlarmArn, state: a.StateValue }));
+}
+
 // ── stacks ───────────────────────────────────────────────────────────────────
 export async function listStacks(statusFilter) {
   const r = result(await call("ListStacks", statusFilter?.length ? listParams(statusFilter, "StackStatusFilter") : {}), "ListStacks");
@@ -45,13 +63,14 @@ export async function describeStack(name) {
     Capabilities: asList(s.Capabilities?.member),
   };
 }
-export async function createStack({ name, templateBody, templateUrl, parameters = [], tags = [], capabilities = [], onFailure, disableRollback, terminationProtection, roleArn, timeoutInMinutes }) {
+export async function createStack({ name, templateBody, templateUrl, parameters = [], tags = [], capabilities = [], onFailure, disableRollback, terminationProtection, roleArn, timeoutInMinutes, stackPolicy, rollbackAlarms = [], monitoringMinutes, notificationArns = [] }) {
   const r = result(await call("CreateStack", {
     StackName: name, ...(templateUrl ? { TemplateURL: templateUrl } : { TemplateBody: templateBody }),
     ...paramsOf(parameters), ...tagsOf(tags), ...listParams(capabilities, "Capabilities"),
     ...(onFailure ? { OnFailure: onFailure } : {}), ...(disableRollback ? { DisableRollback: "true" } : {}),
     ...(terminationProtection ? { EnableTerminationProtection: "true" } : {}), ...(roleArn ? { RoleARN: roleArn } : {}),
     ...(timeoutInMinutes ? { TimeoutInMinutes: String(timeoutInMinutes) } : {}),
+    ...(stackPolicy ? { StackPolicyBody: stackPolicy } : {}), ...rollbackParams(rollbackAlarms, monitoringMinutes), ...listParams(notificationArns, "NotificationARNs"),
   }), "CreateStack");
   return r.StackId;
 }
