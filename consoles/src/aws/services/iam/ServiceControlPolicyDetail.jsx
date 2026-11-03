@@ -1,6 +1,6 @@
 /* Organization policy detail (SCP / RCP) — real DescribePolicy, attach/detach to the root, OUs and
  * accounts (AttachPolicy / DetachPolicy / ListTargetsForPolicy) and editable policy JSON
- * (UpdatePolicy). The CloudTrail-based service access report is a registered gap. */
+ * (UpdatePolicy). The service access report is derived from recorded activity (limited). */
 import { useState } from "react";
 import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
@@ -17,6 +17,7 @@ import { useNotify } from "../../../common/notify.jsx";
 import { ErrorAlert, KeyValue } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { parentLabel, useOrgModel } from "./OrgKit.jsx";
+import ServiceAccessReport from "./ServiceAccessReport.jsx";
 import * as api from "./api.js";
 
 export default function ServiceControlPolicyDetail({ params, type = "SERVICE_CONTROL_POLICY" }) {
@@ -68,7 +69,7 @@ export default function ServiceControlPolicyDetail({ params, type = "SERVICE_CON
             ]}
             empty={<Box textAlign="center"><b>Not attached to any root, OU or account</b></Box>} />
         </CapabilityContainer>
-        {type === "SERVICE_CONTROL_POLICY" && <CapabilityContainer id="iam.organizations.service-access-report" title="Service access report" />}
+        {type === "SERVICE_CONTROL_POLICY" && <ServiceAccessReport policy={policy} model={m} />}
         <CapabilityContainer id="iam.organizations.policies" title="Policy JSON"
           actions={<SpaceBetween direction="horizontal" size="xs">
             {!s.AwsManaged && (draft === null

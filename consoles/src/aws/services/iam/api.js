@@ -328,3 +328,11 @@ export const tagProvider = (kind, Arn, tags) => call(`Tag${kind}Provider`, { [ki
 export const untagProvider = (kind, Arn, keys) => call(`Untag${kind}Provider`, { [kind === "SAML" ? "SAMLProviderArn" : "OpenIDConnectProviderArn"]: Arn, ...members("TagKeys", keys) });
 export const listProviderTags = async (kind, Arn) => tagsFromXml((await call(`List${kind}ProviderTags`, { [kind === "SAML" ? "SAMLProviderArn" : "OpenIDConnectProviderArn"]: Arn }))[`List${kind}ProviderTagsResponse`][`List${kind}ProviderTagsResult`].Tags);
 export const getAccountAuthorizationDetails = async () => (await call("GetAccountAuthorizationDetails", {})).GetAccountAuthorizationDetailsResponse.GetAccountAuthorizationDetailsResult;
+
+// ── Organizations service access report (IAM GenerateOrganizationsAccessReport / GetOrganizationsAccessReport) ──
+export async function organizationsAccessReport(EntityPath, OrganizationsPolicyId) {
+  const g = await call("GenerateOrganizationsAccessReport", { EntityPath, ...(OrganizationsPolicyId ? { OrganizationsPolicyId } : {}) });
+  const JobId = g.GenerateOrganizationsAccessReportResponse.GenerateOrganizationsAccessReportResult.JobId;
+  const r = (await call("GetOrganizationsAccessReport", { JobId })).GetOrganizationsAccessReportResponse.GetOrganizationsAccessReportResult;
+  return { ...r, AccessDetails: asList(r.AccessDetails?.member) };
+}

@@ -226,10 +226,12 @@
  },
  "iam.organizations.service-access-report": {
   "title": "Service access report for an SCP",
-  "level": {"nano": "not_simulated", "offline": "not_simulated"},
+  "level": {"nano": "limited", "offline": "limited"},
   "limitations": [
-   "The service access report is derived from CloudTrail activity of member accounts. Vyomi member accounts have no resources and generate no activity, so there is nothing to report."
-  ]
+   "Real GenerateOrganizationsAccessReport / GetOrganizationsAccessReport over the IAM wire, scoped to a root/OU/account and to the services the SCP allows (Allow statements minus unconditional Deny). It is derived from the activity Vyomi itself recorded for the management account's IAM users (the same signal as the user-level last-accessed report). Member accounts have no principals or traffic, so they contribute nothing; roles are not attributable; the report covers only the services Vyomi implements and has no region breakdown, no CloudTrail log-file source and no pagination."
+  ],
+  "api": ["GenerateOrganizationsAccessReport", "GetOrganizationsAccessReport"],
+  "tests": ["tests/conformance/test_iam_access_report.py"]
  },
  "iam.organizations.access-requests": {
   "title": "Temporary delegation requests (centralized root access)",
