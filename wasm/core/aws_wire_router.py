@@ -132,6 +132,9 @@ def _gcp_service(path):
     # Deny policies (IAM Deny API): /v2/policies/{attachmentPoint}/denypolicies[/…]
     if re.match(r"^/v2/policies/[^/]+/denypolicies(/.*)?$", path):
         return "gcp-iam"
+    # STS (sts.googleapis.com): federated token exchange + introspection
+    if path in ("/v1/token", "/v1/introspect"):
+        return "gcp-iam"
     # Predefined roles catalog (no project scope): /v1/roles
     if path.startswith("/v1/roles"):
         return "gcp-iam"
@@ -194,7 +197,7 @@ def _gcp_service(path):
         if "/serviceAccounts" in path or path.endswith(
                 (":getIamPolicy", ":setIamPolicy", ":testIamPermissions")):
             return "gcp-iam"
-        if re.search(r"^/v2/projects/[^/]+/policies(/|$)", path):
+        if re.search(r"^/v2/projects/[^/]+/(policies(:simulate)?|simulations)(/|$)", path):
             return "gcp-resourcemanager"
         if re.search(r"^/v1/projects/[^/]+/roles(/|$)", path):
             return "gcp-iam"
@@ -581,11 +584,20 @@ class AwsWireRouter:
         self.gcp_mon.compute_vm_store = self.gcp_compute_vm   # Overview "VMs with Ops Agent" + uptime checks targeting a GCE instance read real Compute Engine state
         self.gcp_mon.gcs_store = self.gcs   # Cost Explorer's Cloud Storage line item prices real bucket bytes stored
         self.gcp_rm = s.get("gcp_rm") or gcp_rm.ResourceManagerStore()   # Resource Manager (project, tags, contacts, org policies)
+        self.gcp_rm.inputs = self._rm_inputs   # org-policy simulation reads the project's real service accounts / keys / buckets
         self.gcp_pam = s.get("gcp_pam") or gcp_pam.PamStore()   # Privileged Access Manager entitlements
         self.gcp_run = s.get("gcp_run") or gcp_run.RunStore()   # Cloud Run (backs /functions, which the real console folds into it)
         self.gcp_run.pubsub_store = self.gcp_msg    # Eventarc Pub/Sub-sourced triggers validate/create a real subscription
         self.gcp_run.logging_store = self.gcp_logging   # Observability "Logs" — real Cloud Logging entries per invocation
         self.gcp_run.mon_store = self.gcp_mon       # Observability "Metrics" — real Cloud Monitoring points per invocation
+        if getattr(self.gcs, "refs", None) is None:
+            self.gcs.refs = self._run_refs   # bucket CMEK keys are checked against real Cloud KMS keys
+        if getattr(self.gcs, "on_object_event", None) is None:
+            self.gcs.on_object_event = self._gcs_object_event   # Eventarc Cloud Storage triggers fire on real object finalize/delete
+        if getattr(self.gcp_sql, "refs", None) is None:
+            self.gcp_sql.refs = self._run_refs          # Cloud SQL CMEK keys are checked against real Cloud KMS keys
+        if getattr(self.gcp_run, "refs", None) is None:   # a store already wired by its host (offline routes) keeps its own
+            self.gcp_run.refs = self._run_refs          # Cloud SQL / KMS / GCS references in a revision template are checked for real
         # Azure data-plane services.
         self.az_blob = s.get("az_blob") or AzureBlobStore()
         self.az_cosmos = s.get("az_cosmos") or CosmosStore()
@@ -762,6 +774,43 @@ class AwsWireRouter:
         """A real Pub/Sub publish -> deliver to every Cloud Run Eventarc-style trigger
         bound to that topic (see core/gcp_run_core.deliver_event)."""
         gcp_run.deliver_event(self.gcp_run, topic_full, messages, log_fn=self._run_log)
+
+    def _rm_inputs(self):
+        """Existing GCP resources an org-policy simulation evaluates (read as a GCP request)."""
+        try:
+            from core import app_context as _ctx
+            tok = _ctx.REQUEST_PROVIDER.set("gcp")
+        except Exception:   # Nano: no app_context, the stores are plain
+            _ctx, tok = None, None
+        try:
+            return {"sa_keys": dict(getattr(self.gcp_iam, "gcp_sa_keys", None) or {}),
+                    "service_accounts": dict(getattr(self.gcp_iam, "gcp_service_accounts", None) or {}),
+                    "buckets": dict(self.gcs.buckets)}
+        finally:
+            if tok is not None:
+                _ctx.REQUEST_PROVIDER.reset(tok)
+
+    def _gcs_object_event(self, bucket, name, event, obj):
+        gcp_run.deliver_storage_event(self.gcp_run, bucket, name, event, obj, log_fn=self._run_log)
+
+    def _run_refs(self, kind, *args):
+        """Existence of a resource a Cloud Run template references (True/False; None = unknown)."""
+        if kind == "sql":
+            return gcp_sql._get_instance(self.gcp_sql, args[0], args[1]) is not None
+        if kind == "kms":
+            try:
+                from core import app_context as _ctx
+                tok = _ctx.REQUEST_PROVIDER.set("gcp")   # offline GCP stores are provider-scoped
+            except Exception:   # Nano: plain stores
+                _ctx, tok = None, None
+            try:
+                return gcp_kms.dispatch(self.gcp_kms, "GET", "/v1/" + args[0], {}, {}, b"").status == 200
+            finally:
+                if tok is not None:
+                    _ctx.REQUEST_PROVIDER.reset(tok)
+        if kind == "bucket":
+            return bool(self.gcs.bucket_exists(args[0]))
+        return None
 
     def _run_topic_exists(self, topic_full):
         return bool(self.gcp_msg.get_topic(topic_full))

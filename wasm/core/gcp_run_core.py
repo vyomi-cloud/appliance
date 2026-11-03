@@ -91,6 +91,7 @@ class RunStore:
         self.pubsub_store = None
         self.logging_store = None
         self.mon_store = None
+        self.refs = None   # callable(kind, *args) -> True/False/None: Cloud SQL / KMS / GCS / Secret Manager existence (wired by the router)
 
 
 _SHARED: RunStore | None = None
@@ -288,7 +289,7 @@ def _norm_timeout(v, default):
     return str(v)
 
 
-def _revision_template(project, spec, is_job):
+def _revision_template(project, spec, is_job, store=None, location=""):
     """Normalise a RevisionTemplate / TaskTemplate (defaults the real service reports)."""
     spec = dict(spec or {})
     cs = spec.get("containers") or []
@@ -316,7 +317,223 @@ def _revision_template(project, spec, is_job):
         spec["maxInstanceRequestConcurrency"] = conc
     if spec.get("labels") is not None:
         _check_map(spec["labels"], "labels")
+    _validate_template_ext(spec, is_job, store, project, location)
     return spec
+
+
+# ── advanced template settings (probes, volumes, Cloud SQL, CMEK, autoscaling) ─────────────
+# Real Cloud Run v2 validation rules for fields that used to be unmodelled. Cross-service
+# references (Cloud SQL instance, KMS key, GCS bucket, secret) are checked against the real
+# sibling stores through `store.refs(kind, *args) -> True | False | None` (None = no store
+# wired, skip), so a typo'd instance is rejected exactly like the real control plane does.
+_QTY = re.compile(r"^\d+(\.\d+)?(Ki|Mi|Gi|Ti|K|M|G|T)?$")
+_SQL_INST = re.compile(r"^[a-z0-9][-a-z0-9]*:[a-z0-9-]+:[a-z][-a-z0-9]*$")
+_KMS_KEY = re.compile(r"^projects/([^/]+)/locations/([^/]+)/keyRings/([^/]+)/cryptoKeys/([^/]+)$")
+_TAG_RE = re.compile(r"^[a-z]([-a-z0-9]{0,45}[a-z0-9])?$")
+_MIN_ERR = "Invalid %s: %s"
+_ANN_SQL = "run.googleapis.com/cloudsql-instances"
+_ANN_TARGET = "autoscaling.knative.dev/target-utilization-percentage"
+_ANN_CPU_TARGET = "run.googleapis.com/autoscaling-target-cpu-utilization"
+
+
+def _ref(store, kind, *args):
+    fn = getattr(store, "refs", None)
+    if not callable(fn):
+        return None
+    try:
+        return fn(kind, *args)
+    except Exception:   # noqa: BLE001 — a sibling store hiccup must never fail a deploy
+        return None
+
+
+def _int_in(v, lo, hi, what):
+    if isinstance(v, bool) or not isinstance(v, int) or v < lo or v > hi:
+        raise _E(400, "INVALID_ARGUMENT", "%s must be an integer between %d and %d." % (what, lo, hi))
+    return v
+
+
+def _check_probe(p, which, where):
+    if not isinstance(p, dict):
+        raise _E(400, "INVALID_ARGUMENT", "%s must be an object." % where)
+    kinds = [k for k in ("httpGet", "tcpSocket", "grpc") if p.get(k) is not None]
+    if len(kinds) != 1:
+        raise _E(400, "INVALID_ARGUMENT", "%s: exactly one of httpGet, tcpSocket or grpc must be set." % where)
+    period = _int_in(p.get("periodSeconds", 10), 1, 240, where + ".periodSeconds")
+    timeout = _int_in(p.get("timeoutSeconds", 1), 0, 3600, where + ".timeoutSeconds")
+    if timeout > period:
+        raise _E(400, "INVALID_ARGUMENT", "%s.timeoutSeconds (%d) must not exceed periodSeconds (%d)." % (where, timeout, period))
+    _int_in(p.get("initialDelaySeconds", 0), 0, 240, where + ".initialDelaySeconds")
+    _int_in(p.get("failureThreshold", 3), 1, 1000, where + ".failureThreshold")
+    k = kinds[0]
+    port = (p[k] or {}).get("port")
+    if k == "httpGet":
+        path = (p[k] or {}).get("path", "/")
+        if not str(path).startswith("/"):
+            raise _E(400, "INVALID_ARGUMENT", "%s.httpGet.path must start with '/'." % where)
+        for h in (p[k] or {}).get("httpHeaders") or []:
+            if not isinstance(h, dict) or not h.get("name"):
+                raise _E(400, "INVALID_ARGUMENT", "%s.httpGet.httpHeaders entries need a name." % where)
+    if port is not None:
+        _int_in(port, 1, 65535, "%s.%s.port" % (where, k))
+    if which == "liveness" and k == "grpc" and not p[k]:
+        pass
+
+
+def _check_volumes(spec, is_job, store, project):
+    vols = spec.get("volumes") or []
+    if not isinstance(vols, list):
+        raise _E(400, "INVALID_ARGUMENT", "template.volumes must be a list.")
+    names, gen1 = {}, spec.get("executionEnvironment") == "EXECUTION_ENVIRONMENT_GEN1"
+    for i, v in enumerate(vols):
+        w = "template.volumes[%d]" % i
+        if not isinstance(v, dict) or not v.get("name"):
+            raise _E(400, "INVALID_ARGUMENT", "%s.name is required." % w)
+        if not re.match(r"^[a-z0-9]([-a-z0-9_.]*[a-z0-9])?$", v["name"]) or len(v["name"]) > 63:
+            raise _E(400, "INVALID_ARGUMENT", "%s.name %r is not a valid volume name." % (w, v["name"]))
+        if v["name"] in names:
+            raise _E(400, "INVALID_ARGUMENT", "Volume name %r is used more than once." % v["name"])
+        kinds = [k for k in ("secret", "cloudSqlInstance", "emptyDir", "nfs", "gcs") if v.get(k) is not None]
+        if len(kinds) != 1:
+            raise _E(400, "INVALID_ARGUMENT", "%s: exactly one of secret, cloudSqlInstance, emptyDir, nfs or gcs must be set." % w)
+        kind = kinds[0]
+        names[v["name"]] = kind
+        body = v[kind] or {}
+        if kind == "emptyDir":
+            if body.get("medium") not in (None, "", "MEMORY", "MEDIUM_UNSPECIFIED", "DISK"):
+                raise _E(400, "INVALID_ARGUMENT", "%s.emptyDir.medium must be MEMORY (in-memory) or DISK." % w)
+            if body.get("sizeLimit") and not _QTY.match(str(body["sizeLimit"])):
+                raise _E(400, "INVALID_ARGUMENT", "%s.emptyDir.sizeLimit %r is not a valid quantity (e.g. 512Mi, 10Gi)." % (w, body["sizeLimit"]))
+            if body.get("medium") == "DISK" and gen1:
+                raise _E(400, "INVALID_ARGUMENT", "Ephemeral disk (emptyDir medium DISK) requires the second-generation execution environment.")
+            if body.get("medium") == "DISK" and not body.get("sizeLimit"):
+                raise _E(400, "INVALID_ARGUMENT", "%s.emptyDir.sizeLimit is required for an ephemeral disk." % w)
+        elif kind == "cloudSqlInstance":
+            insts = body.get("instances") or []
+            if not insts or not isinstance(insts, list):
+                raise _E(400, "INVALID_ARGUMENT", "%s.cloudSqlInstance.instances must list at least one connection name." % w)
+            _check_sql_instances(insts, store)
+        elif kind == "secret":
+            if not body.get("secret"):
+                raise _E(400, "INVALID_ARGUMENT", "%s.secret.secret (Secret Manager secret name) is required." % w)
+            if _ref(store, "secret", project, str(body["secret"]).rsplit("/", 1)[-1]) is False:
+                raise _E(400, "INVALID_ARGUMENT", "Secret Manager secret '%s' does not exist." % body["secret"])
+            for it in body.get("items") or []:
+                if not isinstance(it, dict) or not it.get("path") or not it.get("version"):
+                    raise _E(400, "INVALID_ARGUMENT", "%s.secret.items entries need a path and a version." % w)
+        elif kind == "nfs":
+            if not body.get("server") or not str(body.get("path", "")).startswith("/"):
+                raise _E(400, "INVALID_ARGUMENT", "%s.nfs needs a server and an absolute path." % w)
+            if gen1:
+                raise _E(400, "INVALID_ARGUMENT", "NFS volumes require the second-generation execution environment.")
+        elif kind == "gcs":
+            if not body.get("bucket"):
+                raise _E(400, "INVALID_ARGUMENT", "%s.gcs.bucket is required." % w)
+            if _ref(store, "bucket", str(body["bucket"])) is False:
+                raise _E(400, "INVALID_ARGUMENT", "Cloud Storage bucket '%s' does not exist." % body["bucket"])
+            if gen1:
+                raise _E(400, "INVALID_ARGUMENT", "Cloud Storage volumes require the second-generation execution environment.")
+    paths = set()
+    for ci, c in enumerate(spec.get("containers") or []):
+        for m in c.get("volumeMounts") or []:
+            w = "template.containers[%d].volumeMounts" % ci
+            if not isinstance(m, dict) or m.get("name") not in names:
+                raise _E(400, "INVALID_ARGUMENT", "%s references volume %r, which is not defined in template.volumes." % (w, (m or {}).get("name")))
+            mp = m.get("mountPath", "")
+            if not str(mp).startswith("/"):
+                raise _E(400, "INVALID_ARGUMENT", "%s mountPath %r must be an absolute path." % (w, mp))
+            if names[m["name"]] == "cloudSqlInstance" and mp != "/cloudsql":
+                raise _E(400, "INVALID_ARGUMENT", "A Cloud SQL volume must be mounted at /cloudsql (got %r)." % mp)
+            if (ci, mp) in paths:
+                raise _E(400, "INVALID_ARGUMENT", "Mount path %r is used more than once in container %d." % (mp, ci))
+            paths.add((ci, mp))
+    used = {m.get("name") for c in (spec.get("containers") or []) for m in (c.get("volumeMounts") or [])}
+    for n, kind in names.items():
+        if n not in used and kind != "cloudSqlInstance":
+            raise _E(400, "INVALID_ARGUMENT", "Volume %r is defined but not mounted by any container." % n)
+
+
+def _check_sql_instances(insts, store):
+    for conn in insts:
+        if not isinstance(conn, str) or not _SQL_INST.match(conn):
+            raise _E(400, "INVALID_ARGUMENT", "Invalid Cloud SQL connection name %r (expected PROJECT:REGION:INSTANCE)." % (conn,))
+        proj, _reg, name = conn.split(":")
+        if _ref(store, "sql", proj, name) is False:
+            raise _E(400, "INVALID_ARGUMENT", "Cloud SQL instance '%s' does not exist." % conn)
+
+
+def _validate_template_ext(spec, is_job, store, project, location):
+    ann = spec.get("annotations") or {}
+    for c in spec.get("containers") or []:
+        for key, which in (("startupProbe", "startup"), ("livenessProbe", "liveness")):
+            if c.get(key) is not None:
+                if is_job:
+                    raise _E(400, "INVALID_ARGUMENT", "Jobs do not support %s." % key)
+                _check_probe(c[key], which, "container.%s" % key)
+    _check_volumes(spec, is_job, store, project)
+    if ann.get(_ANN_SQL):   # the annotation form functions / gcloud use
+        _check_sql_instances([x.strip() for x in str(ann[_ANN_SQL]).split(",") if x.strip()], store)
+    if not is_job:
+        for k in (_ANN_TARGET, _ANN_CPU_TARGET):
+            if ann.get(k) is not None:
+                try:
+                    ok = 1 <= int(ann[k]) <= 100
+                except (TypeError, ValueError):
+                    ok = False
+                if not ok:
+                    raise _E(400, "INVALID_ARGUMENT", "Annotation %s must be an integer between 1 and 100." % k)
+    key = spec.get("encryptionKey")
+    if key:
+        m = _KMS_KEY.match(str(key))
+        if not m:
+            raise _E(400, "INVALID_ARGUMENT", "template.encryptionKey must be a Cloud KMS CryptoKey (projects/P/locations/L/keyRings/R/cryptoKeys/K).")
+        if location and m.group(2) not in (location, "global"):
+            raise _E(400, "INVALID_ARGUMENT", "The Cloud KMS key location %r must match the region %r." % (m.group(2), location))
+        if _ref(store, "kms", str(key)) is False:
+            raise _E(400, "INVALID_ARGUMENT", "Cloud KMS key '%s' does not exist." % key)
+        if spec.get("encryptionKeyRevocationAction") not in (None, "", "PREVENT_NEW", "SHUTDOWN", "ENCRYPTION_KEY_REVOCATION_ACTION_UNSPECIFIED"):
+            raise _E(400, "INVALID_ARGUMENT", "encryptionKeyRevocationAction must be PREVENT_NEW or SHUTDOWN.")
+    elif spec.get("encryptionKeyRevocationAction") or spec.get("encryptionKeyShutdownDuration"):
+        raise _E(400, "INVALID_ARGUMENT", "encryptionKeyRevocationAction requires template.encryptionKey.")
+
+
+def _check_binauthz(b):
+    if b is None:
+        return
+    if not isinstance(b, dict) or bool(b.get("useDefault")) == bool(b.get("policy")):
+        raise _E(400, "INVALID_ARGUMENT", "binaryAuthorization: set exactly one of useDefault or policy.")
+    if b.get("policy") and not re.match(r"^projects/[^/]+/platforms/cloudRun/policies/[^/]+$", str(b["policy"])):
+        raise _E(400, "INVALID_ARGUMENT", "binaryAuthorization.policy must look like projects/P/platforms/cloudRun/policies/default.")
+
+
+def _check_tags(traffic):
+    seen = set()
+    for tt in traffic or []:
+        tag = tt.get("tag")
+        if not tag:
+            continue
+        if not _TAG_RE.match(str(tag)):
+            raise _E(400, "INVALID_ARGUMENT", "Invalid revision tag %r: use lowercase letters, digits and '-', start with a letter (max 47)." % tag)
+        if tag in seen:
+            raise _E(400, "INVALID_ARGUMENT", "Revision tag %r is assigned to more than one traffic target." % tag)
+        seen.add(tag)
+
+
+def desired_instances(template, in_flight=0, cpu_utilization=0.0):
+    """What the autoscaler would run for this load: the real Cloud Run rule of thumb.
+    Concurrency-bound (in_flight / (concurrency x target utilisation)), raised by the CPU target,
+    then clamped to the revision's min/max instance counts. Pure — the console shows it."""
+    sc = template.get("scaling") or {}
+    lo, hi = int(sc.get("minInstanceCount") or 0), int(sc.get("maxInstanceCount") or 0) or 100
+    ann = template.get("annotations") or {}
+    conc = int(template.get("maxInstanceRequestConcurrency") or 80) or 1
+    tgt = int(ann.get(_ANN_TARGET) or 60) / 100.0
+    cpu_tgt = int(ann.get(_ANN_CPU_TARGET) or 60) / 100.0
+    by_conc = -(-in_flight // max(1, int(conc * tgt))) if in_flight else 0
+    base = max(1, lo) if in_flight or cpu_utilization else lo
+    by_cpu = 0
+    if cpu_utilization:
+        by_cpu = max(1, int(-(-cpu_utilization // cpu_tgt))) if cpu_utilization > cpu_tgt else 1
+    return max(lo, min(hi, max(by_conc, by_cpu, 1 if (in_flight or cpu_utilization) else 0, base if in_flight else 0)))
 
 
 # ── inline function source (Cloud Run functions: the "Function" deploy source) ─────────────
@@ -566,7 +783,9 @@ def create_service(store, project, location, query, payload):
         if spec.get(k) is not None:
             _check_map(spec[k], k)
     _validate_function_source(spec.get("annotations"))
-    template = _revision_template(project, spec["template"], False)
+    template = _revision_template(project, spec["template"], False, store, location)
+    _check_binauthz(spec.get("binaryAuthorization"))
+    _check_tags(spec.get("traffic"))
     traffic = spec.get("traffic") or [{"type": LATEST, "percent": 100}]
     now = _ts()
     svc = {"name": full, "description": spec.get("description", ""), "uid": _uid(store, "svc", full),
@@ -632,7 +851,7 @@ def update_service(store, project, location, sid, query, payload):
         if f in ("labels", "annotations"):
             _check_map(spec[f], f)
         if f == "template":
-            tpl = _revision_template(project, spec["template"], False)
+            tpl = _revision_template(project, spec["template"], False, store, location)
             cur = _copy(svc["template"])
             cur.pop("revision", None)
             differs = json.dumps(cur, sort_keys=True) != json.dumps({k: v for k, v in tpl.items() if k != "revision"}, sort_keys=True)
@@ -645,7 +864,10 @@ def update_service(store, project, location, sid, query, payload):
             new["template"] = tpl
         else:
             new[f] = spec[f]
+    if "binaryAuthorization" in fields:
+        _check_binauthz(new.get("binaryAuthorization"))
     if "traffic" in fields:
+        _check_tags(new.get("traffic", []))
         _traffic_check(store, full, new.get("traffic", []))
         if not new.get("traffic"):
             new["traffic"] = [{"type": LATEST, "percent": 100}]
@@ -708,11 +930,11 @@ def delete_revision(store, project, location, sid, rid, query):
 
 
 # ── jobs ───────────────────────────────────────────────────────────────────
-def _job_template(project, spec):
+def _job_template(project, spec, store=None, location=""):
     spec = dict(spec or {})
     if not spec.get("template"):
         raise _E(400, "INVALID_ARGUMENT", "template.template is required (the task template).")
-    task = _revision_template(project, spec["template"], True)
+    task = _revision_template(project, spec["template"], True, store, location)
     out = {"labels": spec.get("labels", {}) or {}, "annotations": spec.get("annotations", {}) or {},
            "parallelism": spec.get("parallelism", 1), "taskCount": spec.get("taskCount", 1), "template": task}
     for k in ("parallelism", "taskCount"):
@@ -756,7 +978,7 @@ def create_job(store, project, location, query, payload):
            "labels": spec.get("labels", {}) or {}, "annotations": spec.get("annotations", {}) or {},
            "createTime": now, "creator": "admin@vyomi.cloud", "lastModifier": "admin@vyomi.cloud",
            "client": spec.get("client", ""), "clientVersion": spec.get("clientVersion", ""),
-           "launchStage": spec.get("launchStage") or "GA", "template": _job_template(project, spec.get("template")),
+           "launchStage": spec.get("launchStage") or "GA", "template": _job_template(project, spec.get("template"), store, location),
            "executionCount": 0}
     if query.get("validateOnly") in ("true", "True", True):
         return _operation(store, project, location, "job", job_view(job))
@@ -792,7 +1014,7 @@ def update_job(store, project, location, jid, query, payload):
             _check_map(spec[f], f)
             new[f] = spec[f]
         elif f == "template":
-            new["template"] = _job_template(project, spec["template"])
+            new["template"] = _job_template(project, spec["template"], store, location)
         else:
             new[f] = spec[f]
     if query.get("validateOnly") in ("true", "True", True):
@@ -1479,7 +1701,7 @@ def create_worker_pool(store, project, location, query, payload):
     for k in ("labels", "annotations"):
         if spec.get(k) is not None:
             _check_map(spec[k], k)
-    template = _revision_template(project, spec.get("template"), False)
+    template = _revision_template(project, spec.get("template"), False, store, location)
     now = _ts()
     wp = {"name": full, "description": spec.get("description", ""), "uid": _uid(store, "wp", full),
           "generation": "1", "labels": spec.get("labels", {}) or {}, "annotations": spec.get("annotations", {}) or {},
@@ -1714,7 +1936,8 @@ def _operations(store, method, project, location, rest, verb, query):
 # time rather than accepted and silently never firing — see core/capabilities/gcp/functions.json.
 # Delivery is deliver_event alone, wired from the Pub/Sub core's on_publish hook
 # (core/aws_wire_router.py, routes/gcp_pubsub_unified.py), so a publish fires a trigger once.
-TRIGGER_EVENT_TYPES = ("google.cloud.pubsub.topic.v1.messagePublished",)
+STORAGE_EVENT_TYPES = ("google.cloud.storage.object.v1.finalized", "google.cloud.storage.object.v1.deleted")
+TRIGGER_EVENT_TYPES = ("google.cloud.pubsub.topic.v1.messagePublished",) + STORAGE_EVENT_TYPES
 _TOPIC_RE = re.compile(r"^projects/[^/]+/topics/[^/]+$")
 
 
@@ -1772,8 +1995,9 @@ def create_trigger(store, project, location, sid, query, payload, topic_exists=N
         raise _E(400, "INVALID_ARGUMENT", "eventFilters must include an entry with attribute \"type\".")
     if event_type not in TRIGGER_EVENT_TYPES:
         raise _E(400, "INVALID_ARGUMENT",
-                 "Event type %r is not simulated: Vyomi has no event source for it (only %s). "
-                 "Use a Pub/Sub-sourced custom event." % (event_type, ", ".join(TRIGGER_EVENT_TYPES)))
+                 "Event type %r is not simulated: Vyomi has no event source for it (only %s)." % (event_type, ", ".join(TRIGGER_EVENT_TYPES)))
+    if event_type in STORAGE_EVENT_TYPES:
+        return _create_storage_trigger(store, project, location, sid, tid, tfull, filters, event_type, payload, alias)
     topic = str(payload.get("pubsubTopic") or ((payload.get("transport") or {}).get("pubsub") or {}).get("topic") or "").strip()
     if not topic:
         raise _E(400, "INVALID_ARGUMENT", "pubsubTopic (or transport.pubsub.topic) is required for event type %r." % event_type)
@@ -1805,6 +2029,51 @@ def create_trigger(store, project, location, sid, query, payload, topic_exists=N
             trig["_subscription"] = sub_full
     store.triggers[tfull] = trig
     return trigger_view(trig, alias)
+
+
+def _create_storage_trigger(store, project, location, sid, tid, tfull, filters, event_type, payload, alias):
+    bucket = next((f.get("value") for f in filters if isinstance(f, dict) and f.get("attribute") == "bucket"), "")
+    if not bucket:
+        raise _E(400, "INVALID_ARGUMENT", "A Cloud Storage trigger needs an eventFilters entry with attribute \"bucket\".")
+    if _ref(store, "bucket", bucket) is False:
+        raise _E(400, "INVALID_ARGUMENT", "Cloud Storage bucket '%s' does not exist." % bucket)
+    now = _ts()
+    trig = {"name": tfull, "uid": _uid(store, "trg", tfull), "createTime": now, "updateTime": now,
+            "eventFilters": _copy(filters), "eventType": event_type, "bucket": bucket,
+            "serviceAccount": payload.get("serviceAccount") or "%s-compute@developer.gserviceaccount.com" % project_number(project),
+            "destination": {"service": sid, "region": location, "cloudRun": {"service": sid, "region": location, "path": "/"}},
+            "labels": payload.get("labels") or {}, "state": "ACTIVE",
+            "etag": '"%s"' % _h("trg", tfull, now)[:16],
+            "_eventCount": 0, "_lastEventTime": "", "_lastError": ""}
+    store.triggers[tfull] = trig
+    return trigger_view(trig, alias)
+
+
+def deliver_storage_event(store, bucket, name, event, obj, log_fn=None):
+    """A real object finalize/delete in `bucket` -> one CloudEvent request to every Cloud Storage
+    trigger bound to it (same never-raises contract as deliver_event)."""
+    etype = "google.cloud.storage.object.v1.%s" % event
+    for full, trg in list(store.triggers.items()):
+        if trg.get("eventType") != etype or trg.get("bucket") != bucket:
+            continue
+        parts = full.split("/")
+        project, location, sid, tid = parts[1], parts[3], parts[5], parts[7]
+        ev = {"specversion": "1.0", "type": etype, "id": "%s-%s" % (_h("evt", full, name)[:8], trg.get("_eventCount", 0) + 1),
+              "source": "//storage.googleapis.com/projects/_/buckets/%s" % bucket, "subject": "objects/%s" % name,
+              "time": _ts(), "data": obj}
+        error = ""
+        try:
+            out = invoke_service(store, project, location, sid, ev, internal=True)
+            if out["status"] >= 500:
+                error = str(out["body"].get("error", "")) if isinstance(out["body"], dict) else "delivery failed"
+        except Exception as e:   # noqa: BLE001
+            error = getattr(e, "message", str(e))
+        trg["_eventCount"] = trg.get("_eventCount", 0) + (0 if error else 1)
+        trg["_lastEventTime"] = _ts()
+        trg["_lastError"] = error
+        if log_fn:
+            log_fn("service", project, location, sid, "Eventarc trigger %s %s for gs://%s/%s" % (tid, "failed: " + error if error else "delivered %s" % etype, bucket, name),
+                   "ERROR" if error else "INFO")
 
 
 def delete_trigger(store, project, location, sid, tid, alias=False):
