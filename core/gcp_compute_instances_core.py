@@ -87,6 +87,7 @@ class ComputeStore:
         self.health_checks: dict = {}      # "projects/p/global/healthChecks/n" -> resource
         self.operations: dict = {}         # "projects/p/(zones/z|global)/operations/n" -> resource
         self.project_metadata: dict = {}   # project -> commonInstanceMetadata
+        self.ext: dict = {}                # core/gcp_compute_ext_core collections (policies, reservations, node groups, ...)
         self.seq = {"op": 0, "id": 1000}
 
 
@@ -294,6 +295,13 @@ def insert_instance(store, project, zone, payload):
     mt_name, mt_link = _mt_full(project, zone, payload.get("machineType") or "e2-medium")
     if mt_name not in MACHINE_SHAPES:
         raise _E(400, "INVALID_ARGUMENT", "Invalid value for field 'machineType': %r." % mt_name)
+    from core import gcp_compute_ext_core as _ext
+    _ext.check_instance_placement(store, project, zone, payload, name)
+    nets = [_last(n.get("network") or "default") for n in (payload.get("networkInterfaces") or [{}])]
+    if len(nets) > 8:
+        raise _E(400, "INVALID_ARGUMENT", "An instance supports at most 8 network interfaces.")
+    if len(set(nets)) != len(nets):
+        raise _E(400, "INVALID_ARGUMENT", "Multiple network interfaces cannot be in the same VPC network.")
     now = _ts()
     disks_in = payload.get("disks") or []
     disks_out = []
@@ -327,12 +335,12 @@ def insert_instance(store, project, zone, payload):
     nis_in = payload.get("networkInterfaces") or [{}]
     nis_out = []
     internal_ip = external_ip = None
-    for ni in nis_in:
-        internal_ip = ni.get("networkIP") or _synthetic_ip("10.128", full)
+    for nidx, ni in enumerate(nis_in):
+        internal_ip = ni.get("networkIP") or _synthetic_ip("10.%d" % (128 + nidx), full)
         net = ni.get("network") or _selflink("projects/%s/global/networks/default" % project)
         sub = ni.get("subnetwork") or _selflink("projects/%s/regions/%s/subnetworks/default" % (project, _region_of(zone)))
         access = ni.get("accessConfigs")
-        out_ni = {"name": "nic0", "network": net, "subnetwork": sub, "networkIP": internal_ip,
+        out_ni = {"name": "nic%d" % nidx, "network": net, "subnetwork": sub, "networkIP": internal_ip,
                   "stackType": "IPV4_ONLY", "fingerprint": _fingerprint(ni)}
         if access is None:
             external_ip = _synthetic_ip("34.72", full + "x")
@@ -362,6 +370,7 @@ def insert_instance(store, project, zone, payload):
         "selfLink": _selflink(full), "_zone": zone, "_internalIp": internal_ip, "_externalIp": external_ip,
     }
     store.instances[full] = inst
+    _ext.finish_instance_insert(store, project, zone, name, payload)
     return _operation(store, project, zone, "insert", name, _selflink(full))
 
 
@@ -515,11 +524,14 @@ def insert_disk(store, project, zone, payload):
     dtype = _last(payload.get("type") or DEFAULT_DISK_TYPE)
     if dtype not in DISK_TYPES:
         raise _E(400, "INVALID_ARGUMENT", "Invalid value for field 'type': %r." % dtype)
+    from core import gcp_compute_ext_core as _ext
+    payload = _ext.prepare_disk_payload(store, project, zone, dict(payload, type=dtype))
     _insert_disk_record(store, project, zone, name, {
         "sizeGb": payload.get("sizeGb") or DEFAULT_DISK_GB, "type": dtype,
         "sourceImage": payload.get("sourceImage"), "sourceSnapshot": payload.get("sourceSnapshot"),
         "labels": payload.get("labels"),
     })
+    _ext.finish_disk_insert(store, project, zone, name, payload)
     return _operation(store, project, zone, "insert", name, _selflink(full))
 
 
@@ -551,6 +563,8 @@ def delete_disk(store, project, zone, name):
     full, disk = _disk(store, project, zone, name)
     if disk.get("users"):
         raise _E(400, "RESOURCE_IN_USE_BY_ANOTHER_RESOURCE", "The disk resource '%s' is already being used by '%s'." % (name, disk["users"][0]))
+    if disk.get("asyncPrimaryDisk") or disk.get("asyncSecondaryDisks"):
+        raise _E(400, "FAILED_PRECONDITION", "The disk '%s' is part of an async replication pair; stop replication first." % name)
     del store.disks[full]
     return _operation(store, project, zone, "delete", name, _selflink(full))
 
@@ -1145,6 +1159,10 @@ def _body(body):
 
 def _dispatch(store, method, path, query, headers, body):
     p = path.split("?", 1)[0]
+    from core import gcp_compute_ext_core as _ext
+    _ext.tick(store)          # due instance-schedule start/stops + snapshot-schedule fires (lazy scheduler)
+    if p.startswith("/v1/projects/") and "/recommenders" in p:
+        return _ext.recommender_dispatch(store, method, p.rstrip("/"), query, _body(body))
     for pre in ("/compute/beta", "/compute/v1"):
         if p.startswith(pre + "/") or p == pre:
             p = p[len(pre):]
@@ -1159,6 +1177,9 @@ def _dispatch(store, method, path, query, headers, body):
     project = segs[1]
     rest = segs[2:]
     payload = _body(body)
+    ext_resp = _ext.handle(store, method, project, rest, verb, payload, query)
+    if ext_resp is not None:
+        return ext_resp
 
     if not rest:
         if method == "GET":

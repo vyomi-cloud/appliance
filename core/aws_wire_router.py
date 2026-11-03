@@ -97,6 +97,8 @@ def _gcp_service(path):
         return "gcp-logging"
     if re.match(r"^/v2/projects/[^/]+/locations/[^/]+/buckets", path):
         return "gcp-logging"
+    if re.match(r"^/v1/projects/[^/]+/locations/[^/]+/recommenders([/:]|$)", path):
+        return "gcp-compute-vm"   # Recommender API v1 — recommendations computed from live Compute state (core/gcp_compute_ext_core)
     if path.startswith(("/compute/v1", "/compute/beta")):
         # VPC resources → the networking core; everything else (instances, disks, images,
         # templates, groups, health checks…) → the VM core.
