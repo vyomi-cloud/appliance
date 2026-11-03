@@ -2230,7 +2230,8 @@ def _taggable_collections(m: dict) -> list:
             m["vpcs"], m["subnets"], m["route_tables"], m["igws"], m["nacls"], m["nat_gateways"],
             m["eigws"], m["dhcp_options"], m["prefix_lists"], m["peering_connections"], m["route_servers"],
             m.get("tgws", {}), m.get("tgw_attachments", {}), m.get("tgw_rts", {}),
-            m.get("customer_gateways", {}), m.get("vgws", {}), m.get("vpn_connections", {}),
+            m.get("customer_gateways", {}), m.get("vgws", {}), m.get("vpn_connections", {}), m.get("cvpn_endpoints", {}),
+            m.get("vpn_concentrators", {}),
             m.get("flow_logs", {}), m.get("insights_paths", {}), m.get("insights_analyses", {})]
 
 
@@ -4502,6 +4503,8 @@ def adopt_legacy_slot(service_states: dict, legacy: dict | None = None):
 _OPS.update(_TGW_OPS)   # the offline server (server.py) routes by `action in _OPS`
 from core import vpc_vpn_core as _vpn_core   # noqa: E402  (lazy-imports vpc_core back; no cycle at import time)
 _OPS.update(_vpn_core.OPS)
+from core import vpc_extras_core as _extras_core   # noqa: E402
+_OPS.update(_extras_core.OPS)
 
 
 def dispatch(store, params: dict | None = None) -> VpcResponse:

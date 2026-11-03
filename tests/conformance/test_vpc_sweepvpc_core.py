@@ -83,8 +83,43 @@ def vpn():
     c({"Action": "DeleteCustomerGateway", "CustomerGatewayId": cgw})
 
 
+def client_vpn():
+    e = Env(); c = e.call
+    vpc_id = e.id(c({"Action": "CreateVpc", "CidrBlock": "10.71.0.0/16"}), "vpcId")
+    s1 = e.id(c({"Action": "CreateSubnet", "VpcId": vpc_id, "CidrBlock": "10.71.1.0/24", "AvailabilityZone": "us-east-1a"}), "subnetId")
+    s2 = e.id(c({"Action": "CreateSubnet", "VpcId": vpc_id, "CidrBlock": "10.71.2.0/24", "AvailabilityZone": "us-east-1a"}), "subnetId")
+    s3 = e.id(c({"Action": "CreateSubnet", "VpcId": vpc_id, "CidrBlock": "10.71.3.0/24", "AvailabilityZone": "us-east-1b"}), "subnetId")
+    base = {"Action": "CreateClientVpnEndpoint", "ClientCidrBlock": "10.99.0.0/16", "ServerCertificateArn": "arn:aws:acm:us-east-1:123456789012:certificate/x",
+            "Authentication.1.Type": "certificate-authentication", "Authentication.1.MutualAuthentication.ClientRootCertificateChainArn": "arn:aws:acm:us-east-1:123456789012:certificate/c"}
+    c({**base, "ClientCidrBlock": "10.99.0.0/28"}, ok=False)
+    c({k: v for k, v in base.items() if not k.startswith("Authentication")}, ok=False)
+    eid = e.id(c(base), "clientVpnEndpointId")
+    _check("new endpoint is pending-associate", "<code>pending-associate</code>" in c({"Action": "DescribeClientVpnEndpoints", "ClientVpnEndpointId.1": eid}))
+    c({"Action": "AssociateClientVpnTargetNetwork", "ClientVpnEndpointId": eid, "SubnetId": s1})
+    _check("association makes the endpoint available", "<code>available</code>" in c({"Action": "DescribeClientVpnEndpoints", "ClientVpnEndpointId.1": eid}))
+    _check("second subnet in the same AZ rejected", "Duplicate" in c({"Action": "AssociateClientVpnTargetNetwork", "ClientVpnEndpointId": eid, "SubnetId": s2}, ok=False))
+    c({"Action": "AssociateClientVpnTargetNetwork", "ClientVpnEndpointId": eid, "SubnetId": s3})
+    _check("VPC-CIDR route auto-created", "<destinationCidr>10.71.0.0/16</destinationCidr>" in c({"Action": "DescribeClientVpnRoutes", "ClientVpnEndpointId": eid}))
+    c({"Action": "AuthorizeClientVpnIngress", "ClientVpnEndpointId": eid, "TargetNetworkCidr": "10.71.0.0/16", "AuthorizeAllGroups": "true"})
+    c({"Action": "AuthorizeClientVpnIngress", "ClientVpnEndpointId": eid, "TargetNetworkCidr": "10.71.0.0/16", "AuthorizeAllGroups": "true"}, ok=False)
+    c({"Action": "AuthorizeClientVpnIngress", "ClientVpnEndpointId": eid, "TargetNetworkCidr": "10.0.0.0/8"}, ok=False)
+    _check("rule listed", "<accessAll>true</accessAll>" in c({"Action": "DescribeClientVpnAuthorizationRules", "ClientVpnEndpointId": eid}))
+    c({"Action": "CreateClientVpnRoute", "ClientVpnEndpointId": eid, "DestinationCidrBlock": "0.0.0.0/0", "TargetVpcSubnetId": s1})
+    c({"Action": "CreateClientVpnRoute", "ClientVpnEndpointId": eid, "DestinationCidrBlock": "1.0.0.0/8", "TargetVpcSubnetId": "subnet-nope"}, ok=False)
+    c({"Action": "DeleteClientVpnEndpoint", "ClientVpnEndpointId": eid}, ok=False)
+    _check("connections list honest (empty)", "<connections></connections>" in c({"Action": "DescribeClientVpnConnections", "ClientVpnEndpointId": eid}))
+    for a in __import__("re").findall(r"<associationId>(.*?)</associationId>", c({"Action": "DescribeClientVpnTargetNetworks", "ClientVpnEndpointId": eid})):
+        c({"Action": "DisassociateClientVpnTargetNetwork", "ClientVpnEndpointId": eid, "AssociationId": a})
+    c({"Action": "DeleteClientVpnEndpoint", "ClientVpnEndpointId": eid})
+    tg = e.id(c({"Action": "CreateTransitGateway"}), "transitGatewayId")
+    vc = e.id(c({"Action": "CreateVpnConcentrator", "TransitGatewayId": tg, "Type": "ipsec.1"}), "vpnConcentratorId")
+    c({"Action": "CreateVpnConcentrator", "TransitGatewayId": "tgw-nope"}, ok=False)
+    _check("concentrator listed + deleted", vc in c({"Action": "DescribeVpnConcentrators"}) and (c({"Action": "DeleteVpnConcentrator", "VpnConcentratorId": vc}) and vc not in c({"Action": "DescribeVpnConcentrators"})))
+
+
 def main():
     vpn()
+    client_vpn()
     print("\nVPC sweep: ALL GREEN")
 
 
