@@ -194,5 +194,83 @@
     "tests": [
       "tests/conformance/test_awsb_sweep_core.py"
     ]
+  },
+  "eventbridge.bus.kms-encryption": {
+    "title": "Event bus + archive encryption with a customer KMS key (events stored as real KMS ciphertext)",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "Encryption is applied to Vyomi's bounded per-bus event log through the real KMS core (Encrypt on PutEvents, Decrypt on archive read/replay); a disabled key blocks PutEvents and makes archived payloads unreadable. Key grants / key-policy checks for the events.amazonaws.com principal and the encryption-context binding are not modeled."
+    ],
+    "tests": [
+      "tests/conformance/test_eventbridge_sweep_core.py"
+    ]
+  },
+  "eventbridge.bus.logs": {
+    "title": "Event bus logs delivered to CloudWatch Logs (LogConfig Level/IncludeDetail)",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "Only the CloudWatch Logs destination is modeled (log group /aws/vendedlogs/events/event-bus/<bus>); S3 and Firehose log destinations and per-delivery-destination configuration are not. Records cover event receipt, rule-target invocation outcome, no-match and policy denial; they are emitted synchronously."
+    ],
+    "tests": [
+      "tests/conformance/test_eventbridge_sweep_core.py"
+    ]
+  },
+  "eventbridge.bus.resource-policy": {
+    "title": "Event bus resource-based policy (PutPermission/RemovePermission) enforced on cross-account PutEvents",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "The caller's account comes from the x-amz-account-id request header (Vyomi has one real account; SigV4 is not verified). Evaluation covers Principal account/*, events:PutEvents/events:*/* Actions and explicit Deny; Condition blocks (aws:PrincipalOrgID, etc.) are stored but not evaluated. Policy is enforced for PutEvents only."
+    ],
+    "tests": [
+      "tests/conformance/test_eventbridge_sweep_core.py"
+    ]
+  },
+  "eventbridge.bus.archive-at-create": {
+    "title": "Attach an archive while creating an event bus",
+    "level": {
+      "nano": "full",
+      "offline": "full"
+    },
+    "limitations": [
+      "Console convenience: CreateEventBus has no archive parameter in the real API either; the console issues CreateArchive right after the bus is created, and so does Vyomi's."
+    ],
+    "tests": [
+      "tests/conformance/test_eventbridge_sweep_core.py"
+    ]
+  },
+  "eventbridge.schemas.registry": {
+    "title": "EventBridge Schemas: registries, schemas and versions (REST CRUD, search)",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "The AWS-managed aws.events registry is not shipped; only registries and schemas you create or discover exist. Schema content is validated as JSON only (OpenApi3 / JSONSchemaDraft4 structure is not checked); code bindings and GetCodeBindingSource are not modeled."
+    ],
+    "tests": [
+      "tests/conformance/test_eventbridge_schemas_core.py"
+    ]
+  },
+  "eventbridge.schemas.discovery": {
+    "title": "Schema discovery: discoverers infer OpenAPI schemas from PutEvents on a bus",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "Inference is a structural JSON-type inference (string/number/boolean/object/array, nullable not modeled) producing OpenApi3; new versions are created when the shape changes. Cross-account and partner buses are not discovered."
+    ],
+    "tests": [
+      "tests/conformance/test_eventbridge_schemas_core.py"
+    ]
   }
 }

@@ -191,5 +191,44 @@
   "limitations": [
    "Spotlight is an editorial content feed, not an API surface — out of Vyomi's scope."
   ]
+ },
+ "aws.cloudformation.stack.policy": {
+  "title": "Stack policy enforced on UpdateStack (Update:Modify/Replace/Delete, per-resource, StackPolicyDuringUpdateBody)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Decisions use the template diff (raw resource definitions + changed parameters): a changed property is treated as Update:Modify and a type change as Update:Replace — CloudFormation's per-property replacement-vs-modify knowledge is not modeled. Principal is not evaluated (always \"*\"); Condition supports ResourceType only. A denied update fails asynchronously and ends UPDATE_ROLLBACK_COMPLETE with nothing changed."
+  ],
+  "tests": [
+   "tests/conformance/test_cfn_sweep_core.py"
+  ]
+ },
+ "aws.cloudformation.stack.rollback-triggers": {
+  "title": "Rollback configuration: CloudWatch alarm triggers roll the stack back to the previous template",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Alarm state is evaluated once, right after the operation completes (Vyomi has no background timer), so MonitoringTimeInMinutes is stored and returned but there is no monitoring window afterwards. The rollback is real: the previous template and parameters are re-applied through the resource provisioners. Only metric/composite alarms in this account are valid triggers."
+  ],
+  "tests": [
+   "tests/conformance/test_cfn_sweep_core.py"
+  ]
+ },
+ "aws.cloudformation.stack.notifications": {
+  "title": "Stack notification ARNs: every stack/resource event is published to the SNS topics",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Messages use CloudFormation's real notification body (StackId=, ResourceStatus=, ...) with SNS fan-out to subscribers; topics must exist. Delivery is synchronous in the API call."
+  ],
+  "tests": [
+   "tests/conformance/test_cfn_sweep_core.py"
+  ]
  }
 }

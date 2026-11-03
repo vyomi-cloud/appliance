@@ -1,3 +1,4 @@
+import { ServiceQuota } from "./RdsExtras.jsx";
 import Dashboard from "./Dashboard.jsx";
 import Databases from "./Databases.jsx";
 import DatabaseDetail from "./DatabaseDetail.jsx";
@@ -48,6 +49,8 @@ export default {
   routes: [
     { pattern: "/rds", component: Dashboard, crumbs: () => root },
     { pattern: "/rds/home", component: Dashboard, crumbs: () => root },
+    { pattern: "/rds/dashboard", component: Dashboard, crumbs: () => root },
+    { pattern: "/rds/service-quota", component: ServiceQuota, crumbs: () => [...root, crumb("Service quotas", "#/rds/service-quota")] },
     { pattern: "/rds/databases", component: Databases, crumbs: () => [...root, crumb("Databases", "#/rds/databases")] },
     { pattern: "/rds/databases/:id", component: DatabaseDetail, crumbs: (p) => [...root, crumb("Databases", "#/rds/databases"), crumb(p.id, `#/rds/databases/${p.id}`)] },
     { pattern: "/rds/create-database", component: CreateDatabase, crumbs: () => [...root, crumb("Databases", "#/rds/databases"), crumb("Create database", "#/rds/create-database")] },

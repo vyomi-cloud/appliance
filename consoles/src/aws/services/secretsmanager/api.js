@@ -1,5 +1,5 @@
 /* Secrets Manager over the native JSON wire (X-Amz-Target secretsmanager.*). */
-import { awsJson, awsQuery, asList } from "../../../common/wire.js";
+import { awsJson, awsQuery, asList, restJson, getRegion } from "../../../common/wire.js";
 
 const call = (op, body) => awsJson("secretsmanager", `secretsmanager.${op}`, body, { version: "1.1" });
 
@@ -64,4 +64,14 @@ export function asKeyValue(secretString) {
     if (obj && typeof obj === "object" && !Array.isArray(obj)) return Object.entries(obj).map(([key, value]) => ({ key, value: String(value) }));
   } catch { /* not JSON — plaintext */ }
   return null;
+}
+
+// ── Lambda rotation function (sweep AWS-08) ──────────────────────────────────
+const lamHeaders = () => { const d = new Date().toISOString().replace(/[-:]|\.\d{3}/g, ""); return { authorization: `AWS4-HMAC-SHA256 Credential=VYOMICONSOLE/${d.slice(0, 8)}/${getRegion()}/lambda/aws4_request, SignedHeaders=host;x-amz-date, Signature=0`, "x-amz-date": d }; };
+export const listLambdaFunctions = async () => (await restJson("GET", "/2015-03-31/functions", { headers: lamHeaders() })).Functions || [];
+/** What the real console does when you pick a function: let secretsmanager.amazonaws.com invoke it (idempotent). */
+export async function grantRotationInvoke(fnArn) {
+  const name = fnArn.split(":function:")[1] || fnArn;
+  try { await restJson("POST", `/2015-03-31/functions/${name}/policy`, { headers: lamHeaders(), body: { StatementId: "SecretsManagerAccess", Action: "lambda:InvokeFunction", Principal: "secretsmanager.amazonaws.com" } }); }
+  catch (e) { if (!/already exists|ResourceConflict/i.test(String(e?.message || e))) throw e; }
 }

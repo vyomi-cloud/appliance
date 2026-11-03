@@ -558,6 +558,19 @@ def _register_scheduler(app) -> None:
         app.add_route(p, _sched, methods=methods)
 
 
+# ── EventBridge Schemas native REST (/v1/registries, /v1/discoverers, /v1/search/schemas) ──
+def _register_schemas(app) -> None:
+    async def _sch(request: Request):
+        if _scope(request) != "schemas" and _wi.is_unified("s3"):
+            return await _wi.serve_service("s3", request)      # an S3 bucket literally named "v1"
+        return await _wi.serve_service("schemas", request, path=request.url.path)
+
+    methods = ["GET", "POST", "PUT", "DELETE"]
+    for p in ("/v1/registries", "/v1/registries/{rest:path}", "/v1/discoverers", "/v1/discoverers/{rest:path}",
+              "/v1/search/schemas"):
+        app.add_route(p, _sch, methods=methods)
+
+
 # ── the SQS queue URL itself (`POST /<account>/<queue>`) ──────────────────────────
 def queue_path_request(request: Request) -> bool:
     """A request an SDK POSTed to a queue URL this appliance handed out
@@ -585,6 +598,8 @@ def register(app) -> None:
         _register_eventbridge_extras(app)
     if _wi.is_unified("scheduler"):
         _register_scheduler(app)
+    if _wi.is_unified("schemas"):
+        _register_schemas(app)
 
 
 def inventory(space: dict) -> dict:

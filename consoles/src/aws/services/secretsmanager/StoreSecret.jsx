@@ -29,6 +29,7 @@ import { navigate } from "../../../common/router.js";
 import { ErrorAlert, fmtDate } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import KeyValueOrPlaintext from "./KeyValueOrPlaintext.jsx";
+import RotationFunction from "./RotationFunction.jsx";
 import * as api from "./api.js";
 
 const DB_TYPES = [
@@ -210,7 +211,9 @@ function ConfigureRotationStep({ s, set }) {
         </SpaceBetween>
       </CapabilityContainer>
       {s.rotation && (
-        <CapabilityContainer id="secretsmanager.rotation.lambda-function" title="Rotation function" />
+        <CapabilityContainer id="secretsmanager.rotation.lambda-function" title="Rotation function">
+          <RotationFunction value={s.rotationLambda} onChange={(v) => set({ rotationLambda: v })} />
+        </CapabilityContainer>
       )}
     </SpaceBetween>
   );
@@ -254,7 +257,7 @@ export default function StoreSecret() {
     kmsKeyId: "aws/secretsmanager",
     name: "", description: "", tags: [], resourcePolicy: "", editPolicy: false,
     replicate: false, replicateRegion: REPLICA_REGIONS[0][0], replicateKmsKeyId: "aws/secretsmanager",
-    rotation: false, rotationScheduleType: "builder", timeUnit: "Months", scheduleExpression: "", windowDuration: "", rotateImmediately: true,
+    rotation: false, rotationLambda: "", rotationScheduleType: "builder", timeUnit: "Months", scheduleExpression: "", windowDuration: "", rotateImmediately: true,
   });
   const set = (patch) => setS((prev) => ({ ...prev, ...patch }));
   const nameErr = touched && !s.name ? "Secret name is required." : null;
@@ -304,7 +307,8 @@ export default function StoreSecret() {
           ? { ScheduleExpression: s.scheduleExpression || "rate(30 days)" }
           : { AutomaticallyAfterDays: { Hours: 1 / 24, Days: 1, Weeks: 7, Months: 30 }[s.timeUnit] || 30 };
         if (s.windowDuration) rules.Duration = s.windowDuration;
-        await api.rotateSecret(s.name, { RotationRules: rules, RotateImmediately: s.rotateImmediately });
+        if (s.rotationLambda) await api.grantRotationInvoke(s.rotationLambda);
+        await api.rotateSecret(s.name, { RotationRules: rules, RotateImmediately: s.rotateImmediately, ...(s.rotationLambda ? { RotationLambdaARN: s.rotationLambda } : {}) });
       }
       notify.success(`Successfully stored secret "${s.name}".`);
       navigate("secretsmanager", "secret", s.name);

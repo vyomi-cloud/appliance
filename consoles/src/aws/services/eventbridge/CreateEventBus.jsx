@@ -16,6 +16,7 @@ import { ErrorAlert, NotSimulated } from "../../kit/common.jsx";
 import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import { follow, navigate } from "../../../common/router.js";
+import { KmsKeySelect, LogConfigFields, PolicyField } from "./BusSettings.jsx";
 import * as api from "./api.js";
 
 export default function CreateEventBus({ params }) {
@@ -30,6 +31,12 @@ export default function CreateEventBus({ params }) {
   const [sharing, setSharing] = useState(false);
   const [tags, setTags] = useState([]);
   const [existingTags, setExistingTags] = useState([]);
+  const [kmsKey, setKmsKey] = useState("");
+  const [logCfg, setLogCfg] = useState({ Level: "OFF", IncludeDetail: "NONE" });
+  const [policy, setPolicy] = useState("");
+  const [discovery, setDiscovery] = useState(false);
+  const [archiveName, setArchiveName] = useState("");
+  const [archiveDays, setArchiveDays] = useState("0");
   const [touched, setTouched] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -38,6 +45,7 @@ export default function CreateEventBus({ params }) {
   useEffect(() => {
     if (existing.data) {
       setDescription(existing.data.Description || "");
+      setKmsKey(existing.data.KmsKeyIdentifier || ""); if (existing.data.LogConfig) setLogCfg(existing.data.LogConfig); if (existing.data.Policy) setPolicy(existing.data.Policy);
       api.listTagsForResource(existing.data.Arn).then((ts) => {
         const mapped = ts.map((t) => ({ key: t.Key, value: t.Value }));
         setExistingTags(mapped); setTags(mapped);
@@ -51,9 +59,15 @@ export default function CreateEventBus({ params }) {
     setBusy(true); setError(null);
     try {
       if (editing) {
-        await api.updateEventBus(name, description);
+        await api.updateEventBusConfig(name, { Description: description, KmsKeyIdentifier: kmsKey, LogConfig: logCfg, ...(policy.trim() ? { Policy: policy } : {}) });
       } else {
-        await api.createEventBus({ Name: name, Description: description, Tags: tags.filter((t) => t.key).map((t) => ({ Key: t.key, Value: t.value })) });
+        await api.createEventBus({ Name: name, Description: description, ...(kmsKey ? { KmsKeyIdentifier: kmsKey } : {}), ...(logCfg.Level !== "OFF" ? { LogConfig: logCfg } : {}), Tags: tags.filter((t) => t.key).map((t) => ({ Key: t.key, Value: t.value })) });
+      }
+      if (!editing && policy.trim()) await api.updateEventBusConfig(name, { Policy: policy });
+      if (!editing && discovery) await api.createDiscoverer((await api.describeEventBus(name)).Arn, "");
+      if (!editing && archiveName.trim()) {
+        const busArn = (await api.describeEventBus(name)).Arn;
+        await api.createArchive({ ArchiveName: archiveName.trim(), EventSourceArn: busArn, RetentionDays: Number(archiveDays) || 0, ...(kmsKey ? { KmsKeyIdentifier: kmsKey } : {}) });
       }
       const arn = editing ? existing.data.Arn : (await api.describeEventBus(name)).Arn;
       const removed = existingTags.filter((e) => !tags.some((t) => t.key === e.key));
@@ -114,33 +128,26 @@ export default function CreateEventBus({ params }) {
                 )}
 
                 <Container header={<Header variant="h2">Encryption</Header>}>
-                  <FormField label="AWS Key Management Service (KMS) key">
-                    <NotSimulated feature="Event bus encryption with a customer KMS key" note="Events are stored unencrypted inside Vyomi's own store." />
-                  </FormField>
+                  <KmsKeySelect value={kmsKey} onChange={setKmsKey} />
                 </Container>
 
                 <Container header={<Header variant="h2">Logs - new, optional</Header>}>
-                  <FormField label="Log destination">
-                    <NotSimulated feature="Delivering bus logs to CloudWatch Logs / S3 / Firehose" />
-                  </FormField>
+                  <LogConfigFields value={logCfg} onChange={setLogCfg} />
                 </Container>
 
                 <Container header={<Header variant="h2">Resource-based policy - optional</Header>}>
-                  <FormField label="Resource-based policy">
-                    <NotSimulated feature="Resource-based policy enforcement" note="A policy document can be attached but Vyomi never evaluates it against a cross-account PutEvents call." />
-                  </FormField>
+                  <PolicyField value={policy} onChange={setPolicy} />
                 </Container>
 
                 <Container header={<Header variant="h2">Archives - optional</Header>}>
-                  <FormField label="Archive" description="Create or manage archives from the Archives tab after the bus exists.">
-                    <NotSimulated feature="Attaching an archive at bus-creation time" />
-                  </FormField>
+                  <SpaceBetween size="l">
+                    <FormField label="Archive name" description="Optional. Creates an archive on this bus right after the bus is created (CreateArchive)."><Input value={archiveName} disabled={editing} onChange={({ detail }) => setArchiveName(detail.value)} ariaLabel="Archive name" /></FormField>
+                    <FormField label="Archive retention (days)" description="0 = indefinite."><Input type="number" value={archiveDays} disabled={editing} onChange={({ detail }) => setArchiveDays(detail.value)} ariaLabel="Archive retention days" /></FormField>
+                  </SpaceBetween>
                 </Container>
 
                 <Container header={<Header variant="h2">Schema discovery - optional</Header>}>
-                  <FormField label="Schema discovery">
-                    <NotSimulated feature="Schema discovery" note="The Schema registry isn't modeled in Vyomi." />
-                  </FormField>
+                  <FormField label="Schema discovery" description="Infers an OpenAPI schema from every event sent to this bus (registry discovered-schemas)."><Toggle checked={discovery} disabled={editing} onChange={({ detail }) => setDiscovery(detail.checked)}>Enable schema discovery on this event bus</Toggle></FormField>
                 </Container>
 
                 <Container header={<Header variant="h2" description="Tags are pairs of keys and optional values that you can assign to AWS resources.">Tags - optional</Header>}>

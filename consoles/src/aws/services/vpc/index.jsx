@@ -14,6 +14,7 @@ import { NetworkAccessAnalyzer } from "./NetworkAccessAnalyzer.jsx";
 import { Endpoints, EndpointServices, PrivatelinkGettingStarted } from "./Endpoints.jsx";
 import { VerifiedAccessInstances, VerifiedAccessTrustProviders, VerifiedAccessGroups, VerifiedAccessEndpoints } from "./VerifiedAccess.jsx";
 import Settings from "./Settings.jsx";
+import AllResources from "./AllResources.jsx";
 import * as Honest from "./HonestPages.jsx";
 import * as Vpn from "./VpnPages.jsx";
 import * as Nfw from "./NetworkFirewallPages.jsx";
@@ -192,6 +193,7 @@ export default {
     { pattern: "/vpc/mirror-targets", component: Vpn.MirrorTargets, crumbs: () => [crumb("VPC", ""), crumb("Mirror targets", "mirror-targets")] },
     { pattern: "/vpc/mirror-filters", component: Vpn.MirrorFilters, crumbs: () => [crumb("VPC", ""), crumb("Mirror filters", "mirror-filters")] },
 
+    { pattern: "/vpc/all-resources", component: AllResources, crumbs: () => [crumb("VPC", ""), crumb("All VPC resources", "all-resources")] },
     { pattern: "/vpc/settings", component: Settings, crumbs: () => [crumb("VPC", ""), crumb("Settings", "settings")] },
   ],
 };

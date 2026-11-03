@@ -100,12 +100,12 @@ def _cfg(key: str, default: str) -> str:
 
 
 _DEFAULT_SERVICES = ("s3,dynamodb,gcs,azure_blob,gcp_secrets,gcp_kms,kms,secretsmanager,"
-                     "gcp_firestore,gcp_compute,sqs,sns,events,scheduler,"
+                     "gcp_firestore,gcp_compute,sqs,sns,events,scheduler,schemas,"
                      "lambda,azure_keyvault,azure_acr,azure_servicebus,gcp_pubsub,azure_graph,azure_cosmos,iam,"
                      "azure_table,rds,gcp_iam")
 _KNOWN_SERVICES = ("s3", "dynamodb", "gcs", "azure_blob", "gcp_secrets", "gcp_kms",
                    "kms", "secretsmanager", "gcp_firestore", "gcp_compute",
-                   "sqs", "sns", "events", "scheduler",
+                   "sqs", "sns", "events", "scheduler", "schemas",
                    "lambda", "azure_keyvault", "azure_acr", "azure_servicebus", "gcp_pubsub",
                    "azure_graph", "azure_cosmos", "iam", "azure_table", "rds", "gcp_iam")
 
@@ -389,6 +389,15 @@ def dispatch_service(service: str, method: str, path: str, query: dict, headers:
         hdrs = dict(resp.headers or {})
         hdrs.setdefault("content-type", resp.media_type or "application/json")
         return {"status": resp.status, "headers": hdrs, "body": resp.body or b""}
+    if service == "schemas":           # EventBridge Schemas REST, over the EventBridge store
+        from core import appliance_stores as _aps, eventbridge_schemas_core
+        _aps.set_request_base(headers)
+        if hasattr(r.msg, "adopt"):
+            r.msg.adopt()
+        resp = eventbridge_schemas_core.dispatch(r.msg, method, path, query or {}, headers or {}, body or b"")
+        hdrs = dict(resp.headers or {})
+        hdrs.setdefault("content-type", "application/json")
+        return {"status": resp.status, "headers": hdrs, "body": resp.body or b""}
     if service in ("sqs", "sns", "events", "scheduler"):
         return _dispatch_messaging(service, r, method, path, query, headers, body)
     if service == "lambda":
@@ -653,7 +662,8 @@ def _dispatch_messaging(service: str, r: AwsWireRouter, method: str, path: str, 
         elif service == "events":
             from core import eventbridge_core
             resp = eventbridge_core.dispatch(st, target, payload, lam_store=_lam_store(r),
-                                             kinesis_store=_kinesis_store(), sfn_store=_sfn_store())
+                                             kinesis_store=_kinesis_store(), sfn_store=_sfn_store(),
+                                             caller_account=next((v for k, v in headers.items() if k.lower() == "x-amz-account-id"), None))
         else:
             return {"status": 400, "headers": {"content-type": ct, "x-amzn-requestid": rid},
                     "body": _json.dumps({"__type": "UnknownOperationException",

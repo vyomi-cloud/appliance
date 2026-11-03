@@ -137,13 +137,13 @@ function StackOptionsStep({ s, set }) {
       </Container>
       <ExpandableSection headerText="Advanced options">
         <SpaceBetween size="l">
-          <FormField label="Stack policy" description="Stored and returned exactly as written; Vyomi doesn't enforce it.">
+          <FormField label="Stack policy" description="Enforced on every update: an update that touches a protected resource is denied and rolled back.">
             <Textarea rows={4} value={s.stackPolicy} onChange={({ detail }) => set({ stackPolicy: detail.value })} spellcheck={false} ariaLabel="Stack policy" />
           </FormField>
-          <FormField label="Rollback configuration" description="CloudWatch alarm-triggered rollback monitors — stored, not evaluated.">
+          <FormField label="Rollback configuration" description="CloudWatch alarm ARNs, one per line. If any is in ALARM after the operation, the stack rolls back.">
             <Textarea rows={3} value={s.rollbackConfig} onChange={({ detail }) => set({ rollbackConfig: detail.value })} spellcheck={false} ariaLabel="Rollback configuration" />
           </FormField>
-          <FormField label="Notification options" description="SNS topic ARNs to notify on stack events — stored, not published to.">
+          <FormField label="Notification options" description="SNS topic ARNs (comma separated). Every stack event is published to them.">
             <Input value={s.notificationOptions} onChange={({ detail }) => set({ notificationOptions: detail.value })} ariaLabel="Notification options" />
           </FormField>
           <FormField label="Termination protection">
@@ -229,6 +229,8 @@ export default function CreateStack() {
         capabilities: s.capabilityAck ? ["CAPABILITY_NAMED_IAM"] : [],
         onFailure: s.onFailure, terminationProtection: s.terminationProtection === "Activated",
         roleArn: s.iamRole || undefined, timeoutInMinutes: s.timeout || undefined,
+        stackPolicy: s.stackPolicy.trim() || undefined, rollbackAlarms: s.rollbackConfig.split(/\s+/).filter(Boolean),
+        notificationArns: s.notificationOptions.split(",").map((x) => x.trim()).filter(Boolean),
       });
       notify.success(`Creation of stack "${s.stackName}" has been initiated.`);
       navigate("cloudformation", "stacks", s.stackName);

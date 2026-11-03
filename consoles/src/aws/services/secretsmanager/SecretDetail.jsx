@@ -27,6 +27,7 @@ import { useNotify } from "../../../common/notify.jsx";
 import { navigate, href, follow } from "../../../common/router.js";
 import { ErrorAlert, fmtDate, KeyValue } from "../../kit/common.jsx";
 import { CapabilityContainer, saveNotice } from "../../kit/Capability.jsx";
+import RotationFunction from "./RotationFunction.jsx";
 import * as api from "./api.js";
 
 function SecretValueSection({ name }) {
@@ -116,7 +117,8 @@ function RotationTab({ name, secret, reload }) {
   const save = async () => {
     setBusy(true);
     try {
-      await api.rotateSecret(name, { RotationRules: { AutomaticallyAfterDays: edit.days }, RotateImmediately: edit.now });
+      if (edit.fn) await api.grantRotationInvoke(edit.fn);
+      await api.rotateSecret(name, { RotationRules: { AutomaticallyAfterDays: edit.days }, RotateImmediately: edit.now, ...(edit.fn ? { RotationLambdaARN: edit.fn } : {}) });
       notify.success(`Rotation configured — the schedule really fires on the next access once due.${saveNotice("secretsmanager.secret.rotation")}`);
       setEdit(null); reload();
     } catch (e) { notify.error(e); } finally { setBusy(false); }
@@ -125,7 +127,7 @@ function RotationTab({ name, secret, reload }) {
     <SpaceBetween size="l">
       <CapabilityContainer id="secretsmanager.secret.rotation" title="Rotation configuration" actions={
         <SpaceBetween direction="horizontal" size="xs">
-          <Button onClick={() => setEdit({ days: secret.RotationRules?.AutomaticallyAfterDays || 30, now: true })}>Edit rotation</Button>
+          <Button onClick={() => setEdit({ days: secret.RotationRules?.AutomaticallyAfterDays || 30, now: true, fn: secret.RotationLambdaARN || "" })}>Edit rotation</Button>
           <Button loading={busy} disabled={!secret.RotationEnabled} onClick={rotateNow}>Rotate secret immediately</Button>
         </SpaceBetween>
       }>
@@ -149,6 +151,7 @@ function RotationTab({ name, secret, reload }) {
                 onChange={({ detail }) => setEdit({ ...edit, days: Number(detail.selectedOption.value) })}
                 options={[7, 30, 60, 90].map((d) => ({ label: `${d} days`, value: String(d) }))} />
             </FormField>
+            <RotationFunction value={edit.fn} onChange={(v) => setEdit({ ...edit, fn: v })} />
             <Toggle checked={edit.now} onChange={({ detail }) => setEdit({ ...edit, now: detail.checked })}>Rotate immediately when saved</Toggle>
           </SpaceBetween>
         )}

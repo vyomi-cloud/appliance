@@ -21,6 +21,7 @@ import { follow, href } from "../../../common/router.js";
 import DeleteModal from "../../kit/DeleteModal.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { ErrorAlert, fmtBytes, fmtDate, KeyValue } from "../../kit/common.jsx";
+import RdsDatabases from "./RdsDatabases.jsx";
 import * as api from "./api.js";
 
 const EVENT_KEY = (name) => `vyomi.lambda.testEvents.${name}`;
@@ -436,7 +437,7 @@ function ConfigurationTab({ name, cfg, reload }) {
         <FormField label="Security groups" description="Comma-separated security group IDs — required together with at least one subnet."><Input value={sgs} onChange={({ detail }) => setSgs(detail.value)} placeholder="sg-0123456789abcdef0" /></FormField>
       </EditModal>
 
-      <CapabilityContainer id="lambda.function.rds-databases" title="RDS databases" />
+      <RdsDatabases fn={name} cfg={cfg} />
 
       <KeyValue title="Monitoring and operations tools" actions={<Button onClick={() => setEditOps(true)}>Edit</Button>}
         columns={3} items={[["CloudWatch Logs", "Enabled"], ["Log format", cfg.LoggingConfig?.LogFormat], ["Log group", `/aws/lambda/${name}`], ["AWS X-Ray", cfg.TracingConfig?.Mode === "Active" ? "Active" : "PassThrough"], ["Enhanced monitoring", "Disabled"]]} />

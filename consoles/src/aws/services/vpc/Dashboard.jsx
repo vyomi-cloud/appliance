@@ -69,7 +69,7 @@ export default function Dashboard() {
         <Container header={<Header variant="h2">Additional Information</Header>}>
           <SpaceBetween direction="horizontal" size="l">
             <GapButton text="VPC Documentation" feature="Linked AWS documentation" />
-            <GapButton text="All VPC Resources" feature="Cross-Region resource summary" />
+            <Button href={href("vpc", "all-resources")} onFollow={follow}>All VPC Resources</Button>
             <GapButton text="Forums" feature="Linked AWS forums" />
             <GapButton text="Report an Issue" feature="Linked issue reporting" />
           </SpaceBetween>

@@ -81,6 +81,138 @@ def _buses(store) -> dict:
     return m
 
 
+# ── KMS encryption, bus logs, resource policy (v4 sweep AWS-08) ─────────────
+def _kms_call(store, action: str, body: dict) -> dict:
+    from core import kms_core
+    kms = getattr(store, "kms_store", None)
+    if kms is None:
+        raise _E("ValidationException", "KMS is not available in this runtime.")
+    r = kms_core.dispatch(kms, f"TrentService.{action}", body)
+    if getattr(r, "status", 200) != 200:
+        b = getattr(r, "body", {}) or {}
+        raise _E(str(b.get("__type", "KMSInvalidStateException")).split("#")[-1], b.get("message", "KMS call failed."))
+    return r.body
+
+
+def _validate_kms_key(store, key_id: str) -> str:
+    """The key must exist and be usable (Enabled) — resolved through the real KMS core."""
+    if not key_id:
+        return ""
+    md = _kms_call(store, "DescribeKey", {"KeyId": key_id}).get("KeyMetadata") or {}
+    if md.get("KeyState") != "Enabled":
+        raise _E("ValidationException", f"KMS key {key_id} is in state {md.get('KeyState')}; EventBridge needs an Enabled key.")
+    if md.get("KeyUsage") not in (None, "ENCRYPT_DECRYPT"):
+        raise _E("ValidationException", "The KMS key must be a symmetric ENCRYPT_DECRYPT key.")
+    return md.get("Arn") or key_id
+
+
+def _seal_envelope(store, bus: dict, envelope: dict) -> dict:
+    """Event as stored at rest: with a customer key the payload is real KMS ciphertext."""
+    kid = bus.get("kms_key")
+    if not kid:
+        return envelope
+    blob = _kms_call(store, "Encrypt", {"KeyId": kid, "Plaintext": base64.b64encode(json.dumps(envelope).encode()).decode()})
+    return {"id": envelope["id"], "time": envelope["time"], "source": envelope.get("source"),
+            "detail-type": envelope.get("detail-type"), "_enc": blob["CiphertextBlob"], "_kms": kid}
+
+
+def _open_envelope(store, e: dict) -> dict | None:
+    if "_enc" not in e:
+        return e
+    try:
+        pt = _kms_call(store, "Decrypt", {"CiphertextBlob": e["_enc"]})["Plaintext"]
+        return json.loads(base64.b64decode(pt))
+    except Exception:
+        return None  # key disabled/deleted: the archived payload is unreadable, like real KMS
+
+
+def _bus_events(store, bus: str) -> list:
+    out = []
+    for e in _buses(store).get(bus, {}).get("event_log", []):
+        o = _open_envelope(store, e)
+        if o is not None:
+            out.append(o)
+    return out
+
+
+_LOG_LEVELS = {"OFF": 0, "ERROR": 1, "INFO": 2, "TRACE": 3}
+
+
+def _bus_log(store, bus: dict, level: str, message: str, detail: dict | None = None, envelope: dict | None = None) -> None:
+    """Write one structured record to the bus's CloudWatch Logs group (real PutLogEvents)."""
+    cfg = bus.get("log_config") or {}
+    if _LOG_LEVELS.get(cfg.get("Level", "OFF"), 0) < _LOG_LEVELS[level] or _LOG_LEVELS[level] == 0:
+        return
+    logs = getattr(store, "logs_store", None)
+    if logs is None:
+        return
+    from core import logs_core
+    group = f"/aws/vendedlogs/events/event-bus/{bus['name']}"
+    stream = f"{store.account_id}-{bus['name']}"
+    logs_core.dispatch(logs, "Logs_20140328.CreateLogGroup", {"logGroupName": group})
+    logs_core.dispatch(logs, "Logs_20140328.CreateLogStream", {"logGroupName": group, "logStreamName": stream})
+    rec = {"message_type": message, "event_bus_name": bus["name"], "log_level": level, "account": store.account_id}
+    if envelope is not None:
+        rec.update({"event_id": envelope.get("id"), "source": envelope.get("source"), "detail_type": envelope.get("detail-type")})
+        if cfg.get("IncludeDetail") == "FULL":
+            rec["detail"] = envelope.get("detail")
+    if detail:
+        rec.update(detail)
+    logs_core.dispatch(logs, "Logs_20140328.PutLogEvents", {"logGroupName": group, "logStreamName": stream, "logEvents": [
+        {"timestamp": int(datetime.now(timezone.utc).timestamp() * 1000), "message": json.dumps(rec)}]})
+
+
+def _norm_log_config(cfg) -> dict:
+    cfg = dict(cfg or {})
+    lvl = str(cfg.get("Level", "OFF")).upper()
+    inc = str(cfg.get("IncludeDetail", "NONE")).upper()
+    if lvl not in _LOG_LEVELS:
+        raise _E("ValidationException", "LogConfig.Level must be one of OFF, ERROR, INFO, TRACE.")
+    if inc not in ("NONE", "FULL"):
+        raise _E("ValidationException", "LogConfig.IncludeDetail must be NONE or FULL.")
+    return {"Level": lvl, "IncludeDetail": inc}
+
+
+def _policy_doc(bus: dict) -> dict:
+    try:
+        d = json.loads(bus.get("policy") or "")
+    except Exception:
+        d = None
+    return d if isinstance(d, dict) else {"Version": "2012-10-17", "Statement": []}
+
+
+def _principal_account(p) -> list:
+    out = []
+    vals = p if isinstance(p, list) else [p]
+    if isinstance(p, dict):
+        vals = p.get("AWS", [])
+        vals = vals if isinstance(vals, list) else [vals]
+    for v in vals:
+        v = str(v)
+        out.append("*" if v == "*" else (v.split(":")[4] if v.startswith("arn:") and v.count(":") >= 4 else v))
+    return out
+
+
+def _put_allowed(store, bus: dict, caller_account: str | None) -> bool:
+    """Cross-account PutEvents is allowed only by an explicit Allow in the bus resource policy."""
+    if not caller_account or caller_account == store.account_id:
+        return True
+    allowed = False
+    for st in _policy_doc(bus).get("Statement", []):
+        acts = st.get("Action", [])
+        acts = acts if isinstance(acts, list) else [acts]
+        if not any(a in ("events:PutEvents", "events:*", "*") for a in acts):
+            continue
+        princ = _principal_account(st.get("Principal"))
+        if caller_account not in princ and "*" not in princ:
+            continue
+        if st.get("Effect") == "Deny":
+            return False
+        if st.get("Effect") == "Allow":
+            allowed = True
+    return allowed
+
+
 # ── rules ────────────────────────────────────────────────────────────────────
 def _rules(store) -> dict:
     m = getattr(store, "event_rules", None)
@@ -387,9 +519,17 @@ def _create_event_bus(store, body):
     if name in buses:
         raise _E("ResourceAlreadyExistsException", f"Event bus {name} already exists.")
     tags = {t["Key"]: t.get("Value", "") for t in body.get("Tags") or []}
+    key = _validate_kms_key(store, str(body.get("KmsKeyIdentifier") or ""))
+    lc = _norm_log_config(body["LogConfig"]) if body.get("LogConfig") else None
     buses[name] = _new_bus(store, name, body.get("Description", ""), tags)
+    buses[name].update({"kms_key": key or None, "log_config": lc})
     store.persist()
-    return EventsResponse(body={"EventBusArn": buses[name]["arn"]})
+    out = {"EventBusArn": buses[name]["arn"], "Description": buses[name]["description"]}
+    if key:
+        out["KmsKeyIdentifier"] = key
+    if lc:
+        out["LogConfig"] = lc
+    return EventsResponse(body=out)
 
 
 def _delete_event_bus(store, body):
@@ -406,10 +546,19 @@ def _delete_event_bus(store, body):
     return EventsResponse(body={})
 
 
+def _bus_view(b: dict) -> dict:
+    v = {"Name": b["name"], "Arn": b["arn"], "Description": b.get("description", ""), "Policy": b.get("policy"),
+         "CreationTime": b.get("created"), "LastModifiedTime": b.get("modified") or b.get("created")}
+    if b.get("kms_key"):
+        v["KmsKeyIdentifier"] = b["kms_key"]
+    if b.get("log_config"):
+        v["LogConfig"] = b["log_config"]
+    return v
+
+
 def _list_event_buses(store, body):
     prefix = str(body.get("NamePrefix", "") or "")
-    buses = [{"Name": b["name"], "Arn": b["arn"], "Description": b.get("description", ""),
-              "Policy": b.get("policy")}
+    buses = [_bus_view(b)
              for b in _buses(store).values() if b["name"].startswith(prefix)]
     return EventsResponse(body={"EventBuses": buses})
 
@@ -423,8 +572,57 @@ def _update_event_bus(store, body):
         bus["description"] = body.get("Description") or ""
     if "Policy" in body:
         bus["policy"] = body.get("Policy")
+    if "KmsKeyIdentifier" in body:
+        bus["kms_key"] = _validate_kms_key(store, str(body.get("KmsKeyIdentifier") or "")) or None
+    if "LogConfig" in body:
+        bus["log_config"] = _norm_log_config(body.get("LogConfig"))
+    bus["modified"] = _now_iso()
     store.persist()
-    return EventsResponse(body={"Name": bus["name"], "Arn": bus["arn"], "Description": bus.get("description", "")})
+    return EventsResponse(body=_bus_view(bus))
+
+
+def _put_permission(store, body):
+    bus = _buses(store).get(str(body.get("EventBusName", "default") or "default"))
+    if not bus:
+        raise _E("ResourceNotFoundException", "Event bus does not exist.")
+    if body.get("Policy"):
+        try:
+            doc = json.loads(body["Policy"]) if isinstance(body["Policy"], str) else dict(body["Policy"])
+        except Exception:
+            raise _E("MalformedPolicyDocumentException", "The policy is not valid JSON.")
+        bus["policy"] = json.dumps(doc)
+    else:
+        sid, princ = body.get("StatementId"), body.get("Principal")
+        if not sid or not princ:
+            raise _E("ValidationException", "StatementId and Principal are required.")
+        doc = _policy_doc(bus)
+        if any(st.get("Sid") == sid for st in doc["Statement"]):
+            raise _E("ResourceConflictException", f"Statement with the provided id already exists.")
+        st = {"Sid": sid, "Effect": "Allow", "Principal": "*" if princ == "*" else {"AWS": f"arn:aws:iam::{princ}:root"},
+              "Action": body.get("Action") or "events:PutEvents", "Resource": bus["arn"]}
+        if body.get("Condition"):
+            st["Condition"] = {body["Condition"].get("Type", "StringEquals"): {body["Condition"].get("Key", "aws:PrincipalOrgID"): body["Condition"].get("Value", "")}}
+        doc["Statement"].append(st)
+        bus["policy"] = json.dumps(doc)
+    store.persist()
+    return EventsResponse(body={})
+
+
+def _remove_permission(store, body):
+    bus = _buses(store).get(str(body.get("EventBusName", "default") or "default"))
+    if not bus:
+        raise _E("ResourceNotFoundException", "Event bus does not exist.")
+    if body.get("RemoveAllPermissions"):
+        bus["policy"] = None
+    else:
+        doc = _policy_doc(bus)
+        keep = [st for st in doc["Statement"] if st.get("Sid") != body.get("StatementId")]
+        if len(keep) == len(doc["Statement"]):
+            raise _E("ResourceNotFoundException", "Statement with the provided id does not exist.")
+        doc["Statement"] = keep
+        bus["policy"] = json.dumps(doc) if keep else None
+    store.persist()
+    return EventsResponse(body={})
 
 
 def _describe_event_bus(store, body):
@@ -432,8 +630,7 @@ def _describe_event_bus(store, body):
     bus = _buses(store).get(name)
     if not bus:
         raise _E("ResourceNotFoundException", f"Event bus {name} does not exist.")
-    return EventsResponse(body={"Name": bus["name"], "Arn": bus["arn"],
-                                 "Description": bus.get("description", ""), "Policy": bus.get("policy")})
+    return EventsResponse(body=_bus_view(bus))
 
 
 # ── operations: rules ───────────────────────────────────────────────────────
@@ -552,13 +749,18 @@ def _list_rule_names_by_target(store, body):
 
 
 # ── operations: events ──────────────────────────────────────────────────────
-def _put_events(store, body, lam_store=None, kinesis_store=None, sfn_store=None):
+def _put_events(store, body, lam_store=None, kinesis_store=None, sfn_store=None, caller_account=None):
     entries_out = []
     for entry in body.get("Entries") or []:
         bus = str(entry.get("EventBusName", "default") or "default")
         if bus not in _buses(store):
             entries_out.append({"ErrorCode": "ResourceNotFoundException",
                                  "ErrorMessage": f"Event bus {bus} does not exist."})
+            continue
+        if not _put_allowed(store, _buses(store)[bus], caller_account):
+            _bus_log(store, _buses(store)[bus], "ERROR", "EVENT_DENIED_BY_RESOURCE_POLICY", {"caller_account": caller_account})
+            entries_out.append({"ErrorCode": "AccessDeniedException",
+                                 "ErrorMessage": f"Account {caller_account} is not authorized to put events to event bus {bus}: no resource-based policy allows events:PutEvents."})
             continue
         source = entry.get("Source", "")
         detail_type = entry.get("DetailType", "")
@@ -575,11 +777,25 @@ def _put_events(store, body, lam_store=None, kinesis_store=None, sfn_store=None)
                     "detail-type": detail_type, "detail": detail, "time": now,
                     "account": store.account_id, "region": REGION,
                     "resources": entry.get("Resources") or []}
-        log = _buses(store)[bus]["event_log"]
-        log.append(envelope)
+        bus_rec = _buses(store)[bus]
+        try:
+            sealed = _seal_envelope(store, bus_rec, envelope)
+        except _E as e:
+            _bus_log(store, bus_rec, "ERROR", "EVENT_ENCRYPTION_FAILED", {"error": e.message}, envelope)
+            entries_out.append({"ErrorCode": "InternalFailure", "ErrorMessage": f"Event bus KMS key unusable: {e.message}"})
+            continue
+        log = bus_rec["event_log"]
+        log.append(sealed)
         del log[:-EVENT_LOG_MAX]
+        _bus_log(store, bus_rec, "INFO", "EVENT_RECEIVED", None, envelope)
         _notify(store, "put", bus, envelope)
-        _deliver_to_bus(store, lam_store, bus, envelope, event_obj, kinesis_store=kinesis_store, sfn_store=sfn_store)
+        n = _deliver_to_bus(store, lam_store, bus, envelope, event_obj, kinesis_store=kinesis_store, sfn_store=sfn_store)
+        _bus_log(store, bus_rec, "INFO", "INVOKE_SUCCEEDED" if n else "NO_MATCHING_RULES", {"deliveries": n}, envelope)
+        try:   # real schema discovery: a STARTED discoverer on this bus infers + versions the event's schema
+            from core import eventbridge_schemas_core as _schemas
+            _schemas.discover(store, bus, envelope)
+        except Exception:
+            pass
         entries_out.append({"EventId": event_id})
     store.persist()
     failed = sum(1 for e in entries_out if "ErrorCode" in e)
@@ -606,14 +822,15 @@ def _create_archive(store, body):
     archive = {"name": name, "arn": _archive_arn(store, name), "bus": bus,
                "source_arn": source_arn or _bus_arn(store, bus), "pattern": pattern or {},
                "retention_days": int(body.get("RetentionDays") or 0),
-               "description": body.get("Description", ""), "created": _now_iso(), "state": "ENABLED"}
+               "description": body.get("Description", ""), "created": _now_iso(), "state": "ENABLED",
+               "kms_key": _validate_kms_key(store, str(body.get("KmsKeyIdentifier") or "")) or None}
     _archives(store)[name] = archive
     store.persist()
     return EventsResponse(body={"ArchiveArn": archive["arn"], "State": "ENABLED", "CreationTime": archive["created"]})
 
 
 def _archived_events(store, archive):
-    log = _buses(store).get(archive["bus"], {}).get("event_log", [])
+    log = _bus_events(store, archive["bus"])
     matched = [e for e in log if _match_pattern(archive.get("pattern", {}), {
         "source": e.get("source"), "detail-type": e.get("detail-type"), "detail": e.get("detail")})]
     days = archive.get("retention_days") or 0
@@ -633,7 +850,8 @@ def _describe_archive(store, body):
                                  "EventPattern": json.dumps(archive.get("pattern", {})),
                                  "RetentionDays": archive["retention_days"], "Description": archive.get("description", ""),
                                  "SizeBytes": sum(len(json.dumps(e)) for e in events_), "EventCount": len(events_),
-                                 "CreationTime": archive["created"]})
+                                 "CreationTime": archive["created"],
+                                 **({"KmsKeyIdentifier": archive["kms_key"]} if archive.get("kms_key") else {})})
 
 
 def _list_archives(store, body):
@@ -1083,7 +1301,7 @@ _OPS = {
     "ListTargetsByRule": _list_targets_by_rule, "ListRuleNamesByTarget": _list_rule_names_by_target,
     "CreateEventBus": _create_event_bus, "DeleteEventBus": _delete_event_bus,
     "ListEventBuses": _list_event_buses, "DescribeEventBus": _describe_event_bus,
-    "UpdateEventBus": _update_event_bus,
+    "UpdateEventBus": _update_event_bus, "PutPermission": _put_permission, "RemovePermission": _remove_permission,
     "CreateArchive": _create_archive, "DescribeArchive": _describe_archive,
     "ListArchives": _list_archives, "DeleteArchive": _delete_archive, "UpdateArchive": _update_archive,
     "StartReplay": _start_replay, "DescribeReplay": _describe_replay, "ListReplays": _list_replays,
@@ -1103,7 +1321,7 @@ _NEEDS_LAMBDA = {"PutEvents", "StartReplay"}
 
 
 def dispatch(store: MessagingStore, target: str, payload: dict | None = None, lam_store=None,
-              kinesis_store=None, sfn_store=None) -> EventsResponse:
+              kinesis_store=None, sfn_store=None, caller_account=None) -> EventsResponse:
     """Native EventBridge JSON router. `target` is the X-Amz-Target header,
     e.g. "AWSEvents.PutEvents". `lam_store` / `kinesis_store` / `sfn_store` (all optional)
     are the Lambda / Kinesis / Step Functions registries, needed only to deliver to
@@ -1112,7 +1330,7 @@ def dispatch(store: MessagingStore, target: str, payload: dict | None = None, la
     action = target.rsplit(".", 1)[-1] if target else ""
     try:
         if action == "PutEvents":
-            return _put_events(store, body, lam_store, kinesis_store, sfn_store)
+            return _put_events(store, body, lam_store, kinesis_store, sfn_store, caller_account)
         if action == "StartReplay":
             return _start_replay(store, body, lam_store, kinesis_store, sfn_store)
         op = _OPS.get(action)

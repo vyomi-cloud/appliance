@@ -472,5 +472,31 @@
   "limitations": [
    "Container associations attach Network Firewall to container platforms (EKS/ECS) through firewall endpoints on real node networking; Vyomi has no inline firewall data path for them."
   ]
+ },
+ "aws.vpc.multi-subnet-create": {
+  "title": "Create several subnets in one console submit (a CreateSubnet call per subnet over the native wire)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "The console loops one CreateSubnet call per row, like the real console; there is no batch API, and a failure part-way leaves the earlier subnets created (reported in the message)."
+  ],
+  "tests": [
+   "tests/conformance/test_vpc_core.py"
+  ]
+ },
+ "aws.vpc.all-resources": {
+  "title": "All VPC resources summary (live counts per Region)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Vyomi simulates one Region (us-east-1); the page lists live counts for it and states that other Regions are not modeled — no cross-Region data exists to aggregate."
+  ],
+  "tests": [
+   "tests/conformance/test_vpc_core.py"
+  ]
  }
 }

@@ -9,11 +9,12 @@ import Select from "@cloudscape-design/components/select";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Textarea from "@cloudscape-design/components/textarea";
 import Wizard from "@cloudscape-design/components/wizard";
-import { ErrorAlert, NotSimulated } from "../../kit/common.jsx";
+import { ErrorAlert } from "../../kit/common.jsx";
 import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import { navigate } from "../../../common/router.js";
 import { WIZARD_I18N } from "./common.jsx";
+import { KmsKeySelect } from "./BusSettings.jsx";
 import * as api from "./api.js";
 
 export default function CreateArchive({ params }) {
@@ -25,6 +26,7 @@ export default function CreateArchive({ params }) {
   const [step, setStep] = useState(0);
   const [name, setName] = useState(params?.name || "");
   const [description, setDescription] = useState("");
+  const [kmsKey, setKmsKey] = useState("");
   const [source, setSource] = useState("default");
   const [retention, setRetention] = useState("0");
   const [pattern, setPattern] = useState("{\n  \"source\": [\"my.app\"]\n}");
@@ -46,7 +48,7 @@ export default function CreateArchive({ params }) {
       try { parsed = pattern.trim() ? JSON.parse(pattern) : {}; } catch { throw new Error("Event pattern must be valid JSON."); }
       const bus = buses.find((b) => b.Name === source);
       if (editing) {
-        await api.updateArchive({ ArchiveName: name, Description: description, RetentionDays: Number(retention) || 0, EventPattern: JSON.stringify(parsed) });
+        await api.updateArchive({ ArchiveName: name, Description: description, RetentionDays: Number(retention) || 0, ...(kmsKey ? { KmsKeyIdentifier: kmsKey } : {}), EventPattern: JSON.stringify(parsed) });
         notify.success(`Updated archive ${name}.`);
       } else {
         await api.createArchive({ ArchiveName: name, Description: description, EventSourceArn: bus?.Arn, RetentionDays: Number(retention) || 0, EventPattern: JSON.stringify(parsed) });
@@ -88,9 +90,7 @@ export default function CreateArchive({ params }) {
                   </SpaceBetween>
                 </Container>
                 <Container header={<Header variant="h2">Encryption</Header>}>
-                  <FormField label="AWS Key Management Service (KMS) key">
-                    <NotSimulated feature="Archive encryption with a customer KMS key" note="Archives are stored unencrypted inside Vyomi's own store." />
-                  </FormField>
+                  <KmsKeySelect value={kmsKey} onChange={setKmsKey} />
                 </Container>
               </SpaceBetween>
             ),

@@ -16,6 +16,7 @@ import CreateSchedule from "./CreateSchedule.jsx";
 import ScheduleGroups from "./ScheduleGroups.jsx";
 import { Pipes, CreatePipe, PipeDetail, Connections, CreateConnection, ApiDestinations, CreateApiDestination, GlobalEndpoints, CreateGlobalEndpoint, Sandbox } from "./Integration.jsx";
 import GapRoutes from "./GapRoutes.jsx";
+import Schemas from "./Schemas.jsx";
 
 const crumb = (text, href) => ({ text, href });
 const root = [crumb("EventBridge", "#/eventbridge")];
@@ -94,6 +95,7 @@ export default {
     { pattern: "/eventbridge/create-global-endpoint", component: CreateGlobalEndpoint, crumbs: () => [...root, crumb("Global endpoints", "#/eventbridge/global-endpoints"), crumb("Create global endpoint", "#/eventbridge/create-global-endpoint")] },
     { pattern: "/eventbridge/sandbox", component: Sandbox, crumbs: () => [...root, crumb("Sandbox", "#/eventbridge/sandbox")] },
 
+    { pattern: "/eventbridge/schemas", component: Schemas, crumbs: () => [...root, crumb("Schemas", "#/eventbridge/schemas")] },
     ...GapRoutes.map(({ path, title, component }) => ({
       pattern: `/eventbridge/${path}`,
       component,

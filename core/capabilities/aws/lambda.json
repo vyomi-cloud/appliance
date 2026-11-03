@@ -270,15 +270,17 @@
   ]
  },
  "lambda.function.rds-databases": {
-  "title": "Lambda RDS database connectivity helper",
+  "title": "RDS databases (RDS Proxy connection helper)",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "The RDS proxy/connection helper creates an RDS Proxy and rewires the function's VPC and IAM auth. Vyomi has no RDS Proxy; RDS instances are modeled but a Lambda cannot be attached to them through this helper. Configure VPC and environment variables manually."
+   "The helper creates a real RDS Proxy record in the function's own subnets and security groups (CreateDBProxy with the Secrets Manager auth + IAM role, RegisterDBProxyTargets with an engine-family check) and lists the proxies in the function's VPC with their targets. Vyomi does not proxy connections (apps still connect to the instance endpoint), does not rewrite the function's IAM role (no rds-db:connect policy is attached) and proxy endpoints are labels, not resolvable hosts."
   ],
-  "api": []
+  "tests": [
+   "tests/conformance/test_rds_sweep_core.py"
+  ]
  },
  "lambda.dashboard.agent-onboarding": {
   "title": "AI coding-agent onboarding (MCP server + agent prompt)",
