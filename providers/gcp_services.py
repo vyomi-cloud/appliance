@@ -366,7 +366,15 @@ async def api_gcp_sql_create_instance(project: str, request: Request):
     except Exception:
         payload = {}
     payload = payload if isinstance(payload, dict) else {}
+    from core import gcp_cloudsql_core as _csql, wire_ingress
+    bad = _csql.validate_config(wire_ingress.appliance_router()._run_refs,
+                                s._gcp_location_name(payload.get("region") or "us-central1"), payload)
+    if bad:
+        raise HTTPException(400, detail=bad)
     instance = s._gcp_sql_instance_record(project, payload)
+    _cm = (payload.get("diskEncryptionConfiguration") or {}).get("kmsKeyName") if isinstance(payload.get("diskEncryptionConfiguration"), dict) else None
+    if _cm:
+        instance["diskEncryptionConfiguration"] = {"kind": "sql#diskEncryptionConfiguration", "kmsKeyName": _cm}
     # Read replica (masterInstanceName): a READ_REPLICA_INSTANCE of an existing primary, listed
     # in the primary's replicaNames and seeded with the primary's databases (as the shared
     # core does on Nano — gcp.sql.replicas).
@@ -443,6 +451,10 @@ async def api_gcp_sql_patch_instance(project: str, instance: str, request: Reque
     except Exception:
         payload = {}
     payload = payload if isinstance(payload, dict) else {}
+    from core import gcp_cloudsql_core as _csql
+    bad = _csql.validate_config(None, rec.get("region") or "us-central1", payload, patch=True)
+    if bad:
+        raise HTTPException(400, detail=bad)
     if isinstance(payload.get("settings"), dict):
         cur = rec.get("settings") if isinstance(rec.get("settings"), dict) else {}
         cur.update(payload["settings"])

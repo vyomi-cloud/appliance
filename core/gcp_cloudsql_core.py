@@ -317,6 +317,20 @@ def _check_cmek(store, region: str, cfg: dict) -> str | None:
     return None
 
 
+def validate_config(refs, region: str, body: dict, patch: bool = False) -> str | None:
+    """Shared by the Nano core and the offline appliance's Cloud SQL handlers: tier, sslMode
+    and CMEK rules for an instances.insert / patch body (None = ok)."""
+    class _S:  # minimal store shim carrying the optional refs hook
+        pass
+    st = _S()
+    st.refs = refs
+    settings = body.get("settings")
+    bad = _check_settings(st, "", region, settings) if isinstance(settings, dict) else None
+    if bad:
+        return bad
+    return None if patch else _check_cmek(st, region, body.get("diskEncryptionConfiguration") or {})
+
+
 # ── control-plane operations: instances ────────────────────────────────────
 def _insert_instance(store: SqlStore, project: str, body: dict) -> CloudSqlResponse:
     name = str(body.get("name", "")).strip()
