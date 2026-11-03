@@ -256,6 +256,19 @@ def set_primary(meta: dict, ver: str) -> None:
 IMPORT_METHODS = {"RSA_OAEP_3072_SHA1_AES_256": 3072, "RSA_OAEP_4096_SHA1_AES_256": 4096,
                   "RSA_OAEP_3072_SHA256_AES_256": 3072, "RSA_OAEP_4096_SHA256_AES_256": 4096,
                   "RSA_OAEP_3072_SHA256": 3072, "RSA_OAEP_4096_SHA256": 4096}
+# The official SDKs' REST transport sends proto enums as integers (enum-encoding=int).
+_IMPORT_METHOD_NUM = {1: "RSA_OAEP_3072_SHA1_AES_256", 2: "RSA_OAEP_4096_SHA1_AES_256", 3: "RSA_OAEP_3072_SHA256",
+                      4: "RSA_OAEP_4096_SHA256", 5: "RSA_OAEP_3072_SHA256_AES_256", 6: "RSA_OAEP_4096_SHA256_AES_256"}
+_PROTECTION_NUM = {1: "SOFTWARE", 2: "HSM", 3: "EXTERNAL", 4: "EXTERNAL_VPC"}
+_PURPOSE_NUM = {1: "ENCRYPT_DECRYPT", 5: "ASYMMETRIC_SIGN", 6: "ASYMMETRIC_DECRYPT", 7: "RAW_ENCRYPT_DECRYPT", 9: "MAC"}
+
+
+def _enum(val, table, default=""):
+    if isinstance(val, int) and not isinstance(val, bool):
+        return table.get(val, "")
+    return str(val or default)
+
+
 _SMALL_PRIMES = [p for p in range(3, 2000, 2) if all(p % d for d in range(3, int(p ** 0.5) + 1, 2))]
 
 
@@ -381,10 +394,10 @@ def import_job_create(jobs: dict, ring: str, jid: str, payload: dict, budget_s: 
     name = f"{ring}/importJobs/{jid}"
     if name in jobs:
         raise KmsTabError(409, "ALREADY_EXISTS", f"ImportJob {name} already exists.")
-    meth = str(payload.get("importMethod") or "")
+    meth = _enum(payload.get("importMethod"), _IMPORT_METHOD_NUM)
     if meth not in IMPORT_METHODS:
         raise KmsTabError(400, "INVALID_ARGUMENT", "import_method must be one of " + ", ".join(IMPORT_METHODS) + ".")
-    lvl = str(payload.get("protectionLevel") or "SOFTWARE")
+    lvl = _enum(payload.get("protectionLevel"), _PROTECTION_NUM, "SOFTWARE") or "?"
     if lvl not in ("SOFTWARE", "HSM"):
         raise KmsTabError(400, "INVALID_ARGUMENT", "protection_level must be SOFTWARE or HSM for import jobs.")
     now = datetime.now(timezone.utc).timestamp()
@@ -526,7 +539,7 @@ def dispatch(store: KeyStore, method: str, path: str,
                 return _err(409, "ALREADY_EXISTS", f"CryptoKey {name} already exists.")
             now = _now()
             store.put_key(name, {
-                "purpose": str(payload.get("purpose", "ENCRYPT_DECRYPT")),
+                "purpose": _enum(payload.get("purpose"), _PURPOSE_NUM, "ENCRYPT_DECRYPT"),
                 "algorithm": (payload.get("versionTemplate", {}) or {}).get(
                     "algorithm", "GOOGLE_SYMMETRIC_ENCRYPTION"),
                 "createTime": now,

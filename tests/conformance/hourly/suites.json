@@ -1123,6 +1123,14 @@
       "timeout": 300
     },
     {
+      "id": "offline-sdk-gcp-kms-python",
+      "target": "offline",
+      "cloud": "gcp",
+      "kind": "sdk",
+      "cmd": "python3 -m venv /tmp/gkms-venv && /tmp/gkms-venv/bin/pip install -q google-cloud-kms && VYOMI_BASE_URL={ENDPOINT} /tmp/gkms-venv/bin/python tests/conformance/test_gcp_kms_sdk_python.py",
+      "timeout": 600
+    },
+    {
       "id": "offline-api-gcp-cloudscheduler-http",
       "target": "offline",
       "cloud": "gcp",
