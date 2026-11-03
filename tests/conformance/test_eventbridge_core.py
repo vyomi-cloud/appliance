@@ -146,6 +146,32 @@ def run(store=None):
     _check("exhausted event dead-lettered to DeadLetterConfig queue",
            len(m) == 1 and json.loads(m[0]["Body"])["detail"] == {"k": 1})
 
+    # Event-bus target: a rule on `default` forwards the event to another bus whose rule delivers it.
+    call("PutRule", {"Name": "fwd", "EventPattern": json.dumps({"source": ["bus.app"]})})
+    call("PutTargets", {"Rule": "fwd", "Targets": [{"Id": "tb", "Arn": "arn:aws:events:us-east-1:123456789012:event-bus/other"}]})
+    call("PutRule", {"Name": "onother", "EventBusName": "other", "EventPattern": json.dumps({"source": ["bus.app"]})})
+    call("PutTargets", {"Rule": "onother", "EventBusName": "other", "Targets": [{"Id": "tq", "Arn": qarn}]})
+    drain()
+    call("PutEvents", {"Entries": [{"Source": "bus.app", "DetailType": "x", "Detail": json.dumps({"k": 3})}]})
+    _check("event-bus target forwards to the other bus's rule → SQS", drain() == 1)
+
+    # Step Functions target: StartExecution with the event as input.
+    try:
+        from core import stepfunctions_core as sfn
+    except ImportError:  # pragma: no cover
+        import stepfunctions_core as sfn  # type: ignore
+    ss = sfn.shared_store()
+    sm = sfn.dispatch(ss, "AWSStepFunctions.CreateStateMachine", {
+        "name": "eb-sm", "roleArn": "arn:aws:iam::123456789012:role/r",
+        "definition": json.dumps({"StartAt": "P", "States": {"P": {"Type": "Pass", "End": True}}})}).body
+    call("PutRule", {"Name": "rsf", "EventPattern": json.dumps({"source": ["sfn.app"]})})
+    call("PutTargets", {"Rule": "rsf", "Targets": [{"Id": "ts", "Arn": sm["stateMachineArn"]}]})
+    call("PutEvents", {"Entries": [{"Source": "sfn.app", "DetailType": "x", "Detail": json.dumps({"k": 9})}]})
+    ex = sfn.dispatch(ss, "AWSStepFunctions.ListExecutions", {"stateMachineArn": sm["stateMachineArn"]}).body["executions"]
+    _check("Step Functions target starts an execution", len(ex) == 1)
+    d = sfn.dispatch(ss, "AWSStepFunctions.DescribeExecution", {"executionArn": ex[0]["executionArn"]}).body
+    _check("execution input is the event", json.loads(d["input"])["detail"] == {"k": 9})
+
     _check("ListRules",call("ListRules", {}).body["Rules"][0]["Name"] == "r1")
     _check("ListTargetsByRule", call("ListTargetsByRule", {"Rule": "r1"}).body["Targets"][0]["Id"] == "t1")
 

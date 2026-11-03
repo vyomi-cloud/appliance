@@ -317,7 +317,7 @@ def _deliver_with_retry(tgt, fn, send_sqs, envelope_str):
     return False
 
 
-def route_event(rules, bus, event_obj, envelope, send_sqs, invoke_lambda, publish_sns):
+def route_event(rules, bus, event_obj, envelope, send_sqs, invoke_lambda, publish_sns, deliver_other=None):
     """Match `event_obj` against every ENABLED rule on `bus` and hand each matching target
     its (Input/InputPath/InputTransformer-shaped) body via the three delivery callbacks.
     Shared by the Nano wire (eventbridge_core) and the offline appliance. Returns #deliveries."""
@@ -337,6 +337,8 @@ def route_event(rules, bus, event_obj, envelope, send_sqs, invoke_lambda, publis
                 fn = lambda a=arn, b=body_str: publish_sns(a, b)
             elif ":lambda:" in arn or ":function:" in arn:
                 fn = lambda a=arn, b=body_str: invoke_lambda(a, b)
+            elif deliver_other is not None and (":event-bus/" in arn or ":stateMachine:" in arn):
+                fn = lambda a=arn, b=body_str: deliver_other(a, b)
             else:
                 continue
             _deliver_with_retry(tgt, fn, send_sqs, base_str)
@@ -344,7 +346,7 @@ def route_event(rules, bus, event_obj, envelope, send_sqs, invoke_lambda, publis
     return n
 
 
-def _put_events(store, body, lambda_store=None):
+def _put_events(store, body, lambda_store=None, depth=0):
     entries_out = []
     for entry in body.get("Entries") or []:
         source = entry.get("Source", "")
@@ -369,9 +371,34 @@ def _put_events(store, body, lambda_store=None):
                 raise LookupError(f"SQS queue {arn} does not exist")
             sqs_core.enqueue(store, queue, body_str)
 
+        def deliver_other(arn, body_str):
+            if ":event-bus/" in arn:
+                # Another event bus: re-route the (possibly transformed) event on that bus (depth-capped).
+                if depth >= 3:
+                    return
+                try:
+                    ev2 = json.loads(body_str)
+                except Exception:
+                    return
+                if not isinstance(ev2, dict):
+                    return
+                _put_events(store, {"Entries": [{
+                    "Source": ev2.get("source", source), "DetailType": ev2.get("detail-type", detail_type),
+                    "Detail": json.dumps(ev2.get("detail", {})), "Resources": ev2.get("resources", []),
+                    "EventBusName": arn.rsplit("/", 1)[-1]}]}, lambda_store, depth + 1)
+            else:  # Step Functions StartExecution with the event as input
+                try:
+                    from core import stepfunctions_core as sfn
+                except ImportError:  # Pyodide flat layout
+                    import stepfunctions_core as sfn  # type: ignore
+                r = sfn.dispatch(sfn.shared_store(), "AWSStepFunctions.StartExecution",
+                                 {"stateMachineArn": arn, "input": body_str}, lambda_store)
+                if r.status >= 300:
+                    raise RuntimeError(f"StartExecution failed: {r.body}")
+
         route_event(_rules(store).values(), bus, event_obj, envelope, send_sqs,
                     lambda arn, b: _deliver_lambda(lambda_store, arn, b),
-                    lambda arn, b: _deliver_sns(store, arn, b))
+                    lambda arn, b: _deliver_sns(store, arn, b), deliver_other)
         entries_out.append({"EventId": event_id})
     store.persist()
     return EventsResponse(body={"FailedEntryCount": 0, "Entries": entries_out})
