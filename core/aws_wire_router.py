@@ -580,6 +580,7 @@ class AwsWireRouter:
         self.gcp_run.pubsub_store = self.gcp_msg    # Eventarc Pub/Sub-sourced triggers validate/create a real subscription
         self.gcp_run.logging_store = self.gcp_logging   # Observability "Logs" — real Cloud Logging entries per invocation
         self.gcp_run.mon_store = self.gcp_mon       # Observability "Metrics" — real Cloud Monitoring points per invocation
+        self.gcp_run.refs = self._run_refs          # Cloud SQL / KMS / GCS references in a revision template are checked for real
         # Azure data-plane services.
         self.az_blob = s.get("az_blob") or AzureBlobStore()
         self.az_cosmos = s.get("az_cosmos") or CosmosStore()
@@ -753,6 +754,16 @@ class AwsWireRouter:
         """A real Pub/Sub publish -> deliver to every Cloud Run Eventarc-style trigger
         bound to that topic (see core/gcp_run_core.deliver_event)."""
         gcp_run.deliver_event(self.gcp_run, topic_full, messages, log_fn=self._run_log)
+
+    def _run_refs(self, kind, *args):
+        """Existence of a resource a Cloud Run template references (True/False; None = unknown)."""
+        if kind == "sql":
+            return gcp_sql._get_instance(self.gcp_sql, args[0], args[1]) is not None
+        if kind == "kms":
+            return gcp_kms.dispatch(self.gcp_kms, "GET", "/v1/" + args[0], {}, {}, b"").status == 200
+        if kind == "bucket":
+            return bool(self.gcs.bucket_exists(args[0]))
+        return None
 
     def _run_topic_exists(self, topic_full):
         return bool(self.gcp_msg.get_topic(topic_full))

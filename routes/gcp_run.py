@@ -48,6 +48,23 @@ for _k in _KEYS + ("seq",):
 _STORE = SpaceRunStore()
 
 
+def _refs(kind, *args):
+    """Cross-service existence for a revision template (Cloud SQL / KMS / GCS); None = can't tell."""
+    try:
+        from core import appliance_stores as aps
+        if kind == "kms":
+            from core import gcp_kms_core as kms
+            return kms.dispatch(aps.gcp_kms_store(), "GET", "/v1/" + args[0], {}, {}, b"").status == 200
+        if kind == "bucket":
+            return bool(aps.gcs_store().bucket_exists(args[0]))
+    except Exception:
+        return None
+    return None
+
+
+_STORE.refs = _refs
+
+
 def store() -> SpaceRunStore:
     """The offline appliance's one Cloud Run store — routes/gcp_pubsub_unified.py reaches in
     here to deliver Eventarc-style trigger events on a real Pub/Sub publish."""
