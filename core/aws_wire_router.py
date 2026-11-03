@@ -128,6 +128,9 @@ def _gcp_service(path):
     # Deny policies (IAM Deny API): /v2/policies/{attachmentPoint}/denypolicies[/…]
     if re.match(r"^/v2/policies/[^/]+/denypolicies(/.*)?$", path):
         return "gcp-iam"
+    # STS (sts.googleapis.com): federated token exchange + introspection
+    if path in ("/v1/token", "/v1/introspect"):
+        return "gcp-iam"
     # Predefined roles catalog (no project scope): /v1/roles
     if path.startswith("/v1/roles"):
         return "gcp-iam"

@@ -279,3 +279,13 @@ export const SIMULATABLE_CONSTRAINTS = [
   ["storage.uniformBucketLevelAccess", "Enforce uniform bucket-level access"],
   ["storage.publicAccessPrevention", "Enforce public access prevention"],
 ];
+
+// ── Federation providers (workload: .../workloadIdentityPools/{p}/providers; workforce: .../workforcePools/{p}/providers) ──
+const isWorkforce = (poolName) => poolName.includes("workforcePools");
+export async function listProviders(poolName) {
+  const r = await restJson("GET", `/v1/${poolName}/providers`);
+  return r.workloadIdentityPoolProviders || r.providers || [];
+}
+export const createProvider = (poolName, providerId, body) =>
+  restJson("POST", `/v1/${poolName}/providers`, { query: { [isWorkforce(poolName) ? "workforcePoolProviderId" : "workloadIdentityPoolProviderId"]: providerId }, body });
+export const deleteProvider = (providerName) => restJson("DELETE", `/v1/${providerName}`);

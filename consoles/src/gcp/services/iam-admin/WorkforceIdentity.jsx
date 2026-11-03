@@ -8,8 +8,9 @@ import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import ResourceTable from "../../kit/ResourceTable.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
-import { ErrorAlert, NotSimulated, PageHeader, Section } from "../../kit/common.jsx";
-import { CapabilityContainer } from "../../kit/Capability.jsx";
+import { ErrorAlert, PageHeader, Section } from "../../kit/common.jsx";
+import ProviderDialog from "./ProviderDialog.jsx";
+import { CapabilityBadge, CapabilityContainer } from "../../kit/Capability.jsx";
 import * as api from "./api.js";
 
 export default function WorkforceIdentity() {
@@ -17,6 +18,8 @@ export default function WorkforceIdentity() {
   const list = useAsync(() => api.listWorkforcePools(), []);
   const [open, setOpen] = useState(false);
   const [del, setDel] = useState(null);
+  const [provFor, setProvFor] = useState(null);
+  const [provKey, setProvKey] = useState(0);
 
   return (
     <>
@@ -27,8 +30,8 @@ export default function WorkforceIdentity() {
           A workforce identity pool manages external workforce identities (your own employees and partners) for
           workforce identity federation, under this project's organization.
         </Typography>
-        <Section title="Connect an identity provider">
-          <NotSimulated compact feature="Connecting an external OIDC/SAML workforce identity provider" />
+        <Section title={<>Connect an identity provider <CapabilityBadge id="gcp.iam-admin.workforce-identity-providers" /></>}>
+          <Typography variant="body2" color="text.secondary">Use "Add provider" on a pool below to connect an OIDC or SAML workforce identity provider.</Typography>
         </Section>
         <ErrorAlert error={list.error} />
         <ResourceTable resourceName="workforce pools" items={list.data || []} rowKey={(p) => p.name} loading={list.loading} onRetry={list.reload}
@@ -37,9 +40,11 @@ export default function WorkforceIdentity() {
             { id: "name", header: "Pool", cell: (p) => p.displayName || p.name.split("/").pop() },
             { id: "id", header: "Pool ID", cell: (p) => p.name.split("/").pop() },
             { id: "state", header: "State", cell: (p) => p.state },
-            { id: "actions", header: "", cell: (p) => <Button size="small" color="error" onClick={() => setDel(p)}>Delete</Button> },
+            { id: "providers", header: "Providers", cell: (p) => <PoolProviders pool={p} reloadKey={provKey} /> },
+            { id: "actions", header: "", cell: (p) => (<><Button size="small" onClick={() => setProvFor(p.name)}>Add provider</Button><Button size="small" color="error" onClick={() => setDel(p)}>Delete</Button></>) },
           ]} />
       </CapabilityContainer>
+      {provFor && <ProviderDialog poolName={provFor} onClose={() => setProvFor(null)} onCreated={() => { notify.success("Added provider"); setProvKey((k) => k + 1); }} />}
       {open && <CreatePoolDialog onClose={() => setOpen(false)} onCreated={() => { notify.success("Created workforce pool"); list.reload(); }} />}
       <DeleteDialog open={!!del} onClose={() => setDel(null)} title={`Delete pool ${del?.name.split("/").pop()}?`} actionLabel="Delete"
         onConfirm={async () => { await api.deleteWorkforcePool(del.name); notify.success("Deleted workforce pool"); list.reload(); }} />
@@ -73,4 +78,11 @@ function CreatePoolDialog({ onClose, onCreated }) {
       </DialogActions>
     </Dialog>
   );
+}
+
+function PoolProviders({ pool, reloadKey }) {
+  const list = useAsync(() => api.listProviders(pool.name), [pool.name, reloadKey]);
+  const items = list.data || [];
+  if (!items.length) return "—";
+  return <span data-pool-providers={pool.name}>{items.map((p) => `${p.name.split("/").pop()} (${p.oidc ? "OIDC" : "SAML"})`).join(", ")}</span>;
 }

@@ -5,13 +5,17 @@ import { Button, Dialog, DialogActions, DialogContent, DialogTitle, Stack, TextF
 import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import ResourceTable from "../../kit/ResourceTable.jsx";
-import { ErrorAlert, NotSimulated, PageHeader, Section } from "../../kit/common.jsx";
+import { ErrorAlert, PageHeader, Section } from "../../kit/common.jsx";
+import { CapabilityBadge } from "../../kit/Capability.jsx";
+import ProviderDialog from "./ProviderDialog.jsx";
 import * as api from "./api.js";
 
 export default function WorkloadIdentity() {
   const notify = useNotify();
   const list = useAsync(() => api.listWorkloadIdentityPools(), []);
   const [open, setOpen] = useState(false);
+  const [provFor, setProvFor] = useState(null);
+  const [provKey, setProvKey] = useState(0);
 
   return (
     <>
@@ -19,11 +23,12 @@ export default function WorkloadIdentity() {
       <Section title="1. Create a workload identity pool">
         <Typography variant="body2" color="text.secondary">A workload identity pool is an entity that lets you manage external identities.</Typography>
       </Section>
-      <Section title="2. Connect an identity provider">
-        <NotSimulated compact feature="Connecting an external OIDC/SAML identity provider" />
+      <Section title={<>2. Connect an identity provider <CapabilityBadge id="gcp.iam-admin.workload-identity-providers" /></>}
+        description="Add an OIDC, SAML or AWS provider to a pool, with its attribute mapping and condition (step 3). Exchange a provider's token for a federated access token at /v1/token.">
+        <Typography variant="body2" color="text.secondary">Use "Add provider" on a pool in step 4.</Typography>
       </Section>
       <Section title="3. Configure provider mapping">
-        <NotSimulated compact feature="Attribute mapping and condition configuration for an external provider" />
+        <Typography variant="body2" color="text.secondary">Attribute mapping and the attribute condition are set when the provider is added.</Typography>
       </Section>
       <Section title="4. Grant access" actions={<Button variant="contained" onClick={() => setOpen(true)}>Get started</Button>}>
         <ErrorAlert error={list.error} />
@@ -33,8 +38,11 @@ export default function WorkloadIdentity() {
             { id: "name", header: "Pool", cell: (p) => p.displayName || p.name.split("/").pop() },
             { id: "id", header: "Pool ID", cell: (p) => p.name.split("/").pop() },
             { id: "state", header: "State", cell: (p) => p.state },
+            { id: "providers", header: "Providers", cell: (p) => <PoolProviders pool={p} reloadKey={provKey} /> },
+            { id: "actions", header: "", cell: (p) => <Button size="small" onClick={() => setProvFor(p.name)}>Add provider</Button> },
           ]} />
       </Section>
+      {provFor && <ProviderDialog poolName={provFor} onClose={() => setProvFor(null)} onCreated={() => { notify.success("Added provider"); setProvKey((k) => k + 1); }} />}
       {open && <CreatePoolDialog onClose={() => setOpen(false)} onCreated={() => { notify.success("Created workload identity pool"); list.reload(); }} />}
     </>
   );
@@ -66,4 +74,11 @@ function CreatePoolDialog({ onClose, onCreated }) {
       </DialogActions>
     </Dialog>
   );
+}
+
+function PoolProviders({ pool, reloadKey }) {
+  const list = useAsync(() => api.listProviders(pool.name), [pool.name, reloadKey]);
+  const items = list.data || [];
+  if (!items.length) return "—";
+  return <span data-pool-providers={pool.name}>{items.map((p) => `${p.name.split("/").pop()} (${p.oidc ? "OIDC" : p.saml ? "SAML" : "AWS"})`).join(", ")}</span>;
 }

@@ -74,6 +74,7 @@ import hashlib
 import json
 import re
 import uuid
+from core import gcp_wif_core as wif   # provider validation / attribute mapping (shared with the IAM core)
 from datetime import datetime, timezone
 from dataclasses import dataclass, field
 from urllib.parse import unquote
@@ -103,6 +104,7 @@ class ResourceManagerStore:
         self.workforce_pools: dict = {}    # "locations/global/workforcePools/{id}" -> WorkforcePool
         self.pab_policies: dict = {}       # PAB policy name -> PrincipalAccessBoundaryPolicy
         self.pab_bindings: dict = {}       # PolicyBinding name -> PolicyBinding
+        self.workforce_providers: dict = {}   # full workforce provider name -> WorkforcePoolProvider
         self.org_policy_simulations: dict = {}   # "projects/{p}/simulations/{id}" -> constraint simulation report (history)
 
 
@@ -621,6 +623,8 @@ def _delete_workforce_pool(store, name) -> RmResponse:
     if name not in store.workforce_pools:
         return _err(404, f"Workforce pool {name} not found.", "NOT_FOUND")
     del store.workforce_pools[name]
+    for pn in [n for n in store.workforce_providers if n.startswith(name + "/providers/")]:
+        del store.workforce_providers[pn]
     return _json(200, {})
 
 
@@ -887,6 +891,11 @@ def dispatch(store: ResourceManagerStore, method: str, path: str,
                 return _list_workforce_pools(store, str(query.get("parent", "")).strip())
             return _err(400, f"Unsupported method {method} on workforcePools", "INVALID_ARGUMENT")
         name = f"locations/global/workforcePools/{segs[3]}"
+        if len(segs) >= 5 and segs[4] == "providers":
+            if name not in store.workforce_pools:
+                return _err(404, f"Workforce pool {name} not found.", "NOT_FOUND")
+            st, out = wif.dispatch_providers(store.workforce_providers, name, segs[5:], method, query, _body())
+            return _err(st, out[1], out[0]) if isinstance(out, tuple) else _json(st, out)
         if method == "GET":
             return _get_workforce_pool(store, name)
         if method == "DELETE":
