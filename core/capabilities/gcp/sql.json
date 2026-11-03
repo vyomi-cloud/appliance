@@ -84,5 +84,44 @@
       "Offline instances backed by the shared MySQL engine are not supported (the operation fails with that reason); serverless exports, offload, BAK (SQL Server) files and encryption options are not simulated."
     ],
     "tests": ["tests/conformance/test_db_exports_local.py", "tests/conformance/test_no_cloud_egress.py"]
-  }
+  },
+ "gcp.sql.custom-machine-shapes": {
+  "title": "Custom machine shapes (db-custom-<vCPU>-<MB>)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "vCPU/memory rules are validated like Cloud SQL (1 or even vCPUs up to 96, memory a multiple of 256 MB, 0.9-6.5 GB per vCPU, at least 3840 MB); the shape is stored and billed in the cost model but the database engine is not resource-limited to it."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_sql_config.py"
+  ]
+ },
+ "gcp.sql.ssl-mode": {
+  "title": "SSL/TLS enforcement (sslMode)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "sslMode is validated and reported (requireSsl derived); ENCRYPTED_ONLY is enforced on the connection-test path, but client-certificate validation for TRUSTED_CLIENT_CERTIFICATE_REQUIRED is not performed on the wire."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_sql_config.py"
+  ]
+ },
+ "gcp.sql.cmek": {
+  "title": "Customer-managed encryption key (diskEncryptionConfiguration)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "The key name shape, same-region rule and existence in Cloud KMS are checked; disk data is not actually encrypted with the key and key disable/destroy does not affect the instance."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_sql_config.py"
+  ]
+ }
 }

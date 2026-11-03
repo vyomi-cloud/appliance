@@ -1,7 +1,7 @@
 /* Create instance — the console's single long form with numbered sections. Every real
  * setting goes into ONE native instances.insert body; settings Vyomi doesn't model are
  * declared gaps, not controls. */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Box, Button, Checkbox, Divider, FormControl, FormControlLabel, IconButton, InputLabel, MenuItem,
   Radio, RadioGroup, Select, Stack, TextField, Typography,
@@ -9,7 +9,8 @@ import {
 import AddIcon from "@mui/icons-material/esm/Add.js";
 import DeleteIcon from "@mui/icons-material/esm/Delete.js";
 import { useNotify } from "../../../common/notify.jsx";
-import { ErrorAlert, NotSimulated, PageHeader, Section } from "../../kit/common.jsx";
+import { ErrorAlert, PageHeader, Section } from "../../kit/common.jsx";
+import { listEncryptKeys } from "../storage/api.js";
 import * as api from "./api.js";
 
 const ENGINE_LABEL = { MYSQL: "MySQL", POSTGRES: "PostgreSQL", SQLSERVER: "SQL Server" };
@@ -60,6 +61,13 @@ export default function CreateInstance({ query }) {
   const [flags, setFlags] = useState([]);
   const [queryInsights, setQueryInsights] = useState(false);
   const [labels, setLabels] = useState([]);
+  const [customCpu, setCustomCpu] = useState(2);
+  const [customMem, setCustomMem] = useState(7680);
+  const [sslMode, setSslMode] = useState("ALLOW_UNENCRYPTED_AND_ENCRYPTED");
+  const [cmek, setCmek] = useState(false);
+  const [kmsKey, setKmsKey] = useState("");
+  const [kmsKeys, setKmsKeys] = useState([]);
+  useEffect(() => { if (cmek) listEncryptKeys().then(setKmsKeys).catch(() => setKmsKeys([])); }, [cmek]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
 
@@ -70,10 +78,10 @@ export default function CreateInstance({ query }) {
     const body = {
       name, databaseVersion: version, region,
       settings: {
-        tier: TIER[machine], dataDiskType: storageType === "SSD" ? "PD_SSD" : "PD_HDD",
+        tier: machine === "Custom" ? `db-custom-${customCpu}-${customMem}` : TIER[machine], dataDiskType: storageType === "SSD" ? "PD_SSD" : "PD_HDD",
         dataDiskSizeGb: Number(storageGb), storageAutoResize: autoResize,
         availabilityType: zonal.startsWith("Multiple") ? "REGIONAL" : "ZONAL",
-        ipConfiguration: { ipv4Enabled: publicIp, privateNetwork: privateIp ? "projects/-/global/networks/default" : null, authorizedNetworks: networks.filter((n) => n.Network).map((n) => ({ name: n.Name || "", value: n.Network })) },
+        ipConfiguration: { sslMode, ipv4Enabled: publicIp, privateNetwork: privateIp ? "projects/-/global/networks/default" : null, authorizedNetworks: networks.filter((n) => n.Network).map((n) => ({ name: n.Name || "", value: n.Network })) },
         backupConfiguration: { enabled: autoBackup, pointInTimeRecoveryEnabled: pitr },
         deletionProtectionEnabled: deletionProtection,
         databaseFlags: flags.filter((f) => f.Flag).map((f) => ({ name: f.Flag, value: f.Value || "" })),
@@ -83,6 +91,7 @@ export default function CreateInstance({ query }) {
         passwordValidationPolicy: { enablePasswordPolicy: pwdPolicy },
       },
     };
+    if (cmek && kmsKey) body.diskEncryptionConfiguration = { kmsKeyName: kmsKey };
     try {
       await api.insertInstance(body);   // native API returns an Operation — route by the requested ID
       notify.success(`Created instance "${name}"`);
@@ -157,8 +166,14 @@ export default function CreateInstance({ query }) {
             <Box>
               <Typography variant="body2" sx={{ fontWeight: 500, mb: 1 }}>Machine configuration</Typography>
               <RadioGroup row value={machine} onChange={(e) => setMachine(e.target.value)} aria-label="Machine configuration">
-                {Object.keys(TIER).map((v) => <FormControlLabel key={v} value={v} control={<Radio size="small" />} label={v} />)}
+                {[...Object.keys(TIER), "Custom"].map((v) => <FormControlLabel key={v} value={v} control={<Radio size="small" />} label={v} />)}
               </RadioGroup>
+              {machine === "Custom" && (
+                <Stack direction="row" spacing={2} sx={{ mt: 1 }}>
+                  <TextField label="vCPUs" type="number" size="small" value={customCpu} onChange={(e) => setCustomCpu(e.target.value)} helperText="1 or an even number up to 96" />
+                  <TextField label="Memory (MB)" type="number" size="small" value={customMem} onChange={(e) => setCustomMem(e.target.value)} helperText="multiple of 256; 0.9-6.5 GB per vCPU" />
+                </Stack>
+              )}
             </Box>
             <Box>
               <Typography variant="body2" sx={{ fontWeight: 500, mb: 1 }}>Storage type</Typography>
@@ -202,7 +217,23 @@ export default function CreateInstance({ query }) {
             <Rows title="Flags" rows={flags} setRows={setFlags} cols={["Flag", "Value"]} addLabel="Add a database flag" />
             <FormControlLabel control={<Checkbox size="small" checked={queryInsights} onChange={(e) => setQueryInsights(e.target.checked)} />} label="Query insights" />
             <Rows title="Labels" rows={labels.map((l) => ({ Name: l.key, Value: l.value }))} setRows={(rs) => setLabels(rs.map((r) => ({ key: r.Name, value: r.Value })))} cols={["Name", "Value"]} addLabel="Add label" />
-            <NotSimulated compact feature="Custom machine shapes, SSL/TLS enforcement and Cloud KMS customer-managed encryption" />
+            <FormControl sx={{ maxWidth: 420 }}>
+              <InputLabel id="ci-ssl">SSL mode</InputLabel>
+              <Select labelId="ci-ssl" label="SSL mode" value={sslMode} onChange={(e) => setSslMode(e.target.value)} inputProps={{ "aria-label": "SSL mode" }}>
+                <MenuItem value="ALLOW_UNENCRYPTED_AND_ENCRYPTED">Allow unencrypted and encrypted connections</MenuItem>
+                <MenuItem value="ENCRYPTED_ONLY">Allow only SSL connections</MenuItem>
+                <MenuItem value="TRUSTED_CLIENT_CERTIFICATE_REQUIRED">Require trusted client certificates</MenuItem>
+              </Select>
+            </FormControl>
+            <FormControlLabel control={<Checkbox size="small" checked={cmek} onChange={(e) => setCmek(e.target.checked)} />} label="Use a customer-managed encryption key (CMEK)" />
+            {cmek && (
+              <FormControl sx={{ maxWidth: 520 }}>
+                <InputLabel id="ci-kms">Cloud KMS key</InputLabel>
+                <Select labelId="ci-kms" label="Cloud KMS key" value={kmsKey} onChange={(e) => setKmsKey(e.target.value)} inputProps={{ "aria-label": "Cloud KMS key" }}>
+                  {kmsKeys.map((k) => <MenuItem key={k} value={k}>{k.split("/").slice(3).join("/")}</MenuItem>)}
+                </Select>
+              </FormControl>
+            )}
           </Stack>
         </Section>
 

@@ -588,6 +588,8 @@ class AwsWireRouter:
             self.gcs.refs = self._run_refs   # bucket CMEK keys are checked against real Cloud KMS keys
         if getattr(self.gcs, "on_object_event", None) is None:
             self.gcs.on_object_event = self._gcs_object_event   # Eventarc Cloud Storage triggers fire on real object finalize/delete
+        if getattr(self.gcp_sql, "refs", None) is None:
+            self.gcp_sql.refs = self._run_refs          # Cloud SQL CMEK keys are checked against real Cloud KMS keys
         if getattr(self.gcp_run, "refs", None) is None:   # a store already wired by its host (offline routes) keeps its own
             self.gcp_run.refs = self._run_refs          # Cloud SQL / KMS / GCS references in a revision template are checked for real
         # Azure data-plane services.
@@ -787,7 +789,16 @@ class AwsWireRouter:
         if kind == "sql":
             return gcp_sql._get_instance(self.gcp_sql, args[0], args[1]) is not None
         if kind == "kms":
-            return gcp_kms.dispatch(self.gcp_kms, "GET", "/v1/" + args[0], {}, {}, b"").status == 200
+            try:
+                from core import app_context as _ctx
+                tok = _ctx.REQUEST_PROVIDER.set("gcp")   # offline GCP stores are provider-scoped
+            except Exception:   # Nano: plain stores
+                _ctx, tok = None, None
+            try:
+                return gcp_kms.dispatch(self.gcp_kms, "GET", "/v1/" + args[0], {}, {}, b"").status == 200
+            finally:
+                if tok is not None:
+                    _ctx.REQUEST_PROVIDER.reset(tok)
         if kind == "bucket":
             return bool(self.gcs.bucket_exists(args[0]))
         return None
