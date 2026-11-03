@@ -2366,7 +2366,8 @@ def _instance_xml(inst: dict) -> str:
         f"<instanceType>{_xml_escape(inst['instance_type'])}</instanceType>"
         f"<launchTime>{_xml_escape(inst['launch_time'])}</launchTime>"
         f"<placement><availabilityZone>{_xml_escape(inst['az'])}</availabilityZone><tenancy>{_xml_escape(inst.get('tenancy', 'default'))}</tenancy>"
-        f"<groupName>{_xml_escape(inst.get('placement_group', ''))}</groupName>{partition_xml}</placement>"
+        f"<groupName>{_xml_escape(inst.get('placement_group', ''))}</groupName>{partition_xml}"
+        f"{('<hostId>' + _xml_escape(inst['host_id']) + '</hostId>') if inst.get('host_id') else ''}</placement>"
         f"<platform>{_xml_escape(inst.get('platform', ''))}</platform>"
         f"<platformDetails>{_xml_escape(inst.get('platform_details', 'Linux/UNIX'))}</platformDetails>"
         f"<privateIpAddress>{_xml_escape(inst.get('private_ip', ''))}</privateIpAddress>"
@@ -2392,6 +2393,8 @@ def _instance_xml(inst: dict) -> str:
         f"<hibernationOptions><configured>{str(inst.get('hibernation', False)).lower()}</configured></hibernationOptions>"
         f"<metadataOptions><httpTokens>{_xml_escape(inst.get('metadata_tokens', 'required'))}</httpTokens>"
         f"<httpEndpoint>{_xml_escape(inst.get('metadata_endpoint', 'enabled'))}</httpEndpoint></metadataOptions>"
+        f"{('<instanceLifecycle>spot</instanceLifecycle><spotInstanceRequestId>' + _xml_escape(inst.get('spot_request_id', '')) + '</spotInstanceRequestId>') if inst.get('lifecycle') == 'spot' else ''}"
+        f"{('<capacityReservationId>' + _xml_escape(inst['capacity_reservation_id']) + '</capacityReservationId>') if inst.get('capacity_reservation_id') else ''}"
         f"<usageOperation>{_xml_escape(inst.get('usage_operation', 'RunInstances'))}</usageOperation>"
         f"{_tags_xml(inst.get('tags', {}))}"
         "</item>"
@@ -2753,7 +2756,7 @@ def _instance_status_xml(inst: dict) -> str:
             f"<instanceState><code>{_STATE_CODE.get(inst['state'], 0)}</code><name>{_xml_escape(inst['state'])}</name></instanceState>"
             f"<systemStatus><status>{status}</status>{details}</systemStatus>"
             f"<instanceStatus><status>{status}</status>{details}</instanceStatus>"
-            "<eventsSet/>"
+            f"{_ec2ops.events_xml(inst)}"
             "</item>")
 
 
@@ -4518,6 +4521,8 @@ from core import vpc_vpn_core as _vpn_core   # noqa: E402  (lazy-imports vpc_cor
 _OPS.update(_vpn_core.OPS)
 from core import vpc_extras_core as _extras_core   # noqa: E402
 _OPS.update(_extras_core.OPS)
+from core import ec2_ops_core as _ec2ops   # noqa: E402  (events, zones, spot, RIs, capacity reservations, hosts, Recycle Bin)
+_ec2ops.install(_OPS)
 
 
 def dispatch(store, params: dict | None = None) -> VpcResponse:

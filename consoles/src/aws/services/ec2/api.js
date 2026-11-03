@@ -57,7 +57,7 @@ export async function describeInstanceTypes() {
   const r = await call("DescribeInstanceTypes");
   return asList(r.instanceTypeSet?.item).map((x) => ({
     InstanceType: x.instanceType, FreeTierEligible: x.freeTierEligible === "true", BareMetal: x.bareMetal === "true",
-    Hypervisor: x.hypervisor, VCpuCount: Number(x.vCpuInfo?.defaultVCpus || 0), MemoryMiB: Number(x.memoryInfo?.sizeInMiB || 0),
+    Hypervisor: x.hypervisor, VCpuCount: Number((x.vCpuInfo || x.vcpuInfo)?.defaultVCpus || 0), MemoryMiB: Number(x.memoryInfo?.sizeInMiB || 0),
     Architectures: asList(x.processorInfo?.supportedArchitectures?.item), NetworkPerformance: x.networkInfo?.networkPerformance,
   }));
 }
@@ -419,3 +419,70 @@ export async function getLifecyclePolicies() {
 export const getLifecyclePolicy = (id) => dlmRest("GET", `/policies/${id}`).then((r) => r.Policy);
 export const updateLifecyclePolicy = (id, input) => dlmRest("PATCH", `/policies/${id}`, input);
 export const deleteLifecyclePolicy = (id) => dlmRest("DELETE", `/policies/${id}`);
+
+// ── AWS-03/04 ops: zones, events, health, alarms, Spot, RIs, capacity reservations, hosts, Recycle Bin ──
+export async function describeZones(all = false) {
+  const r = await call("DescribeAvailabilityZones", all ? { AllAvailabilityZones: true } : {});
+  return asList(r.availabilityZoneInfo?.item);
+}
+export const modifyAvailabilityZoneGroup = (groupName, status) => call("ModifyAvailabilityZoneGroup", { GroupName: groupName, OptInStatus: status });
+
+/** Every instance's status (incl. non-running) with its scheduled events + a derived check summary. */
+export async function describeInstanceStatusAll() {
+  const r = await call("DescribeInstanceStatus", { IncludeAllInstances: true });
+  return asList(r.instanceStatusSet?.item).map((x) => ({
+    instanceId: x.instanceId, az: x.availabilityZone, state: x.instanceState?.name,
+    systemStatus: x.systemStatus?.status, instanceStatus: x.instanceStatus?.status,
+    events: asList(x.eventsSet?.item).map((e) => ({ id: e.instanceEventId, code: e.code, description: e.description, notBefore: e.notBefore, notAfter: e.notAfter, deadline: e.notBeforeDeadline, instanceId: x.instanceId })),
+  }));
+}
+export const scheduleInstanceEvent = (input) => call("VyomiScheduleInstanceEvent", input);
+export const modifyInstanceEventStartTime = (instanceId, eventId, notBefore) => call("ModifyInstanceEventStartTime", { InstanceId: instanceId, InstanceEventId: eventId, NotBefore: notBefore });
+
+export async function describeEc2Alarms() {
+  const out = []; let token;
+  do { const r = await CW("DescribeAlarms", { AlarmTypes: ["MetricAlarm"], NextToken: token }); out.push(...(r.MetricAlarms || [])); token = r.NextToken; } while (token);
+  return out.filter((a) => a.Namespace === "AWS/EC2");
+}
+
+const spotFromXml = (x) => ({ ...x, Tags: tagsFromXml(x.tagSet) });
+export async function describeSpotRequests() { const r = await call("DescribeSpotInstanceRequests"); return asList(r.spotInstanceRequestSet?.item).map(spotFromXml); }
+export const requestSpotInstances = (input) => call("RequestSpotInstances", input).then((r) => asList(r.spotInstanceRequestSet?.item));
+export const cancelSpotRequests = (ids) => call("CancelSpotInstanceRequests", { SpotInstanceRequestId: ids });
+export async function describeSpotPriceHistory(types, az) { const r = await call("DescribeSpotPriceHistory", { InstanceType: types, AvailabilityZone: az }); return asList(r.spotPriceHistorySet?.item); }
+
+export async function describeRiOfferings(input) { const r = await call("DescribeReservedInstancesOfferings", input); return asList(r.reservedInstancesOfferingsSet?.item); }
+export const purchaseRi = (offeringId, count) => call("PurchaseReservedInstancesOffering", { ReservedInstancesOfferingId: offeringId, InstanceCount: count }).then((r) => r.reservedInstancesId);
+export async function describeReservedInstances() { const r = await call("DescribeReservedInstances"); return asList(r.reservedInstancesSet?.item); }
+
+export async function describeCapacityReservations() { const r = await call("DescribeCapacityReservations"); return asList(r.capacityReservationSet?.item).map((x) => ({ ...x, Tags: tagsFromXml(x.tagSet) })); }
+export const createCapacityReservation = (input) => call("CreateCapacityReservation", input).then((r) => r.capacityReservation);
+export const cancelCapacityReservation = (id) => call("CancelCapacityReservation", { CapacityReservationId: id });
+export async function describeHosts() { const r = await call("DescribeHosts"); return asList(r.hostSet?.item); }
+export const allocateHosts = (input) => call("AllocateHosts", input).then((r) => asList(r.hostIdSet?.item));
+export const releaseHosts = (ids) => call("ReleaseHosts", { HostId: ids });
+
+// Recycle Bin: native `rbin` REST for rules, EC2 actions for the retained resources.
+const RB = (method, path, body, query) => awsRest("rbin", method, path, { body, query });
+export const listRetentionRules = async (type) => (await RB("POST", "/list-rules", { ResourceType: type })).Rules || [];
+export const getRetentionRule = (id) => RB("GET", `/rules/${id}`);
+export const createRetentionRule = (input) => RB("POST", "/rules", input);
+export const updateRetentionRule = (id, input) => RB("PATCH", `/rules/${id}`, input);
+export const deleteRetentionRule = (id) => RB("DELETE", `/rules/${id}`);
+export const lockRetentionRule = (id, days) => RB("PATCH", `/rules/${id}/lock`, { LockConfiguration: { UnlockDelay: { UnlockDelayValue: days, UnlockDelayUnit: "DAYS" } } });
+export const unlockRetentionRule = (id) => RB("PATCH", `/rules/${id}/unlock`, {});
+export async function listSnapshotsInBin() { const r = await call("ListSnapshotsInRecycleBin"); return asList(r.snapshotSet?.item); }
+export async function listImagesInBin() { const r = await call("ListImagesInRecycleBin"); return asList(r.imageSet?.item); }
+export const restoreSnapshotFromBin = (id) => call("RestoreSnapshotFromRecycleBin", { SnapshotId: id });
+export const restoreImageFromBin = (id) => call("RestoreImageFromRecycleBin", { ImageId: id });
+
+// IAM instance profiles (the real IAM service; "Create IAM profile" page)
+const IAM = (action, params = {}) => awsQuery("iam", action, flatten(params)).then((r) => r[`${action}Response`]?.[`${action}Result`] || {});
+export const createInstanceProfile = (name) => IAM("CreateInstanceProfile", { InstanceProfileName: name }).then((r) => r.InstanceProfile);
+export const addRoleToInstanceProfile = (profile, role) => IAM("AddRoleToInstanceProfile", { InstanceProfileName: profile, RoleName: role });
+export const listInstanceProfiles = () => IAM("ListInstanceProfiles").then((r) => asList(r.InstanceProfiles?.member));
+export const iamCreateRole = (name, trust) => IAM("CreateRole", { RoleName: name, AssumeRolePolicyDocument: trust });
+export const iamAttachRolePolicy = (role, arn) => IAM("AttachRolePolicy", { RoleName: role, PolicyArn: arn });
+export const iamListRoles = () => IAM("ListRoles").then((r) => asList(r.Roles?.Role));
+export const iamListPolicies = () => IAM("ListPolicies", { Scope: "AWS", MaxItems: 200 }).then((r) => asList(r.Policies?.Policy));
+export const asgAccountLimits = () => asg("DescribeAccountLimits");

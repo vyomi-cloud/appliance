@@ -88,7 +88,7 @@ CORES = [
     "cloudformation_core.py",                      # AWS: CloudFormation (stacks, change sets, stack sets — provisions through s3/ddb/sns/sqs/iam)
     "cloudwatch_core.py",                          # AWS CloudWatch: metrics / alarms / dashboards (rpc-v2-cbor + JSON + Query wire)
     "vpc_vpn_core.py",
-    "vpc_extras_core.py",
+    "vpc_extras_core.py", "ec2_ops_core.py",
     "netfw_core.py",
     "dnsfw_core.py",
     "vpc_core.py",                                 # v2.8.0 AWS: VPC network-simulation data plane (reachability analyzer)

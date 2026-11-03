@@ -769,7 +769,20 @@ def execute_policy_arn(store: AutoScalingStore, policy_arn: str) -> bool:
     return True
 
 
+def _op_describe_account_limits(store: AutoScalingStore, params: dict) -> AsgResponse:
+    """Real account quotas + current usage (ec2.settings.other). Launch configurations are not modeled
+    (templates only), so that usage is always 0."""
+    inner = (f"<MaxNumberOfAutoScalingGroups>{_ASG_MAX_GROUPS}</MaxNumberOfAutoScalingGroups>"
+             f"<MaxNumberOfLaunchConfigurations>200</MaxNumberOfLaunchConfigurations>"
+             f"<NumberOfAutoScalingGroups>{len(store.groups)}</NumberOfAutoScalingGroups>"
+             f"<NumberOfLaunchConfigurations>0</NumberOfLaunchConfigurations>")
+    return _success("DescribeAccountLimits", inner)
+
+
+_ASG_MAX_GROUPS = 500
+
 _OPS = {
+    "DescribeAccountLimits": _op_describe_account_limits,
     "CreateAutoScalingGroup": _op_create_group,
     "DescribeAutoScalingGroups": _op_describe_groups,
     "DescribeAutoScalingInstances": _op_describe_instances,

@@ -326,20 +326,25 @@
    "offline": "full"
   },
   "limitations": [
-   "A real read of DescribeAvailabilityZones; Local Zone / Wavelength Zone opt-in isn't modeled — Vyomi has only the three standard AZs."
+   "A real read of DescribeAvailabilityZones. Local Zone / Wavelength Zone opt-in groups are real (ModifyAvailabilityZoneGroup; opted-in zones appear and accept launches/reservations/hosts), but a Local Zone has no distinct latency, services or capacity behind it."
   ],
   "tests": [
-   "tests/conformance/test_ec2_console_v4_core.py"
+   "tests/conformance/test_ec2_console_v4_core.py",
+   "tests/conformance/test_ec2_ops_core.py"
   ]
  },
  "ec2.settings.other": {
-  "title": "Managed resources, Auto Scaling group account defaults",
+  "title": "Managed resources, Auto Scaling quotas",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Managed resources is a cross-service inventory view (resources other AWS services created) and Auto Scaling's account-level defaults page aren't modeled; they have no effect in Vyomi."
+   "Managed resources is derived live from the resources' own tags/attributes: Auto Scaling group instances, Spot instances, ELB network interfaces and snapshots created by AMI creation or Data Lifecycle Manager. It does not cover resources other AWS services keep outside EC2.",
+   "Auto Scaling shows the real DescribeAccountLimits quotas (500 groups, 200 launch configurations) with live usage; Vyomi has no account-level Auto Scaling defaults to change, so none are shown."
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_ops_core.py"
   ]
  },
  "ec2.load-balancers": {
@@ -440,13 +445,200 @@
   ]
  },
  "ec2.purchasing-options": {
-  "title": "Spot Requests, Savings Plans, Reserved Instances, Dedicated Hosts, Capacity Reservations, UltraServers, Capacity Manager",
+  "title": "Purchasing options and capacity planning (page family)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Spot requests, Reserved Instances, Capacity Reservations and Dedicated Hosts are real (see their own entries). Savings Plans, UltraServers and Capacity Manager are not simulated.",
+   "There is no billing; prices are illustrative."
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_ops_core.py"
+  ]
+ },
+ "ec2.events": {
+  "title": "Scheduled events (DescribeInstanceStatus events, ModifyInstanceEventStartTime)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Real: events appear in DescribeInstanceStatus.Events, can be rescheduled (future, before the deadline), and a due instance-stop / instance-retirement event really stops the instance (evaluated lazily on read); reboot/maintenance events complete without effect.",
+   "AWS raises maintenance events from hardware health itself; Vyomi has no hardware, so events exist only when scheduled through the console's 'Schedule test event' (a simulator-only action). Event windows and event notifications are not modeled.",
+   "On the offline appliance, instances run through its separate Docker runtime (not this core), so launch coupling (Spot fulfilment, Capacity Reservation targeting, Dedicated Host placement, scheduled instance events) applies on Nano; offline records and describes these resources but does not couple them to Docker launches."
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_ops_core.py"
+  ]
+ },
+ "ec2.health-rollup": {
+  "title": "Account-wide instance health rollup",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Computed live from DescribeInstanceStatus across all instances. A running instance always passes its checks and nothing ever becomes impaired or initializing (see ec2.instances.status-checks), so only the passing / events counters move.",
+   "The offline appliance's DescribeInstanceStatus comes from its Docker runtime, so scheduled-event counts there stay 0."
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_ops_core.py"
+  ]
+ },
+ "ec2.volumes.fault-tolerance": {
+  "title": "EBS snapshot-coverage (fault tolerance) widget",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Computed live from the account's real volumes and snapshots (recent = a snapshot started within 7 days). AWS's widget also factors in Data Lifecycle Manager coverage and Multi-AZ replication, which Vyomi doesn't model."
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_ops_core.py"
+  ]
+ },
+ "ec2.iam-instance-profiles": {
+  "title": "IAM instance profiles (Create IAM profile)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Real IAM: CreateInstanceProfile / GetInstanceProfile / ListInstanceProfiles / AddRoleToInstanceProfile / RemoveRoleFromInstanceProfile / DeleteInstanceProfile, with AWS's one-role-per-profile and delete-conflict rules; a role that sits in a profile can't be deleted.",
+   "RunInstances records the profile on the instance, but Vyomi does not vend the role's credentials through the instance metadata service."
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_ops_core.py"
+  ]
+ },
+ "ec2.compare-sg-rules": {
+  "title": "Compare security group rules",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_ec2_ops_core.py"
+  ]
+ },
+ "ec2.instance-type-finder": {
+  "title": "Instance type finder",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Filters the live DescribeInstanceTypes catalog by workload family, architecture, vCPU and memory. Vyomi's catalog is a curated subset of AWS's instance types, and the finder does not rank by price or performance."
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_ops_core.py"
+  ]
+ },
+ "ec2.recycle-bin": {
+  "title": "Recycle Bin (retention rules, retained snapshots and AMIs)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Real: the native rbin API (CreateRule/ListRules/GetRule/UpdateRule/DeleteRule/LockRule/UnlockRule/tags). Deleting an EBS snapshot or deregistering an AMI that matches a rule (Region-level or tag-level; the longest retention wins) moves it to the bin; ListSnapshotsInRecycleBin / ListImagesInRecycleBin / Restore* recover it; retention expiry purges it (evaluated lazily); locked rules can't be changed or deleted until unlocked and the 7-30 day delay passes.",
+   "Only EBS snapshots and AMIs are supported (not EBS volumes), and a restored AMI does not re-create its sourced snapshots' retention separately."
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_ops_core.py"
+  ]
+ },
+ "ec2.purchasing.spot": {
+  "title": "Spot requests, Spot price history",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Real: RequestSpotInstances / DescribeSpotInstanceRequests / CancelSpotInstanceRequests and RunInstances with InstanceMarketOptions launch real instances (instanceLifecycle=spot); a bid below the current price stays open (price-too-low) and is fulfilled when the price drops; a persistent request relaunches after the instance ends; ValidUntil expires.",
+   "Spot prices are a deterministic hourly function of the type and zone (30-65% of an illustrative on-demand rate), not a real market; Vyomi never interrupts a Spot instance for capacity. Spot Fleet / EC2 Fleet are not modeled.",
+   "On the offline appliance, instances run through its separate Docker runtime (not this core), so launch coupling (Spot fulfilment, Capacity Reservation targeting, Dedicated Host placement, scheduled instance events) applies on Nano; offline records and describes these resources but does not couple them to Docker launches."
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_ops_core.py"
+  ]
+ },
+ "ec2.purchasing.reserved-instances": {
+  "title": "Reserved Instances (offerings, purchase, describe)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Real: DescribeReservedInstancesOfferings (standard/convertible, 1/3-year, all payment options), PurchaseReservedInstancesOffering with count and limit-price checks, DescribeReservedInstances with active/retired by term.",
+   "There is no billing: prices are illustrative multiples of Vyomi's on-demand rate and a reservation has no discount effect. Modify/exchange/Marketplace resale are not modeled."
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_ops_core.py"
+  ]
+ },
+ "ec2.purchasing.capacity-reservations": {
+  "title": "Capacity Reservations",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Real: Create/Describe/Modify/CancelCapacityReservation; available capacity is total minus the running instances using it; RunInstances targeting a reservation is rejected (InsufficientInstanceCapacity) when it is full, cancelled or mismatched, and open reservations are consumed by matching launches; limited reservations expire.",
+   "No physical capacity backs a reservation; only Linux/UNIX, RHEL, SUSE and Windows platforms and default tenancy are modeled; reservation groups and sharing are not.",
+   "On the offline appliance, instances run through its separate Docker runtime (not this core), so launch coupling (Spot fulfilment, Capacity Reservation targeting, Dedicated Host placement, scheduled instance events) applies on Nano; offline records and describes these resources but does not couple them to Docker launches."
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_ops_core.py"
+  ]
+ },
+ "ec2.purchasing.dedicated-hosts": {
+  "title": "Dedicated Hosts",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Real: AllocateHosts / DescribeHosts / ModifyHosts / ReleaseHosts; RunInstances with host tenancy is placed on the named host (or an auto-placement host) subject to a per-host vCPU budget and instance-type/family match, a host that still has instances can't be released.",
+   "A host is an illustrative 96-vCPU budget, not real sockets/cores; host reservations, license configurations and host resource groups are not modeled.",
+   "On the offline appliance, instances run through its separate Docker runtime (not this core), so launch coupling (Spot fulfilment, Capacity Reservation targeting, Dedicated Host placement, scheduled instance events) applies on Nano; offline records and describes these resources but does not couple them to Docker launches."
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_ops_core.py"
+  ]
+ },
+ "ec2.purchasing.savings-plans": {
+  "title": "Savings Plans",
   "level": {
    "nano": "not_simulated",
    "offline": "not_simulated"
   },
   "limitations": [
-   "Vyomi has one simple on-demand pricing/availability model; these purchasing and capacity-planning products aren't simulated."
+   "Savings Plans is a separate billing service; Vyomi has no billing or commitment model."
+  ]
+ },
+ "ec2.purchasing.ultraservers": {
+  "title": "UltraServers",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "UltraServer capacity (multi-host accelerator domains) is not modeled."
+  ]
+ },
+ "ec2.purchasing.capacity-manager": {
+  "title": "Capacity Manager",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Capacity Manager's cross-account capacity analytics aren't modeled."
   ]
  }
 }

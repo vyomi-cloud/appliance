@@ -14,6 +14,7 @@ import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import { follow, href, navigate } from "../../../common/router.js";
 import * as api from "./api.js";
+import { HealthRollup } from "./OpsPages.jsx";
 
 export const stateType = (s) => ({ running: "success", stopped: "stopped", terminated: "stopped", pending: "pending", stopping: "pending", "shutting-down": "pending" }[s] || "pending");
 export const StateBadge = ({ s }) => <StatusIndicator type={stateType(s)}>{s}</StatusIndicator>;
@@ -33,7 +34,7 @@ export default function Instances() {
 
   return (
     <SpaceBetween size="l">
-      <NotSimulatedContainer title="All instances" feature="Instance alarm states / service health / EC2 health events" note="Account-wide health rollups above the table aren't modeled by Vyomi." />
+      <HealthRollup />
       <ResourceTable
         resourceName="Instances"
         items={rows}

@@ -25,6 +25,7 @@ import { follow, href, navigate } from "../../../common/router.js";
 import { ErrorAlert, KeyValue, NotSimulatedContainer } from "../../kit/common.jsx";
 import { TAG_I18N } from "./InstanceDetail.jsx";
 import * as api from "./api.js";
+import { FaultTolerance } from "./OpsPages.jsx";
 
 const opt = (v) => ({ value: v, label: v });
 
@@ -41,7 +42,7 @@ export function Volumes() {
 
   return (
     <SpaceBetween size="l">
-      <NotSimulatedContainer title="Fault tolerance for all volumes in this Region" feature="Data Lifecycle Manager / backup fault-tolerance rollup" />
+      <FaultTolerance />
       <ResourceTable
         resourceName="Volumes"
         items={rows}

@@ -10,13 +10,15 @@ import { useAsync } from "../../../common/useAsync.js";
 import { follow, href } from "../../../common/router.js";
 import { NotSimulatedContainer } from "../../kit/common.jsx";
 import * as api from "./api.js";
+import { ZonesWidget, AlarmsWidget } from "./OpsPages.jsx";
 
 export default function Dashboard() {
   const t = useAsync(() => Promise.all([
     api.describeInstances(), api.describeVolumes(), api.describeSnapshots(), api.describeSecurityGroups(),
     api.describeKeyPairs(), api.describeAddresses(), api.describePlacementGroups(),
-  ]).then(([instances, volumes, snapshots, sgs, keyPairs, addresses, pgs]) => ({ instances, volumes, snapshots, sgs, keyPairs, addresses, pgs })), []);
-  const d = t.data || { instances: [], volumes: [], snapshots: [], sgs: [], keyPairs: [], addresses: [], pgs: [] };
+    api.describeLoadBalancers().catch(() => []), api.describeAutoScalingGroups().catch(() => []), api.describeCapacityReservations().catch(() => []), api.describeHosts().catch(() => []),
+  ]).then(([instances, volumes, snapshots, sgs, keyPairs, addresses, pgs, lbs, asgs, crs, hosts]) => ({ instances, volumes, snapshots, sgs, keyPairs, addresses, pgs, lbs, asgs, crs, hosts })), []);
+  const d = t.data || { instances: [], volumes: [], snapshots: [], sgs: [], keyPairs: [], addresses: [], pgs: [], lbs: [], asgs: [], crs: [], hosts: [] };
   const running = d.instances.filter((i) => i.instanceState?.name === "running").length;
 
   return (
@@ -28,7 +30,7 @@ export default function Dashboard() {
               ["Instances (running)", running], ["Instances", d.instances.length], ["Volumes", d.volumes.length],
               ["Snapshots", d.snapshots.length], ["Security groups", d.sgs.length], ["Key pairs", d.keyPairs.length],
               ["Elastic IPs", d.addresses.length], ["Placement groups", d.pgs.length],
-              ["Load balancers", 0], ["Auto Scaling Groups", 0], ["Capacity Reservations", 0], ["Dedicated Hosts", 0],
+              ["Load balancers", d.lbs.length], ["Auto Scaling Groups", d.asgs.length], ["Capacity Reservations", d.crs.filter((c) => c.state === "active").length], ["Dedicated Hosts", d.hosts.filter((h) => h.state === "available").length],
             ].map(([label, value]) => (
               <div key={label}><Box variant="awsui-key-label">{label}</Box><div>{value}</div></div>
             ))}
@@ -46,8 +48,8 @@ export default function Dashboard() {
         </Grid>
 
         <Grid gridDefinition={[{ colspan: 6 }, { colspan: 6 }]}>
-          <NotSimulatedContainer title="Zones" feature="Local Zones / Wavelength Zones enablement" />
-          <NotSimulatedContainer title="Instance alarms" feature="CloudWatch alarms" note="No custom alarms are modeled by Vyomi." />
+          <ZonesWidget />
+          <AlarmsWidget />
         </Grid>
 
         <NotSimulatedContainer title="EC2 cost" feature="AWS Cost Explorer" note="Cost and usage data isn't modeled by Vyomi." />
