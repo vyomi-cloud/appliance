@@ -138,5 +138,12 @@
    "IP address pools are real: Microsoft.Network/networkManagers/{nm}/ipamPools is a genuine nested ARM resource (core/azure_arm_data.py CATALOG, reached through the generic type/name alternation — no dedicated code, same mechanic as a container registry's webhooks), and the Create VNet wizard's 'Allocate using IP address pools' checkbox ENFORCES a real, non-overlapping CIDR block carved out of the chosen pool's own address space (AzureArm._allocate_ipam_pool) — never a stored label; the block is released back to the pool when its vnet is deleted. Per-subnet pool allocation is not modelled: a pool-allocated vnet always gets one 'default' subnet spanning its full allocated range. Advertised address prefixes (custom BGP route advertisement) are not modelled: they only affect routing once this vnet peers with a real ExpressRoute circuit's carrier-network routers — hardware outside anything a local simulator can model — so Vyomi stores no advertised gateway prefixes."
   ],
   "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.vnets.subnetservices": {
+  "title": "Subnet service endpoints and delegation (create-subnet dialog)",
+  "level": { "nano": "config_only", "offline": "config_only" },
+  "limitations": ["Service endpoints and the subnet delegation are stored on the subnet and returned by the API exactly as set; Vyomi does not route service traffic over the endpoint or restrict the delegated subnet to the named service."],
+  "api": ["subnets CreateOrUpdate (serviceEndpoints, delegations)", "subnets Get"],
+  "tests": ["tests/conformance/test_azure_vnets_subnet_services.py"]
  }
 }

@@ -98,6 +98,16 @@ await pg.getByLabel("Connection name").fill("tostg"); await pg.getByLabel("Targe
 await pg.getByRole("button", { name: "Create", exact: true }).click(); await pg.waitForTimeout(1000);
 ok("function service connector wrote app settings", !!(await arm("GET", `${fsite}/config/appsettings`)).body.properties.AZURE_STORAGEBLOB_RESOURCEENDPOINT);
 for (const p of ["apimanagement", "webjobs", "certificates", "serviceconnector", "healthcheck", "authentication"]) { await go(p); }
+// ── VNet: subnet service endpoints + delegation in the Add-subnet dialog ──
+const VN = `appopsvnet${n}`;
+await arm("PUT", `/resourceGroups/${RG}/providers/Microsoft.Network/virtualNetworks/${VN}`, { location: "eastus", properties: { addressSpace: { addressPrefixes: ["10.5.0.0/16"] } } }, "2023-11-01");
+await pg.goto(`${UI}#/vnets/${RG}/${VN}/subnets`); await pg.waitForTimeout(1500);
+await pg.getByRole("button", { name: "Subnet", exact: true }).click(); await pg.waitForTimeout(500);
+await pg.getByLabel("Name", { exact: true }).fill("sn1"); await pg.getByLabel("Starting address").fill("10.5.1.0");
+await pg.getByLabel("Microsoft.Storage").check(); await pg.getByLabel("Delegate subnet to a service").selectOption("Microsoft.Web/serverFarms");
+await pg.getByRole("button", { name: "Add", exact: true }).click(); await pg.waitForTimeout(1200);
+const sp = (await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.Network/virtualNetworks/${VN}/subnets/sn1`, null, "2023-11-01")).body?.properties || {};
+ok("subnet carries the service endpoint + delegation", sp.serviceEndpoints?.[0]?.service === "Microsoft.Storage" && sp.delegations?.[0]?.properties?.serviceName === "Microsoft.Web/serverFarms", JSON.stringify(sp));
 // ── Entra: user sign-ins (non-interactive) via the real ROPC grant ──
 const UPN = `appopsuser${n}@vyomilearn.onmicrosoft.com`;
 await pg.evaluate(async ([w, upn]) => fetch(`${w}/v1.0/users`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ displayName: "Appops User", userPrincipalName: upn, passwordProfile: { password: "Vy0mi!pass12", forceChangePasswordNextSignIn: false } }) }), [WIRE, UPN]);

@@ -22,6 +22,7 @@ const PURPOSES = {
   "Azure Firewall Management (forced tunneling)": "AzureFirewallManagementSubnet",
   "Azure Route Server": "RouteServerSubnet",
 };
+const DELEGATIONS = ["Microsoft.Web/serverFarms", "Microsoft.ContainerInstance/containerGroups", "Microsoft.Sql/managedInstances", "Microsoft.DBforPostgreSQL/flexibleServers", "Microsoft.App/environments", "Microsoft.Netapp/volumes"];
 const SERVICES = ["Microsoft.Storage", "Microsoft.Sql", "Microsoft.AzureActiveDirectory", "Microsoft.KeyVault", "Microsoft.ServiceBus", "Microsoft.EventHub", "Microsoft.CosmosDB", "Microsoft.Web"];
 
 // ── Subnets ────────────────────────────────────────────────────────────────────────────
@@ -94,6 +95,8 @@ function AddSubnetDialog({ a, existing, nsgs, routeTables, natGateways, gateway,
   const [nsgId, setNsgId] = useState("");
   const [routeTableId, setRouteTableId] = useState("");
   const [natGatewayId, setNatGatewayId] = useState("");
+  const [endpoints, setEndpoints] = useState([]);
+  const [delegation, setDelegation] = useState("");
   const [busy, setBusy] = useState(false);
   const reserved = PURPOSES[purpose];
   const effectiveName = reserved || name;
@@ -114,6 +117,8 @@ function AddSubnetDialog({ a, existing, nsgs, routeTables, natGateways, gateway,
           ...(nsgId ? { networkSecurityGroup: { id: nsgId } } : {}),
           ...(routeTableId ? { routeTable: { id: routeTableId } } : {}),
           ...(natGatewayId ? { natGateway: { id: natGatewayId } } : {}),
+          ...(endpoints.length ? { serviceEndpoints: endpoints.map((service) => ({ service, locations: ["*"], provisioningState: "Succeeded" })) } : {}),
+          ...(delegation ? { delegations: [{ name: delegation.replace(/[^A-Za-z0-9]+/g, "_"), properties: { serviceName: delegation } }] } : {}),
         },
       });
       onClose();
@@ -169,8 +174,18 @@ function AddSubnetDialog({ a, existing, nsgs, routeTables, natGateways, gateway,
                   </Select>
                 </Field>
               </section>
-              <NotSimulatedContainer title="Service Endpoints" feature="Services" note="Configure service endpoints from the virtual network's Service endpoints page instead." />
-              <NotSimulatedContainer title="Subnet Delegation" feature="Delegate subnet to a service" note="Per-service subnet delegation is not modelled." />
+              <CapabilityContainer id="azure.vnets.subnetservices" title="Service Endpoints">
+                <Field label="Services">
+                  {SERVICES.map((svc) => <Checkbox key={svc} label={svc} checked={endpoints.includes(svc)} onChange={(_, d) => setEndpoints(d.checked ? [...endpoints, svc] : endpoints.filter((x) => x !== svc))} />)}
+                </Field>
+              </CapabilityContainer>
+              <CapabilityContainer id="azure.vnets.subnetservices" title="Subnet Delegation">
+                <Field label="Delegate subnet to a service">
+                  <Select value={delegation} onChange={(_, d) => setDelegation(d.value)} aria-label="Delegate subnet to a service">
+                    <option value="">None</option>{DELEGATIONS.map((d) => <option key={d}>{d}</option>)}
+                  </Select>
+                </Field>
+              </CapabilityContainer>
               {errors.length > 0 && <div style={{ color: "var(--colorPaletteRedForeground1)", fontSize: 12 }}>Fix: {errors.join(", ")}</div>}
             </div>
           </DialogContent>
