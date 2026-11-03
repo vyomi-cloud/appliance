@@ -101,6 +101,22 @@ jobs:
         if: always()
         with: { name: checks-brew, path: out/ }
 
+  # vyomi-tunnel (the Nano local tunnel) is published separately from the appliance. The
+  # in-browser VM's SSH details need the published version to match the source (>= 1.1.0
+  # carries `vm-tcp`); drift = users are told to upgrade to a version that doesn't exist.
+  tunnel:
+    needs: resolve
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: npm + Homebrew tap match packaging/tunnel
+        run: |
+          mkdir -p out
+          python3 scripts/tunnel_sync.py status | tee out/summary.md
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: checks-tunnel, path: out/ }
+
   # The real aws / gcloud / az CLIs (preinstalled on ubuntu-latest) against
   # the released images booted like `vyomi up`: identity (each CLI discovers
   # the account / project / subscription its console uses), every CLI suite on
@@ -307,7 +323,7 @@ jobs:
             tests/conformance/hourly/out/results-nano-${{ matrix.cloud }}.json
 
   report:
-    needs: [resolve, deb, rpm, brew, cli, nano-cli, console-ui, nano-ui]
+    needs: [resolve, deb, rpm, brew, tunnel, cli, nano-cli, console-ui, nano-ui]
     if: always() && needs.resolve.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 120
@@ -373,6 +389,7 @@ jobs:
             echo "| DEB: vyomi + vyomi-docker (install, vyomi commands, uninstall) | Ubuntu (GitHub) | $(res "${{ needs.deb.result }}") |"
             echo "| RPM: vyomi + vyomi-docker (install, vyomi commands, uninstall) | Fedora 40 (GitHub) | $(res "${{ needs.rpm.result }}") |"
             echo "| Homebrew: vyomi + vyomi-docker (install, vyomi commands, uninstall) | macOS (GitHub) | $(res "${{ needs.brew.result }}") |"
+            echo "| Tunnel: vyomi-tunnel on npm + Homebrew tap matches the source version | Ubuntu (GitHub) | $(res "${{ needs.tunnel.result }}") |"
             echo "| CLI: aws / gcloud / az suites + CLI ↔ console both ways $( [ -f arts/checks-cli/summary.md ] && grep -oE '[0-9]+/[0-9]+ checks passed' arts/checks-cli/summary.md | head -1 | sed 's/^/(/;s/$/)/') | Linux, release images | $(res "${{ needs.cli.result }}") |"
             echo "| Nano CLI: aws / gcloud / az through the tunnel + CLI ↔ console both ways $( [ -f arts/checks-nano-cli/summary.md ] && grep -oE '[0-9]+/[0-9]+ checks passed' arts/checks-nano-cli/summary.md | head -1 | sed 's/^/(/;s/$/)/') | Chromium, release wasm bundle | $(res "${{ needs.nano-cli.result }}") |"
             while IFS='|' read -r label wf id concl; do
@@ -387,6 +404,7 @@ jobs:
             for k in deb rpm brew; do
               [ -f "arts/checks-$k/summary.md" ] && { echo "## ${k^^}"; echo; cat "arts/checks-$k/summary.md"; echo; }
             done
+            [ -f arts/checks-tunnel/summary.md ] && { echo "## vyomi-tunnel (npm + Homebrew)"; echo; cat arts/checks-tunnel/summary.md; echo; }
             [ -f arts/checks-cli/summary.md ] && { echo "## CLI (aws / gcloud / az) and CLI ↔ console"; echo; cat arts/checks-cli/summary.md; echo; }
             [ -f arts/checks-nano-cli/summary.md ] && { echo "## Nano CLI through the tunnel and CLI ↔ console"; echo; cat arts/checks-nano-cli/summary.md; echo; }
             for d in arts/checks-console-ui-* arts/checks-nano-ui-*; do
