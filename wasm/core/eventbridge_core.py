@@ -683,6 +683,59 @@ def _list_replays(store, body):
                                             if r["ReplayName"].startswith(pre)]})
 
 
+def _buses(store):
+    return _store_map(store, "event_buses")
+
+
+def _bus_arn(store, name):
+    return f"arn:aws:events:{REGION}:{store.account_id}:event-bus/{name}"
+
+
+def _bus_view(store, name, b=None):
+    v = {"Name": name, "Arn": _bus_arn(store, name)}
+    if b and b.get("Description"):
+        v["Description"] = b["Description"]
+    return v
+
+
+def _create_event_bus(store, body):
+    name = str(body.get("Name", "")).strip()
+    if not name:
+        raise _E("ValidationException", "Name is required.")
+    if name == "default" or name in _buses(store):
+        raise _E("ResourceAlreadyExistsException", f"Event bus {name} already exists.")
+    _buses(store)[name] = {"Description": body.get("Description", ""), "Tags": body.get("Tags") or [],
+                           "CreationTime": _now_iso()}
+    store.persist()
+    out = {"EventBusArn": _bus_arn(store, name)}
+    if body.get("Description"):
+        out["Description"] = body["Description"]
+    return EventsResponse(body=out)
+
+
+def _describe_event_bus(store, body):
+    name = _bus_name(body.get("Name") or "default")
+    if name != "default" and name not in _buses(store):
+        raise _E("ResourceNotFoundException", f"Event bus {name} does not exist.")
+    return EventsResponse(body=_bus_view(store, name, _buses(store).get(name)))
+
+
+def _list_event_buses(store, body):
+    pre = str(body.get("NamePrefix", "") or "")
+    names = ["default"] + sorted(_buses(store))
+    return EventsResponse(body={"EventBuses": [_bus_view(store, n, _buses(store).get(n))
+                                               for n in names if n.startswith(pre)]})
+
+
+def _delete_event_bus(store, body):
+    name = _bus_name(body.get("Name") or "")
+    if name == "default":
+        raise _E("ValidationException", "Cannot delete the default event bus.")
+    _buses(store).pop(name, None)
+    store.persist()
+    return EventsResponse(body={})
+
+
 class _E(Exception):
     def __init__(self, code, message):
         super().__init__(message)
@@ -691,6 +744,8 @@ class _E(Exception):
 
 
 _OPS = {
+    "CreateEventBus": _create_event_bus, "DescribeEventBus": _describe_event_bus,
+    "ListEventBuses": _list_event_buses, "DeleteEventBus": _delete_event_bus,
     "PutRule": _put_rule, "DeleteRule": _delete_rule, "ListRules": _list_rules,
     "PutTargets": _put_targets, "RemoveTargets": _remove_targets,
     "ListTargetsByRule": _list_targets_by_rule, "PutEvents": _put_events,

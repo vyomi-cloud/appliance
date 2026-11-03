@@ -264,6 +264,18 @@ def run(store=None):
     _check("ListRules",call("ListRules", {}).body["Rules"][0]["Name"] == "r1")
     _check("ListTargetsByRule", call("ListTargetsByRule", {"Rule": "r1"}).body["Targets"][0]["Id"] == "t1")
 
+    # Event buses: Create/Describe/List/Delete
+    cb = call("CreateEventBus", {"Name": "orders", "Description": "d"})
+    _check("CreateEventBus returns the bus ARN", cb.status == 200
+           and cb.body["EventBusArn"].endswith(":event-bus/orders"))
+    _check("CreateEventBus duplicate is rejected", call("CreateEventBus", {"Name": "orders"}).status == 400)
+    _check("DescribeEventBus", call("DescribeEventBus", {"Name": "orders"}).body["Name"] == "orders")
+    _check("ListEventBuses includes default and orders",
+           [b["Name"] for b in call("ListEventBuses", {}).body["EventBuses"]] == ["default", "orders"])
+    _check("default bus cannot be deleted", call("DeleteEventBus", {"Name": "default"}).status == 400)
+    call("DeleteEventBus", {"Name": "orders"})
+    _check("DeleteEventBus", call("DescribeEventBus", {"Name": "orders"}).status == 400)
+
     print("\nEventBridge event-bus conformance: ALL GREEN")
     return s
 
