@@ -216,5 +216,21 @@
    "Per-resource IAP enable/disable and its IAM policy (roles/iap.httpsResourceAccessor) are real and stateful, and the Allow decision is ENFORCED: a checkAccess call returns the same allow/deny IAP's own proxy would — denied while IAP is off, denied without the accessor role, allowed with it. Vyomi does not run an actual HTTPS reverse proxy in front of a real backend service/App Engine app; checkAccess is the decision, not a live request path."
   ],
   "tests": ["tests/conformance/test_gcp_iam_core.py"]
+ },
+ "gcp.iam-admin.org-policy-simulation": {
+  "title": "Constraint simulation against existing resources",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Simulates four constraints Vyomi can evaluate against real state (service account key/account creation, uniform bucket-level access, public access prevention) using a Vyomi-specific policies:simulate verb; the real org-level Policy Simulator, custom constraints and list constraints are not simulated. Simulation never applies the change."
+  ],
+  "api": [
+   "policies.simulate"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_orgpolicy_sim.py"
+  ]
  }
 }

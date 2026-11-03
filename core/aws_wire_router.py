@@ -190,7 +190,7 @@ def _gcp_service(path):
         if "/serviceAccounts" in path or path.endswith(
                 (":getIamPolicy", ":setIamPolicy", ":testIamPermissions")):
             return "gcp-iam"
-        if re.search(r"^/v2/projects/[^/]+/policies(/|$)", path):
+        if re.search(r"^/v2/projects/[^/]+/(policies(:simulate)?|simulations)(/|$)", path):
             return "gcp-resourcemanager"
         if re.search(r"^/v1/projects/[^/]+/roles(/|$)", path):
             return "gcp-iam"
@@ -575,6 +575,7 @@ class AwsWireRouter:
         self.gcp_mon.compute_vm_store = self.gcp_compute_vm   # Overview "VMs with Ops Agent" + uptime checks targeting a GCE instance read real Compute Engine state
         self.gcp_mon.gcs_store = self.gcs   # Cost Explorer's Cloud Storage line item prices real bucket bytes stored
         self.gcp_rm = s.get("gcp_rm") or gcp_rm.ResourceManagerStore()   # Resource Manager (project, tags, contacts, org policies)
+        self.gcp_rm.inputs = self._rm_inputs   # org-policy simulation reads the project's real service accounts / keys / buckets
         self.gcp_pam = s.get("gcp_pam") or gcp_pam.PamStore()   # Privileged Access Manager entitlements
         self.gcp_run = s.get("gcp_run") or gcp_run.RunStore()   # Cloud Run (backs /functions, which the real console folds into it)
         self.gcp_run.pubsub_store = self.gcp_msg    # Eventarc Pub/Sub-sourced triggers validate/create a real subscription
@@ -757,6 +758,21 @@ class AwsWireRouter:
         """A real Pub/Sub publish -> deliver to every Cloud Run Eventarc-style trigger
         bound to that topic (see core/gcp_run_core.deliver_event)."""
         gcp_run.deliver_event(self.gcp_run, topic_full, messages, log_fn=self._run_log)
+
+    def _rm_inputs(self):
+        """Existing GCP resources an org-policy simulation evaluates (read as a GCP request)."""
+        try:
+            from core import app_context as _ctx
+            tok = _ctx.REQUEST_PROVIDER.set("gcp")
+        except Exception:   # Nano: no app_context, the stores are plain
+            _ctx, tok = None, None
+        try:
+            return {"sa_keys": dict(getattr(self.gcp_iam, "gcp_sa_keys", None) or {}),
+                    "service_accounts": dict(getattr(self.gcp_iam, "gcp_service_accounts", None) or {}),
+                    "buckets": dict(self.gcs.buckets)}
+        finally:
+            if tok is not None:
+                _ctx.REQUEST_PROVIDER.reset(tok)
 
     def _gcs_object_event(self, bucket, name, event, obj):
         gcp_run.deliver_storage_event(self.gcp_run, bucket, name, event, obj, log_fn=self._run_log)

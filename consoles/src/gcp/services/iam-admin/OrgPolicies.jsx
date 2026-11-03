@@ -4,13 +4,13 @@
  * are ENFORCED for real: core/gcp_iam_core.org_policy_enforced() checks them before
  * serviceAccounts.create / keys.create on both Nano and the offline substrate. */
 import { useState } from "react";
-import { Button, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, MenuItem, Stack, Switch, TextField } from "@mui/material";
+import { Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, MenuItem, Stack, Switch, TextField, Typography } from "@mui/material";
 import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import ResourceTable from "../../kit/ResourceTable.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
-import { ErrorAlert, NotSimulated, PageHeader } from "../../kit/common.jsx";
-import { CapabilityContainer } from "../../kit/Capability.jsx";
+import { ErrorAlert, PageHeader, Section } from "../../kit/common.jsx";
+import { CapabilityBadge, CapabilityContainer } from "../../kit/Capability.jsx";
 import * as api from "./api.js";
 
 const ENFORCED_CONSTRAINTS = [
@@ -42,8 +42,8 @@ export default function OrgPolicies() {
           <Button onClick={() => setSimulate((v) => !v)}>Simulate constraint</Button>
           <Button onClick={() => setSimHistory((v) => !v)}>Simulation history</Button>
         </Stack>} />
-      {simulate && <NotSimulated feature="Simulating a constraint change against existing resources" />}
-      {simHistory && <NotSimulated feature="Constraint simulation history" />}
+      {simulate && <SimulatePanel onRan={() => setSimHistory(true)} />}
+      {simHistory && <SimulationHistory />}
       <ErrorAlert error={list.error} title="Failed to load organization policies" />
       <CapabilityContainer id="gcp.iam-admin.organization-policies" title="Organization policies">
         <ResourceTable resourceName="policies" items={list.data || []} rowKey={(p) => p.name} loading={list.loading} onRetry={list.reload} filterPlaceholder="Filter"
@@ -124,5 +124,63 @@ function CreateConstraintDialog({ onClose, onCreated }) {
         }}>{busy ? "Creating…" : "Create"}</Button>
       </DialogActions>
     </Dialog>
+  );
+}
+
+function SimulatePanel() {
+  const [id, setId] = useState(api.SIMULATABLE_CONSTRAINTS[0][0]);
+  const [enforce, setEnforce] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const [report, setReport] = useState(null);
+  const run = async () => {
+    setBusy(true); setError(null);
+    try { setReport(await api.simulateOrgPolicy(id, enforce)); } catch (e) { setError(e); } finally { setBusy(false); }
+  };
+  return (
+    <Section title={<>Simulate a constraint change <CapabilityBadge id="gcp.iam-admin.org-policy-simulation" /></>}
+      description="Evaluate a change against the project's existing resources without applying it.">
+      <Stack spacing={2}>
+        <ErrorAlert error={error} title="Simulation failed" />
+        <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap" useFlexGap>
+          <TextField select label="Constraint" value={id} onChange={(e) => setId(e.target.value)} sx={{ minWidth: 340 }} inputProps={{ "aria-label": "Constraint to simulate" }}>
+            {api.SIMULATABLE_CONSTRAINTS.map(([v, l]) => <MenuItem key={v} value={v}>{l}</MenuItem>)}
+          </TextField>
+          <FormControlLabel control={<Switch checked={enforce} onChange={(e) => setEnforce(e.target.checked)} />} label={enforce ? "Enforce" : "Stop enforcing"} />
+          <Button variant="contained" disabled={busy} onClick={run}>{busy ? "Simulating…" : "Run simulation"}</Button>
+        </Stack>
+        {report && <Report r={report} />}
+      </Stack>
+    </Section>
+  );
+}
+
+function Report({ r }) {
+  return (
+    <Stack spacing={1} data-simulation-report={r.name}>
+      <Typography variant="body2"><b>{r.summary}</b> — {r.resourcesEvaluated} resource(s) evaluated.</Typography>
+      <Typography variant="body2" color="text.secondary">{r.effectOnNewResources}</Typography>
+      {r.violations.length > 0 && (
+        <Box component="ul" sx={{ m: 0, pl: 2.5 }} aria-label="Non-compliant resources">
+          {r.violations.map((v) => <li key={v.resource}><Typography variant="body2"><code>{v.resource}</code> — {v.reason}</Typography></li>)}
+        </Box>
+      )}
+    </Stack>
+  );
+}
+
+function SimulationHistory() {
+  const list = useAsync(() => api.listOrgSimulations(), []);
+  return (
+    <Section title="Simulation history">
+      <ResourceTable resourceName="simulations" items={list.data || []} rowKey={(r) => r.name} loading={list.loading} error={list.error} onRetry={list.reload}
+        empty={<Typography variant="body2" color="text.secondary">No simulations yet.</Typography>}
+        columns={[
+          { id: "time", header: "Run", cell: (r) => r.createTime },
+          { id: "constraint", header: "Constraint", cell: (r) => r.constraint },
+          { id: "change", header: "Change", cell: (r) => (r.enforce ? "Enforce" : "Stop enforcing") },
+          { id: "violations", header: "Non-compliant resources", cell: (r) => r.violationCount },
+        ]} />
+    </Section>
   );
 }
