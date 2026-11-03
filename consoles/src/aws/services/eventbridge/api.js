@@ -139,3 +139,19 @@ export const createEndpoint = (input) => E("CreateEndpoint", input);
 export const updateEndpoint = (input) => E("UpdateEndpoint", input);
 export const deleteEndpoint = (name) => E("DeleteEndpoint", { Name: name });
 export const testEventPattern = (eventPattern, event) => E("TestEventPattern", { EventPattern: eventPattern, Event: event });
+
+// ── KMS / bus logs / resource policy (sweep AWS-08) ─────────────────────────
+export const listKmsKeys = async () => {
+  const r = await awsJson("kms", "TrentService.ListKeys", {}, { version: "1.1" });
+  const out = [];
+  for (const k of r.Keys || []) {
+    try { const md = (await awsJson("kms", "TrentService.DescribeKey", { KeyId: k.KeyId }, { version: "1.1" })).KeyMetadata; if (md.KeyState === "Enabled" && (md.KeyUsage || "ENCRYPT_DECRYPT") === "ENCRYPT_DECRYPT" && md.KeyManager !== "AWS") out.push(md); } catch { /* skip */ }
+  }
+  return out;
+};
+export const updateEventBusConfig = (name, cfg) => E("UpdateEventBus", { Name: name, ...cfg });
+export const putPermission = (input) => E("PutPermission", input);
+export const removePermission = (input) => E("RemovePermission", input);
+export const busLogGroup = (bus) => `/aws/vendedlogs/events/event-bus/${bus}`;
+export const busLogEvents = (bus) => awsJson("logs", "Logs_20140328.FilterLogEvents", { logGroupName: busLogGroup(bus), limit: 50 }, { version: "1.1" })
+  .then((r) => r.events || []).catch(() => []);

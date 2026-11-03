@@ -653,7 +653,8 @@ def _dispatch_messaging(service: str, r: AwsWireRouter, method: str, path: str, 
         elif service == "events":
             from core import eventbridge_core
             resp = eventbridge_core.dispatch(st, target, payload, lam_store=_lam_store(r),
-                                             kinesis_store=_kinesis_store(), sfn_store=_sfn_store())
+                                             kinesis_store=_kinesis_store(), sfn_store=_sfn_store(),
+                                             caller_account=next((v for k, v in headers.items() if k.lower() == "x-amz-account-id"), None))
         else:
             return {"status": 400, "headers": {"content-type": ct, "x-amzn-requestid": rid},
                     "body": _json.dumps({"__type": "UnknownOperationException",

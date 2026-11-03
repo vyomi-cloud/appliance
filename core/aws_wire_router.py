@@ -643,6 +643,7 @@ class AwsWireRouter:
         self.cw.logs_store = self.logs            # real log-based Contributor Insights rules
         self.msg.cw_store = self.cw               # real AWS/SNS SMS delivery metrics (sns.sms.delivery-statistics)
         self.msg.logs_store = self.logs           # real SNS delivery-status logging (SQSSuccessFeedbackRoleArn/…)
+        self.msg.kms_store = self.kms             # EventBridge bus/archive KMS encryption (real Encrypt/Decrypt)
         self.elbv2 = s.get("elbv2") or elbv2.Elbv2Store()
         self.elbv2.vpc_store = self.vpc    # target health reacts to real instance state
         self.elbv2.cw_store = self.cw      # real AWS/ApplicationELB + AWS/NetworkELB metrics
@@ -1199,7 +1200,8 @@ class AwsWireRouter:
             elif svc == "secretsmanager":   # a customer KmsKeyId is really encrypted/decrypted through the KMS core
                 r = secrets.dispatch(self.sec, target, payload, kms_store=self.kms)
             elif svc == "events":
-                r = events.dispatch(self.events, target, payload, lam_store=self.lam, kinesis_store=self.kinesis, sfn_store=self.sfn)
+                r = events.dispatch(self.events, target, payload, lam_store=self.lam, kinesis_store=self.kinesis, sfn_store=self.sfn,
+                                    caller_account=lheaders.get("x-amz-account-id"))
             elif svc == "kinesis":
                 r = kinesis.dispatch(self.kinesis, target, payload)
             elif svc == "logs":
