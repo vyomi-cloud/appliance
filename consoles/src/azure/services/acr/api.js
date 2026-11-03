@@ -80,7 +80,9 @@ export const listActivityLog = async (rg, name) => {
 // x-vyomi-vault / keyvaults/api.js setActiveVault).
 let activeRegistry = "";
 export const setActiveRegistry = (name) => { activeRegistry = name || ""; };
-const acr = (method, path) => restJson(method, path, { headers: activeRegistry ? { "x-vyomi-registry": activeRegistry } : {} });
+const acr = (method, path, body) => restJson(method, path, { body, headers: activeRegistry ? { "x-vyomi-registry": activeRegistry } : {} });
+/** Import image (importImage). Carried on the data plane: the ARM action has no access to the repository store. */
+export const importImage = (body) => acr("POST", "/acr/v1/_import", body);
 
 export const listRepositories = async () => (await acr("GET", "/acr/v1/_catalog")).repositories || [];
 export const getRepository = (repo) => acr("GET", `/acr/v1/${repo}`);

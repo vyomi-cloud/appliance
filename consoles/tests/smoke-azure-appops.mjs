@@ -138,6 +138,19 @@ await pg.getByRole("radio", { name: "Export" }).check(); await pg.getByLabel("Se
 await pg.getByRole("button", { name: "Export", exact: true }).click(); await pg.waitForTimeout(1500);
 const kvb = Object.fromEntries(((await acData(ACB, "GET", "/kv")).body?.items || []).map((i) => [i.key, i.value]));
 ok("export copied key-values to the other store", kvb["p:app.name"] === "demo", JSON.stringify(kvb));
+// ── ACR: Import image copies manifest + blobs ──
+const ACRN = `appopsacr${n}`;
+await arm("PUT", `/resourceGroups/${RG}/providers/Microsoft.ContainerRegistry/registries/${ACRN}`, { location: "eastus", sku: { name: "Basic" } }, "2023-07-01");
+const acrCall = (m, path, body, ct) => pg.evaluate(async ([m, url, body, ct, reg]) => { const r = await fetch(url, { method: m, headers: { "x-vyomi-registry": reg, ...(ct ? { "content-type": ct } : {}) }, body: body ?? undefined }); const t = await r.text(); return { status: r.status, text: t }; }, [m, `${WIRE}${path}`, body, ct, ACRN]);
+const sha = async (str) => { const b = new TextEncoder().encode(str); const h = await crypto.subtle.digest("SHA-256", b); return "sha256:" + [...new Uint8Array(h)].map((x) => x.toString(16).padStart(2, "0")).join(""); };
+const cfgD = "sha256:" + (await import("node:crypto")).createHash("sha256").update("{}").digest("hex");
+await acrCall("POST", `/v2/imp-src/blobs/uploads/?digest=${cfgD}`, "{}", "application/octet-stream");
+await acrCall("PUT", `/v2/imp-src/manifests/v1`, JSON.stringify({ schemaVersion: 2, config: { digest: cfgD }, layers: [] }), "application/vnd.docker.distribution.manifest.v2+json");
+await pg.goto(`${UI}#/acr/${RG}/${ACRN}`); await pg.waitForTimeout(1500);
+await pg.getByRole("button", { name: "Import image" }).click(); await pg.waitForTimeout(400);
+await pg.getByLabel("Source image").fill("imp-src:v1"); await pg.getByLabel("Target tags").fill("imp-dst/app:prod");
+await pg.getByRole("button", { name: "Import", exact: true }).click(); await pg.waitForTimeout(1200);
+ok("ACR import created the target tag", (await acrCall("GET", `/v2/imp-dst/app/tags/list`)).text.includes("prod"));
 // ── Entra: user sign-ins (non-interactive) via the real ROPC grant ──
 const UPN = `appopsuser${n}@vyomilearn.onmicrosoft.com`;
 await pg.evaluate(async ([w, upn]) => fetch(`${w}/v1.0/users`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ displayName: "Appops User", userPrincipalName: upn, passwordProfile: { password: "Vy0mi!pass12", forceChangePasswordNextSignIn: false } }) }), [WIRE, UPN]);
