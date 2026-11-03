@@ -25,10 +25,10 @@
   "tests": ["tests/conformance/test_azure_blob_core.py"]
  },
  "azure.storage.accesskeys": {
-  "title": "Access keys (the ARM listKeys action)",
+  "title": "Access keys (listKeys / regenerateKey / key expiration policy)",
   "level": { "nano": "limited", "offline": "limited" },
-  "limitations": ["Keys are fixed simulator values, not real random key material, and Vyomi does not verify SharedKey request signatures against them."],
-  "tests": ["tests/conformance/test_azure_arm_core.py"]
+  "limitations": ["REAL: key1/key2 are random per-account 64-byte keys minted on first use; regenerateKey really rotates the named key (the other is unchanged), stamps properties.keyCreationTime, and keyPolicy.keyExpirationPeriodInDays yields a per-key keyExpirationTime. Vyomi does not verify SharedKey request signatures, so a rotated-out key keeps working against the Blob data plane."],
+  "tests": ["tests/conformance/test_azure_arm_core.py", "tests/conformance/test_azure_storage_ext_core.py"]
  },
  "azure.storage.endpoints": {
   "title": "Endpoints",
@@ -51,19 +51,28 @@
  "azure.storage.networking": {
   "title": "Networking (public network access / firewall default action / routing preference)",
   "level": { "nano": "limited", "offline": "limited" },
-  "limitations": ["ENFORCED: publicNetworkAccess=\"Disabled\" really rejects every Blob data-plane request for that account (403 AuthorizationFailure) — the account has no private endpoint in this simulator, so \"disabled\" means unreachable, same as the real service with no private endpoint configured. Still not simulated: virtual network rules, IP firewall rules, private endpoints and the networkAcls.defaultAction allow-list (which needs a real client network identity to match against — core/netsim models inter-VNet reachability, not a public-Internet client's source IP) and routingPreference."],
-  "tests": ["tests/conformance/test_azure_arm_core.py", "tests/conformance/test_azure_storage_depth_core.py"]
+  "limitations": [
+   "ENFORCED: publicNetworkAccess=\"Disabled\" really rejects every Blob data-plane request for that account (403 AuthorizationFailure) — the account has no private endpoint in this simulator, so \"disabled\" means unreachable, same as the real service with no private endpoint configured. Still not simulated: virtual network rules, IP firewall rules, private endpoints and the networkAcls.defaultAction allow-list (which needs a real client network identity to match against — core/netsim models inter-VNet reachability, not a public-Internet client's source IP) and routingPreference.",
+   "Resource instances (networkAcls.resourceAccessRules), custom domain (customDomain, no real CNAME validation) and route-specific endpoints (routingPreference.publishMicrosoftEndpoints/publishInternetEndpoints -> primaryEndpoints.microsoftEndpoints/internetEndpoints, both resolving to the account's single data path) are stored and returned exactly as configured but not enforced / not DNS-validated."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py", "tests/conformance/test_azure_storage_depth_core.py", "tests/conformance/test_azure_storage_ext_core.py"]
  },
  "azure.storage.encryption": {
   "title": "Encryption (key source)",
   "level": { "nano": "limited", "offline": "limited" },
-  "limitations": ["ENFORCED: selecting customer-managed keys requires a keyvaulturi + keyname and rejects (400) a keyvaulturi that doesn't name a Key Vault that actually exists in this subscription. The named key's own existence/enabled state INSIDE that vault is not checked (core/azure_arm_core.py has no reference to the Key Vault keys data-plane store), and every account is still encrypted the same way underneath — infrastructure (double) encryption and encryption scopes are not simulated."],
+  "limitations": [
+   "ENFORCED: selecting customer-managed keys requires a keyvaulturi + keyname and rejects (400) a keyvaulturi that doesn't name a Key Vault that actually exists in this subscription. The named key's own existence/enabled state INSIDE that vault is not checked (core/azure_arm_core.py has no reference to the Key Vault keys data-plane store), and every account is still encrypted the same way underneath — infrastructure (double) encryption and encryption scopes are not simulated.",
+   "requireInfrastructureEncryption and the CMK queue/table support flag are stored on encryption exactly as sent (create wizard + Encryption blade) but there is no second encryption pass; encryption scopes on containers stay not simulated."
+  ],
   "tests": ["tests/conformance/test_azure_arm_core.py"]
  },
  "azure.storage.dataprotection": {
   "title": "Data protection (soft delete, point-in-time restore, versioning, change feed) over the blobServices/default ARM sub-resource",
   "level": { "nano": "limited", "offline": "limited" },
-  "limitations": ["ENFORCED: Enable soft delete for blobs/containers really makes DELETE recoverable (invisible to normal listings, visible with include=deleted, restorable with comp=undelete, purged for real once the configured retention window elapses); Enable versioning for blobs really keeps an overwritten body as a separately fetchable version (?versionid=); Enable blob change feed really logs BlobCreated/BlobDeleted events from actual mutations. Still not enforced: operational backup (no backup engine), point-in-time restore, permanent delete, file-share soft delete (no Azure Files core) and version-level immutability."],
+  "limitations": [
+   "ENFORCED: Enable soft delete for blobs/containers really makes DELETE recoverable (invisible to normal listings, visible with include=deleted, restorable with comp=undelete, purged for real once the configured retention window elapses); Enable versioning for blobs really keeps an overwritten body as a separately fetchable version (?versionid=); Enable blob change feed really logs BlobCreated/BlobDeleted events from actual mutations. Still not enforced: operational backup (no backup engine), point-in-time restore, permanent delete, file-share soft delete (no Azure Files core) and version-level immutability.",
+   "The create wizard's Data protection tab writes the same blobServices/default document after the account is created; version-level immutability support is stored as properties.immutableStorageWithVersioning but immutability policies are not enforced."
+  ],
   "tests": ["tests/conformance/test_azure_arm_core.py", "tests/conformance/test_azure_storage_wave5b_core.py"]
  },
  "azure.storage.locks": {

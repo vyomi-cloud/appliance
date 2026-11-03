@@ -28,6 +28,9 @@ export default function CreateStorageAccount() {
     secureTransfer: true, allowBlobPublicAccess: false, allowSharedKeyAccess: true, defaultToOAuth: false, minimumTls: "TLS1_2", copyScope: "any",
     hns: false, accessTier: "Hot", allowCrossTenantReplication: false, primaryService: "blob",
     networkAccess: "all", routing: "MicrosoftRouting",
+    pitr: false, softDeleteBlobs: true, softDeleteBlobDays: 7, softDeleteContainers: true, softDeleteContainerDays: 7, permanentDelete: false,
+    versioning: false, changeFeed: false, immutability: false,
+    cmk: false, keyvaulturi: "", keyname: "", cmkQueueTable: false, infraEncryption: false,
     tags: [{ name: "", value: "" }],
   });
   const set = (k) => (_, d) => setF((x) => ({ ...x, [k]: d.value ?? d.checked }));
@@ -182,11 +185,23 @@ export default function CreateStorageAccount() {
 
   const dataProtection = (
     <>
-      <NotSimulatedContainer title="Recovery"
-        feature="Enable point-in-time restore for containers, Enable soft delete for blobs, Days to retain deleted blobs, Enable soft delete for containers, Days to retain deleted containers, Enable permanent delete for soft deleted items, Enable soft delete for file shares and Days to retain deleted file shares"
-        note="Deleted blobs and containers are removed immediately in Vyomi. These can be changed later under Data protection." />
-      <NotSimulatedContainer title="Tracking" feature="Enable versioning for blobs and Enable blob change feed" />
-      <NotSimulatedContainer title="Access control" feature="Enable version-level immutability support" />
+      <InfoBar>Saved as the account's blobServices/default properties. Soft delete, versioning and the change feed are enforced by the Vyomi Blob data plane.</InfoBar>
+      <FormSection title="Recovery" description="Protect your data from accidental or erroneous deletion or modification.">
+        <FormRow label="Enable point-in-time restore for containers"><Checkbox checked={f.pitr} onChange={chk("pitr")} aria-label="Enable point-in-time restore for containers" /></FormRow>
+        <FormRow label="Enable soft delete for blobs"><Checkbox checked={f.softDeleteBlobs} onChange={chk("softDeleteBlobs")} aria-label="Enable soft delete for blobs" /></FormRow>
+        {f.softDeleteBlobs && <FormRow label="Days to retain deleted blobs"><Input type="number" value={String(f.softDeleteBlobDays)} onChange={set("softDeleteBlobDays")} aria-label="Days to retain deleted blobs" /></FormRow>}
+        <FormRow label="Enable soft delete for containers"><Checkbox checked={f.softDeleteContainers} onChange={chk("softDeleteContainers")} aria-label="Enable soft delete for containers" /></FormRow>
+        {f.softDeleteContainers && <FormRow label="Days to retain deleted containers"><Input type="number" value={String(f.softDeleteContainerDays)} onChange={set("softDeleteContainerDays")} aria-label="Days to retain deleted containers" /></FormRow>}
+        <FormRow label="Enable permanent delete for soft deleted items"><Checkbox checked={f.permanentDelete} onChange={chk("permanentDelete")} aria-label="Enable permanent delete for soft deleted items" /></FormRow>
+      </FormSection>
+      <NotSimulatedContainer title="Azure Files recovery" feature="Enable soft delete for file shares and Days to retain deleted file shares" note="Azure Files has no core in Vyomi." />
+      <FormSection title="Tracking" description="Manage versions and keep track of changes made to your blob data.">
+        <FormRow label="Enable versioning for blobs"><Checkbox checked={f.versioning} onChange={chk("versioning")} aria-label="Enable versioning for blobs" /></FormRow>
+        <FormRow label="Enable blob change feed"><Checkbox checked={f.changeFeed} onChange={chk("changeFeed")} aria-label="Enable blob change feed" /></FormRow>
+      </FormSection>
+      <FormSection title="Access control" description="Enable version-level immutability so new containers can hold immutable (WORM) data.">
+        <FormRow label="Enable version-level immutability support"><Checkbox checked={f.immutability} onChange={chk("immutability")} aria-label="Enable version-level immutability support" /></FormRow>
+      </FormSection>
     </>
   );
 
@@ -194,13 +209,20 @@ export default function CreateStorageAccount() {
     <>
       <FormSection title="Encryption type">
         <FormRow label="Encryption type">
-          <RadioGroup value="mmk" aria-label="Encryption type">
+          <RadioGroup value={f.cmk ? "cmk" : "mmk"} onChange={(_, d) => setF((x) => ({ ...x, cmk: d.value === "cmk" }))} aria-label="Encryption type">
             <Radio value="mmk" label="Microsoft-managed keys (MMK)" />
+            <Radio value="cmk" label="Customer-managed keys (CMK)" />
           </RadioGroup>
         </FormRow>
+        {f.cmk && <>
+          <FormRow label="Key vault URI" required><Input value={f.keyvaulturi} onChange={set("keyvaulturi")} placeholder="https://myvault.vault.azure.net/" aria-label="Key vault URI" /></FormRow>
+          <FormRow label="Encryption key name" required><Input value={f.keyname} onChange={set("keyname")} aria-label="Encryption key name" /></FormRow>
+        </>}
       </FormSection>
-      <NotSimulatedContainer title="Customer-managed keys (CMK)" feature="Enable support for customer-managed keys for storage encryption" />
-      <NotSimulatedContainer title="Infrastructure encryption" feature="Enable infrastructure encryption (double encryption)" />
+      <FormSection title="Support options">
+        <FormRow label="Enable support for customer-managed keys"><Checkbox checked={f.cmkQueueTable} onChange={chk("cmkQueueTable")} aria-label="Enable support for customer-managed keys" /></FormRow>
+        <FormRow label="Enable infrastructure encryption"><Checkbox checked={f.infraEncryption} onChange={chk("infraEncryption")} aria-label="Enable infrastructure encryption" /></FormRow>
+      </FormSection>
     </>
   );
 
@@ -230,9 +252,12 @@ export default function CreateStorageAccount() {
         {dl([["Network connectivity", { all: "Public endpoint (all networks)", selected: "Public endpoint (selected networks)", disabled: "Private endpoint" }[f.networkAccess]],
           ["Default routing tier", f.routing === "MicrosoftRouting" ? "Microsoft network routing" : "Internet routing"]])}
         <h3>Data protection</h3>
-        {dl([["Point-in-time restore / soft delete / versioning / change feed", <span data-vyomi-not-simulated="Data protection">Not simulated in Vyomi</span>]])}
+        {dl([["Point-in-time restore for containers", yes(f.pitr)], ["Soft delete for blobs", f.softDeleteBlobs ? `Enabled (${f.softDeleteBlobDays} days)` : "Disabled"],
+          ["Soft delete for containers", f.softDeleteContainers ? `Enabled (${f.softDeleteContainerDays} days)` : "Disabled"], ["Permanent delete for soft deleted items", yes(f.permanentDelete)],
+          ["Versioning for blobs", yes(f.versioning)], ["Blob change feed", yes(f.changeFeed)], ["Version-level immutability support", yes(f.immutability)]])}
         <h3>Encryption</h3>
-        {dl([["Encryption type", "Microsoft-managed keys (MMK)"]])}
+        {dl([["Encryption type", f.cmk ? "Customer-managed keys (CMK)" : "Microsoft-managed keys (MMK)"], ...(f.cmk ? [["Key vault URI", f.keyvaulturi || "--"], ["Encryption key name", f.keyname || "--"]] : []),
+          ["Infrastructure encryption", yes(f.infraEncryption)]])}
         <h3>Tags</h3>
         {dl(Object.keys(b.tags).length ? Object.entries(b.tags).map(([k, v]) => [k, v || "(empty)"]) : [["Tags", "None"]])}
       </>
@@ -242,6 +267,7 @@ export default function CreateStorageAccount() {
   const onCreate = async () => {
     try {
       await api.createStorageAccount(rg, f.name, body());
+      await api.putBlobServiceProperties(rg, f.name, api.blobServiceFromWizard(f));
       notify.success(`Deployment of storage account '${f.name}' to resource group '${rg}' was successful.`, "Deployment succeeded");
       navigate("storage", rg, f.name);
     } catch (e) { notify.error(e, "Deployment failed"); }

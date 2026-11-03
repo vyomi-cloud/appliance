@@ -85,11 +85,11 @@ export default function StorageAccountBlade({ params, query }) {
       overview: () => <Overview a={a} reload={reload} self={self} />,
       tags: () => <Tags a={a} reload={reload} />,
       containers: () => (query.container ? <Container account={name} container={query.container} self={self} /> : <Containers account={name} self={self} />),
-      accesskeys: () => <AccessKeys a={a} />,
+      accesskeys: () => <AccessKeys a={a} reload={reload} />,
       configuration: () => <Configuration a={a} reload={reload} />,
       endpoints: () => <Endpoints a={a} />,
       redundancy: () => <Redundancy a={a} self={self} />,
-      networking: () => <Networking a={a} />,
+      networking: () => <Networking a={a} reload={reload} />,
       encryption: () => <Encryption a={a} reload={reload} />,
       dataprotection: () => <DataProtection a={a} />,
       objectreplication: () => <ObjectReplication a={a} />,
@@ -170,7 +170,7 @@ function Overview({ a, reload, self }) {
         <Tab value="tutorials">Tutorials</Tab>
         <Tab value="toolsandsdks">Tools + SDKs</Tab>
       </TabList>
-      {tab === "properties" && <Properties a={a} />}
+      {tab === "properties" && <Properties a={a} reload={reload} />}
       {tab === "monitoring" && <NotSimulatedContainer feature="Storage account monitoring (requests, egress, latency charts)" />}
       {tab === "capabilities" && <NotSimulatedContainer feature="The capabilities overview" />}
       {tab === "recommendations" && <NotSimulatedContainer feature="Advisor recommendations" />}
@@ -203,8 +203,12 @@ function Overview({ a, reload, self }) {
 const ns = (what) => <span data-vyomi-not-simulated={what} className="vy-muted">Not simulated</span>;
 const onoff = (v, dflt) => ((v ?? dflt) ? "Enabled" : "Disabled");
 
-function Properties({ a }) {
+function Properties({ a, reload }) {
+  const notify = useNotify();
   const p = a.properties || {};
+  const svcQ = useAsync(() => api.getBlobServiceProperties(a.resourceGroup, a.name), [a.id]);
+  const sv = svcQ.data || {};
+  const days = (x) => (x?.enabled ? `Enabled (${x.days ?? 7} days)` : "Disabled");
   const net = p.publicNetworkAccess === "Disabled" ? "Disabled" : p.networkAcls?.defaultAction === "Deny" ? "Selected networks" : "All networks";
   return (
     <div className="vy-props" style={{ marginTop: 12 }}>
@@ -212,10 +216,10 @@ function Properties({ a }) {
         <KV label="Hierarchical namespace" value={onoff(p.isHnsEnabled, false)} />
         <KV label="Default access tier" value={p.accessTier || "--"} />
         <KV label="Blob anonymous access" value={onoff(p.allowBlobPublicAccess, false)} />
-        <KV label="Blob soft delete" value={ns("Blob soft delete")} />
-        <KV label="Container soft delete" value={ns("Container soft delete")} />
-        <KV label="Versioning" value={ns("Blob versioning")} />
-        <KV label="Change feed" value={ns("Blob change feed")} />
+        <KV label="Blob soft delete" value={svcQ.loading ? "…" : days(sv.deleteRetentionPolicy)} />
+        <KV label="Container soft delete" value={svcQ.loading ? "…" : days(sv.containerDeleteRetentionPolicy)} />
+        <KV label="Versioning" value={svcQ.loading ? "…" : onoff(sv.isVersioningEnabled, false)} />
+        <KV label="Change feed" value={svcQ.loading ? "…" : onoff(sv.changeFeed?.enabled, false)} />
         <KV label="NFS v3" value={ns("NFS v3")} />
         <KV label="Allow cross-tenant replication" value={onoff(p.allowCrossTenantReplication, false)} />
       </section>
@@ -223,7 +227,7 @@ function Properties({ a }) {
         <KV label="Require secure transfer for REST API operations" value={onoff(p.supportsHttpsTrafficOnly, true)} />
         <KV label="Storage account key access" value={onoff(p.allowSharedKeyAccess, true)} />
         <KV label="Minimum TLS version" value={(p.minimumTlsVersion || "TLS1_0").replace("TLS", "Version ").replace("_", ".")} />
-        <KV label="Infrastructure encryption" value={ns("Infrastructure encryption")} />
+        <KV label="Infrastructure encryption" value={onoff(p.encryption?.requireInfrastructureEncryption, false)} />
       </section>
       <section className="vy-section"><h3>Networking</h3>
         <KV label="Allow access from" value={net} />
@@ -233,7 +237,11 @@ function Properties({ a }) {
       </section>
       <section className="vy-section"><h3>File service</h3>
         <KV label="Large file share" value={ns("Azure Files")} />
-        <KV label="Identity-based access" value={ns("Azure Files identity-based access")} />
+        <KV label="Identity-based access" value={
+          <Select value={p.azureFilesIdentityBasedAuthentication?.directoryServiceOptions || "None"} aria-label="Azure Files identity-based access" style={{ maxWidth: 320 }}
+            onChange={async (_, d) => { try { await api.updateStorageAccount(a.resourceGroup, a.name, { properties: { azureFilesIdentityBasedAuthentication: { directoryServiceOptions: d.value } } }); notify.success(`Identity-based access set to ${d.value}.`, "Saved"); reload?.(); } catch (e) { notify.error(e, "Saving failed"); } }}>
+            <option value="None">Not configured</option><option value="AADKERB">Microsoft Entra Kerberos</option><option value="AADDS">Microsoft Entra Domain Services</option><option value="AD">Active Directory</option>
+          </Select>} />
       </section>
       <section className="vy-section"><h3>Queue service</h3>
         <KV label="Approximate messaging" value="Shared across every storage account on this Vyomi — see Queues." />
@@ -519,8 +527,21 @@ function Secret({ label, value }) {
   );
 }
 
-function AccessKeys({ a }) {
+function AccessKeys({ a, reload }) {
+  const notify = useNotify();
   const keys = useAsync(() => api.listKeys(a.resourceGroup, a.name), [a.id]);
+  const [days, setDays] = useState(String(a.properties?.keyPolicy?.keyExpirationPeriodInDays ?? ""));
+  const rotate = async (keyName) => {
+    try { await api.regenerateKey(a.resourceGroup, a.name, keyName); notify.success(`${keyName} was regenerated.`, "Rotate key"); keys.reload(); reload?.(); }
+    catch (e) { notify.error(e, "Rotating the key failed"); }
+  };
+  const saveDays = async () => {
+    try {
+      await api.updateStorageAccount(a.resourceGroup, a.name, { properties: { keyPolicy: days ? { keyExpirationPeriodInDays: Number(days) } : undefined } });
+      notify.success("Key expiration policy saved.", "Saved"); keys.reload(); reload?.();
+    } catch (e) { notify.error(e, "Saving the key expiration policy failed"); }
+  };
+  const nowMs = Date.now();
   const ep = api.blobEndpoint(a.name);
   return (
     <>
@@ -532,11 +553,18 @@ function AccessKeys({ a }) {
       {keys.loading ? <Loading /> : (keys.data || []).map((k) => (
         <section className="vy-section" key={k.keyName} style={{ maxWidth: 760, display: "flex", flexDirection: "column", gap: 8 }}>
           <h3>{k.keyName}</h3>
+          <KV label="Last rotated" value={fmtDate(k.creationTime)} />
+          {k.keyExpirationTime && <KV label="Key expires" value={`${fmtDate(k.keyExpirationTime)}${Date.parse(k.keyExpirationTime) < nowMs ? " (expired — rotate this key)" : ""}`} />}
+          <div><Button size="small" onClick={() => rotate(k.keyName)} aria-label={`Rotate key ${k.keyName}`}>Rotate key</Button></div>
           <Secret label="Key" value={k.value} />
           <Secret label="Connection string" value={`DefaultEndpointsProtocol=${location.protocol.replace(":", "")};AccountName=${a.name};AccountKey=${k.value};BlobEndpoint=${ep};`} />
         </section>
       ))}
-      <NotSimulatedContainer title="Rotate key" feature="Key rotation and key expiry reminders" />
+      <CapabilityContainer id="azure.storage.accesskeys" title="Set rotation reminder">
+        <Field label="Set a reminder to rotate access keys (days; blank = off)" style={{ maxWidth: 360 }}>
+          <Input type="number" value={days} onChange={(_, d) => setDays(d.value)} aria-label="Key expiration period in days" /></Field>
+        <div style={{ marginTop: 8 }}><Button onClick={saveDays} aria-label="Save key expiration policy">Save</Button></div>
+      </CapabilityContainer>
     </>
   );
 }
@@ -669,8 +697,13 @@ function Redundancy({ a, self }) {
   );
 }
 
-function Networking({ a }) {
+function Networking({ a, reload }) {
+  const notify = useNotify();
   const p = a.properties || {};
+  const patch = async (props, msg) => { try { await api.updateStorageAccount(a.resourceGroup, a.name, { properties: props }); notify.success(msg, "Saved"); reload?.(); } catch (e) { notify.error(e, "Saving failed"); } };
+  const [ri, setRi] = useState({ tenantId: "", resourceId: "" });
+  const [domain, setDomain] = useState({ name: p.customDomain?.name || "", useSubDomainName: !!p.customDomain?.useSubDomainName });
+  const rules = p.networkAcls?.resourceAccessRules || [];
   const [tab, setTab] = useState("public");
   const net = p.publicNetworkAccess === "Disabled" ? "Disabled" : p.networkAcls?.defaultAction === "Deny" ? "Enable from selected networks" : "Enable from all networks";
   return (
@@ -689,16 +722,41 @@ function Networking({ a }) {
         </section>
         <NotSimulatedContainer title="Virtual networks" feature="Virtual network rules for storage accounts" />
         <NotSimulatedContainer title="Firewall" feature="Address range IP firewall rules for storage accounts" />
-        <NotSimulatedContainer title="Resource instances" feature="Resource instances (trusted Azure resource access by resource ID)" />
+        <CapabilityContainer id="azure.storage.networking" title="Resource instances">
+          <table className="vy-grid"><thead><tr><th>Resource ID</th><th>Tenant ID</th><th /></tr></thead><tbody>
+            {rules.length ? rules.map((r, i) => (
+              <tr key={i}><td>{r.resourceId}</td><td>{r.tenantId}</td>
+                <td><Button size="small" aria-label={`Remove resource instance ${i + 1}`} onClick={() => patch({ networkAcls: { ...p.networkAcls, resourceAccessRules: rules.filter((_, j) => j !== i) } }, "Resource instance removed.")}>Remove</Button></td></tr>
+            )) : <tr><td colSpan={3} className="vy-muted">No resource instances.</td></tr>}
+          </tbody></table>
+          <div style={{ display: "flex", gap: 8, marginTop: 8, alignItems: "flex-end" }}>
+            <Field label="Resource ID" style={{ flex: 2 }}><Input value={ri.resourceId} onChange={(_, d) => setRi((x) => ({ ...x, resourceId: d.value }))} aria-label="Resource instance resource ID" /></Field>
+            <Field label="Tenant ID" style={{ flex: 1 }}><Input value={ri.tenantId} onChange={(_, d) => setRi((x) => ({ ...x, tenantId: d.value }))} aria-label="Resource instance tenant ID" /></Field>
+            <Button disabled={!ri.resourceId.trim()} aria-label="Add resource instance"
+              onClick={() => { patch({ networkAcls: { ...p.networkAcls, resourceAccessRules: [...rules, { tenantId: ri.tenantId || "00000000-0000-0000-0000-000000000000", resourceId: ri.resourceId.trim() }] } }, "Resource instance added."); setRi({ tenantId: "", resourceId: "" }); }}>Add</Button>
+          </div>
+        </CapabilityContainer>
         <NotSimulatedContainer title="Exceptions" feature="Allow Azure services on the trusted services list to access this storage account" />
       </div>}
       {tab === "private" && <NotSimulatedContainer title="Private endpoint connections" feature="Private endpoints for storage accounts" />}
       {tab === "advanced" && <div style={{ display: "flex", flexDirection: "column", gap: 16, marginTop: 12 }}>
         <section className="vy-section"><h3>Network routing</h3>
           <KV label="Routing preference" value={p.routingPreference?.routingChoice === "InternetRouting" ? "Internet routing" : "Microsoft network routing"} />
-          <NotSimulated feature="Publish route-specific endpoints for Microsoft network routing and Internet routing" />
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
+            <Checkbox checked={!!p.routingPreference?.publishMicrosoftEndpoints} label="Publish Microsoft network routing endpoints"
+              onChange={(_, d) => patch({ routingPreference: { ...p.routingPreference, publishMicrosoftEndpoints: !!d.checked } }, "Routing endpoints updated.")} />
+            <Checkbox checked={!!p.routingPreference?.publishInternetEndpoints} label="Publish Internet routing endpoints"
+              onChange={(_, d) => patch({ routingPreference: { ...p.routingPreference, publishInternetEndpoints: !!d.checked } }, "Routing endpoints updated.")} />
+            {p.primaryEndpoints?.microsoftEndpoints && <KV label="Microsoft routing blob endpoint" value={`${location.origin}${p.primaryEndpoints.microsoftEndpoints.blob}`} />}
+            {p.primaryEndpoints?.internetEndpoints && <KV label="Internet routing blob endpoint" value={`${location.origin}${p.primaryEndpoints.internetEndpoints.blob}`} />}
+            <p className="vy-muted" style={{ fontSize: 12 }}>Vyomi is single-origin: both route-specific endpoints resolve to this account's one data path.</p>
+          </div>
         </section>
-        <NotSimulatedContainer title="Custom domain" feature="Custom domain mapping — Domain name and Use indirect CNAME validation for storage accounts" />
+        <CapabilityContainer id="azure.storage.networking" title="Custom domain">
+          <Field label="Domain name" style={{ maxWidth: 420 }}><Input value={domain.name} onChange={(_, d) => setDomain((x) => ({ ...x, name: d.value }))} aria-label="Custom domain name" /></Field>
+          <Checkbox checked={domain.useSubDomainName} label="Use indirect CNAME validation" onChange={(_, d) => setDomain((x) => ({ ...x, useSubDomainName: !!d.checked }))} />
+          <div style={{ marginTop: 8 }}><Button aria-label="Save custom domain" onClick={() => patch({ customDomain: domain.name ? { name: domain.name, useSubDomainName: domain.useSubDomainName } : null }, "Custom domain saved.")}>Save</Button></div>
+        </CapabilityContainer>
       </div>}
     </>
   );
@@ -744,7 +802,10 @@ function Encryption({ a, reload }) {
           <Field label="Key name"><Input value={f.keyname} onChange={(_, d) => setF((x) => ({ ...x, keyname: d.value }))} /></Field>
         </>}
       </section>
-      <NotSimulatedContainer title="Infrastructure encryption" feature="Infrastructure (double) encryption and encryption scopes" note="The named key's own existence/enabled state inside the vault is not checked — only that the vault itself exists." />
+      <section className="vy-section"><h3>Infrastructure encryption</h3>
+        <KV label="Enable infrastructure encryption" value={enc.requireInfrastructureEncryption ? "Enabled" : "Disabled"} />
+        <p className="vy-muted" style={{ fontSize: 12 }}>Set at account creation only, as in Azure (immutable afterwards). Stored and reported; Vyomi does not layer a second encryption pass. The named key's own existence inside the vault is not checked — only that the vault exists.</p>
+      </section>
     </CapabilityContainer>
   );
 }
@@ -1288,7 +1349,7 @@ function DataProtection({ a }) {
       softDeleteBlobs: !!p.deleteRetentionPolicy?.enabled, softDeleteBlobDays: p.deleteRetentionPolicy?.days ?? 7,
       softDeleteContainers: !!p.containerDeleteRetentionPolicy?.enabled, softDeleteContainerDays: p.containerDeleteRetentionPolicy?.days ?? 7,
       permanentDelete: false, softDeleteShares: false, softDeleteShareDays: 7,
-      versioning: !!p.isVersioningEnabled, changeFeed: !!p.changeFeed?.enabled, immutability: false,
+      versioning: !!p.isVersioningEnabled, changeFeed: !!p.changeFeed?.enabled, immutability: !!a.properties?.immutableStorageWithVersioning?.enabled,
     };
   };
   const [f, setF] = useState(init);
@@ -1308,6 +1369,8 @@ function DataProtection({ a }) {
         isVersioningEnabled: f.versioning,
         changeFeed: { enabled: f.changeFeed },
       });
+      if (f.immutability !== !!a.properties?.immutableStorageWithVersioning?.enabled)
+        await api.updateStorageAccount(a.resourceGroup, a.name, { properties: { immutableStorageWithVersioning: { enabled: f.immutability } } });
       notify.success(`Data protection settings on '${a.name}' were saved.`, "Saved");
       svc.reload();
     } catch (e) { notify.error(e, "Saving data protection settings failed"); }
@@ -1344,7 +1407,7 @@ function DataProtection({ a }) {
           </div>
         </section>
         <section className="vy-section"><h3>Access control</h3>
-          {cb("immutability", "Enable version-level immutability support", "not enforced")}
+          {cb("immutability", "Enable version-level immutability support", "stored on the account; blob immutability policies are not enforced")}
         </section>
       </div>
       {f.softDeleteContainers && <section className="vy-section" style={{ marginTop: 16 }}><h3>Deleted containers</h3>

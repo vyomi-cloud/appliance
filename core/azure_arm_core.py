@@ -79,6 +79,11 @@ try:                                              # Event Grid event subscriptio
 except ImportError:
     import azure_eventgrid_core as eventgrid_engine       # type: ignore
 
+try:                                              # Storage account keys (rotation) + route-specific endpoints
+    from core import azure_storage_ext_core as storage_ext
+except ImportError:
+    import azure_storage_ext_core as storage_ext   # type: ignore
+
 try:                                              # Azure Policy rule engine (custom policyRule evaluation)
     from core import azure_policy_core as policy_engine
 except ImportError:
@@ -1493,6 +1498,9 @@ class AzureArm:
                 rec = self.state[key]
                 grant_vault_creator(self.state, rec, rid, sub, rg)
                 resp["body"] = _view(rec)
+            if full_type.lower() == "microsoft.storage/storageaccounts" and key in self.state:
+                storage_ext.apply_endpoints(self.state[key])
+                resp["body"] = _view(self.state[key])
             if full_type.lower() == "microsoft.resources/deploymentstacks":
                 # Same bounded template evaluator as a plain deployment — but a stack also
                 # tracks the resources it manages so DELETE can cascade-delete them for real
@@ -3067,6 +3075,14 @@ class AzureArm:
                 {"name": "password", "value": creds["password"]},
                 {"name": "password2", "value": creds["password2"]},
             ]})
+        if ns == "microsoft.storage" and typ == "storageaccounts" and len(type_chain) == 3 and action in ("listkeys", "regeneratekey"):
+            rec = self.state.get(parent_rid.lower()) if parent_rid else None
+            if not rec:
+                return _err(404, "ResourceNotFound", f"Storage account '{resource_name}' not found.")
+            if action == "regeneratekey":
+                r = storage_ext.regenerate(rec, payload or {})
+                return _ok(r["body"]) if r["status"] == 200 else _err(r["status"], r["body"]["error"]["code"], r["body"]["error"]["message"])
+            return _ok(storage_ext.list_keys(rec))
         if ns == "microsoft.sql" and typ == "servers" and action in ("export", "import"):
             return self._sql_import_export(action, type_chain, parent_rid, payload or {}, sub, rg)
         if ns == "microsoft.containerservice" and typ == "managedclusters":

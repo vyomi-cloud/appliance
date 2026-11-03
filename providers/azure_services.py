@@ -1014,7 +1014,9 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
         # stay here (they drive the real runtime).
         if type_chain[0].lower() in ("microsoft.documentdb", "microsoft.containerregistry", "microsoft.resources",
                                      "microsoft.apimanagement") or (
-                type_chain[0].lower() == "microsoft.sql" and type_chain[-1].lower() in ("export", "import")):
+                type_chain[0].lower() == "microsoft.sql" and type_chain[-1].lower() in ("export", "import")) or (
+                type_chain[0].lower() == "microsoft.storage" and len(type_chain) == 3
+                and type_chain[1].lower() == "storageaccounts" and type_chain[-1].lower() in ("listkeys", "regeneratekey")):
             # (Microsoft.Sql database export/import: the .bacpac goes to the appliance's OWN Blob store)
             payload = await _safe_json(request)
             out = core_arm()._arm_action(type_chain[-1].lower(), type_chain, names[-1], parent_rid,
@@ -1116,6 +1118,13 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
             _body = _json.loads(resp.body)
             _body.setdefault("properties", {})["accessPolicies"] = _state[key]["properties"].get("accessPolicies", [])
             resp = JSONResponse(status_code=resp.status_code, content=_body)
+        if full_type.lower() == "microsoft.storage/storageaccounts" and key in _state:   # route-specific endpoints (core parity)
+            from core import azure_storage_ext_core as _sx
+            _sx.apply_endpoints(_state[key])
+            import json as _json2
+            _b2 = _json2.loads(resp.body)
+            _b2.setdefault("properties", {})["primaryEndpoints"] = _state[key]["properties"].get("primaryEndpoints", {})
+            resp = JSONResponse(status_code=resp.status_code, content=_b2)
         # Data-plane provisioning hooks (real Postgres for SQL, etc.).
         _provision_on_create(full_type, _state.get(key), base)
         if lro:
@@ -1325,7 +1334,7 @@ def _core_create_block(sub: str, rg, full_type: str, key: str, payload: dict):
     this offline catalog: the core ARM engine's own checks, so they behave the same as on Nano."""
     try:
         arm = core_arm()
-        out = arm._policy_block(sub, rg, full_type, payload) or arm._quota_block(sub, full_type, key, payload)
+        out = arm._policy_block(sub, rg, full_type, payload, key.rsplit("/", 1)[-1], _state.get(key)) or arm._quota_block(sub, full_type, key, payload)
     except Exception:
         return None
     if not out:

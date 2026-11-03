@@ -30,7 +30,10 @@ const errors = [];
 page.on("pageerror", (e) => errors.push(e.message));
 page.on("console", (m) => m.type() === "error" && !/status of (400|403|404|409)/.test(m.text()) && errors.push(m.text()));
 const shot = (name) => page.screenshot({ path: `${OUT}/${name}.png`, fullPage: true });
-const noNS = async (label) => check(`${label}: no Not-simulated panel`, (await page.locator("[data-vyomi-not-simulated]").count()) === 0);
+const noNS = async (label, allow = []) => {
+  const left = (await page.locator("[data-vyomi-not-simulated]").evaluateAll((els) => els.map((e) => e.getAttribute("data-vyomi-not-simulated") || ""))).filter((t) => !allow.some((a) => t.includes(a)));
+  check(`${label}: no unexpected Not-simulated panel`, left.length === 0, left.join(" | ").slice(0, 160));
+};
 
 try {
   await page.goto(UI, { waitUntil: process.env.NANO ? "domcontentloaded" : "networkidle" });
@@ -78,6 +81,56 @@ try {
   await page.goto(UI + `#/aks/${RG}/${aks}/policies`);
   await page.getByRole("tab", { name: "Compliance" }).waitFor();
   await noNS("AKS policies");
+
+  // ── Storage: wizard Data protection + Encryption, Properties, key rotation, networking ──
+  const SA = `vyazs${n}`;
+  await page.goto(UI + "#/storage/create");
+  await page.getByLabel("Storage account name", { exact: true }).fill(SA);
+  await page.getByRole("link", { name: "Create new" }).or(page.getByRole("button", { name: "Create new" })).first().click();
+  await page.getByLabel("New resource group name").fill(RG + "s");
+  await page.getByRole("tab", { name: "Data protection", exact: true }).click();
+  await page.getByLabel("Enable versioning for blobs").check();
+  await page.getByLabel("Enable blob change feed").check();
+  await page.getByLabel("Days to retain deleted blobs").fill("9");
+  await noNS("wizard Data protection", ["file shares"]);
+  await page.getByRole("tab", { name: "Encryption", exact: true }).click();
+  await page.getByLabel("Enable infrastructure encryption").check();
+  await noNS("wizard Encryption");
+  await page.getByRole("button", { name: "Review + create" }).click();
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("heading", { name: new RegExp(SA) }).first().waitFor({ timeout: 30000 });
+  const bs = json(await arm("GET", `/resourceGroups/${RG}s/providers/Microsoft.Storage/storageAccounts/${SA}/blobServices/default`));
+  check("wizard wrote blobServices/default (versioning, change feed, 9d soft delete)", bs.properties?.isVersioningEnabled === true && bs.properties?.changeFeed?.enabled === true && bs.properties?.deleteRetentionPolicy?.days === 9);
+  const sacc = json(await arm("GET", `/resourceGroups/${RG}s/providers/Microsoft.Storage/storageAccounts/${SA}`));
+  check("infrastructure encryption stored on the account", sacc.properties?.encryption?.requireInfrastructureEncryption === true);
+  await page.goto(UI + `#/storage/${RG}s/${SA}/configuration`);
+  await page.waitForTimeout(500);
+  await page.goto(UI + `#/storage/${RG}s/${SA}`);
+  await page.getByRole("tab", { name: "Properties" }).click();
+  await page.getByText("Enabled (9 days)").first().waitFor({ timeout: 10000 });
+  await noNS("storage Properties", ["NFS v3", "Private endpoints", "Azure Files"]);
+  // key rotation
+  const before = json(await arm("POST", `/resourceGroups/${RG}s/providers/Microsoft.Storage/storageAccounts/${SA}/listKeys`)).keys[0].value;
+  await page.goto(UI + `#/storage/${RG}s/${SA}/accesskeys`);
+  await page.getByRole("button", { name: "Rotate key key1" }).click();
+  await page.waitForTimeout(800);
+  const after = json(await arm("POST", `/resourceGroups/${RG}s/providers/Microsoft.Storage/storageAccounts/${SA}/listKeys`)).keys[0].value;
+  check("UI Rotate key really changes the key over ARM", before !== after);
+  await noNS("Access keys");
+  // networking
+  await page.goto(UI + `#/storage/${RG}s/${SA}/networking`);
+  await page.getByLabel("Resource instance resource ID").fill("/subscriptions/x/resourceGroups/y/providers/Microsoft.Sql/servers/z");
+  await page.getByRole("button", { name: "Add resource instance" }).click();
+  await page.waitForTimeout(800);
+  await page.getByRole("tab", { name: "Advanced" }).click();
+  await page.getByLabel("Publish Internet routing endpoints").click();
+  await page.getByLabel("Custom domain name").fill("cdn.example.com");
+  await page.getByRole("button", { name: "Save custom domain" }).click();
+  await page.waitForTimeout(800);
+  const net = json(await arm("GET", `/resourceGroups/${RG}s/providers/Microsoft.Storage/storageAccounts/${SA}`)).properties || {};
+  check("resource instance + internet endpoint + custom domain persisted", net.networkAcls?.resourceAccessRules?.length === 1 && !!net.primaryEndpoints?.internetEndpoints && net.customDomain?.name === "cdn.example.com");
+  await page.getByRole("tab", { name: "Public access" }).click();
+  await noNS("storage Networking (public)", ["Virtual network", "firewall", "trusted services"]);
 
   // @@GROUPS@@
 } catch (e) {
