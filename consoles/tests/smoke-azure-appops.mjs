@@ -125,6 +125,19 @@ await pg.getByLabel("Certificate Name").fill("polcert"); await pg.getByRole("rad
 await pg.getByRole("button", { name: "Create", exact: true }).click(); await pg.waitForTimeout(1500);
 const cp = (await kvData("GET", "/certificates/polcert/policy")).body || {};
 ok("certificate policy stored (content type, key size, lifetime action)", cp.secret_properties?.content_type === "application/x-pem-file" && cp.key_properties?.key_size === 3072 && cp.lifetime_actions?.[0]?.action?.action_type === "AutoRenew", JSON.stringify(cp).slice(0, 300));
+// ── App Configuration: import a JSON file, export to another store ──
+const ACA = `appopscfga${n}`, ACB = `appopscfgb${n}`;
+for (const nm of [ACA, ACB]) await arm("PUT", `/resourceGroups/${RG}/providers/Microsoft.AppConfiguration/configurationStores/${nm}`, { location: "eastus", sku: { name: "standard" } }, "2024-05-01");
+const acData = (store, m, path, body) => pg.evaluate(async ([m, url, body, st]) => { const r = await fetch(url, { method: m, headers: { "content-type": "application/json", "x-vyomi-store": st }, body: body ? JSON.stringify(body) : undefined }); const t = await r.text(); return { status: r.status, body: t ? JSON.parse(t) : null }; }, [m, `${WIRE}${path}${path.includes("?") ? "&" : "?"}api-version=2023-11-01`, body, store]);
+await pg.goto(`${UI}#/appconfiguration/${RG}/${ACA}/importexport`); await pg.waitForTimeout(1500);
+await pg.getByLabel("File", { exact: true }).setInputFiles({ name: "cfg.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify({ app: { name: "demo", db: { host: "h1" } }, flag: "on" })) });
+await pg.getByLabel("Prefix").fill("p:"); await pg.getByRole("button", { name: "Apply" }).click(); await pg.waitForTimeout(1500);
+const kvs = Object.fromEntries(((await acData(ACA, "GET", "/kv")).body?.items || []).map((i) => [i.key, i.value]));
+ok("JSON import flattened with separator + prefix", kvs["p:app.name"] === "demo" && kvs["p:app.db.host"] === "h1" && kvs["p:flag"] === "on", JSON.stringify(kvs));
+await pg.getByRole("radio", { name: "Export" }).check(); await pg.getByLabel("Service", { exact: true }).selectOption("store"); await pg.getByLabel("Configuration store").selectOption(ACB);
+await pg.getByRole("button", { name: "Export", exact: true }).click(); await pg.waitForTimeout(1500);
+const kvb = Object.fromEntries(((await acData(ACB, "GET", "/kv")).body?.items || []).map((i) => [i.key, i.value]));
+ok("export copied key-values to the other store", kvb["p:app.name"] === "demo", JSON.stringify(kvb));
 // ── Entra: user sign-ins (non-interactive) via the real ROPC grant ──
 const UPN = `appopsuser${n}@vyomilearn.onmicrosoft.com`;
 await pg.evaluate(async ([w, upn]) => fetch(`${w}/v1.0/users`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ displayName: "Appops User", userPrincipalName: upn, passwordProfile: { password: "Vy0mi!pass12", forceChangePasswordNextSignIn: false } }) }), [WIRE, UPN]);

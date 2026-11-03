@@ -26,6 +26,7 @@ import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
+import ImportExport from "./ImportExport.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -87,6 +88,7 @@ export default function ConfigStoreBlade({ params, query }) {
       iam: () => <AccessControlIam a={a} />,
       tags: () => <Tags a={a} reload={reload} />,
       explorer: () => <ConfigExplorer self={self} query={query} />,
+      importexport: () => <ImportExport store={name} />,
       features: () => <FeatureManager />,
       access: () => <AccessSettings a={a} reload={reload} />,
       replicas: () => <Replicas a={a} />,
@@ -308,7 +310,7 @@ function ConfigExplorerList({ self }) {
         ]}
         emptyAction={<Link as="button" onClick={() => setCreate(true)}>Create key-value</Link>}
       />
-      <NotSimulatedContainer feature="Export and Import of key-values (file, App Service, another configuration store)" />
+      <p style={{ fontSize: 13, marginTop: 12 }}>Move many key-values at once: <Link href={`${self}/importexport`}>Import/export</Link> (file, App Service or another configuration store).</p>
       <CreateKeyValueDialog open={create} onClose={() => setCreate(false)} onCreated={reload} />
     </>
   );

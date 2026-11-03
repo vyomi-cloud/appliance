@@ -88,3 +88,8 @@ export function toArmBody(f) {
     },
   };
 }
+
+/** Data-plane call against an explicit store (Import/export reads a SECOND store without switching the blade's active one). */
+export const dpFor = (store, method, path, { query, body } = {}) => restJson(method, path, {
+  query: { "api-version": DATA_API_VERSION, ...(query || {}) }, body, headers: { "x-vyomi-store": store },
+});
