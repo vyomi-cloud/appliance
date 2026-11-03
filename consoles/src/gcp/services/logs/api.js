@@ -189,3 +189,16 @@ export const validBucketId = (n) => {
   if (!/^[A-Za-z0-9_-]+$/.test(n)) return "Use only letters, numbers, underscores (_) and hyphens (-).";
   return null;
 };
+
+/** Correlate by trace: for the traces appearing in `matched`, fetch EVERY entry that carries the same trace
+ * (across all log streams, via the native `trace="..."` entries:list filter) and group them, newest group first. */
+export async function correlateByTrace(matched, maxGroups = 20) {
+  const traces = [...new Set(matched.map((en) => en.trace).filter(Boolean))].slice(0, maxGroups);
+  const groups = await Promise.all(traces.map(async (trace) => {
+    const entries = (await listEntries({ filter: `trace="${trace}"`, orderBy: "timestamp asc", pageSize: 500 }));
+    const logs = [...new Set(entries.map((en) => en.logName?.split("/logs/")[1]).filter(Boolean))];
+    const worst = entries.reduce((w, en) => ((SEVERITY_ORDER[en.severity] ?? 0) > (SEVERITY_ORDER[w] ?? 0) ? en.severity : w), "DEFAULT");
+    return { trace, entries, logs, severity: worst, first: entries[0]?.timestamp, last: entries[entries.length - 1]?.timestamp };
+  }));
+  return groups.sort((a, b) => String(b.last).localeCompare(String(a.last)));
+}
