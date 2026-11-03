@@ -28,6 +28,7 @@ export default function VirtualMachines() {
       <TitleRow title="Virtual machines" glyph={<Glyph id="vms" />} closeHref="#/" />
       <div className="vy-page">
         <BrowseGrid
+          tools
           resourceName="virtual machine"
           items={data || []}
           loading={loading}
@@ -60,7 +61,6 @@ export default function VirtualMachines() {
           ]}
           emptyAction={<Link href="#/vms/create">Create virtual machine</Link>}
         />
-        <NotSimulatedContainer feature="Switch to classic, Reservations, Open query (Azure Resource Graph), Assign tags, Start, Restart, Stop, Services and Maintenance from this list's command bar — open a virtual machine to start, restart or stop it" />
       </div>
     </>
   );

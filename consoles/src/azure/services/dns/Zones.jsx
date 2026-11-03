@@ -23,6 +23,7 @@ export default function Zones() {
       <TitleRow title="DNS zones" subtitle="Vyomi simulator (default directory)" glyph={<Glyph id="dns" />} closeHref="#/" />
       <div className="vy-page">
         <BrowseGrid
+          tools
           resourceName="DNS zone"
           items={data || []}
           loading={loading}
@@ -30,8 +31,6 @@ export default function Zones() {
           onRefresh={reload}
           onCreate={() => navigate("dns", "create")}
           extraCommands={<>
-            <ToolbarButton onClick={() => setGap("Open query")}>Open query</ToolbarButton>
-            <ToolbarButton onClick={() => setGap("Assign tags")}>Assign tags</ToolbarButton>
           </>}
           onDelete={async (rows) => {
             for (const r of rows) await api.deleteZone(rg(r.id), r.name);

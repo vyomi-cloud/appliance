@@ -178,7 +178,7 @@
   "title": "Access control (IAM)",
   "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "Check access, Role assignments and Deny assignments are REAL and scoped to this AKS cluster's resource id: Check access runs core/azure_iam_core.py's evaluator (explicit-deny-wins, scope inheritance from the subscription/resource group), the lists filter the shared RBAC store to assignments whose scope covers it, and new assignments are created scoped to it. Principal IDs are free text (Vyomi has no real directory); 'My access' and Classic administrators stay honest gaps."
+   "Check access, Role assignments and Deny assignments are REAL and scoped to this AKS cluster's resource id: Check access runs core/azure_iam_core.py's evaluator (explicit-deny-wins, scope inheritance from the subscription/resource group), the lists filter the shared RBAC store to assignments whose scope covers it, and new assignments are created scoped to it. Principal IDs are free text (Vyomi has no real directory); 'My access' and Classic administrators stay honest gaps. Update: the Deny assignments list, Classic administrators (a read-only list of the subscription's account administrator, like the real API) and My access (the simulated signed-in principal, evaluated with checkAccess) are now real shared tabs (azure.common.*); the gap wording above predates them."
   ],
   "tests": ["tests/conformance/test_azure_rbac_core.py"]
  }

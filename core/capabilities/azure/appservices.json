@@ -75,7 +75,7 @@
   "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
    "Role assignments and role definitions are real ARM resources (Microsoft.Authorization/roleAssignments, roleDefinitions). The Role assignments list is ENFORCED scoped to this Web App (plus its subscription/resource-group ancestors, matching real Azure's inherited-access view) instead of the whole subscription — the same engine the Cosmos DB account and VM blades use; Roles stays subscription-wide, which matches real Azure (built-in role definitions are listed tenant-wide too).",
-   "Assignments are still created at the subscription scope (az role assignment create); 'Check access' / 'My access' evaluation and Deny assignments / Classic administrators remain an honest gap."
+   "Assignments are still created at the subscription scope (az role assignment create); 'Check access' / 'My access' evaluation and Deny assignments / Classic administrators remain an honest gap. Update: the Deny assignments list, Classic administrators (a read-only list of the subscription's account administrator, like the real API) and My access (the simulated signed-in principal, evaluated with checkAccess) are now real shared tabs (azure.common.*); the gap wording above predates them."
   ],
   "api": ["RoleAssignments_ListForScope (resource-scoped)", "RoleDefinitions_List"],
   "tests": ["tests/conformance/test_azure_arm_core.py"]

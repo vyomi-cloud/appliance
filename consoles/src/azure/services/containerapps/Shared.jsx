@@ -15,6 +15,9 @@ import { CapabilityContainer } from "../../kit/Capability.jsx";
 import BrowseGrid from "../../kit/BrowseGrid.jsx";
 import { ErrorBar, Loading, NotSimulatedContainer, fmtDate } from "../../kit/common.jsx";
 import * as api from "./api.js";
+import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
+import SharedActivityLog from "../../kit/ActivityLog.jsx";
+import { ClassicAdminsPanel, DenyAssignmentsPanel, MyAccess } from "../../kit/IamExtras.jsx";
 
 export function MiniTable({ columns, rows, empty }) {
   return (
@@ -26,32 +29,7 @@ export function MiniTable({ columns, rows, empty }) {
 }
 
 export function ActivityLog({ resPath, name }) {
-  const { data, loading, error, reload } = useAsync(() => api.listActivityLog(resPath), [resPath]);
-  const rows = (data || []).map((e) => ({
-    key: e.id, op: e.operationName?.localizedValue || e.operationName?.value || "--",
-    status: e.status?.localizedValue || e.status?.value || "--",
-    time: e.eventTimestamp ? new Date(e.eventTimestamp).toLocaleString() : "--",
-    ts: e.eventTimestamp || "--", sub: e.subscriptionId || "--", caller: e.caller || "--",
-  }));
-  return (
-    <>
-      <div className="vy-panel-title">{name} | Activity log</div>
-      <div className="vy-cmdbar" role="toolbar" aria-label="Activity log commands">
-        <ToolbarButton icon={<ArrowClockwise20Regular />} onClick={reload}>Refresh</ToolbarButton>
-      </div>
-      {loading ? <Loading /> : error ? <ErrorBar error={error} title="Failed to load the activity log" /> : (
-        <table className="vy-grid" aria-label="Activity log">
-          <thead><tr><th>Operation name</th><th>Status</th><th>Time</th><th>Time stamp</th><th>Subscription</th><th>Event initiated by</th></tr></thead>
-          <tbody>
-            {rows.length === 0 ? <tr><td colSpan={6}>No events to display</td></tr>
-              : rows.map((r) => <tr key={r.key}><td>{r.op}</td><td>{r.status}</td><td>{r.time}</td><td>{r.ts}</td><td>{r.sub}</td><td>{r.caller}</td></tr>)}
-          </tbody>
-        </table>
-      )}
-      <NotSimulatedContainer feature="Activity log filters and export"
-        note="Filters (Management Group, Subscription, Event severity, Timespan, Resource group, Resource, Add Filter) and the Edit columns / Export Activity Logs / Download as CSV / Insights / Feedback / Pin current filters / Reset filters actions are not simulated; Vyomi lists the real create/update/delete/action operations performed on this resource." />
-    </>
-  );
+  return <SharedActivityLog scope={resPath || ""} name={name} />;
 }
 
 export function AccessControlIam({ resPath, name, capId }) {
@@ -75,7 +53,7 @@ export function AccessControlIam({ resPath, name, capId }) {
       </TabList>
       {tab === "checkaccess" && (
         <div style={{ marginTop: 12 }}>
-          <section className="vy-section"><h3>My access</h3><Button>View my access</Button></section>
+          <MyAccess a={a} />
           <section className="vy-section"><h3>Check access</h3><Button>Check access</Button></section>
         </div>
       )}
@@ -102,8 +80,8 @@ export function AccessControlIam({ resPath, name, capId }) {
           </CapabilityContainer>
         </div>
       )}
-      {tab === "denyassignments" && <div style={{ marginTop: 12 }}><NotSimulatedContainer title="Deny assignments" feature="Deny assignments" /></div>}
-      {tab === "classicadministrators" && <div style={{ marginTop: 12 }}><NotSimulatedContainer title="Classic administrators" feature="Classic administrators" /></div>}
+      {tab === "denyassignments" && <div style={{ marginTop: 12 }}><DenyAssignmentsPanel a={a} /></div>}
+      {tab === "classicadministrators" && <div style={{ marginTop: 12 }}><ClassicAdminsPanel /></div>}
     </>
   );
 }
@@ -238,35 +216,8 @@ export function DiagnosticSettings({ resPath, name }) {
   );
 }
 
-export function ExportTemplate({ a, name, type, extra }) {
-  const [tab, setTab] = useState("arm");
-  const template = {
-    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#", contentVersion: "1.0.0.0",
-    resources: [{ type, apiVersion: api.API_VERSION, name: a.name, location: a.location, properties: a.properties, ...extra }],
-  };
-  return (
-    <>
-      <div className="vy-panel-title">{name} | Export template</div>
-      <div className="vy-cmdbar" role="toolbar" aria-label="Export template commands">
-        <ToolbarButton icon={<DocumentArrowDown20Regular />} onClick={() => {
-          const blob = new Blob([JSON.stringify(template, null, 2)], { type: "application/json" });
-          const u = URL.createObjectURL(blob); const el = document.createElement("a"); el.href = u; el.download = `${a.name}.json`; document.body.appendChild(el); el.click(); el.remove();
-          setTimeout(() => URL.revokeObjectURL(u), 1000);
-        }}>Download</ToolbarButton>
-        <ToolbarButton disabled>Deploy</ToolbarButton>
-      </div>
-      <TabList selectedValue={tab} onTabSelect={(_, d) => setTab(d.value)} aria-label="Export template tabs">
-        <Tab value="arm">ARM Template</Tab><Tab value="bicep">Bicep</Tab><Tab value="terraform">Terraform</Tab>
-      </TabList>
-      {tab === "arm" && (
-        <section className="vy-section"><h3>Template</h3>
-          <pre className="vy-mono" style={{ maxHeight: 360, overflow: "auto", background: "var(--colorNeutralBackground3)", padding: 10, borderRadius: 4, fontSize: 12 }}>{JSON.stringify(template, null, 2)}</pre>
-        </section>
-      )}
-      {tab === "bicep" && <NotSimulatedContainer feature="ARM-to-Bicep decompilation" />}
-      {tab === "terraform" && <NotSimulatedContainer feature="ARM-to-Terraform export" />}
-    </>
-  );
+export function ExportTemplate({ a, name }) {
+  return <SharedExportTemplate id={a.id} name={name || a.name} resourceGroup={a.resourceGroup} />;
 }
 
 export const activityLogFmt = fmtDate;

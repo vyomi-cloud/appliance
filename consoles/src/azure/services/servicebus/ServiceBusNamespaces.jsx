@@ -20,6 +20,7 @@ export default function ServiceBusNamespaces() {
       <TitleRow title="Service Bus" subtitle="Vyomi simulator (default directory)" glyph={<Glyph id="servicebus" />} closeHref="#/" />
       <div className="vy-page">
         <BrowseGrid
+          tools
           resourceName="namespace"
           items={data || []}
           loading={loading}
@@ -47,7 +48,6 @@ export default function ServiceBusNamespaces() {
           ]}
           emptyAction={<Link href="#/servicebus/create">Create service bus namespace</Link>}
         />
-        <NotSimulatedContainer feature="Open query (Azure Resource Graph) and Assign tags from the command bar" />
       </div>
     </>
   );

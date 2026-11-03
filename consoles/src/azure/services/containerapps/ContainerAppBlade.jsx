@@ -23,6 +23,7 @@ import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
 import { AccessControlIam, ActivityLog, DiagnosticSettings, ExportTemplate, Locks, MiniTable, Tags } from "./Shared.jsx";
+import SharedResourceHealth from "../../kit/ResourceHealth.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -101,6 +102,7 @@ export default function ContainerAppBlade({ params }) {
       locks: () => <Locks resPath={resPath} name={a.name} />,
       diagnosticsettings: () => <DiagnosticSettings resPath={resPath} name={a.name} />,
       exporttemplate: () => <ExportTemplate a={a} name={a.name} type="Microsoft.App/containerApps" />,
+      resourcehealth: () => <SharedResourceHealth id={a.id} name={a.name} />,
     }[panel];
     body = P ? P() : <CapabilityContainer id={CAP[panel] || "azure.containerapps.app.tools"} title={`${a.name} | ${LABEL[panel] || panel}`} />;
   }

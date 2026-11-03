@@ -23,6 +23,7 @@ export default function CosmosAccounts() {
       <TitleRow title="Azure Cosmos DB" subtitle="Vyomi simulator (default directory)" glyph={<Glyph id="cosmos" />} closeHref="#/" />
       <div className="vy-page">
         <BrowseGrid
+          tools
           resourceName="Azure Cosmos DB account"
           items={data || []}
           loading={loading}
@@ -36,8 +37,6 @@ export default function CosmosAccounts() {
           }}
           extraCommands={<>
             <ToolbarButton onClick={() => setGap("Restore")}>Restore</ToolbarButton>
-            <ToolbarButton onClick={() => setGap("Open query")}>Open query</ToolbarButton>
-            <ToolbarButton onClick={() => setGap("Assign tags")}>Assign tags</ToolbarButton>
           </>}
           subscriptionLabel={subName}
           csvName="cosmos-db-accounts.csv"

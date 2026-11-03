@@ -21,6 +21,8 @@ import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 import { TagRows } from "./TagRows.jsx";
 import * as api from "./api.js";
+import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
+import SharedActivityLog from "../../kit/ActivityLog.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -50,9 +52,9 @@ export default function ZoneBlade({ params }) {
       tags: () => <Tags z={z} rg={rg} reload={reload} />,
       vnetlinks: () => <VnetLinks z={z} rg={rg} reload={reload} />,
       locks: () => <Locks z={z} rg={rg} />,
-      activitylog: () => <ActivityLog z={z} rg={rg} />,
+      activitylog: () => <SharedActivityLog scope={z.id} name={z.name} />,
       iam: () => <Iam z={z} />,
-      exporttemplate: () => <NotSimulatedContainer title={`${z.name} | Export template`} feature="ARM/Bicep/Terraform template export for a DNS zone" />,
+      exporttemplate: () => <SharedExportTemplate id={z.id} name={z.name} resourceGroup={z.resourceGroup || z.id.split("/")[4]} />,
       diagnose: () => <NotSimulatedContainer title={`${z.name} | Diagnose and solve problems`} feature="The guided DNS diagnostic tiles" />,
     }[panel];
     body = P ? P() : <NotSimulatedContainer title={`${z.name} | ${LABEL[panel] || panel}`} feature={`The ${LABEL[panel] || panel} panel`} />;
@@ -449,31 +451,6 @@ function AddLockDialog({ open, onClose, onCreate }) {
 }
 
 // ── Activity log (Microsoft.Insights/eventtypes/management/values, scoped to this zone) ──
-function ActivityLog({ z, rg }) {
-  const { data, loading, error, reload } = useAsync(() => api.listActivityLog(rg, z.name), [rg, z.name]);
-  const rows = data || [];
-  return (
-    <CapabilityContainer id="azure.dns.activity_log" title={`${z.name} | Activity log`}
-      actions={<ToolbarButton icon={<ArrowClockwise20Regular />} onClick={reload}>Refresh</ToolbarButton>}>
-      <ErrorBar error={error} />
-      <table className="vy-grid">
-        <thead><tr><th>Operation name</th><th>Status</th><th>Time</th><th>Time stamp</th><th>Subscription</th><th>Event initiated by</th></tr></thead>
-        <tbody>
-          {loading ? <tr><td colSpan={6}><Spinner size="tiny" /></td></tr> : rows.length ? rows.map((r) => (
-            <tr key={r.id}>
-              <td>{r.operationName?.localizedValue || r.operationName?.value}</td>
-              <td>{r.status?.localizedValue || r.status?.value}</td>
-              <td>{fmtDate(r.eventTimestamp)}</td>
-              <td>{r.eventTimestamp}</td>
-              <td>{r.subscriptionId}</td>
-              <td>{r.caller}</td>
-            </tr>
-          )) : <tr><td colSpan={6} className="vy-muted">No events to display</td></tr>}
-        </tbody>
-      </table>
-    </CapabilityContainer>
-  );
-}
 
 // ── Access control (IAM) — shared real RBAC panel (core/azure_iam_core.py) ─────────────
 const DNS_ACTIONS = ["Microsoft.Network/dnsZones/read", "Microsoft.Network/dnsZones/write", "Microsoft.Network/dnsZones/delete",

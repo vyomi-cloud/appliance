@@ -10,6 +10,7 @@ import BrowseGrid from "./BrowseGrid.jsx";
 import { CapabilityContainer } from "./Capability.jsx";
 import { KV, NotSimulatedContainer } from "./common.jsx";
 import * as iam from "./iam.js";
+import { ClassicAdminsPanel, DenyAssignmentsPanel, MyAccess } from "./IamExtras.jsx";
 
 
 function CheckAccess({ a, actions }) {
@@ -26,7 +27,7 @@ function CheckAccess({ a, actions }) {
   };
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16, marginTop: 12 }}>
-      <NotSimulatedContainer title="My access" feature="View my access" note="There is no real signed-in principal in Vyomi to view the access of — use Check access with any principal ID instead." />
+      <MyAccess a={a} />
       <section className="vy-section" style={{ maxWidth: 640 }}><h3>Check access</h3>
         <p style={{ fontSize: 13 }}>Evaluated for real against this resource's role assignments by core/azure_iam_core.py (explicit-deny-wins, scope inheritance).</p>
         <Field label="Principal ID" hint="Any identifier — Vyomi has no real directory to validate it against."><Input value={principalId} onChange={(_, d) => setPrincipalId(d.value)} /></Field>
@@ -131,22 +132,6 @@ function Roles() {
   );
 }
 
-function DenyAssignments({ a }) {
-  const { data, loading, error } = useAsync(iam.listRoleAssignments, []);
-  const scoped = (data || []).filter((r) => r.properties?.kind === "deny" && iam.scopeCovers(r.properties?.scope, a.id));
-  return (
-    <BrowseGrid
-      resourceName="deny assignment" rowKey={(r) => r.name} items={scoped} loading={loading} error={error}
-      csvName="deny-assignments.csv"
-      columns={[
-        { key: "name", label: "Name", value: (r) => r.properties?.principalId },
-        { key: "description", label: "Description", value: () => "--" },
-        { key: "principal", label: "Principal", value: (r) => r.properties?.principalId },
-        { key: "scope", label: "Scope", value: (r) => (r.properties?.scope === a.id ? "This resource" : r.properties?.scope) },
-      ]}
-    />
-  );
-}
 
 export default function ResourceIam({ a, capId, actions }) {
   const [tab, setTab] = useState("check");
@@ -162,8 +147,8 @@ export default function ResourceIam({ a, capId, actions }) {
       {tab === "check" && <CheckAccess a={a} actions={actions} />}
       {tab === "assignments" && <RoleAssignments a={a} />}
       {tab === "roles" && <Roles />}
-      {tab === "deny" && <DenyAssignments a={a} />}
-      {tab === "classic" && <NotSimulatedContainer title="Classic administrators" feature="Classic administrators" note="A legacy (pre-RBAC) co-administrator model Azure itself is retiring — not modelled." />}
+      {tab === "deny" && <DenyAssignmentsPanel a={a} />}
+      {tab === "classic" && <ClassicAdminsPanel />}
     </CapabilityContainer>
   );
 }

@@ -21,6 +21,7 @@ export default function KubernetesServices() {
       <TitleRow title="Kubernetes services" subtitle="Vyomi simulator (default directory)" glyph={<Glyph id="aks" />} closeHref="#/" />
       <div className="vy-page">
         <BrowseGrid
+          tools
           resourceName="kubernetes service"
           items={data || []}
           loading={loading}
@@ -48,7 +49,6 @@ export default function KubernetesServices() {
           ]}
           emptyAction={<Link href="#/aks/create">Create kubernetes service</Link>}
         />
-        <NotSimulatedContainer feature="Manage view customization, Open query (Azure Resource Graph), Assign tags and bulk Start/Stop from the command bar (Start/Stop is available per cluster on its Overview page)" />
       </div>
     </>
   );

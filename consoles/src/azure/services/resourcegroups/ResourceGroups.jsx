@@ -22,13 +22,13 @@ export default function ResourceGroups() {
       <TitleRow title="Resource groups" subtitle="Vyomi simulator (default directory)" glyph={<Glyph id="resourcegroups" />} closeHref="#/" />
       <div className="vy-page">
         <BrowseGrid
+          tools
           resourceName="resource group"
           items={data || []}
           loading={loading}
           error={error}
           onRefresh={reload}
           onCreate={() => navigate("resourcegroups", "create")}
-          extraCommands={<ToolbarButton onClick={() => setQuery(true)}>Open query</ToolbarButton>}
           onDelete={async (rows) => {
             for (const r of rows) await api.deleteGroup(r.name);
             notify.success(`Deleted ${rows.length} resource group${rows.length === 1 ? "" : "s"}.`, "Delete succeeded");
@@ -43,7 +43,6 @@ export default function ResourceGroups() {
           ]}
           emptyAction={<Link href="#/resourcegroups/create">Create resource group</Link>}
         />
-        <NotSimulatedContainer feature="Assign tags across a multi-selection and Open query (Azure Resource Graph) from the command bar" />
       </div>
       <Dialog open={query} onOpenChange={(_, d) => setQuery(d.open)}>
         <DialogSurface aria-label="Open query">

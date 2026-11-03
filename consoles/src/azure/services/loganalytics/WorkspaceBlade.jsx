@@ -23,6 +23,10 @@ import ResourceIam from "../../kit/ResourceIam.jsx";
 import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
+import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
+import SharedActivityLog from "../../kit/ActivityLog.jsx";
+import SharedResourceHealth from "../../kit/ResourceHealth.jsx";
+import SharedDiagnosticSettings from "../../kit/DiagnosticSettings.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -87,7 +91,7 @@ export default function WorkspaceBlade({ params }) {
     const a = ws.data, reload = ws.reload;
     const P = {
       overview: () => <Overview a={a} reload={reload} self={self} />,
-      activitylog: () => <ActivityLog a={a} />,
+      activitylog: () => <SharedActivityLog scope={a.id} name={a.name} />,
       iam: () => <AccessControlIam a={a} />,
       tags: () => <Tags a={a} reload={reload} />,
       agents: () => <Agents a={a} />,
@@ -99,7 +103,9 @@ export default function WorkspaceBlade({ params }) {
       tables: () => <Tables a={a} />,
       datasources: () => <DataSources a={a} />,
       legacysolutions: () => <LegacySolutions a={a} />,
-      exporttemplate: () => <ExportTemplate a={a} />,
+      exporttemplate: () => <SharedExportTemplate id={a.id} name={a.name} resourceGroup={a.resourceGroup} />,
+      resourcehealth: () => <SharedResourceHealth id={a.id} name={a.name} />,
+      diagnosticsettings: () => <SharedDiagnosticSettings id={a.id} name={a.name} />,
     }[panel];
     body = P ? P() : <CapabilityContainer id={CAP_FOR_PANEL[panel] || "azure.loganalytics.workspace.tools"} title={`${a.name} | ${LABEL[panel] || panel}`} />;
   }
@@ -693,77 +699,5 @@ const ACTIVITY_LOG_COLUMNS = [
   { key: "caller", label: "Event initiated by", value: (r) => r.caller },
 ];
 
-function ActivityLog({ a }) {
-  const { data, loading, error, reload } = useAsync(() => api.listActivityLog(a.resourceGroup, a.name), [a.id]);
-  const [gap, setGap] = useState(null);
-  const [filter, setFilter] = useState("");
-  const rows = data || [];
-  const filtered = filter.trim() ? rows.filter((r) => ACTIVITY_LOG_COLUMNS.some((c) => String(c.value(r) ?? "").toLowerCase().includes(filter.trim().toLowerCase()))) : rows;
-  return (
-    <CapabilityContainer id="azure.loganalytics.workspace.activitylog" title={`${a.name} | Activity log`}>
-      <div className="vy-cmdbar" role="toolbar" aria-label="Activity log commands">
-        <ToolbarButton icon={<ArrowClockwise20Regular />} onClick={reload}>Refresh</ToolbarButton>
-        <ToolbarButton onClick={() => setGap("Export Activity Logs")}>Export Activity Logs</ToolbarButton>
-        <ToolbarButton icon={<ArrowDownload20Regular />} disabled={!filtered.length} onClick={() => downloadCsv("activity-log.csv", ACTIVITY_LOG_COLUMNS, filtered)}>Download as CSV</ToolbarButton>
-        <ToolbarButton onClick={() => setFilter("")}>Reset filters</ToolbarButton>
-      </div>
-      <div className="vy-filters">
-        <Input size="small" style={{ width: 280 }} placeholder="Filter by operation, status or caller..."
-          value={filter} onChange={(_, d) => setFilter(d.value)} aria-label="Filter by operation, status or caller..." />
-      </div>
-      <ErrorBar error={error} />
-      <table className="vy-grid">
-        <thead><tr>{ACTIVITY_LOG_COLUMNS.map((c) => <th key={c.key}>{c.label}</th>)}</tr></thead>
-        <tbody>
-          {loading ? <tr><td colSpan={ACTIVITY_LOG_COLUMNS.length}><Spinner size="tiny" /></td></tr> : filtered.length
-            ? filtered.map((r) => <tr key={r.id}>{ACTIVITY_LOG_COLUMNS.map((c) => <td key={c.key}>{c.value(r)}</td>)}</tr>)
-            : <tr><td colSpan={ACTIVITY_LOG_COLUMNS.length} className="vy-muted">No events to display</td></tr>}
-        </tbody>
-      </table>
-      <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
-        <DialogSurface aria-label={gap || "Not simulated"}>
-          <DialogBody><CapabilityContainer id="azure.loganalytics.workspace.listactions" title={gap || ""} /></DialogBody>
-        </DialogSurface>
-      </Dialog>
-    </CapabilityContainer>
-  );
-}
 
 // ── Export template ────────────────────────────────────────────────────────────────────
-function ExportTemplate({ a }) {
-  const [tab, setTab] = useState("arm");
-  const [params, setParams] = useState(true);
-  const template = {
-    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
-    contentVersion: "1.0.0.0",
-    ...(params ? { parameters: { workspaceName: { type: "string", defaultValue: a.name } } } : {}),
-    resources: [{ type: "Microsoft.OperationalInsights/workspaces", apiVersion: api.ARM.apiVersion, name: params ? "[parameters('workspaceName')]" : a.name, location: a.location, properties: a.properties }],
-  };
-  const text = JSON.stringify(template, null, 2);
-  const download = () => {
-    const el = document.createElement("a");
-    el.href = URL.createObjectURL(new Blob([text], { type: "application/json" }));
-    el.download = `${a.name}.json`;
-    document.body.appendChild(el); el.click(); el.remove();
-  };
-  return (
-    <>
-      <div className="vy-panel-title">Export template</div>
-      <div className="vy-cmdbar" role="toolbar" aria-label="Export template commands">
-        <ToolbarButton icon={<ArrowDownload20Regular />} onClick={download}>Download</ToolbarButton>
-        <ToolbarButton disabled>Add to library (preview)</ToolbarButton>
-        <ToolbarButton disabled>Deploy</ToolbarButton>
-      </div>
-      <TabList selectedValue={tab} onTabSelect={(_, d) => setTab(d.value)} aria-label="Export template tabs">
-        <Tab value="arm">ARM Template</Tab>
-        <Tab value="bicep">Bicep</Tab>
-        <Tab value="terraform">Terraform</Tab>
-      </TabList>
-      <CapabilityContainer id="azure.loganalytics.workspace.exporttemplate" title="Template">
-        <Checkbox label="Include parameters" checked={params} onChange={(_, d) => setParams(!!d.checked)} />
-        {tab === "arm" && <Textarea readOnly value={text} style={{ width: "100%", minHeight: 320, fontFamily: "monospace" }} />}
-        {tab !== "arm" && <NotSimulatedContainer feature={`${tab === "bicep" ? "Bicep" : "Terraform"} template export`} />}
-      </CapabilityContainer>
-    </>
-  );
-}

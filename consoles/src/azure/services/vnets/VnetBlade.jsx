@@ -25,6 +25,10 @@ import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
 import { SubnetsPanel, PeeringsPanel, ServiceEndpointsPanel, ConnectedDevicesPanel, TopologyPanel } from "./Networking.jsx";
 import NetworkWatcherTools, { ConnectionTroubleshootPanel } from "./NetworkWatcher.jsx";
+import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
+import SharedActivityLog from "../../kit/ActivityLog.jsx";
+import { ClassicAdminsPanel, DenyAssignmentsPanel, MyAccess } from "../../kit/IamExtras.jsx";
+import SharedAdvisor from "../../kit/Advisor.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -81,8 +85,8 @@ export default function VnetBlade({ params }) {
       connecteddevices: () => <ConnectedDevicesPanel a={a} />,
       properties: () => <Properties a={a} />,
       locks: () => <Locks a={a} />,
-      activitylog: () => <ActivityLog a={a} />,
-      exporttemplate: () => <ExportTemplate a={a} />,
+      activitylog: () => <SharedActivityLog scope={a.id} name={a.name} />,
+      exporttemplate: () => <SharedExportTemplate id={a.id} name={a.name} resourceGroup={a.resourceGroup} />,
       topology: () => <TopologyPanel a={a} />,
       diagnose: () => <Diagnose />,
       connectiontroubleshoot: () => <ConnectionTroubleshootPanel />,
@@ -137,7 +141,7 @@ function Overview({ a, reload, self }) {
         {tab === "topology" && <TopologyPanel a={a} />}
         {tab === "properties" && <Properties a={a} />}
         {tab === "capabilities" && <NotSimulatedContainer feature="The capabilities overview" />}
-        {tab === "recommendations" && <NotSimulatedContainer feature="Advisor recommendations" />}
+        {tab === "recommendations" && <SharedAdvisor bare scope={a.id} />}
         {tab === "tutorials" && <NotSimulatedContainer feature="Tutorials" />}
       </div>
       <Essentials
@@ -206,7 +210,7 @@ function AccessControlIam({ a }) {
       </TabList>
       {tab === "check" && (
         <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 16 }}>
-          <section className="vy-section"><h3>My access</h3><Button onClick={() => setDlg("mine")}>View my access</Button></section>
+          <MyAccess a={a} />
           <section className="vy-section"><h3>Check access</h3><Button onClick={() => { setDecision(null); setDlg("check"); }}>Check access</Button></section>
         </div>
       )}
@@ -268,8 +272,8 @@ function AccessControlIam({ a }) {
           />
         </section>
       )}
-      {tab === "deny" && <div style={{ marginTop: 12 }}><NotSimulatedContainer title="Deny assignments" feature="Deny assignments" /></div>}
-      {tab === "classic" && <div style={{ marginTop: 12 }}><NotSimulatedContainer title="Classic administrators" feature="Classic administrators" /></div>}
+      {tab === "deny" && <div style={{ marginTop: 12 }}><DenyAssignmentsPanel a={a} /></div>}
+      {tab === "classic" && <div style={{ marginTop: 12 }}><ClassicAdminsPanel /></div>}
     </CapabilityContainer>
   );
 }
@@ -509,43 +513,6 @@ function AddLockDialog({ open, onClose, onCreate }) {
 }
 
 // ── Activity log (Microsoft.Insights/eventtypes/management/values, scoped to this vnet) ──
-function ActivityLog({ a }) {
-  const { data, loading, error, reload } = useAsync(() => api.listActivityLog(a.resourceGroup, a.name), [a.id]);
-  const [gap, setGap] = useState(null);
-  const rows = data || [];
-  return (
-    <CapabilityContainer id="azure.vnets.activity_log" title={`${a.name} | Activity log`}
-      actions={<ToolbarButton icon={<ArrowClockwise20Regular />} onClick={reload}>Refresh</ToolbarButton>}>
-      <div className="vy-cmdbar" role="toolbar" aria-label="Activity log tools">
-        {["Activity", "Edit columns", "Export Activity Logs", "Download as CSV", "Insights", "Feedback", "Pin current filters", "Reset filters"].map((l) => (
-          <ToolbarButton key={l} onClick={() => setGap(l)}>{l}</ToolbarButton>
-        ))}
-      </div>
-      <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
-        <DialogSurface aria-label={gap || "Not simulated"}>
-          <DialogBody><DialogTitle>{gap}</DialogTitle><DialogContent><NotSimulatedContainer feature={gap || ""} /></DialogContent>
-            <DialogActions><Button onClick={() => setGap(null)}>Close</Button></DialogActions></DialogBody>
-        </DialogSurface>
-      </Dialog>
-      <ErrorBar error={error} />
-      <table className="vy-grid">
-        <thead><tr><th>Operation name</th><th>Status</th><th>Time</th><th>Time stamp</th><th>Subscription</th><th>Event initiated by</th></tr></thead>
-        <tbody>
-          {loading ? <tr><td colSpan={6}><Spinner size="tiny" /></td></tr> : rows.length ? rows.map((r) => (
-            <tr key={r.id}>
-              <td>{r.operationName?.localizedValue || r.operationName?.value}</td>
-              <td>{r.status?.localizedValue || r.status?.value}</td>
-              <td>{fmtDate(r.eventTimestamp)}</td>
-              <td>{r.eventTimestamp}</td>
-              <td>{r.subscriptionId}</td>
-              <td>{r.caller}</td>
-            </tr>
-          )) : <tr><td colSpan={6} className="vy-muted">No events to display</td></tr>}
-        </tbody>
-      </table>
-    </CapabilityContainer>
-  );
-}
 
 // ── Export template — all three tabs are generated client-side from this resource's live
 // ARM state (same source, three serializations); no linked/nested templates or deployment
@@ -583,44 +550,6 @@ function toTerraform(a, params) {
   return lines.join("\n");
 }
 
-function ExportTemplate({ a }) {
-  const [tab, setTab] = useState("arm");
-  const [params, setParams] = useState(true);
-  const template = {
-    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
-    contentVersion: "1.0.0.0",
-    ...(params ? { parameters: { vnetName: { type: "string", defaultValue: a.name } } } : {}),
-    resources: [{ type: "Microsoft.Network/virtualNetworks", apiVersion: api.ARM.apiVersion, name: params ? "[parameters('vnetName')]" : a.name, location: a.location, properties: a.properties }],
-  };
-  const byTab = { arm: [JSON.stringify(template, null, 2), "json"], bicep: [toBicep(a, params), "bicep"], terraform: [toTerraform(a, params), "tf"] };
-  const [text, ext] = byTab[tab];
-  const download = () => {
-    const el = document.createElement("a");
-    el.href = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
-    el.download = `${a.name}.${ext}`;
-    document.body.appendChild(el); el.click(); el.remove();
-  };
-  return (
-    <>
-      <div className="vy-panel-title">Export template</div>
-      <div className="vy-cmdbar" role="toolbar" aria-label="Export template commands">
-        <ToolbarButton icon={<ArrowDownload20Regular />} onClick={download}>Download</ToolbarButton>
-        <ToolbarButton disabled>Add to library (preview)</ToolbarButton>
-        <ToolbarButton disabled>Deploy</ToolbarButton>
-        <ToolbarButton disabled>Visualize template</ToolbarButton>
-      </div>
-      <TabList selectedValue={tab} onTabSelect={(_, d) => setTab(d.value)} aria-label="Export template tabs">
-        <Tab value="arm">ARM Template</Tab>
-        <Tab value="bicep">Bicep</Tab>
-        <Tab value="terraform">Terraform</Tab>
-      </TabList>
-      <section className="vy-section" style={{ marginTop: 12 }}><h3>Template</h3>
-        <label><input type="checkbox" checked={params} onChange={(e) => setParams(e.target.checked)} /> Include parameters</label>
-        <Textarea readOnly value={text} style={{ width: "100%", minHeight: 320, fontFamily: "monospace" }} />
-      </section>
-    </>
-  );
-}
 
 // ── Diagnostic settings (Microsoft.Insights/diagnosticSettings, a real ARM extension
 // resource scoped to this vnet) — the same generic mechanism the NSG lens wires. Logs/metrics

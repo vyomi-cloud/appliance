@@ -38,6 +38,9 @@ import * as Deployment from "./Deployment.jsx";
 import * as Monitoring from "./Monitoring.jsx";
 import * as api from "./api.js";
 import { ResourceRecommendations } from "../defender/Pages.jsx";
+import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
+import SharedActivityLog from "../../kit/ActivityLog.jsx";
+import { ClassicAdminsPanel, DenyAssignmentsPanel, MyAccess } from "../../kit/IamExtras.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -97,7 +100,7 @@ export default function ApimBlade({ params, query }) {
     const P = {
       overview: () => <Overview a={a} reload={reload} self={self} />,
       defenderforcloud: () => <ResourceRecommendations resourceId={a.id} />,
-      activitylog: () => <ActivityLog a={a} />,
+      activitylog: () => <SharedActivityLog scope={a.id} name={a.name} />,
       iam: () => <AccessControlIam a={a} />,
       tags: () => <Tags a={a} reload={reload} />,
       apis: () => <Apis rg={rg} svc={name} self={self} />,
@@ -112,7 +115,7 @@ export default function ApimBlade({ params, query }) {
       pricingtier: () => <PricingTier a={a} reload={reload} />,
       properties: () => <Properties a={a} />,
       locks: () => <Locks a={a} />,
-      exporttemplate: () => <ExportTemplate a={a} />,
+      exporttemplate: () => <SharedExportTemplate id={a.id} name={a.name} resourceGroup={a.resourceGroup} />,
       protocolsciphers: () => <ProtocolsCiphers a={a} reload={reload} />,
       mcpservers: () => <McpServers rg={rg} svc={name} />,
       workspaces: () => <Workspaces rg={rg} svc={name} />,
@@ -274,7 +277,7 @@ function AccessControlIam({ a }) {
       </TabList>
       {tab === "checkaccess" && (
         <div style={{ display: "flex", gap: 24, marginTop: 12 }}>
-          <section className="vy-section"><h3>My access</h3><Button onClick={() => setGap("View my access")}>View my access</Button></section>
+          <MyAccess a={a} />
           <section className="vy-section"><h3>Check access</h3><Button onClick={() => setGap("Check access")}>Check access</Button></section>
         </div>
       )}
@@ -307,8 +310,8 @@ function AccessControlIam({ a }) {
           />
         </section>
       )}
-      {tab === "deny" && <div style={{ marginTop: 12 }}><NotSimulatedContainer title="Deny assignments" feature="Deny assignments" /></div>}
-      {tab === "classic" && <div style={{ marginTop: 12 }} />}
+      {tab === "deny" && <div style={{ marginTop: 12 }}><DenyAssignmentsPanel a={a} /></div>}
+      {tab === "classic" && <ClassicAdminsPanel />}
       <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
         <DialogSurface aria-label={gap || "Not simulated"}>
           <DialogBody><DialogTitle>{gap}</DialogTitle><DialogContent><NotSimulated feature={`${gap} evaluation`} /></DialogContent>
@@ -468,124 +471,8 @@ const isoMicro = (d) => d.toISOString().replace(/(\.\d{3})Z$/, "$1000Z");
 const TIMESPANS = [["6h", "Last 6 hours", 6], ["24h", "Last 24 hours", 24], ["7d", "Last 7 days", 24 * 7], ["30d", "Last 30 days", 24 * 30], ["all", "All time", null]];
 
 // ── Activity log (Microsoft.Insights/eventtypes/management/values, scoped to this service) ──
-function ActivityLog({ a }) {
-  const [timespan, setTimespan] = useState("24h");
-  const hours = TIMESPANS.find(([k]) => k === timespan)?.[2];
-  const ge = hours ? isoMicro(new Date(Date.now() - hours * 3600e3)) : null;
-  const { data, loading, error, reload } = useAsync(() => api.listActivityLog(a.resourceGroup, a.name, ge ? { ge } : undefined), [a.id, timespan]);
-  const rows = data || [];
-  const [gap, setGap] = useState(null);
-  return (
-    <CapabilityContainer id="azure.apim.activity_log" title={`${a.name} | Activity log`}>
-      <div className="vy-cmdbar" role="toolbar" aria-label="Activity log commands">
-        <ToolbarButton onClick={() => setGap("Activity")}>Activity</ToolbarButton>
-        <ToolbarButton onClick={() => setGap("Edit columns")}>Edit columns</ToolbarButton>
-        <ToolbarButton icon={<ArrowClockwise20Regular />} onClick={reload}>Refresh</ToolbarButton>
-        <ToolbarButton onClick={() => setGap("Export Activity Logs")}>Export Activity Logs</ToolbarButton>
-        <ToolbarButton onClick={() => setGap("Download as CSV")}>Download as CSV</ToolbarButton>
-        <ToolbarButton onClick={() => setGap("Insights")}>Insights</ToolbarButton>
-        <ToolbarButton onClick={() => setGap("Feedback")}>Feedback</ToolbarButton>
-        <ToolbarButton onClick={() => setGap("Pin current filters")}>Pin current filters</ToolbarButton>
-        <ToolbarButton onClick={() => setGap("Reset filters")}>Reset filters</ToolbarButton>
-      </div>
-      <Field label="Timespan" style={{ maxWidth: 200, marginBottom: 8 }}>
-        <Select value={timespan} onChange={(_, d) => setTimespan(d.value)} aria-label="Timespan">
-          {TIMESPANS.map(([k, label]) => <option key={k} value={k}>{label}</option>)}
-        </Select>
-      </Field>
-      <ErrorBar error={error} />
-      <table className="vy-grid" style={{ width: "100%" }}>
-        <thead><tr><th>Operation name</th><th>Status</th><th>Time</th><th>Time stamp</th><th>Subscription</th><th>Event initiated by</th></tr></thead>
-        <tbody>
-          {loading ? <tr><td colSpan={6}><Spinner size="tiny" /></td></tr> : rows.length ? rows.map((r) => (
-            <tr key={r.id}>
-              <td>{r.operationName?.localizedValue || r.operationName?.value}</td>
-              <td>{r.status?.localizedValue || r.status?.value}</td>
-              <td>{fmtDate(r.eventTimestamp)}</td>
-              <td>{r.eventTimestamp}</td>
-              <td>{r.subscriptionId}</td>
-              <td>{r.caller}</td>
-            </tr>
-          )) : <tr><td colSpan={6} className="vy-muted">No events to display</td></tr>}
-        </tbody>
-      </table>
-      <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
-        <DialogSurface aria-label={gap || ""}>
-          <DialogBody><DialogTitle>{gap}</DialogTitle><DialogContent><NotSimulated feature={gap === "Feedback" ? "Sending product feedback" : `The ${gap} action`} /></DialogContent>
-            <DialogActions><Button onClick={() => setGap(null)}>Close</Button></DialogActions></DialogBody>
-        </DialogSurface>
-      </Dialog>
-    </CapabilityContainer>
-  );
-}
 
 // ── Export template ────────────────────────────────────────────────────────────────────
-function ExportTemplate({ a }) {
-  const [tab, setTab] = useState("arm");
-  const [params, setParams] = useState(true);
-  const template = {
-    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
-    contentVersion: "1.0.0.0",
-    ...(params ? { parameters: { serviceName: { type: "string", defaultValue: a.name } } } : {}),
-    resources: [{ type: "Microsoft.ApiManagement/service", apiVersion: api.ARM.apiVersion, name: params ? "[parameters('serviceName')]" : a.name, location: a.location, sku: a.sku, properties: a.properties }],
-  };
-  const text = JSON.stringify(template, null, 2);
-  // Bicep / Terraform: the SAME live resource, mechanically rendered into each format's
-  // syntax (not a general ARM decompiler — just this one resource's known shape).
-  const nameExpr = params ? "serviceName" : `'${a.name}'`;
-  const bicepText = [
-    ...(params ? [`param serviceName string = '${a.name}'`, ""] : []),
-    `resource apimService 'Microsoft.ApiManagement/service@${api.ARM.apiVersion}' = {`,
-    `  name: ${nameExpr}`,
-    `  location: '${a.location}'`,
-    `  sku: {`,
-    `    name: '${a.sku?.name || "Developer"}'`,
-    `    capacity: ${a.sku?.capacity ?? 0}`,
-    `  }`,
-    `  properties: {`,
-    `    publisherEmail: '${a.properties?.publisherEmail || ""}'`,
-    `    publisherName: '${a.properties?.publisherName || ""}'`,
-    `  }`,
-    `}`,
-  ].join("\n");
-  const terraformText = [
-    `resource "azurerm_api_management" "this" {`,
-    `  name                = "${a.name}"`,
-    `  location            = "${a.location}"`,
-    `  resource_group_name = "${a.resourceGroup}"`,
-    `  publisher_name      = "${a.properties?.publisherName || ""}"`,
-    `  publisher_email     = "${a.properties?.publisherEmail || ""}"`,
-    `  sku_name            = "${a.sku?.name || "Developer"}_${a.sku?.capacity ?? 0}"`,
-    `}`,
-  ].join("\n");
-  const shown = tab === "arm" ? text : tab === "bicep" ? bicepText : terraformText;
-  const download = () => {
-    const ext = { arm: "json", bicep: "bicep", terraform: "tf" }[tab];
-    const el = document.createElement("a");
-    el.href = URL.createObjectURL(new Blob([shown], { type: "text/plain" }));
-    el.download = `${a.name}.${ext}`;
-    document.body.appendChild(el); el.click(); el.remove();
-  };
-  return (
-    <CapabilityContainer id="azure.apim.exporttemplate" title={`${a.name} | Export template`}>
-      <div className="vy-cmdbar" role="toolbar" aria-label="Export template commands">
-        <ToolbarButton icon={<ArrowDownload20Regular />} onClick={download}>Download</ToolbarButton>
-        <ToolbarButton disabled>Add to library (preview)</ToolbarButton>
-        <ToolbarButton disabled>Deploy</ToolbarButton>
-        <ToolbarButton disabled>Visualize template</ToolbarButton>
-      </div>
-      <TabList selectedValue={tab} onTabSelect={(_, d) => setTab(d.value)} aria-label="Export template tabs">
-        <Tab value="arm">ARM Template</Tab>
-        <Tab value="bicep">Bicep</Tab>
-        <Tab value="terraform">Terraform</Tab>
-      </TabList>
-      <section className="vy-section" style={{ marginTop: 12 }}><h3>Template</h3>
-        <Checkbox label="Include parameters" checked={params} onChange={(_, d) => setParams(!!d.checked)} />
-        <Textarea readOnly value={shown} style={{ width: "100%", minHeight: 320, fontFamily: "monospace" }} />
-      </section>
-    </CapabilityContainer>
-  );
-}
 
 // ── Scale out and up / Pricing tier (post-creation sku.capacity / sku.name over ARM — the
 // SAME generic sku merge the create wizard's Pricing tier step writes) ────────────────────

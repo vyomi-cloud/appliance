@@ -2,6 +2,7 @@
  * Environment variables, Scale and concurrency, Locks, Export template and Access control
  * (role assignments/roles) are backed by native ARM calls; everything else in the menu is an
  * honest NotSimulated panel (Vyomi has no diagnostics/telemetry/identity backend for them). */
+import { ClassicAdminsPanel, DenyAssignmentsPanel, MyAccess } from "../../kit/IamExtras.jsx";
 import { useEffect, useState } from "react";
 import {
   Button, Checkbox, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, Field, Input, Link,
@@ -24,6 +25,8 @@ import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
 import { ResourceRecommendations } from "../defender/Pages.jsx";
+import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
+import SharedActivityLog from "../../kit/ActivityLog.jsx";
 
 const ROLE_ASSIGNMENTS = armType("Microsoft.Authorization", "roleAssignments", "2022-04-01");
 const ROLE_DEFINITIONS = armType("Microsoft.Authorization", "roleDefinitions", "2022-04-01");
@@ -94,8 +97,8 @@ export default function FunctionAppBlade({ params }) {
       "scale-and-concurrency": () => <ScaleAndConcurrency a={a} reload={reload} />,
       "locks": () => <Locks a={a} />,
       "access-control-iam": () => <AccessControl a={a} />,
-      "export-template": () => <ExportTemplate a={a} />,
-      "activity-log": () => <ActivityLog a={a} />,
+      "export-template": () => <SharedExportTemplate id={a.id} name={a.name} resourceGroup={a.resourceGroup} />,
+      "activity-log": () => <SharedActivityLog scope={a.id} name={a.name} />,
       "configuration": () => <Placeholder name={a.name} id="configuration" extra={<p style={{ fontSize: 13 }}>App settings and connection strings moved to <Link href={`${self}/environment-variables`}>Environment variables</Link>.</p>} />,
       "identity": () => <Identity a={a} reload={reload} />,
       "custom-domains": () => <CustomDomains a={a} />,
@@ -597,7 +600,7 @@ function AccessControl({ a }) {
       </TabList>
       {tab === "checkaccess" && (
         <div style={{ marginTop: 12 }}>
-          <section className="vy-section"><h3>My access</h3><Button onClick={() => {}}>View my access</Button></section>
+          <MyAccess a={a} />
           <section className="vy-section"><h3>Check access</h3><Button onClick={() => {}}>Check access</Button></section>
         </div>
       )}
@@ -629,86 +632,15 @@ function AccessControl({ a }) {
           </table>
         </section>
       )}
-      {tab === "denyassignments" && (
-        <section className="vy-section"><h3>Deny assignments</h3>
-          <table className="vy-grid"><thead><tr><th>Name</th><th>Description</th><th>Principal</th><th>Scope</th></tr></thead>
-            <tbody><tr><td colSpan={4} className="vy-muted">No deny assignments found.</td></tr></tbody>
-          </table>
-        </section>
-      )}
-      {tab === "classicadministrators" && <InfoBar>No classic administrators are configured for this subscription.</InfoBar>}
+      {tab === "denyassignments" && <DenyAssignmentsPanel a={a} />}
+      {tab === "classicadministrators" && <ClassicAdminsPanel />}
     </>
   );
 }
 
 // ── Activity log ─────────────────────────────────────────────────────────────────────────
-function ActivityLog({ a }) {
-  const { data, loading, error, reload } = useAsync(() => api.listActivityLog(a.resourceGroup, a.name), [a.id]);
-  const rows = data || [];
-  return (
-    <>
-      <div className="vy-panel-title">{a.name} | Activity log</div>
-      <div className="vy-cmdbar" role="toolbar" aria-label="Activity log commands">
-        <ToolbarButton icon={<ArrowClockwise20Regular />} onClick={reload}>Refresh</ToolbarButton>
-      </div>
-      <ErrorBar error={error} />
-      <table className="vy-grid">
-        <thead><tr><th>Operation name</th><th>Status</th><th>Time</th><th>Time stamp</th><th>Subscription</th><th>Event initiated by</th></tr></thead>
-        <tbody>
-          {loading ? <tr><td colSpan={6}><Spinner size="tiny" /></td></tr> : rows.length ? rows.map((r) => (
-            <tr key={r.id}>
-              <td>{r.operationName?.value}</td>
-              <td>{r.status?.localizedValue || r.status?.value}</td>
-              <td>{fmtDate(r.eventTimestamp)}</td>
-              <td>{r.eventTimestamp}</td>
-              <td>{r.subscriptionId}</td>
-              <td>{r.caller}</td>
-            </tr>
-          )) : <tr><td colSpan={6} className="vy-muted">No events to display</td></tr>}
-        </tbody>
-      </table>
-    </>
-  );
-}
 
 // ── Export template ──────────────────────────────────────────────────────────────────────
-function ExportTemplate({ a }) {
-  const [tab, setTab] = useState("arm");
-  const [includeParams, setIncludeParams] = useState(true);
-  const template = {
-    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#", contentVersion: "1.0.0.0",
-    parameters: includeParams ? { name: { type: "string", defaultValue: a.name } } : {},
-    resources: [{ type: "Microsoft.Web/sites", apiVersion: "2023-12-01", name: includeParams ? "[parameters('name')]" : a.name, location: a.location, kind: a.kind, properties: a.properties }],
-  };
-  return (
-    <>
-      <div className="vy-panel-title">{a.name} | Export template</div>
-      <div className="vy-cmdbar" role="toolbar" aria-label="Export template commands">
-        <ToolbarButton icon={<DocumentArrowDown20Regular />} onClick={() => {
-          const blob = new Blob([JSON.stringify(template, null, 2)], { type: "application/json" });
-          const u = URL.createObjectURL(blob); const el = document.createElement("a"); el.href = u; el.download = `${a.name}.json`; document.body.appendChild(el); el.click(); el.remove();
-          setTimeout(() => URL.revokeObjectURL(u), 1000);
-        }}>Download</ToolbarButton>
-        <ToolbarButton disabled>Add to library (preview)</ToolbarButton>
-        <ToolbarButton disabled>Deploy</ToolbarButton>
-        <ToolbarButton disabled>Visualize template</ToolbarButton>
-      </div>
-      <TabList selectedValue={tab} onTabSelect={(_, d) => setTab(d.value)} aria-label="Export template tabs">
-        <Tab value="arm">ARM Template</Tab><Tab value="bicep">Bicep</Tab><Tab value="terraform">Terraform</Tab>
-      </TabList>
-      {tab === "arm" && (
-        <>
-          <Checkbox style={{ marginTop: 8 }} checked={includeParams} onChange={(_, d) => setIncludeParams(!!d.checked)} label="Include parameters" />
-          <section className="vy-section"><h3>Template</h3>
-            <pre className="vy-mono" style={{ maxHeight: 360, overflow: "auto", background: "var(--colorNeutralBackground3)", padding: 10, borderRadius: 4, fontSize: 12 }}>{JSON.stringify(template, null, 2)}</pre>
-          </section>
-        </>
-      )}
-      {tab === "bicep" && <NotSimulatedContainer feature="ARM-to-Bicep decompilation" />}
-      {tab === "terraform" && <NotSimulatedContainer feature="ARM-to-Terraform export" />}
-    </>
-  );
-}
 
 // ── Identity ─────────────────────────────────────────────────────────────────────────────
 // `identity` is a top-level sibling of `properties` on the site (core/azure_webapp_core.py's

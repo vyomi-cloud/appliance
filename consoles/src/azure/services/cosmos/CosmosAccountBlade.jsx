@@ -22,6 +22,11 @@ import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
 import DataExplorer from "./DataExplorer.jsx";
+import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
+import SharedActivityLog from "../../kit/ActivityLog.jsx";
+import { ClassicAdminsPanel, DenyAssignmentsPanel, MyAccess } from "../../kit/IamExtras.jsx";
+import SharedResourceHealth from "../../kit/ResourceHealth.jsx";
+import SharedDiagnosticSettings from "../../kit/DiagnosticSettings.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -105,7 +110,7 @@ export default function CosmosAccountBlade({ params }) {
     const a = data.data, reload = data.reload;
     const P = {
       overview: () => <Overview a={a} reload={reload} self={self} />,
-      activitylog: () => <ActivityLog a={a} />,
+      activitylog: () => <SharedActivityLog scope={a.id} name={a.name} />,
       iam: () => <Iam a={a} />,
       tags: () => <Tags a={a} reload={reload} />,
       dataexplorer: () => <DataExplorer />,
@@ -114,7 +119,9 @@ export default function CosmosAccountBlade({ params }) {
       backup: () => <Backup a={a} reload={reload} />,
       keys: () => <Keys a={a} />,
       locks: () => <Locks a={a} />,
-      exporttemplate: () => <ExportTemplate a={a} />,
+      exporttemplate: () => <SharedExportTemplate id={a.id} name={a.name} resourceGroup={a.resourceGroup} />,
+      resourcehealth: () => <SharedResourceHealth id={a.id} name={a.name} />,
+      diagnosticsettings: () => <SharedDiagnosticSettings id={a.id} name={a.name} />,
     }[panel];
     body = P ? P() : (
       <>
@@ -230,58 +237,6 @@ function Overview({ a, reload, self }) {
 // ── Activity log ──────────────────────────────────────────────────────────────────────
 const TIMESPANS = { "1h": 1, "6h": 6, "24h": 24, "7d": 24 * 7, "30d": 24 * 30 };
 
-function ActivityLog({ a }) {
-  const sub = useSubscription();
-  const resPath = api.resourcePath(a.resourceGroup, a.name);
-  const [timespan, setTimespan] = useState("24h");
-  const since = () => new Date(Date.now() - TIMESPANS[timespan] * 3600 * 1000).toISOString();
-  const { data, loading, error, reload } = useAsync(() => api.listActivityLog(resPath, sub.id, since()), [resPath, sub.id, timespan]);
-  const [gap, setGap] = useState(null);
-  const rows = data || [];
-  const GAPS = ["Edit columns", "Export Activity Logs", "Download as CSV", "Insights", "Feedback", "Pin current filters", "Reset filters"];
-  return (
-    <>
-      <div className="vy-panel-title">{a.name} | Activity log</div>
-      <div className="vy-cmdbar" role="toolbar" aria-label="Activity log commands">
-        <ToolbarButton onClick={reload}>Activity</ToolbarButton>
-        {GAPS.map((g) => <ToolbarButton key={g} onClick={() => setGap(g)}>{g}</ToolbarButton>)}
-        <ToolbarButton icon={<ArrowClockwise20Regular />} onClick={reload}>Refresh</ToolbarButton>
-        <Select size="small" value={timespan} onChange={(_, d) => setTimespan(d.value)} aria-label="Timespan" style={{ marginLeft: "auto", width: 160 }}>
-          <option value="1h">Last hour</option>
-          <option value="6h">Last 6 hours</option>
-          <option value="24h">Last 24 hours</option>
-          <option value="7d">Last 7 days</option>
-          <option value="30d">Last 30 days</option>
-        </Select>
-      </div>
-      <ErrorBar error={error} />
-      <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
-        <DialogSurface aria-label={gap || "Not simulated"}>
-          <DialogBody>
-            <DialogTitle>{gap}</DialogTitle>
-            <DialogContent><NotSimulated feature={gap === "Feedback" ? "Sending product feedback" : `${gap} on the activity log`} /></DialogContent>
-            <DialogActions><Button onClick={() => setGap(null)}>Close</Button></DialogActions>
-          </DialogBody>
-        </DialogSurface>
-      </Dialog>
-      <table className="vy-grid">
-        <thead><tr><th>Operation name</th><th>Status</th><th>Time</th><th>Time stamp</th><th>Subscription</th><th>Event initiated by</th></tr></thead>
-        <tbody>
-          {loading ? <tr><td colSpan={6}><Spinner size="tiny" /></td></tr> : rows.length ? rows.map((r) => (
-            <tr key={r.id}>
-              <td>{r.operationName?.localizedValue || r.operationName?.value}</td>
-              <td>{r.status?.localizedValue || r.status?.value}</td>
-              <td>{fmtDate(r.eventTimestamp)}</td>
-              <td>{r.eventTimestamp}</td>
-              <td>{r.subscriptionId}</td>
-              <td>{r.caller}</td>
-            </tr>
-          )) : <tr><td colSpan={6} className="vy-muted">No events to display</td></tr>}
-        </tbody>
-      </table>
-    </>
-  );
-}
 
 // ── Access control (IAM) ─────────────────────────────────────────────────────────────────
 function Iam({ a }) {
@@ -303,7 +258,7 @@ function Iam({ a }) {
       </TabList>
       {tab === "checkaccess" && (
         <div style={{ display: "flex", gap: 24, marginTop: 12 }}>
-          <section className="vy-section"><h3>My access</h3><Button onClick={() => setGap("View my access")}>View my access</Button></section>
+          <MyAccess a={a} />
           <section className="vy-section"><h3>Check access</h3><Button onClick={() => setGap("Check access")}>Check access</Button></section>
         </div>
       )}
@@ -335,8 +290,8 @@ function Iam({ a }) {
           />
         </section>
       )}
-      {tab === "denyassignments" && <NotSimulatedContainer title="Deny assignments" feature="Deny assignments" />}
-      {tab === "classicadmins" && <div style={{ marginTop: 12 }} />}
+      {tab === "denyassignments" && <DenyAssignmentsPanel a={a} />}
+      {tab === "classicadmins" && <ClassicAdminsPanel />}
       <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
         <DialogSurface aria-label={gap || "Not simulated"}>
           <DialogBody>
@@ -774,39 +729,3 @@ function AddLockDialog({ open, onClose, onCreate }) {
 }
 
 // ── Export template ────────────────────────────────────────────────────────────────────
-function ExportTemplate({ a }) {
-  const [tab, setTab] = useState("arm");
-  const [params, setParams] = useState(true);
-  const template = {
-    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
-    contentVersion: "1.0.0.0",
-    ...(params ? { parameters: { accountName: { type: "string", defaultValue: a.name } } } : {}),
-    resources: [{ type: "Microsoft.DocumentDB/databaseAccounts", apiVersion: api.ARM.apiVersion, name: params ? "[parameters('accountName')]" : a.name, location: a.location, kind: a.kind, properties: a.properties }],
-  };
-  const text = JSON.stringify(template, null, 2);
-  const download = () => {
-    const el = document.createElement("a");
-    el.href = URL.createObjectURL(new Blob([text], { type: "application/json" }));
-    el.download = `${a.name}.json`;
-    document.body.appendChild(el); el.click(); el.remove();
-  };
-  return (
-    <>
-      <div className="vy-panel-title">Export template</div>
-      <div className="vy-cmdbar" role="toolbar" aria-label="Export template commands">
-        <ToolbarButton icon={<ArrowDownload20Regular />} onClick={download}>Download</ToolbarButton>
-        <ToolbarButton disabled>Add to library (preview)</ToolbarButton>
-        <ToolbarButton disabled>Deploy</ToolbarButton>
-        <ToolbarButton disabled>Visualize template</ToolbarButton>
-      </div>
-      <TabList selectedValue={tab} onTabSelect={(_, d) => setTab(d.value)} aria-label="Export template tabs">
-        <Tab value="arm">ARM Template</Tab><Tab value="bicep">Bicep</Tab><Tab value="terraform">Terraform</Tab>
-      </TabList>
-      <section className="vy-section" style={{ marginTop: 12 }}><h3>Template</h3>
-        <Checkbox label="Include parameters" checked={params} onChange={(_, d) => setParams(!!d.checked)} />
-        {tab === "arm" && <Textarea readOnly value={text} style={{ width: "100%", minHeight: 320, fontFamily: "monospace" }} />}
-        {tab !== "arm" && <NotSimulatedContainer feature={`${tab === "bicep" ? "Bicep" : "Terraform"} template export`} />}
-      </section>
-    </>
-  );
-}

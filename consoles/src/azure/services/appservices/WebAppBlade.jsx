@@ -22,6 +22,12 @@ import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
 import { ResourceRecommendations } from "../defender/Pages.jsx";
+import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
+import SharedActivityLog from "../../kit/ActivityLog.jsx";
+import { ClassicAdminsPanel, DenyAssignmentsPanel, MyAccess } from "../../kit/IamExtras.jsx";
+import SharedResourceVisualizer from "../../kit/ResourceVisualizer.jsx";
+import SharedResourceHealth from "../../kit/ResourceHealth.jsx";
+import SharedAdvisor from "../../kit/Advisor.jsx";
 
 /** Resource menu: [id, label] | {group, items}. Matches the real Web App blade's nav exactly
  * (labels double as the "{name} | Label" page titles the captured spec records). */
@@ -87,7 +93,7 @@ export default function WebAppBlade({ params, query }) {
     const P = {
       overview: () => <Overview a={a} reload={reload} self={self} />,
       defender: () => <ResourceRecommendations resourceId={a.id} />,
-      activitylog: () => <ActivityLog rg={rg} name={name} />,
+      activitylog: () => <SharedActivityLog scope={a.id} name={a.name} />,
       iam: () => <AccessControl a={a} />,
       tags: () => <Tags a={a} reload={reload} />,
       slots: () => <Slots rg={rg} name={name} />,
@@ -102,7 +108,10 @@ export default function WebAppBlade({ params, query }) {
       appservicelogs: () => <AppServiceLogs rg={rg} name={name} />,
       logstream: () => <LogStream name={name} />,
       diagnosticsettings: () => <DiagnosticSettings a={a} rg={rg} name={name} />,
-      exporttemplate: () => <ExportTemplate a={a} />,
+      exporttemplate: () => <SharedExportTemplate id={a.id} name={a.name} resourceGroup={a.resourceGroup} />,
+      resourcehealth: () => <SharedResourceHealth id={a.id} name={a.name} />,
+      advisor: () => <SharedAdvisor scope={a.id} name={a.name} />,
+      visualizer: () => <SharedResourceVisualizer resourceGroup={a.resourceGroup} focus={a.name} />,
       identity: () => <Identity a={a} rg={rg} name={name} reload={reload} />,
       backups: () => <Backups rg={rg} name={name} />,
     }[panel];
@@ -196,7 +205,7 @@ function Overview({ a, reload, self }) {
       {tab === "logs" && <NotSimulatedContainer feature="The resource's Logs (Log Analytics queries)" />}
       {tab === "capabilities" && <NotSimulatedContainer feature="The capabilities overview" />}
       {tab === "notifications" && <NotSimulatedContainer feature="Notifications" />}
-      {tab === "recommendations" && <NotSimulatedContainer feature="Advisor recommendations" />}
+      {tab === "recommendations" && <SharedAdvisor bare scope={a.id} />}
 
       <DeleteDialog open={del} onClose={() => setDel(false)} resourceType="app service" names={[a.name]}
         onConfirm={async () => { await api.deleteSite(a.resourceGroup, a.name); forget(self); notify.success(`App service '${a.name}' was deleted.`, "Delete succeeded"); navigate("appservices"); }} />
@@ -238,40 +247,6 @@ function SwapDialog({ open, onClose, rg, name, onDone }) {
 }
 
 // ── Activity log ─────────────────────────────────────────────────────────────────────────
-function ActivityLog({ rg, name }) {
-  const { data, loading, error, reload } = useAsync(() => api.listActivityLog(rg, name), [rg, name]);
-  const rows = (data || []).map((e) => ({
-    key: `${e.id}`,
-    op: e.operationName?.localizedValue || e.operationName?.value || "--",
-    status: e.status?.localizedValue || e.status?.value || "--",
-    time: e.eventTimestamp ? new Date(e.eventTimestamp).toLocaleString() : "--",
-    ts: e.eventTimestamp || "--",
-    sub: e.subscriptionId || "--",
-    caller: e.caller || "--",
-  }));
-  return (
-    <>
-      <div className="vy-panel-title">{name} | Activity log</div>
-      <div className="vy-cmdbar" role="toolbar" aria-label="Activity log commands">
-        <ToolbarButton icon={<ArrowClockwise20Regular />} onClick={reload}>Refresh</ToolbarButton>
-      </div>
-      {loading ? <Loading /> : error ? <ErrorBar error={error} title="Failed to load the activity log" /> : (
-        <table className="vy-grid" aria-label="Activity log">
-          <thead><tr><th>Operation name</th><th>Status</th><th>Time</th><th>Time stamp</th><th>Subscription</th><th>Event initiated by</th></tr></thead>
-          <tbody>
-            {rows.length === 0
-              ? <tr><td colSpan={6}>No events to display</td></tr>
-              : rows.map((r) => <tr key={r.key}><td>{r.op}</td><td>{r.status}</td><td>{r.time}</td><td>{r.ts}</td><td>{r.sub}</td><td>{r.caller}</td></tr>)}
-          </tbody>
-        </table>
-      )}
-      <NotSimulatedContainer feature="Activity log filters and export"
-        note={("Filters (Management Group, Subscription, Event severity, Timespan, Resource group, Resource, Add Filter) and the "
-          + "Edit columns / Export Activity Logs / Download as CSV / Insights / Feedback / Pin current filters / Reset filters actions are "
-          + "not simulated; Vyomi lists the real create/update/delete/action operations performed on this Web App.")} />
-    </>
-  );
-}
 
 // ── Access control (IAM) ─────────────────────────────────────────────────────────────────
 // Role assignments are a real ARM extension resource (Microsoft.Authorization/roleAssignments)
@@ -305,7 +280,7 @@ function AccessControl({ a }) {
       </TabList>
       {tab === "checkaccess" && (
         <div style={{ marginTop: 12 }}>
-          <section className="vy-section"><h3>My access</h3><Button onClick={() => {}}>View my access</Button></section>
+          <MyAccess a={a} />
           <section className="vy-section"><h3>Check access</h3><Button onClick={() => {}}>Check access</Button></section>
         </div>
       )}
@@ -338,10 +313,10 @@ function AccessControl({ a }) {
         </div>
       )}
       {tab === "denyassignments" && (
-        <div style={{ marginTop: 12 }}><NotSimulatedContainer title="Deny assignments" feature="Deny assignments" /></div>
+        <div style={{ marginTop: 12 }}><DenyAssignmentsPanel a={a} /></div>
       )}
       {tab === "classicadministrators" && (
-        <div style={{ marginTop: 12 }}><NotSimulatedContainer title="Classic administrators" feature="Classic administrators" /></div>
+        <div style={{ marginTop: 12 }}><ClassicAdminsPanel /></div>
       )}
     </>
   );
@@ -934,48 +909,6 @@ function DiagnosticSettings({ a, rg, name }) {
 }
 
 // ── Export template ──────────────────────────────────────────────────────────────────────
-function ExportTemplate({ a }) {
-  const [tab, setTab] = useState("arm");
-  const [includeParams, setIncludeParams] = useState(true);
-  const planName = api.planName(a.properties?.serverFarmId);
-  const template = {
-    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#", contentVersion: "1.0.0.0",
-    parameters: includeParams ? { name: { type: "string", defaultValue: a.name } } : {},
-    resources: [
-      { type: "Microsoft.Web/serverfarms", apiVersion: "2023-12-01", name: planName, location: a.location },
-      { type: "Microsoft.Web/sites", apiVersion: "2023-12-01", name: includeParams ? "[parameters('name')]" : a.name, location: a.location, kind: a.kind,
-        dependsOn: [`[resourceId('Microsoft.Web/serverfarms', '${planName}')]`], properties: a.properties },
-    ],
-  };
-  return (
-    <>
-      <div className="vy-panel-title">{a.name} | Export template</div>
-      <div className="vy-cmdbar" role="toolbar" aria-label="Export template commands">
-        <ToolbarButton icon={<DocumentArrowDown20Regular />} onClick={() => {
-          const blob = new Blob([JSON.stringify(template, null, 2)], { type: "application/json" });
-          const u = URL.createObjectURL(blob); const el = document.createElement("a"); el.href = u; el.download = `${a.name}.json`; document.body.appendChild(el); el.click(); el.remove();
-          setTimeout(() => URL.revokeObjectURL(u), 1000);
-        }}>Download</ToolbarButton>
-        <ToolbarButton disabled>Add to library (preview)</ToolbarButton>
-        <ToolbarButton disabled>Deploy</ToolbarButton>
-        <ToolbarButton disabled>Visualize template</ToolbarButton>
-      </div>
-      <TabList selectedValue={tab} onTabSelect={(_, d) => setTab(d.value)} aria-label="Export template tabs">
-        <Tab value="arm">ARM Template</Tab><Tab value="bicep">Bicep</Tab><Tab value="terraform">Terraform</Tab>
-      </TabList>
-      {tab === "arm" && (
-        <>
-          <Checkbox style={{ marginTop: 8 }} checked={includeParams} onChange={(_, d) => setIncludeParams(!!d.checked)} label="Include parameters" />
-          <section className="vy-section"><h3>Template</h3>
-            <pre className="vy-mono" style={{ maxHeight: 360, overflow: "auto", background: "var(--colorNeutralBackground3)", padding: 10, borderRadius: 4, fontSize: 12 }}>{JSON.stringify(template, null, 2)}</pre>
-          </section>
-        </>
-      )}
-      {tab === "bicep" && <NotSimulatedContainer feature="ARM-to-Bicep decompilation" />}
-      {tab === "terraform" && <NotSimulatedContainer feature="ARM-to-Terraform export" />}
-    </>
-  );
-}
 
 // ── Identity ──────────────────────────────────────────────────────────────────────────────
 // `identity` is a top-level ARM field on the site (core/azure_webapp_core.py's _apply_identity):

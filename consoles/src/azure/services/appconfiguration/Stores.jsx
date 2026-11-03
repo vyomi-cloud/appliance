@@ -20,6 +20,7 @@ export default function Stores() {
       <TitleRow title="Configuration stores" subtitle="Vyomi simulator (default directory)" glyph={<Glyph id="appconfiguration" />} closeHref="#/" />
       <div className="vy-page">
         <BrowseGrid
+          tools
           resourceName="configuration store"
           items={data || []}
           loading={loading}
@@ -46,7 +47,6 @@ export default function Stores() {
           ]}
           emptyAction={<Link href="#/appconfiguration/create">Create</Link>}
         />
-        <NotSimulatedContainer feature="Manage deleted configuration stores, Open query (Azure Resource Graph) and Assign tags from the command bar" />
       </div>
     </>
   );

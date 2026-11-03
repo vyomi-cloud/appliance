@@ -22,6 +22,10 @@ import { Essentials, ErrorBar, Glyph, KV, Loading, NotSimulated, NotSimulatedCon
 import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
+import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
+import SharedActivityLog from "../../kit/ActivityLog.jsx";
+import { ClassicAdminsPanel, DenyAssignmentsPanel, MyAccess } from "../../kit/IamExtras.jsx";
+import SharedResourceHealth from "../../kit/ResourceHealth.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -85,7 +89,7 @@ export default function NamespaceBlade({ params, query }) {
     const a = ns.data, reload = ns.reload;
     const P = {
       overview: () => <Overview a={a} reload={reload} self={self} />,
-      activitylog: () => <ActivityLog a={a} />,
+      activitylog: () => <SharedActivityLog scope={a.id} name={a.name} />,
       iam: () => <AccessControlIam a={a} />,
       tags: () => <Tags a={a} reload={reload} />,
       saspolicies: () => <SasPolicies a={a} />,
@@ -94,7 +98,8 @@ export default function NamespaceBlade({ params, query }) {
       locks: () => <Locks a={a} />,
       queues: () => <Queues a={a} self={self} />,
       topics: () => <Topics a={a} self={self} />,
-      exporttemplate: () => <ExportTemplate a={a} />,
+      exporttemplate: () => <SharedExportTemplate id={a.id} name={a.name} resourceGroup={a.resourceGroup} />,
+      resourcehealth: () => <SharedResourceHealth id={a.id} name={a.name} />,
       identity: () => <Identity a={a} reload={reload} />,
       diagnosticsettings: () => <DiagnosticSettings a={a} />,
       alerts: () => <Alerts a={a} />,
@@ -253,9 +258,7 @@ function AccessControlIam({ a }) {
       </TabList>
       {tab === "check" && (
         <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 16 }}>
-          <section className="vy-section"><h3>My access</h3>
-            <Button onClick={() => setDlg("mine")}>View my access</Button>
-          </section>
+          <MyAccess a={a} />
           <section className="vy-section"><h3>Check access</h3>
             <Button onClick={() => { setDecision(null); setDlg("check"); }}>Check access</Button>
           </section>
@@ -289,8 +292,8 @@ function AccessControlIam({ a }) {
           />
         </section>
       )}
-      {tab === "deny" && <div style={{ marginTop: 12 }}><NotSimulatedContainer title="Deny assignments" feature="Deny assignments" /></div>}
-      {tab === "classic" && <div style={{ marginTop: 12 }}><NotSimulatedContainer title="Classic administrators" feature="Classic administrators" /></div>}
+      {tab === "deny" && <div style={{ marginTop: 12 }}><DenyAssignmentsPanel a={a} /></div>}
+      {tab === "classic" && <div style={{ marginTop: 12 }}><ClassicAdminsPanel /></div>}
       <Dialog open={!!dlg} onOpenChange={(_, d) => !d.open && setDlg(null)}>
         <DialogSurface aria-label="Access check">
           <DialogBody>
@@ -853,108 +856,8 @@ const ACTIVITY_LOG_COLUMNS = [
   { key: "caller", label: "Event initiated by", value: (r) => r.caller },
 ];
 
-function ActivityLog({ a }) {
-  const { data, loading, error, reload } = useAsync(() => api.listActivityLog(a.resourceGroup, a.name), [a.id]);
-  const [gap, setGap] = useState(null);
-  const [filter, setFilter] = useState("");
-  const [visible, setVisible] = useState(() => new Set(ACTIVITY_LOG_COLUMNS.map((c) => c.key)));
-  const [editCols, setEditCols] = useState(false);
-  const rows = data || [];
-  const shownCols = ACTIVITY_LOG_COLUMNS.filter((c) => visible.has(c.key));
-  const filtered = useMemo(() => {
-    const f = filter.trim().toLowerCase();
-    if (!f) return rows;
-    return rows.filter((r) => ACTIVITY_LOG_COLUMNS.some((c) => String(c.value(r) ?? "").toLowerCase().includes(f)));
-  }, [rows, filter]);
-  return (
-    <CapabilityContainer id="azure.servicebus.namespace.activitylog" title={`${a.name} | Activity log`}>
-      <div className="vy-cmdbar" role="toolbar" aria-label="Activity log commands">
-        <ToolbarButton onClick={() => setGap("Activity")}>Activity</ToolbarButton>
-        <ToolbarButton onClick={() => setEditCols(true)}>Edit columns</ToolbarButton>
-        <ToolbarButton icon={<ArrowClockwise20Regular />} onClick={reload}>Refresh</ToolbarButton>
-        <ToolbarButton onClick={() => setGap("Export Activity Logs")}>Export Activity Logs</ToolbarButton>
-        <ToolbarButton icon={<ArrowDownload20Regular />} disabled={!filtered.length}
-          onClick={() => downloadCsv("activity-log.csv", shownCols, filtered)}>Download as CSV</ToolbarButton>
-        <ToolbarButton onClick={() => setGap("Insights")}>Insights</ToolbarButton>
-        <ToolbarButton onClick={() => setGap("Feedback")}>Feedback</ToolbarButton>
-        <ToolbarButton onClick={() => setGap("Pin current filters")}>Pin current filters</ToolbarButton>
-        <ToolbarButton onClick={() => setFilter("")}>Reset filters</ToolbarButton>
-      </div>
-      <div className="vy-filters">
-        <Input size="small" style={{ width: 280 }} placeholder="Filter by operation, status or caller..."
-          value={filter} onChange={(_, d) => setFilter(d.value)} aria-label="Filter by operation, status or caller..." />
-      </div>
-      <ErrorBar error={error} />
-      <table className="vy-grid">
-        <thead><tr>{shownCols.map((c) => <th key={c.key}>{c.label}</th>)}</tr></thead>
-        <tbody>
-          {loading ? <tr><td colSpan={shownCols.length || 1}><Spinner size="tiny" /></td></tr> : filtered.length ? filtered.map((r) => (
-            <tr key={r.id}>{shownCols.map((c) => <td key={c.key}>{c.value(r)}</td>)}</tr>
-          )) : <tr><td colSpan={shownCols.length || 1} className="vy-muted">No events to display</td></tr>}
-        </tbody>
-      </table>
-      <Dialog open={editCols} onOpenChange={(_, d) => setEditCols(d.open)}>
-        <DialogSurface aria-label="Edit columns">
-          <DialogBody>
-            <DialogTitle>Edit columns</DialogTitle>
-            <DialogContent>
-              {ACTIVITY_LOG_COLUMNS.map((c) => (
-                <div key={c.key}><Checkbox label={c.label} checked={visible.has(c.key)}
-                  onChange={(_, d) => setVisible((v) => { const n = new Set(v); d.checked ? n.add(c.key) : n.delete(c.key); return n; })} /></div>
-              ))}
-            </DialogContent>
-            <DialogActions><Button appearance="primary" onClick={() => setEditCols(false)}>Save</Button></DialogActions>
-          </DialogBody>
-        </DialogSurface>
-      </Dialog>
-      <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
-        <DialogSurface aria-label={gap || "Not simulated"}>
-          <DialogBody><CapabilityContainer id="azure.servicebus.namespace.listactions" title={gap || ""} /></DialogBody>
-        </DialogSurface>
-      </Dialog>
-    </CapabilityContainer>
-  );
-}
 
 // ── Export template ────────────────────────────────────────────────────────────────────
-function ExportTemplate({ a }) {
-  const [tab, setTab] = useState("arm");
-  const [params, setParams] = useState(true);
-  const template = {
-    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
-    contentVersion: "1.0.0.0",
-    ...(params ? { parameters: { namespaceName: { type: "string", defaultValue: a.name } } } : {}),
-    resources: [{ type: "Microsoft.ServiceBus/namespaces", apiVersion: api.ARM.apiVersion, name: params ? "[parameters('namespaceName')]" : a.name, location: a.location, sku: a.sku, properties: a.properties }],
-  };
-  const text = JSON.stringify(template, null, 2);
-  const download = () => {
-    const el = document.createElement("a");
-    el.href = URL.createObjectURL(new Blob([text], { type: "application/json" }));
-    el.download = `${a.name}.json`;
-    document.body.appendChild(el); el.click(); el.remove();
-  };
-  return (
-    <>
-      <div className="vy-panel-title">Export template</div>
-      <div className="vy-cmdbar" role="toolbar" aria-label="Export template commands">
-        <ToolbarButton icon={<ArrowDownload20Regular />} onClick={download}>Download</ToolbarButton>
-        <ToolbarButton disabled>Add to library (preview)</ToolbarButton>
-        <ToolbarButton disabled>Deploy</ToolbarButton>
-        <ToolbarButton disabled>Visualize template</ToolbarButton>
-      </div>
-      <TabList selectedValue={tab} onTabSelect={(_, d) => setTab(d.value)} aria-label="Export template tabs">
-        <Tab value="arm">ARM Template</Tab>
-        <Tab value="bicep">Bicep</Tab>
-        <Tab value="terraform">Terraform</Tab>
-      </TabList>
-      <CapabilityContainer id="azure.servicebus.namespace.exporttemplate" title="Template">
-        <Checkbox label="Include parameters" checked={params} onChange={(_, d) => setParams(!!d.checked)} />
-        {tab === "arm" && <Textarea readOnly value={text} style={{ width: "100%", minHeight: 320, fontFamily: "monospace" }} />}
-        {tab !== "arm" && <NotSimulatedContainer feature={`${tab === "bicep" ? "Bicep" : "Terraform"} template export`} />}
-      </CapabilityContainer>
-    </>
-  );
-}
 
 // ── Identity: system-assigned managed identity, the same generic ARM identity merge every
 // lens resource's PUT/PATCH can carry (core/azure_arm_core.py "18. Generic top-level

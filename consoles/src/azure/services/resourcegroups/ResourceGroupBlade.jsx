@@ -20,6 +20,12 @@ import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
+import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
+import SharedActivityLog from "../../kit/ActivityLog.jsx";
+import SharedResourceVisualizer from "../../kit/ResourceVisualizer.jsx";
+import SharedResourceHealth from "../../kit/ResourceHealth.jsx";
+import SharedDiagnosticSettings from "../../kit/DiagnosticSettings.jsx";
+import SharedAdvisor from "../../kit/Advisor.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -92,12 +98,16 @@ export default function ResourceGroupBlade({ params }) {
     const a = group.data, reload = group.reload;
     const P = {
       overview: () => <Overview a={a} reload={reload} self={self} name={name} />,
-      activitylog: () => <ActivityLog name={name} />,
+      activitylog: () => <SharedActivityLog scope={a.id} name={name} />,
       iam: () => <AccessControlIam name={name} />,
       tags: () => <Tags a={a} reload={reload} />,
       deployments: () => <Deployments name={name} />,
       locks: () => <Locks name={name} />,
-      exporttemplate: () => <ExportTemplate a={a} name={name} />,
+      exporttemplate: () => <SharedExportTemplate all id={a.id} name={a.name} resourceGroup={a.name} />,
+      resourcehealth: () => <SharedResourceHealth id={a.id} name={a.name} group />,
+      advisorrecommendations: () => <SharedAdvisor scope={a.id} name={a.name} />,
+      diagnosticsettings: () => <SharedDiagnosticSettings id={a.id} name={a.name} />,
+      resourcevisualizer: () => <SharedResourceVisualizer resourceGroup={a.name} />,
       properties: () => <Properties a={a} />,
       costanalysis: () => <CostAnalysis name={name} />,
       costalertspreview: () => <CostAlerts name={name} />,
@@ -178,7 +188,7 @@ function Overview({ a, reload, self, name }) {
           />
         </div>
       )}
-      {tab === "recommendations" && <NotSimulatedContainer feature="Advisor recommendations" />}
+      {tab === "recommendations" && <SharedAdvisor bare scope={a.id} />}
 
       <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
         <DialogSurface aria-label={gap || "Not simulated"}>
@@ -642,81 +652,8 @@ function Deployments({ name }) {
 }
 
 // ── Activity log ─────────────────────────────────────────────────────────────────────────
-function ActivityLog({ name }) {
-  const { data, loading, error, reload } = useAsync(() => api.listActivityLog(name), [name]);
-  const rows = data || [];
-  return (
-    <>
-      <div className="vy-panel-title">{name} | Activity log</div>
-      <div className="vy-cmdbar" role="toolbar" aria-label="Activity log commands">
-        <ToolbarButton icon={<ArrowClockwise20Regular />} onClick={reload}>Refresh</ToolbarButton>
-        <ToolbarButton icon={<ArrowDownload20Regular />} onClick={() => downloadCsv("activity-log.csv",
-          [{ key: "op", label: "Operation name" }, { key: "status", label: "Status" }, { key: "ts", label: "Time stamp" }],
-          rows.map((r) => ({ op: r.operationName?.localizedValue || r.operationName?.value, status: r.status?.localizedValue || r.status?.value, ts: r.eventTimestamp })))}>
-          Download as CSV
-        </ToolbarButton>
-      </div>
-      <ErrorBar error={error} />
-      <table className="vy-grid">
-        <thead><tr><th>Operation name</th><th>Status</th><th>Time</th><th>Time stamp</th><th>Subscription</th><th>Event initiated by</th></tr></thead>
-        <tbody>
-          {loading ? <tr><td colSpan={6}><Spinner size="tiny" /></td></tr> : rows.length ? rows.map((r) => (
-            <tr key={r.id}>
-              <td>{r.operationName?.localizedValue || r.operationName?.value}</td>
-              <td>{r.status?.localizedValue || r.status?.value}</td>
-              <td>{fmtDate(r.eventTimestamp)}</td>
-              <td>{r.eventTimestamp}</td>
-              <td>{r.subscriptionId}</td>
-              <td>{r.caller}</td>
-            </tr>
-          )) : <tr><td colSpan={6} className="vy-muted">No events to display</td></tr>}
-        </tbody>
-      </table>
-      <NotSimulatedContainer feature="Activity, Edit columns, Export Activity Logs, Insights, Feedback, Pin current filters and Reset filters from the command bar" />
-    </>
-  );
-}
 
 // ── Export template ────────────────────────────────────────────────────────────────────
-function ExportTemplate({ a, name }) {
-  const [tab, setTab] = useState("arm");
-  const [params, setParams] = useState(true);
-  const resources = useAsync(() => api.listResources(name), [name]);
-  const template = {
-    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
-    contentVersion: "1.0.0.0",
-    ...(params ? { parameters: { resourceGroupTags: { type: "object", defaultValue: a.tags || {} } } } : {}),
-    resources: (resources.data || []).map((r) => ({ type: r.type, apiVersion: "2023-01-01", name: r.name, location: r.location, properties: r.properties })),
-  };
-  const text = JSON.stringify(template, null, 2);
-  const download = () => {
-    const el = document.createElement("a");
-    el.href = URL.createObjectURL(new Blob([text], { type: "application/json" }));
-    el.download = `${a.name}.json`;
-    document.body.appendChild(el); el.click(); el.remove();
-  };
-  return (
-    <>
-      <div className="vy-panel-title">Export template</div>
-      <div className="vy-cmdbar" role="toolbar" aria-label="Export template commands">
-        <ToolbarButton icon={<ArrowDownload20Regular />} onClick={download}>Download</ToolbarButton>
-        <ToolbarButton disabled>Add to library (preview)</ToolbarButton>
-        <ToolbarButton disabled>Deploy</ToolbarButton>
-        <ToolbarButton disabled>Visualize template</ToolbarButton>
-      </div>
-      <TabList selectedValue={tab} onTabSelect={(_, d) => setTab(d.value)} aria-label="Export template tabs">
-        <Tab value="arm">ARM Template</Tab>
-        <Tab value="bicep">Bicep</Tab>
-        <Tab value="terraform">Terraform</Tab>
-      </TabList>
-      <section className="vy-section" style={{ marginTop: 12 }}><h3>Template</h3>
-        <Checkbox label="Include parameters" checked={params} onChange={(_, d) => setParams(!!d.checked)} />
-        {tab === "arm" && <Textarea readOnly value={text} style={{ width: "100%", minHeight: 320, fontFamily: "monospace" }} />}
-        {tab !== "arm" && <NotSimulatedContainer feature={`${tab === "bicep" ? "Bicep" : "Terraform"} template export`} />}
-      </section>
-    </>
-  );
-}
 
 // ── Properties ─────────────────────────────────────────────────────────────────────────
 function Properties({ a }) {

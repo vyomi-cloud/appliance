@@ -1489,5 +1489,37 @@ def run() -> int:
     return 0
 
 
+
+
+def test_classic_administrators_listed_read_only():
+    from core.azure_arm_core import AzureArm
+    a = AzureArm(); a._base = "http://x"
+    sub = "00000000-0000-0000-0000-cloudlearn01"
+    r = a.handle("GET", f"/subscriptions/{sub}/providers/Microsoft.Authorization/classicAdministrators", {"api-version": "2015-06-01"})
+    assert r["status"] == 200
+    v = r["body"]["value"]
+    assert v[0]["properties"]["role"] == "ServiceAdministrator;AccountAdministrator" and v[0]["properties"]["emailAddress"]
+    assert a.handle("PUT", f"/subscriptions/{sub}/providers/Microsoft.Authorization/classicAdministrators", {"api-version": "2015-06-01"}, {})["status"] == 405
+
+
+def test_resource_graph_subscription_prefixed_and_tag_patch_merge():
+    from core.azure_arm_core import AzureArm
+    sub = "00000000-0000-0000-0000-cloudlearn01"
+    a = AzureArm(); a._base = "http://x"
+    a.handle("PUT", f"/subscriptions/{sub}/resourcegroups/rg1", {"api-version": "2021-04-01"}, {"location": "eastus"})
+    rid = f"/subscriptions/{sub}/resourceGroups/rg1/providers/Microsoft.Network/virtualNetworks/v1"
+    a.handle("PUT", rid, {"api-version": "2023-04-01"}, {"location": "eastus", "tags": {"a": "1"}, "properties": {"addressSpace": {"addressPrefixes": ["10.0.0.0/16"]}}})
+    cur = a.handle("GET", rid, {"api-version": "2023-01-01"})["body"]
+    assert a.handle("PATCH", rid, {"api-version": "2023-01-01"}, {"tags": {**cur["tags"], "b": "2"}})["status"] == 200
+    assert a.handle("GET", rid, {"api-version": "2023-01-01"})["body"]["tags"] == {"a": "1", "b": "2"}
+    r = a.handle("POST", f"/subscriptions/{sub}/providers/Microsoft.ResourceGraph/resources", {"api-version": "2021-03-01"},
+                 {"subscriptions": [sub], "query": "Resources | where type =~ 'microsoft.network/virtualnetworks' | project name, tags"})
+    assert r["status"] == 200 and r["body"]["data"]["rows"][0][0] == "v1" and r["body"]["data"]["rows"][0][1] == {"a": "1", "b": "2"}
+
+
 if __name__ == "__main__":
+    for _n, _f in sorted(globals().items()):
+        if _n.startswith("test_") and callable(_f):
+            _f()
+            print("PASS", _n)
     raise SystemExit(run())

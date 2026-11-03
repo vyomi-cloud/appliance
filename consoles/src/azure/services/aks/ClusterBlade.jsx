@@ -27,6 +27,10 @@ import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { ResourceRecommendations } from "../defender/Pages.jsx";
+import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
+import SharedActivityLog from "../../kit/ActivityLog.jsx";
+import SharedDiagnosticSettings from "../../kit/DiagnosticSettings.jsx";
+import SharedAdvisor from "../../kit/Advisor.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -106,8 +110,10 @@ export default function ClusterBlade({ params, query }) {
       clusterconfiguration: () => <ClusterConfiguration a={a} reload={reload} />,
       properties: () => <Properties a={a} />,
       locks: () => <Locks a={a} />,
-      activitylog: () => <ActivityLog a={a} />,
-      exporttemplate: () => <ExportTemplate a={a} />,
+      activitylog: () => <SharedActivityLog scope={a.id} name={a.name} />,
+      exporttemplate: () => <SharedExportTemplate id={a.id} name={a.name} resourceGroup={a.resourceGroup} />,
+      advisorrecommendations: () => <SharedAdvisor scope={a.id} name={a.name} />,
+      diagnosticsettings: () => <SharedDiagnosticSettings id={a.id} name={a.name} />,
     }[panel];
     body = P ? P() : (
       <>
@@ -185,7 +191,7 @@ function Overview({ a, reload, self }) {
       {tab === "monitoring" && <NotSimulatedContainer feature="Cluster monitoring (CPU/memory charts, node and pod health)" />}
       {tab === "properties" && <PropertyList a={a} />}
       {tab === "capabilities" && <NotSimulatedContainer feature="The capabilities overview" />}
-      {tab === "recommendations" && <NotSimulatedContainer feature="Advisor recommendations" />}
+      {tab === "recommendations" && <SharedAdvisor bare scope={a.id} />}
       {tab === "tutorials" && <NotSimulatedContainer feature="Tutorials" />}
 
       <Dialog open={connect} onOpenChange={(_, d) => !d.open && setConnect(false)}>
@@ -943,55 +949,6 @@ function AddLockDialog({ open, onClose, onCreate }) {
 }
 
 // ── Activity log (Microsoft.Insights/eventtypes/management/values, scoped to this cluster) ──
-function ActivityLog({ a }) {
-  const { data, loading, error, reload } = useAsync(() => api.listActivityLog(a.resourceGroup, a.name), [a.id]);
-  const [filter, setFilter] = useState("");
-  const [pinned, setPinned] = useState(false);
-  const [gap, setGap] = useState(null);
-  const rows = (data || []).filter((r) => !filter || (r.operationName?.localizedValue || "").toLowerCase().includes(filter.toLowerCase()));
-  return (
-    <>
-      <div className="vy-panel-title">{a.name} | Activity log</div>
-      <div className="vy-cmdbar" role="toolbar" aria-label="Activity log commands">
-        <ToolbarButton onClick={() => setGap("Activity")}>Activity</ToolbarButton>
-        <ToolbarButton onClick={() => setGap("Edit columns")}>Edit columns</ToolbarButton>
-        <ToolbarButton icon={<ArrowClockwise20Regular />} onClick={reload}>Refresh</ToolbarButton>
-        <ToolbarButton onClick={() => setGap("Export Activity Logs")}>Export Activity Logs</ToolbarButton>
-        <ToolbarButton icon={<ArrowDownload20Regular />} onClick={() => downloadActivity(rows, a.name)}>Download as CSV</ToolbarButton>
-        <ToolbarButton onClick={() => setGap("Insights")}>Insights</ToolbarButton>
-        <ToolbarButton onClick={() => setGap("Feedback")}>Feedback</ToolbarButton>
-        <ToolbarButton onClick={() => setPinned((v) => !v)}>{pinned ? "Unpin current filters" : "Pin current filters"}</ToolbarButton>
-        <ToolbarButton onClick={() => setFilter("")}>Reset filters</ToolbarButton>
-      </div>
-      <Input size="small" style={{ margin: "8px 0", width: 240 }} placeholder="Filter by operation" value={filter} onChange={(_, d) => setFilter(d.value)} aria-label="Filter by operation" />
-      <ErrorBar error={error} />
-      <table className="vy-grid">
-        <thead><tr><th>Operation name</th><th>Status</th><th>Time</th><th>Time stamp</th><th>Subscription</th><th>Event initiated by</th></tr></thead>
-        <tbody>
-          {loading ? <tr><td colSpan={6}><Spinner size="tiny" /></td></tr> : rows.length ? rows.map((r) => (
-            <tr key={r.id}>
-              <td>{r.operationName?.localizedValue || r.operationName?.value}</td>
-              <td>{r.status?.localizedValue || r.status?.value}</td>
-              <td>{fmtDate(r.eventTimestamp)}</td>
-              <td>{r.eventTimestamp}</td>
-              <td>{r.subscriptionId}</td>
-              <td>{r.caller}</td>
-            </tr>
-          )) : <tr><td colSpan={6} className="vy-muted">No events to display</td></tr>}
-        </tbody>
-      </table>
-      <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
-        <DialogSurface aria-label={gap || "Not simulated"}>
-          <DialogBody>
-            <DialogTitle>{gap}</DialogTitle>
-            <DialogContent><NotSimulated feature={gap === "Feedback" ? "Sending product feedback" : gap || ""} /></DialogContent>
-            <DialogActions><Button onClick={() => setGap(null)}>Close</Button></DialogActions>
-          </DialogBody>
-        </DialogSurface>
-      </Dialog>
-    </>
-  );
-}
 
 function downloadActivity(rows, name) {
   const cols = [{ label: "Operation name" }, { label: "Status" }, { label: "Time stamp" }];
@@ -1004,41 +961,3 @@ function downloadActivity(rows, name) {
 }
 
 // ── Export template ────────────────────────────────────────────────────────────────────
-function ExportTemplate({ a }) {
-  const [tab, setTab] = useState("arm");
-  const [params, setParams] = useState(true);
-  const template = {
-    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
-    contentVersion: "1.0.0.0",
-    ...(params ? { parameters: { clusterName: { type: "string", defaultValue: a.name } } } : {}),
-    resources: [{ type: "Microsoft.ContainerService/managedClusters", apiVersion: api.ARM.apiVersion, name: params ? "[parameters('clusterName')]" : a.name, location: a.location, properties: a.properties }],
-  };
-  const text = JSON.stringify(template, null, 2);
-  const download = () => {
-    const el = document.createElement("a");
-    el.href = URL.createObjectURL(new Blob([text], { type: "application/json" }));
-    el.download = `${a.name}.json`;
-    document.body.appendChild(el); el.click(); el.remove();
-  };
-  return (
-    <>
-      <div className="vy-panel-title">Export template</div>
-      <div className="vy-cmdbar" role="toolbar" aria-label="Export template commands">
-        <ToolbarButton icon={<ArrowDownload20Regular />} onClick={download}>Download</ToolbarButton>
-        <ToolbarButton disabled>Add to library (preview)</ToolbarButton>
-        <ToolbarButton disabled>Deploy</ToolbarButton>
-        <ToolbarButton disabled>Visualize template</ToolbarButton>
-      </div>
-      <TabList selectedValue={tab} onTabSelect={(_, d) => setTab(d.value)} aria-label="Export template tabs">
-        <Tab value="arm">ARM Template</Tab>
-        <Tab value="bicep">Bicep</Tab>
-        <Tab value="terraform">Terraform</Tab>
-      </TabList>
-      <section className="vy-section" style={{ marginTop: 12 }}><h3>Template</h3>
-        <Checkbox label="Include parameters" checked={params} onChange={(_, d) => setParams(!!d.checked)} />
-        {tab === "arm" && <Textarea readOnly value={text} style={{ width: "100%", minHeight: 320, fontFamily: "monospace" }} />}
-        {tab !== "arm" && <NotSimulatedContainer feature={`${tab === "bicep" ? "Bicep" : "Terraform"} template export`} />}
-      </section>
-    </>
-  );
-}

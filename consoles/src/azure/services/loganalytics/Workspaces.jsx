@@ -20,6 +20,7 @@ export default function Workspaces() {
       <TitleRow title="Log Analytics workspaces" subtitle="Vyomi simulator (default directory)" glyph={<Glyph id="loganalytics" />} closeHref="#/" />
       <div className="vy-page">
         <BrowseGrid
+          tools
           resourceName="workspace"
           items={data || []}
           loading={loading}
@@ -48,7 +49,6 @@ export default function Workspaces() {
           ]}
           emptyAction={<Link href="#/loganalytics/create">Create Log Analytics workspace</Link>}
         />
-        <NotSimulatedContainer feature="Assign tags from the command bar" />
       </div>
     </>
   );

@@ -23,6 +23,9 @@ import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 import { TagRows } from "./TagRows.jsx";
 import * as api from "./api.js";
+import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
+import SharedActivityLog from "../../kit/ActivityLog.jsx";
+import { ClassicAdminsPanel, DenyAssignmentsPanel, MyAccess } from "../../kit/IamExtras.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -59,7 +62,7 @@ export default function TopicBlade({ params, query }) {
       configuration: () => <Configuration t={t} reload={reload} />,
       accesskeys: () => <AccessKeys t={t} />,
       properties: () => <Properties t={t} />,
-      activitylog: () => <ActivityLog t={t} name={name} />,
+      activitylog: () => <SharedActivityLog scope={t.id} name={t.name} />,
       accesscontrol: () => <Iam name={name} />,
       locks: () => <Locks rg={rg} topic={name} />,
       diagnose: () => <Diagnose t={t} rg={rg} name={name} />,
@@ -69,7 +72,7 @@ export default function TopicBlade({ params, query }) {
       metrics: () => <Metrics t={t} />,
       diagnosticsettings: () => <DiagnosticSettings t={t} />,
       logs: () => <CapabilityContainer id="azure.eventgrid.topic.monitoring" title={`${name} | Logs`} />,
-      exporttemplate: () => <ExportTemplate t={t} />,
+      exporttemplate: () => <SharedExportTemplate id={t.id} name={t.name} resourceGroup={t.resourceGroup} />,
     }[panel];
     body = P ? P() : <><div className="vy-panel-title">{LABEL[panel] || panel}</div><CapabilityContainer id="azure.eventgrid.topic.tools" title={LABEL[panel] || panel} /></>;
   }
@@ -389,46 +392,6 @@ const ACTIVITY_LOG_COLUMNS = [
   { key: "caller", label: "Event initiated by", value: (e) => e.caller },
 ];
 
-function ActivityLog({ t, name }) {
-  const log = useAsync(() => api.listActivityLog(t.id), [t.id]);
-  const [filter, setFilter] = useState("");
-  const [gap, setGap] = useState(null);
-  const f = filter.trim().toLowerCase();
-  const rows = (log.data || []).filter((e) => !f || (ACTIVITY_LOG_COLUMNS.some((c) => String(c.value(e) ?? "").toLowerCase().includes(f))));
-  return (
-    <CapabilityContainer id="azure.eventgrid.topic.activitylog" title={`${name} | Activity log`}>
-      <div className="vy-cmdbar" role="toolbar" aria-label="Activity log commands">
-        <ToolbarButton onClick={() => setGap("Activity")}>Activity</ToolbarButton>
-        <ToolbarButton onClick={() => setGap("Edit columns")}>Edit columns</ToolbarButton>
-        <ToolbarButton icon={<ArrowClockwise20Regular />} onClick={log.reload}>Refresh</ToolbarButton>
-        <ToolbarButton onClick={() => setGap("Export Activity Logs")}>Export Activity Logs</ToolbarButton>
-        <ToolbarButton icon={<ArrowDownload20Regular />} disabled={!rows.length} onClick={() => downloadCsv("activity-log.csv", ACTIVITY_LOG_COLUMNS, rows)}>Download as CSV</ToolbarButton>
-        <ToolbarButton onClick={() => setGap("Insights")}>Insights</ToolbarButton>
-        <ToolbarButton onClick={() => setGap("Feedback")}>Feedback</ToolbarButton>
-        <ToolbarButton onClick={() => setGap("Pin current filters")}>Pin current filters</ToolbarButton>
-        <ToolbarButton onClick={() => setFilter("")}>Reset filters</ToolbarButton>
-      </div>
-      <Input size="small" style={{ width: 260, margin: "8px 0" }} placeholder="Filter by operation..." value={filter} onChange={(_, d) => setFilter(d.value)} aria-label="Filter by operation" />
-      <ErrorBar error={log.error} />
-      {log.loading ? <Loading /> : (
-        <table className="vy-grid" style={{ width: "100%" }}>
-          <thead><tr>{ACTIVITY_LOG_COLUMNS.map((c) => <th key={c.key}>{c.label}</th>)}</tr></thead>
-          <tbody>
-            {rows.map((e) => (
-              <tr key={e.id}>{ACTIVITY_LOG_COLUMNS.map((c) => <td key={c.key}>{c.value(e)}</td>)}</tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-      {!log.loading && !rows.length && <div className="vy-empty"><h3>No events to display</h3></div>}
-      <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
-        <DialogSurface aria-label={gap || ""}>
-          <DialogBody><CapabilityContainer id="azure.eventgrid.topic.listactions" title={gap || ""} /></DialogBody>
-        </DialogSurface>
-      </Dialog>
-    </CapabilityContainer>
-  );
-}
 
 // ── Access control (IAM): real ARM resources (Microsoft.Authorization/roleAssignments,
 // roleDefinitions), subscription-wide rather than scoped to this one topic — same honest
@@ -451,7 +414,7 @@ function Iam({ name }) {
       </TabList>
       {tab === "checkaccess" && (
         <div style={{ display: "flex", gap: 24, marginTop: 12 }}>
-          <section className="vy-section"><h3>My access</h3><Button onClick={() => setGap("View my access")}>View my access</Button></section>
+          <MyAccess a={t} />
           <section className="vy-section"><h3>Check access</h3><Button onClick={() => setGap("Check access")}>Check access</Button></section>
         </div>
       )}
@@ -483,8 +446,8 @@ function Iam({ name }) {
           />
         </section>
       )}
-      {tab === "denyassignments" && <NotSimulatedContainer title="Deny assignments" feature="Deny assignments" />}
-      {tab === "classicadmins" && <div style={{ marginTop: 12 }} />}
+      {tab === "denyassignments" && <DenyAssignmentsPanel a={t} />}
+      {tab === "classicadmins" && <ClassicAdminsPanel />}
       <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
         <DialogSurface aria-label={gap || "Not simulated"}>
           <DialogBody>
@@ -500,42 +463,6 @@ function Iam({ name }) {
 
 // ── Export template (ARM Template tab reflects this topic's own live resource JSON; Bicep
 // and Terraform output are an honest gap, same as the Cosmos DB account blade) ────────────
-function ExportTemplate({ t }) {
-  const [tab, setTab] = useState("arm");
-  const [params, setParams] = useState(true);
-  const template = {
-    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
-    contentVersion: "1.0.0.0",
-    ...(params ? { parameters: { topicName: { type: "string", defaultValue: t.name } } } : {}),
-    resources: [{ type: "Microsoft.EventGrid/topics", apiVersion: api.ARM.apiVersion, name: params ? "[parameters('topicName')]" : t.name, location: t.location, properties: t.properties }],
-  };
-  const text = JSON.stringify(template, null, 2);
-  const download = () => {
-    const el = document.createElement("a");
-    el.href = URL.createObjectURL(new Blob([text], { type: "application/json" }));
-    el.download = `${t.name}.json`;
-    document.body.appendChild(el); el.click(); el.remove();
-  };
-  return (
-    <>
-      <div className="vy-panel-title">{t.name} | Export template</div>
-      <div className="vy-cmdbar" role="toolbar" aria-label="Export template commands">
-        <ToolbarButton icon={<ArrowDownload20Regular />} onClick={download}>Download</ToolbarButton>
-        <ToolbarButton disabled>Add to library (preview)</ToolbarButton>
-        <ToolbarButton disabled>Deploy</ToolbarButton>
-        <ToolbarButton disabled>Visualize template</ToolbarButton>
-      </div>
-      <TabList selectedValue={tab} onTabSelect={(_, d) => setTab(d.value)} aria-label="Export template tabs">
-        <Tab value="arm">ARM Template</Tab><Tab value="bicep">Bicep</Tab><Tab value="terraform">Terraform</Tab>
-      </TabList>
-      <section className="vy-section" style={{ marginTop: 12 }}><h3>Template</h3>
-        <Checkbox label="Include parameters" checked={params} onChange={(_, d) => setParams(!!d.checked)} />
-        {tab === "arm" && <Textarea readOnly value={text} style={{ width: "100%", minHeight: 320, fontFamily: "monospace" }} />}
-        {tab !== "arm" && <NotSimulatedContainer feature={`${tab === "bicep" ? "Bicep" : "Terraform"} template export`} />}
-      </section>
-    </>
-  );
-}
 
 // ── Locks (resource-scoped Microsoft.Authorization/locks) ─────────────────────────────────
 const LOCK_TYPE_LABEL = { CanNotDelete: "Delete", ReadOnly: "Read-only" };

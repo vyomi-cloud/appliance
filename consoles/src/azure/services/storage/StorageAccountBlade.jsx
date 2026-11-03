@@ -25,6 +25,9 @@ import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 import { TagRows } from "./CreateStorageAccount.jsx";
 import * as api from "./api.js";
+import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
+import SharedActivityLog from "../../kit/ActivityLog.jsx";
+import SharedAdvisor from "../../kit/Advisor.jsx";
 
 const ENFORCEMENT = "These settings are stored on the storage account (ARM) and returned to your SDKs and the az CLI. The Vyomi Blob data plane does not enforce them.";
 
@@ -94,12 +97,13 @@ export default function StorageAccountBlade({ params, query }) {
       dataprotection: () => <DataProtection a={a} />,
       objectreplication: () => <ObjectReplication a={a} />,
       staticwebsite: () => <StaticWebsite a={a} />,
-      exporttemplate: () => <ExportTemplate a={a} />,
+      exporttemplate: () => <SharedExportTemplate id={a.id} name={a.name} resourceGroup={a.resourceGroup} />,
+      advisor: () => <SharedAdvisor scope={a.id} name={a.name} />,
       iam: () => <Iam a={a} />,
       cors: () => <Cors a={a} />,
       lifecycle: () => <Lifecycle a={a} />,
       sas: () => <Sas a={a} />,
-      activitylog: () => <ActivityLog a={a} />,
+      activitylog: () => <SharedActivityLog scope={a.id} name={a.name} />,
       locks: () => <Locks a={a} />,
       queues: () => (query.queue ? <QueueDetail name={query.queue} self={self} /> : <Queues self={self} />),
       tables: () => (query.table ? <TableDetail name={query.table} self={self} /> : <Tables self={self} />),
@@ -173,7 +177,7 @@ function Overview({ a, reload, self }) {
       {tab === "properties" && <Properties a={a} />}
       {tab === "monitoring" && <NotSimulatedContainer feature="Storage account monitoring (requests, egress, latency charts)" />}
       {tab === "capabilities" && <NotSimulatedContainer feature="The capabilities overview" />}
-      {tab === "recommendations" && <NotSimulatedContainer feature="Advisor recommendations" />}
+      {tab === "recommendations" && <SharedAdvisor bare scope={a.id} />}
       {tab === "tutorials" && <NotSimulatedContainer feature="Tutorials" />}
       {tab === "toolsandsdks" && <NotSimulatedContainer feature="Tools + SDKs" />}
 
@@ -1202,50 +1206,6 @@ function StaticWebsite({ a }) {
 }
 
 // ── Export template (client-side ARM/Bicep/Terraform generated from this resource) ────
-function ExportTemplate({ a }) {
-  const [tab, setTab] = useState("arm");
-  const [params, setParams] = useState(true);
-  const resource = { type: "Microsoft.Storage/storageAccounts", apiVersion: "2023-01-01", name: a.name, location: a.location, tags: a.tags || {}, sku: a.sku, kind: a.kind, properties: a.properties };
-  const arm = {
-    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
-    contentVersion: "1.0.0.0",
-    parameters: params ? { storageAccountName: { type: "string", defaultValue: a.name } } : {},
-    resources: [{ ...resource, name: params ? "[parameters('storageAccountName')]" : a.name }],
-  };
-  const bicep = `resource ${a.name.replace(/[^a-zA-Z0-9]/g, "")} 'Microsoft.Storage/storageAccounts@2023-01-01' = {\n  name: '${a.name}'\n  location: '${a.location}'\n  sku: {\n    name: '${a.sku?.name}'\n  }\n  kind: '${a.kind}'\n}\n`;
-  const terraform = `resource "azurerm_storage_account" "${a.name.replace(/[^a-zA-Z0-9]/g, "_")}" {\n  name                     = "${a.name}"\n  location                 = "${a.location}"\n  account_tier             = "${a.sku?.tier || "Standard"}"\n  account_replication_type = "${(a.sku?.name || "").split("_")[1] || "LRS"}"\n}\n`;
-  const text = tab === "arm" ? JSON.stringify(arm, null, 2) : tab === "bicep" ? bicep : terraform;
-  const [gap, setGap] = useState(null);
-  return (
-    <>
-      <div className="vy-panel-title">{a.name} | Export template</div>
-      <div className="vy-cmdbar" role="toolbar" aria-label="Export template commands">
-        <ToolbarButton icon={<ArrowDownload20Regular />} as="a" href={`data:text/plain,${encodeURIComponent(text)}`} download={`${a.name}-template.${tab === "arm" ? "json" : tab === "bicep" ? "bicep" : "tf"}`}>Download</ToolbarButton>
-        <ToolbarButton onClick={() => setGap("Add to library (preview)")}>Add to library (preview)</ToolbarButton>
-        <ToolbarButton onClick={() => setGap("Deploy")}>Deploy</ToolbarButton>
-        <ToolbarButton onClick={() => setGap("Visualize template")}>Visualize template</ToolbarButton>
-      </div>
-      <TabList selectedValue={tab} onTabSelect={(_, d) => setTab(d.value)} aria-label="Export template tabs">
-        <Tab value="arm">ARM Template</Tab>
-        <Tab value="bicep">Bicep</Tab>
-        <Tab value="terraform">Terraform</Tab>
-      </TabList>
-      <section className="vy-section" style={{ marginTop: 12 }}><h3>Template</h3>
-        {tab === "arm" && <Checkbox checked={params} onChange={(_, d) => setParams(!!d.checked)} label="Include parameters" />}
-        <pre className="vy-mono" style={{ maxHeight: 420, overflow: "auto", background: "var(--colorNeutralBackground3)", padding: 12, borderRadius: 4 }}>{text}</pre>
-      </section>
-      <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
-        <DialogSurface aria-label={gap || "Not simulated"}>
-          <DialogBody>
-            <DialogTitle>{gap}</DialogTitle>
-            <DialogContent><NotSimulated feature={gap} /></DialogContent>
-            <DialogActions><Button onClick={() => setGap(null)}>Close</Button></DialogActions>
-          </DialogBody>
-        </DialogSurface>
-      </Dialog>
-    </>
-  );
-}
 
 // ── Data protection (Microsoft.Storage/storageAccounts/blobServices/default) ───────────
 function DeletedContainers({ a }) {
@@ -1449,50 +1409,6 @@ function AddLockDialog({ open, onClose, onCreate }) {
 }
 
 // ── Activity log (Microsoft.Insights/eventtypes/management/values, scoped to this account) ──
-function ActivityLog({ a }) {
-  const { data, loading, error, reload } = useAsync(() => api.listActivityLog(a.resourceGroup, a.name), [a.id]);
-  const [gap, setGap] = useState(null);
-  const rows = data || [];
-  return (
-    <CapabilityContainer id="azure.storage.activitylog" title={`${a.name} | Activity log`}
-      actions={<>
-        <ToolbarButton onClick={() => setGap("Edit columns")}>Edit columns</ToolbarButton>
-        <ToolbarButton icon={<ArrowClockwise20Regular />} onClick={reload}>Refresh</ToolbarButton>
-        <ToolbarButton onClick={() => setGap("Export Activity Logs")}>Export Activity Logs</ToolbarButton>
-        <ToolbarButton icon={<ArrowDownload20Regular />} onClick={() => setGap("Download as CSV")}>Download as CSV</ToolbarButton>
-        <ToolbarButton onClick={() => setGap("Feedback")}>Feedback</ToolbarButton>
-        <ToolbarButton onClick={() => setGap("Pin current filters")}>Pin current filters</ToolbarButton>
-        <ToolbarButton onClick={() => setGap("Reset filters")}>Reset filters</ToolbarButton>
-      </>}>
-      <ErrorBar error={error} />
-      <NotSimulated feature="Severity/category filtering and the Timespan picker" note="This list always shows everything recorded since the simulation booted." />
-      <table className="vy-grid">
-        <thead><tr><th>Operation name</th><th>Status</th><th>Time</th><th>Time stamp</th><th>Subscription</th><th>Event initiated by</th></tr></thead>
-        <tbody>
-          {loading ? <tr><td colSpan={6}><Spinner size="tiny" /></td></tr> : rows.length ? rows.map((r) => (
-            <tr key={r.id}>
-              <td>{r.operationName?.localizedValue || r.operationName?.value}</td>
-              <td>{r.status?.localizedValue || r.status?.value}</td>
-              <td>{fmtDate(r.eventTimestamp)}</td>
-              <td>{r.eventTimestamp}</td>
-              <td>{r.subscriptionId}</td>
-              <td>{r.caller}</td>
-            </tr>
-          )) : <tr><td colSpan={6} className="vy-muted">No events to display</td></tr>}
-        </tbody>
-      </table>
-      <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
-        <DialogSurface aria-label={gap || "Not simulated"}>
-          <DialogBody>
-            <DialogTitle>{gap}</DialogTitle>
-            <DialogContent><NotSimulated feature={gap === "Feedback" ? "Sending product feedback" : gap} /></DialogContent>
-            <DialogActions><Button onClick={() => setGap(null)}>Close</Button></DialogActions>
-          </DialogBody>
-        </DialogSurface>
-      </Dialog>
-    </CapabilityContainer>
-  );
-}
 
 // ── Queues (Azure Storage Queue REST, a global data plane — see api.js) ────────────────
 function Queues({ self }) {

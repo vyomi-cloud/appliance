@@ -27,6 +27,9 @@ import { Essentials, ErrorBar, Glyph, KV, Loading, NotSimulated, NotSimulatedCon
 import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
+import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
+import SharedActivityLog from "../../kit/ActivityLog.jsx";
+import { ClassicAdminsPanel, DenyAssignmentsPanel, MyAccess } from "../../kit/IamExtras.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -112,7 +115,7 @@ export default function VmBlade({ params }) {
       tags: () => <Tags a={a} reload={reload} />,
       properties: () => <Properties a={a} />,
       locks: () => <Locks a={a} />,
-      activitylog: () => <ActivityLog a={a} />,
+      activitylog: () => <SharedActivityLog scope={a.id} name={a.name} />,
       size: () => <Size a={a} reload={reload} />,
       disks: () => <Disks a={a} reload={reload} />,
       identity: () => <Identity a={a} reload={reload} />,
@@ -120,7 +123,7 @@ export default function VmBlade({ params }) {
       connect: () => <Connect a={a} />,
       networksettings: () => <NetworkSettings a={a} />,
       runcommand: () => <RunCommand a={a} reload={reload} />,
-      exporttemplate: () => <ExportTemplate a={a} />,
+      exporttemplate: () => <SharedExportTemplate id={a.id} name={a.name} resourceGroup={a.resourceGroup} />,
       resourcevisualizer: () => <ResourceVisualizer a={a} />,
       advisor: () => <Advisor a={a} />,
       diagnose: () => <Diagnose a={a} />,
@@ -339,7 +342,7 @@ function AccessControlIam({ a }) {
       </TabList>
       {tab === "check" && (
         <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 16 }}>
-          <section className="vy-section"><h3>My access</h3><Button onClick={() => setDlg("mine")}>View my access</Button></section>
+          <MyAccess a={a} />
           <section className="vy-section"><h3>Check access</h3><Button onClick={() => setDlg("check")}>Check access</Button></section>
         </div>
       )}
@@ -374,8 +377,8 @@ function AccessControlIam({ a }) {
           </CapabilityContainer>
         </div>
       )}
-      {tab === "deny" && <div style={{ marginTop: 12 }}><NotSimulatedContainer title="Deny assignments" feature="Deny assignments" /></div>}
-      {tab === "classic" && <div style={{ marginTop: 12 }}><NotSimulatedContainer title="Classic administrators" feature="Classic administrators" /></div>}
+      {tab === "deny" && <div style={{ marginTop: 12 }}><DenyAssignmentsPanel a={a} /></div>}
+      {tab === "classic" && <div style={{ marginTop: 12 }}><ClassicAdminsPanel /></div>}
       <Dialog open={!!dlg} onOpenChange={(_, d) => !d.open && setDlg(null)}>
         <DialogSurface aria-label="Access check">
           <DialogBody>
@@ -538,52 +541,6 @@ function AddLockDialog({ open, onClose, onCreate }) {
 // ── Activity log (Microsoft.Insights/eventtypes/management/values, scoped to this VM) ──
 const TIMESPANS = { "1h": 1, "6h": 6, "24h": 24, "7d": 24 * 7, "30d": 24 * 30 };
 
-function ActivityLog({ a }) {
-  const [timespan, setTimespan] = useState("24h");
-  const since = () => new Date(Date.now() - TIMESPANS[timespan] * 3600 * 1000).toISOString();
-  const { data, loading, error, reload } = useAsync(() => api.listActivityLog(a.resourceGroup, a.name, since()), [a.id, timespan]);
-  const [gap, setGap] = useState(null);
-  const rows = data || [];
-  return (
-    <CapabilityContainer id="azure.vms.activity_log" title={`${a.name} | Activity log`}
-      actions={<ToolbarButton icon={<ArrowClockwise20Regular />} onClick={reload}>Refresh</ToolbarButton>}>
-      <div className="vy-cmdbar" role="toolbar" aria-label="Activity log tools">
-        {["Activity", "Edit columns", "Export Activity Logs", "Download as CSV", "Insights", "Feedback", "Pin current filters", "Reset filters"].map((l) => (
-          <ToolbarButton key={l} onClick={() => setGap(l)}>{l}</ToolbarButton>
-        ))}
-        <Select size="small" value={timespan} onChange={(_, d) => setTimespan(d.value)} aria-label="Timespan" style={{ marginLeft: "auto", width: 160 }}>
-          <option value="1h">Last hour</option>
-          <option value="6h">Last 6 hours</option>
-          <option value="24h">Last 24 hours</option>
-          <option value="7d">Last 7 days</option>
-          <option value="30d">Last 30 days</option>
-        </Select>
-      </div>
-      <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
-        <DialogSurface aria-label={gap || "Not simulated"}>
-          <DialogBody><DialogTitle>{gap}</DialogTitle><DialogContent><NotSimulated feature={gap || ""} /></DialogContent>
-            <DialogActions><Button onClick={() => setGap(null)}>Close</Button></DialogActions></DialogBody>
-        </DialogSurface>
-      </Dialog>
-      <ErrorBar error={error} />
-      <table className="vy-grid">
-        <thead><tr><th>Operation name</th><th>Status</th><th>Time</th><th>Time stamp</th><th>Subscription</th><th>Event initiated by</th></tr></thead>
-        <tbody>
-          {loading ? <tr><td colSpan={6}><Spinner size="tiny" /></td></tr> : rows.length ? rows.map((r) => (
-            <tr key={r.id}>
-              <td>{r.operationName?.localizedValue || r.operationName?.value}</td>
-              <td>{r.status?.localizedValue || r.status?.value}</td>
-              <td>{fmtDate(r.eventTimestamp)}</td>
-              <td>{r.eventTimestamp}</td>
-              <td>{r.subscriptionId}</td>
-              <td>{r.caller}</td>
-            </tr>
-          )) : <tr><td colSpan={6} className="vy-muted">No events to display</td></tr>}
-        </tbody>
-      </table>
-    </CapabilityContainer>
-  );
-}
 
 // ── Size — real ARM GET .../virtualMachines/{vm}/vmSizes (azure.vms.size), backed by
 // core/instance_catalog.py's AZURE sample through the ARM engine. No size list in the console. ──
@@ -1030,51 +987,6 @@ function RunCommand({ a }) {
 
 // ── Export template (ARM/Bicep/Terraform all generated client-side from this VM's own live
 // resource — same approach as the Storage account blade's Export template) ────────────────
-function ExportTemplate({ a }) {
-  const [tab, setTab] = useState("arm");
-  const [params, setParams] = useState(true);
-  const template = {
-    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
-    contentVersion: "1.0.0.0",
-    ...(params ? { parameters: { vmName: { type: "string", defaultValue: a.name } } } : {}),
-    resources: [{ type: "Microsoft.Compute/virtualMachines", apiVersion: api.ARM.apiVersion, name: params ? "[parameters('vmName')]" : a.name, location: a.location, properties: a.properties }],
-  };
-  const vmSize = a.properties?.hardwareProfile?.vmSize;
-  const osDisk = a.properties?.storageProfile?.osDisk || {};
-  const img = a.properties?.storageProfile?.imageReference || {};
-  const adminUsername = a.properties?.osProfile?.adminUsername;
-  const bicepName = a.name.replace(/[^a-zA-Z0-9]/g, "");
-  const bicep = `resource ${bicepName} 'Microsoft.Compute/virtualMachines@${api.ARM.apiVersion}' = {\n  name: '${a.name}'\n  location: '${a.location}'\n  properties: {\n    hardwareProfile: {\n      vmSize: '${vmSize}'\n    }\n    osProfile: {\n      computerName: '${a.name}'\n      adminUsername: '${adminUsername}'\n    }\n    storageProfile: {\n      imageReference: {\n        publisher: '${img.publisher}'\n        offer: '${img.offer}'\n        sku: '${img.sku}'\n        version: '${img.version}'\n      }\n      osDisk: {\n        osType: '${osDisk.osType}'\n        managedDisk: {\n          storageAccountType: '${osDisk.managedDisk?.storageAccountType}'\n        }\n      }\n    }\n  }\n}\n`;
-  const terraform = `resource "azurerm_linux_virtual_machine" "${a.name.replace(/[^a-zA-Z0-9]/g, "_")}" {\n  name                = "${a.name}"\n  location            = "${a.location}"\n  resource_group_name = "${a.resourceGroup}"\n  size                = "${vmSize}"\n  admin_username      = "${adminUsername}"\n\n  os_disk {\n    storage_account_type = "${osDisk.managedDisk?.storageAccountType}"\n  }\n\n  source_image_reference {\n    publisher = "${img.publisher}"\n    offer     = "${img.offer}"\n    sku       = "${img.sku}"\n    version   = "${img.version}"\n  }\n}\n`;
-  const text = tab === "arm" ? JSON.stringify(template, null, 2) : tab === "bicep" ? bicep : terraform;
-  const ext = tab === "arm" ? "json" : tab === "bicep" ? "bicep" : "tf";
-  const download = () => {
-    const el = document.createElement("a");
-    el.href = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
-    el.download = `${a.name}.${ext}`;
-    document.body.appendChild(el); el.click(); el.remove();
-  };
-  return (
-    <>
-      <div className="vy-panel-title">Export template</div>
-      <div className="vy-cmdbar" role="toolbar" aria-label="Export template commands">
-        <ToolbarButton icon={<ArrowDownload20Regular />} onClick={download}>Download</ToolbarButton>
-        <ToolbarButton disabled>Add to library (preview)</ToolbarButton>
-        <ToolbarButton disabled>Deploy</ToolbarButton>
-        <ToolbarButton disabled>Visualize template</ToolbarButton>
-      </div>
-      <TabList selectedValue={tab} onTabSelect={(_, d) => setTab(d.value)} aria-label="Export template tabs">
-        <Tab value="arm">ARM Template</Tab>
-        <Tab value="bicep">Bicep</Tab>
-        <Tab value="terraform">Terraform</Tab>
-      </TabList>
-      <section className="vy-section" style={{ marginTop: 12 }}><h3>Template</h3>
-        {tab === "arm" && <Checkbox label="Include parameters" checked={params} onChange={(_, d) => setParams(!!d.checked)} />}
-        <Textarea readOnly value={text} style={{ width: "100%", minHeight: 320, fontFamily: "monospace" }} />
-      </section>
-    </>
-  );
-}
 
 // ── Resource visualizer — a real diagram of this VM's own ARM relationships (NIC, public IP,
 // attached NSG, OS/data disks): no new backend, just rendering data the console already reads

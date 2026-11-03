@@ -20,6 +20,7 @@ export default function VirtualNetworks() {
       <TitleRow title="Virtual networks" glyph={<Glyph id="vnets" />} closeHref="#/" />
       <div className="vy-page">
         <BrowseGrid
+          tools
           resourceName="virtual network"
           items={data || []}
           loading={loading}
@@ -45,7 +46,6 @@ export default function VirtualNetworks() {
           ]}
           emptyAction={<Link href="#/vnets/create">Create virtual network</Link>}
         />
-        <NotSimulatedContainer feature="Open query (Azure Resource Graph) and Assign tags from the command bar" />
       </div>
     </>
   );
