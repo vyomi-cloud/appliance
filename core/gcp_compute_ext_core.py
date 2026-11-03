@@ -326,11 +326,9 @@ def policy_view(store, project, full):
     v["_display"] = {"type": rec["_kind"], "attachedInstances": [G._last(n) for n in inst], "attachedDisks": [G._last(n) for n in disks],
                      "region": rec["_region"]}
     if rec["_kind"] == "instanceSchedulePolicy":
-        v["resourceStatus"] = {"instanceSchedulePolicy": {k: rec[k] for k in ("lastRunStartTime", "nextRunStartTime") if rec.get("_" + k) or rec.get(k)}}
-        rs = v["resourceStatus"]["instanceSchedulePolicy"]
-        for k in ("lastRunStartTime", "nextRunStartTime"):
-            if rec.get("_" + k):
-                rs[k] = rec["_" + k]
+        rs = {k: rec["_" + k] for k in ("lastRunStartTime", "nextRunStartTime") if rec.get("_" + k)}
+        if rs:
+            v["resourceStatus"] = {"instanceSchedulePolicy": rs}
     return v
 
 

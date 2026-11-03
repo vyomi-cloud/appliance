@@ -12,9 +12,10 @@ import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import ResourceTable from "../../kit/ResourceTable.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
-import { ErrorAlert, fmtBytes, fmtDate, NotSimulated, PageHeader } from "../../kit/common.jsx";
+import { ErrorAlert, fmtBytes, fmtDate, PageHeader } from "../../kit/common.jsx";
 import { useProject } from "../../project.js";
 import * as api from "./api.js";
+import { InstantSnapshots, SnapshotSchedules } from "./Ext.jsx";
 
 function TabPanel({ value, name, children }) {
   return value === name ? <Box sx={{ pt: 2 }}>{children}</Box> : null;
@@ -77,14 +78,15 @@ export default function Snapshots() {
   const [sel, setSel] = useState([]);
   const [del, setDel] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
-  const [scheduleOpen, setScheduleOpen] = useState(false);
   const { data = [], loading, error, reload } = useAsync(() => api.listSnapshots(), [project]);
+  const [disks, setDisks] = useState([]);
+  useEffect(() => { api.listDisksAllZones().then(setDisks).catch(() => setDisks([])); }, [project]);
 
   return (
     <>
       <PageHeader title="Snapshots" actions={<>
         <Button startIcon={<AddIcon />} onClick={() => setCreateOpen(true)}>Create snapshot</Button>
-        <Button startIcon={<ScheduleIcon />} onClick={() => setScheduleOpen(true)}>Create snapshot schedule</Button>
+        <Button startIcon={<ScheduleIcon />} onClick={() => setTab("schedules")}>Create snapshot schedule</Button>
         <Button startIcon={<RefreshIcon />} onClick={reload}>Refresh</Button>
         <Button startIcon={<DeleteIcon />} disabled={!sel.length} onClick={() => setDel(true)}>Delete</Button>
       </>} />
@@ -122,10 +124,10 @@ export default function Snapshots() {
         />
       </TabPanel>
       <TabPanel value={tab} name="schedules">
-        <NotSimulated feature="Snapshot schedules" note="Recurring automated snapshot policies aren't modeled." />
+        <SnapshotSchedules disks={disks} />
       </TabPanel>
       <TabPanel value={tab} name="instant">
-        <NotSimulated feature="Instant snapshots" note="Instant snapshots aren't modeled." />
+        <InstantSnapshots disks={disks} />
       </TabPanel>
 
       <CreateSnapshotDialog
@@ -133,12 +135,6 @@ export default function Snapshots() {
         onClose={() => setCreateOpen(false)}
         onCreated={(name) => { notify.success(`Created snapshot "${name}"`); reload(); }}
       />
-
-      <Dialog open={scheduleOpen} onClose={() => setScheduleOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Create snapshot schedule</DialogTitle>
-        <DialogContent><NotSimulated feature="Snapshot schedules" note="Recurring automated snapshot policies aren't modeled." /></DialogContent>
-        <DialogActions><Button onClick={() => setScheduleOpen(false)}>Close</Button></DialogActions>
-      </Dialog>
 
       <DeleteDialog
         open={del}

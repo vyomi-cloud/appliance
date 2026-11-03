@@ -27,6 +27,7 @@ import Zones from "./Zones.jsx";
 import Operations from "./Operations.jsx";
 import Settings from "./Settings.jsx";
 import { gapById, gapRoutes } from "./GapPages.jsx";
+import { EXT_PAGE_IDS } from "./Ext.jsx";
 
 const link = (id, overrides) => { const g = gapById(id); return g ? { text: g[1], href: `#/compute/${g[2]}`, icon: g[3], ...overrides } : null; };
 
@@ -107,6 +108,7 @@ export default {
     { pattern: "/compute/zones", component: Zones },
     { pattern: "/compute/operations", component: Operations },
     { pattern: "/compute/settings", component: Settings },
-    ...gapRoutes(),
+    ...gapRoutes().filter((r) => !Object.keys(EXT_PAGE_IDS).some((id) => r.pattern === `/compute/${gapById(id)?.[2]}`)),
+    ...Object.entries(EXT_PAGE_IDS).map(([id, component]) => ({ pattern: `/compute/${gapById(id)[2]}`, component })),
   ],
 };

@@ -14,6 +14,7 @@ import { ErrorAlert, NotSimulated, PageHeader } from "../../kit/common.jsx";
 import { hashHref } from "../../link.jsx";
 import { useProject } from "../../project.js";
 import * as api from "./api.js";
+import { getProject } from "../../project.js";
 import ScrollTable from "../../kit/ScrollTable.jsx";
 
 function Step({ n, title, children }) {
@@ -70,9 +71,19 @@ export default function CreateInstance() {
   const [deletionProtection, setDeletionProtection] = useState(false);
   const [metadata, setMetadataItems] = useState([]);
   const [startupScript, setStartupScript] = useState("");
+  const [extraDisks, setExtraDisks] = useState([]);
+  const [backupPolicy, setBackupPolicy] = useState("");
+  const [schedulePolicy, setSchedulePolicy] = useState("");
+  const [policies, setPolicies] = useState([]);
+  const [nics, setNics] = useState([{ network: "default", subnetwork: "default" }]);
+  const [networks, setNetworks] = useState([]);
+  const [subnets, setSubnets] = useState([]);
+  const [lbHealth, setLbHealth] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
 
+  useEffect(() => { api.listPolicies().then(setPolicies).catch(() => setPolicies([])); api.listVpcNetworks().then(setNetworks).catch(() => setNetworks([])); api.listSubnetsAll().then(setSubnets).catch(() => setSubnets([])); }, []);
+  useEffect(() => { setBackupPolicy(""); setSchedulePolicy(""); }, [region]);
   useEffect(() => { setZone(api.ZONES_BY_REGION[region]?.[0] || api.DEFAULT_ZONE); }, [region]);
   useEffect(() => { api.listMachineTypes(zone).then(setMachineTypes).catch(() => setMachineTypes([])); }, [zone]);
 
@@ -87,15 +98,18 @@ export default function CreateInstance() {
     if (api.validResourceName(name)) return;
     setBusy(true); setError(null);
     const [osProject, osFamily] = api.OS_IMAGES[osIdx];
-    const tagItems = [...(httpTag ? ["http-server"] : []), ...(httpsTag ? ["https-server"] : []), ...netTags];
+    const tagItems = [...(httpTag ? ["http-server"] : []), ...(httpsTag ? ["https-server"] : []), ...(lbHealth ? ["lb-health-check"] : []), ...netTags];
     const metaItems = [...metadata.filter((m) => m.key), ...(startupScript ? [{ key: "startup-script", value: startupScript }] : []),
       ...(manageAccess && sshKeys.length ? [{ key: "ssh-keys", value: sshKeys.map((k) => `${k.user}:${k.key}`).join("\n") }] : [])];
     const body = {
       name, description: "",
       machineType, zone,
       labels: labels.length ? Object.fromEntries(labels.map((l) => [l.key, l.value])) : undefined,
-      disks: [{ boot: true, autoDelete: true, initializeParams: { sourceImage: api.osImageSource(osProject, osFamily), diskType, diskSizeGb: Number(diskSize) } }],
-      networkInterfaces: [{}],
+      disks: [{ boot: true, autoDelete: true, initializeParams: { sourceImage: api.osImageSource(osProject, osFamily), diskType, diskSizeGb: Number(diskSize) } },
+        ...extraDisks.map((d, i) => ({ boot: false, autoDelete: d.autoDelete, initializeParams: { diskName: d.name || `${name}-data-${i + 1}`, diskType: d.type, diskSizeGb: Number(d.size) } }))],
+      networkInterfaces: nics.map((n) => (n.network === "default" && n.subnetwork === "default" ? {} : {
+        network: `projects/${getProject()}/global/networks/${n.network}`, subnetwork: `projects/${getProject()}/regions/${region}/subnetworks/${n.subnetwork}` })),
+      resourcePolicies: schedulePolicy ? [api.policyLink(region, schedulePolicy)] : undefined,
       tags: tagItems.length ? { items: tagItems } : undefined,
       hostname: hostname || undefined,
       canIpForward: ipForward,
@@ -106,7 +120,15 @@ export default function CreateInstance() {
       metadata: metaItems.length ? { items: metaItems } : undefined,
     };
     try {
+      if (lbHealth) {
+        const fws = await api.listFirewalls();
+        if (!fws.some((f) => f.name === "default-allow-health-check")) {
+          await api.insertFirewall({ name: "default-allow-health-check", network: `projects/${getProject()}/global/networks/${nics[0].network}`, direction: "INGRESS", priority: 1000,
+            allowed: [{ IPProtocol: "tcp" }], sourceRanges: ["130.211.0.0/22", "35.191.0.0/16"], targetTags: ["lb-health-check"] });
+        }
+      }
       await api.insertInstance(zone, body);
+      if (backupPolicy) await api.attachPolicy("disks", zone, name, region, backupPolicy);
       notify.success(`Created instance "${name}"`);
       window.location.hash = hashHref("compute", "instances", zone, name).slice(1);
     } catch (e) { setError(e); }
@@ -194,12 +216,46 @@ export default function CreateInstance() {
             <TextField label="Size (GB)" type="number" value={diskSize} onChange={(e) => setDiskSize(e.target.value)} sx={{ width: 140 }} />
           </Stack>
         </Sub>
-        <NotSimulated compact feature="Additional storage and VM backups" note="Attaching extra disks and VM-level backup plans at create time aren't modeled; create and attach a disk afterwards from the Disks page." />
+        <Sub title="Additional storage">
+          <Stack spacing={1}>
+            {extraDisks.map((d, i) => (
+              <Stack key={i} useFlexGap direction="row" spacing={1} flexWrap="wrap" alignItems="center">
+                <TextField label="Disk name" size="small" value={d.name} placeholder={`${name}-data-${i + 1}`} onChange={(e) => setExtraDisks(extraDisks.map((x, j) => j === i ? { ...x, name: e.target.value.trim() } : x))} />
+                <FormControl size="small" sx={{ minWidth: 200 }}>
+                  <InputLabel id={`xd-t-${i}`}>Disk type</InputLabel>
+                  <Select labelId={`xd-t-${i}`} label="Disk type" value={d.type} onChange={(e) => setExtraDisks(extraDisks.map((x, j) => j === i ? { ...x, type: e.target.value } : x))}>
+                    {api.DISK_TYPES.map(([v, l]) => <MenuItem key={v} value={v}>{l}</MenuItem>)}
+                  </Select>
+                </FormControl>
+                <TextField label="Size (GB)" size="small" type="number" value={d.size} sx={{ width: 120 }} onChange={(e) => setExtraDisks(extraDisks.map((x, j) => j === i ? { ...x, size: e.target.value } : x))} />
+                <IconButton aria-label={`Remove disk ${i + 1}`} onClick={() => setExtraDisks(extraDisks.filter((_, j) => j !== i))}><DeleteIcon fontSize="small" /></IconButton>
+              </Stack>
+            ))}
+            <Box><Button size="small" startIcon={<AddIcon />} onClick={() => setExtraDisks([...extraDisks, { name: "", type: "pd-balanced", size: 10, autoDelete: true }])}>Add new disk</Button></Box>
+          </Stack>
+        </Sub>
       </Step>
       <Divider />
 
       <Step n={3} title="Data protection">
-        <NotSimulated compact feature="Back up your data" note="Choose a backup policy after creation isn't modeled; snapshots are available from the Snapshots page." />
+        <Sub title="Back up your data" help="Attach a snapshot schedule to the boot disk (create schedules on the Snapshots page).">
+          <FormControl sx={{ minWidth: 360 }}>
+            <InputLabel id="bk-l">Snapshot schedule</InputLabel>
+            <Select labelId="bk-l" label="Snapshot schedule" value={backupPolicy} onChange={(e) => setBackupPolicy(e.target.value)}>
+              <MenuItem value="">No schedule</MenuItem>
+              {policies.filter((p) => p.snapshotSchedulePolicy && p._scope === `regions/${region}`).map((p) => <MenuItem key={p.name} value={p.name}>{p.name}</MenuItem>)}
+            </Select>
+          </FormControl>
+        </Sub>
+        <Sub title="Instance schedule" help="Start and stop this VM automatically.">
+          <FormControl sx={{ minWidth: 360 }}>
+            <InputLabel id="is-l">Instance schedule</InputLabel>
+            <Select labelId="is-l" label="Instance schedule" value={schedulePolicy} onChange={(e) => setSchedulePolicy(e.target.value)}>
+              <MenuItem value="">No schedule</MenuItem>
+              {policies.filter((p) => p.instanceSchedulePolicy && p._scope === `regions/${region}`).map((p) => <MenuItem key={p.name} value={p.name}>{p.name}</MenuItem>)}
+            </Select>
+          </FormControl>
+        </Sub>
       </Step>
       <Divider />
 
@@ -208,7 +264,7 @@ export default function CreateInstance() {
           <Stack spacing={0.5}>
             <FormControlLabel control={<Checkbox size="small" checked={httpTag} onChange={(e) => setHttpTag(e.target.checked)} />} label="Allow HTTP traffic" />
             <FormControlLabel control={<Checkbox size="small" checked={httpsTag} onChange={(e) => setHttpsTag(e.target.checked)} />} label="Allow HTTPS traffic" />
-            <NotSimulated compact feature="Allow Load Balancer Health Checks" note="No load balancer or firewall rules are modeled." />
+            <FormControlLabel control={<Checkbox size="small" checked={lbHealth} onChange={(e) => setLbHealth(e.target.checked)} />} label="Allow Load Balancer Health Checks" />
           </Stack>
         </Sub>
         <TextField label="Network tags" placeholder="Comma-separated" value={netTags.join(", ")}
@@ -216,13 +272,30 @@ export default function CreateInstance() {
         <TextField label="Hostname" value={hostname} onChange={(e) => setHostname(e.target.value)} sx={{ maxWidth: 420 }} />
         <FormControlLabel control={<Checkbox size="small" checked={ipForward} onChange={(e) => setIpForward(e.target.checked)} />} label="IP forwarding" />
         <Sub title="Network interfaces">
-          <Paper variant="outlined">
-            <ScrollTable size="small">
-              <TableHead><TableRow><TableCell>Network</TableCell><TableCell>Subnetwork</TableCell><TableCell>IP stack type</TableCell><TableCell>Primary internal IPv4 address</TableCell><TableCell>External IPv4 address</TableCell></TableRow></TableHead>
-              <TableBody><TableRow><TableCell>default</TableCell><TableCell>default</TableCell><TableCell>IPv4 (single-stack)</TableCell><TableCell>Ephemeral (auto)</TableCell><TableCell>Ephemeral (auto)</TableCell></TableRow></TableBody>
-            </ScrollTable>
-          </Paper>
-          <NotSimulated compact feature="Add a network interface" note="Only a single default network interface is modeled." />
+          <Stack spacing={1}>
+            {nics.map((n, i) => (
+              <Stack key={i} useFlexGap direction="row" spacing={1} flexWrap="wrap" alignItems="center" aria-label={`Network interface ${i}`}>
+                <Typography variant="body2" sx={{ width: 48 }}>nic{i}</Typography>
+                <FormControl size="small" sx={{ minWidth: 200 }}>
+                  <InputLabel id={`nic-n-${i}`}>Network</InputLabel>
+                  <Select labelId={`nic-n-${i}`} label="Network" value={n.network} onChange={(e) => setNics(nics.map((x, j) => j === i ? { network: e.target.value, subnetwork: subnets.find((s) => s.name && String(s.network || "").endsWith(`/${e.target.value}`) && s._scope === `regions/${region}`)?.name || "default" } : x))}>
+                    {[...new Set(["default", ...networks.map((x) => x.name)])].filter((x) => x === n.network || !nics.some((o) => o.network === x)).map((x) => <MenuItem key={x} value={x}>{x}</MenuItem>)}
+                  </Select>
+                </FormControl>
+                <FormControl size="small" sx={{ minWidth: 200 }}>
+                  <InputLabel id={`nic-s-${i}`}>Subnetwork</InputLabel>
+                  <Select labelId={`nic-s-${i}`} label="Subnetwork" value={n.subnetwork} onChange={(e) => setNics(nics.map((x, j) => j === i ? { ...x, subnetwork: e.target.value } : x))}>
+                    {[...new Set(["default", ...subnets.filter((s) => String(s.network || "").endsWith(`/${n.network}`) && s._scope === `regions/${region}`).map((s) => s.name)])].map((x) => <MenuItem key={x} value={x}>{x}</MenuItem>)}
+                  </Select>
+                </FormControl>
+                {i > 0 && <IconButton aria-label={`Remove network interface ${i}`} onClick={() => setNics(nics.filter((_, j) => j !== i))}><DeleteIcon fontSize="small" /></IconButton>}
+              </Stack>
+            ))}
+            <Box><Button size="small" startIcon={<AddIcon />} disabled={nics.length >= 8 || networks.length < 1} onClick={() => {
+              const free = networks.find((x) => !nics.some((o) => o.network === x.name));
+              if (free) setNics([...nics, { network: free.name, subnetwork: subnets.find((s) => String(s.network || "").endsWith(`/${free.name}`) && s._scope === `regions/${region}`)?.name || "default" }]);
+            }}>Add a network interface</Button></Box>
+          </Stack>
         </Sub>
       </Step>
       <Divider />

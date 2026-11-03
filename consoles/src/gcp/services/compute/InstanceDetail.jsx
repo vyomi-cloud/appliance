@@ -16,6 +16,7 @@ import { ErrorAlert, KeyValue, NotSimulated, PageHeader, Section, fmtDate, fmtDu
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { hashHref } from "../../link.jsx";
 import * as api from "./api.js";
+import { RecommendationsTable } from "./Ext.jsx";
 
 const TABS = ["Details", "Observability", "Serial port output", "OS info", "Screenshot"];
 
@@ -52,8 +53,12 @@ function ObservabilityPanel({ zone, name, inst }) {
           </Box>
         )}
       </Box>
-      <NotSimulated compact feature="Recommender & VM Manager"
-        note="Recommender suggestions and VM Manager (Patch, OS policies, VM Extension Manager) aren't modeled in Vyomi." />
+      <Box>
+        <Typography variant="body2" sx={{ fontWeight: 500, mb: 0.5 }}>Recommendations</Typography>
+        <RecommendationsTable filter={(r) => (inst.disks || []).some((d) => (r.targetResources?.[0] || "").endsWith(`/disks/${String(d.source || "").split("/").pop()}`))} />
+      </Box>
+      <NotSimulated compact feature="VM Manager"
+        note="VM Manager (Patch, OS policies, VM Extension Manager) needs a guest OS and patch agent, which Vyomi doesn't run." />
     </Stack>
   );
 }

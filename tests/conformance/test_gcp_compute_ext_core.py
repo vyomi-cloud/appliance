@@ -46,6 +46,8 @@ inst("vm1")
 call("POST", B + "/zones/%s/instances/vm1/addResourcePolicies" % Z, {"resourcePolicies": ["projects/%s/regions/%s/resourcePolicies/weekdays" % (P, R)]})
 ok("policy attached", "weekdays" in json.dumps(call("GET", B + "/zones/%s/instances/vm1" % Z)["resourcePolicies"]))
 call("DELETE", B + "/regions/%s/resourcePolicies/weekdays" % R, status=400)  # in use
+agg = call("GET", B + "/aggregated/resourcePolicies")["items"]["regions/%s" % R]["resourcePolicies"]
+ok("aggregatedList resourcePolicies shows attachment + next run", agg[0]["_display"]["attachedInstances"] == ["vm1"] and agg[0]["resourceStatus"]["instanceSchedulePolicy"]["nextRunStartTime"])
 now = ext._now()
 day = now.replace(hour=12, minute=0, second=0, microsecond=0)
 S.ext["sched"] = {"lastTick": ext._iso(day.replace(hour=7, minute=0))}
