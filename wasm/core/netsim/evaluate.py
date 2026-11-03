@@ -509,6 +509,16 @@ def reach(topo: Topology, src, dst, protocol: str = "tcp", port=None, src_port=N
         v.add("vpc-endpoint", route.target, "pass", f"gateway endpoint {route.target}")
         v.path = "via-gateway-endpoint"
         d = None
+    elif route.kind == "vgw":
+        g = topo.vgws.get(route.target) or {"vpcs": [], "vpns": []}
+        if N.id not in g["vpcs"]:
+            return v.block("VGW_NOT_ATTACHED", f"{route.target} is not attached to {N.id}", route.target)
+        hit = next((x for x in g["vpns"] if x["state"] == "available" and any(ip_in(dst_ip, c) for c in x["routes"])), None)
+        if hit is None:
+            return v.block("VGW_NO_VPN_ROUTE", f"no VPN connection on {route.target} has a route covering {dst_ip}", route.target)
+        v.add("virtual-private-gateway", route.target, "pass", f"{dst_ip} -> VPN connection {hit['id']}")
+        v.path = "via-vpn"
+        d = None
     elif route.kind == BLACKHOLE:
         return v.block("BLACKHOLE_ROUTE", f"route {route.dest} is a blackhole ({route.name or route.target or 'None'})",
                        S.route_table or "")

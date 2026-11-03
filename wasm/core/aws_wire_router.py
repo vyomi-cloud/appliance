@@ -230,6 +230,8 @@ from core import stepfunctions_core as sfn
 from core import vpc_core as vpc
 from core import autoscaling_core as asg
 from core import ram_core as ram
+from core import netfw_core as netfw
+from core import dnsfw_core as dnsfw
 from core import organizations_core as orgs
 from core import dlm_core as dlm
 from core import kinesis_core as kinesis
@@ -351,6 +353,8 @@ _SIGNING = {
     "elasticloadbalancing": "elbv2",
     "cloudformation": "cloudformation",
     "ssm": "ssm", "scheduler": "scheduler", "pipes": "pipes", "ram": "ram", "organizations": "organizations",
+    "route53resolver": "dnsfw",   # Route 53 Resolver DNS Firewall control plane (core/dnsfw_core)
+    "network-firewall": "netfw",   # AWS Network Firewall control plane (core/netfw_core, state in the VPC model)
     "apigateway": "apigateway",   # v1 REST control plane paths with no "/restapis" segment (apikeys, usageplans, clientcertificates, account)
 }
 
@@ -363,6 +367,8 @@ _TARGET_PREFIX = {
     "AmazonSSM": "ssm",
     "AWSStepFunctions": "stepfunctions",
     "AWSRAMFrontendService": "ram",
+    "NetworkFirewall_20201112": "netfw",
+    "Route53Resolver": "dnsfw",
     "AWSOrganizationsV20161128": "organizations",
 }
 
@@ -375,6 +381,7 @@ _JSON_CT = {
     "stepfunctions": "application/x-amz-json-1.0",
     "ram": "application/x-amz-json-1.1",
     "organizations": "application/x-amz-json-1.1",
+    "netfw": "application/x-amz-json-1.0", "dnsfw": "application/x-amz-json-1.1",
 }
 
 # Query-protocol Action → service, for UNSIGNED query requests (signed ones route
@@ -430,6 +437,11 @@ _QUERY_ACTION = {
     "CreateTransitGatewayRoute": "vpc", "DeleteTransitGatewayRoute": "vpc", "SearchTransitGatewayRoutes": "vpc",
     "AssociateTransitGatewayRouteTable": "vpc", "DisassociateTransitGatewayRouteTable": "vpc", "EnableTransitGatewayRouteTablePropagation": "vpc",
     "DisableTransitGatewayRouteTablePropagation": "vpc", "GetTransitGatewayRouteTableAssociations": "vpc", "GetTransitGatewayRouteTablePropagations": "vpc",
+    "CreateCustomerGateway": "vpc", "DescribeCustomerGateways": "vpc", "DeleteCustomerGateway": "vpc", "CreateVpnGateway": "vpc", "DescribeVpnGateways": "vpc", "AttachVpnGateway": "vpc", "DetachVpnGateway": "vpc", "DeleteVpnGateway": "vpc", "CreateVpnConnection": "vpc", "DescribeVpnConnections": "vpc", "DeleteVpnConnection": "vpc", "CreateVpnConnectionRoute": "vpc", "DeleteVpnConnectionRoute": "vpc", "ModifyVpnTunnelOptions": "vpc", "ModifyVpnConnectionOptions": "vpc", "EnableVgwRoutePropagation": "vpc", "DisableVgwRoutePropagation": "vpc",
+    "CreateClientVpnEndpoint": "vpc", "DescribeClientVpnEndpoints": "vpc", "ModifyClientVpnEndpoint": "vpc", "DeleteClientVpnEndpoint": "vpc", "AssociateClientVpnTargetNetwork": "vpc", "DisassociateClientVpnTargetNetwork": "vpc", "DescribeClientVpnTargetNetworks": "vpc", "AuthorizeClientVpnIngress": "vpc", "RevokeClientVpnIngress": "vpc", "DescribeClientVpnAuthorizationRules": "vpc", "CreateClientVpnRoute": "vpc", "DeleteClientVpnRoute": "vpc", "DescribeClientVpnRoutes": "vpc", "DescribeClientVpnConnections": "vpc", "TerminateClientVpnConnections": "vpc", "CreateVpnConcentrator": "vpc", "DescribeVpnConcentrators": "vpc", "DeleteVpnConcentrator": "vpc",
+    "AssociateVpcCidrBlock": "vpc", "DisassociateVpcCidrBlock": "vpc",
+    "CreateTrafficMirrorTarget": "vpc", "DescribeTrafficMirrorTargets": "vpc", "DeleteTrafficMirrorTarget": "vpc", "CreateTrafficMirrorFilter": "vpc", "DescribeTrafficMirrorFilters": "vpc", "DeleteTrafficMirrorFilter": "vpc", "ModifyTrafficMirrorFilterNetworkServices": "vpc", "CreateTrafficMirrorFilterRule": "vpc", "DescribeTrafficMirrorFilterRules": "vpc", "ModifyTrafficMirrorFilterRule": "vpc", "DeleteTrafficMirrorFilterRule": "vpc", "CreateTrafficMirrorSession": "vpc", "DescribeTrafficMirrorSessions": "vpc", "ModifyTrafficMirrorSession": "vpc", "DeleteTrafficMirrorSession": "vpc",
+    "CreateTransitGatewayPolicyTable": "vpc", "DescribeTransitGatewayPolicyTables": "vpc", "DeleteTransitGatewayPolicyTable": "vpc", "AssociateTransitGatewayPolicyTable": "vpc", "DisassociateTransitGatewayPolicyTable": "vpc", "GetTransitGatewayPolicyTableAssociations": "vpc", "GetTransitGatewayPolicyTableEntries": "vpc", "CreateTransitGatewayMulticastDomain": "vpc", "DescribeTransitGatewayMulticastDomains": "vpc", "DeleteTransitGatewayMulticastDomain": "vpc", "AssociateTransitGatewayMulticastDomain": "vpc", "DisassociateTransitGatewayMulticastDomain": "vpc", "GetTransitGatewayMulticastDomainAssociations": "vpc", "SearchTransitGatewayMulticastGroups": "vpc", "RegisterTransitGatewayMulticastGroupMembers": "vpc", "RegisterTransitGatewayMulticastGroupSources": "vpc", "DeregisterTransitGatewayMulticastGroupMembers": "vpc", "DeregisterTransitGatewayMulticastGroupSources": "vpc", "CreateTransitGatewayMeteringPolicy": "vpc", "DescribeTransitGatewayMeteringPolicies": "vpc", "DeleteTransitGatewayMeteringPolicy": "vpc", "ModifyTransitGatewayMeteringPolicy": "vpc", "CreateTransitGatewayMeteringPolicyEntry": "vpc", "DeleteTransitGatewayMeteringPolicyEntry": "vpc", "GetTransitGatewayMeteringPolicyEntries": "vpc",
     "CreateFlowLogs": "vpc", "DescribeFlowLogs": "vpc", "DeleteFlowLogs": "vpc",
     "RunInstances": "vpc", "DescribeInstances": "vpc", "StartInstances": "vpc",
     "StopInstances": "vpc", "TerminateInstances": "vpc", "RebootInstances": "vpc",
@@ -1187,6 +1199,10 @@ class AwsWireRouter:
                 r = sfn.dispatch(self.sfn, target, payload, lambda_store=self.lam)
             elif svc == "ram":
                 r = ram.dispatch(self.ram, target, payload, vpc_store=self.vpc)
+            elif svc == "netfw":   # AWS Network Firewall (state lives in the VPC model so subnets/VPCs are validated for real)
+                r = netfw.dispatch(self.vpc, target, payload)
+            elif svc == "dnsfw":   # Route 53 Resolver DNS Firewall (state in the VPC model)
+                r = dnsfw.dispatch(self.vpc, target, payload)
             elif svc == "organizations":   # AWS Organizations (state in the IAM store: extras["org"] + org_policies)
                 r = orgs.dispatch(self.iam, target, payload)
             else:  # sqs

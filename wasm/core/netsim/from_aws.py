@@ -90,9 +90,11 @@ def _route_kind(m: dict, target: str):
         return (GATEWAY_ENDPOINT, t) if ep and ep.get("type") == "Gateway" and ep.get("state") == "available" else (BLACKHOLE, t)
     if t.startswith("tgw-"):
         return ("tgw", t) if t in m.get("tgws", {}) else (BLACKHOLE, t)
+    if t.startswith("vgw-"):
+        return ("vgw", t) if t in m.get("vgws", {}) else (BLACKHOLE, t)
     if t == "blackhole":
         return BLACKHOLE, ""
-    return None, t                    # tgw-/vgw-/eigw- … not simulated yet
+    return None, t                    # eigw- … not simulated yet
 
 
 def from_aws(store_or_model) -> Topology:
@@ -127,12 +129,19 @@ def from_aws(store_or_model) -> Topology:
                for r in m.get("tgw_rts", {}).values() if r["tgw_id"] == tid}
         t.tgws[tid] = {"atts": atts, "rts": rts}
 
+    for gid, g in m.get("vgws", {}).items():
+        t.vgws[gid] = {"vpcs": list(g["vpcs"]),
+                       "vpns": [{"id": c["id"], "routes": list(c["routes"]), "state": c["state"]}
+                                for c in m.get("vpn_connections", {}).values() if c["vgw"] == gid]}
+
     for rid, rt in m.get("route_tables", {}).items():
         vpc = vpcs.get(rt.get("vpc_id"), {})
         routes = []
         if vpc:
             routes.append(Route(dest=vpc["cidr"], kind=LOCAL, origin="system", name="local"))
-        for r in rt.get("routes", []):
+            for sc in vpc.get("secondary_cidrs", []):
+                routes.append(Route(dest=sc, kind=LOCAL, origin="system", name="local"))
+        for r in list(rt.get("routes", [])) + list(rt.get("propagated", [])):
             if r.get("target") == "local":
                 continue
             kind, target = _route_kind(m, r.get("target"))
