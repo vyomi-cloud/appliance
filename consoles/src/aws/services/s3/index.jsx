@@ -10,6 +10,7 @@ import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { AccessPointsSection } from "./Sweep.jsx";
 import { AccountPublicAccessBlock, DirectoryBuckets, ObjectLambdaAccessPoints } from "./AccountPages.jsx";
 import { AccessGrants, BatchOperations, MultiRegionAccessPoints } from "./BatchPages.jsx";
+import { VectorBuckets } from "./VectorPages.jsx";
 import { AccessAnalyzer, StorageLensDashboards, StorageLensGroups, TableBuckets } from "./InsightPages.jsx";
 
 // Account-level pages Vyomi has no backend for: each is a registered capability gap (core/capabilities/aws/s3.json).
@@ -20,6 +21,7 @@ export default {
     { type: "link", text: "General purpose buckets", href: "#/s3" },
     { type: "link", text: "Directory buckets", href: "#/s3/directory-buckets" },
     { type: "link", text: "Table buckets", href: "#/s3/table-buckets" },
+    { type: "link", text: "Vector buckets", href: "#/s3/vector-buckets" },
     { type: "link", text: "Access Grants", href: "#/s3/access-grants" },
     { type: "link", text: "Access Points", href: "#/s3/access-points" },
     { type: "link", text: "Object Lambda Access Points", href: "#/s3/olap" },
@@ -51,6 +53,7 @@ export default {
     { pattern: "/s3/access-grants", component: AccessGrants, crumbs: () => [{ text: "Access Grants", href: "#/s3/access-grants" }] },
     { pattern: "/s3/batch-operations", component: BatchOperations, crumbs: () => [{ text: "Batch Operations", href: "#/s3/batch-operations" }] },
     { pattern: "/s3/table-buckets", component: TableBuckets, crumbs: () => [{ text: "Table buckets", href: "#/s3/table-buckets" }] },
+    { pattern: "/s3/vector-buckets", component: VectorBuckets, crumbs: () => [{ text: "Vector buckets", href: "#/s3/vector-buckets" }] },
     { pattern: "/s3/access-analyzer", component: AccessAnalyzer, crumbs: () => [{ text: "IAM Access Analyzer for S3", href: "#/s3/access-analyzer" }] },
     { pattern: "/s3/lens/dashboards", component: StorageLensDashboards, crumbs: () => [{ text: "Storage Lens dashboards", href: "#/s3/lens/dashboards" }] },
     { pattern: "/s3/lens/groups", component: StorageLensGroups, crumbs: () => [{ text: "Storage Lens groups", href: "#/s3/lens/groups" }] },

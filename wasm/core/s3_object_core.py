@@ -4319,6 +4319,8 @@ def _dispatch_inner(store: ObjectStore, method: str, path: str,
     bucket, _, key = raw.partition("/")
     bucket = urllib.parse.unquote(bucket)
     method = (method or "GET").upper()
+    if bucket == "__s3vectors__":  # Amazon S3 Vectors (rest-json POST /<Operation>), routed by AwsWireRouter
+        return _load_core("s3_vectors_core").dispatch(store, method, "/" + raw.partition("/")[2], query, headers, body)
     if bucket == "__s3tables__":  # Amazon S3 Tables REST (SigV4 signing name s3tables), routed by AwsWireRouter
         return _load_core("s3_tables_core").dispatch(store, method, "/" + raw.partition("/")[2], query, headers, body)
     if bucket == "v20180820":     # S3 Control (access points; every other control op -> NotImplemented)

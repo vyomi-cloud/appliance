@@ -951,5 +951,36 @@
   "tests": [
    "tests/conformance/test_s3_sweeps3d_core.py"
   ]
+ },
+ "s3.account.vector-buckets": {
+  "title": "Vector buckets",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Amazon S3 Vectors (service s3vectors, rest-json, every operation a JSON POST): Create/Get/List/DeleteVectorBucket (name rules, ConflictException; deleting a bucket that still has indexes is refused), Put/Get/DeleteVectorBucketPolicy, CreateIndex (float32, dimension 1-4096, euclidean or cosine, nonFilterableMetadataKeys), GetIndex, ListIndexes, DeleteIndex, PutVectors (up to 500 per call, validated all-or-nothing, upsert by key, metadata size limits), GetVectors, ListVectors (paginated), DeleteVectors and QueryVectors (topK 1-100, returnDistance, returnMetadata, and the real metadata filter grammar: implicit AND, $and, $or, $eq, $ne, $gt, $gte, $lt, $lte, $in, $nin, $exists). Search is an exact brute-force scan over the whole index, not an approximate (ANN) index: results are the true nearest neighbours, but it is meant for thousands of vectors, not millions, and no recall/latency/throughput behaviour is modelled. Bucket policies and encryption settings are stored, never enforced against a caller. Not implemented: KMS-backed encryption keys (the setting is recorded only), tagging, Bedrock Knowledge Bases / OpenSearch integrations and S3 Vectors export."
+  ],
+  "api": [
+   "CreateVectorBucket",
+   "GetVectorBucket",
+   "ListVectorBuckets",
+   "DeleteVectorBucket",
+   "PutVectorBucketPolicy",
+   "GetVectorBucketPolicy",
+   "DeleteVectorBucketPolicy",
+   "CreateIndex",
+   "GetIndex",
+   "ListIndexes",
+   "DeleteIndex",
+   "PutVectors",
+   "GetVectors",
+   "ListVectors",
+   "DeleteVectors",
+   "QueryVectors"
+  ],
+  "tests": [
+   "tests/conformance/test_s3_vectors_core.py"
+  ]
  }
 }

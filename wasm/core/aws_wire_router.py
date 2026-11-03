@@ -350,6 +350,7 @@ _SIGNING = {
     "autoscaling": "asg",
     "dlm": "dlm",
     "cloudtrail": "cloudtrail",   # minimal CloudTrail (trails + S3 data-event selectors) -> core/s3_ext_core via the S3 store
+    "s3vectors": "s3vectors",   # Amazon S3 Vectors (rest-json POST /<Operation>) -> core/s3_vectors_core via the S3 store
     "s3tables": "s3tables",   # Amazon S3 Tables (rest-json /buckets, /namespaces, /tables, /tag) -> core/s3_tables_core via the S3 store
     "elasticloadbalancing": "elbv2",
     "cloudformation": "cloudformation",
@@ -953,6 +954,12 @@ class AwsWireRouter:
         if svc == "cloudtrail":
             r = s3.dispatch(self.s3, "POST", "/__cloudtrail__", {}, {"x-amz-target": lheaders.get("x-amz-target", "")}, bytes(body))
             return {"status": r.status, "headers": {**dict(r.headers or {}), "content-type": "application/x-amz-json-1.1"}, "body": r.body or b""}
+
+        if svc == "s3vectors":
+            r = s3.dispatch(self.s3, method, "/__s3vectors__" + path, query or {}, headers or {}, bytes(body))
+            hdrs = dict(r.headers or {})
+            hdrs.setdefault("content-type", "application/json")
+            return {"status": r.status, "headers": hdrs, "body": r.body or b""}
 
         if svc == "s3tables":
             r = s3.dispatch(self.s3, method, "/__s3tables__" + path, query or {}, headers or {}, bytes(body))
