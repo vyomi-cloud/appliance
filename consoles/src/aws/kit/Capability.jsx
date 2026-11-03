@@ -14,6 +14,7 @@ import Header from "@cloudscape-design/components/header";
 import Popover from "@cloudscape-design/components/popover";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import { NotSimulatedContainer } from "./common.jsx";
+import { CardTab, MarkerSpan, useCardSlot } from "../../common/cardTab.jsx";
 import cap_apigateway from "../../../../core/capabilities/aws/apigateway.json";
 import cap_cloudformation from "../../../../core/capabilities/aws/cloudformation.json";
 import cap_cloudwatch from "../../../../core/capabilities/aws/cloudwatch.json";
@@ -54,77 +55,51 @@ const DEFAULT_NOTE = {
 };
 
 export function CapabilityBadge({ id }) {
+  const [markerRef, slot] = useCardSlot();
   const c = capability(id);
   if (!c || c.level === "full" || c.level === "not_simulated") return null;
+  const attrs = { "data-vyomi-capability": c.level, "data-vyomi-capability-id": id };
+  const popover = (trigger) => (
+    <Popover
+      size="large"
+      triggerType="custom"
+      header={`${c.title}: ${LABEL[c.level]}`}
+      content={
+        <SpaceBetween size="xs">
+          <Box variant="p">{DEFAULT_NOTE[c.level]}</Box>
+          {c.limitations?.length > 0 && <ul style={{ margin: 0, paddingLeft: 18 }}>{c.limitations.map((l) => <li key={l}>{l}</li>)}</ul>}
+          <Box variant="small" color="text-body-secondary">Applies to this Vyomi environment ({SUBSTRATE}).</Box>
+        </SpaceBetween>
+      }
+    >
+      {trigger}
+    </Popover>
+  );
+  const link = (children, style = {}) => (
+    <button type="button" aria-label={`${LABEL[c.level]} — details`} style={{ background: "none", border: 0, padding: 0, cursor: "pointer", font: "inherit", color: "inherit", ...style }}>{children}</button>
+  );
   return (
-    <span data-vyomi-capability={c.level} data-vyomi-capability-id={id}>
-      <Popover
-        size="large"
-        triggerType="custom"
-        header={`${c.title}: ${LABEL[c.level]}`}
-        content={
-          <SpaceBetween size="xs">
-            <Box variant="p">{DEFAULT_NOTE[c.level]}</Box>
-            {c.limitations?.length > 0 && <ul style={{ margin: 0, paddingLeft: 18 }}>{c.limitations.map((l) => <li key={l}>{l}</li>)}</ul>}
-            <Box variant="small" color="text-body-secondary">Applies to this Vyomi environment ({SUBSTRATE}).</Box>
-          </SpaceBetween>
-        }
-      >
-        <button type="button" aria-label={`${LABEL[c.level]} — details`} style={{ background: "none", border: 0, padding: 0, cursor: "pointer" }}>
-          <Badge color={c.level === "limited" ? "blue" : "grey"}>{LABEL[c.level]}</Badge>
-        </button>
-      </Popover>
-    </span>
+    <>
+      <MarkerSpan markerRef={markerRef} />
+      {slot
+        ? <CardTab slot={slot} attrs={attrs}>{popover(link(LABEL[c.level]))}</CardTab>
+        : <span {...attrs}>{popover(link(<Badge color={c.level === "limited" ? "blue" : "grey"}>{LABEL[c.level]}</Badge>))}</span>}
+    </>
   );
 }
 
-/** Gray tab sitting inside a capability container, flush with its bottom-right border (replaces the
- *  header pill). Click for the limitations popover. */
-export function CapabilityTab({ id }) {
-  const c = capability(id);
-  if (!c || c.level === "full" || c.level === "not_simulated") return null;
-  return (
-    <span data-vyomi-capability={c.level} data-vyomi-capability-id={id} data-vyomi-capability-tab=""
-      style={{ position: "absolute", right: 0, bottom: 0, zIndex: 1, display: "inline-flex", alignItems: "center", height: 26,
-        padding: "0 12px", background: "#e9ebed", border: "1px solid #c6c6cd",
-        borderRadius: "8px 0 16px 0", fontSize: 12, lineHeight: "16px", color: "#414d5c" }}>
-      <Popover
-        size="large"
-        triggerType="custom"
-        header={`${c.title}: ${LABEL[c.level]}`}
-        content={
-          <SpaceBetween size="xs">
-            <Box variant="p">{DEFAULT_NOTE[c.level]}</Box>
-            {c.limitations?.length > 0 && <ul style={{ margin: 0, paddingLeft: 18 }}>{c.limitations.map((l) => <li key={l}>{l}</li>)}</ul>}
-            <Box variant="small" color="text-body-secondary">Applies to this Vyomi environment ({SUBSTRATE}).</Box>
-          </SpaceBetween>
-        }
-      >
-        <button type="button" aria-label={`${LABEL[c.level]} — details`}
-          style={{ background: "none", border: 0, padding: 0, cursor: "pointer", font: "inherit", color: "inherit" }}>
-          {LABEL[c.level]}
-        </button>
-      </Popover>
-    </span>
-  );
-}
-
-/** A console section that carries the capability tab on its bottom-right border; becomes the
+/** A console section; its capability tab attaches to the bottom-right border. Becomes the
  *  honest Not-simulated panel when the registry says so. */
 export function CapabilityContainer({ id, title, description, actions, counter, children }) {
   const c = capability(id);
   if (!c || c.level === "not_simulated") {
     return <NotSimulatedContainer title={title} note={c?.limitations?.join(" ")} />;
   }
-  const tabbed = c.level === "limited" || c.level === "config_only";
   return (
-    <div style={{ position: "relative" }}>
-      <Container header={<Header variant="h2" counter={counter} description={description} actions={actions}>{title}</Header>}>
-        {children}
-        {tabbed && <div aria-hidden="true" style={{ height: 14 }} />}
-      </Container>
-      <CapabilityTab id={id} />
-    </div>
+    <Container header={<Header variant="h2" counter={counter} description={description} actions={actions}>{title}</Header>}>
+      {children}
+      <CapabilityBadge id={id} />
+    </Container>
   );
 }
 

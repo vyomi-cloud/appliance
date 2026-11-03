@@ -7,6 +7,7 @@
  *   config_only    → "Config only" badge + popover; saves add "not enforced" to the notice
  *   not_simulated  → the whole section becomes the honest Not-simulated panel
  */
+import { CardTab, MarkerSpan, useCardSlot } from "../../common/cardTab.jsx";
 import { useState } from "react";
 import { Box, Chip, Popover, Stack, Typography } from "@mui/material";
 import InfoOutlinedIcon from "@mui/icons-material/esm/InfoOutlined.js";
@@ -52,46 +53,58 @@ const DEFAULT_NOTE = {
 
 export function CapabilityBadge({ id }) {
   const [anchor, setAnchor] = useState(null);
+  const [markerRef, slot] = useCardSlot();
   const c = capability(id);
   if (!c || c.level === "full" || c.level === "not_simulated") return null;
+  const attrs = { "data-vyomi-capability": c.level, "data-vyomi-capability-id": id };
+  const popover = (
+    <Popover open={!!anchor} anchorEl={anchor} onClose={() => setAnchor(null)}
+      anchorOrigin={{ vertical: "top", horizontal: "left" }} transformOrigin={{ vertical: "bottom", horizontal: "left" }}>
+      <Box sx={{ p: 2, maxWidth: 360 }}>
+        <Typography variant="subtitle2" sx={{ mb: 1 }}>{c.title}: {LABEL[c.level]}</Typography>
+        <Stack spacing={1}>
+          <Typography variant="body2">{DEFAULT_NOTE[c.level]}</Typography>
+          {c.limitations?.length > 0 && (
+            <Box component="ul" sx={{ m: 0, pl: 2.5 }}>
+              {c.limitations.map((l) => <li key={l}><Typography variant="body2">{l}</Typography></li>)}
+            </Box>
+          )}
+          <Typography variant="caption" color="text.secondary">Applies to this Vyomi environment ({SUBSTRATE}).</Typography>
+        </Stack>
+      </Box>
+    </Popover>
+  );
   return (
-    <span data-vyomi-capability={c.level} data-vyomi-capability-id={id}>
-      <Chip size="small" color={c.level === "limited" ? "info" : "default"} label={LABEL[c.level]}
-        onClick={(e) => setAnchor(e.currentTarget)}
-        icon={<InfoOutlinedIcon fontSize="small" />} />
-      <Popover open={!!anchor} anchorEl={anchor} onClose={() => setAnchor(null)}
-        anchorOrigin={{ vertical: "bottom", horizontal: "left" }}>
-        <Box sx={{ p: 2, maxWidth: 360 }}>
-          <Typography variant="subtitle2" sx={{ mb: 1 }}>{c.title}: {LABEL[c.level]}</Typography>
-          <Stack spacing={1}>
-            <Typography variant="body2">{DEFAULT_NOTE[c.level]}</Typography>
-            {c.limitations?.length > 0 && (
-              <Box component="ul" sx={{ m: 0, pl: 2.5 }}>
-                {c.limitations.map((l) => <li key={l}><Typography variant="body2">{l}</Typography></li>)}
-              </Box>
-            )}
-            <Typography variant="caption" color="text.secondary">Applies to this Vyomi environment ({SUBSTRATE}).</Typography>
-          </Stack>
-        </Box>
-      </Popover>
-    </span>
+    <>
+      <MarkerSpan markerRef={markerRef} />
+      {slot ? (
+        <CardTab slot={slot} attrs={attrs}>
+          <button type="button" aria-label={`${LABEL[c.level]} — details`} onClick={(e) => setAnchor(e.currentTarget)}
+            style={{ background: "none", border: 0, padding: 0, cursor: "pointer", font: "inherit", color: "inherit" }}>{LABEL[c.level]}</button>
+          {popover}
+        </CardTab>
+      ) : (
+        <span {...attrs}>
+          <Chip size="small" color={c.level === "limited" ? "info" : "default"} label={LABEL[c.level]}
+            onClick={(e) => setAnchor(e.currentTarget)} icon={<InfoOutlinedIcon fontSize="small" />} />
+          {popover}
+        </span>
+      )}
+    </>
   );
 }
 
-/** A console section whose header carries the capability badge; becomes the honest
- *  Not-simulated panel when the registry says so. */
+/** A console section; its capability tab attaches to the bottom-right border. Becomes the
+ *  honest Not-simulated panel when the registry says so. */
 export function CapabilityContainer({ id, title, description, actions, children }) {
   const c = capability(id);
   if (!c || c.level === "not_simulated") {
     return <NotSimulatedContainer title={title} note={c?.limitations?.join(" ")} />;
   }
   return (
-    <Section
-      title={<Stack component="span" direction="row" spacing={1} alignItems="center"><span>{title}</span><CapabilityBadge id={id} /></Stack>}
-      description={description}
-      actions={actions}
-    >
+    <Section title={title} description={description} actions={actions}>
       {children}
+      <CapabilityBadge id={id} />
     </Section>
   );
 }

@@ -106,6 +106,7 @@ body { font-family: "Segoe UI", "Segoe UI Web (West European)", -apple-system, B
 .vy-wizard-body .fui-TabList { margin: 8px 0 16px; border-bottom: 1px solid var(--colorNeutralStroke2); }
 .vy-wizard-foot { position: sticky; bottom: 0; display: flex; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--colorNeutralStroke2); background: var(--colorNeutralBackground1); z-index: 5; }
 .vy-form-section { margin: 20px 0 8px; }
+.vy-form-section.vy-cap-card { border: 1px solid var(--colorNeutralStroke2, #d1d1d1); border-radius: 8px; padding: 12px 16px; background: var(--colorNeutralBackground1, #fff); }
 .vy-form-section h3 { font-size: 15px; font-weight: 600; margin: 0 0 4px; }
 .vy-form-section p { font-size: 13px; color: var(--colorNeutralForeground2); margin: 0 0 12px; }
 .vy-form-row { display: grid; grid-template-columns: 260px minmax(0, 420px); align-items: start; gap: 12px; margin: 10px 0; font-size: 13px; }

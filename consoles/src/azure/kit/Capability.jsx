@@ -7,6 +7,7 @@
  *   config_only    → "Config only" badge + popover; saves add "not enforced" to the notice
  *   not_simulated  → the whole section becomes the honest Not-simulated panel
  */
+import { CardTab, MarkerSpan, useCardSlot } from "../../common/cardTab.jsx";
 import { Badge, Popover, PopoverSurface, PopoverTrigger } from "@fluentui/react-components";
 import { NotSimulatedContainer } from "./common.jsx";
 import cap_acr from "../../../../core/capabilities/azure/acr.json";
@@ -56,42 +57,51 @@ const DEFAULT_NOTE = {
 };
 
 export function CapabilityBadge({ id }) {
+  const [markerRef, slot] = useCardSlot();
   const c = capability(id);
   if (!c || c.level === "full" || c.level === "not_simulated") return null;
+  const attrs = { "data-vyomi-capability": c.level, "data-vyomi-capability-id": id };
+  const popover = (trigger) => (
+    <Popover withArrow>
+      <PopoverTrigger disableButtonEnhancement>{trigger}</PopoverTrigger>
+      <PopoverSurface style={{ maxWidth: 320 }}>
+        <b>{c.title}: {LABEL[c.level]}</b>
+        <p style={{ margin: "6px 0" }}>{DEFAULT_NOTE[c.level]}</p>
+        {c.limitations?.length > 0 && <ul style={{ margin: 0, paddingLeft: 18 }}>{c.limitations.map((l) => <li key={l}>{l}</li>)}</ul>}
+        <div style={{ marginTop: 6, fontSize: 12, opacity: 0.75 }}>Applies to this Vyomi environment ({SUBSTRATE}).</div>
+      </PopoverSurface>
+    </Popover>
+  );
+  const btn = (children) => (
+    <button type="button" aria-label={`${LABEL[c.level]} — details`}
+      style={{ background: "none", border: 0, padding: 0, cursor: "pointer", font: "inherit", color: "inherit" }}>{children}</button>
+  );
   return (
-    <span data-vyomi-capability={c.level} data-vyomi-capability-id={id}>
-      <Popover withArrow>
-        <PopoverTrigger disableButtonEnhancement>
-          <button type="button" aria-label={`${LABEL[c.level]} — details`} style={{ background: "none", border: 0, padding: 0, cursor: "pointer" }}>
-            <Badge color={c.level === "limited" ? "brand" : "informative"} appearance="tint">{LABEL[c.level]}</Badge>
-          </button>
-        </PopoverTrigger>
-        <PopoverSurface style={{ maxWidth: 320 }}>
-          <b>{c.title}: {LABEL[c.level]}</b>
-          <p style={{ margin: "6px 0" }}>{DEFAULT_NOTE[c.level]}</p>
-          {c.limitations?.length > 0 && <ul style={{ margin: 0, paddingLeft: 18 }}>{c.limitations.map((l) => <li key={l}>{l}</li>)}</ul>}
-          <div style={{ marginTop: 6, fontSize: 12, opacity: 0.75 }}>Applies to this Vyomi environment ({SUBSTRATE}).</div>
-        </PopoverSurface>
-      </Popover>
-    </span>
+    <>
+      <MarkerSpan markerRef={markerRef} />
+      {slot
+        ? <CardTab slot={slot} attrs={attrs}>{popover(btn(LABEL[c.level]))}</CardTab>
+        : <span {...attrs}>{popover(btn(<Badge color={c.level === "limited" ? "brand" : "informative"} appearance="tint">{LABEL[c.level]}</Badge>))}</span>}
+    </>
   );
 }
 
-/** A console section whose header carries the capability badge; becomes the honest
- *  Not-simulated panel when the registry says so. */
+/** A console section; limited / config-only ones become a bordered card whose capability tab
+ *  attaches to the bottom-right border. Becomes the honest Not-simulated panel when the registry says so. */
 export function CapabilityContainer({ id, title, actions, children }) {
   const c = capability(id);
   if (!c || c.level === "not_simulated") {
     return <NotSimulatedContainer title={title} note={c?.limitations?.join(" ")} />;
   }
+  const carded = c.level === "limited" || c.level === "config_only";
   return (
-    <section className="vy-form-section">
+    <section className={carded ? "vy-form-section vy-cap-card" : "vy-form-section"}>
       <h3 style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <span>{title}</span>
-        <CapabilityBadge id={id} />
         {actions && <span style={{ marginLeft: "auto" }}>{actions}</span>}
       </h3>
       {children}
+      <CapabilityBadge id={id} />
     </section>
   );
 }
