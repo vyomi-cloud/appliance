@@ -249,12 +249,13 @@ def _deliver_sns(store, topic_arn, body_str):
         except ImportError:  # Pyodide flat layout
             import sns_core  # type: ignore
         topic = store.get_topic(topic_arn)
-        if topic is not None:
-            sns_core._publish_to_topic(store, topic, {"Message": body_str, "Subject": None,
-                                                      "MessageStructure": "", "attrs": {},
-                                                      "group": "", "dedup": ""})
+        if topic is None:
+            raise LookupError(f"SNS topic {topic_arn} does not exist")
+        sns_core._publish_to_topic(store, topic, {"Message": body_str, "Subject": None,
+                                                  "MessageStructure": "", "attrs": {},
+                                                  "group": "", "dedup": ""})
     except Exception:
-        pass
+        raise  # route_event retries per the target's RetryPolicy, then dead-letters
 
 
 # Offline hook: the appliance's own Lambda registry (server.py) is not an `lambda_core` store.
@@ -287,7 +288,33 @@ def _deliver_lambda(lambda_store, arn, body_str):
             lambda_core.dispatch(lambda_store, "POST", f"/2015-03-31/functions/{name}/invocations", {}, {},
                                  body_str.encode("utf-8"))
     except Exception:
-        pass
+        raise  # route_event retries per the target's RetryPolicy, then dead-letters
+
+
+_MAX_LOCAL_RETRIES = 5   # EventBridge allows up to 185 over 24h; retried back-to-back here, capped
+
+
+def _deliver_with_retry(tgt, fn, send_sqs, envelope_str):
+    """Call `fn()`; on failure retry per the target's RetryPolicy.MaximumRetryAttempts, then
+    send the event to DeadLetterConfig.Arn (an SQS queue) if set. Never raises: EventBridge
+    swallows target failures, PutEvents succeeds regardless."""
+    try:
+        extra = int((tgt.get("RetryPolicy") or {}).get("MaximumRetryAttempts", 0) or 0)
+    except (TypeError, ValueError):
+        extra = 0
+    for _ in range(1 + max(0, min(extra, _MAX_LOCAL_RETRIES))):
+        try:
+            fn()
+            return True
+        except Exception:
+            continue
+    dlq = str((tgt.get("DeadLetterConfig") or {}).get("Arn") or "")
+    if dlq and ":sqs:" in dlq:
+        try:
+            send_sqs(dlq, envelope_str)
+        except Exception:
+            pass
+    return False
 
 
 def route_event(rules, bus, event_obj, envelope, send_sqs, invoke_lambda, publish_sns):
@@ -305,13 +332,14 @@ def route_event(rules, bus, event_obj, envelope, send_sqs, invoke_lambda, publis
             arn = tgt["Arn"]
             body_str = _target_input(tgt, envelope, base_str)
             if ":sqs:" in arn:
-                send_sqs(arn, body_str)
+                fn = lambda a=arn, b=body_str: send_sqs(a, b)
             elif ":sns:" in arn:
-                publish_sns(arn, body_str)
+                fn = lambda a=arn, b=body_str: publish_sns(a, b)
             elif ":lambda:" in arn or ":function:" in arn:
-                invoke_lambda(arn, body_str)
+                fn = lambda a=arn, b=body_str: invoke_lambda(a, b)
             else:
                 continue
+            _deliver_with_retry(tgt, fn, send_sqs, base_str)
             n += 1
     return n
 
@@ -337,8 +365,9 @@ def _put_events(store, body, lambda_store=None):
 
         def send_sqs(arn, body_str):
             queue = store.get_queue_by_arn(arn)
-            if queue is not None:
-                sqs_core.enqueue(store, queue, body_str)
+            if queue is None:
+                raise LookupError(f"SQS queue {arn} does not exist")
+            sqs_core.enqueue(store, queue, body_str)
 
         route_event(_rules(store).values(), bus, event_obj, envelope, send_sqs,
                     lambda arn, b: _deliver_lambda(lambda_store, arn, b),

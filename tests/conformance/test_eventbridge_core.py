@@ -129,6 +129,23 @@ def run(store=None):
     _check("Lambda target invoked through lambda_core store (Nano path)",
            real and real[0][0].endswith("/functions/sink/invocations") and real[0][1]["detail"] == {"k": 8})
 
+    # Retry + DLQ: a failing target is retried (RetryPolicy), then the event lands in its DLQ.
+    dq = sqs.dispatch(s, "AmazonSQS.CreateQueue", {"QueueName": "eb-dlq"}).body["QueueUrl"]
+    dqarn = sqs.dispatch(s, "AmazonSQS.GetQueueAttributes", {"QueueUrl": dq}).body["Attributes"]["QueueArn"]
+    attempts = []
+    eb.set_lambda_invoker(lambda n, b: attempts.append(n) or (_ for _ in ()).throw(RuntimeError("boom")))
+    call2("PutRule", {"Name": "rd", "EventPattern": json.dumps({"source": ["dlq.app"]})})
+    call2("PutTargets", {"Rule": "rd", "Targets": [{
+        "Id": "td", "Arn": "arn:aws:lambda:us-east-1:123456789012:function:bad",
+        "RetryPolicy": {"MaximumRetryAttempts": 2}, "DeadLetterConfig": {"Arn": dqarn}}]})
+    r = call2("PutEvents", {"Entries": [{"Source": "dlq.app", "DetailType": "x", "Detail": json.dumps({"k": 1})}]}).body
+    eb.set_lambda_invoker(None)
+    _check("failing target does not fail PutEvents", r["FailedEntryCount"] == 0)
+    _check("failing target retried MaximumRetryAttempts times (1+2)", len(attempts) == 3)
+    m = sqs.dispatch(s, "AmazonSQS.ReceiveMessage", {"QueueUrl": dq, "MaxNumberOfMessages": 10}).body.get("Messages", [])
+    _check("exhausted event dead-lettered to DeadLetterConfig queue",
+           len(m) == 1 and json.loads(m[0]["Body"])["detail"] == {"k": 1})
+
     _check("ListRules",call("ListRules", {}).body["Rules"][0]["Name"] == "r1")
     _check("ListTargetsByRule", call("ListTargetsByRule", {"Rule": "r1"}).body["Targets"][0]["Id"] == "t1")
 
