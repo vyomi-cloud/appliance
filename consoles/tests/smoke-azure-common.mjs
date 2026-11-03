@@ -92,6 +92,25 @@ await page.goto(`${UI}#/resourcegroups/${RG}/resourcevisualizer`);
 await page.locator('[data-testid="viz-node"]').first().waitFor({ timeout: 20000 });
 ok((await page.locator('[data-testid="viz-node"]').count()) >= 3, "Resource visualizer draws the group's resources");
 
+// Grid tools (shared BrowseGrid): Open query (Resource Graph) + Assign tags (real ARM PATCH)
+await page.goto(`${UI}#/vnets`);
+await page.getByRole("button", { name: "Open query" }).waitFor({ timeout: 20000 });
+await page.getByRole("button", { name: "Open query" }).click();
+await page.getByRole("button", { name: "Run query" }).click();
+await page.getByRole("table", { name: "Query results" }).waitFor({ timeout: 15000 });
+await page.waitForFunction((v) => document.querySelector('[aria-label="Query results"]')?.innerText.includes(v), VN, { timeout: 10000 });
+ok(true, "Open query returns the vnet from real Resource Graph");
+await page.getByRole("button", { name: "Close" }).first().click();
+await page.getByText(VN).first().waitFor({ timeout: 10000 });
+await page.locator("tbody").getByRole("row").filter({ hasText: VN }).getByRole("checkbox").check();
+await page.getByRole("button", { name: "Assign tags" }).click();
+await page.getByLabel("Tag name 1").fill("owner");
+await page.getByLabel("Tag value 1").fill("azc");
+await page.getByRole("button", { name: "Apply" }).click();
+await page.waitForTimeout(1500);
+const got = await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.Network/virtualNetworks/${VN}`, null, "2023-04-01");
+ok(JSON.parse(got.text).tags?.owner === "azc", "Assign tags merged the tag onto the vnet over ARM");
+
 await browser.close();
 console.log(fails ? `${fails} FAILED` : "ALL PASS");
 process.exit(fails ? 1 : 0);

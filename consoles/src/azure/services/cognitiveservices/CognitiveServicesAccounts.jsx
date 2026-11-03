@@ -20,6 +20,7 @@ export default function CognitiveServicesAccounts() {
       <TitleRow title="Azure AI services" subtitle="Vyomi simulator (default directory)" glyph={<Glyph id="cognitiveservices" />} closeHref="#/" />
       <div className="vy-page">
         <BrowseGrid
+          tools
           resourceName="account"
           items={data || []}
           loading={loading}
@@ -47,7 +48,6 @@ export default function CognitiveServicesAccounts() {
           ]}
           emptyAction={<Link href="#/cognitiveservices/create">Create</Link>}
         />
-        <NotSimulatedContainer feature="Manage view, Open query (Azure Resource Graph) and Assign tags from the command bar" />
       </div>
     </>
   );

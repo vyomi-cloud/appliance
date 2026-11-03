@@ -97,5 +97,19 @@
   "tests": [
    "tests/conformance/test_azure_arm_core.py"
   ]
+ },
+ "azure.common.grid_tools": {
+  "title": "Browse-grid Open query (Resource Graph) and Assign tags",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Open query runs a minimal Kusto subset (tables Resources and ResourceContainers; where with =~ / == / contains, project, limit, count) evaluated over Vyomi's ARM resource store \u2014 no joins, summarize, extend or order by. The console posts to the subscription-prefixed path; real Azure Resource Graph is tenant-level (Nano also answers that form).",
+   "Assign tags merges the entered tags onto every selected resource with real ARM PATCHes; it needs the list to hold ARM resources (a row id) and is disabled otherwise. Manage view is the grid's column chooser (a console preference), not a saved/shared portal view."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py"
+  ]
  }
 }

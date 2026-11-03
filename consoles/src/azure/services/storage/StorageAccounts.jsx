@@ -22,6 +22,7 @@ export default function StorageAccounts() {
       <TitleRow title="Storage accounts" subtitle="Vyomi simulator (default directory)" glyph={<Glyph id="storage" />} closeHref="#/" />
       <div className="vy-page">
         <BrowseGrid
+          tools
           resourceName="storage account"
           items={data || []}
           loading={loading}
@@ -30,8 +31,6 @@ export default function StorageAccounts() {
           onCreate={() => navigate("storage", "create")}
           extraCommands={<>
             <ToolbarButton onClick={() => setGap("Restore")}>Restore</ToolbarButton>
-            <ToolbarButton onClick={() => setGap("Open query")}>Open query</ToolbarButton>
-            <ToolbarButton onClick={() => setGap("Assign tags")}>Assign tags</ToolbarButton>
           </>}
           onDelete={async (rows) => {
             for (const r of rows) await api.deleteStorageAccount(r.resourceGroup, r.name);

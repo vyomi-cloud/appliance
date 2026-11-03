@@ -20,6 +20,7 @@ export default function NetworkSecurityGroups() {
       <TitleRow title="Network security groups" glyph={<Glyph id="nsgs" />} closeHref="#/" />
       <div className="vy-page">
         <BrowseGrid
+          tools
           resourceName="network security group"
           items={data || []}
           loading={loading}
@@ -45,7 +46,6 @@ export default function NetworkSecurityGroups() {
           ]}
           emptyAction={<Link href="#/nsgs/create">Create network security group</Link>}
         />
-        <NotSimulatedContainer feature="Open query (Azure Resource Graph) and Assign tags from the command bar" />
       </div>
     </>
   );

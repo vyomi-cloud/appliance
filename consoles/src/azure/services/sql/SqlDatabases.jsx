@@ -22,6 +22,7 @@ export default function SqlDatabases() {
       <TitleRow title="SQL databases" subtitle="Vyomi simulator (default directory)" glyph={<Glyph id="sql" />} closeHref="#/" />
       <div className="vy-page">
         <BrowseGrid
+          tools
           resourceName="sql database"
           items={data || []}
           loading={loading}
@@ -50,7 +51,6 @@ export default function SqlDatabases() {
           ]}
           emptyAction={<Link href="#/sql/create">Create SQL database</Link>}
         />
-        <NotSimulatedContainer feature="Reservations, Open query (Azure Resource Graph) and Assign tags from the command bar" />
       </div>
     </>
   );

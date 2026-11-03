@@ -23,6 +23,7 @@ export default function ApiManagementServices() {
       <TitleRow title="API Management services" glyph={<Glyph id="apim" />} closeHref="#/" />
       <div className="vy-page">
         <BrowseGrid
+          tools
           resourceName="API Management service"
           items={data || []}
           loading={loading}
@@ -37,8 +38,6 @@ export default function ApiManagementServices() {
           subscriptionLabel={subName}
           csvName="api-management-services.csv"
           extraCommands={<>
-            <ToolbarButton icon={<DocumentSearch20Regular />} onClick={() => setGap("Open query")}>Open query</ToolbarButton>
-            <ToolbarButton icon={<Tag20Regular />} onClick={() => setGap("Assign tags")}>Assign tags</ToolbarButton>
           </>}
           pills={[
             { key: "rg", label: "Resource group", value: (r) => r.resourceGroup },

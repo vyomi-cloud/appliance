@@ -9,10 +9,11 @@ import {
   TableRow, TableSelectionCell, ToolbarButton,
 } from "@fluentui/react-components";
 import {
-  Add20Regular, ArrowClockwise20Regular, ArrowDownload20Regular, Delete20Regular, Filter20Regular, TableSettings20Regular,
+  Add20Regular, ArrowClockwise20Regular, ArrowDownload20Regular, Delete20Regular, Filter20Regular, Search20Regular, TableSettings20Regular, TagMultiple20Regular,
 } from "@fluentui/react-icons";
 import { downloadCsv } from "./common.jsx";
 import DeleteDialog from "./DeleteDialog.jsx";
+import { AssignTagsDialog, OpenQueryDialog } from "./GridTools.jsx";
 
 export default function BrowseGrid({
   resourceName,              // "storage account" (singular, lower)
@@ -28,7 +29,10 @@ export default function BrowseGrid({
   emptyAction,
   csvName = "export.csv",
   filterPlaceholder = "Filter for any field...",
+  tools,                     // true | {type}: real "Open query" (Resource Graph) + "Assign tags" (ARM PATCH) for ARM-resource rows
 }) {
+  const [query, setQuery] = useState(false);
+  const [tagRows, setTagRows] = useState(null);
   const [filter, setFilter] = useState("");
   const [pillValues, setPillValues] = useState({});
   const [sel, setSel] = useState(new Set());
@@ -78,6 +82,10 @@ export default function BrowseGrid({
         </Menu>
         <ToolbarButton icon={<ArrowClockwise20Regular />} onClick={onRefresh}>Refresh</ToolbarButton>
         <ToolbarButton icon={<ArrowDownload20Regular />} onClick={() => downloadCsv(csvName, shownCols, rows)} disabled={!rows.length}>Export to CSV</ToolbarButton>
+        {tools && <>
+          <ToolbarButton icon={<Search20Regular />} onClick={() => setQuery(true)}>Open query</ToolbarButton>
+          <ToolbarButton icon={<TagMultiple20Regular />} disabled={!selected.some((r) => r.id)} onClick={() => setTagRows(selected.filter((r) => r.id))}>Assign tags</ToolbarButton>
+        </>}
         {typeof extraCommands === "function" ? extraCommands(selected) : extraCommands}
         <span className="sep" />
         {onDelete && <ToolbarButton icon={<Delete20Regular />} disabled={!selected.length} onClick={() => setDel(true)}>Delete</ToolbarButton>}
@@ -135,6 +143,9 @@ export default function BrowseGrid({
           {emptyAction && <div style={{ marginTop: 12 }}>{emptyAction}</div>}
         </div>
       )}
+
+      {tools && <OpenQueryDialog open={query} onClose={() => setQuery(false)} type={tools?.type} />}
+      {tools && <AssignTagsDialog rows={tagRows} onClose={() => setTagRows(null)} onDone={onRefresh} />}
 
       <Dialog open={editCols} onOpenChange={(_, d) => setEditCols(d.open)}>
         <DialogSurface aria-label="Edit columns">

@@ -20,6 +20,7 @@ export default function KeyVaults() {
       <TitleRow title="Key vaults" subtitle="Vyomi simulator (default directory)" glyph={<Glyph id="keyvaults" />} closeHref="#/" />
       <div className="vy-page">
         <BrowseGrid
+          tools
           resourceName="key vault"
           items={data || []}
           loading={loading}
@@ -46,7 +47,6 @@ export default function KeyVaults() {
           ]}
           emptyAction={<Link href="#/keyvaults/create">Create key vault</Link>}
         />
-        <NotSimulatedContainer feature="Manage deleted vaults, Open query (Azure Resource Graph) and Assign tags from the command bar" />
       </div>
     </>
   );
