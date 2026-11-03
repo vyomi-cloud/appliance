@@ -248,7 +248,17 @@ const ROW_SEL = "#main table tr:has(td), #main [role=row]:has([role=cell],[role=
 // Lists page (AWS shows 10 rows by default), so once a service holds a page-full the visible
 // row count cannot grow; use the list's own total ("15 items") when it states one.
 const rowCount = async (page) => {
-  const rows = await page.locator(ROW_SEL).count();
+  // The list loads asynchronously: a count taken while it is still fetching reads 0 for a
+  // service that has rows (Azure VMs: "rows 0 -> 0" with the VM listed seconds later), so
+  // wait until the count is non-zero or has been stable for ~2.5s before trusting it.
+  let rows = await page.locator(ROW_SEL).count(), stable = 0;
+  for (let i = 0; i < 12 && stable < 5; i++) {
+    await sleep(500);
+    const n = await page.locator(ROW_SEL).count();
+    stable = n === rows ? stable + 1 : 0;
+    rows = n;
+    if (rows > 0 && stable >= 2) break;
+  }
   const t = await page.locator("#main").innerText().catch(() => "");
   const m = /\b(\d+)\s+items?\b/i.exec(t);
   return m ? Math.max(rows, +m[1]) : rows;
