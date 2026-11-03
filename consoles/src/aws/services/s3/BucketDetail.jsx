@@ -22,6 +22,7 @@ import DeleteModal from "../../kit/DeleteModal.jsx";
 import { ErrorAlert, fmtBytes, fmtDate, KeyValue, NotSimulated, NotSimulatedContainer } from "../../kit/common.jsx";
 import * as api from "./api.js";
 import { AccessPointsSection, EventNotificationsSection, EventBridgeSection, StorageMetricsSection, ReplicationMetricsSection, DataTransferSection } from "./Sweep.jsx";
+import { AccelerateSection, BucketLensSection, DataEventsSection, MetadataSection } from "./ExtPages.jsx";
 import TagsContainer from "./TagsContainer.jsx";
 import Permissions from "./Permissions.jsx";
 import { CapabilityContainer, saveNotice } from "../../kit/Capability.jsx";
@@ -39,7 +40,7 @@ export default function BucketDetail({ params, query }) {
         onChange={({ detail }) => setTab(detail.activeTabId)}
         tabs={[
           { id: "objects", label: "Objects", content: <Objects bucket={bucket} prefix={query.prefix || ""} /> },
-          { id: "metadata", label: "Metadata", content: <CapabilityContainer id="s3.bucket.metadata-configuration" title="Metadata configuration" /> },
+          { id: "metadata", label: "Metadata", content: <MetadataSection bucket={bucket} /> },
           { id: "properties", label: "Properties", content: <Properties bucket={bucket} /> },
           { id: "permissions", label: "Permissions", content: <Permissions bucket={bucket} /> },
           { id: "metrics", label: "Metrics", content: <Metrics bucket={bucket} /> },
@@ -143,10 +144,10 @@ function Properties({ bucket }) {
       <Encryption bucket={bucket} state={enc} />
       <IntelligentTieringSection bucket={bucket} />
       <LoggingSection bucket={bucket} />
-      <CapabilityContainer id="s3.bucket.cloudtrail-data-events" title="AWS CloudTrail data events" />
+      <DataEventsSection bucket={bucket} />
       <EventNotificationsSection bucket={bucket} />
       <EventBridgeSection bucket={bucket} />
-      <CapabilityContainer id="s3.bucket.accelerate" title="Transfer acceleration" />
+      <AccelerateSection bucket={bucket} />
       <ObjectLockSection bucket={bucket} />
       <RequestPaymentSection bucket={bucket} />
       <WebsiteSection bucket={bucket} />
@@ -464,7 +465,7 @@ function Metrics({ bucket }) {
   return (
     <SpaceBetween size="l">
       <StorageMetricsSection bucket={bucket} />
-      <CapabilityContainer id="s3.bucket.storage-lens" title="Storage Lens metrics" />
+      <BucketLensSection bucket={bucket} />
       <MetricsConfigSection bucket={bucket} />
       <ReplicationMetricsSection bucket={bucket} />
       <DataTransferSection bucket={bucket} />
