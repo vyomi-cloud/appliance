@@ -249,7 +249,7 @@ _QUERY_ACTION = {
     "DeleteRouteTable": "vpc", "DeleteNetworkAcl": "vpc",
     "AuthorizeSecurityGroupIngress": "vpc", "AuthorizeSecurityGroupEgress": "vpc",
     "CreateInternetGateway": "vpc", "AttachInternetGateway": "vpc", "CreateRoute": "vpc",
-    "DescribeVpcs": "vpc", "CreateNetworkAcl": "vpc", "CreateNetworkAclEntry": "vpc",
+    "DescribeVpcs": "vpc", "CreateNetworkAcl": "vpc", "DescribeNetworkAcls": "vpc", "CreateNetworkAclEntry": "vpc",
     "AssociateNetworkAcl": "vpc", "AnalyzeReachability": "vpc",
 }
 
