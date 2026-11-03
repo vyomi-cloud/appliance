@@ -23,6 +23,20 @@
       "tests/conformance/test_eventbridge_console_v4_core.py"
     ]
   },
+ "eventbridge.rule.builder": {
+    "title": "Rule Builder (visual canvas)",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "The visual Builder is a real editor over the rule's event pattern and targets: drawing a Triggering event wired to Target nodes is exactly what PutRule/PutTargets send. It has no sample-event library or schema-registry discovery; advanced pattern operators (prefix, anything-but, numeric, exists) go in the 'Other pattern fields' JSON or the pattern editor."
+    ],
+    "api": ["PutRule", "PutTargets"],
+    "tests": [
+      "tests/conformance/test_visual_canvas.py"
+    ]
+  },
   "eventbridge.rule.targets": {
     "title": "Targets (SQS, SNS, Lambda, Step Functions, Kinesis)",
     "level": {

@@ -177,10 +177,10 @@
    "offline": "limited"
   },
   "limitations": [
-   "The template + text editing and Validate action are real; the visual resource Canvas view is not simulated."
+   "The template text editor, Validate and the visual Canvas are real: the canvas edits the same JSON template (resources, DependsOn/Ref edges, properties) and Create stack provisions it. The canvas covers the resource types the engine provisions (S3 bucket, DynamoDB table, SQS queue, SNS topic, IAM role, Logs log group; other types in a pasted template are shown but not in the palette). It reads/writes JSON templates only (no YAML round trip), and does not model Parameters/Outputs/Conditions graphically."
   ],
-  "api": ["ValidateTemplate"],
-  "tests": ["tests/conformance/test_cloudformation_core.py"]
+  "api": ["ValidateTemplate", "CreateStack"],
+  "tests": ["tests/conformance/test_cloudformation_core.py", "tests/conformance/test_visual_canvas.py"]
  },
  "aws.cloudformation.spotlight": {
   "title": "CloudFormation Spotlight (editorial content)",

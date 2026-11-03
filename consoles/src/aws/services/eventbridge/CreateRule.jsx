@@ -18,6 +18,7 @@ import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import { navigate } from "../../../common/router.js";
+import RuleBuilder from "./RuleBuilder.jsx";
 import * as api from "./api.js";
 
 const SAMPLE_PATTERN = '{\n  "source": ["my.app"],\n  "detail-type": ["x"]\n}';
@@ -152,9 +153,9 @@ export default function CreateRule({ params, query }) {
         {
           id: "build", label: "Build", content: (
             <SpaceBetween size="l">
-              <Box variant="small" color="text-body-secondary" data-vyomi-not-simulated="Builder mode">
-                The drag-and-drop Builder mode (Palette, Canvas, Triggering Events) isn't simulated in Vyomi — use the Event pattern (filter) editor below.
-              </Box>
+              <CapabilityContainer id="eventbridge.rule.builder" title="Builder">
+                <RuleBuilder pattern={pattern} setPattern={setPattern} targets={targets} setTargets={setTargets} options={targetOptions} />
+              </CapabilityContainer>
               <Container header={<Header variant="h2">Event pattern (filter)</Header>}>
                 <SpaceBetween size="l">
                   <FormField label="Event pattern" stretch description="Events on this bus matching this pattern trigger the rule's targets.">

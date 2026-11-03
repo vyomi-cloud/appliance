@@ -303,14 +303,15 @@
   "api": []
  },
  "lambda.application.infrastructure-composer": {
-  "title": "AWS Infrastructure Composer",
+  "title": "AWS Infrastructure Composer (canvas)",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Infrastructure Composer is a visual drag-and-drop canvas for authoring a SAM template. Vyomi has no visual template designer. Use the Serverless application tab."
+   "The drag-and-drop canvas is real and deploys through the real service APIs: a CloudFormation stack for SQS/SNS/S3/DynamoDB resources, CreateFunction for Lambda functions (default python handler code), CreateEventSourceMapping for SQS -> function and SNS Subscribe for SNS -> function. It authors plain CloudFormation, not a SAM (AWS::Serverless) template: no API Gateway, Step Functions, layers or per-function code editing on the canvas. S3/DynamoDB nodes are deployed but cannot be wired to a function."
   ],
-  "api": []
+  "api": ["CreateStack", "CreateFunction", "CreateEventSourceMapping", "Subscribe"],
+  "tests": ["tests/conformance/test_visual_canvas.py"]
  }
 }

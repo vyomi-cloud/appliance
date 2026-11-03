@@ -14,6 +14,7 @@ import { follow, navigate } from "../../../common/router.js";
 import { useNotify } from "../../../common/notify.jsx";
 import { ErrorAlert } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
+import Composer from "./Composer.jsx";
 import * as api from "./api.js";
 
 const TEMPLATES = ["From scratch", "Serverless API backend", "File processing", "Scheduled job", "Notifications processing", "Queue processing"];
@@ -69,7 +70,7 @@ export default function CreateApplication() {
       <Tabs tabs={[
         { id: "cicd", label: "CI/CD pipeline application", content: <CapabilityContainer id="lambda.application.cicd-pipeline" title="CI/CD pipeline application" /> },
         { id: "serverless", label: "Serverless application", content: serverlessApplicationTab },
-        { id: "composer", label: "Build with Infrastructure Composer", content: <CapabilityContainer id="lambda.application.infrastructure-composer" title="Build with Infrastructure Composer" /> },
+        { id: "composer", label: "Build with Infrastructure Composer", content: <CapabilityContainer id="lambda.application.infrastructure-composer" title="Build with Infrastructure Composer"><Composer /></CapabilityContainer> },
       ]} />
     </ContentLayout>
   );
