@@ -364,6 +364,7 @@ async function createWithDefaults(page, drain, cloud, backToList, service) {
     const TAKEN = /already exists|ResourceInUse|ResourceExists|AlreadyExists|name is (already )?(taken|in use)/i;
     let taken = false;
     const onResp = async (r) => {
+      if (process.env.DEBUG_CRAWL && ["POST", "PUT"].includes(r.request().method())) console.log(`[debug] create ${r.status()} ${r.request().method()} ${r.url().slice(0, 200)}`);
       if (r.status() < 400 || !["POST", "PUT"].includes(r.request().method())) return;
       if (r.status() === 409 || TAKEN.test(await r.text().catch(() => ""))) taken = true;
     };
