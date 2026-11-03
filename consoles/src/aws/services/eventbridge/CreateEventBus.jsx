@@ -34,6 +34,7 @@ export default function CreateEventBus({ params }) {
   const [kmsKey, setKmsKey] = useState("");
   const [logCfg, setLogCfg] = useState({ Level: "OFF", IncludeDetail: "NONE" });
   const [policy, setPolicy] = useState("");
+  const [discovery, setDiscovery] = useState(false);
   const [archiveName, setArchiveName] = useState("");
   const [archiveDays, setArchiveDays] = useState("0");
   const [touched, setTouched] = useState(false);
@@ -63,6 +64,7 @@ export default function CreateEventBus({ params }) {
         await api.createEventBus({ Name: name, Description: description, ...(kmsKey ? { KmsKeyIdentifier: kmsKey } : {}), ...(logCfg.Level !== "OFF" ? { LogConfig: logCfg } : {}), Tags: tags.filter((t) => t.key).map((t) => ({ Key: t.key, Value: t.value })) });
       }
       if (!editing && policy.trim()) await api.updateEventBusConfig(name, { Policy: policy });
+      if (!editing && discovery) await api.createDiscoverer((await api.describeEventBus(name)).Arn, "");
       if (!editing && archiveName.trim()) {
         const busArn = (await api.describeEventBus(name)).Arn;
         await api.createArchive({ ArchiveName: archiveName.trim(), EventSourceArn: busArn, RetentionDays: Number(archiveDays) || 0, ...(kmsKey ? { KmsKeyIdentifier: kmsKey } : {}) });
@@ -145,9 +147,7 @@ export default function CreateEventBus({ params }) {
                 </Container>
 
                 <Container header={<Header variant="h2">Schema discovery - optional</Header>}>
-                  <FormField label="Schema discovery">
-                    <NotSimulated feature="Schema discovery" note="The Schema registry isn't modeled in Vyomi." />
-                  </FormField>
+                  <FormField label="Schema discovery" description="Infers an OpenAPI schema from every event sent to this bus (registry discovered-schemas)."><Toggle checked={discovery} disabled={editing} onChange={({ detail }) => setDiscovery(detail.checked)}>Enable schema discovery on this event bus</Toggle></FormField>
                 </Container>
 
                 <Container header={<Header variant="h2" description="Tags are pairs of keys and optional values that you can assign to AWS resources.">Tags - optional</Header>}>

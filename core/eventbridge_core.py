@@ -791,6 +791,11 @@ def _put_events(store, body, lam_store=None, kinesis_store=None, sfn_store=None,
         _notify(store, "put", bus, envelope)
         n = _deliver_to_bus(store, lam_store, bus, envelope, event_obj, kinesis_store=kinesis_store, sfn_store=sfn_store)
         _bus_log(store, bus_rec, "INFO", "INVOKE_SUCCEEDED" if n else "NO_MATCHING_RULES", {"deliveries": n}, envelope)
+        try:   # real schema discovery: a STARTED discoverer on this bus infers + versions the event's schema
+            from core import eventbridge_schemas_core as _schemas
+            _schemas.discover(store, bus, envelope)
+        except Exception:
+            pass
         entries_out.append({"EventId": event_id})
     store.persist()
     failed = sum(1 for e in entries_out if "ErrorCode" in e)

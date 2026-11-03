@@ -155,3 +155,22 @@ export const removePermission = (input) => E("RemovePermission", input);
 export const busLogGroup = (bus) => `/aws/vendedlogs/events/event-bus/${bus}`;
 export const busLogEvents = (bus) => awsJson("logs", "Logs_20140328.FilterLogEvents", { logGroupName: busLogGroup(bus), limit: 50 }, { version: "1.1" })
   .then((r) => r.events || []).catch(() => []);
+
+// ── EventBridge Schemas (REST, signed as "schemas") ──────────────────────────
+const SC = (method, path, opts = {}) => restJson(method, path, { ...opts, headers: { ...restHeaders("schemas"), ...(opts.headers || {}) } });
+const enc = encodeURIComponent;
+export const listSchemaRegistries = () => SC("GET", "/v1/registries").then((r) => r.Registries || []);
+export const createSchemaRegistry = (name, description) => SC("POST", `/v1/registries/name/${enc(name)}`, { body: { Description: description || "" } });
+export const deleteSchemaRegistry = (name) => SC("DELETE", `/v1/registries/name/${enc(name)}`);
+export const listSchemas = (registry) => SC("GET", `/v1/registries/name/${enc(registry)}/schemas`).then((r) => r.Schemas || []);
+export const describeSchema = (registry, name, version) => SC("GET", `/v1/registries/name/${enc(registry)}/schemas/name/${enc(name)}`, { query: version ? { schemaVersion: version } : undefined });
+export const createSchema = (registry, name, type, content, description) => SC("POST", `/v1/registries/name/${enc(registry)}/schemas/name/${enc(name)}`, { body: { Type: type, Content: content, Description: description || "" } });
+export const updateSchema = (registry, name, content) => SC("PUT", `/v1/registries/name/${enc(registry)}/schemas/name/${enc(name)}`, { body: { Content: content } });
+export const deleteSchema = (registry, name) => SC("DELETE", `/v1/registries/name/${enc(registry)}/schemas/name/${enc(name)}`);
+export const listSchemaVersions = (registry, name) => SC("GET", `/v1/registries/name/${enc(registry)}/schemas/name/${enc(name)}/versions`).then((r) => r.SchemaVersions || []);
+export const searchSchemas = (keywords) => SC("GET", "/v1/search/schemas", { query: { keywords } }).then((r) => r.Schemas || []);
+export const listDiscoverers = () => SC("GET", "/v1/discoverers").then((r) => r.Discoverers || []);
+export const createDiscoverer = (sourceArn, description) => SC("POST", "/v1/discoverers", { body: { SourceArn: sourceArn, Description: description || "" } });
+export const deleteDiscoverer = (id) => SC("DELETE", `/v1/discoverers/id/${enc(id)}`);
+export const startDiscoverer = (id) => SC("POST", `/v1/discoverers/id/${enc(id)}/start`);
+export const stopDiscoverer = (id) => SC("POST", `/v1/discoverers/id/${enc(id)}/stop`);

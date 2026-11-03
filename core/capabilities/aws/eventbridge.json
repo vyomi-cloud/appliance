@@ -232,5 +232,31 @@
     "tests": [
       "tests/conformance/test_eventbridge_sweep_core.py"
     ]
+  },
+  "eventbridge.schemas.registry": {
+    "title": "EventBridge Schemas: registries, schemas and versions (REST CRUD, search)",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "The AWS-managed aws.events registry is not shipped; only registries and schemas you create or discover exist. Schema content is validated as JSON only (OpenApi3 / JSONSchemaDraft4 structure is not checked); code bindings and GetCodeBindingSource are not modeled."
+    ],
+    "tests": [
+      "tests/conformance/test_eventbridge_schemas_core.py"
+    ]
+  },
+  "eventbridge.schemas.discovery": {
+    "title": "Schema discovery: discoverers infer OpenAPI schemas from PutEvents on a bus",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "Inference is a structural JSON-type inference (string/number/boolean/object/array, nullable not modeled) producing OpenApi3; new versions are created when the shape changes. Cross-account and partner buses are not discovered."
+    ],
+    "tests": [
+      "tests/conformance/test_eventbridge_schemas_core.py"
+    ]
   }
 }
