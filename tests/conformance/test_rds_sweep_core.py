@@ -53,6 +53,27 @@ def main():
     _check("RemoveRoleFromDBInstance", st == 200 and arn not in y)
     st, x = q(r, "rds", "RemoveRoleFromDBInstance", {"DBInstanceIdentifier": "app-db", "RoleArn": arn, "FeatureName": "s3Import"})
     _check("removing an unassociated role -> DBInstanceRoleNotFound", st == 404 and "DBInstanceRoleNotFound" in x)
+    # ── RDS Proxy: auth/VPC/endpoint + targets (what the Lambda "RDS databases" helper drives)
+    st, x = q(r, "rds", "CreateDBProxy", {"DBProxyName": "px", "EngineFamily": "MYSQL", "RoleArn": "arn:aws:iam::123456789012:role/rds-s3",
+                                             "VpcSubnetIds.member.1": "subnet-a", "VpcSecurityGroupIds.member.1": "sg-1",
+                                             "Auth.member.1.AuthScheme": "SECRETS", "Auth.member.1.SecretArn": "arn:aws:secretsmanager:us-east-1:123456789012:secret:db"})
+    _check("CreateDBProxy with one subnet is rejected (needs two)", st == 400)
+    st, x = q(r, "rds", "CreateDBProxy", {"DBProxyName": "px", "EngineFamily": "POSTGRESQL", "RoleArn": "arn:aws:iam::123456789012:role/rds-s3",
+                                             "VpcSubnetIds.member.1": "subnet-a", "VpcSubnetIds.member.2": "subnet-b", "VpcSecurityGroupIds.member.1": "sg-1",
+                                             "Auth.member.1.AuthScheme": "SECRETS", "Auth.member.1.SecretArn": "arn:aws:secretsmanager:us-east-1:123456789012:secret:db"})
+    _check("CreateDBProxy stores VPC, auth and an endpoint", st == 200 and "<Endpoint>px.proxy" in x and "<member>subnet-b</member>" in x and "<SecretArn>arn:aws:secretsmanager" in x)
+    st, x = q(r, "rds", "RegisterDBProxyTargets", {"DBProxyName": "px", "DBInstanceIdentifiers.member.1": "app-db"})
+    _check("RegisterDBProxyTargets registers a matching-engine instance", st == 200 and "<RdsResourceId>app-db</RdsResourceId>" in x and "AVAILABLE" in x)
+    st, x = q(r, "rds", "RegisterDBProxyTargets", {"DBProxyName": "px", "DBInstanceIdentifiers.member.1": "app-db"})
+    _check("registering the same target twice is rejected", st == 400)
+    st, x = q(r, "rds", "CreateDBProxy", {"DBProxyName": "pxm", "EngineFamily": "MYSQL"})
+    st, x = q(r, "rds", "RegisterDBProxyTargets", {"DBProxyName": "pxm", "DBInstanceIdentifiers.member.1": "app-db"})
+    _check("an engine-family mismatch is rejected", st == 400)
+    st, x = q(r, "rds", "DescribeDBProxyTargets", {"DBProxyName": "px"})
+    _check("DescribeDBProxyTargets", "<RdsResourceId>app-db</RdsResourceId>" in x)
+    st, x = q(r, "rds", "DeregisterDBProxyTargets", {"DBProxyName": "px", "DBInstanceIdentifiers.member.1": "app-db"})
+    st2, y = q(r, "rds", "DescribeDBProxyTargets", {"DBProxyName": "px"})
+    _check("DeregisterDBProxyTargets", st == 200 and "app-db" not in y)
     print("RDS sweep: all checks passed")
 
 

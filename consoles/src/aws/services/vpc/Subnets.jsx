@@ -231,6 +231,7 @@ export function CreateSubnet() {
   const [az, setAz] = useState("");
   const [cidr, setCidr] = useState("");
   const [tags, setTags] = useState([]);
+  const [extra, setExtra] = useState([]);   // additional subnets created in the same submit
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   // AWS hides "Subnet settings" until a VPC is chosen; default to the first one so the
@@ -242,8 +243,18 @@ export function CreateSubnet() {
     try {
       const tagMap = Object.fromEntries(tags.filter((t) => !t.markedForRemoval && t.key).map((t) => [t.key, t.value]));
       if (name) tagMap.Name = name;
-      const subnet = await api.createSubnet(vpcId, cidr, az || undefined, tagMap);
-      notify.success(`Subnet "${subnet.SubnetId}" created.`);
+      const made = [];
+      const all = [{ name, az, cidr }, ...extra];
+      for (const [i, sn] of all.entries()) {
+        try {
+          const tm = { ...tagMap, ...(sn.name ? { Name: sn.name } : {}) };
+          made.push((await api.createSubnet(vpcId, sn.cidr, sn.az || undefined, tm)).SubnetId);
+        } catch (e) {
+          if (made.length) notify.success(`Created ${made.length} of ${all.length} subnets (${made.join(", ")}).`);
+          throw new Error(`Subnet ${i + 1} (${sn.cidr}) failed: ${e.message || e}`);
+        }
+      }
+      notify.success(all.length > 1 ? `${made.length} subnets created (${made.join(", ")}).` : `Subnet "${made[0]}" created.`);
       navigate("vpc", "subnets");
     } catch (e) { setError(e); } finally { setBusy(false); }
   };
@@ -253,7 +264,7 @@ export function CreateSubnet() {
       <Form errorText={error && <ErrorAlert error={error} />} actions={
         <SpaceBetween direction="horizontal" size="xs">
           <Button formAction="none" href={href("vpc", "subnets")} onFollow={follow}>Cancel</Button>
-          <Button variant="primary" loading={busy} disabled={!vpcId || !cidr} onClick={submit}>Create subnet</Button>
+          <Button variant="primary" loading={busy} disabled={!vpcId || !cidr || extra.some((x) => !x.cidr)} onClick={submit}>{extra.length ? `Create ${extra.length + 1} subnets` : "Create subnet"}</Button>
         </SpaceBetween>
       }>
         <SpaceBetween size="l">
@@ -276,7 +287,20 @@ export function CreateSubnet() {
                 <FormField label="IPv4 VPC CIDR block"><Input value={(vpcs.data || []).find((v) => v.VpcId === vpcId)?.CidrBlock || ""} disabled /></FormField>
                 <FormField label="IPv4 subnet CIDR block"><Input value={cidr} onChange={({ detail }) => setCidr(detail.value)} placeholder="10.0.0.0/24" /></FormField>
                 <FormField label="Tags - optional"><TagEditor tags={tags} onChange={({ detail }) => setTags(detail.tags)} i18nStrings={TAG_I18N} /></FormField>
-                <GapButton text="Add new subnet" feature="Creating multiple subnets in one batch" note="Create subnets one at a time; each submit creates a single subnet over the native wire." />
+                {extra.map((sn, i) => (
+                  <Container key={i} header={<Header variant="h3" actions={<Button onClick={() => setExtra(extra.filter((_, j) => j !== i))}>Remove</Button>}>Subnet {i + 2} of {extra.length + 1}</Header>}>
+                    <SpaceBetween size="l">
+                      <FormField label="Subnet name"><Input ariaLabel={`Subnet ${i + 2} name`} value={sn.name} onChange={({ detail }) => setExtra(extra.map((x, j) => (j === i ? { ...x, name: detail.value } : x)))} /></FormField>
+                      <FormField label="Availability Zone">
+                        <Select ariaLabel={`Subnet ${i + 2} Availability Zone`} selectedOption={sn.az ? { value: sn.az, label: sn.az } : { value: "", label: "No preference" }}
+                          options={["No preference", "us-east-1a", "us-east-1b", "us-east-1c"].map((z) => ({ value: z === "No preference" ? "" : z, label: z }))}
+                          onChange={({ detail }) => setExtra(extra.map((x, j) => (j === i ? { ...x, az: detail.selectedOption.value } : x)))} />
+                      </FormField>
+                      <FormField label="IPv4 subnet CIDR block"><Input ariaLabel={`Subnet ${i + 2} CIDR`} value={sn.cidr} onChange={({ detail }) => setExtra(extra.map((x, j) => (j === i ? { ...x, cidr: detail.value } : x)))} placeholder="10.0.1.0/24" /></FormField>
+                    </SpaceBetween>
+                  </Container>
+                ))}
+                <Button iconName="add-plus" onClick={() => setExtra([...extra, { name: "", az: "", cidr: "" }])}>Add new subnet</Button>
               </SpaceBetween>
             </Container>
           )}

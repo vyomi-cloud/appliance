@@ -62,12 +62,37 @@ export default function TopicDetail({ params, query }) {
           { id: "delivery-status-logging", label: "Delivery status logging", content: <DeliveryStatusTab arn={arn} attrs={attrs} reload={t.reload} /> },
           { id: "encryption", label: "Encryption", content: <EncryptionTab arn={arn} attrs={attrs} reload={t.reload} /> },
           { id: "tags", label: "Tags", content: <TagsTab arn={arn} /> },
-          { id: "integrations", label: "Integrations", content: <CapabilityContainer id="sns.topic.integrations" title="Integrations" /> },
+          { id: "integrations", label: "Integrations", content: <IntegrationsTab arn={arn} name={name} /> },
         ]} />
       </SpaceBetween>
       <DeleteModal visible={del} resourceType="topic" names={[name]} confirmText="delete me" onDismiss={() => setDel(false)}
         onConfirm={async () => { await api.deleteTopic(arn); notify.success(`"${name}" deleted.`); navigate("sns", "topics"); }} />
     </ContentLayout>
+  );
+}
+
+function IntegrationsTab({ arn, name }) {
+  const t = useAsync(() => api.integrationsForTopic(arn), [arn]);
+  const d = t.data || { rules: [], alarms: [], subs: [] };
+  const byProto = (p) => d.subs.filter((s) => s.protocol === p);
+  const empty = (txt) => <Box textAlign="center" color="inherit"><b>{txt}</b></Box>;
+  return (
+    <CapabilityContainer id="sns.topic.integrations" title="Integrations" actions={<Button iconName="refresh" ariaLabel="Refresh integrations" onClick={t.reload} />}>
+      <SpaceBetween size="l">
+        <Table loading={t.loading} variant="embedded" items={d.rules} trackBy="rule" header={<Header variant="h3" counter={`(${d.rules.length})`}
+          actions={<Button href={`#/eventbridge/create-rule`} onFollow={follow}>Create EventBridge rule</Button>}>EventBridge rules targeting this topic</Header>}
+          columnDefinitions={[{ id: "r", header: "Rule", cell: (r) => <Link href={`#/eventbridge/rules/${r.rule}`} onFollow={follow}>{r.rule}</Link> }, { id: "b", header: "Event bus", cell: (r) => r.bus }]}
+          empty={empty("No EventBridge rules deliver to this topic")} />
+        <Table loading={t.loading} variant="embedded" items={d.alarms} trackBy="AlarmName" header={<Header variant="h3" counter={`(${d.alarms.length})`}>CloudWatch alarms notifying this topic</Header>}
+          columnDefinitions={[{ id: "a", header: "Alarm", cell: (a) => <Link href={`#/cloudwatch/alarms/${a.AlarmName}`} onFollow={follow}>{a.AlarmName}</Link> }, { id: "s", header: "State", cell: (a) => a.StateValue }]}
+          empty={empty("No CloudWatch alarms notify this topic")} />
+        {[["lambda", "Lambda functions subscribed"], ["sqs", "SQS queues subscribed"], ["firehose", "Firehose delivery streams subscribed"]].map(([p, label]) => (
+          <Table key={p} loading={t.loading} variant="embedded" items={byProto(p)} trackBy="arn" header={<Header variant="h3" counter={`(${byProto(p).length})`}>{label}</Header>}
+            columnDefinitions={[{ id: "e", header: "Endpoint", cell: (s) => s.endpoint }, { id: "st", header: "Status", cell: (s) => (s.pending ? "Pending confirmation" : "Confirmed") }]}
+            empty={empty(`No ${p} subscriptions`)} />
+        ))}
+      </SpaceBetween>
+    </CapabilityContainer>
   );
 }
 

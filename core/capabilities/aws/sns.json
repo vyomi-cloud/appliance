@@ -284,14 +284,16 @@
   "api": []
  },
  "sns.topic.integrations": {
-  "title": "Topic integrations",
+  "title": "Topic Integrations tab (EventBridge rules, CloudWatch alarms and Lambda/SQS/Firehose subscriptions wired to the topic)",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "The console's Integrations tab links a topic to other services' wizards (CloudWatch, EventBridge Pipes, Firehose); there is no SNS API behind it and Vyomi does not model those links."
+   "A live read-only view assembled from real data: EventBridge rules whose target is the topic (ListRuleNamesByTarget across buses), CloudWatch alarms with the topic as an alarm action, and the topic's subscriptions grouped by protocol. SNS itself has no 'integrations' API, so nothing is stored — links open the real EventBridge/CloudWatch wizards. EventBridge Pipes sources and Firehose delivery-stream creation from this tab are not modeled."
   ],
-  "api": []
+  "tests": [
+   "tests/conformance/test_sns_core.py"
+  ]
  }
 }

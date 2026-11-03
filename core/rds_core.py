@@ -335,6 +335,14 @@ def _proxy_xml(px: dict) -> str:
         _el("DBProxyArn", px.get("db_proxy_arn", "")),
         _el("EngineFamily", px.get("engine_family", "POSTGRESQL")),
         _el("Status", px.get("status", "available")),
+        (_el("RoleArn", px["role_arn"]) if px.get("role_arn") else ""),
+        (_el("Endpoint", px["endpoint"]) if px.get("endpoint") else ""),
+        "<VpcSubnetIds>" + "".join(_el("member", x) for x in px.get("vpc_subnet_ids", [])) + "</VpcSubnetIds>",
+        "<VpcSecurityGroupIds>" + "".join(_el("member", x) for x in px.get("vpc_security_group_ids", [])) + "</VpcSecurityGroupIds>",
+        "<Auth>" + "".join(f"<member>{_el('AuthScheme', a.get('AuthScheme', 'SECRETS'))}{_el('SecretArn', a.get('SecretArn', ''))}{_el('IAMAuth', a.get('IAMAuth', 'DISABLED'))}</member>"
+                           for a in px.get("auth", [])) + "</Auth>",
+        _el("RequireTLS", str(px.get("require_tls", False)).lower()),
+        _el("IdleClientTimeout", px.get("idle_client_timeout", 1800)),
         _el("CreatedDate", px.get("created", "")),
         "</DBProxy>",
     ])
@@ -1064,16 +1072,99 @@ def _create_db_proxy(store: SqlStore, params: dict) -> RdsResponse:
         raise RdsError("InvalidParameterValue", "DBProxyName is required.", 400)
     if store.get_proxy(name):
         raise RdsError("DBProxyAlreadyExistsFault", f"DB proxy {name} already exists.", 400)
+    family = str(params.get("EngineFamily", "POSTGRESQL")).upper()
+    if family not in ("MYSQL", "POSTGRESQL", "SQLSERVER"):
+        raise RdsError("InvalidParameterValue", "EngineFamily must be MYSQL, POSTGRESQL or SQLSERVER.", 400)
+    auth = []
+    i = 1
+    while f"Auth.member.{i}.SecretArn" in params or f"Auth.member.{i}.AuthScheme" in params:
+        auth.append({"AuthScheme": params.get(f"Auth.member.{i}.AuthScheme", "SECRETS"), "SecretArn": params.get(f"Auth.member.{i}.SecretArn", ""),
+                     "IAMAuth": params.get(f"Auth.member.{i}.IAMAuth", "DISABLED")})
+        i += 1
+    subnets = _members(params, "VpcSubnetIds")
+    if params.get("RoleArn") is not None and not str(params.get("RoleArn")).startswith("arn:aws:iam::"):
+        raise RdsError("InvalidParameterValue", "RoleArn must be an IAM role ARN.", 400)
+    if "VpcSubnetIds.member.1" in params and len(subnets) < 2:
+        raise RdsError("InvalidParameterValue", "An RDS Proxy needs at least two subnets (in different Availability Zones).", 400)
     record = {
         "db_proxy_name": name,
         "db_proxy_arn": _proxy_arn(store, name),
-        "engine_family": str(params.get("EngineFamily", "POSTGRESQL")),
+        "engine_family": family,
         "status": "available",
         "created": _now(),
+        "role_arn": str(params.get("RoleArn", "")),
+        "vpc_subnet_ids": subnets,
+        "vpc_security_group_ids": _members(params, "VpcSecurityGroupIds"),
+        "auth": auth,
+        "require_tls": str(params.get("RequireTLS", "false")).lower() == "true",
+        "idle_client_timeout": _int(params, "IdleClientTimeout", 1800),
+        "endpoint": f"{name}.proxy-nano.us-east-1.rds.amazonaws.com",
+        "targets": [],
     }
     store.put_proxy(name, record)
     store.persist()
     return _success("CreateDBProxy", _proxy_xml(record))
+
+
+_FAMILY_OF = {"postgres": "POSTGRESQL", "aurora-postgresql": "POSTGRESQL", "mysql": "MYSQL", "mariadb": "MYSQL", "aurora-mysql": "MYSQL"}
+
+
+def _register_db_proxy_targets(store: SqlStore, params: dict) -> RdsResponse:
+    name = str(params.get("DBProxyName", "")).strip()
+    px = store.get_proxy(name)
+    if not px:
+        raise RdsError("DBProxyNotFoundFault", f"DB proxy {name} not found.", 404)
+    ids = _members(params, "DBInstanceIdentifiers")
+    if not ids:
+        raise RdsError("InvalidParameterValue", "DBInstanceIdentifiers is required.", 400)
+    for db_id in ids:
+        db = store.get_instance(db_id)
+        if not db:
+            raise RdsError("DBInstanceNotFound", f"DBInstance {db_id} not found.", 404)
+        fam = _FAMILY_OF.get(str(db.get("engine", "")), "")
+        if fam != px.get("engine_family"):
+            raise RdsError("InvalidDBInstanceState", f"DB instance {db_id} ({db.get('engine')}) does not match the proxy's engine family {px.get('engine_family')}.", 400)
+        if any(t["RdsResourceId"] == db_id for t in px.setdefault("targets", [])):
+            raise RdsError("DBProxyTargetAlreadyRegisteredFault", f"{db_id} is already registered with proxy {name}.", 400)
+        px["targets"].append({"RdsResourceId": db_id, "Type": "RDS_INSTANCE", "Endpoint": db.get("endpoint_address", ""), "Port": db.get("endpoint_port", 0), "State": "AVAILABLE"})
+    store.put_proxy(name, px)
+    store.persist()
+    return _success("RegisterDBProxyTargets", _proxy_targets_xml(px, "DBProxyTargets"))
+
+
+def _proxy_targets_xml(px: dict, tag: str) -> str:
+    return f"<{tag}>" + "".join(
+        f"<member>{_el('RdsResourceId', t['RdsResourceId'])}{_el('Type', t['Type'])}{_el('Endpoint', t['Endpoint'])}{_el('Port', t['Port'])}"
+        f"{_el('TargetArn', _instance_arn_from(px, t['RdsResourceId']))}<TargetHealth>{_el('State', t['State'])}</TargetHealth></member>"
+        for t in px.get("targets", [])) + f"</{tag}>"
+
+
+def _instance_arn_from(px: dict, db_id: str) -> str:
+    acct = px.get("db_proxy_arn", "").split(":")[4] if px.get("db_proxy_arn", "").count(":") >= 4 else "123456789012"
+    return f"arn:aws:rds:us-east-1:{acct}:db:{db_id}"
+
+
+def _describe_db_proxy_targets(store: SqlStore, params: dict) -> RdsResponse:
+    name = str(params.get("DBProxyName", "")).strip()
+    px = store.get_proxy(name)
+    if not px:
+        raise RdsError("DBProxyNotFoundFault", f"DB proxy {name} not found.", 404)
+    return _success("DescribeDBProxyTargets", _proxy_targets_xml(px, "Targets"))
+
+
+def _deregister_db_proxy_targets(store: SqlStore, params: dict) -> RdsResponse:
+    name = str(params.get("DBProxyName", "")).strip()
+    px = store.get_proxy(name)
+    if not px:
+        raise RdsError("DBProxyNotFoundFault", f"DB proxy {name} not found.", 404)
+    ids = set(_members(params, "DBInstanceIdentifiers"))
+    left = [t for t in px.get("targets", []) if t["RdsResourceId"] not in ids]
+    if len(left) == len(px.get("targets", [])):
+        raise RdsError("DBProxyTargetNotFoundFault", "None of the DB instances are registered with the proxy.", 404)
+    px["targets"] = left
+    store.put_proxy(name, px)
+    store.persist()
+    return _success("DeregisterDBProxyTargets", "")
 
 
 def _describe_db_proxies(store: SqlStore, params: dict) -> RdsResponse:
@@ -1823,6 +1914,12 @@ def dispatch(store: SqlStore, params: dict | None = None, msg_store=None, s3_sto
             return _describe_db_proxies(store, params)
         if action == "DeleteDBProxy":
             return _delete_db_proxy(store, params)
+        if action == "RegisterDBProxyTargets":
+            return _register_db_proxy_targets(store, params)
+        if action == "DescribeDBProxyTargets":
+            return _describe_db_proxy_targets(store, params)
+        if action == "DeregisterDBProxyTargets":
+            return _deregister_db_proxy_targets(store, params)
         if action == "CreateOptionGroup":
             return _create_option_group(store, params)
         if action == "DescribeOptionGroups":

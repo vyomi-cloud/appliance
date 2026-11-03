@@ -1,6 +1,6 @@
 /* Amazon SNS over the native Query protocol (POST / with Action=<Op>, XML response) —
  * the same wire core/sns_core.py proves against in tests/conformance/test_sns_core.py. */
-import { awsQuery, asList } from "../../../common/wire.js";
+import { awsQuery, awsJson, asList } from "../../../common/wire.js";
 
 const call = (action, params = {}) => awsQuery("sns", action, params);
 const result = (resp, action) => resp[`${action}Response`]?.[`${action}Result`] || {};
@@ -185,4 +185,19 @@ export async function listSmsSandboxPhoneNumbers() {
     token = r.NextToken;
   } while (token);
   return out;
+}
+
+// ── Integrations tab (sweep AWS-09): what this topic is really wired to ──────
+const EV = (op, body) => awsJson("events", `AWSEvents.${op}`, body, { version: "1.1" });
+export async function integrationsForTopic(arn) {
+  const buses = (await EV("ListEventBuses", {}).catch(() => ({}))).EventBuses || [];
+  const rules = [];
+  for (const b of buses) {
+    const names = (await EV("ListRuleNamesByTarget", { TargetArn: arn, EventBusName: b.Name }).catch(() => ({}))).RuleNames || [];
+    names.forEach((n) => rules.push({ rule: n, bus: b.Name }));
+  }
+  const alarms = ((await awsJson("monitoring", "GraniteServiceVersion20100801.DescribeAlarms", {}).catch(() => ({}))).MetricAlarms || [])
+    .filter((a) => [...(a.AlarmActions || []), ...(a.OKActions || []), ...(a.InsufficientDataActions || [])].includes(arn));
+  const subs = await listSubscriptionsByTopic(arn);
+  return { rules, alarms, subs };
 }
