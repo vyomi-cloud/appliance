@@ -187,7 +187,40 @@ def traffic_mirroring():
     c({"Action": "DeleteTrafficMirrorTarget", "TrafficMirrorTargetId": tgt})
 
 
+def tgw_extras():
+    e = Env(); c = e.call
+    va = e.id(c({"Action": "CreateVpc", "CidrBlock": "10.75.0.0/16"}), "vpcId")
+    sa = e.id(c({"Action": "CreateSubnet", "VpcId": va, "CidrBlock": "10.75.1.0/24"}), "subnetId")
+    tg = e.id(c({"Action": "CreateTransitGateway", "Options.MulticastSupport": "enable"}), "transitGatewayId")
+    plain = e.id(c({"Action": "CreateTransitGateway"}), "transitGatewayId")
+    att = e.id(c({"Action": "CreateTransitGatewayVpcAttachment", "TransitGatewayId": tg, "VpcId": va, "SubnetIds.1": sa}), "transitGatewayAttachmentId")
+    c({"Action": "CreateTransitGatewayPolicyTable", "TransitGatewayId": "tgw-nope"}, ok=False)
+    pt = e.id(c({"Action": "CreateTransitGatewayPolicyTable", "TransitGatewayId": tg}), "transitGatewayPolicyTableId")
+    c({"Action": "AssociateTransitGatewayPolicyTable", "TransitGatewayPolicyTableId": pt, "TransitGatewayAttachmentId": att})
+    _check("policy table association listed", att in c({"Action": "GetTransitGatewayPolicyTableAssociations", "TransitGatewayPolicyTableId": pt}))
+    c({"Action": "DeleteTransitGatewayPolicyTable", "TransitGatewayPolicyTableId": pt}, ok=False)
+    c({"Action": "DisassociateTransitGatewayPolicyTable", "TransitGatewayPolicyTableId": pt, "TransitGatewayAttachmentId": att})
+    c({"Action": "DeleteTransitGatewayPolicyTable", "TransitGatewayPolicyTableId": pt})
+    _check("multicast needs MulticastSupport on the TGW", "InvalidTransitGatewayState" in c({"Action": "CreateTransitGatewayMulticastDomain", "TransitGatewayId": plain}, ok=False))
+    md = e.id(c({"Action": "CreateTransitGatewayMulticastDomain", "TransitGatewayId": tg, "Options.StaticSourcesSupport": "enable"}), "transitGatewayMulticastDomainId")
+    c({"Action": "AssociateTransitGatewayMulticastDomain", "TransitGatewayMulticastDomainId": md, "TransitGatewayAttachmentId": att, "SubnetIds.1": "subnet-nope"}, ok=False)
+    c({"Action": "AssociateTransitGatewayMulticastDomain", "TransitGatewayMulticastDomainId": md, "TransitGatewayAttachmentId": att, "SubnetIds.1": sa})
+    eni = e.id(c({"Action": "CreateNetworkInterface", "SubnetId": sa}), "networkInterfaceId")
+    c({"Action": "RegisterTransitGatewayMulticastGroupMembers", "TransitGatewayMulticastDomainId": md, "GroupIpAddress": "10.0.0.1", "NetworkInterfaceIds.1": eni}, ok=False)
+    c({"Action": "RegisterTransitGatewayMulticastGroupMembers", "TransitGatewayMulticastDomainId": md, "GroupIpAddress": "224.0.0.50", "NetworkInterfaceIds.1": eni})
+    _check("registered member found by group search", eni in c({"Action": "SearchTransitGatewayMulticastGroups", "TransitGatewayMulticastDomainId": md}))
+    c({"Action": "DeleteTransitGatewayMulticastDomain", "TransitGatewayMulticastDomainId": md}, ok=False)
+    c({"Action": "DisassociateTransitGatewayMulticastDomain", "TransitGatewayMulticastDomainId": md, "TransitGatewayAttachmentId": att, "SubnetIds.1": sa})
+    c({"Action": "DeleteTransitGatewayMulticastDomain", "TransitGatewayMulticastDomainId": md})
+    mp = e.id(c({"Action": "CreateTransitGatewayMeteringPolicy", "TransitGatewayId": tg, "MiddleboxAttachmentId.1": att}), "transitGatewayMeteringPolicyId")
+    c({"Action": "CreateTransitGatewayMeteringPolicyEntry", "TransitGatewayMeteringPolicyId": mp, "PolicyRuleNumber": "10", "PolicyRule.Protocol": "6"})
+    c({"Action": "CreateTransitGatewayMeteringPolicyEntry", "TransitGatewayMeteringPolicyId": mp, "PolicyRuleNumber": "10"}, ok=False)
+    _check("metering entry listed", "<policyRuleNumber>10</policyRuleNumber>" in c({"Action": "GetTransitGatewayMeteringPolicyEntries", "TransitGatewayMeteringPolicyId": mp}))
+    c({"Action": "DeleteTransitGatewayMeteringPolicy", "TransitGatewayMeteringPolicyId": mp})
+
+
 def main():
+    tgw_extras()
     traffic_mirroring()
     cidrs_and_edge()
     vpn()

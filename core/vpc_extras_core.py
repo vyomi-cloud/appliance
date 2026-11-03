@@ -717,6 +717,282 @@ def mirror_decision(m, session, direction, proto, src_ip, dst_ip, src_port=None,
     return None
 
 
+
+# ── Transit Gateway extras: policy tables, multicast domains, metering policies ───────────
+def _need_tgw(m, tid):
+    if tid not in m.setdefault("tgws", {}):
+        raise _err("InvalidTransitGatewayID.NotFound", f"Transit gateway {tid} does not exist.")
+    return m["tgws"][tid]
+
+
+def _need_tatt(m, aid):
+    a = m.get("tgw_attachments", {}).get(aid)
+    if not a:
+        raise _err("InvalidTransitGatewayAttachmentID.NotFound", f"The transit gateway attachment '{aid}' does not exist.")
+    return a
+
+
+def _pt_xml(t):
+    return {"transitGatewayPolicyTableId": t["id"], "transitGatewayId": t["tgw"], "state": "available", "creationTime": t["created"], **tags(t["tags"])}
+
+
+def _pt_create(store, p):
+    V = _V(); m = V._model(store); _need_tgw(m, str(p.get("TransitGatewayId", "")))
+    tid = V._rid("tgw-ptb", 17)
+    bag(m, "tgw_policy_tables")[tid] = {"id": tid, "tgw": str(p["TransitGatewayId"]), "created": V._now_utc(), "assocs": {}, "tags": tag_of(p, "transit-gateway-policy-table")}
+    return V._envelope("CreateTransitGatewayPolicyTable", xml(_pt_xml(m["tgw_policy_tables"][tid]), "transitGatewayPolicyTable"))
+
+
+def _pt_describe(store, p):
+    m = _V()._model(store); t = bag(m, "tgw_policy_tables"); want = ids(p, "TransitGatewayPolicyTableIds")
+    for i in want:
+        if i not in t:
+            raise _err("InvalidTransitGatewayPolicyTableId.NotFound", f"The policy table '{i}' does not exist")
+    return _V()._envelope("DescribeTransitGatewayPolicyTables", xml([_pt_xml(t[i]) for i in (want or t)], "transitGatewayPolicyTables"))
+
+
+def _pt_need(m, i):
+    t = bag(m, "tgw_policy_tables").get(i)
+    if not t:
+        raise _err("InvalidTransitGatewayPolicyTableId.NotFound", f"The policy table '{i}' does not exist")
+    return t
+
+
+def _pt_delete(store, p):
+    m = _V()._model(store); t = _pt_need(m, str(p.get("TransitGatewayPolicyTableId", "")))
+    if t["assocs"]:
+        raise _err("IncorrectState", f"{t['id']} still has associations.")
+    bag(m, "tgw_policy_tables").pop(t["id"])
+    return _V()._envelope("DeleteTransitGatewayPolicyTable", xml(_pt_xml(t) | {"state": "deleting"}, "transitGatewayPolicyTable"))
+
+
+def _pt_assoc(store, p):
+    m = _V()._model(store); t = _pt_need(m, str(p.get("TransitGatewayPolicyTableId", ""))); a = _need_tatt(m, str(p.get("TransitGatewayAttachmentId", "")))
+    if a["tgw_id"] != t["tgw"]:
+        raise _err("InvalidParameterValue", "The attachment and policy table belong to different transit gateways.")
+    if any(a["id"] in x["assocs"] for x in bag(m, "tgw_policy_tables").values()):
+        raise _err("Resource.AlreadyAssociated", f"{a['id']} is already associated with a policy table.")
+    t["assocs"][a["id"]] = "associated"
+    return _V()._envelope("AssociateTransitGatewayPolicyTable", xml({"transitGatewayPolicyTableId": t["id"], "transitGatewayAttachmentId": a["id"], "resourceId": a["resource_id"], "resourceType": a["resource_type"], "state": "associated"}, "association"))
+
+
+def _pt_disassoc(store, p):
+    m = _V()._model(store); t = _pt_need(m, str(p.get("TransitGatewayPolicyTableId", ""))); aid = str(p.get("TransitGatewayAttachmentId", ""))
+    if aid not in t["assocs"]:
+        raise _err("InvalidAssociation.NotFound", f"{aid} is not associated with {t['id']}.")
+    t["assocs"].pop(aid); a = _need_tatt(m, aid)
+    return _V()._envelope("DisassociateTransitGatewayPolicyTable", xml({"transitGatewayPolicyTableId": t["id"], "transitGatewayAttachmentId": aid, "resourceId": a["resource_id"], "resourceType": a["resource_type"], "state": "disassociated"}, "association"))
+
+
+def _pt_get_assocs(store, p):
+    m = _V()._model(store); t = _pt_need(m, str(p.get("TransitGatewayPolicyTableId", "")))
+    rows = [{"transitGatewayPolicyTableId": t["id"], "transitGatewayAttachmentId": a, "resourceId": m["tgw_attachments"][a]["resource_id"], "resourceType": "vpc", "state": s} for a, s in t["assocs"].items() if a in m.get("tgw_attachments", {})]
+    return _V()._envelope("GetTransitGatewayPolicyTableAssociations", xml(rows, "associations"))
+
+
+def _pt_get_entries(store, p):
+    m = _V()._model(store); _pt_need(m, str(p.get("TransitGatewayPolicyTableId", "")))
+    return _V()._envelope("GetTransitGatewayPolicyTableEntries", xml([], "transitGatewayPolicyTableEntries"))
+
+
+def _md_xml(d):
+    return {"transitGatewayMulticastDomainId": d["id"], "transitGatewayId": d["tgw"], "transitGatewayMulticastDomainArn": f"arn:aws:ec2:us-east-1:{_V().OWNER_ID}:transit-gateway-multicast-domain/{d['id']}",
+            "ownerId": _V().OWNER_ID, "options": {"igmpv2Support": d["igmp"], "staticSourcesSupport": d["static_src"], "autoAcceptSharedAssociations": d["auto_accept"]},
+            "state": "available", "creationTime": d["created"], **tags(d["tags"])}
+
+
+def _md_need(m, i):
+    d = bag(m, "tgw_multicast_domains").get(i)
+    if not d:
+        raise _err("InvalidTransitGatewayMulticastDomainId.NotFound", f"The multicast domain '{i}' does not exist")
+    return d
+
+
+def _md_create(store, p):
+    V = _V(); m = V._model(store); tg = _need_tgw(m, str(p.get("TransitGatewayId", "")))
+    if tg["options"].get("multicast") != "enable":
+        raise _err("InvalidTransitGatewayState", "The transit gateway does not have multicast support enabled (create it with Options.MulticastSupport=enable).")
+    did = V._rid("tgw-mcast-domain", 17)
+    bag(m, "tgw_multicast_domains")[did] = {"id": did, "tgw": tg["id"], "created": V._now_utc(), "igmp": str(p.get("Options.Igmpv2Support", "disable")), "static_src": str(p.get("Options.StaticSourcesSupport", "disable")),
+                                            "auto_accept": str(p.get("Options.AutoAcceptSharedAssociations", "disable")), "assocs": {}, "members": [], "sources": [], "tags": tag_of(p, "transit-gateway-multicast-domain")}
+    return V._envelope("CreateTransitGatewayMulticastDomain", xml(_md_xml(m["tgw_multicast_domains"][did]), "transitGatewayMulticastDomain"))
+
+
+def _md_describe(store, p):
+    m = _V()._model(store); d = bag(m, "tgw_multicast_domains"); want = ids(p, "TransitGatewayMulticastDomainIds")
+    for i in want:
+        _md_need(m, i)
+    return _V()._envelope("DescribeTransitGatewayMulticastDomains", xml([_md_xml(d[i]) for i in (want or d)], "transitGatewayMulticastDomains"))
+
+
+def _md_delete(store, p):
+    m = _V()._model(store); d = _md_need(m, str(p.get("TransitGatewayMulticastDomainId", "")))
+    if d["assocs"]:
+        raise _err("IncorrectState", f"{d['id']} still has subnet associations.")
+    bag(m, "tgw_multicast_domains").pop(d["id"])
+    return _V()._envelope("DeleteTransitGatewayMulticastDomain", xml(_md_xml(d) | {"state": "deleting"}, "transitGatewayMulticastDomain"))
+
+
+def _md_assoc(store, p):
+    m = _V()._model(store); d = _md_need(m, str(p.get("TransitGatewayMulticastDomainId", ""))); a = _need_tatt(m, str(p.get("TransitGatewayAttachmentId", "")))
+    if a["tgw_id"] != d["tgw"] or a["resource_type"] != "vpc":
+        raise _err("InvalidParameterValue", "The attachment must be a VPC attachment of the domain's transit gateway.")
+    subs = idx_list(p, "SubnetIds")
+    if not subs:
+        raise _err("MissingParameter", "The request must contain the parameter SubnetIds")
+    for sid in subs:
+        sn = m["subnets"].get(sid)
+        if not sn or sn["vpc_id"] != a["resource_id"] or sid not in a["subnet_ids"]:
+            raise _err("InvalidSubnetID.NotFound", f"{sid} is not a subnet of attachment {a['id']}.")
+        d["assocs"][sid] = a["id"]
+    return _V()._envelope("AssociateTransitGatewayMulticastDomain", xml({"transitGatewayMulticastDomainId": d["id"], "transitGatewayAttachmentId": a["id"], "resourceId": a["resource_id"], "resourceType": "vpc",
+                                                                           "subnets": [{"subnetId": x, "state": "associated"} for x in subs]}, "associations"))
+
+
+def _md_disassoc(store, p):
+    m = _V()._model(store); d = _md_need(m, str(p.get("TransitGatewayMulticastDomainId", ""))); subs = idx_list(p, "SubnetIds")
+    for sid in subs:
+        if sid not in d["assocs"]:
+            raise _err("InvalidAssociation.NotFound", f"{sid} is not associated with {d['id']}.")
+        d["assocs"].pop(sid)
+    aid = str(p.get("TransitGatewayAttachmentId", ""))
+    return _V()._envelope("DisassociateTransitGatewayMulticastDomain", xml({"transitGatewayMulticastDomainId": d["id"], "transitGatewayAttachmentId": aid, "subnets": [{"subnetId": x, "state": "disassociated"} for x in subs]}, "associations"))
+
+
+def _md_get_assocs(store, p):
+    m = _V()._model(store); d = _md_need(m, str(p.get("TransitGatewayMulticastDomainId", "")))
+    rows = [{"transitGatewayAttachmentId": a, "resourceId": m["tgw_attachments"][a]["resource_id"] if a in m["tgw_attachments"] else "", "resourceType": "vpc",
+             "subnet": {"subnetId": sid, "state": "associated"}} for sid, a in d["assocs"].items()]
+    return _V()._envelope("GetTransitGatewayMulticastDomainAssociations", xml(rows, "multicastDomainAssociations"))
+
+
+def _md_register(kind):
+    def op(store, p):
+        m = _V()._model(store); d = _md_need(m, str(p.get("TransitGatewayMulticastDomainId", "")))
+        grp = str(p.get("GroupIpAddress", ""))
+        try:
+            if not ipaddress.IPv4Address(grp).is_multicast:
+                raise ValueError
+        except ValueError:
+            raise _err("InvalidParameterValue", f"{grp} is not a valid IPv4 multicast group address (224.0.0.0/4).")
+        enis = idx_list(p, "NetworkInterfaceIds")
+        for e in enis:
+            if e not in m["enis"]:
+                raise _err("InvalidNetworkInterfaceID.NotFound", f"The networkInterface ID '{e}' does not exist")
+        key = "members" if kind == "members" else "sources"
+        if kind == "sources" and d["static_src"] != "enable":
+            raise _err("InvalidParameterValue", "The domain does not have static sources support enabled.")
+        d[key] += [{"group": grp, "eni": e} for e in enis if {"group": grp, "eni": e} not in d[key]]
+        return _V()._envelope("RegisterTransitGatewayMulticastGroup" + kind.capitalize(), xml({"registeredNetworkInterfaceIds": enis, "transitGatewayMulticastDomainId": d["id"], "groupIpAddress": grp}, "registeredMulticastGroup" + kind.capitalize()))
+    return op
+
+
+def _md_deregister(kind):
+    def op(store, p):
+        m = _V()._model(store); d = _md_need(m, str(p.get("TransitGatewayMulticastDomainId", ""))); grp = str(p.get("GroupIpAddress", "")); enis = idx_list(p, "NetworkInterfaceIds")
+        key = "members" if kind == "members" else "sources"
+        d[key] = [x for x in d[key] if not (x["group"] == grp and x["eni"] in enis)]
+        return _V()._envelope("DeregisterTransitGatewayMulticastGroup" + kind.capitalize(), xml({"deregisteredNetworkInterfaceIds": enis, "transitGatewayMulticastDomainId": d["id"], "groupIpAddress": grp}, "deregisteredMulticastGroup" + kind.capitalize()))
+    return op
+
+
+def _md_search(store, p):
+    m = _V()._model(store); d = _md_need(m, str(p.get("TransitGatewayMulticastDomainId", "")))
+    rows = [{"groupIpAddress": x["group"], "transitGatewayAttachmentId": next(iter(d["assocs"].values()), ""), "networkInterfaceId": x["eni"], "groupMember": True, "groupSource": False, "memberType": "static", "resourceType": "vpc"} for x in d["members"]]
+    rows += [{"groupIpAddress": x["group"], "networkInterfaceId": x["eni"], "groupMember": False, "groupSource": True, "sourceType": "static", "resourceType": "vpc"} for x in d["sources"]]
+    return _V()._envelope("SearchTransitGatewayMulticastGroups", xml(rows, "multicastGroups"))
+
+
+def _mp_xml(pol):
+    return {"transitGatewayMeteringPolicyId": pol["id"], "transitGatewayId": pol["tgw"], "middleboxAttachmentIdSet": [x for x in pol["middleboxes"]] or None, "state": "available", **tags(pol["tags"])}
+
+
+def _mp_need(m, i):
+    pol = bag(m, "tgw_metering_policies").get(i)
+    if not pol:
+        raise _err("InvalidTransitGatewayMeteringPolicyId.NotFound", f"The metering policy '{i}' does not exist")
+    return pol
+
+
+def _mp_create(store, p):
+    V = _V(); m = V._model(store); _need_tgw(m, str(p.get("TransitGatewayId", "")))
+    mb = idx_list(p, "MiddleboxAttachmentId")
+    for a in mb:
+        _need_tatt(m, a)
+    pid = V._rid("tgw-mp", 17)
+    bag(m, "tgw_metering_policies")[pid] = {"id": pid, "tgw": str(p["TransitGatewayId"]), "middleboxes": mb, "entries": [], "tags": tag_of(p, "transit-gateway-metering-policy")}
+    return V._envelope("CreateTransitGatewayMeteringPolicy", xml(_mp_xml(m["tgw_metering_policies"][pid]), "transitGatewayMeteringPolicy"))
+
+
+def _mp_describe(store, p):
+    m = _V()._model(store); d = bag(m, "tgw_metering_policies"); want = ids(p, "TransitGatewayMeteringPolicyIds")
+    for i in want:
+        _mp_need(m, i)
+    return _V()._envelope("DescribeTransitGatewayMeteringPolicies", xml([_mp_xml(d[i]) for i in (want or d)], "transitGatewayMeteringPolicySet"))
+
+
+def _mp_delete(store, p):
+    m = _V()._model(store); pol = _mp_need(m, str(p.get("TransitGatewayMeteringPolicyId", "")))
+    bag(m, "tgw_metering_policies").pop(pol["id"])
+    return _V()._envelope("DeleteTransitGatewayMeteringPolicy", xml(_mp_xml(pol) | {"state": "deleting"}, "transitGatewayMeteringPolicy"))
+
+
+def _mp_modify(store, p):
+    m = _V()._model(store); pol = _mp_need(m, str(p.get("TransitGatewayMeteringPolicyId", "")))
+    for a in idx_list(p, "AddMiddleboxAttachmentIds"):
+        _need_tatt(m, a)
+        if a not in pol["middleboxes"]: pol["middleboxes"].append(a)
+    pol["middleboxes"] = [a for a in pol["middleboxes"] if a not in idx_list(p, "RemoveMiddleboxAttachmentIds")]
+    return _V()._envelope("ModifyTransitGatewayMeteringPolicy", xml(_mp_xml(pol), "transitGatewayMeteringPolicy"))
+
+
+def _mp_entry_create(store, p):
+    m = _V()._model(store); pol = _mp_need(m, str(p.get("TransitGatewayMeteringPolicyId", "")))
+    n = int(p.get("PolicyRuleNumber", 0) or 0)
+    if not (1 <= n <= 32766):
+        raise _err("InvalidParameterValue", "PolicyRuleNumber must be between 1 and 32766.")
+    if any(e["number"] == n for e in pol["entries"]):
+        raise _err("InvalidTransitGatewayMeteringPolicyEntry.Duplicate", f"Rule {n} already exists.")
+    ent = {"number": n, "metered_account": str(p.get("MeteredAccount", "source-attachment-owner")), "rule": {k[len("PolicyRule."):]: v for k, v in p.items() if k.startswith("PolicyRule.")}}
+    pol["entries"].append(ent); pol["entries"].sort(key=lambda e: e["number"])
+    return _V()._envelope("CreateTransitGatewayMeteringPolicyEntry", xml(_mp_entry_xml(pol, ent), "transitGatewayMeteringPolicyEntry"))
+
+
+def _mp_entry_xml(pol, e):
+    r = e["rule"]
+    return {"policyRuleNumber": e["number"], "meteredAccount": e["metered_account"], "state": "available", "updatedAt": _V()._now_utc(),
+            "policyRule": {"sourceCidrBlock": r.get("SourceCidrBlock"), "destinationCidrBlock": r.get("DestinationCidrBlock"), "protocol": r.get("Protocol"),
+                           "sourcePortRange": r.get("SourcePortRange"), "destinationPortRange": r.get("DestinationPortRange")}}
+
+
+def _mp_entry_delete(store, p):
+    m = _V()._model(store); pol = _mp_need(m, str(p.get("TransitGatewayMeteringPolicyId", ""))); n = int(p.get("PolicyRuleNumber", 0) or 0)
+    ent = next((e for e in pol["entries"] if e["number"] == n), None)
+    if not ent:
+        raise _err("InvalidTransitGatewayMeteringPolicyEntry.NotFound", f"Rule {n} does not exist.")
+    pol["entries"].remove(ent)
+    return _V()._envelope("DeleteTransitGatewayMeteringPolicyEntry", xml(_mp_entry_xml(pol, ent), "transitGatewayMeteringPolicyEntry"))
+
+
+def _mp_entries(store, p):
+    m = _V()._model(store); pol = _mp_need(m, str(p.get("TransitGatewayMeteringPolicyId", "")))
+    return _V()._envelope("GetTransitGatewayMeteringPolicyEntries", xml([_mp_entry_xml(pol, e) for e in pol["entries"]], "transitGatewayMeteringPolicyEntries"))
+
+
+TGW_EXTRA_OPS = {
+    "CreateTransitGatewayPolicyTable": _pt_create, "DescribeTransitGatewayPolicyTables": _pt_describe, "DeleteTransitGatewayPolicyTable": _pt_delete,
+    "AssociateTransitGatewayPolicyTable": _pt_assoc, "DisassociateTransitGatewayPolicyTable": _pt_disassoc,
+    "GetTransitGatewayPolicyTableAssociations": _pt_get_assocs, "GetTransitGatewayPolicyTableEntries": _pt_get_entries,
+    "CreateTransitGatewayMulticastDomain": _md_create, "DescribeTransitGatewayMulticastDomains": _md_describe, "DeleteTransitGatewayMulticastDomain": _md_delete,
+    "AssociateTransitGatewayMulticastDomain": _md_assoc, "DisassociateTransitGatewayMulticastDomain": _md_disassoc,
+    "GetTransitGatewayMulticastDomainAssociations": _md_get_assocs, "SearchTransitGatewayMulticastGroups": _md_search,
+    "RegisterTransitGatewayMulticastGroupMembers": _md_register("members"), "RegisterTransitGatewayMulticastGroupSources": _md_register("sources"),
+    "DeregisterTransitGatewayMulticastGroupMembers": _md_deregister("members"), "DeregisterTransitGatewayMulticastGroupSources": _md_deregister("sources"),
+    "CreateTransitGatewayMeteringPolicy": _mp_create, "DescribeTransitGatewayMeteringPolicies": _mp_describe, "DeleteTransitGatewayMeteringPolicy": _mp_delete,
+    "ModifyTransitGatewayMeteringPolicy": _mp_modify, "CreateTransitGatewayMeteringPolicyEntry": _mp_entry_create,
+    "DeleteTransitGatewayMeteringPolicyEntry": _mp_entry_delete, "GetTransitGatewayMeteringPolicyEntries": _mp_entries,
+}
+
 OPS = dict(CVPN_OPS)
 OPS.update({"CreateTrafficMirrorTarget": _tm_target_create, "DescribeTrafficMirrorTargets": _tm_target_describe, "DeleteTrafficMirrorTarget": _tm_target_delete,
             "CreateTrafficMirrorFilter": _tm_filter_create, "DescribeTrafficMirrorFilters": _tm_filter_describe, "DeleteTrafficMirrorFilter": _tm_filter_delete,
@@ -726,3 +1002,4 @@ OPS.update({"CreateTrafficMirrorTarget": _tm_target_create, "DescribeTrafficMirr
             "ModifyTrafficMirrorSession": _tm_session_modify, "DeleteTrafficMirrorSession": _tm_session_delete})
 OPS.update({"AssociateVpcCidrBlock": _vpc_assoc, "DisassociateVpcCidrBlock": _vpc_disassoc})
 OPS.update({"CreateVpnConcentrator": _vc_create, "DescribeVpnConcentrators": _vc_describe, "DeleteVpnConcentrator": _vc_delete})
+OPS.update(TGW_EXTRA_OPS)
