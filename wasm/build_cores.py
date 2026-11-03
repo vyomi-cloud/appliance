@@ -104,6 +104,7 @@ CORES = [
     "azure_cost_core.py",                          # expansion Azure: Cost Management + Consumption (query/alerts/exports/budgets over real inventory) — vendored VERBATIM
     "azure_webapp_core.py",                         # Azure: App Service (Microsoft.Web: web apps + function apps by kind, serverfarms) — vendored VERBATIM
     "azure_eventgrid_core.py",                      # v4: Azure Event Grid event subscriptions (topic-scoped extension resource)
+    "azure_policy_core.py",                         # v4: Azure Policy rule engine (custom policyRule evaluation) — before azure_arm_core
     "azure_locks_core.py",                          # v4: Management locks (Microsoft.Authorization/locks, scoped to ANY resource)
     "k8s_yaml.py",                                  # v4: dependency-free YAML reader for Kubernetes manifests (AKS kubectl)
     "azure_aks_k8s_core.py",                        # v4: AKS Kubernetes object store + kubectl subset behind runCommand
