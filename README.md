@@ -1,6 +1,6 @@
 # Vyomi service pipeline
 
-_Updated 2026-11-03 12:29 UTC · refreshes after every pipeline run_
+_Updated 2026-11-03 13:13 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
@@ -9,7 +9,7 @@ _Updated 2026-11-03 12:29 UTC · refreshes after every pipeline run_
 - **In the gate / releasing:** Amazon Cognito Identity Provider (AWS), Amazon EC2 Container Service (AWS), Amazon Elastic Container Registry (AWS), Amazon ElastiCache (AWS), Amazon Kinesis (AWS), Amazon Route 53 (AWS), Amazon Simple Email Service (AWS), AWS CloudFormation (AWS), AWS Security Token Service (AWS), BigQuery API (GCP), Cloud DNS API (GCP), Cloud Logging API (GCP), Cloud Run Admin API (GCP), Cloud Tasks API (GCP), Workflows API (GCP), Application Insights (Azure), Container Registry (Azure), Azure Kubernetes Service (Azure), Event Hubs (Azure), Managed Identities (Azure), Azure Cache for Redis (Azure)
 - **Queued:** 41 services (P1 first, then P2)
 - **Consoles really implemented:** offline 97% · Nano 97%
-- **Hourly tests:** 283 of 285 suites passing (run 11:13 UTC)
+- **Hourly tests:** 285 of 286 suites passing (run 13:04 UTC)
 - **Upstream watch:** 61 open changes from the real clouds to adopt
 
 ## By cloud
@@ -18,7 +18,7 @@ _Updated 2026-11-03 12:29 UTC · refreshes after every pipeline run_
 |---|---|---|---|---|---|
 | AWS | 19 | 0 | 9 | 17 | 93% · 93% |
 | GCP | 18 | 0 | 6 | 12 | 100% · 100% |
-| Azure | 18 | 0 | 6 | 12 | 99% · 100% |
+| Azure | 18 | 0 | 6 | 12 | 100% · 100% |
 
 ## In progress
 
@@ -126,8 +126,8 @@ _Updated 2026-11-03 12:29 UTC · refreshes after every pipeline run_
 
 | Service | Real backend | Wired today | Console live | UI issues | Upstream | Release |
 |---|---|---|---|---|---|---|
-| Virtual Machines | — | not audited | 🧩 1/2 · ✅ 22/22 | 1 · 0 | ⚠️ 1 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+compute) | before gate |
-| Storage accounts | — | not audited | 🧩 1/2 · ✅ 22/22 | 1 · 0 | ✅ watched | before gate |
+| Virtual Machines | — | not audited | ✅ 22/22 · ✅ 22/22 | 0 · 0 | ⚠️ 1 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+compute) | before gate |
+| Storage accounts | — | not audited | ✅ 22/22 · ✅ 22/22 | 0 · 0 | ✅ watched | before gate |
 | SQL servers | — | not audited | ✅ 22/22 · ✅ 22/22 | 0 · 0 | ✅ watched | before gate |
 | Service Bus | messaging-core · in-process · + nats agent · + amqp protocol | 🟡 REST management + messaging only; native SDKs need AMQP (in PRs #35-#45, not merged) | ✅ 17/17 · ✅ 17/17 | 0 · 0 | ✅ watched | before gate |
 | Cosmos DB | — | not audited | ✅ 20/20 · ✅ 20/20 | 0 · 0 | ✅ watched | before gate |
@@ -898,20 +898,11 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 
 </details>
 
-<details><summary>Console parts not live yet — Azure (2)</summary>
-
-| Service | Console | Part | State |
-|---|---|---|---|
-| Virtual Machines | offline | create: create with defaults | unimplemented |
-| Storage accounts | offline | create: create with defaults | unimplemented |
-
-</details>
-
 <details><summary>Latest hourly test results</summary>
 
 | Suite | Result | Checks |
 |---|---|---|
-| offline-ui-crawl | ❌ | 56/58 |
+| offline-ui-crawl | ✅ | 58/58 |
 | offline-console-actions | ✅ | 375/375 |
 | offline-api-ec2-instance-detail | ✅ | 3/3 |
 | offline-api-s3-bucket-creation-date | ✅ | 3/3 |
@@ -1191,6 +1182,7 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 | offline-api-gcp-console-maintenance-routes | ✅ | 5/5 |
 | offline-api-gcp-console-tools-routes | ✅ | 16/16 |
 | offline-api-gcp-kms-importjobs-ar-tags | ✅ | 17/17 |
+| offline-api-gcp-provider-connect | ✅ | 15/15 |
 | offline-api-gcp-sql-patch-monitoring | ✅ | 10/10 |
 | offline-cli-gcp-scheduler-pubsub-gcloud | ✅ | 7/7 |
 | offline-core-aws-vpc-nacl | ✅ | 6/6 |
