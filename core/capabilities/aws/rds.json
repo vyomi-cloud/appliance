@@ -311,5 +311,47 @@
   "tests": [
    "tests/conformance/test_rds_console_v4_core.py"
   ]
+ },
+ "rds.iam-roles": {
+  "title": "IAM role association for RDS features (AddRoleToDBInstance / RemoveRoleFromDBInstance / AssociatedRoles)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "The role must exist in Vyomi's IAM and trust rds.amazonaws.com, and the feature must be one the engine supports (checked against AWS's per-engine list); associations are stored and returned like the real API. The database engines in Vyomi do not actually assume the role, so s3Import/s3Export through the role is not performed — S3 exports use Vyomi's own export-task path (rds.exports-to-s3)."
+  ],
+  "tests": [
+   "tests/conformance/test_rds_sweep_core.py",
+   "consoles/tests/smoke-aws-rdssweep.mjs"
+  ]
+ },
+ "rds.cloudwatch-alarms": {
+  "title": "CloudWatch alarms for a DB instance (create, list, delete, SNS action) in the Logs & events tab",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Real CloudWatch alarms on AWS/RDS metrics with the DBInstanceIdentifier dimension. Only DatabaseConnections, ReadIOPS and WriteIOPS carry data (see rds.monitoring); alarms on CPUUtilization, FreeStorageSpace or FreeableMemory exist but stay INSUFFICIENT_DATA because Vyomi has no virtualized compute/disk to measure."
+  ],
+  "tests": [
+   "tests/conformance/test_rds_sweep_core.py",
+   "consoles/tests/smoke-aws-rdssweep.mjs"
+  ]
+ },
+ "rds.service-quotas": {
+  "title": "Dashboard and Service quotas pages (DescribeAccountAttributes: default quotas + live usage)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Quota maxima are AWS's default RDS quotas for us-east-1 and cannot be raised (no Service Quotas increase workflow). Usage is counted from the live store (instances, allocated storage, subnet groups, snapshots, roles, proxies); the dashboard's DB clusters count is 0 because Aurora clusters aren't modeled."
+  ],
+  "tests": [
+   "tests/conformance/test_rds_sweep_core.py",
+   "consoles/tests/smoke-aws-rdssweep.mjs"
+  ]
  }
 }

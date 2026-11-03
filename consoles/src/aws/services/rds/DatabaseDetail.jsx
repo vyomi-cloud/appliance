@@ -21,6 +21,7 @@ import { ErrorAlert, fmtDate, KeyValue, NotSimulated, NotSimulatedContainer } fr
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { DeleteDatabaseModal, ModifyModal, SnapshotModal } from "./DatabaseActions.jsx";
 import { statusOf } from "./Databases.jsx";
+import { IamRolesPanel, AlarmsPanel } from "./RdsExtras.jsx";
 import * as api from "./api.js";
 
 const RANGE_OPTIONS = [
@@ -418,7 +419,7 @@ export default function DatabaseDetail({ params, query }) {
           {
             id: "logs", label: "Logs & events", content: (
               <SpaceBetween size="l">
-                <NotSimulatedContainer title="CloudWatch alarms" feature="RDS CloudWatch alarms" />
+                <AlarmsPanel id={d.DBInstanceIdentifier} />
                 <RecentEvents id={id} />
                 <LogsTab id={id} />
               </SpaceBetween>
@@ -445,6 +446,7 @@ export default function DatabaseDetail({ params, query }) {
                   ["Provisioned IOPS", "-"], ["Storage throughput", "-"], ["Storage autoscaling", "Disabled"], ["Maximum storage threshold", "-"],
                 ]} />
                 <KeyValue title="Performance Insights" columns={1} items={[["Performance Insights enabled", "Not enabled"]]} />
+                <IamRolesPanel d={d} reload={t.reload} />
               </SpaceBetween>
             ),
           },

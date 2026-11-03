@@ -17,6 +17,7 @@ import { useNotify } from "../../../common/notify.jsx";
 import { follow, href, navigate } from "../../../common/router.js";
 import { ErrorAlert, NotSimulated } from "../../kit/common.jsx";
 import { AZS, ENGINES, ENGINE_VERSIONS, ENGINE_WIRE, INSTANCE_CLASSES, isAurora } from "./engines.js";
+import { RolePicker } from "./RdsExtras.jsx";
 import * as api from "./api.js";
 
 const opt = (v) => ({ value: v, label: v });
@@ -109,6 +110,7 @@ export default function CreateDatabase() {
         BackupRetentionPeriod: f.autoBackups ? parseInt(f.backupRetention) || 7 : 0,
         DeletionProtection: String(f.deletionProtection),
       }, f.tags.filter((t) => t.key).map((t) => ({ Key: t.key, Value: t.value || "" })));
+      if (f.iamRole && f.iamFeature) await api.addRoleToDBInstance(created.DBInstanceIdentifier, f.iamRole, f.iamFeature);
       notify.success(`Creating database "${created.DBInstanceIdentifier}". It will be available for use shortly.`);
       navigate("rds", "databases", created.DBInstanceIdentifier);
     } catch (e) { setError(e); } finally { setBusy(false); }
@@ -325,13 +327,7 @@ export default function CreateDatabase() {
 
             <Container header={<Header variant="h2">IAM roles - optional</Header>}>
               <SpaceBetween size="l">
-                <FormField label="Feature">
-                  <Select selectedOption={SELECT(f.iamFeature)} onChange={({ detail }) => set("iamFeature")(detail.selectedOption.value)} placeholder="Choose a feature" options={[opt("s3Import"), opt("s3Export")]} ariaLabel="Feature" />
-                </FormField>
-                <FormField label="IAM role">
-                  <Select selectedOption={SELECT(f.iamRole)} onChange={({ detail }) => set("iamRole")(detail.selectedOption.value)} placeholder="Choose an IAM role" options={[]} ariaLabel="IAM role" />
-                </FormField>
-                <NotSimulated feature="IAM role association" note="IAM roles for RDS features (S3 import/export) aren't modeled by Vyomi." />
+                <RolePicker role={f.iamRole} feature={f.iamFeature} onRole={set("iamRole")} onFeature={set("iamFeature")} />
               </SpaceBetween>
             </Container>
 

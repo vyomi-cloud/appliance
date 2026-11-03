@@ -252,6 +252,10 @@ def _db_instance_xml(db: dict) -> str:
         "<ReadReplicaDBInstanceIdentifiers>" +
         "".join(_el("ReadReplicaDBInstanceIdentifier", r) for r in db.get("read_replica_db_instance_identifiers", [])) +
         "</ReadReplicaDBInstanceIdentifiers>",
+        "<AssociatedRoles>",
+        "".join(f"<DBInstanceRole>{_el('RoleArn', r['RoleArn'])}{_el('FeatureName', r['FeatureName'])}{_el('Status', r.get('Status', 'ACTIVE'))}</DBInstanceRole>"
+                for r in db.get("associated_roles", [])),
+        "</AssociatedRoles>",
         "</DBInstance>",
     ]
     return "".join(parts)
@@ -579,6 +583,85 @@ def _create_db_instance(store: SqlStore, params: dict, msg_store=None) -> RdsRes
     store.persist()
     _log_event(store, db_id, "db-instance", f"DB instance {db_id} created.", ["creation"], msg_store)
     return _success("CreateDBInstance", _db_instance_xml(record))
+
+
+# Engine -> features whose IAM role association RDS accepts (AWS documents these per engine).
+_ROLE_FEATURES = {
+    "postgres": {"s3Import", "s3Export"}, "aurora-postgresql": {"s3Import", "s3Export", "Lambda"},
+    "mysql": {"s3Export"}, "aurora-mysql": {"s3Import", "s3Export", "Lambda"},
+    "oracle-ee": {"S3_INTEGRATION"}, "oracle-se2": {"S3_INTEGRATION"},
+    "sqlserver-ee": {"SQLSERVER_BACKUP_RESTORE"}, "sqlserver-se": {"SQLSERVER_BACKUP_RESTORE"},
+    "sqlserver-ex": {"SQLSERVER_BACKUP_RESTORE"}, "sqlserver-web": {"SQLSERVER_BACKUP_RESTORE"},
+}
+
+
+def _add_role_to_db_instance(store: SqlStore, params: dict) -> RdsResponse:
+    db_id = str(params.get("DBInstanceIdentifier", "")).strip()
+    db = store.get_instance(db_id) if db_id else None
+    if not db:
+        raise RdsError("DBInstanceNotFound", f"DBInstance {db_id} not found.", 404)
+    role_arn, feature = str(params.get("RoleArn", "")).strip(), str(params.get("FeatureName", "")).strip()
+    if not role_arn.startswith("arn:aws:iam::") or ":role/" not in role_arn or not feature:
+        raise RdsError("InvalidParameterValue", "RoleArn must be an IAM role ARN and FeatureName is required.", 400)
+    iam = getattr(store, "iam_store", None)
+    if iam is not None:
+        name = role_arn.split(":role/", 1)[1].split("/")[-1]
+        role = iam.get_role(name)
+        if role is None:
+            raise RdsError("InvalidParameterValue", f"IAM role {role_arn} does not exist.", 400)
+        trust = json.dumps(role.get("assume_role_policy_document") or role.get("AssumeRolePolicyDocument") or "")
+        if "rds.amazonaws.com" not in trust:
+            raise RdsError("InvalidParameterValue", f"IAM role {name} cannot be assumed by rds.amazonaws.com; its trust policy must name that service principal.", 400)
+    allowed = _ROLE_FEATURES.get(str(db.get("engine", "")))
+    if allowed is not None and feature not in allowed:
+        raise RdsError("InvalidParameterValue", f"Feature {feature} is not supported by engine {db.get('engine')}. Supported: {', '.join(sorted(allowed))}.", 400)
+    roles = db.setdefault("associated_roles", [])
+    if any(r["RoleArn"] == role_arn and r["FeatureName"] == feature for r in roles):
+        raise RdsError("DBInstanceRoleAlreadyExists", f"Role {role_arn} is already associated with feature {feature}.", 400)
+    if len(roles) >= 5:
+        raise RdsError("DBInstanceRoleQuotaExceeded", "A DB instance can have at most 5 associated roles.", 400)
+    roles.append({"RoleArn": role_arn, "FeatureName": feature, "Status": "ACTIVE"})
+    store.put_instance(db_id, db)
+    store.persist()
+    return _success("AddRoleToDBInstance", "")
+
+
+def _remove_role_from_db_instance(store: SqlStore, params: dict) -> RdsResponse:
+    db_id = str(params.get("DBInstanceIdentifier", "")).strip()
+    db = store.get_instance(db_id) if db_id else None
+    if not db:
+        raise RdsError("DBInstanceNotFound", f"DBInstance {db_id} not found.", 404)
+    role_arn, feature = str(params.get("RoleArn", "")), str(params.get("FeatureName", ""))
+    roles = db.get("associated_roles", [])
+    keep = [r for r in roles if not (r["RoleArn"] == role_arn and r["FeatureName"] == feature)]
+    if len(keep) == len(roles):
+        raise RdsError("DBInstanceRoleNotFound", f"Role {role_arn} is not associated with feature {feature}.", 404)
+    db["associated_roles"] = keep
+    store.put_instance(db_id, db)
+    store.persist()
+    return _success("RemoveRoleFromDBInstance", "")
+
+
+# Default RDS service quotas (us-east-1) — the real DescribeAccountAttributes names; usage is counted from the live store.
+_QUOTAS = [("DBInstances", 40), ("DBClusters", 40), ("DBParameterGroups", 50), ("DBSecurityGroups", 25), ("DBSubnetGroups", 50),
+           ("ReservedDBInstances", 40), ("AllocatedStorage", 100000), ("DBClusterParameterGroups", 50), ("DBInstanceRoles", 5),
+           ("ManualSnapshots", 100), ("EventSubscriptions", 20), ("ManualClusterSnapshots", 100), ("OptionGroups", 20),
+           ("SubnetsPerDBSubnetGroup", 20), ("ReadReplicasPerMaster", 15), ("DBClusterRoles", 10), ("DBProxies", 20)]
+
+
+def _describe_account_attributes(store: SqlStore, params: dict) -> RdsResponse:
+    insts = [store.get_instance(i) for i in store.instance_ids()]
+    insts = [d for d in insts if d]
+    snaps = [store.get_snapshot(i) for i in store.snapshot_ids()]
+    manual = [x for x in snaps if x and str(x.get("snapshot_type", "manual")) == "manual"]
+    used = {"DBInstances": len(insts), "AllocatedStorage": sum(int(d.get("allocated_storage", 0) or 0) for d in insts),
+            "DBSubnetGroups": len(store.subnet_groups), "ManualSnapshots": len(manual),
+            "ReadReplicasPerMaster": max([len(d.get("read_replica_db_instance_identifiers", [])) for d in insts] or [0]),
+            "DBInstanceRoles": max([len(d.get("associated_roles", [])) for d in insts] or [0]),
+            "DBProxies": len(getattr(store, "db_proxies", {}) or {})}
+    inner = "<AccountQuotas>" + "".join(
+        f"<AccountQuota>{_el('AccountQuotaName', n)}{_el('Used', used.get(n, 0))}{_el('Max', m)}</AccountQuota>" for n, m in _QUOTAS) + "</AccountQuotas>"
+    return _success("DescribeAccountAttributes", inner)
 
 
 def _describe_db_instances(store: SqlStore, params: dict) -> RdsResponse:
@@ -1686,6 +1769,12 @@ def dispatch(store: SqlStore, params: dict | None = None, msg_store=None, s3_sto
             return _create_db_instance(store, params, msg_store)
         if action == "DescribeDBInstances":
             return _describe_db_instances(store, params)
+        if action == "AddRoleToDBInstance":
+            return _add_role_to_db_instance(store, params)
+        if action == "RemoveRoleFromDBInstance":
+            return _remove_role_from_db_instance(store, params)
+        if action == "DescribeAccountAttributes":
+            return _describe_account_attributes(store, params)
         if action == "ModifyDBInstance":
             return _modify_db_instance(store, params, msg_store)
         if action == "DeleteDBInstance":

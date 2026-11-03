@@ -309,3 +309,30 @@ export const setUpEc2Connection = (dbSecurityGroupId, ec2SecurityGroupId, port) 
   "IpPermissions.1.FromPort": port, "IpPermissions.1.ToPort": port,
   "IpPermissions.1.Groups.1.GroupId": ec2SecurityGroupId,
 });
+
+// ── IAM role association / account attributes / alarms (sweep AWS-09) ───────
+export const addRoleToDBInstance = (id, roleArn, feature) => call("AddRoleToDBInstance", { DBInstanceIdentifier: id, RoleArn: roleArn, FeatureName: feature });
+export const removeRoleFromDBInstance = (id, roleArn, feature) => call("RemoveRoleFromDBInstance", { DBInstanceIdentifier: id, RoleArn: roleArn, FeatureName: feature });
+export async function describeAccountQuotas() {
+  const r = await call("DescribeAccountAttributes", {});
+  return asList(r.AccountQuotas?.AccountQuota).map((q) => ({ name: q.AccountQuotaName, used: Number(q.Used), max: Number(q.Max) }));
+}
+/** IAM roles RDS can assume (trust policy names rds.amazonaws.com) — what the console's role picker lists. */
+export async function listRdsRoles() {
+  const r = await awsQuery("iam", "ListRoles", {}, { version: "2010-05-08" });
+  const roles = asList(r.ListRolesResponse?.ListRolesResult?.Roles?.Role);
+  const dec = (v) => { try { return decodeURIComponent(String(v || "")); } catch { return String(v || ""); } };
+  return roles.filter((x) => dec(x.AssumeRolePolicyDocument).includes("rds.amazonaws.com")).map((x) => ({ name: x.RoleName, arn: x.Arn }));
+}
+export async function describeDbAlarms(dbId) {
+  const r = await awsJson("monitoring", "GraniteServiceVersion20100801.DescribeAlarms", { AlarmTypes: ["MetricAlarm"] });
+  return (r.MetricAlarms || []).filter((a) => a.Namespace === "AWS/RDS" && (a.Dimensions || []).some((d) => d.Name === "DBInstanceIdentifier" && d.Value === dbId));
+}
+export const putDbAlarm = (dbId, { name, metric, threshold, comparison, statistic = "Average", period = 300, actions = [] }) =>
+  awsJson("monitoring", "GraniteServiceVersion20100801.PutMetricAlarm", { AlarmName: name, Namespace: "AWS/RDS", MetricName: metric, Statistic: statistic, Period: period,
+    EvaluationPeriods: 1, Threshold: Number(threshold), ComparisonOperator: comparison, Dimensions: [{ Name: "DBInstanceIdentifier", Value: dbId }], AlarmActions: actions });
+export const deleteAlarms = (names) => awsJson("monitoring", "GraniteServiceVersion20100801.DeleteAlarms", { AlarmNames: names });
+export async function listSnsTopicArns() {
+  const r = await awsQuery("sns", "ListTopics", {});
+  return asList(r.ListTopicsResponse?.ListTopicsResult?.Topics?.member).filter(Boolean).map((t) => t.TopicArn);
+}
