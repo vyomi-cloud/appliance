@@ -115,6 +115,7 @@ def _on_object_event(bucket, name, event, obj):
 def register(app: FastAPI) -> None:
     try:
         _gcs().on_object_event = _on_object_event
+        _gcs().refs = _refs
     except Exception:
         pass
     async def _wire(request: Request):

@@ -584,6 +584,8 @@ class AwsWireRouter:
         self.gcp_run.pubsub_store = self.gcp_msg    # Eventarc Pub/Sub-sourced triggers validate/create a real subscription
         self.gcp_run.logging_store = self.gcp_logging   # Observability "Logs" — real Cloud Logging entries per invocation
         self.gcp_run.mon_store = self.gcp_mon       # Observability "Metrics" — real Cloud Monitoring points per invocation
+        if getattr(self.gcs, "refs", None) is None:
+            self.gcs.refs = self._run_refs   # bucket CMEK keys are checked against real Cloud KMS keys
         if getattr(self.gcs, "on_object_event", None) is None:
             self.gcs.on_object_event = self._gcs_object_event   # Eventarc Cloud Storage triggers fire on real object finalize/delete
         if getattr(self.gcp_run, "refs", None) is None:   # a store already wired by its host (offline routes) keeps its own
