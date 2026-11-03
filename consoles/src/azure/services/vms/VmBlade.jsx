@@ -9,6 +9,7 @@
  * account blade uses) are backed by real ARM calls; the remaining menu items are honest
  * CapabilityContainer gaps (core/capabilities/azure/vms.json is the single source of truth for
  * which). */
+import { UserAssignedIdentities } from "../../kit/UserAssignedIdentities.jsx";
 import { useEffect, useState } from "react";
 import {
   Button, Checkbox, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, Field, Input, Link,
@@ -725,7 +726,7 @@ function Identity({ a, reload }) {
             checks that token's principal against the Key Vault's real role assignments before releasing the secret.
           </p>
         </div>
-      ) : <div style={{ marginTop: 12 }}><NotSimulated feature="User-assigned managed identities" note="This lens does not model standalone Microsoft.ManagedIdentity/userAssignedIdentities resources to attach." /></div>}
+      ) : <div style={{ marginTop: 12 }}><UserAssignedIdentities resourceId={a.id} apiVersion="2023-09-01" capabilityId="azure.managedidentity.userassigned" onChanged={reload} /></div>}
     </CapabilityContainer>
   );
 }

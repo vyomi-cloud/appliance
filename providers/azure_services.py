@@ -826,6 +826,28 @@ def _is_lro_type(namespace: str, type_chain: list[str]) -> bool:
 
 
 async def handle_arm(request: Request, rest: str) -> JSONResponse:
+    """ARM entry: user-assigned managed identity validation/resolution wraps EVERY offline engine."""
+    method = request.method.upper()
+    ua = None
+    if method in ("PUT", "PATCH"):
+        try:
+            ua = ((await _safe_json(request)).get("identity") or {}).get("userAssignedIdentities")
+        except Exception:
+            ua = None
+        from core.azure_arm_core import missing_identity_ref
+        missing = missing_identity_ref(_state, ua)
+        if missing:
+            return _error(400, "ResourceNotFound", f"The Resource '{missing}' of type 'Microsoft.ManagedIdentity/userAssignedIdentities' was not found.")
+    resp = await _handle_arm_inner(request, rest)
+    if ua and resp.status_code < 300:
+        from core.azure_arm_core import resolve_identity_refs
+        rec = _state.get(("/subscriptions/" + rest.split("?")[0].strip("/")).lower())
+        if rec is not None:
+            resolve_identity_refs(rec, _state)
+    return resp
+
+
+async def _handle_arm_inner(request: Request, rest: str) -> JSONResponse:
     """Parse `/subscriptions/{rest}` and CRUD the in-memory ARM store."""
     base = _public_base(request)
     method = request.method.upper()
@@ -925,8 +947,10 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
     # control (IAM) blade lists the assignments at its own scope plus inherited ones).
     lowc = [c.lower() for c in chain]
     for i in range(1, len(lowc) - 1):
-        if lowc[i] == "providers" and lowc[i + 1] in ("microsoft.authorization", "microsoft.security", "microsoft.resourcehealth") and i % 2 == 0:
+        if lowc[i] == "providers" and lowc[i + 1] in ("microsoft.authorization", "microsoft.security", "microsoft.resourcehealth", "microsoft.eventgrid") and i % 2 == 0:
             return await _handle_core_arm(request, method, rest, base)
+    if namespace.lower() == "microsoft.eventgrid" and chain and chain[0].lower() == "eventsubscriptions":   # RG / subscription scope
+        return await _handle_core_arm(request, method, rest, base)
 
     # Microsoft.Compute/.../vmSizes (azure.vms.size): a derived read (location- or VM-scoped),
     # not a RESOURCE_CATALOG-stored resource — served by the shared core ARM engine, same as
@@ -1015,7 +1039,9 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
         # stay here (they drive the real runtime).
         if type_chain[0].lower() in ("microsoft.documentdb", "microsoft.containerregistry", "microsoft.resources",
                                      "microsoft.apimanagement") or (
-                type_chain[0].lower() == "microsoft.sql" and type_chain[-1].lower() in ("export", "import")):
+                type_chain[0].lower() == "microsoft.sql" and type_chain[-1].lower() in ("export", "import")) or (
+                type_chain[0].lower() == "microsoft.storage" and len(type_chain) == 3
+                and type_chain[1].lower() == "storageaccounts" and type_chain[-1].lower() in ("listkeys", "regeneratekey")):
             # (Microsoft.Sql database export/import: the .bacpac goes to the appliance's OWN Blob store)
             payload = await _safe_json(request)
             out = core_arm()._arm_action(type_chain[-1].lower(), type_chain, names[-1], parent_rid,
@@ -1117,6 +1143,13 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
             _body = _json.loads(resp.body)
             _body.setdefault("properties", {})["accessPolicies"] = _state[key]["properties"].get("accessPolicies", [])
             resp = JSONResponse(status_code=resp.status_code, content=_body)
+        if full_type.lower() == "microsoft.storage/storageaccounts" and key in _state:   # route-specific endpoints (core parity)
+            from core import azure_storage_ext_core as _sx
+            _sx.apply_endpoints(_state[key])
+            import json as _json2
+            _b2 = _json2.loads(resp.body)
+            _b2.setdefault("properties", {})["primaryEndpoints"] = _state[key]["properties"].get("primaryEndpoints", {})
+            resp = JSONResponse(status_code=resp.status_code, content=_b2)
         # Data-plane provisioning hooks (real Postgres for SQL, etc.).
         _provision_on_create(full_type, _state.get(key), base)
         if lro:
@@ -1326,7 +1359,7 @@ def _core_create_block(sub: str, rg, full_type: str, key: str, payload: dict):
     this offline catalog: the core ARM engine's own checks, so they behave the same as on Nano."""
     try:
         arm = core_arm()
-        out = arm._policy_block(sub, rg, full_type, payload) or arm._quota_block(sub, full_type, key, payload)
+        out = arm._policy_block(sub, rg, full_type, payload, key.rsplit("/", 1)[-1], _state.get(key)) or arm._quota_block(sub, full_type, key, payload)
     except Exception:
         return None
     if not out:

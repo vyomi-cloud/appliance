@@ -3,6 +3,7 @@
  * Locks, Access control (IAM) and Export template are backed by native ARM / the native Cosmos
  * DB REST (SQL/Core API) data plane; everything else in the menu is an honest NotSimulated panel
  * (the spec captures them as blade menu items with no further content — "title only"). */
+import { ManagedIdentityPage } from "../../kit/UserAssignedIdentities.jsx";
 import { useEffect, useState } from "react";
 import {
   Button, Checkbox, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, Field, Input, Link,
@@ -113,6 +114,7 @@ export default function CosmosAccountBlade({ params }) {
       activitylog: () => <SharedActivityLog scope={a.id} name={a.name} />,
       iam: () => <Iam a={a} />,
       tags: () => <Tags a={a} reload={reload} />,
+      identity: () => <ManagedIdentityPage resourceId={a.id} apiVersion="2024-05-15" name={a.name} onChanged={reload} />,
       dataexplorer: () => <DataExplorer />,
       replicate: () => <Replicate a={a} reload={reload} />,
       consistency: () => <Consistency a={a} reload={reload} />,

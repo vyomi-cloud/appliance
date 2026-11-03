@@ -2,6 +2,8 @@
  * Locks, Deployments, Export template, Properties, Activity log and the resource-group-scoped
  * Cost Management pages are backed by real native ARM calls; everything else in the menu is
  * an honest NotSimulated panel. */
+import DeploymentStacks from "./DeploymentStacks.jsx";
+import ResourceEvents from "../../kit/ResourceEvents.jsx";
 import { useEffect, useState } from "react";
 import {
   Button, Checkbox, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, Field, Input, Link,
@@ -15,6 +17,7 @@ import { locationLabel } from "../../kit/arm.js";
 import BrowseGrid from "../../kit/BrowseGrid.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
 import ResourceBlade from "../../kit/ResourceBlade.jsx";
+import PolicyPanel from "../../kit/PolicyPanel.jsx";
 import { downloadCsv, Essentials, ErrorBar, Glyph, InfoBar, KV, Loading, NotSimulated, NotSimulatedContainer, fmtDate } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { remember, forget } from "../../kit/recent.js";
@@ -108,6 +111,9 @@ export default function ResourceGroupBlade({ params }) {
       advisorrecommendations: () => <SharedAdvisor scope={a.id} name={a.name} />,
       diagnosticsettings: () => <SharedDiagnosticSettings id={a.id} name={a.name} />,
       resourcevisualizer: () => <SharedResourceVisualizer resourceGroup={a.name} />,
+      deploymentstacks: () => <DeploymentStacks rg={name} />,
+      events: () => <ResourceEvents scopeId={a.id} kind="resourcegroup" title={`${name} | Events`} />,
+      policies: () => <PolicyPanel rg={name} title={`${name} | Policies`} />,
       properties: () => <Properties a={a} />,
       costanalysis: () => <CostAnalysis name={name} />,
       costalertspreview: () => <CostAlerts name={name} />,

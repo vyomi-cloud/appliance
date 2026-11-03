@@ -104,3 +104,11 @@ CATALOG += [
     {'key': 'deploymentstack', 'namespace': 'Microsoft.Resources', 'type': 'deploymentStacks', 'api_version': '2024-03-01',
      'defaults': {'properties': {'provisioningState': 'Succeeded', 'actionOnUnmanage': {'resources': 'delete'}}}},
 ]
+
+# v4 AZ-02: user-assigned managed identities — a real resource; principalId/clientId minted at create
+# (the __UUID__ tokens are expanded once per create) and RESOLVED onto every resource that attaches
+# it (azure_arm_core._resolve_user_identities).
+CATALOG += [
+    {'key': 'userassignedidentity', 'namespace': 'Microsoft.ManagedIdentity', 'type': 'userAssignedIdentities', 'api_version': '2023-01-31',
+     'defaults': {'properties': {'tenantId': '00000000-0000-0000-0000-000000000000', 'principalId': '__UUID__', 'clientId': '__UUID__'}}},
+]

@@ -79,6 +79,16 @@ try:                                              # Event Grid event subscriptio
 except ImportError:
     import azure_eventgrid_core as eventgrid_engine       # type: ignore
 
+try:                                              # Storage account keys (rotation) + route-specific endpoints
+    from core import azure_storage_ext_core as storage_ext
+except ImportError:
+    import azure_storage_ext_core as storage_ext   # type: ignore
+
+try:                                              # Azure Policy rule engine (custom policyRule evaluation)
+    from core import azure_policy_core as policy_engine
+except ImportError:
+    import azure_policy_core as policy_engine      # type: ignore
+
 try:                                              # Management locks (Microsoft.Authorization/locks, scoped to ANY resource)
     from core import azure_locks_core as locks_engine
 except ImportError:
@@ -623,6 +633,35 @@ def _guid(*parts):
 _NO_IDENTITY = {"type": "None", "principalId": None, "tenantId": None, "userAssignedIdentities": None}
 
 
+def missing_identity_ref(state: dict, ua):
+    """First ``userAssignedIdentities`` key that is not an existing managed identity, else None."""
+    for rid in (ua or {}):
+        t = state.get(str(rid).lower())
+        if not t or t.get("_type", "").lower() != "microsoft.managedidentity/userassignedidentities":
+            return rid
+    return None
+
+
+def resolve_identity_refs(rec: dict, state: dict):
+    return _resolve_user_identities(rec, state)
+
+
+def _resolve_user_identities(rec: dict, state: dict):
+    """Fill every ``identity.userAssignedIdentities[<id>]`` with the referenced managed identity's real
+    principalId/clientId. Returns the first referenced id that does NOT exist (so the PUT/PATCH can fail like
+    ARM does), else ``None``."""
+    ua = (rec.get("identity") or {}).get("userAssignedIdentities")
+    if not isinstance(ua, dict):
+        return None
+    for rid in list(ua):
+        tgt = state.get(str(rid).lower())
+        if not tgt or tgt.get("_type", "").lower() != "microsoft.managedidentity/userassignedidentities":
+            return rid
+        p = tgt.get("properties") or {}
+        ua[rid] = {"principalId": p.get("principalId"), "clientId": p.get("clientId")}
+    return None
+
+
 def _apply_identity(rec: dict, ident: dict) -> None:
     """``identity`` is a top-level sibling of ``properties`` on ANY generic-catalog resource
     (real ARM shape) — generic over every type this engine serves (ACR, APIM, VMs, …), mirroring
@@ -639,7 +678,7 @@ def _apply_identity(rec: dict, ident: dict) -> None:
         return
     itype = str(ident.get("type") or "None")
     out = {"type": itype, "principalId": None, "tenantId": None,
-           "userAssignedIdentities": ident.get("userAssignedIdentities") or cur.get("userAssignedIdentities") or {}}
+           "userAssignedIdentities": (ident["userAssignedIdentities"] if isinstance(ident.get("userAssignedIdentities"), dict) else cur.get("userAssignedIdentities")) or {}}
     if "systemassigned" in itype.lower():
         out["principalId"] = cur.get("principalId") or _guid(rec["id"], "principal")
         out["tenantId"] = _guid(rec["_sub"], "tenant")
@@ -847,6 +886,16 @@ class AzureArm:
     # through it, and anything else here can via _record_activity. Read back by the single
     # eventtypes handler in _arm, merged with the shared nano_events feed.
     def _record_activity(self, rid: str, operation_name: str, sub: str, status: str = "Succeeded"):
+        try:   # a real write/delete raises the resource group's (and subscription's) Event Grid system event
+            low = operation_name.lower()
+            if "eventgrid" not in low and (low.endswith("/write") or low.endswith("/delete")) and "/resourcegroups/" in rid.lower():
+                evt = "Microsoft.Resources.ResourceWriteSuccess" if low.endswith("/write") else "Microsoft.Resources.ResourceDeleteSuccess"
+                if status != "Succeeded":
+                    evt = "Microsoft.Resources.ResourceWriteFailure"
+                eventgrid_engine.emit_system_event(self.state, rid, evt, rid, {"operationName": operation_name, "resourceUri": rid,
+                                                                              "status": status}, sb_store=getattr(self, "sb_store", None))
+        except Exception:
+            pass
         web_engine._record_event(self.state, sub, _rg_from_id(rid), rid, operation_name, operation_name, status)
 
     def _activity_log(self, method: str, query: dict, sub: str = DEFAULT_SUBSCRIPTION):
@@ -857,6 +906,27 @@ class AzureArm:
 
     # ── public entry ──────────────────────────────────────────────────────
     def handle(self, method: str, path: str, query=None, body=None):
+        """Every ARM request. Wraps the dispatcher with user-assigned identity validation/resolution that is
+        generic over EVERY engine (generic catalog, web apps, Cognitive Services, Container Apps, App Configuration …)."""
+        m = (method or "GET").upper()
+        ua = ((body or {}).get("identity") or {}).get("userAssignedIdentities") if m in ("PUT", "PATCH") and isinstance(body, dict) else None
+        missing = missing_identity_ref(self.state, ua)
+        if missing:
+            return _err(400, "ResourceNotFound", f"The Resource '{missing}' of type 'Microsoft.ManagedIdentity/userAssignedIdentities' was not found.")
+        out = self._handle_raw(method, path, query, body)
+        if ua and isinstance(out, dict) and out.get("status", 500) < 300:
+            self._resolve_identity_at(path, out)
+        return out
+
+    def _resolve_identity_at(self, path, out):
+        rid = "/subscriptions/" + str(path).split("?")[0].split("/subscriptions/", 1)[-1].strip("/")
+        rec = self.state.get(rid.lower())
+        if rec is not None:
+            resolve_identity_refs(rec, self.state)
+            if isinstance(out.get("body"), dict) and out["body"].get("identity") is not None:
+                out["body"]["identity"] = _view(rec).get("identity")
+
+    def _handle_raw(self, method: str, path: str, query=None, body=None):
         method = (method or "GET").upper()
         query = query or {}
         # LRO poll — every operation completes immediately in the sim.
@@ -1142,7 +1212,14 @@ class AzureArm:
         # compliance of every resource in this subscription against every policyAssignment
         # (azure_arm_core._policy_block runs the SAME check at create time to actually enforce it).
         if namespace.lower() == "microsoft.policyinsights":
-            return self._policy_states(method, sub, chain)
+            return self._policy_states(method, sub, chain, rg, query)
+        # Microsoft.Authorization/policyDefinitions: built-ins (by real GUID) alongside custom ones.
+        if namespace.lower() == "microsoft.authorization" and chain and chain[0].lower() == "policydefinitions" and method == "GET" and rg is None:
+            if len(chain) == 1:
+                custom = [_view(r) for r in self.state.values() if r.get("_type", "").lower() == "microsoft.authorization/policydefinitions" and r.get("_sub") == sub]
+                return _ok({"value": list(policy_engine.BUILTINS.values()) + custom})
+            if len(chain) == 2 and chain[1].lower() in policy_engine.BUILTINS:
+                return _ok(policy_engine.BUILTINS[chain[1].lower()])
 
         # Microsoft.Billing/invoices (Billing > Invoices): derived from the real cost engine —
         # Vyomi keeps no historical cost ledger, so only the current, still-accruing period exists.
@@ -1285,6 +1362,18 @@ class AzureArm:
             rest = chain[health_marker + 3:]
             r = health_engine.health(self.state, sub, _canonical_id(sub, rg, stc, snames).lower(), bool(rest) and rest[0].lower() == "current")
             return _ok(r["body"], r["status"]) if r["status"] < 300 else _err(r["status"], r["body"]["error"]["code"], r["body"]["error"]["message"])
+        # Microsoft.EventGrid/eventSubscriptions scoped to a resource group / the subscription (system events).
+        if namespace.lower() == "microsoft.eventgrid" and chain and chain[0].lower() == "eventsubscriptions":
+            scope_rid = f"/subscriptions/{sub}/resourceGroups/{rg}" if rg is not None else f"/subscriptions/{sub}"
+            return self._eg_scoped(method, sub, scope_rid, chain[1:], payload)
+        # …and scoped to any other (non-topic) resource: storage / key vault / App Configuration / API Management / …
+        if not (namespace.lower() == "microsoft.eventgrid" and chain and chain[0].lower() == "topics"):
+            _eg_marker = eventgrid_engine.find_scoped_marker(chain)
+            if _eg_marker is not None:
+                stc, snames = [namespace], []
+                for n, token in enumerate(chain[:_eg_marker]):
+                    (stc if n % 2 == 0 else snames).append(token)
+                return self._eg_scoped(method, sub, _canonical_id(sub, rg, stc, snames), chain[_eg_marker + 3:], payload)
 
         # Microsoft.Authorization/locks: a real ARM extension resource scoped to ANY other
         # resource's own id (the chain re-enters "providers", like Event Grid's event
@@ -1486,7 +1575,11 @@ class AzureArm:
             blocked = self._acr_validate_block(type_chain, names, payload, sub, rg)
             if blocked:
                 return blocked
-            blocked = self._policy_block(sub, rg, full_type, payload)
+            if full_type.lower() == "microsoft.authorization/policydefinitions":
+                _pe = policy_engine.validate_definition(payload)
+                if _pe:
+                    return _err(400, "InvalidPolicyRule", _pe)
+            blocked = self._policy_block(sub, rg, full_type, payload, names[-1] if names else '', self.state.get(key))
             if blocked:
                 return blocked
             blocked = self._quota_block(sub, full_type, key, payload)
@@ -1535,6 +1628,9 @@ class AzureArm:
                 rec = self.state[key]
                 grant_vault_creator(self.state, rec, rid, sub, rg)
                 resp["body"] = _view(rec)
+            if full_type.lower() == "microsoft.storage/storageaccounts" and key in self.state:
+                storage_ext.apply_endpoints(self.state[key])
+                resp["body"] = _view(self.state[key])
             if full_type.lower() == "microsoft.resources/deploymentstacks":
                 # Same bounded template evaluator as a plain deployment — but a stack also
                 # tracks the resources it manages so DELETE can cascade-delete them for real
@@ -1570,7 +1666,7 @@ class AzureArm:
                 return blocked
             if full_type.lower() == "microsoft.resources/deploymentstacks":
                 stack = self.state.get(key)
-                action = ((stack or {}).get("properties") or {}).get("actionOnUnmanage", {}).get("resources", "delete")
+                action = str((query or {}).get("unmanageAction.Resources") or ((stack or {}).get("properties") or {}).get("actionOnUnmanage", {}).get("resources", "delete")).lower()
                 if stack and action != "detach":
                     for pr in (stack.get("properties") or {}).get("resources") or []:
                         pid = (pr.get("id") or "").lower()
@@ -1596,31 +1692,52 @@ class AzureArm:
     # by its real GUID (POLICY_ALLOWED_LOCATIONS_ID) — a policyAssignment referencing it denies
     # any catalog resource PUT whose location isn't in its listOfAllowedLocations parameter.
     # Custom policyRule JSON is stored (generic catalog CRUD) but not evaluated — "limited". ──
-    def _policy_block(self, sub, rg, full_type, payload):
-        ft = full_type.lower()
-        if ft in ("microsoft.authorization/policyassignments", "microsoft.authorization/policydefinitions",
-                  "microsoft.resources/resourcegroups"):
-            return None
-        loc = str((payload or {}).get("location") or "").lower()
-        if not loc or loc == "global":
-            return None
+    def _policy_assignments_for(self, sub, rg):
+        out = []
         for r in self.state.values():
             if r.get("_type", "").lower() != "microsoft.authorization/policyassignments" or r.get("_sub") != sub:
                 continue
             rec_rg = r.get("_rg")
             if rec_rg is not None and (rg is None or rec_rg.lower() != rg.lower()):
                 continue
-            props = r.get("properties") or {}
-            if str(props.get("enforcementMode", "Default")).lower() == "donotenforce":
+            if str((r.get("properties") or {}).get("enforcementMode", "Default")).lower() == "donotenforce":
                 continue
-            defid = str(props.get("policyDefinitionId") or "")
-            if POLICY_ALLOWED_LOCATIONS_ID.lower() not in defid.lower():
+            out.append(r)
+        return out
+
+    def _policy_skip(self, defn, res):
+        """Allowed-locations never applies to region-less / global resources (budgets, role records…)."""
+        loc = str(res.get("location") or "").lower()
+        if (defn or {}).get("name", "").lower() == policy_engine.ALLOWED_LOCATIONS_ID and (not loc or loc == "global"):
+            return True
+        return False
+
+    def _policy_block(self, sub, rg, full_type, payload, name="", existing=None):
+        ft = full_type.lower()
+        if ft in ("microsoft.authorization/policyassignments", "microsoft.authorization/policydefinitions",
+                  "microsoft.resources/resourcegroups") or ft.startswith("microsoft.authorization/"):
+            return None
+        pl = payload or {}
+        res = {"type": full_type, "name": name, "location": pl.get("location") or (existing or {}).get("location"),
+               "kind": pl.get("kind") or (existing or {}).get("kind"), "tags": pl.get("tags") if "tags" in pl else (existing or {}).get("tags") or {},
+               "properties": {**((existing or {}).get("properties") or {}), **(pl.get("properties") or {})},
+               "sku": pl.get("sku") or (existing or {}).get("sku"), "identity": pl.get("identity") or (existing or {}).get("identity")}
+        for r in self._policy_assignments_for(sub, rg):
+            defn = policy_engine.find_definition(self.state, sub, (r.get("properties") or {}).get("policyDefinitionId"))
+            if not defn or self._policy_skip(defn, res):
                 continue
-            allowed = [str(x).lower() for x in ((props.get("parameters") or {}).get("listOfAllowedLocations") or {}).get("value") or []]
-            if allowed and loc not in allowed:
-                return _err(403, "RequestDisallowedByPolicy",
-                            f"Resource '{loc}' location is not permitted by the policy assignment "
-                            f"'{r.get('name')}'. Allowed locations: {', '.join(allowed)}.")
+            st, eff = policy_engine.evaluate(defn, r, res)
+            if st == "NonCompliant" and eff == "deny":
+                props = r.get("properties") or {}
+                allowed = ((props.get("parameters") or {}).get("listOfAllowedLocations") or {}).get("value")
+                if defn.get("name", "").lower() == policy_engine.ALLOWED_LOCATIONS_ID and allowed:
+                    msg = (f"Resource '{str(res.get('location')).lower()}' location is not permitted by the policy assignment "
+                           f"'{r.get('name')}'. Allowed locations: {', '.join(str(x).lower() for x in allowed)}.")
+                else:
+                    msg = (f"Resource '{name}' was disallowed by policy. Policy identifiers: "
+                           f"'[{{\"policyAssignment\":{{\"name\":\"{r.get('name')}\",\"id\":\"{r.get('id')}\"}},"
+                           f"\"policyDefinition\":{{\"name\":\"{(defn.get('properties') or {}).get('displayName') or defn.get('name')}\"}}}}]'.")
+                return _err(403, "RequestDisallowedByPolicy", msg)
         return None
 
     # ── Quota enforcement (Settings > Usage + quotas): counted LIVE off real provisioned
@@ -1719,7 +1836,7 @@ class AzureArm:
     # ── Policies compliance (Microsoft.PolicyInsights/policyStates): re-runs the SAME
     # allowed-locations check _policy_block enforces at create time, over every existing
     # resource, for the Policies blade's Compliance tab. ──
-    def _policy_states(self, method, sub, chain):
+    def _policy_states(self, method, sub, chain, rg=None, query=None):
         low = [c.lower() for c in chain]
         if not low or low[0] != "policystates":
             return _err(404, "NotFound", "Only policyStates/latest/queryResults is simulated.")
@@ -1727,26 +1844,37 @@ class AzureArm:
             return _err(405, "MethodNotAllowed", "Use POST for policyStates queryResults.")
         assignments = [r for r in self.state.values()
                        if r.get("_type", "").lower() == "microsoft.authorization/policyassignments" and r.get("_sub") == sub]
+        only = str((query or {}).get("$filter") or "").lower()
         results = []
         for key, rec in self.state.items():
             rtype = rec.get("_type", "").lower()
             loc = str(rec.get("location") or "").lower()
-            # "/__event__/" rows are Activity log entries, not resources (see the DELETE
-            # cascade's own exclusion above); a resource with no/global location (budgets,
-            # role catalog records, …) isn't region-scoped, so a locations policy never
-            # applies to it — _policy_block skips enforcement on these for the same reason.
-            if (rec.get("_sub") != sub or "/__event__/" in key or not loc or loc == "global"
-                    or rtype == "microsoft.resources/resourcegroups" or rtype.startswith("microsoft.authorization")):
+            if (rec.get("_sub") != sub or "/__event__/" in key or rtype == "microsoft.resources/resourcegroups"
+                    or rtype.startswith("microsoft.authorization") or rtype.startswith("microsoft.resources/")
+                    or (rg and (rec.get("_rg") or "").lower() != rg.lower())):
                 continue
+            if only and only.split("'")[1:2] and only.split("'")[1] not in str(rec.get("id", "")).lower():
+                continue
+            res = {"type": rec.get("_type"), "name": rec.get("name"), "location": rec.get("location"), "kind": rec.get("kind"),
+                   "tags": rec.get("tags") or {}, "properties": rec.get("properties") or {}, "sku": rec.get("sku"), "identity": rec.get("identity")}
             for a in assignments:
+                arg = a.get("_rg")
+                if arg is not None and (rec.get("_rg") or "").lower() != arg.lower():
+                    continue
                 props = a.get("properties") or {}
                 defid = str(props.get("policyDefinitionId") or "")
-                compliant = True
-                if POLICY_ALLOWED_LOCATIONS_ID.lower() in defid.lower():
-                    allowed = [str(x).lower() for x in ((props.get("parameters") or {}).get("listOfAllowedLocations") or {}).get("value") or []]
-                    compliant = (not allowed) or str(rec.get("location") or "").lower() in allowed
-                results.append({"resourceId": rec.get("id"), "policyAssignmentId": a.get("id"),
-                                "policyDefinitionId": defid, "complianceState": "Compliant" if compliant else "NonCompliant"})
+                defn = policy_engine.find_definition(self.state, sub, defid)
+                if not defn or self._policy_skip(defn, res):
+                    continue
+                st, eff = policy_engine.evaluate(defn, a, res)
+                if st == "Disabled":
+                    continue
+                state = {"Compliant": "Compliant", "NonCompliant": "NonCompliant"}.get(st, "NotStarted")
+                results.append({"resourceId": rec.get("id"), "resourceType": rec.get("_type"), "resourceGroup": rec.get("_rg"),
+                                "policyAssignmentId": a.get("id"), "policyAssignmentName": a.get("name"),
+                                "policyDefinitionId": defid, "policyDefinitionName": (defn.get("properties") or {}).get("displayName") or defn.get("name"),
+                                "policyDefinitionAction": eff or None, "complianceState": state,
+                                "isCompliant": state == "Compliant"})
         return _ok({"@odata.count": len(results), "value": results})
 
     # ── Invoices (Microsoft.Billing/invoices): derived from the real cost engine — Vyomi keeps
@@ -1872,6 +2000,19 @@ class AzureArm:
         # still leaves Microsoft.Authorization/locks config_only (stored, not enforced),
         # matching their own capability registries.
         ft = full_type.lower()
+        # Deployment stack deny settings: a resource MANAGED by a stack whose denySettings.mode is
+        # denyDelete / denyWriteAndDelete cannot be deleted (and, for denyWriteAndDelete, written) directly.
+        if ft != "microsoft.resources/deploymentstacks":
+            for st in self.state.values():
+                if st.get("_type", "").lower() != "microsoft.resources/deploymentstacks":
+                    continue
+                mode = str(((st.get("properties") or {}).get("denySettings") or {}).get("mode") or "none").lower()
+                if mode in ("none", "") or (mode == "denydelete" and not for_delete):
+                    continue
+                if any(str(m.get("id") or "").lower() == rid.lower() for m in (st.get("properties") or {}).get("resources") or []):
+                    return _err(403, "DenyAssignmentAuthorizationFailed",
+                                f"The client does not have permission to perform this action on '{rid}': it is managed by deployment stack '{st.get('name')}' "
+                                f"with deny settings mode '{(st.get('properties') or {}).get('denySettings', {}).get('mode')}'.")
         if not (ft.startswith("microsoft.servicebus/") or ft == "microsoft.eventgrid/topics"):
             return None
         levels = {(r.get("properties") or {}).get("level")
@@ -2633,6 +2774,18 @@ class AzureArm:
             resp["headers"].update({"Azure-AsyncOperation": url, "Location": url, "Retry-After": "0"})
         return resp
 
+    def _eg_scoped(self, method, sub, scope_rid, rest, payload):
+        if method == "POST" and len(rest) == 1 and rest[0].lower() == "simulateevent":
+            # Simulator-internal: raise a system event ON this resource (a resource group's writes raise real ones).
+            p = payload or {}
+            if eventgrid_engine.scope_kind(scope_rid) not in eventgrid_engine.SYSTEM_EVENT_TYPES:
+                return _err(400, "InvalidRequest", "This resource type does not raise Event Grid system events in Vyomi.")
+            outs = eventgrid_engine.emit_system_event(self.state, scope_rid, str(p.get("eventType") or ""), str(p.get("subject") or scope_rid),
+                                                      p.get("data") or {}, sb_store=getattr(self, "sb_store", None))
+            return _ok({"deliveries": outs})
+        r = eventgrid_engine.scoped_dispatch(self.state, method, sub, scope_rid, rest, payload)
+        return {"status": r["status"], "headers": dict(r["headers"]), "body": r["body"]}
+
     def _eventgrid(self, method, sub, rg, chain, payload, query):
         r = eventgrid_engine.dispatch(self.state, method, sub, rg, chain, [], payload, query, base=self._base)
         # chain: ['topics', '<topic>', 'providers', 'Microsoft.EventGrid', 'eventSubscriptions', '<name>?']
@@ -2731,7 +2884,14 @@ class AzureArm:
         if isinstance(payload.get("sku"), dict):
             rec["sku"] = _merge(rec.get("sku", {}), payload["sku"])
         if isinstance(payload.get("identity"), dict):
+            _before_ident = rec.get("identity")
             _apply_identity(rec, payload["identity"])
+            _missing = _resolve_user_identities(rec, self.state)
+            if _missing:
+                rec["identity"] = _before_ident
+                if not existed:
+                    self.state.pop(key, None)
+                return _err(400, "ResourceNotFound", f"The Resource '{_missing}' of type 'Microsoft.ManagedIdentity/userAssignedIdentities' was not found.")
             if full_type.lower() == "microsoft.compute/virtualmachines":   # Run command's IMDS token subject
                 rec["identity"] = _vm_identity_view(rid, rec["identity"])
         if isinstance(payload.get("properties"), dict):
@@ -3077,6 +3237,14 @@ class AzureArm:
                 {"name": "password", "value": creds["password"]},
                 {"name": "password2", "value": creds["password2"]},
             ]})
+        if ns == "microsoft.storage" and typ == "storageaccounts" and len(type_chain) == 3 and action in ("listkeys", "regeneratekey"):
+            rec = self.state.get(parent_rid.lower()) if parent_rid else None
+            if not rec:
+                return _err(404, "ResourceNotFound", f"Storage account '{resource_name}' not found.")
+            if action == "regeneratekey":
+                r = storage_ext.regenerate(rec, payload or {})
+                return _ok(r["body"]) if r["status"] == 200 else _err(r["status"], r["body"]["error"]["code"], r["body"]["error"]["message"])
+            return _ok(storage_ext.list_keys(rec))
         if ns == "microsoft.sql" and typ == "servers" and action in ("export", "import"):
             return self._sql_import_export(action, type_chain, parent_rid, payload or {}, sub, rg)
         if ns == "microsoft.containerservice" and typ == "managedclusters":

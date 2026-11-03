@@ -2,6 +2,7 @@
  * Keys, Secrets, Access configuration, Networking (Firewalls tab), Properties and Export
  * template are backed by native ARM / Key Vault REST calls; everything else in the menu is
  * an honest NotSimulated panel. */
+import ResourceEvents from "../../kit/ResourceEvents.jsx";
 import { useEffect, useState } from "react";
 import {
   Button, Checkbox, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, Field, Input, Link,
@@ -76,6 +77,7 @@ export default function KeyVaultBlade({ params, query }) {
       overview: () => <Overview a={a} reload={reload} self={self} />,
       iam: () => <AccessControlIam a={a} />,
       tags: () => <Tags a={a} reload={reload} />,
+      events: () => <ResourceEvents scopeId={a.id} kind="keyvault" title={`${a.name} | Events`} />,
       accesspolicies: () => <AccessPolicies a={a} reload={reload} />,
       keys: () => <Keys />,
       secrets: () => <Secrets self={self} query={query} />,

@@ -19,6 +19,7 @@ export const createStorageAccount = (rg, name, body) => ARM.put(rg, name, body);
 export const updateStorageAccount = (rg, name, body) => ARM.patch(rg, name, body);
 export const deleteStorageAccount = (rg, name) => ARM.remove(rg, name);
 export const listKeys = async (rg, name) => (await ARM.action(rg, name, "listKeys")).keys || [];
+export const regenerateKey = async (rg, name, keyName) => (await ARM.action(rg, name, "regenerateKey", { keyName })).keys || [];
 
 /** The account's Blob endpoint on this Vyomi (path-style, same origin as the console). */
 export const blobEndpoint = (account) => `${location.origin}${WIRE_BASE}/${account}`;
@@ -249,10 +250,28 @@ export function toArmBody(f) {
       publicNetworkAccess: f.networkAccess === "disabled" ? "Disabled" : "Enabled",
       networkAcls: { defaultAction: f.networkAccess === "all" ? "Allow" : "Deny", bypass: "AzureServices", virtualNetworkRules: [], ipRules: [] },
       routingPreference: { routingChoice: f.routing },
-      encryption: { keySource: "Microsoft.Storage", services: { blob: { enabled: true, keyType: "Account" }, file: { enabled: true, keyType: "Account" } } },
+      encryption: f.cmk && f.keyvaulturi
+        ? { keySource: "Microsoft.Keyvault", keyvaultproperties: { keyvaulturi: f.keyvaulturi, keyname: f.keyname },
+            services: { blob: { enabled: true, keyType: "Account" }, file: { enabled: true, keyType: "Account" },
+              ...(f.cmkQueueTable ? { queue: { enabled: true, keyType: "Account" }, table: { enabled: true, keyType: "Account" } } : {}) },
+            ...(f.infraEncryption ? { requireInfrastructureEncryption: true } : {}) }
+        : { keySource: "Microsoft.Storage",
+            services: { blob: { enabled: true, keyType: "Account" }, file: { enabled: true, keyType: "Account" },
+              ...(f.cmkQueueTable ? { queue: { enabled: true, keyType: "Account" }, table: { enabled: true, keyType: "Account" } } : {}) },
+            ...(f.infraEncryption ? { requireInfrastructureEncryption: true } : {}) },
+      ...(f.immutability ? { immutableStorageWithVersioning: { enabled: true } } : {}),
     },
   };
 }
+
+/** The blobServices/default document the wizard's Data protection tab produces (written after create). */
+export const blobServiceFromWizard = (f) => ({
+  deleteRetentionPolicy: { enabled: f.softDeleteBlobs, days: Number(f.softDeleteBlobDays) || 7, ...(f.permanentDelete ? { allowPermanentDelete: true } : {}) },
+  containerDeleteRetentionPolicy: { enabled: f.softDeleteContainers, days: Number(f.softDeleteContainerDays) || 7 },
+  restorePolicy: { enabled: !!f.pitr },
+  isVersioningEnabled: !!f.versioning,
+  changeFeed: { enabled: !!f.changeFeed },
+});
 
 // ── Redundancy (Microsoft.Storage/storageAccounts sku.name) — a RA-* sku really exposes a
 // read-only secondary endpoint (core/azure_blob_core.py: `{account}-secondary`) ───────────
