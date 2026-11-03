@@ -11,6 +11,7 @@ import ExpandMoreIcon from "@mui/icons-material/esm/ExpandMore.js";
 import { useNotify } from "../../../common/notify.jsx";
 import { ErrorAlert, NotSimulated, PageHeader } from "../../kit/common.jsx";
 import * as api from "./api.js";
+import ImagePicker from "./ImagePicker.jsx";
 
 const SourceOpt = ({ title, children }) => (
   <Box>
@@ -22,6 +23,7 @@ const SourceOpt = ({ title, children }) => (
 export default function CreateJob() {
   const notify = useNotify();
   const [image, setImage] = useState(api.DEFAULT_IMAGE);
+  const [picker, setPicker] = useState(false);
   const [name, setName] = useState("");
   const [touched, setTouched] = useState(false);
   const [region, setRegion] = useState(api.getRegion());
@@ -72,7 +74,8 @@ export default function CreateJob() {
       <SourceOpt title="Container image">
         <TextField label="Container image URL" required value={image} onChange={(e) => setImage(e.target.value)} sx={{ maxWidth: 560 }} />
         <Stack direction="row" spacing={1}>
-          <NotSimulated compact feature="Select" note="Vyomi has no Artifact Registry image picker; paste an image URL directly." />
+          <Button size="small" variant="outlined" onClick={() => setPicker(true)}>Select</Button>
+          <ImagePicker open={picker} onClose={() => setPicker(false)} onPick={setImage} />
           <Button size="small" onClick={() => setImage(api.DEFAULT_IMAGE)}>Test with a sample container</Button>
         </Stack>
       </SourceOpt>

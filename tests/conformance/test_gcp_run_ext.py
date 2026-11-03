@@ -98,5 +98,27 @@ check("autoscaling target out of range -> 400", svc("as", {"annotations": {rn._A
 # job does not accept probes
 s, o = call("POST", L + "/jobs", {"template": {"template": {"containers": [{"image": "i", "startupProbe": probe}]}}}, {"jobId": "j1"})
 check("jobs reject probes", s == 400)
+# Eventarc: Cloud Storage source, end to end through the real router (object upload -> function invoked)
+from core.aws_wire_router import AwsWireRouter  # noqa: E402
+R = AwsWireRouter()
+from core import gcp_storage_core as G  # noqa: E402
+G.dispatch(R.gcs, "POST", "/storage/v1/b", {"project": "p1"}, {}, json.dumps({"name": "evt-bkt"}).encode())
+fn_ann = {"vyomi.dev/function-runtime": "Python 3.13", "vyomi.dev/function-entry-point": "handler",
+          "vyomi.dev/function-source": "def handler(event):\n    return {'seen': event.get('subject')}\n"}
+rs = R.gcp_run
+def rcall(method, path, body=None, query=None):
+    r = rn.dispatch(rs, method, path, query or {}, {}, json.dumps(body).encode() if body is not None else b"")
+    return r.status, json.loads(r.body or b"{}")
+rcall("POST", L + "/services", {"template": {"containers": [{"image": "vyomi.dev/function-source/python-3-13:aaaa"}]}, "annotations": fn_ann}, {"serviceId": "onfile"})
+s, t = rcall("POST", L + "/services/onfile/triggers", {"eventFilters": [{"attribute": "type", "value": "google.cloud.storage.object.v1.finalized"}, {"attribute": "bucket", "value": "evt-bkt"}]}, {"triggerId": "t1"})
+check("storage trigger created", s == 200 and t["eventType"].endswith("finalized") and t["bucket"] == "evt-bkt", t)
+check("trigger on a missing bucket -> 400", rcall("POST", L + "/services/onfile/triggers", {"eventFilters": [{"attribute": "type", "value": "google.cloud.storage.object.v1.finalized"}, {"attribute": "bucket", "value": "nope"}]}, {"triggerId": "t2"})[0] == 400)
+check("storage trigger needs a bucket filter", rcall("POST", L + "/services/onfile/triggers", {"eventFilters": [{"attribute": "type", "value": "google.cloud.storage.object.v1.deleted"}]}, {"triggerId": "t3"})[0] == 400)
+from core import gcp_storage_core as G  # noqa: E402
+up = G.dispatch(R.gcs, "POST", "/upload/storage/v1/b/evt-bkt/o", {"name": "a.txt", "uploadType": "media"}, {"content-type": "text/plain"}, b"hello")
+trg = rs.triggers[L[4:] + "/services/onfile/triggers/t1"]
+check("object upload fires the Eventarc trigger (function invoked)", up.status == 200 and trg["_eventCount"] == 1 and not trg["_lastError"], (up.status, trg))
+G.dispatch(R.gcs, "DELETE", "/storage/v1/b/evt-bkt/o/a.txt", {}, {}, b"")
+check("object delete does not fire a finalize trigger", trg["_eventCount"] == 1)
 print(f"\n{PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)

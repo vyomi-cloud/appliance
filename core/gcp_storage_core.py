@@ -781,6 +781,18 @@ def _record_op(store: ObjectStore, bucket: str, op_type: str) -> None:
 # a small per-second sequence number (real elapsed time, just disambiguated below
 # whole-second resolution) gives every real request its own point. See
 # gcp.storage.observability.
+def _emit_object_event(store, bucket: str, name: str, event: str, entry: dict | None = None) -> None:
+    """Tell Eventarc (Cloud Run triggers) about a real object change. `store.on_object_event` is
+    linked by the wire router; None elsewhere so a bare store is unaffected. Never raises."""
+    hook = getattr(store, "on_object_event", None)
+    if not callable(hook):
+        return
+    try:
+        hook(bucket, name, event, _object_view(bucket, name, entry) if entry else {"bucket": bucket, "name": name})
+    except Exception:   # noqa: BLE001 — an event-delivery failure must never fail the storage call
+        pass
+
+
 def _record_request_metric(store: ObjectStore, bucket: str) -> None:
     mon_store = getattr(store, "mon_store", None)
     if mon_store is None:
@@ -1332,6 +1344,7 @@ def _dispatch(store: ObjectStore, method: str, path: str,
                 _archive_entry(store, bucket, name, objs.get(name), deleted=False)
                 objs[name] = entry
                 store.mirror_put(bucket, name, media, content_type, custom)
+                _emit_object_event(store, bucket, name, "finalized", entry)
                 _gcs_resumable(store).pop(query.get("upload_id"), None)
                 store.persist()
                 return _json(200, _object_view(bucket, name, entry))
@@ -1389,6 +1402,7 @@ def _dispatch(store: ObjectStore, method: str, path: str,
                 _archive_entry(store, bucket, name, objs.get(name), deleted=False)
                 objs[name] = entry
                 store.mirror_put(bucket, name, media, content_type, custom)
+                _emit_object_event(store, bucket, name, "finalized", entry)
                 store.persist()
                 return _json(200, _object_view(bucket, name, entry))
             if method == "GET":                     # list objects
@@ -1518,6 +1532,7 @@ def _dispatch(store: ObjectStore, method: str, path: str,
                     objs.pop(name, None)
                     store.mirror_delete(bucket, name)
                     removed = True
+                    _emit_object_event(store, bucket, name, "deleted")
                 versions = _versions_map(store).get(bucket, {}).get(name)
                 if versions is not None:
                     before = len(versions)
@@ -1537,6 +1552,7 @@ def _dispatch(store: ObjectStore, method: str, path: str,
             else:
                 store.mirror_delete(bucket, name)
             objs.pop(name, None)
+            _emit_object_event(store, bucket, name, "deleted")
             store.persist()
             return GcsResponse(status=204, body=b"", media_type=None)
         return _err(400, "invalid", f"Unsupported method {method} on object")

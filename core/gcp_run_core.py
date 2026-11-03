@@ -1934,7 +1934,8 @@ def _operations(store, method, project, location, rest, verb, query):
 # time rather than accepted and silently never firing — see core/capabilities/gcp/functions.json.
 # Delivery is deliver_event alone, wired from the Pub/Sub core's on_publish hook
 # (core/aws_wire_router.py, routes/gcp_pubsub_unified.py), so a publish fires a trigger once.
-TRIGGER_EVENT_TYPES = ("google.cloud.pubsub.topic.v1.messagePublished",)
+STORAGE_EVENT_TYPES = ("google.cloud.storage.object.v1.finalized", "google.cloud.storage.object.v1.deleted")
+TRIGGER_EVENT_TYPES = ("google.cloud.pubsub.topic.v1.messagePublished",) + STORAGE_EVENT_TYPES
 _TOPIC_RE = re.compile(r"^projects/[^/]+/topics/[^/]+$")
 
 
@@ -1992,8 +1993,9 @@ def create_trigger(store, project, location, sid, query, payload, topic_exists=N
         raise _E(400, "INVALID_ARGUMENT", "eventFilters must include an entry with attribute \"type\".")
     if event_type not in TRIGGER_EVENT_TYPES:
         raise _E(400, "INVALID_ARGUMENT",
-                 "Event type %r is not simulated: Vyomi has no event source for it (only %s). "
-                 "Use a Pub/Sub-sourced custom event." % (event_type, ", ".join(TRIGGER_EVENT_TYPES)))
+                 "Event type %r is not simulated: Vyomi has no event source for it (only %s)." % (event_type, ", ".join(TRIGGER_EVENT_TYPES)))
+    if event_type in STORAGE_EVENT_TYPES:
+        return _create_storage_trigger(store, project, location, sid, tid, tfull, filters, event_type, payload, alias)
     topic = str(payload.get("pubsubTopic") or ((payload.get("transport") or {}).get("pubsub") or {}).get("topic") or "").strip()
     if not topic:
         raise _E(400, "INVALID_ARGUMENT", "pubsubTopic (or transport.pubsub.topic) is required for event type %r." % event_type)
@@ -2025,6 +2027,51 @@ def create_trigger(store, project, location, sid, query, payload, topic_exists=N
             trig["_subscription"] = sub_full
     store.triggers[tfull] = trig
     return trigger_view(trig, alias)
+
+
+def _create_storage_trigger(store, project, location, sid, tid, tfull, filters, event_type, payload, alias):
+    bucket = next((f.get("value") for f in filters if isinstance(f, dict) and f.get("attribute") == "bucket"), "")
+    if not bucket:
+        raise _E(400, "INVALID_ARGUMENT", "A Cloud Storage trigger needs an eventFilters entry with attribute \"bucket\".")
+    if _ref(store, "bucket", bucket) is False:
+        raise _E(400, "INVALID_ARGUMENT", "Cloud Storage bucket '%s' does not exist." % bucket)
+    now = _ts()
+    trig = {"name": tfull, "uid": _uid(store, "trg", tfull), "createTime": now, "updateTime": now,
+            "eventFilters": _copy(filters), "eventType": event_type, "bucket": bucket,
+            "serviceAccount": payload.get("serviceAccount") or "%s-compute@developer.gserviceaccount.com" % project_number(project),
+            "destination": {"service": sid, "region": location, "cloudRun": {"service": sid, "region": location, "path": "/"}},
+            "labels": payload.get("labels") or {}, "state": "ACTIVE",
+            "etag": '"%s"' % _h("trg", tfull, now)[:16],
+            "_eventCount": 0, "_lastEventTime": "", "_lastError": ""}
+    store.triggers[tfull] = trig
+    return trigger_view(trig, alias)
+
+
+def deliver_storage_event(store, bucket, name, event, obj, log_fn=None):
+    """A real object finalize/delete in `bucket` -> one CloudEvent request to every Cloud Storage
+    trigger bound to it (same never-raises contract as deliver_event)."""
+    etype = "google.cloud.storage.object.v1.%s" % event
+    for full, trg in list(store.triggers.items()):
+        if trg.get("eventType") != etype or trg.get("bucket") != bucket:
+            continue
+        parts = full.split("/")
+        project, location, sid, tid = parts[1], parts[3], parts[5], parts[7]
+        ev = {"specversion": "1.0", "type": etype, "id": "%s-%s" % (_h("evt", full, name)[:8], trg.get("_eventCount", 0) + 1),
+              "source": "//storage.googleapis.com/projects/_/buckets/%s" % bucket, "subject": "objects/%s" % name,
+              "time": _ts(), "data": obj}
+        error = ""
+        try:
+            out = invoke_service(store, project, location, sid, ev, internal=True)
+            if out["status"] >= 500:
+                error = str(out["body"].get("error", "")) if isinstance(out["body"], dict) else "delivery failed"
+        except Exception as e:   # noqa: BLE001
+            error = getattr(e, "message", str(e))
+        trg["_eventCount"] = trg.get("_eventCount", 0) + (0 if error else 1)
+        trg["_lastEventTime"] = _ts()
+        trg["_lastError"] = error
+        if log_fn:
+            log_fn("service", project, location, sid, "Eventarc trigger %s %s for gs://%s/%s" % (tid, "failed: " + error if error else "delivered %s" % etype, bucket, name),
+                   "ERROR" if error else "INFO")
 
 
 def delete_trigger(store, project, location, sid, tid, alias=False):
