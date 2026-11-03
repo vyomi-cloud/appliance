@@ -108,5 +108,29 @@
    "The .bacpac is a zip carrying the database as a replayable SQL script (model.sql) plus Origin.json, not SqlPackage's DACPAC model, so only simulator-written bacpacs import; the storage key / SAS and administrator credentials are recorded but not checked. The operation completes synchronously (no importExportOperationResults polling) and the console's Export button is not wired yet."
   ],
   "tests": ["tests/conformance/test_db_exports_local.py", "tests/conformance/test_no_cloud_egress.py"]
+ },
+ "azure.sql.connectivity": {
+  "title": "Server connection policy (connectionPolicies/default)",
+  "level": { "nano": "config_only", "offline": "config_only" },
+  "limitations": ["The connection policy (Default / Proxy / Redirect) is stored on the server as a real connectionPolicies/default resource and returned to the SDK / az CLI. Vyomi's SQL front door is always a single endpoint, so Proxy and Redirect behave identically."],
+  "tests": ["tests/conformance/test_azure_sql_ext_core.py"]
+ },
+ "azure.sql.datamasking": {
+  "title": "Dynamic Data Masking (dataMaskingPolicies/Default and its rules)",
+  "level": { "nano": "config_only", "offline": "config_only" },
+  "limitations": ["Masking policy state, exempt principals and per-column masking rules round-trip as real ARM resources. The Vyomi query engine (Postgres / PGlite) does not rewrite result sets, so no data is actually masked."],
+  "tests": ["tests/conformance/test_azure_sql_ext_core.py"]
+ },
+ "azure.sql.ledger": {
+  "title": "Ledger (isLedgerOn at create)",
+  "level": { "nano": "config_only", "offline": "config_only" },
+  "limitations": ["isLedgerOn is stored on the database exactly as set at create time. There is no tamper-evident ledger, digest generation or verification — tables behave as ordinary tables."],
+  "tests": ["tests/conformance/test_azure_sql_ext_core.py"]
+ },
+ "azure.sql.maintenance": {
+  "title": "Maintenance window and event history",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["The configured maintenance window (maintenanceConfigurationId) is the database's real property; the event history is always empty because Vyomi never performs platform maintenance."],
+  "tests": ["tests/conformance/test_azure_sql_ext_core.py"]
  }
 }

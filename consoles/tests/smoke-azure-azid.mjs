@@ -30,6 +30,7 @@ const errors = [];
 page.on("pageerror", (e) => errors.push(e.message));
 page.on("console", (m) => m.type() === "error" && !/status of (400|403|404|409)/.test(m.text()) && errors.push(m.text()));
 const shot = (name) => page.screenshot({ path: `${OUT}/${name}.png`, fullPage: true });
+const until = async (fn, ms = 15000) => { const t0 = Date.now(); for (;;) { try { const v = await fn(); if (v) return v; } catch { /* retry */ } if (Date.now() - t0 > ms) return false; await page.waitForTimeout(300); } };
 const noNS = async (label, allow = []) => {
   const left = (await page.locator("[data-vyomi-not-simulated]").evaluateAll((els) => els.map((e) => e.getAttribute("data-vyomi-not-simulated") || ""))).filter((t) => !allow.some((a) => t.includes(a)));
   check(`${label}: no unexpected Not-simulated panel`, left.length === 0, left.join(" | ").slice(0, 160));
@@ -119,16 +120,18 @@ try {
   await noNS("Access keys");
   // networking
   await page.goto(UI + `#/storage/${RG}s/${SA}/networking`);
+  const SAP = `/resourceGroups/${RG}s/providers/Microsoft.Storage/storageAccounts/${SA}`;
+  const props = async () => json(await arm("GET", SAP)).properties || {};
   await page.getByLabel("Resource instance resource ID").fill("/subscriptions/x/resourceGroups/y/providers/Microsoft.Sql/servers/z");
   await page.getByRole("button", { name: "Add resource instance" }).click();
-  await page.waitForTimeout(800);
+  await until(async () => (await props()).networkAcls?.resourceAccessRules?.length === 1);
   await page.getByRole("tab", { name: "Advanced" }).click();
-  await page.getByLabel("Publish Internet routing endpoints").click();
-  await page.waitForTimeout(1500);
-  await page.getByRole("tab", { name: "Advanced" }).click().catch(() => {});
   await page.getByLabel("Custom domain name").fill("cdn.example.com");
   await page.getByRole("button", { name: "Save custom domain" }).click();
-  await page.waitForTimeout(800);
+  await until(async () => (await props()).customDomain?.name === "cdn.example.com");
+  await page.getByRole("tab", { name: "Advanced" }).click().catch(() => {});
+  await page.getByLabel("Publish Internet routing endpoints").click();
+  await until(async () => !!(await props()).primaryEndpoints?.internetEndpoints);
   const net = json(await arm("GET", `/resourceGroups/${RG}s/providers/Microsoft.Storage/storageAccounts/${SA}`)).properties || {};
   check("resource instance + internet endpoint + custom domain persisted", net.networkAcls?.resourceAccessRules?.length === 1 && !!net.primaryEndpoints?.internetEndpoints && net.customDomain?.name === "cdn.example.com", `${net.networkAcls?.resourceAccessRules?.length} ${JSON.stringify(net.primaryEndpoints)} ${JSON.stringify(net.customDomain)}`);
   await page.getByRole("tab", { name: "Public access" }).click();
@@ -198,6 +201,37 @@ try {
   await page.getByText("No deployment stacks.").waitFor({ timeout: 15000 });
   check("deleting the stack cascades the managed resource", (await arm("GET", stor)).status === 404);
   await noNS("Deployment stacks");
+
+  // ── SQL: connection policy, Dynamic Data Masking, Ledger, Maintenance ───────────────────
+  const SQLS = `vyazsql${n}`, SQLD = `vyazdb${n}`;
+  const sqlv = armv("2023-08-01");
+  await sqlv("PUT", `/resourceGroups/${RG}/providers/Microsoft.Sql/servers/${SQLS}`, { location: "eastus", properties: { administratorLogin: "sqladmin", administratorLoginPassword: "Xx123456789!" } });
+  await sqlv("PUT", `/resourceGroups/${RG}/providers/Microsoft.Sql/servers/${SQLS}/databases/${SQLD}`, { location: "eastus", properties: { isLedgerOn: true } });
+  await page.goto(UI + `#/sql/servers/${RG}/${SQLS}/networking`);
+  await page.getByRole("tab", { name: "Connectivity" }).click();
+  await page.getByLabel("Connection policy", { exact: true }).selectOption("Redirect");
+  await page.waitForTimeout(800);
+  check("UI connection policy persisted over ARM", json(await sqlv("GET", `/resourceGroups/${RG}/providers/Microsoft.Sql/servers/${SQLS}/connectionPolicies/default`)).properties?.connectionType === "Redirect");
+  await noNS("SQL Connectivity", ["Virtual network", "Private endpoint"]);
+  await page.goto(UI + `#/sql/${RG}/${SQLS}/${SQLD}/datamasking`);
+  await page.getByLabel("Masking table").fill("Customers");
+  await page.getByLabel("Masking column").fill("Email");
+  await page.getByLabel("Masking function").selectOption("Email");
+  await page.getByRole("button", { name: "Add masking rule" }).click();
+  await page.getByRole("cell", { name: "Customers_Email", exact: true }).waitFor({ timeout: 10000 });
+  const rl = json(await sqlv("GET", `/resourceGroups/${RG}/providers/Microsoft.Sql/servers/${SQLS}/databases/${SQLD}/dataMaskingPolicies/Default/rules`)).value || [];
+  check("UI masking rule visible over native ARM", rl.length === 1 && rl[0].properties?.maskingFunction === "Email");
+  await noNS("SQL Dynamic Data Masking");
+  await page.goto(UI + `#/sql/${RG}/${SQLS}/${SQLD}/ledger`);
+  await page.getByText("Yes (all tables are ledger tables)").waitFor({ timeout: 10000 });
+  await noNS("SQL Ledger");
+  await page.goto(UI + `#/sql/${RG}/${SQLS}/${SQLD}/maintenance`);
+  await page.getByText("No maintenance events", { exact: false }).waitFor({ timeout: 10000 });
+  await noNS("SQL Maintenance");
+  await page.goto(UI + "#/sql/create");
+  await page.getByRole("tab", { name: "Security", exact: true }).click();
+  await page.getByLabel("Configure ledger database").check();
+  await noNS("SQL create Security", ["Defender", "Transparent data encryption", "Private endpoint", "Customer-managed key"]);
 
   // @@GROUPS@@
 } catch (e) {

@@ -1,8 +1,9 @@
 /* Create SQL Database: Basics, Networking, Security, Additional settings, Tags, Review +
  * create → one native ARM PUT for the database (+ the server, if new) plus the native
  * firewall-rule PUTs for the two "allow access" switches. */
+import { putConnectionPolicy } from "./SqlSecurityPages.jsx";
 import { useState } from "react";
-import { Button, Input, Link, Radio, RadioGroup, Select, Table, TableBody, TableCell, TableHeader, TableHeaderCell, TableRow } from "@fluentui/react-components";
+import { Button, Checkbox, Input, Link, Radio, RadioGroup, Select, Table, TableBody, TableCell, TableHeader, TableHeaderCell, TableRow } from "@fluentui/react-components";
 import { Delete20Regular } from "@fluentui/react-icons";
 import { useNotify } from "../../../common/notify.jsx";
 import { navigate } from "../../../common/router.js";
@@ -59,7 +60,7 @@ export default function CreateSqlDatabase() {
     elasticPool: "No", workload: "Production",
     compute: DEFAULT_COMPUTE_STORAGE,
     backupRedundancy: "Geo-redundant backup storage",
-    allowAzureServices: "No", addClientIp: "No", connectionPolicy: "Default",
+    allowAzureServices: "No", addClientIp: "No", connectionPolicy: "Default", ledger: false, serverIdentity: "None", enclave: false,
     dataSource: "None", collation: COLLATIONS[0], maintenanceWindow: MAINTENANCE_WINDOWS[0],
     tags: [{ name: "", value: "" }],
   });
@@ -154,7 +155,13 @@ export default function CreateSqlDatabase() {
         </FormRow>
       </FormSection>
       <NotSimulatedContainer title="Private endpoints" feature="Private endpoints for a SQL database" />
-      <NotSimulatedContainer title="Connection policy" feature="Server connection policy (Default / Proxy / Redirect)" />
+      <FormSection title="Connection policy">
+        <FormRow label="Connection policy">
+          <RadioGroup value={f.connectionPolicy} onChange={set("connectionPolicy")} aria-label="Connection policy">
+            <Radio value="Default" label="Default" /><Radio value="Proxy" label="Proxy" /><Radio value="Redirect" label="Redirect" />
+          </RadioGroup>
+        </FormRow>
+      </FormSection>
       <FormSection title="Encrypted connections">
         <FormRow label="Minimum TLS version"><Input readOnly value="TLS 1.2" aria-label="Minimum TLS version" /></FormRow>
       </FormSection>
@@ -164,10 +171,20 @@ export default function CreateSqlDatabase() {
   const security = (
     <>
       <NotSimulatedContainer title="Microsoft Defender for SQL" feature="Enable Microsoft Defender for SQL" />
-      <NotSimulatedContainer title="Ledger" feature="Database ledger" />
-      <NotSimulatedContainer title="Server identity" feature="Server managed identity assignment at create time" note="A database-level identity can be configured after creation from Identity." />
+      <FormSection title="Ledger">
+        <FormRow label="Configure ledger database"><Checkbox checked={f.ledger} onChange={(_, d) => setF((x) => ({ ...x, ledger: !!d.checked }))} aria-label="Configure ledger database" /></FormRow>
+      </FormSection>
+      <FormSection title="Server identity">
+        <FormRow label="Server identity">
+          <RadioGroup value={f.serverIdentity} onChange={set("serverIdentity")} aria-label="Server identity">
+            <Radio value="None" label="Not configured" /><Radio value="SystemAssigned" label="System assigned managed identity" />
+          </RadioGroup>
+        </FormRow>
+      </FormSection>
       <NotSimulatedContainer title="Transparent data encryption key management" feature="Customer-managed key configuration at create time" note="Toggle TDE after creation from Transparent data encryption." />
-      <NotSimulatedContainer title="Always Encrypted" feature="Enable secure enclaves" />
+      <FormSection title="Always Encrypted">
+        <FormRow label="Enable secure enclaves"><Checkbox checked={f.enclave} onChange={(_, d) => setF((x) => ({ ...x, enclave: !!d.checked }))} aria-label="Enable secure enclaves" /></FormRow>
+      </FormSection>
     </>
   );
 
@@ -217,6 +234,8 @@ export default function CreateSqlDatabase() {
         collation: f.collation,
         requestedBackupStorageRedundancy: BACKUP_TO_CODE[f.backupRedundancy],
         maintenanceConfigurationId: f.maintenanceWindow === MAINTENANCE_WINDOWS[0] ? "SQL_Default" : "SQL_CustomWindow",
+        ...(f.ledger ? { isLedgerOn: true } : {}),
+        ...(f.enclave ? { preferredEnclaveType: "VBS" } : {}),
         creationDate: new Date().toISOString(),
         status: "Online",
       },
@@ -237,10 +256,10 @@ export default function CreateSqlDatabase() {
         {dl([["Subscription", sub.displayName || sub.id], ["Resource group", rg || "--"], ["Region", locationLabel(b.location)], ["Database name", f.name || "--"],
           ["Server", f.server || "--"], ["Compute + storage", `${f.compute.tier} ${f.compute.serverless ? "Serverless" : "Provisioned"}, ${f.compute.maxVCores} vCores`], ["Backup storage redundancy", f.backupRedundancy]])}
         <h3>Networking</h3>
-        {dl([["Allow Azure services and resources to access this server", f.allowAzureServices], ["Private endpoint", "None"]])}
+        {dl([["Allow Azure services and resources to access this server", f.allowAzureServices], ["Private endpoint", "None"], ["Connection policy", f.connectionPolicy]])}
         <h3>Security</h3>
         {dl([["Transparent data encryption (Server level)", "On"], ["Database level customer-managed key", "None"], ["Database level user assigned managed identity", "None"],
-          ["Advanced data security", "Not now"], ["Always Encrypted with secure enclaves", "OFF"], ["Sql Ledger(Database)", "Not configured"], ["Digest Storage", "None"]])}
+          ["Advanced data security", "Not now"], ["Always Encrypted with secure enclaves", f.enclave ? "ON" : "OFF"], ["Server identity", f.serverIdentity === "SystemAssigned" ? "System assigned" : "None"], ["Sql Ledger(Database)", f.ledger ? "Configured" : "Not configured"], ["Digest Storage", "None"]])}
         <h3>Additional settings</h3>
         {dl([["Use existing data", f.dataSource], ["Collation", f.collation]])}
         <h3>Tags</h3>
@@ -252,6 +271,8 @@ export default function CreateSqlDatabase() {
   const onCreate = async () => {
     try {
       await api.createDatabase(rg, f.server, f.name, body());
+      if (f.connectionPolicy !== "Default") await putConnectionPolicy(`/subscriptions/${sub.id}/resourceGroups/${rg}/providers/Microsoft.Sql/servers/${f.server}`, f.connectionPolicy);
+      if (f.serverIdentity === "SystemAssigned") await api.updateServer(rg, f.server, { identity: { type: "SystemAssigned" } });
       if (f.allowAzureServices === "Yes") await api.putFirewallRule(rg, f.server, "AllowAllWindowsAzureIps", { properties: { startIpAddress: "0.0.0.0", endIpAddress: "0.0.0.0" } });
       if (f.addClientIp === "Yes") await api.putFirewallRule(rg, f.server, `ClientIPAddress-${f.name}`, { properties: { startIpAddress: "203.0.113.4", endIpAddress: "203.0.113.4" } });
       if (f.dataSource === "Sample") { await api.ensureDataPlane(f.server, f.name); await api.loadSampleData(f.server, f.name); }

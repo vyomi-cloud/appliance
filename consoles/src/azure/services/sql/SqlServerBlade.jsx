@@ -2,6 +2,7 @@
  * network access + firewall rules), which is what "Set server firewall" on a database and the
  * ui-spec's sql-server-networking page both need. Firewall rules are a real nested ARM
  * resource (Microsoft.Sql/servers/firewallRules); private access / connectivity are honest gaps. */
+import { ConnectionPolicy } from "./SqlSecurityPages.jsx";
 import { useEffect, useState } from "react";
 import { Button, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, Field, Input, Link, Radio, RadioGroup, Tab, TabList, ToolbarButton } from "@fluentui/react-components";
 import { Add20Regular, ArrowClockwise20Regular, Save20Regular } from "@fluentui/react-icons";
@@ -127,7 +128,7 @@ function Networking({ a }) {
         </div>
       )}
       {tab === "private" && <NotSimulatedContainer title="Private endpoint connections" feature="Private endpoint connections for a SQL server" />}
-      {tab === "connectivity" && <NotSimulatedContainer title="Connectivity" feature="Connection policy (Default / Proxy / Redirect) and minimum TLS version enforcement" />}
+      {tab === "connectivity" && <ConnectionPolicy serverId={a.id} />}
 
       <AddFirewallRuleDialog open={!!add} client={add === "client"} onClose={() => setAdd(false)}
         onCreate={async (name, start, end) => { await api.putFirewallRule(a.resourceGroup, a.name, name, { properties: { startIpAddress: start, endIpAddress: end } }); rules.reload(); }} />
