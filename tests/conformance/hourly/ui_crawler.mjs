@@ -411,6 +411,7 @@ async function createWithDefaults(page, drain, cloud, backToList, service) {
   }
   await backToList();
   const rowsAfter = await rowCount(page);
+  if (process.env.DEBUG_CRAWL) console.log(`[debug] ${service}: rows ${rowsBefore} -> ${rowsAfter}`);
   if (rowsAfter <= rowsBefore) f.push({ type: "CREATE_NO_ROW", detail: "create with defaults added no resource to the list" });
   f.push(...(await placeholderFindings(page, "after create")));
   if (rowsAfter > rowsBefore) {
