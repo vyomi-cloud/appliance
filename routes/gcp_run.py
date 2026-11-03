@@ -48,15 +48,26 @@ for _k in _KEYS + ("seq",):
 _STORE = SpaceRunStore()
 
 
+def _gcs():
+    """The GCS store the native storage wire serves (the unified ingress router's)."""
+    from core import wire_ingress
+    return wire_ingress.appliance_router().gcs
+
+
 def _refs(kind, *args):
-    """Cross-service existence for a revision template (Cloud SQL / KMS / GCS); None = can't tell."""
+    """Cross-service existence for a revision template (KMS / GCS); None = can't tell. Runs under the
+    GCP request provider, because the run routes themselves sit on the default (aws-scoped) one."""
     try:
-        from core import appliance_stores as aps
-        if kind == "kms":
-            from core import gcp_kms_core as kms
-            return kms.dispatch(aps.gcp_kms_store(), "GET", "/v1/" + args[0], {}, {}, b"").status == 200
-        if kind == "bucket":
-            return bool(aps.gcs_store().bucket_exists(args[0]))
+        tok = ctx.REQUEST_PROVIDER.set("gcp")
+        try:
+            if kind == "kms":
+                from core import appliance_stores as aps
+                from core import gcp_kms_core as kms
+                return kms.dispatch(aps.gcp_kms_store(), "GET", "/v1/" + args[0], {}, {}, b"").status == 200
+            if kind == "bucket":
+                return bool(_gcs().bucket_exists(args[0]))
+        finally:
+            ctx.REQUEST_PROVIDER.reset(tok)
     except Exception:
         return None
     return None
@@ -96,7 +107,16 @@ def _topic_exists(topic_full):
         return ps._store().get_topic(topic_full) is not None
 
 
+def _on_object_event(bucket, name, event, obj):
+    """A real GCS object finalize/delete -> Eventarc Cloud Storage triggers (see core/gcp_run_core)."""
+    run.deliver_storage_event(_STORE, bucket, name, event, obj, log_fn=_log_fn)
+
+
 def register(app: FastAPI) -> None:
+    try:
+        _gcs().on_object_event = _on_object_event
+    except Exception:
+        pass
     async def _wire(request: Request):
         r = run.dispatch(_STORE, request.method, request.url.path, dict(request.query_params),
                          dict(request.headers), await request.body(), log_fn=_log_fn, topic_exists=_topic_exists)
