@@ -78,24 +78,52 @@ export function CapabilityBadge({ id }) {
   );
 }
 
-/** A console section whose header carries the capability badge; becomes the honest
- *  Not-simulated panel when the registry says so. */
+/** Gray tab attached to the bottom-right border of a capability container (replaces the
+ *  header pill). Click for the limitations popover. */
+export function CapabilityTab({ id }) {
+  const c = capability(id);
+  if (!c || c.level === "full" || c.level === "not_simulated") return null;
+  return (
+    <span data-vyomi-capability={c.level} data-vyomi-capability-id={id} data-vyomi-capability-tab=""
+      style={{ position: "absolute", right: 20, top: "100%", zIndex: 1, display: "inline-flex", alignItems: "center", height: 26,
+        padding: "0 12px", marginTop: -1, background: "#e9ebed", border: "1px solid #c6c6cd", borderTop: "1px solid #e9ebed",
+        borderRadius: "0 0 8px 8px", fontSize: 12, lineHeight: "16px", color: "#414d5c" }}>
+      <Popover
+        size="large"
+        triggerType="custom"
+        header={`${c.title}: ${LABEL[c.level]}`}
+        content={
+          <SpaceBetween size="xs">
+            <Box variant="p">{DEFAULT_NOTE[c.level]}</Box>
+            {c.limitations?.length > 0 && <ul style={{ margin: 0, paddingLeft: 18 }}>{c.limitations.map((l) => <li key={l}>{l}</li>)}</ul>}
+            <Box variant="small" color="text-body-secondary">Applies to this Vyomi environment ({SUBSTRATE}).</Box>
+          </SpaceBetween>
+        }
+      >
+        <button type="button" aria-label={`${LABEL[c.level]} — details`}
+          style={{ background: "none", border: 0, padding: 0, cursor: "pointer", font: "inherit", color: "inherit" }}>
+          {LABEL[c.level]}
+        </button>
+      </Popover>
+    </span>
+  );
+}
+
+/** A console section that carries the capability tab on its bottom-right border; becomes the
+ *  honest Not-simulated panel when the registry says so. */
 export function CapabilityContainer({ id, title, description, actions, counter, children }) {
   const c = capability(id);
   if (!c || c.level === "not_simulated") {
     return <NotSimulatedContainer title={title} note={c?.limitations?.join(" ")} />;
   }
+  const tabbed = c.level === "limited" || c.level === "config_only";
   return (
-    <Container header={
-      <Header variant="h2" counter={counter} description={description} actions={actions}>
-        <SpaceBetween direction="horizontal" size="xs" alignItems="center">
-          <span>{title}</span>
-          <CapabilityBadge id={id} />
-        </SpaceBetween>
-      </Header>
-    }>
-      {children}
-    </Container>
+    <div style={{ position: "relative", marginBottom: tabbed ? 26 : 0 }}>
+      <Container header={<Header variant="h2" counter={counter} description={description} actions={actions}>{title}</Header>}>
+        {children}
+      </Container>
+      <CapabilityTab id={id} />
+    </div>
   );
 }
 
