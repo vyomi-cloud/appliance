@@ -4,6 +4,7 @@ Rules with event patterns + SQS targets; PutEvents matches each event against ev
 rule and delivers matching events to the rule's target queues (EventBridge→SQS).
 """
 import json
+import time
 
 try:
     from core.messaging_store import InMemoryMessagingStore
@@ -235,6 +236,30 @@ def run(store=None):
     evs = lg.dispatch(ls2, "Logs_20140328.GetLogEvents", {"logGroupName": "/ev/logs",
                       "logStreamName": sts[0]["logStreamName"]}).body["events"]
     _check("CloudWatch Logs target receives the event", len(evs) == 1 and json.loads(evs[0]["message"])["source"] == "kl.app")
+
+    # Archives + replay
+    call("CreateArchive", {"ArchiveName": "arc", "EventSourceArn": f"arn:aws:events:us-east-1:{s.account_id}:event-bus/default",
+                           "EventPattern": json.dumps({"source": ["arc.app"]})})
+    call("PutRule", {"Name": "ra", "EventPattern": json.dumps({"source": ["arc.app"]})})
+    call("PutTargets", {"Rule": "ra", "Targets": [{"Id": "ta", "Arn": qarn}]})
+    drain()
+    for i in range(2):
+        call("PutEvents", {"Entries": [{"Source": "arc.app", "DetailType": "x", "Detail": json.dumps({"i": i})}]})
+    call("PutEvents", {"Entries": [{"Source": "other.app", "DetailType": "x", "Detail": "{}"}]})
+    _check("live events delivered", drain() == 2)
+    d = call("DescribeArchive", {"ArchiveName": "arc"}).body
+    _check("archive stores only matching events", d["EventCount"] == 2 and d["State"] == "ENABLED" and "events" not in d)
+    _check("ListArchives", [a["ArchiveName"] for a in call("ListArchives", {}).body["Archives"]] == ["arc"])
+    rp = call("StartReplay", {"ReplayName": "rp", "EventSourceArn": d["ArchiveArn"], "EventStartTime": 0,
+                              "EventEndTime": time.time() + 5,
+                              "Destination": {"Arn": f"arn:aws:events:us-east-1:{s.account_id}:event-bus/default"}})
+    _check("replay re-delivers archived events", rp.body["State"] == "COMPLETED" and drain() == 2)
+    _check("replay is not re-archived", call("DescribeArchive", {"ArchiveName": "arc"}).body["EventCount"] == 2)
+    _check("DescribeReplay/ListReplays", call("DescribeReplay", {"ReplayName": "rp"}).body["State"] == "COMPLETED"
+           and len(call("ListReplays", {}).body["Replays"]) == 1)
+    call("DeleteArchive", {"ArchiveName": "arc"})
+    _check("DeleteArchive", call("ListArchives", {}).body["Archives"] == [])
+    call("RemoveTargets", {"Rule": "ra", "Ids": ["ta"]}); call("DeleteRule", {"Name": "ra"})
 
     _check("ListRules",call("ListRules", {}).body["Rules"][0]["Name"] == "r1")
     _check("ListTargetsByRule", call("ListTargetsByRule", {"Rule": "r1"}).body["Targets"][0]["Id"] == "t1")

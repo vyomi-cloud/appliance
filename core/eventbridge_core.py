@@ -500,7 +500,7 @@ def _deliver_api_destination(store, arn, body_str, tgt=None):
             raise RuntimeError(f"API destination returned {r.status}")
 
 
-def _put_events(store, body, lambda_store=None, depth=0):
+def _put_events(store, body, lambda_store=None, depth=0, replay_name=None):
     entries_out = []
     for entry in body.get("Entries") or []:
         source = entry.get("Source", "")
@@ -518,6 +518,10 @@ def _put_events(store, body, lambda_store=None, depth=0):
         envelope = {"version": "0", "id": event_id, "detail-type": detail_type, "source": source,
                     "account": store.account_id, "time": _now_iso(), "region": REGION,
                     "resources": resources, "detail": detail}
+        if replay_name:
+            envelope["replay-name"] = replay_name
+        else:
+            _archive_event(store, bus, event_obj, envelope)
 
         def send_sqs(arn, body_str):
             queue = store.get_queue_by_arn(arn)
@@ -543,7 +547,7 @@ def _put_events(store, body, lambda_store=None, depth=0):
                 _put_events(store, {"Entries": [{
                     "Source": ev2.get("source", source), "DetailType": ev2.get("detail-type", detail_type),
                     "Detail": json.dumps(ev2.get("detail", {})), "Resources": ev2.get("resources", []),
-                    "EventBusName": arn.rsplit("/", 1)[-1]}]}, lambda_store, depth + 1)
+                    "EventBusName": arn.rsplit("/", 1)[-1]}]}, lambda_store, depth + 1, replay_name)
             elif ":api-destination/" in arn:
                 _deliver_api_destination(store, arn, body_str, tgt)
             else:  # Step Functions StartExecution with the event as input
@@ -564,6 +568,119 @@ def _put_events(store, body, lambda_store=None, depth=0):
     return EventsResponse(body={"FailedEntryCount": 0, "Entries": entries_out})
 
 
+def _bus_name(arn_or_name):
+    return str(arn_or_name or "default").rsplit("/", 1)[-1] or "default"
+
+
+def _archive_event(store, bus, event_obj, envelope):
+    """Store the event in every ENABLED archive whose source bus is `bus` and whose pattern matches."""
+    for a in _store_map(store, "event_archives").values():
+        if a["State"] != "ENABLED" or _bus_name(a["EventSourceArn"]) != bus:
+            continue
+        if a.get("EventPattern") and not _match_pattern(json.loads(a["EventPattern"]), event_obj):
+            continue
+        a["events"].append({"time": time.time(), "envelope": dict(envelope)})
+        a["EventCount"] = len(a["events"])
+        a["SizeBytes"] = a.get("SizeBytes", 0) + len(json.dumps(envelope))
+
+
+def _archive_view(a):
+    return {k: v for k, v in a.items() if k != "events"}
+
+
+def _create_archive(store, body):
+    name = str(body.get("ArchiveName", "")).strip()
+    src = body.get("EventSourceArn")
+    if not name or not src:
+        raise _E("ValidationException", "ArchiveName and EventSourceArn are required.")
+    arch = _store_map(store, "event_archives")
+    if name in arch:
+        raise _E("ResourceAlreadyExistsException", f"Archive {name} already exists.")
+    pat = body.get("EventPattern") or ""
+    arn = f"arn:aws:events:{REGION}:{store.account_id}:archive/{name}"
+    now = time.time()
+    arch[name] = {"ArchiveName": name, "ArchiveArn": arn, "EventSourceArn": src, "State": "ENABLED",
+                  "Description": body.get("Description", ""), "EventPattern": pat,
+                  "RetentionDays": body.get("RetentionDays", 0), "SizeBytes": 0, "EventCount": 0,
+                  "CreationTime": now, "events": []}
+    store.persist()
+    return EventsResponse(body={"ArchiveArn": arn, "State": "ENABLED", "CreationTime": now})
+
+
+def _get_archive(store, name):
+    a = _store_map(store, "event_archives").get(str(name or ""))
+    if not a:
+        raise _E("ResourceNotFoundException", f"Archive {name} does not exist.")
+    return a
+
+
+def _describe_archive(store, body):
+    return EventsResponse(body=_archive_view(_get_archive(store, body.get("ArchiveName"))))
+
+
+def _list_archives(store, body):
+    pre = str(body.get("NamePrefix") or "")
+    src = body.get("EventSourceArn")
+    return EventsResponse(body={"Archives": [
+        _archive_view(a) for a in _store_map(store, "event_archives").values()
+        if a["ArchiveName"].startswith(pre) and (not src or a["EventSourceArn"] == src)]})
+
+
+def _delete_archive(store, body):
+    _get_archive(store, body.get("ArchiveName"))
+    del _store_map(store, "event_archives")[body["ArchiveName"]]
+    store.persist()
+    return EventsResponse(body={})
+
+
+def _start_replay(store, body, lambda_store=None):
+    name = str(body.get("ReplayName", "")).strip()
+    if not name or not body.get("EventSourceArn") or not body.get("Destination"):
+        raise _E("ValidationException", "ReplayName, EventSourceArn, Destination, EventStartTime and EventEndTime are required.")
+    reps = _store_map(store, "event_replays")
+    if name in reps:
+        raise _E("ResourceAlreadyExistsException", f"Replay {name} already exists.")
+    arch = next((a for a in _store_map(store, "event_archives").values()
+                 if a["ArchiveArn"] == body["EventSourceArn"]), None)
+    if arch is None:
+        raise _E("ResourceNotFoundException", f"Archive {body['EventSourceArn']} does not exist.")
+    t0 = float(body.get("EventStartTime") or 0)
+    t1 = float(body.get("EventEndTime") or time.time() + 1)
+    dest_bus = _bus_name((body["Destination"] or {}).get("Arn"))
+    start = time.time()
+    n = 0
+    for ev in list(arch["events"]):
+        if not (t0 <= ev["time"] <= t1):
+            continue
+        e = ev["envelope"]
+        _put_events(store, {"Entries": [{
+            "Source": e.get("source", ""), "DetailType": e.get("detail-type", ""),
+            "Detail": json.dumps(e.get("detail", {})), "Resources": e.get("resources", []),
+            "EventBusName": dest_bus}]}, lambda_store, replay_name=name)
+        n += 1
+    arn = f"arn:aws:events:{REGION}:{store.account_id}:replay/{name}"
+    reps[name] = {"ReplayName": name, "ReplayArn": arn, "State": "COMPLETED", "EventSourceArn": arch["ArchiveArn"],
+                  "Destination": body["Destination"], "Description": body.get("Description", ""),
+                  "EventStartTime": t0, "EventEndTime": t1, "ReplayStartTime": start,
+                  "ReplayEndTime": time.time(), "EventLastReplayedTime": time.time() if n else None,
+                  "StateReason": "Replay completed"}
+    store.persist()
+    return EventsResponse(body={"ReplayArn": arn, "State": "COMPLETED", "ReplayStartTime": start})
+
+
+def _describe_replay(store, body):
+    r = _store_map(store, "event_replays").get(str(body.get("ReplayName", "")))
+    if not r:
+        raise _E("ResourceNotFoundException", f"Replay {body.get('ReplayName')} does not exist.")
+    return EventsResponse(body=dict(r))
+
+
+def _list_replays(store, body):
+    pre = str(body.get("NamePrefix") or "")
+    return EventsResponse(body={"Replays": [r for r in _store_map(store, "event_replays").values()
+                                            if r["ReplayName"].startswith(pre)]})
+
+
 class _E(Exception):
     def __init__(self, code, message):
         super().__init__(message)
@@ -579,6 +696,9 @@ _OPS = {
     "DeleteConnection": _delete_connection, "CreateApiDestination": _create_api_destination,
     "DescribeApiDestination": _describe_api_destination, "ListApiDestinations": _list_api_destinations,
     "DeleteApiDestination": _delete_api_destination,
+    "CreateArchive": _create_archive, "DescribeArchive": _describe_archive,
+    "ListArchives": _list_archives, "DeleteArchive": _delete_archive,
+    "StartReplay": _start_replay, "DescribeReplay": _describe_replay, "ListReplays": _list_replays,
 }
 
 
@@ -592,8 +712,8 @@ def dispatch(store: MessagingStore, target: str, payload: dict | None = None, la
         return EventsResponse(status=400, body={"__type": "UnknownOperationException",
                                                 "message": f"Unknown operation {action}."})
     try:
-        if action == "PutEvents":
-            return _put_events(store, body, lambda_store)
+        if action in ("PutEvents", "StartReplay"):
+            return op(store, body, lambda_store)
         return op(store, body)
     except _E as e:
         return EventsResponse(status=400, body={"__type": e.code, "message": e.message})
