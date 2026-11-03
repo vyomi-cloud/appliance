@@ -7,3 +7,8 @@ services:
       CLOUDLEARN_TIER_ENFORCE: "0"
       # Test boots must not count as installs in the traction numbers.
       VYOMI_NO_TELEMETRY: "1"
+    # The runner's docker.sock is root:docker (gid varies per image) and the
+    # workflows don't export VYOMI_DOCKER_GID, so the non-root app user got
+    # "permission denied" -> EC2/GCE/VM launches failed with DockerUnavailable.
+    # CI-only: run as root so the bind-mounted socket is usable.
+    user: "0:0"
