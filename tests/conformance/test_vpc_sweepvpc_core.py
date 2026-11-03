@@ -303,7 +303,52 @@ def network_firewall():
     _check("everything deletes cleanly in dependency order", f("ListFirewalls", {})["Firewalls"] == [] and f("ListRuleGroups", {})["RuleGroups"] == [])
 
 
+def dns_firewall():
+    from core import dnsfw_core as df
+    e = Env(); c = e.call
+    vpc_id = e.id(c({"Action": "CreateVpc", "CidrBlock": "10.78.0.0/16"}), "vpcId")
+
+    def f(action, body, ok=True):
+        r = df.dispatch(e.s, "Route53Resolver." + action, body)
+        if ok and r.status != 200:
+            raise AssertionError((action, r.body))
+        if not ok and r.status == 200:
+            raise AssertionError(("expected failure", action, r.body))
+        return r.body
+
+    dl = f("CreateFirewallDomainList", {"Name": "bad-domains"})["FirewallDomainList"]["Id"]
+    al = f("CreateFirewallDomainList", {"Name": "ok-domains"})["FirewallDomainList"]["Id"]
+    f("UpdateFirewallDomains", {"FirewallDomainListId": dl, "Operation": "ADD", "Domains": ["bad.example.com", "*.evil.org"]})
+    f("UpdateFirewallDomains", {"FirewallDomainListId": dl, "Operation": "ADD", "Domains": ["not a domain"]}, ok=False)
+    f("UpdateFirewallDomains", {"FirewallDomainListId": dl, "Operation": "REMOVE", "Domains": ["absent.example.com"]}, ok=False)
+    f("UpdateFirewallDomains", {"FirewallDomainListId": al, "Operation": "REPLACE", "Domains": ["good.evil.org"]})
+    _check("domain list ops validated (syntax, REMOVE of absent domain)", f("ListFirewallDomains", {"FirewallDomainListId": dl})["Domains"] == ["*.evil.org", "bad.example.com"])
+    g = f("CreateFirewallRuleGroup", {"Name": "grp"})["FirewallRuleGroup"]["Id"]
+    f("CreateFirewallRule", {"FirewallRuleGroupId": g, "FirewallDomainListId": dl, "Priority": 20, "Action": "BLOCK", "Name": "blk"}, ok=False)
+    f("CreateFirewallRule", {"FirewallRuleGroupId": g, "FirewallDomainListId": dl, "Priority": 20, "Action": "BLOCK", "BlockResponse": "OVERRIDE", "Name": "blk"}, ok=False)
+    f("CreateFirewallRule", {"FirewallRuleGroupId": g, "FirewallDomainListId": dl, "Priority": 20, "Action": "BLOCK", "BlockResponse": "NXDOMAIN", "Name": "blk"})
+    f("CreateFirewallRule", {"FirewallRuleGroupId": g, "FirewallDomainListId": al, "Priority": 10, "Action": "ALLOW", "Name": "allow-good"})
+    f("CreateFirewallRule", {"FirewallRuleGroupId": g, "FirewallDomainListId": "rslvr-fdl-nope", "Priority": 30, "Action": "ALLOW", "Name": "x"}, ok=False)
+    _check("rule validation: BLOCK needs BlockResponse (OVERRIDE needs a domain), unknown list rejected", True)
+    f("DeleteFirewallDomainList", {"FirewallDomainListId": dl}, ok=False)
+    f("AssociateFirewallRuleGroup", {"FirewallRuleGroupId": g, "VpcId": "vpc-nope", "Priority": 101, "Name": "a"}, ok=False)
+    f("AssociateFirewallRuleGroup", {"FirewallRuleGroupId": g, "VpcId": vpc_id, "Priority": 50, "Name": "a"}, ok=False)
+    a = f("AssociateFirewallRuleGroup", {"FirewallRuleGroupId": g, "VpcId": vpc_id, "Priority": 101, "Name": "assoc"})["FirewallRuleGroupAssociation"]["Id"]
+    f("AssociateFirewallRuleGroup", {"FirewallRuleGroupId": g, "VpcId": vpc_id, "Priority": 102, "Name": "again"}, ok=False)
+    _check("association needs an existing VPC and priority 100-9900; double association rejected", True)
+    d = lambda q, t="A": df.resolve_decision(e.s, vpc_id, q, t)
+    _check("enforcement evaluator: exact + wildcard block, allow-list, unmatched passes",
+           d("bad.example.com.")["action"] == "BLOCK" and d("x.evil.org")["action"] == "BLOCK" and d("good.evil.org")["action"] == "ALLOW" and d("fine.org")["action"] is None)
+    _check("a rule's list takes precedence by priority (allow-good beats *.evil.org)", d("good.evil.org")["rule"] == "allow-good")
+    f("DeleteFirewallRuleGroup", {"FirewallRuleGroupId": g}, ok=False)
+    f("DisassociateFirewallRuleGroup", {"FirewallRuleGroupAssociationId": a})
+    _check("disassociated VPC is no longer filtered", d("bad.example.com")["action"] is None)
+    f("DeleteFirewallRuleGroup", {"FirewallRuleGroupId": g})
+    f("DeleteFirewallDomainList", {"FirewallDomainListId": dl}); f("DeleteFirewallDomainList", {"FirewallDomainListId": al})
+
+
 def main():
+    dns_firewall()
     network_firewall()
     tgw_extras()
     traffic_mirroring()

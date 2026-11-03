@@ -17,6 +17,7 @@ import Settings from "./Settings.jsx";
 import * as Honest from "./HonestPages.jsx";
 import * as Vpn from "./VpnPages.jsx";
 import * as Nfw from "./NetworkFirewallPages.jsx";
+import * as Dns from "./DnsFirewallPages.jsx";
 
 const crumb = (text, ...path) => ({ text, href: `#/vpc/${path.join("/")}` });
 const base = [crumb("VPC", "")];
@@ -157,8 +158,8 @@ export default {
     { pattern: "/vpc/lattice-target-groups", component: Honest.LatticeTargetGroups, crumbs: () => [crumb("VPC", ""), crumb("Target groups", "lattice-target-groups")] },
     { pattern: "/vpc/domain-verifications", component: Honest.DomainVerifications, crumbs: () => [crumb("VPC", ""), crumb("Domain verifications", "domain-verifications")] },
 
-    { pattern: "/vpc/dns-firewall-rule-groups", component: Honest.DnsFirewallRuleGroups, crumbs: () => [crumb("VPC", ""), crumb("Rule groups", "dns-firewall-rule-groups")] },
-    { pattern: "/vpc/dns-firewall-domain-lists", component: Honest.DnsFirewallDomainLists, crumbs: () => [crumb("VPC", ""), crumb("Domain lists", "dns-firewall-domain-lists")] },
+    { pattern: "/vpc/dns-firewall-rule-groups", component: Dns.DnsFirewallRuleGroups, crumbs: () => [crumb("VPC", ""), crumb("Rule groups", "dns-firewall-rule-groups")] },
+    { pattern: "/vpc/dns-firewall-domain-lists", component: Dns.DnsFirewallDomainLists, crumbs: () => [crumb("VPC", ""), crumb("Domain lists", "dns-firewall-domain-lists")] },
 
     { pattern: "/vpc/firewalls", component: Nfw.Firewalls, crumbs: () => [crumb("VPC", ""), crumb("Firewalls", "firewalls")] },
     { pattern: "/vpc/firewall-policies", component: Nfw.FirewallPolicies, crumbs: () => [crumb("VPC", ""), crumb("Firewall policies", "firewall-policies")] },

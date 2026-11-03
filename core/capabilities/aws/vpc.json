@@ -356,13 +356,16 @@
   ]
  },
  "aws.vpc.dns-firewall": {
-  "title": "Route 53 Resolver DNS Firewall (rule groups, domain lists)",
+  "title": "Route 53 Resolver DNS Firewall (rule groups, rules, domain lists, VPC associations)",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Route 53 Resolver DNS Firewall is a separate AWS service surfaced under the VPC nav \u2014 not simulated."
+   "Control plane is real with Route 53 Resolver validation: domain syntax (wildcards only as a leading *.), ADD/REMOVE/REPLACE semantics, rule priorities, BLOCK needs BlockResponse (OVERRIDE needs a CNAME domain), association priority 100-9900 unique per VPC, existing-VPC and in-use ConflictException checks. A DNS decision evaluator (associations then rules by priority, wildcard + exact match) is implemented and tested, but the simulator has no Route 53 Resolver data plane, so no live DNS query is filtered and no query logs are produced."
+  ],
+  "tests": [
+   "tests/conformance/test_vpc_sweepvpc_core.py"
   ]
  },
  "aws.vpc.network-firewall": {

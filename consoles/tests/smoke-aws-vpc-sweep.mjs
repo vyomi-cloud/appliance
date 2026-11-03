@@ -242,6 +242,51 @@ check("Firewall endpoints tab shows the vpce endpoint", (await body()).includes(
 await shot("firewalls");
 check("in-use rule group cannot be deleted over the wire", (await nfw("DeleteRuleGroup", { RuleGroupArn: rgArn })).json.__type === "InvalidOperationException");
 
+// ── DNS Firewall (JSON 1.1) ──
+const r53 = (op, p = {}) => page.evaluate(async ([u, op, p]) => {
+  const r = await fetch(u + "/", { method: "POST", headers: { authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/route53resolver/aws4_request, SignedHeaders=host, Signature=0", "content-type": "application/x-amz-json-1.1", "x-amz-target": `Route53Resolver.${op}` }, body: JSON.stringify(p) });
+  const t = await r.text(); return { status: r.status, json: t ? JSON.parse(t) : {} };
+}, [WIRE, op, p]);
+await go("#/vpc/dns-firewall-domain-lists", "DNS Firewall domain lists");
+check("DNS Firewall domain lists: real page, no Not-simulated badge", (await badges()) === 0);
+await page.getByRole("button", { name: "Add domain list" }).click();
+await page.getByRole("textbox", { name: "Name", exact: true }).fill(`dl-${N}`);
+await page.getByRole("textbox", { name: /Domains/ }).fill("bad domain!");
+await page.getByRole("button", { name: "Create", exact: true }).click();
+await page.waitForTimeout(1500);
+check("invalid domain rejected in the modal", (await body()).toLowerCase().includes("not a valid domain"));
+await page.getByRole("textbox", { name: /Domains/ }).fill(`blocked-${N}.example.com *.evil-${N}.org`);
+await page.getByRole("button", { name: "Create", exact: true }).click();
+await page.waitForTimeout(1800);
+const dls = await r53("ListFirewallDomainLists");
+const dlId = dls.json.FirewallDomainLists?.find((l) => l.Name === `dl-${N}`)?.Id;
+check("UI-created domain list holds both domains on the wire", dlId && (await r53("ListFirewallDomains", { FirewallDomainListId: dlId })).json.Domains?.length === 2);
+await go("#/vpc/dns-firewall-rule-groups", "DNS Firewall rule groups");
+await page.getByRole("button", { name: "Add rule group" }).click();
+await page.getByRole("textbox", { name: "Name", exact: true }).fill(`rg-${N}`);
+await page.getByRole("button", { name: "Create", exact: true }).click();
+await page.waitForTimeout(1500);
+const frg = (await r53("ListFirewallRuleGroups")).json.FirewallRuleGroups?.find((g) => g.Name === `rg-${N}`)?.Id;
+check("UI-created DNS rule group exists", !!frg);
+await page.locator("tr", { hasText: `rg-${N}` }).locator("input[type=checkbox]").check({ force: true });
+await page.getByRole("button", { name: "Add rule", exact: true }).click();
+await page.getByRole("textbox", { name: "Rule name" }).fill("blk");
+await pick("Domain list", `dl-${N}`);
+await page.getByRole("textbox", { name: /Priority/ }).fill("5");
+await page.getByRole("button", { name: "Confirm" }).click();
+await page.waitForTimeout(1500);
+check("UI-added BLOCK rule (NXDOMAIN) exists on the wire", (await r53("ListFirewallRules", { FirewallRuleGroupId: frg })).json.FirewallRules?.[0]?.BlockResponse === "NXDOMAIN");
+await page.getByRole("button", { name: "Associate VPC" }).click();
+await page.getByRole("textbox", { name: "Association name" }).fill("assoc");
+await pick("VPC", vpc);
+await page.getByRole("button", { name: "Confirm" }).click();
+await page.waitForTimeout(1500);
+check("UI VPC association exists on the wire", (await r53("ListFirewallRuleGroupAssociations", { VpcId: vpc })).json.FirewallRuleGroupAssociations?.length === 1);
+await page.getByRole("tab", { name: "Associated VPCs" }).click();
+await page.waitForTimeout(600);
+check("Associated VPCs tab lists the VPC", (await body()).includes(vpc));
+await shot("dns-firewall");
+
 // ── honest pages stay honest ──
 for (const [hash, heading] of [["container-associations", "Container associations"], ["service-networks", "Service networks"]]) {
   await go(`#/vpc/${hash}`, heading);

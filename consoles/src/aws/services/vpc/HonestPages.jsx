@@ -28,8 +28,6 @@ export const LatticeTargetGroups = page("Target groups", "aws.vpc.lattice");
 export const DomainVerifications = page("Domain verifications", "aws.vpc.lattice");
 
 // DNS firewall
-export const DnsFirewallRuleGroups = page("Rule groups", "aws.vpc.dns-firewall");
-export const DnsFirewallDomainLists = page("Domain lists", "aws.vpc.dns-firewall");
 
 // Network Firewall
 export const ContainerAssociations = page("Container associations", "aws.vpc.network-firewall-containers");

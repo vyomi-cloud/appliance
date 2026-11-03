@@ -53,8 +53,8 @@
   "lattice-target-groups": { "route": "#/vpc/lattice-target-groups", "honest_page": true },
   "domain-verifications": { "route": "#/vpc/domain-verifications", "honest_page": true },
 
-  "dns-firewall-rule-groups": { "route": "#/vpc/dns-firewall-rule-groups", "honest_page": true },
-  "dns-firewall-domain-lists": { "route": "#/vpc/dns-firewall-domain-lists", "honest_page": true },
+  "dns-firewall-rule-groups": { "route": "#/vpc/dns-firewall-rule-groups" },
+  "dns-firewall-domain-lists": { "route": "#/vpc/dns-firewall-domain-lists" },
 
   "firewalls": { "route": "#/vpc/firewalls" },
   "firewall-policies": { "route": "#/vpc/firewall-policies" },

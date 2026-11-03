@@ -63,8 +63,6 @@
       "resource-gateways",
       "lattice-target-groups",
       "domain-verifications",
-      "dns-firewall-rule-groups",
-      "dns-firewall-domain-lists",
       "container-associations",
       "verified-access-instances",
       "verified-access-trust-providers",
