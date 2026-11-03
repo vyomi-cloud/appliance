@@ -366,13 +366,16 @@
   ]
  },
  "aws.vpc.network-firewall": {
-  "title": "AWS Network Firewall (firewalls, policies, rule groups, TLS inspection, resource groups, endpoint/container associations)",
+  "title": "AWS Network Firewall (firewalls, policies, stateless/stateful/Suricata/domain rule groups, TLS inspection, resource policies, logging, endpoint associations)",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "AWS Network Firewall is a separate AWS service surfaced under the VPC nav \u2014 not simulated."
+   "Control plane is real with AWS validation: subnet/VPC mappings must exist (one subnet per AZ), protection flags, UpdateToken optimistic concurrency, typed rule-group references, rule-group capacity, Suricata rule strings (sid required/unique), stateless priorities/match attributes, domain lists, resource policy JSON, logging destinations. A rule evaluator (stateless priority order + default actions, then stateful 5-tuple/Suricata/domain allow-deny) is implemented and tested, but the firewall endpoint is NOT inserted into netsim routing: no real or simulated traffic is inspected, no alert/flow/TLS logs are delivered and TLS inspection does not decrypt anything. Container associations are not simulated."
+  ],
+  "tests": [
+   "tests/conformance/test_vpc_sweepvpc_core.py"
   ]
  },
  "aws.vpc.vpn": {
@@ -455,6 +458,16 @@
   "tests": [
    "tests/conformance/test_vpc_netsim_core.py",
    "tests/netsim/test_aws.py"
+  ]
+ },
+ "aws.vpc.network-firewall-containers": {
+  "title": "Network Firewall container associations",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Container associations attach Network Firewall to container platforms (EKS/ECS) through firewall endpoints on real node networking; Vyomi has no inline firewall data path for them."
   ]
  }
 }

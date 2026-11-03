@@ -16,6 +16,7 @@ import { VerifiedAccessInstances, VerifiedAccessTrustProviders, VerifiedAccessGr
 import Settings from "./Settings.jsx";
 import * as Honest from "./HonestPages.jsx";
 import * as Vpn from "./VpnPages.jsx";
+import * as Nfw from "./NetworkFirewallPages.jsx";
 
 const crumb = (text, ...path) => ({ text, href: `#/vpc/${path.join("/")}` });
 const base = [crumb("VPC", "")];
@@ -159,12 +160,12 @@ export default {
     { pattern: "/vpc/dns-firewall-rule-groups", component: Honest.DnsFirewallRuleGroups, crumbs: () => [crumb("VPC", ""), crumb("Rule groups", "dns-firewall-rule-groups")] },
     { pattern: "/vpc/dns-firewall-domain-lists", component: Honest.DnsFirewallDomainLists, crumbs: () => [crumb("VPC", ""), crumb("Domain lists", "dns-firewall-domain-lists")] },
 
-    { pattern: "/vpc/firewalls", component: Honest.Firewalls, crumbs: () => [crumb("VPC", ""), crumb("Firewalls", "firewalls")] },
-    { pattern: "/vpc/firewall-policies", component: Honest.FirewallPolicies, crumbs: () => [crumb("VPC", ""), crumb("Firewall policies", "firewall-policies")] },
-    { pattern: "/vpc/network-firewall-rule-groups", component: Honest.NetworkFirewallRuleGroups, crumbs: () => [crumb("VPC", ""), crumb("Network Firewall rule groups", "network-firewall-rule-groups")] },
-    { pattern: "/vpc/tls-inspection-configurations", component: Honest.TlsInspectionConfigurations, crumbs: () => [crumb("VPC", ""), crumb("TLS inspection configurations", "tls-inspection-configurations")] },
-    { pattern: "/vpc/network-firewall-resource-groups", component: Honest.NetworkFirewallResourceGroups, crumbs: () => [crumb("VPC", ""), crumb("Network Firewall resource groups", "network-firewall-resource-groups")] },
-    { pattern: "/vpc/vpc-endpoint-associations", component: Honest.VpcEndpointAssociations, crumbs: () => [crumb("VPC", ""), crumb("VPC endpoint associations", "vpc-endpoint-associations")] },
+    { pattern: "/vpc/firewalls", component: Nfw.Firewalls, crumbs: () => [crumb("VPC", ""), crumb("Firewalls", "firewalls")] },
+    { pattern: "/vpc/firewall-policies", component: Nfw.FirewallPolicies, crumbs: () => [crumb("VPC", ""), crumb("Firewall policies", "firewall-policies")] },
+    { pattern: "/vpc/network-firewall-rule-groups", component: Nfw.NetworkFirewallRuleGroups, crumbs: () => [crumb("VPC", ""), crumb("Network Firewall rule groups", "network-firewall-rule-groups")] },
+    { pattern: "/vpc/tls-inspection-configurations", component: Nfw.TlsInspectionConfigurations, crumbs: () => [crumb("VPC", ""), crumb("TLS inspection configurations", "tls-inspection-configurations")] },
+    { pattern: "/vpc/network-firewall-resource-groups", component: Nfw.NetworkFirewallResourceGroups, crumbs: () => [crumb("VPC", ""), crumb("Network Firewall resource groups", "network-firewall-resource-groups")] },
+    { pattern: "/vpc/vpc-endpoint-associations", component: Nfw.VpcEndpointAssociations, crumbs: () => [crumb("VPC", ""), crumb("VPC endpoint associations", "vpc-endpoint-associations")] },
     { pattern: "/vpc/container-associations", component: Honest.ContainerAssociations, crumbs: () => [crumb("VPC", ""), crumb("Container associations", "container-associations")] },
 
     { pattern: "/vpc/customer-gateways", component: Vpn.CustomerGateways, crumbs: () => [crumb("VPC", ""), crumb("Customer gateways", "customer-gateways")] },

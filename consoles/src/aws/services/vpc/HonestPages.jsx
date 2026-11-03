@@ -32,13 +32,7 @@ export const DnsFirewallRuleGroups = page("Rule groups", "aws.vpc.dns-firewall")
 export const DnsFirewallDomainLists = page("Domain lists", "aws.vpc.dns-firewall");
 
 // Network Firewall
-export const Firewalls = page("Firewalls", "aws.vpc.network-firewall");
-export const FirewallPolicies = page("Firewall policies", "aws.vpc.network-firewall");
-export const NetworkFirewallRuleGroups = page("Network Firewall rule groups", "aws.vpc.network-firewall");
-export const TlsInspectionConfigurations = page("TLS inspection configurations", "aws.vpc.network-firewall");
-export const NetworkFirewallResourceGroups = page("Network Firewall resource groups", "aws.vpc.network-firewall");
-export const VpcEndpointAssociations = page("VPC endpoint associations", "aws.vpc.network-firewall");
-export const ContainerAssociations = page("Container associations", "aws.vpc.network-firewall");
+export const ContainerAssociations = page("Container associations", "aws.vpc.network-firewall-containers");
 
 // Site-to-Site VPN / Client VPN
 

@@ -194,8 +194,56 @@ await page.getByRole("button", { name: "Create", exact: true }).click();
 await page.waitForTimeout(1500);
 check("UI-created metering policy exists on the wire", (await ec2("DescribeTransitGatewayMeteringPolicies")).text.includes(tgw));
 
+// ── Network Firewall (JSON wire) ──
+const nfw = (op, p = {}) => page.evaluate(async ([u, op, p]) => {
+  const r = await fetch(u + "/", { method: "POST", headers: { authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/network-firewall/aws4_request, SignedHeaders=host, Signature=0", "content-type": "application/x-amz-json-1.0", "x-amz-target": `NetworkFirewall_20201112.${op}` }, body: JSON.stringify(p) });
+  const t = await r.text(); return { status: r.status, json: t ? JSON.parse(t) : {} };
+}, [WIRE, op, p]);
+for (const [hash, heading] of [["firewalls", "Firewalls"], ["firewall-policies", "Firewall policies"], ["network-firewall-rule-groups", "Network Firewall rule groups"], ["tls-inspection-configurations", "TLS inspection configurations"],
+  ["network-firewall-resource-groups", "Network Firewall resource groups"], ["vpc-endpoint-associations", "VPC endpoint associations"]]) {
+  await go(`#/vpc/${hash}`, heading);
+  check(`${heading}: real page, no Not-simulated badge`, (await badges()) === 0 && (await page.getByRole("button", { name: /^Create|Put resource policy/ }).count()) > 0);
+}
+await go("#/vpc/network-firewall-rule-groups", "Network Firewall rule groups");
+await page.getByRole("button", { name: "Create rule group" }).click();
+await page.getByRole("textbox", { name: "Name", exact: true }).fill(`rg-${N}`);
+await page.getByRole("textbox", { name: /Suricata compatible rules/ }).fill("drop tcp any any -> any 4444 (msg:\"no sid\";)");
+await page.getByRole("button", { name: "Create", exact: true }).click();
+await page.waitForTimeout(1500);
+check("invalid Suricata rule (no sid) rejected in the modal", (await body()).toLowerCase().includes("sid"));
+await page.getByRole("textbox", { name: /Suricata compatible rules/ }).fill("drop tcp any any -> any 4444 (msg:\"block\"; sid:1;)");
+await page.getByRole("button", { name: "Create", exact: true }).click();
+await page.waitForTimeout(1800);
+const rgs = await nfw("ListRuleGroups");
+check("UI-created Suricata rule group exists on the wire", rgs.json.RuleGroups?.some((g) => g.Name === `rg-${N}`));
+const rgArn = rgs.json.RuleGroups.find((g) => g.Name === `rg-${N}`).Arn;
+await go("#/vpc/firewall-policies", "Firewall policies");
+await page.getByRole("button", { name: "Create firewall policy" }).click();
+await page.getByRole("textbox", { name: "Name", exact: true }).fill(`pol-${N}`);
+await pick("Stateful rule group", `rg-${N}`);
+await page.getByRole("button", { name: "Create", exact: true }).click();
+await page.waitForTimeout(1800);
+const pols = await nfw("ListFirewallPolicies");
+check("UI-created firewall policy references the rule group", pols.json.FirewallPolicies?.some((p) => p.Name === `pol-${N}`));
+await go("#/vpc/firewalls", "Firewalls");
+await page.getByRole("button", { name: "Create firewall" }).click();
+await page.getByRole("textbox", { name: "Name", exact: true }).fill(`fw-${N}`);
+await pick("VPC", vpc);
+await pick("Firewall subnet", sub);
+await pick("Associated firewall policy", `pol-${N}`);
+await page.getByRole("button", { name: "Create", exact: true }).click();
+await page.waitForTimeout(2000);
+const fwd = await nfw("DescribeFirewall", { FirewallName: `fw-${N}` });
+check("UI-created firewall is READY with an endpoint in the subnet's AZ", fwd.json.FirewallStatus?.Status === "READY" && Object.keys(fwd.json.FirewallStatus.SyncStates).length === 1);
+await page.locator("tr", { hasText: `fw-${N}` }).locator("input[type=checkbox]").check({ force: true });
+await page.getByRole("tab", { name: "Firewall endpoints" }).click();
+await page.waitForTimeout(800);
+check("Firewall endpoints tab shows the vpce endpoint", (await body()).includes("vpce-"));
+await shot("firewalls");
+check("in-use rule group cannot be deleted over the wire", (await nfw("DeleteRuleGroup", { RuleGroupArn: rgArn })).json.__type === "InvalidOperationException");
+
 // ── honest pages stay honest ──
-for (const [hash, heading] of [["firewalls", "Firewalls"], ["service-networks", "Service networks"]]) {
+for (const [hash, heading] of [["container-associations", "Container associations"], ["service-networks", "Service networks"]]) {
   await go(`#/vpc/${hash}`, heading);
   check(`${heading}: still an honest page (badge present)`, (await badges()) > 0 || (await body()).toLowerCase().includes("not simulated"));
 }

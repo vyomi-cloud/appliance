@@ -10,6 +10,7 @@ import Header from "@cloudscape-design/components/header";
 import Input from "@cloudscape-design/components/input";
 import Modal from "@cloudscape-design/components/modal";
 import Select from "@cloudscape-design/components/select";
+import Textarea from "@cloudscape-design/components/textarea";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Tabs from "@cloudscape-design/components/tabs";
 import ResourceTable from "../../kit/ResourceTable.jsx";
@@ -23,6 +24,10 @@ import { useNotify } from "../../../common/notify.jsx";
 function Field({ f, values, set }) {
   const opts = useAsync(async () => (typeof f.options === "function" ? f.options(values) : f.options || []), [f.key, f.type === "select" ? JSON.stringify(f.dep ? values[f.dep] : "") : ""]);
   const v = values[f.key];
+  if (f.type === "textarea") return (
+    <FormField label={f.label + (f.required ? "" : " - optional")} description={f.description}>
+      <Textarea value={v ?? ""} rows={f.rows || 6} placeholder={f.placeholder} ariaLabel={f.label} onChange={({ detail }) => set(f.key, detail.value)} />
+    </FormField>);
   if (f.type === "checkbox") return <Checkbox checked={!!v} onChange={({ detail }) => set(f.key, detail.checked)}>{f.label}</Checkbox>;
   if (f.type === "select") {
     const options = (opts.data || []).map((o) => (typeof o === "string" ? { value: o, label: o } : o));
@@ -45,12 +50,13 @@ export function FormModal({ header, fields = [], submit, onDismiss, onDone, labe
   const [values, setValues] = useState(() => Object.fromEntries(fields.filter((f) => f.default !== undefined).map((f) => [f.key, f.default])));
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
-  const valid = fields.every((f) => !f.required || (values[f.key] !== undefined && values[f.key] !== ""));
+  const shown = fields.filter((f) => !f.showIf || f.showIf(values));
+  const valid = shown.every((f) => !f.required || (values[f.key] !== undefined && values[f.key] !== ""));
   const go = async () => { setBusy(true); setErr(null); try { await submit(values); onDone?.(); onDismiss(); } catch (e) { setErr(e); notify.error?.(e); } finally { setBusy(false); } };
   return (
     <Modal visible onDismiss={onDismiss} header={header}
       footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs"><Button variant="link" onClick={onDismiss}>Cancel</Button><Button variant="primary" loading={busy} disabled={!valid} onClick={go}>{label}</Button></SpaceBetween></Box>}>
-      <SpaceBetween size="m">{err && <ErrorAlert error={err} />}{children}{fields.map((f) => <Field key={f.key} f={f} values={values} set={(k, val) => setValues((s) => ({ ...s, [k]: val }))} />)}</SpaceBetween>
+      <SpaceBetween size="m">{err && <ErrorAlert error={err} />}{children}{shown.map((f) => <Field key={f.key} f={f} values={values} set={(k, val) => setValues((s) => ({ ...s, [k]: val }))} />)}</SpaceBetween>
     </Modal>
   );
 }

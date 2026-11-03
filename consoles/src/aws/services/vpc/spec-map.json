@@ -56,12 +56,12 @@
   "dns-firewall-rule-groups": { "route": "#/vpc/dns-firewall-rule-groups", "honest_page": true },
   "dns-firewall-domain-lists": { "route": "#/vpc/dns-firewall-domain-lists", "honest_page": true },
 
-  "firewalls": { "route": "#/vpc/firewalls", "honest_page": true },
-  "firewall-policies": { "route": "#/vpc/firewall-policies", "honest_page": true },
-  "network-firewall-rule-groups": { "route": "#/vpc/network-firewall-rule-groups", "honest_page": true },
-  "tls-inspection-configurations": { "route": "#/vpc/tls-inspection-configurations", "honest_page": true },
-  "network-firewall-resource-groups": { "route": "#/vpc/network-firewall-resource-groups", "honest_page": true },
-  "vpc-endpoint-associations": { "route": "#/vpc/vpc-endpoint-associations", "honest_page": true },
+  "firewalls": { "route": "#/vpc/firewalls" },
+  "firewall-policies": { "route": "#/vpc/firewall-policies" },
+  "network-firewall-rule-groups": { "route": "#/vpc/network-firewall-rule-groups" },
+  "tls-inspection-configurations": { "route": "#/vpc/tls-inspection-configurations" },
+  "network-firewall-resource-groups": { "route": "#/vpc/network-firewall-resource-groups" },
+  "vpc-endpoint-associations": { "route": "#/vpc/vpc-endpoint-associations" },
   "container-associations": { "route": "#/vpc/container-associations", "honest_page": true },
 
   "customer-gateways": { "route": "#/vpc/customer-gateways" },
