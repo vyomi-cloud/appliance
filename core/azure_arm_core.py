@@ -84,6 +84,11 @@ try:                                              # Management locks (Microsoft.
 except ImportError:
     import azure_locks_core as locks_engine        # type: ignore
 
+try:                                              # Resource health + Advisor (derived from the stored resources)
+    from core import azure_health_core as health_engine
+except ImportError:
+    import azure_health_core as health_engine      # type: ignore
+
 try:                                              # checkAccess decision algorithm (wildcard + scope-inheritance +
     from core import azure_iam_core as iam_engine  # notActions/deny) — reused for role assignments created as real
 except ImportError:                               # ARM resources scoped to a resource group (this module's own store,
@@ -1252,6 +1257,34 @@ class AzureArm:
             if self.state.get(scope_rid.lower()) is None:
                 return _err(404, "ResourceNotFound", f"Resource '{scope_rid}' not found.")
             return self._security(method, sub, rg, chain[sec_marker + 2:], payload, query, scope_rid)
+
+        # Microsoft.Advisor/recommendations (+ suppressions) and Microsoft.ResourceHealth/
+        # availabilityStatuses (subscription / resource-group scope, or re-entering any resource's
+        # own id): derived from the stored resources, core/azure_health_core.py.
+        if namespace.lower() == "microsoft.advisor" and chain and chain[0].lower() == "recommendations":
+            if len(chain) == 1 and method == "GET":
+                r = health_engine.recommendations(self.state, sub, query)
+            elif len(chain) == 4 and chain[2].lower() == "suppressions":
+                r = health_engine.suppress(self.state, sub, chain[1], chain[3], method, payload)
+            else:
+                return _err(405, "MethodNotAllowed", "Unsupported Advisor recommendations operation.")
+            return _ok(r["body"], r["status"]) if r["status"] < 300 else _err(r["status"], r["body"]["error"]["code"], r["body"]["error"]["message"])
+        if namespace.lower() == "microsoft.resourcehealth" and chain and chain[0].lower() == "availabilitystatuses":
+            if method != "GET":
+                return _err(405, "MethodNotAllowed", "Resource health is read-only.")
+            scope_rid = f"/subscriptions/{sub}/resourceGroups/{rg}" if rg is not None else None
+            r = health_engine.health(self.state, sub, scope_rid, False)
+            return _ok(r["body"], r["status"])
+        health_marker = health_engine.find_health_marker(chain)
+        if health_marker is not None:
+            if method != "GET":
+                return _err(405, "MethodNotAllowed", "Resource health is read-only.")
+            stc, snames = [namespace], []
+            for n, token in enumerate(chain[:health_marker]):
+                (stc if n % 2 == 0 else snames).append(token)
+            rest = chain[health_marker + 3:]
+            r = health_engine.health(self.state, sub, _canonical_id(sub, rg, stc, snames).lower(), bool(rest) and rest[0].lower() == "current")
+            return _ok(r["body"], r["status"]) if r["status"] < 300 else _err(r["status"], r["body"]["error"]["code"], r["body"]["error"]["message"])
 
         # Microsoft.Authorization/locks: a real ARM extension resource scoped to ANY other
         # resource's own id (the chain re-enters "providers", like Event Grid's event

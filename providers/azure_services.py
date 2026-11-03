@@ -847,7 +847,7 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
             or (len(low0) >= 3 and low0[0] == "providers"
                 and ((low0[1] == "microsoft.subscription" and low0[2] == "rename")
                      or (low0[1] == "microsoft.resources" and low0[2] == "tags")
-                     or low0[1] == "microsoft.security"      # Defender for Cloud (core/azure_security_core.py)
+                     or low0[1] in ("microsoft.security", "microsoft.advisor", "microsoft.resourcehealth")   # Defender / Advisor / Resource health cores
                      or (low0[1] == "microsoft.authorization"
                          and low0[2] in ("locks", "roleassignments", "roledefinitions", "checkaccess", "classicadministrators"))))):
         return await _handle_core_arm(request, method, rest, base)
@@ -864,7 +864,7 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
             or (len(low) == 3 and low[2] == "exporttemplate")
             or (len(low) >= 5 and low[2] == "providers" and low[3] == "microsoft.authorization"
                 and low[4] in ("locks", "roleassignments", "roledefinitions", "checkaccess"))
-            or (len(low) >= 4 and low[2] == "providers" and low[3] == "microsoft.security")):
+            or (len(low) >= 4 and low[2] == "providers" and low[3] in ("microsoft.security", "microsoft.resourcehealth"))):
         if method == "DELETE" and len(low) == 2:
             for rec in [r for r in list(_state.values())
                         if isinstance(r, dict) and r.get("_sub") == sub and (r.get("_rg") or "").lower() == low[1]]:
@@ -925,7 +925,7 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
     # control (IAM) blade lists the assignments at its own scope plus inherited ones).
     lowc = [c.lower() for c in chain]
     for i in range(1, len(lowc) - 1):
-        if lowc[i] == "providers" and lowc[i + 1] in ("microsoft.authorization", "microsoft.security") and i % 2 == 0:
+        if lowc[i] == "providers" and lowc[i + 1] in ("microsoft.authorization", "microsoft.security", "microsoft.resourcehealth") and i % 2 == 0:
             return await _handle_core_arm(request, method, rest, base)
 
     # Microsoft.Compute/.../vmSizes (azure.vms.size): a derived read (location- or VM-scoped),

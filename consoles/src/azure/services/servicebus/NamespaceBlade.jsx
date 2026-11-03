@@ -25,6 +25,7 @@ import * as api from "./api.js";
 import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
 import SharedActivityLog from "../../kit/ActivityLog.jsx";
 import { ClassicAdminsPanel, DenyAssignmentsPanel, MyAccess } from "../../kit/IamExtras.jsx";
+import SharedResourceHealth from "../../kit/ResourceHealth.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -98,6 +99,7 @@ export default function NamespaceBlade({ params, query }) {
       queues: () => <Queues a={a} self={self} />,
       topics: () => <Topics a={a} self={self} />,
       exporttemplate: () => <SharedExportTemplate id={a.id} name={a.name} resourceGroup={a.resourceGroup} />,
+      resourcehealth: () => <SharedResourceHealth id={a.id} name={a.name} />,
       identity: () => <Identity a={a} reload={reload} />,
       diagnosticsettings: () => <DiagnosticSettings a={a} />,
       alerts: () => <Alerts a={a} />,

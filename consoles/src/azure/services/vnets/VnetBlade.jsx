@@ -28,6 +28,7 @@ import NetworkWatcherTools, { ConnectionTroubleshootPanel } from "./NetworkWatch
 import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
 import SharedActivityLog from "../../kit/ActivityLog.jsx";
 import { ClassicAdminsPanel, DenyAssignmentsPanel, MyAccess } from "../../kit/IamExtras.jsx";
+import SharedAdvisor from "../../kit/Advisor.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -140,7 +141,7 @@ function Overview({ a, reload, self }) {
         {tab === "topology" && <TopologyPanel a={a} />}
         {tab === "properties" && <Properties a={a} />}
         {tab === "capabilities" && <NotSimulatedContainer feature="The capabilities overview" />}
-        {tab === "recommendations" && <NotSimulatedContainer feature="Advisor recommendations" />}
+        {tab === "recommendations" && <SharedAdvisor bare scope={a.id} />}
         {tab === "tutorials" && <NotSimulatedContainer feature="Tutorials" />}
       </div>
       <Essentials

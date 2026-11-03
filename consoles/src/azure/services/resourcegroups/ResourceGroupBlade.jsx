@@ -22,6 +22,10 @@ import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
 import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
 import SharedActivityLog from "../../kit/ActivityLog.jsx";
+import SharedResourceVisualizer from "../../kit/ResourceVisualizer.jsx";
+import SharedResourceHealth from "../../kit/ResourceHealth.jsx";
+import SharedDiagnosticSettings from "../../kit/DiagnosticSettings.jsx";
+import SharedAdvisor from "../../kit/Advisor.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -100,6 +104,10 @@ export default function ResourceGroupBlade({ params }) {
       deployments: () => <Deployments name={name} />,
       locks: () => <Locks name={name} />,
       exporttemplate: () => <SharedExportTemplate all id={a.id} name={a.name} resourceGroup={a.name} />,
+      resourcehealth: () => <SharedResourceHealth id={a.id} name={a.name} group />,
+      advisorrecommendations: () => <SharedAdvisor scope={a.id} name={a.name} />,
+      diagnosticsettings: () => <SharedDiagnosticSettings id={a.id} name={a.name} />,
+      resourcevisualizer: () => <SharedResourceVisualizer resourceGroup={a.name} />,
       properties: () => <Properties a={a} />,
       costanalysis: () => <CostAnalysis name={name} />,
       costalertspreview: () => <CostAlerts name={name} />,
@@ -180,7 +188,7 @@ function Overview({ a, reload, self, name }) {
           />
         </div>
       )}
-      {tab === "recommendations" && <NotSimulatedContainer feature="Advisor recommendations" />}
+      {tab === "recommendations" && <SharedAdvisor bare scope={a.id} />}
 
       <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
         <DialogSurface aria-label={gap || "Not simulated"}>

@@ -42,5 +42,60 @@
   "tests": [
    "tests/conformance/test_azure_arm_core.py"
   ]
+ },
+ "azure.common.resource_health": {
+  "title": "Resource health on every resource",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Health is derived from the resource's own stored state (failed provisioning, a stopped/deallocated VM or stopped AKS cluster); Vyomi runs no Azure platform, so there are never platform outages, planned maintenance or a health-history feed \u2014 the history section is always empty."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_health_core.py"
+  ]
+ },
+ "azure.common.advisor": {
+  "title": "Advisor recommendations on every resource",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Recommendations come from a small fixed rule set over each resource's stored configuration (Key Vault soft delete / purge protection, storage secure transfer / public blob access / TLS, SQL TLS, NSG open SSH/RDP, App Service HTTPS only, ACR admin user) \u2014 all in the Security category. Cost, Reliability and Performance recommendations need real utilisation telemetry, which Vyomi does not have, so none are produced.",
+   "Postpone (7 days) and Dismiss are real Advisor suppressions persisted with the recommendation, but a postponed recommendation is never re-activated by the clock."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_health_core.py"
+  ]
+ },
+ "azure.common.diagnostic_settings": {
+  "title": "Diagnostic settings on every resource",
+  "level": {
+   "nano": "config_only",
+   "offline": "config_only"
+  },
+  "limitations": [
+   "Settings are stored and validated exactly as the real Microsoft.Insights/diagnosticSettings resource requires (at least one destination; a storage destination must be a real resource), but logs and metrics are never delivered to the workspace, storage account or event hub \u2014 there is no telemetry pipeline.",
+   "The log-category picker lists the categories Vyomi knows for the common resource types plus the allLogs category group; GET diagnosticSettingsCategories is not modelled."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_monitor_core.py",
+   "tests/conformance/test_azure_arm_core.py"
+  ]
+ },
+ "azure.common.resource_visualizer": {
+  "title": "Resource visualizer (resource group graph)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "The graph is drawn from the real ARM resource list of the resource group; an edge exists only where a stored property of one resource holds another resource's id. Layout is a fixed circle (no drag, zoom, or expand-by-type), and cross-resource-group relationships are not shown."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py"
+  ]
  }
 }

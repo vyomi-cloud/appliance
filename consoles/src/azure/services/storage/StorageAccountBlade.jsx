@@ -27,6 +27,7 @@ import { TagRows } from "./CreateStorageAccount.jsx";
 import * as api from "./api.js";
 import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
 import SharedActivityLog from "../../kit/ActivityLog.jsx";
+import SharedAdvisor from "../../kit/Advisor.jsx";
 
 const ENFORCEMENT = "These settings are stored on the storage account (ARM) and returned to your SDKs and the az CLI. The Vyomi Blob data plane does not enforce them.";
 
@@ -97,6 +98,7 @@ export default function StorageAccountBlade({ params, query }) {
       objectreplication: () => <ObjectReplication a={a} />,
       staticwebsite: () => <StaticWebsite a={a} />,
       exporttemplate: () => <SharedExportTemplate id={a.id} name={a.name} resourceGroup={a.resourceGroup} />,
+      advisor: () => <SharedAdvisor scope={a.id} name={a.name} />,
       iam: () => <Iam a={a} />,
       cors: () => <Cors a={a} />,
       lifecycle: () => <Lifecycle a={a} />,
@@ -175,7 +177,7 @@ function Overview({ a, reload, self }) {
       {tab === "properties" && <Properties a={a} />}
       {tab === "monitoring" && <NotSimulatedContainer feature="Storage account monitoring (requests, egress, latency charts)" />}
       {tab === "capabilities" && <NotSimulatedContainer feature="The capabilities overview" />}
-      {tab === "recommendations" && <NotSimulatedContainer feature="Advisor recommendations" />}
+      {tab === "recommendations" && <SharedAdvisor bare scope={a.id} />}
       {tab === "tutorials" && <NotSimulatedContainer feature="Tutorials" />}
       {tab === "toolsandsdks" && <NotSimulatedContainer feature="Tools + SDKs" />}
 

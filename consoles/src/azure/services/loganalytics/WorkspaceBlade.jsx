@@ -25,6 +25,8 @@ import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
 import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
 import SharedActivityLog from "../../kit/ActivityLog.jsx";
+import SharedResourceHealth from "../../kit/ResourceHealth.jsx";
+import SharedDiagnosticSettings from "../../kit/DiagnosticSettings.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -102,6 +104,8 @@ export default function WorkspaceBlade({ params }) {
       datasources: () => <DataSources a={a} />,
       legacysolutions: () => <LegacySolutions a={a} />,
       exporttemplate: () => <SharedExportTemplate id={a.id} name={a.name} resourceGroup={a.resourceGroup} />,
+      resourcehealth: () => <SharedResourceHealth id={a.id} name={a.name} />,
+      diagnosticsettings: () => <SharedDiagnosticSettings id={a.id} name={a.name} />,
     }[panel];
     body = P ? P() : <CapabilityContainer id={CAP_FOR_PANEL[panel] || "azure.loganalytics.workspace.tools"} title={`${a.name} | ${LABEL[panel] || panel}`} />;
   }

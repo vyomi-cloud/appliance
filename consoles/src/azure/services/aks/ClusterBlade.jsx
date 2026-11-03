@@ -29,6 +29,8 @@ import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { ResourceRecommendations } from "../defender/Pages.jsx";
 import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
 import SharedActivityLog from "../../kit/ActivityLog.jsx";
+import SharedDiagnosticSettings from "../../kit/DiagnosticSettings.jsx";
+import SharedAdvisor from "../../kit/Advisor.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -110,6 +112,8 @@ export default function ClusterBlade({ params, query }) {
       locks: () => <Locks a={a} />,
       activitylog: () => <SharedActivityLog scope={a.id} name={a.name} />,
       exporttemplate: () => <SharedExportTemplate id={a.id} name={a.name} resourceGroup={a.resourceGroup} />,
+      advisorrecommendations: () => <SharedAdvisor scope={a.id} name={a.name} />,
+      diagnosticsettings: () => <SharedDiagnosticSettings id={a.id} name={a.name} />,
     }[panel];
     body = P ? P() : (
       <>
@@ -187,7 +191,7 @@ function Overview({ a, reload, self }) {
       {tab === "monitoring" && <NotSimulatedContainer feature="Cluster monitoring (CPU/memory charts, node and pod health)" />}
       {tab === "properties" && <PropertyList a={a} />}
       {tab === "capabilities" && <NotSimulatedContainer feature="The capabilities overview" />}
-      {tab === "recommendations" && <NotSimulatedContainer feature="Advisor recommendations" />}
+      {tab === "recommendations" && <SharedAdvisor bare scope={a.id} />}
       {tab === "tutorials" && <NotSimulatedContainer feature="Tutorials" />}
 
       <Dialog open={connect} onOpenChange={(_, d) => !d.open && setConnect(false)}>

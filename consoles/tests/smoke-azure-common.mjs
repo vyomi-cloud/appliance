@@ -72,6 +72,26 @@ await page.getByRole("button", { name: "View my access" }).click();
 await page.waitForFunction(() => document.body.innerText.includes("Role assignments covering this resource"), null, { timeout: 15000 });
 ok(true, "My access evaluates the signed-in principal with checkAccess");
 
+// Resource health + Advisor + Diagnostic settings + Resource visualizer (shared)
+const KV = `azckv${n}`;
+ok((await arm("PUT", `/resourceGroups/${RG}/providers/Microsoft.KeyVault/vaults/${KV}`, { location: "eastus", properties: { tenantId: "t", sku: { family: "A", name: "standard" } } }, "2023-02-01")).status < 300, "key vault created over ARM");
+await page.goto(`${UI}#/keyvaults/${RG}/${KV}/resourcehealth`);
+await page.waitForFunction(() => document.body.innerText.includes("Available"), null, { timeout: 20000 });
+ok(true, "Resource health shows the real Available state");
+await page.goto(`${UI}#/keyvaults/${RG}/${KV}`);
+await page.getByRole("tab", { name: "Recommendations" }).click();
+await page.waitForFunction(() => document.body.innerText.includes("Purge protection should be enabled"), null, { timeout: 20000 });
+ok(true, "Advisor shows a real Key Vault recommendation on the Overview tab");
+await page.getByRole("button", { name: "Dismiss" }).first().click();
+await page.waitForFunction(() => document.body.innerText.includes("No active recommendations"), null, { timeout: 15000 });
+ok(true, "Dismiss persists a real Advisor suppression");
+await page.goto(`${UI}#/keyvaults/${RG}/${KV}/diagnosticsettings`);
+await page.getByRole("button", { name: /Create|Add/ }).first().waitFor({ timeout: 20000 });
+ok(!(await page.content()).includes("isn't backed by a Vyomi backend"), "Diagnostic settings is a real blade");
+await page.goto(`${UI}#/resourcegroups/${RG}/resourcevisualizer`);
+await page.locator('[data-testid="viz-node"]').first().waitFor({ timeout: 20000 });
+ok((await page.locator('[data-testid="viz-node"]').count()) >= 3, "Resource visualizer draws the group's resources");
+
 await browser.close();
 console.log(fails ? `${fails} FAILED` : "ALL PASS");
 process.exit(fails ? 1 : 0);

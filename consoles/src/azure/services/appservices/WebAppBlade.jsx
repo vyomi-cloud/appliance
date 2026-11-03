@@ -25,6 +25,9 @@ import { ResourceRecommendations } from "../defender/Pages.jsx";
 import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
 import SharedActivityLog from "../../kit/ActivityLog.jsx";
 import { ClassicAdminsPanel, DenyAssignmentsPanel, MyAccess } from "../../kit/IamExtras.jsx";
+import SharedResourceVisualizer from "../../kit/ResourceVisualizer.jsx";
+import SharedResourceHealth from "../../kit/ResourceHealth.jsx";
+import SharedAdvisor from "../../kit/Advisor.jsx";
 
 /** Resource menu: [id, label] | {group, items}. Matches the real Web App blade's nav exactly
  * (labels double as the "{name} | Label" page titles the captured spec records). */
@@ -106,6 +109,9 @@ export default function WebAppBlade({ params, query }) {
       logstream: () => <LogStream name={name} />,
       diagnosticsettings: () => <DiagnosticSettings a={a} rg={rg} name={name} />,
       exporttemplate: () => <SharedExportTemplate id={a.id} name={a.name} resourceGroup={a.resourceGroup} />,
+      resourcehealth: () => <SharedResourceHealth id={a.id} name={a.name} />,
+      advisor: () => <SharedAdvisor scope={a.id} name={a.name} />,
+      visualizer: () => <SharedResourceVisualizer resourceGroup={a.resourceGroup} focus={a.name} />,
       identity: () => <Identity a={a} rg={rg} name={name} reload={reload} />,
       backups: () => <Backups rg={rg} name={name} />,
     }[panel];
@@ -199,7 +205,7 @@ function Overview({ a, reload, self }) {
       {tab === "logs" && <NotSimulatedContainer feature="The resource's Logs (Log Analytics queries)" />}
       {tab === "capabilities" && <NotSimulatedContainer feature="The capabilities overview" />}
       {tab === "notifications" && <NotSimulatedContainer feature="Notifications" />}
-      {tab === "recommendations" && <NotSimulatedContainer feature="Advisor recommendations" />}
+      {tab === "recommendations" && <SharedAdvisor bare scope={a.id} />}
 
       <DeleteDialog open={del} onClose={() => setDel(false)} resourceType="app service" names={[a.name]}
         onConfirm={async () => { await api.deleteSite(a.resourceGroup, a.name); forget(self); notify.success(`App service '${a.name}' was deleted.`, "Delete succeeded"); navigate("appservices"); }} />

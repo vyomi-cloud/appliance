@@ -16,6 +16,7 @@ import re
 
 SCHEMA = "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#"
 _DROP_PROPS = {"provisioningState", "creationDate", "createdAt", "lastModifiedAt", "etag"}
+_SECRET = re.compile(r"(password|clientsecret|secretkey|connectionstring|primarykey|secondarykey|accountkey|sastoken)", re.I)
 _IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _EXPR = re.compile(r"^\[(?!\[)(.*)\]$", re.S)
 _PARAM = re.compile(r"parameters\('([^']+)'\)")
@@ -30,7 +31,7 @@ def _sym(name: str) -> str:
 
 def _clean(v):
     if isinstance(v, dict):
-        return {k: _clean(x) for k, x in v.items() if k not in _DROP_PROPS and not k.startswith("_")}
+        return {k: _clean(x) for k, x in v.items() if k not in _DROP_PROPS and not k.startswith("_") and not _SECRET.search(k)}
     if isinstance(v, list):
         return [_clean(x) for x in v]
     return v
