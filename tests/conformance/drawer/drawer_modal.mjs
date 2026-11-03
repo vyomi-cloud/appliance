@@ -22,6 +22,9 @@ const b = await chromium.launch();
 const p = await (await b.newContext({ viewport: { width: 1440, height: 860 } })).newPage();
 const errs = []; p.on("pageerror", e => errs.push(String(e)));
 await p.goto(`${BASE}/console/${CLOUD}`); await p.waitForSelector("#vy-appbar .vy-notch a", { timeout: 30000 });
+// let the console finish its first render (it rebuilds header bits on load) before clicking: a cold first load made these clicks race it
+await p.waitForLoadState("networkidle", { timeout: 15000 }).catch(() => {});
+await p.waitForSelector("#vy-acct-btn", { timeout: 15000 });
 check((await p.locator("#vy-appbar .vy-notch a[data-v]").count()) === 5, "five items in the drawer (Spaces, Health, Knowledge Center, SDK & CLI usage, API reference)");
 check((await p.locator("header .back-spaces, header .az-back-spaces, header a[href$='#api'], header a[href$='#usage']").count()) === 0, "old back-to-spaces/api/usage header links are gone");
 const url0 = p.url();
