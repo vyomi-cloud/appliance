@@ -124,11 +124,13 @@ try {
   await page.waitForTimeout(800);
   await page.getByRole("tab", { name: "Advanced" }).click();
   await page.getByLabel("Publish Internet routing endpoints").click();
+  await page.waitForTimeout(1500);
+  await page.getByRole("tab", { name: "Advanced" }).click().catch(() => {});
   await page.getByLabel("Custom domain name").fill("cdn.example.com");
   await page.getByRole("button", { name: "Save custom domain" }).click();
   await page.waitForTimeout(800);
   const net = json(await arm("GET", `/resourceGroups/${RG}s/providers/Microsoft.Storage/storageAccounts/${SA}`)).properties || {};
-  check("resource instance + internet endpoint + custom domain persisted", net.networkAcls?.resourceAccessRules?.length === 1 && !!net.primaryEndpoints?.internetEndpoints && net.customDomain?.name === "cdn.example.com");
+  check("resource instance + internet endpoint + custom domain persisted", net.networkAcls?.resourceAccessRules?.length === 1 && !!net.primaryEndpoints?.internetEndpoints && net.customDomain?.name === "cdn.example.com", `${net.networkAcls?.resourceAccessRules?.length} ${JSON.stringify(net.primaryEndpoints)} ${JSON.stringify(net.customDomain)}`);
   await page.getByRole("tab", { name: "Public access" }).click();
   await noNS("storage Networking (public)", ["Virtual network", "firewall", "trusted services"]);
 
@@ -178,6 +180,24 @@ try {
   const rgd = json(await armv("2022-06-15")("GET", `/resourceGroups/${RG}/providers/Microsoft.EventGrid/eventSubscriptions/rgsub${n}/deliveryStatus`));
   check("resource group subscription received real ResourceWriteSuccess from an ARM write", rgd.matched >= 1);
   await noNS("RG Events");
+
+  // ── Deployment stacks (resource group) ──────────────────────────────────────────────────
+  await page.goto(UI + `#/resourcegroups/${RG}/deploymentstacks`);
+  await page.getByRole("button", { name: "Create deployment stack" }).click();
+  await page.getByLabel("Deployment stack name").fill(`stk${n}`);
+  await page.getByLabel("Stack template").fill(JSON.stringify({ $schema: "x", contentVersion: "1.0.0.0", resources: [{ type: "Microsoft.Storage/storageAccounts", apiVersion: "2023-01-01", name: `vyazstk${n}`, location: "eastus", sku: { name: "Standard_LRS" }, kind: "StorageV2", tags: { costcenter: "x" }, properties: {} }] }));
+  await page.getByLabel("Deny settings mode").selectOption("denyDelete");
+  await page.getByRole("dialog").getByRole("button", { name: "Create" }).click();
+  await page.getByRole("cell", { name: `stk${n}`, exact: true }).waitFor({ timeout: 15000 });
+  const stor = `/resourceGroups/${RG}/providers/Microsoft.Storage/storageAccounts/vyazstk${n}`;
+  { const stk = json(await armv("2024-03-01")("GET", `/resourceGroups/${RG}/providers/Microsoft.Resources/deploymentStacks/stk${n}`)); void stk; const g = await arm("GET", stor); check("stack provisioned its template over ARM", g.status === 200, `HTTP ${g.status} ${g.text.slice(0, 160)}`); }
+  check("denyDelete blocks direct delete over ARM (403)", (await arm("DELETE", stor)).status === 403);
+  await page.getByRole("button", { name: `Delete deployment stack stk${n}` }).click();
+  await page.getByLabel("Unmanage action on delete").selectOption("delete");
+  await page.getByRole("dialog").getByRole("button", { name: "Delete", exact: true }).click();
+  await page.getByText("No deployment stacks.").waitFor({ timeout: 15000 });
+  check("deleting the stack cascades the managed resource", (await arm("GET", stor)).status === 404);
+  await noNS("Deployment stacks");
 
   // @@GROUPS@@
 } catch (e) {

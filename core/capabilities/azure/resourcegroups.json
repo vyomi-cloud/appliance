@@ -96,5 +96,14 @@
   "tests": [
    "tests/conformance/test_azure_cost_core.py"
   ]
+ },
+ "azure.resourcegroups.deploymentstacks": {
+  "title": "Deployment stacks (Microsoft.Resources/deploymentStacks)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "A stack evaluates its ARM template through the same bounded template engine as a plain deployment and OWNS the resources it provisions: deleting the stack deletes them (or detaches them with unmanageAction.Resources=detach), and denySettings.mode denyDelete / denyWriteAndDelete really blocks a direct delete (and write) of a managed resource with 403 DenyAssignmentAuthorizationFailed.",
+   "Not modelled: resourceGroups/managementGroups unmanage actions (only resources), deny-settings excludedPrincipals/excludedActions/applyToChildScopes, subscription- and management-group-scope stacks, what-if / validate, and template specs. Template functions beyond the bounded evaluator fail the stack."
+  ],
+  "tests": ["tests/conformance/test_azure_deploymentstacks_core.py"]
  }
 }

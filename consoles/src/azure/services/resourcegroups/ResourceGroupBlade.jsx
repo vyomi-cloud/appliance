@@ -2,6 +2,7 @@
  * Locks, Deployments, Export template, Properties, Activity log and the resource-group-scoped
  * Cost Management pages are backed by real native ARM calls; everything else in the menu is
  * an honest NotSimulated panel. */
+import DeploymentStacks from "./DeploymentStacks.jsx";
 import ResourceEvents from "../../kit/ResourceEvents.jsx";
 import { useEffect, useState } from "react";
 import {
@@ -100,6 +101,7 @@ export default function ResourceGroupBlade({ params }) {
       deployments: () => <Deployments name={name} />,
       locks: () => <Locks name={name} />,
       exporttemplate: () => <ExportTemplate a={a} name={name} />,
+      deploymentstacks: () => <DeploymentStacks rg={name} />,
       events: () => <ResourceEvents scopeId={a.id} kind="resourcegroup" title={`${name} | Events`} />,
       policies: () => <PolicyPanel rg={name} title={`${name} | Policies`} />,
       properties: () => <Properties a={a} />,

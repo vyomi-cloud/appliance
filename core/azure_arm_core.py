@@ -1609,7 +1609,7 @@ class AzureArm:
                 return blocked
             if full_type.lower() == "microsoft.resources/deploymentstacks":
                 stack = self.state.get(key)
-                action = ((stack or {}).get("properties") or {}).get("actionOnUnmanage", {}).get("resources", "delete")
+                action = str((query or {}).get("unmanageAction.Resources") or ((stack or {}).get("properties") or {}).get("actionOnUnmanage", {}).get("resources", "delete")).lower()
                 if stack and action != "detach":
                     for pr in (stack.get("properties") or {}).get("resources") or []:
                         pid = (pr.get("id") or "").lower()
@@ -1943,6 +1943,19 @@ class AzureArm:
         # still leaves Microsoft.Authorization/locks config_only (stored, not enforced),
         # matching their own capability registries.
         ft = full_type.lower()
+        # Deployment stack deny settings: a resource MANAGED by a stack whose denySettings.mode is
+        # denyDelete / denyWriteAndDelete cannot be deleted (and, for denyWriteAndDelete, written) directly.
+        if ft != "microsoft.resources/deploymentstacks":
+            for st in self.state.values():
+                if st.get("_type", "").lower() != "microsoft.resources/deploymentstacks":
+                    continue
+                mode = str(((st.get("properties") or {}).get("denySettings") or {}).get("mode") or "none").lower()
+                if mode in ("none", "") or (mode == "denydelete" and not for_delete):
+                    continue
+                if any(str(m.get("id") or "").lower() == rid.lower() for m in (st.get("properties") or {}).get("resources") or []):
+                    return _err(403, "DenyAssignmentAuthorizationFailed",
+                                f"The client does not have permission to perform this action on '{rid}': it is managed by deployment stack '{st.get('name')}' "
+                                f"with deny settings mode '{(st.get('properties') or {}).get('denySettings', {}).get('mode')}'.")
         if not (ft.startswith("microsoft.servicebus/") or ft == "microsoft.eventgrid/topics"):
             return None
         levels = {(r.get("properties") or {}).get("level")
