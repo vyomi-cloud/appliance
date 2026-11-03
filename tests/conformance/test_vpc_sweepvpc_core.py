@@ -1,5 +1,6 @@
 """VPC sweep (VPN / route propagation / ...) — real behaviour, host + Nano share core code.
 Run: PYTHONPATH=. python3 tests/conformance/test_vpc_sweepvpc_core.py"""
+import json
 import re
 import types
 
@@ -219,7 +220,91 @@ def tgw_extras():
     c({"Action": "DeleteTransitGatewayMeteringPolicy", "TransitGatewayMeteringPolicyId": mp})
 
 
+def network_firewall():
+    from core import netfw_core as nf
+    e = Env(); c = e.call
+    vpc_id = e.id(c({"Action": "CreateVpc", "CidrBlock": "10.76.0.0/16"}), "vpcId")
+    s1 = e.id(c({"Action": "CreateSubnet", "VpcId": vpc_id, "CidrBlock": "10.76.1.0/24", "AvailabilityZone": "us-east-1a"}), "subnetId")
+    s2 = e.id(c({"Action": "CreateSubnet", "VpcId": vpc_id, "CidrBlock": "10.76.2.0/24", "AvailabilityZone": "us-east-1a"}), "subnetId")
+    other = e.id(c({"Action": "CreateVpc", "CidrBlock": "10.77.0.0/16"}), "vpcId")
+    so = e.id(c({"Action": "CreateSubnet", "VpcId": other, "CidrBlock": "10.77.1.0/24"}), "subnetId")
+
+    def f(action, body, ok=True):
+        r = nf.dispatch(e.s, "NetworkFirewall_20201112." + action, body)
+        if ok and r.status != 200:
+            raise AssertionError((action, r.body))
+        if not ok and r.status == 200:
+            raise AssertionError(("expected failure", action, r.body))
+        return r.body
+
+    sl = f("CreateRuleGroup", {"RuleGroupName": "sl", "Type": "STATELESS", "Capacity": 10, "RuleGroup": {"RulesSource": {"StatelessRulesAndCustomActions": {"StatelessRules": [
+        {"Priority": 1, "RuleDefinition": {"MatchAttributes": {"Protocols": [6], "DestinationPorts": [{"FromPort": 23, "ToPort": 23}]}, "Actions": ["aws:drop"]}},
+        {"Priority": 2, "RuleDefinition": {"MatchAttributes": {"Protocols": [6], "Sources": [{"AddressDefinition": "10.0.0.0/8"}]}, "Actions": ["aws:forward_to_sfe"]}}]}}}})
+    slarn = sl["RuleGroupResponse"]["RuleGroupArn"]
+    f("CreateRuleGroup", {"RuleGroupName": "dup-prio", "Type": "STATELESS", "Capacity": 10, "RuleGroup": {"RulesSource": {"StatelessRulesAndCustomActions": {"StatelessRules": [
+        {"Priority": 1, "RuleDefinition": {"MatchAttributes": {}, "Actions": ["aws:pass"]}}, {"Priority": 1, "RuleDefinition": {"MatchAttributes": {}, "Actions": ["aws:pass"]}}]}}}}, ok=False)
+    f("CreateRuleGroup", {"RuleGroupName": "badcidr", "Type": "STATELESS", "Capacity": 10, "RuleGroup": {"RulesSource": {"StatelessRulesAndCustomActions": {"StatelessRules": [
+        {"Priority": 1, "RuleDefinition": {"MatchAttributes": {"Sources": [{"AddressDefinition": "nope"}]}, "Actions": ["aws:pass"]}}]}}}}, ok=False)
+    _check("stateless validation: duplicate priority / bad CIDR rejected", True)
+    suri = ('# comment\ndrop tcp any any -> any 4444 (msg:"block 4444"; sid:1001; rev:1;)\n'
+            'pass tls any any -> any 443 (tls.sni; content:"good.example.com"; sid:1002; rev:1;)\n'
+            'alert ip any any -> any any (msg:"all"; sid:1003;)')
+    sf = f("CreateRuleGroup", {"RuleGroupName": "suri", "Type": "STATEFUL", "Capacity": 20, "Rules": suri})
+    sfarn = sf["RuleGroupResponse"]["RuleGroupArn"]
+    f("CreateRuleGroup", {"RuleGroupName": "badsuri", "Type": "STATEFUL", "Capacity": 20, "Rules": "drop tcp any any -> any 80 (msg:\"no sid\";)"}, ok=False)
+    f("CreateRuleGroup", {"RuleGroupName": "dupsid", "Type": "STATEFUL", "Capacity": 20, "Rules": "drop ip any any -> any any (sid:1;)\ndrop ip any any -> any any (sid:1;)"}, ok=False)
+    f("CreateRuleGroup", {"RuleGroupName": "toobig", "Type": "STATEFUL", "Capacity": 1, "Rules": suri}, ok=False)
+    _check("Suricata rules parsed; missing/duplicate sid and capacity overflow rejected", True)
+    dl = f("CreateRuleGroup", {"RuleGroupName": "domains", "Type": "STATEFUL", "Capacity": 10, "RuleGroup": {"RulesSource": {"RulesSourceList": {"Targets": [".allowed.com"], "TargetTypes": ["HTTP_HOST", "TLS_SNI"], "GeneratedRulesType": "ALLOWLIST"}}}})
+    dlarn = dl["RuleGroupResponse"]["RuleGroupArn"]
+    pol_body = {"StatelessDefaultActions": ["aws:forward_to_sfe"], "StatelessFragmentDefaultActions": ["aws:forward_to_sfe"],
+                "StatelessRuleGroupReferences": [{"ResourceArn": slarn, "Priority": 1}], "StatefulRuleGroupReferences": [{"ResourceArn": sfarn}, {"ResourceArn": dlarn}]}
+    f("CreateFirewallPolicy", {"FirewallPolicyName": "bad", "FirewallPolicy": {"StatelessDefaultActions": ["aws:pass"]}}, ok=False)
+    f("CreateFirewallPolicy", {"FirewallPolicyName": "bad2", "FirewallPolicy": {**pol_body, "StatelessRuleGroupReferences": [{"ResourceArn": sfarn, "Priority": 1}]}}, ok=False)
+    pol = f("CreateFirewallPolicy", {"FirewallPolicyName": "pol", "FirewallPolicy": pol_body})
+    parn, ptok = pol["FirewallPolicyResponse"]["FirewallPolicyArn"], pol["UpdateToken"]
+    _check("policy needs both default actions and typed rule-group references", True)
+    f("UpdateFirewallPolicy", {"FirewallPolicyArn": parn, "UpdateToken": "stale", "FirewallPolicy": pol_body}, ok=False)
+    up = f("UpdateFirewallPolicy", {"FirewallPolicyArn": parn, "UpdateToken": ptok, "FirewallPolicy": pol_body})
+    _check("UpdateToken enforced and rotated", up["UpdateToken"] != ptok)
+    f("DeleteRuleGroup", {"RuleGroupArn": sfarn}, ok=False)
+    f("CreateFirewall", {"FirewallName": "fw", "FirewallPolicyArn": parn, "VpcId": vpc_id, "SubnetMappings": [{"SubnetId": so}]}, ok=False)
+    f("CreateFirewall", {"FirewallName": "fw", "FirewallPolicyArn": parn, "VpcId": vpc_id, "SubnetMappings": [{"SubnetId": s1}, {"SubnetId": s2}]}, ok=False)
+    fw = f("CreateFirewall", {"FirewallName": "fw", "FirewallPolicyArn": parn, "VpcId": vpc_id, "SubnetMappings": [{"SubnetId": s1}], "DeleteProtection": True})
+    _check("firewall READY with an endpoint per AZ", fw["FirewallStatus"]["Status"] == "READY" and fw["FirewallStatus"]["SyncStates"]["us-east-1a"]["Attachment"]["EndpointId"].startswith("vpce-"))
+    f("DeleteFirewallPolicy", {"FirewallPolicyArn": parn}, ok=False)
+    f("DeleteFirewall", {"FirewallName": "fw"}, ok=False)
+    _check("delete protection + in-use checks enforced", True)
+    ev = lambda **k: nf.evaluate_packet(e.s, "fw", {"proto": 6, "src": "10.76.1.5", "dst": "1.2.3.4", "sport": 40000, "dport": 443, **k})
+    _check("stateless drop rule: telnet blocked", ev(dport=23)["action"] == "drop" and ev(dport=23)["stage"] == "stateless")
+    _check("Suricata drop rule: tcp/4444 blocked", ev(dport=4444)["action"] == "drop" and "sid1001" in ev(dport=4444)["rule"])
+    _check("Suricata TLS SNI pass rule", ev(app="tls", tls_sni="good.example.com")["action"] == "pass")
+    _check("domain allowlist: allowed.com passes, others implicitly denied", ev(app="tls", tls_sni="www.allowed.com")["action"] == "pass" and ev(app="tls", tls_sni="evil.com")["action"] == "drop")
+    _check("no match -> pass by default", ev(proto=17, dport=53)["action"] == "pass")
+    _check("non-forwarded source stays stateless-default (not in 10/8) -> still stateful", ev(src="192.168.1.1", dport=4444)["action"] == "drop")
+    f("UpdateFirewallDeleteProtection", {"FirewallName": "fw", "DeleteProtection": False, "UpdateToken": fw["UpdateToken"]})
+    lg = {"LogDestinationConfigs": [{"LogType": "ALERT", "LogDestinationType": "S3", "LogDestination": {"bucketName": "b", "prefix": "p"}}]}
+    f("UpdateLoggingConfiguration", {"FirewallName": "fw", "LoggingConfiguration": {"LogDestinationConfigs": [{"LogType": "BAD", "LogDestinationType": "S3", "LogDestination": {}}]}}, ok=False)
+    f("UpdateLoggingConfiguration", {"FirewallName": "fw", "LoggingConfiguration": lg})
+    _check("logging configuration round-trips", f("DescribeLoggingConfiguration", {"FirewallName": "fw"})["LoggingConfiguration"] == lg)
+    tls = f("CreateTLSInspectionConfiguration", {"TLSInspectionConfigurationName": "tls1", "TLSInspectionConfiguration": {"ServerCertificateConfigurations": [{"ServerCertificates": [{"ResourceArn": "arn:aws:acm:us-east-1:123456789012:certificate/x"}], "Scopes": [{"Protocols": [6]}]}]}})
+    f("CreateTLSInspectionConfiguration", {"TLSInspectionConfigurationName": "tls2", "TLSInspectionConfiguration": {"ServerCertificateConfigurations": [{"ServerCertificates": [{"ResourceArn": "nope"}]}]}}, ok=False)
+    f("PutResourcePolicy", {"ResourceArn": parn, "Policy": "not json"}, ok=False)
+    f("PutResourcePolicy", {"ResourceArn": parn, "Policy": json.dumps({"Version": "2012-10-17", "Statement": [{"Effect": "Allow", "Principal": "*", "Action": "network-firewall:ListFirewallPolicies", "Resource": parn}]})})
+    _check("resource policy stored", "Statement" in f("DescribeResourcePolicy", {"ResourceArn": parn})["Policy"])
+    f("TagResource", {"ResourceArn": parn, "Tags": [{"Key": "env", "Value": "t"}]})
+    _check("tags round-trip", f("ListTagsForResource", {"ResourceArn": parn})["Tags"] == [{"Key": "env", "Value": "t"}])
+    f("AssociateSubnets", {"FirewallName": "fw", "UpdateToken": f("DescribeFirewall", {"FirewallName": "fw"})["UpdateToken"], "SubnetMappings": [{"SubnetId": s2}]}, ok=False)
+    _check("second subnet in the same AZ rejected", True)
+    f("DeleteFirewall", {"FirewallName": "fw"})
+    f("DeleteFirewallPolicy", {"FirewallPolicyArn": parn})
+    f("DeleteRuleGroup", {"RuleGroupArn": sfarn}); f("DeleteRuleGroup", {"RuleGroupArn": slarn}); f("DeleteRuleGroup", {"RuleGroupArn": dlarn})
+    f("DeleteTLSInspectionConfiguration", {"TLSInspectionConfigurationName": "tls1"})
+    _check("everything deletes cleanly in dependency order", f("ListFirewalls", {})["Firewalls"] == [] and f("ListRuleGroups", {})["RuleGroups"] == [])
+
+
 def main():
+    network_firewall()
     tgw_extras()
     traffic_mirroring()
     cidrs_and_edge()

@@ -228,6 +228,7 @@ from core import stepfunctions_core as sfn
 from core import vpc_core as vpc
 from core import autoscaling_core as asg
 from core import ram_core as ram
+from core import netfw_core as netfw
 from core import organizations_core as orgs
 from core import dlm_core as dlm
 from core import kinesis_core as kinesis
@@ -349,6 +350,7 @@ _SIGNING = {
     "elasticloadbalancing": "elbv2",
     "cloudformation": "cloudformation",
     "ssm": "ssm", "scheduler": "scheduler", "pipes": "pipes", "ram": "ram", "organizations": "organizations",
+    "network-firewall": "netfw",   # AWS Network Firewall control plane (core/netfw_core, state in the VPC model)
     "apigateway": "apigateway",   # v1 REST control plane paths with no "/restapis" segment (apikeys, usageplans, clientcertificates, account)
 }
 
@@ -361,6 +363,7 @@ _TARGET_PREFIX = {
     "AmazonSSM": "ssm",
     "AWSStepFunctions": "stepfunctions",
     "AWSRAMFrontendService": "ram",
+    "NetworkFirewall_20201112": "netfw",
     "AWSOrganizationsV20161128": "organizations",
 }
 
@@ -373,6 +376,7 @@ _JSON_CT = {
     "stepfunctions": "application/x-amz-json-1.0",
     "ram": "application/x-amz-json-1.1",
     "organizations": "application/x-amz-json-1.1",
+    "netfw": "application/x-amz-json-1.0",
 }
 
 # Query-protocol Action → service, for UNSIGNED query requests (signed ones route
@@ -1190,6 +1194,8 @@ class AwsWireRouter:
                 r = sfn.dispatch(self.sfn, target, payload, lambda_store=self.lam)
             elif svc == "ram":
                 r = ram.dispatch(self.ram, target, payload, vpc_store=self.vpc)
+            elif svc == "netfw":   # AWS Network Firewall (state lives in the VPC model so subnets/VPCs are validated for real)
+                r = netfw.dispatch(self.vpc, target, payload)
             elif svc == "organizations":   # AWS Organizations (state in the IAM store: extras["org"] + org_policies)
                 r = orgs.dispatch(self.iam, target, payload)
             else:  # sqs
