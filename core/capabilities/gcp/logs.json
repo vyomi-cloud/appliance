@@ -143,5 +143,21 @@
   "tests": [
    "tests/conformance/test_gcp_logging_core.py"
   ]
+ },
+ "gcp.logs.correlate": {
+  "title": "Correlate by trace",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Correlation groups the entries of up to 20 traces from the current query results, fetching every entry with the same trace across all log streams (native entries:list trace filter); span trees and Cloud Trace linking are not built."
+  ],
+  "api": [
+   "entries.list"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_logging_core.py"
+  ]
  }
 }

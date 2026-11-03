@@ -1,7 +1,7 @@
 /* Create a bucket — the console's single long form with numbered steps. Every real
  * setting goes into ONE native buckets.insert body; settings Vyomi doesn't model are
  * declared gaps, not controls. */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Alert, Box, Button, Checkbox, Divider, FormControl, FormControlLabel, FormHelperText, IconButton, InputLabel, MenuItem,
   Radio, RadioGroup, Select, Stack, TextField, Typography,
@@ -10,7 +10,8 @@ import ArrowBackIcon from "@mui/icons-material/esm/ArrowBack.js";
 import AddIcon from "@mui/icons-material/esm/Add.js";
 import DeleteIcon from "@mui/icons-material/esm/Delete.js";
 import { useNotify } from "../../../common/notify.jsx";
-import { ErrorAlert, NotSimulated, PageHeader } from "../../kit/common.jsx";
+import { ErrorAlert, PageHeader } from "../../kit/common.jsx";
+import { CapabilityBadge } from "../../kit/Capability.jsx";
 import { hashHref } from "../../link.jsx";
 import { getProject } from "../../project.js";
 import * as api from "./api.js";
@@ -57,6 +58,13 @@ export default function CreateBucket() {
   const [softDeleteDays, setSoftDeleteDays] = useState(String(defaultSoftDeleteDays || 7));
   const [versioning, setVersioning] = useState(false);
   const [hns, setHns] = useState(false);
+  const [turbo, setTurbo] = useState(false);
+  const [autoclass, setAutoclass] = useState(false);
+  const [terminal, setTerminal] = useState("NEARLINE");
+  const [cmek, setCmek] = useState(false);
+  const [kmsKey, setKmsKey] = useState("");
+  const [kmsKeys, setKmsKeys] = useState([]);
+  useEffect(() => { api.listEncryptKeys().then(setKmsKeys).catch(() => {}); }, []);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
 
@@ -79,6 +87,9 @@ export default function CreateBucket() {
       ...(softDelete ? { softDeletePolicy: { retentionDurationSeconds: String(Number(softDeleteDays) * 86400) } } : {}),
       ...(versioning ? { versioning: { enabled: true } } : {}),
       ...(hns ? { hierarchicalNamespace: { enabled: true } } : {}),
+      ...(locType === "dual-region" && turbo ? { rpo: "ASYNC_TURBO" } : {}),
+      ...(autoclass ? { autoclass: { enabled: true, terminalStorageClass: terminal } } : {}),
+      ...(cmek && kmsKey ? { encryption: { defaultKmsKeyName: kmsKey.trim() } } : {}),
     };
     try {
       await api.insertBucket(body);
@@ -140,7 +151,12 @@ export default function CreateBucket() {
             {api.LOCATIONS[locType].map(([v, l]) => <MenuItem key={v} value={v}>{l}</MenuItem>)}
           </Select>
         </FormControl>
-        <NotSimulated compact feature="Add turbo replication" note="Offered for dual-region buckets; Vyomi always uses default replication (RPO DEFAULT)." />
+        {locType === "dual-region" && (
+          <Sub title="Replication">
+            <FormControlLabel control={<Checkbox size="small" checked={turbo} onChange={(e) => setTurbo(e.target.checked)} />} label="Add turbo replication (15-minute RPO)" />
+            <CapabilityBadge id="gcp.storage.turbo-replication" />
+          </Sub>
+        )}
       </Step>
       <Divider />
 
@@ -150,7 +166,19 @@ export default function CreateBucket() {
             {api.STORAGE_CLASSES.map(([v, l, d]) => <FormControlLabel key={v} value={v} control={<Radio size="small" />} label={<><b>{l}</b> — {d}</>} />)}
           </RadioGroup>
         </Sub>
-        <NotSimulated compact feature="Autoclass" note="Vyomi keeps objects in the bucket's default class; storage classes don't change pricing or retrieval here." />
+        <Sub title="Autoclass">
+          <FormControlLabel control={<Checkbox size="small" checked={autoclass} onChange={(e) => setAutoclass(e.target.checked)} />} label="Automatically transition objects to colder classes based on access" />
+          <CapabilityBadge id="gcp.storage.autoclass" />
+          {autoclass && (
+            <FormControl size="small" sx={{ ml: 4, mt: 1, width: 280 }}>
+              <InputLabel id="ac-term">Terminal storage class</InputLabel>
+              <Select labelId="ac-term" label="Terminal storage class" value={terminal} onChange={(e) => setTerminal(e.target.value)} inputProps={{ "aria-label": "Autoclass terminal storage class" }}>
+                <MenuItem value="NEARLINE">Nearline</MenuItem>
+                <MenuItem value="ARCHIVE">Archive</MenuItem>
+              </Select>
+            </FormControl>
+          )}
+        </Sub>
         <Sub title="Optimize storage for data-intensive workloads">
           <FormControlLabel control={<Checkbox size="small" checked={hns} onChange={(e) => setHns(e.target.checked)} />} label="Enable hierarchical namespace on this bucket" />
           {hns && <FormHelperText sx={{ ml: 4 }}>Requires uniform bucket-level access — Vyomi sets it for you. Can't be changed after the bucket is created.</FormHelperText>}
@@ -203,7 +231,21 @@ export default function CreateBucket() {
           </Stack>
         </Sub>
         <Sub title="Data encryption">
-          <NotSimulated compact feature="Data encryption with Cloud KMS keys (CMEK)" note="Vyomi always encrypts new objects with a Google-managed key; it does not delegate envelope encryption to Cloud KMS." />
+          <RadioGroup value={cmek ? "cmek" : "google"} onChange={(e) => setCmek(e.target.value === "cmek")} aria-label="Data encryption">
+            <FormControlLabel value="google" control={<Radio size="small" />} label="Google-managed encryption key" />
+            <FormControlLabel value="cmek" control={<Radio size="small" />} label="Cloud KMS key" />
+          </RadioGroup>
+          {cmek && (
+            <Stack direction="row" spacing={1} alignItems="flex-start" sx={{ ml: 4 }}>
+              <FormControl size="small" sx={{ width: 420 }}>
+                <InputLabel id="kms-key">Cloud KMS key</InputLabel>
+                <Select labelId="kms-key" label="Cloud KMS key" value={kmsKey} onChange={(e) => setKmsKey(e.target.value)} inputProps={{ "aria-label": "Cloud KMS key" }}>
+                  {kmsKeys.map((k) => <MenuItem key={k} value={k}>{k.split("/").slice(3).join("/").replace("keyRings/", "").replace("cryptoKeys/", "")} ({k.split("/")[3]})</MenuItem>)}
+                </Select>
+              </FormControl>
+              <CapabilityBadge id="gcp.storage.encryption" />
+            </Stack>
+          )}
         </Sub>
       </Step>
       <Divider />

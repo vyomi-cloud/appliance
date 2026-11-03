@@ -169,6 +169,17 @@ def run() -> int:
     _check("the usage alert really fires: evaluate_incidents opens a real incident against the live byte_count metric",
            st == 200 and any(i["policyDisplayName"] == "log usage" and i["state"] == "OPEN" for i in b.get("incidents", [])))
 
+    # ── correlate by trace: one trace spans several log streams; the trace filter returns all of them ──
+    T = "projects/demo/traces/abc123"
+    call("POST", "/v2/entries:write", body={"entries": [
+        {"logName": "projects/demo/logs/frontend", "resource": {"type": "global"}, "severity": "INFO", "textPayload": "req in", "trace": T},
+        {"logName": "projects/demo/logs/backend", "resource": {"type": "global"}, "severity": "ERROR", "textPayload": "db failed", "trace": T},
+        {"logName": "projects/demo/logs/batch", "resource": {"type": "global"}, "severity": "INFO", "textPayload": "other", "trace": "projects/demo/traces/zzz"},
+    ]})
+    st, b = call("POST", "/v2/entries:list", body={"resourceNames": ["projects/demo"], "filter": 'trace="%s"' % T, "orderBy": "timestamp asc"})
+    logs = {e["logName"].rsplit("/", 1)[-1] for e in b.get("entries", [])}
+    _check("trace filter returns every entry of the trace across log streams", st == 200 and logs == {"frontend", "backend"} and len(b["entries"]) == 2)
+
     print("\nRESULT: PASS — every Cloud Logging wire operation behaves as asserted")
     return 0
 

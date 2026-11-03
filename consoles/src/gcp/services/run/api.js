@@ -243,3 +243,19 @@ export const validName = (n, what = "Service") => {
   return null;
 };
 export const validServiceName = (n) => validName(n, "Service");
+
+// ── Eventarc, Cloud Storage source (services/{s}/triggers is the canonical Trigger resource) ──
+export const STORAGE_EVENTS = [["google.cloud.storage.object.v1.finalized", "Object finalized (created or overwritten)"], ["google.cloud.storage.object.v1.deleted", "Object deleted"]];
+export async function listBucketNames() {
+  const r = await restJson("GET", "/storage/v1/b", { query: { project: getProject() } });
+  return (r.items || []).map((b) => b.name);
+}
+export const createStorageTrigger = (region, name, triggerId2, bucket, eventType) => restJson("POST",
+  `${base(region)}/services/${e(name)}/triggers`,
+  { query: { triggerId: triggerId2 }, body: { eventFilters: [{ attribute: "type", value: eventType }, { attribute: "bucket", value: bucket }] } });
+export const deleteAnyTrigger = (region, name, triggerId2) => restJson("DELETE", `${base(region)}/services/${e(name)}/triggers/${e(triggerId2)}`);
+export async function listAllTriggers(region, name) {
+  const r = await restJson("GET", `${base(region)}/services/${e(name)}/triggers`);
+  return r.triggers || [];
+}
+export const triggerSource = (t) => (t.eventType || "").includes("storage") ? `Cloud Storage: ${t.bucket}` : "Pub/Sub";

@@ -9,7 +9,8 @@ import RefreshIcon from "@mui/icons-material/esm/Refresh.js";
 import VisibilityIcon from "@mui/icons-material/esm/Visibility.js";
 import { useAsync } from "../../../common/useAsync.js";
 import ResourceTable from "../../kit/ResourceTable.jsx";
-import { ErrorAlert, fmtDate, NotSimulated, PageHeader, Section } from "../../kit/common.jsx";
+import { ErrorAlert, fmtDate, PageHeader, Section } from "../../kit/common.jsx";
+import { CapabilityBadge } from "../../kit/Capability.jsx";
 import * as api from "./api.js";
 
 const EXTRA_FIELDS = [["logName", "Log name"], ["resourceType", "Resource"], ["trace", "Trace"]];
@@ -24,6 +25,9 @@ export default function LogsExplorer() {
   const [query, setQuery] = useState("");
   const [extra, setExtra] = useState(new Set());
   const [detail, setDetail] = useState(null);
+  const [correlate, setCorrelate] = useState("none");
+  const [groups, setGroups] = useState(null);
+  const [groupsError, setGroupsError] = useState(null);
   const { data = [], loading, error, reload } = useAsync(() => api.listEntries({ orderBy: "timestamp desc", pageSize: 1000 }), []);
 
   // Keep the raw query box in sync with the dropdowns (the console's own two-way sync).
@@ -38,6 +42,13 @@ export default function LogsExplorer() {
     if (search && !JSON.stringify(en).toLowerCase().includes(search.toLowerCase())) return false;
     return api.matchesQuery(en, query);
   }), [data, cutoff, search, query]);
+
+  useEffect(() => {
+    if (correlate !== "trace") { setGroups(null); return undefined; }
+    let live = true;
+    api.correlateByTrace(filtered).then((g) => live && (setGroups(g), setGroupsError(null))).catch((e) => live && setGroupsError(e));
+    return () => { live = false; };
+  }, [correlate, filtered]);
 
   const buckets = useMemo(() => {
     const n = 24, span = Date.now() - cutoff, out = Array.from({ length: n }, () => ({ count: 0, sev: "DEFAULT" }));
@@ -103,7 +114,16 @@ export default function LogsExplorer() {
                 </Select>
               </FormControl>
             </Stack>
-            <NotSimulated compact feature="Correlate by" note="Groups results by a shared trace ID across multiple log streams; Vyomi records trace IDs on entries but doesn't build this cross-log correlation view." />
+            <Stack direction="row" spacing={1} alignItems="center">
+              <FormControl sx={{ minWidth: 200 }}>
+                <InputLabel id="cor-l">Correlate by</InputLabel>
+                <Select labelId="cor-l" label="Correlate by" value={correlate} onChange={(e) => setCorrelate(e.target.value)} inputProps={{ "aria-label": "Correlate by" }}>
+                  <MenuItem value="none">None</MenuItem>
+                  <MenuItem value="trace">Trace</MenuItem>
+                </Select>
+              </FormControl>
+              <CapabilityBadge id="gcp.logs.correlate" />
+            </Stack>
             <FormControlLabel control={<Switch size="small" checked={showQuery} onChange={(e) => setShowQuery(e.target.checked)} />} label="Show query" />
             {showQuery && (
               <TextField label="Query" value={query} onChange={(e) => setQuery(e.target.value)} multiline minRows={3} fullWidth
@@ -130,6 +150,24 @@ export default function LogsExplorer() {
             ))}
           </Stack>
         </Section>
+
+        {correlate === "trace" && (
+          <Section title="Correlated by trace" description="Every log entry that shares a trace ID with a query match, across all log streams.">
+            <ErrorAlert error={groupsError} title="Failed to correlate" />
+            {groups && groups.length === 0 && <Typography variant="body2" color="text.secondary">No matching entries carry a trace ID.</Typography>}
+            <Stack spacing={1.5} aria-label="Correlated traces">
+              {(groups || []).map((g) => (
+                <Box key={g.trace} data-correlated-trace={g.trace} sx={{ border: 1, borderColor: "divider", borderRadius: 1, p: 1.5 }}>
+                  <Typography variant="body2" sx={{ fontWeight: 500 }}>{g.trace.split("/traces/")[1] || g.trace}</Typography>
+                  <Typography variant="caption" color="text.secondary">{g.entries.length} entries across {g.logs.length} log stream{g.logs.length === 1 ? "" : "s"} ({g.logs.join(", ")}) · worst severity {g.severity}</Typography>
+                  <Box component="ul" sx={{ m: 0, mt: 0.5, pl: 2.5 }}>
+                    {g.entries.map((en) => <li key={en.insertId}><Typography variant="body2"><b>{en.severity}</b> {fmtDate(en.timestamp)} [{en.logName?.split("/logs/")[1]}] {api.summary(en)}</Typography></li>)}
+                  </Box>
+                </Box>
+              ))}
+            </Stack>
+          </Section>
+        )}
 
         <Section title="Query results">
           <ErrorAlert error={error} title="Failed to query logs" />

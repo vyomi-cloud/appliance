@@ -265,3 +265,27 @@ export function parseMember(member) {
   const TYPE = { user: "User", serviceAccount: "Service account", group: "Group", domain: "Domain" };
   return { type: TYPE[kind] || kind, display: display || member };
 }
+
+// ── Org policy simulation (Vyomi verb on the policies collection) ─────────────────────────
+export const simulateOrgPolicy = (constraint, enforce) =>
+  restJson("POST", `/v2/projects/${encodeURIComponent(getProject())}/policies:simulate`, { body: { constraint, enforce } });
+export async function listOrgSimulations() {
+  const r = await restJson("GET", `/v2/projects/${encodeURIComponent(getProject())}/simulations`);
+  return r.simulations || [];
+}
+export const SIMULATABLE_CONSTRAINTS = [
+  ["iam.disableServiceAccountKeyCreation", "Disable service account key creation"],
+  ["iam.disableServiceAccountCreation", "Disable service account creation"],
+  ["storage.uniformBucketLevelAccess", "Enforce uniform bucket-level access"],
+  ["storage.publicAccessPrevention", "Enforce public access prevention"],
+];
+
+// ── Federation providers (workload: .../workloadIdentityPools/{p}/providers; workforce: .../workforcePools/{p}/providers) ──
+const isWorkforce = (poolName) => poolName.includes("workforcePools");
+export async function listProviders(poolName) {
+  const r = await restJson("GET", `/v1/${poolName}/providers`);
+  return r.workloadIdentityPoolProviders || r.providers || [];
+}
+export const createProvider = (poolName, providerId, body) =>
+  restJson("POST", `/v1/${poolName}/providers`, { query: { [isWorkforce(poolName) ? "workforcePoolProviderId" : "workloadIdentityPoolProviderId"]: providerId }, body });
+export const deleteProvider = (providerName) => restJson("DELETE", `/v1/${providerName}`);

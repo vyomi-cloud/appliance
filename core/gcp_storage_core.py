@@ -96,7 +96,7 @@ def _json(status: int, obj: dict) -> GcsResponse:
 _BUCKET_SETTABLE = ("labels", "iamConfiguration", "lifecycle", "retentionPolicy",
                     "rpo", "customPlacementConfig", "storageClass",
                     "cors", "website", "billing", "objectRetention", "encryption",
-                    "versioning", "softDeletePolicy", "hierarchicalNamespace")
+                    "versioning", "softDeletePolicy", "hierarchicalNamespace", "autoclass")
 _MULTI_REGIONS = {"US", "EU", "ASIA"}
 _DUAL_REGIONS = {"NAM4", "EUR4", "EUR5", "EUR7", "EUR8", "ASIA1"}
 # Public members that bucket/project public access prevention (enforced) blocks a
@@ -127,7 +127,7 @@ def _norm_iam_config(v: dict | None) -> dict:
             "publicAccessPrevention": pap}
 
 
-def _apply_bucket_fields(meta: dict, body: dict, patch: bool) -> GcsResponse | None:
+def _apply_bucket_fields(meta: dict, body: dict, patch: bool, store=None) -> GcsResponse | None:
     """Merge settable fields from an insert/patch body into the bucket meta.
     Returns an error response for an invalid value, else None."""
     for k in _BUCKET_SETTABLE:
@@ -164,6 +164,8 @@ def _apply_bucket_fields(meta: dict, body: dict, patch: bool) -> GcsResponse | N
             rules = (v or {}).get("rule") or []
             if not isinstance(rules, list):
                 return _err(400, "invalid", "Invalid lifecycle configuration.")
+            if (meta.get("autoclass") or {}).get("enabled") and any((r.get("action") or {}).get("type") == "SetStorageClass" for r in rules):
+                return _err(400, "invalid", "SetStorageClass lifecycle rules are not allowed while Autoclass is enabled.")
             meta[k] = {"rule": rules}
         elif k == "cors":
             if not isinstance(v, list):
@@ -177,9 +179,36 @@ def _apply_bucket_fields(meta: dict, body: dict, patch: bool) -> GcsResponse | N
             if key_name and not _KMS_KEY_RE.match(key_name):
                 return _err(400, "invalid", "Invalid CMEK key: defaultKmsKeyName must be a full Cloud KMS "
                             "CryptoKey resource name (projects/P/locations/L/keyRings/R/cryptoKeys/K).")
+            if key_name:
+                kl = key_name.split("/")[3].lower()
+                bl = str(meta.get("location") or "US").lower()
+                if kl != bl:
+                    return _err(400, "invalid", f"The Cloud KMS key location ({kl}) must match the bucket location ({bl}).")
+                ref = getattr(store, "refs", None)
+                if callable(ref) and ref("kms", key_name) is False:
+                    return _err(400, "invalid", f"Cloud KMS key {key_name} does not exist.")
             meta[k] = {"defaultKmsKeyName": key_name} if key_name else {}
         elif k == "versioning":
             meta[k] = {"enabled": bool((v or {}).get("enabled"))}
+        elif k == "rpo":
+            if v not in ("DEFAULT", "ASYNC_TURBO"):
+                return _err(400, "invalid", "Invalid rpo: must be DEFAULT or ASYNC_TURBO.")
+            if v == "ASYNC_TURBO" and _location_type(str(meta.get("location") or "US").upper()) != "dual-region":
+                return _err(400, "invalid", "Turbo replication (rpo ASYNC_TURBO) is only available for dual-region buckets.")
+            meta[k] = v
+        elif k == "autoclass":
+            if not isinstance(v, dict):
+                return _err(400, "invalid", "Invalid autoclass configuration.")
+            term = v.get("terminalStorageClass") or "NEARLINE"
+            if term not in ("NEARLINE", "ARCHIVE"):
+                return _err(400, "invalid", "autoclass.terminalStorageClass must be NEARLINE or ARCHIVE.")
+            if v.get("enabled") and any((r.get("action") or {}).get("type") == "SetStorageClass" for r in (meta.get("lifecycle") or {}).get("rule") or []):
+                return _err(400, "invalid", "Autoclass cannot be enabled on a bucket with SetStorageClass lifecycle rules.")
+            prev = meta.get("autoclass") or {}
+            toggled = bool(prev.get("enabled")) != bool(v.get("enabled"))
+            meta[k] = {"enabled": bool(v.get("enabled")), "terminalStorageClass": term,
+                       "toggleTime": _now() if toggled or not prev else prev.get("toggleTime", _now()),
+                       "terminalStorageClassUpdateTime": _now() if (toggled or prev.get("terminalStorageClass") != term) else prev.get("terminalStorageClassUpdateTime", _now())}
         elif k == "hierarchicalNamespace":
             if patch:   # immutable after bucket creation, same as the real API
                 return _err(400, "invalid", "hierarchicalNamespace cannot be changed after bucket creation.")
@@ -221,7 +250,7 @@ def _bucket_view(store: ObjectStore, name: str) -> dict:
     }
     if view["rpo"] is None:
         view.pop("rpo")
-    for k in ("labels", "lifecycle", "retentionPolicy", "customPlacementConfig",
+    for k in ("labels", "lifecycle", "retentionPolicy", "customPlacementConfig", "autoclass",
               "cors", "website", "billing", "objectRetention", "encryption",
               "versioning", "softDeletePolicy", "hierarchicalNamespace"):
         if meta.get(k):
@@ -482,6 +511,106 @@ def _apply_lifecycle(store: ObjectStore, bucket: str) -> None:
         store.persist()
 
 
+# ── Autoclass: objects move between classes by how recently they were accessed (for real, on the
+# object clock: last read, else last write). STANDARD -> NEARLINE after 30 idle days; with terminal
+# class ARCHIVE it continues to COLDLINE (90 days) and ARCHIVE (365 days). A read returns the
+# object to STANDARD. Evaluated whenever the bucket's objects are listed or read, with `now`
+# injectable so the transitions can be tested without waiting a year.
+_AUTOCLASS_STEPS = (("NEARLINE", 30), ("COLDLINE", 90), ("ARCHIVE", 365))
+
+
+def _autoclass_target(idle_days: float, terminal: str) -> str:
+    cls = "STANDARD"
+    for name, days in _AUTOCLASS_STEPS:
+        if idle_days >= days:
+            cls = name
+        if name == terminal and name == "NEARLINE":
+            break
+    return cls
+
+
+def _apply_autoclass(store: ObjectStore, bucket: str, now: float | None = None) -> None:
+    ac = (store.buckets.get(bucket) or {}).get("autoclass") or {}
+    if not ac.get("enabled"):
+        return
+    now = now if now is not None else datetime.now(timezone.utc).timestamp()
+    changed = False
+    for name, entry in store.bucket_objects(bucket).items():
+        last = max(_parse_ts(entry.get("_atime") or ""), _parse_ts(entry.get("updated") or entry.get("timeCreated") or ""))
+        target = _autoclass_target((now - last) / 86400.0, ac.get("terminalStorageClass") or "NEARLINE")
+        if entry.get("storageClass", "STANDARD") != target:
+            entry["storageClass"] = target
+            entry["timeStorageClassUpdated"] = _now()
+            changed = True
+    if changed:
+        store.persist()
+
+
+def _touch_access(store: ObjectStore, bucket: str, entry: dict) -> None:
+    """An object read: stamp the access clock; on an Autoclass bucket it goes back to STANDARD."""
+    entry["_atime"] = _now()
+    if ((store.buckets.get(bucket) or {}).get("autoclass") or {}).get("enabled") and entry.get("storageClass", "STANDARD") != "STANDARD":
+        entry["storageClass"] = "STANDARD"
+        entry["timeStorageClassUpdated"] = _now()
+
+
+# ── Customer-supplied encryption keys (CSEK): per-object AES-256 key sent in x-goog-encryption-* headers.
+# The key is NEVER stored — only its SHA-256, which is what the object metadata returns and what every
+# later read must match. Bytes at rest are encrypted with a SHA-256 counter-mode keystream derived from the
+# key (stdlib-only; Vyomi's stand-in for AES-256, so ciphertext is real but is not AES).
+def _csek_parse(headers: dict, prefix: str = "x-goog-encryption-") -> tuple[bytes | None, str | None, GcsResponse | None]:
+    algo, key_b64, sha_b64 = (headers.get(prefix + "algorithm"), headers.get(prefix + "key"), headers.get(prefix + "key-sha256"))
+    if not (algo or key_b64 or sha_b64):
+        return None, None, None
+    if algo != "AES256":
+        return None, None, _err(400, "invalid", "Invalid customer-supplied encryption algorithm: must be AES256.")
+    try:
+        key = base64.b64decode(key_b64 or "", validate=True)
+    except Exception:
+        return None, None, _err(400, "invalid", "The customer-supplied encryption key is not valid base64.")
+    if len(key) != 32:
+        return None, None, _err(400, "invalid", "The customer-supplied encryption key must be 256 bits (32 bytes).")
+    digest = base64.b64encode(hashlib.sha256(key).digest()).decode()
+    if sha_b64 != digest:
+        return None, None, _err(400, "invalid", "The customer-supplied encryption key SHA-256 does not match the key.")
+    return key, digest, None
+
+
+def _csek_xor(key: bytes, nonce: str, data: bytes) -> bytes:
+    out = bytearray(len(data))
+    for i in range(0, len(data), 32):
+        ks = hashlib.sha256(key + nonce.encode() + (i // 32).to_bytes(8, "big")).digest()
+        chunk = data[i:i + 32]
+        out[i:i + len(chunk)] = bytes(a ^ b for a, b in zip(chunk, ks))
+    return bytes(out)
+
+
+def _apply_csek(entry: dict, headers: dict) -> GcsResponse | None:
+    key, digest, bad = _csek_parse(headers)
+    if bad:
+        return bad
+    if key is None:
+        return None
+    nonce = uuid.uuid4().hex
+    entry["data"] = _csek_xor(key, nonce, bytes(entry["data"]))
+    entry["customerEncryption"] = {"encryptionAlgorithm": "AES256", "keySha256": digest}
+    entry["_csekNonce"] = nonce
+    entry.pop("kmsKeyName", None)
+    return None
+
+
+def _csek_read(entry: dict, headers: dict) -> tuple[bytes | None, GcsResponse | None]:
+    """Decrypted bytes of a CSEK object for a request that supplied the matching key."""
+    key, digest, bad = _csek_parse(headers)
+    if bad:
+        return None, bad
+    if key is None:
+        return None, _err(400, "invalid", "The target object is encrypted by a customer-supplied encryption key; supply it in the x-goog-encryption-* headers.")
+    if digest != entry["customerEncryption"]["keySha256"]:
+        return None, _err(400, "invalid", "The provided customer-supplied encryption key does not match the key the object was encrypted with.")
+    return _csek_xor(key, entry["_csekNonce"], bytes(entry["data"])), None
+
+
 def _apply_lifecycle_noncurrent(store: ObjectStore, bucket: str) -> None:
     """Evaluate numNewerVersions / daysSinceNoncurrentTime / noncurrentTimeBefore for
     real against the noncurrent-version archive (see gcp.storage.versioning) — the one
@@ -553,7 +682,7 @@ def _object_view(bucket: str, name: str, entry: dict) -> dict:
         **({"retention": entry["retention"]} if entry.get("retention") else {}),
         **{k: entry[k] for k in ("contentEncoding", "contentDisposition", "contentLanguage", "cacheControl",
                                  "temporaryHold", "eventBasedHold", "customTime", "componentCount", "kmsKeyName",
-                                 "timeDeleted")
+                                 "timeDeleted", "timeStorageClassUpdated", "customerEncryption")
            if entry.get(k) not in (None, "")},
     }
 
@@ -608,6 +737,8 @@ def _compose(store: ObjectStore, bucket: str, dest: str, body: bytes) -> GcsResp
         ent = objs.get(name)
         if ent is None:
             return _err(404, "notFound", f"No such object: {bucket}/{name}")
+        if ent.get("customerEncryption"):
+            return _err(400, "invalid", "Composing objects encrypted with a customer-supplied encryption key is not supported in Vyomi.")
         chunks.append(_entry_bytes(store, bucket, name, ent))
     blocked = _retention_block(store, bucket, dest, objs.get(dest)) or _hold_block(bucket, dest, objs.get(dest))
     if blocked:
@@ -781,6 +912,18 @@ def _record_op(store: ObjectStore, bucket: str, op_type: str) -> None:
 # a small per-second sequence number (real elapsed time, just disambiguated below
 # whole-second resolution) gives every real request its own point. See
 # gcp.storage.observability.
+def _emit_object_event(store, bucket: str, name: str, event: str, entry: dict | None = None) -> None:
+    """Tell Eventarc (Cloud Run triggers) about a real object change. `store.on_object_event` is
+    linked by the wire router; None elsewhere so a bare store is unaffected. Never raises."""
+    hook = getattr(store, "on_object_event", None)
+    if not callable(hook):
+        return
+    try:
+        hook(bucket, name, event, _object_view(bucket, name, entry) if entry else {"bucket": bucket, "name": name})
+    except Exception:   # noqa: BLE001 — an event-delivery failure must never fail the storage call
+        pass
+
+
 def _record_request_metric(store: ObjectStore, bucket: str) -> None:
     mon_store = getattr(store, "mon_store", None)
     if mon_store is None:
@@ -1148,7 +1291,7 @@ def _dispatch(store: ObjectStore, method: str, path: str,
                      "location": (meta.get("location") or "US").upper(),
                      "storageClass": meta.get("storageClass", "STANDARD"),
                      "project": query.get("project") or ""}
-            bad = _apply_bucket_fields(bmeta, meta, patch=False)
+            bad = _apply_bucket_fields(bmeta, meta, patch=False, store=store)
             if bad:
                 return bad
             store.create_bucket(name)
@@ -1190,7 +1333,7 @@ def _dispatch(store: ObjectStore, method: str, path: str,
                 return _err(400, "parseError", "Parse Error")
             bmeta = store.buckets[bucket]
             staged = dict(bmeta)
-            bad = _apply_bucket_fields(staged, patch, patch=(method == "PATCH"))
+            bad = _apply_bucket_fields(staged, patch, patch=(method == "PATCH"), store=store)
             if bad:
                 return bad
             if "rpo" in staged and staged.get("rpo") != bmeta.get("rpo"):
@@ -1311,6 +1454,7 @@ def _dispatch(store: ObjectStore, method: str, path: str,
         objs = store.bucket_objects(bucket)
         _apply_lifecycle(store, bucket)
         _apply_lifecycle_noncurrent(store, bucket)
+        _apply_autoclass(store, bucket)
         _sweep_soft_deleted(store, bucket)
 
         # object collection: /b/{bucket}/o
@@ -1329,9 +1473,13 @@ def _dispatch(store: ObjectStore, method: str, path: str,
                 custom = sess.get("metadata") or {}
                 entry = _new_entry(objs, name, media, content_type, custom, store.buckets.get(bucket, {}).get("storageClass", "STANDARD"),
                                    kms_key=_bucket_kms_key(store, bucket))
+                bad = _apply_csek(entry, headers)
+                if bad:
+                    return bad
                 _archive_entry(store, bucket, name, objs.get(name), deleted=False)
                 objs[name] = entry
-                store.mirror_put(bucket, name, media, content_type, custom)
+                store.mirror_put(bucket, name, entry["data"] if entry.get("customerEncryption") else media, content_type, custom)
+                _emit_object_event(store, bucket, name, "finalized", entry)
                 _gcs_resumable(store).pop(query.get("upload_id"), None)
                 store.persist()
                 return _json(200, _object_view(bucket, name, entry))
@@ -1386,9 +1534,13 @@ def _dispatch(store: ObjectStore, method: str, path: str,
                     return blocked
                 entry = _new_entry(objs, name, media, content_type, custom, store.buckets.get(bucket, {}).get("storageClass", "STANDARD"),
                                    kms_key=_bucket_kms_key(store, bucket))
+                bad = _apply_csek(entry, headers)
+                if bad:
+                    return bad
                 _archive_entry(store, bucket, name, objs.get(name), deleted=False)
                 objs[name] = entry
-                store.mirror_put(bucket, name, media, content_type, custom)
+                store.mirror_put(bucket, name, entry["data"] if entry.get("customerEncryption") else media, content_type, custom)
+                _emit_object_event(store, bucket, name, "finalized", entry)
                 store.persist()
                 return _json(200, _object_view(bucket, name, entry))
             if method == "GET":                     # list objects
@@ -1447,7 +1599,13 @@ def _dispatch(store: ObjectStore, method: str, path: str,
             if entry is None:
                 return _err(404, "notFound", f"No such object: {bucket}/{name}")
             if query.get("alt") == "media":         # download bytes
-                data = _entry_bytes(store, bucket, name, entry)
+                if entry.get("customerEncryption"):
+                    data, bad = _csek_read(entry, headers)
+                    if bad:
+                        return bad
+                else:
+                    data = _entry_bytes(store, bucket, name, entry)
+                _touch_access(store, bucket, entry)
                 hdrs = {"content-type": entry.get("contentType", "application/octet-stream"),
                         "x-goog-generation": str(entry.get("generation", "1")),
                         "x-goog-metageneration": str(entry.get("metageneration", 1)),
@@ -1518,6 +1676,7 @@ def _dispatch(store: ObjectStore, method: str, path: str,
                     objs.pop(name, None)
                     store.mirror_delete(bucket, name)
                     removed = True
+                    _emit_object_event(store, bucket, name, "deleted")
                 versions = _versions_map(store).get(bucket, {}).get(name)
                 if versions is not None:
                     before = len(versions)
@@ -1537,6 +1696,7 @@ def _dispatch(store: ObjectStore, method: str, path: str,
             else:
                 store.mirror_delete(bucket, name)
             objs.pop(name, None)
+            _emit_object_event(store, bucket, name, "deleted")
             store.persist()
             return GcsResponse(status=204, body=b"", media_type=None)
         return _err(400, "invalid", f"Unsupported method {method} on object")

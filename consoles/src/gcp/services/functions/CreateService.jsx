@@ -3,7 +3,7 @@
  * ui-spec/gcp/functions.json gaps_note). Every real setting goes into ONE native
  * services.create body (+ a follow-up setIamPolicy for authentication); settings Vyomi
  * doesn't model are declared gaps, not dead controls. */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Accordion, AccordionDetails, AccordionSummary, Box, Button, Checkbox, Divider, FormControl, FormControlLabel,
   IconButton, InputLabel, MenuItem, Radio, RadioGroup, Select, Stack, TextField, Typography,
@@ -15,6 +15,9 @@ import DeleteIcon from "@mui/icons-material/esm/Delete.js";
 import { useNotify } from "../../../common/notify.jsx";
 import { ErrorAlert, NotSimulated, PageHeader } from "../../kit/common.jsx";
 import * as api from "./api.js";
+import * as runApi from "../run/api.js";
+import ImagePicker from "../run/ImagePicker.jsx";
+import { applyAdvanced, AutoscalingFactors, CloudSqlPanel, EphemeralDisk, HealthChecks, SecurityPanel, useAdvanced, VolumesPanel } from "../run/AdvancedSettings.jsx";
 
 const SourceOpt = ({ title, children }) => (
   <Box>
@@ -52,6 +55,11 @@ export default function CreateService({ query }) {
   const [execEnv, setExecEnv] = useState("gen2");
   const [serviceAccount, setServiceAccount] = useState("");
   const [cpuBoost, setCpuBoost] = useState(true);
+  const [adv, setAdv] = useAdvanced();
+  const [picker, setPicker] = useState(false);
+  const [trigBucket, setTrigBucket] = useState("");
+  const [trigBuckets, setTrigBuckets] = useState([]);
+  useEffect(() => { runApi.listBucketNames().then(setTrigBuckets).catch(() => {}); }, []);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
 
@@ -87,7 +95,9 @@ export default function CreateService({ query }) {
       if (source === "function" || source === "repo") {
         body.annotations = api.functionAnnotations(runtime, "handler", api.DEFAULT_FUNCTION_SOURCE[runtime] || "");
       }
+      applyAdvanced(adv, { container, template: body.template, body, gen1: execEnv === "gen1" });
       await api.createService(region, name, body);
+      if (trigBucket && source !== "image") await runApi.createStorageTrigger(region, name, `${name}-trigger`, trigBucket, runApi.STORAGE_EVENTS[0][0]);
       if (authMode === "public") await api.setPublic(region, name, true);
       if (source === "repo") await api.connectRepo(region, name, repository.trim(), branch.trim() || "main");
       api.setRegion(region);
@@ -117,7 +127,7 @@ export default function CreateService({ query }) {
           </Stack>
         )}
         {source === "image" && (
-          <TextField label="Container image URL" required value={image} onChange={(e) => setImage(e.target.value)} sx={{ maxWidth: 560 }} />
+          <Stack direction="row" spacing={1} alignItems="flex-start"><TextField label="Container image URL" required value={image} onChange={(e) => setImage(e.target.value)} sx={{ maxWidth: 560 }} /><Button variant="outlined" sx={{ mt: 1 }} onClick={() => setPicker(true)}>Select</Button><ImagePicker open={picker} onClose={() => setPicker(false)} onPick={setImage} /></Stack>
         )}
       </SourceOpt>
       <Divider />
@@ -132,7 +142,13 @@ export default function CreateService({ query }) {
               </Select>
             </FormControl>
             <Typography variant="body2" color="text.secondary">Use an inline editor to create a function. You can edit the entry point and source after the service is created, from the Source tab.</Typography>
-            <Typography variant="body2" color="text.secondary">Trigger (optional): add a Pub/Sub-sourced Eventarc trigger after the service is created, from its Triggers tab.</Typography>
+            <FormControl sx={{ maxWidth: 420 }} size="small">
+              <InputLabel id="ft-l">Trigger (optional)</InputLabel>
+              <Select labelId="ft-l" label="Trigger (optional)" value={trigBucket} onChange={(e) => setTrigBucket(e.target.value)} inputProps={{ "aria-label": "Trigger bucket" }}>
+                <MenuItem value="">None (HTTPS only)</MenuItem>
+                {(trigBuckets || []).map((b) => <MenuItem key={b} value={b}>{`Cloud Storage: object finalized in ${b}`}</MenuItem>)}
+              </Select>
+            </FormControl>
           </SourceOpt>
           <Divider />
         </>
@@ -180,7 +196,7 @@ export default function CreateService({ query }) {
             <TextField label="Maximum number of instances" type="number" value={maxInst} onChange={(e) => setMaxInst(e.target.value)} sx={{ width: 260 }} />
           )}
         </Stack>
-        <NotSimulated compact feature="Customize autoscaling factors" note="Target CPU / concurrency utilization isn't modelled; Vyomi scales strictly between the min and max instance counts." />
+        <AutoscalingFactors a={adv} set={setAdv} />
       </SourceOpt>
       <Divider />
 
@@ -216,9 +232,9 @@ export default function CreateService({ query }) {
                 </Stack>
                 <TextField label="Container command" value={command} onChange={(e) => setCommand(e.target.value)} helperText="Leave blank to use the entry point command defined in the container image." />
                 <TextField label="Container arguments" value={args} onChange={(e) => setArgs(e.target.value)} helperText="Comma-separated. Arguments passed to the entry point command." />
-                <NotSimulated compact feature="Ephemeral disk" />
+                <EphemeralDisk a={adv} set={setAdv} />
                 <NotSimulated compact feature="GPU" />
-                <NotSimulated compact feature="Health checks" />
+                <HealthChecks a={adv} set={setAdv} />
                 <Box>
                   <Typography variant="body2" sx={{ fontWeight: 500, mb: 1 }}>Variables & Secrets</Typography>
                   <Stack spacing={1}>
@@ -232,7 +248,7 @@ export default function CreateService({ query }) {
                     <Box><Button size="small" startIcon={<AddIcon />} onClick={() => setEnvVars([...envVars, { name: "", value: "" }])}>Add variable</Button></Box>
                   </Stack>
                 </Box>
-                <NotSimulated compact feature="Volumes" />
+                <VolumesPanel a={adv} set={setAdv} />
                 <Stack direction="row" spacing={2}>
                   <TextField label="Request timeout" type="number" value={timeout} onChange={(e) => setTimeoutS(e.target.value)} helperText="seconds (maximum 3600)" sx={{ width: 260 }} />
                   <TextField label="Maximum concurrent requests per instance" type="number" value={concurrency} onChange={(e) => setConcurrency(e.target.value)} sx={{ width: 300 }} />
@@ -244,7 +260,7 @@ export default function CreateService({ query }) {
                 </RadioGroup>
                 <Typography variant="body2"><b>Revision scaling</b> — set above, under Service scaling.</Typography>
                 <FormControlLabel control={<Checkbox size="small" checked={cpuBoost} onChange={(e) => setCpuBoost(e.target.checked)} />} label="Startup CPU boost" />
-                <NotSimulated compact feature="Cloud SQL connections" />
+                <CloudSqlPanel a={adv} set={setAdv} />
               </Stack>
             </Box>
             <Box>
@@ -257,7 +273,7 @@ export default function CreateService({ query }) {
               <Stack spacing={2}>
                 <TextField label="Service account" value={serviceAccount} onChange={(e) => setServiceAccount(e.target.value)}
                   helperText="Leave blank to use the default compute service account." sx={{ maxWidth: 480 }} />
-                <NotSimulated feature="Verify container deployment with Binary Authorization, Encryption (Google-managed encryption key / Cloud KMS key)" />
+                <SecurityPanel a={adv} set={setAdv} />
               </Stack>
             </Box>
           </Stack>

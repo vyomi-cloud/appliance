@@ -185,6 +185,11 @@ def _instance_view(rec: dict) -> dict:
         "selfLink": (f"https://sqladmin.googleapis.com/sql/v1beta4/projects/"
                      f"{project}/instances/{name}"),
     }
+    if rec.get("diskEncryptionConfiguration"):
+        view["diskEncryptionConfiguration"] = {"kind": "sql#diskEncryptionConfiguration",
+                                               "kmsKeyName": rec["diskEncryptionConfiguration"]["kmsKeyName"]}
+        view["diskEncryptionStatus"] = {"kind": "sql#diskEncryptionStatus",
+                                        "kmsKeyVersionName": rec["diskEncryptionConfiguration"]["kmsKeyName"] + "/cryptoKeyVersions/1"}
     if rec.get("masterInstanceName"):
         view["masterInstanceName"] = rec["masterInstanceName"]
     return view
@@ -257,6 +262,75 @@ def _operation_view(op: dict, project: str, instance: str) -> dict:
                            f"{project}/instances/{instance}")}
 
 
+_SSL_MODES = ("ALLOW_UNENCRYPTED_AND_ENCRYPTED", "ENCRYPTED_ONLY", "TRUSTED_CLIENT_CERTIFICATE_REQUIRED")
+_SHARED_TIERS = {"db-f1-micro": (1, 614), "db-g1-small": (1, 1700)}
+_CUSTOM_TIER = re.compile(r"^db-custom-(\d+)-(\d+)$")
+
+
+def _check_tier(tier: str, version: str) -> str | None:
+    """Real Cloud SQL machine-shape rules: shared-core tiers are fixed; a custom shape
+    db-custom-<vCPU>-<MB> needs vCPU 1 or an even number up to 96, memory a multiple
+    of 256 MB within 0.9-6.5 GB per vCPU (and at least 3840 MB)."""
+    if tier in _SHARED_TIERS:
+        return None
+    m = _CUSTOM_TIER.match(tier)
+    if not m:
+        return f"Invalid Tier ({tier}) for (PER_USE) Pricing Plan. Use a shared-core tier or db-custom-<vCPUs>-<MB>."
+    cpu, mem = int(m.group(1)), int(m.group(2))
+    if cpu != 1 and (cpu % 2 or cpu > 96):
+        return f"Invalid vCPU count ({cpu}): must be 1 or an even number up to 96."
+    if mem % 256:
+        return f"Invalid memory ({mem} MB): must be a multiple of 256 MB."
+    if mem < 3840 or mem < cpu * 920 or mem > cpu * 6656:
+        return (f"Invalid memory ({mem} MB) for {cpu} vCPU: must be at least 3840 MB and "
+                f"between 0.9 and 6.5 GB per vCPU.")
+    return None
+
+
+def _check_settings(store, project: str, region: str, settings: dict) -> str | None:
+    """Validate tier, SSL mode and the CMEK key on instance create/patch (None = ok)."""
+    if "tier" in settings:
+        bad = _check_tier(str(settings["tier"]), "")
+        if bad:
+            return bad
+    ip = settings.get("ipConfiguration") or {}
+    mode = ip.get("sslMode")
+    if mode is not None and mode not in _SSL_MODES:
+        return f"Invalid value for sslMode: {mode}. Allowed: {', '.join(_SSL_MODES)}."
+    if ip.get("requireSsl") and mode in (None, "ALLOW_UNENCRYPTED_AND_ENCRYPTED"):
+        ip["sslMode"] = "ENCRYPTED_ONLY"      # legacy requireSsl maps onto the SSL mode
+    return None
+
+
+def _check_cmek(store, region: str, cfg: dict) -> str | None:
+    key = (cfg or {}).get("kmsKeyName")
+    if not key:
+        return None
+    m = re.match(r"^projects/[^/]+/locations/([^/]+)/keyRings/[^/]+/cryptoKeys/[^/]+$", key)
+    if not m:
+        return f"Invalid kmsKeyName: {key}"
+    if m.group(1) != region:
+        return (f"The Cloud KMS key location ({m.group(1)}) must match the instance region ({region}).")
+    refs = getattr(store, "refs", None)
+    if refs and refs("kms", key) is False:
+        return f"Cloud KMS key not found: {key}"
+    return None
+
+
+def validate_config(refs, region: str, body: dict, patch: bool = False) -> str | None:
+    """Shared by the Nano core and the offline appliance's Cloud SQL handlers: tier, sslMode
+    and CMEK rules for an instances.insert / patch body (None = ok)."""
+    class _S:  # minimal store shim carrying the optional refs hook
+        pass
+    st = _S()
+    st.refs = refs
+    settings = body.get("settings")
+    bad = _check_settings(st, "", region, settings) if isinstance(settings, dict) else None
+    if bad:
+        return bad
+    return None if patch else _check_cmek(st, region, body.get("diskEncryptionConfiguration") or {})
+
+
 # ── control-plane operations: instances ────────────────────────────────────
 def _insert_instance(store: SqlStore, project: str, body: dict) -> CloudSqlResponse:
     name = str(body.get("name", "")).strip()
@@ -271,6 +345,10 @@ def _insert_instance(store: SqlStore, project: str, body: dict) -> CloudSqlRespo
     settings = body.get("settings") or {}
     if "tier" not in settings:
         settings["tier"] = _DEFAULT_TIER
+    region = str(body.get("region", _DEFAULT_REGION))
+    bad = _check_settings(store, project, region, settings) or _check_cmek(store, region, body.get("diskEncryptionConfiguration") or {})
+    if bad:
+        return _err(400, "INVALID_ARGUMENT", bad)
     rec = {
         "name": name,
         "project": project,
@@ -279,6 +357,7 @@ def _insert_instance(store: SqlStore, project: str, body: dict) -> CloudSqlRespo
         "region": str(body.get("region", _DEFAULT_REGION)),
         "gceZone": str(body.get("gceZone", f"{body.get('region', _DEFAULT_REGION)}-a")),
         "settings": settings,
+        "diskEncryptionConfiguration": body.get("diskEncryptionConfiguration") or None,
         "etag": _etag(),
         "databases": {},  # name -> database metadata (control-plane view)
         "users": {},       # "name@host" -> user metadata
@@ -313,6 +392,9 @@ def _patch_instance(store: SqlStore, project: str, instance: str, body: dict) ->
         return _not_found(f"The Cloud SQL instance does not exist. Instance: {instance}")
     settings = body.get("settings")
     if isinstance(settings, dict):
+        bad = _check_settings(store, project, rec.get("region", _DEFAULT_REGION), settings)
+        if bad:
+            return _err(400, "INVALID_ARGUMENT", bad)
         _DEEP_MERGE(rec.setdefault("settings", {}), settings)
         policy = rec["settings"].get("activationPolicy")
         if policy == "NEVER":

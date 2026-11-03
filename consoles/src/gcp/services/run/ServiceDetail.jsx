@@ -2,7 +2,7 @@
  * Security, Triggers, YAML), all on the native Cloud Run Admin API v2. */
 import { useState } from "react";
 import {
-  Alert, Box, Breadcrumbs, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle,
+  Alert, Box, Breadcrumbs, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle,
   FormControl, FormControlLabel, IconButton, InputLabel, MenuItem, Radio, RadioGroup, Select, Stack, Tab, Tabs, TextField, Tooltip, Typography,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/esm/ArrowBack.js";
@@ -16,7 +16,7 @@ import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import ResourceTable from "../../kit/ResourceTable.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
-import { CapabilityContainer } from "../../kit/Capability.jsx";
+import { CapabilityBadge, CapabilityContainer } from "../../kit/Capability.jsx";
 import { ErrorAlert, fmtDate, NotSimulated, NotSimulatedContainer, PageHeader } from "../../kit/common.jsx";
 import { Link, hashHref } from "../../link.jsx";
 import * as api from "./api.js";
@@ -163,7 +163,7 @@ function Observability({ name }) {
 // ── Triggers (Eventarc-style; Pub/Sub transport — see api.js) ─────────────────────────────
 function Triggers({ region, name }) {
   const notify = useNotify();
-  const list = useAsync(() => api.listServiceTriggers(region, name), [region, name]);
+  const list = useAsync(() => api.listAllTriggers(region, name), [region, name]);
   const [add, setAdd] = useState(false);
   return (
     <Stack spacing={2}>
@@ -180,16 +180,14 @@ function Triggers({ region, name }) {
           empty={<Typography variant="body2" color="text.secondary">No triggers yet. Add one to deliver Pub/Sub events to this service.</Typography>}
           columns={[
             { id: "name", header: "Name", sortField: "name", cell: (t) => api.serviceTriggerId(t) },
-            { id: "type", header: "Type", cell: () => "Pub/Sub" },
+            { id: "type", header: "Source", cell: (t) => api.triggerSource(t) },
             { id: "event", header: "Event", cell: (t) => t.eventFilters?.[0]?.value || "—" },
             { id: "destination", header: "Destination", cell: () => name },
             { id: "actions", header: "Actions", cell: (t) => (
-              <Button size="small" color="error" onClick={async () => { await api.deleteServiceTrigger(region, name, api.serviceTriggerId(t)); notify.success("Trigger deleted"); list.reload(); }}>Delete</Button>
+              <Button size="small" color="error" onClick={async () => { await api.deleteAnyTrigger(region, name, api.serviceTriggerId(t)); notify.success("Trigger deleted"); list.reload(); }}>Delete</Button>
             ) },
           ]}
         />
-        <NotSimulated compact feature="Non-Pub/Sub event sources"
-          note="Vyomi has no Eventarc backend; triggers are modelled as a Pub/Sub topic binding, and publishing to that topic really delivers to this service (see the Observability tab's Logs)." />
       </CapabilityContainer>
       {add && <AddTriggerDialog region={region} name={name} onClose={() => setAdd(false)} onAdded={() => { notify.success("Trigger added"); list.reload(); }} />}
     </Stack>
@@ -200,13 +198,17 @@ function AddTriggerDialog({ region, name, onClose, onAdded }) {
   const notify = useNotify();
   const [id, setId] = useState(`${name}-trigger`);
   const [topic, setTopic] = useState("");
+  const [source, setSource] = useState("pubsub");
+  const [bucket, setBucket] = useState("");
+  const [evt, setEvt] = useState(api.STORAGE_EVENTS[0][0]);
   const topics = useAsync(() => api.listTopicIds(), []);
+  const buckets = useAsync(() => api.listBucketNames(), []);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const idErr = api.validName(id, "Trigger");
   const save = async () => {
     setBusy(true); setError(null);
-    try { await api.createServiceTrigger(region, name, id, topic); onAdded(); onClose(); }
+    try { if (source === "storage") await api.createStorageTrigger(region, name, id, bucket, evt); else await api.createServiceTrigger(region, name, id, topic); onAdded(); onClose(); }
     catch (e) { setError(e); } finally { setBusy(false); }
   };
   return (
@@ -214,15 +216,34 @@ function AddTriggerDialog({ region, name, onClose, onAdded }) {
       <DialogTitle>Add trigger</DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ pt: 1 }}>
-          <Typography variant="body2" color="text.secondary">Delivers messages published on a Pub/Sub topic to this service.</Typography>
+          <Typography variant="body2" color="text.secondary">Delivers events from a source to this service.</Typography>
           <TextField label="Trigger name" required value={id} onChange={(e) => setId(e.target.value.trim())} error={!!idErr} helperText={idErr || " "} />
-          <FormControl required>
+          <RadioGroup row value={source} onChange={(e) => setSource(e.target.value)} aria-label="Event source">
+            <FormControlLabel value="pubsub" control={<Radio size="small" />} label="Cloud Pub/Sub" />
+            <FormControlLabel value="storage" control={<Radio size="small" />} label="Cloud Storage" />
+          </RadioGroup>
+          {source === "storage" && (<>
+            <FormControl required>
+              <InputLabel id="trg-bkt-l">Bucket</InputLabel>
+              <Select labelId="trg-bkt-l" label="Bucket" value={bucket} onChange={(e) => setBucket(e.target.value)}>
+                {(buckets.data || []).map((b) => <MenuItem key={b} value={b}>{b}</MenuItem>)}
+              </Select>
+            </FormControl>
+            <FormControl>
+              <InputLabel id="trg-evt-l">Event type</InputLabel>
+              <Select labelId="trg-evt-l" label="Event type" value={evt} onChange={(e) => setEvt(e.target.value)}>
+                {api.STORAGE_EVENTS.map(([v, l]) => <MenuItem key={v} value={v}>{l}</MenuItem>)}
+              </Select>
+            </FormControl>
+          </>)}
+          {source === "pubsub" && <FormControl required>
             <InputLabel id="trg-topic-l">Pub/Sub topic</InputLabel>
             <Select labelId="trg-topic-l" label="Pub/Sub topic" value={topic} onChange={(e) => setTopic(e.target.value)}>
               {(topics.data || []).map((t) => <MenuItem key={t} value={t}>{t}</MenuItem>)}
             </Select>
           </FormControl>
-          {!topics.loading && !(topics.data || []).length && (
+          }
+          {source === "pubsub" && !topics.loading && !(topics.data || []).length && (
             <Typography variant="caption" color="text.secondary">No topics yet — create one in Pub/Sub first.</Typography>
           )}
           {error && <Alert severity="error">{error.message}</Alert>}
@@ -230,23 +251,30 @@ function AddTriggerDialog({ region, name, onClose, onAdded }) {
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2 }}>
         <Button onClick={onClose} disabled={busy}>Cancel</Button>
-        <Button variant="contained" disabled={busy || !!idErr || !topic} onClick={save}>{busy ? "Creating…" : "Create"}</Button>
+        <Button variant="contained" disabled={busy || !!idErr || (source === "pubsub" ? !topic : !bucket)} onClick={save}>{busy ? "Creating…" : "Create"}</Button>
       </DialogActions>
     </Dialog>
   );
 }
 
 // ── Revisions ────────────────────────────────────────────────────────────────────────────
-function Revisions({ region, name, service, reload }) {
+export function Revisions({ region, name, service, reload }) {
   const notify = useNotify();
   const [traffic, setTraffic] = useState(false);
   const revs = useAsync(() => api.listRevisions(region, name), [region, name]);
   const latest = (service.latestReadyRevision || "").split("/").pop();
+  const [tagFor, setTagFor] = useState(null);
+  const [tagError, setTagError] = useState(null);
+  const saveTraffic = async (traffic) => {
+    setTagError(null);
+    try { await api.patchService(region, name, { traffic }, "traffic"); notify.success("Revision tags updated"); reload(); revs.reload(); }
+    catch (e) { setTagError(e); throw e; }
+  };
   const trafficFor = (rid) => (service.trafficStatuses || []).find((t) => t.revision === rid)?.percent ?? 0;
   return (
     <Stack spacing={2}>
       <Stack direction="row" alignItems="center" spacing={1}>
-        <Typography variant="h3" component="h2" sx={{ flex: 1 }}>Revisions</Typography>
+        <Typography variant="h3" component="h2" sx={{ flex: 1 }}>Revisions <CapabilityBadge id="gcp.run.services.revision-tags" /></Typography>
         <Button onClick={() => setTraffic(true)}>Manage traffic</Button>
       </Stack>
       <ResourceTable
@@ -261,19 +289,56 @@ function Revisions({ region, name, service, reload }) {
           { id: "name", header: "Name", sortField: "name", cell: (r) => r.name.split("/").pop() },
           { id: "traffic", header: "Traffic", cell: (r) => `${trafficFor(r.name.split("/").pop())}%` },
           { id: "deployed", header: "Deployed", sortField: "createTime", cell: (r) => fmtDate(r.createTime) },
-          { id: "tags", header: "Revision tags", cell: () => "—" },
-          { id: "actions", header: "Actions", cell: (r) => (
+          { id: "tags", header: "Revision tags", cell: (r) => tagsOf(service, r.name.split("/").pop()).map((t) => (
+            <Chip key={t.tag} size="small" label={t.tag} title={t.uri} sx={{ mr: 0.5 }}
+              onDelete={() => setTagFor(null) || saveTraffic(removeTag(service, t.tag))} />)) },
+          { id: "actions", header: "Actions", cell: (r) => (<>
+            <Button size="small" onClick={() => setTagFor(r.name.split("/").pop())}>Add tag</Button>
             <Button size="small" color="error" disabled={r.name.split("/").pop() === latest}
               onClick={async () => { await api.deleteRevision(region, name, r.name.split("/").pop()); notify.success("Revision deleted"); revs.reload(); }}>
               Delete
-            </Button>
+            </Button></>
           ) },
         ]}
       />
-      <NotSimulated compact feature="Revision tags" note="Vyomi serves traffic by percentage split only; named revision tags aren't modelled." />
+      {tagFor && <TagDialog revision={tagFor} onClose={() => setTagFor(null)}
+        onSave={(tag) => saveTraffic(addTag(service, tagFor, tag)).then(() => setTagFor(null))} error={tagError} />}
       {traffic && <TrafficDialog region={region} name={name} service={service} revisions={revs.data || []}
         onClose={() => setTraffic(false)} onSaved={() => { reload(); revs.reload(); }} />}
     </Stack>
+  );
+}
+
+const LATEST_T = "TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST";
+const REVISION_T = "TRAFFIC_TARGET_ALLOCATION_TYPE_REVISION";
+const tagsOf = (service, rid) => (service.trafficStatuses || []).filter((t) => t.tag && t.revision === rid);
+const specTraffic = (service) => (service.traffic || []).map((t) => ({ ...t }));
+const removeTag = (service, tag) => specTraffic(service).map((t) => { if (t.tag === tag) delete t.tag; return t; }).filter((t) => t.percent > 0 || t.tag);
+function addTag(service, rid, tag) {
+  const latest = (service.latestReadyRevision || "").split("/").pop();
+  const traffic = specTraffic(service);
+  const hit = traffic.find((t) => !t.tag && (t.type === LATEST_T ? rid === latest : t.revision === rid));
+  if (hit) hit.tag = tag; else traffic.push({ type: REVISION_T, revision: rid, percent: 0, tag });
+  return traffic;
+}
+function TagDialog({ revision, onClose, onSave, error }) {
+  const [tag, setTag] = useState("");
+  const [busy, setBusy] = useState(false);
+  return (
+    <Dialog open onClose={onClose} maxWidth="xs" fullWidth aria-label="Add revision tag">
+      <DialogTitle>Add revision tag</DialogTitle>
+      <DialogContent>
+        <Stack spacing={2} sx={{ pt: 1 }}>
+          <Typography variant="body2">Gives revision <b>{revision}</b> its own URL (TAG---service-...run.app) that receives 0% of production traffic.</Typography>
+          <TextField label="Tag" value={tag} onChange={(e) => setTag(e.target.value.trim())} inputProps={{ "aria-label": "Revision tag" }} helperText="Lowercase letters, digits and '-', starting with a letter" />
+          {error && <Alert severity="error">{error.message}</Alert>}
+        </Stack>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2 }}>
+        <Button onClick={onClose}>Cancel</Button>
+        <Button variant="contained" disabled={busy || !tag} onClick={async () => { setBusy(true); try { await onSave(tag); } catch { /* shown */ } finally { setBusy(false); } }}>Save</Button>
+      </DialogActions>
+    </Dialog>
   );
 }
 

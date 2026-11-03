@@ -141,10 +141,10 @@ export const deleteHnsFolder = (bucket, folder) =>
   restJson("DELETE", `/storage/v1/b/${e(bucket)}/folders/${e(folder)}`);
 
 /** objects.insert, simple media upload (uploadType=media). */
-export async function uploadObject(bucket, name, data, contentType) {
+export async function uploadObject(bucket, name, data, contentType, extraHeaders = {}) {
   const qs = new URLSearchParams({ uploadType: "media", name, userProject: getProject() }).toString();
   const res = await fetch(`${WIRE_BASE}/upload/storage/v1/b/${e(bucket)}/o?${qs}`, {
-    method: "POST", headers: { "content-type": contentType || "application/octet-stream" }, body: data,
+    method: "POST", headers: { "content-type": contentType || "application/octet-stream", ...extraHeaders }, body: data,
   });
   const text = await res.text();
   let j = {};
@@ -211,3 +211,21 @@ export const validBucketName = (n) => {
   if (/^\d+\.\d+\.\d+\.\d+$/.test(n)) return "Bucket names can't be IP addresses.";
   return null;
 };
+
+// ── customer-supplied encryption keys (CSEK): the key travels in x-goog-encryption-* headers and is never stored ──
+export const randomCsekBase64 = () => { const b = new Uint8Array(32); crypto.getRandomValues(b); return btoa(String.fromCharCode(...b)); };
+export async function csekHeaders(keyB64) {
+  const raw = Uint8Array.from(atob(keyB64), (c) => c.charCodeAt(0));
+  const sha = new Uint8Array(await crypto.subtle.digest("SHA-256", raw));
+  return { "x-goog-encryption-algorithm": "AES256", "x-goog-encryption-key": keyB64, "x-goog-encryption-key-sha256": btoa(String.fromCharCode(...sha)) };
+}
+export const uploadObjectWithKey = async (bucket, name, data, contentType, keyB64) => uploadObject(bucket, name, data, contentType, await csekHeaders(keyB64));
+export async function downloadWithKey(bucket, name, keyB64) {
+  const res = await fetch(downloadUrl(bucket, name), { headers: await csekHeaders(keyB64) });
+  if (!res.ok) { let m = res.statusText; try { m = (await res.json()).error?.message || m; } catch {} throw new Error(m); }
+  return res.blob();
+}
+export async function listEncryptKeys() {
+  const r = await restJson("GET", `/v1/projects/${e(getProject())}/locations/-/keyRings/-/cryptoKeys`);
+  return (r.cryptoKeys || []).filter((k) => !k.purpose || k.purpose === "ENCRYPT_DECRYPT").map((k) => k.name);
+}

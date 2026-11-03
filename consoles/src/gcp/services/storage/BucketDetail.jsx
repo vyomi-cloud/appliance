@@ -20,7 +20,7 @@ import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import ResourceTable from "../../kit/ResourceTable.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
-import { ErrorAlert, fmtBytes, fmtDate, fmtDuration, KeyValue, NotSimulated, PageHeader, Section } from "../../kit/common.jsx";
+import { ErrorAlert, fmtBytes, fmtDate, fmtDuration, KeyValue, PageHeader, Section } from "../../kit/common.jsx";
 import { CapabilityBadge, CapabilityContainer } from "../../kit/Capability.jsx";
 import { Link, hashHref } from "../../link.jsx";
 import * as api from "./api.js";
@@ -196,7 +196,7 @@ function Objects({ bucket, prefix, meta, policy }) {
         ]}
         empty={<Typography variant="body2" color="text.secondary">No rows to display. Upload files or create a folder.</Typography>}
       />
-      <Box sx={{ mt: 1.5 }}><NotSimulated compact feature="Per-object customer-managed encryption keys" note="Object holds, object retention and — on a bucket with versioning/soft delete on — noncurrent version history are real; see the bucket's Protection tab." /></Box>
+      <CsekUpload bucket={bucket} prefix={prefix} onDone={reload} />
       <DeleteDialog
         open={del}
         onClose={() => setDel(false)}
@@ -391,7 +391,7 @@ function KmsDialog({ current, onClose, onSave }) {
   const valid = !name || /^projects\/[^/]+\/locations\/[^/]+\/keyRings\/[^/]+\/cryptoKeys\/[^/]+$/.test(name);
   return (
     <SaveDialog title="Use a Cloud KMS key" onClose={onClose} disabled={!valid} onSave={() => onSave(name || null)}>
-      <Typography variant="body2" color="text.secondary">Vyomi validates the key's resource name and stamps it on every object written to this bucket from now on, but does not perform real envelope encryption with it.</Typography>
+      <Typography variant="body2" color="text.secondary">The key must be a Cloud KMS key in this bucket's location that exists in Vyomi; it is stamped on every object written to this bucket from now on (no real envelope encryption happens).</Typography>
       <TextField label="Cloud KMS key" value={name} onChange={(e) => setName(e.target.value)} error={!valid}
         helperText={valid ? "Leave blank to revert to a Google-managed key." : "projects/P/locations/L/keyRings/R/cryptoKeys/K"} />
     </SaveDialog>
@@ -793,5 +793,40 @@ function RuleDialog({ onClose, onSave }) {
       <TextField label="Object name matches prefix" value={prefix} onChange={(e) => setPrefix(e.target.value)} helperText="Comma-separated" />
       <TextField label="Object name matches suffix" value={suffix} onChange={(e) => setSuffix(e.target.value)} helperText="Comma-separated" />
     </SaveDialog>
+  );
+}
+
+/** Upload one object encrypted with a customer-supplied key (x-goog-encryption-* headers). */
+function CsekUpload({ bucket, prefix, onDone }) {
+  const notify = useNotify();
+  const [open, setOpen] = useState(false);
+  const [key, setKey] = useState("");
+  const [file, setFile] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const go = async () => {
+    setBusy(true); setError(null);
+    try { await api.uploadObjectWithKey(bucket, prefix + file.name, file, file.type, key); notify.success(`Uploaded ${file.name} with your encryption key`); setOpen(false); onDone(); }
+    catch (e) { setError(e); } finally { setBusy(false); }
+  };
+  return (
+    <Box sx={{ mt: 1.5 }}>
+      <Button size="small" variant="outlined" onClick={() => { setKey(api.randomCsekBase64()); setFile(null); setError(null); setOpen(true); }}>Upload with customer-supplied key</Button>
+      <CapabilityBadge id="gcp.storage.customer-supplied-keys" />
+      {open && (
+        <Dialog open onClose={busy ? undefined : () => setOpen(false)} maxWidth="sm" fullWidth aria-label="Upload with customer-supplied key">
+          <DialogTitle>Upload with a customer-supplied encryption key</DialogTitle>
+          <DialogContent>
+            <Stack spacing={2} sx={{ pt: 1 }}>
+              <Typography variant="body2" color="text.secondary">The key is sent with the request and never stored. Keep it: it is required to read the object back.</Typography>
+              <ErrorAlert error={error} />
+              <TextField label="Base64 AES-256 key" value={key} onChange={(e) => setKey(e.target.value.trim())} inputProps={{ "aria-label": "Encryption key" }} />
+              <Box><Button component="label" variant="outlined">Choose file<input type="file" hidden aria-label="File to encrypt" onChange={(e) => setFile(e.target.files[0] || null)} /></Button> {file?.name}</Box>
+            </Stack>
+          </DialogContent>
+          <DialogActions><Button onClick={() => setOpen(false)} disabled={busy}>Cancel</Button><Button variant="contained" disabled={!file || !key || busy} onClick={go}>Upload</Button></DialogActions>
+        </Dialog>
+      )}
+    </Box>
   );
 }

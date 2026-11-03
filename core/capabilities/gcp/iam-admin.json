@@ -216,5 +216,62 @@
    "Per-resource IAP enable/disable and its IAM policy (roles/iap.httpsResourceAccessor) are real and stateful, and the Allow decision is ENFORCED: a checkAccess call returns the same allow/deny IAP's own proxy would — denied while IAP is off, denied without the accessor role, allowed with it. Vyomi does not run an actual HTTPS reverse proxy in front of a real backend service/App Engine app; checkAccess is the decision, not a live request path."
   ],
   "tests": ["tests/conformance/test_gcp_iam_core.py"]
+ },
+ "gcp.iam-admin.org-policy-simulation": {
+  "title": "Constraint simulation against existing resources",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Simulates four constraints Vyomi can evaluate against real state (service account key/account creation, uniform bucket-level access, public access prevention) using a Vyomi-specific policies:simulate verb; the real org-level Policy Simulator, custom constraints and list constraints are not simulated. Simulation never applies the change."
+  ],
+  "api": [
+   "policies.simulate"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_orgpolicy_sim.py"
+  ]
+ },
+ "gcp.iam-admin.workload-identity-providers": {
+  "title": "Workload identity pool providers (OIDC / SAML / AWS), attribute mapping and condition",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Providers are validated and the attribute mapping (assertion.* paths, string concatenation, lowerAscii) and CEL condition subset are evaluated for real during the STS token exchange (/v1/token). OIDC RS256 tokens are verified against the JWKS you paste into the provider, because Vyomi cannot fetch the issuer's JWKS URL; AWS and SAML providers are stored and validated but cannot exchange tokens. The minted federated token is not accepted by other Vyomi services' authorization, and service-account impersonation from it is not simulated."
+  ],
+  "api": [
+   "workloadIdentityPools.providers.create",
+   "workloadIdentityPools.providers.get",
+   "workloadIdentityPools.providers.list",
+   "workloadIdentityPools.providers.patch",
+   "workloadIdentityPools.providers.delete",
+   "sts.token",
+   "sts.introspect"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_wif.py"
+  ]
+ },
+ "gcp.iam-admin.workforce-identity-providers": {
+  "title": "Workforce identity pool providers (OIDC / SAML)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Providers are validated and stored with their attribute mapping and condition; workforce sign-in (browser SSO flow and console access) is not simulated. OIDC tokens can be exchanged at /v1/token with the same JWKS-paste limitation as workload identity federation."
+  ],
+  "api": [
+   "workforcePools.providers.create",
+   "workforcePools.providers.get",
+   "workforcePools.providers.list",
+   "workforcePools.providers.delete"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_wif.py"
+  ]
  }
 }

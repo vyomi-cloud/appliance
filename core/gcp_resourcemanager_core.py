@@ -74,6 +74,8 @@ import hashlib
 import json
 import re
 import uuid
+from core import gcp_wif_core as wif   # provider validation / attribute mapping (shared with the IAM core)
+from datetime import datetime, timezone
 from dataclasses import dataclass, field
 from urllib.parse import unquote
 
@@ -102,6 +104,8 @@ class ResourceManagerStore:
         self.workforce_pools: dict = {}    # "locations/global/workforcePools/{id}" -> WorkforcePool
         self.pab_policies: dict = {}       # PAB policy name -> PrincipalAccessBoundaryPolicy
         self.pab_bindings: dict = {}       # PolicyBinding name -> PolicyBinding
+        self.workforce_providers: dict = {}   # full workforce provider name -> WorkforcePoolProvider
+        self.org_policy_simulations: dict = {}   # "projects/{p}/simulations/{id}" -> constraint simulation report (history)
 
 
 def _json(status: int, obj: dict) -> RmResponse:
@@ -396,6 +400,73 @@ def _delete_contact(store, name) -> RmResponse:
     return _json(200, {})
 
 
+# ── org policy simulation ─────────────────────────────────────────────────────
+# "Simulate constraint": evaluate a constraint change against the project's EXISTING resources
+# (read from the real sibling stores) without applying it, and report which existing resources
+# are non-compliant plus what changes for new ones. Vyomi-specific verb `POST …/policies:simulate`
+# (the real Policy Simulator is a different, org-level product); only constraints Vyomi can
+# evaluate against real state are supported.
+SIMULATABLE = {
+    "iam.disableServiceAccountKeyCreation": "boolean",
+    "iam.disableServiceAccountCreation": "boolean",
+    "storage.uniformBucketLevelAccess": "boolean",
+    "storage.publicAccessPrevention": "boolean",
+}
+
+
+def _existing(store, constraint, project):
+    """(evaluated_count, violations[{resource, reason}], effect) for `constraint` enforced on `project`."""
+    fn = getattr(store, "inputs", None)   # wired by the router: the real sibling stores' state
+    data = fn() if callable(fn) else {}
+    if constraint == "iam.disableServiceAccountKeyCreation":
+        keys = data.get("sa_keys") or {}
+        viol = [{"resource": f"projects/{project}/serviceAccounts/{email}/keys/{kid}",
+                 "reason": "A user-managed service account key already exists. Enforcing the constraint does not delete it, but no new key can be created."}
+                for email, ks in sorted(keys.items()) if f"@{project}." in email
+                for kid, k in sorted(ks.items()) if (k or {}).get("keyType", "USER_MANAGED") != "SYSTEM_MANAGED"]
+        return len(keys), viol, "Creating a new user-managed service account key will fail with FAILED_PRECONDITION."
+    if constraint == "iam.disableServiceAccountCreation":
+        sas = data.get("service_accounts") or {}
+        mine = [e for e in sas if f"@{project}." in e]
+        return len(mine), [], "Creating a new service account will fail with FAILED_PRECONDITION; the %d existing account(s) are unaffected." % len(mine)
+    if constraint in ("storage.uniformBucketLevelAccess", "storage.publicAccessPrevention"):
+        buckets = data.get("buckets") or {}
+        viol = []
+        for name, meta in sorted(buckets.items()):
+            cfg = (meta or {}).get("iamConfiguration") or {}
+            if constraint == "storage.uniformBucketLevelAccess":
+                if not (cfg.get("uniformBucketLevelAccess") or {}).get("enabled"):
+                    viol.append({"resource": f"//storage.googleapis.com/projects/_/buckets/{name}", "reason": "Uniform bucket-level access is not enabled."})
+            elif cfg.get("publicAccessPrevention") != "enforced":
+                viol.append({"resource": f"//storage.googleapis.com/projects/_/buckets/{name}", "reason": "Public access prevention is not enforced."})
+        return len(buckets), viol, "Buckets created without this setting would be rejected once the constraint is enforced."
+    return 0, [], ""
+
+
+def _simulate_org_policy(store, parent, body) -> RmResponse:
+    constraint = str(body.get("constraint") or "").replace("constraints/", "", 1)
+    if constraint not in SIMULATABLE:
+        return _err(400, "Constraint %r cannot be simulated: Vyomi evaluates %s against real resources." % (constraint, ", ".join(sorted(SIMULATABLE))), "INVALID_ARGUMENT")
+    enforce = bool(body.get("enforce", True))
+    project = parent.split("/", 1)[1]
+    current = store.org_policies.get(f"{parent}/policies/constraints/{constraint}")
+    currently = bool(current) and bool((((current.get("spec") or {}).get("rules") or [{}])[0]).get("enforce", True))
+    evaluated, viol, effect = _existing(store, constraint, project) if enforce else (_existing(store, constraint, project)[0], [], "Removing enforcement makes new resources unconstrained.")
+    sim_id = "sim-%d" % (len(store.org_policy_simulations) + 1)
+    report = {"name": f"{parent}/simulations/{sim_id}", "constraint": f"constraints/{constraint}", "enforce": enforce,
+              "currentlyEnforced": currently, "createTime": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+              "resourcesEvaluated": evaluated, "violations": viol, "violationCount": len(viol),
+              "state": "SUCCEEDED", "effectOnNewResources": effect,
+              "summary": ("No change" if enforce == currently else "Enforcing" if enforce else "Removing") + f": {len(viol)} existing resource(s) non-compliant"}
+    store.org_policy_simulations[report["name"]] = report
+    return _json(200, report)
+
+
+def _list_org_simulations(store, parent) -> RmResponse:
+    items = sorted((v for k, v in store.org_policy_simulations.items() if k.startswith(parent + "/")), key=lambda r: r["createTime"], reverse=True)
+    return _json(200, {"simulations": items})
+
+
 # ── org policies ──────────────────────────────────────────────────────────────
 def _create_org_policy(store, parent, policy_id, body) -> RmResponse:
     if not policy_id:
@@ -552,6 +623,8 @@ def _delete_workforce_pool(store, name) -> RmResponse:
     if name not in store.workforce_pools:
         return _err(404, f"Workforce pool {name} not found.", "NOT_FOUND")
     del store.workforce_pools[name]
+    for pn in [n for n in store.workforce_providers if n.startswith(name + "/providers/")]:
+        del store.workforce_providers[pn]
     return _json(200, {})
 
 
@@ -717,6 +790,13 @@ def dispatch(store: ResourceManagerStore, method: str, path: str,
         return _err(400, f"Unsupported method {method} on contact", "INVALID_ARGUMENT")
 
     # ---- org policies: projects/{p}/policies[/{constraint}] ----
+    if len(segs) == 3 and segs[0] == "projects" and segs[2] in ("policies:simulate", "simulations"):
+        parent = f"projects/{segs[1]}"
+        if segs[2] == "simulations" and method == "GET":
+            return _list_org_simulations(store, parent)
+        if segs[2] == "policies:simulate" and method == "POST":
+            return _simulate_org_policy(store, parent, _body())
+        return _err(400, f"Unsupported method {method} on {segs[2]}", "INVALID_ARGUMENT")
     if len(segs) >= 3 and segs[0] == "projects" and segs[2] == "policies":
         parent = f"projects/{segs[1]}"
         if len(segs) == 3:
@@ -811,6 +891,11 @@ def dispatch(store: ResourceManagerStore, method: str, path: str,
                 return _list_workforce_pools(store, str(query.get("parent", "")).strip())
             return _err(400, f"Unsupported method {method} on workforcePools", "INVALID_ARGUMENT")
         name = f"locations/global/workforcePools/{segs[3]}"
+        if len(segs) >= 5 and segs[4] == "providers":
+            if name not in store.workforce_pools:
+                return _err(404, f"Workforce pool {name} not found.", "NOT_FOUND")
+            st, out = wif.dispatch_providers(store.workforce_providers, name, segs[5:], method, query, _body())
+            return _err(st, out[1], out[0]) if isinstance(out, tuple) else _json(st, out)
         if method == "GET":
             return _get_workforce_pool(store, name)
         if method == "DELETE":

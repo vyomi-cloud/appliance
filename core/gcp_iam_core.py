@@ -69,6 +69,7 @@ from urllib.parse import unquote
 MAX_ACTIVITY = 200
 
 from core.iam_store import IamStore, InMemoryIamStore
+from core import gcp_wif_core as wif   # provider validation / attribute mapping / STS token exchange
 
 # ── predefined role → permissions map ──────────────────────────────────────
 # A small, faithful slice of GCP's predefined-role expansion. testIamPermissions
@@ -191,6 +192,23 @@ def _keys_ns(store: IamStore) -> dict:
     if ns is None:
         ns = {}
         store.gcp_sa_keys = ns  # type: ignore[attr-defined]
+    return ns
+
+
+def _wi_providers_ns(store: IamStore) -> dict:
+    """Workload identity pool providers, keyed by full provider name."""
+    ns = getattr(store, "gcp_wi_providers", None)
+    if ns is None:
+        ns = {}
+        store.gcp_wi_providers = ns  # type: ignore[attr-defined]
+    return ns
+
+
+def _sts_tokens_ns(store: IamStore) -> dict:
+    ns = getattr(store, "gcp_sts_tokens", None)
+    if ns is None:
+        ns = {}
+        store.gcp_sts_tokens = ns  # type: ignore[attr-defined]
     return ns
 
 
@@ -1240,6 +1258,22 @@ def dispatch(store: IamStore, method: str, path: str,
             return _delete_role(store, name)
         return _err(400, f"Unsupported method {method} on role", "INVALID_ARGUMENT")
 
+    # ---- STS (sts.googleapis.com): /v1/token (RFC 8693 exchange) and /v1/introspect ----
+    if p.strip("/") in ("token", "introspect") and method == "POST":
+        raw = body.decode("utf-8", "replace") if body else ""
+        try:
+            params = json.loads(raw) if raw.strip().startswith("{") else dict(__import__("urllib.parse", fromlist=["parse_qsl"]).parse_qsl(raw))
+        except Exception:
+            params = {}
+        params = {**query, **params}
+        pools = _wi_providers_ns(store)
+        if rm_store is not None and getattr(rm_store, "workforce_providers", None) is not None:
+            pools = {**pools, **rm_store.workforce_providers}
+        st, out = wif.exchange(pools, _sts_tokens_ns(store), params) if p.strip("/") == "token" else wif.introspect(_sts_tokens_ns(store), params)
+        if st == 200 and p.strip("/") == "token":
+            store.persist()
+        return _json(st, out)
+
     # ---- workload identity pools: projects/{p}/locations/global/workloadIdentityPools[/{id}] ----
     if (len(segs) >= 5 and segs[0] == "projects" and segs[2] == "locations"
             and segs[3] == "global" and segs[4] == "workloadIdentityPools"):
@@ -1257,6 +1291,16 @@ def dispatch(store: IamStore, method: str, path: str,
             if method == "DELETE":
                 return _delete_pool(store, name)
             return _err(400, f"Unsupported method {method} on workloadIdentityPool", "INVALID_ARGUMENT")
+        # ---- providers: .../workloadIdentityPools/{pool}/providers[/{id}] (OIDC / SAML / AWS, attribute mapping + condition) ----
+        if segs[6] == "providers":
+            if name not in _pools_ns(store) or _pools_ns(store)[name].get("state") == "DELETED":
+                return _err(404, f"Pool not found: {name}", "NOT_FOUND")
+            st, out = wif.dispatch_providers(_wi_providers_ns(store), name, segs[7:], method, query, _body())
+            if isinstance(out, tuple):
+                return _err(st, out[1], out[0])
+            if method != "GET":
+                store.persist()
+            return _json(st, out)
         # ---- managed workload identities: .../workloadIdentityPools/{pool}/managedIdentities[/{id}] ----
         if segs[6] == "managedIdentities":
             if len(segs) == 7:

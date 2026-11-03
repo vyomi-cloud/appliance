@@ -44,6 +44,7 @@ CORES = [
     "gcp_secretmanager_core.py",                    # GCP: Secret Manager REST (native google-cloud-secret-manager)
     "gcp_pubsub_core.py",                           # GCP: Pub/Sub REST (native google-cloud-pubsub)
     "gcp_iam_core.py",                              # GCP: Cloud IAM REST (SA + policy eval)
+    "gcp_wif_core.py",                              # GCP: workload/workforce identity federation (providers, mapping, STS exchange)
     "gcp_cloudsql_core.py",                         # GCP: Cloud SQL Admin REST (control plane)
     "gcp_artifactregistry_core.py",                 # GCP: Artifact Registry REST v1 (repositories, packages, versions, tags, docker images)
     "gcp_compute_core.py",                          # GCP: Compute Engine networking REST v1 (VPC networks, subnets, firewalls, routes, addresses)
