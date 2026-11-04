@@ -54,6 +54,17 @@ class ObsStore:
         """Flush hook (no-op in memory)."""
 
 
+_DEFAULT = None
+
+
+def default_store() -> ObsStore:
+    """Process-wide recorder for the offline appliance (the Nano router owns its own ObsStore)."""
+    global _DEFAULT
+    if _DEFAULT is None:
+        _DEFAULT = ObsStore()
+    return _DEFAULT
+
+
 def get_store(holder) -> ObsStore:
     s = getattr(holder, "obs", None)
     if s is None:
@@ -80,12 +91,16 @@ def extract_resource(cloud: str, service: str, method: str, path: str, headers: 
     svc = (service or "").lower()
     if svc in ("s3", "gcp-gcs", "gcs"):
         host = (h.get("host") or "").split(":")[0]
-        if cloud == "gcp" and "b" in low[:4]:
+        if low[:1] == ["api"] and "buckets" in low:           # console REST: /api/aws/s3/buckets/{name}/...
+            res = segs[low.index("buckets") + 1] if low.index("buckets") + 1 < len(segs) else ""
+        elif cloud == "gcp" and "b" in low[:4]:
             res = segs[low.index("b") + 1] if low.index("b") + 1 < len(segs) else ""
         elif host.count(".") >= 2 and "s3" in host.split(".", 1)[1]:
             res = host.split(".", 1)[0]
         else:
             res = segs[0] if segs else ""
+        if low[:1] == ["api"] and not res:
+            res = ""
         op = {"GET": "GetObject" if len(segs) > 1 else "ListObjects", "PUT": "PutObject", "DELETE": "DeleteObject",
               "HEAD": "HeadObject", "POST": "PostObject"}.get(method.upper(), method.upper())
         if len(segs) <= (0 if host.count(".") >= 2 else 1) and method.upper() == "PUT":
@@ -103,6 +118,8 @@ def extract_resource(cloud: str, service: str, method: str, path: str, headers: 
             res = (json.loads(body or b"{}") or {}).get("TableName", "")
         except Exception:
             res = ""
+        if not res and "tables" in low and low.index("tables") + 1 < len(segs):
+            res = segs[low.index("tables") + 1]
     elif svc in ("sqs", "sns"):
         if len(segs) >= 2 and segs[0].isdigit():
             res = segs[1]
@@ -1022,6 +1039,11 @@ def publish_rds_stats(cw_store, db_id: str, stats: dict, ts: float | None = None
     put("TransactionCommits", g("xact_commit"), "Count")
     put("TransactionRollbacks", g("xact_rollback"), "Count")
     return out
+
+
+def gcp_project_of(path: str) -> str:
+    m = re.search(r"/projects/([^/:]+)", path or "")
+    return m.group(1) if m else "my-project"
 
 
 def publish_gcp(obs: ObsStore, mon_store, project: str, now: float | None = None, period: int = 60) -> list:

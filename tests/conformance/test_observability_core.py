@@ -99,5 +99,18 @@ ob2 = O.ObsStore()
 O.record(ob2, "azure", "blob", "acct1", "PUT", 201, 12, ts=T); O.record(ob2, "azure", "blob", "acct1", "GET", 500, 30, ts=T)
 am = O.azure_storage_request_metrics(ob2, "acct1", now=T + 5)
 ck("azure storage availability/latency", am["Availability"] == 50.0 and am["SuccessE2ELatency"] == 12.0 and O.azure_storage_request_metrics(ob2, "other", now=T) == {})
+# Nano substrate: the wire router records measured requests and serves /_obs
+from core.aws_wire_router import AwsWireRouter
+r = AwsWireRouter()
+for _ in range(3):
+    r.handle("PUT", "/nano-bkt", {}, {"host": "localhost"}, b"")
+r.handle("GET", "/nano-bkt", {}, {"host": "localhost"}, b"")
+rows = O.rollup(r.obs, "aws", "s3")
+ck("router records s3 per bucket", ("aws", "s3", "nano-bkt") in rows and rows[("aws", "s3", "nano-bkt")]["count"] == 4)
+res = r.handle("GET", "/_obs/prom/api/v1/query", {"query": 'vyomi_requests_total{resource="nano-bkt"}'}, {}, b"")
+ck("router serves /_obs prom", res["status"] == 200 and json.loads(res["body"])["data"]["result"])
+r.obs.recent[:] = [(x[0] - 120,) + x[1:] for x in r.obs.recent]   # age the rows into finished 1-minute buckets
+r.handle("POST", "/", {}, {"X-Amz-Target": "GraniteServiceVersion20100801.ListMetrics", "Content-Type": "application/x-amz-json-1.0", "Host": "localhost"}, b"{}")
+ck("router cloudwatch read path ok", any(m["MetricName"] == "AllRequests" for m in r.cw.metrics.values()))
 print("FAILED: %s" % F if F else "ALL PASS")
 sys.exit(1 if F else 0)

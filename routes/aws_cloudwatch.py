@@ -76,6 +76,11 @@ def _form_action(raw: bytes) -> str:
 
 async def handle(request: Request) -> Response:
     raw = await request.body()
+    try:   # refresh the AWS/* request series from MEASURED traffic before serving a read
+        from core import observability_core as _obsc
+        _obsc.publish_cloudwatch(_obsc.default_store(), get_store())
+    except Exception:
+        pass
     out = cw.wire(get_store(), request.method, request.url.path, dict(request.headers), raw, dict(request.query_params))
     action = _action_of(request, raw)
     if out["status"] < 300 and action in _USAGE_ACTIONS:

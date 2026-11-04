@@ -953,7 +953,7 @@ async def request_recorder_middleware(request, call_next):
     """Record every provider-scoped request (provider, service, path, status, latency) for the
     console Metrics tabs. Outermost layer so it times the whole stack; never alters the response."""
     path = request.url.path
-    if path.startswith(("/api/metrics", "/static/", "/assets/", "/console")) or path in ("/healthz", "/favicon.ico"):
+    if path.startswith(("/api/metrics", "/_obs/", "/static/", "/assets/", "/console")) or path in ("/healthz", "/favicon.ico"):
         return await call_next(request)
     t0 = time.time()
     status = 500
@@ -968,6 +968,11 @@ async def request_recorder_middleware(request, call_next):
             if prov and svc:
                 _rm.record(prov, svc, request.method, path, status, (time.time() - t0) * 1000.0,
                            query=request.url.query or "", host=request.headers.get("host", ""))
+                from core import observability_core as _obsc
+                if not path.startswith(_obsc.BASE):
+                    _res, _op = _obsc.extract_resource(prov, svc, request.method, path, dict(request.headers))
+                    _obsc.record(_obsc.default_store(), prov, svc, _res, _op, status, (time.time() - t0) * 1000.0,
+                                 traceparent=request.headers.get("traceparent", ""))
         except Exception:
             pass
 

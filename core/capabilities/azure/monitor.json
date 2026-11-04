@@ -209,7 +209,7 @@
     },
     "limitations": [
       "Microsoft.Monitor/accounts is a real ARM resource: name rules, query endpoint, and the managed data collection endpoint and rule Azure creates alongside it (removed again on delete; deleting a workspace still integrated with a Grafana workspace is refused).",
-      "Vyomi does not scrape or ingest Prometheus metrics, so the query endpoint never returns data. Prometheus rule groups and AKS add-on onboarding are not modelled."
+      "The workspace's data is served by Vyomi's own Prometheus-compatible API (/_obs/prom/api/v1: query, query_range, labels, series, PromQL-lite selectors, rate/increase, sum/avg/min/max/count by, histogram_quantile) over series MEASURED from real requests (vyomi_requests_total, vyomi_request_duration_ms_*) and OTLP/HTTP-ingested metrics; the ARM query endpoint string itself is still a generated name. It is not a full PromQL engine, there is no remote-write/remote-read protobuf, and Prometheus rule groups and AKS add-on onboarding are not modelled."
     ],
     "tests": [
       "tests/conformance/test_azure_monitorproducts.py"
@@ -223,7 +223,7 @@
     },
     "limitations": [
       "Microsoft.Dashboard/grafana is a real ARM resource: name, SKU and major-version validation, generated endpoint, system identity, and Azure Monitor workspace integrations validated against real Azure Monitor workspaces.",
-      "Vyomi runs no Grafana server: the endpoint is a stable name, not a live web app, and data sources, managed private endpoints and API keys are not modelled."
+      "Vyomi runs no Grafana server: the endpoint is a stable name, not a live web app. A real Grafana pointed at /_obs/prom (Prometheus data source) or /_obs/jaeger works against the measured series; data sources, managed private endpoints and API keys are not modelled on the ARM resource."
     ],
     "tests": [
       "tests/conformance/test_azure_monitorproducts.py"
