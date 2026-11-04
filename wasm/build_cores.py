@@ -56,7 +56,7 @@ CORES = [
     "gcp_osconfig_core.py",                         # GCP: VM Manager (OS Config patch jobs/deployments, OS policy assignments, VM extension policies)
     "gcp_hybrid_core.py",                           # GCP: BYOIP prefixes + Interconnect / VLAN attachments (control plane)
     "gcp_cloudsql_core.py",                         # GCP: Cloud SQL Admin REST (control plane)
-    "gcp_posture_core.py",                          # GCP: rule-based security posture findings over real VM/firewall/bucket state    "gcp_artifactregistry_core.py",                 # GCP: Artifact Registry REST v1 (repositories, packages, versions, tags, docker images)
+    "gcp_posture_core.py", "gcp_scc_core.py",                          # GCP: rule-based security posture findings over real VM/firewall/bucket state    "gcp_artifactregistry_core.py",                 # GCP: Artifact Registry REST v1 (repositories, packages, versions, tags, docker images)
     "gcp_compute_core.py",                          # GCP: Compute Engine networking REST v1 (VPC networks, subnets, firewalls, routes, addresses)
     "instance_catalog.py",                          # real cloud instance-type catalog (GCP machine type shapes) — gcp_compute_instances_core depends on it
     "gcp_compute_ext_core.py",                      # GCP Compute extensions: resource policies/schedulers, reservations, sole-tenant, storage pools, NEGs, Recommender

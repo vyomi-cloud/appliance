@@ -86,6 +86,8 @@ _SCHED_RUN_JOB_RE = re.compile(r"/v2/projects/([^/]+)/locations/([^/]+)/jobs/([^
 def _gcp_service(path):
     """Route a GCP request by URL path (GCP carries no SigV4; each google-cloud-*
     client is pointed at the relay and the path is the service discriminator)."""
+    if re.match(r"^/v2/(projects|organizations|folders)/[^/]+/(locations/[^/]+/)?(sources|findings|muteConfigs|notificationConfigs)([/:?]|$)", path):
+        return "gcp-scc"   # Security Command Center API v2 (core/gcp_scc_core over the posture/threat/vulnerability engines)
     if re.match(r"^/v2/projects/[^/]+/locations/[^/]+/(services|jobs|workerPools|operations)([/:]|$)", path) \
             or path.lstrip("/").startswith(("apis/serving.knative.dev/", "apis/domains.cloudrun.com/")):
         # Cloud Run Admin API v2 (+ its Knative v1 facades for `gcloud run` and
@@ -262,6 +264,7 @@ from core import azure_sql_core as az_sql
 from core import azure_iam_core as az_iam
 from core import azure_acr_core as az_acr
 from core import ecr_core
+from core import gcp_scc_core
 from core.azure_acr_core import AcrRegistryStore
 from core import azure_graph_core as az_graph
 import types as _types
@@ -1115,6 +1118,26 @@ class AwsWireRouter:
                 pass
         return {"status": r.status, "headers": {**r.headers, "content-type": "application/json"}, "body": r.body}
 
+    def scc_ctx(self) -> dict:
+        """What core/gcp_scc_core needs from the platform: generated posture rows + Pub/Sub for notification configs."""
+        def generated(project):
+            try:
+                scans = gcp_ar.scan_images(self.gcp_ar, project)
+            except Exception:
+                scans = []
+            fws = list(self.gcp_compute.firewalls.values())
+            return (gcp_posture.compute_findings(project, self.gcp_compute_vm.instances, fws) + gcp_posture.storage_findings(project, self.gcs.buckets)
+                    + gcp_posture.threat_findings(project, self.secscan_threats("gcp")) + gcp_posture.vulnerability_findings(project, scans))
+
+        def topic_exists(topic):
+            return gcp_ps.dispatch(self.gcp_msg, "GET", "/v1/" + topic, {}, {}, b"").status == 200
+
+        def publish(topic, data_b64, attrs):
+            r = gcp_ps.dispatch(self.gcp_msg, "POST", "/v1/" + topic + ":publish", {}, {},
+                                json.dumps({"messages": [{"data": data_b64, "attributes": attrs}]}).encode())
+            return r.status == 200
+        return {"generated": generated, "topic_exists": topic_exists, "publish": publish, "default_project": gcp_scc_core.DEFAULT_PROJECT}
+
     def secscan_posture(self) -> list:
         from core import secscan_core as sc
         return sc.aws_posture_findings(self.secscan_inventory(), [])
@@ -1335,6 +1358,14 @@ class AwsWireRouter:
             if r.media_type and not any(k.lower() == "content-type" for k in hdrs):
                 hdrs["content-type"] = r.media_type
             return {"status": r.status, "headers": hdrs, "body": r.body or b""}
+
+        if svc == "gcp-scc":
+            r = gcp_scc_core.dispatch(self.s3.account.setdefault("gcp_scc", {}), method, path, query or {}, bytes(body), self.scc_ctx())
+            try:
+                self.s3.persist()
+            except Exception:
+                pass
+            return {"status": r.status, "headers": {"content-type": "application/json"}, "body": r.body}
 
         if svc == "gcp-posture":
             proj = path.split("/")[3] if path.count("/") >= 3 else ""

@@ -7,7 +7,7 @@ their schedule instead of only on a button.
   * `Ticker` — per-key last-fired state kept in `store.account["schedule_seam"]` (so it persists with the S3 store);
   * `tick(router, now)` — one pass over the providers: AWS Backup plans (+ recovery-point DeleteAfterDays expiry),
     Azure Backup policies (+ expiry of recovery points), DLM (reuses core/dlm_core), Cloud SQL automated backup
-    windows (+ retainedBackups pruning) and ECR lifecycle policies / continuous scans. Cloud Scheduler and EventBridge
+    windows (+ retainedBackups pruning) and ECR lifecycle policies / continuous scans, and Security Command Center notification configs (new/changed findings -> Pub/Sub). Cloud Scheduler and EventBridge
     Scheduler already advance themselves and are NOT re-run here.
 
 Honest limits: schedules fire from `tick`, which the appliance calls from a background loop (offline) and which Nano calls
@@ -254,7 +254,19 @@ def _ecr(router, now, tk, log):
     return n
 
 
-PROVIDERS = [("aws-backup", _aws_backup), ("azure-backup", _azure_backup), ("dlm", _dlm), ("cloudsql", _cloudsql), ("ecr", _ecr)]
+def _scc(router, now, tk, log):
+    if not tk.due("scc:notify", "rate(1 minute)", now):
+        return 0
+    bag = router.s3.account.get("gcp_scc")
+    if not bag or not bag.get("notifs"):
+        return 0
+    n = _mod("gcp_scc_core").sync_notifications(bag, router.scc_ctx())
+    if n:
+        log.append({"provider": "scc", "published": n})
+    return n
+
+
+PROVIDERS = [("scc", _scc), ("aws-backup", _aws_backup), ("azure-backup", _azure_backup), ("dlm", _dlm), ("cloudsql", _cloudsql), ("ecr", _ecr)]
 
 
 def tick(router, now: float | None = None) -> dict:
