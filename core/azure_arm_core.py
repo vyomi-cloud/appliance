@@ -93,6 +93,16 @@ try:                                              # Private endpoints / Bastion 
     from core import azure_netsvc_core as netsvc
 except ImportError:
     import azure_netsvc_core as netsvc             # type: ignore
+try:                                              # v4 AZ-08: Azure Files, AI Search, Storage Mover, Marketplace, quota/billing extras
+    from core import azure_files_core as files_engine, azure_search_core as search_engine
+    from core import azure_storagemover_core as mover_engine, azure_marketplace_core as market_engine
+    from core import azure_billing_ext_core as billing_ext
+except ImportError:
+    import azure_files_core as files_engine        # type: ignore
+    import azure_search_core as search_engine      # type: ignore
+    import azure_storagemover_core as mover_engine # type: ignore
+    import azure_marketplace_core as market_engine # type: ignore
+    import azure_billing_ext_core as billing_ext   # type: ignore
 
 try:                                              # Management locks (Microsoft.Authorization/locks, scoped to ANY resource)
     from core import azure_locks_core as locks_engine
@@ -867,6 +877,10 @@ def _ok(body, status=200, headers=None):
     return {"status": status, "headers": headers or {}, "body": body}
 
 
+def _ok_(body, status=200):
+    return {"status": status, "body": body}
+
+
 def _err(status: int, code: str, message: str):
     return {"status": status, "headers": {}, "body": {"error": {"code": code, "message": message}}}
 
@@ -1135,6 +1149,10 @@ class AzureArm:
             r = support_engine.dispatch(self.state, method, sub, chain, payload or {}, query or {},
                                         lambda rid: rid.lower() in self.state)
             return {"status": r["status"], "headers": {}, "body": r["body"]}
+        # v4 AZ-08 engines (Files, AI Search, Storage Mover, Marketplace/SaaS, quota + billing extras).
+        _x = self._az08(method, sub, rg, namespace, chain, payload, query)
+        if _x is not None:
+            return _x
 
         # Microsoft.Subscription/rename: the subscription blade's "Rename" header action.
         if namespace.lower() == "microsoft.subscription" and chain and chain[0].lower() == "rename":
@@ -1777,6 +1795,62 @@ class AzureArm:
         size = ((rec_or_payload or {}).get("properties") or {}).get("hardwareProfile", {}).get("vmSize") or "Standard_B1s"
         return instance_catalog.lookup_azure(size).get("vcpu", 1)
 
+    # ── v4 AZ-08: engines that own their namespace; returns None when the path is not theirs ──
+    def _az08(self, method, sub, rg, namespace, chain, payload, query):
+        ns = namespace.lower()
+        low = [c.lower() for c in chain]
+        if files_engine.handles(namespace, chain) and rg is not None:
+            r = files_engine.dispatch(self.state, method, sub, rg, chain, payload, query)
+            return {"status": r["status"], "headers": {}, "body": r["body"]}
+        if ns == "microsoft.search":
+            r = search_engine.dispatch(self.state, method, sub, rg, chain, payload, query, blob_store=self.blob_store, base=self._base)
+            return {"status": r["status"], "headers": {}, "body": r["body"]}
+        if ns == "microsoft.storagemover" and (rg is not None or len(chain) == 1):
+            r = mover_engine.dispatch(self.state, method, sub, rg, chain, payload, query, blob_store=self.blob_store, base=self._base)
+            return {"status": r["status"], "headers": {}, "body": r["body"]}
+        if ns == "microsoft.marketplace":
+            r = market_engine.catalog(chain, query)
+            return {"status": r["status"], "headers": {}, "body": r["body"]}
+        if ns == "microsoft.saas":
+            r = market_engine.saas_dispatch(self.state, method, sub, rg, chain, payload)
+            return {"status": r["status"], "headers": {}, "body": r["body"]}
+        if ns == "microsoft.managementpartner" and chain and low[0] == "partners":
+            r = billing_ext.partner_dispatch(self.state, method, sub, chain[1:], payload)
+            return {"status": r["status"], "headers": {}, "body": r["body"]}
+        if ns == "microsoft.subscription" and chain and low[0] == "managementcertificates":
+            r = billing_ext.certs_dispatch(self.state, method, sub, chain[1:], payload)
+            return {"status": r["status"], "headers": {}, "body": r["body"]}
+        if ns == "microsoft.billing" and chain and low[0] in ("transferrequests", "freeservices", "costsaved", "invoices"):
+            if low[0] == "transferrequests":
+                self.billing_properties.setdefault("accountAdmin", DEFAULT_PRINCIPAL)
+                r = billing_ext.transfers_dispatch(self.state, method, sub, chain[1:], payload, self.billing_properties)
+            elif method != "GET":
+                return _err(405, "MethodNotAllowed", f"{chain[0]} supports GET only.")
+            elif low[0] == "freeservices":
+                r = _ok_(billing_ext.free_services(self.state, sub, self.blob_store))
+            elif low[0] == "costsaved":
+                r = _ok_(billing_ext.cost_saved(self.state, sub))
+            else:
+                invs = billing_ext.invoices(self.state, sub)
+                if len(chain) > 1:
+                    inv = next((i for i in invs if i["name"].lower() == chain[1].lower()), None)
+                    r = _ok_(inv) if inv else {"status": 404, "body": {"error": {"code": "ResourceNotFound", "message": f"Invoice '{chain[1]}' was not found."}}}
+                else:
+                    r = _ok_({"value": invs})
+            return {"status": r["status"], "headers": {}, "body": r["body"]}
+        if ns == "microsoft.quota" and chain and low[0] == "quotarequests":
+            rows = [billing_ext._view(x) for x in self.state.values() if isinstance(x, dict)
+                    and str(x.get("_type", "")).lower() == "microsoft.quota/quotarequests" and x.get("_sub") == sub]
+            return _ok({"value": list(reversed(rows))})
+        if ns in ("microsoft.compute", "microsoft.network") and len(chain) >= 5 and low[0] == "locations" \
+                and low[2] == "providers" and low[3] == "microsoft.quota":
+            loc = chain[1].lower()
+            usage = {u["name"]["value"]: u["currentValue"] for u in self._usages(sub, namespace, loc)["body"]["value"]}
+            defaults = COMPUTE_QUOTA if ns == "microsoft.compute" else NETWORK_QUOTA
+            r = billing_ext.quota_dispatch(self.state, method, sub, namespace, loc, chain[4:], payload, lambda n: usage.get(n, 0), defaults)
+            return {"status": r["status"], "headers": {}, "body": r["body"]}
+        return None
+
     def _quota_err(self, label, loc, limit):
         return _err(403, "QuotaExceeded",
                     f"Operation results in exceeding approved {label} quota (limit {limit}) in "
@@ -1790,16 +1864,16 @@ class AzureArm:
         if ft == "microsoft.compute/virtualmachines":
             vms = [r for r in self.state.values() if r.get("_type", "").lower() == ft
                    and r.get("_sub") == sub and str(r.get("location", "")).lower() == loc]
-            limit_vms = next(l for n, _, l in COMPUTE_QUOTA if n == "virtualMachines")
+            limit_vms = billing_ext.limit_for(self.state, sub, "Microsoft.Compute", loc, "virtualMachines", next(l for n, _, l in COMPUTE_QUOTA if n == "virtualMachines"))
             if len(vms) + 1 > limit_vms:
                 return self._quota_err("Virtual Machines", loc, limit_vms)
-            limit_cores = next(l for n, _, l in COMPUTE_QUOTA if n == "cores")
+            limit_cores = billing_ext.limit_for(self.state, sub, "Microsoft.Compute", loc, "cores", next(l for n, _, l in COMPUTE_QUOTA if n == "cores"))
             if sum(self._vm_cores(r) for r in vms) + self._vm_cores(payload) > limit_cores:
                 return self._quota_err("Total Regional vCPUs", loc, limit_cores)
         elif ft == "microsoft.network/publicipaddresses":
             cnt = sum(1 for r in self.state.values() if r.get("_type", "").lower() == ft
                       and r.get("_sub") == sub and str(r.get("location", "")).lower() == loc)
-            limit = next(l for n, _, l in NETWORK_QUOTA if n == "PublicIPAddresses")
+            limit = billing_ext.limit_for(self.state, sub, "Microsoft.Network", loc, "PublicIPAddresses", next(l for n, _, l in NETWORK_QUOTA if n == "PublicIPAddresses"))
             if cnt + 1 > limit:
                 return self._quota_err("Public IP Addresses", loc, limit)
         return None
@@ -1821,7 +1895,7 @@ class AzureArm:
             cores_used = sum(self._vm_cores(r) for r in vms)
             for name, label, limit in COMPUTE_QUOTA:
                 used = cores_used if name == "cores" else len(vms)
-                rows.append(self._usage_row(name, label, used, limit, names))
+                rows.append(self._usage_row(name, label, used, billing_ext.limit_for(self.state, sub, "Microsoft.Compute", loc, name, limit), names))
         else:
             tmap = {"microsoft.network/publicipaddresses": "PublicIPAddresses",
                     "microsoft.network/virtualnetworks": "VirtualNetworks",
@@ -1834,7 +1908,7 @@ class AzureArm:
                 if k:
                     buckets[k].append(r.get("name"))
             for name, label, limit in NETWORK_QUOTA:
-                rows.append(self._usage_row(name, label, len(buckets[name]), limit, buckets[name]))
+                rows.append(self._usage_row(name, label, len(buckets[name]), billing_ext.limit_for(self.state, sub, "Microsoft.Network", loc, name, limit), buckets[name]))
         return _ok({"value": rows})
 
     # ── My permissions (Microsoft.Authorization/permissions): the actions/notActions
@@ -2433,6 +2507,9 @@ class AzureArm:
                 or len(type_chain) != 2:
             return None
         props = (payload or {}).get("properties") or {}
+        _fe = files_engine.validate_account(self.state.get(_canonical_id(sub, rg, type_chain, names).lower()), payload)
+        if _fe:
+            return _err(400, _fe["error"]["code"], _fe["error"]["message"])
         if "isHnsEnabled" not in props:
             return None
         existing = self.state.get(_canonical_id(sub, rg, type_chain, names).lower())

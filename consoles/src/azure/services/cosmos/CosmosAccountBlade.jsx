@@ -30,6 +30,8 @@ import { ClassicAdminsPanel, DenyAssignmentsPanel, MyAccess } from "../../kit/Ia
 import SharedResourceHealth from "../../kit/ResourceHealth.jsx";
 import SharedDiagnosticSettings from "../../kit/DiagnosticSettings.jsx";
 import { ResourceRecommendations } from "../defender/Pages.jsx";
+import AiSearchIntegration from "../../kit/AiSearchIntegration.jsx";
+import ResourceCost from "../../kit/ResourceCost.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -127,6 +129,9 @@ export default function CosmosAccountBlade({ params }) {
       exporttemplate: () => <SharedExportTemplate id={a.id} name={a.name} resourceGroup={a.resourceGroup} />,
       resourcehealth: () => <SharedResourceHealth id={a.id} name={a.name} />,
       diagnosticsettings: () => <SharedDiagnosticSettings id={a.id} name={a.name} />,
+      costmgmt: () => <ResourceCost resource={a.name} capId="azure.cosmos.costmgmt" title={`${a.name} | Cost Management`} />,
+      addsearch: () => <AiSearchIntegration source={{ kind: "cosmos", capId: "azure.cosmos.addsearch", title: `${a.name} | Add Azure AI Search`, account: a.name, containerName: "container1",
+        connectionString: `AccountEndpoint=${api.accountEndpoint(a.name)};Database=db1` }} />,
     }[panel];
     body = P ? P() : (
       <>

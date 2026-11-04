@@ -113,6 +113,11 @@ CORES = [
     "azure_storage_ext_core.py",                    # v4: storage keys rotation + route endpoints — before azure_arm_core
     "azure_policy_core.py", "azure_netsvc_core.py", "azure_webdeploy_core.py",  # v4: Azure Policy, network services (private endpoints/Bastion/Firewall/DDoS/flow logs), Deployment Center — before azure_arm_core
     "azure_support_core.py",                        # v4: Microsoft.Support support requests filed with Vyomi
+    "azure_files_core.py",
+    "azure_search_core.py",
+    "azure_storagemover_core.py",
+    "azure_marketplace_core.py",
+    "azure_billing_ext_core.py",
     "azure_locks_core.py",                          # v4: Management locks (Microsoft.Authorization/locks, scoped to ANY resource)
     "k8s_yaml.py",                                  # v4: dependency-free YAML reader for Kubernetes manifests (AKS kubectl)
     "azure_aks_k8s_core.py",                        # v4: AKS Kubernetes object store + kubectl subset behind runCommand

@@ -195,16 +195,6 @@
       "tests/conformance/test_azure_cost_core.py"
     ]
   },
-  "azure.cost.invoices": {
-    "title": "Invoices (billing documents)",
-    "level": {
-      "nano": "not_simulated",
-      "offline": "not_simulated"
-    },
-    "limitations": [
-      "Vyomi does not generate real billing/invoice documents."
-    ]
-  },
   "azure.cost.payment_methods": {
     "title": "Payment methods (card/billing profile management)",
     "level": {
@@ -214,5 +204,11 @@
     "limitations": [
       "Capturing or storing real payment instruments is out of scope for a simulator."
     ]
-  }
+  },
+ "azure.cost.invoices": {
+  "title": "Invoices and cost saved (simulated)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["The cost-saved dashboard (saved so far, this month, run rate, by month / service / top resources) and the monthly invoices are derived from the live inventory at real-Azure list prices accrued from each resource's creation. Invoices are marked simulated: amountDue is 0.00, avoidedAmount is the would-be charge. Deleted resources leave no ledger, so past months are a lower bound. Payment methods are never collected."],
+  "tests": ["tests/conformance/test_azure_billing_ext_core.py"]
+ }
 }

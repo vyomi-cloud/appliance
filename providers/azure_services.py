@@ -947,10 +947,17 @@ async def _handle_arm_inner(request: Request, rest: str) -> JSONResponse:
     # control (IAM) blade lists the assignments at its own scope plus inherited ones).
     lowc = [c.lower() for c in chain]
     for i in range(1, len(lowc) - 1):
-        if lowc[i] == "providers" and lowc[i + 1] in ("microsoft.authorization", "microsoft.security", "microsoft.resourcehealth", "microsoft.eventgrid") and i % 2 == 0:
+        if lowc[i] == "providers" and lowc[i + 1] in ("microsoft.authorization", "microsoft.security", "microsoft.resourcehealth", "microsoft.eventgrid", "microsoft.quota") and i % 2 == 0:
             return await _handle_core_arm(request, method, rest, base)
     if namespace.lower() == "microsoft.eventgrid" and chain and chain[0].lower() == "eventsubscriptions":   # RG / subscription scope
         return await _handle_core_arm(request, method, rest, base)
+
+    # v4 AZ-08: Azure Files shares (storageAccounts/{sa}/fileServices/default/shares/...) live in the shared core
+    # engine (core/azure_files_core.py) over this same _state.
+    if namespace.lower() == "microsoft.storage":
+        from core import azure_files_core as _files_probe
+        if _files_probe.handles(namespace, chain):
+            return await _handle_core_arm(request, method, rest, base)
 
     # Microsoft.Compute/.../vmSizes (azure.vms.size): a derived read (location- or VM-scoped),
     # not a RESOURCE_CATALOG-stored resource — served by the shared core ARM engine, same as
@@ -1134,6 +1141,11 @@ async def _handle_arm_inner(request: Request, rest: str) -> JSONResponse:
         blocked = _core_create_block(sub, rg, full_type, key, payload)   # assigned policies + quotas
         if blocked is not None:
             return blocked
+        if full_type.lower() == "microsoft.storage/storageaccounts" and method in ("PUT", "PATCH"):
+            from core import azure_files_core as _fx
+            _fe = _fx.validate_account(_state.get(key), payload)
+            if _fe:
+                return JSONResponse(status_code=400, content=_fe)
         _new_vault = full_type.lower() == "microsoft.keyvault/vaults" and key not in _state
         resp = _upsert(rid, key, full_type, leaf_name, top, payload, base, patch=(method == "PATCH"))
         if _new_vault and key in _state:   # the creator gets data-plane access, as on the core engine + Nano

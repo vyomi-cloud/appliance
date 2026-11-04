@@ -13,7 +13,8 @@ import CostAllocation from "./CostAllocation.jsx";
 import PreviewFeatures from "./PreviewFeatures.jsx";
 import Configuration from "./Configuration.jsx";
 import AzureSubscriptions from "./AzureSubscriptions.jsx";
-import { DiagnoseAndSolveProblems, Invoices, NewSupportRequest, PaymentMethods } from "./StaticPages.jsx";
+import { DiagnoseAndSolveProblems, NewSupportRequest, PaymentMethods } from "./StaticPages.jsx";
+import { Invoices } from "./CostSaved.jsx";
 
 const crumb = (text, href) => [{ text, href }];
 

@@ -30,6 +30,7 @@ import SharedResourceHealth from "../../kit/ResourceHealth.jsx";
 import SharedDiagnosticSettings from "../../kit/DiagnosticSettings.jsx";
 import SharedSupportPanel from "../../kit/SupportPanel.jsx";
 import { ResourceRecommendations } from "../defender/Pages.jsx";
+import AiSearchIntegration from "../../kit/AiSearchIntegration.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -112,6 +113,8 @@ export default function SqlDatabaseBlade({ params }) {
       support: () => <SharedSupportPanel resourceId={a.id} name={a.name} service="sql" />,
       resourcehealth: () => <SharedResourceHealth id={a.id} name={a.name} />,
       diagnosticsettings: () => <SharedDiagnosticSettings id={a.id} name={a.name} />,
+      addazuresearch: () => <AiSearchIntegration source={{ kind: "sql", capId: "azure.sql.addazuresearch", title: `${a.name} | Add Azure AI Search`, account: a.name, containerName: "dbo.Table1",
+        connectionString: `Server=tcp:${a.server}.database.windows.net;Database=${a.name}` }} />,
     }[panel];
     body = P ? P() : (
       <>
