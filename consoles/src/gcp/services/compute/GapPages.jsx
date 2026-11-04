@@ -64,6 +64,18 @@ export const GAPS = [
   ["preview-features", "Preview Features", "preview-features", ScienceOutlinedIcon],
 ];
 
-export const gapRoutes = () => GAPS.map(([, title, path]) => ({ pattern: `/compute/${path}`, component: ns(title) }));
+import PostureFindings from "../../kit/PostureFindings.jsx";
+import { CapabilityContainer } from "../../kit/Capability.jsx";
+import { PageHeader } from "../../kit/common.jsx";
+function SecurityRiskOverview() {
+  return (
+    <Box sx={{ pt: 2 }}>
+      <PageHeader title="Security risk overview" />
+      <CapabilityContainer id="gcp.compute.security-risk-overview" title="Security risk overview"><PostureFindings kind="compute" /></CapabilityContainer>
+    </Box>
+  );
+}
+const REAL = { "security-risk-overview": SecurityRiskOverview };
+export const gapRoutes = () => GAPS.map(([id, title, path]) => ({ pattern: `/compute/${path}`, component: REAL[id] || ns(title) }));
 export const gapById = (id) => GAPS.find((g) => g[0] === id);
 export const gapLink = (id) => { const g = gapById(id); return g && { text: g[1], href: `#/compute/${g[2]}`, icon: g[3] }; };

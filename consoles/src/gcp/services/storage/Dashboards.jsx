@@ -17,6 +17,7 @@ import { ErrorAlert, fmtBytes, KeyValue, PageHeader, Section } from "../../kit/c
 import { CapabilityBadge, CapabilityContainer } from "../../kit/Capability.jsx";
 import { Link, hashHref } from "../../link.jsx";
 import { useProject } from "../../project.js";
+import PostureFindings from "../../kit/PostureFindings.jsx";
 import * as api from "./api.js";
 
 const DEV_USER_EMAIL = "dev@example.com";
@@ -307,7 +308,7 @@ export function Advisor() {
   return (
     <Box sx={{ pt: 2 }}>
       <Typography variant="h1" component="h1" sx={{ mb: 2 }}>Advisor</Typography>
-      <CapabilityContainer id="gcp.storage.security-insights" title="Recommendations" />
+      <CapabilityContainer id="gcp.storage.security-insights" title="Recommendations"><PostureFindings kind="storage" /></CapabilityContainer>
     </Box>
   );
 }

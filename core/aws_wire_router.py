@@ -74,6 +74,7 @@ from core import gcp_resourcemanager_core as gcp_rm
 from core import gcp_pam_core as gcp_pam
 from core import gcp_run_core as gcp_run
 from core import gcp_trace_core as gcp_trace
+from core import gcp_posture_core as gcp_posture
 
 # Cloud Scheduler httpTarget that names a Cloud Run job's own Admin API v2 `:run` endpoint
 # (the job-trigger binding the Cloud Run console's Triggers tab shows and creates).
@@ -96,6 +97,8 @@ def _gcp_service(path):
             or re.match(r"^/v1/projects/[^/]+/locations/global/traceScopes([/:]|$)", path) \
             or re.match(r"^/v2/projects/[^/]+/locations/global/logScopes([/:]|$)", path):
         return "gcp-trace"   # Cloud Trace v1/v2 + Trace scopes + Log scopes (core/gcp_trace_core, state on the Monitoring store)
+    if re.match(r"^/v1/projects/[^/]+/securityPosture/(compute|storage)$", path):
+        return "gcp-posture"   # rule-based posture findings over real VM / firewall / bucket state (core/gcp_posture_core)
     if path.startswith("/v2/entries"):   # Cloud Logging: entries:write / entries:list
         return "gcp-logging"
     if re.match(r"^/v2/projects/[^/]+/(sinks|metrics|logs)([/:]|$)", path):
@@ -1114,6 +1117,10 @@ class AwsWireRouter:
             if r.media_type and not any(k.lower() == "content-type" for k in hdrs):
                 hdrs["content-type"] = r.media_type
             return {"status": r.status, "headers": hdrs, "body": r.body or b""}
+
+        if svc == "gcp-posture":
+            r = gcp_posture.dispatch(self.gcp_compute_vm, self.gcp_compute, self.gcs, method, path)
+            return {"status": r.status, "headers": {"content-type": r.media_type}, "body": r.body}
 
         if svc and svc.startswith("gcp-"):   # GCP services — native google-cloud-* REST wire
             _gcp_core = {

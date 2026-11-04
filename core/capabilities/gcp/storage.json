@@ -136,11 +136,13 @@
     "tests": ["tests/conformance/test_gcp_resourcemanager_core.py"]
   },
   "gcp.storage.security-insights": {
-    "title": "Security insights (bucket column) and Advisor recommendations",
-    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "title": "Advisor security recommendations (bucket posture findings)",
+    "level": { "nano": "limited", "offline": "limited" },
     "limitations": [
-      "Both are produced by IAM Recommender / Security Command Center analysis and usage-pattern ML over real production traffic; Vyomi runs no such analysis, so it has no findings or recommendations to show."
-    ]
+      "Recommendations come from a deterministic rule engine over the real stored buckets (public allUsers/allAuthenticatedUsers IAM bindings, uniform bucket-level access off, public access prevention not enforced, no versioning/retention, no CMEK). They are not IAM Recommender / Security Command Center output: no usage-pattern ML, no excess-permission analysis and no data-sensitivity scanning. The bucket-list 'Security insights' column is not driven by these findings."
+    ],
+    "api": ["securityPosture.storage"],
+    "tests": ["tests/conformance/test_gcp_posture.py"]
   },
   "gcp.storage.observability": {
     "title": "Monitoring (Cloud Monitoring charts: request/error rates, bandwidth)",

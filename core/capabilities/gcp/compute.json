@@ -225,5 +225,14 @@
      "Compute rollout plans orchestrate Google-managed product updates across waves; there is no managed fleet or update stream to roll out."
   ],
   "api": []
- }
+ },
+  "gcp.compute.security-risk-overview": {
+    "title": "Security risk overview",
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": [
+      "Findings come from a deterministic rule engine over the project's real stored VMs and firewall rules (public IP, full-API-access default service account, OS Login / serial port / project SSH keys, Secure Boot, IP forwarding, firewalls open to 0.0.0.0/0 for SSH/RDP/all ports, with the instances each rule affects). It is not Security Command Center: no Trivy/vulnerability scanning of guest OS packages, no threat detection, no attack-path simulation, and no findings history or muting."
+    ],
+    "api": ["securityPosture.compute"],
+    "tests": ["tests/conformance/test_gcp_posture.py"]
+  }
 }
