@@ -1815,7 +1815,7 @@ def _vnet_fill(state, rec):
         sp.setdefault("privateLinkServiceNetworkPolicies", "Enabled")
         used = _subnet_nics(state, sid)
         if used:
-            sp["ipConfigurations"] = [{"id": ipc["id"]} for _, ipc in used]
+            sp["ipConfigurations"] = [{"id": ipc["id"]} for _, ipc in used if ipc.get("id")]
         else:
             sp.pop("ipConfigurations", None)
     plan = (p.get("ddosProtectionPlan") or {}).get("id")
