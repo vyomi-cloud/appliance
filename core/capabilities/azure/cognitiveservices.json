@@ -38,10 +38,8 @@
  "azure.cognitiveservices.networking": {
   "title": "Networking (public network access / firewall default action)",
   "level": { "nano": "config_only", "offline": "config_only" },
-  "limitations": [
-   "publicNetworkAccess and networkAcls round-trip through ARM exactly as written, but Vyomi does not enforce them against the account's Keys and Endpoint or Model deployments calls — unlike azure.keyvaults.networking, this data plane has no per-account routing signal to check (no x-vyomi-account equivalent is wired into core/aws_wire_router.py for Microsoft.CognitiveServices yet)."
-  ],
-  "tests": ["tests/conformance/test_azure_cognitiveservices_core.py"]
+  "limitations": ["publicNetworkAccess and networkAcls round-trip through ARM exactly as written, but Vyomi does not enforce them against the account's Keys and Endpoint or Model deployments calls — unlike azure.keyvaults.networking, this data plane has no per-account routing signal to check (no x-vyomi-account equivalent is wired into core/aws_wire_router.py for Microsoft.CognitiveServices yet).", "Private endpoint connections are real ARM objects mirrored from Microsoft.Network/privateEndpoints (Pending for manual connections, approve/reject/delete on the account flows back to the endpoint); they do not change how the account's data plane is reached."],
+  "tests": ["tests/conformance/test_azure_cognitiveservices_core.py", "tests/conformance/test_azure_netcfg_core.py"]
  },
  "azure.cognitiveservices.identity": {
   "title": "System-assigned managed identity",

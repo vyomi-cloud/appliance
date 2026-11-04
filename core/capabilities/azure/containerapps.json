@@ -78,9 +78,10 @@
  },
  "azure.containerapps.app.networking": {
   "title": "Networking, Dapr configuration, Service Connector, Console, Continuous deployment",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["No per-app VNet/private endpoint configuration beyond the environment's own network, app-level Dapr sidecar enablement, Service Connector linkage, an in-browser exec console, or a CI/CD source-to-image pipeline."],
-  "api": []
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["Environment custom VNet integration is real configuration: the infrastructure subnet must exist and be at least a /23 (/27 with workload profiles), cannot be shared between environments, internal mode and zoneRedundant require a subnet, platformReservedCidr must not overlap the vnet, and the VNet configuration is immutable after create. Packets are not routed through the subnet, so the environment's ingress works identically with and without it. App-level Dapr sidecar enablement, Service Connector linkage, an in-browser exec console and a CI/CD source-to-image pipeline are still not modelled."],
+  "api": [],
+  "tests": ["tests/conformance/test_azure_netcfg_core.py"]
  },
  "azure.containerapps.app.monitoring": {
   "title": "Metrics, Alerts, Log stream",

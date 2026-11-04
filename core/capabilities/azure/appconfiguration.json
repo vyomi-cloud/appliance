@@ -85,16 +85,9 @@
  },
  "azure.appconfiguration.networking": {
   "title": "Networking (public network access)",
-  "level": {
-   "nano": "limited",
-   "offline": "limited"
-  },
-  "limitations": [
-   "publicNetworkAccess=Disabled is ENFORCED: every data-plane request (read or write) returns 403 Forbidden while the control plane stays reachable. Vyomi has no private-link network path, so private endpoints are stored but cannot restore access — every caller counts as public."
-  ],
-  "tests": [
-   "tests/conformance/test_azure_appconfiguration_core.py"
-  ]
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["publicNetworkAccess=Disabled is ENFORCED: every data-plane request (read or write) returns 403 Forbidden while the control plane stays reachable. Vyomi has no private-link network path, so private endpoints (created through Microsoft.Network, connections approved/rejected on the store) are stored but cannot restore access — every caller counts as public."],
+  "tests": ["tests/conformance/test_azure_appconfiguration_core.py", "tests/conformance/test_azure_netcfg_core.py"]
  },
  "azure.appconfiguration.locks": {
   "title": "Resource locks (Microsoft.Authorization/locks), scoped to this configuration store",
