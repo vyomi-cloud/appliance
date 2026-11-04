@@ -654,6 +654,7 @@ class AwsWireRouter:
         self.ram = s.get("ram") or _types.SimpleNamespace()   # Resource Access Manager (subnet/SG sharing)
         self.vpc.ram_store = self.ram   # DeleteSubnet/DeleteSecurityGroup refuse while actively shared
         self.ram.vpc_store = self.vpc   # AssociateResourceShare validates the subnet/SG exists
+        self.ram.org_store = self.iam   # principals (org / OU ARNs, member accounts) are checked against AWS Organizations (state in the IAM store)
         self.dax.cw_store = self.cw            # real AWS/DAX ItemCache/QueryCache hit/miss metrics
         self.dlm = s.get("dlm") or dlm.DlmStore()   # Data Lifecycle Manager (ec2.lifecycle-manager)
         self.dlm.vpc_store = self.vpc   # policies really create/prune real snapshots + AMIs

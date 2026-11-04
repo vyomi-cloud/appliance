@@ -22,6 +22,7 @@ import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import { follow, href, navigate } from "../../../common/router.js";
 import { ErrorAlert, KeyValue, NotSimulatedContainer } from "../../kit/common.jsx";
+import { ResourceSharingTab } from "../vpc/ResourceSharing.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { TAG_I18N } from "./InstanceDetail.jsx";
 import * as api from "./api.js";
@@ -148,7 +149,7 @@ export function SecurityGroupDetail({ params }) {
         <Tabs tabs={[
           { id: "in", label: "Inbound rules", content: <RulesTable g={g} direction="ingress" reload={t.reload} /> },
           { id: "out", label: "Outbound rules", content: <RulesTable g={g} direction="egress" reload={t.reload} /> },
-          { id: "share", label: "Sharing", content: <CapabilityContainer id="ec2.security-groups.ram-sharing" title="Shared with" /> },
+          { id: "share", label: "Sharing", content: <ResourceSharingTab resourceId={g.GroupId} resourceKind="security-group" capabilityId="ec2.security-groups.ram-sharing" title="Shared with" /> },
           { id: "vpc", label: "VPC associations", content: <VpcAssociationsTab g={g} /> },
           { id: "rel", label: "Related resources - new", content: <CapabilityContainer id="ec2.security-groups.related-resources" title="Related resources"><RelatedResources g={g} /></CapabilityContainer> },
           { id: "tags", label: "Tags", content: <TagsTable resourceId={g.GroupId} tags={g.Tags} onSave={saveTags} /> },

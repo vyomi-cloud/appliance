@@ -211,11 +211,23 @@
  "ec2.security-groups.ram-sharing": {
   "title": "Security group sharing (AWS Resource Access Manager)",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Cross-account sharing via AWS Resource Access Manager isn't modeled — Vyomi simulates one account, so there's no second account to share a resource with."
+   "The Sharing tab drives the real RAM object model: CreateResourceShare / AssociateResourceShare / DisassociateResourceShare over the security group's ARN with the resource-share state machine, and principals are validated like the service (12-digit account, organization ARN, OU ARN or IAM role/user ARN) and cross-checked against the account's AWS Organizations: an organization or OU that does not exist is refused, member accounts are internal, a share created with allowExternalPrincipals=false refuses accounts outside the organization. The owner-side consequence is enforced: a security group with an active share cannot be deleted until it is unshared. Vyomi simulates one account, so the invited account's own view of the shared group (DescribeSecurityGroups from that account, using it in its own VPC) cannot be observed, and no invitation / acceptance flow runs (associations go straight to ASSOCIATED)."
+  ],
+  "api": [
+   "CreateResourceShare",
+   "AssociateResourceShare",
+   "DisassociateResourceShare",
+   "GetResourceShareAssociations",
+   "ListPrincipals",
+   "ListResources"
+  ],
+  "tests": [
+   "tests/conformance/test_ram_core.py",
+   "tests/conformance/test_ram_principals.py"
   ]
  },
  "ec2.security-groups.related-resources": {

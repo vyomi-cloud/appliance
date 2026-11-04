@@ -20,6 +20,7 @@ same dispatch shape as core/kms_core.py.
 """
 from __future__ import annotations
 
+import re
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -160,13 +161,47 @@ def _assoc_dict(a: dict) -> dict:
            "creationTime": a["created"], "lastUpdatedTime": a["created"], "external": a.get("external", False)}
 
 
+_ACCT_RE = re.compile(r"^\d{12}$")
+_ORG_RE = re.compile(r"^arn:aws[-a-z0-9]*:organizations::(\d{12}):organization/(o-[a-z0-9]{10,32})$")
+_OU_RE = re.compile(r"^arn:aws[-a-z0-9]*:organizations::(\d{12}):ou/(o-[a-z0-9]{10,32})/(ou-[0-9a-z]{4,32}-[0-9a-z]{8,32})$")
+_IAM_RE = re.compile(r"^arn:aws[-a-z0-9]*:iam::(\d{12}):(role|user)/.+$")
+
+
+def _validate_principal(store, share: dict, target: str) -> bool:
+    """Validate a RAM principal like the real service (12-digit account, organization ARN, OU ARN, or IAM role/user ARN) and cross-check
+    it against the account's AWS Organizations (when the router wired `org_store`): an organization / OU ARN must exist in the
+    organization, an account is internal when it is the owner or an organization member, and a share created with
+    allowExternalPrincipals=false refuses anything outside the organization. Returns True when the principal is external."""
+    org = None
+    org_store = getattr(store, "org_store", None)
+    if org_store is not None:
+        org = (getattr(org_store, "extras", None) or {}).get("org")
+    mt_org, mt_ou, mt_iam = _ORG_RE.match(target), _OU_RE.match(target), _IAM_RE.match(target)
+    if not (_ACCT_RE.match(target) or mt_org or mt_ou or mt_iam):
+        raise RamError("InvalidParameterException", f"The principal '{target}' is not valid: use a 12-digit account ID, an organization or OU ARN, or an IAM role/user ARN.")
+    if mt_org or mt_ou:
+        oid = (mt_org or mt_ou).group(2)
+        if org is None or org.get("id") != oid:
+            raise RamError("UnknownResourceException", f"The organization {oid} does not exist or this account is not a member of it.")
+        if mt_ou and mt_ou.group(3) not in (org.get("ous") or {}):
+            raise RamError("UnknownResourceException", f"The organizational unit {mt_ou.group(3)} does not exist in the organization.")
+        return False
+    acct = target if _ACCT_RE.match(target) else (mt_iam.group(1) if mt_iam else "")
+    internal = acct == OWNER_ID or (org is not None and acct in (org.get("accounts") or {}))
+    if not internal and not share.get("allow_external_principals", True):
+        raise RamError("OperationNotPermittedException", f"The resource share does not allow external principals and account {acct} is not in your organization.")
+    return not internal
+
+
 def _associate_one(store, vpc_store, share_arn: str, kind: str, target: str) -> dict:
     m = _model(store)
     coll = m["resource_assocs"] if kind == "RESOURCE" else m["principal_assocs"]
+    external = False
     if kind == "RESOURCE":
         _validate_resource(vpc_store, target)
         key_field = "resource_arn"
     else:
+        external = _validate_principal(store, m["shares"].get(share_arn, {}), target)
         key_field = "principal"
     existing = next((a for a in coll.values() if a["share_arn"] == share_arn and a[key_field] == target), None)
     if existing:
@@ -174,7 +209,7 @@ def _associate_one(store, vpc_store, share_arn: str, kind: str, target: str) -> 
         return _assoc_dict(existing)
     aid = str(uuid.uuid4())
     rec = {"id": aid, "share_arn": share_arn, "kind": kind, "target": target, "status": "ASSOCIATED",
-          "created": _now(), "external": kind == "PRINCIPAL" and not target.startswith(OWNER_ID)}
+          "created": _now(), "external": external}
     rec[key_field] = target
     coll[aid] = rec
     return _assoc_dict(rec)
