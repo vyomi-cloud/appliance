@@ -105,6 +105,27 @@ function Preferences() {
   );
 }
 
+/* Vyomi has no carrier or phone: this is the simulated handset. It lists the SMS the simulator "sent" to the number
+ * (VyomiListSimulatedSMS, a Vyomi-only wire action) so a developer can read the verification code a real phone would show. */
+function SimulatedHandset({ phone, onUse }) {
+  const m = useAsync(() => (phone ? api.listSimulatedSms(phone) : Promise.resolve([])), [phone]);
+  const rows = m.data || [];
+  return (
+    <SpaceBetween size="xs">
+      <Box variant="awsui-key-label">Simulated handset for {phone}</Box>
+      {rows.length === 0 ? <Box color="text-status-inactive">No messages received by this number yet.</Box> : rows.slice(0, 5).map((x) => {
+        const code = /(\d{6})/.exec(x.message)?.[1];
+        return (
+          <SpaceBetween key={x.id} direction="horizontal" size="xs" alignItems="center">
+            <Box>{x.message}</Box>
+            {x.kind === "SMSSandboxVerification" && code && <Button variant="inline-link" onClick={() => onUse(code)}>Use code {code}</Button>}
+          </SpaceBetween>);
+      })}
+      <Button iconName="refresh" onClick={m.reload}>Refresh messages</Button>
+    </SpaceBetween>
+  );
+}
+
 function SandboxNumbers() {
   const notify = useNotify();
   const s = useAsync(() => api.listSmsSandboxPhoneNumbers(), []);
@@ -168,7 +189,9 @@ function SandboxNumbers() {
         </SpaceBetween></Box>}>
         <SpaceBetween size="m">
           {error && <ErrorAlert error={error} />}
-          <CapabilityContainer id="sns.sms.otp-delivery" title="Verification code delivery" />
+          <CapabilityContainer id="sns.sms.otp-delivery" title="Verification code delivery">
+            <SimulatedHandset phone={sel[0]?.phone} onUse={setOtp} />
+          </CapabilityContainer>
           <FormField label="Verification code"><Input value={otp} onChange={({ detail }) => setOtp(detail.value)} ariaLabel="Verification code" /></FormField>
         </SpaceBetween>
       </Modal>

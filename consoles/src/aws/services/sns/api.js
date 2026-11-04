@@ -175,6 +175,10 @@ export async function listPhoneNumbersOptedOut() {
 export const optInPhoneNumber = (phone) => call("OptInPhoneNumber", { phoneNumber: phone });
 export const createSmsSandboxPhoneNumber = (phone) => call("CreateSMSSandboxPhoneNumber", { PhoneNumber: phone });
 export const verifySmsSandboxPhoneNumber = (phone, otp) => call("VerifySMSSandboxPhoneNumber", { PhoneNumber: phone, OneTimePassword: otp });
+export async function listSimulatedSms(phone) {
+  const r = result(await call("VyomiListSimulatedSMS", phone ? { PhoneNumber: phone } : {}), "VyomiListSimulatedSMS");
+  return asList(r.Messages?.member).map((m) => ({ id: m.MessageId, phone: m.PhoneNumber, kind: m.Kind, message: m.Message, at: m.Timestamp }));
+}
 export const deleteSmsSandboxPhoneNumber = (phone) => call("DeleteSMSSandboxPhoneNumber", { PhoneNumber: phone });
 export async function listSmsSandboxPhoneNumbers() {
   const out = [];

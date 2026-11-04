@@ -251,15 +251,17 @@
   ]
  },
  "sns.sms.otp-delivery": {
-  "title": "SMS verification code delivery",
+  "title": "SMS verification code delivery (simulated handset inbox)",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "The sandbox verification code is generated and checked by the sandbox API, but Vyomi has no carrier or handset to receive the text, so it is never delivered to a phone and no native API reads it back."
+   "Vyomi has no carrier or handset, so no text reaches a real phone. Every SMS the simulator sends (sandbox verification codes, Publish to a verified phone, SMS topic subscriptions) is delivered to a simulated handset inbox instead, readable through the Vyomi-only VyomiListSimulatedSMS action and shown in the console's Verify phone number dialog. Real AWS has no API to read the code back."
   ],
-  "api": []
+  "tests": [
+   "tests/conformance/test_sns_sms_inbox.py"
+  ]
  },
  "sns.topic.max-message-size": {
   "title": "Maximum message size",
