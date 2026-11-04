@@ -67,13 +67,18 @@
   ]
  },
  "ec2.instances.connect": {
-  "title": "Connect (SSH / RDP / EC2 Instance Connect / Session Manager)",
+  "title": "Connect (SSH / EC2 Instance Connect)",
   "level": {
    "nano": "not_simulated",
-   "offline": "not_simulated"
+   "offline": "limited"
   },
   "limitations": [
-   "Vyomi instances aren't real virtual machines with a reachable network stack, so there is nothing to SSH, RDP or Session-Manager into."
+   "On the offline appliance an instance is a real Docker container running sshd, so Connect is real: the SSH client tab shows the working ssh command (published host port, or the routable bridge IP / Codespaces jump host), the shared key pair's private key downloads as a .pem, and the EC2 Instance Connect tab is an in-browser terminal that executes each command inside the instance's container (working directory is tracked between commands). It is a command-at-a-time shell, not a full pty: interactive programs (vim, top, a password prompt) do not work in the browser terminal, use the SSH client for those. NOT modelled: Session Manager (no SSM agent), RDP for Windows AMIs, the EC2 serial console, instance-connect endpoints and ephemeral-key push (the instance uses the appliance's shared key pair, not the key pair chosen at launch). Nano has no instance runtime to SSH into (the browser tunnel relay is not built yet), so Connect is not simulated there."
+  ],
+  "api": [
+   "(Vyomi) GET /api/aws/ec2/instances/{id}/connect-info",
+   "(Vyomi) GET /api/aws/ec2/instances/{id}/private-key.pem",
+   "(Vyomi) POST /api/ec2/instances/{id}/console/exec"
   ]
  },
  "ec2.instance-types": {

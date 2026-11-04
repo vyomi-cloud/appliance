@@ -10,6 +10,7 @@ import Header from "@cloudscape-design/components/header";
 import ResourceTable from "../../kit/ResourceTable.jsx";
 import { NotSimulatedContainer } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
+import ConnectModalBody from "./ConnectModal.jsx";
 import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import { follow, href, navigate } from "../../../common/router.js";
@@ -89,8 +90,8 @@ export default function Instances() {
         }
         empty={{ title: "No instances", action: <Button href={href("ec2", "launch-instance")} onFollow={follow}>Launch instances</Button> }}
       />
-      <Modal visible={connect} onDismiss={() => setConnect(false)} header="Connect to instance" footer={<Box float="right"><Button onClick={() => setConnect(false)}>Close</Button></Box>}>
-        <CapabilityContainer id="ec2.instances.connect" title="Connect" />
+      <Modal visible={connect} onDismiss={() => setConnect(false)} header="Connect to instance" size="large" footer={<Box float="right"><Button onClick={() => setConnect(false)}>Close</Button></Box>}>
+        <ConnectModalBody instanceId={sel[0]?.instanceId} />
       </Modal>
     </SpaceBetween>
   );

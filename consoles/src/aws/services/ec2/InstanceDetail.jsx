@@ -17,6 +17,7 @@ import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import { ErrorAlert, KeyValue, NotSimulatedContainer } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
+import ConnectModalBody from "./ConnectModal.jsx";
 import MetricGraphs from "../../kit/MetricGraphs.jsx";
 import { navigate } from "../../../common/router.js";
 import { StateBadge, nameOf } from "./Instances.jsx";
@@ -70,8 +71,8 @@ export default function InstanceDetail({ params }) {
           { id: "tags", label: "Tags", content: <TagsTab i={i} reload={t.reload} /> },
         ]} />
       </SpaceBetween>
-      <Modal visible={connect} onDismiss={() => setConnect(false)} header="Connect to instance" footer={<Box float="right"><Button onClick={() => setConnect(false)}>Close</Button></Box>}>
-        <CapabilityContainer id="ec2.instances.connect" title="Connect" />
+      <Modal visible={connect} onDismiss={() => setConnect(false)} header="Connect to instance" size="large" footer={<Box float="right"><Button onClick={() => setConnect(false)}>Close</Button></Box>}>
+        <ConnectModalBody instanceId={i.instanceId} />
       </Modal>
     </ContentLayout>
   );
