@@ -22,6 +22,7 @@ import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { DeleteDatabaseModal, ModifyModal, SnapshotModal } from "./DatabaseActions.jsx";
 import { statusOf } from "./Databases.jsx";
 import { IamRolesPanel, AlarmsPanel } from "./RdsExtras.jsx";
+import DataMigrations from "./DataMigrations.jsx";
 import * as api from "./api.js";
 
 const RANGE_OPTIONS = [
@@ -475,7 +476,7 @@ export default function DatabaseDetail({ params, query }) {
               </SpaceBetween>
             ),
           },
-          { id: "migrations", label: "Data migrations", content: <NotSimulatedContainer title="Data migrations" feature="AWS DMS data migrations" /> },
+          { id: "migrations", label: "Data migrations", content: <DataMigrations db={d} /> },
           { id: "tags", label: "Tags", content: <TagsTab d={d} reload={t.reload} /> },
           { id: "recommendations", label: "Recommendations", content: <InstanceRecommendations arn={d.DBInstanceArn} /> },
         ]} />
