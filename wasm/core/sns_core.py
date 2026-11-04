@@ -1428,6 +1428,19 @@ def _list_sms_sandbox_phone_numbers(store, params):
     return _envelope("ListSMSSandboxPhoneNumbers", f"<PhoneNumbers>{members}</PhoneNumbers>{_next(nxt)}")
 
 
+def _vyomi_list_simulated_sms(store, params):
+    """Vyomi extension (no AWS equivalent): the simulated handset inbox. Vyomi has no carrier or phone, so every SMS the
+    simulator "sends" (sandbox verification codes, direct Publish to a phone number, SMS topic subscriptions) is readable
+    here, newest first, optionally filtered by PhoneNumber. This is how a developer reads the OTP a real phone would show."""
+    phone = _p(params, "PhoneNumber")
+    msgs = [d for d in reversed(_state(store)["deliveries"])
+            if d.get("protocol") == "sms" and (not phone or d.get("endpoint") == phone)]
+    members = "".join("<member>" + _el("MessageId", d["id"]) + _el("PhoneNumber", d.get("endpoint", ""))
+                      + _el("Kind", d.get("kind", "Notification")) + _el("Message", d.get("message", ""))
+                      + _el("Timestamp", d.get("timestamp", "")) + "</member>" for d in msgs[:100])
+    return _envelope("VyomiListSimulatedSMS", f"<Messages>{members}</Messages>")
+
+
 def _get_sms_sandbox_account_status(store, params):
     return _envelope("GetSMSSandboxAccountStatus", _el("IsInSandbox", "true"))
 
@@ -1465,6 +1478,7 @@ _OPS = {
     "OptInPhoneNumber": _opt_in_phone_number,
     "CreateSMSSandboxPhoneNumber": _create_sms_sandbox_phone_number,
     "VerifySMSSandboxPhoneNumber": _verify_sms_sandbox_phone_number,
+    "VyomiListSimulatedSMS": _vyomi_list_simulated_sms,
     "DeleteSMSSandboxPhoneNumber": _delete_sms_sandbox_phone_number,
     "ListSMSSandboxPhoneNumbers": _list_sms_sandbox_phone_numbers,
     "GetSMSSandboxAccountStatus": _get_sms_sandbox_account_status,

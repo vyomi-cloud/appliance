@@ -69,16 +69,14 @@
     "honest_page": true
   },
   "file-systems": {
-    "route": "#/s3/file-systems",
-    "honest_page": true
+    "route": "#/s3/file-systems"
   },
   "access-points": {
     "route": "#/s3/access-points",
     "honest_page": true
   },
   "access-points-for-fsx": {
-    "route": "#/s3/access-points-fsx",
-    "honest_page": true
+    "route": "#/s3/access-points-fsx"
   },
   "access-grants": {
     "route": "#/s3/access-grants",
@@ -104,8 +102,7 @@
     "honest_page": true
   },
   "create-file-system": {
-    "route": "#/s3/file-systems",
-    "honest_page": true
+    "route": "#/s3/file-systems"
   },
   "create-storage-lens-group": {
     "route": "#/s3/lens/groups",
@@ -116,11 +113,9 @@
     "honest_page": true
   },
   "aws-marketplace-for-s3": {
-    "route": "#/s3/marketplace",
-    "honest_page": true
+    "route": "#/s3/marketplace"
   },
   "amazon-s3": {
-    "route": "#/s3/get-started",
-    "honest_page": true
+    "route": "#/s3/get-started"
   }
 }

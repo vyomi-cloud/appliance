@@ -139,3 +139,11 @@ export const rangeToMs = (v) => ({ "5m": 300000, "1h": 3600000, "6h": 21600000, 
 
 export const comparisonLabel = (c) => ({ COMPARISON_GT: "above threshold", COMPARISON_LT: "below threshold" }[c] || c);
 export const channelLabel = (c) => c.displayName || (c.labels && Object.values(c.labels)[0]) || c.name?.split("/").pop();
+
+// ── Cloud Trace (v1 read/list, v2 batchWrite) + Trace scopes (observability v1) + Log scopes (logging v2) ──
+export const listTraces = async (query) => (await restJson("GET", `/v1/projects/${e(getProject())}/traces`, { query: { pageSize: 100, view: "ROOTSPAN", ...query } })).traces || [];
+export const getTrace = (tid) => restJson("GET", `/v1/projects/${e(getProject())}/traces/${e(tid)}`);
+const scopeBase = (kind) => kind === "trace" ? `/v1/projects/${e(getProject())}/locations/global/traceScopes` : `/v2/projects/${e(getProject())}/locations/global/logScopes`;
+export const listScopes = async (kind) => (await restJson("GET", scopeBase(kind)))[kind === "trace" ? "traceScopes" : "logScopes"] || [];
+export const createScope = (kind, id, body) => restJson("POST", scopeBase(kind), { query: { [kind === "trace" ? "traceScopeId" : "logScopeId"]: id }, body });
+export const deleteScope = (kind, id) => restJson("DELETE", `${scopeBase(kind)}/${e(id)}`);

@@ -552,7 +552,7 @@ def _list_tags(store, name):
 # ── function URL ─────────────────────────────────────────────────────────────────────────
 def _url_view(name, cfg, headers=None):
     # the public invoke path (served by url_invoke) when the config has an id; else the legacy host form
-    furl = f"{_origin_from(headers)}/lambda-url/{cfg['url_id']}/" if cfg.get("url_id") else f"https://{name.lower()}.lambda-url.{REGION}.on.vyomi/"
+    furl = f"{_origin_from(headers)}/lambda-url/{cfg['url_id']}/" if cfg.get("url_id") and headers else f"https://{name.lower()}.lambda-url.{REGION}.on.vyomi/"
     return {"FunctionUrl": furl,
             "FunctionArn": _fn_arn(name), "AuthType": cfg.get("AuthType", "AWS_IAM"),
             "Cors": cfg.get("Cors") or {}, "InvokeMode": cfg.get("InvokeMode", "BUFFERED"),

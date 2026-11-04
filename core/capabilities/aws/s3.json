@@ -909,24 +909,36 @@
  "s3.account.marketplace": {
   "title": "AWS Marketplace for S3",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "AWS Marketplace listings are not part of Vyomi."
+   "The catalog is Vyomi's own: six SaaS spaces (payments, identity, e-mail, SMS, observability, git hosting) rather than AWS Marketplace listings. ListEntities / DescribeEntity follow the Marketplace Catalog API shapes (SaaSProduct filter by Category / Name, paging); subscribing (end-user license acceptance required, one active agreement per product) creates a real agreement with a space endpoint and API key, and cancelling ends it. NOT modelled: the third-party SaaS itself (the endpoint is an address handed to your app, nothing answers behind it), metering and billing, private offers and pricing terms, seller-side listing, and the AWS-hosted Agreement / Entitlement / Metering APIs."
   ],
-  "api": []
+  "api": [
+   "ListEntities",
+   "DescribeEntity",
+   "(Vyomi) POST /agreements",
+   "(Vyomi) GET /agreements",
+   "(Vyomi) DELETE /agreements/{agreementId}"
+  ],
+  "tests": [
+   "tests/conformance/test_marketplace_core.py"
+  ]
  },
  "s3.account.get-started": {
   "title": "Amazon S3",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "full",
+   "offline": "full"
   },
-  "limitations": [
-   "This marketing/getting-started page has no backing resource."
+  "limitations": [],
+  "api": [
+   "ListBuckets"
   ],
-  "api": []
+  "probe": {
+   "s3": "bucket-crud"
+  }
  },
  "s3.bucket.metadata-configuration": {
   "title": "Metadata configuration",
@@ -981,6 +993,65 @@
   ],
   "tests": [
    "tests/conformance/test_s3_vectors_core.py"
+  ]
+ },
+ "s3.account.file-systems": {
+  "title": "File systems (Amazon S3 Files)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "S3 Files file systems are real and bucket-backed: CreateFileSystem validates the bucket ARN, that the bucket exists, the IAM role ARN and one file system per bucket+prefix (ConflictException); Get/List/Delete (refused while mount targets or access points exist); mount targets are checked against the EC2 model (real subnet, security groups in the subnet's VPC, one mount target per Availability Zone, IP taken from the subnet CIDR); access points (POSIX user, root directory, creation permissions validated); file system policy (JSON with a Statement); synchronization rules (trigger, size and 1-365 day expiration validated). The files ARE the bucket's objects under the prefix: the console file browser (list, create, read, delete, mkdir) and the Vyomi file API read and write the same objects the S3 API sees. NOT modelled: the NFS mount protocol (there is nothing to mount from an instance), POSIX permissions, ownership and locking semantics (the POSIX identity is stored, not enforced), the import/expiration sync engine (rules are stored and validated, no job runs) and throughput/latency characteristics."
+  ],
+  "api": [
+   "CreateFileSystem",
+   "GetFileSystem",
+   "ListFileSystems",
+   "DeleteFileSystem",
+   "CreateMountTarget",
+   "ListMountTargets",
+   "DeleteMountTarget",
+   "CreateAccessPoint",
+   "ListAccessPoints",
+   "DeleteAccessPoint",
+   "PutFileSystemPolicy",
+   "GetFileSystemPolicy",
+   "DeleteFileSystemPolicy",
+   "PutSynchronizationConfiguration",
+   "GetSynchronizationConfiguration",
+   "(Vyomi) GET|PUT|DELETE /file-systems/{id}/file, GET /file-systems/{id}/files, POST /file-systems/{id}/directories"
+  ],
+  "tests": [
+   "tests/conformance/test_s3files_core.py"
+  ]
+ },
+ "s3.account.access-points-fsx": {
+  "title": "Access Points for FSx",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "FSx for OpenZFS file systems and volumes are tracked (CreateFileSystem validates OPENZFS, 64-524288 GiB capacity, deployment type, throughput and that the subnets exist in the EC2 model; a root volume is created with it; child volumes with unique names; deletes are refused while children or access points exist) and S3 access points can be created and attached to a volume (CreateAndAttachS3AccessPoint with a POSIX identity, optional VPC origin checked against the EC2 model and a JSON policy; DescribeS3AccessPointAttachments with name/volume/file-system filters; DetachAndDeleteS3AccessPoint). The attachment's -ext-s3alias alias is a bucket name the S3 API serves from the volume's files: ListObjectsV2 (prefix, delimiter), GetObject, HeadObject, PutObject and DeleteObject all work and see the same bytes. NOT modelled: the NFS/SMB protocols (files are written with the Vyomi VyomiPutVolumeFile call or through the alias), ZFS features (snapshots, clones, compression, dedup), enforcement of the POSIX identity and of the access point policy, real capacity/throughput limits, and FSx for Windows / Lustre / NetApp ONTAP."
+  ],
+  "api": [
+   "CreateFileSystem",
+   "DescribeFileSystems",
+   "DeleteFileSystem",
+   "CreateVolume",
+   "DescribeVolumes",
+   "DeleteVolume",
+   "CreateAndAttachS3AccessPoint",
+   "DescribeS3AccessPointAttachments",
+   "DetachAndDeleteS3AccessPoint",
+   "ListObjectsV2",
+   "GetObject",
+   "PutObject",
+   "DeleteObject"
+  ],
+  "tests": [
+   "tests/conformance/test_s3files_core.py"
   ]
  }
 }

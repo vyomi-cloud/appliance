@@ -3,6 +3,7 @@
  * Cost Management pages are backed by real native ARM calls; everything else in the menu is
  * an honest NotSimulated panel. */
 import DeploymentStacks from "./DeploymentStacks.jsx";
+import MarketplaceBrowser from "../../kit/MarketplaceBrowser.jsx";
 import ResourceEvents from "../../kit/ResourceEvents.jsx";
 import { useEffect, useState } from "react";
 import {
@@ -27,8 +28,11 @@ import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
 import SharedActivityLog from "../../kit/ActivityLog.jsx";
 import SharedResourceVisualizer from "../../kit/ResourceVisualizer.jsx";
 import SharedResourceHealth from "../../kit/ResourceHealth.jsx";
+import { ResourceAlerts, ResourceMetrics, ResourceLogs, ResourceWorkbooks } from "../../kit/ResourceMonitoring.jsx";
 import SharedDiagnosticSettings from "../../kit/DiagnosticSettings.jsx";
 import SharedAdvisor from "../../kit/Advisor.jsx";
+import SharedSupportPanel from "../../kit/SupportPanel.jsx";
+import { ResourceRecommendations } from "../defender/Pages.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -107,9 +111,15 @@ export default function ResourceGroupBlade({ params }) {
       deployments: () => <Deployments name={name} />,
       locks: () => <Locks name={name} />,
       exporttemplate: () => <SharedExportTemplate all id={a.id} name={a.name} resourceGroup={a.name} />,
+      security: () => <ResourceRecommendations resourceId={a.id} />,
+      support: () => <SharedSupportPanel resourceId={a.id} name={a.name} service="resourcegroups" />,
       resourcehealth: () => <SharedResourceHealth id={a.id} name={a.name} group />,
       advisorrecommendations: () => <SharedAdvisor scope={a.id} name={a.name} />,
       diagnosticsettings: () => <SharedDiagnosticSettings id={a.id} name={a.name} />,
+      alerts: () => <ResourceAlerts id={a.id} name={a.name} />,
+      metrics: () => <ResourceMetrics id={a.id} name={a.name} />,
+      logs: () => <ResourceLogs id={a.id} name={a.name} />,
+      workbooks: () => <ResourceWorkbooks id={a.id} name={a.name} />,
       resourcevisualizer: () => <SharedResourceVisualizer resourceGroup={a.name} />,
       deploymentstacks: () => <DeploymentStacks rg={name} />,
       events: () => <ResourceEvents scopeId={a.id} kind="resourcegroup" title={`${name} | Events`} />,
@@ -196,7 +206,16 @@ function Overview({ a, reload, self, name }) {
       )}
       {tab === "recommendations" && <SharedAdvisor bare scope={a.id} />}
 
-      <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
+      <Dialog open={gap === "Create"} onOpenChange={(_, d) => !d.open && setGap(null)}>
+        <DialogSurface aria-label="Create a resource from the Marketplace" style={{ maxWidth: 960, width: "90vw" }}>
+          <DialogBody>
+            <DialogTitle>Create a resource from the Marketplace</DialogTitle>
+            <DialogContent><MarketplaceBrowser capId="azure.resourcegroups.marketplace" title="Vyomi Marketplace" fixedRg={a.name} /></DialogContent>
+            <DialogActions><Button onClick={() => { setGap(null); resources.reload(); }}>Close</Button></DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
+      <Dialog open={!!gap && gap !== "Create"} onOpenChange={(_, d) => !d.open && setGap(null)}>
         <DialogSurface aria-label={gap || "Not simulated"}>
           <DialogBody>
             <DialogTitle>{gap}</DialogTitle>

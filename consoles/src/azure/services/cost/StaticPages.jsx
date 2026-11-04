@@ -3,6 +3,7 @@
  * operation a simulator cannot perform) — grouped here to avoid one tiny file per page. */
 import CostShell from "./CostShell.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
+import SupportPanel from "../../kit/SupportPanel.jsx";
 
 export function DiagnoseAndSolveProblems() {
   return (
@@ -47,7 +48,7 @@ export function NewSupportRequest() {
   return (
     <CostShell active="support">
       <div className="vy-page">
-        <CapabilityContainer id="azure.cost.new_support_request" title="New support request" />
+        <SupportPanel service="cost" title="New support request" />
       </div>
     </CostShell>
   );

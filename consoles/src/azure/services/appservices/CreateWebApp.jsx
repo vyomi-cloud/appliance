@@ -31,7 +31,7 @@ export default function CreateWebApp() {
     planChoice: "__new", newPlanName: "", planSku: "B1", zoneRedundant: "Disabled",
     createDatabase: false,
     containerImageSource: "Quickstart", containerImage: "",
-    continuousDeployment: "Disable", basicAuth: "Disable",
+    continuousDeployment: "Disable", basicAuth: "Disable", ghRepo: "", ghBranch: "main",
     publicAccess: true, networkInjection: false,
     appInsights: "No", defender: false,
     tags: [{ name: "", value: "" }],
@@ -165,8 +165,12 @@ export default function CreateWebApp() {
           </RadioGroup>
         </FormRow>
       </FormSection>
-      <NotSimulatedContainer title="GitHub Actions details" feature="GitHub account, Organization, Repository, Branch"
-        note={"Vyomi records that continuous deployment is enabled on the site; it cannot authorize a GitHub account or run a build pipeline."} />
+      {f.continuousDeployment === "Enable" && (
+        <FormSection title="GitHub Actions details" description="Vyomi records this source control and generates the workflow; it does not authorize a GitHub account or run the pipeline.">
+          <FormRow label="Repository URL" required htmlFor="wa-gh-repo"><Input id="wa-gh-repo" value={f.ghRepo} onChange={set("ghRepo")} placeholder="https://github.com/org/repo" aria-label="GitHub repository URL" /></FormRow>
+          <FormRow label="Branch" required htmlFor="wa-gh-branch"><Input id="wa-gh-branch" value={f.ghBranch} onChange={set("ghBranch")} aria-label="GitHub branch" /></FormRow>
+        </FormSection>
+      )}
 
       <FormSection title="Authentication settings">
         <FormRow label="Basic authentication">
@@ -252,6 +256,10 @@ export default function CreateWebApp() {
         tags: Object.fromEntries(f.tags.filter((t) => t.name).map((t) => [t.name, t.value])),
         properties: { serverFarmId: planId, siteConfig, publicNetworkAccess: f.publicAccess ? "Enabled" : "Disabled" },
       });
+      if (f.continuousDeployment === "Enable" && f.ghRepo) {
+        await api.putSourceControl(rg, f.name, { repoUrl: f.ghRepo, branch: f.ghBranch || "main", isGitHubAction: true, gitHubActionConfiguration: {
+          codeConfiguration: { runtimeStack: (f.runtimeStack || "").split("|")[0].toLowerCase() || "python", runtimeVersion: (f.runtimeStack || "").split("|")[1] }, isLinux: f.os === "Linux" } });
+      }
       notify.success(`Deployment of app service '${f.name}' to resource group '${rg}' was successful.`, "Deployment succeeded");
       navigate("appservices", rg, f.name);
     } catch (e) { notify.error(e, "Deployment failed"); }

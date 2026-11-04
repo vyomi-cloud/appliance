@@ -2,6 +2,8 @@
  * Environment variables, Scale and concurrency, Locks, Export template and Access control
  * (role assignments/roles) are backed by native ARM calls; everything else in the menu is an
  * honest NotSimulated panel (Vyomi has no diagnostics/telemetry/identity backend for them). */
+import { ResourceMetrics, ResourceLogs, ResourceNotifications } from "../../kit/ResourceMonitoring.jsx";
+import DeploymentCenter from "../../kit/DeploymentCenter.jsx";
 import { ClassicAdminsPanel, DenyAssignmentsPanel, MyAccess } from "../../kit/IamExtras.jsx";
 import { UserAssignedIdentities } from "../../kit/UserAssignedIdentities.jsx";
 import { useEffect, useState } from "react";
@@ -30,6 +32,7 @@ import * as api from "./api.js";
 import { ResourceRecommendations } from "../defender/Pages.jsx";
 import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
 import SharedActivityLog from "../../kit/ActivityLog.jsx";
+import SharedSupportPanel from "../../kit/SupportPanel.jsx";
 
 const ROLE_ASSIGNMENTS = armType("Microsoft.Authorization", "roleAssignments", "2022-04-01");
 const ROLE_DEFINITIONS = armType("Microsoft.Authorization", "roleDefinitions", "2022-04-01");
@@ -70,11 +73,9 @@ const LABEL = Object.fromEntries(MENU.flatMap((m) => (m.group ? m.items : [m])).
 // real human staff) — CapabilityContainer renders their honest Not-simulated panel itself from
 // the registry's limitations text.
 const GAPS = {
-  "deployment-center": "azure.functionapp.deploymentcenter",
   "advanced-tools": "azure.functionapp.advancedtools",
   "extensions": "azure.functionapp.extensions",
   "tasks": "azure.functionapp.tasks",
-  "new-support-request": "azure.functionapp.newsupportrequest",
 };
 
 export default function FunctionAppBlade({ params }) {
@@ -92,6 +93,7 @@ export default function FunctionAppBlade({ params }) {
     const P = {
       overview: () => <Overview a={a} reload={reload} self={self} />,
       "microsoft-defender-for-cloud": () => <ResourceRecommendations resourceId={a.id} />,
+      "deployment-center": () => <DeploymentCenter a={a} cap="azure.functionapp.deploymentcenter" />,
       tags: () => <Tags a={a} reload={reload} />,
       "app-keys": () => <AppKeys a={a} />,
       "environment-variables": () => <EnvironmentVariables a={a} />,
@@ -119,6 +121,7 @@ export default function FunctionAppBlade({ params }) {
       "health-check": () => <HealthCheckPanel a={a} reload={reload} />,
       "advisor-recommendations": () => <Advisor a={a} />,
       "diagnose-and-solve-problems": () => <DiagnoseAndSolve a={a} />,
+      "new-support-request": () => <SharedSupportPanel resourceId={a.id} name={a.name} service="functionapp" />,
       "resource-health": () => <ResourceHealthPanel a={a} />,
       "resource-visualizer": () => <ResourceVisualizer a={a} />,
       "app-files": () => <AppFiles a={a} />,
@@ -214,10 +217,10 @@ function Overview({ a, reload, self }) {
       </TabList>
       {tab === "functions" && <Functions a={a} self={self} />}
       {tab === "properties" && <Properties a={a} rt={rt} />}
-      {tab === "monitoring" && <NotSimulatedContainer feature="Function app monitoring (execution count, errors, duration charts)" />}
-      {tab === "logs" && <NotSimulatedContainer feature="The Logs tab" />}
+      {tab === "monitoring" && <ResourceMetrics id={a.id} name={a.name} title="Monitoring" />}
+      {tab === "logs" && <ResourceLogs id={a.id} name={a.name} title="Logs" />}
       {tab === "capabilities" && <NotSimulatedContainer feature="The capabilities overview" />}
-      {tab === "notifications" && <NotSimulatedContainer feature="Notifications" />}
+      {tab === "notifications" && <ResourceNotifications id={a.id} name={a.name} title={null} />}
       {tab === "recommendations" && <NotSimulatedContainer feature="Advisor recommendations" />}
 
       <DeleteDialog open={del} onClose={() => setDel(false)} resourceType="function app" names={[a.name]}

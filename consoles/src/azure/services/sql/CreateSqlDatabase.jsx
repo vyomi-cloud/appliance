@@ -46,8 +46,10 @@ function TagRows({ tags, onChange }) {
   );
 }
 
+import { PeWizardSection, usePeWizard } from "../../kit/PrivateEndpoints.jsx";
 export default function CreateSqlDatabase() {
   const notify = useNotify();
+  const pe = usePeWizard("Microsoft.Sql/servers");
   const sub = useSubscription();
   const rgs = useAsync(() => listResourceGroups(), [sub.id]);
   const servers = useAsync(() => api.listServers(), [sub.id]);
@@ -154,7 +156,7 @@ export default function CreateSqlDatabase() {
           {f.addClientIp === "Yes" && <p style={{ fontSize: 12, marginTop: 4 }} className="vy-muted">Vyomi adds a placeholder address (203.0.113.4/32) — it cannot see the browser's real public IP.</p>}
         </FormRow>
       </FormSection>
-      <NotSimulatedContainer title="Private endpoints" feature="Private endpoints for a SQL database" />
+      <PeWizardSection pe={pe} />
       <FormSection title="Connection policy">
         <FormRow label="Connection policy">
           <RadioGroup value={f.connectionPolicy} onChange={set("connectionPolicy")} aria-label="Connection policy">
@@ -271,6 +273,7 @@ export default function CreateSqlDatabase() {
   const onCreate = async () => {
     try {
       await api.createDatabase(rg, f.server, f.name, body());
+      await pe.deploy({ id: `/subscriptions/${sub.id}/resourceGroups/${rg}/providers/Microsoft.Sql/servers/${f.server}`, name: f.server });
       if (f.connectionPolicy !== "Default") await putConnectionPolicy(`/subscriptions/${sub.id}/resourceGroups/${rg}/providers/Microsoft.Sql/servers/${f.server}`, f.connectionPolicy);
       if (f.serverIdentity === "SystemAssigned") await api.updateServer(rg, f.server, { identity: { type: "SystemAssigned" } });
       if (f.allowAzureServices === "Yes") await api.putFirewallRule(rg, f.server, "AllowAllWindowsAzureIps", { properties: { startIpAddress: "0.0.0.0", endIpAddress: "0.0.0.0" } });

@@ -9,6 +9,7 @@ import PolicyPanel from "../../kit/PolicyPanel.jsx";
 import { Glyph, NotSimulated } from "../../kit/common.jsx";
 import { TitleRow } from "../../kit/ResourceBlade.jsx";
 import * as api from "./api.js";
+import { TransferRequestsDialog } from "./SubscriptionExtras.jsx";
 
 const DOLLAR = (n) => `$${Number(n || 0).toFixed(2)}`;
 const GAPS = {
@@ -53,7 +54,8 @@ export default function Subscriptions() {
           ]}
         />
       </div>
-      <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
+      <TransferRequestsDialog open={gap === "View Requests"} onClose={() => setGap(null)} id={getSubscription()} />
+      <Dialog open={!!gap && gap !== "View Requests"} onOpenChange={(_, d) => !d.open && setGap(null)}>
         <DialogSurface aria-label={gap || "Not simulated"}>
           <DialogBody>
             <DialogTitle>{gap}</DialogTitle>

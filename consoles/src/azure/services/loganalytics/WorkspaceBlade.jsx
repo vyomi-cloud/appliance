@@ -4,6 +4,7 @@
  * (core/azure_operationalinsights_core.py); everything else in the menu renders its honest
  * capability level via CapabilityContainer (core/capabilities/azure/loganalytics.json — never a
  * hand-written disclaimer). */
+import { ResourceAlerts, ResourceMetrics } from "../../kit/ResourceMonitoring.jsx";
 import { useEffect, useState } from "react";
 import {
   Button, Checkbox, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, Field, Input, Link,
@@ -27,6 +28,7 @@ import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
 import SharedActivityLog from "../../kit/ActivityLog.jsx";
 import SharedResourceHealth from "../../kit/ResourceHealth.jsx";
 import SharedDiagnosticSettings from "../../kit/DiagnosticSettings.jsx";
+import SharedSupportPanel from "../../kit/SupportPanel.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -104,8 +106,11 @@ export default function WorkspaceBlade({ params }) {
       datasources: () => <DataSources a={a} />,
       legacysolutions: () => <LegacySolutions a={a} />,
       exporttemplate: () => <SharedExportTemplate id={a.id} name={a.name} resourceGroup={a.resourceGroup} />,
+      support: () => <SharedSupportPanel resourceId={a.id} name={a.name} service="loganalytics" />,
       resourcehealth: () => <SharedResourceHealth id={a.id} name={a.name} />,
       diagnosticsettings: () => <SharedDiagnosticSettings id={a.id} name={a.name} />,
+      alerts: () => <ResourceAlerts id={a.id} name={a.name} />,
+      metrics: () => <ResourceMetrics id={a.id} name={a.name} />,
     }[panel];
     body = P ? P() : <CapabilityContainer id={CAP_FOR_PANEL[panel] || "azure.loganalytics.workspace.tools"} title={`${a.name} | ${LABEL[panel] || panel}`} />;
   }

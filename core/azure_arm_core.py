@@ -40,6 +40,11 @@ try:                                              # Container Apps engine (Micro
 except ImportError:
     import azure_app_core as app_engine            # type: ignore
 
+try:                                              # Azure Monitor workspaces + Managed Grafana (Microsoft.Monitor, Microsoft.Dashboard)
+    from core import azure_monitorproducts_core as monprod_engine
+except ImportError:
+    import azure_monitorproducts_core as monprod_engine   # type: ignore
+
 try:                                              # App Service engine (Microsoft.Web: web apps, function apps, plans)
     from core import azure_webapp_core as web_engine
 except ImportError:
@@ -94,10 +99,30 @@ try:                                              # Azure Policy rule engine (cu
 except ImportError:
     import azure_policy_core as policy_engine      # type: ignore
 
+try:                                              # Private endpoints / Bastion / Firewall / DDoS / NSG flow logs
+    from core import azure_netsvc_core as netsvc
+except ImportError:
+    import azure_netsvc_core as netsvc             # type: ignore
+try:                                              # v4 AZ-08: Azure Files, AI Search, Storage Mover, Marketplace, quota/billing extras
+    from core import azure_files_core as files_engine, azure_search_core as search_engine
+    from core import azure_storagemover_core as mover_engine, azure_marketplace_core as market_engine
+    from core import azure_billing_ext_core as billing_ext
+except ImportError:
+    import azure_files_core as files_engine        # type: ignore
+    import azure_search_core as search_engine      # type: ignore
+    import azure_storagemover_core as mover_engine # type: ignore
+    import azure_marketplace_core as market_engine # type: ignore
+    import azure_billing_ext_core as billing_ext   # type: ignore
+
 try:                                              # Management locks (Microsoft.Authorization/locks, scoped to ANY resource)
     from core import azure_locks_core as locks_engine
 except ImportError:
     import azure_locks_core as locks_engine        # type: ignore
+
+try:                                              # Microsoft.Support (support requests filed with Vyomi)
+    from core import azure_support_core as support_engine
+except ImportError:
+    import azure_support_core as support_engine    # type: ignore
 
 try:                                              # Resource health + Advisor (derived from the stored resources)
     from core import azure_health_core as health_engine
@@ -1029,6 +1054,10 @@ def _ok(body, status=200, headers=None):
     return {"status": status, "headers": headers or {}, "body": body}
 
 
+def _ok_(body, status=200):
+    return {"status": status, "body": body}
+
+
 def _err(status: int, code: str, message: str):
     return {"status": status, "headers": {}, "body": {"error": {"code": code, "message": message}}}
 
@@ -1338,6 +1367,17 @@ class AzureArm:
 
         namespace = after[0]
         chain = after[1:]
+
+        # Microsoft.Support: services, problem classifications, checkNameAvailability, supportTickets
+        # (+ communications) — core/azure_support_core.py. Subscription scoped.
+        if namespace.lower() == "microsoft.support" and rg is None and support_engine.find_marker(chain):
+            r = support_engine.dispatch(self.state, method, sub, chain, payload or {}, query or {},
+                                        lambda rid: rid.lower() in self.state)
+            return {"status": r["status"], "headers": {}, "body": r["body"]}
+        # v4 AZ-08 engines (Files, AI Search, Storage Mover, Marketplace/SaaS, quota + billing extras).
+        _x = self._az08(method, sub, rg, namespace, chain, payload, query)
+        if _x is not None:
+            return _x
 
         # Microsoft.Subscription/rename: the subscription blade's "Rename" header action.
         if namespace.lower() == "microsoft.subscription" and chain and chain[0].lower() == "rename":
@@ -1685,6 +1725,17 @@ class AzureArm:
         if namespace.lower() == "microsoft.network" and dns_engine.handles(chain):
             return self._dns(method, sub, rg, chain, payload, query)
 
+        # Resource-group-scoped metrics (RG blade Metrics tab): ActivityOperations across everything under the group.
+        if (namespace.lower() == "microsoft.insights" and rg and len(chain) == 1 and chain[0].lower() in ("metricdefinitions", "metrics")):
+            if method != "GET":
+                return _err(405, "MethodNotAllowed", "GET required.")
+            if self._resource_group_item("GET", sub, rg, None)["status"] != 200:
+                return _err(404, "ResourceGroupNotFound", f"Resource group '{rg}' could not be found.")
+            scope_rid = f"/subscriptions/{sub}/resourceGroups/{rg}"
+            r = (monitor_engine.list_metric_definitions(self.state, scope_rid, self.blob_store, rg_exists=True) if chain[0].lower() == "metricdefinitions"
+                 else monitor_engine.get_metrics(self.state, scope_rid, query, self.blob_store, rg_exists=True))
+            return {"status": r["status"], "headers": dict(r["headers"]), "body": r["body"]}
+
         # Microsoft.Insights (action groups, metric / activity log alerts, autoscale): the Azure Monitor engine.
         if namespace.lower() == "microsoft.insights" and monitor_engine.handles(chain):
             return self._monitor(method, sub, rg, chain, payload, query)
@@ -1723,13 +1774,30 @@ class AzureArm:
                 if _bad:
                     return {"status": _bad["status"], "headers": {}, "body": _bad["body"]}
             if len(chain) in (3, 4) and chain[0].lower() == "sites" and chain[2].lower() == "deployments":
-                return self._web_deployments(method, sub, rg, chain, payload)
+                # Kudu push deployments (PUT deployments/{id}) are modelled here; the Deployment Center's own
+                # attempt log (sourcecontrols / sync) is azure_webdeploy_core's — the collection shows both.
+                _mine_rid = f"/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Web/sites/{chain[1]}/deployments/{chain[-1]}".lower()
+                if len(chain) == 4 and method in ("GET", "DELETE") and _mine_rid not in self.state:
+                    return self._web(method, sub, rg, chain, payload, query)
+                mine = self._web_deployments(method, sub, rg, chain, payload)
+                if len(chain) == 3 and method == "GET" and mine["status"] == 200:
+                    theirs = self._web(method, sub, rg, chain, payload, query)
+                    if theirs["status"] == 200 and isinstance(theirs["body"], dict):
+                        mine["body"]["value"] = list(theirs["body"].get("value") or []) + mine["body"]["value"]
+                    return mine
+                if len(chain) == 4 and method in ("GET", "DELETE") and (
+                        f"/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Web/sites/{chain[1]}/deployments/{chain[3]}".lower() not in self.state):
+                    return self._web(method, sub, rg, chain, payload, query)
+                return mine
             r = self._web(method, sub, rg, chain, payload, query)
             if method in ("PUT", "PATCH") and r["status"] < 300 and len(chain) == 4 and chain[2].lower() == "config":
                 _site = self.state.get(f"/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Web/sites/{chain[1]}".lower())
                 if _site is not None:
                     ext_engine.site_log(_site, f"Configuration '{chain[3]}' updated.")
             return r
+
+        if monprod_engine.handles(namespace, chain):
+            return self._monprod(method, sub, rg, namespace, chain, payload, query)
 
         top = _BY_TYPE.get((namespace.lower(), type_chain[1].lower()))
         if top is None:
@@ -1825,6 +1893,11 @@ class AzureArm:
             blocked = self._quota_block(sub, full_type, key, payload)
             if blocked:
                 return blocked
+            _net_prev = self.state.get(key)
+            if netsvc.handles(full_type):
+                blocked = netsvc.validate(self.state, full_type, rid, payload, _net_prev, sub, rg)
+                if blocked:
+                    return blocked
             if full_type.lower() == "microsoft.authorization/roleassignments":
                 # Real ARM derives a role assignment's scope from the resource ID it was PUT
                 # under — not from a client-supplied properties.scope — so checkAccess and the
@@ -1844,6 +1917,9 @@ class AzureArm:
                 ext_engine.after_vm_upsert(self.state, self.state[key])
             if resp["status"] >= 300:          # validation error from a type hook (e.g. NIC IP allocation)
                 return resp
+            if netsvc.handles(full_type) and key in self.state:
+                netsvc.after_put(self.state, self.state[key], payload, _net_prev)
+                resp["body"] = _view(self.state[key])
             deployment_failed = False
             if full_type.lower() == "microsoft.resources/deployments":
                 # A bounded but REAL template evaluator (literal parameter/variable
@@ -1919,6 +1995,11 @@ class AzureArm:
                         pid = (pr.get("id") or "").lower()
                         if pid and pid != key:
                             self.state.pop(pid, None)
+            _net_rec = self.state.get(key)
+            if _net_rec is not None:
+                blocked = netsvc.before_delete(self.state, _net_rec)
+                if blocked:
+                    return blocked
             rec = self.state.pop(key, None)
             if rec is not None:
                 ext_engine.on_delete(self.state, rec)
@@ -1933,6 +2014,7 @@ class AzureArm:
                 prefix = key + "/"
                 for child_key in [k for k in self.state if k.startswith(prefix) and "/__event__/" not in k]:
                     del self.state[child_key]
+                netsvc.on_delete(self.state, rec)
                 self._record_activity(rid, f"{full_type}/delete", sub)
             return _ok(None, status=200 if rec is not None else 204)
         return _err(405, "MethodNotAllowed", f"{method} not allowed.")
@@ -2021,6 +2103,62 @@ class AzureArm:
         size = ((rec_or_payload or {}).get("properties") or {}).get("hardwareProfile", {}).get("vmSize") or "Standard_B1s"
         return instance_catalog.lookup_azure(size).get("vcpu", 1)
 
+    # ── v4 AZ-08: engines that own their namespace; returns None when the path is not theirs ──
+    def _az08(self, method, sub, rg, namespace, chain, payload, query):
+        ns = namespace.lower()
+        low = [c.lower() for c in chain]
+        if files_engine.handles(namespace, chain) and rg is not None:
+            r = files_engine.dispatch(self.state, method, sub, rg, chain, payload, query)
+            return {"status": r["status"], "headers": {}, "body": r["body"]}
+        if ns == "microsoft.search":
+            r = search_engine.dispatch(self.state, method, sub, rg, chain, payload, query, blob_store=self.blob_store, base=self._base)
+            return {"status": r["status"], "headers": {}, "body": r["body"]}
+        if ns == "microsoft.storagemover" and (rg is not None or len(chain) == 1):
+            r = mover_engine.dispatch(self.state, method, sub, rg, chain, payload, query, blob_store=self.blob_store, base=self._base)
+            return {"status": r["status"], "headers": {}, "body": r["body"]}
+        if ns == "microsoft.marketplace":
+            r = market_engine.catalog(chain, query)
+            return {"status": r["status"], "headers": {}, "body": r["body"]}
+        if ns == "microsoft.saas":
+            r = market_engine.saas_dispatch(self.state, method, sub, rg, chain, payload)
+            return {"status": r["status"], "headers": {}, "body": r["body"]}
+        if ns == "microsoft.managementpartner" and chain and low[0] == "partners":
+            r = billing_ext.partner_dispatch(self.state, method, sub, chain[1:], payload)
+            return {"status": r["status"], "headers": {}, "body": r["body"]}
+        if ns == "microsoft.subscription" and chain and low[0] == "managementcertificates":
+            r = billing_ext.certs_dispatch(self.state, method, sub, chain[1:], payload)
+            return {"status": r["status"], "headers": {}, "body": r["body"]}
+        if ns == "microsoft.billing" and chain and low[0] in ("transferrequests", "freeservices", "costsaved", "invoices"):
+            if low[0] == "transferrequests":
+                self.billing_properties.setdefault("accountAdmin", DEFAULT_PRINCIPAL)
+                r = billing_ext.transfers_dispatch(self.state, method, sub, chain[1:], payload, self.billing_properties)
+            elif method != "GET":
+                return _err(405, "MethodNotAllowed", f"{chain[0]} supports GET only.")
+            elif low[0] == "freeservices":
+                r = _ok_(billing_ext.free_services(self.state, sub, self.blob_store))
+            elif low[0] == "costsaved":
+                r = _ok_(billing_ext.cost_saved(self.state, sub))
+            else:
+                invs = billing_ext.invoices(self.state, sub)
+                if len(chain) > 1:
+                    inv = next((i for i in invs if i["name"].lower() == chain[1].lower()), None)
+                    r = _ok_(inv) if inv else {"status": 404, "body": {"error": {"code": "ResourceNotFound", "message": f"Invoice '{chain[1]}' was not found."}}}
+                else:
+                    r = _ok_({"value": invs})
+            return {"status": r["status"], "headers": {}, "body": r["body"]}
+        if ns == "microsoft.quota" and chain and low[0] == "quotarequests":
+            rows = [billing_ext._view(x) for x in self.state.values() if isinstance(x, dict)
+                    and str(x.get("_type", "")).lower() == "microsoft.quota/quotarequests" and x.get("_sub") == sub]
+            return _ok({"value": list(reversed(rows))})
+        if ns in ("microsoft.compute", "microsoft.network") and len(chain) >= 5 and low[0] == "locations" \
+                and low[2] == "providers" and low[3] == "microsoft.quota":
+            loc = chain[1].lower()
+            usage = {u["name"]["value"]: u["currentValue"] for u in self._usages(sub, namespace, loc)["body"]["value"]}
+            defaults = COMPUTE_QUOTA if ns == "microsoft.compute" else NETWORK_QUOTA
+            r = billing_ext.quota_dispatch(self.state, method, sub, namespace, loc, chain[4:], payload, lambda n: usage.get(n, 0), defaults)
+            return {"status": r["status"], "headers": {}, "body": r["body"]}
+        return None
+
     def _quota_err(self, label, loc, limit):
         return _err(403, "QuotaExceeded",
                     f"Operation results in exceeding approved {label} quota (limit {limit}) in "
@@ -2034,16 +2172,16 @@ class AzureArm:
         if ft == "microsoft.compute/virtualmachines":
             vms = [r for r in self.state.values() if r.get("_type", "").lower() == ft
                    and r.get("_sub") == sub and str(r.get("location", "")).lower() == loc]
-            limit_vms = next(l for n, _, l in COMPUTE_QUOTA if n == "virtualMachines")
+            limit_vms = billing_ext.limit_for(self.state, sub, "Microsoft.Compute", loc, "virtualMachines", next(l for n, _, l in COMPUTE_QUOTA if n == "virtualMachines"))
             if len(vms) + 1 > limit_vms:
                 return self._quota_err("Virtual Machines", loc, limit_vms)
-            limit_cores = next(l for n, _, l in COMPUTE_QUOTA if n == "cores")
+            limit_cores = billing_ext.limit_for(self.state, sub, "Microsoft.Compute", loc, "cores", next(l for n, _, l in COMPUTE_QUOTA if n == "cores"))
             if sum(self._vm_cores(r) for r in vms) + self._vm_cores(payload) > limit_cores:
                 return self._quota_err("Total Regional vCPUs", loc, limit_cores)
         elif ft == "microsoft.network/publicipaddresses":
             cnt = sum(1 for r in self.state.values() if r.get("_type", "").lower() == ft
                       and r.get("_sub") == sub and str(r.get("location", "")).lower() == loc)
-            limit = next(l for n, _, l in NETWORK_QUOTA if n == "PublicIPAddresses")
+            limit = billing_ext.limit_for(self.state, sub, "Microsoft.Network", loc, "PublicIPAddresses", next(l for n, _, l in NETWORK_QUOTA if n == "PublicIPAddresses"))
             if cnt + 1 > limit:
                 return self._quota_err("Public IP Addresses", loc, limit)
         return None
@@ -2065,7 +2203,7 @@ class AzureArm:
             cores_used = sum(self._vm_cores(r) for r in vms)
             for name, label, limit in COMPUTE_QUOTA:
                 used = cores_used if name == "cores" else len(vms)
-                rows.append(self._usage_row(name, label, used, limit, names))
+                rows.append(self._usage_row(name, label, used, billing_ext.limit_for(self.state, sub, "Microsoft.Compute", loc, name, limit), names))
         else:
             tmap = {"microsoft.network/publicipaddresses": "PublicIPAddresses",
                     "microsoft.network/virtualnetworks": "VirtualNetworks",
@@ -2078,7 +2216,7 @@ class AzureArm:
                 if k:
                     buckets[k].append(r.get("name"))
             for name, label, limit in NETWORK_QUOTA:
-                rows.append(self._usage_row(name, label, len(buckets[name]), limit, buckets[name]))
+                rows.append(self._usage_row(name, label, len(buckets[name]), billing_ext.limit_for(self.state, sub, "Microsoft.Network", loc, name, limit), buckets[name]))
         return _ok({"value": rows})
 
     # ── My permissions (Microsoft.Authorization/permissions): the actions/notActions
@@ -2680,6 +2818,9 @@ class AzureArm:
                 or len(type_chain) != 2:
             return None
         props = (payload or {}).get("properties") or {}
+        _fe = files_engine.validate_account(self.state.get(_canonical_id(sub, rg, type_chain, names).lower()), payload)
+        if _fe:
+            return _err(400, _fe["error"]["code"], _fe["error"]["message"])
         if "isHnsEnabled" not in props:
             return None
         existing = self.state.get(_canonical_id(sub, rg, type_chain, names).lower())
@@ -3160,6 +3301,18 @@ class AzureArm:
         self.state[rid.lower()] = rec
         ext_engine.after_upsert(self.state, rec, payload or {})
         return _ok(_view(rec), 201 if created else 200)
+
+    def _monprod(self, method, sub, rg, namespace, chain, payload, query):
+        r = monprod_engine.dispatch(self.state, method, sub, rg, namespace, chain, payload, query)
+        resp = {"status": r["status"], "headers": {}, "body": r["body"]}
+        if r["status"] < 300 and r["rid"] and method in ("PUT", "PATCH", "DELETE"):
+            self._record_activity(r["rid"], f"{'/'.join(r['rid'].split('/providers/')[1].split('/')[:2])}/{'delete' if method == 'DELETE' else 'write'}", sub)
+        if r["lro"] and r["status"] < 300:
+            resp["status"] = 200 if r["status"] == 201 else r["status"]
+            op_id = self._make_operation(r["rid"], method)
+            url = f"{self._base}/api/azure/operations/{op_id}?api-version={query.get('api-version') or monprod_engine.API_VERSIONS[namespace.lower()]}"
+            resp["headers"].update({"Azure-AsyncOperation": url, "Location": url, "Retry-After": "0"})
+        return resp
 
     def _web(self, method, sub, rg, chain, payload, query):
         r = web_engine.dispatch(self.state, method, sub, rg, chain, [], payload, query)

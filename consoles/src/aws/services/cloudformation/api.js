@@ -135,8 +135,8 @@ export async function describeResourceDrifts(name) {
 }
 
 // ── stack sets / refactors ────────────────────────────────────────────────────
-export async function createStackSet({ name, templateBody, description, permissionModel }) {
-  const r = result(await call("CreateStackSet", { StackSetName: name, TemplateBody: templateBody, ...(description ? { Description: description } : {}), ...(permissionModel ? { PermissionModel: permissionModel } : {}) }), "CreateStackSet");
+export async function createStackSet({ name, templateBody, description, permissionModel, autoDeployment }) {
+  const r = result(await call("CreateStackSet", { StackSetName: name, TemplateBody: templateBody, ...(description ? { Description: description } : {}), ...(permissionModel ? { PermissionModel: permissionModel } : {}), ...(autoDeployment ? { "AutoDeployment.Enabled": "true", "AutoDeployment.RetainStacksOnAccountRemoval": "false" } : permissionModel === "SERVICE_MANAGED" ? { "AutoDeployment.Enabled": "false" } : {}) }), "CreateStackSet");
   return r.StackSetId;
 }
 export async function listStackSets() {
@@ -220,8 +220,9 @@ export const deleteGeneratedTemplate = (name) => call("DeleteGeneratedTemplate",
 
 // ── registry (extensions) ────────────────────────────────────────────────────
 export async function listTypes() {
-  const r = result(await call("ListTypes", { Visibility: "PUBLIC", Type: "RESOURCE" }), "ListTypes");
-  return asList(r.TypeSummaries?.member);
+  const aws = result(await call("ListTypes", { Visibility: "PUBLIC", Type: "RESOURCE", "Filters.Category": "AWS_TYPES" }), "ListTypes");
+  const mine = result(await call("ListTypes", { Visibility: "PRIVATE", Type: "RESOURCE" }), "ListTypes");   // activated third-party resource types
+  return [...asList(aws.TypeSummaries?.member), ...asList(mine.TypeSummaries?.member)];
 }
 export async function describeType(typeName) {
   return result(await call("DescribeType", { TypeName: typeName }), "DescribeType");
@@ -276,3 +277,63 @@ export async function listHookResults(targetId) {
   const r = result(await call("ListHookResults", targetId ? { TargetId: targetId } : {}), "ListHookResults");
   return asList(r.HookResultSummaries?.member);
 }
+
+// ── StackSets + AWS Organizations trusted access, stack instances (sweep AWS-13) ──
+export const orgsAccessStatus = async () => result(await call("DescribeOrganizationsAccess"), "DescribeOrganizationsAccess").Status;
+export const activateOrgsAccess = () => call("ActivateOrganizationsAccess");
+export const deactivateOrgsAccess = () => call("DeactivateOrganizationsAccess");
+export async function listStackInstances(name) {
+  return asList(result(await call("ListStackInstances", { StackSetName: name }), "ListStackInstances").Summaries?.member);
+}
+export async function listStackSetOperations(name) {
+  return asList(result(await call("ListStackSetOperations", { StackSetName: name }), "ListStackSetOperations").Summaries?.member);
+}
+export async function createStackInstances({ name, regions, ouIds, accounts }) {
+  const p = { StackSetName: name, ...listParams(regions, "Regions") };
+  if (ouIds?.length) Object.assign(p, listParams(ouIds, "DeploymentTargets.OrganizationalUnitIds"));
+  if (accounts?.length) Object.assign(p, listParams(accounts, ouIds?.length ? "DeploymentTargets.Accounts" : "Accounts"), ouIds?.length ? { "DeploymentTargets.AccountFilterType": "UNION" } : {});
+  return result(await call("CreateStackInstances", p), "CreateStackInstances").OperationId;
+}
+export async function deleteStackInstances({ name, regions, ouIds, accounts }) {
+  const p = { StackSetName: name, RetainStacks: "false", ...listParams(regions, "Regions") };
+  if (ouIds?.length) Object.assign(p, listParams(ouIds, "DeploymentTargets.OrganizationalUnitIds"));
+  if (accounts?.length) Object.assign(p, listParams(accounts, ouIds?.length ? "DeploymentTargets.Accounts" : "Accounts"), ouIds?.length ? { "DeploymentTargets.AccountFilterType": "UNION" } : {});
+  return result(await call("DeleteStackInstances", p), "DeleteStackInstances").OperationId;
+}
+export async function listOrgUnits() {
+  const roots = (await awsJson("organizations", "AWSOrganizationsV20161128.ListRoots", {}, { version: "1.1" })).Roots || [];
+  const out = roots.map((r) => ({ id: r.Id, name: `${r.Name} (root)` }));
+  const walk = async (pid, prefix) => {
+    const r = await awsJson("organizations", "AWSOrganizationsV20161128.ListOrganizationalUnitsForParent", { ParentId: pid }, { version: "1.1" });
+    for (const u of r.OrganizationalUnits || []) { out.push({ id: u.Id, name: prefix + u.Name }); await walk(u.Id, prefix + u.Name + "/"); }
+  };
+  for (const r of roots) await walk(r.Id, "");
+  return out;
+}
+
+// ── registry: public extensions, activation, modules, configuration, publisher (sweep AWS-13) ──
+const typeRow = (m) => ({ TypeName: m.TypeName, Type: m.Type, Description: m.Description || "", PublisherId: m.PublisherId || "", PublisherName: m.PublisherName || "",
+  OriginalTypeName: m.OriginalTypeName || "", TypeArn: m.TypeArn, LastUpdated: m.LastUpdated, IsActivated: m.IsActivated === "true" });
+export async function listPublicTypes({ type = "RESOURCE", category } = {}) {
+  const r = result(await call("ListTypes", { Visibility: "PUBLIC", Type: type, ...(category ? { "Filters.Category": category } : {}) }), "ListTypes");
+  return asList(r.TypeSummaries?.member).map(typeRow);
+}
+export async function listActivatedTypes(type) {
+  const r = result(await call("ListTypes", { Visibility: "PRIVATE", Type: type }), "ListTypes");
+  return asList(r.TypeSummaries?.member).map(typeRow);
+}
+export const activateType = ({ type, typeName, publisherId, alias, autoUpdate, executionRoleArn }) =>
+  call("ActivateType", { Type: type, TypeName: typeName, PublisherId: publisherId, ...(alias ? { TypeNameAlias: alias } : {}), AutoUpdate: String(autoUpdate !== false), ...(executionRoleArn ? { ExecutionRoleArn: executionRoleArn } : {}) });
+export const deactivateType = (type, typeName) => call("DeactivateType", { Type: type, TypeName: typeName });
+export async function describeTypeFull(typeName, type) {
+  return result(await call("DescribeType", { TypeName: typeName, ...(type ? { Type: type } : {}) }), "DescribeType");
+}
+export const setTypeConfiguration = (typeName, configuration) => call("SetTypeConfiguration", { TypeName: typeName, Configuration: configuration });
+export async function typeConfiguration(typeName) {
+  const r = result(await call("BatchDescribeTypeConfigurations", { "TypeConfigurationIdentifiers.member.1.TypeName": typeName }), "BatchDescribeTypeConfigurations");
+  return asList(r.TypeConfigurations?.member)[0]?.Configuration || "";
+}
+export async function describePublisher() {
+  try { return result(await call("DescribePublisher"), "DescribePublisher"); } catch (e) { if (/not registered/i.test(e.message || "")) return null; throw e; }
+}
+export const registerPublisher = (connectionArn) => call("RegisterPublisher", { AcceptTermsAndConditions: "true", ...(connectionArn ? { ConnectionArn: connectionArn } : {}) });

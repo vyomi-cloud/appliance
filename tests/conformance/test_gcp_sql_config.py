@@ -3,6 +3,7 @@ import json, os, sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 from core.aws_wire_router import AwsWireRouter  # noqa: E402
 
+AwsWireRouter.STRICT_GCP_PROJECT = False   # engine test: ad-hoc project ids
 R = AwsWireRouter()
 PASS = FAIL = 0
 

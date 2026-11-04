@@ -105,5 +105,11 @@
    "Not modelled: resourceGroups/managementGroups unmanage actions (only resources), deny-settings excludedPrincipals/excludedActions/applyToChildScopes, subscription- and management-group-scope stacks, what-if / validate, and template specs. Template functions beyond the bounded evaluator fail the stack."
   ],
   "tests": ["tests/conformance/test_azure_deploymentstacks_core.py"]
+ },
+ "azure.resourcegroups.marketplace": {
+  "title": "Creating a new resource from the Marketplace (Vyomi Marketplace)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["Vyomi publishes its own SaaS-simulator offers; subscribing creates a real Microsoft.SaaS/resources resource in this resource group. The third-party vendors' APIs are not emulated and nothing is billed."],
+  "tests": ["tests/conformance/test_azure_billing_ext_core.py"]
  }
 }

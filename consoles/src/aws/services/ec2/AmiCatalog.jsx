@@ -6,6 +6,8 @@ import Button from "@cloudscape-design/components/button";
 import { useAsync } from "../../../common/useAsync.js";
 import { href, follow } from "../../../common/router.js";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
+import { ProductBrowser } from "../../kit/MarketplaceBrowser.jsx";
+import * as mp from "../../kit/marketplaceApi.js";
 import ResourceTable from "../../kit/ResourceTable.jsx";
 import * as api from "./api.js";
 
@@ -13,14 +15,15 @@ export default function AmiCatalog() {
   const [tab, setTab] = useState("quickstart");
   const t = useAsync(() => api.describeImages(), []);
   const images = t.data || [];
-  const quickstart = images.filter((x) => x.source === "quickstart");
-  const mine = images.filter((x) => x.source !== "quickstart" && x.imageOwnerId === "123456789012");
+  const quickstart = images.filter((x) => x.imageOwnerId === "amazon");
+  const mine = images.filter((x) => x.imageOwnerId === "123456789012");
+  const community = useAsync(() => mp.listEntities("CommunityAmi"), []);
 
-  const amiTable = (items) => (
+  const amiTable = (items, loading = t.loading) => (
     <ResourceTable
       resourceName="AMIs"
       items={items}
-      loading={t.loading}
+      loading={loading}
       error={t.error}
       onRefresh={t.reload}
       trackBy="imageId"
@@ -38,8 +41,8 @@ export default function AmiCatalog() {
       <Tabs activeTabId={tab} onChange={({ detail }) => setTab(detail.activeTabId)} tabs={[
         { id: "quickstart", label: `Quickstart AMIs (${quickstart.length})`, content: amiTable(quickstart) },
         { id: "mine", label: `My AMIs (${mine.length})`, content: amiTable(mine) },
-        { id: "marketplace", label: "AWS Marketplace AMIs", content: <CapabilityContainer id="ec2.ami-catalog.marketplace-community" title="AWS Marketplace AMIs" /> },
-        { id: "community", label: "Community AMIs", content: <CapabilityContainer id="ec2.ami-catalog.marketplace-community" title="Community AMIs" /> },
+        { id: "marketplace", label: "AWS Marketplace AMIs", content: <CapabilityContainer id="ec2.ami-catalog.marketplace-community" title="AWS Marketplace AMIs"><ProductBrowser entityType="AmiProduct" noun="AMIs" onChanged={t.reload} /></CapabilityContainer> },
+        { id: "community", label: "Community AMIs", content: <CapabilityContainer id="ec2.ami-catalog.marketplace-community" title="Community AMIs">{amiTable((community.data || []).map((c) => ({ imageId: c.EntityId, name: c.Name })), community.loading)}</CapabilityContainer> },
       ]} />
     </ContentLayout>
   );

@@ -1,7 +1,7 @@
 /* VM instances — list across all zones, bulk lifecycle actions, delete. */
 import { useState } from "react";
 import {
-  Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, Menu, MenuItem, Stack, Tab, Tabs, Tooltip, Typography,
+  Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, Menu, MenuItem, Stack, Tab, Tabs, TextField, Tooltip, Typography,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/esm/Add.js";
 import UploadIcon from "@mui/icons-material/esm/Upload.js";
@@ -16,7 +16,7 @@ import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import ResourceTable from "../../kit/ResourceTable.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
-import { PageHeader, NotSimulated, fmtDate } from "../../kit/common.jsx";
+import { PageHeader, NotSimulated, ErrorAlert, fmtDate } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { Link } from "../../link.jsx";
 import { useProject } from "../../project.js";
@@ -171,11 +171,46 @@ export default function VmInstances() {
         <Typography variant="body2">{sel.length === 1 ? <>Instance <b>{byKey(sel[0])?.name}</b> will be permanently deleted.</> : <>{sel.length} instances will be permanently deleted.</>}</Typography>
       </DeleteDialog>
 
-      <Dialog open={importOpen} onClose={() => setImportOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Import VM</DialogTitle>
-        <DialogContent><NotSimulated feature="Import VM" note="Migrating a VM image from another environment isn't modeled." /></DialogContent>
-        <DialogActions><Button onClick={() => setImportOpen(false)}>Close</Button></DialogActions>
-      </Dialog>
+      {importOpen && <ImportVmDialog onClose={() => setImportOpen(false)} onDone={(m) => { notify.success(m); reload(); }} />}
     </>
+  );
+}
+
+/* Import VM: a .tar.gz disk archive in Cloud Storage -> an image (rawDisk images.insert) -> an instance booting from it. */
+function ImportVmDialog({ onClose, onDone }) {
+  const [src, setSrc] = useState("gs://");
+  const [name, setName] = useState("");
+  const [zone, setZone] = useState("us-central1-a");
+  const [machine, setMachine] = useState("e2-medium");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const nameErr = name ? api.validResourceName(name) : null;
+  const submit = async () => {
+    setBusy(true); setError(null);
+    try {
+      const image = `${name}-imported`;
+      await api.importImage(image, src);
+      await api.insertInstance(zone, { name, machineType: machine, disks: [{ boot: true, autoDelete: true, initializeParams: { sourceImage: `global/images/${image}` } }] });
+      onDone(`Imported VM "${name}" from ${src}`);
+      onClose();
+    } catch (e) { setError(e); } finally { setBusy(false); }
+  };
+  return (
+    <Dialog open onClose={busy ? undefined : onClose} maxWidth="sm" fullWidth aria-labelledby="impvm-title">
+      <DialogTitle id="impvm-title">Import VM</DialogTitle>
+      <DialogContent>
+        <Stack spacing={2} sx={{ pt: 1 }}>
+          <ErrorAlert error={error} title="Failed to import VM" />
+          <TextField label="Source disk archive (gs://bucket/disk.tar.gz)" value={src} onChange={(e) => setSrc(e.target.value.trim())} inputProps={{ "aria-label": "VM import source" }} />
+          <TextField label="Instance name" value={name} onChange={(e) => setName(e.target.value.trim())} error={!!nameErr} helperText={nameErr || " "} inputProps={{ "aria-label": "Imported instance name" }} />
+          <TextField label="Zone" value={zone} onChange={(e) => setZone(e.target.value.trim())} />
+          <TextField label="Machine type" value={machine} onChange={(e) => setMachine(e.target.value.trim())} />
+        </Stack>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2 }}>
+        <Button onClick={onClose} disabled={busy}>Cancel</Button>
+        <Button variant="contained" disabled={busy || !name || !!nameErr || src.length < 8} onClick={submit}>{busy ? "Importing…" : "Import"}</Button>
+      </DialogActions>
+    </Dialog>
   );
 }

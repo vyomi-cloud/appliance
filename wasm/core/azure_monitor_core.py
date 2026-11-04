@@ -751,6 +751,18 @@ _STORAGE_METRIC_FIELD = {
 _STORAGE_TYPE = "microsoft.storage/storageaccounts"
 
 
+_RG_ID = re.compile(r"^/subscriptions/[^/]+/resourcegroups/[^/]+$", re.I)
+
+
+def _is_rg(scope_rid):
+    return bool(_RG_ID.match(scope_rid.rstrip("/")))
+
+
+def _scope_known(state, scope_rid, rg_exists=False):
+    """A resource in the ARM store, or a resource group the caller already confirmed exists."""
+    return scope_rid.lower() in state or (rg_exists and _is_rg(scope_rid))
+
+
 def find_metrics_marker(chain):
     """Index of the ['providers','Microsoft.Insights','metricDefinitions'|'metrics'] marker."""
     for i in range(len(chain) - 2):
@@ -781,8 +793,8 @@ def _metric_definition(scope_rid, name, display, unit):
     }
 
 
-def list_metric_definitions(state, scope_rid, blob_store=None):
-    if scope_rid.lower() not in state:
+def list_metric_definitions(state, scope_rid, blob_store=None, rg_exists=False):
+    if not _scope_known(state, scope_rid, rg_exists):
         return _err(404, "ResourceNotFound", f"The Resource '{scope_rid}' was not found.")
     defs = [_metric_definition(scope_rid, _METRIC_NAME, _METRIC_DISPLAY, _METRIC_UNIT)]
     if _storage_account(state, scope_rid, blob_store) is not None:
@@ -799,8 +811,8 @@ def _parse_metric_iso(s):
         return None
 
 
-def get_metrics(state, scope_rid, query, blob_store=None):
-    if scope_rid.lower() not in state:
+def get_metrics(state, scope_rid, query, blob_store=None, rg_exists=False):
+    if not _scope_known(state, scope_rid, rg_exists):
         return _err(404, "ResourceNotFound", f"The Resource '{scope_rid}' was not found.")
     query = query or {}
     names = [n.strip() for n in str(query.get("metricnames") or _METRIC_NAME).split(",") if n.strip()]
@@ -839,12 +851,14 @@ def get_metrics(state, scope_rid, query, blob_store=None):
     n_buckets = int((end - start).total_seconds() // (step_min * 60)) + 1
     if n_buckets < 1 or n_buckets > 500:
         return _err(400, "BadRequest", "The requested timespan/interval produces too many data points (max 500).")
-    scope_key = scope_rid.lower()
+    scope_key = scope_rid.lower().rstrip("/")
+    in_rg = _is_rg(scope_rid)  # a resource group's metric counts every operation under it
     timestamps = []
     for r in state.values():
         if str(r.get("_type", "")).lower() != "microsoft.insights/eventtypes":
             continue
-        if str(r.get("resourceId", "")).lower() != scope_key:
+        rid_l = str(r.get("resourceId", "")).lower()
+        if rid_l != scope_key and not (in_rg and rid_l.startswith(scope_key + "/")):
             continue
         ts = _parse_metric_iso(r.get("eventTimestamp"))
         if ts is not None:

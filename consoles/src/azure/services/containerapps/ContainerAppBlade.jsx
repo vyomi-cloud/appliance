@@ -3,6 +3,7 @@
  * Authentication, Identity, Activity log, Access control (IAM), Tags, Diagnostic settings,
  * Export template and Locks are backed by native ARM calls (core/azure_app_core.py); the rest
  * render their honest capability level via CapabilityContainer. */
+import { ResourceMetrics, ResourceAlerts } from "../../kit/ResourceMonitoring.jsx";
 import { UserAssignedIdentities } from "../../kit/UserAssignedIdentities.jsx";
 import { useEffect, useState } from "react";
 import {
@@ -25,6 +26,7 @@ import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
 import { AccessControlIam, ActivityLog, DiagnosticSettings, ExportTemplate, Locks, MiniTable, Tags } from "./Shared.jsx";
 import SharedResourceHealth from "../../kit/ResourceHealth.jsx";
+import SharedSupportPanel from "../../kit/SupportPanel.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -103,7 +105,10 @@ export default function ContainerAppBlade({ params }) {
       locks: () => <Locks resPath={resPath} name={a.name} />,
       diagnosticsettings: () => <DiagnosticSettings resPath={resPath} name={a.name} />,
       exporttemplate: () => <ExportTemplate a={a} name={a.name} type="Microsoft.App/containerApps" />,
+      supportrequest: () => <SharedSupportPanel resourceId={a.id} name={a.name} service="containerapps" />,
       resourcehealth: () => <SharedResourceHealth id={a.id} name={a.name} />,
+      metrics: () => <ResourceMetrics id={a.id} name={a.name} />,
+      alerts: () => <ResourceAlerts id={a.id} name={a.name} />,
     }[panel];
     body = P ? P() : <CapabilityContainer id={CAP[panel] || "azure.containerapps.app.tools"} title={`${a.name} | ${LABEL[panel] || panel}`} />;
   }

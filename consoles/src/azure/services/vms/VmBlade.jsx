@@ -9,6 +9,7 @@
  * account blade uses) are backed by real ARM calls; the remaining menu items are honest
  * CapabilityContainer gaps (core/capabilities/azure/vms.json is the single source of truth for
  * which). */
+import { ResourceMetrics } from "../../kit/ResourceMonitoring.jsx";
 import { UserAssignedIdentities } from "../../kit/UserAssignedIdentities.jsx";
 import { useEffect, useState } from "react";
 import {
@@ -31,6 +32,7 @@ import * as api from "./api.js";
 import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
 import SharedActivityLog from "../../kit/ActivityLog.jsx";
 import { ClassicAdminsPanel, DenyAssignmentsPanel, MyAccess } from "../../kit/IamExtras.jsx";
+import SharedSupportPanel from "../../kit/SupportPanel.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -128,6 +130,7 @@ export default function VmBlade({ params }) {
       resourcevisualizer: () => <ResourceVisualizer a={a} />,
       advisor: () => <Advisor a={a} />,
       diagnose: () => <Diagnose a={a} />,
+      support: () => <SharedSupportPanel resourceId={a.id} name={a.name} service="vms" />,
       resourcehealth: () => <ResourceHealth a={a} />,
       changetracking: () => <ChangeTracking a={a} />,
       defender: () => <Defender a={a} />,
@@ -143,7 +146,7 @@ export default function VmBlade({ params }) {
       logs: () => <VmLogs a={a} />,
       connectionmonitor: () => <ConnectionMonitor a={a} />,
       workbooks: () => <VmWorkbooks a={a} />,
-      metrics: () => <VmMetrics a={a} />,
+      metrics: () => <ResourceMetrics id={a.id} name={a.name} />,
     }[panel];
     body = P ? P() : (
       NOT_SIMULATED_REASON[panel]

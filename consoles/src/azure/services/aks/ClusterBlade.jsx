@@ -30,8 +30,10 @@ import PolicyPanel from "../../kit/PolicyPanel.jsx";
 import { ResourceRecommendations } from "../defender/Pages.jsx";
 import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
 import SharedActivityLog from "../../kit/ActivityLog.jsx";
+import { ResourceAlerts, ResourceMetrics, ResourceLogs, ResourceInsightsPanel, ResourceWorkbooks } from "../../kit/ResourceMonitoring.jsx";
 import SharedDiagnosticSettings from "../../kit/DiagnosticSettings.jsx";
 import SharedAdvisor from "../../kit/Advisor.jsx";
+import SharedSupportPanel from "../../kit/SupportPanel.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -97,6 +99,7 @@ export default function ClusterBlade({ params, query }) {
     const P = {
       overview: () => <Overview a={a} reload={reload} self={self} />,
       iam: () => <AccessControlIam a={a} />,
+      supporttroubleshooting: () => <SharedSupportPanel resourceId={a.id} name={a.name} service="aks" />,
       tags: () => <Tags a={a} reload={reload} />,
       namespaces: () => <Namespaces a={a} />,
       workloads: () => <Workloads a={a} />,
@@ -116,6 +119,11 @@ export default function ClusterBlade({ params, query }) {
       exporttemplate: () => <SharedExportTemplate id={a.id} name={a.name} resourceGroup={a.resourceGroup} />,
       advisorrecommendations: () => <SharedAdvisor scope={a.id} name={a.name} />,
       diagnosticsettings: () => <SharedDiagnosticSettings id={a.id} name={a.name} />,
+      alerts: () => <ResourceAlerts id={a.id} name={a.name} />,
+      metrics: () => <ResourceMetrics id={a.id} name={a.name} />,
+      logs: () => <ResourceLogs id={a.id} name={a.name} />,
+      insights: () => <ResourceInsightsPanel id={a.id} name={a.name} />,
+      workbooks: () => <ResourceWorkbooks id={a.id} name={a.name} />,
     }[panel];
     body = P ? P() : (
       <>
@@ -190,7 +198,7 @@ function Overview({ a, reload, self }) {
           <Link href={`${self}/nodepools`}>Node pools</Link>{" · "}<Link href={`${self}/namespaces`}>Namespaces</Link>{" · "}<Link href={`${self}/runcommand`}>Run command</Link>
         </div>
       )}
-      {tab === "monitoring" && <NotSimulatedContainer feature="Cluster monitoring (CPU/memory charts, node and pod health)" />}
+      {tab === "monitoring" && <ResourceMetrics id={a.id} name={a.name} title="Monitoring" />}
       {tab === "properties" && <PropertyList a={a} />}
       {tab === "capabilities" && <NotSimulatedContainer feature="The capabilities overview" />}
       {tab === "recommendations" && <SharedAdvisor bare scope={a.id} />}

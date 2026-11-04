@@ -28,7 +28,7 @@ OUT = os.path.join(HERE, "core")
 
 CORES = [
     "object_store.py", "s3_object_core.py",        # S3
-    "s3_tables_core.py", "s3_insights_core.py", "s3_ext_core.py", "s3_vectors_core.py", "backup_core.py", "organizations_core.py", "qr_png.py",     # S3 Tables (s3tables REST) + Access Analyzer for S3 / Storage Lens (loaded by s3_object_core)
+    "s3_tables_core.py", "s3_insights_core.py", "s3_ext_core.py", "s3_vectors_core.py", "backup_core.py", "marketplace_core.py", "s3files_core.py", "ec2_metrics_core.py", "organizations_core.py", "qr_png.py",     # S3 Tables (s3tables REST) + Access Analyzer for S3 / Storage Lens (loaded by s3_object_core)
     "nosql_store.py", "dynamodb_core.py",           # DynamoDB
     "dynamodb_expr.py",                             # DynamoDB expression engine (v4 C0: key/filter/condition/update/projection)
     "dax_core.py",                                  # DynamoDB Accelerator (DAX): clusters, subnet/parameter groups, cache engine
@@ -39,13 +39,17 @@ CORES = [
     "messaging_store.py", "sqs_core.py", "sns_core.py",  # SQS + SNS (eventing)
     "rds_data_core.py",                             # RDS Data API (HTTP SQL over the relay)
     "gcp_project.py",                               # GCP: the one project (ID + number), request normalization + Resource Manager
+    "gcp_storageinsights_core.py",                  # GCP: Storage Insights inventory reports + Anywhere Cache (used by gcp_storage_core)
     "gcp_storage_core.py",                          # GCP: GCS JSON API (native google-cloud-storage wire)
     "gcp_firestore_core.py",                        # GCP: Firestore REST (native google-cloud-firestore)
     "gcp_kms_core.py",                              # GCP: Cloud KMS REST (native google-cloud-kms)
     "gcp_secretmanager_core.py",                    # GCP: Secret Manager REST (native google-cloud-secret-manager)
     "gcp_pubsub_core.py",                           # GCP: Pub/Sub REST (native google-cloud-pubsub)
     "gcp_iam_core.py",                              # GCP: Cloud IAM REST (SA + policy eval)
+    "gcp_asset_query_core.py",                      # GCP: Cloud Asset Inventory search query language (used by gcp_iam_core)
     "gcp_wif_core.py",                              # GCP: workload/workforce identity federation (providers, mapping, STS exchange)
+    "gcp_trace_core.py",                            # GCP: Cloud Trace spans, Trace scopes, Log scopes
+    "gcp_posture_core.py",                          # GCP: rule-based security posture findings over real VM/firewall/bucket state
     "gcp_cloudsql_core.py",                         # GCP: Cloud SQL Admin REST (control plane)
     "gcp_artifactregistry_core.py",                 # GCP: Artifact Registry REST v1 (repositories, packages, versions, tags, docker images)
     "function_shims.py",                            # flask / functions_framework / azure.functions shims + request plumbing for function code
@@ -69,10 +73,10 @@ CORES = [
     "azure_iam_core.py",                            # v2.6.0 Azure: RBAC checkAccess decision core (IAM/testIamPermissions peer)
     "azure_acr_core.py",                            # v4: Container Registry repository data plane (OCI v2 + ACR v1 REST)
     "azure_graph_core.py",                          # v4: Microsoft Graph (Entra ID: users/groups/apps/service principals/domains/admin units)
-    "eventbridge_core.py", "eventbridge_schemas_core.py",                          # v2.6.0 AWS: EventBridge event-bus data plane (rules → SQS delivery)
+    "eventbridge_core.py", "eventbridge_schemas_core.py", "eventbridge_partner_core.py",                          # v2.6.0 AWS: EventBridge event-bus data plane (rules → SQS delivery)
     "lambda_core.py",                              # v2.6.0 AWS: Lambda serverless invoke (sandboxed Python runtime)
     "apigateway_core.py",                          # v2.7.0 AWS: API Gateway data plane (routing + MOCK/Lambda-proxy integrations)
-    "cost_model.py",                                # list prices -> the space cost-savings metrics (pure data)
+    "cost_model.py", "ce_core.py",                                # list prices -> the space cost-savings metrics (pure data)
     "kinesis_core.py",                             # AWS: Kinesis Data Streams (shards, records, iterators, consumers)
     "apigatewayv2_core.py",                        # AWS: API Gateway V2 control plane
     "apigatewayv2_gateway.py",                     # AWS: API Gateway V2 data plane (authorizers, throttling, CORS, Lambda proxy)
@@ -91,10 +95,10 @@ CORES = [
     "gcp_logging_core.py",                         # GCP: Cloud Logging REST v2 (entries, sinks, log-based metrics, log buckets/views)
     "gcp_run_core.py",                             # GCP: Cloud Run Admin API v2 (services, jobs, worker pools, domain mappings) — backs /functions
     "stepfunctions_core.py",                       # AWS: Step Functions (ASL interpreter, executions, activities)
-    "cloudformation_core.py",                      # AWS: CloudFormation (stacks, change sets, stack sets — provisions through s3/ddb/sns/sqs/iam)
+    "cloudformation_core.py", "cloudformation_stacksets_core.py", "cloudformation_registry_core.py",                      # AWS: CloudFormation (stacks, change sets, stack sets — provisions through s3/ddb/sns/sqs/iam)
     "cloudwatch_core.py",                          # AWS CloudWatch: metrics / alarms / dashboards (rpc-v2-cbor + JSON + Query wire)
     "vpc_vpn_core.py",
-    "vpc_extras_core.py", "ec2_ops_core.py",
+    "vpc_extras_core.py", "vpc_lattice_core.py", "ec2_ops_core.py",
     "netfw_core.py",
     "dnsfw_core.py",
     "vpc_core.py",                                 # v2.8.0 AWS: VPC network-simulation data plane (reachability analyzer)
@@ -115,7 +119,14 @@ CORES = [
     "azure_health_core.py",                         # v4: Resource health + Advisor, imported by azure_arm_core
     "azure_templates_core.py",                      # v4: Export template (ARM -> Bicep/Terraform), lazily imported by azure_arm_core
     "azure_storage_ext_core.py",                    # v4: storage keys rotation + route endpoints — before azure_arm_core
-    "azure_policy_core.py",                         # v4: Azure Policy rule engine (custom policyRule evaluation) — before azure_arm_core
+    "azure_policy_core.py", "azure_netsvc_core.py", "azure_webdeploy_core.py",  # v4: Azure Policy, network services (private endpoints/Bastion/Firewall/DDoS/flow logs), Deployment Center — before azure_arm_core
+    "azure_support_core.py",                        # v4: Microsoft.Support support requests filed with Vyomi
+    "azure_monitorproducts_core.py",                # v4: Azure Monitor workspaces (Managed Prometheus) + Managed Grafana control plane — before azure_arm_core
+    "azure_files_core.py",
+    "azure_search_core.py",
+    "azure_storagemover_core.py",
+    "azure_marketplace_core.py",
+    "azure_billing_ext_core.py",
     "azure_locks_core.py",                          # v4: Management locks (Microsoft.Authorization/locks, scoped to ANY resource)
     "k8s_yaml.py",                                  # v4: dependency-free YAML reader for Kubernetes manifests (AKS kubectl)
     "azure_aks_k8s_core.py",                        # v4: AKS Kubernetes object store + kubectl subset behind runCommand

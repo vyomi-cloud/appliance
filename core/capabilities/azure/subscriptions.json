@@ -112,17 +112,10 @@
   ]
  },
  "azure.subscriptions.usage_quotas": {
-  "title": "Usage + quotas (Microsoft.Compute/Microsoft.Network locations/{location}/usages)",
-  "level": {
-   "nano": "limited",
-   "offline": "limited"
-  },
-  "limitations": [
-   "Vyomi models a reduced subset of Azure's published default regional quotas — Total Regional vCPUs and Virtual Machines for compute, Public IP Addresses/Virtual Networks/Network Security Groups for network — rather than the full catalog of dozens of per-SKU-family compute quotas. Every count is live off actually-provisioned resources (not a static report) and ENFORCED: a create that would exceed a modeled limit fails with the real QuotaExceeded error, same as real Azure. The response additionally lists the resource names counted toward each quota, which real Azure's API does not return, so the live count is independently verifiable."
-  ],
-  "tests": [
-   "tests/conformance/test_azure_subscriptions_ext_core.py"
-  ]
+  "title": "Usage + quotas (Microsoft.Compute/Microsoft.Network locations/{location}/usages + Microsoft.Quota)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["Vyomi models a reduced subset of Azure's default regional quotas (Total Regional vCPUs and Virtual Machines for compute; Public IP Addresses, Virtual Networks, Network Security Groups for network). Counts are live off provisioned resources and ENFORCED with the real QuotaExceeded error. Quota increase requests (Microsoft.Quota quotas / quotaRequests) are validated (not below usage, not above 50x the default), auto-approved up to 4x the default and otherwise Failed with the real 'create a support request' message; an approved request really raises the enforced limit. The response lists the counted resource names, which real Azure does not."],
+  "tests": ["tests/conformance/test_azure_subscriptions_ext_core.py", "tests/conformance/test_azure_billing_ext_core.py"]
  },
  "azure.subscriptions.security": {
   "title": "Security (Microsoft Defender for Cloud secure score + recommendations, subscription scope)",
@@ -181,16 +174,9 @@
  },
  "azure.subscriptions.invoices": {
   "title": "Invoices (Microsoft.Billing/invoices)",
-  "level": {
-   "nano": "limited",
-   "offline": "limited"
-  },
-  "limitations": [
-   "Vyomi keeps no historical cost ledger (every cost query recomputes live over current inventory, core/azure_cost_core.py), so only the current, still-accruing billing period exists, honestly marked 'InProgress' — there is no archive of past, finalized/PDF invoices to download, and no real billing-account hierarchy (invoice sections, payment methods)."
-  ],
-  "tests": [
-   "tests/conformance/test_azure_subscriptions_ext_core.py"
-  ]
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["Simulated and marked as such: one invoice per month the inventory existed, amountDue is always 0.00 (nothing is billed) and avoidedAmount carries what real Azure would have charged for the resources Vyomi ran (azure_cost_core list prices, accrued from each resource's creation). Deleted resources leave no ledger, so past months are a lower bound; no PDF documents, invoice sections or payment methods."],
+  "tests": ["tests/conformance/test_azure_subscriptions_ext_core.py", "tests/conformance/test_azure_billing_ext_core.py"]
  },
  "azure.subscriptions.billing_properties": {
   "title": "Billing properties (Microsoft.Billing/billingProperties)",
@@ -275,33 +261,15 @@
  },
  "azure.subscriptions.management_certificates": {
   "title": "Management certificates",
-  "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
-  },
-  "limitations": [
-   "Classic Service Management API certificate authentication — the only real control-plane behavior a management certificate ever gated — was retired by Microsoft in 2024 along with the rest of the classic Azure Service Management API. There is no live Azure behavior left for Vyomi to enforce against; storing an uploaded certificate's bytes with nothing in Vyomi that ever authenticates against it would be inert config dressed up as a feature, which the registry does not allow for a 'full'/'limited' claim."
-  ]
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["Uploaded .cer / PEM certificates are really parsed (DER walk: SHA-1 thumbprint, subject and issuer CN, notBefore / notAfter); expired, not-yet-valid or duplicate certificates are refused and the subscription is capped at 100. They belong to the retired classic deployment model: Vyomi does not authenticate classic Service Management calls with them."],
+  "tests": ["tests/conformance/test_azure_billing_ext_core.py"]
  },
  "azure.subscriptions.partner_information": {
-  "title": "Partner information",
-  "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
-  },
-  "limitations": [
-   "Requires a real Microsoft Cloud Solution Provider (CSP) partner organization with an actual MPN ID and billing-account linkage to that third party — a real external business relationship Vyomi cannot simulate a counterpart for."
-  ]
- },
- "azure.subscriptions.support_troubleshooting": {
-  "title": "Support + Troubleshooting",
-  "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
-  },
-  "limitations": [
-   "Creating a support request routes to Microsoft's own human support engineers and real-time Azure service-health telemetry — a real third party outside Vyomi, with no simulated backend to stand in for it."
-  ]
+  "title": "Partner information (Microsoft.ManagementPartner)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["A Microsoft Partner Network ID (digits only) can be associated, updated and removed; one association per tenant. Vyomi does not look the ID up against the real MPN directory, so the partner name is whatever is entered."],
+  "tests": ["tests/conformance/test_azure_billing_ext_core.py"]
  },
  "azure.subscriptions.cost_management": {
   "title": "Cost analysis, budgets and cost alerts, subscription scope",
@@ -313,5 +281,23 @@
   "tests": [
    "tests/conformance/test_azure_cost_core.py"
   ]
+ },
+ "azure.subscriptions.transfer_requests": {
+  "title": "Subscription ownership-transfer requests (Microsoft.Billing/transferRequests)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["Create (validated recipient e-mail, not the current owner, one pending at a time), accept / decline / cancel and a 15-day expiry; accepting really changes the subscription's account administrator. Vyomi has no second tenant, so there is no recipient-side acceptance flow or directory move."],
+  "tests": ["tests/conformance/test_azure_billing_ext_core.py"]
+ },
+ "azure.subscriptions.top_free_services": {
+  "title": "Top free services by usage (Microsoft.Billing/freeServices)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["The free-account allowances are a fixed table; usage is MEASURED from the real inventory where possible (hours of free-eligible VM sizes this month, Blob GB, SQL databases, Cosmos accounts) and flagged 'Not measurable' otherwise (Key Vault operations, Functions executions)."],
+  "tests": ["tests/conformance/test_azure_billing_ext_core.py"]
+ },
+ "azure.subscriptions.marketplace": {
+  "title": "Creating a new resource from the Marketplace (Vyomi Marketplace)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["Vyomi publishes its own SaaS-simulator offers; subscribing creates a real Microsoft.SaaS/resources resource (offer / plan / term validated, one subscription per offer per resource group, plan change, access key rotation, unsubscribe). The third-party vendors' APIs are not emulated and nothing is billed."],
+  "tests": ["tests/conformance/test_azure_billing_ext_core.py"]
  }
 }

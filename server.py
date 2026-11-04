@@ -12150,6 +12150,70 @@ def _warm_backends_in_background():
     _threading.Thread(target=_run, daemon=True, name="cloudlearn-backend-warmup").start()
 
 
+# ── EC2 instance / EBS volume CloudWatch metrics (AWS-05): real counters read from the instance's Docker container ──
+_EC2_METRICS_PREV: dict[str, dict] = {}
+
+
+def _ec2_collect_metrics_once(now: float | None = None, force: bool = False) -> list[str]:
+    """One sampling pass: for every running Docker-backed EC2 instance read the container's cumulative /proc/net/dev + cgroup cpu/io
+    counters (`docker exec`) and publish the interval deltas to CloudWatch (AWS/EC2 + the root volume's AWS/EBS series) through
+    core/ec2_metrics_core. Basic monitoring samples every 5 minutes, detailed monitoring every minute. Returns instance ids sampled."""
+    import time as _time
+    from core import ec2_metrics_core as _em
+    now = now if now is not None else _time.time()
+    sampled: list[str] = []
+    for iid in _ec2_instance_ids():
+        inst = ec2_state.get("instances", {}).get(iid)
+        if not isinstance(inst, dict) or str(inst.get("state") or "") != "running" or not _docker_backed(inst):
+            continue
+        prev = _EC2_METRICS_PREV.setdefault(iid, {})
+        period = 60.0 if (inst.get("monitoring") or inst.get("detailed_monitoring")) else 300.0
+        if not force and prev.get("ts") is not None and now - prev["ts"] < period - 1:
+            continue
+        try:
+            cp = _docker_compute().exec(_docker_instance_obj(inst), _em.READ_COUNTERS_CMD)
+            counters = _em.parse_counters((cp.stdout or b"").decode("utf-8", "replace"))
+            if counters is None:
+                continue
+            try:
+                vcpus = int(float(inst.get("vcpus") or inst.get("cpus") or 1)) or 1
+            except (TypeError, ValueError):
+                vcpus = 1
+            _em.publish(aws_cloudwatch.get_store(), iid, counters, prev, now, vcpus=vcpus, volume_id=f"vol-{iid.replace('i-', '')}")
+            sampled.append(iid)
+        except Exception:
+            continue
+    for gone in [k for k in _EC2_METRICS_PREV if k not in ec2_state.get("instances", {})]:
+        _EC2_METRICS_PREV.pop(gone, None)
+    return sampled
+
+
+@app.on_event("startup")
+def _start_ec2_metrics_sampler():
+    """Daemon loop that feeds CloudWatch with the EC2 instance / EBS volume metrics every 30s (each instance honours its own 1/5 min period)."""
+    import os as _os
+    import threading as _threading
+    import time as _time
+    if _os.environ.get("VYOMI_EC2_METRICS", "").strip().lower() in ("off", "0", "false", "disabled"):
+        return
+
+    def _loop():
+        while True:
+            _time.sleep(30)
+            try:
+                if _docker_available():
+                    _ec2_collect_metrics_once()
+            except Exception:
+                pass
+    _threading.Thread(target=_loop, daemon=True, name="vyomi-ec2-metrics").start()
+
+
+@app.post("/api/aws/ec2/metrics/collect", include_in_schema=False)
+def api_ec2_metrics_collect():
+    """Force one sampling pass now (console Refresh / tests); returns the instances sampled."""
+    return {"sampled": _ec2_collect_metrics_once(force=True)}
+
+
 @app.on_event("startup")
 def _start_license_background_tasks():
     """Spin up two daemon threads on appliance boot:

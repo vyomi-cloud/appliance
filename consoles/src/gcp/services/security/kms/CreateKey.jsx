@@ -12,6 +12,7 @@ import DeleteIcon from "@mui/icons-material/esm/Delete.js";
 import { useNotify } from "../../../../common/notify.jsx";
 import { useAsync } from "../../../../common/useAsync.js";
 import { ErrorAlert, NotSimulated, PageHeader } from "../../../kit/common.jsx";
+import { CapabilityContainer } from "../../../kit/Capability.jsx";
 import * as api from "./api.js";
 
 function Step({ title, children }) {
@@ -90,7 +91,7 @@ export default function CreateKey({ query }) {
           <FormControlLabel value="EXTERNAL" disabled control={<Radio size="small" />} label="External" />
           <FormControlLabel value="EXTERNAL_VPC" disabled control={<Radio size="small" />} label="External via VPC" />
         </RadioGroup>
-        <NotSimulated compact feature="HSM, External and External via VPC protection levels" note="Vyomi's key material always lives in its own software store; every key it creates is Software-protected." />
+        <CapabilityContainer id="gcp.kms.hsm-protection" title="HSM, External and External via VPC protection levels" />
       </Step>
       <Divider />
 

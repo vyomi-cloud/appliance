@@ -27,13 +27,14 @@ if missing:
 # Every store the router reads from its `stores` dict must exist in Nano's registry under that name
 # (or a declared alias) AND be persisted — otherwise the router silently builds a private store
 # whose state is lost on reload and invisible to the SDK relay.
+OFFLINE_INJECTED = {"gcp_project"}   # a fixed NANO_PROJECT on Nano; the appliance injects the space's project
 ALIASES = {"lam": "compute", "apigw": "compute", "vpc": "vpc_net", "eventbridge": "msg"}
 reg = (ROOT / "core/nano_registry.py").read_text()
 per = (ROOT / "core/nano_persist.py").read_text()
 in_reg = set(re.findall(r'^\s*"([a-z0-9_]+)":', reg, re.M))
 in_per = set(re.findall(r'"([a-z0-9_]+)"', per[: per.index("def _enc")]))
-gaps = [k for k in sorted(set(re.findall(r's\.get\("([a-z0-9_]+)"\)', router)))
-        if ALIASES.get(k, k) not in in_reg or ALIASES.get(k, k) not in in_per]
+gaps = [k for k in sorted(set(re.findall(r'\bs\.get\("([a-z0-9_]+)"\)', router)))
+        if k not in OFFLINE_INJECTED and (ALIASES.get(k, k) not in in_reg or ALIASES.get(k, k) not in in_per)]
 if gaps:
     raise SystemExit(f"RESULT: FAIL — router stores not registered+persisted on Nano: {gaps}")
 print(f"RESULT: PASS — all {len(cores) - len(OFFLINE_ONLY & set(cores))} vendored cores are loaded by Nano")

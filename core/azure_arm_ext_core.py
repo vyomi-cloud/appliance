@@ -483,6 +483,14 @@ def _pip(state, method, sub, rg, after, payload):
             return _err(400, "PublicIPAddressInUse",
                         f"Public IP address {rid} can not be deleted since it is still allocated to resource "
                         f"{rec['properties']['ipConfiguration'].get('id')}.")
+        if rec:
+            try:
+                from core import azure_netsvc_core as _ns
+            except ImportError:  # pragma: no cover - Pyodide flat layout
+                import azure_netsvc_core as _ns  # type: ignore
+            blocked = _ns.before_delete(state, rec)   # bastion / firewall still referencing it
+            if blocked:
+                return blocked
         state.pop(key, None)
         return _ok(None, 200 if rec else 204, rid, PIP_T, name)
     if method in ("PUT", "PATCH"):
@@ -1864,7 +1872,7 @@ def _ddos_plans(state, method, sub, rg, after, payload):
     if method == "DELETE":
         rec = state.get(key)
         if rec and (rec.get("properties") or {}).get("virtualNetworks"):
-            return _err(400, "DdosProtectionPlanInUse", f"DDoS protection plan {name} is associated with virtual networks.")
+            return _err(400, "InUseDdosProtectionPlanCannotBeDeleted", f"DDoS protection plan {name} is associated with virtual networks.")
         state.pop(key, None)
         return _ok(None, 200 if rec else 204, rid, DDOS_T, name)
     if method in ("PUT", "PATCH"):
@@ -2246,6 +2254,8 @@ def route(state, method, sub, rg, after, payload=None, query=None, executor=None
         scope = scope_id(sub, rg, parent_after)
         parent = state.get(scope.lower())
         if parent is None:
+            if len(parent_after) >= 2 and parent_after[-2].lower() == "locations":
+                return None   # {provider}/locations/{region}/providers/... (quota, capabilities): not stored resources — v4's engines
             if method == "GET" and len(ext) == 2 and (ext[0].lower(), ext[1].lower()) in (("microsoft.authorization", "locks"), ("microsoft.insights", "diagnosticsettings")):
                 return _ok({"value": []})   # a deleted resource's locks went with it (v4 list contract)
             return _err(404, "ParentResourceNotFound", f"Resource '{scope}' not found.")

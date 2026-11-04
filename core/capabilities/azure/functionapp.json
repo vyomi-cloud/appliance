@@ -335,11 +335,17 @@
  },
  "azure.functionapp.deploymentcenter": {
   "title": "Deployment Center",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
   "limitations": [
-   "Requires a live connection to a real external source-control/CI provider (GitHub Actions, Azure DevOps) that actually builds and pushes code over a real network connection; Vyomi's cores never egress to a real git/CI host."
+   "Real ARM control plane: sourcecontrols/web (repo URL, branch, manual/continuous integration, GitHub Actions with a generated workflow YAML per runtime stack; scmType maintained), deployments + log, publishing credentials ($site user, rotating password) and per-protocol basic-auth policies. No build runner and no outbound git/GitHub access exist, so a sync or continuous-integration push is recorded as a Failed deployment with an explanation (never a fake success), the GitHub workflow is generated but not committed, and GitHub/Azure DevOps/Bitbucket account authorization (OAuth) is not performed. Local Git, Container registry and Azure Repos sources are not offered."
   ],
-  "api": []
+  "api": [],
+  "tests": [
+   "tests/conformance/test_azure_webdeploy_core.py"
+  ]
  },
  "azure.functionapp.extensions": {
   "title": "Extensions (site extensions)",
@@ -376,14 +382,6 @@
   "level": { "nano": "not_simulated", "offline": "not_simulated" },
   "limitations": [
    "Tasks run on Azure's hosted Automation/Logic Apps runtime to execute scheduled actions outside the request/response cycle; Vyomi has no always-on background scheduler or compute to run them."
-  ],
-  "api": []
- },
- "azure.functionapp.newsupportrequest": {
-  "title": "New support request",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": [
-   "Opening a support request requires real Microsoft support staff to receive and work an actual ticket; there is no local equivalent to a real human support engineer."
   ],
   "api": []
  },

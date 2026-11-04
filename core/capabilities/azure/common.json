@@ -111,5 +111,45 @@
   "tests": [
    "tests/conformance/test_azure_arm_core.py"
   ]
+ },
+ "azure.common.support": {
+  "title": "Support requests (Microsoft.Support) on every blade, filed with Vyomi",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Requests are real Microsoft.Support/supportTickets (services, problem classifications, severity, contact details, communications, close) with validation and a Vyomi Support acknowledgement, and are stored in the simulator. Delivery to the Vyomi portal support queue is not wired yet: each ticket reports properties.vyomiDelivery = recorded-locally, and no human replies arrive here. Support plans, phone callbacks and Microsoft's own engineers do not exist."
+  ],
+  "api": [
+   "SupportTickets.Create",
+   "SupportTickets.Get",
+   "SupportTickets.List",
+   "SupportTickets.Update",
+   "Communications.Create",
+   "Communications.List",
+   "Services.List",
+   "ProblemClassifications.List",
+   "SupportTickets.CheckNameAvailability"
+  ],
+  "tests": [
+   "tests/conformance/test_azure_support_core.py"
+  ]
+ },
+
+ "azure.common.resource_monitoring": {
+  "title": "Alerts, Metrics, Logs, Insights and Workbooks on every resource",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "REAL: Microsoft.Insights/metricAlerts scoped to the resource (stored and validated like Azure's; Evaluate now computes a rule against the real metric on demand), metric definitions + values, Log Analytics queries over the resource's own Activity log (AzureActivity), and Microsoft.Insights/workbooks linked to the resource.",
+   "The only platform metric is ActivityOperations (count of the resource's own Activity-log operations), plus real blob-store metrics for storage accounts. There is no CPU, request, latency or saturation telemetry, so those charts are never shown.",
+   "Alert rules are not evaluated on a schedule and never fire action groups or send notifications; resource-specific log tables (AzureDiagnostics, ContainerLog, ...) stay empty because no log-delivery pipeline exists."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_resource_monitoring.py"
+  ]
  }
 }

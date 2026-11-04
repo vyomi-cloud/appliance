@@ -69,6 +69,7 @@ from urllib.parse import unquote
 MAX_ACTIVITY = 200
 
 from core.iam_store import IamStore, InMemoryIamStore
+from core import gcp_asset_query_core as aq   # Cloud Asset Inventory search query language
 from core import gcp_wif_core as wif   # provider validation / attribute mapping / STS token exchange
 
 # ── predefined role → permissions map ──────────────────────────────────────
@@ -672,7 +673,7 @@ def _key_id() -> str:
 
 
 def _key_view(k: dict) -> dict:
-    return {kk: vv for kk, vv in k.items() if kk != "_email"}
+    return {kk: vv for kk, vv in k.items() if kk not in ("_email", "publicKeyPem")}
 
 
 def _create_key(store, project, email, body, rm_store=None) -> GcpIamResponse:
@@ -680,28 +681,16 @@ def _create_key(store, project, email, body, rm_store=None) -> GcpIamResponse:
         return _err(412, "Operation denied by org policy: 'constraints/iam.disableServiceAccountKeyCreation' "
                          f"is enforced on 'projects/{project}'.", "FAILED_PRECONDITION")
     keys = _keys_ns(store).setdefault(email, {})
-    kid = _key_id()
-    now = _etag()  # not a real timestamp source available here; validAfterTime below uses a stable marker
-    key = {
-        "name": f"projects/{project}/serviceAccounts/{email}/keys/{kid}",
-        "privateKeyType": body.get("privateKeyType", "TYPE_GOOGLE_CREDENTIALS_FILE"),
-        "keyAlgorithm": body.get("keyAlgorithm", "KEY_ALG_RSA_2048"),
-        "privateKeyData": base64.b64encode(json.dumps({
-            "type": "service_account", "project_id": project, "private_key_id": kid,
-            "client_email": email,
-        }).encode()).decode(),
-        "publicKeyData": base64.b64encode(f"public-key-material-{kid}".encode()).decode(),
-        "validAfterTime": "2026-01-01T00:00:00Z",
-        "validBeforeTime": "2036-01-01T00:00:00Z",
-        "keyOrigin": "GOOGLE_PROVIDED",
-        "keyType": "USER_MANAGED",
-        "disabled": False,
-        "_email": email,
-    }
+    sa = _sa_ns(store).get(email) or {}
+    if sum(1 for k in keys.values() if k.get("keyType") == "USER_MANAGED") >= MAX_USER_KEYS:
+        return _err(400, "Precondition check failed: the service account has the maximum of 10 keys.", "FAILED_PRECONDITION")
+    key, created = new_key_record(project, email, sa.get("uniqueId", ""))   # real RSA-2048 key file, like keys.create returns
+    kid = key["name"].rsplit("/", 1)[-1]
+    key["_email"] = email
     keys[kid] = key
     store.persist()
     _record_event(store, f"projects/{project}/serviceAccounts/{email}", "CREATE_KEY", kid)
-    return _json(200, _key_view(key))
+    return _json(200, created)
 
 
 def _list_keys(store, project, email, logger=None) -> GcpIamResponse:
@@ -976,12 +965,12 @@ def _rotate_managed_identity_cert(store, name) -> GcpIamResponse:
 
 
 # ── Asset Inventory: searchAllResources over what Vyomi models for IAM/RM ───
-def _search_assets(store, project, query_str, rm_store=None) -> GcpIamResponse:
+def _search_assets(store, project, query_str, rm_store=None, params=None) -> GcpIamResponse:
     """Real, live search over the IAM & Resource Manager resources this project
     actually has — not Cloud Asset Inventory's full org-wide resource/IAM/policy
     index (which spans every GCP service and keeps a change history Vyomi doesn't
     maintain)."""
-    q = (query_str or "").strip().lower()
+    params = params or {}
     results = []
     for email, sa in sorted(_sa_ns(store).items()):
         if sa["projectId"] != project:
@@ -1013,7 +1002,7 @@ def _search_assets(store, project, query_str, rm_store=None) -> GcpIamResponse:
             results.append({
                 "name": p["name"], "assetType": "cloudresourcemanager.googleapis.com/Project",
                 "displayName": p.get("displayName") or project, "project": f"projects/{project}",
-                "state": p.get("state", "ACTIVE"),
+                "state": p.get("state", "ACTIVE"), "labels": dict(p.get("labels") or {}),
             })
         for name, tk in sorted(getattr(rm_store, "tag_keys", {}).items()):
             if tk.get("parent") != f"projects/{project}":
@@ -1022,9 +1011,25 @@ def _search_assets(store, project, query_str, rm_store=None) -> GcpIamResponse:
                 "name": name, "assetType": "cloudresourcemanager.googleapis.com/TagKey",
                 "displayName": tk.get("shortName", ""), "project": f"projects/{project}", "state": "ACTIVE",
             })
-    if q:
-        results = [r for r in results if q in r["displayName"].lower() or q in r["assetType"].lower()]
-    return _json(200, {"results": results, "totalResults": len(results)})
+        for name, f in sorted(getattr(rm_store, "folders", {}).items()):
+            if f.get("state") == "ACTIVE":
+                results.append({"name": name, "assetType": "cloudresourcemanager.googleapis.com/Folder", "displayName": f["displayName"],
+                                "project": f"projects/{project}", "state": "ACTIVE", "parentFullResourceName": f.get("parent", "")})
+    for r in results:
+        r.setdefault("location", "global")
+    types = params.get("assetTypes") or []
+    if isinstance(types, str):
+        types = [t for t in types.split(",") if t]
+    elif types:
+        types = [t2 for t in types for t2 in str(t).split(",") if t2]
+    try:
+        page, nxt, total = aq.search(results, query_str or "", types, params.get("orderBy") or "", params.get("pageSize"), params.get("pageToken") or "")
+    except aq.QueryError as e:
+        return _err(400, str(e), "INVALID_ARGUMENT")
+    out = {"results": page, "totalResults": total}
+    if nxt:
+        out["nextPageToken"] = nxt
+    return _json(200, out)
 
 
 # ── Security Insights: lint rules evaluated live over the current IAM state ─
@@ -1157,8 +1162,8 @@ def dispatch(store: IamStore, method: str, path: str,
     p = p.strip("/")
 
     # ---- service-account keys: projects/{p}/serviceAccounts/{sa}/keys[/{key}][:disable|:enable] ----
-    if "/keys" in p and "/serviceAccounts/" in p:
-        return _sa_keys(store, method, p, _body())
+    if "/keys/" in p and "/serviceAccounts/" in p and p.rsplit(":", 1)[-1] in ("disable", "enable") and ":" in p.rsplit("/", 1)[-1]:
+        return _toggle_key(store, method, p)
 
     # ---- resource IAM policy verbs (colon methods) ----
     # These live on the LAST path segment: "{resource}:getIamPolicy"
@@ -1170,7 +1175,7 @@ def dispatch(store: IamStore, method: str, path: str,
         if verb == "searchAllResources" and method == "GET":
             rsegs = resource.split("/")
             if len(rsegs) == 2 and rsegs[0] == "projects":
-                return _search_assets(store, rsegs[1], query.get("query"), rm_store=rm_store)
+                return _search_assets(store, rsegs[1], query.get("query"), rm_store=rm_store, params=query)
             return _err(400, f"Invalid scope for searchAllResources: {resource}", "INVALID_ARGUMENT")
 
         if verb == "checkAccess" and method == "POST" and "/iap_web/" in resource:
@@ -1412,43 +1417,18 @@ def new_key_record(project: str, email: str, client_id: str) -> tuple[dict, dict
     return rec, created
 
 
-def _sa_keys(store, method, p, body) -> GcpIamResponse:
-    verb = ""
-    if ":" in p.rsplit("/", 1)[-1]:
-        p, verb = p.rsplit(":", 1)
-    segs = [unquote(s) for s in p.split("/") if s]
-    if len(segs) < 5 or segs[0] != "projects" or segs[2] != "serviceAccounts" or segs[4] != "keys":
-        return _err(404, "Unknown path", "NOT_FOUND")
-    project, ident = segs[1], segs[3]
-    sa = _sa_ns(store).get(ident if "@" in ident else _sa_email(ident, project))
-    if sa is None:
-        return _err(404, f"Unknown service account: {ident}", "NOT_FOUND")
-    keys = sa.setdefault("keys", {})
-    if len(segs) == 5:
-        if method == "GET":
-            return _json(200, {"keys": [_key_public(k) for k in keys.values()]})
-        if method == "POST":
-            if sum(1 for k in keys.values() if k.get("keyType") == "USER_MANAGED") >= MAX_USER_KEYS:
-                return _err(400, "Precondition check failed: the service account has the maximum of 10 keys.", "FAILED_PRECONDITION")
-            rec, created = new_key_record(project, sa["email"], sa["uniqueId"])
-            keys[rec["name"].rsplit("/", 1)[-1]] = rec
-            store.persist()
-            return _json(200, created)
-    if len(segs) == 6:
-        k = keys.get(segs[5])
-        if k is None:
-            return _err(404, f"Unknown key: {segs[5]}", "NOT_FOUND")
-        if method == "GET" and not verb:
-            return _json(200, _key_public(k))
-        if method == "DELETE" and not verb:
-            keys.pop(segs[5])
-            store.persist()
-            return _json(200, {})
-        if method == "POST" and verb in ("disable", "enable"):
-            k["disabled"] = verb == "disable"
-            store.persist()
-            return _json(200, {})
-    return _err(400, f"Unsupported request on keys", "INVALID_ARGUMENT")
+def _toggle_key(store, method, p) -> GcpIamResponse:
+    p, verb = p.rsplit(":", 1)
+    segs = [unquote(x) for x in p.split("/") if x]
+    if method != "POST" or len(segs) != 6 or segs[0] != "projects" or segs[2] != "serviceAccounts" or segs[4] != "keys":
+        return _err(400, "Unsupported request on keys", "INVALID_ARGUMENT")
+    email = _resolve_email(store, segs[1], segs[3])
+    k = _keys_ns(store).get(email, {}).get(segs[5])
+    if k is None:
+        return _err(404, f"Unknown key: {segs[5]}", "NOT_FOUND")
+    k["disabled"] = verb == "disable"
+    store.persist()
+    return _json(200, {})
 
 
 # ── decision helper (not a native verb — for in-tab enforcement / console) ──

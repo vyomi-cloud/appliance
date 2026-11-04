@@ -86,7 +86,7 @@ const MODULES = [
 // The PROVEN conformance cores (vendored into wasm/core/ by build_cores.py).
 // aws_core_adapter imports these; they ARE the S3/DynamoDB data-plane.
 const CORES = [
-  "object_store.py", "s3_object_core.py", "s3_tables_core.py", "s3_insights_core.py", "s3_ext_core.py", "s3_vectors_core.py", "backup_core.py", "organizations_core.py", "qr_png.py", "nosql_store.py", "dynamodb_expr.py", "dynamodb_core.py",
+  "object_store.py", "s3_object_core.py", "s3_tables_core.py", "s3_insights_core.py", "s3_ext_core.py", "s3_vectors_core.py", "backup_core.py", "marketplace_core.py", "s3files_core.py", "ec2_metrics_core.py", "organizations_core.py", "qr_png.py", "nosql_store.py", "dynamodb_expr.py", "dynamodb_core.py",
   "kms_keystore.py", "kms_core.py", "kv_store.py", "secrets_core.py",
   "sql_store.py", "rds_core.py", "iam_store.py", "iam_core.py",
   "aws_console_detail.py",   // main-side Nano cores (merged)
@@ -105,17 +105,20 @@ const CORES = [
   "azure_eventgrid_core.py",   // Azure Event Grid event subscriptions (Microsoft.EventGrid, topic-scoped) — loaded before azure_arm_core which delegates to it
   "azure_health_core.py",      // Resource health + Advisor (derived from the stored ARM resources)
   "azure_templates_core.py",   // Export template engine (ARM→Bicep/Terraform) — lazily imported by azure_arm_core
+  "azure_support_core.py",  // Microsoft.Support support requests (imported by azure_arm_core)
+  "azure_monitorproducts_core.py",  // Microsoft.Monitor accounts + Microsoft.Dashboard grafana (imported by azure_arm_core)
   "azure_locks_core.py",   // Management locks (Microsoft.Authorization/locks, scoped to ANY resource) — loaded before azure_arm_core which delegates to it
   "k8s_yaml.py",   // YAML reader for Kubernetes manifests — azure_aks_k8s_core imports it
   "azure_aks_k8s_core.py",   // AKS Kubernetes object store + kubectl (runCommand) — loaded before azure_arm_core
   "kubescape_catalog.py",   // Kubescape control metadata (generated) — kubescape_core imports it
   "kubescape_core.py",   // Kubescape results + scanner seam (calls the OPA-wasm evaluator) — loaded before azure_arm_core
   "azure_security_core.py",   // Microsoft Defender for Cloud (Microsoft.Security) — loaded before azure_arm_core which delegates to it
-  "azure_arm_data.py", "azure_storage_ext_core.py", "azure_policy_core.py", "azure_arm_core.py",   // Azure ARM control plane (native /subscriptions/* wire)
+  "azure_arm_data.py", "azure_storage_ext_core.py", "azure_policy_core.py", "azure_netsvc_core.py", "azure_webdeploy_core.py", "azure_arm_core.py",   // Azure ARM control plane (native /subscriptions/* wire)
+  "azure_files_core.py", "azure_search_core.py", "azure_storagemover_core.py", "azure_marketplace_core.py", "azure_billing_ext_core.py",
   // GCP conformance cores — the gcp_core_adapter data-plane (console CRUD).
-  "gcp_project.py", "function_shims.py", "gcp_console_tabs.py", "nano_triggers.py",   // main-side Nano cores (merged)
-  "gcp_storage_core.py", "gcp_firestore_core.py", "gcp_kms_core.py",
-  "gcp_secretmanager_core.py", "gcp_pubsub_core.py", "gcp_iam_core.py", "gcp_wif_core.py", "gcp_cloudsql_core.py", "gcp_artifactregistry_core.py", "gcp_logging_core.py", "gcp_compute_core.py", "instance_catalog.py", "gcp_compute_instances_core.py", "gcp_compute_ext_core.py", "gcp_resourcemanager_core.py", "gcp_pam_core.py", "gcp_run_core.py",
+  "gcp_project.py", "function_shims.py", "gcp_console_tabs.py", "nano_triggers.py",   // main-side cores (merged with v4)
+  "gcp_storageinsights_core.py", "gcp_storage_core.py", "gcp_firestore_core.py", "gcp_kms_core.py",
+  "gcp_secretmanager_core.py", "gcp_pubsub_core.py", "gcp_iam_core.py", "gcp_asset_query_core.py", "gcp_wif_core.py", "gcp_trace_core.py", "gcp_posture_core.py", "gcp_cloudsql_core.py", "gcp_artifactregistry_core.py", "gcp_logging_core.py", "gcp_compute_core.py", "instance_catalog.py", "gcp_compute_instances_core.py", "gcp_compute_ext_core.py", "gcp_resourcemanager_core.py", "gcp_pam_core.py", "gcp_run_core.py",
   // Azure data-plane cores — the azure_core_adapter data-plane (console CRUD).
   "azure_blob_core.py", "azure_cosmos_core.py", "azure_keyvault_secrets_core.py",
   "azure_keyvault_keys_core.py", "azure_keyvault_certificates_core.py", "azure_queue_core.py", "azure_table_core.py",
@@ -130,8 +133,9 @@ const CORES = [
   "gcp_compute_core.py",   // main-side Nano cores (merged)
   "azure_graph_core.py",   // Microsoft Graph (Entra ID: users/groups/apps/service principals/domains/admin units) — own data plane, not ARM-delegated
   "azure_servicebus_core.py", "eventbridge_core.py", "eventbridge_schemas_core.py", "scheduler_core.py", "lambda_core.py",
-  "apigateway_core.py", "apigatewayv2_core.py", "apigatewayv2_gateway.py", "vpc_core.py", "vpc_vpn_core.py", "vpc_extras_core.py", "ec2_ops_core.py", "netfw_core.py", "dnsfw_core.py", "kinesis_core.py", "cost_model.py", "cloudwatch_core.py", "azure_sql_core.py", "azure_iam_core.py", "logs_core.py", "ssm_core.py", "stepfunctions_core.py", "cloudformation_core.py", "gcp_cloudscheduler_core.py", "gcp_container_core.py", "gcp_redis_core.py", "gcp_iamcredentials_core.py", "gcp_monitoring_core.py",
-  "azure_keyvault_x509_core.py",   // main-side Azure cores (merged)
+  "azure_keyvault_x509_core.py",   // main-side cores (merged with v4)
+  "apigateway_core.py", "apigatewayv2_core.py", "apigatewayv2_gateway.py", "vpc_core.py", "vpc_vpn_core.py", "vpc_extras_core.py", "vpc_lattice_core.py", "ec2_ops_core.py", "netfw_core.py", "dnsfw_core.py", "kinesis_core.py", "cost_model.py", "cloudwatch_core.py", "azure_sql_core.py", "azure_iam_core.py", "logs_core.py", "ssm_core.py", "stepfunctions_core.py", "cloudformation_core.py", "gcp_cloudscheduler_core.py", "gcp_container_core.py", "gcp_redis_core.py", "gcp_iamcredentials_core.py", "gcp_monitoring_core.py",
+  "eventbridge_partner_core.py", "ce_core.py", "cloudformation_stacksets_core.py", "cloudformation_registry_core.py",
   // console-next capability manifest dependency (slice 1): the pure conformance
   // signal module (only imports `os` — safe in Pyodide, no FastAPI).
   "console_conformance.py",

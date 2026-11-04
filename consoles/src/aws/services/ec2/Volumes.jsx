@@ -23,6 +23,8 @@ import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import { follow, href, navigate } from "../../../common/router.js";
 import { ErrorAlert, KeyValue, NotSimulatedContainer } from "../../kit/common.jsx";
+import { CapabilityContainer } from "../../kit/Capability.jsx";
+import MetricGraphs from "../../kit/MetricGraphs.jsx";
 import { TAG_I18N } from "./InstanceDetail.jsx";
 import * as api from "./api.js";
 import { FaultTolerance } from "./OpsPages.jsx";
@@ -133,7 +135,13 @@ export function VolumeDetail({ params }) {
         ]} />
         <Tabs tabs={[
           { id: "status", label: "Status checks", content: <KeyValue title="Status checks" columns={2} items={[["Volume status", v.status === "available" || v.status === "in-use" ? "ok" : v.status], ["I/O status", "ok"]]} /> },
-          { id: "mon", label: "Monitoring", content: <NotSimulatedContainer title="CloudWatch metrics" /> },
+          { id: "mon", label: "Monitoring", content: <CapabilityContainer id="ec2.volumes.monitoring" title="CloudWatch metrics"><MetricGraphs bare columns={2} graphs={(() => { const d = [{ Name: "VolumeId", Value: v.volumeId }]; return [
+            { title: "Read bandwidth (bytes)", namespace: "AWS/EBS", name: "VolumeReadBytes", dimensions: d, stat: "Sum", unit: "Bytes" },
+            { title: "Write bandwidth (bytes)", namespace: "AWS/EBS", name: "VolumeWriteBytes", dimensions: d, stat: "Sum", unit: "Bytes" },
+            { title: "Read throughput (ops)", namespace: "AWS/EBS", name: "VolumeReadOps", dimensions: d, stat: "Sum", unit: "Count" },
+            { title: "Write throughput (ops)", namespace: "AWS/EBS", name: "VolumeWriteOps", dimensions: d, stat: "Sum", unit: "Count" },
+            { title: "Consumed read/write ops", namespace: "AWS/EBS", name: "VolumeConsumedReadWriteOps", dimensions: d, stat: "Sum", unit: "Count" },
+          ]; })()} /></CapabilityContainer> },
           { id: "tags", label: "Tags", content: <TagsPanel resourceId={v.volumeId} tags={v.Tags} onSave={save} /> },
         ]} />
       </SpaceBetween>

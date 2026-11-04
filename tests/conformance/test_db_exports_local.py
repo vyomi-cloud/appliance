@@ -26,6 +26,13 @@ from core.object_store import InMemoryObjectStore
 from core.sql_store import InMemorySqlStore
 
 
+try:
+    from core.azure_arm_core import AzureArm as _LaxArm
+    _LaxArm.STRICT_SUBSCRIPTION = False   # engine test: ad-hoc subscription ids
+except Exception:
+    pass
+
+
 def _check(name, cond, detail=""):
     if not cond:
         raise AssertionError(f"{name} {detail}")

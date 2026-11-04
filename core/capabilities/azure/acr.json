@@ -80,7 +80,7 @@
   "title": "Insights, Alerts, Metrics, Diagnostic settings and Logs",
   "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "Diagnostic settings (Microsoft.Insights/diagnosticSettings) is a real ARM extension resource scoped to this registry: logs/metrics are stored and validated exactly as the real resource requires, but never actually delivered to the configured destination (workspace, storage account or event hub) — there is no agent/telemetry pipeline. Insights, Alerts, Metrics and Logs for container registries remain an honest gap."
+   "Diagnostic settings (Microsoft.Insights/diagnosticSettings) is a real ARM extension resource scoped to this registry: logs/metrics are stored and validated exactly as the real resource requires, but never actually delivered to the configured destination (workspace, storage account or event hub) — there is no agent/telemetry pipeline. Insights, Alerts, Metrics and Logs are the shared per-resource panels (azure.common.resource_monitoring): the only metric is the registry's own Activity-log operation count, there is no pull/push or storage telemetry."
   ],
   "tests": ["tests/conformance/test_azure_monitor_core.py", "tests/conformance/test_azure_arm_core.py"]
  },
@@ -200,13 +200,6 @@
    "ENFORCED for real: once enabled, an untagged manifest is purged after it has gone untagged for longer than the configured number of days (core/azure_acr_core.py's purge_untagged, swept on every data-plane call via the x-vyomi-registry header) — not a stored setting nobody acts on. Because repositories are process-global (azure.acr.repositories), the policy that applies during a sweep is whichever registry's data-plane call triggered it, not cleanly isolated per registry if more than one registry has retention enabled at once."
   ],
   "tests": ["tests/conformance/test_azure_acr_core.py"]
- },
- "azure.acr.support_troubleshooting": {
-  "title": "Support + Troubleshooting",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": [
-   "Opening a support request routes to Microsoft's own support ticketing system — a genuine third party Vyomi has no backing support organization to open a ticket against."
-  ]
  },
  "azure.acr.import": {
   "title": "Import image (copy between repositories/registries)",

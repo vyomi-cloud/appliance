@@ -6,6 +6,7 @@
  * Retention (Preview) are all backed by real native calls (ARM control plane + the registry's
  * own OCI/ACR REST data plane) — only Support + Troubleshooting (a real Microsoft support
  * ticket) stays an honest NotSimulated panel. */
+import { ResourceInsightsPanel, ResourceAlerts, ResourceMetrics, ResourceLogs } from "../../kit/ResourceMonitoring.jsx";
 import { UserAssignedIdentities } from "../../kit/UserAssignedIdentities.jsx";
 import { useEffect, useState } from "react";
 import {
@@ -31,6 +32,7 @@ import { ResourceRecommendations } from "../defender/Pages.jsx";
 import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
 import SharedActivityLog from "../../kit/ActivityLog.jsx";
 import { ClassicAdminsPanel, DenyAssignmentsPanel, MyAccess } from "../../kit/IamExtras.jsx";
+import SharedSupportPanel from "../../kit/SupportPanel.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -72,6 +74,7 @@ export default function RegistryBlade({ params, query }) {
       overview: () => <Overview a={a} reload={reload} self={self} />,
       defender: () => <ResourceRecommendations resourceId={a.id} />,
       iam: () => <AccessControlIam a={a} />,
+      support: () => <SharedSupportPanel resourceId={a.id} name={a.name} service="acr" />,
       tags: () => <Tags a={a} reload={reload} />,
       accesskeys: () => <AccessKeys a={a} reload={reload} />,
       properties: () => <Properties a={a} />,
@@ -81,10 +84,10 @@ export default function RegistryBlade({ params, query }) {
       activitylog: () => <SharedActivityLog scope={a.id} name={a.name} />,
       exporttemplate: () => <SharedExportTemplate id={a.id} name={a.name} resourceGroup={a.resourceGroup} />,
       diagnosticsettings: () => <DiagnosticSettings a={a} />,
-      insights: () => <NotSimulatedContainer title={`${name} | Insights`} feature="Insights" />,
-      alerts: () => <NotSimulatedContainer title={`${name} | Alerts`} feature="Alerts" />,
-      metrics: () => <NotSimulatedContainer title={`${name} | Metrics`} feature="Metrics" />,
-      logs: () => <NotSimulatedContainer title={`${name} | Logs`} feature="Logs" />,
+      insights: () => <ResourceInsightsPanel id={a.id} name={a.name} />,
+      alerts: () => <ResourceAlerts id={a.id} name={a.name} />,
+      metrics: () => <ResourceMetrics id={a.id} name={a.name} />,
+      logs: () => <ResourceLogs id={a.id} name={a.name} />,
       quickstart: () => <QuickStart a={a} />,
       events: () => <EventsPanel a={a} rg={a.resourceGroup} />,
       encryption: () => <Encryption a={a} reload={reload} />,

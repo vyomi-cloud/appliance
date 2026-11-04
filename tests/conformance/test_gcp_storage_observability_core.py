@@ -21,6 +21,12 @@ except ImportError:  # pragma: no cover - Pyodide flat layout
 AUTH = {"authorization": "AWS4-HMAC-SHA256 Credential=CAP/20261101/us-east-1/s3/aws4_request"}
 
 
+try:
+    AwsWireRouter.STRICT_GCP_PROJECT = False   # engine test: ad-hoc project ids
+except NameError:
+    pass
+
+
 def _check(name, cond):
     if not cond:
         raise AssertionError(name)

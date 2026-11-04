@@ -6,6 +6,19 @@
   "limitations": [],
   "tests": ["tests/conformance/test_azure_arm_core.py"]
  },
+ "azure.storage.vnet_rules": {
+  "title": "Virtual network rules and IP firewall rules",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "networkAcls.virtualNetworkRules and ipRules are real ARM state with real validation: each subnet must exist and carry the Microsoft.Storage service endpoint (the portal enables it for you), IP rules must be public IPv4 addresses / CIDRs (no private ranges, no /31 or /32 CIDR, no duplicates). The rules are not enforced against Blob/Queue/Table data-plane requests: there is no source-network path to evaluate them against."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_netsvc_core.py"
+  ]
+ },
  "azure.storage.account.tags": {
   "title": "Tags",
   "level": { "nano": "full", "offline": "full" },
@@ -107,10 +120,10 @@
   "tests": ["tests/conformance/test_azure_rbac_core.py"]
  },
  "azure.storage.datamigration": {
-  "title": "Data migration (AzCopy / Data Box / migration tooling)",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["This blade is a links-and-downloads page to external tooling, not an API Vyomi could intercept: AzCopy is a separately-installed CLI that already talks to the real Blob copy/upload operations this console's Containers page already exercises (nothing further to simulate there), and Data Box requires Microsoft to ship real physical hardware to a real address — genuinely impossible for a local simulator to run."],
-  "tests": []
+  "title": "Data migration (AzCopy / Storage Mover / Data Box)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["Generates ready-made AzCopy commands against this account's Vyomi endpoint and hands in-product copies to Storage Mover (real). Azure Data Box needs a physical device shipped by Microsoft: not simulated."],
+  "tests": ["tests/conformance/test_azure_storagemover_core.py"]
  },
  "azure.storage.events": {
   "title": "Events (Event Grid subscriptions on storage events)",
@@ -126,21 +139,21 @@
  },
  "azure.storage.storagemover": {
   "title": "Storage Mover",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["This is a cross-link to a wholly separate resource provider (Microsoft.StorageMover: its own storage mover accounts, source/target endpoints, projects and on-premises migration agents) — not a storage-account sub-feature. Building it would mean a new product's own core, console pages and spec outside this storage service's scope, not a gap inside this one; a real on-premises agent to migrate FROM is also not something a local simulator has anything to connect to."],
-  "tests": []
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["Microsoft.StorageMover (movers, endpoints, projects, job definitions, job runs) with real validation. Job runs really copy bytes between Blob containers and Azure Files shares hosted by Vyomi (Additive or Mirror, sub-paths, skip-unchanged, per-file errors). NOT modelled: the on-premises migration agent (NFS/SMB mount sources end in Failed/NoAgentAvailable), bandwidth schedules, ACL/metadata preservation, AWS S3 multicloud sources."],
+  "tests": ["tests/conformance/test_azure_storagemover_core.py"]
  },
  "azure.storage.partnersolutions": {
-  "title": "Partner solutions",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["Third-party marketplace integrations (e.g. Cloudian, DataDynamics) — third-party identity and billing Vyomi cannot run."],
-  "tests": []
+  "title": "Partner solutions (Vyomi Marketplace)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["Vyomi publishes its own SaaS-simulator offers (Storage / Observability categories here); subscribing creates a real Microsoft.SaaS/resources resource with generated access credentials. The third-party vendors' service APIs are not emulated and nothing is billed."],
+  "tests": ["tests/conformance/test_azure_billing_ext_core.py"]
  },
  "azure.storage.fileshares": {
   "title": "File shares (Azure Files)",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["Azure Files is a distinct SMB/NFS data plane (account.file.core.windows.net) with no core in this repo yet — not yet implemented."],
-  "tests": []
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["Real ARM control plane (core/azure_files_core.py): name/quota/tier/protocol validation (NFS only on Premium FileStorage, 5120 GiB without large file shares, 102400 with them or on Premium), soft delete + restore, snapshots, leases, and a content browser (directories, upload, download, delete) with shareQuota enforced on write. NOT modelled: the SMB 3.x / NFS 4.1 protocols themselves (nothing can mount a Vyomi share), AD DS / Entra Kerberos identity enforcement and share-level ACLs; the content browser is a Vyomi ARM extension, not account.file.core.windows.net."],
+  "tests": ["tests/conformance/test_azure_files_core.py"]
  },
  "azure.storage.tables": {
   "title": "Table storage",
@@ -159,12 +172,6 @@
   "level": { "nano": "limited", "offline": "limited" },
   "limitations": ["The form builds a structurally correct SAS query string (sv/ss/srt/sp/st/se/spr/sig) from the selected options and signs it with the account's listKeys value, but core/azure_blob_core.py and core/azure_queue_core.py do not verify any request signature (SharedKey or SAS) — the generated token is not a real, checkable credential."],
   "tests": ["tests/conformance/test_azure_arm_core.py"]
- },
- "azure.storage.defender": {
-  "title": "Microsoft Defender for Cloud",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["A separate security product (threat detection, vulnerability scanning) with its own billing plan — not modelled by any Vyomi core."],
-  "tests": []
  },
  "azure.storage.objectreplication": {
   "title": "Object replication",
@@ -192,9 +199,9 @@
  },
  "azure.storage.azureaisearch": {
   "title": "Azure AI Search (index this storage account)",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["A cross-link to provisioning a wholly separate resource provider (Microsoft.Search/searchServices) with its own full-text/vector indexing pipeline and query language — building a real search engine (tokenization, ranking, vector similarity) is outside a storage account console's scope, the same reasoning as Storage Mover and Front Door/CDN."],
-  "tests": []
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["Real search service (Microsoft.Search) + Import data: a data source, index and indexer are created and the indexer really reads the container's blobs (text, JSON, JSON arrays, CSV) into a queryable index (TF-IDF ranking, $filter, facets). NOT modelled: AI enrichment skillsets, semantic ranker, vector / hybrid search, scoring profiles, synonym maps, the Lucene query parser."],
+  "tests": ["tests/conformance/test_azure_search_core.py"]
  },
  "azure.storage.datalakegen2upgrade": {
   "title": "Data Lake Gen2 upgrade",
@@ -267,5 +274,29 @@
   "level": { "nano": "not_simulated", "offline": "not_simulated" },
   "limitations": ["Opens a real Microsoft support ticket workflow — outside what a local simulator can run."],
   "tests": []
+ },
+ "azure.storage.fileservice": {
+  "title": "File service settings (share soft delete, SMB settings, CORS)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["Share soft-delete retention (1-365 days) is enforced on share delete / restore; SMB versions / authentication / channel-encryption values are validated and multichannel is Premium-only. CORS rules are validated and stored; the Vyomi file content API does not evaluate preflight requests."],
+  "tests": ["tests/conformance/test_azure_files_core.py"]
+ },
+ "azure.storage.queueservice": {
+  "title": "Queue service CORS",
+  "level": { "nano": "config_only", "offline": "config_only" },
+  "limitations": ["CORS rules are validated and stored on queueServices/default; the Queue data plane does not answer preflight requests with them."],
+  "tests": ["tests/conformance/test_azure_files_core.py"]
+ },
+ "azure.storage.tableservice": {
+  "title": "Table service CORS",
+  "level": { "nano": "config_only", "offline": "config_only" },
+  "limitations": ["CORS rules are validated and stored on tableServices/default; the Table data plane does not answer preflight requests with them."],
+  "tests": ["tests/conformance/test_azure_files_core.py"]
+ },
+ "azure.storage.largefileshares": {
+  "title": "Large file shares, NFS v3 and SFTP account properties",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["largeFileSharesState is validated (Standard LRS/ZRS/GRS/GZRS only, one-way) and raises the share quota ceiling to 102400 GiB; isNfsV3Enabled needs hierarchical namespace, secure transfer off and is fixed at creation; isSftpEnabled needs hierarchical namespace. NFS v3 / SFTP protocol servers are NOT served: the flags are validated and reported, not enforced on a data plane."],
+  "tests": ["tests/conformance/test_azure_files_core.py"]
  }
 }

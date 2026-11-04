@@ -158,10 +158,15 @@
   },
   "azure.monitor.grafana_dashboards": {
     "title": "Dashboards with Grafana",
-    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
     "limitations": [
-      "Azure Managed Grafana is a separate managed service Vyomi does not run.",
-      "Toolbar actions would be New, Explore, Browse Grafana dashboards Gallery, Browse Saved dashboards, Help, Feedback, Group by."
+      "Lists real Grafana workspaces and renders one built-in dashboard of Vyomi's real Activity-log operations (by resource type and per hour) itself. It is not Grafana, and saved/favourite Grafana dashboards are not modelled."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_monitorproducts.py"
     ]
   },
   "azure.monitor.containers_insights": {
@@ -197,17 +202,32 @@
     "limitations": ["Azure Local (hybrid hardware) is out of scope for a cloud simulator."]
   },
   "azure.monitor.managed_prometheus": {
-    "title": "Managed Prometheus",
-    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "title": "Managed Prometheus (Azure Monitor workspaces)",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
     "limitations": [
-      "Azure Kubernetes Service and the managed Prometheus add-on are not modelled.",
-      "Grid columns would be Name, Resource group, Metrics collection; toolbar actions would be View manual setup, Feedback."
+      "Microsoft.Monitor/accounts is a real ARM resource: name rules, query endpoint, and the managed data collection endpoint and rule Azure creates alongside it (removed again on delete; deleting a workspace still integrated with a Grafana workspace is refused).",
+      "Vyomi does not scrape or ingest Prometheus metrics, so the query endpoint never returns data. Prometheus rule groups and AKS add-on onboarding are not modelled."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_monitorproducts.py"
     ]
   },
   "azure.monitor.managed_grafana": {
     "title": "Azure Managed Grafana",
-    "level": { "nano": "not_simulated", "offline": "not_simulated" },
-    "limitations": ["Azure Managed Grafana is a separate managed service Vyomi does not run."]
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "Microsoft.Dashboard/grafana is a real ARM resource: name, SKU and major-version validation, generated endpoint, system identity, and Azure Monitor workspace integrations validated against real Azure Monitor workspaces.",
+      "Vyomi runs no Grafana server: the endpoint is a stable name, not a live web app, and data sources, managed private endpoints and API keys are not modelled."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_monitorproducts.py"
+    ]
   },
   "azure.monitor.scom_managed_instance": {
     "title": "Azure Monitor SCOM managed instance",
@@ -261,10 +281,5 @@
     "api": ["PrivateLinkScopes.CreateOrUpdate", "PrivateLinkScopes.List", "PrivateLinkScopes.Delete",
             "PrivateLinkScopes.ScopedResources.CreateOrUpdate", "PrivateLinkScopes.ScopedResources.List", "PrivateLinkScopes.ScopedResources.Delete"],
     "tests": ["tests/conformance/test_azure_monitor_core.py", "tests/conformance/test_azure_arm_core.py"]
-  },
-  "azure.monitor.new_support_request": {
-    "title": "New support request (file a Microsoft support ticket)",
-    "level": { "nano": "not_simulated", "offline": "not_simulated" },
-    "limitations": ["Vyomi does not file real Microsoft support tickets."]
   }
 }

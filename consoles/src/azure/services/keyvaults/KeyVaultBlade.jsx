@@ -18,6 +18,7 @@ import DeleteDialog from "../../kit/DeleteDialog.jsx";
 import ResourceBlade from "../../kit/ResourceBlade.jsx";
 import { Essentials, ErrorBar, Glyph, KV, Loading, NotSimulated, NotSimulatedContainer, downloadCsv, fmtDate } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
+import { PrivateEndpointConnectionsPanel, PeWizardSection, usePeWizard } from "../../kit/PrivateEndpoints.jsx";
 import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
@@ -25,8 +26,11 @@ import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
 import SharedActivityLog from "../../kit/ActivityLog.jsx";
 import { ClassicAdminsPanel, DenyAssignmentsPanel } from "../../kit/IamExtras.jsx";
 import SharedResourceHealth from "../../kit/ResourceHealth.jsx";
+import { ResourceAlerts, ResourceMetrics, ResourceLogs, ResourceInsightsPanel, ResourceWorkbooks } from "../../kit/ResourceMonitoring.jsx";
 import SharedDiagnosticSettings from "../../kit/DiagnosticSettings.jsx";
 import SharedAdvisor from "../../kit/Advisor.jsx";
+import SharedSupportPanel from "../../kit/SupportPanel.jsx";
+import { ResourceRecommendations } from "../defender/Pages.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -88,8 +92,15 @@ export default function KeyVaultBlade({ params, query }) {
       locks: () => <Locks a={a} />,
       activitylog: () => <SharedActivityLog scope={a.id} name={a.name} />,
       exporttemplate: () => <SharedExportTemplate id={a.id} name={a.name} resourceGroup={a.resourceGroup} />,
+      defender: () => <ResourceRecommendations resourceId={a.id} />,
+      support: () => <SharedSupportPanel resourceId={a.id} name={a.name} service="keyvaults" />,
       resourcehealth: () => <SharedResourceHealth id={a.id} name={a.name} />,
       diagnosticsettings: () => <SharedDiagnosticSettings id={a.id} name={a.name} />,
+      alerts: () => <ResourceAlerts id={a.id} name={a.name} />,
+      metrics: () => <ResourceMetrics id={a.id} name={a.name} />,
+      logs: () => <ResourceLogs id={a.id} name={a.name} />,
+      insights: () => <ResourceInsightsPanel id={a.id} name={a.name} />,
+      workbooks: () => <ResourceWorkbooks id={a.id} name={a.name} />,
     }[panel];
     body = P ? P() : (
       <>
@@ -154,7 +165,7 @@ function Overview({ a, reload, self }) {
           <Link href={`${self}/keys`}>Keys</Link>{" · "}<Link href={`${self}/secrets`}>Secrets</Link>
         </div>
       )}
-      {tab === "monitoring" && <NotSimulatedContainer feature="Key vault monitoring (requests, latency and saturation charts)" />}
+      {tab === "monitoring" && <ResourceMetrics id={a.id} name={a.name} title="Monitoring" />}
       {tab === "properties" && <PropertyList a={a} />}
       {tab === "capabilities" && <NotSimulatedContainer feature="The capabilities overview" />}
       {tab === "recommendations" && <SharedAdvisor bare scope={a.id} />}
@@ -936,7 +947,7 @@ function Networking({ a, reload }) {
           </RadioGroup>
         </CapabilityContainer>
       )}
-      {tab === "private" && <NotSimulatedContainer title="Private endpoint connections" feature="Private endpoint connections for key vaults" />}
+      {tab === "private" && <PrivateEndpointConnectionsPanel target={{ id: a.id, name: a.name, type: "Microsoft.KeyVault/vaults", location: a.location }} />}
     </>
   );
 }

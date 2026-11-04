@@ -117,10 +117,65 @@
   "tests": ["tests/conformance/test_azure_arm_core.py", "tests/conformance/test_azure_monitor_core.py", "tests/conformance/test_azure_operationalinsights_core.py"]
  },
  "azure.vnets.network_appliances": {
-  "title": "Azure Bastion, DDoS protection, Azure Firewall, Microsoft Defender for Cloud, Network Manager, Private endpoints",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "title": "Network Manager (vnet blade menu item)",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
   "limitations": [
-   "Each of these is a separate resource type (bastionHosts, ddosProtectionPlans, azureFirewalls, privateEndpoints) or a security service Vyomi does not model; the virtual network create wizard's Bastion/Firewall/DDoS checkboxes and the resource menu items are an honest gap, not provisioned. Microsoft.Network/networkManagers now exists as a bare, generically-CRUD-able ARM resource (so the Create VNet wizard's IP address pool picker has something real to create against — see azure.vnets.ip_address_management), but the VNet blade's own 'Network manager' menu item (which governs connectivity/security-admin configurations applied to this vnet) is still not built."
+   "Private endpoints, Bastion, Azure Firewall and DDoS protection are now real (see their own entries). The vnet blade's 'Network manager' menu item (connectivity / security-admin configurations applied to this vnet) is still not built (the Microsoft Defender for Cloud page is real: it lists the live recommendations that assess this network); Microsoft.Network/networkManagers exists as a bare ARM resource for IP address pools only."
+  ]
+ },
+ "azure.vnets.private_endpoints": {
+  "title": "Private endpoints",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Microsoft.Network/privateEndpoints is a real ARM resource: the subnet and target resource must exist, groupIds are validated per target type, a private IP is allocated from the subnet (never .0-.3), customDnsConfigs carry the privatelink FQDN, and a privateEndpointConnections child is written on the target (auto-Approved, or Pending for manual connections) where approve/reject/delete flow back to the endpoint. No packet is routed: the endpoint does not change how the target's own data plane is reached, publicNetworkAccess=Disabled is not enforced against traffic, and private DNS zone groups are not created. Targets: storage, Key Vault, SQL, Cosmos DB, Container Registry, Redis; App Configuration and Cognitive Services keep their own connection lists."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_netsvc_core.py"
+  ]
+ },
+ "azure.vnets.bastion": {
+  "title": "Azure Bastion",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Bastion hosts are real ARM resources with real validation (AzureBastionSubnet name and /26 minimum, Standard static public IP, SKU-gated features and instance counts). There is no guest network stack to tunnel to, so Connect sessions (browser RDP/SSH, native client) are not available."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_netsvc_core.py"
+  ]
+ },
+ "azure.vnets.firewall": {
+  "title": "Azure Firewall",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Azure Firewall and firewall policies are real ARM resources (AzureFirewallSubnet /26, Standard static public IP, tier must match the policy, Basic requires a management subnet + IP, rule collection / group priorities 100-65000 and unique, a private IP is allocated from the subnet; policies in use cannot be deleted). Rules are stored and validated but do not filter traffic: there is no packet path through the firewall, and the Rules / Threat intelligence / IDPS authoring screens are not built."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_netsvc_core.py"
+  ]
+ },
+ "azure.vnets.ddos": {
+  "title": "DDoS protection",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "DDoS protection plans are real ARM resources; attaching a plan to a vnet is validated and tracked (the plan lists its protected vnets, an in-use plan cannot be deleted). No attack mitigation or telemetry exists: nothing is ever scrubbed, and DDoS metrics/alerts are not produced."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_netsvc_core.py"
   ]
  },
  "azure.vnets.connected_devices": {

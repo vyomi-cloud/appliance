@@ -17,6 +17,12 @@ from core.aws_wire_router import AwsWireRouter  # noqa: E402
 PASS = FAIL = 0
 
 
+try:
+    AwsWireRouter.STRICT_GCP_PROJECT = False   # engine test: ad-hoc project ids
+except NameError:
+    pass
+
+
 def check(name, ok, detail=""):
     global PASS, FAIL
     PASS, FAIL = PASS + (1 if ok else 0), FAIL + (0 if ok else 1)

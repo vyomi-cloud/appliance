@@ -208,5 +208,15 @@
   "tests": [
    "tests/conformance/test_gcp_run_core.py"
   ]
- }
+ },
+  "gcp.functions.gpu": {
+    "title": "GPU for Cloud Run functions",
+    "level": {
+      "nano": "not_simulated",
+      "offline": "not_simulated"
+    },
+    "limitations": [
+      "GPU-backed functions run on NVIDIA L4 hardware; Vyomi has no GPU passthrough or scheduler."
+    ]
+  }
 }

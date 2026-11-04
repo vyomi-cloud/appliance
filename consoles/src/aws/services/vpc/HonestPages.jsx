@@ -19,13 +19,7 @@ const page = (title, id) => () => (
 // Verified Access (instances/trust providers/groups/endpoints) are real now — see
 // NetworkAccessAnalyzer.jsx, Endpoints.jsx, VerifiedAccess.jsx — removed from this honest list.
 
-// Lattice (service mesh — separate control plane from vpc_core.py's VPC/subnet/route-table model)
-export const ServiceNetworks = page("Service networks", "aws.vpc.lattice");
-export const LatticeServices = page("Lattice services", "aws.vpc.lattice");
-export const ResourceConfigurations = page("Resource configurations", "aws.vpc.lattice");
-export const ResourceGateways = page("Resource gateways", "aws.vpc.lattice");
-export const LatticeTargetGroups = page("Target groups", "aws.vpc.lattice");
-export const DomainVerifications = page("Domain verifications", "aws.vpc.lattice");
+// VPC Lattice (service networks, services, target groups, resource gateways/configurations, domain verifications) is real now: Lattice.jsx.
 
 // DNS firewall
 

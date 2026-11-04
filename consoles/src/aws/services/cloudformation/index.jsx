@@ -12,7 +12,8 @@ import ActivatedExtensions, { ExtensionDetail } from "./ActivatedExtensions.jsx"
 import HooksOverview from "./HooksOverview.jsx";
 import InvocationSummary from "./InvocationSummary.jsx";
 import Hooks from "./Hooks.jsx";
-import { PublicExtensions, Publisher, Spotlight } from "./HonestPages.jsx";
+import { Spotlight } from "./HonestPages.jsx";
+import { PublicExtensions, Publisher } from "./Registry.jsx";
 
 export default {
   nav: [

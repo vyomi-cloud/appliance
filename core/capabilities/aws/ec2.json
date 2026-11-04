@@ -29,12 +29,13 @@
    "offline": "limited"
   },
   "limitations": [
-   "Enforced for the one metric Vyomi actually publishes (StatusCheckFailed, from the instance's real status-check state): enabling it lets a fresh datapoint land every 1 minute instead of every 5.",
-   "CPU utilization (%), Network in (bytes), Network out (bytes), Network packets in (count), Network packets out (count), CPU credit usage (count) and CPU credit balance (count) still aren't collected — Vyomi has no CloudWatch metrics pipeline for those."
+   "Detailed monitoring selects a 1-minute instead of 5-minute sampling period. StatusCheckFailed* is published from the instance's real status-check state. On the offline appliance the Docker container behind each running instance is sampled (docker exec reading /proc/net/dev and the cgroup cpu.stat / io.stat counters; a daemon every 30 s, plus POST /api/aws/ec2/metrics/collect) and the interval deltas are published to CloudWatch as the real AWS/EC2 series CPUUtilization (CPU time / (wall time x vCPUs)), NetworkIn/Out, NetworkPacketsIn/Out and EBSRead/WriteBytes and Ops, so alarms and dashboards work on them. On Nano there is no measurable instance runtime, so these series stay empty (graphs draw No data points) rather than showing invented numbers. NOT produced: CPUCreditUsage / CPUCreditBalance, DiskRead/Write (instance store) metrics, per-ENI network breakdown, and Nitro-only metrics such as EBSIOBalance%."
   ],
   "tests": [
    "tests/conformance/test_ec2_console_v4_core.py",
-   "tests/conformance/test_ec2_offline_monitoring.py"
+   "tests/conformance/test_ec2_offline_monitoring.py",
+   "tests/conformance/test_ec2_metrics_core.py",
+   "tests/conformance/test_ec2_connect_offline.py"
   ]
  },
  "ec2.instances.status-checks": {
@@ -67,13 +68,21 @@
   ]
  },
  "ec2.instances.connect": {
-  "title": "Connect (SSH / RDP / EC2 Instance Connect / Session Manager)",
+  "title": "Connect (SSH / EC2 Instance Connect)",
   "level": {
    "nano": "not_simulated",
-   "offline": "not_simulated"
+   "offline": "limited"
   },
   "limitations": [
-   "Vyomi instances aren't real virtual machines with a reachable network stack, so there is nothing to SSH, RDP or Session-Manager into."
+   "On the offline appliance an instance is a real Docker container running sshd, so Connect is real: the SSH client tab shows the working ssh command (published host port, or the routable bridge IP / Codespaces jump host), the shared key pair's private key downloads as a .pem, and the EC2 Instance Connect tab is an in-browser terminal that executes each command inside the instance's container (working directory is tracked between commands). It is a command-at-a-time shell, not a full pty: interactive programs (vim, top, a password prompt) do not work in the browser terminal, use the SSH client for those. NOT modelled: Session Manager (no SSM agent), RDP for Windows AMIs, the EC2 serial console, instance-connect endpoints and ephemeral-key push (the instance uses the appliance's shared key pair, not the key pair chosen at launch). Nano has no instance runtime to SSH into (the browser tunnel relay is not built yet), so Connect is not simulated there."
+  ],
+  "api": [
+   "(Vyomi) GET /api/aws/ec2/instances/{id}/connect-info",
+   "(Vyomi) GET /api/aws/ec2/instances/{id}/private-key.pem",
+   "(Vyomi) POST /api/ec2/instances/{id}/console/exec"
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_connect_offline.py"
   ]
  },
  "ec2.instance-types": {
@@ -125,11 +134,20 @@
  "ec2.ami-catalog.marketplace-community": {
   "title": "AMI catalog — AWS Marketplace AMIs / Community AMIs",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Vyomi has no connection to AWS Marketplace or the community AMI catalog; only AMIs you've created or the built-in quickstart set are available."
+   "The AWS Marketplace AMIs tab lists Vyomi's own AMI products (hardened Ubuntu, Nginx, PostgreSQL, Docker host, Windows IIS), not AWS Marketplace listings. Subscribing (license acceptance required) registers a real AMI in this account's EC2 model (owner aws-marketplace, a marketplace product code, visible in DescribeImages and launchable via RunInstances); ending the subscription is refused while an instance still runs the AMI and deregisters the AMI otherwise. The Community AMIs tab lists public images owned by other accounts, seeded on first use. NOT modelled: real image contents or software behind the AMIs (they boot the same base instance image as any other AMI), pricing/metering, private offers and the Marketplace seller flow."
+  ],
+  "api": [
+   "ListEntities",
+   "DescribeEntity",
+   "DescribeImages",
+   "RunInstances"
+  ],
+  "tests": [
+   "tests/conformance/test_marketplace_core.py"
   ]
  },
  "ec2.volumes": {
@@ -197,11 +215,23 @@
  "ec2.security-groups.ram-sharing": {
   "title": "Security group sharing (AWS Resource Access Manager)",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Cross-account sharing via AWS Resource Access Manager isn't modeled — Vyomi simulates one account, so there's no second account to share a resource with."
+   "The Sharing tab drives the real RAM object model: CreateResourceShare / AssociateResourceShare / DisassociateResourceShare over the security group's ARN with the resource-share state machine, and principals are validated like the service (12-digit account, organization ARN, OU ARN or IAM role/user ARN) and cross-checked against the account's AWS Organizations: an organization or OU that does not exist is refused, member accounts are internal, a share created with allowExternalPrincipals=false refuses accounts outside the organization. The owner-side consequence is enforced: a security group with an active share cannot be deleted until it is unshared. Vyomi simulates one account, so the invited account's own view of the shared group (DescribeSecurityGroups from that account, using it in its own VPC) cannot be observed, and no invitation / acceptance flow runs (associations go straight to ASSOCIATED)."
+  ],
+  "api": [
+   "CreateResourceShare",
+   "AssociateResourceShare",
+   "DisassociateResourceShare",
+   "GetResourceShareAssociations",
+   "ListPrincipals",
+   "ListResources"
+  ],
+  "tests": [
+   "tests/conformance/test_ram_core.py",
+   "tests/conformance/test_ram_principals.py"
   ]
  },
  "ec2.security-groups.related-resources": {
@@ -639,6 +669,59 @@
   },
   "limitations": [
    "Capacity Manager's cross-account capacity analytics aren't modeled."
+  ]
+ },
+ "ec2.volumes.monitoring": {
+  "title": "EBS volume CloudWatch metrics",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "On the offline appliance an instance's root volume receives the real block I/O measured inside the instance's container (cgroup io.stat deltas) as the AWS/EBS series VolumeReadBytes, VolumeWriteBytes, VolumeReadOps, VolumeWriteOps and VolumeConsumedReadWriteOps (read ops + write ops). Attribution is to the root volume only: with several volumes attached the other volumes get no datapoints. On Nano there is no measurable runtime and the graphs show No data points. NOT produced: VolumeIdleTime, VolumeQueueLength, VolumeTotalReadTime / VolumeTotalWriteTime, VolumeThroughputPercentage and BurstBalance."
+  ],
+  "api": [
+   "GetMetricData",
+   "GetMetricStatistics"
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_metrics_core.py",
+   "tests/conformance/test_ec2_connect_offline.py"
+  ]
+ },
+ "ec2.dashboard.service-health": {
+  "title": "Service health (dashboard)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": [
+   "DescribeAvailabilityZones",
+   "DescribeInstanceStatus"
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_cost_table.py"
+  ]
+ },
+ "ec2.dashboard.cost": {
+  "title": "EC2 cost (dashboard)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "An estimate, not a bill: the widget prices this environment's current inventory (running instances by type, EBS volumes by type and size, snapshots at full volume size as an upper bound, public IPv4 addresses, NAT gateways' hourly charge) at us-east-1 on-demand list prices taken from core/cost_model.py, shows what the same resources would cost on AWS since launch and per month, and what Vyomi charged ($0.00; the difference is presented as the saving). NOT included: data transfer, NAT/IO request charges, Savings Plans / reservations / Spot discounts, free tier, taxes, time spent stopped (running instances are priced from their launch time), and prices for instance types missing from the table fall back to a default rate. There is no Cost Explorer API behind it."
+  ],
+  "api": [
+   "DescribeInstances",
+   "DescribeVolumes",
+   "DescribeSnapshots",
+   "DescribeAddresses",
+   "DescribeNatGateways"
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_cost_table.py"
   ]
  }
 }

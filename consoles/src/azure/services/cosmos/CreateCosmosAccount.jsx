@@ -67,8 +67,10 @@ function ApiPicker({ onSelect }) {
   );
 }
 
+import { PeWizardSection, usePeWizard } from "../../kit/PrivateEndpoints.jsx";
 export default function CreateCosmosAccount() {
   const notify = useNotify();
+  const pe = usePeWizard("Microsoft.DocumentDB/databaseAccounts");
   const sub = useSubscription();
   const rgs = useAsync(() => listResourceGroups(), [sub.id]);
   const existing = useAsync(() => api.listAccounts(), [sub.id]);
@@ -191,7 +193,8 @@ export default function CreateCosmosAccount() {
           </RadioGroup>
         </FormRow>
       </FormSection>
-      {f.connectivity !== "All networks" && <NotSimulatedContainer title="Network rules" feature="Virtual network / private endpoint rules for Cosmos DB" />}
+      {f.connectivity === "Private endpoint" && <PeWizardSection pe={pe} />}
+      {f.connectivity === "Public endpoint (selected networks)" && <p style={{ fontSize: 12 }}>Add virtual network and IP address rules from the account's Networking blade once it is created.</p>}
       <FormSection title="Connection Security Settings">
         <FormRow label="Minimum Transport Layer Security Protocol" htmlFor="cosmos-tls">
           <Select id="cosmos-tls" value={f.minimumTls} onChange={set("minimumTls")} aria-label="Minimum Transport Layer Security Protocol">
@@ -276,7 +279,8 @@ export default function CreateCosmosAccount() {
 
   const onCreate = async () => {
     try {
-      await api.createAccount(rg, f.name, body());
+      const created = await api.createAccount(rg, f.name, body());
+      if (f.connectivity === "Private endpoint") await pe.deploy({ id: created.id, name: f.name });
       notify.success(`Deployment of Azure Cosmos DB account '${f.name}' to resource group '${rg}' was successful.`, "Deployment succeeded");
       navigate("cosmos", rg, f.name);
     } catch (e) { notify.error(e, "Deployment failed"); }

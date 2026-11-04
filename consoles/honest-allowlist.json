@@ -50,19 +50,10 @@
     "ec2": [
       "events"
     ],
-    "cloudformation": [
-      "public-extensions"
-    ],
     "vpc": [
       "privatelink-getting-started",
       "endpoints",
       "endpoint-services",
-      "service-networks",
-      "lattice-services",
-      "resource-configurations",
-      "resource-gateways",
-      "lattice-target-groups",
-      "domain-verifications",
       "container-associations",
       "verified-access-instances",
       "verified-access-trust-providers",

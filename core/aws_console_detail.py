@@ -1442,7 +1442,7 @@ def lambda_section(fn: dict, section: str, role_lookup=None) -> dict:
         return {"versions": [{**v, "function_arn": k["arn"] + ("" if v.get("version") == "$LATEST" else ":" + str(v.get("version")))}
                              for v in fn["versions"]]}
     if section == "aliases":
-        return {"aliases": [{**a, "alias_arn": f"{k['arn']}:{a['name']}"} for a in fn["aliases"]],
+        return {"aliases": [{**a, "alias_arn": f"{k['arn']}:{a['name']}"} for a in _alias_rows(fn)],
                 "versions": [v.get("version") for v in fn["versions"]]}
     if section == "policy":
         doc = lambda_policy_document(fn)
@@ -1507,6 +1507,15 @@ def lambda_validate_config(b: dict) -> dict:
     return out
 
 
+def _alias_rows(fn):
+    """Console-shaped alias rows over either store shape (lambda_core keeps a {name: alias} dict)."""
+    al = fn.get("aliases") or []
+    if isinstance(al, dict):
+        return [{"name": a["Name"], "function_version": a["FunctionVersion"], "description": a.get("Description", ""),
+                 "created": a.get("created", ""), "revision_id": a.get("RevisionId", "")} for a in al.values()]
+    return al
+
+
 def lambda_update_section(fn: dict, section: str, body: dict, role_lookup=None) -> dict:
     """UpdateFunctionCode / UpdateFunctionConfiguration / PublishVersion /
     CreateAlias / DeleteAlias / AddPermission / RemovePermission and saved test
@@ -1550,9 +1559,12 @@ def lambda_update_section(fn: dict, section: str, body: dict, role_lookup=None) 
     elif section == "aliases":
         if b.get("action") == "delete":
             name = str(b.get("name") or "")
-            if not any(a["name"] == name for a in fn["aliases"]):
+            if not any(a["name"] == name for a in _alias_rows(fn)):
                 raise DetailError("ResourceNotFoundException", f"Alias not found: {k['arn']}:{name}", 404)
-            fn["aliases"] = [a for a in fn["aliases"] if a["name"] != name]
+            if isinstance(fn["aliases"], dict):
+                fn["aliases"].pop(name, None)
+            else:
+                fn["aliases"] = [a for a in fn["aliases"] if a["name"] != name]
         else:
             name = str(b.get("name") or "").strip()
             if not re.fullmatch(r"(?!^[0-9]+$)([a-zA-Z0-9-_]+)", name) or len(name) > 128:
@@ -1560,9 +1572,13 @@ def lambda_update_section(fn: dict, section: str, body: dict, role_lookup=None) 
             ver = str(b.get("function_version") or "$LATEST")
             if ver not in [v.get("version") for v in fn["versions"]]:
                 raise DetailError("ResourceNotFoundException", f"Function not found: {k['arn']}:{ver}", 404)
-            if any(a["name"] == name for a in fn["aliases"]):
+            if any(a["name"] == name for a in _alias_rows(fn)):
                 raise DetailError("ResourceConflictException", f"Alias already exists: {k['arn']}:{name}", 409)
-            fn["aliases"].append({"name": name, "function_version": ver, "description": str(b.get("description") or ""),
+            if isinstance(fn["aliases"], dict):   # lambda_core's own alias store (the wire's CreateAlias reads it too)
+                fn["aliases"][name] = {"Name": name, "FunctionVersion": ver, "Description": str(b.get("description") or ""),
+                                       "RoutingConfig": None, "RevisionId": _hex(32)}
+            else:
+                fn["aliases"].append({"name": name, "function_version": ver, "description": str(b.get("description") or ""),
                                   "created": _now(), "revision_id": _hex(32)})
     elif section == "policy":
         perms = fn.setdefault("permissions", [])

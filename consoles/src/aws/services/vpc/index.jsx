@@ -16,6 +16,7 @@ import { VerifiedAccessInstances, VerifiedAccessTrustProviders, VerifiedAccessGr
 import Settings from "./Settings.jsx";
 import AllResources from "./AllResources.jsx";
 import * as Honest from "./HonestPages.jsx";
+import * as Lat from "./Lattice.jsx";
 import * as Vpn from "./VpnPages.jsx";
 import * as Nfw from "./NetworkFirewallPages.jsx";
 import * as Dns from "./DnsFirewallPages.jsx";
@@ -152,12 +153,15 @@ export default {
     { pattern: "/vpc/privatelink-getting-started", component: PrivatelinkGettingStarted, crumbs: () => [crumb("VPC", ""), crumb("Getting started", "privatelink-getting-started")] },
     { pattern: "/vpc/endpoints", component: Endpoints, crumbs: () => [crumb("VPC", ""), crumb("Endpoints", "endpoints")] },
     { pattern: "/vpc/endpoint-services", component: EndpointServices, crumbs: () => [crumb("VPC", ""), crumb("Endpoint services", "endpoint-services")] },
-    { pattern: "/vpc/service-networks", component: Honest.ServiceNetworks, crumbs: () => [crumb("VPC", ""), crumb("Service networks", "service-networks")] },
-    { pattern: "/vpc/lattice-services", component: Honest.LatticeServices, crumbs: () => [crumb("VPC", ""), crumb("Lattice services", "lattice-services")] },
-    { pattern: "/vpc/resource-configurations", component: Honest.ResourceConfigurations, crumbs: () => [crumb("VPC", ""), crumb("Resource configurations", "resource-configurations")] },
-    { pattern: "/vpc/resource-gateways", component: Honest.ResourceGateways, crumbs: () => [crumb("VPC", ""), crumb("Resource gateways", "resource-gateways")] },
-    { pattern: "/vpc/lattice-target-groups", component: Honest.LatticeTargetGroups, crumbs: () => [crumb("VPC", ""), crumb("Target groups", "lattice-target-groups")] },
-    { pattern: "/vpc/domain-verifications", component: Honest.DomainVerifications, crumbs: () => [crumb("VPC", ""), crumb("Domain verifications", "domain-verifications")] },
+    { pattern: "/vpc/service-networks/:id", component: Lat.ServiceNetworkDetail, crumbs: (p) => [crumb("VPC", ""), crumb("Service networks", "service-networks"), crumb(p.id, `service-networks/${p.id}`)] },
+    { pattern: "/vpc/lattice-services/:id", component: Lat.LatticeServiceDetail, crumbs: (p) => [crumb("VPC", ""), crumb("Lattice services", "lattice-services"), crumb(p.id, `lattice-services/${p.id}`)] },
+    { pattern: "/vpc/lattice-target-groups/:id", component: Lat.TargetGroupDetail, crumbs: (p) => [crumb("VPC", ""), crumb("Target groups", "lattice-target-groups"), crumb(p.id, `lattice-target-groups/${p.id}`)] },
+    { pattern: "/vpc/service-networks", component: Lat.ServiceNetworks, crumbs: () => [crumb("VPC", ""), crumb("Service networks", "service-networks")] },
+    { pattern: "/vpc/lattice-services", component: Lat.LatticeServices, crumbs: () => [crumb("VPC", ""), crumb("Lattice services", "lattice-services")] },
+    { pattern: "/vpc/resource-configurations", component: Lat.ResourceConfigurations, crumbs: () => [crumb("VPC", ""), crumb("Resource configurations", "resource-configurations")] },
+    { pattern: "/vpc/resource-gateways", component: Lat.ResourceGateways, crumbs: () => [crumb("VPC", ""), crumb("Resource gateways", "resource-gateways")] },
+    { pattern: "/vpc/lattice-target-groups", component: Lat.LatticeTargetGroups, crumbs: () => [crumb("VPC", ""), crumb("Target groups", "lattice-target-groups")] },
+    { pattern: "/vpc/domain-verifications", component: Lat.DomainVerifications, crumbs: () => [crumb("VPC", ""), crumb("Domain verifications", "domain-verifications")] },
 
     { pattern: "/vpc/dns-firewall-rule-groups", component: Dns.DnsFirewallRuleGroups, crumbs: () => [crumb("VPC", ""), crumb("Rule groups", "dns-firewall-rule-groups")] },
     { pattern: "/vpc/dns-firewall-domain-lists", component: Dns.DnsFirewallDomainLists, crumbs: () => [crumb("VPC", ""), crumb("Domain lists", "dns-firewall-domain-lists")] },

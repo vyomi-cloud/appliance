@@ -122,3 +122,5 @@ export const pricingTier = (sku = "") => PLAN_SKUS.find(([k]) => k === sku)?.[1]
 export const planName = (serverFarmId = "") => serverFarmId.split("/").pop();
 
 export { DEFAULT_RG };
+
+export const putSourceControl = (rg, name, properties) => restJson("PUT", `${SITES.path(rg, name)}/sourcecontrols/web`, { query: q, body: { properties } });

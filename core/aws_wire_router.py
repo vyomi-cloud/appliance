@@ -76,6 +76,8 @@ from core import gcp_compute_instances_core as gcp_compute_vm
 from core import gcp_resourcemanager_core as gcp_rm
 from core import gcp_pam_core as gcp_pam
 from core import gcp_run_core as gcp_run
+from core import gcp_trace_core as gcp_trace
+from core import gcp_posture_core as gcp_posture
 
 # Cloud Scheduler httpTarget that names a Cloud Run job's own Admin API v2 `:run` endpoint
 # (the job-trigger binding the Cloud Run console's Triggers tab shows and creates).
@@ -94,6 +96,12 @@ def _gcp_service(path):
         return "gcp-run"
     if path.startswith(("/storage/v1", "/upload/storage/v1", "/download/storage/v1", "/storage/website/")):
         return "gcp-gcs"
+    if re.match(r"^/v[12]/projects/[^/]+/traces([/:]|$)", path) or re.match(r"^/v2/projects/[^/]+/traces/", path) \
+            or re.match(r"^/v1/projects/[^/]+/locations/global/traceScopes([/:]|$)", path) \
+            or re.match(r"^/v2/projects/[^/]+/locations/global/logScopes([/:]|$)", path):
+        return "gcp-trace"   # Cloud Trace v1/v2 + Trace scopes + Log scopes (core/gcp_trace_core, state on the Monitoring store)
+    if re.match(r"^/v1/projects/[^/]+/securityPosture/(compute|storage)$", path):
+        return "gcp-posture"   # rule-based posture findings over real VM / firewall / bucket state (core/gcp_posture_core)
     if path.startswith("/v2/entries"):   # Cloud Logging: entries:write / entries:list
         return "gcp-logging"
     if re.match(r"^/v2/projects/[^/]+/(sinks|metrics|logs)([/:]|$)", path):
@@ -128,7 +136,7 @@ def _gcp_service(path):
         # anything with a sub-resource after the project id is Cloud Monitoring
         # (alertPolicies, metricDescriptors, timeSeries, …).
         return "gcp-monitoring" if m.group(1) else "gcp-resourcemanager"
-    if path.startswith(("/v3/tagKeys", "/v3/tagValues", "/v3/tagBindings")):
+    if path.startswith(("/v3/tagKeys", "/v3/tagValues", "/v3/tagBindings", "/v3/folders")):
         return "gcp-resourcemanager"
     # Deny policies (IAM Deny API): /v2/policies/{attachmentPoint}/denypolicies[/…]
     if re.match(r"^/v2/policies/[^/]+/denypolicies(/.*)?$", path):
@@ -158,6 +166,8 @@ def _gcp_service(path):
         return "gcp-resourcemanager"
     if path.startswith("/v1/locations/global/workforcePools"):
         return "gcp-resourcemanager"
+    if re.match(r"^/v1/projects/[^/]+/locations/[^/]+/(reportConfigs|reportDetails)([/:?]|$)", path):
+        return "gcp-gcs"   # storageinsights.googleapis.com inventory reports (core/gcp_storageinsights_core via gcp_storage_core)
     if re.match(r"^/v1/projects/[^/]+/locations/global/connectivityTests([/:?]|$)", path):
         return "gcp-compute"   # Network Intelligence Center Connectivity Tests → netsim via the VPC core
     if re.search(r"^/v1/projects/[^/]+/locations/[^/]+/internalRanges([/:?]|$)", path):
@@ -370,15 +380,18 @@ _SIGNING = {
     "autoscaling": "asg",
     "dlm": "dlm",
     "cloudtrail": "cloudtrail",   # minimal CloudTrail (trails + S3 data-event selectors) -> core/s3_ext_core via the S3 store
+    "vpc-lattice": "vpc-lattice",   # VPC Lattice control plane (rest-json /servicenetworks, /services, /targetgroups, ...) -> core/vpc_lattice_core over the EC2 model
     "rbin": "rbin",   # EC2 Recycle Bin (rest-json /rules...) -> core/ec2_ops_core.rbin_dispatch over the shared EC2 model
     "schemas": "schemas",   # EventBridge Schemas (rest-json /v1/registries, /v1/discoverers) -> core/eventbridge_schemas_core via the EventBridge store
+    "aws-marketplace": "marketplace",   # AWS Marketplace (Vyomi SaaS spaces + AMI products; rest-json) -> core/marketplace_core over the S3 + EC2 models
+    "s3files": "s3files", "fsx": "fsx",   # S3 Files (rest-json) + FSx for OpenZFS with S3 access points (JSON 1.1) -> core/s3files_core over the S3 + EC2 models
     "backup": "backup",   # AWS Backup subset (region settings + DynamoDB copy jobs) -> core/backup_core over the DynamoDB + S3 stores
     "s3vectors": "s3vectors",   # Amazon S3 Vectors (rest-json POST /<Operation>) -> core/s3_vectors_core via the S3 store
     "s3tables": "s3tables",   # Amazon S3 Tables (rest-json /buckets, /namespaces, /tables, /tag) -> core/s3_tables_core via the S3 store
     "elasticloadbalancing": "elbv2",
     "sts": "sts",
     "cloudformation": "cloudformation",
-    "ssm": "ssm", "scheduler": "scheduler", "pipes": "pipes", "ram": "ram", "organizations": "organizations",
+    "ssm": "ssm", "scheduler": "scheduler", "pipes": "pipes", "ram": "ram", "organizations": "organizations", "ce": "ce",
     "route53resolver": "dnsfw",   # Route 53 Resolver DNS Firewall control plane (core/dnsfw_core)
     "network-firewall": "netfw",   # AWS Network Firewall control plane (core/netfw_core, state in the VPC model)
     "apigateway": "apigateway",   # v1 REST control plane paths with no "/restapis" segment (apikeys, usageplans, clientcertificates, account)
@@ -397,6 +410,7 @@ _TARGET_PREFIX = {
     "Route53Resolver": "dnsfw",
     "com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101": "cloudtrail",
     "AWSOrganizationsV20161128": "organizations",
+    "AWSInsightsIndexService": "ce",   # Cost Explorer
 }
 
 # Native JSON content-types the real SDK expects back per service.
@@ -407,7 +421,7 @@ _JSON_CT = {
     "ssm": "application/x-amz-json-1.1",
     "stepfunctions": "application/x-amz-json-1.0",
     "ram": "application/x-amz-json-1.1",
-    "organizations": "application/x-amz-json-1.1",
+    "organizations": "application/x-amz-json-1.1", "ce": "application/x-amz-json-1.1",
     "netfw": "application/x-amz-json-1.0", "dnsfw": "application/x-amz-json-1.1",
 }
 
@@ -602,6 +616,7 @@ def _lower_headers(headers):
 class AwsWireRouter:
     """Holds one in-tab store per service (the single source of truth for the
     relay endpoint) and routes native AWS-wire requests to the proven cores."""
+    STRICT_GCP_PROJECT = True   # one project per GCP space; engine conformance scripts set False to use ad-hoc project ids
 
     def __init__(self, sql_store=None, stores=None):
         # Stores are INJECTABLE (v2.4.0): Nano/relay pass nothing → in-WASM
@@ -724,6 +739,7 @@ class AwsWireRouter:
         self.ram = s.get("ram") or _types.SimpleNamespace()   # Resource Access Manager (subnet/SG sharing)
         self.vpc.ram_store = self.ram   # DeleteSubnet/DeleteSecurityGroup refuse while actively shared
         self.ram.vpc_store = self.vpc   # AssociateResourceShare validates the subnet/SG exists
+        self.ram.org_store = self.iam   # principals (org / OU ARNs, member accounts) are checked against AWS Organizations (state in the IAM store)
         self.dax.cw_store = self.cw            # real AWS/DAX ItemCache/QueryCache hit/miss metrics
         self.dlm = s.get("dlm") or dlm.DlmStore()   # Data Lifecycle Manager (ec2.lifecycle-manager)
         self.dlm.vpc_store = self.vpc   # policies really create/prune real snapshots + AMIs
@@ -1193,6 +1209,10 @@ class AwsWireRouter:
             r = s3.dispatch(self.s3, "POST", "/__cloudtrail__", {}, {"x-amz-target": lheaders.get("x-amz-target", "")}, bytes(body))
             return {"status": r.status, "headers": {**dict(r.headers or {}), "content-type": "application/x-amz-json-1.1"}, "body": r.body or b""}
 
+        if svc == "vpc-lattice":
+            from core import vpc_lattice_core
+            return vpc_lattice_core.dispatch(self.vpc, method, path, query or {}, headers or {}, bytes(body))
+
         if svc == "rbin":
             from core import ec2_ops_core
             r = ec2_ops_core.rbin_dispatch(self.vpc, method, path, query or {}, headers or {}, bytes(body))
@@ -1201,6 +1221,25 @@ class AwsWireRouter:
             from core import eventbridge_schemas_core as _schemas
             r = _schemas.dispatch(self.msg, method, path, query or {}, headers or {}, bytes(body))
             return {"status": r.status, "headers": {**dict(r.headers or {}), "content-type": "application/json"}, "body": r.body or b""}
+
+        if svc == "marketplace":
+            from core import marketplace_core
+            r = marketplace_core.dispatch(self.s3, self.vpc, method, path, query or {}, bytes(body))
+            hdrs = dict(r.headers or {})
+            hdrs.setdefault("content-type", "application/json")
+            return {"status": r.status, "headers": hdrs, "body": r.body or b""}
+
+        if svc == "s3files":
+            from core import s3files_core
+            r = s3files_core.dispatch(self.s3, self.vpc, method, path, query or {}, bytes(body))
+            hdrs = dict(r.headers or {})
+            hdrs.setdefault("content-type", "application/json")
+            return {"status": r.status, "headers": hdrs, "body": r.body or b""}
+
+        if svc == "fsx":
+            from core import s3files_core
+            r = s3files_core.fsx_dispatch(self.s3, self.vpc, lheaders.get("x-amz-target", ""), bytes(body))
+            return {"status": r.status, "headers": dict(r.headers or {}), "body": r.body or b""}
 
         if svc == "backup":
             from core import backup_core
@@ -1369,20 +1408,23 @@ class AwsWireRouter:
                 hdrs["content-type"] = r.media_type
             return {"status": r.status, "headers": hdrs, "body": r.body or b""}
 
+        if svc == "gcp-posture":
+            r = gcp_posture.dispatch(self.gcp_compute_vm, self.gcp_compute, self.gcs, method, path)
+            return {"status": r.status, "headers": {"content-type": r.media_type}, "body": r.body}
+
         if svc and svc.startswith("gcp-"):   # GCP services — native google-cloud-* REST wire
             # One project, by ID or number (core/gcp_project): normalize before the core sees it.
             proj = self.gcp_project() if callable(self.gcp_project) else self.gcp_project
-            if svc == "gcp-compute":   # the console's own records; also answers public image projects
-                root = getattr(self.gcp_iam, "nano_sub", None)
-                if not isinstance(root, dict):
-                    root = self.gcp_iam.nano_sub = {}
-                return gcp_compute.dispatch(self._stores["resources"], root, proj, method, path, headers, bytes(body))
-            path, query, err = gcp_proj.normalize_request(path, dict(query or {}), method, proj)
-            if err is not None or svc == "gcp-resourcemanager":
+            if self.STRICT_GCP_PROJECT:
+                path, query, err = gcp_proj.normalize_request(path, dict(query or {}), method, proj)
+            else:   # lax (engine unit tests only): any project id addresses its own data
+                err = None
+            _crm = svc == "gcp-resourcemanager" and self.STRICT_GCP_PROJECT and gcp_proj.CRM_PATH_RE.match(path)   # the project's own describe/list; folders, org policy, asset search stay v4's
+            if err is not None or _crm:
                 st, obj = err if err is not None else gcp_proj.crm_dispatch(method, path, query, proj)
                 return {"status": st, "headers": {"content-type": "application/json"},
                         "body": json.dumps(obj).encode()}
-            if svc != "gcp-gcs" and body[:1] in (b"{", b"["):   # object bytes are never rewritten
+            if self.STRICT_GCP_PROJECT and svc != "gcp-gcs" and body[:1] in (b"{", b"["):   # object bytes are never rewritten
                 body = gcp_proj.rewrite_body(bytes(body), proj)
             _gcp_core = {
                 "gcp-gcs": (gcs, self.gcs), "gcp-firestore": (gcp_fs, self.gcp_fs),
@@ -1391,6 +1433,7 @@ class AwsWireRouter:
                 "gcp-cloudsql": (gcp_sql, self.gcp_sql), "gcp-cloudscheduler": (gcp_sched, self.gcp_sched),
                 "gcp-container": (gcp_gke, self.gcp_gke), "gcp-iamcredentials": (gcp_iamc, self.gcp_iamc),
                 "gcp-monitoring": (gcp_mon, self.gcp_mon),
+                "gcp-trace": (gcp_trace, self.gcp_mon),
                 "gcp-redis": (gcp_redis, self.gcp_redis),
                 "gcp-artifactregistry": (gcp_ar, self.gcp_ar),
                 "gcp-logging": (gcp_logging, self.gcp_logging),
@@ -1414,6 +1457,8 @@ class AwsWireRouter:
             elif svc == "gcp-cloudsql":   # instances.export/import read/write the simulator's GCS objects
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), gcs_store=self.gcs)
             elif svc == "gcp-firestore":   # exportDocuments/importDocuments read/write real GCS objects
+                r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), gcs_store=self.gcs)
+            elif svc == "gcp-compute-vm":   # image import (rawDisk) / export read+write the simulator's GCS objects
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), gcs_store=self.gcs)
             elif svc == "gcp-compute":   # Connectivity Tests evaluate against the VMs too
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), vm_store=self.gcp_compute_vm)
@@ -1564,6 +1609,9 @@ class AwsWireRouter:
                 r = dnsfw.dispatch(self.vpc, target, payload)
             elif svc == "organizations":   # AWS Organizations (state in the IAM store: extras["org"] + org_policies)
                 r = orgs.dispatch(self.iam, target, payload)
+            elif svc == "ce":   # Cost Explorer over the EC2/EBS (VPC model) + RDS inventory
+                from core import ce_core
+                r = ce_core.dispatch(self.vpc, self.rds, target, payload)
             else:  # sqs
                 r = sqs.dispatch(self.msg, target, payload, lam_store=self.lam)
             hdrs = dict(r.headers or {})

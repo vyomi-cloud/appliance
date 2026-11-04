@@ -27,6 +27,13 @@ ALLOWED = {("apigateway_core.py", "urllib.request"),   # HTTP integration → th
            ("eventbridge_core.py", "urllib.request")}  # API destination → the user's own endpoint
 
 
+try:
+    from core.azure_arm_core import AzureArm as _LaxArm
+    _LaxArm.STRICT_SUBSCRIPTION = False   # engine test: ad-hoc subscription ids
+except Exception:
+    pass
+
+
 def _check(name, cond, detail=""):
     if not cond:
         raise AssertionError(f"{name} {detail}")

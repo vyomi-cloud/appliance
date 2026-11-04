@@ -5,6 +5,7 @@
  * the Monitoring group — Metrics/Insights/Alerts/Diagnostic settings/Logs/Workbooks); a
  * remaining handful (separate products, or genuinely unmodellable telemetry/hardware) are
  * honest NotSimulated panels — see NS_NOTES. */
+import { ResourceMetrics } from "../../kit/ResourceMonitoring.jsx";
 import ResourceEvents from "../../kit/ResourceEvents.jsx";
 import { useEffect, useState } from "react";
 import {
@@ -18,6 +19,8 @@ import { useAsync } from "../../../common/useAsync.js";
 import { locationLabel } from "../../kit/arm.js";
 import BrowseGrid from "../../kit/BrowseGrid.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
+import { StorageVnetRules, StorageIpRules } from "../../kit/NetworkRules.jsx";
+import { PrivateEndpointConnectionsPanel, PeWizardSection, usePeWizard } from "../../kit/PrivateEndpoints.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
 import ResourceBlade from "../../kit/ResourceBlade.jsx";
 import ResourceIam from "../../kit/ResourceIam.jsx";
@@ -29,6 +32,12 @@ import * as api from "./api.js";
 import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
 import SharedActivityLog from "../../kit/ActivityLog.jsx";
 import SharedAdvisor from "../../kit/Advisor.jsx";
+import SharedSupportPanel from "../../kit/SupportPanel.jsx";
+import { ResourceRecommendations } from "../defender/Pages.jsx";
+import AiSearchIntegration from "../../kit/AiSearchIntegration.jsx";
+import MarketplaceBrowser from "../../kit/MarketplaceBrowser.jsx";
+import { FileServiceSettings, FileShares, ServiceCors } from "./FileShares.jsx";
+import { DataMigration, StorageMover } from "./StorageMover.jsx";
 
 const ENFORCEMENT = "These settings are stored on the storage account (ARM) and returned to your SDKs and the az CLI. The Vyomi Blob data plane does not enforce them.";
 
@@ -87,6 +96,8 @@ export default function StorageAccountBlade({ params, query }) {
     const a = acct.data, reload = acct.reload;
     const P = {
       overview: () => <Overview a={a} reload={reload} self={self} />,
+      defender: () => <ResourceRecommendations resourceId={a.id} />,
+      support: () => <SharedSupportPanel resourceId={a.id} name={a.name} service="storage" />,
       tags: () => <Tags a={a} reload={reload} />,
       containers: () => (query.container ? <Container account={name} container={query.container} self={self} /> : <Containers account={name} self={self} />),
       events: () => <ResourceEvents scopeId={a.id} kind="storage" title={`${a.name} | Events`} />,
@@ -118,6 +129,11 @@ export default function StorageAccountBlade({ params, query }) {
       diagnostics: () => <Diagnostics a={a} />,
       logs: () => <LogsPage a={a} />,
       workbooks: () => <Workbooks a={a} />,
+      fileshares: () => <FileShares a={a} self={self} query={query} />,
+      storagemover: () => <StorageMover a={a} />,
+      datamigration: () => <DataMigration a={a} />,
+      partnersolutions: () => <MarketplaceBrowser capId="azure.storage.partnersolutions" title={`${a.name} | Partner solutions`} categories={["Storage", "Observability"]} />,
+      azureaisearch: () => <AzureAiSearch a={a} />,
     }[panel];
     body = P ? P() : <NotSimulatedContainer title={`${a.name} | ${LABEL[panel] || panel}`} feature={NS_NOTES[panel] || `The ${LABEL[panel] || panel} panel`} />;
   }
@@ -177,7 +193,7 @@ function Overview({ a, reload, self }) {
         <Tab value="toolsandsdks">Tools + SDKs</Tab>
       </TabList>
       {tab === "properties" && <Properties a={a} reload={reload} />}
-      {tab === "monitoring" && <NotSimulatedContainer feature="Storage account monitoring (requests, egress, latency charts)" />}
+      {tab === "monitoring" && <ResourceMetrics id={a.id} name={a.name} title="Monitoring" />}
       {tab === "capabilities" && <NotSimulatedContainer feature="The capabilities overview" />}
       {tab === "recommendations" && <SharedAdvisor bare scope={a.id} />}
       {tab === "tutorials" && <NotSimulatedContainer feature="Tutorials" />}
@@ -226,7 +242,8 @@ function Properties({ a, reload }) {
         <KV label="Container soft delete" value={svcQ.loading ? "…" : days(sv.containerDeleteRetentionPolicy)} />
         <KV label="Versioning" value={svcQ.loading ? "…" : onoff(sv.isVersioningEnabled, false)} />
         <KV label="Change feed" value={svcQ.loading ? "…" : onoff(sv.changeFeed?.enabled, false)} />
-        <KV label="NFS v3" value={ns("NFS v3")} />
+        <KV label="NFS v3" value={onoff(p.isNfsV3Enabled, false)} />
+        <KV label="SFTP" value={onoff(p.isSftpEnabled, false)} />
         <KV label="Allow cross-tenant replication" value={onoff(p.allowCrossTenantReplication, false)} />
       </section>
       <section className="vy-section"><h3>Security</h3>
@@ -242,7 +259,7 @@ function Properties({ a, reload }) {
         <KV label="Endpoint type" value="Standard" />
       </section>
       <section className="vy-section"><h3>File service</h3>
-        <KV label="Large file share" value={ns("Azure Files")} />
+        <KV label="Large file share" value={onoff(p.largeFileSharesState === "Enabled", false)} />
         <KV label="Identity-based access" value={
           <Select value={p.azureFilesIdentityBasedAuthentication?.directoryServiceOptions || "None"} aria-label="Azure Files identity-based access" style={{ maxWidth: 320 }}
             onChange={async (_, d) => { try { await api.updateStorageAccount(a.resourceGroup, a.name, { properties: { azureFilesIdentityBasedAuthentication: { directoryServiceOptions: d.value } } }); notify.success(`Identity-based access set to ${d.value}.`, "Saved"); reload?.(); } catch (e) { notify.error(e, "Saving failed"); } }}>
@@ -644,7 +661,7 @@ function Configuration({ a, reload }) {
           <option value="AAD">From storage accounts with the same Microsoft Entra tenant</option>
           <option value="PrivateLink">Into storage accounts with private link connections</option>
         </Select></div>
-      <NotSimulatedContainer title="Large file shares" feature="Azure Files large file shares" />
+      <LargeFileShares a={a} reload={reload} />
     </>
   );
 }
@@ -673,8 +690,18 @@ function Endpoints({ a }) {
         <h3>Static website</h3>
         <Field label="Primary endpoint" hint="Enabled on the Static website page."><Input readOnly value={api.websiteEndpoint(a.name)} /></Field>
       </section>
-      <NotSimulatedContainer title="File service" feature="Azure Files (file shares) endpoints" />
-      <NotSimulatedContainer title="Other services" feature="Data Lake Storage Gen2 endpoints in the v4 portal lens" />
+      <section className="vy-section" style={{ maxWidth: 760, display: "flex", flexDirection: "column", gap: 10 }}>
+        <h3>File service</h3>
+        <Field label="File shares (ARM)" hint="Browse and manage shares under File shares; the SMB / NFS protocols themselves are not served."><Input readOnly value={`${a.id}/fileServices/default/shares`} /></Field>
+        <Field label="Primary endpoint (from ARM)"><Input readOnly value={p.file || "--"} /></Field>
+      </section>
+      <section className="vy-section" style={{ maxWidth: 760, display: "flex", flexDirection: "column", gap: 10 }}>
+        <h3>Other services</h3>
+        <Field label="Data Lake Storage Gen2 (dfs)" hint={a.properties?.isHnsEnabled ? "Hierarchical namespace is enabled." : "Enable hierarchical namespace (Data Lake Gen2 upgrade) to use the dfs endpoint."}>
+          <Input readOnly value={a.properties?.isHnsEnabled ? (p.dfs || `${api.blobEndpoint(a.name)}/__dfs__`) : "Not enabled"} /></Field>
+        <Field label="NFS v3 (blob)"><Input readOnly value={a.properties?.isNfsV3Enabled ? "Enabled" : "Disabled"} /></Field>
+        <Field label="SFTP"><Input readOnly value={a.properties?.isSftpEnabled ? "Enabled" : "Disabled"} /></Field>
+      </section>
     </>
   );
 }
@@ -726,8 +753,8 @@ function Networking({ a, reload }) {
           <KV label="Public network access" value={p.publicNetworkAccess === "Disabled" ? "Disabled" : "Enabled"} />
           <KV label="Public network access scope" value={net} />
         </section>
-        <NotSimulatedContainer title="Virtual networks" feature="Virtual network rules for storage accounts" />
-        <NotSimulatedContainer title="Firewall" feature="Address range IP firewall rules for storage accounts" />
+        <StorageVnetRules a={a} reload={reload} />
+        <StorageIpRules a={a} reload={reload} />
         <CapabilityContainer id="azure.storage.networking" title="Resource instances">
           <table className="vy-grid"><thead><tr><th>Resource ID</th><th>Tenant ID</th><th /></tr></thead><tbody>
             {rules.length ? rules.map((r, i) => (
@@ -744,7 +771,7 @@ function Networking({ a, reload }) {
         </CapabilityContainer>
         <NotSimulatedContainer title="Exceptions" feature="Allow Azure services on the trusted services list to access this storage account" />
       </div>}
-      {tab === "private" && <NotSimulatedContainer title="Private endpoint connections" feature="Private endpoints for storage accounts" />}
+      {tab === "private" && <PrivateEndpointConnectionsPanel target={{ id: a.id, name: a.name, type: "Microsoft.Storage/storageAccounts", location: a.location }} />}
       {tab === "advanced" && <div style={{ display: "flex", flexDirection: "column", gap: 16, marginTop: 12 }}>
         <section className="vy-section"><h3>Network routing</h3>
           <KV label="Routing preference" value={p.routingPreference?.routingChoice === "InternetRouting" ? "Internet routing" : "Microsoft network routing"} />
@@ -1164,9 +1191,9 @@ function Cors({ a }) {
           </table>
         </CapabilityContainer>
       )}
-      {tab === "file" && <NotSimulatedContainer title="File service" feature="CORS rules for the File service" note="Azure Files has no core in this repo yet — see Lifecycle/CORS limitations." />}
-      {tab === "queue" && <NotSimulatedContainer title="Queue service" feature="CORS rules for the Queue service" note="core/azure_queue_core.py does not serve Set/Get Queue Service Properties." />}
-      {tab === "table" && <NotSimulatedContainer title="Table service" feature="CORS rules for the Table service" note="core/azure_table_core.py does not serve Set/Get Table Service Properties." />}
+      {tab === "file" && <CapabilityContainer id="azure.storage.fileservice" title="File service"><FileServiceSettings a={a} /><ServiceCors a={a} kind="fileServices" title="File service CORS" /></CapabilityContainer>}
+      {tab === "queue" && <CapabilityContainer id="azure.storage.queueservice" title="Queue service"><ServiceCors a={a} kind="queueServices" title="Queue service CORS" /></CapabilityContainer>}
+      {tab === "table" && <CapabilityContainer id="azure.storage.tableservice" title="Table service"><ServiceCors a={a} kind="tableServices" title="Table service CORS" /></CapabilityContainer>}
       <AddCorsRuleDialog open={add} onClose={() => setAdd(false)} onCreate={(rule) => save([...rules, rule])} />
     </>
   );
@@ -2155,5 +2182,32 @@ function CreateWorkbookBody({ a, onClose, onCreated }) {
         <Button onClick={onClose}>Cancel</Button>
       </DialogActions>
     </DialogBody>
+  );
+}
+
+
+// ── Large file shares (Configuration): one-way, only on Standard LRS/ZRS/GRS/GZRS (core/azure_files_core.validate_account) ──
+function LargeFileShares({ a, reload }) {
+  const notify = useNotify();
+  const on = a.properties?.largeFileSharesState === "Enabled";
+  const premium = a.kind === "FileStorage" || /^premium/i.test(a.sku?.name || "");
+  const enable = async () => {
+    try { await api.updateStorageAccount(a.resourceGroup, a.name, { properties: { largeFileSharesState: "Enabled" } }); notify.success("Large file shares enabled (this cannot be undone).", "Saved"); reload?.(); }
+    catch (e) { notify.error(e, "Enabling large file shares failed"); }
+  };
+  return (
+    <CapabilityContainer id="azure.storage.largefileshares" title="Large file shares">
+      <KV label="Large file shares" value={premium ? "Always on (premium FileStorage)" : on ? "Enabled" : "Disabled"} />
+      {!premium && !on && <Button onClick={enable} aria-label="Enable large file shares">Enabled</Button>}
+      <p className="vy-muted" style={{ fontSize: 12 }}>Raises the maximum share size from 5 TiB to 100 TiB. Cannot be disabled afterwards; requires Standard LRS, ZRS, GRS or GZRS.</p>
+    </CapabilityContainer>
+  );
+}
+
+function AzureAiSearch({ a }) {
+  const containers = useAsync(() => api.listContainers(a.name), [a.name]);
+  return (
+    <AiSearchIntegration source={{ kind: "storage", capId: "azure.storage.azureaisearch", title: `${a.name} | Azure AI Search`, account: a.name,
+      containers: (containers.data || []).map((c) => c.name), connectionString: `DefaultEndpointsProtocol=https;AccountName=${a.name};EndpointSuffix=core.windows.net` }} />
   );
 }

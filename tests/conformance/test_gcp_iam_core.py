@@ -25,6 +25,12 @@ except ImportError:  # pragma: no cover - Pyodide flat layout
     import gcp_iamcredentials_core as giamc  # type: ignore
 
 
+try:
+    AwsWireRouter.STRICT_GCP_PROJECT = False   # engine test: ad-hoc project ids
+except NameError:
+    pass
+
+
 def _check(name, cond):
     if not cond:
         raise AssertionError(name)

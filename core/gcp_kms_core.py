@@ -466,7 +466,7 @@ def validate_rotation(period, next_time) -> dict:
         t = _parse_ts(next_time)
         if not t:
             raise KmsTabError(400, "INVALID_ARGUMENT", "next_rotation_time must be an RFC 3339 timestamp.")
-        out["nextRotationTime"] = _ts(t)
+        out["nextRotationTime"] = str(next_time)   # echoed as given (validated above)
     elif "rotationPeriod" in out:
         out["nextRotationTime"] = _ts(datetime.now(timezone.utc).timestamp() + _dur(out["rotationPeriod"]))
     return out
@@ -927,8 +927,9 @@ def dispatch(store: KeyStore, method: str, path: str,
                     if m not in ("rotationPeriod", "nextRotationTime", "labels", "rotation_period", "next_rotation_time"):
                         raise KmsTabError(400, "INVALID_ARGUMENT", "Field %s can't be updated." % m)
                 if any(m in mask for m in ("rotationPeriod", "nextRotationTime", "rotation_period", "next_rotation_time")):
-                    period = payload.get("rotationPeriod")
-                    if period in (None, "") and "nextRotationTime" not in payload:
+                    _pm = any(m in mask for m in ("rotationPeriod", "rotation_period"))
+                    period = payload.get("rotationPeriod") if _pm else meta.get("rotationPeriod")   # not in the mask: untouched
+                    if _pm and period in (None, "") and "nextRotationTime" not in payload:
                         meta.pop("rotationPeriod", None)
                         meta.pop("nextRotationTime", None)
                     else:

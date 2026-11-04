@@ -172,6 +172,7 @@ def _rule_matches(rule: dict, protocol: str, port: int, source_ip, source_sgs) -
 
 # ── control-plane operations ────────────────────────────────────────────────
 def _default_dhcp_options(m: dict) -> str:
+    m.setdefault("dhcp_options", {})   # a model created before DHCP option sets existed
     existing = next((d["id"] for d in m["dhcp_options"].values() if d.get("default")), None)
     if existing:
         return existing
@@ -2822,7 +2823,10 @@ def _image_xml(img: dict) -> str:
     return ("<item>"
             f"<imageId>{_xml_escape(img['id'])}</imageId><imageType>machine</imageType>"
             f"<name>{_xml_escape(img['name'])}</name><description>{_xml_escape(img.get('description', ''))}</description>"
-            f"<imageOwnerId>{_xml_escape(img['owner_id'])}</imageOwnerId><isPublic>{str(img.get('public', False)).lower()}</isPublic>"
+            f"<imageOwnerId>{_xml_escape(img['owner_id'])}</imageOwnerId>"
+            + (f"<imageOwnerAlias>{_xml_escape(img['owner_id'])}</imageOwnerAlias>" if img["owner_id"] in ("amazon", "aws-marketplace") else "")
+            + (f"<productCodes><item><productCode>{_xml_escape(img['product_code'])}</productCode><type>marketplace</type></item></productCodes>" if img.get("product_code") else "")
+            + f"<isPublic>{str(img.get('public', False)).lower()}</isPublic>"
             f"<imageState>{_xml_escape(img['state'])}</imageState><architecture>{_xml_escape(img['architecture'])}</architecture>"
             f"<platformDetails>{_xml_escape('Windows' if img.get('platform') == 'windows' else 'Linux/UNIX')}</platformDetails>"
             f"<rootDeviceType>{_xml_escape(img['root_device_type'])}</rootDeviceType><rootDeviceName>{_xml_escape(img['root_device_name'])}</rootDeviceName>"

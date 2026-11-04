@@ -20,6 +20,15 @@ except ImportError:  # pragma: no cover - Pyodide flat layout
     from aws_wire_router import AwsWireRouter  # type: ignore
 
 
+try:
+    from core.azure_arm_core import AzureArm as _LaxArm
+    _LaxArm.STRICT_SUBSCRIPTION = False   # engine test: ad-hoc subscription ids
+    from core.aws_wire_router import AwsWireRouter as _LaxR
+    _LaxR.STRICT_GCP_PROJECT = False   # ... and ad-hoc GCP project ids
+except Exception:
+    pass
+
+
 def _check(name, cond):
     if not cond:
         raise AssertionError(name)

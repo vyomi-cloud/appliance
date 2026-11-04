@@ -97,5 +97,15 @@
   "tests": [
    "tests/conformance/test_gcp_kms_core.py"
   ]
- }
+ },
+  "gcp.kms.hsm-protection": {
+    "title": "HSM, External and External via VPC protection levels",
+    "level": {
+      "nano": "not_simulated",
+      "offline": "not_simulated"
+    },
+    "limitations": [
+      "HSM keys are generated and held inside FIPS 140-2 Level 3 hardware modules and External keys live in a third-party key manager (EKM); Vyomi's key material always lives in its own software store, so offering these levels would misrepresent where the key is held."
+    ]
+  }
 }

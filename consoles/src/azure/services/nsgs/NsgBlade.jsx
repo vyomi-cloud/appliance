@@ -5,6 +5,7 @@
  * interfaces / Subnets association + Associate picker are backed by real ARM calls; the
  * remaining menu items are honest CapabilityContainer gaps (core/capabilities/azure/nsgs.json
  * is the single source of truth for which). */
+import { ResourceAlerts, ResourceLogs } from "../../kit/ResourceMonitoring.jsx";
 import { useEffect, useState } from "react";
 import {
   Button, Checkbox, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, Field, Input, Link,
@@ -23,11 +24,13 @@ import { Essentials, ErrorBar, Glyph, KV, Loading, NotSimulated, NotSimulatedCon
 import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
+import FlowLogsPanel from "./FlowLogs.jsx";
 import EffectiveSecurityRules from "./EffectiveSecurityRules.jsx";
 import NetworkWatcherTools from "./NetworkWatcher.jsx";
 import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
 import SharedActivityLog from "../../kit/ActivityLog.jsx";
 import { ClassicAdminsPanel, DenyAssignmentsPanel, MyAccess } from "../../kit/IamExtras.jsx";
+import SharedSupportPanel from "../../kit/SupportPanel.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -65,6 +68,7 @@ export default function NsgBlade({ params }) {
     const P = {
       overview: () => <Overview a={a} reload={reload} self={self} />,
       iam: () => <AccessControlIam a={a} />,
+      support: () => <SharedSupportPanel resourceId={a.id} name={a.name} service="nsgs" />,
       tags: () => <Tags a={a} reload={reload} />,
       inbound: () => <RuleList key="inbound" rg={rg} name={name} direction="Inbound" />,
       outbound: () => <RuleList key="outbound" rg={rg} name={name} direction="Outbound" />,
@@ -78,9 +82,9 @@ export default function NsgBlade({ params }) {
       diagnose: () => <Diagnose />,
       tasks: () => <Tasks a={a} reload={reload} />,
       effectivesecurityrules: () => <EffectiveSecurityRules a={a} />,
-      alerts: () => <NotSimulatedContainer title={`${name} | Alerts`} feature="Alerts" />,
-      logs: () => <NotSimulatedContainer title={`${name} | Logs`} feature="Logs" />,
-      flowlogs: () => <NotSimulatedContainer title={`${name} | NSG flow logs`} feature="NSG flow logs" />,
+      alerts: () => <ResourceAlerts id={a.id} name={a.name} />,
+      logs: () => <ResourceLogs id={a.id} name={a.name} />,
+      flowlogs: () => <FlowLogsPanel a={a} />,
     }[panel];
     body = P ? P() : (
       <CapabilityContainer id={GAP_CAP[panel] || "azure.nsgs.tools"} title={`${name} | ${LABEL[panel] || panel}`} />

@@ -174,3 +174,11 @@ export const createDiscoverer = (sourceArn, description) => SC("POST", "/v1/disc
 export const deleteDiscoverer = (id) => SC("DELETE", `/v1/discoverers/id/${enc(id)}`);
 export const startDiscoverer = (id) => SC("POST", `/v1/discoverers/id/${enc(id)}/start`);
 export const stopDiscoverer = (id) => SC("POST", `/v1/discoverers/id/${enc(id)}/stop`);
+
+// ── partner event sources (sweep AWS-13) ─────────────────────────────────────
+export const listEventSources = (namePrefix) => E("ListEventSources", namePrefix ? { NamePrefix: namePrefix } : {}).then((r) => r.EventSources || []);
+export const createPartnerEventSource = (name, account) => E("CreatePartnerEventSource", { Name: name, Account: account });
+export const deletePartnerEventSource = (name, account) => E("DeletePartnerEventSource", { Name: name, Account: account });
+export const activateEventSource = (name) => E("ActivateEventSource", { Name: name });
+export const deactivateEventSource = (name) => E("DeactivateEventSource", { Name: name });
+export const putPartnerEvents = (entries) => E("PutPartnerEvents", { Entries: entries });

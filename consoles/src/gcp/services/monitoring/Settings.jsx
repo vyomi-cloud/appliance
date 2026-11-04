@@ -1,7 +1,6 @@
 /* Settings — Notification channels (real CRUD). Metric Scope is real cross-project
  * aggregation (Metrics Scopes API v1; see gcp.monitoring.settings.metric-scope). Log/Trace
- * Scopes stay an honest gap: they'd extend Log Explorer / Trace Explorer, both separate,
- * unbuilt products in this console. */
+ * Scopes are real CRUD (core/gcp_trace_core). */
 import { useState } from "react";
 import { Button, Dialog, DialogActions, DialogContent, DialogTitle, FormControl, IconButton, InputLabel, MenuItem, Menu, Select, Stack, Tab, Tabs, TextField, Typography } from "@mui/material";
 import AddIcon from "@mui/icons-material/esm/Add.js";
@@ -14,6 +13,59 @@ import { PageHeader } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { useProject } from "../../project.js";
 import * as api from "./api.js";
+
+function ScopesTab({ kind }) {
+  const project = useProject();
+  const notify = useNotify();
+  const [open, setOpen] = useState(false);
+  const [id, setId] = useState("");
+  const [names, setNames] = useState("");
+  const [del, setDel] = useState(null);
+  const label = kind === "trace" ? "trace scope" : "log scope";
+  const { data, loading, error, reload } = useAsync(() => api.listScopes(kind), [project, kind]);
+  const hint = kind === "trace" ? "projects/my-project, projects/other-project" : `projects/${project}/locations/global/buckets/_Default/views/_AllLogs`;
+  return (
+    <>
+      <Stack direction="row" justifyContent="flex-end" sx={{ mb: 1 }}><Button startIcon={<AddIcon />} onClick={() => setOpen(true)}>Create {label}</Button></Stack>
+      <ResourceTable
+        resourceName={`${label}s`}
+        items={data || []}
+        loading={loading}
+        error={error}
+        onRetry={reload}
+        rowKey={(s) => s.name}
+        columns={[
+          { id: "name", header: "Name", cell: (s) => s.name.split("/").pop() },
+          { id: "res", header: kind === "trace" ? "Projects" : "Log views", cell: (s) => (s.resourceNames || []).length },
+          { id: "desc", header: "Description", cell: (s) => s.description || "" },
+          { id: "actions", header: "", cell: (s) => s.name.endsWith("/_Default") ? null : <Button size="small" onClick={() => setDel(s)}>Delete</Button> },
+        ]}
+        empty={<Typography variant="body2" color="text.secondary">No scopes.</Typography>}
+      />
+      <Dialog open={open} onClose={() => setOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Create {label}</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <TextField label="Scope ID" value={id} onChange={(e) => setId(e.target.value)} inputProps={{ "aria-label": "Scope ID" }} />
+            <TextField label="Resource names (comma separated)" placeholder={hint} value={names} onChange={(e) => setNames(e.target.value)} inputProps={{ "aria-label": "Resource names" }} />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpen(false)}>Cancel</Button>
+          <Button variant="contained" disabled={!id.trim() || !names.trim()} onClick={async () => {
+            await api.createScope(kind, id.trim(), { resourceNames: names.split(",").map((x) => x.trim()).filter(Boolean) });
+            notify.success(`Created ${label}`);
+            setId(""); setNames(""); setOpen(false); reload();
+          }}>Create</Button>
+        </DialogActions>
+      </Dialog>
+      <DeleteDialog open={!!del} onClose={() => setDel(null)} title={`Delete ${label}?`} confirmText={del?.name.split("/").pop() || ""}
+        onConfirm={async () => { await api.deleteScope(kind, del.name.split("/").pop()); notify.success(`Deleted ${label}`); setDel(null); reload(); }}>
+        <Typography variant="body2">This scope will be permanently deleted.</Typography>
+      </DeleteDialog>
+    </>
+  );
+}
 
 const TABS = ["channels", "logscopes", "metricscope", "tracescopes"];
 
@@ -164,13 +216,13 @@ export default function Settings({ query }) {
         <Tab value="tracescopes" label="Trace Scopes" />
       </Tabs>
       {tab === "channels" && <ChannelsTab />}
-      {tab === "logscopes" && <CapabilityContainer id="gcp.monitoring.settings.log-scopes" title="Log scopes" />}
+      {tab === "logscopes" && <CapabilityContainer id="gcp.monitoring.settings.log-scopes" title="Log scopes"><ScopesTab kind="log" /></CapabilityContainer>}
       {tab === "metricscope" && (
         <CapabilityContainer id="gcp.monitoring.settings.metric-scope" title="Metric scope">
           <MetricScopeTab />
         </CapabilityContainer>
       )}
-      {tab === "tracescopes" && <CapabilityContainer id="gcp.monitoring.settings.trace-scopes" title="Trace scopes" />}
+      {tab === "tracescopes" && <CapabilityContainer id="gcp.monitoring.settings.trace-scopes" title="Trace scopes"><ScopesTab kind="trace" /></CapabilityContainer>}
     </>
   );
 }

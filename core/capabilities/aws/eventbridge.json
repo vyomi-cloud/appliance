@@ -272,5 +272,18 @@
     "tests": [
       "tests/conformance/test_eventbridge_schemas_core.py"
     ]
+  },
+  "eventbridge.partner-event-sources": {
+    "title": "Partner event sources: partner create/delete, customer activate, bus association, PutPartnerEvents delivery",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "Vyomi simulates one account, so the partner and the customer are the same account (the console's Vyomi SaaS partners play the partner role); there is no cross-account partner handshake and pending sources expire only when listed, with no background reaper. Real third-party SaaS partners (Datadog, Zendesk, ...) cannot push events into the simulator."
+    ],
+    "tests": [
+      "tests/conformance/test_eventbridge_partner_core.py"
+    ]
   }
 }

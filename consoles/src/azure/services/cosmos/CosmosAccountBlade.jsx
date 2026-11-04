@@ -3,6 +3,7 @@
  * Locks, Access control (IAM) and Export template are backed by native ARM / the native Cosmos
  * DB REST (SQL/Core API) data plane; everything else in the menu is an honest NotSimulated panel
  * (the spec captures them as blade menu items with no further content — "title only"). */
+import { CosmosNetworking } from "../../kit/NetworkRules.jsx";
 import { ManagedIdentityPage } from "../../kit/UserAssignedIdentities.jsx";
 import { useEffect, useState } from "react";
 import {
@@ -27,7 +28,11 @@ import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
 import SharedActivityLog from "../../kit/ActivityLog.jsx";
 import { ClassicAdminsPanel, DenyAssignmentsPanel, MyAccess } from "../../kit/IamExtras.jsx";
 import SharedResourceHealth from "../../kit/ResourceHealth.jsx";
+import { ResourceAlerts, ResourceMetrics, ResourceLogs, ResourceInsightsPanel, ResourceWorkbooks, ResourceNotifications } from "../../kit/ResourceMonitoring.jsx";
 import SharedDiagnosticSettings from "../../kit/DiagnosticSettings.jsx";
+import { ResourceRecommendations } from "../defender/Pages.jsx";
+import AiSearchIntegration from "../../kit/AiSearchIntegration.jsx";
+import ResourceCost from "../../kit/ResourceCost.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -74,7 +79,6 @@ const NS_NOTES = {
   quickstart: "The Quick start code samples blade",
   notifications: "Notifications",
   features: "The Features overview",
-  networking: "Private endpoint / VNet networking configuration (see the create wizard's Connectivity method, and Access control for IP-based restrictions)",
   datamigration: "The Data Migration tool integration",
   cors: "CORS rules",
   dedicatedgateway: "Dedicated Gateway (integrated cache) provisioning",
@@ -113,17 +117,28 @@ export default function CosmosAccountBlade({ params }) {
       overview: () => <Overview a={a} reload={reload} self={self} />,
       activitylog: () => <SharedActivityLog scope={a.id} name={a.name} />,
       iam: () => <Iam a={a} />,
+      defender: () => <ResourceRecommendations resourceId={a.id} />,
       tags: () => <Tags a={a} reload={reload} />,
       identity: () => <ManagedIdentityPage resourceId={a.id} apiVersion="2024-05-15" name={a.name} onChanged={reload} />,
       dataexplorer: () => <DataExplorer />,
       replicate: () => <Replicate a={a} reload={reload} />,
       consistency: () => <Consistency a={a} reload={reload} />,
+      networking: () => <CosmosNetworking a={a} reload={reload} />,
       backup: () => <Backup a={a} reload={reload} />,
       keys: () => <Keys a={a} />,
       locks: () => <Locks a={a} />,
       exporttemplate: () => <SharedExportTemplate id={a.id} name={a.name} resourceGroup={a.resourceGroup} />,
       resourcehealth: () => <SharedResourceHealth id={a.id} name={a.name} />,
       diagnosticsettings: () => <SharedDiagnosticSettings id={a.id} name={a.name} />,
+      notifications: () => <ResourceNotifications id={a.id} name={a.name} />,
+      alerts: () => <ResourceAlerts id={a.id} name={a.name} />,
+      metrics: () => <ResourceMetrics id={a.id} name={a.name} />,
+      logs: () => <ResourceLogs id={a.id} name={a.name} />,
+      insights: () => <ResourceInsightsPanel id={a.id} name={a.name} />,
+      workbooks: () => <ResourceWorkbooks id={a.id} name={a.name} />,
+      costmgmt: () => <ResourceCost resource={a.name} capId="azure.cosmos.costmgmt" title={`${a.name} | Cost Management`} />,
+      addsearch: () => <AiSearchIntegration source={{ kind: "cosmos", capId: "azure.cosmos.addsearch", title: `${a.name} | Add Azure AI Search`, account: a.name, containerName: "container1",
+        connectionString: `AccountEndpoint=${api.accountEndpoint(a.name)};Database=db1` }} />,
     }[panel];
     body = P ? P() : (
       <>
@@ -189,7 +204,7 @@ function Overview({ a, reload, self }) {
           Use <Link href={`${self}/dataexplorer`}>Data Explorer</Link> to create databases and containers and browse items, or copy a key from <Link href={`${self}/keys`}>Keys</Link> to connect from your application.
         </div>
       )}
-      {tab === "monitoring" && <NotSimulatedContainer feature="Account monitoring (request units, storage and latency charts)" />}
+      {tab === "monitoring" && <ResourceMetrics id={a.id} name={a.name} title="Monitoring" />}
       {tab === "properties" && (
         <div className="vy-props" style={{ marginTop: 12 }}>
           <KV label="Resource ID" value={a.id} />

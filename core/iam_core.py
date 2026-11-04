@@ -1238,6 +1238,8 @@ def _simulate_principal_policy(store, params):
     actions = _members(params, "ActionNames")
     resources = _members(params, "ResourceArns") or ["*"]
     identity, docs, boundary = _resolve_policy_docs(store, source)
+    if identity["type"] == "unknown":
+        raise IamError("NoSuchEntity", f"Entity {source} not found.", 404)
     docs = docs + [_parse_policy_input(d) for d in _members(params, "PolicyInputList")]
     mfa_present = identity["type"] == "user" and _has_mfa(store, identity["name"])
     ctx = _base_context(store, identity, mfa_present)

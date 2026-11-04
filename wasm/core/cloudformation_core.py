@@ -92,6 +92,8 @@ class CloudFormationStore:
         self.generated_templates: dict[str, dict] = {}
         self.hooks: dict[str, dict] = {}           # TypeName -> hook record (registry Type=HOOK)
         self.hook_invocations: list[dict] = []     # most-recent-first, across every targeted stack
+        self.stack_set_ops: dict[str, dict] = {}   # StackSet operations (core/cloudformation_stacksets_core)
+        self.registry: dict = {"activated": {}, "config": {}, "publisher": None, "published": {}}   # core/cloudformation_registry_core
         self.account_id = account_id
 
     def persist(self) -> None:
@@ -432,6 +434,10 @@ def _parse_template(raw: str) -> dict:
             raise CfnError("ValidationError", f"Template format error: unable to parse as JSON or YAML ({e})", 400)
     if not isinstance(doc, dict):
         raise CfnError("ValidationError", "Template format error: template body must be a JSON/YAML object.", 400)
+    cfn_store = _RUNTIME.get("cfn")
+    if cfn_store is not None:   # activated registry modules expand into their real resources
+        from core import cloudformation_registry_core as _reg
+        doc = _reg.expand_modules(doc, cfn_store)
     return doc
 
 
@@ -1981,7 +1987,7 @@ def _list_stack_sets(store, params, stores):
 def _delete_stack_set(store, params, stores):
     name = _p(params, "StackSetName")
     if store.stack_set_instances.get(name):
-        raise CfnError("OperationInProgressException", f"StackSet {name} still has stack instances", 400)
+        raise CfnError("StackSetNotEmptyException", f"StackSet {name} still has stack instances; delete them first", 400)
     if store.stack_sets.pop(name, None) is None:
         raise CfnError("StackSetNotFoundException", f"StackSet {name} not found", 400)
     store.persist()
@@ -2584,6 +2590,16 @@ _ACTIONS = {
 }
 
 
+def _install_stacksets():
+    from core import cloudformation_stacksets_core as _ss
+    _ss.install(_ACTIONS)
+    from core import cloudformation_registry_core as _rg
+    _rg.install(_ACTIONS)
+
+
+_install_stacksets()
+
+
 def dispatch(store: CloudFormationStore, params: dict | None = None,
              s3_store=None, ddb_store=None, iam_store=None, msg_store=None, logs_store=None, cw_store=None) -> CfnResponse:
     params = params or {}
@@ -2595,6 +2611,7 @@ def dispatch(store: CloudFormationStore, params: dict | None = None,
         return _error("InvalidAction", f"The action {action} is not implemented.", 400)
     stores = {"s3": s3_store, "ddb": ddb_store, "iam": iam_store, "msg": msg_store, "logs": logs_store, "cw": cw_store}
     _RUNTIME["msg"] = msg_store
+    _RUNTIME["cfn"] = store
     try:
         return fn(store, params, stores)
     except CfnError as e:

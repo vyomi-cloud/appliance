@@ -8,17 +8,14 @@
  * (ObservabilityAgents.jsx, Issues.jsx, HealthModels.jsx, ServiceHealth.jsx, Pipelines.jsx,
  * ResourceInsights.jsx) once each got a real backend. Data Collection Endpoints, Private Link
  * Scopes and Diagnostic settings moved out earlier the same way. */
-import { useState } from "react";
-import { Tab, TabList } from "@fluentui/react-components";
 import MonitorShell from "./MonitorShell.jsx";
+import SupportPanel from "../../kit/SupportPanel.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 
 /** [route id, exact page title (after "Monitor | "), capability id]. */
 const GAPS = [
   ["insights-azurelocal", "Azure Local", "azure.monitor.azure_local_insights"],
-  ["managedgrafana", "Azure Managed Grafana", "azure.monitor.managed_grafana"],
   ["scommanagedinstance", "Azure Monitor SCOM managed instance", "azure.monitor.scom_managed_instance"],
-  ["support", "New support request", "azure.monitor.new_support_request"],
 ];
 
 function GapPage({ active, title, capId }) {
@@ -29,32 +26,16 @@ function GapPage({ active, title, capId }) {
   );
 }
 
-export const gapRoutes = () => GAPS.map(([id, title, capId]) => ({
+function SupportPage() {
+  return (
+    <MonitorShell active="support" pageTitle="New support request">
+      <SupportPanel service="monitor" title="New support request" />
+    </MonitorShell>
+  );
+}
+
+export const gapRoutes = () => [{ pattern: "/monitor/support", component: SupportPage,
+  crumbs: () => [{ text: "New support request", href: "#/monitor/support" }] }].concat(GAPS.map(([id, title, capId]) => ({
   pattern: `/monitor/${id}`, component: () => <GapPage active={id} title={title} capId={capId} />,
   crumbs: () => [{ text: title, href: `#/monitor/${id}` }],
-}));
-
-export function ManagedPrometheus() {
-  return (
-    <MonitorShell active="managedprometheus">
-      <CapabilityContainer id="azure.monitor.managed_prometheus" title="Managed Prometheus" />
-    </MonitorShell>
-  );
-}
-
-export function DashboardsWithGrafana() {
-  const [tab, setTab] = useState("all");
-  return (
-    <MonitorShell active="grafanadashboards">
-      <TabList selectedValue={tab} onTabSelect={(_, d) => setTab(d.value)} aria-label="Dashboards with Grafana">
-        <Tab value="all">All dashboards</Tab>
-        <Tab value="saved">Saved dashboards</Tab>
-        <Tab value="favorite">Favorite dashboards</Tab>
-      </TabList>
-      <div style={{ marginTop: 12 }}>
-        <CapabilityContainer id="azure.monitor.grafana_dashboards" title="Dashboards with Grafana" />
-      </div>
-    </MonitorShell>
-  );
-}
-
+})));

@@ -634,6 +634,14 @@ def _site_subresource(state, rec, rest, method, payload):
     if (r0 in _WEB_ONLY and fn) or (r0 in _FN_ONLY and not fn):
         return _err(404, "ResourceTypeNotSupported",
                     f"'{rest[0]}' is not supported on a {_label(rec)} (kind '{rec.get('kind')}').")
+    if r0 == "config" and len(rest) >= 2 and rest[1].lower() == "publishingcredentials" or r0 in (
+            "sourcecontrols", "deployments", "sync", "newpassword", "basicpublishingcredentialspolicies"):
+        try:
+            from core import azure_webdeploy_core as _wd
+        except ImportError:
+            import azure_webdeploy_core as _wd          # type: ignore  (Nano: flat module path)
+        r = _wd.dispatch(state, rec, rest, method, payload)
+        return _ok(r["body"], r["status"]) if r["status"] < 300 else _err(r["status"], r["body"]["error"]["code"], r["body"]["error"]["message"])
     if r0 == "config":
         return _config_ops(rec, rest[1:], method, payload)
     if r0 == "locks":
