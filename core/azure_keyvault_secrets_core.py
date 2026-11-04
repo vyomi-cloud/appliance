@@ -149,7 +149,33 @@ def dispatch(store: InMemoryKvStore, method: str, path: str,
             return _json(200, {"value": items, "nextLink": None})
         return _err(405, "MethodNotAllowed", f"Unsupported method {method} on /secrets")
 
+    if len(segs) == 2 and segs[1] == "restore" and method == "POST":
+        try:
+            payload = json.loads(body.decode("utf-8")) if body else {}
+        except Exception:
+            return _err(400, "BadParameter", "Request body is not valid JSON.")
+        from core import azure_keyvault_keys_core as _k
+        doc, bad = _k.backup_unpack("secret", payload.get("value") or "")
+        if bad:
+            return _err(400, "BadParameter", bad)
+        existing = store.get_secret(doc["name"])
+        if existing and not existing.get("deleted") and existing.get("versions"):
+            return _err(409, "Conflict", f"A secret with name {doc['name']} already exists in this key vault; delete (and purge) it before restoring a backup.")
+        rec = doc["record"]
+        rec["deleted"], rec["deletedDate"] = False, None
+        store.put_secret(doc["name"], rec)
+        store.persist()
+        store.mirror_put(doc["name"], rec)
+        return _json(200, _version_bundle(doc["name"], rec["current"], rec["versions"][rec["current"]]))
+
     name = segs[1]
+
+    if len(segs) == 3 and segs[2] == "backup" and method == "POST":
+        rec = store.get_secret(name)
+        if not rec or rec.get("deleted") or not rec.get("versions"):
+            return _err(404, "SecretNotFound", f"A secret with (name/id) {name} was not found in this key vault.")
+        from core import azure_keyvault_keys_core as _k
+        return _json(200, {"value": _k._backup_pack("secret", {"name": name, "record": rec})})
 
     # ---- /secrets/{name}  ----
     if len(segs) == 2:
