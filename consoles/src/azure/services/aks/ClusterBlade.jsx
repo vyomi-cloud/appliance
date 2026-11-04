@@ -32,6 +32,7 @@ import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
 import SharedActivityLog from "../../kit/ActivityLog.jsx";
 import SharedDiagnosticSettings from "../../kit/DiagnosticSettings.jsx";
 import SharedAdvisor from "../../kit/Advisor.jsx";
+import SharedSupportPanel from "../../kit/SupportPanel.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -97,6 +98,7 @@ export default function ClusterBlade({ params, query }) {
     const P = {
       overview: () => <Overview a={a} reload={reload} self={self} />,
       iam: () => <AccessControlIam a={a} />,
+      supporttroubleshooting: () => <SharedSupportPanel resourceId={a.id} name={a.name} service="aks" />,
       tags: () => <Tags a={a} reload={reload} />,
       namespaces: () => <Namespaces a={a} />,
       workloads: () => <Workloads a={a} />,

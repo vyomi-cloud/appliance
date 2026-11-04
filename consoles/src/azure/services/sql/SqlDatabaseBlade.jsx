@@ -28,6 +28,8 @@ import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
 import SharedActivityLog from "../../kit/ActivityLog.jsx";
 import SharedResourceHealth from "../../kit/ResourceHealth.jsx";
 import SharedDiagnosticSettings from "../../kit/DiagnosticSettings.jsx";
+import SharedSupportPanel from "../../kit/SupportPanel.jsx";
+import { ResourceRecommendations } from "../defender/Pages.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -106,6 +108,8 @@ export default function SqlDatabaseBlade({ params }) {
       autotuning: () => <AutomaticTuning a={a} reload={reload} />,
       perfrecommendations: () => <PerformanceRecommendations a={a} />,
       exporttemplate: () => <SharedExportTemplate id={a.id} name={a.name} resourceGroup={a.resourceGroup} />,
+      defender: () => <ResourceRecommendations resourceId={a.id} />,
+      support: () => <SharedSupportPanel resourceId={a.id} name={a.name} service="sql" />,
       resourcehealth: () => <SharedResourceHealth id={a.id} name={a.name} />,
       diagnosticsettings: () => <SharedDiagnosticSettings id={a.id} name={a.name} />,
     }[panel];

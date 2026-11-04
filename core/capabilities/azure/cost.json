@@ -214,15 +214,5 @@
     "limitations": [
       "Capturing or storing real payment instruments is out of scope for a simulator."
     ]
-  },
-  "azure.cost.new_support_request": {
-    "title": "New support request (file a Microsoft support ticket)",
-    "level": {
-      "nano": "not_simulated",
-      "offline": "not_simulated"
-    },
-    "limitations": [
-      "Vyomi does not file real Microsoft support tickets."
-    ]
   }
 }

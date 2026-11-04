@@ -869,7 +869,7 @@ async def _handle_arm_inner(request: Request, rest: str) -> JSONResponse:
             or (len(low0) >= 3 and low0[0] == "providers"
                 and ((low0[1] == "microsoft.subscription" and low0[2] == "rename")
                      or (low0[1] == "microsoft.resources" and low0[2] == "tags")
-                     or low0[1] in ("microsoft.security", "microsoft.advisor", "microsoft.resourcehealth", "microsoft.resourcegraph")   # Defender / Advisor / Resource health cores
+                     or low0[1] in ("microsoft.security", "microsoft.advisor", "microsoft.resourcehealth", "microsoft.resourcegraph", "microsoft.support")   # Support / Defender / Advisor / Resource health cores
                      or (low0[1] == "microsoft.authorization"
                          and low0[2] in ("locks", "roleassignments", "roledefinitions", "checkaccess", "classicadministrators"))))):
         return await _handle_core_arm(request, method, rest, base)

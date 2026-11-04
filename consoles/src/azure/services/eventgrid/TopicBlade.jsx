@@ -26,6 +26,7 @@ import * as api from "./api.js";
 import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
 import SharedActivityLog from "../../kit/ActivityLog.jsx";
 import { ClassicAdminsPanel, DenyAssignmentsPanel, MyAccess } from "../../kit/IamExtras.jsx";
+import SharedSupportPanel from "../../kit/SupportPanel.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -55,6 +56,7 @@ export default function TopicBlade({ params, query }) {
     const t = topic.data, reload = topic.reload;
     const P = {
       overview: () => <Overview t={t} reload={reload} self={self} />,
+      support: () => <SharedSupportPanel resourceId={t.id} name={t.name} service="eventgrid" />,
       tags: () => <Tags t={t} reload={reload} />,
       eventsubscriptions: () => <EventSubscriptions rg={rg} topic={name} self={self} />,
       networking: () => <Networking t={t} reload={reload} />,
@@ -67,7 +69,6 @@ export default function TopicBlade({ params, query }) {
       locks: () => <Locks rg={rg} topic={name} />,
       diagnose: () => <Diagnose t={t} rg={rg} name={name} />,
       tasks: () => <CapabilityContainer id="azure.eventgrid.topic.tools" title={`${name} | Tasks`} />,
-      support: () => <CapabilityContainer id="azure.eventgrid.topic.tools" title={`${name} | Support + Troubleshooting`} />,
       alerts: () => <Alerts t={t} />,
       metrics: () => <Metrics t={t} />,
       diagnosticsettings: () => <DiagnosticSettings t={t} />,

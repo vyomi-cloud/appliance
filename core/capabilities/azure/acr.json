@@ -201,13 +201,6 @@
   ],
   "tests": ["tests/conformance/test_azure_acr_core.py"]
  },
- "azure.acr.support_troubleshooting": {
-  "title": "Support + Troubleshooting",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": [
-   "Opening a support request routes to Microsoft's own support ticketing system — a genuine third party Vyomi has no backing support organization to open a ticket against."
-  ]
- },
  "azure.acr.import": {
   "title": "Import image (copy between repositories/registries)",
   "level": { "nano": "limited", "offline": "limited" },

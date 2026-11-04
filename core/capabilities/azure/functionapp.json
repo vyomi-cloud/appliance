@@ -379,14 +379,6 @@
   ],
   "api": []
  },
- "azure.functionapp.newsupportrequest": {
-  "title": "New support request",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": [
-   "Opening a support request requires real Microsoft support staff to receive and work an actual ticket; there is no local equivalent to a real human support engineer."
-  ],
-  "api": []
- },
  "azure.functionapp.bindingseditor": {
   "title": "Function Integration (bindings editor)",
   "level": { "nano": "limited", "offline": "limited" },

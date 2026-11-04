@@ -30,6 +30,7 @@ import { ClassicAdminsPanel, DenyAssignmentsPanel, MyAccess } from "../../kit/Ia
 import SharedResourceVisualizer from "../../kit/ResourceVisualizer.jsx";
 import SharedResourceHealth from "../../kit/ResourceHealth.jsx";
 import SharedAdvisor from "../../kit/Advisor.jsx";
+import SharedSupportPanel from "../../kit/SupportPanel.jsx";
 
 /** Resource menu: [id, label] | {group, items}. Matches the real Web App blade's nav exactly
  * (labels double as the "{name} | Label" page titles the captured spec records). */
@@ -111,6 +112,7 @@ export default function WebAppBlade({ params, query }) {
       logstream: () => <LogStream name={name} />,
       diagnosticsettings: () => <DiagnosticSettings a={a} rg={rg} name={name} />,
       exporttemplate: () => <SharedExportTemplate id={a.id} name={a.name} resourceGroup={a.resourceGroup} />,
+      supportrequest: () => <SharedSupportPanel resourceId={a.id} name={a.name} service="appservices" />,
       resourcehealth: () => <SharedResourceHealth id={a.id} name={a.name} />,
       advisor: () => <SharedAdvisor scope={a.id} name={a.name} />,
       visualizer: () => <SharedResourceVisualizer resourceGroup={a.resourceGroup} focus={a.name} />,

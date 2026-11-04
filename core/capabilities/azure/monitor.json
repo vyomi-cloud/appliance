@@ -261,10 +261,5 @@
     "api": ["PrivateLinkScopes.CreateOrUpdate", "PrivateLinkScopes.List", "PrivateLinkScopes.Delete",
             "PrivateLinkScopes.ScopedResources.CreateOrUpdate", "PrivateLinkScopes.ScopedResources.List", "PrivateLinkScopes.ScopedResources.Delete"],
     "tests": ["tests/conformance/test_azure_monitor_core.py", "tests/conformance/test_azure_arm_core.py"]
-  },
-  "azure.monitor.new_support_request": {
-    "title": "New support request (file a Microsoft support ticket)",
-    "level": { "nano": "not_simulated", "offline": "not_simulated" },
-    "limitations": ["Vyomi does not file real Microsoft support tickets."]
   }
 }

@@ -42,6 +42,7 @@ import { ResourceRecommendations } from "../defender/Pages.jsx";
 import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
 import SharedActivityLog from "../../kit/ActivityLog.jsx";
 import { ClassicAdminsPanel, DenyAssignmentsPanel, MyAccess } from "../../kit/IamExtras.jsx";
+import SharedSupportPanel from "../../kit/SupportPanel.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -103,6 +104,7 @@ export default function ApimBlade({ params, query }) {
       defenderforcloud: () => <ResourceRecommendations resourceId={a.id} />,
       activitylog: () => <SharedActivityLog scope={a.id} name={a.name} />,
       iam: () => <AccessControlIam a={a} />,
+      support: () => <SharedSupportPanel resourceId={a.id} name={a.name} service="apim" />,
       tags: () => <Tags a={a} reload={reload} />,
       apis: () => <Apis rg={rg} svc={name} self={self} />,
       products: () => <Products rg={rg} svc={name} />,

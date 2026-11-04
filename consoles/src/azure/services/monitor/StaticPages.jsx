@@ -11,6 +11,7 @@
 import { useState } from "react";
 import { Tab, TabList } from "@fluentui/react-components";
 import MonitorShell from "./MonitorShell.jsx";
+import SupportPanel from "../../kit/SupportPanel.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 
 /** [route id, exact page title (after "Monitor | "), capability id]. */
@@ -18,7 +19,6 @@ const GAPS = [
   ["insights-azurelocal", "Azure Local", "azure.monitor.azure_local_insights"],
   ["managedgrafana", "Azure Managed Grafana", "azure.monitor.managed_grafana"],
   ["scommanagedinstance", "Azure Monitor SCOM managed instance", "azure.monitor.scom_managed_instance"],
-  ["support", "New support request", "azure.monitor.new_support_request"],
 ];
 
 function GapPage({ active, title, capId }) {
@@ -29,10 +29,19 @@ function GapPage({ active, title, capId }) {
   );
 }
 
-export const gapRoutes = () => GAPS.map(([id, title, capId]) => ({
+function SupportPage() {
+  return (
+    <MonitorShell active="support" pageTitle="New support request">
+      <SupportPanel service="monitor" title="New support request" />
+    </MonitorShell>
+  );
+}
+
+export const gapRoutes = () => [{ pattern: "/monitor/support", component: SupportPage,
+  crumbs: () => [{ text: "New support request", href: "#/monitor/support" }] }].concat(GAPS.map(([id, title, capId]) => ({
   pattern: `/monitor/${id}`, component: () => <GapPage active={id} title={title} capId={capId} />,
   crumbs: () => [{ text: title, href: `#/monitor/${id}` }],
-}));
+})));
 
 export function ManagedPrometheus() {
   return (

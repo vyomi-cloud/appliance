@@ -29,6 +29,8 @@ import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
 import SharedActivityLog from "../../kit/ActivityLog.jsx";
 import { ClassicAdminsPanel, DenyAssignmentsPanel, MyAccess } from "../../kit/IamExtras.jsx";
 import SharedAdvisor from "../../kit/Advisor.jsx";
+import SharedSupportPanel from "../../kit/SupportPanel.jsx";
+import { ResourceRecommendations } from "../defender/Pages.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -57,7 +59,7 @@ export const MENU = [
 const LABEL = Object.fromEntries(MENU.flatMap((m) => (m.group ? m.items : [m])).map((i) => [i.id, i.label]));
 const GAP_CAP = {
   bastion: "azure.vnets.network_appliances", ddosprotection: "azure.vnets.network_appliances", firewall: "azure.vnets.network_appliances",
-  defender: "azure.vnets.network_appliances", networkmanager: "azure.vnets.network_appliances", privateendpoints: "azure.vnets.network_appliances",
+  networkmanager: "azure.vnets.network_appliances", privateendpoints: "azure.vnets.network_appliances",
   connecteddevices: "azure.vnets.connected_devices",
 };
 
@@ -76,6 +78,7 @@ export default function VnetBlade({ params }) {
     const P = {
       overview: () => <Overview a={a} reload={reload} self={self} />,
       iam: () => <AccessControlIam a={a} />,
+      defender: () => <ResourceRecommendations resourceId={a.id} />,
       tags: () => <Tags a={a} reload={reload} />,
       addressspace: () => <AddressSpace a={a} reload={reload} />,
       dnsservers: () => <DnsServers a={a} reload={reload} />,
@@ -808,7 +811,6 @@ function ResourceVisualizer({ a }) {
 // Resource health) plus one honest, narrowly-scoped gap: filing an actual Microsoft support
 // ticket needs Microsoft's own support ticketing service (azure.vnets.tools). ─────────────
 function Support({ self }) {
-  const [gap, setGap] = useState(false);
   return (
     <>
       <div className="vy-panel-title">Support + Troubleshooting</div>
@@ -822,20 +824,8 @@ function Support({ self }) {
           <h3>Resource health</h3>
           <p style={{ fontSize: 13 }}>This virtual network is <b>Available</b> — Vyomi has no fault-injection model, so every simulated resource always reports healthy.</p>
         </section>
-        <section className="vy-section">
-          <h3>New support request</h3>
-          <Button onClick={() => setGap(true)}>New support request</Button>
-        </section>
+        <SharedSupportPanel service="vnets" title="New support request" />
       </div>
-      <Dialog open={gap} onOpenChange={(_, d) => !d.open && setGap(false)}>
-        <DialogSurface aria-label="New support request">
-          <DialogBody>
-            <DialogTitle>New support request</DialogTitle>
-            <DialogContent><NotSimulatedContainer feature="Filing a Microsoft support ticket" note="Creating a real support case needs Microsoft's own support ticketing service — outside anything a local simulator can model." /></DialogContent>
-            <DialogActions><Button onClick={() => setGap(false)}>Close</Button></DialogActions>
-          </DialogBody>
-        </DialogSurface>
-      </Dialog>
     </>
   );
 }
