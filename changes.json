@@ -1,61 +1,25 @@
 {
- "at": "2026-11-04T00:28:43+00:00",
+ "at": "2026-11-04T01:28:40+00:00",
  "baseline": false,
  "changes": [
   {
    "cloud": "gcp",
-   "service": "sqladmin/v1beta4",
-   "kind": "operation-flapping",
-   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.start:1910d4526f14",
-   "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.start changed",
-   "detail": {
-    "request": {
-     "was": "WorkloadCapturesStartRequest",
-     "now": "SqlWorkloadCapturesStartRequest"
-    }
-   },
+   "service": "API Gateway",
+   "kind": "announcement",
+   "key": "feed:gcp:099b6fef2cc9",
+   "title": "API Gateway: Feature (November 03, 2026)",
+   "link": "https://docs.cloud.google.com/release-notes#November_03_2026",
+   "detail": "Call Google Cloud APIs from streaming gateways Streaming gateways can now call Google Cloud APIs such as aiplatform.googleapis.com . A gateway with an effectiveStreamingMode of EFFECTIVE_STREAMING_MODE_ENABLED authenticates to backends whose host ends in .googleapis.com or .vertexai.goog with an access token for the gateway's service account. Other backends still receive an ID token. An existing streaming gateway switches when API Gateway next rolls out a gateway update, or immediately when you update it to a new API config. For more information, see Securing backend services .",
    "actionable": false
   },
   {
    "cloud": "gcp",
-   "service": "sqladmin/v1beta4",
-   "kind": "operation-flapping",
-   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.startReplay:2cfe2f793adc",
-   "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.startReplay changed",
-   "detail": {
-    "request": {
-     "was": "WorkloadCapturesStartReplayRequest",
-     "now": "SqlWorkloadCapturesStartReplayRequest"
-    }
-   },
-   "actionable": false
-  },
-  {
-   "cloud": "gcp",
-   "service": "sqladmin/v1beta4",
-   "kind": "operation-flapping",
-   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.stop:ee7fdfd4ca9e",
-   "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.stop changed",
-   "detail": {
-    "request": {
-     "was": "WorkloadCapturesStopRequest",
-     "now": "SqlWorkloadCapturesStopRequest"
-    }
-   },
-   "actionable": false
-  },
-  {
-   "cloud": "gcp",
-   "service": "sqladmin/v1beta4",
-   "kind": "operation-flapping",
-   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.stopReplay:fff14efd9e7d",
-   "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.stopReplay changed",
-   "detail": {
-    "request": {
-     "was": "WorkloadCapturesStopReplayRequest",
-     "now": "SqlWorkloadCapturesStopReplayRequest"
-    }
-   },
+   "service": "Google Kubernetes Engine",
+   "kind": "announcement",
+   "key": "feed:gcp:7b1692aec378",
+   "title": "Google Kubernetes Engine: Feature (November 03, 2026)",
+   "link": "https://docs.cloud.google.com/release-notes#November_03_2026",
+   "detail": "In GKE version 1.37.0-gke.3570000 and later, you can split each Local SSD on a node between ephemeral storage and raw block storage. When you create a cluster or node pool, use the capacity property of the --ephemeral-storage-local-ssd flag to set how much Local SSD capacity GKE formats for ephemeral storage. GKE leaves the rest of each Local SSD unformatted, so that workloads like databases and caches can use it as raw block storage. This feature is available in GKE Standard clusters. For more information, see Provision and use mixed Local SSDs for raw block and ephemeral storage .",
    "actionable": false
   }
  ],
