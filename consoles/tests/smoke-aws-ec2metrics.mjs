@@ -32,7 +32,9 @@ await page.goto(UI + `#/ec2/instances/${iid}`);
 await page.getByRole("tab", { name: "Monitoring" }).click();
 await page.getByTestId("metric-CPUUtilization").waitFor({ timeout: 10000 });
 check("monitoring tab draws graphs (not Not-simulated)", !/Not simulated in Vyomi/i.test(await page.locator("body").innerText()));
-check("no samples -> No data points", /No data/i.test(await page.getByTestId("metric-CPUUtilization").innerText()));
+let nodata = false;
+for (let i = 0; i < 20 && !nodata; i++) { nodata = /No data/i.test(await page.getByTestId("metric-CPUUtilization").innerText()); if (!nodata) await page.waitForTimeout(500); }  // Nano: the card renders before the (slower) series fetch settles
+check("no samples -> No data points", nodata);
 
 // Nano has no measurable instance runtime and no /_dev sampler hook: capability says the series stay empty (asserted above).
 if (process.env.NANO) {
