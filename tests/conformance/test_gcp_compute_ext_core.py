@@ -49,13 +49,18 @@ call("DELETE", B + "/regions/%s/resourcePolicies/weekdays" % R, status=400)  # i
 agg = call("GET", B + "/aggregated/resourcePolicies")["items"]["regions/%s" % R]["resourcePolicies"]
 ok("aggregatedList resourcePolicies shows attachment + next run", agg[0]["_display"]["attachedInstances"] == ["vm1"] and agg[0]["resourceStatus"]["instanceSchedulePolicy"]["nextRunStartTime"])
 now = ext._now()
+CLOCK = [now]
+ext._now = lambda: CLOCK[0]   # deterministic engine clock: the lazy per-request tick must not use wall time
+def tick_at(t):
+    CLOCK[0] = t
+    ext.tick(S, t)
 day = now.replace(hour=12, minute=0, second=0, microsecond=0)
 S.ext["sched"] = {"lastTick": ext._iso(day.replace(hour=7, minute=0))}
-ext.tick(S, day.replace(hour=9, minute=0))
+tick_at(day.replace(hour=9, minute=0))
 ok("start fire @08:00 keeps it RUNNING", S.instances["projects/%s/zones/%s/instances/vm1" % (P, Z)]["status"] == "RUNNING")
-ext.tick(S, day.replace(hour=19, minute=0))
+tick_at(day.replace(hour=19, minute=0))
 ok("stop fire @18:00 stops the VM", S.instances["projects/%s/zones/%s/instances/vm1" % (P, Z)]["status"] == "TERMINATED")
-ext.tick(S, day.replace(hour=19, minute=0) + timedelta(hours=13))
+tick_at(day.replace(hour=19, minute=0) + timedelta(hours=13))
 ok("next start fire restarts it", S.instances["projects/%s/zones/%s/instances/vm1" % (P, Z)]["status"] == "RUNNING")
 
 # ── snapshot schedules + retention ─────────────────────────────────────────
@@ -68,14 +73,15 @@ call("POST", B + "/zones/%s/disks" % Z, {"name": "data1", "sizeGb": "20", "resou
 call("POST", B + "/zones/%s/disks/data1/addResourcePolicies" % Z, {"resourcePolicies": ["projects/%s/regions/%s/resourcePolicies/weekdays" % (P, R)]}, 400)  # wrong type
 pol = S.ext["resourcePolicies"]["projects/%s/regions/%s/resourcePolicies/hourly" % (P, R)]
 pol["creationTimestamp"] = ext._iso(now - timedelta(days=3))
+now = day; CLOCK[0] = now   # noon: keeps the weekdays 18:00 stop out of the snapshot window
 S.ext["sched"]["lastTick"] = ext._iso(now - timedelta(hours=9))
-ext.tick(S, now)
+tick_at(now)
 snaps = [s for s in S.snapshots.values() if s.get("autoCreated")]
 ok("hourly(4h) schedule produced snapshots for the 9h window", 2 <= len(snaps) <= 3)
 ok("snapshots carry labels + policy link", all(s["labels"] == {"auto": "yes"} and "hourly" in s["sourceSnapshotSchedulePolicy"] for s in snaps))
 old = next(iter(S.snapshots.values()))
 old["creationTimestamp"] = ext._iso(now - timedelta(days=3))
-ext.tick(S, now + timedelta(minutes=1))
+tick_at(now + timedelta(minutes=1))
 ok("retention (1 day) pruned the expired snapshot", old["name"] not in {s["name"] for s in S.snapshots.values()})
 call("POST", B + "/regions/%s/resourcePolicies" % R, {"name": "daily", "snapshotSchedulePolicy": {"schedule": {"dailySchedule": {"daysInCycle": 1, "startTime": "04:00"}}}})
 call("POST", B + "/zones/%s/disks/data1/addResourcePolicies" % Z, {"resourcePolicies": ["projects/%s/regions/%s/resourcePolicies/daily" % (P, R)]}, 400)  # one schedule only
