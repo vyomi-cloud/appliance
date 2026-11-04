@@ -1,0 +1,46 @@
+/* Security Hub + GuardDuty console: enable, derived findings from a real bucket, finding detail, workflow update, GuardDuty sample + archive.
+ *   BASE=http://127.0.0.1:9075 node consoles/tests/smoke-aws-securityhub.mjs  (fresh dev server) */
+import { createRequire } from "node:module";
+const require = createRequire(import.meta.url);
+let pw;
+try { pw = require(process.env.PW || "playwright"); } catch { pw = require("/Users/sudhirganti/Applications/simulator/portal/node_modules/playwright"); }
+const BASE = process.env.BASE || "http://127.0.0.1:9075";
+const UI = `${BASE}${process.env.UI_PATH || "/v4/aws/"}`;
+const WIRE = `${BASE}${process.env.WIRE_PATH || "/_wire"}`;
+const N = Date.now() % 100000;
+let bad = 0;
+const check = (n, ok, d = "") => { if (!ok) bad++; console.log(`${ok ? "PASS" : "FAIL"} ${n}${d ? " - " + String(d).slice(0, 140) : ""}`); };
+const browser = await pw.chromium.launch();
+const page = await browser.newPage({ viewport: { width: 1440, height: 1300 } });
+const errors = []; page.on("pageerror", (e) => errors.push(e.message));
+const auth = (svc) => `AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/${svc}/aws4_request, SignedHeaders=host, Signature=0`;
+await page.goto(UI + "#/securityhub");
+const raw = (svc, m, path, body, hdr = {}) => page.evaluate(async ([u, i]) => { const r = await fetch(u, i); return { s: r.status, t: await r.text() }; }, [WIRE + path, { method: m, headers: { authorization: auth(svc), "content-type": "application/json", ...hdr }, body }]);
+await raw("s3", "PUT", `/pub-${N}`);
+await page.getByRole("button", { name: "Enable Security Hub" }).click();
+await page.getByText("Security Hub summary").waitFor({ timeout: 15000 });
+check("Security Hub enabled from the UI", JSON.parse((await raw("securityhub", "GET", "/accounts")).t).HubArn.includes("hub/default"));
+await page.goto(UI + "#/securityhub/findings");
+await page.getByRole("button", { name: /S3|bucket|Block|public/i }).first().waitFor({ timeout: 20000 });
+check("derived findings reference the real bucket", (await page.locator("body").innerText()).includes(`pub-${N}`));
+await page.getByRole("button", { name: /S3|bucket|Block|public/i }).first().click();
+await page.getByText("Finding JSON (ASFF)").waitFor();
+check("finding detail shows remediation + ASFF", await page.getByText("Remediation").first().isVisible());
+await page.getByRole("dialog").getByRole("button", { name: "Close" }).click();
+await page.getByRole("row").nth(1).getByRole("checkbox").check();
+await page.getByRole("button", { name: "Update workflow status" }).click();
+await page.getByRole("dialog").getByRole("button", { name: "Update", exact: true }).click();
+await page.waitForTimeout(1200);
+const all = JSON.parse((await raw("securityhub", "POST", "/findings", JSON.stringify({ MaxResults: 100 }))).t).Findings;
+check("workflow status updated to NOTIFIED over the wire", all.some((f) => f.Workflow.Status === "NOTIFIED"));
+await page.goto(UI + "#/securityhub/controls");
+await page.getByText(/S3\.\d/).first().waitFor({ timeout: 15000 });
+check("controls table lists FSBP controls", true);
+await page.goto(UI + "#/securityhub/guardduty");
+await page.getByRole("button", { name: "Enable GuardDuty" }).click();
+await page.getByRole("button", { name: "Generate sample findings" }).click();
+await page.getByText(/\[SAMPLE\]/).first().waitFor({ timeout: 15000 });
+check("GuardDuty sample findings listed", true);
+check("no page errors", errors.length === 0, errors.join("|"));
+await browser.close();
+process.exit(bad ? 1 : 0);

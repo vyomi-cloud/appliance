@@ -27,6 +27,7 @@ export const SERVICES = [
   { id: "states", icon: "states", title: "Step Functions", description: "Coordinate distributed applications with visual workflows", category: "Application Integration", load: () => import("./states/index.jsx") },
   { id: "cost-explorer", icon: "costexplorer", title: "Cost Explorer", description: "Explore what your resources would cost, and what Vyomi saved", category: "Management & Governance", load: () => import("./cost-explorer/index.jsx") },
   { id: "ssm", icon: "ssm", title: "Systems Manager", description: "Visibility and control of your infrastructure", category: "Management & Governance", load: () => import("./ssm/index.jsx") },
+  { id: "securityhub", icon: "iam", title: "Security Hub & GuardDuty", description: "Security findings, controls and threat detection", category: "Security, Identity, & Compliance", load: () => import("./securityhub/index.jsx") },
   { id: "bedrock", icon: "ssm", title: "Amazon Bedrock", description: "Build generative AI applications with foundation models", category: "Management & Governance", load: () => import("./bedrock/index.jsx") },
   { id: "backup", icon: "ssm", title: "AWS Backup", description: "Centralized backup across AWS services", category: "Storage", load: () => import("./backup/index.jsx") },
 ];
