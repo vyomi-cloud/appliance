@@ -373,7 +373,7 @@ _SIGNING = {
     "s3tables": "s3tables",   # Amazon S3 Tables (rest-json /buckets, /namespaces, /tables, /tag) -> core/s3_tables_core via the S3 store
     "elasticloadbalancing": "elbv2",
     "cloudformation": "cloudformation",
-    "ssm": "ssm", "scheduler": "scheduler", "pipes": "pipes", "ram": "ram", "organizations": "organizations",
+    "ssm": "ssm", "scheduler": "scheduler", "pipes": "pipes", "ram": "ram", "organizations": "organizations", "ce": "ce",
     "route53resolver": "dnsfw",   # Route 53 Resolver DNS Firewall control plane (core/dnsfw_core)
     "network-firewall": "netfw",   # AWS Network Firewall control plane (core/netfw_core, state in the VPC model)
     "apigateway": "apigateway",   # v1 REST control plane paths with no "/restapis" segment (apikeys, usageplans, clientcertificates, account)
@@ -392,6 +392,7 @@ _TARGET_PREFIX = {
     "Route53Resolver": "dnsfw",
     "com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101": "cloudtrail",
     "AWSOrganizationsV20161128": "organizations",
+    "AWSInsightsIndexService": "ce",   # Cost Explorer
 }
 
 # Native JSON content-types the real SDK expects back per service.
@@ -402,7 +403,7 @@ _JSON_CT = {
     "ssm": "application/x-amz-json-1.1",
     "stepfunctions": "application/x-amz-json-1.0",
     "ram": "application/x-amz-json-1.1",
-    "organizations": "application/x-amz-json-1.1",
+    "organizations": "application/x-amz-json-1.1", "ce": "application/x-amz-json-1.1",
     "netfw": "application/x-amz-json-1.0", "dnsfw": "application/x-amz-json-1.1",
 }
 
@@ -1314,6 +1315,9 @@ class AwsWireRouter:
                 r = dnsfw.dispatch(self.vpc, target, payload)
             elif svc == "organizations":   # AWS Organizations (state in the IAM store: extras["org"] + org_policies)
                 r = orgs.dispatch(self.iam, target, payload)
+            elif svc == "ce":   # Cost Explorer over the EC2/EBS (VPC model) + RDS inventory
+                from core import ce_core
+                r = ce_core.dispatch(self.vpc, self.rds, target, payload)
             else:  # sqs
                 r = sqs.dispatch(self.msg, target, payload, lam_store=self.lam)
             hdrs = dict(r.headers or {})

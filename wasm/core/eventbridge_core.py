@@ -523,8 +523,11 @@ def _create_event_bus(store, body):
     tags = {t["Key"]: t.get("Value", "") for t in body.get("Tags") or []}
     key = _validate_kms_key(store, str(body.get("KmsKeyIdentifier") or ""))
     lc = _norm_log_config(body["LogConfig"]) if body.get("LogConfig") else None
+    if body.get("EventSourceName"):
+        from core import eventbridge_partner_core as _partner
+        _partner.associate_bus(store, name, str(body["EventSourceName"]))
     buses[name] = _new_bus(store, name, body.get("Description", ""), tags)
-    buses[name].update({"kms_key": key or None, "log_config": lc})
+    buses[name].update({"kms_key": key or None, "log_config": lc, "event_source_name": body.get("EventSourceName") or None})
     store.persist()
     out = {"EventBusArn": buses[name]["arn"], "Description": buses[name]["description"]}
     if key:
@@ -540,6 +543,8 @@ def _delete_event_bus(store, body):
         raise _E("ValidationException", "Cannot delete the default event bus.")
     buses = _buses(store)
     if buses.pop(name, None) is not None:
+        from core import eventbridge_partner_core as _partner
+        _partner.bus_deleted(store, name)
         for key in [k for k, r in _rules(store).items() if r.get("bus") == name]:
             _rules(store).pop(key, None)
         for key in [k for k, a in _archives(store).items() if a.get("bus") == name]:
@@ -1318,6 +1323,14 @@ _OPS = {
     "TagResource": _tag_resource, "UntagResource": _untag_resource, "ListTagsForResource": _list_tags_for_resource,
 }
 
+def _register_partner_ops():
+    from core import eventbridge_partner_core as _p
+    _OPS.update(_p.OPS)
+    _OPS["ActivateEventSource"] = _p.activate_event_source
+
+
+_register_partner_ops()
+
 # Ops that need the Lambda function store for target delivery.
 _NEEDS_LAMBDA = {"PutEvents", "StartReplay"}
 
@@ -1335,6 +1348,9 @@ def dispatch(store: MessagingStore, target: str, payload: dict | None = None, la
             return _put_events(store, body, lam_store, kinesis_store, sfn_store, caller_account)
         if action == "StartReplay":
             return _start_replay(store, body, lam_store, kinesis_store, sfn_store)
+        if action == "PutPartnerEvents":
+            from core import eventbridge_partner_core as _partner
+            return _partner.put_partner_events(store, body, lam_store, kinesis_store, sfn_store)
         op = _OPS.get(action)
         if op is None:
             return EventsResponse(status=400, body={"__type": "UnknownOperationException",
