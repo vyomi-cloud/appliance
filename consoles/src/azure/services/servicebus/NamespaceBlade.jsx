@@ -3,6 +3,7 @@
  * are backed by native ARM calls (+ the Service Bus data plane for queue message counts);
  * everything else in the menu renders its honest capability level via CapabilityContainer
  * (core/capabilities/azure/servicebus.json — never a hand-written disclaimer). */
+import { ResourceMetrics, ResourceInsightsPanel } from "../../kit/ResourceMonitoring.jsx";
 import { useEffect, useMemo, useState } from "react";
 import {
   Button, Checkbox, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, Field, Input, Link,
@@ -105,6 +106,8 @@ export default function NamespaceBlade({ params, query }) {
       identity: () => <Identity a={a} reload={reload} />,
       diagnosticsettings: () => <DiagnosticSettings a={a} />,
       alerts: () => <Alerts a={a} />,
+      metrics: () => <ResourceMetrics id={a.id} name={a.name} />,
+      insights: () => <ResourceInsightsPanel id={a.id} name={a.name} />,
       logs: () => <LogsPanel a={a} />,
       georecovery: () => <GeoRecovery a={a} reload={reload} />,
     }[panel];

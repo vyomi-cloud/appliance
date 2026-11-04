@@ -28,6 +28,7 @@ import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
 import SharedActivityLog from "../../kit/ActivityLog.jsx";
 import SharedResourceVisualizer from "../../kit/ResourceVisualizer.jsx";
 import SharedResourceHealth from "../../kit/ResourceHealth.jsx";
+import { ResourceAlerts, ResourceMetrics, ResourceLogs, ResourceWorkbooks } from "../../kit/ResourceMonitoring.jsx";
 import SharedDiagnosticSettings from "../../kit/DiagnosticSettings.jsx";
 import SharedAdvisor from "../../kit/Advisor.jsx";
 import SharedSupportPanel from "../../kit/SupportPanel.jsx";
@@ -115,6 +116,10 @@ export default function ResourceGroupBlade({ params }) {
       resourcehealth: () => <SharedResourceHealth id={a.id} name={a.name} group />,
       advisorrecommendations: () => <SharedAdvisor scope={a.id} name={a.name} />,
       diagnosticsettings: () => <SharedDiagnosticSettings id={a.id} name={a.name} />,
+      alerts: () => <ResourceAlerts id={a.id} name={a.name} />,
+      metrics: () => <ResourceMetrics id={a.id} name={a.name} />,
+      logs: () => <ResourceLogs id={a.id} name={a.name} />,
+      workbooks: () => <ResourceWorkbooks id={a.id} name={a.name} />,
       resourcevisualizer: () => <SharedResourceVisualizer resourceGroup={a.name} />,
       deploymentstacks: () => <DeploymentStacks rg={name} />,
       events: () => <ResourceEvents scopeId={a.id} kind="resourcegroup" title={`${name} | Events`} />,

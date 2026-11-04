@@ -83,9 +83,9 @@
   "api": []
  },
  "azure.containerapps.app.monitoring": {
-  "title": "Metrics, Alerts, Log stream",
+  "title": "Log stream",
   "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["No metrics pipeline, alert evaluation or live log streaming behind a Container App (Diagnostic settings are real — see Automation/Monitoring's generic ARM extension-resource engine)."],
+  "limitations": ["No live log streaming behind a Container App (Metrics and Alerts are real, see azure.common.resource_monitoring; Diagnostic settings are real too, via the generic ARM extension-resource engine)."],
   "api": []
  },
  "azure.containerapps.app.tools": {

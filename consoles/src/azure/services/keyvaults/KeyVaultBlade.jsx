@@ -26,6 +26,7 @@ import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
 import SharedActivityLog from "../../kit/ActivityLog.jsx";
 import { ClassicAdminsPanel, DenyAssignmentsPanel } from "../../kit/IamExtras.jsx";
 import SharedResourceHealth from "../../kit/ResourceHealth.jsx";
+import { ResourceAlerts, ResourceMetrics, ResourceLogs, ResourceInsightsPanel, ResourceWorkbooks } from "../../kit/ResourceMonitoring.jsx";
 import SharedDiagnosticSettings from "../../kit/DiagnosticSettings.jsx";
 import SharedAdvisor from "../../kit/Advisor.jsx";
 import SharedSupportPanel from "../../kit/SupportPanel.jsx";
@@ -95,6 +96,11 @@ export default function KeyVaultBlade({ params, query }) {
       support: () => <SharedSupportPanel resourceId={a.id} name={a.name} service="keyvaults" />,
       resourcehealth: () => <SharedResourceHealth id={a.id} name={a.name} />,
       diagnosticsettings: () => <SharedDiagnosticSettings id={a.id} name={a.name} />,
+      alerts: () => <ResourceAlerts id={a.id} name={a.name} />,
+      metrics: () => <ResourceMetrics id={a.id} name={a.name} />,
+      logs: () => <ResourceLogs id={a.id} name={a.name} />,
+      insights: () => <ResourceInsightsPanel id={a.id} name={a.name} />,
+      workbooks: () => <ResourceWorkbooks id={a.id} name={a.name} />,
     }[panel];
     body = P ? P() : (
       <>
@@ -159,7 +165,7 @@ function Overview({ a, reload, self }) {
           <Link href={`${self}/keys`}>Keys</Link>{" · "}<Link href={`${self}/secrets`}>Secrets</Link>
         </div>
       )}
-      {tab === "monitoring" && <NotSimulatedContainer feature="Key vault monitoring (requests, latency and saturation charts)" />}
+      {tab === "monitoring" && <ResourceMetrics id={a.id} name={a.name} title="Monitoring" />}
       {tab === "properties" && <PropertyList a={a} />}
       {tab === "capabilities" && <NotSimulatedContainer feature="The capabilities overview" />}
       {tab === "recommendations" && <SharedAdvisor bare scope={a.id} />}

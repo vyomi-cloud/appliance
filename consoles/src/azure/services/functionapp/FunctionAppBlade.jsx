@@ -2,6 +2,7 @@
  * Environment variables, Scale and concurrency, Locks, Export template and Access control
  * (role assignments/roles) are backed by native ARM calls; everything else in the menu is an
  * honest NotSimulated panel (Vyomi has no diagnostics/telemetry/identity backend for them). */
+import { ResourceMetrics, ResourceLogs, ResourceNotifications } from "../../kit/ResourceMonitoring.jsx";
 import DeploymentCenter from "../../kit/DeploymentCenter.jsx";
 import { ClassicAdminsPanel, DenyAssignmentsPanel, MyAccess } from "../../kit/IamExtras.jsx";
 import { UserAssignedIdentities } from "../../kit/UserAssignedIdentities.jsx";
@@ -216,10 +217,10 @@ function Overview({ a, reload, self }) {
       </TabList>
       {tab === "functions" && <Functions a={a} self={self} />}
       {tab === "properties" && <Properties a={a} rt={rt} />}
-      {tab === "monitoring" && <NotSimulatedContainer feature="Function app monitoring (execution count, errors, duration charts)" />}
-      {tab === "logs" && <NotSimulatedContainer feature="The Logs tab" />}
+      {tab === "monitoring" && <ResourceMetrics id={a.id} name={a.name} title="Monitoring" />}
+      {tab === "logs" && <ResourceLogs id={a.id} name={a.name} title="Logs" />}
       {tab === "capabilities" && <NotSimulatedContainer feature="The capabilities overview" />}
-      {tab === "notifications" && <NotSimulatedContainer feature="Notifications" />}
+      {tab === "notifications" && <ResourceNotifications id={a.id} name={a.name} title={null} />}
       {tab === "recommendations" && <NotSimulatedContainer feature="Advisor recommendations" />}
 
       <DeleteDialog open={del} onClose={() => setDel(false)} resourceType="function app" names={[a.name]}

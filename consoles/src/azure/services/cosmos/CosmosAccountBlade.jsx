@@ -28,6 +28,7 @@ import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
 import SharedActivityLog from "../../kit/ActivityLog.jsx";
 import { ClassicAdminsPanel, DenyAssignmentsPanel, MyAccess } from "../../kit/IamExtras.jsx";
 import SharedResourceHealth from "../../kit/ResourceHealth.jsx";
+import { ResourceAlerts, ResourceMetrics, ResourceLogs, ResourceInsightsPanel, ResourceWorkbooks, ResourceNotifications } from "../../kit/ResourceMonitoring.jsx";
 import SharedDiagnosticSettings from "../../kit/DiagnosticSettings.jsx";
 import { ResourceRecommendations } from "../defender/Pages.jsx";
 import AiSearchIntegration from "../../kit/AiSearchIntegration.jsx";
@@ -129,6 +130,12 @@ export default function CosmosAccountBlade({ params }) {
       exporttemplate: () => <SharedExportTemplate id={a.id} name={a.name} resourceGroup={a.resourceGroup} />,
       resourcehealth: () => <SharedResourceHealth id={a.id} name={a.name} />,
       diagnosticsettings: () => <SharedDiagnosticSettings id={a.id} name={a.name} />,
+      notifications: () => <ResourceNotifications id={a.id} name={a.name} />,
+      alerts: () => <ResourceAlerts id={a.id} name={a.name} />,
+      metrics: () => <ResourceMetrics id={a.id} name={a.name} />,
+      logs: () => <ResourceLogs id={a.id} name={a.name} />,
+      insights: () => <ResourceInsightsPanel id={a.id} name={a.name} />,
+      workbooks: () => <ResourceWorkbooks id={a.id} name={a.name} />,
       costmgmt: () => <ResourceCost resource={a.name} capId="azure.cosmos.costmgmt" title={`${a.name} | Cost Management`} />,
       addsearch: () => <AiSearchIntegration source={{ kind: "cosmos", capId: "azure.cosmos.addsearch", title: `${a.name} | Add Azure AI Search`, account: a.name, containerName: "container1",
         connectionString: `AccountEndpoint=${api.accountEndpoint(a.name)};Database=db1` }} />,
@@ -197,7 +204,7 @@ function Overview({ a, reload, self }) {
           Use <Link href={`${self}/dataexplorer`}>Data Explorer</Link> to create databases and containers and browse items, or copy a key from <Link href={`${self}/keys`}>Keys</Link> to connect from your application.
         </div>
       )}
-      {tab === "monitoring" && <NotSimulatedContainer feature="Account monitoring (request units, storage and latency charts)" />}
+      {tab === "monitoring" && <ResourceMetrics id={a.id} name={a.name} title="Monitoring" />}
       {tab === "properties" && (
         <div className="vy-props" style={{ marginTop: 12 }}>
           <KV label="Resource ID" value={a.id} />

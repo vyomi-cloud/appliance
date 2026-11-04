@@ -208,3 +208,13 @@ export async function listFailedActivity() {
   const rows = await listActivityLog();
   return rows.filter((r) => r.status?.value && r.status.value !== "Succeeded");
 }
+
+// ── Azure Monitor workspaces (Managed Prometheus) + Azure Managed Grafana (core/azure_monitorproducts_core.py) ──
+export const MONITOR_ACCOUNTS = armType("Microsoft.Monitor", "accounts", "2023-04-03");
+export const GRAFANA = armType("Microsoft.Dashboard", "grafana", "2023-09-01");
+export const listMonitorAccounts = async () => (await MONITOR_ACCOUNTS.list()).map(withRg);
+export const putMonitorAccount = (rg, name, body) => MONITOR_ACCOUNTS.put(rg, name, body);
+export const deleteMonitorAccount = (rg, name) => MONITOR_ACCOUNTS.remove(rg, name);
+export const listGrafana = async () => (await GRAFANA.list()).map(withRg);
+export const putGrafana = (rg, name, body) => GRAFANA.put(rg, name, body);
+export const deleteGrafana = (rg, name) => GRAFANA.remove(rg, name);

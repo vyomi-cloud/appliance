@@ -5,6 +5,7 @@
  * the Monitoring group — Metrics/Insights/Alerts/Diagnostic settings/Logs/Workbooks); a
  * remaining handful (separate products, or genuinely unmodellable telemetry/hardware) are
  * honest NotSimulated panels — see NS_NOTES. */
+import { ResourceMetrics } from "../../kit/ResourceMonitoring.jsx";
 import ResourceEvents from "../../kit/ResourceEvents.jsx";
 import { useEffect, useState } from "react";
 import {
@@ -192,7 +193,7 @@ function Overview({ a, reload, self }) {
         <Tab value="toolsandsdks">Tools + SDKs</Tab>
       </TabList>
       {tab === "properties" && <Properties a={a} reload={reload} />}
-      {tab === "monitoring" && <NotSimulatedContainer feature="Storage account monitoring (requests, egress, latency charts)" />}
+      {tab === "monitoring" && <ResourceMetrics id={a.id} name={a.name} title="Monitoring" />}
       {tab === "capabilities" && <NotSimulatedContainer feature="The capabilities overview" />}
       {tab === "recommendations" && <SharedAdvisor bare scope={a.id} />}
       {tab === "tutorials" && <NotSimulatedContainer feature="Tutorials" />}

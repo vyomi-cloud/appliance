@@ -3,6 +3,7 @@
  * domains, Locks, App Service logs, Diagnostic settings, Access control (IAM), Export
  * template, Identity, Backups and Scale up/out/Change App Service plan are backed by native
  * ARM calls; everything else in the menu is an honest NotSimulated panel. */
+import { ResourceMetrics, ResourceLogs, ResourceNotifications, ResourceAlerts } from "../../kit/ResourceMonitoring.jsx";
 import DeploymentCenter from "../../kit/DeploymentCenter.jsx";
 import { UserAssignedIdentities } from "../../kit/UserAssignedIdentities.jsx";
 import { useEffect, useState } from "react";
@@ -110,6 +111,9 @@ export default function WebAppBlade({ params, query }) {
       appservicelogs: () => <AppServiceLogs rg={rg} name={name} />,
       logstream: () => <LogStream name={name} />,
       diagnosticsettings: () => <DiagnosticSettings a={a} rg={rg} name={name} />,
+      alerts: () => <ResourceAlerts id={a.id} name={a.name} />,
+      metrics: () => <ResourceMetrics id={a.id} name={a.name} />,
+      logs: () => <ResourceLogs id={a.id} name={a.name} />,
       exporttemplate: () => <SharedExportTemplate id={a.id} name={a.name} resourceGroup={a.resourceGroup} />,
       supportrequest: () => <SharedSupportPanel resourceId={a.id} name={a.name} service="appservices" />,
       resourcehealth: () => <SharedResourceHealth id={a.id} name={a.name} />,
@@ -214,10 +218,10 @@ function Overview({ a, reload, self }) {
           <section className="vy-section"><h3>Networking</h3><KV label="Virtual IP address" value={p.outboundIpAddresses?.split(",")[0]} /><KV label="Outbound IP addresses" value={p.outboundIpAddresses} /><KV label="Additional Outbound IP addresses" value={p.possibleOutboundIpAddresses} /></section>
         </div>
       )}
-      {tab === "monitoring" && <NotSimulatedContainer feature="App Service monitoring (requests, response time, errors)" />}
-      {tab === "logs" && <NotSimulatedContainer feature="The resource's Logs (Log Analytics queries)" />}
+      {tab === "monitoring" && <ResourceMetrics id={a.id} name={a.name} title="Monitoring" />}
+      {tab === "logs" && <ResourceLogs id={a.id} name={a.name} title="Logs" />}
       {tab === "capabilities" && <NotSimulatedContainer feature="The capabilities overview" />}
-      {tab === "notifications" && <NotSimulatedContainer feature="Notifications" />}
+      {tab === "notifications" && <ResourceNotifications id={a.id} name={a.name} title={null} />}
       {tab === "recommendations" && <SharedAdvisor bare scope={a.id} />}
 
       <DeleteDialog open={del} onClose={() => setDel(false)} resourceType="app service" names={[a.name]}
