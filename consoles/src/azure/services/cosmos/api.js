@@ -102,7 +102,9 @@ export function toArmBody(f) {
     location: f.location,
     kind: "GlobalDocumentDB",
     tags: Object.fromEntries(f.tags.filter((t) => t.name).map((t) => [t.name, t.value])),
+    ...(f.dataEncryption === "Customer-managed key (CMK)" && f.keyUri ? { identity: { type: "SystemAssigned" } } : {}),
     properties: {
+      ...(f.dataEncryption === "Customer-managed key (CMK)" && f.keyUri ? { keyVaultKeyUri: f.keyUri, defaultIdentity: "SystemAssignedIdentity" } : {}),
       databaseAccountOfferType: "Standard",
       locations: [{ locationName: f.location, failoverPriority: 0, isZoneRedundant: f.availabilityZones === "Enable" }],
       enableMultipleWriteLocations: f.multiRegionWrites === "Enable",
