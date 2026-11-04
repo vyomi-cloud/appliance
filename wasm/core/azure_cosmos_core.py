@@ -103,6 +103,46 @@ def _db_view(db_id: str, entry: dict) -> dict:
     }
 
 
+def validate_partition_key(pk) -> str | None:
+    """Error text for an invalid container partitionKey definition, else None. Hash = one path; MultiHash
+    (hierarchical, version 2) = two or three distinct paths, as in the real service."""
+    if not isinstance(pk, dict):
+        return "partitionKey must be an object with 'paths' and 'kind'."
+    paths = pk.get("paths")
+    kind = pk.get("kind", "Hash")
+    if kind not in ("Hash", "MultiHash"):
+        return f"Unsupported partition key kind '{kind}'."
+    if not isinstance(paths, list) or not paths or not all(isinstance(x, str) for x in paths):
+        return "partitionKey.paths must be a non-empty list of paths."
+    for x in paths:
+        if not x.startswith("/") or len(x) < 2 or x.endswith("/") or "//" in x:
+            return f"Partition key path '{x}' is invalid: a path starts with '/' and names a property (e.g. /tenantId)."
+    if len({x.lower() for x in paths}) != len(paths):
+        return "Partition key paths must be unique."
+    if kind == "Hash" and len(paths) != 1:
+        return "A Hash partition key takes exactly one path; use kind 'MultiHash' (version 2) for hierarchical partition keys."
+    if kind == "MultiHash":
+        if not 2 <= len(paths) <= 3:
+            return "A hierarchical (MultiHash) partition key takes two or three paths."
+        if pk.get("version", 2) != 2:
+            return "Hierarchical partition keys require partition key version 2."
+    return None
+
+
+def _pk_from_doc(doc: dict, paths: list):
+    out = []
+    for path in paths:
+        cur = doc
+        for part in path.strip("/").split("/"):
+            if isinstance(cur, dict) and part in cur:
+                cur = cur[part]
+            else:
+                cur = None
+                break
+        out.append(cur)
+    return out
+
+
 def _coll_view(db: dict, coll_id: str, entry: dict) -> dict:
     return {
         "id": coll_id,
@@ -380,10 +420,15 @@ def dispatch(store: CosmosStore, method: str, path: str,
             if coll_id in colls:
                 return _err(409, "Conflict",
                             f"Collection with id '{coll_id}' already exists.")
+            pk = b.get("partitionKey", {"paths": ["/id"], "kind": "Hash"})
+            pk_err = validate_partition_key(pk)
+            if pk_err:
+                return _err(400, "BadRequest", pk_err)
+            if pk.get("kind") == "MultiHash":
+                pk = {**pk, "version": 2}
             entry = {
                 "_rid": _rid(), "_etag": _etag(), "_ts": _now_ts(),
-                "partitionKey": b.get("partitionKey",
-                                      {"paths": ["/id"], "kind": "Hash"}),
+                "partitionKey": pk,
             }
             if "indexingPolicy" in b:
                 entry["indexingPolicy"] = b["indexingPolicy"]
@@ -441,6 +486,15 @@ def dispatch(store: CosmosStore, method: str, path: str,
             if not doc_id:
                 return _err(400, "BadRequest", "The document must carry an 'id'.")
             is_upsert = str(headers.get("x-ms-documentdb-is-upsert", "")).lower() == "true"
+            hdr = headers.get("x-ms-documentdb-partitionkey")
+            if hdr:
+                try:
+                    want = json.loads(hdr)
+                except ValueError:
+                    return _err(400, "BadRequest", "The x-ms-documentdb-partitionkey header is not valid JSON.")
+                have = _pk_from_doc(b, (coll_entry.get("partitionKey") or {"paths": ["/id"]}).get("paths", ["/id"]))
+                if isinstance(want, list) and len(want) == len(have) and any(h is not None and h != w for h, w in zip(have, want)):
+                    return _err(400, "BadRequest", "PartitionKey extracted from document doesn't match the one specified in the header.")
             if doc_id in docs and not is_upsert:
                 return _err(409, "Conflict",
                             f"Document with id '{doc_id}' already exists.")
