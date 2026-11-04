@@ -65,6 +65,7 @@ EXTENSIONS = {
     "microsoft.azurekeyvaultsecretsprovider": {"multi": False, "scopes": ("cluster",)},
     "microsoft.web.appservice": {"multi": False, "scopes": ("cluster",)},
     "microsoft.azurebackup.kubernetes": {"multi": False, "scopes": ("cluster",)},
+    "microsoft.dataprotection.kubernetes": {"multi": False, "scopes": ("cluster",)},
     "microsoft.arc.containerstorage": {"multi": False, "scopes": ("cluster",)},
     "microsoft.workloadiam": {"multi": False, "scopes": ("cluster",)},
     "microsoft.containerstorage": {"multi": False, "scopes": ("cluster",)},
