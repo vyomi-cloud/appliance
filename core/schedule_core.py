@@ -270,7 +270,15 @@ def _azure_tasks(router, now, tk, log):
     return _mod("azure_tasks_core").tick(router.az_arm, now, tk, log)
 
 
-PROVIDERS = [("azure-tasks", _azure_tasks), ("scc", _scc), ("aws-backup", _aws_backup), ("azure-backup", _azure_backup), ("dlm", _dlm), ("cloudsql", _cloudsql), ("ecr", _ecr)]
+def _gcp_backupdr(router, now, tk, log):
+    """Backup and DR plan rules + backup expiry (state on the Compute store; own tick bag, so lazy ticks never double-fire)."""
+    n = _mod("gcp_backupdr_core").tick(router.gcp_compute_vm, now)
+    if n:
+        log.append({"provider": "gcp-backupdr", "backups": n})
+    return n
+
+
+PROVIDERS = [("gcp-backupdr", _gcp_backupdr), ("azure-tasks", _azure_tasks), ("scc", _scc), ("aws-backup", _aws_backup), ("azure-backup", _azure_backup), ("dlm", _dlm), ("cloudsql", _cloudsql), ("ecr", _ecr)]
 
 
 def tick(router, now: float | None = None) -> dict:
