@@ -4,6 +4,57 @@ All notable changes to Vyomi will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.42] — 2026-11-04
+
+Daily conformance release. **7 product fixes** (AWS 4, GCP 1, Azure 1, all clouds 1); 5 reach Nano and 7 reach the offline appliance; 10 test and harness improvements.
+
+### Highlights
+
+- **EventBridge rules now deliver to more targets.** Rules can send events to Kinesis streams, CloudWatch Logs, Step Functions state machines (which start an execution) and other event buses, in both Nano and the offline appliance.
+- **Cloud SQL workload captures on GCP.** You can start, stop, replay and list workload captures through the Cloud SQL API, in both Nano and the offline appliance.
+- **VM SSH works again in the offline appliance.** The SSH key for Azure, AWS and GCP VMs can now be served, and EC2 launch errors stay visible instead of being reset to "ready".
+- **Azure Container Apps Properties tab is clean.** It no longer shows a stray "null" for the network setting, in Nano and offline.
+- **Newer Azure and Compute API versions are accepted.** Cosmos 2026-07-15, Cognitive Services 2026-09-15-preview, Web 2026-08-01 and Compute 2026-11-01-preview requests work like older versions.
+
+### Fixes — AWS
+
+- **[Nano + offline]** EventBridge delivers to Kinesis (PartitionKeyPath) and CloudWatch Logs rule targets (Nano + offline NATS path); test_eventbridge_core covers it (refs #171, partial)
+- **[Nano + offline]** EventBridge starts Step Functions executions for state-machine rule targets (Nano + offline NATS path); test_eventbridge_core covers it (refs #171, partial)
+- **[Nano + offline]** EventBridge delivers to event-bus rule targets (forwarded events re-match the destination bus's rules); test_eventbridge_core covers it (refs #171, partial)
+- **[offline]** Keep EC2 docker launch errors visible (launch_status=error no longer reset to ready); ssh probe prints launch_error
+
+### Fixes — GCP
+
+- **[Nano + offline]** Cloud SQL sql.workloadCaptures start/stop/startReplay/stopReplay/list (v1beta4; discovery flaps between shapes so body read leniently); core test added, Nano core rebuilt
+
+### Fixes — Azure
+
+- **[Nano + offline]** Container Apps vyomiRuntime no longer carries network: null (console Properties tab printed "null", failing offline-ui-azure-app); unit check added
+
+### Fixes — all clouds
+
+- **[offline]** VM SSH key was unservable (HOME unwritable; Azure key URL used generated id) — fixes offline azure/aws/gcp vm-ssh suites
+
+<details><summary>Test and harness improvements (10)</summary>
+
+- Cloud SQL Instances.Patch covered with the official google.golang.org/api sqladmin Go client (untested ops PatchInstance/PatchSettings); suite offline-sdk-go-gcp-sqladmin registered
+- Fixes #340 - Compute 2026-11-01-preview is accepted like older versions (no behaviour change needed); test extended, Cognitive case uses per-run names (soft-delete)
+- Cover Monitoring Groups.List and UptimeCheckConfigs.Get with the official Go client (untested ops GetUptime/ListGroups)
+- Fixes #502 Fixes #500 Fixes #499 - ARM accepts the new Cosmos 2026-07-15, CognitiveServices 2026-09-15-preview and Web 2026-08-01 api-versions (no behaviour change needed); test added
+- Crawler polls up to 8s for the new row after create (cold console list reload raced the check; Azure VM/Storage CREATE_NO_ROW did not reproduce once warm); harness fix
+- Cover Log Analytics RunKql with the official azlogs client (query unknown table -> 400, ingest then count)
+- Nano azure vm-ssh probe no longer reloads the console before Connect (the reload killed the in-browser VM and its disk, so the stop/start file check failed spuriously)
+- Nano gce-ssh probe no longer reloads the console before stop/start (reload dropped the in-page VM, so the file was lost); harness fix
+- CI simulator runs as root so docker.sock is usable (EC2 SSH launch failed with DockerUnavailable); offline-post-create-aws-ec2-ssh now green
+- Drawer_modal waits for first render before clicking the account button (cold-load flake on GCP)
+
+</details>
+
+### How to upgrade
+
+- **Offline appliance:** `vyomi update` (Homebrew installs older than 3.0.24: run `brew trust vyomi-cloud/tap && brew upgrade vyomi-docker` once first). Docker: `docker pull vyomi/appliance:3.0.42`.
+- **Nano** ([vyomi.cloud](https://vyomi.cloud)): updates with this release; close all Nano tabs and reopen to load it.
+
 ## [3.0.41] — 2026-11-04
 
 Daily conformance release. **2 product fixes** (all clouds 2); 2 reach Nano and 2 reach the offline appliance.
