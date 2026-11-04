@@ -132,7 +132,7 @@ def run(store=None):
     acall(nodestfn, {})
     _check("async delivery failure counted when no destination/DLQ is configured",
           j(call("GET", f"{F}/{nodestfn}/invocations"))["Metrics"]["AsyncDeliveryFailures"] == 0)
-    call("PUT", f"{F}/{nodestfn}/event-invoke-config", {"DestinationConfig": {"OnFailure": {"Destination": "arn:aws:events:us-east-1:123456789012:event-bus/default"}}})
+    call("PUT", f"{F}/{nodestfn}/event-invoke-config", {"DestinationConfig": {"OnFailure": {"Destination": "arn:aws:ecs:us-east-1:123456789012:cluster/not-a-destination"}}})   # (event buses are deliverable since the 3.0.40 bus-forwarding port)
     acall(nodestfn, {})
     _check("an undeliverable destination ARN (event bus) increments AsyncDeliveryFailures",
           j(call("GET", f"{F}/{nodestfn}/invocations"))["Metrics"]["AsyncDeliveryFailures"] == 1)
