@@ -77,7 +77,8 @@ const as = (await arm("GET", `/providers/Microsoft.Insights/autoscalesettings`, 
 ok("autoscale setting stored", as.some((s) => s.properties.profiles[0].capacity.maximum === "5"), JSON.stringify(as).slice(0, 200));
 
 await go("appserviceplan"); ok("plan page shows plan", (await pg.content()).includes("Pricing plan"));
-await go("cloneapp"); await pg.getByRole("button", { name: "Clone", exact: true }).click(); await pg.waitForTimeout(2000);
+await go("cloneapp"); await pg.getByRole("button", { name: "Clone", exact: true }).click();
+for (let i = 0; i < 40; i++) { if ((await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.Web/sites/${APP}-clone`)).status === 200) break; await pg.waitForTimeout(500); }
 ok("clone created over wire", (await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.Web/sites/${APP}-clone`)).status === 200);
 const c = (await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.Web/sites/${APP}-clone/config/appsettings`)).body.properties;
 ok("clone copied app settings", !!c.AZURE_STORAGEBLOB_RESOURCEENDPOINT);
