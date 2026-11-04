@@ -152,10 +152,17 @@
     "tests": ["tests/conformance/test_gcp_storage_observability_core.py", "tests/conformance/test_gcp_monitoring_core.py"]
   },
   "gcp.storage.rapid-cache": {
-    "title": "Rapid Storage / Anywhere Cache (regional read-through cache for hot objects)",
-    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "title": "Anywhere Cache (create, pause, resume, disable, update TTL / admission policy)",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
     "limitations": [
-      "Anywhere Cache provisions a real zonal SSD cache fronting a bucket to cut cross-region read latency; Vyomi has one in-process object store with no regional topology or cache tier to provision."
+      "The cache resource and its creating/running/paused/disabled lifecycle, zone-vs-bucket-location, one-cache-per-zone, TTL (1h-7d) and admission-policy validation are real and stateful.",
+      "Vyomi has one in-process object store with no regional topology, so reads are not actually served from a cache tier: no hit/miss metrics, no latency change, no cache-fill billing. Operations complete synchronously (the returned long-running operation is already done)."
+    ],
+    "tests": [
+      "tests/conformance/test_gcp_storageinsights.py"
     ]
   },
   "gcp.storage.operations": {
@@ -167,10 +174,17 @@
     "tests": ["tests/conformance/test_gcp_storage_depth2_core.py"]
   },
   "gcp.storage.inventory-reports": {
-    "title": "Inventory reports (per-bucket Storage Insights object inventory, CSV/Parquet to a destination bucket)",
-    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "title": "Inventory reports (Storage Insights report configs + generated CSV reports in a destination bucket)",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
     "limitations": [
-      "Inventory reports are a separate Storage Insights sub-product (distinct from gcp.storage.insights-datasets' project-level dataset configs); Vyomi has no report generator to run on a schedule and write CSV/Parquet output to a destination bucket."
+      "Report configs (storageinsights v1 reportConfigs) are validated for real and the report is a REAL CSV of the source bucket's objects (+ manifest) written to the destination bucket, listable via reportDetails.",
+      "Generation is lazy: a due daily/weekly slot is produced when the config or its details are read (the real service runs on its own schedule, 24-48h after the slot); Vyomi adds a :runNow custom method to produce one on demand. Parquet output (parquetOptions) is rejected - the simulator has no Parquet encoder in this path."
+    ],
+    "tests": [
+      "tests/conformance/test_gcp_storageinsights.py"
     ]
   },
   "gcp.storage.project-settings": {

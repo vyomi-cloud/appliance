@@ -155,6 +155,8 @@ def _gcp_service(path):
         return "gcp-resourcemanager"
     if path.startswith("/v1/locations/global/workforcePools"):
         return "gcp-resourcemanager"
+    if re.match(r"^/v1/projects/[^/]+/locations/[^/]+/(reportConfigs|reportDetails)([/:?]|$)", path):
+        return "gcp-gcs"   # storageinsights.googleapis.com inventory reports (core/gcp_storageinsights_core via gcp_storage_core)
     if re.match(r"^/v1/projects/[^/]+/locations/global/connectivityTests([/:?]|$)", path):
         return "gcp-compute"   # Network Intelligence Center Connectivity Tests → netsim via the VPC core
     if re.search(r"^/v1/projects/[^/]+/locations/[^/]+/internalRanges([/:?]|$)", path):

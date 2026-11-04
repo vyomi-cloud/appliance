@@ -18,6 +18,7 @@ import { CapabilityBadge, CapabilityContainer } from "../../kit/Capability.jsx";
 import { Link, hashHref } from "../../link.jsx";
 import { useProject } from "../../project.js";
 import * as api from "./api.js";
+import RapidCache from "./RapidCache.jsx";
 
 const DEV_USER_EMAIL = "dev@example.com";
 
@@ -131,7 +132,7 @@ export function Monitoring() {
           )}
         </CapabilityContainer>
       )}
-      {tab === "rapid-cache" && <CapabilityContainer id="gcp.storage.rapid-cache" title="Rapid Cache" />}
+      {tab === "rapid-cache" && <RapidCache />}
     </Box>
   );
 }

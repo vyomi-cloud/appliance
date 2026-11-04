@@ -229,3 +229,27 @@ export async function listEncryptKeys() {
   const r = await restJson("GET", `/v1/projects/${e(getProject())}/locations/-/keyRings/-/cryptoKeys`);
   return (r.cryptoKeys || []).filter((k) => !k.purpose || k.purpose === "ENCRYPT_DECRYPT").map((k) => k.name);
 }
+
+/** Storage Insights inventory reports (storageinsights v1 reportConfigs / reportDetails) — see core/gcp_storageinsights_core.py. */
+const siBase = (loc) => `/v1/projects/${e(getProject())}/locations/${e(loc.toLowerCase())}/reportConfigs`;
+export async function listReportConfigs(loc, bucket) {
+  const r = await restJson("GET", siBase(loc), { query: { filter: `objectMetadataReportOptions.storageFilters.bucket="${bucket}"` } });
+  return r.reportConfigs || [];
+}
+export const createReportConfig = (loc, id, body) => restJson("POST", siBase(loc), { query: { reportConfigId: id }, body });
+export const deleteReportConfig = (name) => restJson("DELETE", `/v1/${name}`, { query: { force: "true" } });
+export const runReportConfig = (name) => restJson("POST", `/v1/${name}:runNow`);
+export async function listReportDetails(name) {
+  const r = await restJson("GET", `/v1/${name}/reportDetails`);
+  return r.reportDetails || [];
+}
+export const REPORT_FIELDS = ["project", "bucket", "name", "location", "size", "timeCreated", "updated", "storageClass", "etag", "crc32c", "md5Hash", "generation", "metageneration", "contentType", "kmsKeyName", "metadata"];
+
+/** Anywhere (Rapid) Cache — storage/v1 b/{bucket}/anywhereCaches. */
+export async function listAnywhereCaches(bucket) {
+  const r = await restJson("GET", `/storage/v1/b/${e(bucket)}/anywhereCaches`);
+  return (r.items || []).map((c) => ({ ...c, bucket }));
+}
+export const createAnywhereCache = (bucket, body) => restJson("POST", `/storage/v1/b/${e(bucket)}/anywhereCaches`, { body });
+export const anywhereCacheAction = (bucket, zone, action) => restJson("POST", `/storage/v1/b/${e(bucket)}/anywhereCaches/${e(zone)}/${action}`);
+export const patchAnywhereCache = (bucket, zone, body) => restJson("PATCH", `/storage/v1/b/${e(bucket)}/anywhereCaches/${e(zone)}`, { body });

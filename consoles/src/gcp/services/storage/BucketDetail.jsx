@@ -24,6 +24,7 @@ import { ErrorAlert, fmtBytes, fmtDate, fmtDuration, KeyValue, PageHeader, Secti
 import { CapabilityBadge, CapabilityContainer } from "../../kit/Capability.jsx";
 import { Link, hashHref } from "../../link.jsx";
 import * as api from "./api.js";
+import InventoryReports from "./InventoryReports.jsx";
 
 const TABS = [
   ["objects", "Objects"], ["configuration", "Configuration"], ["permissions", "Permissions"], ["protection", "Protection"],
@@ -70,7 +71,7 @@ export default function BucketDetail({ params, query }) {
       {tab === "protection" && b.data && <Protection bucket={b.data} reload={b.reload} />}
       {tab === "lifecycle" && b.data && <Lifecycle bucket={b.data} reload={b.reload} />}
       {tab === "observability" && <Observability bucket={bucket} />}
-      {tab === "inventory" && <CapabilityContainer id="gcp.storage.inventory-reports" title="Inventory reports" />}
+      {tab === "inventory" && b.data && <InventoryReports bucket={bucket} bucketMeta={b.data} />}
       {tab === "operations" && <Operations bucket={bucket} />}
     </>
   );
