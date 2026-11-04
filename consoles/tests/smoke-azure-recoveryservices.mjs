@@ -99,6 +99,12 @@ check("test failover created the replica VM in the target region", json(await ar
 await page.getByRole("button", { name: "Cleanup test failover" }).click();
 await page.waitForTimeout(1200);
 check("cleanup removed it", json(await arm("GET", `/resourceGroups/${DR}/providers/Microsoft.Compute/virtualMachines/${VM}-test`, null, "2023-09-01")).error !== undefined);
+await page.goto(UI + `#/vms/${RG}/${VM}/disasterrecovery`);
+await page.getByText(VAULT).first().waitFor({ timeout: 15000 });
+check("VM Disaster recovery tab lists the replicated item (not a gap panel)", (await page.locator("[data-vyomi-not-simulated]").count()) === 0);
+await page.goto(UI + `#/vms/${RG}/${VM}/backup`);
+await page.getByText("Azure Backup (Recovery Services vault)").waitFor({ timeout: 15000 });
+check("VM Backup tab shows vault protection", await page.getByText(/Protection status/).isVisible());
 check("no page errors", errors.length === 0, errors.join("|"));
 await browser.close();
 process.exit(bad ? 1 : 0);

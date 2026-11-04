@@ -9,6 +9,7 @@
  * account blade uses) are backed by real ARM calls; the remaining menu items are honest
  * CapabilityContainer gaps (core/capabilities/azure/vms.json is the single source of truth for
  * which). */
+import { VmDisasterRecovery, VmVaultBackup } from "./RecoveryPanels.jsx";
 import { ResourceMetrics } from "../../kit/ResourceMonitoring.jsx";
 import { UserAssignedIdentities } from "../../kit/UserAssignedIdentities.jsx";
 import { useEffect, useState } from "react";
@@ -134,7 +135,8 @@ export default function VmBlade({ params }) {
       resourcehealth: () => <ResourceHealth a={a} />,
       changetracking: () => <ChangeTracking a={a} />,
       defender: () => <Defender a={a} />,
-      backup: () => <Backup a={a} reload={reload} />,
+      backup: () => <><Backup a={a} reload={reload} /><VmVaultBackup a={a} /></>,
+      disasterrecovery: () => <VmDisasterRecovery a={a} />,
       resetpassword: () => <ResetPassword a={a} />,
       redeploy: () => <Redeploy a={a} reload={reload} />,
       operatingsystem: () => <OperatingSystem a={a} />,
