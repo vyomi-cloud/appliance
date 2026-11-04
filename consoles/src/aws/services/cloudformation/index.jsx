@@ -12,7 +12,7 @@ import ActivatedExtensions, { ExtensionDetail } from "./ActivatedExtensions.jsx"
 import HooksOverview from "./HooksOverview.jsx";
 import InvocationSummary from "./InvocationSummary.jsx";
 import Hooks from "./Hooks.jsx";
-import { Spotlight } from "./HonestPages.jsx";
+import Spotlight from "./Spotlight.jsx";
 import { PublicExtensions, Publisher } from "./Registry.jsx";
 
 export default {
