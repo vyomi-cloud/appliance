@@ -3,6 +3,7 @@
  * Support + Troubleshooting (azure.apim.tools — Azure's own multi-tenant diagnostics/support
  * backends) and Managed identities / user-assigned (not catalogued in Vyomi, same as every
  * other service) — those render an honest NotSimulated panel via CAP_FOR. */
+import { ResourceMetrics } from "../../kit/ResourceMonitoring.jsx";
 import ResourceEvents from "../../kit/ResourceEvents.jsx";
 import { useEffect, useState } from "react";
 import {
@@ -205,7 +206,7 @@ function Overview({ a, reload, self }) {
           <Link href={`${self}/apis`}>APIs</Link>{" · "}<Link href={`${self}/products`}>Products</Link>{" · "}<Link href={`${self}/subscriptions`}>Subscriptions</Link>
         </div>
       )}
-      {tab === "monitoring" && <NotSimulatedContainer feature="API Management monitoring (capacity, requests, latency charts)" />}
+      {tab === "monitoring" && <ResourceMetrics id={a.id} name={a.name} title="Monitoring" />}
       {tab === "capacity" && <NotSimulatedContainer feature="The capacity gauge" />}
       {tab === "properties" && <PropertyList a={a} />}
 

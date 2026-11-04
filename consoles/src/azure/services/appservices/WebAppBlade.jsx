@@ -3,6 +3,7 @@
  * domains, Locks, App Service logs, Diagnostic settings, Access control (IAM), Export
  * template, Identity, Backups and Scale up/out/Change App Service plan are backed by native
  * ARM calls; everything else in the menu is an honest NotSimulated panel. */
+import { ResourceMetrics } from "../../kit/ResourceMonitoring.jsx";
 import DeploymentCenter from "../../kit/DeploymentCenter.jsx";
 import { UserAssignedIdentities } from "../../kit/UserAssignedIdentities.jsx";
 import { useEffect, useState } from "react";
@@ -214,7 +215,7 @@ function Overview({ a, reload, self }) {
           <section className="vy-section"><h3>Networking</h3><KV label="Virtual IP address" value={p.outboundIpAddresses?.split(",")[0]} /><KV label="Outbound IP addresses" value={p.outboundIpAddresses} /><KV label="Additional Outbound IP addresses" value={p.possibleOutboundIpAddresses} /></section>
         </div>
       )}
-      {tab === "monitoring" && <NotSimulatedContainer feature="App Service monitoring (requests, response time, errors)" />}
+      {tab === "monitoring" && <ResourceMetrics id={a.id} name={a.name} title="Monitoring" />}
       {tab === "logs" && <NotSimulatedContainer feature="The resource's Logs (Log Analytics queries)" />}
       {tab === "capabilities" && <NotSimulatedContainer feature="The capabilities overview" />}
       {tab === "notifications" && <NotSimulatedContainer feature="Notifications" />}

@@ -27,6 +27,7 @@ import ComputeStorageFields from "./ComputeStorageFields.jsx";
 import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
 import SharedActivityLog from "../../kit/ActivityLog.jsx";
 import SharedResourceHealth from "../../kit/ResourceHealth.jsx";
+import { ResourceAlerts, ResourceMetrics, ResourceLogs } from "../../kit/ResourceMonitoring.jsx";
 import SharedDiagnosticSettings from "../../kit/DiagnosticSettings.jsx";
 import SharedSupportPanel from "../../kit/SupportPanel.jsx";
 import { ResourceRecommendations } from "../defender/Pages.jsx";
@@ -113,6 +114,9 @@ export default function SqlDatabaseBlade({ params }) {
       support: () => <SharedSupportPanel resourceId={a.id} name={a.name} service="sql" />,
       resourcehealth: () => <SharedResourceHealth id={a.id} name={a.name} />,
       diagnosticsettings: () => <SharedDiagnosticSettings id={a.id} name={a.name} />,
+      alerts: () => <ResourceAlerts id={a.id} name={a.name} />,
+      metrics: () => <ResourceMetrics id={a.id} name={a.name} />,
+      logs: () => <ResourceLogs id={a.id} name={a.name} />,
       addazuresearch: () => <AiSearchIntegration source={{ kind: "sql", capId: "azure.sql.addazuresearch", title: `${a.name} | Add Azure AI Search`, account: a.name, containerName: "dbo.Table1",
         connectionString: `Server=tcp:${a.server}.database.windows.net;Database=${a.name}` }} />,
     }[panel];
@@ -180,7 +184,7 @@ function Overview({ a, reload, self }) {
         <Tab value="tutorials">Tutorials</Tab>
       </TabList>
       {tab === "getstarted" && <div style={{ marginTop: 12 }}><GettingStarted self={self} /></div>}
-      {tab === "monitoring" && <NotSimulatedContainer feature="Database monitoring (DTU/vCore, storage and connection charts)" />}
+      {tab === "monitoring" && <ResourceMetrics id={a.id} name={a.name} title="Monitoring" />}
       {tab === "properties" && <Properties a={a} />}
       {tab === "features" && <NotSimulatedContainer feature="The features overview" />}
       {tab === "notifications" && <NotSimulatedContainer feature="Notifications" />}

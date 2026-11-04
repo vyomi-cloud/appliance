@@ -1495,6 +1495,17 @@ class AzureArm:
         if namespace.lower() == "microsoft.network" and dns_engine.handles(chain):
             return self._dns(method, sub, rg, chain, payload, query)
 
+        # Resource-group-scoped metrics (RG blade Metrics tab): ActivityOperations across everything under the group.
+        if (namespace.lower() == "microsoft.insights" and rg and len(chain) == 1 and chain[0].lower() in ("metricdefinitions", "metrics")):
+            if method != "GET":
+                return _err(405, "MethodNotAllowed", "GET required.")
+            if self._resource_group_item("GET", sub, rg, None)["status"] != 200:
+                return _err(404, "ResourceGroupNotFound", f"Resource group '{rg}' could not be found.")
+            scope_rid = f"/subscriptions/{sub}/resourceGroups/{rg}"
+            r = (monitor_engine.list_metric_definitions(self.state, scope_rid, self.blob_store, rg_exists=True) if chain[0].lower() == "metricdefinitions"
+                 else monitor_engine.get_metrics(self.state, scope_rid, query, self.blob_store, rg_exists=True))
+            return {"status": r["status"], "headers": dict(r["headers"]), "body": r["body"]}
+
         # Microsoft.Insights (action groups, metric / activity log alerts, autoscale): the Azure Monitor engine.
         if namespace.lower() == "microsoft.insights" and monitor_engine.handles(chain):
             return self._monitor(method, sub, rg, chain, payload, query)

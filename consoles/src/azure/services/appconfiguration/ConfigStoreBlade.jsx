@@ -31,6 +31,7 @@ import * as api from "./api.js";
 import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
 import SharedActivityLog from "../../kit/ActivityLog.jsx";
 import SharedResourceHealth from "../../kit/ResourceHealth.jsx";
+import { ResourceAlerts, ResourceMetrics, ResourceLogs } from "../../kit/ResourceMonitoring.jsx";
 import SharedDiagnosticSettings from "../../kit/DiagnosticSettings.jsx";
 import ImportExport from "./ImportExport.jsx";
 import SharedSupportPanel from "../../kit/SupportPanel.jsx";
@@ -108,6 +109,9 @@ export default function ConfigStoreBlade({ params, query }) {
       support: () => <SharedSupportPanel resourceId={a.id} name={a.name} service="appconfiguration" />,
       resourcehealth: () => <SharedResourceHealth id={a.id} name={a.name} />,
       diagnosticsettings: () => <SharedDiagnosticSettings id={a.id} name={a.name} />,
+      alerts: () => <ResourceAlerts id={a.id} name={a.name} />,
+      metrics: () => <ResourceMetrics id={a.id} name={a.name} />,
+      logs: () => <ResourceLogs id={a.id} name={a.name} />,
     }[panel];
     body = P ? P() : (
       <>

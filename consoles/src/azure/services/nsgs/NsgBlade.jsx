@@ -5,6 +5,7 @@
  * interfaces / Subnets association + Associate picker are backed by real ARM calls; the
  * remaining menu items are honest CapabilityContainer gaps (core/capabilities/azure/nsgs.json
  * is the single source of truth for which). */
+import { ResourceAlerts, ResourceLogs } from "../../kit/ResourceMonitoring.jsx";
 import { useEffect, useState } from "react";
 import {
   Button, Checkbox, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, Field, Input, Link,
@@ -81,8 +82,8 @@ export default function NsgBlade({ params }) {
       diagnose: () => <Diagnose />,
       tasks: () => <Tasks a={a} reload={reload} />,
       effectivesecurityrules: () => <EffectiveSecurityRules a={a} />,
-      alerts: () => <NotSimulatedContainer title={`${name} | Alerts`} feature="Alerts" />,
-      logs: () => <NotSimulatedContainer title={`${name} | Logs`} feature="Logs" />,
+      alerts: () => <ResourceAlerts id={a.id} name={a.name} />,
+      logs: () => <ResourceLogs id={a.id} name={a.name} />,
       flowlogs: () => <FlowLogsPanel a={a} />,
     }[panel];
     body = P ? P() : (

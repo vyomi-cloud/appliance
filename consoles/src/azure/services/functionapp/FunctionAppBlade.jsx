@@ -2,6 +2,7 @@
  * Environment variables, Scale and concurrency, Locks, Export template and Access control
  * (role assignments/roles) are backed by native ARM calls; everything else in the menu is an
  * honest NotSimulated panel (Vyomi has no diagnostics/telemetry/identity backend for them). */
+import { ResourceMetrics } from "../../kit/ResourceMonitoring.jsx";
 import DeploymentCenter from "../../kit/DeploymentCenter.jsx";
 import { ClassicAdminsPanel, DenyAssignmentsPanel, MyAccess } from "../../kit/IamExtras.jsx";
 import { UserAssignedIdentities } from "../../kit/UserAssignedIdentities.jsx";
@@ -216,7 +217,7 @@ function Overview({ a, reload, self }) {
       </TabList>
       {tab === "functions" && <Functions a={a} self={self} />}
       {tab === "properties" && <Properties a={a} rt={rt} />}
-      {tab === "monitoring" && <NotSimulatedContainer feature="Function app monitoring (execution count, errors, duration charts)" />}
+      {tab === "monitoring" && <ResourceMetrics id={a.id} name={a.name} title="Monitoring" />}
       {tab === "logs" && <NotSimulatedContainer feature="The Logs tab" />}
       {tab === "capabilities" && <NotSimulatedContainer feature="The capabilities overview" />}
       {tab === "notifications" && <NotSimulatedContainer feature="Notifications" />}
