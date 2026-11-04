@@ -402,7 +402,10 @@ async function createWithDefaults(page, drain, cloud, backToList, service) {
     f.push({ type: "CREATE_REJECTED", detail: `create with default values was rejected: "${(msg.match(/[^\n]*(error|failed|invalid)[^\n]*/i) || [""])[0].slice(0, 140)}"` });
   }
   await backToList();
-  const rowsAfter = await rowCount(page);
+  // The list reloads after the create call returns (a cold console takes a few seconds): poll before judging.
+  let rowsAfter = await rowCount(page);
+  for (let i = 0; i < 8 && rowsAfter <= rowsBefore; i++) { await sleep(1000); rowsAfter = await rowCount(page); }
+  if (process.env.DEBUG_CRAWL) console.log(`[debug] rows ${rowsBefore} -> ${rowsAfter}`);
   if (rowsAfter <= rowsBefore) f.push({ type: "CREATE_NO_ROW", detail: "create with defaults added no resource to the list" });
   f.push(...(await placeholderFindings(page, "after create")));
   if (rowsAfter > rowsBefore) {
