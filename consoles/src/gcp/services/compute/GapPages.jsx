@@ -79,7 +79,13 @@ function SecurityRiskOverview() {
   return (
     <Box sx={{ pt: 2 }}>
       <PageHeader title="Security risk overview" />
-      <CapabilityContainer id="gcp.compute.security-risk-overview" title="Security risk overview"><PostureFindings kind="compute" /></CapabilityContainer>
+      <CapabilityContainer id="gcp.compute.security-risk-overview" title="Security risk overview">
+        <PostureFindings kind="compute" />
+        <PageHeader title="Threats (Vyomi rule detector)" />
+        <PostureFindings kind="threats" />
+        <PageHeader title="Image vulnerabilities (Artifact Registry scanning)" />
+        <PostureFindings kind="vulnerabilities" />
+      </CapabilityContainer>
     </Box>
   );
 }

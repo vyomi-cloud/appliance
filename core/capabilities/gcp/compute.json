@@ -241,10 +241,10 @@
     "title": "Security risk overview",
     "level": { "nano": "limited", "offline": "limited" },
     "limitations": [
-      "Findings come from a deterministic rule engine over the project's real stored VMs and firewall rules (public IP, full-API-access default service account, OS Login / serial port / project SSH keys, Secure Boot, IP forwarding, firewalls open to 0.0.0.0/0 for SSH/RDP/all ports, with the instances each rule affects). It is not Security Command Center: no Trivy/vulnerability scanning of guest OS packages, no threat detection, no attack-path simulation, and no findings history or muting."
+      "Compute findings are a deterministic rule engine over stored VMs/firewalls. Threat findings come from Vyomi's deterministic detector over the control-plane calls the simulator served (bucket opened to allUsers, Owner/Editor granted, log sink deleted, world-open firewall, KMS destruction, service-account key creation) - no ML threat analysis and no attack-path simulation. Image vulnerabilities come from Artifact Registry scanning (core/vuln_scan_core.py: bundled advisory snapshot + EOL table over the image config; the real Trivy container where the offline appliance has it). It is not Security Command Center: no findings history, muting or org-level aggregation."
     ],
     "api": ["securityPosture.compute"],
-    "tests": ["tests/conformance/test_gcp_posture.py"]
+    "tests": ["tests/conformance/test_gcp_posture.py", "tests/conformance/test_gcp_secscan.py"]
   },
   "gcp.compute.migrate-to-vms": {
     "title": "Migrate to Virtual Machines (source connectors, replication, cut-over)",
