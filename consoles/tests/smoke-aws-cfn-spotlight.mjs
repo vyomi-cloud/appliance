@@ -1,0 +1,48 @@
+/* CloudFormation Spotlight: the Filters panel really filters, bookmarks persist, Create stack makes a real stack.
+ *   BASE=http://127.0.0.1:9084 node consoles/tests/smoke-aws-cfn-spotlight.mjs */
+import { createRequire } from "node:module";
+import { mkdir } from "node:fs/promises";
+const require = createRequire(import.meta.url);
+let pw;
+try { pw = require(process.env.PW || "playwright"); } catch { pw = require("/Users/sudhirganti/Applications/simulator/portal/node_modules/playwright"); }
+const BASE = process.env.BASE || "http://127.0.0.1:9084";
+const UI = `${BASE}${process.env.UI_PATH || "/v4/aws/"}`;
+const OUT = process.env.OUT || "smoke-out";
+const results = [];
+const check = (name, ok, d = "") => { results.push({ name, ok }); console.log(`${ok ? "PASS" : "FAIL"} ${name}${d ? " - " + String(d).slice(0, 160) : ""}`); };
+await mkdir(OUT, { recursive: true });
+const browser = await pw.chromium.launch();
+const page = await browser.newPage({ viewport: { width: 1440, height: 1500 } });
+const errors = []; page.on("pageerror", (e) => errors.push(e.message));
+const body = () => page.locator("body").innerText();
+await page.goto(UI + "#/cloudformation/spotlight");
+await page.getByText("Versioned S3 bucket").first().waitFor({ timeout: 10000 });
+check("Filters panel is real (no Not-simulated panel)", !/Not simulated in Vyomi/i.test(await body()));
+const count = async () => Number((await page.getByText(/^Templates \(\d+\)/).first().innerText()).match(/\((\d+)\)/)[1]);
+check("5 templates listed", (await count()) === 5);
+await page.getByRole("button", { name: /Filter by tag|All tags/ }).first().click();
+await page.getByRole("option", { name: "Messaging" }).click();
+await page.keyboard.press("Escape");
+await page.waitForFunction(() => /Templates \(2\)/.test(document.body.innerText), null, { timeout: 5000 });
+check("tag filter narrows to the 2 Messaging templates", true);
+await page.getByRole("button", { name: /Messaging/ }).first().click().catch(() => {});
+await page.keyboard.press("Escape");
+await page.getByText("Show editor's choice only").click();
+await page.waitForFunction(() => /Templates \(1\)/.test(document.body.innerText), null, { timeout: 5000 });
+check("editor's choice + Messaging -> 1 template", /SQS queue with a dead-letter queue/.test(await body()));
+await page.getByRole("button", { name: /Bookmark SQS queue/ }).click();
+await page.getByText("Show bookmarks only").click();
+check("bookmarks-only keeps the bookmarked card", (await count()) === 1);
+await page.getByRole("button", { name: "Create stack" }).first().click();
+const N = `spot-${Date.now() % 100000}`;
+await page.getByRole("dialog").getByLabel("Stack name").fill(N);
+await page.getByRole("dialog").getByRole("button", { name: "Create stack" }).click();
+await page.waitForURL(new RegExp(`#/cloudformation/stacks/${N}`), { timeout: 15000 });
+await page.getByText(/CREATE_COMPLETE|CREATE_IN_PROGRESS/).first().waitFor({ timeout: 15000 });
+check("Create stack created a real stack", true);
+await page.screenshot({ path: `${OUT}/cfn-spotlight-stack.png`, fullPage: true });
+check("no page errors", errors.length === 0, errors.join(" | "));
+await browser.close();
+const bad = results.filter((r) => !r.ok);
+console.log(`\n${results.length - bad.length}/${results.length} passed`);
+process.exit(bad.length ? 1 : 0);

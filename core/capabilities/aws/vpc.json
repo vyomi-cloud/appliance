@@ -196,20 +196,30 @@
   "limitations": [
    "CreateFlowLogs / DescribeFlowLogs / DeleteFlowLogs manage real flow log resources (status, destination, format, tags) against a VPC, subnet or ENI.",
    "Offline with netsim enforcement on (VYOMI_NETSIM_ENFORCE=1|auto, Docker compute backend) the enforcer's real per-flow packet/byte counters are delivered per flow log: CloudWatch Logs (stream <eni>-<all|accept|reject>, group must exist or deliverLogsStatus becomes FAILED) or S3 (gzip AWSLogs/<acct>/vpcflowlogs/... object with the header line), honouring TrafficType ACCEPT/REJECT, resource scope (VPC/subnet/ENI) and custom LogFormat fields (core/netsim/flowdeliver.py, tests/netsim/test_flow_delivery.py with synthetic counters). Delivery runs on each enforcement apply, not on a fixed 1/10-minute aggregation timer, and ICMP/IPv6 flows are not recorded.",
-   "Nano has no packets, so no flow records are produced there (the control plane only)."
+   "The console offers CloudWatch Logs and S3 destinations and a View flow records dialog that reads delivered records back from the CloudWatch Logs group (S3 flow logs point to the S3 console). Nano has no packets, so no flow records are produced there (the control plane only)."
   ],
   "tests": [
    "tests/conformance/test_vpc_core.py"
   ]
  },
  "aws.vpc.integrations": {
-  "title": "VPC console third-party integrations (e.g. Transit Gateway Network Manager tiles)",
+  "title": "VPC Integrations tab: transit gateway attachments and Network Manager registration",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "These dashboard tiles link out to genuinely separate things Vyomi cannot stand in for: AWS Network Manager (its own control plane over Transit Gateways) and real third-party network/observability partners (e.g. Aviatrix, Kentik) advertised in the console \u2014 not a resource this core could model, real external services."
+   "Shows this VPC's real transit gateway attachments and whether each gateway is registered in a Network Manager global network (core/networkmanager_core.py, Home Region us-west-2). Third-party partner integrations (Aviatrix, Kentik and similar) are external services and are not simulated."
+  ]
+ },
+ "aws.networkmanager": {
+  "title": "AWS Network Manager global networks, sites, devices, links and transit gateway registrations",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Inventory and registration control plane only: transit gateways are validated against the account's real EC2 model. No topology telemetry, events, route analysis, Connect or Direct Connect associations are collected."
   ]
  },
  "aws.vpc.create-vpc-and-more": {

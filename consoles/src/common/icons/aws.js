@@ -37,6 +37,8 @@ export const AWS_ICONS = {
   apigateway: ["networking", '<path d="M8.5 7.5 4.6 12l3.9 4.5M15.5 7.5l3.9 4.5-3.9 4.5M13.3 6.5l-2.6 11"/>'],
   // identity: person
   iam: ["security", '<circle cx="12" cy="8.6" r="3.1"/><path d="M5.8 19c.6-3.3 3.2-5.3 6.2-5.3s5.6 2 6.2 5.3"/>'],
+  // container registry: a stacked image box
+  ecr: ["containers", '<path d="M12 4.8 18.6 8.3v7.4L12 19.2 5.4 15.7V8.3z"/><path d="M5.6 8.4 12 12l6.4-3.6M12 12v7"/>'],
   // key
   kms: ["security", '<circle cx="8.4" cy="12" r="3.3"/><path d="M11.7 12h7.3M16.6 12v2.8M19 12v2.2"/>'],
   // padlock with an asterisk

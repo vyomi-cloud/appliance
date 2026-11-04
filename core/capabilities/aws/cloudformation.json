@@ -185,14 +185,16 @@
   "tests": ["tests/conformance/test_cloudformation_core.py", "tests/conformance/test_visual_canvas.py"]
  },
  "aws.cloudformation.spotlight": {
-  "title": "CloudFormation Spotlight (editorial content)",
+  "title": "CloudFormation Spotlight (Vyomi's curated sample-template gallery with filters, sort, editor's choice, bookmarks)",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Spotlight is an editorial content feed, not an API surface — out of Vyomi's scope."
-  ]
+   "AWS's Spotlight is an editorial content feed (an API-less web service); Vyomi does not reproduce it. The page is a gallery of five Vyomi-authored sample templates (S3, DynamoDB, SNS/SQS, SQS DLQ, SSM) whose filters (tag, sort by newest/name, editor's choice only, bookmarks only) really filter the list and whose Create stack button runs a real CreateStack. 'Editor's choice' is Vyomi's own flag; bookmarks are kept in this browser only (localStorage), not in the account."
+  ],
+  "api": ["CreateStack"],
+  "tests": ["tests/conformance/test_cloudformation_core.py"]
  },
  "aws.cloudformation.stack.policy": {
   "title": "Stack policy enforced on UpdateStack (Update:Modify/Replace/Delete, per-resource, StackPolicyDuringUpdateBody)",

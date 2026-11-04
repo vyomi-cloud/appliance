@@ -28,6 +28,7 @@ import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { VpcCidrsTab } from "./VpnPages.jsx";
 import { CreateFlowLogModal, FlowLogsTab } from "./FlowLogs.jsx";
 import GapButton from "./GapButton.jsx";
+import VpcIntegrations from "./Integrations.jsx";
 import { TAG_I18N } from "./tagI18n.js";
 import * as api from "./api.js";
 
@@ -170,7 +171,7 @@ export function VpcDetail({ params }) {
               columnDefinitions={[{ id: "k", header: "Key", cell: (r) => r.k }, { id: "v", header: "Value", cell: (r) => r.val || "-" }]}
               empty={<Box textAlign="center" color="inherit">No tags</Box>} />
           ) },
-          { id: "integ", label: "Integrations", content: <CapabilityContainer id="aws.vpc.integrations" title="Integrations" /> },
+          { id: "integ", label: "Integrations", content: <VpcIntegrations vpcId={v.VpcId} /> },
         ]} />
       </SpaceBetween>
       {tags && <TagsModal resource={v} onDismiss={() => setTags(false)} onSaved={() => { setTags(false); t.reload(); }} />}

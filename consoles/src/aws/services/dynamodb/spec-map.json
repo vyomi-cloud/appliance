@@ -96,12 +96,10 @@
     "live": "live-item"
   },
   "reserved-capacity": {
-    "route": "#/dynamodb/reserved-capacity",
-    "honest_page": true
+    "route": "#/dynamodb/reserved-capacity"
   },
   "purchase-reserved-capacity": {
-    "route": "#/dynamodb/reserved-capacity",
-    "honest_page": true
+    "route": "#/dynamodb/reserved-capacity"
   },
   "integrations": {
     "route": "#/dynamodb/integrations",

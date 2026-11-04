@@ -1,4 +1,6 @@
 import { useState } from "react";
+import BackupLink from "../../kit/BackupLink.jsx";
+import SpaceBetween from "@cloudscape-design/components/space-between";
 import Tabs from "@cloudscape-design/components/tabs";
 import ButtonDropdown from "@cloudscape-design/components/button-dropdown";
 import ResourceTable from "../../kit/ResourceTable.jsx";
@@ -30,10 +32,13 @@ function CurrentRegion() {
 export default function AutomatedBackups() {
   const [tab, setTab] = useState("current");
   return (
+    <SpaceBetween size="m">
+    <BackupLink service="Amazon RDS" resource="databases" />
     <Tabs activeTabId={tab} onChange={({ detail }) => setTab(detail.activeTabId)} tabs={[
       { id: "current", label: "Current Region", content: <CurrentRegion /> },
       { id: "replicated", label: "Replicated", content: <ResourceTable resourceName="Replicated backups" items={[]} trackBy="DBInstanceIdentifier" empty={{ title: "No replicated backups found" }} columns={COLUMNS} /> },
       { id: "retained", label: "Retained", content: <ResourceTable resourceName="Retained backups" items={[]} trackBy="DBInstanceIdentifier" empty={{ title: "No retained backups found" }} columns={COLUMNS} /> },
     ]} />
+    </SpaceBetween>
   );
 }

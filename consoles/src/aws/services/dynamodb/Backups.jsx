@@ -12,6 +12,7 @@ import Input from "@cloudscape-design/components/input";
 import RadioGroup from "@cloudscape-design/components/radio-group";
 import TagEditor from "@cloudscape-design/components/tag-editor";
 import StatusIndicator from "@cloudscape-design/components/status-indicator";
+import BackupLink from "../../kit/BackupLink.jsx";
 import ResourceTable from "../../kit/ResourceTable.jsx";
 import DeleteModal from "../../kit/DeleteModal.jsx";
 import { useAsync } from "../../../common/useAsync.js";
@@ -147,6 +148,7 @@ export default function Backups() {
   return (
     <ContentLayout header={<Header variant="h1">Backups</Header>}>
       <SpaceBetween size="l">
+        <BackupLink service="Amazon DynamoDB" resource="tables" />
         <Container header={<Header variant="h2" actions={
           <Button loading={togglingBackup} disabled={!settings.data} onClick={async () => {
             setTogglingBackup(true);

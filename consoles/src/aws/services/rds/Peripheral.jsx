@@ -48,20 +48,6 @@ export function ReservedInstances() {
   );
 }
 
-export function CapacityReservations() {
-  return (
-    <NotSimulatedContainer title="Capacity reservations" feature="RDS capacity reservations"
-      note="Capacity reservations are a capacity-market/billing construct; Vyomi has no billing system to reserve capacity against." />
-  );
-}
-
-export function CreateCapacityReservation() {
-  return <ContentLayout header={<Header variant="h1">Create capacity reservation</Header>}>
-    <NotSimulatedContainer title="Create capacity reservation" feature="RDS capacity reservations"
-      note="Capacity reservations are a capacity-market/billing construct; Vyomi has no billing system to reserve capacity against." />
-  </ContentLayout>;
-}
-
 export function ZeroEtlIntegrations() {
   return <ZeroEtl kind="rds" />;
 }

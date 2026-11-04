@@ -229,11 +229,17 @@ class Delivery:
             return                                   # unsubscribed meanwhile: drop
         policy = job.get("retry_policy") or {}
         retries = int(policy.get("numRetries", 3))
+        if job.get("ttl") is not None and self._age(job) > float(job["ttl"]):
+            self._log(job, "DeliveryFailure", f"message expired (TTL {job['ttl']}s) before delivery - dropped")
+            self._redrive(job, "TTL expired")
+            if msg is not None:
+                await msg.ack()
+            return
         try:
             note = await asyncio.get_running_loop().run_in_executor(None, self._attempt, job)
         except Exception as e:                        # noqa: BLE001 — any failure is a failed attempt
             err = str(e)[:300] or e.__class__.__name__
-            if attempt <= retries:
+            if attempt <= retries and not (job.get("ttl") is not None and self._age(job) + retry_delay(policy, attempt) > float(job["ttl"])):
                 delay = retry_delay(policy, attempt)
                 self._log(job, "DeliveryFailure", f"attempt {attempt} failed ({err}); retry {attempt} of {retries} in {delay:g}s")
                 if msg is not None:
@@ -252,6 +258,14 @@ class Delivery:
             await msg.ack()
 
     # helpers -----------------------------------------------------------------------------
+    @staticmethod
+    def _age(job: dict) -> float:
+        try:
+            t = _dt.datetime.fromisoformat(str(job.get("enqueued")).replace("Z", "+00:00"))
+            return max(0.0, (_dt.datetime.now(_dt.timezone.utc) - t).total_seconds())
+        except Exception:
+            return 0.0
+
     def _find(self, job: dict):
         for topic in list(self.store.topics.values()):
             sub = topic["subscriptions"].get(job["subscription_arn"])

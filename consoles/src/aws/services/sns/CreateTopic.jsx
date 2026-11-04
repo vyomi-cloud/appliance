@@ -53,6 +53,7 @@ export default function CreateTopic({ params, query }) {
   const [feedbackSqs, setFeedbackSqs] = useState(false);
   const [tracing, setTracing] = useState(false);
   const [tags, setTags] = useState([]);
+  const [maxSize, setMaxSize] = useState("");
   const [touched, setTouched] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -74,6 +75,7 @@ export default function CreateTopic({ params, query }) {
     if (a.KmsMasterKeyId && !encryption) { setEncryption(true); setKmsKey({ label: a.KmsMasterKeyId, value: a.KmsMasterKeyId }); }
     if (a.Policy) setPolicyJson(a.Policy);
     if (a.ArchivePolicy && !archivePolicy) setArchivePolicy(true);
+    if (a.VyomiMaximumMessageSize && maxSize === "") setMaxSize(a.VyomiMaximumMessageSize);
     setTouched(true);
   }
 
@@ -103,6 +105,7 @@ export default function CreateTopic({ params, query }) {
       await api.setTopicAttribute(arn, "Policy", accessMethod === "Advanced" ? policyJson : DEFAULT_POLICY(arn));
       await api.setTopicAttribute(arn, "ArchivePolicy", archivePolicy ? JSON.stringify({ MessageRetentionPeriod: Number(retentionDays) || 365 }) : "");
       await api.setTopicAttribute(arn, "TracingConfig", tracing ? "Active" : "PassThrough");
+      await api.setTopicAttribute(arn, "VyomiMaximumMessageSize", maxSize.trim());
       await api.setTopicAttribute(arn, "SQSSuccessFeedbackRoleArn", feedbackSqs ? `arn:aws:iam::${ACCOUNT_ID}:role/SNSSuccessFeedback` : "");
       if (feedbackSqs) await api.setTopicAttribute(arn, "SQSSuccessFeedbackSampleRate", "100");
       notify.success(`Successfully ${editing ? "updated" : "created"} topic "${api.topicName(arn)}".`);
@@ -152,7 +155,12 @@ export default function CreateTopic({ params, query }) {
               </SpaceBetween>
             </Container>
 
-            <CapabilityContainer id="sns.topic.max-message-size" title="Maximum message size" />
+            <CapabilityContainer id="sns.topic.max-message-size" title="Maximum message size">
+              <FormField label="Maximum message size (bytes) - optional" description="Publishes larger than this are rejected with InvalidParameter. Leave empty for the platform limit (262144 bytes). Stored as the Vyomi-only topic attribute VyomiMaximumMessageSize."
+                errorText={maxSize && !(/^\d+$/.test(maxSize) && Number(maxSize) >= 1 && Number(maxSize) <= 262144) ? "Enter a whole number between 1 and 262144." : null}>
+                <Input value={maxSize} inputMode="numeric" placeholder="262144" onChange={({ detail }) => setMaxSize(detail.value)} ariaLabel="Maximum message size" />
+              </FormField>
+            </CapabilityContainer>
 
             <ExpandableSection headerText="Encryption - optional" variant="container" defaultExpanded={encryption}>
               <SpaceBetween size="l">

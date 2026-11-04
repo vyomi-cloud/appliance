@@ -19,10 +19,11 @@ import Proxies from "./Proxies.jsx";
 import Events from "./Events.jsx";
 import EventSubscriptions from "./EventSubscriptions.jsx";
 import {
-  CapacityReservations, CertificateUpdate, CreateCapacityReservation, CreateZeroEtlIntegration,
+  CertificateUpdate, CreateZeroEtlIntegration,
   CustomEngineVersions, Recommendations, ReservedInstances, ZeroEtlIntegrations,
 } from "./Peripheral.jsx";
 
+import { CapacityReservations, CreateCapacityReservation } from "./CapacityReservations.jsx";
 const crumb = (text, href) => ({ text, href });
 const root = [crumb("Aurora and RDS", "#/rds")];
 

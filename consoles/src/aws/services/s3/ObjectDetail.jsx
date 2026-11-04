@@ -5,6 +5,7 @@
  * modeled, so they render as declared gaps rather than fake success. */
 import { ObjectManagementOverview } from "./Sweep.jsx";
 import { useState } from "react";
+import Container from "@cloudscape-design/components/container";
 import Header from "@cloudscape-design/components/header";
 import Tabs from "@cloudscape-design/components/tabs";
 import Button from "@cloudscape-design/components/button";
@@ -23,7 +24,7 @@ import { WIRE_BASE } from "../../../common/wire.js";
 import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import { CapabilityContainer, saveNotice } from "../../kit/Capability.jsx";
-import { ErrorAlert, fmtBytes, fmtDate, KeyValue, NotSimulatedContainer } from "../../kit/common.jsx";
+import { ErrorAlert, fmtBytes, fmtDate, KeyValue } from "../../kit/common.jsx";
 import * as api from "./api.js";
 import TagsContainer from "./TagsContainer.jsx";
 
@@ -147,13 +148,22 @@ function ObjectAcl({ bucket, objectKey }) {
   );
 }
 
+/* Object Lock can only be switched on when a bucket is created (as in real S3), so on such a bucket these panels are informational. */
+function LockDisabled({ title }) {
+  return (
+    <Container header={<Header variant="h2">{title}</Header>}>
+      <Box color="text-body-secondary">Object Lock is not enabled for this bucket. It can only be turned on when the bucket is created (Create bucket - Advanced settings - Object Lock), which also enables versioning.</Box>
+    </Container>
+  );
+}
+
 function LegalHold({ bucket, objectKey, lockLoading, lockEnabled }) {
   const notify = useNotify();
   const st = useAsync(() => lockEnabled ? api.getLegalHold(bucket, objectKey) : Promise.resolve({ unsupported: true }), [bucket, objectKey, lockEnabled]);
   const [edit, setEdit] = useState(null);
   const [saving, setSaving] = useState(false);
   if (lockLoading || st.loading) return <CapabilityContainer id="s3.bucket.object-lock" title="Object Lock legal hold"><StatusIndicator type="loading">Loading</StatusIndicator></CapabilityContainer>;
-  if (st.data?.unsupported) return <NotSimulatedContainer title="Object Lock legal hold" note="Object Lock is disabled for this bucket." />;
+  if (st.data?.unsupported) return <LockDisabled title="Object Lock legal hold" />;
   return (
     <CapabilityContainer id="s3.bucket.object-lock" title="Object Lock legal hold"
       actions={<Button onClick={() => setEdit(st.data?.status === "ON" ? "OFF" : "ON")}>Edit</Button>}>
@@ -181,7 +191,7 @@ function Retention({ bucket, objectKey, lockLoading, lockEnabled }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   if (lockLoading || st.loading) return <CapabilityContainer id="s3.bucket.object-lock" title="Object Lock retention"><StatusIndicator type="loading">Loading</StatusIndicator></CapabilityContainer>;
-  if (st.data?.unsupported) return <NotSimulatedContainer title="Object Lock retention" note="Object Lock is disabled for this bucket." />;
+  if (st.data?.unsupported) return <LockDisabled title="Object Lock retention" />;
   return (
     <CapabilityContainer id="s3.bucket.object-lock" title="Object Lock retention"
       actions={<Button onClick={() => { setError(null); setEdit({ mode: st.data?.mode || "GOVERNANCE", date: (st.data?.retainUntil || "").slice(0, 10) }); }}>Edit</Button>}>

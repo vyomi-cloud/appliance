@@ -16,6 +16,7 @@ import TagEditor from "@cloudscape-design/components/tag-editor";
 import { useNotify } from "../../../common/notify.jsx";
 import { follow, href, navigate } from "../../../common/router.js";
 import { ErrorAlert, NotSimulated } from "../../kit/common.jsx";
+import { CapabilityBadge } from "../../kit/Capability.jsx";
 import { AZS, ENGINES, ENGINE_VERSIONS, ENGINE_WIRE, INSTANCE_CLASSES, isAurora } from "./engines.js";
 import { RolePicker } from "./RdsExtras.jsx";
 import * as api from "./api.js";
@@ -348,7 +349,8 @@ export default function CreateDatabase() {
                   <Select selectedOption={SELECT(f.kmsKey)} onChange={({ detail }) => set("kmsKey")(detail.selectedOption.value)} options={[opt("(default) aws/rds")]} ariaLabel="AWS KMS key" />
                 </FormField>
                 <FormField label="Additional monitoring settings" description="Enhanced Monitoring, CloudWatch Logs and DevOps Guru" />
-                <NotSimulated feature="Database Insights metrics" note="Vyomi does not emit RDS CloudWatch metrics; this setting is stored but has nothing to chart." />
+                <Box variant="small" color="text-body-secondary">Database Insights mode, detailed metrics and retention are not stored by Vyomi: every Postgres instance is sampled for DB load, cache hit ratio, commits/rollbacks and deadlocks regardless, and charted on the database's Database Insights tab.</Box>
+                <CapabilityBadge id="rds.database_insights" />
               </SpaceBetween>
             </Container>
 

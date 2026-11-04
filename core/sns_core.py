@@ -43,7 +43,8 @@ PLATFORMS = ("ADM", "APNS", "APNS_SANDBOX", "APNS_VOIP", "APNS_VOIP_SANDBOX", "B
              "MACOS", "MACOS_SANDBOX", "MPNS", "WNS")
 TOPIC_SETTABLE = {"DeliveryPolicy", "DisplayName", "Policy", "TracingConfig", "KmsMasterKeyId",
                   "SignatureVersion", "ContentBasedDeduplication", "ArchivePolicy",
-                  "FifoThroughputScope", "BeginningArchiveTime"}
+                  "FifoThroughputScope", "BeginningArchiveTime",
+                  "VyomiMaximumMessageSize"}   # Vyomi extension: a per-topic payload cap (bytes, <= the 256 KiB platform limit)
 TOPIC_SETTABLE_PREFIXES = ("HTTP", "Lambda", "SQS", "Application", "Firehose")
 # Delivery-status logging feedback attributes (CloudWatch Logs), keyed by botocore's
 # per-protocol prefix on {prefix}SuccessFeedbackRoleArn / SampleRate / FailureFeedbackRoleArn.
@@ -403,6 +404,9 @@ def _set_topic_attributes(store, params):
         raise _invalid("Invalid parameter: SignatureVersion")
     if name == "ContentBasedDeduplication" and not _is_fifo(topic):
         raise _invalid("Invalid parameter: AttributeName Reason: ContentBasedDeduplication is only valid for FIFO topics")
+    if name == "VyomiMaximumMessageSize":
+        if raw != "" and not (raw.isdigit() and 1 <= int(raw) <= MAX_MESSAGE_BYTES):
+            raise _invalid(f"Invalid parameter: VyomiMaximumMessageSize Reason: must be an integer between 1 and {MAX_MESSAGE_BYTES}")
     topic["attributes"][name] = raw
     store.persist()
     return _envelope("SetTopicAttributes")
@@ -813,6 +817,29 @@ def _passes_body_policy(policy: dict, body) -> bool:
 
 
 # ── publish ─────────────────────────────────────────────────────────────────
+def _message_size(msg: dict) -> int:
+    return len(msg["Message"].encode("utf-8")) + sum(
+        len(k.encode()) + len(str(v.get("DataType", "")).encode()) + len(str(v.get("Value") or "").encode())
+        for k, v in msg["attrs"].items())
+
+
+_TTL_ATTR = re.compile(r"^AWS\.SNS\.MOBILE\.[A-Z0-9_]+\.TTL$")
+MAX_TTL_SECONDS = 2419200   # 28 days, the FCM/APNs ceiling
+
+
+def _message_ttl(msg: dict):
+    """Seconds from the real push-TTL message attribute (AWS.SNS.MOBILE.<PLATFORM>.TTL, Number) - validated like SNS does."""
+    found = None
+    for k, v in msg["attrs"].items():
+        if not _TTL_ATTR.match(k):
+            continue
+        val = str(v.get("Value") if isinstance(v, dict) else v).strip()
+        if not re.fullmatch(r"\d+", val) or int(val) > MAX_TTL_SECONDS:
+            raise _invalid(f"Invalid parameter: {k} Reason: TTL must be a whole number of seconds between 0 and {MAX_TTL_SECONDS}")
+        found = int(val) if found is None else min(found, int(val))
+    return found
+
+
 def _check_message(msg: dict, fifo: bool, require_default: bool = True) -> None:
     message = msg["Message"]
     if message is None or message == "":
@@ -928,7 +955,7 @@ def _redrive_target(sub: dict) -> str:
 
 
 def _simulate_http_retry_exhaustion(store, topic: dict, sub: dict, *, message_id: str, subject: str,
-                                    message: str, envelope: dict) -> None:
+                                    message: str, envelope: dict, ttl=None) -> None:
     """Nano / dev_server have no durable delivery worker (no background thread, no real
     socket to retry an HTTP/S endpoint against), so a push can never actually succeed there —
     see sns.publish.other-protocols. What CAN be made real on this substrate is the
@@ -940,16 +967,25 @@ def _simulate_http_retry_exhaustion(store, topic: dict, sub: dict, *, message_id
     policy = _retry_policy(topic, sub)
     total = max(0, int(policy.get("numRetries", 3)))
     arn, sub_arn, endpoint, protocol = topic["topic_arn"], sub["subscription_arn"], sub["endpoint"], sub["protocol"]
+    waited = 0.0
     for attempt in range(1, total + 2):             # 1 initial attempt + `total` configured retries
+        expired = False
         if attempt <= total:
             delay = retry_delay(policy, attempt)
-            note = (f"attempt {attempt} failed (no delivery worker on this substrate); "
-                    f"retry {attempt} of {total} in {delay:g}s per healthyRetryPolicy")
+            if ttl is not None and waited + delay > ttl:
+                note = f"attempt {attempt} failed; message expired (TTL {ttl}s) before retry {attempt} - dropped"
+                expired = True
+            else:
+                waited += delay
+                note = (f"attempt {attempt} failed (no delivery worker on this substrate); "
+                        f"retry {attempt} of {total} in {delay:g}s per healthyRetryPolicy")
         else:
             note = f"gave up after {attempt} attempts per healthyRetryPolicy"
         _log_delivery(store, kind="DeliveryFailure", topic_arn=arn, protocol=protocol, endpoint=endpoint,
                       subscription_arn=sub_arn, subject=subject, message=message, message_id=message_id,
                       error=note)
+        if expired:
+            break
     target = _redrive_target(sub)
     if target and _deliver_sqs(store, target, json.dumps(envelope), None, None, message_id):
         _log_delivery(store, kind="DeadLetter", topic_arn=arn, protocol=protocol, endpoint=target,
@@ -978,6 +1014,10 @@ def _publish_to_topic(store, topic: dict, msg: dict) -> tuple[str, str]:
     fifo = _is_fifo(topic)
     _enforce_data_protection_policy(store, topic, msg)
     _check_message(msg, fifo)
+    cap = str(topic["attributes"].get("VyomiMaximumMessageSize") or "")
+    if cap.isdigit() and _message_size(msg) > int(cap):
+        raise _invalid(f"Invalid parameter: Message too long (topic maximum message size is {cap} bytes)")
+    ttl = _message_ttl(msg)
     arn = topic["topic_arn"]
     seq = ""
     dedup = msg.get("dedup")
@@ -1051,10 +1091,10 @@ def _publish_to_topic(store, topic: dict, msg: dict) -> tuple[str, str]:
                 queued = _enqueue_delivery(
                     store, topic, sub, kind="Notification", subject=msg.get("Subject") or "", message=text,
                     message_id=message_id, raw=raw, envelope=env, group=msg.get("group") or "",
-                    attributes=attrs or {})
+                    attributes=attrs or {}, ttl=ttl)
             if not queued and sub["protocol"] in ("http", "https"):
                 _simulate_http_retry_exhaustion(store, topic, sub, message_id=message_id,
-                                                subject=msg.get("Subject") or "", message=text, envelope=env)
+                                                subject=msg.get("Subject") or "", message=text, envelope=env, ttl=ttl)
             elif not queued:
                 _log_delivery(store, kind="Notification", topic_arn=arn, protocol=sub["protocol"],
                               endpoint=sub["endpoint"], subscription_arn=sub["subscription_arn"],
