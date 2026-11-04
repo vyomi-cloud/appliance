@@ -6,7 +6,6 @@
 import GapPage from "./common.jsx";
 
 const PAGES = [
-  { id: "partner-event-sources", path: "partner-event-sources", title: "Partner event sources" },
   { id: "learn", path: "learn", title: "Learn" },
   { id: "quick-starts", path: "quick-starts", title: "Quick starts" },
 ];

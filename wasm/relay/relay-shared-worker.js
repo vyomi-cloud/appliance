@@ -35,11 +35,13 @@ const CORES = [
   "azure_blob_core.py", "azure_cosmos_core.py", "azure_keyvault_secrets_core.py",
   "azure_keyvault_keys_core.py", "azure_keyvault_certificates_core.py", "azure_queue_core.py", "azure_table_core.py", "azure_servicebus_core.py",
   "eventbridge_core.py", "eventbridge_schemas_core.py", "scheduler_core.py", "lambda_core.py", "apigateway_core.py", "apigatewayv2_core.py", "apigatewayv2_gateway.py", "vpc_core.py", "vpc_vpn_core.py", "vpc_extras_core.py", "vpc_lattice_core.py", "ec2_ops_core.py", "netfw_core.py", "dnsfw_core.py", "autoscaling_core.py", "ram_core.py", "dlm_core.py", "kinesis_core.py", "cloudwatch_core.py", "cloudformation_core.py", "logs_core.py", "ssm_core.py", "stepfunctions_core.py", "gcp_cloudscheduler_core.py", "gcp_container_core.py", "gcp_redis_core.py", "gcp_iamcredentials_core.py", "gcp_monitoring_core.py", "gcp_run_core.py", "gcp_gke_dataplane_core.py",
+  "eventbridge_partner_core.py", "cloudformation_stacksets_core.py", "cloudformation_registry_core.py",
   "azure_sql_core.py", "azure_iam_core.py", "azure_acr_core.py", "azure_graph_core.py",
   "azure_app_core.py", "azure_webapp_core.py", "azure_appconfiguration_core.py", "azure_cognitiveservices_core.py", "azure_dns_core.py", "azure_monitor_core.py", "azure_operationalinsights_core.py",
   "azure_eventgrid_core.py", "azure_locks_core.py", "azure_templates_core.py", "azure_health_core.py", "azure_support_core.py",
   "k8s_yaml.py", "azure_aks_k8s_core.py", "kubescape_catalog.py", "kubescape_core.py", "azure_security_core.py",   // AKS objects + Defender for Cloud
   "cost_model.py", "azure_cost_core.py", "azure_arm_data.py", "azure_storage_ext_core.py", "azure_policy_core.py", "azure_netsvc_core.py", "azure_webdeploy_core.py", "azure_arm_core.py",   // Azure ARM control plane — nano_registry imports it
+  "ce_core.py",
   "aws_wire_router.py",
   "nano_events.py", "nano_registry.py", "nano_persist.py",   // shared registry + store persistence (console↔CLI parity)
 ];

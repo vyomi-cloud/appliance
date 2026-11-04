@@ -1,5 +1,5 @@
 {
-  "_doc": "ui-spec page id → v4 route. honest_page = the whole page is a declared 'Not simulated in Vyomi' gap, approved on consoles/honest-allowlist.json (public-extensions). Hooks overview/invocation-summary/hooks are real (registry Type=HOOK, enforced on CreateStack/UpdateStack/DeleteStack). activated-extensions/extension-detail are approved as read-only REFERENCE pages (_reference) — real backend data (ListTypes/DescribeType), no create-a-resource liveness.",
+  "_doc": "ui-spec page id → v4 route. honest_page = the whole page is a declared 'Not simulated in Vyomi' gap, Hooks overview/invocation-summary/hooks are real (registry Type=HOOK, enforced on CreateStack/UpdateStack/DeleteStack). activated-extensions/extension-detail are approved as read-only REFERENCE pages (_reference) — real backend data (ListTypes/DescribeType), no create-a-resource liveness.",
   "getting-started": {
     "route": "#/cloudformation"
   },
@@ -52,8 +52,7 @@
     "live": "live-hook"
   },
   "public-extensions": {
-    "route": "#/cloudformation/registry/public-extensions",
-    "honest_page": true
+    "route": "#/cloudformation/registry/public-extensions"
   },
   "extension-detail": {
     "route": "#/cloudformation/registry/public-extensions/resource-type/AWS::S3::Bucket",

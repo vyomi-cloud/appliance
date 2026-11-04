@@ -68,10 +68,10 @@ CORES = [
     "azure_iam_core.py",                            # v2.6.0 Azure: RBAC checkAccess decision core (IAM/testIamPermissions peer)
     "azure_acr_core.py",                            # v4: Container Registry repository data plane (OCI v2 + ACR v1 REST)
     "azure_graph_core.py",                          # v4: Microsoft Graph (Entra ID: users/groups/apps/service principals/domains/admin units)
-    "eventbridge_core.py", "eventbridge_schemas_core.py",                          # v2.6.0 AWS: EventBridge event-bus data plane (rules → SQS delivery)
+    "eventbridge_core.py", "eventbridge_schemas_core.py", "eventbridge_partner_core.py",                          # v2.6.0 AWS: EventBridge event-bus data plane (rules → SQS delivery)
     "lambda_core.py",                              # v2.6.0 AWS: Lambda serverless invoke (sandboxed Python runtime)
     "apigateway_core.py",                          # v2.7.0 AWS: API Gateway data plane (routing + MOCK/Lambda-proxy integrations)
-    "cost_model.py",                                # list prices -> the space cost-savings metrics (pure data)
+    "cost_model.py", "ce_core.py",                                # list prices -> the space cost-savings metrics (pure data)
     "kinesis_core.py",                             # AWS: Kinesis Data Streams (shards, records, iterators, consumers)
     "apigatewayv2_core.py",                        # AWS: API Gateway V2 control plane
     "apigatewayv2_gateway.py",                     # AWS: API Gateway V2 data plane (authorizers, throttling, CORS, Lambda proxy)
@@ -89,7 +89,7 @@ CORES = [
     "gcp_logging_core.py",                         # GCP: Cloud Logging REST v2 (entries, sinks, log-based metrics, log buckets/views)
     "gcp_run_core.py",                             # GCP: Cloud Run Admin API v2 (services, jobs, worker pools, domain mappings) — backs /functions
     "stepfunctions_core.py",                       # AWS: Step Functions (ASL interpreter, executions, activities)
-    "cloudformation_core.py",                      # AWS: CloudFormation (stacks, change sets, stack sets — provisions through s3/ddb/sns/sqs/iam)
+    "cloudformation_core.py", "cloudformation_stacksets_core.py", "cloudformation_registry_core.py",                      # AWS: CloudFormation (stacks, change sets, stack sets — provisions through s3/ddb/sns/sqs/iam)
     "cloudwatch_core.py",                          # AWS CloudWatch: metrics / alarms / dashboards (rpc-v2-cbor + JSON + Query wire)
     "vpc_vpn_core.py",
     "vpc_extras_core.py", "vpc_lattice_core.py", "ec2_ops_core.py",
