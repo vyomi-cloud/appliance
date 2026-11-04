@@ -346,13 +346,17 @@
   ]
  },
  "aws.vpc.lattice": {
-  "title": "VPC Lattice (service networks, services, resource configurations/gateways, target groups, domain verifications)",
+  "title": "VPC Lattice control plane (service networks, services, listeners/rules, target groups, associations, resource gateways/configurations, domain verifications, auth policies)",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Amazon VPC Lattice is a separate AWS service surfaced under the VPC nav \u2014 not simulated."
+   "Control plane is real (core/vpc_lattice_core, native vpc-lattice REST): AWS name/ID/ARN formats, VPC/subnet/security-group/instance checks against the EC2 model, one service network per VPC, unique listener ports and rule priorities, undeletable default rule, in-use target groups/gateways/networks refuse deletion, auth/resource policy and tag APIs.",
+   "No traffic is routed through a service network (no netsim data path): service DNS names do not resolve, listeners/rules are never evaluated against requests, and target health is never probed (targets stay INITIAL/UNUSED). A domain verification stays PENDING because no DNS TXT check is performed. Cross-account sharing (RAM) is not modeled."
+  ],
+  "tests": [
+   "tests/conformance/test_vpc_lattice_core.py"
   ]
  },
  "aws.vpc.dns-firewall": {
@@ -493,7 +497,7 @@
    "offline": "limited"
   },
   "limitations": [
-   "Vyomi simulates one Region (us-east-1); the page lists live counts for it and states that other Regions are not modeled — no cross-Region data exists to aggregate."
+   "Vyomi simulates one Region (us-east-1); the page lists live counts for it and states that other Regions are not modeled \u2014 no cross-Region data exists to aggregate."
   ],
   "tests": [
    "tests/conformance/test_vpc_core.py"
