@@ -209,6 +209,7 @@ def _create_vpc(store, params):
     m["route_tables"][rt_id] = {"id": rt_id, "vpc_id": vpc_id, "main": True,
                                "routes": [{"dest": cidr, "target": "local"}],
                                "subnets": [], "tags": {}}
+    _vpc_default_sg(m, vpc_id, "")   # every VPC gets its `default` security group at creation, like AWS
     return _envelope("CreateVpc", f"<vpc><vpcId>{vpc_id}</vpcId><cidrBlock>{cidr}</cidrBlock>"
                                   f"<state>available</state><instanceTenancy>{_xml_escape(m['vpcs'][vpc_id]['tenancy'])}</instanceTenancy>"
                                   f"<dhcpOptionsId>{_xml_escape(m['vpcs'][vpc_id]['dhcp_options_id'])}</dhcpOptionsId>"
@@ -239,6 +240,21 @@ def _describe_vpc_attribute(store, params):
     tag = "enableDnsHostnames" if attr == "enableDnsHostnames" else "enableDnsSupport"
     return _envelope("DescribeVpcAttribute", f"<vpcId>{_xml_escape(vpc_id)}</vpcId>"
                                              f"<{tag}><value>{str(v.get(key, False)).lower()}</value></{tag}>")
+
+
+def delete_vpc_cascade(store, vpc_id: str) -> bool:
+    """Remove a VPC and everything recorded under it: what the console's Delete VPC does
+    (subnets, gateways, route tables, security groups, ACLs, NAT gateways, endpoints...)."""
+    m = _model(store)
+    if vpc_id not in m["vpcs"]:
+        return False
+    for key, records in m.items():
+        if key == "vpcs" or not isinstance(records, dict):
+            continue
+        for rid in [k for k, r in records.items() if isinstance(r, dict) and r.get("vpc_id") == vpc_id]:
+            del records[rid]
+    del m["vpcs"][vpc_id]
+    return True
 
 
 def _delete_vpc(store, params):
@@ -3293,10 +3309,24 @@ def _describe_security_groups(store, params):
     ids = [v for k, v in params.items() if k.startswith("GroupId.")]
     names = [v for k, v in params.items() if k.startswith("GroupName.")]
     rows = list(m["sgs"].values())
+    missing = [i for i in ids if i not in m["sgs"]]
+    if missing:
+        raise VpcError("InvalidGroup.NotFound", f"The security group '{missing[0]}' does not exist")
     if ids:
         rows = [sg for sg in rows if sg["id"] in ids]
     elif names:
         rows = [sg for sg in rows if sg.get("name") in names]
+    flt = {}
+    for k, v in params.items():
+        mt = re.match(r"Filter\.(\d+)\.Name$", k)
+        if mt:
+            flt[v] = {params[x] for x in params if x.startswith(f"Filter.{mt.group(1)}.Value.")}
+    if "group-id" in flt:
+        rows = [sg for sg in rows if sg["id"] in flt["group-id"]]
+    if "group-name" in flt:
+        rows = [sg for sg in rows if sg.get("name") in flt["group-name"]]
+    if "vpc-id" in flt:
+        rows = [sg for sg in rows if sg.get("vpc_id") in flt["vpc-id"]]
     return _envelope("DescribeSecurityGroups", f"<securityGroupInfo>{''.join(_sg_xml(sg) for sg in rows)}</securityGroupInfo>")
 
 

@@ -1231,24 +1231,17 @@ class AzureArm:
         if rest_segs[0].lower() == "resourcegroups" and len(rest_segs) <= 2:
             if len(rest_segs) == 1:
                 if method == "GET":
-                    return _ok({"value": list_resource_groups(self.state)})
+                    return _ok({"value": self._list_resource_groups(sub)})
                 return _err(405, "MethodNotAllowed", "Use PUT /resourcegroups/{name}.")
             kids = []
             if method == "DELETE":
                 kids = [r for r in list(self.state.values()) if isinstance(r, dict)
                         and (r.get("_rg") or "").lower() == rest_segs[1].lower()
                         and r.get("type") != "Microsoft.Resources/resourceGroups"]
-            code, body = resource_group_item(self.state, method, rest_segs[1], payload)
+            out = self._resource_group_item(method, sub, rest_segs[1], payload)
             for _r in kids:   # after removal, so "last vault gone" checks see the final state
                 self._child_deleted(_r)
-            return {"status": code, "headers": {}, "body": body}
-        if len(rest_segs) == 3 and rest_segs[0].lower() == "resourcegroups" \
-                and rest_segs[2].lower() == "resources" and method == "GET":
-            res = list_group_resources(self.state, rest_segs[1])
-            if res is None:
-                code, body = resource_group_item(self.state, "GET", rest_segs[1], {})
-                return {"status": code, "headers": {}, "body": body}
-            return _ok({"value": res})
+            return out
 
         rg = None
         idx = 0

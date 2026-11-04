@@ -1756,32 +1756,6 @@ def dispatch(store: MessagingStore, method: str, path: str,
 
     query = query or {}
     try:
-        if collection == "schemas":
-            sch = _schemas(store)
-            if len(segs) == 3:
-                if method == "GET":
-                    items = [dict(v, name=k) for k, v in sorted(sch.items()) if k.startswith(f"projects/{project}/schemas/")]
-                    return _json(200, {"schemas": items} if items else {})
-                if method == "POST":
-                    sid = str(query.get("schemaId") or payload.get("name") or "").split("/")[-1]
-                    full = f"projects/{project}/schemas/{sid}"
-                    rec = validate_schema(sid, payload)
-                    if full in sch:
-                        raise PubsubError(409, "ALREADY_EXISTS", f"Schema already exists: {full}")
-                    sch[full] = rec
-                    store.persist()
-                    return _json(200, dict(rec, name=full))
-            elif len(segs) == 4:
-                if resource not in sch:
-                    raise PubsubError(404, "NOT_FOUND", f"Schema not found: {resource}")
-                if method == "GET":
-                    return _json(200, dict(sch[resource], name=resource))
-                if method == "DELETE":
-                    sch.pop(resource)
-                    store.persist()
-                    return _json(200, {})
-            return _err(400, "INVALID_ARGUMENT", f"Unsupported method {method} on schemas")
-
         if collection == "topics":
             if len(segs) == 3:                       # collection
                 if method == "GET":

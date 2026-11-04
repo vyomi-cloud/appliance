@@ -1502,7 +1502,7 @@ def _key():
 
 def site_log(rec, message, level="Information"):
     """Append one line to the app's log stream (platform + application events)."""
-    logs = rec.setdefault("_logs", [])
+    logs = rec.setdefault("_logstream", [])
     logs.append({"timestamp": _now(), "level": level, "message": str(message)[:2000]})
     del logs[:-500]
 
@@ -1697,7 +1697,7 @@ def _site_route(state, method, sub, rg, after, payload):
         fk = fn.setdefault("_keys", {"default": _key()})
         return _ok(dict(fk))
     if rest[:1] == ["extensions"] and rest[1:] == ["api", "logs"] and method == "GET":
-        return _ok({"value": list(reversed(site.get("_logs") or []))[:200]})
+        return _ok({"value": list(reversed(site.get("_logstream") or []))[:200]})
     return None
 
 
@@ -2290,7 +2290,7 @@ def route(state, method, sub, rg, after, payload=None, query=None, executor=None
         pk, sk = apim_sub_keys(svc_id, after[4], srec)
         return _ok({"primaryKey": pk, "secondaryKey": sk})
     if low[0] == "microsoft.apimanagement" and low[1] == "service" and len(after) >= 4 and low[3] == "namedvalues" \
-            and (method == "GET" or (len(after) == 6 and low[5] == "listvalue")):
+            and method == "GET":   # (listValue is v4's: AzureArm._apim_namedvalue_listvalue resolves Key Vault refs for real)
         r = _apim_route(state, method, sub, rg, after, payload)
         if r is not None:
             return r

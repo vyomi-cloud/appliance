@@ -135,7 +135,7 @@ def test_wire_router_routes_artifactregistry():
     out = router.handle("POST", rb, {"repositoryId": "w1"}, {"content-type": "application/json"},
                         json.dumps({"format": "MAVEN"}).encode())
     assert out["status"] == 200 and json.loads(out["body"])["done"]
-    assert router.handle("GET", B + "/w1", {}, {}, b"")["status"] == 200
+    assert router.handle("GET", rb + "/w1", {}, {}, b"")["status"] == 200
 
 
 def test_list_across_locations():

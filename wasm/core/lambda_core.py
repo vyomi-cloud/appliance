@@ -550,14 +550,16 @@ def _list_tags(store, name):
 
 
 # ── function URL ─────────────────────────────────────────────────────────────────────────
-def _url_view(name, cfg):
-    return {"FunctionUrl": f"https://{name.lower()}.lambda-url.{REGION}.on.vyomi/",
+def _url_view(name, cfg, headers=None):
+    # the public invoke path (served by url_invoke) when the config has an id; else the legacy host form
+    furl = f"{_origin_from(headers)}/lambda-url/{cfg['url_id']}/" if cfg.get("url_id") else f"https://{name.lower()}.lambda-url.{REGION}.on.vyomi/"
+    return {"FunctionUrl": furl,
             "FunctionArn": _fn_arn(name), "AuthType": cfg.get("AuthType", "AWS_IAM"),
             "Cors": cfg.get("Cors") or {}, "InvokeMode": cfg.get("InvokeMode", "BUFFERED"),
             "CreationTime": cfg.get("CreationTime", _now_iso()), "LastModifiedTime": _now_iso()}
 
 
-def _create_function_url_config(store, name, body):
+def _create_function_url_config(store, name, body, headers=None):
     try:
         fn = _require_fn(store, name)
     except _NotFound as e:
@@ -565,21 +567,22 @@ def _create_function_url_config(store, name, body):
     if fn.get("function_url"):
         return _err(409, "ResourceConflictException", "Function URL config already exists.")
     fn["function_url"] = {"AuthType": body.get("AuthType", "AWS_IAM"), "Cors": body.get("Cors") or {},
-                          "InvokeMode": body.get("InvokeMode", "BUFFERED"), "CreationTime": _now_iso()}
+                          "InvokeMode": body.get("InvokeMode", "BUFFERED"), "CreationTime": _now_iso(),
+                          "url_id": uuid.uuid4().hex[:32]}
     _persist(store)
-    return _json(201, _url_view(name, fn["function_url"]))
+    return _json(201, _url_view(name, fn["function_url"], headers))
 
 
-def _get_function_url_config(store, name):
+def _get_function_url_config(store, name, headers=None):
     fn = _find_fn(store, name)
     if not fn:
         return _err(404, "ResourceNotFoundException", f"Function not found: {_fn_arn(name)}")
     if not fn.get("function_url"):
         return _err(404, "ResourceNotFoundException", "The resource you requested doesn't exist.")
-    return _json(200, _url_view(name, fn["function_url"]))
+    return _json(200, _url_view(name, fn["function_url"], headers))
 
 
-def _update_function_url_config(store, name, body):
+def _update_function_url_config(store, name, body, headers=None):
     try:
         fn = _require_fn(store, name)
     except _NotFound as e:
@@ -588,7 +591,7 @@ def _update_function_url_config(store, name, body):
         return _err(404, "ResourceNotFoundException", "The resource you requested doesn't exist.")
     fn["function_url"].update({k: v for k, v in body.items() if k in ("AuthType", "Cors", "InvokeMode")})
     _persist(store)
-    return _json(200, _url_view(name, fn["function_url"]))
+    return _json(200, _url_view(name, fn["function_url"], headers))
 
 
 def _delete_function_url_config(store, name):
@@ -1298,18 +1301,32 @@ def _record_invocation(fn, request_id, duration_ms, error, extra=None):
     del fn["invocations"][RECENT_INVOCATIONS_KEPT:]
 
 
+class _Ctx(dict):
+    """Lambda context: attribute access (context.function_name) AND the dict form older handlers use."""
+    __getattr__ = dict.get
+
+
 def _sandbox_run(fn, event, context) -> dict:
     """The in-process sandboxed Python runtime (Nano; any store without `run_function`)."""
-    sandbox_globals = {"__builtins__": dict(_SAFE_BUILTINS), "json": json}
+    logs = []
+
+    def _print(*a, **k):   # captured as the invocation's log (LogType=Tail / CloudWatch Logs)
+        logs.append(" ".join(str(x) for x in a))
+    safe = dict(_SAFE_BUILTINS)
+    safe["print"] = _print
+    sandbox_globals = {"__builtins__": safe, "json": json}
+    lg = lambda: "\n".join(logs) + ("\n" if logs else "")
     try:
         exec(compile(fn.get("source", ""), f"<lambda:{fn['name']}>", "exec"), sandbox_globals)
         handler = sandbox_globals.get(fn.get("handler", "index.handler").split(".")[-1]) \
             or sandbox_globals.get("handler")
         if not callable(handler):
             raise RuntimeError("handler is not defined")
-        return {"ok": True, "result": handler(event, context)}
+        result = handler(event, _Ctx(context))
+        fn.setdefault("logs", []).extend(logs)
+        return {"ok": True, "result": result, "logs": lg()}
     except Exception as e:
-        return {"ok": False, "errorType": type(e).__name__, "error": str(e)}
+        return {"ok": False, "errorType": type(e).__name__, "error": str(e), "logs": lg()}
 
 
 def _statement_principal(stmt) -> str:
@@ -1447,9 +1464,19 @@ def _invoke(store, name, body, headers=None, query=None, msg_store=None, lam_sto
         _deliver_async_result(fn, name, event, out, request_id, msg_store, lam_store)
     _persist(store)
     hdrs = {"X-Amz-Executed-Version": "$LATEST", "x-amzn-RequestId": request_id}
+    log_lines = [f"START RequestId: {request_id} Version: $LATEST"]
+    log_lines += [ln for ln in logs.splitlines() if ln.strip()]
+    log_lines += [f"END RequestId: {request_id}",
+                  f"REPORT RequestId: {request_id}\tDuration: {round(duration_ms, 2)} ms\tBilled Duration: {int(duration_ms) + 1} ms\t"
+                  f"Memory Size: {fn.get('memory_size', 128)} MB\tMax Memory Used: 32 MB"]
+    sink = getattr(store, "_log_sink", None)   # CloudWatch Logs (/aws/lambda/<fn>) like real Lambda
+    if sink is not None:
+        try:
+            sink(f"/aws/lambda/{name}", f"{time.strftime('%Y/%m/%d')}/[$LATEST]{request_id}", log_lines)
+        except Exception:
+            pass
     if str(lh.get("x-amz-log-type") or "").lower() == "tail":
-        tail = (logs + f"END RequestId: {request_id}\nREPORT RequestId: {request_id}\t"
-                f"Duration: {round(duration_ms, 2)} ms\n")[-4096:]
+        tail = ("\n".join(log_lines) + "\n")[-4096:]
         hdrs["X-Amz-Log-Result"] = base64.b64encode(tail.encode()).decode()
     if itype == "Event":
         return LambdaResponse(status=202, body=b"", headers=hdrs, media_type=None)
@@ -1513,8 +1540,8 @@ def invoke_by_arn(store, arn: str, event: dict) -> bool:
     name = _norm_name(str(arn).rsplit(":", 1)[-1] if ":function:" not in str(arn) else arn)
     if name not in _functions(store):
         return False
-    try:
-        _invoke(store, name, json.dumps(event).encode())
+    try:   # through the native router (the same path a wire Invoke takes)
+        dispatch(store, "POST", f"/2015-03-31/functions/{name}/invocations", {}, {}, json.dumps(event).encode())
     except Exception:
         pass
     return True
@@ -1766,11 +1793,11 @@ def _dispatch_functions(store, method, tail, query, body, headers=None, msg_stor
 
     if sub == "url" and not rest:
         if method == "POST":
-            return _create_function_url_config(store, name, _parse(body))
+            return _create_function_url_config(store, name, _parse(body), headers)
         if method == "GET":
-            return _get_function_url_config(store, name)
+            return _get_function_url_config(store, name, headers)
         if method == "PUT":
-            return _update_function_url_config(store, name, _parse(body))
+            return _update_function_url_config(store, name, _parse(body), headers)
         if method == "DELETE":
             return _delete_function_url_config(store, name)
 
@@ -1849,100 +1876,17 @@ def _dispatch_functions(store, method, tail, query, body, headers=None, msg_stor
     return _err(404, "ResourceNotFoundException", f"Unknown functions path: /{name}/{sub}")
 
 
-def _invoke(store, name, body, headers=None):
-    """Invoke + the log plumbing real Lambda has: the handler's stdout/START/END/REPORT lines go to
-    CloudWatch Logs (/aws/lambda/<fn>) via the store's optional ``_log_sink`` and, with
-    ``X-Amz-Log-Type: Tail``, come back base64 in ``X-Amz-Log-Result``."""
-    import contextlib
-    import io
-    import time as _t
-    name = name.split(":function:")[-1].split(":")[0] if ":function:" in name else name
-    buf = io.StringIO()
-    seen = len((_functions(store).get(name) or {}).get("logs", []))
-    with contextlib.redirect_stdout(buf):
-        r = _invoke_raw(store, name, body, headers)
-    if r.status == 404:
-        return r
-    rid = uuid.uuid4().hex
-    fn = _functions(store).get(name) or {}
-    lines = [f"START RequestId: {rid} Version: $LATEST"]
-    lines += [ln for ln in buf.getvalue().splitlines() if ln.strip()]
-    lines += [str(ln) for ln in fn.get("logs", [])[seen:] if str(ln).strip()]   # print() output the sandbox captured
-    if (r.headers or {}).get("X-Amz-Function-Error"):
-        try:
-            lines.append("[ERROR] " + str(json.loads(r.body.decode("utf-8")).get("errorMessage", "")))
-        except Exception:
-            pass
-    lines += [f"END RequestId: {rid}",
-              f"REPORT RequestId: {rid}\tDuration: 1.00 ms\tBilled Duration: 1 ms\tMemory Size: {fn.get('memory_size', 128)} MB\tMax Memory Used: 32 MB"]
-    sink = getattr(store, "_log_sink", None)
-    if sink is not None:
-        try:
-            sink(f"/aws/lambda/{name}", f"{_t.strftime('%Y/%m/%d')}/[$LATEST]{rid}", lines)
-        except Exception:
-            pass
-    hl = {str(k).lower(): v for k, v in (headers or {}).items()}
-    if hl.get("x-amz-log-type", "").lower() == "tail":
-        r.headers = dict(r.headers or {})
-        r.headers["X-Amz-Log-Result"] = base64.b64encode(("\n".join(lines) + "\n").encode("utf-8")[-4096:]).decode("ascii")
-    return r
-
-
 # ── Function URLs (API 2021-10-31) ──────────────────────────────────────────
-def _url_cfg_view(fn: dict, origin: str) -> dict:
-    c = fn["url"]
-    return {"FunctionUrl": f"{origin}/lambda-url/{c['url_id']}/", "FunctionArn": fn["arn"], "AuthType": c["auth_type"],
-            "Cors": c.get("cors") or {}, "CreationTime": c["created"], "LastModifiedTime": c["modified"],
-            "InvokeMode": c.get("invoke_mode", "BUFFERED")}
-
-
 def _origin_from(headers) -> str:
     hl = {str(k).lower(): v for k, v in (headers or {}).items()}
     host = hl.get("x-forwarded-host") or hl.get("host") or "localhost"
     return f"{hl.get('x-forwarded-proto') or 'http'}://{host}"
 
 
-def _function_url(store, method, name, plural, body, headers):
-    fn = _functions(store).get(name)
-    if not fn:
-        return _err(404, "ResourceNotFoundException", f"Function not found: {name}")
-    origin = _origin_from(headers)
-    if plural:
-        return _json(200, {"FunctionUrlConfigs": [_url_cfg_view(fn, origin)] if fn.get("url") else []})
-    b = _parse(body)
-    if method == "POST":
-        if fn.get("url"):
-            return _err(409, "ResourceConflictException", "Failed to create function url config: it already exists.")
-        if b.get("AuthType") not in ("NONE", "AWS_IAM"):
-            return _err(400, "InvalidParameterValueException", "AuthType must be NONE or AWS_IAM.")
-        now = _now_iso()
-        fn["url"] = {"url_id": uuid.uuid4().hex[:32], "auth_type": b["AuthType"], "cors": b.get("Cors") or {},
-                     "invoke_mode": b.get("InvokeMode", "BUFFERED"), "created": now, "modified": now}
-        _persist(store)
-        return _json(201, _url_cfg_view(fn, origin))
-    if not fn.get("url"):
-        return _err(404, "ResourceNotFoundException", f"The resource you requested does not exist: {name}")
-    if method == "GET":
-        return _json(200, _url_cfg_view(fn, origin))
-    if method == "PUT":
-        c = fn["url"]
-        c["auth_type"] = b.get("AuthType", c["auth_type"])
-        c["cors"] = b.get("Cors", c.get("cors") or {})
-        c["invoke_mode"] = b.get("InvokeMode", c.get("invoke_mode", "BUFFERED"))
-        c["modified"] = _now_iso()
-        _persist(store)
-        return _json(200, _url_cfg_view(fn, origin))
-    if method == "DELETE":
-        fn.pop("url", None)
-        _persist(store)
-        return LambdaResponse(status=204)
-    return _err(405, "MethodNotAllowed", f"Unsupported {method} on url")
-
-
 def url_invoke(store, url_id, method, rest, query, headers, body):
     """The public https://<id>.lambda-url… endpoint: build a payload-format-2.0 event, run the
     function, map the {statusCode, headers, body} result to an HTTP response."""
-    fn = next((f for f in _functions(store).values() if (f.get("url") or {}).get("url_id") == url_id), None)
+    fn = next((f for f in _functions(store).values() if (f.get("function_url") or {}).get("url_id") == url_id), None)
     if not fn:
         return _err(404, "ResourceNotFoundException", "Function URL not found.")
     raw = body.decode("utf-8", "replace") if isinstance(body, (bytes, bytearray)) else str(body or "")

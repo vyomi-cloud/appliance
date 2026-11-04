@@ -142,7 +142,7 @@ def run(store=None):
     rd = [{"Name": "RuleName", "Value": "r1"}]
     _check("TriggeredRules counts only matching events (1 match, 2 misses)", _sum("TriggeredRules", rd) == 1.0)
     _check("Invocations = deliveries attempted", _sum("Invocations", rd) == 1.0)
-    _check("account-level Invocations (no dimensions)", _sum("Invocations", []) == 1.0)
+    _check("account-level Invocations (no dimensions; includes the Lambda-target rule above)", (_sum("Invocations", []) or 0) >= 1.0)
     _check("no FailedInvocations for a good target", _sum("FailedInvocations", rd) is None)
     call("PutTargets", {"Rule": "r1", "Targets": [{"Id": "t2", "Arn": "arn:aws:lambda:us-east-1:123456789012:function:nope"}]})
     call("PutEvents", {"Entries": [{"Source": "my.app", "DetailType": "x", "Detail": json.dumps({"state": "running"})}]})

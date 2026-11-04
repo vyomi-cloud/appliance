@@ -340,6 +340,15 @@ def _match_pattern(pattern: dict, event: dict) -> bool:
 
 # ── delivery (SQS / SNS / Lambda / Step Functions / Kinesis — the target
 #    types Vyomi backs; see eventbridge.rule.targets for the rest) ─────────
+# Offline hook (kept for hosts that wire their own function registry): fn(function_name, payload_json_str).
+_LAMBDA_INVOKER = None
+
+
+def set_lambda_invoker(fn) -> None:
+    global _LAMBDA_INVOKER
+    _LAMBDA_INVOKER = fn
+
+
 def deliver(store, lam_store, arn: str, body_str: str, event_obj: dict, group_id=None,
             kinesis_store=None, sfn_store=None, partition_key=None) -> bool:
     """Deliver one event to a target ARN. A substrate may own the SQS queues or the
@@ -361,6 +370,12 @@ def deliver(store, lam_store, arn: str, body_str: str, event_obj: dict, group_id
     if ":sns:" in arn:
         return sns_mod.publish_arn(store, arn, body_str)
     if ":lambda:" in arn:
+        if _LAMBDA_INVOKER is not None:
+            try:
+                _LAMBDA_INVOKER(arn.split(":function:", 1)[-1].split(":", 1)[0], body_str)
+                return True
+            except Exception:
+                return False
         hook = getattr(store, "deliver_lambda", None)
         if callable(hook):
             try:
@@ -1323,12 +1338,13 @@ _NEEDS_LAMBDA = {"PutEvents", "StartReplay"}
 
 
 def dispatch(store: MessagingStore, target: str, payload: dict | None = None, lam_store=None,
-              kinesis_store=None, sfn_store=None, caller_account=None) -> EventsResponse:
+              kinesis_store=None, sfn_store=None, caller_account=None, lambda_store=None) -> EventsResponse:
     """Native EventBridge JSON router. `target` is the X-Amz-Target header,
     e.g. "AWSEvents.PutEvents". `lam_store` / `kinesis_store` / `sfn_store` (all optional)
     are the Lambda / Kinesis / Step Functions registries, needed only to deliver to
     those target types."""
     body = payload if isinstance(payload, dict) else {}
+    lam_store = lam_store if lam_store is not None else lambda_store   # main's Nano adapter spells it lambda_store
     action = target.rsplit(".", 1)[-1] if target else ""
     try:
         if action == "PutEvents":

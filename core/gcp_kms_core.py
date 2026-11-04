@@ -915,6 +915,9 @@ def dispatch(store: KeyStore, method: str, path: str,
             return _json(200, policy)
         if verb:
             return _err(400, "INVALID_ARGUMENT", f"Unknown method :{verb}")
+        if method in ("GET", "PATCH") and not store.key_exists(name):
+            return _err(404, "NOT_FOUND", f"CryptoKey {name} not found.")
+        meta = store.get_key(name) if store.key_exists(name) else {}
         if method == "GET":
             return _json(200, _crypto_key_view(store, name))
         if method == "PATCH":                       # cryptoKeys.patch (rotation, labels)
@@ -935,17 +938,6 @@ def dispatch(store: KeyStore, method: str, path: str,
                     meta["labels"] = {str(a): str(b) for a, b in (payload.get("labels") or {}).items()}
             except KmsTabError as e:
                 return _err(e.status, e.gcp_status, e.message)
-            store.persist()
-            return _json(200, _crypto_key_view(store, name))
-        if method == "PATCH":                         # UpdateCryptoKey (labels / rotation)
-            if not store.key_exists(name):
-                return _err(404, "NOT_FOUND", f"CryptoKey {name} not found.")
-            mask = [m for m in str(query.get("updateMask") or query.get("update_mask") or "").split(",") if m]
-            meta = store.get_key(name)
-            bad = _apply_settings(meta, payload, mask)
-            if bad:
-                return _err(400, "INVALID_ARGUMENT", bad)
-            store.put_key(name, meta, store.get_material(name))
             store.persist()
             return _json(200, _crypto_key_view(store, name))
         return _err(400, "INVALID_ARGUMENT", f"Unsupported method {method} on cryptoKey")

@@ -359,7 +359,7 @@ def _insert_instance(store: SqlStore, project: str, body: dict) -> CloudSqlRespo
         "name": name,
         "project": project,
         "state": "RUNNABLE",  # Nano: no provisioning lag, ready at once
-        "databaseVersion": version,
+        "databaseVersion": str(body.get("databaseVersion", "POSTGRES_15")),
         "region": region,
         "gceZone": str(body.get("gceZone", f"{region}-a")),
         "settings": settings,
