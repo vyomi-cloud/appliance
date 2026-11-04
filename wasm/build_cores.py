@@ -56,7 +56,7 @@ CORES = [
     "gcp_osconfig_core.py",                         # GCP: VM Manager (OS Config patch jobs/deployments, OS policy assignments, VM extension policies)
     "gcp_hybrid_core.py",                           # GCP: BYOIP prefixes + Interconnect / VLAN attachments (control plane)
     "gcp_cloudsql_core.py",                         # GCP: Cloud SQL Admin REST (control plane)
-    "gcp_posture_core.py",                          # GCP: rule-based security posture findings over real VM/firewall/bucket state    "gcp_artifactregistry_core.py",                 # GCP: Artifact Registry REST v1 (repositories, packages, versions, tags, docker images)
+    "gcp_posture_core.py", "gcp_scc_core.py",                          # GCP: rule-based security posture findings over real VM/firewall/bucket state    "gcp_artifactregistry_core.py",                 # GCP: Artifact Registry REST v1 (repositories, packages, versions, tags, docker images)
     "gcp_compute_core.py",                          # GCP: Compute Engine networking REST v1 (VPC networks, subnets, firewalls, routes, addresses)
     "instance_catalog.py",                          # real cloud instance-type catalog (GCP machine type shapes) — gcp_compute_instances_core depends on it
     "gcp_compute_ext_core.py",                      # GCP Compute extensions: resource policies/schedulers, reservations, sole-tenant, storage pools, NEGs, Recommender
@@ -136,7 +136,7 @@ CORES = [
     "k8s_yaml.py",                                  # v4: dependency-free YAML reader for Kubernetes manifests (AKS kubectl)
     "azure_aks_k8s_core.py",                        # v4: AKS Kubernetes object store + kubectl subset behind runCommand
     "kubescape_catalog.py",                         # v4: Kubescape control metadata (GENERATED, regolibrary Apache-2.0)
-    "vuln_scan_core.py", "secscan_core.py",         # v4: image vulnerability engine + Security Hub / GuardDuty / Defender alerts / SCC-lite detector (Nano = same pure-Python engines)
+    "vuln_scan_core.py", "secscan_core.py", "ecr_core.py", "malware_scan_core.py", "schedule_core.py",         # v4: image vulnerability engine + Security Hub / GuardDuty / Defender alerts / SCC-lite detector (Nano = same pure-Python engines)
     "kubescape_core.py",                            # v4: Kubescape result mapping + scanner seam (Nano: OPA-wasm evaluator)
     "azure_security_core.py",                       # v4: Microsoft Defender for Cloud (Microsoft.Security), live over the ARM state
     "azure_arm_data.py", "azure_arm_core.py",       # Azure ARM control plane (native /subscriptions/* wire)
@@ -148,7 +148,7 @@ CORES = [
 
 # Core SUB-PACKAGES vendored as directories (wasm/core/<pkg>/…). Every file must also be listed in
 # the CORE_PKGS array of each JS loader (nano-boot.js + the relay loaders) — check_core_pkgs().
-CORE_PKGS = ['netsim/__init__.py', 'netsim/model.py', 'netsim/evaluate.py', 'netsim/from_aws.py', 'netsim/from_gcp.py', 'netsim/from_azure.py', 'netsim/flowlogs.py', 'netsim/enforce.py']
+CORE_PKGS = ['netsim/__init__.py', 'netsim/model.py', 'netsim/evaluate.py', 'netsim/from_aws.py', 'netsim/from_gcp.py', 'netsim/from_azure.py', 'netsim/flowlogs.py', 'netsim/mirror.py', 'netsim/enforce.py']
 
 # Cores vendored byte-for-byte (no GENERATED header): the service gate requires the
 # Nano copy of a new service's engine to be identical to core/.

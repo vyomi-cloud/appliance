@@ -1,0 +1,96 @@
+{
+ "$doc": "Vyomi capability registry \u2014 Amazon ECR + Inspector2 image findings. See s3.json for the contract. Control plane = core/ecr_core.py via AwsWireRouter (JSON 1.1, signing name ecr); registry v2 data plane on the ECR host name (<acct>.dkr.ecr.<region>.<host>) with AWS:<token> basic auth; image layers and manifests are stored in the simulator S3 (bucket vyomi-ecr-<account>).",
+ "ecr.repositories": {
+  "title": "Repositories \u2014 create/describe/delete (force), tag mutability, scan-on-push, encryption config, tags, repository + registry policies",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_ecr_core.py"
+  ]
+ },
+ "ecr.images": {
+  "title": "Images \u2014 PutImage/BatchGetImage/BatchDeleteImage/ListImages/DescribeImages with real manifests; layer upload API (Initiate/UploadPart/Complete/BatchCheck)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "Layer tarballs are stored byte-for-byte and digest-verified but never unpacked or executed.",
+   "GetDownloadUrlForLayer returns the registry blob URL, not a presigned S3 URL."
+  ],
+  "tests": [
+   "tests/conformance/test_ecr_core.py"
+  ]
+ },
+ "ecr.registry_v2": {
+  "title": "Docker/OCI registry v2 push and pull after `aws ecr get-login-password | docker login` (blob uploads, manifests, tags/list, _catalog)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "The registry answers on the ECR host name (<account>.dkr.ecr.<region>.<simulator host>, e.g. *.localhost); a plain host is the Azure ACR / GCP registry wire.",
+   "Nano: the registry wire only works through the Nano relay/tunnel; a docker client cannot reach the browser tab directly, so use the ECR API (PutImage + layer upload) there.",
+   "Cross-repository blob mount and pull-through cache rules are not simulated."
+  ],
+  "tests": [
+   "tests/conformance/test_ecr_core.py"
+  ]
+ },
+ "ecr.lifecycle": {
+  "title": "Lifecycle policies \u2014 validated rules, StartLifecyclePolicyPreview, expiry executed on the scheduler tick",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "Real ECR evaluates policies asynchronously (up to ~24h); here evaluation runs on the shared scheduler tick (offline) or while the Nano page is open, and on preview."
+  ],
+  "tests": [
+   "tests/conformance/test_ecr_core.py"
+  ]
+ },
+ "ecr.replication": {
+  "title": "Cross-region replication to the same account (PutReplicationConfiguration, DescribeImageReplicationStatus)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Replication stays inside this simulator account: a destination registry id that is not the simulator account reports FAILED (REPLICATION_NOT_SUPPORTED)."
+  ],
+  "tests": [
+   "tests/conformance/test_ecr_core.py"
+  ]
+ },
+ "ecr.scanning": {
+  "title": "Image scanning \u2014 basic scan on push / StartImageScan / DescribeImageScanFindings, registry scanning configuration",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Findings come from Vyomi's bundled advisory snapshot over the image's stored config (packages from pinned install commands / SBOM label), not Amazon's feed.",
+   "Offline appliance can substitute a real Trivy report; Nano uses the advisory engine only. Layer contents are not unpacked."
+  ],
+  "tests": [
+   "tests/conformance/test_ecr_core.py"
+  ]
+ },
+ "ecr.inspector": {
+  "title": "Inspector2 enhanced scanning findings for ECR images (Enable, ListFindings with filter criteria, coverage, aggregation, CONTINUOUS_SCAN rescans)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "ECR image findings only (no EC2/Lambda scanning); finding scores/severities come from the bundled advisory snapshot."
+  ],
+  "tests": [
+   "tests/conformance/test_ecr_core.py"
+  ]
+ }
+}

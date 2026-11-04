@@ -1,0 +1,17 @@
+{
+ "$doc": "Vyomi capability registry \u2014 Defender for Storage malware scanning (core/malware_scan_core.py). See aws/s3.json for the contract.",
+ "azure.defender.storage_malware": {
+  "title": "Defender for Storage \u2014 on-upload malware scanning: StorageAccounts plan extensions, per-account DefenderForStorageSettings, blob index tags, Storage.Blob_AM.MalwareFound alert",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Honest scanner: SHA-256 hash + literal content signatures (EICAR test string, the Vyomi test string, and signatures the operator registers) over the object and zip members (2 levels, size-capped). It detects the standard test samples and what you register; it is not an antivirus engine (no heuristics, behavioural analysis or vendor threat intelligence). Scans run synchronously on upload and only cover NEW uploads (no on-demand scan of existing data); objects over 64 MiB are reported unsupported/not scanned.",
+   "Blob index tags are supported for get/set (?comp=tags and x-ms-tags) but there is no tag-based blob query (find blobs by tags). The scan-results Event Grid topic is stored but no event is delivered. Sensitive data discovery is stored, not run."
+  ],
+  "tests": [
+   "tests/conformance/test_malware_scan_core.py"
+  ]
+ }
+}

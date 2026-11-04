@@ -451,10 +451,11 @@
    "offline": "limited"
   },
   "limitations": [
-   "Targets, filters with ordered accept/reject rules and sessions are real control-plane state with AWS validation (rule numbers, protocol/port rules, session number per source ENI, in-use checks) and the filter rules can be evaluated against a packet. No packets are captured or VXLAN-encapsulated to the target: there is no mirrored traffic."
+   "Targets, filters with ordered accept/reject rules and sessions are real control-plane state with AWS validation (rule numbers, protocol/port rules, session number per source ENI, in-use checks) and the filter rules can be evaluated against a packet. No packets are VXLAN-encapsulated to the target ENI / NLB: nothing listening on a mirror target sees traffic. Offline with netsim enforcement on (VYOMI_NETSIM_ENFORCE=1|auto, Docker compute backend) the enforcer's real per-flow counters ARE evaluated against the sessions (lowest session number claims a packet; filter rules decide accept/reject; PacketLength truncates bytes) and each window's mirrored FLOW SUMMARIES are written to CloudWatch Logs group /vyomi/traffic-mirror/<session-id> (stream = source ENI). Nano has no data plane, so no flows exist there."
   ],
   "tests": [
-   "tests/conformance/test_vpc_sweepvpc_core.py"
+   "tests/conformance/test_vpc_sweepvpc_core.py",
+   "tests/netsim/test_traffic_mirror.py"
   ]
  },
  "aws.vpc.reachability-analyzer": {

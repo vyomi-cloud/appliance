@@ -86,6 +86,8 @@ _SCHED_RUN_JOB_RE = re.compile(r"/v2/projects/([^/]+)/locations/([^/]+)/jobs/([^
 def _gcp_service(path):
     """Route a GCP request by URL path (GCP carries no SigV4; each google-cloud-*
     client is pointed at the relay and the path is the service discriminator)."""
+    if re.match(r"^/v2/(projects|organizations|folders)/[^/]+/(locations/[^/]+/)?(sources|findings|muteConfigs|notificationConfigs)([/:?]|$)", path):
+        return "gcp-scc"   # Security Command Center API v2 (core/gcp_scc_core over the posture/threat/vulnerability engines)
     if re.match(r"^/v2/projects/[^/]+/locations/[^/]+/(services|jobs|workerPools|operations)([/:]|$)", path) \
             or path.lstrip("/").startswith(("apis/serving.knative.dev/", "apis/domains.cloudrun.com/")):
         # Cloud Run Admin API v2 (+ its Knative v1 facades for `gcloud run` and
@@ -261,6 +263,8 @@ from core import cloudwatch_core as cw
 from core import azure_sql_core as az_sql
 from core import azure_iam_core as az_iam
 from core import azure_acr_core as az_acr
+from core import ecr_core
+from core import gcp_scc_core
 from core.azure_acr_core import AcrRegistryStore
 from core import azure_graph_core as az_graph
 import types as _types
@@ -385,6 +389,7 @@ _SIGNING = {
     "cloudfront": "cloudfront",   # CloudFront public keys + key groups (rest-xml /2020-05-31/...) -> core/cloudfront_keys_core via the S3 store
     "savingsplans": "savingsplans",   # Savings Plans (rest-json POST /<Operation>) + EC2 coverage/capacity views -> core/savingsplans_core over the EC2 model
     "dms": "dms", "bedrock": "bedrock",   # Bedrock runtime + foundation-model catalogue -> core/ai_models_core over the local-LLM seam (core/llm_core)
+    "ecr": "ecr", "inspector2": "inspector2",   # Amazon ECR control plane + Inspector2 findings -> core/ecr_core over the S3 store (images/layers live in the simulator S3)
     "backup": "backup",   # AWS Backup subset (region settings + DynamoDB copy jobs) -> core/backup_core over the DynamoDB + S3 stores
     "s3vectors": "s3vectors",   # Amazon S3 Vectors (rest-json POST /<Operation>) -> core/s3_vectors_core via the S3 store
     "s3tables": "s3tables",   # Amazon S3 Tables (rest-json /buckets, /namespaces, /tables, /tag) -> core/s3_tables_core via the S3 store
@@ -410,6 +415,7 @@ _TARGET_PREFIX = {
     "Route53Resolver": "dnsfw",
     "com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101": "cloudtrail",
     "AWSOrganizationsV20161128": "organizations",
+    "AmazonEC2ContainerRegistry_V20150921": "ecr",   # Amazon ECR
     "AWSInsightsIndexService": "ce",   # Cost Explorer
     "AnyScaleFrontendService": "appas",   # Application Auto Scaling
     "com.amazonaws.codeconnections.CodeConnections_20231201": "codeconnections",
@@ -897,6 +903,27 @@ class AwsWireRouter:
         return False
 
     # ── service detection ──────────────────────────────────────────────
+    _SCHED_EVERY_S = 20.0
+
+    def _sched_pulse(self):
+        """Lazy scheduler pulse (core/schedule_core): backup plans/policies, DLM, Cloud SQL backup windows and ECR lifecycle run on
+        their schedules whenever the router is serving traffic (Nano: only while the page is open); the offline appliance also
+        ticks from a background loop. Throttled; never affects the request."""
+        import time as _t
+        now = _t.time()
+        if now - getattr(self, "_sched_last", 0.0) < self._SCHED_EVERY_S:
+            return
+        self._sched_last = now
+        try:
+            from core import schedule_core
+            schedule_core.tick(self, now)
+        except Exception:
+            pass
+
+    def ecr_registry(self, method, path, query, headers, body):
+        r = ecr_core.registry_dispatch(self.s3, method, path, query, headers, bytes(body))
+        return {"status": r.status, "headers": dict(r.headers or {}), "body": r.body or b""}
+
     def service_of(self, method, path, lheaders, body, query=None):
         # Static website hosting: real S3 serves this over its OWN unsigned HTTP(S) origin
         # (bucket.s3-website-<region>.amazonaws.com), never the signed control+data API —
@@ -906,6 +933,8 @@ class AwsWireRouter:
             return "s3-website"
         # GCP services are unambiguous by path (REST) and carry no SigV4 — route
         # them first so they never fall through to the S3 default.
+        if path.startswith("/v2") and ecr_core.is_registry_request(lheaders, path):
+            return "ecr-registry"   # docker push/pull against <acct>.dkr.ecr.<region>.<host> (AWS:<token> basic auth)
         gcp = _gcp_service(path)
         if gcp:
             return gcp
@@ -1080,6 +1109,15 @@ class AwsWireRouter:
     def secscan_serve(self, svc, method, path, body: bytes) -> dict:
         from core import secscan_core as _sc
         bag = self.secscan_bag()
+        if svc == "guardduty" and path.split("?", 1)[0].startswith("/malware-protection-plan"):   # GuardDuty Malware Protection for S3 (core/malware_scan_core)
+            from core import malware_scan_core as _mw
+            r = _mw.gd_dispatch(self.s3, method, path, body)
+            if method != "GET":
+                try:
+                    self.s3.persist()
+                except Exception:
+                    pass
+            return {"status": r.status, "headers": {**r.headers, "content-type": "application/json"}, "body": r.body}
         if svc == "securityhub":
             rows = self.secscan_posture() if _sc._state(bag)["hub"]["enabled"] else []
             r = _sc.hub_dispatch(bag, method, path, body, rows, self.secscan_threats())
@@ -1092,6 +1130,26 @@ class AwsWireRouter:
                 pass
         return {"status": r.status, "headers": {**r.headers, "content-type": "application/json"}, "body": r.body}
 
+    def scc_ctx(self) -> dict:
+        """What core/gcp_scc_core needs from the platform: generated posture rows + Pub/Sub for notification configs."""
+        def generated(project):
+            try:
+                scans = gcp_ar.scan_images(self.gcp_ar, project)
+            except Exception:
+                scans = []
+            fws = list(self.gcp_compute.firewalls.values())
+            return (gcp_posture.compute_findings(project, self.gcp_compute_vm.instances, fws) + gcp_posture.storage_findings(project, self.gcs.buckets)
+                    + gcp_posture.threat_findings(project, self.secscan_threats("gcp")) + gcp_posture.vulnerability_findings(project, scans))
+
+        def topic_exists(topic):
+            return gcp_ps.dispatch(self.gcp_msg, "GET", "/v1/" + topic, {}, {}, b"").status == 200
+
+        def publish(topic, data_b64, attrs):
+            r = gcp_ps.dispatch(self.gcp_msg, "POST", "/v1/" + topic + ":publish", {}, {},
+                                json.dumps({"messages": [{"data": data_b64, "attributes": attrs}]}).encode())
+            return r.status == 200
+        return {"generated": generated, "topic_exists": topic_exists, "publish": publish, "default_project": gcp_scc_core.DEFAULT_PROJECT}
+
     def secscan_posture(self) -> list:
         from core import secscan_core as sc
         return sc.aws_posture_findings(self.secscan_inventory(), [])
@@ -1102,6 +1160,7 @@ class AwsWireRouter:
         stores from the measured series before a read of them."""
         import time as _t
         from core import observability_core as _obsc
+        self._sched_pulse()
         p0 = path.split("?", 1)[0]
         if p0.startswith(_obsc.BASE + "/") or p0 == _obsc.BASE:
             r = _obsc.dispatch(self.obs, method, p0, query or {}, headers or {}, body if isinstance(body, (bytes, bytearray)) else (body or "").encode(), cw_store=self.cw, mon_store=self.gcp_mon)
@@ -1326,6 +1385,14 @@ class AwsWireRouter:
                 hdrs["content-type"] = r.media_type
             return {"status": r.status, "headers": hdrs, "body": r.body or b""}
 
+        if svc == "gcp-scc":
+            r = gcp_scc_core.dispatch(self.s3.account.setdefault("gcp_scc", {}), method, path, query or {}, bytes(body), self.scc_ctx())
+            try:
+                self.s3.persist()
+            except Exception:
+                pass
+            return {"status": r.status, "headers": {"content-type": "application/json"}, "body": r.body}
+
         if svc == "gcp-posture":
             proj = path.split("/")[3] if path.count("/") >= 3 else ""
             try:
@@ -1477,6 +1544,19 @@ class AwsWireRouter:
             if r.media_type and not any(k.lower() == "content-type" for k in hdrs):
                 hdrs["content-type"] = r.media_type
             return {"status": r.status, "headers": hdrs, "body": r.body or b""}
+
+        if svc == "ecr":   # ECR JSON 1.1 control plane (region from the SigV4 credential scope)
+            rm = re.search(r"Credential=[^/]+/[^/]+/([^/]+)/", lheaders.get("authorization", "") or "")
+            r = ecr_core.dispatch(self.s3, lheaders.get("x-amz-target", "") or "", self._json_body(body), rm.group(1) if rm else ecr_core.DEFAULT_REGION)
+            return {"status": r.status, "headers": {"content-type": "application/x-amz-json-1.1", **(r.headers or {})}, "body": json.dumps(r.body).encode()}
+
+        if svc == "inspector2":
+            rm = re.search(r"Credential=[^/]+/[^/]+/([^/]+)/", lheaders.get("authorization", "") or "")
+            r = ecr_core.inspector_dispatch(self.s3, method, path, bytes(body), rm.group(1) if rm else ecr_core.DEFAULT_REGION)
+            return {"status": r.status, "headers": {"content-type": "application/json"}, "body": json.dumps(r.body).encode()}
+
+        if svc == "ecr-registry":   # OCI / Docker Registry v2 on the ECR host; layers + manifests stored in the simulator S3
+            return self.ecr_registry(method, path, query or {}, headers or {}, bytes(body))
 
         if svc == "kinesis":   # JSON 1.1 (boto3/Go/CLI) or CBOR (Java SDK) by Content-Type
             status, hdrs, out = kinesis.handle_wire(self.kinesis, lheaders.get("x-amz-target", "") or "",

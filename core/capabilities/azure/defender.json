@@ -60,7 +60,7 @@
    "offline": "limited"
   },
   "limitations": [
-   "Every plan can be turned on and off and reads back as set, but only the Containers plan changes behaviour (it gates the Kubernetes recommendations). The other plans enable no plan-specific protection \u2014 no agents, threat detection, vulnerability assessment or malware scanning run."
+   "Every plan can be turned on and off and reads back as set, but only the Containers plan (gates the Kubernetes recommendations) and the Storage plan (DefenderForStorageV2 + OnUploadMalwareScanning: signature-based on-upload malware scanning, see azure.defender.storage_malware) change behaviour. The other plans enable no plan-specific protection \u2014 no agents, threat detection or vulnerability assessment run."
   ],
   "api": [
    "Pricings_List",

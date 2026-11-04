@@ -11957,6 +11957,25 @@ def _flush_state_at_shutdown():
 
 
 @app.on_event("startup")
+def _schedule_seam_loop():
+    """Shared schedule runner (core/schedule_core): AWS Backup plans, Azure Backup policies, DLM, Cloud SQL backup windows and
+    ECR lifecycle run on their schedules in a daemon thread. Opt out with VYOMI_NO_SCHEDULER=1."""
+    if os.environ.get("VYOMI_NO_SCHEDULER") == "1":
+        return
+
+    def _loop():
+        import time as _t
+        from core import schedule_core as _sc, wire_ingress as _wi
+        while True:
+            _t.sleep(30)
+            try:
+                _sc.tick(_wi.appliance_router())
+            except Exception:
+                pass
+    threading.Thread(target=_loop, name="schedule-seam", daemon=True).start()
+
+
+@app.on_event("startup")
 def _restore_license_at_boot():
     """v2.0.6: re-apply the cached JWT from /data/license-backup.jwt if
     in-memory tier is Free at boot. Runs BEFORE the background license
