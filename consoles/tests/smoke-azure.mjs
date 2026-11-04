@@ -2503,6 +2503,11 @@ try {
   const subLockGet = await wire(`/subscriptions/${SUB}/providers/Microsoft.Authorization/locks/${SUBLOCK}?api-version=2016-09-01`);
   check("UI add subscription-scoped lock → visible over native ARM", subLockGet.status === 200, `HTTP ${subLockGet.status}`);
   await shot("32-subscription-locks");
+  // A subscription-scope CanNotDelete lock is inherited by every resource: remove it here, or every later
+  // delete in this run (VMs, ...) is correctly refused with ScopeLocked.
+  await wire(`/subscriptions/${SUB}/providers/Microsoft.Authorization/locks/${SUBLOCK}?api-version=2016-09-01`, { method: "DELETE" });
+  const subLockGone = await wire(`/subscriptions/${SUB}/providers/Microsoft.Authorization/locks/${SUBLOCK}?api-version=2016-09-01`);
+  check("subscription-scoped lock removed over native ARM (cleanup, so later deletes are not locked)", subLockGone.status === 404, `HTTP ${subLockGone.status}`);
 
   // ── Resource group + resource + deployment created over the wire → shown in the Subscription's ──
   // Resource groups / Resources / Deployments panels (CLI → UI direction) ───────────────────────
