@@ -23,6 +23,7 @@ import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
+import { PerformanceOverview, QueryPerformanceInsight, SqlAuditing } from "./SqlInsights.jsx";
 import ComputeStorageFields from "./ComputeStorageFields.jsx";
 import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
 import SharedActivityLog from "../../kit/ActivityLog.jsx";
@@ -109,6 +110,9 @@ export default function SqlDatabaseBlade({ params }) {
       maintenance: () => <Maintenance a={a} />,
       identity: () => <IdentityPanel a={a} reload={reload} />,
       autotuning: () => <AutomaticTuning a={a} reload={reload} />,
+      perfoverview: () => <PerformanceOverview a={a} />,
+      queryperfinsight: () => <QueryPerformanceInsight a={a} />,
+      auditing: () => <SqlAuditing a={a} />,
       perfrecommendations: () => <PerformanceRecommendations a={a} />,
       exporttemplate: () => <SharedExportTemplate id={a.id} name={a.name} resourceGroup={a.resourceGroup} />,
       defender: () => <ResourceRecommendations resourceId={a.id} />,
