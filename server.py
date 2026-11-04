@@ -11821,6 +11821,29 @@ def _restore_license_from_backup() -> bool:
 
 
 @app.on_event("startup")
+def _apply_env_license_jwt_at_boot():
+    """Enterprise access (enterprise-access-spec.md §5.2): a sandbox created
+    by the portal gets its tier JWT injected as VYOMI_LICENSE_JWT. Applying
+    it here, before `_restore_license_at_boot`, means the portal-issued
+    claims win over anything in the stale state/backup — an enterprise
+    sandbox never boots on a leftover personal tier.
+
+    Runs before the background license daemons so they pick up the applied
+    claims on their first tick. Fails soft: an invalid/rejected JWT (bad
+    signature, expired, enterprise mismatch) just leaves the sandbox on
+    whatever tier it already had (normally Free) and logs why."""
+    token = os.environ.get("VYOMI_LICENSE_JWT", "").strip()
+    if not token or token == STATE.get("license_jwt"):
+        return
+    try:
+        _apply_license_jwt(token)
+    except HTTPException as e:
+        print(f"[vyomi] VYOMI_LICENSE_JWT rejected at boot: {e.detail}")
+    except Exception as e:
+        print(f"[vyomi] VYOMI_LICENSE_JWT could not be applied at boot: {e}")
+
+
+@app.on_event("startup")
 def _restore_license_at_boot():
     """v2.0.6: re-apply the cached JWT from /data/license-backup.jwt if
     in-memory tier is Free at boot. Runs BEFORE the background license

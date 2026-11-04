@@ -190,5 +190,74 @@ class RevocationPollIntervalTest(unittest.TestCase):
             lr._POLL_THREAD = self._orig_poll_thread
 
 
+class ApplyEnvLicenseJwtAtBootTest(unittest.TestCase):
+    """A6: VYOMI_LICENSE_JWT is applied at boot, before backup restore."""
+
+    def setUp(self):
+        self._orig_fetch = lr._fetch_jwks
+        lr._fetch_jwks = lambda backend_url: _jwks()
+        lr._jwks_cache.update({"keys": [], "fetched_at": 0.0, "backend_url": ""})
+        self._orig_env_jwt = os.environ.get("VYOMI_LICENSE_JWT")
+        self._orig_state_jwt = server.STATE.get("license_jwt")
+        self._orig_state_license = dict(server.STATE.get("license") or {})
+
+    def tearDown(self):
+        lr._fetch_jwks = self._orig_fetch
+        lr._jwks_cache.update({"keys": [], "fetched_at": 0.0, "backend_url": ""})
+        if self._orig_env_jwt is None:
+            os.environ.pop("VYOMI_LICENSE_JWT", None)
+        else:
+            os.environ["VYOMI_LICENSE_JWT"] = self._orig_env_jwt
+        server.STATE["license_jwt"] = self._orig_state_jwt
+        server.STATE["license"] = self._orig_state_license
+
+    def test_no_env_jwt_is_a_noop(self):
+        os.environ.pop("VYOMI_LICENSE_JWT", None)
+        server.STATE["license_jwt"] = None
+        server.STATE["license"] = {"tier": "free"}
+        server._apply_env_license_jwt_at_boot()
+        self.assertEqual(server.STATE["license"]["tier"], "free")
+
+    def test_valid_jwt_sets_tier_before_user_action(self):
+        token = _mint(_base_claims(tier="max"))
+        os.environ["VYOMI_LICENSE_JWT"] = token
+        server.STATE["license_jwt"] = None
+        server.STATE["license"] = {"tier": "free"}
+        server._apply_env_license_jwt_at_boot()
+        self.assertEqual(server.STATE["license"]["tier"], "max")
+
+    def test_same_jwt_as_cached_is_skipped(self):
+        token = _mint(_base_claims(tier="max"))
+        os.environ["VYOMI_LICENSE_JWT"] = token
+        server.STATE["license_jwt"] = token  # already applied
+        calls = []
+        orig = server._apply_license_jwt
+        server._apply_license_jwt = lambda t: calls.append(t)
+        try:
+            server._apply_env_license_jwt_at_boot()
+        finally:
+            server._apply_license_jwt = orig
+        self.assertEqual(calls, [])
+
+    def test_tampered_jwt_fails_soft_stays_on_current_tier(self):
+        token = _mint(_base_claims(tier="max"))
+        tampered = token[:-4] + ("A" if token[-4] != "A" else "B") + token[-3:]
+        os.environ["VYOMI_LICENSE_JWT"] = tampered
+        server.STATE["license_jwt"] = None
+        server.STATE["license"] = {"tier": "free"}
+        server._apply_env_license_jwt_at_boot()  # must not raise
+        self.assertEqual(server.STATE["license"]["tier"], "free")
+
+    def test_enterprise_mismatch_fails_soft_stays_on_current_tier(self):
+        os.environ["VYOMI_REQUIRED_ENTERPRISE"] = "ent-1"
+        self.addCleanup(lambda: os.environ.pop("VYOMI_REQUIRED_ENTERPRISE", None))
+        token = _mint(_base_claims(tier="max", ent="ent-2"))
+        os.environ["VYOMI_LICENSE_JWT"] = token
+        server.STATE["license_jwt"] = None
+        server.STATE["license"] = {"tier": "free"}
+        server._apply_env_license_jwt_at_boot()  # must not raise
+        self.assertEqual(server.STATE["license"]["tier"], "free")
+
+
 if __name__ == "__main__":
     unittest.main()

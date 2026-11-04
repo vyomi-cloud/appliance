@@ -19,6 +19,10 @@ COMPOSE_PROFILES="${COMPOSE_PROFILES:-aws,gcp,azure}"; export COMPOSE_PROFILES
 BILLING="${VYOMI_BILLING:-free_personal_quota}"
 TTL="${VYOMI_SANDBOX_TTL:-8h}"
 FWD_DOMAIN="${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN:-app.github.dev}"
+# Detached default (enterprise-access-spec.md §3.8): the port stays owner-only
+# private. `org` is the legacy turnkey behavior (org-owned sandboxes, port
+# visible to any org member) — kept only for sandboxes that still need it.
+PORT_VISIBILITY="${VYOMI_PORT_VISIBILITY:-private}"
 
 RUN_DIR="${HOME}/.vyomi-sandbox"
 mkdir -p "$RUN_DIR"
@@ -57,10 +61,18 @@ ttl_seconds() {  # 8h | 90m | 1d | 1w → seconds
 
 make_port_public() {
   # Mark the forwarded console port 9000 ORG-visible so a developer who ISN'T the
-  # Codespace owner (the turnkey model: the box runs in the org/PAT-owner account,
-  # the dev just opens the URL) can still reach it. A default forward is `private`
-  # = owner-only → a non-owner dev hitting it gets a proxy error (the 502).
+  # Codespace owner (the legacy turnkey model: the box runs in the org/PAT-owner
+  # account, the dev just opens the URL) can still reach it. A default forward is
+  # `private` = owner-only → a non-owner dev hitting it gets a proxy error (502).
   #
+  # Detached sandboxes (owned by the developer, VYOMI_PORT_VISIBILITY unset or
+  # `private`) skip this entirely — the owner is already the only one who needs
+  # the port, and ORG visibility on a developer-owned Codespace would expose it
+  # to the whole GitHub org, not just the enterprise. Only `org` opts back in.
+  if [ "$PORT_VISIBILITY" != "org" ]; then
+    log "port 9000 visibility: private (VYOMI_PORT_VISIBILITY=$PORT_VISIBILITY)."
+    return 0
+  fi
   # ORG (not public) — SOC/InfoSec: the console must not be an anonymous
   # internet-reachable endpoint; only authenticated org members reach it.
   #
@@ -78,6 +90,7 @@ make_port_public() {
       sleep 2
     done
     log "note: couldn't set port 9000 org-visible after retries — set it in the Ports tab or via the portal."
+    post_status port_visibility_failed 100
   fi
 }
 

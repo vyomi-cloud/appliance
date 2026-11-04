@@ -36,11 +36,12 @@ services:
       CLOUDLEARN_STATE_FILE: /data/cloudlearn_state.sqlite3
       CLOUDLEARN_LICENSE_BACKEND_URL: ${VYOMI_LICENSE_BACKEND_URL:-https://vyomi.cloud}
       CLOUDLEARN_DISTRIBUTION_MODE: developer
-      # Sandbox = self-contained dev env (not a commercial tier). Without a license
-      # from vyomi.cloud the appliance falls back to free-tier and locks services
-      # (DynamoDB/SQS/etc. → 403 tier_service_locked). Disable tier gating so the
-      # profile's full service set works. Overridable via VYOMI_TIER_ENFORCE.
-      CLOUDLEARN_TIER_ENFORCE: ${VYOMI_TIER_ENFORCE:-0}
+      # Tier comes from the portal-issued VYOMI_LICENSE_JWT (applied at boot,
+      # A6), not a blanket bypass: unlicensed sandboxes are Free and locked
+      # services (DynamoDB/SQS/etc.) 403 tier_service_locked, same as any
+      # other Free install. Overridable via VYOMI_TIER_ENFORCE for the rare
+      # case a sandbox needs the old full-bypass behavior.
+      CLOUDLEARN_TIER_ENFORCE: ${VYOMI_TIER_ENFORCE:-1}
       CLOUDLEARN_PUBLIC_URL: ${CLOUDLEARN_PUBLIC_URL:-}
       VYOMI_LICENSE_JWT: ${VYOMI_LICENSE_JWT:-}
       # Admin key enforced even in developer mode, so sandbox admin routes
