@@ -33,6 +33,12 @@ if (!LIVE && !NANO) {
     lxc: { command: `docker exec -it vyomi-${iid} bash` } } }));
   await page.route(`**/api/ec2/instances/${iid}/console/exec`, (r) => { const c = JSON.parse(r.request().postData()).command; execCalls.push(c); r.fulfill({ json: { cwd: "/root", command: c, exit_code: 0, output: c === "echo hello" ? "hello\n" : "ok\n" } }); });
 }
+if (!LIVE && !NANO) {
+  await page.route(`**/api/aws/ec2/instances/${iid}/instance-connect`, (r) => r.fulfill({ json: { ok: true, success: true, delivered: true, expires_in_seconds: 60, os_user: "ubuntu", ssh_command: "ssh -i key -p 43531 ubuntu@127.0.0.1" } }));
+  await page.route("**/api/ssm/sessions", (r) => r.fulfill({ json: { ok: true, SessionId: "root-0abc", Target: iid, Status: "Connected" } }));
+  await page.route("**/api/ssm/sessions/root-0abc/exec", (r) => r.fulfill({ json: { output: "ssm-ok\n" } }));
+  await page.route("**/api/ssm/sessions/root-0abc/terminate", (r) => r.fulfill({ json: { ok: true } }));
+}
 await page.goto(UI + `#/ec2/instances/${iid}`);
 await page.getByRole("button", { name: "Connect" }).first().click();
 if (NANO) {
@@ -44,6 +50,17 @@ if (NANO) {
   await page.getByRole("tab", { name: "SSH client" }).click();
   const cmd = await page.getByTestId("ssh-command").innerText();
   check("SSH tab shows the ssh command and key download", /^ssh -i .* -p \d+ ubuntu@/.test(cmd) && await page.getByRole("link", { name: /Download private key/ }).isVisible().catch(() => false) || /Download private key/.test(await page.locator("body").innerText()), cmd);
+  await page.getByRole("tab", { name: "Send SSH public key" }).click();
+  await page.getByRole("textbox", { name: "SSH public key" }).fill("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl test");
+  await page.getByRole("button", { name: "Send public key" }).click();
+  await page.getByTestId("eic-command").waitFor({ timeout: 10000 });
+  check("Instance Connect pushes the key and shows the ssh command", /ssh -i/.test(await page.getByTestId("eic-command").innerText()));
+  await page.getByRole("tab", { name: "Session Manager" }).click();
+  await page.getByRole("button", { name: "Start session" }).click();
+  await page.getByLabel("Session command").fill("echo x");
+  await page.getByRole("button", { name: "Run", exact: true }).last().click();
+  await page.waitForFunction(() => /ssm-ok/.test(document.querySelector('[data-testid="ssm-terminal"]')?.innerText || ""), null, { timeout: 10000 });
+  check("Session Manager starts a session and runs a command", true);
   await page.getByRole("tab", { name: "EC2 Instance Connect" }).click();
   await page.getByLabel("Terminal command").fill("echo hello");
   await page.getByRole("button", { name: "Run" }).click();
