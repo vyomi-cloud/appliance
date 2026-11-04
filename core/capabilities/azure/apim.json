@@ -210,10 +210,10 @@
   "tests": ["tests/conformance/test_azure_arm_core.py"]
  },
  "azure.apim.tools": {
-  "title": "Diagnose and solve problems, Events, Tasks, Support + Troubleshooting",
+  "title": "Diagnose and solve problems, Support + Troubleshooting",
   "level": { "nano": "not_simulated", "offline": "not_simulated" },
   "limitations": [
-   "Diagnose and solve problems runs Azure's own fleet-wide diagnostics heuristics against telemetry Vyomi never collects. Events and Tasks route to Azure's real multi-tenant notification/automation backends, and Support + Troubleshooting opens a real Azure support ticket against Microsoft — all infrastructure outside any local simulator, consistent with every other Vyomi service (Storage, Service Bus, AKS, ACR, App Service, VMs, …)."
+   "Diagnose and solve problems runs Azure's own fleet-wide diagnostics heuristics against telemetry Vyomi never collects. Events (preview) is served by the Events panel; Tasks are real (azure.apim.tasks), and Support + Troubleshooting opens a real Azure support ticket against Microsoft — all infrastructure outside any local simulator, consistent with every other Vyomi service (Storage, Service Bus, AKS, ACR, App Service, VMs, …)."
   ]
  },
  "azure.apim.exporttemplate": {
@@ -238,5 +238,6 @@
   "tests": [
    "tests/conformance/test_azure_apim_gateway_core.py"
   ]
- }
+ },
+ "azure.apim.tasks": {"title": "Tasks (Logic App-backed task templates)", "level": {"nano": "limited", "offline": "limited"}, "limitations": ["A task is a REAL Microsoft.Logic/workflows record (Recurrence trigger + Http actions against management.azure.com) created from a template via POST .../Microsoft.Logic/vyomiCreateTask; runs are fired by the simulator scheduler (core/schedule_core.py) or 'Run now' and call the simulator's own ARM, so the effect is real (power state, restarts, key rotation, usage snapshots), with per-action results in Microsoft.Logic/workflows/runs. Only Recurrence triggers and Http-to-ARM/Compose actions run (anything else fails the run with ActionNotSupported); the managed identity is not authorised (RBAC is not evaluated); workflow expressions are not evaluated; there are no e-mail/Teams connectors, so report tasks keep their result in the run output. Missed schedules coalesce into one run; Nano only fires schedules while the tab is open."], "tests": ["tests/conformance/test_azure_tasks_core.py"]}
 }

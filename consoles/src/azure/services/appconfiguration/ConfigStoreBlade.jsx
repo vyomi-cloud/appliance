@@ -31,6 +31,7 @@ import { PrivateEndpointConnectionsPanel } from "../../kit/PrivateEndpoints.jsx"
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
 import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
+import TasksPanel from "../../kit/TasksPanel.jsx";
 import SharedActivityLog from "../../kit/ActivityLog.jsx";
 import SharedResourceHealth from "../../kit/ResourceHealth.jsx";
 import { ResourceAlerts, ResourceMetrics, ResourceLogs } from "../../kit/ResourceMonitoring.jsx";
@@ -108,6 +109,7 @@ export default function ConfigStoreBlade({ params, query }) {
       networking: () => <Networking a={a} reload={reload} />,
       properties: () => <PropertiesPanel a={a} />,
       locks: () => <Locks a={a} />,
+      tasks: () => <TasksPanel a={a} />,
       exporttemplate: () => <SharedExportTemplate id={a.id} name={a.name} resourceGroup={a.resourceGroup} />,
       support: () => <SharedSupportPanel resourceId={a.id} name={a.name} service="appconfiguration" />,
       resourcehealth: () => <SharedResourceHealth id={a.id} name={a.name} />,

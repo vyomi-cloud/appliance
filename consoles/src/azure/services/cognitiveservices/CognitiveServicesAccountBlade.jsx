@@ -22,6 +22,7 @@ import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { remember, forget } from "../../kit/recent.js";
 import * as api from "./api.js";
 import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
+import TasksPanel from "../../kit/TasksPanel.jsx";
 import SharedActivityLog from "../../kit/ActivityLog.jsx";
 import SharedResourceHealth from "../../kit/ResourceHealth.jsx";
 import { ResourceAlerts, ResourceMetrics, ResourceLogs } from "../../kit/ResourceMonitoring.jsx";
@@ -81,6 +82,7 @@ export default function CognitiveServicesAccountBlade({ params }) {
       properties: () => <Properties a={a} />,
       locks: () => <Locks a={a} />,
       activitylog: () => <SharedActivityLog scope={a.id} name={a.name} />,
+      tasks: () => <TasksPanel a={a} />,
       exporttemplate: () => <SharedExportTemplate id={a.id} name={a.name} resourceGroup={a.resourceGroup} />,
       support: () => <SharedSupportPanel resourceId={a.id} name={a.name} service="cognitiveservices" />,
       resourcehealth: () => <SharedResourceHealth id={a.id} name={a.name} />,

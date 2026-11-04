@@ -43,6 +43,7 @@ import { CapacityGauge } from "./Gateway.jsx";
 import * as api from "./api.js";
 import { ResourceRecommendations } from "../defender/Pages.jsx";
 import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
+import TasksPanel from "../../kit/TasksPanel.jsx";
 import SharedActivityLog from "../../kit/ActivityLog.jsx";
 import { ClassicAdminsPanel, DenyAssignmentsPanel, MyAccess } from "../../kit/IamExtras.jsx";
 import SharedSupportPanel from "../../kit/SupportPanel.jsx";
@@ -121,6 +122,7 @@ export default function ApimBlade({ params, query }) {
       pricingtier: () => <PricingTier a={a} reload={reload} />,
       properties: () => <Properties a={a} />,
       locks: () => <Locks a={a} />,
+      tasks: () => <TasksPanel a={a} />,
       exporttemplate: () => <SharedExportTemplate id={a.id} name={a.name} resourceGroup={a.resourceGroup} />,
       protocolsciphers: () => <ProtocolsCiphers a={a} reload={reload} />,
       mcpservers: () => <McpServers rg={rg} svc={name} />,
