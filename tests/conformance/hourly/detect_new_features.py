@@ -258,6 +258,8 @@ GCP_SDK_ALIASES = {
     ("gcp_monitoring_core", "ListDescriptors"): ("MetricDescriptors.List(",),
     ("gcp_monitoring_core", "DeleteDescriptor"): ("MetricDescriptors.Delete(",),
     ("gcp_monitoring_core", "ListTimeSeries"): ("TimeSeries.List(",),
+    ("gcp_monitoring_core", "ListGroups"): ("Groups.List(",),
+    ("gcp_monitoring_core", "GetUptime"): ("UptimeCheckConfigs.Get(",),
     ("gcp_monitoring_core", "UpdateGroup"): ("Groups.Update(",),
     ("gcp_monitoring_core", "DeleteGroup"): ("Groups.Delete(",),
     ("gcp_monitoring_core", "CreateUptime"): ("UptimeCheckConfigs.Create(",),
