@@ -363,6 +363,7 @@ _SIGNING = {
     "autoscaling": "asg",
     "dlm": "dlm",
     "cloudtrail": "cloudtrail",   # minimal CloudTrail (trails + S3 data-event selectors) -> core/s3_ext_core via the S3 store
+    "vpc-lattice": "vpc-lattice",   # VPC Lattice control plane (rest-json /servicenetworks, /services, /targetgroups, ...) -> core/vpc_lattice_core over the EC2 model
     "rbin": "rbin",   # EC2 Recycle Bin (rest-json /rules...) -> core/ec2_ops_core.rbin_dispatch over the shared EC2 model
     "schemas": "schemas",   # EventBridge Schemas (rest-json /v1/registries, /v1/discoverers) -> core/eventbridge_schemas_core via the EventBridge store
     "backup": "backup",   # AWS Backup subset (region settings + DynamoDB copy jobs) -> core/backup_core over the DynamoDB + S3 stores
@@ -1019,6 +1020,10 @@ class AwsWireRouter:
         if svc == "cloudtrail":
             r = s3.dispatch(self.s3, "POST", "/__cloudtrail__", {}, {"x-amz-target": lheaders.get("x-amz-target", "")}, bytes(body))
             return {"status": r.status, "headers": {**dict(r.headers or {}), "content-type": "application/x-amz-json-1.1"}, "body": r.body or b""}
+
+        if svc == "vpc-lattice":
+            from core import vpc_lattice_core
+            return vpc_lattice_core.dispatch(self.vpc, method, path, query or {}, headers or {}, bytes(body))
 
         if svc == "rbin":
             from core import ec2_ops_core
