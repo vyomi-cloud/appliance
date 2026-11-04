@@ -11,6 +11,8 @@ import { useAsync } from "../../../common/useAsync.js";
 import { DEFAULT_RG, LOCATIONS, listResourceGroups, locationLabel } from "../../kit/arm.js";
 import CreateWizard, { FormRow, FormSection } from "../../kit/CreateWizard.jsx";
 import { Glyph } from "../../kit/common.jsx";
+import { CapabilityContainer } from "../../kit/Capability.jsx";
+import { listAllSubnets } from "../../kit/PrivateEndpoints.jsx";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
 import { TagRows } from "./ClusterBlade.jsx";
@@ -68,7 +70,7 @@ export default function CreateKubernetesCluster() {
     autoUpgrade: "Enabled with patch (recommended)", nodeSecurityChannel: "Node Image", authMode: "Local accounts with Kubernetes RBAC",
     nodeAutoProvisioning: false, nodePools: [{ name: "nodepool1", mode: "System", vmSize: "Standard_DS2_v2", osSku: "Ubuntu", count: 3, zones: "", maxPods: 30 }],
     virtualNodes: false, osDiskEncryption: "(Default) Encryption at-rest with a platform-managed key",
-    privateCluster: false, authorizedIpRanges: "", networkConfig: "Azure CNI Overlay", byoVnet: false, dnsPrefix: "", cilium: true,
+    privateCluster: false, authorizedIpRanges: "", networkConfig: "Azure CNI Overlay", byoVnet: false, subnet: "", serviceCidr: "", dnsServiceIP: "", podCidr: "", outboundType: "loadBalancer", dnsPrefix: "", cilium: true,
     containerRegistry: "None", istio: false, azurePolicy: false,
     containerInsights: true, prometheus: true, grafana: true, alertRules: true,
     defender: false, imageCleaner: false, oidcIssuer: true, workloadIdentity: true,
@@ -193,8 +195,9 @@ export default function CreateKubernetesCluster() {
     </>
   );
 
+  const subnets = useAsync(listAllSubnets, []);
   const networking = (
-    <>
+    <CapabilityContainer id="azure.aks.networking" title="Networking">
       <FormSection title="Private access">
         <FormRow label="Enable private cluster"><Checkbox checked={f.privateCluster} onChange={chk("privateCluster")} aria-label="Enable private cluster" /></FormRow>
       </FormSection>
@@ -208,16 +211,32 @@ export default function CreateKubernetesCluster() {
           <RadioGroup value={f.networkConfig} onChange={set("networkConfig")} aria-label="Network configuration">
             <Radio value="Azure CNI Overlay" label="Azure CNI Overlay" />
             <Radio value="Azure CNI Node Subnet" label="Azure CNI Node Subnet" />
+            <Radio value="Kubenet" label="Kubenet" />
           </RadioGroup>
         </FormRow>
         <FormRow label="Bring your own Azure virtual network"><Checkbox checked={f.byoVnet} onChange={chk("byoVnet")} aria-label="Bring your own Azure virtual network" /></FormRow>
+        {f.byoVnet && (
+          <FormRow label="Cluster subnet" htmlFor="aks-subnet">
+            <Select id="aks-subnet" value={f.subnet || subnets.data?.[0]?.id || ""} onChange={(_, d) => setF((x) => ({ ...x, subnet: d.value }))} aria-label="Cluster subnet">
+              {(subnets.data || []).map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+            </Select>
+          </FormRow>
+        )}
+        <FormRow label="Service CIDR" htmlFor="aks-svc"><Input id="aks-svc" value={f.serviceCidr} placeholder="10.0.0.0/16" onChange={set("serviceCidr")} aria-label="Service CIDR" /></FormRow>
+        <FormRow label="DNS service IP" htmlFor="aks-dnsip"><Input id="aks-dnsip" value={f.dnsServiceIP} placeholder="10.0.0.10" onChange={set("dnsServiceIP")} aria-label="DNS service IP" /></FormRow>
+        {f.networkConfig !== "Azure CNI Node Subnet" && <FormRow label="Pod CIDR" htmlFor="aks-pod"><Input id="aks-pod" value={f.podCidr} placeholder={f.networkConfig === "Kubenet" ? "10.244.0.0/16" : "192.168.0.0/16"} onChange={set("podCidr")} aria-label="Pod CIDR" /></FormRow>}
+        <FormRow label="Outbound type" htmlFor="aks-outbound">
+          <Select id="aks-outbound" value={f.outboundType} onChange={set("outboundType")} aria-label="Outbound type">
+            <option value="loadBalancer">Load balancer</option><option value="managedNATGateway">Managed NAT gateway</option><option value="userDefinedRouting">User-defined routing</option>
+          </Select>
+        </FormRow>
         <FormRow label="DNS name prefix" required htmlFor="aks-dns">
           <Input id="aks-dns" value={f.dnsPrefix} placeholder={dnsPrefix} onChange={set("dnsPrefix")} aria-label="DNS name prefix" />
         </FormRow>
         <FormRow label="Enable Cilium dataplane and network policy engine"><Checkbox checked={f.cilium} onChange={chk("cilium")} aria-label="Enable Cilium dataplane and network policy engine" /></FormRow>
         <FormRow label="Load balancer"><Input readOnly value="Standard" aria-label="Load balancer" /></FormRow>
       </FormSection>
-    </>
+    </CapabilityContainer>
   );
 
   const integrations = (

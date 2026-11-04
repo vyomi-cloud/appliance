@@ -5,6 +5,7 @@
  * ARM calls; everything else in the menu is an honest NotSimulated panel. */
 import { ResourceMetrics, ResourceLogs, ResourceNotifications, ResourceAlerts } from "../../kit/ResourceMonitoring.jsx";
 import DeploymentCenter from "../../kit/DeploymentCenter.jsx";
+import Networking from "./Networking.jsx";
 import { UserAssignedIdentities } from "../../kit/UserAssignedIdentities.jsx";
 import { useEffect, useState } from "react";
 import {
@@ -99,7 +100,8 @@ export default function WebAppBlade({ params, query }) {
       iam: () => <AccessControl a={a} />,
       tags: () => <Tags a={a} reload={reload} />,
       slots: () => <Slots rg={rg} name={name} />,
-      deploymentcenter: () => <DeploymentCenter a={a} />,
+      deploymentcenter: () => <DeploymentCenter a={a} onChanged={reload} />,
+      networking: () => <Networking a={a} reload={reload} />,
       envvars: () => <EnvVars rg={rg} name={name} />,
       configuration: () => <Configuration a={a} rg={rg} name={name} reload={reload} />,
       cors: () => <Cors a={a} rg={rg} name={name} reload={reload} />,

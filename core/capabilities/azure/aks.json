@@ -181,5 +181,11 @@
    "Check access, Role assignments and Deny assignments are REAL and scoped to this AKS cluster's resource id: Check access runs core/azure_iam_core.py's evaluator (explicit-deny-wins, scope inheritance from the subscription/resource group), the lists filter the shared RBAC store to assignments whose scope covers it, and new assignments are created scoped to it. Principal IDs are free text (Vyomi has no real directory); 'My access' and Classic administrators stay honest gaps. Update: the Deny assignments list, Classic administrators (a read-only list of the subscription's account administrator, like the real API) and My access (the simulated signed-in principal, evaluated with checkAccess) are now real shared tabs (azure.common.*); the gap wording above predates them."
   ],
   "tests": ["tests/conformance/test_azure_rbac_core.py"]
+ },
+ "azure.aks.networking": {
+  "title": "Cluster networking (networkProfile)",
+  "level": { "nano": "config_only", "offline": "config_only" },
+  "limitations": ["networkProfile is validated like ARM: plugin (azure/kubenet/none), overlay mode, network policy / Cilium dataplane compatibility, service/pod CIDR overlap and size, dnsServiceIP inside the service CIDR, outbound type (UDR / NAT gateway need a custom subnet), node/pod subnets must exist, authorized IP ranges, plugin immutability. Defaults (serviceCidr, dnsServiceIP, podCidr) are filled in. No CNI runs: pod networking, network policy and egress are not enforced."],
+  "tests": ["tests/conformance/test_azure_netcfg_core.py"]
  }
 }

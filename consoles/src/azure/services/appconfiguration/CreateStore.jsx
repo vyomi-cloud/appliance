@@ -10,6 +10,7 @@ import CreateWizard, { FormRow, FormSection } from "../../kit/CreateWizard.jsx";
 import { Glyph, NotSimulatedContainer } from "../../kit/common.jsx";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
+import { PeWizardSection, usePeWizard } from "../../kit/PrivateEndpoints.jsx";
 import { TagRows } from "./ConfigStoreBlade.jsx";
 
 const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9-]{3,48}[A-Za-z0-9]$/;
@@ -26,6 +27,7 @@ export default function CreateStore() {
     publicAccess: true,
     tags: [{ name: "", value: "" }],
   });
+  const pe = usePeWizard("Microsoft.AppConfiguration/configurationStores");
   const set = (k) => (_, d) => setF((x) => ({ ...x, [k]: d.value ?? d.checked }));
   const rg = newRg ?? f.resourceGroup;
 
@@ -87,7 +89,7 @@ export default function CreateStore() {
           <Checkbox checked={f.publicAccess} onChange={(_, d) => setF((x) => ({ ...x, publicAccess: !!d.checked }))} aria-label="Enable public access" />
         </FormRow>
       </FormSection>
-      <NotSimulatedContainer title="Private endpoint" feature="Private endpoint connections for a configuration store" />
+      <PeWizardSection pe={pe} />
     </>
   );
 
@@ -116,7 +118,8 @@ export default function CreateStore() {
 
   const onCreate = async () => {
     try {
-      await api.createStore(rg, f.name, body());
+      const created = await api.createStore(rg, f.name, body());
+      await pe.deploy({ name: f.name, id: created?.id || `/subscriptions/${sub.id}/resourceGroups/${rg}/providers/Microsoft.AppConfiguration/configurationStores/${f.name}` });
       notify.success(`Deployment of configuration store '${f.name}' to resource group '${rg}' was successful.`, "Deployment succeeded");
       navigate("appconfiguration", rg, f.name);
     } catch (e) { notify.error(e, "Deployment failed"); }

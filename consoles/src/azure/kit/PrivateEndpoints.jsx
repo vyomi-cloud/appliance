@@ -23,7 +23,7 @@ export async function listAllSubnets() {
   }
   return out;
 }
-const PEC_API = { "Microsoft.Storage": "2023-01-01", "Microsoft.KeyVault": "2023-07-01", "Microsoft.Sql": "2023-05-01-preview", "Microsoft.DocumentDB": "2024-05-15" };
+const PEC_API = { "Microsoft.Storage": "2023-01-01", "Microsoft.KeyVault": "2023-07-01", "Microsoft.Sql": "2023-05-01-preview", "Microsoft.DocumentDB": "2024-05-15", "Microsoft.AppConfiguration": "2023-03-01", "Microsoft.CognitiveServices": "2023-05-01" };
 const apiOf = (type) => PEC_API[type.split("/")[0]] || "2023-01-01";
 
 export function PrivateEndpointConnectionsPanel({ target, title }) {

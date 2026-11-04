@@ -117,27 +117,16 @@
   "tests": ["tests/conformance/test_azure_arm_core.py", "tests/conformance/test_azure_monitor_core.py", "tests/conformance/test_azure_operationalinsights_core.py"]
  },
  "azure.vnets.network_appliances": {
-  "title": "Network Manager (vnet blade menu item)",
-  "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
-  },
-  "limitations": [
-   "Private endpoints, Bastion, Azure Firewall and DDoS protection are now real (see their own entries). The vnet blade's 'Network manager' menu item (connectivity / security-admin configurations applied to this vnet) is still not built (the Microsoft Defender for Cloud page is real: it lists the live recommendations that assess this network); Microsoft.Network/networkManagers exists as a bare ARM resource for IP address pools only."
-  ]
+  "title": "Network Manager (connectivity / security admin configurations)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["Microsoft.Network/networkManagers with networkGroups (+ staticMembers), connectivityConfigurations (Mesh / HubAndSpoke) and securityAdminConfigurations (ruleCollections + rules) are real ARM resources: scope accesses gate which configuration kinds are allowed, target groups and hub/member vnets must exist, rule priorities (1-4096) and ports are validated, and a group/vnet/manager in use cannot be deleted. There is no commit/deploy step and nothing is applied to the network: no peerings are created from a connectivity configuration and security admin rules are not evaluated against traffic."],
+  "tests": ["tests/conformance/test_azure_netcfg_core.py"]
  },
  "azure.vnets.private_endpoints": {
   "title": "Private endpoints",
-  "level": {
-   "nano": "limited",
-   "offline": "limited"
-  },
-  "limitations": [
-   "Microsoft.Network/privateEndpoints is a real ARM resource: the subnet and target resource must exist, groupIds are validated per target type, a private IP is allocated from the subnet (never .0-.3), customDnsConfigs carry the privatelink FQDN, and a privateEndpointConnections child is written on the target (auto-Approved, or Pending for manual connections) where approve/reject/delete flow back to the endpoint. No packet is routed: the endpoint does not change how the target's own data plane is reached, publicNetworkAccess=Disabled is not enforced against traffic, and private DNS zone groups are not created. Targets: storage, Key Vault, SQL, Cosmos DB, Container Registry, Redis; App Configuration and Cognitive Services keep their own connection lists."
-  ],
-  "tests": [
-   "tests/conformance/test_azure_netsvc_core.py"
-  ]
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["Microsoft.Network/privateEndpoints is a real ARM resource: the subnet and target resource must exist, groupIds are validated per target type, a private IP is allocated from the subnet (never .0-.3), customDnsConfigs carry the privatelink FQDN, and a privateEndpointConnections child is written on the target (auto-Approved, or Pending for manual connections) where approve/reject/delete flow back to the endpoint. No packet is routed: the endpoint does not change how the target's own data plane is reached, publicNetworkAccess=Disabled is not enforced against traffic, and private DNS zone groups are not created. Targets: storage, Key Vault, SQL, Cosmos DB, Container Registry, Redis; App Configuration and Cognitive Services connections are mirrored onto the target resource's own privateEndpointConnections list and approve/reject/delete there flows back to the endpoint."],
+  "tests": ["tests/conformance/test_azure_netsvc_core.py"]
  },
  "azure.vnets.bastion": {
   "title": "Azure Bastion",
@@ -200,5 +189,17 @@
   "limitations": ["Service endpoints and the subnet delegation are stored on the subnet and returned by the API exactly as set; Vyomi does not route service traffic over the endpoint or restrict the delegated subnet to the named service."],
   "api": ["subnets CreateOrUpdate (serviceEndpoints, delegations)", "subnets Get"],
   "tests": ["tests/conformance/test_azure_vnets_subnet_services.py"]
+ },
+ "azure.vnets.advertised_prefixes": {
+  "title": "Advertised address prefixes (virtual network)",
+  "level": { "nano": "config_only", "offline": "config_only" },
+  "limitations": ["advertisedAddressPrefixes are validated (CIDRs, within the address space, no duplicates) and round-trip on the virtual network. Custom BGP advertisement only matters once the network peers with a gateway/ExpressRoute circuit, which does not exist in a local simulator, so nothing is advertised."],
+  "tests": ["tests/conformance/test_azure_netcfg_core.py"]
+ },
+ "azure.vnets.front_door_cdn": {
+  "title": "Front Door / CDN profiles (Microsoft.Cdn/profiles)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["Control plane only: profiles (AFD Standard/Premium + classic CDN SKUs, SKU change rules), afdEndpoints (derived *.z01.azurefd.net host), originGroups + origins (health probe / load balancing / priority / weight / port ranges), routes (origin group, rule set and custom domain cross references, pattern/protocol validation, conflict detection), ruleSets + rules (condition/action names, unique order) and customDomains (managed/customer TLS, Pending DNS validation token), with in-use delete protection. No edge request is ever served: no caching, WAF, TLS termination, or origin health probing, and custom domains never leave Pending."],
+  "tests": ["tests/conformance/test_azure_netcfg_core.py"]
  }
 }

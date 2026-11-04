@@ -291,8 +291,11 @@ function Networking({ a }) {
         left={[["Virtual network", vnet?.infrastructureSubnetId ? vnet.infrastructureSubnetId.split("/").pop() : "Not configured (Vyomi-managed)"], ["Internal load balancer", vnet?.internal ? "Enabled" : "Disabled"]]}
         right={[["Static IP", p.staticIp], ["Outbound IP addresses", p.staticIp]]}
       />
-      <NotSimulatedContainer title="Custom VNet integration" feature="Bringing an existing virtual network/subnet"
-        note="Vyomi always provisions the environment's own virtual network; private endpoints and NAT gateway integration are not simulated." />
+      <CapabilityContainer id="azure.containerapps.app.networking" title="Custom VNet integration">
+        {vnet?.infrastructureSubnetId
+          ? <p style={{ fontSize: 13 }}>This environment uses the infrastructure subnet <code>{vnet.infrastructureSubnetId}</code>. The virtual network configuration cannot be changed after the environment is created.</p>
+          : <p style={{ fontSize: 13 }}>This environment uses a Vyomi-managed network. A custom virtual network can only be chosen when the environment is created.</p>}
+      </CapabilityContainer>
     </>
   );
 }

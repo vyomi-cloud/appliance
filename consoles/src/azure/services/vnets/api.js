@@ -214,6 +214,7 @@ export function toArmBody(f) {
     properties: {
       addressSpace,
       encryption: { enabled: f.encryption, enforcement: "AllowUnencrypted" },
+      ...(String(f.advertised || "").trim() ? { advertisedAddressPrefixes: String(f.advertised).split(/[\s,]+/).filter(Boolean) } : {}),
     },
   };
 }

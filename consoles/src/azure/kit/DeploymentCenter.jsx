@@ -35,45 +35,74 @@ export default function DeploymentCenter({ a, cap = "azure.appservices.webapp.de
 function Settings({ a, onChanged }) {
   const notify = useNotify();
   const src = useAsync(async () => { try { return await restJson("GET", `${a.id}/sourcecontrols/web`, { query: q }); } catch { return null; } }, [a.id]);
+  const web = useAsync(async () => (await restJson("GET", `${a.id}/config/web`, { query: q })).properties, [a.id]);
   const [f, setF] = useState(null);
   const [busy, setBusy] = useState(false);
-  if (src.loading && !src.data && f === null) return <Loading />;
+  if ((src.loading && !src.data && f === null) || (web.loading && !web.data)) return <Loading />;
   const p = src.data?.properties;
-  const cur = f || { source: p ? (p.isGitHubAction ? "gh" : "git") : "none", repoUrl: p?.repoUrl || "", branch: p?.branch || "main", manual: p?.isManualIntegration || false,
+  const image = String(web.data?.linuxFxVersion || "").toUpperCase().startsWith("DOCKER|") ? web.data.linuxFxVersion.slice(7) : "";
+  const kind = p ? (p.isGitHubAction ? "gh" : { AzureRepos: "azrepos", Bitbucket: "bitbucket" }[p.provider] || "git") : web.data?.scmType === "LocalGit" ? "local" : image ? "container" : "none";
+  const cur = f || { source: kind, image, repoUrl: p?.repoUrl || "", branch: p?.branch || "main", manual: p?.isManualIntegration || false,
     stack: STACKS.find(([, l]) => l === p?.gitHubActionConfiguration?.codeConfiguration?.runtimeStack)?.[0] || "python", version: p?.gitHubActionConfiguration?.codeConfiguration?.runtimeVersion || "" };
   const set = (k, v) => setF({ ...cur, [k]: v });
+  const REPO = ["gh", "git", "azrepos", "bitbucket"];
+  const scm = `https://${a.name}.scm.azurewebsites.net`;
+  const patchWeb = (props) => restJson("PATCH", `${a.id}/config/web`, { query: q, body: { properties: props } });
   const yaml = p?.gitHubActionConfiguration?.workflowYaml;
   const save = async () => {
     setBusy(true);
     try {
-      if (cur.source === "none") { await restJson("DELETE", `${a.id}/sourcecontrols/web`, { query: q }); notify.success("Disconnected from source control.", "Disconnect succeeded"); }
-      else {
-        const properties = { repoUrl: cur.repoUrl, branch: cur.branch, isManualIntegration: cur.source === "git" ? cur.manual : false, isGitHubAction: cur.source === "gh" };
+      if (cur.source === "none") {
+        if (kind === "local") await patchWeb({ scmType: "None" });
+        else if (p) await restJson("DELETE", `${a.id}/sourcecontrols/web`, { query: q });
+        notify.success("Disconnected from source control.", "Disconnect succeeded");
+      } else if (cur.source === "local") {
+        if (p) await restJson("DELETE", `${a.id}/sourcecontrols/web`, { query: q });
+        await patchWeb({ scmType: "LocalGit" });
+        notify.success("Local Git deployment was enabled.", "Save succeeded");
+      } else if (cur.source === "container") {
+        await patchWeb({ linuxFxVersion: `DOCKER|${cur.image}` });
+        await restJson("PATCH", `${a.id}/config/appsettings`, { query: q, body: { properties: { DOCKER_ENABLE_CI: cur.ci ? "true" : "false" } } });
+        notify.success("Container registry settings were saved.", "Save succeeded");
+      } else {
+        if (kind === "local") await patchWeb({ scmType: "None" });
+        const properties = { repoUrl: cur.repoUrl, branch: cur.branch, isManualIntegration: cur.source !== "gh" ? cur.manual : false, isGitHubAction: cur.source === "gh" };
         if (cur.source === "gh") properties.gitHubActionConfiguration = { codeConfiguration: { runtimeStack: cur.stack, runtimeVersion: cur.version || undefined }, isLinux: String(a.kind || "").includes("linux") };
         await restJson("PUT", `${a.id}/sourcecontrols/web`, { query: q, body: { properties } });
         notify.success("Deployment settings were saved.", "Save succeeded");
       }
-      setF(null); src.reload(); onChanged && onChanged();
+      setF(null); src.reload(); web.reload(); onChanged && onChanged();
     } catch (e) { notify.error(e, "Failed to save deployment settings"); } finally { setBusy(false); }
   };
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 640 }}>
       <Field label="Source">
         <Select value={cur.source} onChange={(_, d) => set("source", d.value)} aria-label="Source">
-          <option value="none">Select source</option><option value="gh">GitHub</option><option value="git">External Git</option>
+          <option value="none">Select source</option><option value="gh">GitHub</option><option value="azrepos">Azure Repos</option><option value="bitbucket">Bitbucket</option>
+          <option value="git">External Git</option><option value="local">Local Git</option><option value="container">Container registry</option>
         </Select>
       </Field>
-      {cur.source !== "none" && <>
-        <Field label="Repository" required><Input value={cur.repoUrl} placeholder="https://github.com/org/repo" onChange={(_, d) => set("repoUrl", d.value)} aria-label="Repository" /></Field>
+      {cur.source === "local" && (
+        <Field label="Git clone URI" hint="Push to this remote with your deployment credentials (FTPS credentials tab). Vyomi has no Kudu receiver, so a push is not accepted.">
+          <Input readOnly value={`${scm}:443/${a.name}.git`} aria-label="Git clone URI" /></Field>
+      )}
+      {cur.source === "container" && <>
+        <Field label="Image and tag" required hint="registry/repository:tag, for example myregistry.azurecr.io/team/app:v1">
+          <Input value={cur.image} onChange={(_, d) => set("image", d.value)} aria-label="Image and tag" /></Field>
+        <Switch checked={!!cur.ci} onChange={(_, d) => set("ci", !!d.checked)} label="Continuous deployment" />
+        {cur.ci && <Field label="Webhook URL" hint="Add this as a registry webhook (the registry cannot reach it from this simulator)."><Input readOnly value={`${scm}/api/registry/webhook`} aria-label="Webhook URL" /></Field>}
+      </>}
+      {REPO.includes(cur.source) && <>
+        <Field label="Repository" required><Input value={cur.repoUrl} placeholder={{ azrepos: "https://dev.azure.com/org/project/_git/repo", bitbucket: "https://bitbucket.org/team/repo.git" }[cur.source] || "https://github.com/org/repo"} onChange={(_, d) => set("repoUrl", d.value)} aria-label="Repository" /></Field>
         <Field label="Branch" required><Input value={cur.branch} onChange={(_, d) => set("branch", d.value)} aria-label="Branch" /></Field>
       </>}
       {cur.source === "gh" && <>
         <Field label="Runtime stack"><Select value={cur.stack} onChange={(_, d) => set("stack", d.value)} aria-label="Runtime stack">{STACKS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</Select></Field>
         <Field label="Version"><Input value={cur.version} placeholder="e.g. 3.11" onChange={(_, d) => set("version", d.value)} aria-label="Runtime version" /></Field>
       </>}
-      {cur.source === "git" && <Switch checked={cur.manual} onChange={(_, d) => set("manual", !!d.checked)} label="Manual integration (do not sync on save)" />}
+      {["git", "azrepos", "bitbucket"].includes(cur.source) && <Switch checked={cur.manual} onChange={(_, d) => set("manual", !!d.checked)} label="Manual integration (do not sync on save)" />}
       <div style={{ display: "flex", gap: 8 }}>
-        <Button appearance="primary" disabled={busy || (cur.source !== "none" && !cur.repoUrl)} onClick={save}>Save</Button>
+        <Button appearance="primary" disabled={busy || (REPO.includes(cur.source) && !cur.repoUrl) || (cur.source === "container" && !cur.image)} onClick={save}>Save</Button>
         <Button disabled={busy || f === null} onClick={() => setF(null)}>Discard</Button>
       </div>
       {yaml && <Field label={`Generated workflow (${p.gitHubActionConfiguration.workflowFilePath})`} hint="Generated, not committed: Vyomi makes no outbound connection to GitHub.">
