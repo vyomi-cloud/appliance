@@ -1,4 +1,5 @@
 import { useState } from "react";
+import BackupLink from "../../kit/BackupLink.jsx";
 import Header from "@cloudscape-design/components/header";
 import Tabs from "@cloudscape-design/components/tabs";
 import Button from "@cloudscape-design/components/button";
@@ -582,6 +583,7 @@ function Management({ bucket }) {
   const rules = lc.data?.rules || [];
   return (
     <SpaceBetween size="l">
+      <BackupLink service="Amazon S3" resource="buckets" />
       <SubSetting title="Lifecycle rules" state={lc} render={(d) => (
         <Table variant="container"
           header={<Header variant="h2" counter={`(${d.rules.length})`} description="Use lifecycle rules to define actions you want Amazon S3 to take during an object's lifetime."
