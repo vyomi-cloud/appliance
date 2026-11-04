@@ -11776,9 +11776,12 @@ def _restore_license_from_backup() -> bool:
             if token:
                 _apply_license_jwt(token)
                 return True
-        # Fall back to JSON snapshot (dev-mode signup)
+        # Fall back to JSON snapshot (dev-mode signup). Unlike the JWT above,
+        # this payload carries no signature to verify — restoring it outside
+        # dev mode would let anyone who can write to the data dir grant
+        # themselves a tier for free.
         json_file = backup_dir / "license-backup.json"
-        if json_file.exists():
+        if json_file.exists() and os.environ.get("CLOUDLEARN_DEV_MODE", "").strip() == "1":
             import json as _json
             payload = _json.loads(json_file.read_text(encoding="utf-8"))
             if isinstance(payload, dict) and payload.get("tier"):

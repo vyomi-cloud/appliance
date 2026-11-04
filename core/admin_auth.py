@@ -38,6 +38,10 @@ def get_or_create_admin_key() -> str:
     global _cached_key
     if _cached_key:
         return _cached_key
+    env_key = os.environ.get("CLOUDLEARN_ADMIN_KEY", "").strip()
+    if len(env_key) >= 32:
+        _cached_key = env_key
+        return _cached_key
     path = _key_path()
     if path.exists():
         try:
@@ -74,11 +78,20 @@ def verify_admin_key(request: Request) -> bool:
     return secrets.compare_digest(provided, expected)
 
 
+def admin_key_required() -> bool:
+    """True when the admin key must be enforced: appliance mode, or
+    VYOMI_REQUIRE_ADMIN_KEY explicitly turns it on outside appliance mode
+    (e.g. sandboxes running in developer mode)."""
+    from core.app_context import appliance_mode_enabled
+    if appliance_mode_enabled():
+        return True
+    return os.environ.get("VYOMI_REQUIRE_ADMIN_KEY", "").strip().lower() in ("1", "true", "yes")
+
+
 def require_admin_key(request: Request) -> None:
     """Raise 403 if the request doesn't carry a valid admin key.
     Call this at the top of protected endpoints."""
-    from core.app_context import appliance_mode_enabled
-    if not appliance_mode_enabled():
+    if not admin_key_required():
         return  # dev mode — no auth required
     if not verify_admin_key(request):
         raise HTTPException(

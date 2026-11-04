@@ -43,6 +43,12 @@ services:
       CLOUDLEARN_TIER_ENFORCE: ${VYOMI_TIER_ENFORCE:-0}
       CLOUDLEARN_PUBLIC_URL: ${CLOUDLEARN_PUBLIC_URL:-}
       VYOMI_LICENSE_JWT: ${VYOMI_LICENSE_JWT:-}
+      # Admin key enforced even in developer mode, so sandbox admin routes
+      # (shared tenancy, tenants, licensing) require the key the portal hands
+      # the sandbox owner. Does not flip compute to LXD (that's appliance mode).
+      VYOMI_REQUIRE_ADMIN_KEY: "1"
+      CLOUDLEARN_ADMIN_KEY: ${VYOMI_ADMIN_KEY:-}
+      CLOUDLEARN_LICENSE_SECRET: ${VYOMI_SHARED_SECRET:-}
       VYOMI_INSTALL_ID: ${CODESPACE_NAME:-vyomi-sandbox}
       # Let the appliance detect it's a cloud sandbox so spaces get a default
       # TTL and the countdown timer shows (0/no-expiry stays the offline default).

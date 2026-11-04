@@ -556,28 +556,40 @@ async def _provider_api_alias(request, call_next):
 async def tenant_context_middleware(request, call_next):
     """Read X-CloudLearn-Tenant header -> request-scoped tenant override
     (ContextVar). Without the header, requests fall through to the globally
-    active tenant. Cross-tenant access is then blocked by the state proxy."""
+    active tenant. Cross-tenant access is then blocked by the state proxy.
+
+    Shared-instance multi-user: the developer's signed `vyomi_dev` cookie binds
+    them to their tenant and wins over the header. The header is honoured only
+    with a valid admin key (operator override into another tenant); otherwise
+    it's ignored, or rejected with `tenant_header_forbidden` if it names a
+    different tenant than the cookie's — a plain header must never let one
+    developer read another's resources. Off unless VYOMI_SHARED_INSTANCE is
+    set; fail-soft (any error falls through to the global active tenant)."""
     tid = (request.headers.get("x-cloudlearn-tenant") or "").strip()
-    # Shared-instance multi-user: when no explicit header, bind the request to the
-    # developer's tenant from their signed `vyomi_dev` cookie. Off unless
-    # VYOMI_SHARED_INSTANCE is set; fail-soft (any error falls through to the
-    # global active tenant, i.e. unchanged behavior).
-    if not tid:
-        try:
-            from core import shared_tenancy as _sh
-            if _sh.shared_enabled():
-                resolved = _sh.resolve_dev_token(request.cookies.get(_sh.COOKIE_NAME, ""))
-                if resolved:
-                    # Offboarded developer (Phase 6): valid token, but access has
-                    # been severed. Refuse — their resources stay, but they can't
-                    # reach them. 403 rather than falling through to a global tenant.
-                    if _sh.is_disabled(resolved):
-                        return JSONResponse(status_code=403, content={
-                            "error": {"ok": False, "code": "offboarded",
-                                      "reason": "Access for this developer has been revoked."}})
-                    tid = resolved
-        except Exception:
-            pass
+    try:
+        from core import shared_tenancy as _sh
+        if _sh.shared_enabled():
+            cookie_tid = _sh.resolve_dev_token(request.cookies.get(_sh.COOKIE_NAME, "")) or ""
+            # Offboarded developer (Phase 6): valid token, but access has been
+            # severed. Refuse — their resources stay, but they can't reach them.
+            if cookie_tid and _sh.is_disabled(cookie_tid):
+                return JSONResponse(status_code=403, content={
+                    "error": {"ok": False, "code": "offboarded",
+                              "reason": "Access for this developer has been revoked."}})
+            if tid:
+                from core.admin_auth import verify_admin_key
+                if verify_admin_key(request):
+                    pass  # operator override — header wins as given
+                elif cookie_tid and tid != cookie_tid:
+                    return JSONResponse(status_code=403, content={
+                        "error": {"ok": False, "code": "tenant_header_forbidden",
+                                  "reason": "X-CloudLearn-Tenant requires an admin key in shared mode."}})
+                else:
+                    tid = cookie_tid
+            else:
+                tid = cookie_tid
+    except Exception:
+        pass
     if tid:
         from core.app_context import tenants_state as _tenants_state
         known_tenants = _tenants_state().get("tenants", {})
