@@ -143,6 +143,30 @@ def run():
     _check("appcfg CMK vault must exist", r["status"] == 400)
     r = put(ac, {"location": "eastus", "sku": {"name": "standard"}, "identity": {"type": "SystemAssigned"}, "properties": {"encryption": ek}}, AQ)
     _check("appcfg CMK accepted", r["status"] in (200, 201))
+    # ── API Management: restrict an API to a self-hosted gateway
+    ap = f"{RG}/providers/Microsoft.ApiManagement/service/cxapim"
+    AQ2 = {"api-version": "2022-08-01"}
+    put(ap, {"location": "eastus", "sku": {"name": "Developer", "capacity": 1}, "properties": {"publisherEmail": "a@b.co", "publisherName": "x"}}, AQ2)
+    put(ap + "/apis/echo", {"properties": {"displayName": "Echo", "path": "echo", "protocols": ["https"], "serviceUrl": "https://example.com"}}, AQ2)
+    _check("gateway link needs gateway", put(ap + "/gateways/gw1/apis/echo", {}, AQ2)["status"] == 404)
+    put(ap + "/gateways/gw1", {"properties": {"locationData": {"name": "dc1"}}}, AQ2)
+    _check("gateway link needs api", put(ap + "/gateways/gw1/apis/nope", {}, AQ2)["status"] == 404)
+    _check("gateway link created", put(ap + "/gateways/gw1/apis/echo", {}, AQ2)["status"] in (200, 201))
+    _check("gateway apis listed", len(get(ap + "/gateways/gw1/apis", AQ2)["body"]["value"]) == 1)
+    # ── API Management soft-delete + restore
+    DS = f"/subscriptions/{SUB}/providers/Microsoft.ApiManagement"
+    _check("apim delete", a.handle("DELETE", ap, AQ2)["status"] in (200, 202, 204))
+    lst = get(DS + "/deletedservices", AQ2)["body"]["value"]
+    _check("soft-deleted service listed", len(lst) == 1 and lst[0]["name"] == "cxapim" and lst[0]["properties"]["scheduledPurgeDate"])
+    r = put(ap, {"location": "eastus", "sku": {"name": "Developer", "capacity": 1}, "properties": {"publisherEmail": "a@b.co", "publisherName": "x"}}, AQ2)
+    _check("name reuse while soft-deleted conflicts", r["status"] == 409 and code(r) == "ServiceAlreadyExistsInSoftDeletedState")
+    r = put(ap, {"location": "eastus", "sku": {"name": "Developer", "capacity": 1}, "properties": {"publisherEmail": "a@b.co", "publisherName": "x", "restore": True}}, AQ2)
+    _check("restore brings the service back", r["status"] in (200, 201) and get(ap, AQ2)["status"] == 200)
+    _check("restore brings its APIs back", get(ap + "/apis/echo", AQ2)["status"] == 200)
+    _check("restore clears the soft-deleted record", get(DS + "/deletedservices", AQ2)["body"]["value"] == [])
+    a.handle("DELETE", ap, AQ2)
+    _check("purge soft-deleted", a.handle("DELETE", DS + "/locations/eastus/deletedservices/cxapim", AQ2)["status"] == 200 and get(DS + "/deletedservices", AQ2)["body"]["value"] == [])
+    _check("restore without soft-delete record 404", put(ap, {"location": "eastus", "sku": {"name": "Developer", "capacity": 1}, "properties": {"publisherEmail": "a@b.co", "publisherName": "x", "restore": True}}, AQ2)["status"] == 404)
     print("test_azure_cfgext_core: PASS")
 
 

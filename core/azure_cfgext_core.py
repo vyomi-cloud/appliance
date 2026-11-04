@@ -14,6 +14,7 @@ the same flat ARM state map as ``azure_arm_core`` (keyed by lower-cased resource
 * Service Bus namespaces -- ``encryption`` (Premium only, Key Vault key + identity) and ``networkRuleSets/default``
   (Premium only, subnet must exist, IP rules valid).
 * App Configuration stores -- the customer-managed key check lives in azure_appconfiguration_core._cmk_check (uses _check_key_uri here).
+* API Management ``service/gateways/{gw}/apis/{api}`` -- gateway and API must exist (restricts an API to a self-hosted gateway).
 * Virtual network subnets -- ``serviceEndpoints`` names, ``delegations`` serviceName, and the rule that a delegated
   subnet cannot also carry a private endpoint.
 
@@ -34,6 +35,9 @@ COSMOS_SVC = "microsoft.documentdb/databaseaccounts/services"
 SBNS = "microsoft.servicebus/namespaces"
 SB_NETRULES = "microsoft.servicebus/namespaces/networkrulesets"
 APPCFG = "microsoft.appconfiguration/configurationstores"
+APIM = "microsoft.apimanagement/service"
+APIM_DELETED = "microsoft.apimanagement/deletedservices"
+APIM_GW_API = "microsoft.apimanagement/service/gateways/apis"
 VNET = "microsoft.network/virtualnetworks"
 PE = "microsoft.network/privateendpoints"
 
@@ -76,7 +80,7 @@ def _err(status: int, code: str, message: str) -> dict:
 
 def handles(full_type: str) -> bool:
     ft = full_type.lower()
-    return ft in (AKS, COSMOS, COSMOS_SVC, SBNS, SB_NETRULES, VNET) or ft.endswith("/providers/extensions")
+    return ft in (AKS, COSMOS, COSMOS_SVC, SBNS, SB_NETRULES, VNET, APIM_GW_API, APIM) or ft.endswith("/providers/extensions")
 
 
 def _merged(existing, payload) -> dict:
@@ -136,6 +140,71 @@ def validate(state: dict, full_type: str, rid: str, payload: dict, existing: dic
         return _validate_sb_rules(state, rid, payload)
     if ft == VNET:
         return _validate_vnet(state, rid, payload, props)
+    if ft == APIM_GW_API:
+        return _validate_gw_api(state, rid)
+    if ft == APIM:
+        return _validate_apim_soft_deleted(state, rid, payload, existing)
+    return None
+
+
+# ── API Management soft-delete (deletedservices) ────────────────────────────────────────
+def _deleted_key(rid: str, location: str) -> str:
+    parts = rid.split("/")
+    return f"/subscriptions/{parts[2]}/providers/Microsoft.ApiManagement/locations/{(location or 'eastus').replace(' ', '').lower()}/deletedservices/{parts[-1]}".lower()
+
+
+def _find_deleted(state: dict, sub: str, name: str):
+    pre = f"/subscriptions/{sub}/providers/microsoft.apimanagement/locations/".lower()
+    for k, r in state.items():
+        if k.startswith(pre) and k.endswith("/deletedservices/" + name.lower()):
+            return k, r
+    return None, None
+
+
+def _validate_apim_soft_deleted(state: dict, rid: str, payload: dict, existing):
+    if existing is not None:
+        return None
+    key, gone = _find_deleted(state, rid.split("/")[2], rid.rsplit("/", 1)[-1])
+    if gone is None:
+        if ((payload or {}).get("properties") or {}).get("restore"):
+            return _err(404, "ResourceNotFound", f"There is no soft-deleted API Management service named '{rid.rsplit('/', 1)[-1]}' to restore.")
+        return None
+    if not ((payload or {}).get("properties") or {}).get("restore"):
+        return _err(409, "ServiceAlreadyExistsInSoftDeletedState", f"API Management service '{gone['name']}' is in a soft-deleted state; restore it with properties.restore=true or purge it before reusing the name.")
+    return None
+
+
+def apim_deleted_dispatch(state: dict, method: str, sub: str, chain: list, payload=None):
+    """Microsoft.ApiManagement/deletedservices (GET list, GET/DELETE by name at locations/{loc}/deletedservices/{name})."""
+    pre = f"/subscriptions/{sub}/providers/microsoft.apimanagement/locations/".lower()
+    rows = [r for k, r in state.items() if k.startswith(pre) and (r.get("_type") or "") == APIM_DELETED]
+    view = lambda r: {k: v for k, v in r.items() if not k.startswith("_")}
+    if len(chain) == 1 and chain[0].lower() == "deletedservices" and method == "GET":
+        return {"status": 200, "headers": {}, "body": {"value": [view(r) for r in rows]}}
+    if len(chain) == 4 and chain[0].lower() == "locations" and chain[2].lower() == "deletedservices":
+        name = chain[3]
+        rec = next((r for r in rows if r["name"].lower() == name.lower() and r["id"].lower().split("/locations/")[1].startswith(chain[1].lower() + "/")), None)
+        if rec is None:
+            return _err(404, "ResourceNotFound", f"The soft-deleted API Management service '{name}' was not found.")
+        if method == "GET":
+            return {"status": 200, "headers": {}, "body": view(rec)}
+        if method == "DELETE":
+            state.pop(rec["id"].lower(), None)
+            return {"status": 200, "headers": {}, "body": None}
+    return _err(405, "MethodNotAllowed", f"{method} is not supported on this deletedservices path.")
+
+
+def _validate_gw_api(state: dict, rid: str):
+    """service/gateways/{gw}/apis/{api}: the self-hosted gateway and the API must both exist in the service."""
+    low = rid.lower()
+    gw_id = low[: low.index("/apis/")] if "/apis/" in low else low
+    svc_id = gw_id[: gw_id.index("/gateways/")]
+    api_name = rid.rsplit("/", 1)[-1]
+    gw = state.get(gw_id)
+    if gw is None:
+        return _err(404, "ResourceNotFound", f"The gateway '{gw_id.rsplit('/', 1)[-1]}' was not found.")
+    if state.get(f"{svc_id}/apis/{api_name}".lower()) is None:
+        return _err(404, "ResourceNotFound", f"The API '{api_name}' was not found in the API Management service.")
     return None
 
 
@@ -363,6 +432,16 @@ def after_put(state: dict, rec: dict, payload: dict, prev: dict | None = None) -
         p["locations"] = [{"name": f"{host}-{i}", "location": (acct or {}).get("location", "East US"), "status": "Running"} for i in range(count)]
         p["instanceSize"] = size
         rec["etag"] = f'"{uuid.uuid4()}"'
+    elif ft == APIM and (payload or {}).get("properties", {}).get("restore"):
+        key, gone = _find_deleted(state, rec["id"].split("/")[2], rec["name"])
+        if gone is not None:
+            for k, v in (gone.get("_children") or {}).items():
+                state.setdefault(k, v)
+            prev_p = (gone.get("_svc") or {}).get("properties") or {}
+            for k, v in prev_p.items():
+                p.setdefault(k, v)
+            p.pop("restore", None)
+            state.pop(key, None)
     elif ft == SB_NETRULES:
         p.setdefault("defaultAction", "Allow")
         p.setdefault("publicNetworkAccess", "Enabled")
@@ -373,4 +452,20 @@ def after_put(state: dict, rec: dict, payload: dict, prev: dict | None = None) -
 
 
 def before_delete(state: dict, rec: dict):
+    ft = (rec.get("_type") or "").lower()
+    if ft == APIM:
+        import datetime
+        now = datetime.datetime.now(datetime.timezone.utc)
+        rid = rec["id"]
+        pre = rid.lower() + "/"
+        loc = rec.get("location") or "eastus"
+        snap = {k: dict(v) if isinstance(v, dict) else v for k, v in state.items() if k.startswith(pre) and "/__event__/" not in k}
+        state[_deleted_key(rid, loc)] = {
+            "id": f"/subscriptions/{rid.split('/')[2]}/providers/Microsoft.ApiManagement/locations/{loc.replace(' ', '').lower()}/deletedservices/{rid.rsplit('/', 1)[-1]}",
+            "name": rid.rsplit("/", 1)[-1], "type": "Microsoft.ApiManagement/deletedservices", "_type": APIM_DELETED,
+            "location": loc, "sku": rec.get("sku"),
+            "properties": {"serviceId": rid, "scheduledPurgeDate": (now + datetime.timedelta(hours=48)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                           "deletionDate": now.strftime("%Y-%m-%dT%H:%M:%SZ")},
+            "_svc": dict(rec), "_children": snap,
+        }
     return None

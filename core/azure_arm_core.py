@@ -1495,6 +1495,10 @@ class AzureArm:
         if namespace.lower() == "microsoft.appconfiguration":
             return self._appconfig(method, sub, rg, chain, payload, query)
 
+        # Microsoft.ApiManagement/deletedservices: soft-deleted services (restore = PUT service with properties.restore).
+        if namespace.lower() == "microsoft.apimanagement" and rg is None and chain and chain[0].lower() in ("deletedservices", "locations"):
+            return cfgext.apim_deleted_dispatch(self.state, method, sub, chain, payload)
+
         # Microsoft.Network/dnsZones (+ record sets): the Azure DNS engine owns the zone semantics.
         if namespace.lower() == "microsoft.network" and dns_engine.handles(chain):
             return self._dns(method, sub, rg, chain, payload, query)
@@ -1731,6 +1735,10 @@ class AzureArm:
                 blocked = netsvc.before_delete(self.state, _net_rec)
                 if blocked:
                     return blocked
+                if cfgext.handles(_net_rec.get("_type") or ""):
+                    blocked = cfgext.before_delete(self.state, _net_rec)
+                    if blocked:
+                        return blocked
             rec = self.state.pop(key, None)
             if rec is not None:
                 if rec.get("_ipam_alloc"):

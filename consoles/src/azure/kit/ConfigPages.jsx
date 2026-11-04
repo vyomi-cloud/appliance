@@ -10,6 +10,7 @@ import { useAsync } from "../../common/useAsync.js";
 import { CapabilityContainer } from "./Capability.jsx";
 import { ErrorBar, InfoBar, KV, Loading } from "./common.jsx";
 import { AddVnetDialog } from "./NetworkRules.jsx";
+import { getSubscription } from "./arm.js";
 
 const q = (v) => ({ "api-version": v });
 
@@ -285,6 +286,36 @@ export function AppConfigEncryption({ a, reload }) {
           }, "The customer-managed key was saved.")}>Save</Button>
         {cur?.keyIdentifier && <Button style={{ marginLeft: 8 }} aria-label="Remove encryption key" onClick={() => save(() => restJson("PATCH", a.id, { query: AC_V, body: { properties: { encryption: { keyVaultProperties: null } } } }), "Reverted to a Microsoft-managed key.")}>Use Microsoft-managed key</Button>}
       </div>
+    </CapabilityContainer>
+  );
+}
+
+// ── API Management soft-deleted services ───────────────────────────────────────────────
+const APIM_V = q("2022-08-01");
+export function ApimDeletedServices({ onRestored }) {
+  const save = useSave();
+  const list = useAsync(async () => {
+    return (await restJson("GET", `/subscriptions/${getSubscription()}/providers/Microsoft.ApiManagement/deletedservices`, { query: APIM_V })).value || [];
+  }, []);
+  const restore = async (r) => {
+    const rg = String(r.properties?.serviceId || "").split("/resourceGroups/")[1]?.split("/")[0];
+    if (await save(() => restJson("PUT", r.properties.serviceId, { query: APIM_V, body: { location: r.location, sku: r.sku, properties: { publisherEmail: "restored@vyomi.local", publisherName: "Restored", restore: true } } }), `API Management service '${r.name}' was restored.`)) {
+      list.reload(); onRestored?.(rg, r.name);
+    }
+  };
+  return (
+    <CapabilityContainer id="azure.apim.softdelete" title="Soft-deleted API Management services">
+      <ErrorBar error={list.error} />
+      {list.loading && !list.data ? <Loading /> : (
+        <table className="vy-grid" aria-label="Soft-deleted services">
+          <thead><tr><th>Name</th><th>Location</th><th>Deleted</th><th>Scheduled purge</th><th /></tr></thead>
+          <tbody>{(list.data || []).length ? list.data.map((r) => (
+            <tr key={r.id}><td>{r.name}</td><td>{r.location}</td><td>{r.properties?.deletionDate}</td><td>{r.properties?.scheduledPurgeDate}</td>
+              <td><Button size="small" aria-label={`Restore ${r.name}`} onClick={() => restore(r)}>Restore</Button>{" "}
+                <Button size="small" aria-label={`Purge ${r.name}`} onClick={async () => { await save(() => restJson("DELETE", r.id, { query: APIM_V }), `'${r.name}' was purged.`); list.reload(); }}>Purge</Button></td></tr>
+          )) : <tr><td colSpan={5} className="vy-muted">No soft-deleted services.</td></tr>}</tbody>
+        </table>
+      )}
     </CapabilityContainer>
   );
 }

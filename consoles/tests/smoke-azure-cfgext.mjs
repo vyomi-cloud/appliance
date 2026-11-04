@@ -123,6 +123,25 @@ try {
   await page.getByRole("button", { name: "Add event subscription" }).waitFor({ timeout: 10000 }).then(() => check("SB events page", true), () => check("SB events page", false));
   await noNS("SB events");
 
+  // ── API Management: gateway association in the create flow, soft-delete restore
+  const M = `cxapim${n}`;
+  await arm("PUT", P("ApiManagement", "service", M), { location: "eastus", sku: { name: "Developer", capacity: 1 }, properties: { publisherEmail: "a@b.co", publisherName: "x" } }, "2022-08-01");
+  await arm("PUT", P("ApiManagement", "service", M) + "/gateways/gw1", { properties: { locationData: { name: "dc1" } } }, "2022-08-01");
+  await arm("PUT", P("ApiManagement", "service", M) + "/apis/echo", { properties: { displayName: "Echo", path: "echo", protocols: ["https"], serviceUrl: "https://example.com" } }, "2022-08-01");
+  await arm("PUT", P("ApiManagement", "service", M) + "/gateways/gw1/apis/echo", { properties: {} }, "2022-08-01");
+  await page.goto(UI + `#/apim/${RG}/${M}/selfhostedgateways`);
+  await page.locator("tr", { hasText: "gw1" }).getByText("echo").waitFor({ timeout: 10000 }).then(() => check("gateway lists its APIs", true), () => check("gateway lists its APIs", false));
+  await page.goto(UI + `#/apim/${RG}/${M}/apis/create/http`);
+  await page.getByLabel("Gateway gw1").waitFor({ timeout: 10000 }).then(() => check("create-API wizard offers gateways", true), () => check("create-API wizard offers gateways", false));
+  await noNS("APIM create API gateways");
+  await arm("DELETE", P("ApiManagement", "service", M), null, "2022-08-01");
+  await page.goto(UI + `#/apim`);
+  await page.getByRole("button", { name: "Manage deleted services" }).click();
+  await page.locator("tr", { hasText: M }).waitFor({ timeout: 10000 }).then(() => check("deleted service listed", true), () => check("deleted service listed", false));
+  await page.getByRole("button", { name: `Restore ${M}` }).click();
+  await page.waitForTimeout(1500);
+  check("APIM restored with its API", json(await arm("GET", P("ApiManagement", "service", M) + "/apis/echo", null, "2022-08-01")).name === "echo");
+
   // ── App Configuration
   const A = `cxappcfg${n}`;
   await arm("PUT", P("AppConfiguration", "configurationStores", A), { location: "eastus", sku: { name: "standard" } }, "2024-05-01");

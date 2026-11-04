@@ -4,6 +4,7 @@
  * backends) and Managed identities / user-assigned (not catalogued in Vyomi, same as every
  * other service) — those render an honest NotSimulated panel via CAP_FOR. */
 import ResourceEvents from "../../kit/ResourceEvents.jsx";
+import { ApimDeletedServices } from "../../kit/ConfigPages.jsx";
 import { useEffect, useState } from "react";
 import {
   Button, Checkbox, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, Field, Input, Link,
@@ -220,7 +221,7 @@ function Overview({ a, reload, self }) {
         <DialogSurface aria-label={gap || "Not simulated"}>
           <DialogBody>
             <DialogTitle>{gap}</DialogTitle>
-            <DialogContent><NotSimulated feature={gap === "Feedback" ? "Sending product feedback" : "Restoring a soft-deleted API Management service"} /></DialogContent>
+            <DialogContent>{gap === "Feedback" ? <NotSimulated feature="Sending product feedback" /> : <ApimDeletedServices onRestored={(rg, n) => { setGap(null); navigate("apim", rg, n); }} />}</DialogContent>
             <DialogActions><Button onClick={() => setGap(null)}>Close</Button></DialogActions>
           </DialogBody>
         </DialogSurface>
