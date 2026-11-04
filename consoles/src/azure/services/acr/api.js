@@ -120,6 +120,7 @@ export const listTasks = (rg, name) => listChild(rg, name, "tasks");
 export const putTask = (rg, name, task, body) => putChild(rg, name, "tasks", task, body);
 export const deleteTask = (rg, name, task) => deleteChild(rg, name, "tasks", task);
 export const listRuns = (rg, name) => listChild(rg, name, "runs");
+export const scheduleRun = (rg, name, body) => restJson("POST", `${ARM.path(rg, name)}/scheduleRun`, { query: { "api-version": "2019-04-01" }, body });
 export const putRun = (rg, name, runId, body) => putChild(rg, name, "runs", runId, body);
 
 export const listCacheRules = (rg, name) => listChild(rg, name, "cacheRules");

@@ -168,6 +168,30 @@ def run():
     dep = a.handle("GET", f"{S}/deployments", Q)["body"]["value"]
     _check("Bitbucket source honestly Failed (unsupported)", dep[0]["properties"]["status"] == 3 and "Only https://github.com" in dep[0]["properties"]["logs"][0]["message"])
     ci.set_fetcher(None)
+
+    # ACR Tasks scheduleRun on the seam
+    R = f"{RG}/providers/Microsoft.ContainerRegistry/registries/ciacr"
+    a.handle("PUT", R, {"api-version": "2023-07-01"}, {"location": "eastus", "sku": {"name": "Standard"}})
+    sr = lambda body: a.handle("POST", f"{R}/scheduleRun", {"api-version": "2019-04-01"}, body)
+    _check("unknown run type 400", sr({"type": "Nope"})["status"] == 400)
+    _check("YAML task runs honestly unsupported", sr({"type": "FileTaskRunRequest"})["status"] == 400)
+    _check("bad image name 400", sr({"type": "DockerBuildRequest", "imageNames": ["BAD NAME"], "vyomiFiles": {"Dockerfile": "FROM alpine"}})["status"] == 400)
+    r = sr({"type": "DockerBuildRequest", "imageNames": ["samples/app:{{.Run.ID}}"], "vyomiFiles": {"Dockerfile": "FROM alpine:3\nCOPY a.txt /a\n", "a.txt": "x"}})
+    pr = r["body"]["properties"]
+    _check("Nano-style (no container builder): image run is Failed with reason, no outputImages", r["status"] == 200 and pr["status"] == "Failed" and "No container builder" in pr["errorMessage"] and not pr["outputImages"])
+    ci.set_builder(ci.BuildKitBuilder(lambda argv, i, t: (0, b"ok\n") if argv[1] == "build" else (0, b"sha256:abc123 2048\n")))
+    r = sr({"type": "DockerBuildRequest", "imageNames": ["samples/app:{{.Run.ID}}"], "vyomiFiles": {"Dockerfile": "FROM alpine:3\nCOPY a.txt /a\n", "a.txt": "x"}})
+    pr = r["body"]["properties"]
+    _check("BuildKit run Succeeded with real outputImages + log", pr["status"] == "Succeeded" and pr["outputImages"][0]["digest"] == "sha256:abc123" and pr["outputImages"][0]["tag"].startswith("ca") and any("docker build" in l for l in pr["vyomiLogs"]))
+    runs = a.handle("GET", f"{R}/runs", {"api-version": "2019-04-01"})["body"]["value"]
+    _check("runs listed as ARM children", len(runs) == 2 and {x["properties"]["status"] for x in runs} == {"Failed", "Succeeded"})
+    _check("DF path honoured / missing Dockerfile fails", sr({"type": "DockerBuildRequest", "dockerFilePath": "x/Dockerfile", "vyomiFiles": {"a": "b"}})["body"]["properties"]["status"] == "Failed")
+    a.handle("PUT", f"{R}/tasks/t1", {"api-version": "2019-06-01-preview"}, {"properties": {"step": {"type": "Docker", "contextPath": "https://github.com/o/r#main", "dockerFilePath": "Dockerfile", "imageNames": ["t/x:v1"]}}})
+    _check("task run: unknown task 404", sr({"type": "TaskRunRequest", "taskName": "zz"})["status"] == 404)
+    ci.set_fetcher(lambda u, h: (200, _tgz({"Dockerfile": b"FROM alpine:3\n"})))
+    pr = sr({"type": "TaskRunRequest", "taskName": "t1"})["body"]["properties"]
+    _check("task run builds the GitHub context and records the task name", pr["status"] == "Succeeded" and pr["taskName"] == "t1" and pr["outputImages"][0]["tag"] == "v1")
+    ci.set_fetcher(None); ci.set_builder(None)
     print("PASS test_ci_core")
 
 
