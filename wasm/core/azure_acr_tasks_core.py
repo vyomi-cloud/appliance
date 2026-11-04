@@ -57,7 +57,32 @@ def _source(db, run_id, ctx, files, ref_default="main"):
     return repo, ref or ref_default
 
 
-def schedule_run(state, reg_rid, reg_rec, payload, sub, rg):
+def _push(props, job, images, store, enabled):
+    """Push the really-built image into the simulated registry's repository store (what `docker push` does)."""
+    if not images:
+        props["vyomiNote"] = "No imageNames: the image was built but, as in Azure, not pushed."
+        return
+    if not enabled:
+        props["vyomiNote"] = "isPushEnabled=false: image kept in the builder only."
+        return
+    if store is None:
+        props["vyomiNote"] = "No registry store attached: image was not pushed."
+        return
+    try:
+        from core import azure_acr_core as acr
+    except ImportError:
+        import azure_acr_core as acr                      # type: ignore
+    try:
+        img = ci.export_image(job["artifact"]["tag"])
+        for im in props["outputImages"]:
+            im["digest"] = acr.push_image(store, im["repository"], im["tag"], img)
+        props["vyomiNote"] = f"Pushed {len(props['outputImages'])} tag(s) ({img['size']} bytes) into the registry repository store."
+    except ci.CiError as e:
+        props["status"], props["errorMessage"] = "Failed", f"Build succeeded but the push to the registry failed: {e.message}"
+        props["outputImages"] = []
+
+
+def schedule_run(state, reg_rid, reg_rec, payload, sub, rg, acr_store=None):
     p = payload if isinstance(payload, dict) else {}
     typ = p.get("type")
     if typ in ("FileTaskRunRequest", "EncodedTaskRunRequest"):
@@ -110,11 +135,12 @@ def schedule_run(state, reg_rid, reg_rec, payload, sub, rg):
         props["vyomiLogs"] = [l["message"] for l in job["logs"]]
         if job["status"] == "Succeeded":
             props["status"] = "Succeeded"
-            for img in images or [tag]:
+            for img in images:
                 r, _, t = img.partition(":")
                 props["outputImages"].append({"registry": f"{reg_rec['name'].lower()}.azurecr.io", "repository": r, "tag": t or "latest",
                                               "digest": job["artifact"]["digest"]})
-            props["vyomiNote"] = "Image is in the host docker engine under its tag; it was not pushed to the simulated registry's repository store."
+            step = (task.get("properties") or {}).get("step") or {} if task else {}
+            _push(props, job, images, acr_store, p.get("isPushEnabled", step.get("isPushEnabled", True)) is not False)
         else:
             props["status"], props["errorMessage"] = "Failed", job["error"]
     except ci.CiError as e:

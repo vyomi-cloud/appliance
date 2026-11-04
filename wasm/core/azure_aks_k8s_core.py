@@ -1051,3 +1051,39 @@ def run_command(rec: dict, command: str, context_b64: str | None = None) -> dict
             logs.append(str(e).rstrip("\n") + "\n"); code = 1
             break
     return {"exitCode": code, "logs": "".join(logs), "changed": version(rec) != before}
+
+
+# ── programmatic apply (GitOps controllers: Flux, automated deployments) ──────────────────
+def apply_manifests(rec: dict, docs: list, default_ns: str = "default", owner: tuple | None = None) -> list:
+    """Server-side apply of already-parsed manifests, all-or-nothing validated, exactly like `kubectl apply -f`.
+    ``owner`` = (label_key, label_value) stamped on every object so a controller can prune what it created.
+    Returns ["deployment.apps/web created", ...]. Raises KubectlError."""
+    docs = [copy.deepcopy(d) for d in docs if d]
+    pending = {d.get("metadata", {}).get("name") for d in docs if isinstance(d, dict) and d.get("kind") == "Namespace"}
+    if owner:
+        for d in docs:
+            if isinstance(d, dict):
+                md = d.setdefault("metadata", {})
+                md.setdefault("labels", {})[owner[0]] = owner[1]
+    validated = [_validate(d, default_ns, rec, pending) for d in docs]
+    out = []
+    for d, obj in zip(docs, validated):
+        res = _put(rec, obj, "apply", applied=d)
+        out.append(f"{_resource_label(rec, obj['kind'])}/{obj['metadata']['name']} {res}")
+    return out
+
+
+def owned_objects(rec: dict, owner: tuple) -> list:
+    return [o for o in list_objects(rec) if (o["metadata"].get("labels") or {}).get(owner[0]) == owner[1]]
+
+
+def prune_owned(rec: dict, owner: tuple, keep: set) -> list:
+    """Delete objects stamped with ``owner`` that are no longer in ``keep`` ({(kind, ns, name)}); returns what was deleted."""
+    gone = []
+    for o in owned_objects(rec, owner):
+        md = o["metadata"]
+        k = (o["kind"], md.get("namespace"), md["name"])
+        if k not in keep and o["kind"] != "Namespace":
+            if _delete(rec, o["kind"], md.get("namespace"), md["name"]):
+                gone.append(f"{_resource_label(rec, o['kind'])}/{md['name']} deleted")
+    return gone

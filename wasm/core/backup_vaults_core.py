@@ -7,7 +7,7 @@ handle(...) returns (status, json-doc) or None when the path is not one of these
   DynamoDB table -> a dynamodb_core backup (artifact in the simulator S3); RDS instance -> an ``awsbackup:job-*`` DB snapshot with
   the table data; S3 bucket -> a JSON artifact of every object in the simulator's own S3 (bucket ``vyomi-aws-backup``);
   EBS volume -> an EC2 snapshot. Restore jobs create a real table / DB instance / bucket+objects / volume.
-Honest limits: see core/backup_core.py docstring (no cron scheduler, no EC2/EFS/FSx/Aurora, no audit/report/restore-testing).
+Honest limits: see core/backup_core.py docstring (cron/rate rules run via core/schedule_core, EC2 (AMI) + FSx OpenZFS recovery points; no EFS/Aurora (no such resources), no audit/report/restore-testing).
 """
 from __future__ import annotations
 
@@ -150,7 +150,20 @@ def _classify(arn):
         return "S3", arn.split(":::", 1)[1]
     if re.match(r"^arn:aws[a-z-]*:ec2:[^:]+:\d{12}:volume/vol-.+$", arn):
         return "EBS", arn.rsplit("/", 1)[1]
+    if re.match(r"^arn:aws[a-z-]*:ec2:[^:]+:\d{12}:instance/i-.+$", arn):
+        return "EC2", arn.rsplit("/", 1)[1]                      # recovery point = a real AMI (+ one snapshot per attached volume)
+    if re.match(r"^arn:aws[a-z-]*:fsx:[^:]+:\d{12}:volume/fs-[^/]+/fsvol-.+$", arn):
+        return "FSx", arn.rsplit("/", 1)[1]                      # FSx for OpenZFS volume: its file tree is captured
     return None, None
+
+
+def _unsupported(arn):
+    """Why a resource ARN can't be protected (a precise message beats a generic one)."""
+    if re.match(r"^arn:aws[a-z-]*:elasticfilesystem:", arn or ""):
+        return "Vyomi has no Amazon EFS file-system resource, so there is nothing to back up (EFS recovery points are not simulated)."
+    if re.match(r"^arn:aws[a-z-]*:rds:[^:]+:\d{12}:cluster:", arn or ""):
+        return "Vyomi's RDS models DB instances only (no Aurora DB clusters), so an Aurora cluster has nothing to back up; protect the DB instance ARN instead."
+    return "Resource type is not supported by Vyomi's AWS Backup (supported: DynamoDB, RDS instances, S3, EBS, EC2 (AMI), FSx for OpenZFS volumes)."
 
 
 def _s3c(): return _lazy("s3_object_core")
@@ -206,7 +219,35 @@ def _capture(ddb, s3, rds, vpc, rtype, name, job_id, vault):
         sid = re.search(r"snapshot_?[iI]d>([^<]+)<|<snapshotId>([^<]+)<", resp.body.decode() if isinstance(resp.body, bytes) else str(resp.body))
         snap_id = (sid.group(1) or sid.group(2)) if sid else max(m["snapshots"], key=lambda k: m["snapshots"][k]["started"])
         return f"arn:aws:ec2:{REGION}::snapshot/{snap_id}", m["volumes"][name]["size"] * 1024 ** 3, None
-    return None, 0, "Resource type is not supported by Vyomi's AWS Backup (supported: DynamoDB, RDS, S3, EBS)."
+    if rtype == "EC2":
+        if vpc is None:
+            return None, 0, "EC2 is not available."
+        v = _vpc()
+        m = v._model(vpc)
+        inst = m["instances"].get(name)
+        if inst is None:
+            return None, 0, f"Instance {name} does not exist."
+        if inst.get("state") in ("terminated", "shutting-down"):
+            return None, 0, f"Instance {name} is {inst.get('state')} and cannot be backed up."
+        resp = v._create_image(vpc, {"InstanceId": name, "Name": f"AwsBackup_{job_id[:12]}", "Description": f"Created by AWS Backup job {job_id}"})
+        mm = re.search(r"<imageId>([^<]+)</imageId>", resp.body.decode() if isinstance(resp.body, bytes) else str(resp.body))
+        ami = mm.group(1)
+        size = sum(int(b.get("size", 0)) for b in m["images"][ami].get("block_devices", [])) * 1024 ** 3
+        return f"arn:aws:ec2:{REGION}::image/{ami}", size, None
+    if rtype == "FSx":
+        st = s3.account.get("fsx") or {}
+        vol = (st.get("vol") or {}).get(name)
+        if vol is None:
+            return None, 0, f"FSx volume {name} does not exist."
+        files = {k: dict(f) for k, f in (vol.get("_files") or {}).items()}
+        rid = uuid.uuid4().hex
+        c = _s3c()
+        if not s3.bucket_exists(ART_BUCKET):
+            s3.create_bucket(ART_BUCKET)
+        c.put_object(s3, ART_BUCKET, f"{vault}/{rid}.json", json.dumps({"fsx_volume": name, "fileSystemId": vol["FileSystemId"], "volumeName": vol["Name"],
+                                                                         "path": vol["OpenZFSConfiguration"]["VolumePath"], "files": files}).encode(), {"content-type": "application/json"})
+        return f"arn:aws:backup:{REGION}:{ACCT}:recovery-point:{rid}", sum(int(f.get("size", 0)) for f in files.values()), None
+    return None, 0, "Resource type is not supported by Vyomi's AWS Backup."
 
 
 def _drop_rp(ddb, s3, rds, vpc, rp):
@@ -224,6 +265,14 @@ def _drop_rp(ddb, s3, rds, vpc, rp):
             s3.bucket_objects(ART_BUCKET).pop(f"{rp['BackupVaultName']}/{rid}.json", None)
         elif t == "EBS" and vpc is not None:
             _vpc()._model(vpc)["snapshots"].pop(arn.rsplit("/", 1)[1], None)
+        elif t == "EC2" and vpc is not None:
+            m = _vpc()._model(vpc)
+            img = m["images"].pop(arn.rsplit("/", 1)[1], None)
+            for bd in (img or {}).get("block_devices", []):
+                m["snapshots"].pop(bd.get("snapshot_id"), None)
+        elif t == "FSx":
+            rid = arn.rsplit(":", 1)[1]
+            s3.bucket_objects(ART_BUCKET).pop(f"{rp['BackupVaultName']}/{rid}.json", None)
     except Exception:  # noqa: BLE001
         pass
 
@@ -253,7 +302,7 @@ def _start_backup(ddb, s3, rds, vpc, st, p, plan_ref=None):
            "State": "RUNNING", "StartBy": _ts(datetime.now(timezone.utc) + timedelta(minutes=p.get("StartWindowMinutes", 480))), "BackupType": "Full"}
     if plan_ref:
         job["CreatedBy"] = plan_ref
-    rp_arn, size, err = _capture(ddb, s3, rds, vpc, rtype, name, jid, v["BackupVaultName"]) if rtype else (None, 0, "Resource type is not supported by Vyomi's AWS Backup (supported: DynamoDB, RDS, S3, EBS).")
+    rp_arn, size, err = _capture(ddb, s3, rds, vpc, rtype, name, jid, v["BackupVaultName"]) if rtype else (None, 0, _unsupported(p["ResourceArn"]))
     if err:
         job.update({"State": "FAILED", "StatusMessage": err, "CompletionDate": _ts()})
         st["bjobs"][jid] = job
@@ -338,6 +387,36 @@ def _restore(ddb, s3, rds, vpc, st, p):
             m = v._model(vpc)
             vid = max(m["volumes"], key=lambda k: m["volumes"][k]["created"])
             created = f"arn:aws:ec2:{REGION}:{ACCT}:volume/{vid}"
+        elif t == "EC2":
+            v = _vpc()
+            ami = arn.rsplit("/", 1)[1]
+            if ami not in v._model(vpc)["images"]:
+                raise ValueError("The recovery point's AMI no longer exists.")
+            params = {"ImageId": ami, "MinCount": "1", "MaxCount": "1", "InstanceType": md.get("InstanceType") or md.get("instanceType") or "t3.micro"}
+            sn = md.get("SubnetId") or md.get("subnetId")
+            if sn:
+                params["SubnetId"] = sn
+            try:
+                resp = v._run_instances(vpc, params)
+            except Exception as e:  # noqa: BLE001
+                raise ValueError(getattr(e, "message", str(e)))
+            mm = re.search(r"<instanceId>([^<]+)</instanceId>", resp.body.decode() if isinstance(resp.body, bytes) else str(resp.body))
+            created = f"arn:aws:ec2:{REGION}:{ACCT}:instance/{mm.group(1)}"
+        elif t == "FSx":
+            fx = s3.account.get("fsx") or {}
+            target = md.get("TargetVolumeId") or md.get("targetVolumeId")
+            if not target:
+                return _e(400, "InvalidParameterValueException", "Metadata.TargetVolumeId is required to restore an FSx recovery point (an existing OpenZFS volume to restore the files into).")
+            if target not in (fx.get("vol") or {}):
+                raise ValueError(f"FSx volume {target} does not exist.")
+            rid = arn.rsplit(":", 1)[1]
+            g = _s3c().get_object(s3, ART_BUCKET, f"{rp['BackupVaultName']}/{rid}.json", {}, {})
+            if g.status != 200:
+                raise ValueError("The recovery point's backup artifact is missing.")
+            tv = fx["vol"][target]
+            for k, f in json.loads(g.body)["files"].items():
+                tv.setdefault("_files", {})[k] = f
+            created = tv["ResourceARN"]
         else:
             raise ValueError("Unsupported resource type.")
     except ValueError as e:

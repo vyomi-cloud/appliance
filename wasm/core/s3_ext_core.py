@@ -709,6 +709,31 @@ def _day() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
 
+def _malware_hook(store, bucket, key):
+    try:
+        if not (store.account.get("malware") or {}).get("plans"):
+            return
+        import importlib
+        try:
+            mw = importlib.import_module("core.malware_scan_core")
+        except ImportError:
+            mw = importlib.import_module("malware_scan_core")
+        c = _m()
+
+        def get(b, k):
+            g = c.get_object(store, b, k, {}, {})
+            return g.body if g.status == 200 and isinstance(g.body, bytes) else None
+        def set_tag(b, k, tk, tv):
+            ent = c._ensure_object_entry(store, b, k, create=False)
+            obj = c._find_version(ent, None) if ent else None
+            if obj:
+                obj.setdefault("tags", {})[tk] = tv
+                c._refresh_object_entry(ent)
+        mw.s3_after_put(store, bucket, key, get, set_tag)
+    except Exception:
+        pass
+
+
 def on_request(store, method: str, raw: str, query: dict, lheaders: dict, body: bytes, resp) -> None:
     """After every served S3 request: request counters (Storage Lens) + CloudTrail data events. Best-effort."""
     try:
@@ -731,6 +756,9 @@ def on_request(store, method: str, raw: str, query: dict, lheaders: dict, body: 
             cat = "ListRequests" if method == "GET" and not any(k in q for k in ("acl", "policy", "versioning", "location", "tagging", "cors", "lifecycle", "encryption", "logging", "website", "notification", "replication", "accelerate", "requestPayment", "object-lock", "ownershipControls", "publicAccessBlock", "metrics", "inventory", "intelligent-tiering", "metadataConfiguration", "metadataTable", "uploads")) else ("PostRequests" if method == "POST" else None)
         if cat:
             r[cat] = r.get(cat, 0) + 1
+        if 200 <= status < 300 and key and (method == "PUT" or (method == "POST" and "uploadId" in q)) and "x-amz-copy-source" not in (lheaders or {}) \
+                and not any(k in q for k in ("tagging", "acl", "retention", "legal-hold", "attributes", "restore")):
+            _malware_hook(store, bucket, key)   # GuardDuty Malware Protection plans: scan every new object of a protected bucket
         if 200 <= status < 300:
             if method == "GET" and key:
                 r["BytesDownloaded"] = r.get("BytesDownloaded", 0) + len(getattr(resp, "body", b"") or b"")

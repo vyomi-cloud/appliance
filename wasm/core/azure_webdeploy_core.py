@@ -268,6 +268,15 @@ def _put_source(rec, s, props, method):
         if g.get("generateWorkflowFile", True):
             g["workflowYaml"] = workflow_yaml(rec, branch, stack, code.get("runtimeVersion"), is_linux)
             g["workflowFilePath"] = f".github/workflows/{branch.replace('/', '-')}_{rec['name']}.yml"
+            g.pop("workflowCommit", None); g.pop("workflowCommitError", None)
+            if (ci.get_db(rec)["connections"].get("github") or {}).get("token"):
+                try:                                     # the real workflow file lands in the user's own repo
+                    g["workflowCommit"] = ci.github_commit_file(ci.get_db(rec), repo, branch, g["workflowFilePath"], g["workflowYaml"],
+                                                                f"Add or update the Azure App Service build and deployment workflow config ({rec['name']})")
+                except ci.CiError as e:
+                    return _err(e.status, e.code, f"The workflow was generated but could not be committed to {repo}: {e.message}")
+            else:
+                g["workflowCommitError"] = "No personal access token connected: the workflow was generated but not committed (set properties.vyomiAccessToken)."
         g["generateWorkflowFile"] = True
     else:
         cur.pop("gitHubActionConfiguration", None)

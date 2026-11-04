@@ -69,7 +69,12 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
-from core.kms_keystore import KeyStore
+try:
+    from core.kms_keystore import KeyStore
+    from core import gcp_kms_import as _imp
+except ImportError:  # pragma: no cover - Pyodide flat layout
+    from kms_keystore import KeyStore  # type: ignore
+    import gcp_kms_import as _imp  # type: ignore
 
 
 # ── transport type ─────────────────────────────────────────────────────────
@@ -273,6 +278,9 @@ def _version_view(key_name: str, ver: str, entry: dict) -> dict:
         "createTime": entry.get("createTime", _now()),
         "generateTime": entry.get("createTime", _now()),
     }
+    if entry.get("importJob"):
+        view["importJob"] = entry["importJob"]
+        view["importTime"] = entry.get("importTime", entry.get("createTime"))
     if entry.get("destroyTime"):
         view["destroyTime"] = entry["destroyTime"]
     if entry.get("destroyEventTime"):
@@ -286,7 +294,6 @@ def _crypto_key_view(store: KeyStore, name: str) -> dict:
     versions = meta.get("versions", {primary: {}})
     view = {
         "name": name,
-        "primary": _version_view(name, primary, versions.get(primary, {})),
         "purpose": _enum(meta.get("purpose"), _PURPOSES, "ENCRYPT_DECRYPT"),
         "createTime": meta.get("createTime", _now()),
         "versionTemplate": {
@@ -294,6 +301,10 @@ def _crypto_key_view(store: KeyStore, name: str) -> dict:
             "algorithm": _enum(meta.get("algorithm"), _ALGORITHMS, "GOOGLE_SYMMETRIC_ENCRYPTION"),
         },
     }
+    if primary in versions or not meta.get("importOnly"):
+        view["primary"] = _version_view(name, primary, versions.get(primary, {}))
+    if meta.get("importOnly"):
+        view["importOnly"] = True
     if meta.get("labels"):
         view["labels"] = dict(meta["labels"])
     if meta.get("rotationPeriod"):
@@ -496,6 +507,9 @@ def dispatch(store: KeyStore, method: str, path: str,
             return _json(200, _key_ring_view(name, rings[name]))
         return _err(400, "INVALID_ARGUMENT", f"Unsupported method {method} on keyRing")
 
+    if segs[6] == "importJobs":
+        return _import_jobs_dispatch(store, segs, verb, method, payload, query)
+
     # From here on the 7th segment must be cryptoKeys.
     if segs[6] != "cryptoKeys":
         return _err(404, "NOT_FOUND", f"Unknown resource path: {path}")
@@ -523,10 +537,15 @@ def dispatch(store: KeyStore, method: str, path: str,
                 "primary": "1",
                 "versions": {"1": {"state": "ENABLED", "createTime": now}},
             }
+            skip = str(query.get("skipInitialVersionCreation", "")).lower() == "true"
+            if payload.get("importOnly") or skip:
+                meta["versions"] = {}          # import-only: versions arrive via cryptoKeyVersions:import
+                meta["importOnly"] = bool(payload.get("importOnly"))
             _apply_settings(meta, payload, [])
             material = store.engine.new_key_material()
             store.put_key(name, meta, material)
-            store.material[_version_name(name, "1")] = material
+            if meta["versions"]:
+                store.material[_version_name(name, "1")] = material
             store.persist()
             return _json(200, _crypto_key_view(store, name))
         if method == "GET":
@@ -610,6 +629,8 @@ def dispatch(store: KeyStore, method: str, path: str,
             store.put_key(key_name, meta, store.get_material(key_name))
             store.persist()
 
+        if len(segs) == 9 and verb == "import" and method == "POST":
+            return _import_version(store, key_name, meta, versions, payload)
         if len(segs) == 9 and method == "GET":       # list versions
             items = [_version_view(key_name, v, versions[v]) for v in sorted(versions)]
             return _json(200, {"cryptoKeyVersions": items})
@@ -662,6 +683,118 @@ def dispatch(store: KeyStore, method: str, path: str,
     return _err(404, "NOT_FOUND", f"Unknown resource path: {path}")
 
 
+# ── ImportJobs + wrapped key import ─────────────────────────────────────────
+_IMPORT_JOB_TTL = 3 * 24 * 3600          # real jobs expire 3 days after creation
+
+
+def _import_view(name: str, j: dict) -> dict:
+    now = datetime.now(timezone.utc)
+    exp = datetime.strptime(j["expireTime"], "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=timezone.utc)
+    state = j["state"]
+    if state == "ACTIVE" and exp <= now:
+        state = "EXPIRED"
+    view = {"name": name, "importMethod": j["importMethod"],
+            "protectionLevel": "SOFTWARE", "createTime": j["createTime"],
+            "generateTime": j.get("generateTime", j["createTime"]),
+            "expireTime": j["expireTime"], "state": state}
+    if state == "EXPIRED":
+        view["expireEventTime"] = j["expireTime"]
+    else:
+        view["publicKey"] = {"pem": j["publicKeyPem"],
+                             "algorithm": "RSA_DECRYPT_OAEP_%d_%s" % (
+                                 _imp.IMPORT_METHODS[j["importMethod"]][0],
+                                 _imp.IMPORT_METHODS[j["importMethod"]][1])}
+    return view
+
+
+def _import_jobs_dispatch(store, segs, verb, method, payload, query) -> GcpKmsResponse:
+    rings = _rings(store)
+    ring = "/".join(segs[:6])
+    if ring not in rings:
+        return _err(404, "NOT_FOUND", f"KeyRing {ring} not found.")
+    jobs = rings[ring].setdefault("importJobs", {})
+    if len(segs) == 7:
+        if method == "POST":
+            jid = query.get("importJobId") or payload.get("importJobId")
+            if not jid:
+                return _err(400, "INVALID_ARGUMENT", "importJobId is required.")
+            if not re.match(r"^[a-zA-Z0-9_-]{1,63}$", str(jid)):
+                return _err(400, "INVALID_ARGUMENT", "importJobId must match [a-zA-Z0-9_-]{1,63}.")
+            method_name = _enum(payload.get("importMethod"), {}, "")
+            if method_name not in _imp.IMPORT_METHODS:
+                return _err(400, "INVALID_ARGUMENT",
+                            "importMethod must be one of: " + ", ".join(sorted(_imp.IMPORT_METHODS)) + ".")
+            if payload.get("protectionLevel") not in (None, "", "SOFTWARE"):
+                return _err(400, "INVALID_ARGUMENT", "Only protectionLevel SOFTWARE is supported by Vyomi.")
+            name = f"{ring}/importJobs/{jid}"
+            if name in jobs:
+                return _err(409, "ALREADY_EXISTS", f"ImportJob {name} already exists.")
+            kp = _imp.rsa_generate(_imp.IMPORT_METHODS[method_name][0])
+            now = _now()
+            jobs[name] = {"importMethod": method_name, "state": "ACTIVE", "createTime": now,
+                          "generateTime": now, "expireTime": _future(_IMPORT_JOB_TTL),
+                          "publicKeyPem": _imp.rsa_public_pem(kp["n"], kp["e"]),
+                          "n": str(kp["n"]), "e": kp["e"], "d": str(kp["d"])}
+            store.persist()
+            return _json(200, _import_view(name, jobs[name]))
+        if method == "GET":
+            return _json(200, {"importJobs": [_import_view(n, j) for n, j in sorted(jobs.items())]})
+    elif len(segs) == 8 and method == "GET" and not verb:
+        name = "/".join(segs)
+        if name not in jobs:
+            return _err(404, "NOT_FOUND", f"ImportJob {name} not found.")
+        return _json(200, _import_view(name, jobs[name]))
+    return _err(400, "INVALID_ARGUMENT", f"Unsupported request on importJobs ({method}).")
+
+
+def _import_version(store, key_name: str, meta: dict, versions: dict, payload: dict) -> GcpKmsResponse:
+    job_name = str(payload.get("importJob") or "")
+    ring = key_name.rsplit("/cryptoKeys/", 1)[0]
+    job = (_rings(store).get(ring, {}).get("importJobs") or {}).get(job_name)
+    if not job:
+        return _err(404, "NOT_FOUND", f"ImportJob {job_name or '(unset)'} not found in key ring {ring}.")
+    view = _import_view(job_name, job)
+    if view["state"] != "ACTIVE":
+        return _err(400, "FAILED_PRECONDITION", f"ImportJob {job_name} is {view['state']}; create a new import job.")
+    algo = _enum(payload.get("algorithm"), {}, "")
+    if algo != "GOOGLE_SYMMETRIC_ENCRYPTION":
+        return _err(400, "INVALID_ARGUMENT",
+                    "Vyomi imports symmetric key material only: algorithm must be GOOGLE_SYMMETRIC_ENCRYPTION.")
+    if meta.get("purpose", "ENCRYPT_DECRYPT") != "ENCRYPT_DECRYPT":
+        return _err(400, "INVALID_ARGUMENT", "Import is only supported into ENCRYPT_DECRYPT keys.")
+    b64 = payload.get("rsaAesWrappedKey") or payload.get("wrappedKey")
+    if not b64:
+        return _err(400, "INVALID_ARGUMENT", "rsaAesWrappedKey (or wrappedKey) is required.")
+    imp_method = job["importMethod"]
+    with_aes = _imp.IMPORT_METHODS[imp_method][2]
+    if with_aes and not payload.get("rsaAesWrappedKey"):
+        return _err(400, "INVALID_ARGUMENT", f"Import method {imp_method} requires rsaAesWrappedKey.")
+    if not with_aes and not payload.get("wrappedKey"):
+        return _err(400, "INVALID_ARGUMENT", f"Import method {imp_method} requires wrappedKey.")
+    try:
+        wrapped = base64.b64decode(b64)
+        raw = _imp.unwrap_import(imp_method, int(job["n"]), int(job["d"]), wrapped)
+    except Exception:
+        return _err(400, "INVALID_ARGUMENT",
+                    "Unable to unwrap the key material: it was not wrapped for this import job's public key "
+                    "with the job's import method (RSA-OAEP / AES-KWP).")
+    if len(raw) != 32:
+        return _err(400, "INVALID_ARGUMENT",
+                    "GOOGLE_SYMMETRIC_ENCRYPTION requires a 256-bit (32-byte) key; the unwrapped key is %d bytes." % len(raw))
+    next_id = str(max((int(v) for v in versions), default=0) + 1)
+    now = _now()
+    versions[next_id] = {"state": "ENABLED", "createTime": now, "importJob": job_name, "importTime": now}
+    store.material[_version_name(key_name, next_id)] = raw
+    if not meta.get("primary") or str(meta.get("primary")) not in versions:
+        meta["primary"] = next_id
+    elif len(versions) == 1:
+        meta["primary"] = next_id
+    meta["versions"] = versions
+    store.put_key(key_name, meta, store.get_material(key_name))
+    store.persist()
+    return _json(200, _version_view(key_name, next_id, versions[next_id]))
+
+
 # ── crypto operations (reuse the AWS KMS engine + key material) ─────────────
 # Every CryptoKeyVersion gets its OWN key material (minted on create, above), so
 # rotation is real: the new primary encrypts with genuinely different material, not
@@ -676,6 +809,8 @@ def _encrypt(store: KeyStore, name: str, payload: dict, headers: dict | None = N
     if denied:
         return denied
     primary = str(meta.get("primary", "1"))
+    if primary not in meta.get("versions", {primary: {}}):
+        return _err(400, "FAILED_PRECONDITION", f"CryptoKey {name} has no primary version; import key material first.")
     if meta.get("versions", {}).get(primary, {}).get("state", "ENABLED") != "ENABLED":
         return _err(400, "FAILED_PRECONDITION",
                     f"CryptoKeyVersion {name}/cryptoKeyVersions/{primary} is not enabled.")
