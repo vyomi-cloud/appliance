@@ -189,6 +189,20 @@ def run() -> int:
     missc = cosmos.dispatch(st, "GET", "/dbs/appdb/colls/items", {}, {}, b"")
     _check("deleted coll 404", missc.status == 404)
 
+    # 11b. hierarchical (MultiHash) partition keys
+    H = {"content-type": "application/json"}
+    mk = lambda pk, cid="h1": cosmos.dispatch(st, "POST", "/dbs/appdb/colls", {}, H, json.dumps({"id": cid, "partitionKey": pk}).encode())
+    _check("hpk one path rejected for MultiHash", mk({"paths": ["/a"], "kind": "MultiHash", "version": 2}).status == 400)
+    _check("hpk four paths rejected", mk({"paths": ["/a", "/b", "/c", "/d"], "kind": "MultiHash", "version": 2}).status == 400)
+    _check("hpk duplicate paths rejected", mk({"paths": ["/a", "/A"], "kind": "MultiHash", "version": 2}).status == 400)
+    _check("hash with two paths rejected", mk({"paths": ["/a", "/b"], "kind": "Hash"}).status == 400)
+    _check("path without slash rejected", mk({"paths": ["a"], "kind": "Hash"}).status == 400)
+    okc = mk({"paths": ["/tenant", "/user"], "kind": "MultiHash"})
+    _check("hpk container created as version 2", okc.status == 201 and _jbody(okc)["partitionKey"]["version"] == 2)
+    putd = lambda doc, hdr: cosmos.dispatch(st, "POST", "/dbs/appdb/colls/h1/docs", {}, {**H, "x-ms-documentdb-partitionkey": json.dumps(hdr)}, json.dumps(doc).encode())
+    _check("doc matching pk header accepted", putd({"id": "d1", "tenant": "t1", "user": "u1"}, ["t1", "u1"]).status == 201)
+    _check("doc mismatching pk header rejected", putd({"id": "d2", "tenant": "t1", "user": "u1"}, ["t1", "u2"]).status == 400)
+
     # 12. delete database -> 204, then read 404
     deldb = cosmos.dispatch(st, "DELETE", "/dbs/appdb", {}, {}, b"")
     _check("delete db 204", deldb.status == 204)

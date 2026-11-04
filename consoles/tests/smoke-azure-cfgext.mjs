@@ -88,6 +88,19 @@ try {
   check("Cosmos CMK stored", (json(await arm("GET", P("DocumentDB", "databaseAccounts", C), null, "2024-05-15")).properties?.keyVaultKeyUri || "").includes(KV));
   await noNS("Cosmos data encryption");
 
+  // ── Cosmos hierarchical partition key via the Data Explorer create dialog
+  await page.goto(UI + `#/cosmos/${RG}/${C}/dataexplorer`);
+  await page.getByRole("button", { name: /New Container/i }).first().click();
+  await page.getByLabel("Database id", { exact: true }).fill(`hdb${n}`);
+  await page.getByLabel("Container id").fill("hc");
+  await page.getByLabel("Partition key", { exact: true }).fill("/tenant");
+  await page.getByRole("button", { name: "Add hierarchical partition key" }).click();
+  await page.getByRole("textbox", { name: "Partition key level 2" }).fill("/user");
+  await page.getByRole("button", { name: "OK", exact: true }).click();
+  await page.waitForTimeout(1500);
+  const hc = await wire(`/dbs/hdb${n}/colls/hc`);
+  check("hierarchical container created", JSON.parse(hc.text || "{}").partitionKey?.kind === "MultiHash", hc.text.slice(0, 120));
+
   // ── Service Bus
   const S = `cxsb${n}`;
   await arm("PUT", P("ServiceBus", "namespaces", S), { location: "eastus", sku: { name: "Standard", tier: "Standard" } }, "2022-10-01-preview");

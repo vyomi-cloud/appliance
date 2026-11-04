@@ -93,7 +93,7 @@ function NewContainer({ databases, onCreated, notify }) {
   const [containerId, setContainerId] = useState("");
   const [indexing, setIndexing] = useState("Automatic");
   const [partitionKey, setPartitionKey] = useState("");
-  const [hpkGap, setHpkGap] = useState(false);
+  const [subKeys, setSubKeys] = useState([]);
   const [uniqueKeys, setUniqueKeys] = useState([]);
   const [analyticalStore, setAnalyticalStore] = useState("Off");
   const [busy, setBusy] = useState(false);
@@ -107,7 +107,7 @@ function NewContainer({ databases, onCreated, notify }) {
     try {
       const dbId = dbMode === "new" ? newDbId.trim() : existingDbId;
       if (dbMode === "new") await api.createDatabase(dbId);
-      await api.createContainer(dbId, containerId.trim(), partitionKey.trim(), { indexingOff: indexing === "Off", uniqueKeys: uniqueKeys.filter(Boolean), analyticalStore });
+      await api.createContainer(dbId, containerId.trim(), partitionKey.trim(), { indexingOff: indexing === "Off", uniqueKeys: uniqueKeys.filter(Boolean), analyticalStore, extraPartitionPaths: subKeys.map((x) => x.trim()).filter(Boolean) });
       notify.success(`Container '${containerId.trim()}' was created in database '${dbId}'.`, "Container created");
       onCreated(dbId, containerId.trim());
     } catch (e) { setErr(e); notify.error(e, "Creating container failed"); }
@@ -153,8 +153,14 @@ function NewContainer({ databases, onCreated, notify }) {
           <Input value={partitionKey} onChange={(_, d) => setPartitionKey(d.value)} placeholder="/pk" aria-label="Partition key" />
         </FormRow>
         <div>
-          <Button size="small" onClick={() => setHpkGap(true)}>Add hierarchical partition key</Button>
-          {hpkGap && <div style={{ marginTop: 6 }}><NotSimulated feature="Hierarchical (multi-level) partition keys" note="Containers in Vyomi always use a single partition key path." /></div>}
+          {subKeys.map((k, i) => (
+            <div key={i} style={{ display: "flex", gap: 4, marginBottom: 4 }}>
+              <Input size="small" value={k} placeholder={i === 0 ? "second level, e.g. /userId" : "third level, e.g. /sessionId"} onChange={(_, d) => setSubKeys((xs) => xs.map((x, j) => (j === i ? d.value : x)))} aria-label={`Partition key level ${i + 2}`} style={{ flex: 1 }} />
+              <Button appearance="subtle" size="small" icon={<Delete20Regular />} aria-label={`Remove partition key level ${i + 2}`} onClick={() => setSubKeys((xs) => xs.filter((_, j) => j !== i))} />
+            </div>
+          ))}
+          <Button size="small" disabled={subKeys.length >= 2} onClick={() => setSubKeys((xs) => [...xs, ""])}>Add hierarchical partition key</Button>
+          {subKeys.length > 0 && <div className="vy-muted" style={{ fontSize: 12, marginTop: 4 }}>Hierarchical partition key: {[partitionKey || "/pk", ...subKeys.map((x) => x || "/...")].join(" > ")}</div>}
         </div>
         <FormRow label="Unique keys">
           <div>

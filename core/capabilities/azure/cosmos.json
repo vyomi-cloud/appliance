@@ -30,7 +30,7 @@
   "level": { "nano": "full", "offline": "full" },
   "limitations": [
    "The Cosmos data-plane store is a single keyspace shared by every Cosmos account in this Vyomi environment (no per-account partitioning) — a database id created under one account is visible from any other account's Data Explorer.",
-   "New Container accepts a hierarchical partition key request, a unique key policy and analytical store enablement the way the real form submits them, but only the indexing policy (on/off) round-trips for real; the others are accepted and not enforced."
+   "New Container validates the partition key definition (Hash = one path; hierarchical MultiHash version 2 = two or three distinct paths) and rejects a document whose partition key does not match the x-ms-documentdb-partitionkey header. Document ids are still unique per container, not per logical partition. A unique key policy and analytical store enablement are accepted the way the real form submits them but not enforced; only the indexing policy (on/off) round-trips for real."
   ],
   "tests": ["tests/conformance/test_azure_cosmos_core.py"]
  },
