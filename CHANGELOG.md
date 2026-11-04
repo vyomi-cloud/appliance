@@ -4,6 +4,24 @@ All notable changes to Vyomi will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.41] — 2026-11-04
+
+Daily conformance release. **2 product fixes** (all clouds 2); 2 reach Nano and 2 reach the offline appliance.
+
+### Highlights
+
+- **Nano and the offline appliance are back in sync.** This release brings the latest Nano console changes into the offline appliance, so both now behave the same way.
+
+### Fixes — all clouds
+
+- **[Nano + offline]** Sync Nano console changes into the appliance (v3.0.41)
+- **[Nano + offline]** Sync Nano console changes into the appliance (v3.0.41)
+
+### How to upgrade
+
+- **Offline appliance:** `vyomi update` (Homebrew installs older than 3.0.24: run `brew trust vyomi-cloud/tap && brew upgrade vyomi-docker` once first). Docker: `docker pull vyomi/appliance:3.0.41`.
+- **Nano** ([vyomi.cloud](https://vyomi.cloud)): updates with this release; close all Nano tabs and reopen to load it.
+
 ## [3.0.40] — 2026-11-04
 
 Daily conformance release. **13 product fixes** (AWS 8, GCP 2, Azure 1, all clouds 2); 9 reach Nano and 12 reach the offline appliance; 14 test and harness improvements.
