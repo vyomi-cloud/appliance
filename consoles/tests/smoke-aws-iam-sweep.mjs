@@ -68,7 +68,7 @@ await iam("UpdateAccountPasswordPolicy", { MinimumPasswordLength: "12", RequireN
 
 // ── 3. Root security credentials: MFA with REAL TOTP, access key, X.509
 await go("#/iam/security-credentials", "My security credentials");
-check("Root credentials page: MFA/access keys/X.509 real, only CloudFront key pairs is a gap", (await badges()) === 1);
+check("Root credentials page: MFA/access keys/X.509 and CloudFront key pairs are all real (no honest-gap badge)", (await badges()) === 0);
 await page.getByRole("button", { name: "Assign MFA device" }).click();
 await page.getByLabel("Device name").fill(ROOTDEV);
 await page.getByRole("dialog").getByRole("button", { name: "Next" }).click();

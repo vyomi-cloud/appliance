@@ -1099,6 +1099,8 @@ def _aws_query_target_service(request: Request) -> str:
         return "logs"
     if target.startswith("AmazonSSM."):
         return "ssm"
+    if target.startswith("AWSEC2InstanceConnectService."):
+        return "ec2-instance-connect"
     if target.startswith("AWSStepFunctions."):
         return "states"
     if target.startswith("AmazonSQS."):
@@ -1107,20 +1109,32 @@ def _aws_query_target_service(request: Request) -> str:
         return "dax"
     if target.startswith("AWSRAMFrontendService."):
         return "ram"
+    if target.startswith("AmazonDMSv20160101."):
+        return "dms"
+    if target.startswith(("com.amazonaws.codeconnections.", "com.amazonaws.codestar.connections.")):
+        return "codeconnections"
+    if target.startswith("AWSGlue."):
+        return "glue"
+    if target.startswith("RedshiftData."):
+        return "redshift-data"
     if target.startswith("NetworkFirewall_20201112."):
         return "network-firewall"
     if target.startswith("com.amazonaws.cloudtrail."):
         return "cloudtrail"
     if target.startswith("Route53Resolver."):
         return "route53resolver"
+    if target.startswith("AmazonEC2ContainerRegistry_V20150921."):
+        return "ecr"
     return ""
 
 
 # Services the appliance serves ONLY through the shared router (core/aws_wire_router.py) over
 # its durable stores (core/wire_ingress.appliance_router → offline_runtime_stores): the JSON /
 # Query ones on POST / and the REST ones whose paths would otherwise fall into the S3 catch-all.
-_ROUTER_QUERY_SERVICES = ("fsx", "dax", "ram", "cloudformation", "network-firewall", "route53resolver", "cloudtrail")
-_ROUTER_REST_SERVICES = ("dlm", "pipes", "apigateway", "s3tables", "s3vectors", "rbin", "backup", "vpc-lattice", "aws-marketplace", "s3files", "cloudfront", "savingsplans")
+_ROUTER_QUERY_SERVICES = ("ecr", "fsx", "dax", "ram", "dms", "cloudformation", "network-firewall", "route53resolver", "cloudtrail", "codeconnections", "codestar-connections")
+_ROUTER_REST_SERVICES = ("inspector2", "dlm", "pipes", "apigateway", "s3tables", "s3vectors", "rbin", "backup", "bedrock", "vpc-lattice", "aws-marketplace", "s3files", "cloudfront", "savingsplans")
+_ROUTER_QUERY_SERVICES = ("fsx", "dax", "ram", "dms", "glue", "redshift-data", "cloudformation", "network-firewall", "route53resolver", "cloudtrail")
+_ROUTER_REST_SERVICES = ("dlm", "pipes", "apigateway", "s3tables", "s3vectors", "rbin", "backup", "bedrock", "bedrock-agentcore", "vpc-lattice", "aws-marketplace", "s3files", "cloudfront", "savingsplans")
 
 
 def _signed_service(request: Request) -> str:
@@ -1206,6 +1220,9 @@ def _register_unified_s3(app: FastAPI) -> None:
             # (/apikeys, /usageplans, …): REST paths with no S3 meaning, told apart by SigV4 scope.
             return await _wi.serve(_wi.new_services_router() or _wi.appliance_router(), request)
         path = request.scope.get("path") or request.url.path
+        if path.startswith("/openai/") and request.method == "POST":
+            # Azure OpenAI data plane (deployments/{d}/chat/completions, /openai/v1/...) -> shared router -> core/ai_models_core
+            return await _wi.serve(_wi.new_services_router() or _wi.appliance_router(), request, path=path)
         if path.lstrip("/").split("/", 1)[0] in ("v1", "v1beta1", "v2", "v3"):
             # A GCP REST family with no dedicated offline route: these catch-alls are registered
             # LAST, so nothing else claimed it. If the shared router knows the path, serve it there
@@ -1356,6 +1373,12 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
             return await _srv().api_iam_query(request)
         if service == "sts":
             return await _srv().api_sts_query(request)
+        if service == "ec2-instance-connect":
+            try:
+                _ic_payload = json.loads(await request.body() or b"{}")
+            except Exception:
+                _ic_payload = {}
+            return _srv().ec2_instance_connect_wire(request.headers.get("x-amz-target", ""), _ic_payload)
         if service == "ssm":
             # Systems Manager: in-process engine (core/ssm_core.py), same store as the console REST.
             from core import ssm_core as _ssm_core

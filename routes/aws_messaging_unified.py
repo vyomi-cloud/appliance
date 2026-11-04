@@ -571,6 +571,22 @@ def _register_schemas(app) -> None:
         app.add_route(p, _sch, methods=methods)
 
 
+# ── Security Hub (/accounts, /findings, /standards) + GuardDuty (/detector) native REST ──
+def _register_secscan(app) -> None:
+    def _make(svc):
+        async def _h(request: Request):
+            if _scope(request) != svc and _wi.is_unified("s3"):
+                return await _wi.serve_service("s3", request)      # an S3 bucket literally named "findings"/"detector"
+            return await _wi.serve_service(svc, request, path=request.url.path)
+        return _h
+
+    methods = ["GET", "POST", "PUT", "PATCH", "DELETE"]
+    for p in ("/accounts", "/findings", "/findings/{rest:path}", "/standards/{rest:path}"):
+        app.add_route(p, _make("securityhub"), methods=methods)
+    for p in ("/detector", "/detector/{rest:path}", "/malware-protection-plan", "/malware-protection-plan/{rest:path}"):
+        app.add_route(p, _make("guardduty"), methods=methods)
+
+
 # ── the SQS queue URL itself (`POST /<account>/<queue>`) ──────────────────────────
 def queue_path_request(request: Request) -> bool:
     """A request an SDK POSTed to a queue URL this appliance handed out
@@ -600,6 +616,8 @@ def register(app) -> None:
         _register_scheduler(app)
     if _wi.is_unified("schemas"):
         _register_schemas(app)
+    if _wi.is_unified("securityhub"):
+        _register_secscan(app)
 
 
 def inventory(space: dict) -> dict:

@@ -139,10 +139,10 @@
     "title": "Advisor security recommendations (bucket posture findings)",
     "level": { "nano": "limited", "offline": "limited" },
     "limitations": [
-      "Recommendations come from a deterministic rule engine over the real stored buckets (public allUsers/allAuthenticatedUsers IAM bindings, uniform bucket-level access off, public access prevention not enforced, no versioning/retention, no CMEK). They are not IAM Recommender / Security Command Center output: no usage-pattern ML, no excess-permission analysis and no data-sensitivity scanning. The bucket-list 'Security insights' column is not driven by these findings."
+      "Recommendations come from a deterministic rule engine over the real stored buckets (public allUsers/allAuthenticatedUsers IAM bindings, uniform bucket-level access off, public access prevention not enforced, no versioning/retention, no CMEK). The bucket list 'Security insights' column shows the per-bucket count and top severity of the same findings plus Vyomi detector alerts. They are not IAM Recommender / Security Command Center output: no usage-pattern ML, no excess-permission analysis and no data-sensitivity scanning."
     ],
     "api": ["securityPosture.storage"],
-    "tests": ["tests/conformance/test_gcp_posture.py"]
+    "tests": ["tests/conformance/test_gcp_posture.py", "tests/conformance/test_gcp_secscan.py"]
   },
   "gcp.storage.observability": {
     "title": "Monitoring (Cloud Monitoring charts: request/error rates, bandwidth)",

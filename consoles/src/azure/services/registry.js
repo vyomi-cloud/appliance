@@ -7,6 +7,7 @@ import { classicUrl } from "../../common/classic.js";
 export const CATEGORIES = ["Compute", "Containers", "Databases", "Storage", "Networking", "Integration", "Security", "Identity", "AI + machine learning", "Management and governance"];
 
 export const SERVICES = [
+  { id: "recoveryservices", title: "Recovery Services vaults", type: "Microsoft.RecoveryServices/vaults", category: "Management and governance", icon: "recoveryservices", load: () => import("./recoveryservices/index.jsx") },
   { id: "storage", title: "Storage accounts", type: "Microsoft.Storage/storageAccounts", category: "Storage", icon: "storage", load: () => import("./storage/index.jsx") },
   { id: "vms", title: "Virtual machines", type: "Microsoft.Compute/virtualMachines", category: "Compute", icon: "vms", load: () => import("./vms/index.jsx") },
   { id: "sql", title: "SQL databases", type: "Microsoft.Sql/servers/databases", category: "Databases", icon: "sql", load: () => import("./sql/index.jsx") },

@@ -184,7 +184,7 @@
   },
   "limitations": [
    "DatabaseConnections (the instance's real count of currently open RDS Data API transactions) and ReadIOPS/WriteIOPS (a real count of SELECT vs. write statements actually executed through the RDS Data API / query editor) are genuine datapoints pushed to CloudWatch (AWS/RDS namespace) as the activity happens \u2014 GetMetricStatistics/GetMetricData return real series, not synthetic ones.",
-   "CPUUtilization, FreeStorageSpace and FreeableMemory have no real analogue in Vyomi \u2014 there is no virtualized compute, disk or memory allocation behind a DB instance to measure, so the Monitoring tab shows them as unavailable rather than inventing numbers."
+   "CPUUtilization, FreeableMemory, network throughput (and FreeStorageSpace when sized) are published only when a runtime measured them (core/observability_core.publish_rds_stats fed by `docker stats` of the engine container via the offline collector or POST /_obs/rds-stats); engines without a measurable runtime (in-memory sqlite, Nano) leave those graphs empty - never invented."
   ],
   "tests": [
    "tests/conformance/test_rds_console_v4_core.py"
@@ -249,10 +249,11 @@
    "offline": "limited"
   },
   "limitations": [
-   "CreateIntegration/DeleteIntegration/DescribeIntegrations is real, stateful metadata CRUD; Vyomi does not run the actual cross-service replication pipeline into Redshift, so the console's create wizard (picking a real Redshift target) is not built \u2014 call the action directly with source/target ARNs."
+   "The integration really replicates: DynamoDB table items / RDS table rows are copied into an in-process 'Redshift-lite' warehouse (sqlite) on every touch/query ('sync on read'), and the Redshift Data API (ExecuteStatement/GetStatementResult, CREATE DATABASE ... FROM INTEGRATION) queries it. The SQL dialect is SQLite's, not Redshift's; replication is poll-on-touch, not a continuous stream; no data filters, encryption or cross-account semantics; the warehouse is in memory and rebuilt from the sources on boot. A real Redshift/SageMaker lakehouse is not run."
   ],
   "tests": [
-   "tests/conformance/test_rds_console_v4_core.py"
+   "tests/conformance/test_rds_console_v4_core.py",
+   "tests/conformance/test_zeroetl_core.py"
   ]
  },
  "rds.custom-engine-versions": {
@@ -366,5 +367,37 @@
   "tests": [
    "tests/conformance/test_rds_restore_s3.py"
   ]
- }
+ },
+ "rds.data-migrations": {
+  "title": "Data migrations (AWS DMS between simulator databases)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Real DMS control plane (core/dms_core.py, target AmazonDMSv20160101): replication instances, source/target endpoints, TestConnection, replication tasks with selection-rule TableMappings, DescribeTableStatistics. An endpoint's ServerName must resolve to a simulator RDS instance; StartReplicationTask really creates the selected tables on the target instance and copies the rows.",
+   "CDC is 'CDC-lite': a running cdc / full-load-and-cdc task re-reads the source and applies row-level inserts, updates and deletes (keyed on the primary key) whenever the task is described, reloaded, resumed or stopped - there is no WAL/binlog reader, so changes appear when polled rather than instantly.",
+   "Table and column discovery uses the simulator's SQL engine catalog (sqlite on the default engine). Not modelled: transformation rules, data validation, LOB settings, premigration assessments, DMS Serverless, non-SQL endpoint engines (accepted for configuration but TestConnection fails), schema conversion."
+  ],
+  "api": [
+   "CreateReplicationInstance",
+   "DescribeReplicationInstances",
+   "DeleteReplicationInstance",
+   "CreateEndpoint",
+   "DescribeEndpoints",
+   "DeleteEndpoint",
+   "TestConnection",
+   "DescribeConnections",
+   "CreateReplicationTask",
+   "DescribeReplicationTasks",
+   "StartReplicationTask",
+   "StopReplicationTask",
+   "DeleteReplicationTask",
+   "DescribeTableStatistics"
+  ],
+  "tests": [
+   "tests/conformance/test_dms_core.py"
+  ]
+ },
+ "rds.database_insights": {"title": "Database Insights (DB load, cache hit ratio, commits/rollbacks, deadlocks)", "level": {"nano": "limited", "offline": "limited"}, "limitations": ["DBLoad (average active sessions from pg_stat_activity), BufferCacheHitRatio, TransactionCommits/Rollbacks and Deadlocks are read from pg_stat_database / pg_stat_activity by the collector (offline Postgres every 30 s, or pushed to /_obs/rds-stats) and published to CloudWatch AWS/RDS. pg_stat_database is database-wide, so instances sharing one Postgres (schema-per-instance) share these counters. Engines that cannot answer pg_stat (in-memory sqlite) publish nothing. No Top SQL / wait events. Nano PGlite uses the async collector (acollect_rds_stats) but no timer drives it yet."], "tests": ["tests/conformance/test_obs_collectors.py"]}
 }

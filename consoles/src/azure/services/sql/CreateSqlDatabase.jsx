@@ -13,6 +13,8 @@ import CreateWizard, { FormRow, FormSection } from "../../kit/CreateWizard.jsx";
 import { Glyph, NotSimulatedContainer } from "../../kit/common.jsx";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
+import { setPricing } from "../defender/api.js";
+import { CapabilityContainer } from "../../kit/Capability.jsx";
 import ConfigureDatabaseDialog, { DEFAULT_COMPUTE_STORAGE } from "./ConfigureDatabaseDialog.jsx";
 import CreateSqlServerDialog from "./CreateSqlServerDialog.jsx";
 
@@ -172,7 +174,16 @@ export default function CreateSqlDatabase() {
 
   const security = (
     <>
-      <NotSimulatedContainer title="Microsoft Defender for SQL" feature="Enable Microsoft Defender for SQL" />
+      <CapabilityContainer id="azure.defender.plans" title="Microsoft Defender for SQL">
+        <FormSection title="Microsoft Defender for SQL">
+          <FormRow label="Enable Microsoft Defender for SQL">
+            <RadioGroup layout="horizontal" value={f.defenderSql ? "Yes" : "No"} onChange={(_, d) => setF((x) => ({ ...x, defenderSql: d.value === "Yes" }))} aria-label="Enable Microsoft Defender for SQL">
+              <Radio value="Yes" label="Start free trial / Enable" />
+              <Radio value="No" label="Not now" />
+            </RadioGroup>
+          </FormRow>
+        </FormSection>
+      </CapabilityContainer>
       <FormSection title="Ledger">
         <FormRow label="Configure ledger database"><Checkbox checked={f.ledger} onChange={(_, d) => setF((x) => ({ ...x, ledger: !!d.checked }))} aria-label="Configure ledger database" /></FormRow>
       </FormSection>
@@ -273,6 +284,7 @@ export default function CreateSqlDatabase() {
   const onCreate = async () => {
     try {
       await api.createDatabase(rg, f.server, f.name, body());
+      if (f.defenderSql) await setPricing("SqlServers", "Standard");
       await pe.deploy({ id: `/subscriptions/${sub.id}/resourceGroups/${rg}/providers/Microsoft.Sql/servers/${f.server}`, name: f.server });
       if (f.connectionPolicy !== "Default") await putConnectionPolicy(`/subscriptions/${sub.id}/resourceGroups/${rg}/providers/Microsoft.Sql/servers/${f.server}`, f.connectionPolicy);
       if (f.serverIdentity === "SystemAssigned") await api.updateServer(rg, f.server, { identity: { type: "SystemAssigned" } });

@@ -107,6 +107,7 @@
    "offline": "limited"
   },
   "limitations": [
+   "Build from GitHub (core/ci_core.py): connecting a https://github.com owner/repo (optionally with the user's own personal access token, stored server-side) and choosing Build from GitHub fetches the branch, builds its Dockerfile with BuildKit on the offline appliance and cuts a revision whose image is the really built one; no Dockerfile (no buildpacks), no outbound HTTP or container builder (Nano), or a failed build ends FAILURE with the reason and leaves the service untouched. The built image stays in the host docker engine (not pushed to Artifact Registry); Cloud Source Repositories, GitHub App/OAuth authorization and webhook-triggered builds are not simulated.",
    "Vyomi has no real GitHub/Cloud Source Repositories integration: \"connect a repository\" just names an owner/repo + branch against the service, and a \"push\" is the console's own build action rather than a real webhook.",
    "The build step is real, not cosmetic: it parses/validates the pushed source the same way a Cloud Build step would, and only lands a new revision (visible on the Revisions tab) when that build succeeds — a broken push fails the build and leaves the service untouched, same as Source tab redeploys.",
    "Build history (status, logs, which revision it deployed) is real per-service state, not a static list."

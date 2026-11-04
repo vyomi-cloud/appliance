@@ -1,0 +1,62 @@
+{
+ "$doc": "Vyomi capability registry \u2014 Security Hub + GuardDuty (core/secscan_core.py). See s3.json for the contract.",
+ "securityhub.findings": {
+  "title": "Security Hub: EnableSecurityHub, GetFindings (filters, sort, paging), BatchUpdateFindings workflow, ASFF documents",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Findings are derived live from the simulated resources by Vyomi's own rules (AWS Foundational Security Best Practices controls S3.2, S3.4, S3.8, EC2.9, EC2.13, EC2.14, RDS.2, RDS.3, IAM.5, CloudTrail.1) - a small subset of the FSBP catalogue, no CIS/PCI standards, no cross-Region aggregation, no custom insights or automation rules. Inspector-style findings: network reachability of instances (public IP + world-open security group), end-of-life Lambda runtimes, and CVE findings for scanned images. GuardDuty findings flow into Security Hub once a detector exists. Filters supported: SeverityLabel, ProductName, Title, ResourceType, ResourceId, ComplianceStatus, WorkflowStatus, RecordState, GeneratorId, Id, ProductArn."
+  ],
+  "api": [
+   "EnableSecurityHub",
+   "DescribeHub",
+   "DisableSecurityHub",
+   "GetFindings",
+   "BatchUpdateFindings",
+   "GetEnabledStandards"
+  ],
+  "tests": [
+   "tests/conformance/test_secscan_core.py",
+   "tests/conformance/test_secscan_wire.py"
+  ]
+ },
+ "securityhub.home": {
+  "title": "Console Home: Security widget (live counts by severity)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_secscan_wire.py"
+  ]
+ },
+ "guardduty.detector": {
+  "title": "GuardDuty: detectors, ListFindings/GetFindings, archive, CreateSampleFindings",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "There is no real attacker, VPC flow, DNS or CloudTrail-event stream: findings come from a DETERMINISTIC rule engine over the control-plane calls the simulator served (CloudTrail stopped, bucket opened to anonymous access, administrator policy attached, credentials minted in a burst, repeated denials, enumeration bursts). Finding types reuse GuardDuty names where an equivalent exists; every finding carries detector=vyomi-rules. No machine-learning anomaly detection, EBS/EC2 malware scanning, runtime monitoring, S3/EKS/RDS protection plans or multi-account administration. CreateSampleFindings creates clearly labelled [SAMPLE] findings. Only calls served through the simulator's own wire are observed (EC2 security-group changes on the offline appliance are covered by the posture rules instead)."
+  ],
+  "api": [
+   "CreateDetector",
+   "ListDetectors",
+   "GetDetector",
+   "UpdateDetector",
+   "DeleteDetector",
+   "ListFindings",
+   "GetFindings",
+   "ArchiveFindings",
+   "UnarchiveFindings",
+   "CreateSampleFindings"
+  ],
+  "tests": [
+   "tests/conformance/test_secscan_core.py",
+   "tests/conformance/test_secscan_wire.py"
+  ]
+ }
+}

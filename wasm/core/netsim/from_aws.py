@@ -86,6 +86,12 @@ def _route_kind(m: dict, target: str):
         inst = m.get("instances", {}).get(t)
         return (INSTANCE, primary_eni(t)) if inst else (BLACKHOLE, t)
     if t.startswith("vpce-"):
+        try:
+            from core.netfw_core import firewall_endpoints
+            if t in firewall_endpoints(m.get("netfw") or {"firewalls": {}, "assocs": {}}):
+                return "nfw", t
+        except ImportError:
+            pass
         ep = m.get("vpc_endpoints", {}).get(t)
         return (GATEWAY_ENDPOINT, t) if ep and ep.get("type") == "Gateway" and ep.get("state") == "available" else (BLACKHOLE, t)
     if t.startswith("tgw-"):
@@ -134,6 +140,13 @@ def from_aws(store_or_model) -> Topology:
                        "vpns": [{"id": c["id"], "routes": list(c["routes"]), "state": c["state"]}
                                 for c in m.get("vpn_connections", {}).values() if c["vgw"] == gid]}
 
+    if m.get("netfw"):
+        try:
+            from core.netfw_core import firewall_endpoints
+            t.firewalls = firewall_endpoints(m["netfw"])
+            t.netfw_state = m["netfw"]
+        except ImportError:
+            pass
     for rid, rt in m.get("route_tables", {}).items():
         vpc = vpcs.get(rt.get("vpc_id"), {})
         routes = []

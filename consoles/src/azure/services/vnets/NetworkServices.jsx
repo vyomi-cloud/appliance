@@ -7,6 +7,8 @@ import {
 import { Add20Regular } from "@fluentui/react-icons";
 import { useNotify } from "../../../common/notify.jsx";
 import { useAsync } from "../../../common/useAsync.js";
+import { restJson } from "../../../common/wire.js";
+import { ErrorBar } from "../../kit/common.jsx";
 import BrowseGrid from "../../kit/BrowseGrid.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import * as ns from "./netsvc.js";
@@ -147,11 +149,13 @@ export function FirewallPanel({ a }) {
   const notify = useNotify();
   const { data, loading, error, reload } = useAsync(() => ns.listFirewalls(a.id), [a.id]);
   const [add, setAdd] = useState(false);
+  const [ev, setEval] = useState(null);
   return (
     <CapabilityContainer id="azure.vnets.firewall" title={`${a.name} | Firewall`}>
       <BrowseGrid
         resourceName="firewall" rowKey={(r) => r.id} items={data || []} loading={loading} error={error} onRefresh={reload} csvName="firewalls.csv"
-        extraCommands={<ToolbarButton icon={<Add20Regular />} onClick={() => setAdd(true)}>Deploy Firewall</ToolbarButton>}
+        extraCommands={(sel) => <><ToolbarButton icon={<Add20Regular />} onClick={() => setAdd(true)}>Deploy Firewall</ToolbarButton>
+          <ToolbarButton disabled={sel.length !== 1} onClick={() => setEval(sel[0])}>Evaluate rule</ToolbarButton></>}
         onDelete={async (sel) => { for (const r of sel) await ns.FIREWALL.remove(ns.rgOf(r.id), r.name); notify.success(`Deleted ${sel.length} firewall(s).`, "Delete succeeded"); reload(); }}
         columns={[
           { key: "name", label: "Name" }, { key: "tier", label: "Tier", value: (r) => r.properties?.sku?.tier },
@@ -162,7 +166,32 @@ export function FirewallPanel({ a }) {
         ]}
       />
       {add && <DeployFirewall a={a} onClose={() => setAdd(false)} onDone={reload} />}
+      {ev && <EvaluateRule fw={ev} onClose={() => setEval(null)} />}
     </CapabilityContainer>
+  );
+}
+
+/* Simulator action (not a real ARM action): POST .../azureFirewalls/{fw}/evaluate runs one connection through the firewall's policy
+ * (DNAT -> network -> application rules, priority order, implicit deny) - core/azure_firewall_eval.py. */
+function EvaluateRule({ fw, onClose }) {
+  const [f, setF] = useState({ protocol: "TCP", src: "10.0.0.4", dst: "93.184.216.34", port: "443", fqdn: "" });
+  const [res, setRes] = useState(null);
+  const [err, setErr] = useState(null);
+  const run = async () => {
+    setErr(null); setRes(null);
+    try { setRes(await restJson("POST", `${fw.id}/evaluate`, { query: { "api-version": "2023-09-01" }, body: { protocol: f.protocol, sourceAddress: f.src, destinationAddress: f.dst, destinationPort: f.port, destinationFqdn: f.fqdn } })); }
+    catch (e) { setErr(e); }
+  };
+  const row = (label, key, ph) => <label style={{ display: "block", marginBottom: 8, fontSize: 13 }}>{label}<Input aria-label={label} value={f[key]} placeholder={ph} onChange={(_, d) => setF({ ...f, [key]: d.value })} style={{ display: "block", width: "100%" }} /></label>;
+  return (
+    <Modal title={`Evaluate rule - ${fw.name}`} goLabel="Evaluate" valid busy={false} onClose={onClose} onGo={run}>
+      {row("Protocol", "protocol", "TCP, UDP, ICMP, Http, Https")}{row("Source address", "src")}{row("Destination address", "dst")}{row("Destination port", "port")}{row("Destination FQDN (optional)", "fqdn", "www.example.com")}
+      {err && <ErrorBar error={err} title="Evaluation failed" />}
+      {res && <div data-testid="fw-eval-result" style={{ marginTop: 12, fontSize: 13 }}>
+        <b>{res.action}</b>{res.rule ? <> by {res.ruleType} <b>{res.rule}</b> in collection {res.ruleCollection} (group {res.ruleCollectionGroup})</> : <> - {res.reason}</>}
+        {res.translatedAddress && <div>Translated to {res.translatedAddress}:{res.translatedPort}</div>}
+        {(res.notes || []).map((n, i) => <div key={i} className="vy-muted">{n}</div>)}</div>}
+    </Modal>
   );
 }
 function DeployFirewall({ a, onClose, onDone }) {

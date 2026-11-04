@@ -69,6 +69,7 @@ function Versions({ loc, keyRing, k, keyData, reloadKey }) {
   const notify = useNotify();
   const [sel, setSel] = useState([]);
   const [menu, setMenu] = useState(null);
+  const [imp, setImp] = useState(false);
   const vers = useAsync(() => api.listVersions(loc, keyRing, k), [loc, keyRing, k, keyData]);
   const primary = api.parseVersionId(keyData.primary?.name);
 
@@ -91,6 +92,7 @@ function Versions({ loc, keyRing, k, keyData, reloadKey }) {
     <CapabilityContainer id="gcp.kms.key.versions" title="Versions"
       actions={<>
         <Button startIcon={<AddIcon />} onClick={() => run(() => api.createVersion(loc, keyRing, k), "Created a new version")}>Create new version</Button>
+        <Button onClick={() => setImp(true)}>Import key version</Button>
         <Button disabled={!sel.length} onClick={() => bulk("Disable")}>Disable</Button>
         <Button disabled={!sel.length} onClick={() => bulk("Enable")}>Enable</Button>
         <Button startIcon={<DeleteIcon />} disabled={!sel.length} onClick={() => bulk("Destroy")}>Destroy</Button>
@@ -126,7 +128,32 @@ function Versions({ loc, keyRing, k, keyData, reloadKey }) {
         <MenuItem disabled={!["ENABLED", "DISABLED"].includes(menu?.v.state)}
           onClick={() => { const id = ver(menu.v); setMenu(null); run(() => api.destroyVersion(loc, keyRing, k, id), `Scheduled version ${id} for destruction`); }}>Destroy</MenuItem>
       </Menu>
+      {imp && <ImportVersionDialog loc={loc} keyRing={keyRing} onClose={() => setImp(false)} onSave={(body) => run(() => api.importVersion(loc, keyRing, k, body), "Imported key version")} />}
     </CapabilityContainer>
+  );
+}
+
+function ImportVersionDialog({ loc, keyRing, onClose, onSave }) {
+  const jobs = useAsync(() => api.listImportJobs(loc, keyRing), [loc, keyRing]);
+  const active = (jobs.data || []).filter((j) => j.state === "ACTIVE");
+  const [job, setJob] = useState("");
+  const [wrapped, setWrapped] = useState("");
+  const chosen = active.find((j) => j.name === (job || active[0]?.name));
+  const direct = chosen && !chosen.importMethod.endsWith("_AES_256");
+  return (
+    <SaveDialog title="Import key version" onClose={onClose}
+      onSave={() => (chosen && wrapped.trim()
+        ? onSave({ importJob: chosen.name, algorithm: "GOOGLE_SYMMETRIC_ENCRYPTION", [direct ? "wrappedKey" : "rsaAesWrappedKey"]: wrapped.trim() })
+        : Promise.reject(new Error("Choose an active import job and paste the wrapped key (base64).")))}>
+      <FormControl>
+        <InputLabel id="ij-l">Import job</InputLabel>
+        <Select labelId="ij-l" label="Import job" value={chosen?.name || ""} onChange={(e) => setJob(e.target.value)} inputProps={{ "aria-label": "Import job" }}>
+          {active.map((j) => <MenuItem key={j.name} value={j.name}>{j.name.split("/").pop()} ({j.importMethod})</MenuItem>)}
+        </Select>
+      </FormControl>
+      <TextField label="Wrapped key material (base64)" multiline minRows={3} value={wrapped} onChange={(e) => setWrapped(e.target.value)} />
+      <Typography variant="caption" color="text.secondary">Algorithm: Google symmetric encryption (256-bit). Wrap the key with the import job's public key (RSA-OAEP{direct ? "" : " + AES-KWP"}).</Typography>
+    </SaveDialog>
   );
 }
 

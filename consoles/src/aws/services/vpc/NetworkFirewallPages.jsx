@@ -6,6 +6,7 @@ import * as nf from "./apiNfw.js";
 import * as x from "./apiExtras.js";
 
 const col = (id, header, cell, extra = {}) => ({ id, header, cell, ...extra });
+import SimPanel from "../../kit/SimPanel.jsx";
 const arnOpts = (load, filter = () => true) => async () => (await load()).filter(filter).map((r) => ({ value: r.Arn, label: r.Name }));
 const vpcOpts = async () => (await x.describeVpcs()).map((v) => ({ value: v.VpcId, label: v.VpcId }));
 const subnetOpts = async () => (await x.describeSubnets()).map((s) => ({ value: s.SubnetId, label: `${s.SubnetId} (${s.CidrBlock})` }));
@@ -28,6 +29,11 @@ export const Firewalls = () => (
     detail={(f) => [
       { id: "details", label: "Firewall details", content: <Sub title="Details" items={[{ k: "ARN", v: f.Arn }, { k: "Policy", v: f.Policy }, { k: "Policy change protection", v: String(f.PolicyProtection) }, { k: "Subnet change protection", v: String(f.SubnetProtection) }, { k: "Description", v: f.Description || "-" }]} columns={[col("k", "Property", (r) => r.k), col("v", "Value", (r) => r.v)]} /> },
       { id: "endpoints", label: "Firewall endpoints", content: <Sub title="Firewall endpoints" items={f.Endpoints} columns={[col("az", "Availability Zone", (r) => r.Az), col("s", "Subnet", (r) => r.Subnet), col("e", "Endpoint ID", (r) => r.Endpoint), col("st", "Status", (r) => r.Status)]} /> },
+      { id: "sim", label: "Simulate traffic", content: <SimPanel key={f.Arn} title="Simulate traffic" testId="nfw" description="Runs one packet through this firewall's policy: stateless rule groups and default actions, then the stateful engine (5-tuple, domain lists, Suricata). Simulator verb: SimulateTraffic."
+        fields={[{ key: "proto", label: "Protocol", default: "tcp", options: ["tcp", "udp", "icmp"].map((m) => ({ value: m, label: m })) }, { key: "src", label: "Source IP", default: "10.0.1.10" }, { key: "dst", label: "Destination IP", default: "93.184.216.34" },
+          { key: "sport", label: "Source port", default: "40000" }, { key: "dport", label: "Destination port", default: "443" }, { key: "sni", label: "TLS SNI / HTTP host (optional)", default: "" }]}
+        run={(v) => nf.simulateTraffic(f.Arn, { Protocol: v.proto, SourceIp: v.src, DestinationIp: v.dst, SourcePort: Number(v.sport) || undefined, DestinationPort: Number(v.dport) || undefined, ...(v.sni ? { TlsSni: v.sni, HttpHost: v.sni } : {}) })}
+        verdict={(r) => [r.Action === "PASS" ? "success" : "warning", `${r.Action} at the ${r.Stage} stage (rule: ${r.Rule})`]} /> },
       { id: "logging", label: "Logging", content: <Sub title="Logging configuration" empty="No logging destinations configured" items={f.Logging} columns={[col("t", "Log type", (r) => r.LogType), col("d", "Destination type", (r) => r.LogDestinationType), col("l", "Destination", (r) => JSON.stringify(r.LogDestination))]} /> },
     ]} />
 );

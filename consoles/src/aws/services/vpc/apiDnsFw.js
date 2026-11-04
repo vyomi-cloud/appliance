@@ -36,3 +36,6 @@ export const createRule = (g, v) => call("CreateFirewallRule", { FirewallRuleGro
 export const deleteRule = (g, r) => call("DeleteFirewallRule", { FirewallRuleGroupId: g.Id, FirewallDomainListId: r.FirewallDomainListId });
 export const associate = (g, v) => call("AssociateFirewallRuleGroup", { FirewallRuleGroupId: g.Id, VpcId: v.vpc, Priority: Number(v.priority), Name: v.name });
 export const disassociate = (a) => call("DisassociateFirewallRuleGroup", { FirewallRuleGroupAssociationId: a.Id });
+
+/* Simulator verb (not a real Route 53 Resolver API): what the VPC Resolver answers for one query. */
+export const resolveQuery = (VpcId, DomainName, QueryType) => call("ResolveDnsQuery", { VpcId, DomainName, QueryType });

@@ -16,6 +16,7 @@ import SpaceBetween from "@cloudscape-design/components/space-between";
 import { NotSimulatedContainer } from "./common.jsx";
 import { CardTab, MarkerSpan, useCardSlot } from "../../common/cardTab.jsx";
 import cap_apigateway from "../../../../core/capabilities/aws/apigateway.json";
+import cap_bedrock from "../../../../core/capabilities/aws/bedrock.json";
 import cap_cloudformation from "../../../../core/capabilities/aws/cloudformation.json";
 import cap_cloudwatch from "../../../../core/capabilities/aws/cloudwatch.json";
 import cap_dynamodb from "../../../../core/capabilities/aws/dynamodb.json";
@@ -34,7 +35,7 @@ import cap_ssm from "../../../../core/capabilities/aws/ssm.json";
 import cap_states from "../../../../core/capabilities/aws/states.json";
 import cap_vpc from "../../../../core/capabilities/aws/vpc.json";
 
-const REGISTRY = { ...cap_apigateway, ...cap_cloudformation, ...cap_cloudwatch, ...cap_dynamodb, ...cap_ec2, ...cap_eventbridge, ...cap_iam, ...cap_kinesis, ...cap_kms, ...cap_lambda, ...cap_rds, ...cap_s3, ...cap_secretsmanager, ...cap_sns, ...cap_sqs, ...cap_ssm, ...cap_states, ...cap_vpc };
+const REGISTRY = { ...cap_apigateway, ...cap_bedrock, ...cap_cloudformation, ...cap_cloudwatch, ...cap_dynamodb, ...cap_ec2, ...cap_eventbridge, ...cap_iam, ...cap_kinesis, ...cap_kms, ...cap_lambda, ...cap_rds, ...cap_s3, ...cap_secretsmanager, ...cap_sns, ...cap_sqs, ...cap_ssm, ...cap_states, ...cap_vpc };
 
 export const SUBSTRATE = (typeof document !== "undefined" && document.querySelector('meta[name="vyomi-substrate"]')?.content) || "offline";
 

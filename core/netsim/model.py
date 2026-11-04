@@ -235,6 +235,8 @@ class Topology:
     peerings: dict = field(default_factory=dict)
     tgws: dict = field(default_factory=dict)     # AWS transit gateways: {tgw: {atts:{att:{network,rt,state}}, rts:{rt:[{cidr,att,state}]}}}
     vgws: dict = field(default_factory=dict)    # AWS virtual private gateways: {vgw: {vpcs:[vpc], vpns:[{id,routes,state}]}}
+    firewalls: dict = field(default_factory=dict)   # AWS Network Firewall endpoints: {vpce: {firewall, subnet, vpc}}
+    netfw_state: dict | None = None                # live m["netfw"] (policies/rule groups) the endpoints are evaluated against
     cloud: str = ""
     warnings: list = field(default_factory=list)
 

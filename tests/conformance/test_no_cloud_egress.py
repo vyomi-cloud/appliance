@@ -24,7 +24,8 @@ EXPORT_CORES = ("sql_store.py", "rds_core.py", "rds_data_core.py", "gcp_cloudsql
                 "azure_arm_core.py", "s3_object_core.py", "gcp_storage_core.py", "azure_blob_core.py",
                 "dynamodb_core.py", "gcp_firestore_core.py", "object_store.py", "parquet_pyarrow.py")
 ALLOWED = {("apigateway_core.py", "urllib.request"),   # HTTP integration → the user's own endpoint
-           ("eventbridge_core.py", "urllib.request")}  # API destination → the user's own endpoint
+           ("eventbridge_core.py", "urllib.request"),  # API destination → the user's own endpoint
+           ("llm_core.py", "urllib.request")}          # local-LLM seam → the user's own model server (VYOMI_LLM_ENDPOINT); offline only
 
 
 try:

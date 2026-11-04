@@ -68,6 +68,11 @@ def register(app, on_change=None):
     # ── native wire ───────────────────────────────────────────────────────
     async def native(request: Request):
         body = await request.body()
+        try:   # refresh request_count series from MEASURED gcp traffic before serving
+            from core import observability_core as _obsc
+            _obsc.publish_gcp(_obsc.default_store(), store(), _obsc.gcp_project_of(request.url.path))
+        except Exception:
+            pass
         before = set(store().alert_policies)
         r = core.dispatch(store(), request.method, request.url.path, dict(request.query_params),
                           dict(request.headers), body)

@@ -121,7 +121,11 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import unquote
+
+from core import azure_netaccess as _netaccess
 from xml.sax.saxutils import escape
+
+_DEFAULT_SUB = "00000000-0000-0000-0000-cloudlearn01"   # the single simulated subscription (core/azure_arm_core.DEFAULT_SUBSCRIPTION)
 
 X_MS_VERSION = "2021-12-02"
 
@@ -281,6 +285,27 @@ def _arm_properties(arm_state: dict | None, acct: str, suffix: str) -> dict:
             # the simulator's single-tenant default namespace with no explicit account).
             return (rec or {}).get("properties", {}) or {}
     return {}
+
+
+def _enc_scope(arm_state: dict | None, acct: str, name: str):
+    """The storage account's ARM `encryptionScopes/{name}` record (or None) -- same account-name suffix match."""
+    if not arm_state or not acct or not name:
+        return None
+    want = f"/storageaccounts/{acct.lower()}/encryptionscopes/{name.lower()}"
+    for key, rec in arm_state.items():
+        if key.lower().endswith(want):
+            return rec
+    return None
+
+
+def _scope_check(arm_state: dict | None, acct: str, name: str):
+    """(error-tuple | None) for a scope named on a container/blob request: it must exist and be Enabled."""
+    rec = _enc_scope(arm_state, acct, name)
+    if rec is None:
+        return (400, "InvalidHeaderValue", f"The encryption scope '{name}' does not exist on this storage account.")
+    if ((rec.get("properties") or {}).get("state") or "Enabled") != "Enabled":
+        return (403, "EncryptionScopeDisabled", f"The encryption scope '{name}' is disabled.")
+    return None
 
 
 def _account_sku(arm_state: dict | None, acct: str) -> str:
@@ -623,7 +648,14 @@ def dispatch(store: AzureBlobStore, method: str, path: str,
 
     # ---- account configuration gates (ENFORCED — see module docstring) ----
     props = _account_properties(arm_state, acct)
-    if props.get("publicNetworkAccess") == "Disabled":
+    _na_ctx = _netaccess.caller_context(headers)
+    _na_rec = _netaccess.find_arm(arm_state, "microsoft.storage/storageaccounts", f"storageaccounts/{acct}") if _na_ctx else None
+    if _na_rec is not None:
+        # caller declared a network identity (x-vyomi-source-*): IP / vnet / private-endpoint rules are enforced
+        _denied = _netaccess.check(arm_state, _na_rec["id"], "storage", props, _na_ctx)
+        if _denied:
+            return _err(_denied[0], _denied[1], _denied[2])
+    elif props.get("publicNetworkAccess") == "Disabled":
         return _err(403, "AuthorizationFailure",
                     "Public network access is disabled for this storage account.")
     auth_header = headers.get("authorization", "") or ""
@@ -694,7 +726,18 @@ def dispatch(store: AzureBlobStore, method: str, path: str,
                     return _err(409, "ContainerAlreadyExists",
                                 "The specified container already exists.")
                 pa = (headers.get("x-ms-blob-public-access") or "").strip().lower()
+                dscope = (headers.get("x-ms-default-encryption-scope") or "").strip()
+                deny = (headers.get("x-ms-deny-encryption-scope-override") or "").strip().lower() == "true"
+                if dscope:
+                    bad = _scope_check(arm_state, acct, dscope)
+                    if bad:
+                        return _err(*bad)
+                elif deny:
+                    return _err(400, "InvalidHeaderValue", "x-ms-deny-encryption-scope-override needs x-ms-default-encryption-scope.")
                 store.create_container(container, pa if pa in ("blob", "container") else "")
+                if dscope:
+                    store.containers[container]["default_encryption_scope"] = dscope
+                    store.containers[container]["deny_scope_override"] = deny
                 store.persist()
                 _bump(store, acct)
                 _reqlog(store, acct, "StorageWrite", "PutContainer", 201, f"/{display}")
@@ -738,6 +781,9 @@ def dispatch(store: AzureBlobStore, method: str, path: str,
                 h["etag"] = _etag()
                 if pa:
                     h["x-ms-blob-public-access"] = pa
+                cm = store.containers[container]
+                h["x-ms-default-encryption-scope"] = cm.get("default_encryption_scope") or "$account-encryption-key"
+                h["x-ms-deny-encryption-scope-override"] = "true" if cm.get("deny_scope_override") else "false"
                 return Response(status=200, headers=h, body=b"", media_type=None)
         return _err(400, "InvalidQueryParameterValue",
                     f"Unsupported container operation {method}")
@@ -755,6 +801,25 @@ def dispatch(store: AzureBlobStore, method: str, path: str,
         store.persist()
         return Response(status=200, headers=_base_headers(), body=b"", media_type=None)
 
+    if comp == "tags" and method in ("GET", "PUT"):       # blob index tags (also where Defender for Storage writes its scan result)
+        if not store.container_exists(container):
+            return _err(404, "ContainerNotFound", "The specified container does not exist.")
+        ent = store.container_blobs(container).get(blob)
+        if ent is None:
+            return _err(404, "BlobNotFound", "The specified blob does not exist.")
+        from core import malware_scan_core as _mw
+        if method == "GET":
+            return Response(status=200, headers=_base_headers(), body=_mw.tags_xml(ent.get("index_tags") or {}).encode(), media_type="application/xml")
+        try:
+            new = _mw.parse_tags_xml(body)
+        except Exception:
+            return _err(400, "InvalidXmlDocument", "XML specified is not syntactically valid.")
+        if len(new) > 10 or any(not k or len(k) > 128 or len(v) > 256 for k, v in new.items()):
+            return _err(400, "InvalidTag", "Blob index tags: at most 10 tags, key 1-128 and value 0-256 characters.")
+        ent["index_tags"] = new
+        store.persist()
+        return Response(status=204, headers=_base_headers(), body=b"", media_type=None)
+
     if method == "PUT":                               # put block blob
         if not store.container_exists(container):
             return _err(404, "ContainerNotFound",
@@ -765,6 +830,16 @@ def dispatch(store: AzureBlobStore, method: str, path: str,
         # --content-type` set); the request's own Content-Type is the fallback.
         content_type = (headers.get("x-ms-blob-content-type") or headers.get("content-type")
                         or "application/octet-stream")
+        cmeta = store.containers.get(container, {})
+        req_scope = (headers.get("x-ms-encryption-scope") or "").strip()
+        eff_scope = req_scope or cmeta.get("default_encryption_scope") or ""
+        if req_scope and cmeta.get("deny_scope_override") and req_scope != cmeta.get("default_encryption_scope"):
+            return _err(409, "InvalidHeaderValue",
+                        "The container denies overriding its default encryption scope.")
+        if eff_scope:
+            bad = _scope_check(arm_state, acct, eff_scope)
+            if bad:
+                return _err(*bad)
         now = _now_http()
         prev = store.container_blobs(container).get(blob) or {}
         tier = headers.get("x-ms-access-tier") or prev.get("access_tier") or props.get("accessTier") or "Hot"
@@ -778,12 +853,19 @@ def dispatch(store: AzureBlobStore, method: str, path: str,
             "created": prev.get("created") or now,
             "md5": _md5_b64(body),
             "access_tier": tier,
+            "encryption_scope": eff_scope,
             "metadata": {k[len("x-ms-meta-"):]: v for k, v in headers.items()
                          if k.startswith("x-ms-meta-")},
         }
+        if headers.get("x-ms-tags"):
+            from core import malware_scan_core as _mw
+            entry["index_tags"] = _mw.parse_tags_header(headers["x-ms-tags"])
         if prev and _versioning_enabled(arm_state, acct):     # v4 WAVE 5b — keep the overwritten body as a real version
             versions = store.blob_versions.setdefault(container, {}).setdefault(blob, [])
             versions.append({**prev, "_version_id": prev["etag"]})
+        if arm_state is not None:    # Defender for Storage: malware scanning on upload (core/malware_scan_core)
+            from core import malware_scan_core as _mw
+            _mw.azure_after_put(arm_state, store, _DEFAULT_SUB, acct, container, blob, entry)
         store.container_blobs(container)[blob] = entry
         store.persist()
         store.mirror_put(container, blob, entry)
@@ -797,6 +879,8 @@ def dispatch(store: AzureBlobStore, method: str, path: str,
         h["last-modified"] = entry["last_modified"]
         h["content-md5"] = entry["md5"]
         h["x-ms-request-server-encrypted"] = "true"
+        if eff_scope:
+            h["x-ms-encryption-scope"] = eff_scope
         return Response(status=201, headers=h, body=b"", media_type=None)
 
     if method in ("GET", "HEAD") and store.container_exists(container):
@@ -828,6 +912,8 @@ def dispatch(store: AzureBlobStore, method: str, path: str,
             h["content-md5"] = entry["md5"]
         h["x-ms-blob-type"] = entry["blob_type"]
         h["x-ms-access-tier"] = entry.get("access_tier", "Hot")
+        if entry.get("encryption_scope"):
+            h["x-ms-encryption-scope"] = entry["encryption_scope"]
         h["accept-ranges"] = "bytes"
         h["x-ms-server-encrypted"] = "true"
         h["x-ms-creation-time"] = entry.get("created") or entry["last_modified"]

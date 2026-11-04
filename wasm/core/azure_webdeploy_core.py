@@ -12,14 +12,31 @@ Real ARM resources with real validation, stored on the site record (``_webdeploy
 * ``config/publishingcredentials`` (+ ``POST newpassword``) and ``basicPublishingCredentialsPolicies/{ftp,scm}`` -- the
   "FTPS credentials" tab: ``$site`` user, generated password (rotates), per-protocol basic-auth allow switches.
 
-NOT modelled: there is no build runner and no outbound git access, so a sync is recorded as a *Failed* deployment with
-an explanatory log line (never a fake success), and the GitHub workflow is generated but not committed to the remote.
+Deployments are REAL through the shared CI seam (core/ci_core.py, one repo ``site-<name>`` per app on the site record):
+
+* Local Git (scmType LocalGit): ``POST localgit`` {branch, message, author, files:{path: text}} is a push -- it commits
+  to the app's repo and the push hook builds a package artifact and records a deployment (Vyomi extension: the Kudu git
+  receiver itself is the git wire protocol; with the Gitea git host the repo has a real clone URL). ``GET localgit``
+  returns the remote info and, with Gitea, picks up pushes made straight to the git host.
+* GitHub source (public, or private with the user's own PAT in ``properties.vyomiAccessToken`` -- stored server-side,
+  never returned): a sync/continuous-integration fetches the branch tarball and builds it.
+* Azure Repos / Bitbucket / generic git: not fetchable (no HTTP git client) -> a Failed deployment saying so.
+* On Nano (no outbound HTTP) a GitHub fetch is Failed with that reason; Local Git works.
+
+A build/fetch failure is recorded as a *Failed* deployment with the real reason (never a fake success). The deployed
+package is a stored artifact: the App Service runtime does not hot-swap to it (limited; see capability JSON). The
+GitHub Actions workflow is generated but not committed to the remote.
 """
 from __future__ import annotations
 
 import datetime
 import hashlib
 import re
+
+try:
+    from core import ci_core as ci
+except ImportError:                                    # Pyodide flat layout
+    import ci_core as ci                               # type: ignore
 
 _REPO_RE = re.compile(r"^(https?://[^\s/]+/\S+|git@[^\s:]+:\S+|ssh://\S+)$")
 STACKS = {"python": "Python", "node": "Node.js", "dotnetcore": ".NET", "java": "Java", "php": "PHP", "dotnet": ".NET"}
@@ -52,7 +69,7 @@ def _store(rec):
 
 def handles(rest):
     r0 = rest[0].lower()
-    if r0 in ("sourcecontrols", "deployments", "sync", "newpassword", "basicpublishingcredentialspolicies"):
+    if r0 in ("sourcecontrols", "deployments", "sync", "newpassword", "basicpublishingcredentialspolicies", "localgit"):
         return True
     return r0 == "config" and len(rest) >= 2 and rest[1].lower() == "publishingcredentials"
 
@@ -125,7 +142,11 @@ def dispatch(state, rec, rest, method, payload):
             return _put_source(rec, s, props, method)
         return _err(405, "MethodNotAllowed", f"{method} not allowed.")
 
+    if r0 == "localgit":
+        return _localgit(rec, s, method, payload)
+
     if r0 == "deployments":
+        _reconcile(rec)
         deps = s["deployments"]
         if len(rest) == 1:
             if method != "GET":
@@ -200,7 +221,12 @@ def _policy_view(rec, s, n):
 
 def _put_source(rec, s, props, method):
     cur = dict(s["source"] or {}) if method == "PATCH" else {}
-    cur.update({k: v for k, v in props.items() if k != "gitHubActionConfiguration"})
+    cur.update({k: v for k, v in props.items() if k not in ("gitHubActionConfiguration", "vyomiAccessToken")})
+    if props.get("vyomiAccessToken"):
+        try:
+            ci.set_connection(ci.get_db(rec), "github", props["vyomiAccessToken"])
+        except ci.CiError as e:
+            return _err(e.status, e.code, e.message)
     if "gitHubActionConfiguration" in props:
         cur["gitHubActionConfiguration"] = dict(props["gitHubActionConfiguration"] or {})
     repo = str(cur.get("repoUrl") or "")
@@ -242,6 +268,15 @@ def _put_source(rec, s, props, method):
         if g.get("generateWorkflowFile", True):
             g["workflowYaml"] = workflow_yaml(rec, branch, stack, code.get("runtimeVersion"), is_linux)
             g["workflowFilePath"] = f".github/workflows/{branch.replace('/', '-')}_{rec['name']}.yml"
+            g.pop("workflowCommit", None); g.pop("workflowCommitError", None)
+            if (ci.get_db(rec)["connections"].get("github") or {}).get("token"):
+                try:                                     # the real workflow file lands in the user's own repo
+                    g["workflowCommit"] = ci.github_commit_file(ci.get_db(rec), repo, branch, g["workflowFilePath"], g["workflowYaml"],
+                                                                f"Add or update the Azure App Service build and deployment workflow config ({rec['name']})")
+                except ci.CiError as e:
+                    return _err(e.status, e.code, f"The workflow was generated but could not be committed to {repo}: {e.message}")
+            else:
+                g["workflowCommitError"] = "No personal access token connected: the workflow was generated but not committed (set properties.vyomiAccessToken)."
         g["generateWorkflowFile"] = True
     else:
         cur.pop("gitHubActionConfiguration", None)
@@ -265,14 +300,93 @@ def _provider(repo):
     return "ExternalGit"
 
 
-def _record_deployment(rec, s, src):
+def _site_repo(rec):
+    db = ci.get_db(rec)
+    repo = f"site-{rec['name']}"
+    ci.ensure_repo(db, repo, "main")
+    return db, repo
+
+
+def _ensure_hook(db, repo, branch):
+    r = db["repos"][repo]
+    if not any(h["consumer"] == "azure.webdeploy" and h["branch"] == branch for h in r["hooks"]):
+        ci.add_hook(db, repo, "azure.webdeploy", branch=branch, build={"kind": "package"}, context={"site": repo})
+
+
+def _on_push(db, ev, hook, rec, job):
+    """CI consumer: a push (or import) on a hooked branch becomes a Deployment Center record from the build job."""
+    if rec is None:
+        return
+    s = _store(rec)
     n = len(s["deployments"]) + 1
-    did = _h(rec["id"], "dep", n, _now(), n=40)
-    ts = _now()
-    msg = (f"Repository {src.get('repoUrl')} @ {src.get('branch')} was not fetched: Vyomi has no build runner and makes no outbound git "
-           f"connections, so this deployment could not run. The attempt is recorded so the Deployment Center log is truthful.")
-    d = {"id": did, "status": 3, "status_text": "Failed", "author_email": "N/A", "author": "N/A", "deployer": "Vyomi",
-         "message": f"Sync from {src.get('repoUrl')}", "start_time": ts, "end_time": ts, "active": False, "provisioningState": "Succeeded",
-         "logs": [{"id": did + "-1", "message": msg, "type": 1, "details_url": None, "log_time": ts}]}
-    s["deployments"].append(d)
-    return d
+    did = _h(rec["id"], "dep", n, ev["after"], n=40)
+    ok = bool(job) and job["status"] == "Succeeded"
+    for d in s["deployments"]:
+        if ok:
+            d["active"] = False
+    logs = [{"id": f"{did}-{i}", "message": l["message"], "type": 1 if ok else 2, "details_url": None, "log_time": l["time"]}
+            for i, l in enumerate(job["logs"] if job else [], 1)]
+    if job and ok:
+        a = job["artifact"]
+        logs.append({"id": f"{did}-p", "message": f"Deployed package {a['digest']} ({a['files']} files, {a['runtime']}) to the app's deployment store. "
+                     "The App Service runtime does not hot-swap to it in this simulator.", "type": 1, "details_url": None, "log_time": ev["time"]})
+    s["deployments"].append({"id": did, "status": 4 if ok else 3, "status_text": "Success" if ok else "Failed", "author_email": "N/A",
+                             "author": ev["author"], "deployer": "Vyomi CI", "message": ev["message"], "id_commit": ev["after"],
+                             "start_time": job["started"] if job else ev["time"], "end_time": job["finished"] if job else ev["time"],
+                             "active": ok, "provisioningState": "Succeeded", "jobId": job["id"] if job else None, "logs": logs})
+
+
+ci.register_consumer("azure.webdeploy", _on_push)
+
+
+def _reconcile(rec):
+    db = ci.get_db(rec)
+    repo = f"site-{rec['name']}"
+    if repo in db["repos"]:
+        try:
+            ci.reconcile(db, repo, rec)
+        except ci.CiError:
+            pass
+
+
+def _localgit(rec, s, method, payload):
+    if (rec.get("properties", {}).get("siteConfig") or {}).get("scmType") != "LocalGit":
+        return _err(409, "Conflict", "Local Git deployment is not enabled on this app (scmType must be LocalGit).")
+    try:
+        db, repo = _site_repo(rec)
+        _ensure_hook(db, repo, "main")
+        if method == "GET":
+            _reconcile(rec)
+            v = ci.repo_view(db, repo)
+            return _ok({"repo": repo, "branches": v["branches"], "backend": v["backend"], "cloneUrl": v["cloneUrl"],
+                        "commits": ci.log(db, repo, None, 20) if v["branches"] else []})
+        if method != "POST":
+            return _err(405, "MethodNotAllowed", f"{method} not allowed.")
+        p = payload if isinstance(payload, dict) else {}
+        branch = str(p.get("branch") or "main")
+        _ensure_hook(db, repo, branch)
+        ev = ci.commit_files(db, repo, branch, p.get("files") or {}, str(p.get("message") or "Update"), str(p.get("author") or "vyomi"), rec)
+        return _ok({"commit": ev["after"], "branch": branch, "jobs": ev["jobs"], "deployment": s["deployments"][-1]["id"] if s["deployments"] else None}, 200)
+    except ci.CiError as e:
+        return _err(e.status, e.code, e.message)
+
+
+def _record_deployment(rec, s, src):
+    """Sync from the configured repo through the CI seam; the hook records the Deployment (success or failure)."""
+    before = len(s["deployments"])
+    try:
+        db, repo = _site_repo(rec)
+        branch = src.get("branch") or "main"
+        _ensure_hook(db, repo, branch)
+        ci.import_external(db, repo, src.get("repoUrl"), branch, branch=branch, message=f"Sync from {src.get('repoUrl')} @ {branch}", ctx=rec)
+    except ci.CiError as e:
+        if len(s["deployments"]) == before:
+            n = before + 1
+            did = _h(rec["id"], "dep", n, _now(), n=40)
+            ts = _now()
+            s["deployments"].append({"id": did, "status": 3, "status_text": "Failed", "author_email": "N/A", "author": "N/A", "deployer": "Vyomi CI",
+                                     "message": f"Sync from {src.get('repoUrl')}", "start_time": ts, "end_time": ts, "active": False,
+                                     "provisioningState": "Succeeded",
+                                     "logs": [{"id": did + "-1", "message": f"Sync of {src.get('repoUrl')} @ {src.get('branch')} failed: {e.message}",
+                                               "type": 2, "details_url": None, "log_time": ts}]})
+    return s["deployments"][-1]

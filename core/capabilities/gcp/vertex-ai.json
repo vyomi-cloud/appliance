@@ -1,0 +1,29 @@
+{
+ "$doc": "Vyomi capability registry — GCP Vertex AI (Gemini publisher models over the local-LLM seam). Proven by tests/conformance/test_capabilities.py.",
+ "gcp.vertex-ai.gemini": {
+  "title": "Gemini generateContent / countTokens / streamGenerateContent",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "One small local model answers every Gemini model id (llama.cpp on the appliance, WebLLM on Nano when the page registers one), so quality is toy-grade; with no model running the API returns 503 UNAVAILABLE rather than an answer. Text parts only: no images/audio/video, tools/function calling, grounding, safety settings or tuning."
+  ],
+  "tests": [
+   "tests/conformance/test_local_llm_seam.py"
+  ]
+ },
+ "gcp.vertex-ai.embeddings": {
+  "title": "Text embeddings (embedContent / predict)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Embeddings come from the local embedding model when the backend has one; otherwise from vyomi-hash-embed, a deterministic bag-of-words embedding that is stable and cosine-comparable but not semantic. Dimensions are 256, not the real models' 768/3072."
+  ],
+  "tests": [
+   "tests/conformance/test_local_llm_seam.py"
+  ]
+ }
+}

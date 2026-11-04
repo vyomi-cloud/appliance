@@ -266,14 +266,12 @@ register_azure_routes(app, None)
 from routes import console, aws_extras, gcp_extras, tenants, config, licensing
 from routes import terraform, azure_console, cloudsim, spaces, gcp_console, runtime
 from routes import aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb, aws_elbv2, aws_sns
-from routes import lazy_backends, shared, console_next, aws_logs, metrics_series, aws_cloudwatch, aws_kinesis, gcp_artifactregistry, gcp_logging, gcp_run, gcp_pam
-from routes import gcp_resourcemanager
+from routes import lazy_backends, shared, console_next, aws_logs, metrics_series, aws_cloudwatch, aws_kinesis, gcp_artifactregistry, gcp_logging, gcp_run, gcp_pam, observability
 
 for mod in [console, aws_extras, gcp_extras, tenants, config, licensing,
             terraform, azure_console, cloudsim, spaces, gcp_console, runtime,
             aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb, aws_elbv2, aws_sns,
-            lazy_backends, shared, console_next, aws_logs, metrics_series, aws_cloudwatch, aws_kinesis, gcp_artifactregistry, gcp_logging, gcp_run, gcp_pam,
-            gcp_resourcemanager]:
+            lazy_backends, shared, console_next, aws_logs, metrics_series, aws_cloudwatch, aws_kinesis, gcp_artifactregistry, gcp_logging, gcp_run, gcp_pam, observability]:
     mod.register(app)
 
 # ── Middleware registration ──────────────────────────────────────────
@@ -8033,6 +8031,15 @@ def _docker_connect_info(instance: dict, provider: str) -> dict:
     info = _docker_compute().ssh_info(inst)
     user = info.get("user") or "ubuntu"
     key_path = _docker_ssh_key_path()
+    # Self-heal: containers launched before the shared key existed/rotated only carry the key baked at their
+    # creation (VYOMI_SSH_PUBKEY env), so `ssh -i <shared key>` failed publickey. Idempotently re-authorize the
+    # current shared pubkey in the running guest whenever Connect info is requested.
+    try:
+        if inst.ssh_pubkey and str(instance.get("state") or "") == "running":
+            from core import ssh_access_core as _sa_heal
+            _docker_compute().exec(inst, ["sh", "-c", _sa_heal.authorize_command(user, inst.ssh_pubkey)])
+    except Exception:
+        pass
     container_ip = info.get("container_ip") or instance.get("private_ip") or ""
     published_port = info.get("published_port") or instance.get("ssh_host_port")
     opts = "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
@@ -12049,6 +12056,25 @@ def _flush_state_at_shutdown():
         flush_pending_state()
     except Exception:
         pass
+
+
+@app.on_event("startup")
+def _schedule_seam_loop():
+    """Shared schedule runner (core/schedule_core): AWS Backup plans, Azure Backup policies, DLM, Cloud SQL backup windows and
+    ECR lifecycle run on their schedules in a daemon thread. Opt out with VYOMI_NO_SCHEDULER=1."""
+    if os.environ.get("VYOMI_NO_SCHEDULER") == "1":
+        return
+
+    def _loop():
+        import time as _t
+        from core import schedule_core as _sc, wire_ingress as _wi
+        while True:
+            _t.sleep(30)
+            try:
+                _sc.tick(_wi.appliance_router())
+            except Exception:
+                pass
+    threading.Thread(target=_loop, name="schedule-seam", daemon=True).start()
 
 
 @app.on_event("startup")
@@ -22529,6 +22555,8 @@ def _aws_query_target_service(request: Request) -> str:
     # Systems Manager uses AmazonSSM.* targets.
     if target.startswith("AmazonSSM."):
         return "ssm"
+    if target.startswith("AWSEC2InstanceConnectService."):
+        return "ec2-instance-connect"
     return ""
 
 
@@ -22748,6 +22776,12 @@ async def aws_query_root(request: Request) -> Response:
         return await api_iam_query(request)
     if service == "sts":
         return await api_sts_query(request)
+    if service == "ec2-instance-connect":
+        try:
+            _ic_payload = json.loads(await request.body() or b"{}")
+        except Exception:
+            _ic_payload = {}
+        return ec2_instance_connect_wire(request.headers.get("x-amz-target", ""), _ic_payload)
     if service == "ssm":
         # Systems Manager: in-process engine (core/ssm_core.py) shared with the console REST.
         from core import ssm_core as _ssm_core
@@ -24420,43 +24454,197 @@ async def api_console_azurevm_exec(instance_id: str, request: Request):
     return {"message": "Console command executed", "instance_id": instance_id, **result}
 
 
-# ── Event delivery hooks: EventBridge targets + Step Functions Lambda tasks use the appliance's REAL
-# SQS queues and Lambda functions (the shared cores otherwise look in their own, empty stores).
-def _eb_send_sqs(arn: str, body: str) -> None:
-    queue = _sqs_find_queue(arn.rsplit(":", 1)[-1])
-    if queue is not None:
-        _sqs_enqueue_message(queue, body, source="eventbridge")
-        _persist_state()
+# ── SSH / shell access (decision family 1): EC2 Instance Connect, SSM Session Manager, GCE ssh-keys + OS info,
+#    Azure serial console + Bastion. Engine: core/ssh_access_core.py (shared with Nano). Reach-in is `docker exec`
+#    into the instance container, whose sshd takes the pushed key, so `ssh -i key user@host -p port` really logs in.
+from core import ssh_access_core as _sa  # noqa: E402
 
 
-def _eb_invoke_lambda(name: str, body: str) -> None:
-    try:
-        payload = json.loads(body) if body else {}
-    except Exception:
-        payload = {"raw": body}
-    _lambda_invoke_function(name, payload, invocation_type="Event", source="events.amazonaws.com")
+def _ssh_flat(provider: str, iid: str) -> Optional[dict]:
+    if provider == "aws":
+        inst = (ec2_state.get("instances") or {}).get(iid)
+        if not isinstance(inst, dict):
+            inst, _ = _find_instance_across_spaces("aws", iid)
+        return inst if isinstance(inst, dict) else None
+    if provider == "gcp":
+        inst = (gcp_compute_state.get("instances") or {}).get(iid)
+        if not isinstance(inst, dict):
+            inst, _ = _find_instance_across_spaces("gcp", iid)
+        return inst if isinstance(inst, dict) else None
+    rec, _ = _find_instance_across_spaces("azure", iid)
+    if isinstance(rec, dict):
+        flat = _azure_vm_flat_instance(rec)
+        _azure_vm_sync(flat, rec)
+        return flat
+    return None
 
 
-def _sfn_invoke_lambda(name: str, payload: Any) -> dict:
-    """Synchronous Lambda call for a Step Functions Task: {found, error, payload}."""
-    if _lambda_find_function(name) is None:
-        return {"found": False}
-    rec = _lambda_invoke_function(name, payload if payload is not None else {}, source="states.amazonaws.com")
-    if rec.get("status") == "error":
-        tb = (rec.get("traceback") or "").strip().splitlines()
-        last = tb[-1] if tb else ""
-        etype = (last.split(":", 1)[0].strip().rsplit(".", 1)[-1]) if ":" in last else "Error"
-        return {"found": True, "error": {"errorType": etype, "errorMessage": rec.get("error", "")}}
-    return {"found": True, "payload": rec.get("response_payload")}
+def _ssh_run(provider: str):
+    """run(instance_id, sh) -> (rc, stdout) through the compute backend, or (1, '') if there is no guest to reach."""
+    def run(iid: str, sh: str):
+        inst = _ssh_flat(provider, iid)
+        if not inst or not _docker_backed(inst):
+            return 1, ""
+        try:
+            cp = _docker_compute().exec(_docker_instance_obj(inst), ["sh", "-c", sh])
+            return cp.returncode, (cp.stdout or b"").decode(errors="replace")
+        except Exception:
+            return 1, ""
+    return run
+
+
+def _ssh_ec2_instances() -> dict:
+    out = {}
+    for iid, i in (ec2_state.get("instances") or {}).items():
+        if isinstance(i, dict) and _docker_backed(i):
+            pl = i.get("placement") if isinstance(i.get("placement"), dict) else {}
+            out[iid] = {"state": i.get("state"), "az": i.get("availability_zone") or pl.get("availability_zone") or "",
+                        "ip": i.get("private_ip") or i.get("private_ip_address") or "", "name": i.get("name") or iid}
+    return out
 
 
 try:
-    from core import nats_routes as _nr_hooks, stepfunctions_core as _sfn_hooks
-    _nr_hooks.EB_HOOKS["sqs"] = _eb_send_sqs
-    _nr_hooks.EB_HOOKS["lambda"] = _eb_invoke_lambda
-    _sfn_hooks.set_lambda_invoker(_sfn_invoke_lambda)
-except Exception as _e:   # never let this break appliance boot
-    print(f"[eventing] delivery hooks skipped: {_e}")
+    from core import ssm_core as _ssm_core_mod
+    _ssm_core_mod.INSTANCE_PROVIDER = _ssh_ec2_instances
+except Exception:
+    pass
+
+
+def _ssh_err(e: "_sa.SshAccessError"):
+    return JSONResponse({"__type": e.code, "message": e.message}, status_code=e.status)
+
+
+def ec2_instance_connect_wire(target: str, payload: dict):
+    """AWSEC2InstanceConnectService.SendSSHPublicKey / SendSerialConsoleSSHPublicKey (awsJson1.1)."""
+    op = target.rsplit(".", 1)[-1]
+    if op not in ("SendSSHPublicKey", "SendSerialConsoleSSHPublicKey"):
+        return JSONResponse({"__type": "UnknownOperationException", "message": f"{op} is not implemented."}, status_code=400)
+    try:
+        body = _sa.send_ssh_public_key(_sa.shared_store(), payload or {}, _ssh_ec2_instances(), _ssh_run("aws"), serial=op.startswith("SendSerial"))
+    except _sa.SshAccessError as e:
+        return _ssh_err(e)
+    return JSONResponse(body, media_type="application/x-amz-json-1.1")
+
+
+@app.post("/api/aws/ec2/instances/{instance_id}/instance-connect", include_in_schema=False)
+async def api_ec2_instance_connect(instance_id: str, request: Request):
+    """Console EC2 Instance Connect: push the user's public key for 60 s, return the ssh command."""
+    p = await request.json()
+    body = {"InstanceId": instance_id, "InstanceOSUser": p.get("os_user") or "ubuntu", "SSHPublicKey": p.get("public_key") or ""}
+    if p.get("availability_zone"):
+        body["AvailabilityZone"] = p["availability_zone"]
+    r = ec2_instance_connect_wire("AWSEC2InstanceConnectService.SendSSHPublicKey", body)
+    if r.status_code != 200:
+        return r
+    info = _connect_info_response("aws", instance_id)
+    ssh = (info.get("ssh") if isinstance(info, dict) else None) or {}
+    pushed = _sa.shared_store().pushed_keys[-1]
+    return {"ok": True, "success": True, "delivered": pushed["delivered"], "expires_in_seconds": _sa.KEY_TTL_SECONDS,
+            "os_user": body["InstanceOSUser"], "ssh_command": ssh.get("command", ""),
+            "note": "The key is valid for 60 seconds for new connections; an established session is unaffected."}
+
+
+@app.post("/api/ssm/sessions", include_in_schema=False)
+async def api_ssm_start_session(request: Request):
+    p = await request.json()
+    try:
+        s = _sa.start_session(_sa.shared_store(), {"Target": p.get("target"), "DocumentName": p.get("document")}, _ssh_ec2_instances())
+    except _sa.SshAccessError as e:
+        return _ssh_err(e)
+    return {"ok": True, **s}
+
+
+@app.get("/api/ssm/sessions", include_in_schema=False)
+def api_ssm_list_sessions(state: str = "Active"):
+    return _sa.describe_sessions(_sa.shared_store(), {"State": state})
+
+
+@app.post("/api/ssm/sessions/{session_id}/exec", include_in_schema=False)
+async def api_ssm_session_exec(session_id: str, request: Request):
+    """Command-at-a-time Session Manager shell (no pty). Runs in the target instance container."""
+    s = _sa.shared_store().sessions.get(session_id)
+    if not s or s["Status"] != "Connected":
+        raise HTTPException(404, detail="SessionNotFound")
+    p = await request.json()
+    inst = _ssh_flat("aws", s["Target"])
+    if not inst or inst.get("state") != "running":
+        raise HTTPException(409, detail="InstanceNotRunning")
+    result = _console_execute(inst, str(p.get("command") or ""))
+    return {"session_id": session_id, **result}
+
+
+@app.post("/api/ssm/sessions/{session_id}/terminate", include_in_schema=False)
+def api_ssm_terminate_session(session_id: str):
+    try:
+        return {"ok": True, **_sa.terminate_session(_sa.shared_store(), {"SessionId": session_id})}
+    except _sa.SshAccessError as e:
+        return _ssh_err(e)
+
+
+@app.post("/api/gcp/compute/instances/{instance_id}/ssh-keys", include_in_schema=False)
+async def api_gce_ssh_keys(instance_id: str, request: Request):
+    """Set the instance's `ssh-keys` metadata (gcloud compute instances add-metadata / OS Login key); the guest agent
+    equivalent authorizes each USERNAME:KEY line inside the container so `gcloud compute ssh` really logs in."""
+    inst = _ssh_flat("gcp", instance_id)
+    if not inst:
+        raise HTTPException(404, detail="NoSuchInstance")
+    if inst.get("state") != "running":
+        raise HTTPException(409, detail="InstanceNotRunning")
+    p = await request.json()
+    value = str(p.get("ssh_keys") or "")
+    try:
+        res = _sa.apply_gce_ssh_keys(_sa.shared_store(), instance_id, value, _ssh_run("gcp"))
+    except _sa.SshAccessError as e:
+        return _ssh_err(e)
+    md = inst.setdefault("metadata", {})
+    if isinstance(md, dict):
+        md["ssh-keys"] = value
+    _persist_state()
+    return {"ok": True, **res, "metadata_key": "ssh-keys"}
+
+
+@app.get("/api/gcp/compute/instances/{instance_id}/os-info", include_in_schema=False)
+def api_gce_os_info(instance_id: str):
+    inst = _ssh_flat("gcp", instance_id)
+    if not inst:
+        raise HTTPException(404, detail="NoSuchInstance")
+    if inst.get("state") != "running":
+        raise HTTPException(409, detail="InstanceNotRunning")
+    rc, out = _ssh_run("gcp")(instance_id, _sa.OS_INFO_CMD)
+    if rc != 0:
+        raise HTTPException(502, detail="GuestUnreachable")
+    return {"ok": True, "instance": instance_id, **_sa.parse_os_info(out), "source": "guest (docker exec)"}
+
+
+@app.get("/api/azure/vm/{instance_id}/serial-console", include_in_schema=False)
+def api_azure_vm_serial_console(instance_id: str):
+    """Serial console: the guest's kernel/boot log (dmesg) + a login shell via the exec endpoint."""
+    inst = _ssh_flat("azure", instance_id)
+    if not inst:
+        raise HTTPException(404, detail="NoSuchInstance")
+    if str(inst.get("state") or "").lower() != "running":
+        raise HTTPException(409, detail="InstanceNotRunning")
+    rc, out = _ssh_run("azure")(inst["instance_id"], "dmesg 2>/dev/null | tail -n 200 || true; echo; echo '--- sshd ---'; ps -eo pid,comm,args | grep -E 'sshd|systemd|tini' | grep -v grep")
+    return {"ok": True, "instance": instance_id, "log": out if rc == 0 else "", "exec": f"/api/console/azurevm/instances/{inst['instance_id']}/exec",
+            "note": "Serial console is a docker-exec shell on the guest (line-at-a-time), not a UART."}
+
+
+@app.post("/api/azure/vm/{instance_id}/bastion/connect", include_in_schema=False)
+async def api_azure_bastion_connect(instance_id: str, request: Request):
+    """Bastion Connect: browser SSH session record + the ssh command. Auth type password/key accepted; the shell runs via exec."""
+    inst = _ssh_flat("azure", instance_id)
+    if not inst:
+        raise HTTPException(404, detail="NoSuchInstance")
+    if str(inst.get("state") or "").lower() != "running":
+        raise HTTPException(409, detail="InstanceNotRunning")
+    p = await request.json()
+    sid = "bastion-" + uuid.uuid4().hex[:12]
+    _sa.shared_store().sessions[sid] = {"SessionId": sid, "Target": instance_id, "Status": "Connected", "DocumentName": "AzureBastion",
+                                        "Owner": p.get("username") or "azureuser", "StartDate": time.time(), "Details": "", "OutputUrl": {}, "MaxSessionDuration": "60"}
+    info = _connect_info_response("azure", instance_id)
+    return {"ok": True, "session_id": sid, "exec": f"/api/console/azurevm/instances/{inst['instance_id']}/exec",
+            "ssh_command": ((info.get("ssh") if isinstance(info, dict) else None) or {}).get("command", "")}
+
 
 # ── v2.4.0 unified wire ingress (opt-in) ────────────────────────────
 # When VYOMI_UNIFIED_INGRESS is set, native cloud-wire requests are served by

@@ -50,8 +50,23 @@ export async function listContainers(account) {
   const { text } = await blob(account, "GET", "", { query: { comp: "list" } });
   return asList(xml(text).Containers?.Container).map((c) => ({ name: c.Name, modified: c.Properties?.["Last-Modified"], lease: c.Properties?.LeaseState, publicAccess: PUBLIC_ACCESS_LABEL[c.Properties?.PublicAccess] || "Private" }));
 }
-export const createContainer = (account, name, publicAccess = "private") =>
-  blob(account, "PUT", `/${encodeURIComponent(name)}`, { query: { restype: "container" }, headers: publicAccess !== "private" ? { "x-ms-blob-public-access": publicAccess } : {} });
+export const createContainer = (account, name, publicAccess = "private", { scope, denyOverride } = {}) =>
+  blob(account, "PUT", `/${encodeURIComponent(name)}`, { query: { restype: "container" }, headers: {
+    ...(publicAccess !== "private" ? { "x-ms-blob-public-access": publicAccess } : {}),
+    ...(scope ? { "x-ms-default-encryption-scope": scope, ...(denyOverride ? { "x-ms-deny-encryption-scope-override": "true" } : {}) } : {}),
+  } });
+
+// ── Encryption scopes + version-level immutability (ARM children of the account) ─────────
+const SQ = { "api-version": "2023-05-01" };
+const acctId = async (account) => {
+  const a = (await listStorageAccounts()).find((x) => x.name === account);
+  if (!a) throw new Error(`Storage account '${account}' was not found.`);
+  return a;
+};
+export const listEncryptionScopes = async (account) => (await restJson("GET", `${(await acctId(account)).id}/encryptionScopes`, { query: SQ })).value || [];
+export const putEncryptionScope = async (account, name, properties) => restJson("PUT", `${(await acctId(account)).id}/encryptionScopes/${encodeURIComponent(name)}`, { query: SQ, body: { properties } });
+export const accountSupportsContainerWorm = async (account) => !!(await acctId(account)).properties?.immutableStorageWithVersioning?.enabled;
+export const putContainerArm = async (account, name, properties) => restJson("PUT", `${(await acctId(account)).id}/blobServices/default/containers/${encodeURIComponent(name)}`, { query: SQ, body: { properties } });
 export const deleteContainer = (account, name) => blob(account, "DELETE", `/${encodeURIComponent(name)}`, { query: { restype: "container" } });
 
 export async function listBlobs(account, container, prefix = "") {

@@ -107,12 +107,24 @@ except ImportError:
     import azure_netsvc_core as netsvc             # type: ignore
 try:                                              # v4 AZ-07: Network Manager, Front Door / CDN, AKS + Container Apps networking
     from core import azure_netcfg_core as netcfg
+    from core import azure_lb_core as lbcore
+    from core import azure_disks_core as diskcore
 except ImportError:
     import azure_netcfg_core as netcfg             # type: ignore
+    import azure_lb_core as lbcore                 # type: ignore
+    import azure_disks_core as diskcore            # type: ignore
 try:                                              # v4 AZ-02..05: KEDA / AKS extensions, Cosmos CORS+gateway+CMK, Service Bus CMK+network rules, App Config CMK, subnet delegation
     from core import azure_cfgext_core as cfgext
 except ImportError:
     import azure_cfgext_core as cfgext             # type: ignore
+try:                                              # v4: Azure Backup + Site Recovery (Recovery Services vaults) over real Blob artifacts
+    from core import azure_backup_core as backup_engine
+except ImportError:
+    import azure_backup_core as backup_engine      # type: ignore
+try:                                              # v4: Azure SQL copy / PITR / restore / geo-replication / LTR over the SqlStore data plane
+    from core import azure_sqlbackup_core as sqlbk
+except ImportError:
+    import azure_sqlbackup_core as sqlbk           # type: ignore
 try:                                              # v4 AZ-08: Azure Files, AI Search, Storage Mover, Marketplace, quota/billing extras
     from core import azure_files_core as files_engine, azure_search_core as search_engine
     from core import azure_storagemover_core as mover_engine, azure_marketplace_core as market_engine
@@ -1125,6 +1137,10 @@ class AzureArm:
         if missing:
             return _err(400, "ResourceNotFound", f"The Resource '{missing}' of type 'Microsoft.ManagedIdentity/userAssignedIdentities' was not found.")
         out = self._handle_raw(method, path, query, body)
+        if m != "GET" and isinstance(out, dict):   # security audit feed (core/secscan_core.py classifier)
+            sub_m = re.search(r"/subscriptions/([^/]+)", str(path))
+            if sub_m:
+                security_engine.record_call(self.state, sub_m.group(1), m, str(path).split("?")[0], body, out.get("status", 200))
         if ua and isinstance(out, dict) and out.get("status", 500) < 300:
             self._resolve_identity_at(path, out)
         return out
@@ -1835,6 +1851,14 @@ class AzureArm:
             if self.state.get(_canonical_id(sub, rg, type_chain[:2], names[:1]).lower()) is None:
                 return _err(404, "ResourceNotFound", f"Network watcher '{names[0]}' not found.")
             return self._network_watcher(chain[2].lower(), payload or {})
+        # Azure Firewall rule evaluation (simulator action, not a real ARM action): POST .../azureFirewalls/{fw}/evaluate
+        if (method == "POST" and namespace.lower() == "microsoft.network" and len(chain) == 3
+                and chain[0].lower() == "azurefirewalls" and chain[2].lower() == "evaluate"):
+            from core import azure_firewall_eval as _fwe
+            fw_id = _canonical_id(sub, rg, type_chain[:2], names[:1])
+            if self.state.get(fw_id.lower()) is None:
+                return _err(404, "ResourceNotFound", f"Azure Firewall '{names[0]}' not found.")
+            return _ok(_fwe.evaluate(self.state, fw_id, payload or {}))
         # POST action verbs (listKeys / start / powerOff / runCommand / …)
         if method == "POST" and is_collection and len(type_chain) >= 3 and names:
             parent_rid = _canonical_id(sub, rg, type_chain[:-1], names)
@@ -1920,8 +1944,20 @@ class AzureArm:
                 blocked = netcfg.validate(self.state, full_type, rid, payload, _net_prev, sub, rg)
                 if blocked:
                     return blocked
+            if lbcore.handles(full_type):
+                blocked = lbcore.validate(self.state, full_type, rid, payload, _net_prev, sub, rg)
+                if blocked:
+                    return blocked
+            if diskcore.handles(full_type):
+                blocked = diskcore.validate(self.state, full_type, rid, payload, _net_prev, sub, rg)
+                if blocked:
+                    return blocked
             if cfgext.handles(full_type):
                 blocked = cfgext.validate(self.state, full_type, rid, payload, _net_prev, sub, rg)
+                if blocked:
+                    return blocked
+            if sqlbk.handles(full_type):
+                blocked = sqlbk.validate(self.state, full_type, rid, payload, _net_prev, sub, rg, self.sql_store)
                 if blocked:
                     return blocked
             if full_type.lower() == "microsoft.authorization/roleassignments":
@@ -1949,8 +1985,22 @@ class AzureArm:
             if netcfg.handles(full_type) and key in self.state:
                 netcfg.after_put(self.state, self.state[key], payload, _net_prev)
                 resp["body"] = _view(self.state[key])
+            if lbcore.handles(full_type) and key in self.state:
+                lbcore.after_put(self.state, self.state[key], payload, _net_prev)
+                resp["body"] = _view(self.state[key])
+            if diskcore.handles(full_type) and key in self.state:
+                diskcore.after_put(self.state, self.state[key], payload, _net_prev)
+                resp["body"] = _view(self.state[key])
             if cfgext.handles(full_type) and key in self.state:
                 cfgext.after_put(self.state, self.state[key], payload, _net_prev)
+                resp["body"] = _view(self.state[key])
+            if full_type.lower() == "microsoft.storage/storageaccounts" and key in self.state:
+                backup_engine.storage_after_put(self.state, self.state[key])
+                resp["body"] = _view(self.state[key])
+            if sqlbk.handles(full_type) and key in self.state:
+                blocked = sqlbk.after_put(self.state, self.state[key], payload, _net_prev, self.sql_store, self.blob_store)
+                if blocked:
+                    return blocked
                 resp["body"] = _view(self.state[key])
             deployment_failed = False
             if full_type.lower() == "microsoft.resources/deployments":
@@ -2032,11 +2082,20 @@ class AzureArm:
                 blocked = netsvc.before_delete(self.state, _net_rec) or netcfg.before_delete(self.state, _net_rec)
                 if blocked:
                     return blocked
+                blocked = lbcore.before_delete(self.state, _net_rec) or diskcore.before_delete(self.state, _net_rec)
+                if blocked:
+                    return blocked
                 if cfgext.handles(_net_rec.get("_type") or ""):
                     blocked = cfgext.before_delete(self.state, _net_rec)
                     if blocked:
                         return blocked
+                if sqlbk.handles(_net_rec.get("_type") or ""):
+                    blocked = sqlbk.before_delete(self.state, _net_rec)
+                    if blocked:
+                        return blocked
             rec = self.state.pop(key, None)
+            if rec is not None and sqlbk.handles(rec.get("_type") or ""):
+                sqlbk.on_delete(self.state, rec, self.sql_store, self.blob_store)
             if rec is not None:
                 ext_engine.on_delete(self.state, rec)
                 self._child_deleted(rec)
@@ -2052,6 +2111,8 @@ class AzureArm:
                     del self.state[child_key]
                 netsvc.on_delete(self.state, rec)
                 netcfg.on_delete(self.state, rec)
+                lbcore.on_delete(self.state, rec)
+                diskcore.on_delete(self.state, rec)
                 self._record_activity(rid, f"{full_type}/delete", sub)
             return _ok(None, status=200 if rec is not None else 204)
         return _err(405, "MethodNotAllowed", f"{method} not allowed.")
@@ -2153,6 +2214,19 @@ class AzureArm:
         if ns == "microsoft.storagemover" and (rg is not None or len(chain) == 1):
             r = mover_engine.dispatch(self.state, method, sub, rg, chain, payload, query, blob_store=self.blob_store, base=self._base)
             return {"status": r["status"], "headers": {}, "body": r["body"]}
+        if ns == "microsoft.storage" and rg is not None and len(chain) == 3 and chain[0].lower() == "storageaccounts" and chain[2].lower() == "failover" and method == "POST":
+            rec = self.state.get(f"/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Storage/storageAccounts/{chain[1]}".lower())
+            if rec is None:
+                return _err(404, "ResourceNotFound", f"The Resource 'Microsoft.Storage/storageAccounts/{chain[1]}' under resource group '{rg}' was not found.")
+            r = backup_engine.storage_failover(self.state, rec, query or {})
+            return {"status": r["status"], "headers": {}, "body": r["body"]}
+        if ns == "microsoft.sql" and chain and sqlbk.owns(chain) and (rg is not None or chain[0].lower() == "locations"):
+            r = sqlbk.dispatch(self.state, method, sub, rg, chain, payload, query, sql_store=self.sql_store, blob_store=self.blob_store)
+            return {"status": r["status"], "headers": {}, "body": r["body"]}
+        if ns == "microsoft.recoveryservices" and (rg is not None or len(chain) == 1 or (chain and chain[0].lower() == "locations")):
+            r = backup_engine.dispatch(self.state, method, sub, rg, chain, payload, query, blob_store=self.blob_store, base=self._base,
+                                       arm_put=lambda rid, api, body: self.handle("PUT", rid, {"api-version": api}, body))
+            return {"status": r["status"], "headers": r.get("headers") or {}, "body": r["body"]}
         if ns == "microsoft.marketplace":
             r = market_engine.catalog(chain, query)
             return {"status": r["status"], "headers": {}, "body": r["body"]}
@@ -2820,7 +2894,7 @@ class AzureArm:
         # to a REAL Key Vault in this subscription, instead of round-tripping whatever
         # encryption.keySource/keyvaultproperties the caller sends. The named KEY's own
         # existence/enabled state inside that vault is still not checked (core/azure_arm_core.py
-        # has no reference to the Key Vault keys data-plane store) — an honest, narrower gap.
+        # is checked through the cfgext key-lookup seam when the substrate injects it).
         if type_chain[0].lower() != "microsoft.storage" or type_chain[1].lower() != "storageaccounts" \
                 or len(type_chain) != 2:
             return None
@@ -2843,7 +2917,11 @@ class AzureArm:
             return _err(400, "BadRequest",
                         f"The Key Vault referenced by encryption.keyvaultproperties.keyvaulturi "
                         f"('{uri}') does not exist in this subscription.")
-        return None
+        try:
+            from core.azure_cfgext_core import check_key_exists
+        except ImportError:  # pragma: no cover - Pyodide flat layout
+            from azure_cfgext_core import check_key_exists  # type: ignore
+        return check_key_exists(m.group(1), key_name, kv.get("keyversion"), "encryption.keyvaultproperties")
 
     def _storage_hns_block(self, type_chain, names, payload, sub, rg):
         # v4 WAVE 5b (azure.storage.datalakegen2upgrade): the Data Lake Gen2 upgrade flips
@@ -2882,6 +2960,13 @@ class AzureArm:
         # the caller sends (azure.cosmos.default_consistency, azure.cosmos.backup_restore,
         # azure.cosmos.replicate_data_globally); the underlying behaviour (read consistency,
         # taking/restoring a backup, provisioning a second region) is still not simulated.
+        if (len(type_chain) >= 4 and type_chain[0].lower() == "microsoft.documentdb" and type_chain[-1].lower() == "throughputsettings"):
+            try:
+                from core.azure_cosmos_core import validate_throughput_settings
+            except ImportError:  # pragma: no cover - Pyodide flat layout
+                from azure_cosmos_core import validate_throughput_settings  # type: ignore
+            msg = validate_throughput_settings((payload or {}).get("properties") or {})
+            return _err(400, "BadRequest", msg) if msg else None
         if type_chain[0].lower() != "microsoft.documentdb" or type_chain[1].lower() != "databaseaccounts" or len(type_chain) != 2:
             return None
         existing_props = (self.state.get(_canonical_id(sub, rg, type_chain, names).lower()) or {}).get("properties") or {}
@@ -2943,8 +3028,34 @@ class AzureArm:
                             "properties.locations.failoverPriority must be a 0-based, gap-free sequence with exactly one region at priority 0.")
         return None
 
+    def _acr_images(self):
+        """Scanned images of the registry data plane (core/vuln_scan_core.py) for Defender for Containers."""
+        store = getattr(self, "acr_store", None)
+        if store is None:
+            try:
+                from core import appliance_stores as _aps
+                store = _aps.acr_store()
+            except Exception:
+                return []
+        try:
+            try:
+                from core import vuln_scan_core
+            except ImportError:
+                import vuln_scan_core  # type: ignore
+            reports = None
+            try:   # offline appliance only: upgrade images to a real Trivy report when the container is available
+                from providers import trivy_runner
+                trivy_runner.request_scan(store)
+                reports = trivy_runner.cached_reports()
+            except Exception:
+                pass
+            return vuln_scan_core.scan_acr_store(store, reports)
+        except Exception:
+            return []
+
     def _security(self, method, sub, rg, chain, payload, query, scope_rid):
-        r = security_engine.dispatch(self.state, method, sub, rg, chain, payload or {}, query or {}, scope_rid)
+        ctx = {"images": self._acr_images()} if security_engine.plan_on(self.state, sub, "Containers") else {}
+        r = security_engine.dispatch(self.state, method, sub, rg, chain, payload or {}, query or {}, scope_rid, ctx)
         if r["status"] < 300 and method in ("PUT", "PATCH") and chain[:1] and chain[0].lower() == "pricings":
             self._record_activity(f"/subscriptions/{sub}/providers/Microsoft.Security/pricings/{chain[1] if len(chain) > 1 else ''}",
                                   "Microsoft.Security/pricings/write", sub)
@@ -3756,6 +3867,34 @@ class AzureArm:
         typ = type_chain[1].lower() if len(type_chain) > 1 else ""
         if ns == "microsoft.resources" and typ == "deployments" and action in ("cancel", "redeploy"):
             return self._deployment_action(action, resource_name, parent_rid, sub, rg)
+        if action in ("reconcile", "vyomipush", "run") and any(m in (parent_rid or "").lower() for m in (
+                "/providers/microsoft.kubernetesconfiguration/fluxconfigurations/", "/vyomiautomateddeployments/")):
+            rec = self.state.get(parent_rid.lower())
+            if not rec:
+                return _err(404, "ResourceNotFound", f"Flux configuration '{resource_name}' not found.")
+            try:
+                from core import azure_flux_core as _flux
+            except ImportError:
+                import azure_flux_core as _flux  # type: ignore
+            if getattr(self, "acr_store", None) is not None:
+                _flux.ACR_STORE = self.acr_store
+            return _flux.action(self.state, rec, action, payload)
+        if ns == "microsoft.containerregistry" and typ == "registries" and len(type_chain) == 3 and action == "schedulerun":
+            rec = self.state.get(parent_rid.lower()) if parent_rid else None
+            if not rec:
+                return _err(404, "ResourceNotFound", f"Registry '{resource_name}' not found.")
+            try:
+                from core import azure_acr_tasks_core as _acrt
+            except ImportError:                      # Pyodide flat layout
+                import azure_acr_tasks_core as _acrt  # type: ignore
+            _st = getattr(self, "acr_store", None)
+            if _st is None:
+                try:
+                    from core import appliance_stores as _aps
+                    _st = _aps.acr_store()
+                except Exception:
+                    _st = None
+            return _acrt.schedule_run(self.state, parent_rid, rec, payload, sub, rg, _st)
         if ns == "microsoft.containerregistry" and typ == "registries" and action in ("listcredentials", "regeneratecredential"):
             rec = self.state.get(parent_rid.lower()) if parent_rid else None
             if not rec:

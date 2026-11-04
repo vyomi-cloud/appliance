@@ -104,7 +104,7 @@ export default function StorageAccountBlade({ params, query }) {
       accesskeys: () => <AccessKeys a={a} reload={reload} />,
       configuration: () => <Configuration a={a} reload={reload} />,
       endpoints: () => <Endpoints a={a} />,
-      redundancy: () => <Redundancy a={a} self={self} />,
+      redundancy: () => <Redundancy a={a} self={self} reload={reload} />,
       networking: () => <Networking a={a} reload={reload} />,
       encryption: () => <Encryption a={a} reload={reload} />,
       dataprotection: () => <DataProtection a={a} />,
@@ -357,13 +357,18 @@ function NewContainer({ open, onClose, account, onCreated }) {
   const [name, setName] = useState("");
   const [access, setAccess] = useState("private");
   const [busy, setBusy] = useState(false);
+  const [scope, setScope] = useState("");
+  const [deny, setDeny] = useState(false);
+  const [worm, setWorm] = useState(false);
+  const opts = useAsync(async () => (open ? { scopes: (await api.listEncryptionScopes(account)).filter((x) => x.properties?.state === "Enabled"), wormOk: await api.accountSupportsContainerWorm(account) } : { scopes: [], wormOk: false }), [account, open]);
   const valid = /^(?!-)(?!.*--)[a-z0-9-]{3,63}(?<!-)$/.test(name);
   const go = async () => {
     setBusy(true);
     try {
-      await api.createContainer(account, name, access);
+      await api.createContainer(account, name, access, { scope, denyOverride: deny });
+      if (worm) await api.putContainerArm(account, name, { immutableStorageWithVersioning: { enabled: true }, ...(scope ? { defaultEncryptionScope: scope, denyEncryptionScopeOverride: deny } : {}) });
       notify.success(`Successfully created storage container '${name}'.`, "Container created");
-      setName(""); setAccess("private"); onClose(); onCreated();
+      setName(""); setAccess("private"); setScope(""); setDeny(false); setWorm(false); onClose(); onCreated();
     } catch (e) { notify.error(e, "Failed to create container"); }
     finally { setBusy(false); }
   };
@@ -384,7 +389,15 @@ function NewContainer({ open, onClose, account, onCreated }) {
                   <option value="container">Container (anonymous read access for containers and blobs)</option>
                 </Select>
               </Field>
-              <NotSimulated feature="Encryption scope and Enable version-level immutability support for new containers" />
+              <Field label="Encryption scope" hint="Defaults to the account's encryption (Microsoft-managed keys) unless an Enabled encryption scope is chosen.">
+                <Select value={scope} onChange={(_, d) => setScope(d.value)} aria-label="Default encryption scope">
+                  <option value="">Use this account's encryption scope (default)</option>
+                  {(opts.data?.scopes || []).map((x) => <option key={x.name} value={x.name}>{x.name}</option>)}
+                </Select>
+              </Field>
+              <Checkbox checked={deny} disabled={!scope} onChange={(_, d) => setDeny(!!d.checked)} label="Use this encryption scope for all blobs in the container" aria-label="Deny encryption scope override" />
+              <Checkbox checked={worm} disabled={!opts.data?.wormOk} onChange={(_, d) => setWorm(!!d.checked)} label="Enable version-level immutability support" aria-label="Enable version-level immutability support for this container" />
+              {!opts.data?.wormOk && <p className="vy-muted" style={{ fontSize: 12 }}>Version-level immutability must be enabled on the storage account (Data protection) first.</p>}
             </div>
           </DialogContent>
           <DialogActions>
@@ -706,7 +719,9 @@ function Endpoints({ a }) {
   );
 }
 
-function Redundancy({ a, self }) {
+function Redundancy({ a, self, reload }) {
+  const notify = useNotify();
+  const [fo, setFo] = useState(false);
   const ra = api.isReadAccessSku(a.sku?.name);
   const sec = useAsync(() => (ra ? api.listContainersSecondary(a.name) : Promise.resolve(null)), [a.sku?.name, ra]);
   return (
@@ -725,7 +740,20 @@ function Redundancy({ a, self }) {
             {" "}{sec.loading ? "Checking the secondary endpoint…" : sec.error ? `Secondary endpoint error: ${sec.error.message}` : `Secondary endpoint reachable — ${sec.data?.length ?? 0} container(s) visible.`}</p>
         </> : <p style={{ fontSize: 13 }}>Enable RA-GRS or RA-GZRS in Configuration to turn this on.</p>}
       </section>
-      <NotSimulatedContainer title="Geo-replication" feature="Geo-replication lag, the secondary region's own storage and customer-managed failover" note="Vyomi stores data once, locally — only the read-only secondary ENDPOINT above is real." />
+      <section className="vy-section"><h3>Geo-replication</h3>
+        {a.properties?.secondaryLocation ? <>
+          <KV label="Primary region" value={locationLabel(a.location)} />
+          <KV label="Secondary region (paired)" value={locationLabel(a.properties.secondaryLocation)} />
+          <KV label="Replication status" value={a.properties.geoReplicationStats?.status || "Live"} />
+          <KV label="Last sync time" value={a.properties.geoReplicationStats?.lastSyncTime ? fmtDate(a.properties.geoReplicationStats.lastSyncTime) : "--"} />
+          <KV label="Can fail over" value={a.properties.geoReplicationStats?.canFailover === false ? "No" : "Yes"} />
+          <div style={{ marginTop: 8 }}><Button disabled={a.properties.geoReplicationStats?.canFailover === false} onClick={() => setFo(true)}>Prepare for failover</Button></div>
+          <p style={{ fontSize: 13 }}>Failover swaps the primary and secondary regions and converts the account to locally-redundant storage, like Azure. Vyomi stores the data once, so there is no replication lag and the last sync time tracks the present.</p>
+        </> : <p style={{ fontSize: 13 }}>This account uses {api.skuLabel(a.sku?.name)}. Geo-replication and customer-managed failover need GRS, RA-GRS, GZRS or RA-GZRS (change it in Configuration).</p>}
+      </section>
+      <DeleteDialog open={fo} onClose={() => setFo(false)} resourceType="failover" title="Prepare for failover" confirmLabel="Failover" names={[a.name]} confirmText={a.name}
+        warning={<>Failing over <b>{a.name}</b> makes {locationLabel(a.properties?.secondaryLocation)} the primary region and converts the account to LRS. You will need to reconfigure geo-redundancy afterwards.</>}
+        onConfirm={async () => { await api.ARM.action(a.resourceGroup, a.name, "failover"); notify.success(`Failover of '${a.name}' completed.`, "Failover"); reload(); }} />
     </CapabilityContainer>
   );
 }
@@ -846,7 +874,50 @@ function Encryption({ a, reload }) {
         <KV label="Enable infrastructure encryption" value={enc.requireInfrastructureEncryption ? "Enabled" : "Disabled"} />
         <p className="vy-muted" style={{ fontSize: 12 }}>Set at account creation only, as in Azure (immutable afterwards). Stored and reported; Vyomi does not layer a second encryption pass. The named key's own existence inside the vault is not checked — only that the vault exists.</p>
       </section>
+      <EncryptionScopes a={a} />
     </CapabilityContainer>
+  );
+}
+
+// Encryption scopes: Microsoft.Storage/storageAccounts/encryptionScopes ARM children; containers and blobs
+// reference them (x-ms-default-encryption-scope / x-ms-encryption-scope), validated by core/azure_blob_core.py.
+function EncryptionScopes({ a }) {
+  const notify = useNotify();
+  const list = useAsync(() => api.listEncryptionScopes(a.name), [a.id]);
+  const [f, setF] = useState({ name: "", source: "Microsoft.Storage", keyUri: "", infra: false });
+  const add = async () => {
+    try {
+      await api.putEncryptionScope(a.name, f.name, { source: f.source, state: "Enabled", requireInfrastructureEncryption: f.infra, ...(f.source === "Microsoft.KeyVault" ? { keyVaultProperties: { keyUri: f.keyUri } } : {}) });
+      notify.success(`Encryption scope '${f.name}' was created.`, "Created");
+      setF({ name: "", source: "Microsoft.Storage", keyUri: "", infra: false }); list.reload();
+    } catch (e) { notify.error(e, "Creating the encryption scope failed"); }
+  };
+  const toggle = async (x) => {
+    try { await api.putEncryptionScope(a.name, x.name, { state: x.properties.state === "Enabled" ? "Disabled" : "Enabled" }); list.reload(); }
+    catch (e) { notify.error(e, "Updating the encryption scope failed"); }
+  };
+  return (
+    <section className="vy-section"><h3>Encryption scopes</h3>
+      <ErrorBar error={list.error} />
+      <table className="vy-grid" aria-label="Encryption scopes">
+        <thead><tr><th>Name</th><th>Encryption type</th><th>Infrastructure encryption</th><th>Status</th><th /></tr></thead>
+        <tbody>{(list.data || []).length ? list.data.map((x) => (
+          <tr key={x.name}><td>{x.name}</td><td>{x.properties.source === "Microsoft.KeyVault" ? "Customer-managed key" : "Microsoft-managed key"}</td>
+            <td>{x.properties.requireInfrastructureEncryption ? "Enabled" : "Disabled"}</td><td>{x.properties.state}</td>
+            <td><Button size="small" aria-label={`${x.properties.state === "Enabled" ? "Disable" : "Enable"} ${x.name}`} onClick={() => toggle(x)}>{x.properties.state === "Enabled" ? "Disable" : "Enable"}</Button></td></tr>
+        )) : <tr><td colSpan={5} className="vy-muted">No encryption scopes yet.</td></tr>}</tbody>
+      </table>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12, maxWidth: 520 }}>
+        <Field label="Encryption scope name"><Input value={f.name} onChange={(_, d) => setF((x) => ({ ...x, name: d.value }))} aria-label="Encryption scope name" /></Field>
+        <Field label="Encryption type">
+          <Select value={f.source} onChange={(_, d) => setF((x) => ({ ...x, source: d.value }))} aria-label="Scope encryption type">
+            <option value="Microsoft.Storage">Microsoft-managed key</option><option value="Microsoft.KeyVault">Customer-managed key</option>
+          </Select></Field>
+        {f.source === "Microsoft.KeyVault" && <Field label="Key URI" hint="https://{vault}.vault.azure.net/keys/{name}"><Input value={f.keyUri} onChange={(_, d) => setF((x) => ({ ...x, keyUri: d.value }))} aria-label="Scope key URI" /></Field>}
+        <Checkbox checked={f.infra} onChange={(_, d) => setF((x) => ({ ...x, infra: !!d.checked }))} label="Enable infrastructure encryption (immutable)" />
+        <div><Button appearance="primary" disabled={!f.name} onClick={add} aria-label="Create encryption scope">Create</Button></div>
+      </div>
+    </section>
   );
 }
 

@@ -16,6 +16,8 @@ const Q = (svc, p) => page.evaluate(async ([u, a, body]) => (await fetch(u + "/"
   [WIRE, auth(svc), new URLSearchParams(p).toString()]);
 await page.goto(UI + "#/cost-explorer");
 await page.getByRole("heading", { name: "Saved by Vyomi" }).waitFor({ timeout: 30000 });
+if (process.env.NANO) await page.waitForFunction(() => navigator.serviceWorker?.controller && window.__vyomiNanoReady, null, { timeout: 240000, polling: 500 });
+await page.getByText("Nothing metered yet").waitFor({ timeout: 30000 }).catch(() => {});
 check("empty state before any resource", await page.getByText("Nothing metered yet").isVisible());
 const imgs = await Q("ec2", { Action: "DescribeImages", Version: "2016-11-15" });
 const ami = /<imageId>(ami-[0-9a-f]+)<\/imageId>/.exec(imgs)?.[1];

@@ -11,7 +11,7 @@ import { createHash } from "node:crypto";
 
 const require = createRequire(import.meta.url);
 let pw;
-try { pw = require("playwright"); }
+try { pw = require(process.env.PW || "playwright"); }
 catch { pw = require("/Users/sudhirganti/Applications/simulator/portal/node_modules/playwright"); }
 
 const BASE = process.env.BASE || "http://127.0.0.1:8740";
@@ -242,7 +242,7 @@ try {
   }
   check("Access keys panel shows listKeys result", await page.goto(UI + `#/storage/${RG}/${SA}/accesskeys`).then(() => page.getByRole("heading", { name: "key1" }).waitFor({ timeout: 5000 })).then(() => true, () => false));
   await openPanel("Activity log");
-  check("unbacked panel is an honest NotSimulated", await page.locator("[data-vyomi-not-simulated]").first().isVisible());
+  check("Activity log is a real feed now (command bar, no Not-simulated panel)", await page.getByRole("toolbar", { name: "Activity log commands" }).isVisible() && (await page.locator("[data-vyomi-not-simulated]").count()) === 0);
   await shot("12-activity-log-not-simulated");
   // Configuration → ARM PATCH round-trip
   await openPanel("Configuration");
@@ -1159,7 +1159,7 @@ try {
   await page.getByRole("tab", { name: "Terraform" }).click();
   const acrTfText = await page.getByRole("textbox").first().inputValue();
   check("UI Export template (Terraform) reflects the real resource",
-    acrTfText.includes("azurerm_container_registry") && acrTfText.includes(ACR), acrTfText.slice(0, 200));
+    /azapi_resource/.test(acrTfText) && acrTfText.includes("Microsoft.ContainerRegistry/registries") && acrTfText.includes(ACR), acrTfText.slice(0, 200));
 
   // ── A repository pushed over the real OCI v2 wire (CLI → UI) ───────────────────────────
   const REPO = `smokerepo${n}`;
@@ -2698,7 +2698,7 @@ try {
   await page.getByRole("tab", { name: "Terraform" }).click();
   const vmTfText = await page.getByRole("textbox").first().inputValue();
   check("UI Export template (Terraform) reflects the real resource",
-    vmTfText.includes("azurerm_linux_virtual_machine") && vmTfText.includes(VM), vmTfText.slice(0, 200));
+    /azapi_resource/.test(vmTfText) && vmTfText.includes("Microsoft.Compute/virtualMachines") && vmTfText.includes(VM), vmTfText.slice(0, 200));
 
   // ── Activity log: the ENFORCED timespan picker narrows the query without losing this VM's
   // own very-recent events ───────────────────────────────────────────────────────────────────

@@ -40,6 +40,11 @@ import re
 import secrets
 import uuid
 
+try:
+    from core import azure_search_vector_core as vec
+except ImportError:  # Pyodide flat layout
+    import azure_search_vector_core as vec  # type: ignore
+
 NAMESPACE = "Microsoft.Search"
 API_VERSION = "2023-11-01"
 NAME_RE = re.compile(r"^[a-z0-9](?:[a-z0-9]|-(?!-))*[a-z0-9]$")
@@ -49,7 +54,7 @@ SKUS = {   # sku -> (max replicas, allowed partition counts, max indexes)
     "standard3": (12, (1, 2, 3, 4, 6, 12), 200), "storage_optimized_l1": (12, (1, 2, 3, 4, 6, 12), 10),
     "storage_optimized_l2": (12, (1, 2, 3, 4, 6, 12), 10),
 }
-FIELD_TYPES = ("Edm.String", "Edm.Int32", "Edm.Int64", "Edm.Double", "Edm.Boolean", "Edm.DateTimeOffset", "Collection(Edm.String)")
+FIELD_TYPES = ("Edm.String", "Edm.Int32", "Edm.Int64", "Edm.Double", "Edm.Boolean", "Edm.DateTimeOffset", "Collection(Edm.String)", "Collection(Edm.Single)")
 DS_TYPES = ("azureblob", "cosmosdb", "azuresql", "azuretable", "adlsgen2")
 
 
@@ -195,6 +200,11 @@ def validate_index(body):
                 return f"The key field '{n}' must be of type Edm.String."
             if f.get("searchable") is True and False:
                 pass
+        if f["type"] == "Collection(Edm.Single)":
+            e = vec.validate_vector_field(f, body)
+            if e:
+                return e
+            continue
         if f.get("searchable") and f["type"] not in ("Edm.String", "Collection(Edm.String)"):
             return f"Field '{n}' of type {f['type']} cannot be searchable."
         if f.get("facetable") and f.get("key"):
@@ -208,11 +218,18 @@ def _norm_index(body, name):
     out = {"name": name, "fields": [], "@odata.etag": '"0x%s"' % uuid.uuid4().hex[:14].upper()}
     for f in body["fields"]:
         is_str = f["type"] in ("Edm.String", "Collection(Edm.String)")
+        if f["type"] == "Collection(Edm.Single)":
+            out["fields"].append({"name": f["name"], "type": f["type"], "key": False, "searchable": True, "filterable": False, "sortable": False,
+                                  "facetable": False, "retrievable": bool(f.get("retrievable", True)), "dimensions": f["dimensions"],
+                                  "vectorSearchProfile": f["vectorSearchProfile"]})
+            continue
         out["fields"].append({"name": f["name"], "type": f["type"], "key": bool(f.get("key")),
                               "searchable": bool(f.get("searchable", is_str and not f.get("key"))),
                               "filterable": bool(f.get("filterable", True)), "sortable": bool(f.get("sortable", f["type"] != "Collection(Edm.String)")),
                               "facetable": bool(f.get("facetable", f["type"] != "Edm.DateTimeOffset" and not f.get("key"))),
                               "retrievable": bool(f.get("retrievable", True))})
+    if body.get("vectorSearch"):
+        out["vectorSearch"] = body["vectorSearch"]
     return out
 
 
@@ -321,7 +338,7 @@ def _cmp(op, a, b):
 
 
 def _searchable_text(doc, idx):
-    return " ".join(" ".join(v) if isinstance(v, list) else str(v) for f in idx["fields"] if f["searchable"]
+    return " ".join(" ".join(v) if isinstance(v, list) else str(v) for f in idx["fields"] if f["searchable"] and f["type"] != "Collection(Edm.Single)"
                     for v in [doc.get(f["name"])] if v is not None)
 
 
@@ -334,6 +351,14 @@ def search(index_rec, params):
     except ValueError as e:
         return _err(400, "InvalidRequest", str(e))
     cand = [d for d in docs.values() if pred(d)]
+    vq = params.get("vectorQueries")
+    vranked = None
+    if vq:
+        if not isinstance(vq, list):
+            return _err(400, "InvalidRequest", "vectorQueries must be an array.")
+        vranked, verr = vec.vector_rank(idx, cand, vq)
+        if verr:
+            return _err(400, "InvalidRequest", verr)
     must, mustnot, terms = [], [], []
     if text != "*":
         for m in re.finditer(r'(-?)("([^"]+)"|\S+)', text):
@@ -367,6 +392,12 @@ def search(index_rec, params):
             if (terms or must) and score == 0.0:
                 continue
         scored.append((score, d))
+    if vranked is not None:
+        if text == "*":
+            scored = vranked
+        else:
+            scored.sort(key=lambda sd: -sd[0])
+            scored = vec.fuse(scored, vranked, keyf)
     order = params.get("$orderby") or params.get("orderby")
     if order:
         for clause in reversed([c.strip() for c in order.split(",") if c.strip()]):
@@ -438,7 +469,7 @@ def _docs_index(index_rec, body):
                 if k not in fm:
                     raise ValueError(f"The property '{k}' does not exist on type 'search.documentFields'.")
                 try:
-                    clean[k] = _coerce(fm[k]["type"], v)
+                    clean[k] = vec.coerce_vector(fm[k], v) if fm[k]["type"] == "Collection(Edm.Single)" and v is not None else _coerce(fm[k]["type"], v)
                 except ValueError as e:
                     raise ValueError(f"Field '{k}': {e} ({fm[k]['type']}).")
         except ValueError as e:
@@ -520,6 +551,38 @@ def run_indexer(svc, ix_name, blob_store, account_lookup=None):
                     if keyf not in doc:
                         doc[keyf] = path if len(rows) == 1 else f"{path}_{n}"
                     doc = {k: _soft(fm[k]["type"], v) for k, v in doc.items()}
+                    sk = svc.get("_skillsets", {}).get(ix.get("skillsetName") or "")
+                    if sk:
+                        tree, serr = vec.run_skillset(sk, {**row, **meta})
+                        if serr:
+                            res["itemsFailed"] += 1
+                            res["errors"].append({"key": bname, "errorMessage": serr})
+                            continue
+                        mode_p = ((sk.get("indexProjections") or {}).get("parameters") or {}).get("projectionMode", "includeIndexingParentDocuments")
+                        for tname, children in vec.project(sk, tree, doc[keyf]).items():
+                            trec = svc["_indexes"].get(tname)
+                            if trec is None:
+                                res["itemsFailed"] += 1
+                                res["errors"].append({"key": bname, "errorMessage": f"Projection target index '{tname}' does not exist."})
+                                continue
+                            tkey = next(f["name"] for f in trec["_def"]["fields"] if f["key"])
+                            tfm = _fmap(trec["_def"])
+                            pk = [s2["parentKeyFieldName"] for s2 in sk["indexProjections"]["selectors"] if s2["targetIndexName"] == tname][0]
+                            for stale in [k for k, d in trec["_docs"].items() if d.get(pk) == doc[keyf]]:
+                                trec["_docs"].pop(stale)   # re-index of a parent replaces its chunks
+                            for ch in children:
+                                n_ord = ch.pop("__ordinal")
+                                cdoc = {k: v for k, v in ch.items() if k in tfm}
+                                cdoc[tkey] = vec.child_key(doc[keyf], n_ord)
+                                cr = _docs_index(trec, {"value": [dict(cdoc, **{"@search.action": "mergeOrUpload"})]})["body"]["value"][0]
+                                if cr["status"]:
+                                    res["itemsProcessed"] += 1
+                                else:
+                                    res["itemsFailed"] += 1
+                                    res["errors"].append({"key": bname, "errorMessage": cr["errorMessage"]})
+                        if mode_p == "skipIndexingParentDocuments":
+                            seen.add(doc[keyf])
+                            continue
                     r = _docs_index(idx_rec, {"value": [dict(doc, **{"@search.action": "mergeOrUpload"})]})["body"]["value"][0]
                     seen.add(doc[keyf])
                     if r["status"]:
@@ -655,7 +718,8 @@ def dispatch(state, method, sub, rg, chain, payload, query, blob_store=None, bas
         return _ok(None)
     if op == "indexes":
         return _indexes(rec, method, chain[3:], payload, query)
-    if op in ("datasources", "indexers"):
+    if op in ("datasources", "indexers", "skillsets"):
+        rec.setdefault("_skillsets", {})
         return _ds_ix(rec, op, method, chain[3:], payload, blob_store)
     if op == "stats" and method == "GET":
         return _ok({"counters": {"documentCount": {"usage": sum(len(i["_docs"]) for i in rec["_indexes"].values()), "quota": None},
@@ -760,6 +824,8 @@ def _ds_ix(svc, kind, method, rest, payload, blob_store):
                 return _err(404, "ResourceNotFound", f"{kind[:-1]} '{name}' was not found.")
             if kind == "datasources" and any(x["dataSourceName"] == name for x in svc["_indexers"].values()):
                 return _err(409, "ResourceInUse", "The data source is used by an indexer.")
+            if kind == "skillsets" and any(x.get("skillsetName") == name for x in svc["_indexers"].values()):
+                return _err(409, "ResourceInUse", "The skillset is used by an indexer.")
             store.pop(name)
             svc["_ix_status"].pop(name, None)
             return {"status": 204, "body": None}
@@ -790,7 +856,13 @@ def _put_ds_ix(svc, kind, name, body, status):
             return _err(400, "InvalidRequest", "credentials.connectionString is required.")
         if not (body.get("container") or {}).get("name"):
             return _err(400, "InvalidRequest", "container.name is required.")
+    elif kind == "skillsets":
+        e = vec.validate_skillset(body)
+        if e:
+            return _err(400, "InvalidRequest", e)
     else:
+        if body.get("skillsetName") and body["skillsetName"] not in svc.get("_skillsets", {}):
+            return _err(400, "InvalidRequest", f"Skillset '{body['skillsetName']}' does not exist.")
         for req in ("dataSourceName", "targetIndexName"):
             if not body.get(req):
                 return _err(400, "InvalidRequest", f"{req} is required.")

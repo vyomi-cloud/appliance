@@ -1099,8 +1099,21 @@ def _delete_microvm(store, mid):
 # ── Applications (Vyomi-exclusive; a tracked deployment record, not a real
 #    CloudFormation/SAM stack — Vyomi has no CloudFormation core to provision one) ──────
 def _application_view(a):
-    return {"Name": a["name"], "Description": a.get("description", ""), "Status": a["status"],
-            "LastModified": a["last_modified"], "Template": a.get("template", "From scratch")}
+    v = {"Name": a["name"], "Description": a.get("description", ""), "Status": a["status"],
+         "LastModified": a["last_modified"], "Template": a.get("template", "From scratch")}
+    if a.get("pipeline"):
+        v["Pipeline"] = a["pipeline"]
+    return v
+
+
+def _app_call(store):
+    def call(method, path, doc):
+        r = dispatch(store, method, path, {}, {}, json.dumps(doc).encode() if doc is not None else b"")
+        try:
+            return r.status, json.loads(r.body or b"{}")
+        except ValueError:
+            return r.status, {}
+    return call
 
 
 def _create_application(store, body):
@@ -1112,6 +1125,20 @@ def _create_application(store, body):
         return _err(409, "ResourceConflictException", f"Application already exists: {name}")
     a = {"name": name, "description": body.get("Description", ""), "status": "CREATE_COMPLETE",
          "template": body.get("Template", "From scratch"), "last_modified": _now_iso()}
+    if body.get("Pipeline") is not None:                    # CI/CD pipeline application (core/lambda_cicd_core.py)
+        from core import lambda_cicd_core as _cicd
+        bad = _cicd.validate(name, body["Pipeline"])
+        if bad:
+            return _err(400, "ValidationException", bad)
+        a["template"] = body.get("Template", "CI/CD pipeline application")
+        store_m[name] = a
+        try:
+            _cicd.create(a, body["Pipeline"], _app_call(store), store)
+        except Exception as e:
+            store_m.pop(name, None)
+            return _err(400, "ValidationException", str(getattr(e, "message", e)))
+        _persist(store)
+        return _json(201, _application_view(a))
     store_m[name] = a
     _persist(store)
     return _json(201, _application_view(a))
@@ -1712,8 +1739,25 @@ def _dispatch_applications(store, method, tail, body):
         if method == "GET":
             return _list_applications(store)
         return _err(405, "MethodNotAllowed", "Unsupported method on applications")
-    if method == "DELETE":
+    if method == "DELETE" and len(tail) == 1:
         return _delete_application(store, tail[0])
+    a = _applications(store).get(tail[0])
+    if a is None:
+        return _err(404, "ResourceNotFoundException", f"Application not found: {tail[0]}")
+    if len(tail) == 1 and method == "GET":
+        return _json(200, _application_view(a))
+    if len(tail) >= 3 and tail[1] == "pipeline" and a.get("pipeline"):     # Vyomi extension: pipeline executions + push
+        from core import lambda_cicd_core as _cicd
+        if tail[2] == "executions" and method == "GET":
+            return _json(200, {"Executions": a["pipeline"]["Executions"]})
+        if tail[2] == "executions" and method == "POST":
+            _cicd.run(a, "manual", _app_call(store))
+            _persist(store)
+            return _json(200, _application_view(a))
+        if tail[2] == "push" and method == "POST":
+            st, doc = _cicd.push(a, _parse(body), _app_call(store))
+            _persist(store)
+            return _json(st, doc) if st < 300 else _err(st, "ValidationException", doc.get("Message", ""))
     return _err(404, "ResourceNotFoundException", "Unknown applications path")
 
 

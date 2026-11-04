@@ -9,7 +9,7 @@
  "azure.nsgs.flow_logs": {
   "title": "NSG flow logs",
   "level": { "nano": "limited", "offline": "limited" },
-  "limitations": ["Flow logs are real Microsoft.Network/networkWatchers/{nw}/flowLogs resources (target NSG or vnet and storage account must exist, same region as the watcher, retention 0-365, version 1|2, one flow log per target, Traffic Analytics needs an existing workspace). Configuration only: no flow tuples are written to the storage account, because the simulator has no packet-level data plane to observe; Traffic Analytics produces no data. Note that real Azure retired NSG flow logs for new creation in June 2025 in favour of virtual network flow logs, which this engine also accepts."],
+  "limitations": ["Flow logs are real Microsoft.Network/networkWatchers/{nw}/flowLogs resources (target NSG or vnet and storage account must exist, same region as the watcher, retention 0-365, version 1|2, one flow log per target, Traffic Analytics needs an existing workspace). Offline with netsim enforcement on (Docker backend; Azure VMs run on LXD/Multipass today, so only Docker-attached interfaces produce flows), real per-flow counters are written as v2 PT1H.json blobs (flow tuples with the matched DefaultRule_/UserRule_ name from the shared NSG evaluator) into insights-logs-networksecuritygroupflowevent of the configured storage account for NSG targets; delivery code is covered by unit tests with synthetic counters only (vnet-targeted flow logs, Nano and Traffic Analytics produce no data). Note that real Azure retired NSG flow logs for new creation in June 2025 in favour of virtual network flow logs, which this engine also accepts."],
   "tests": ["tests/conformance/test_azure_netsvc_core.py"]
  },
  "azure.nsgs.tags": {
@@ -81,6 +81,12 @@
    "IP flow verify, Next hop, VM connectivity issue (Connection troubleshoot) and Network configuration diagnostics all answer from the shared netsim evaluator (core/netsim) — the same engine behind AWS Reachability Analyzer and GCP Connectivity Tests — scoped to a virtual machine's network interface in this subscription. Vyomi auto-provisions the regional NetworkWatcher_<location> resource the first time any of these tools run in a location, same as the real portal's 'Enable Network Watcher' behaviour. Network configuration diagnostics reports every network security group evaluated on the path (NIC and/or subnet) with its matched rule — the same picture `az network watcher run-configuration-diagnostic` and the real portal's result pane show — but, unlike the real multi-resource version, is scoped to one NIC rather than also reporting route-table/user-defined-route results. There is no standalone Network Watcher service console (browsing/deleting networkWatchers resources) yet, only these diagnostic tools reached from the NSG and Virtual network blades."
   ],
   "tests": ["tests/conformance/test_azure_netsim_core.py"]
+ },
+ "azure.nsgs.packet_capture": {
+  "title": "Network Watcher packet capture",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["Packet capture (Microsoft.Network/networkWatchers/packetCaptures) is not simulated: there is no packet data plane that yields .cap files. Traffic flow summaries are available through flow logs and AWS-style traffic mirroring is the closest equivalent; Azure captures are not created."],
+  "tests": []
  },
  "azure.nsgs.tasks": {
   "title": "Tasks",

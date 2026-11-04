@@ -414,13 +414,15 @@
  "dynamodb.account.zero-etl": {
   "title": "Zero-ETL integrations",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Zero-ETL integrations replicate tables into Amazon Redshift / SageMaker lakehouse, services Vyomi does not implement."
+   "The integration really replicates: DynamoDB table items / RDS table rows are copied into an in-process 'Redshift-lite' warehouse (sqlite) on every touch/query ('sync on read'), and the Redshift Data API (ExecuteStatement/GetStatementResult, CREATE DATABASE ... FROM INTEGRATION) queries it. The SQL dialect is SQLite's, not Redshift's; replication is poll-on-touch, not a continuous stream; no data filters, encryption or cross-account semantics; the warehouse is in memory and rebuilt from the sources on boot. A real Redshift/SageMaker lakehouse is not run."
   ],
-  "api": []
+  "tests": [
+   "tests/conformance/test_zeroetl_core.py"
+  ]
  },
  "dynamodb.account.reserved-capacity": {
   "title": "Reserved capacity",
@@ -443,5 +445,6 @@
    "Account-level table defaults are not modeled; edit capacity, class and protection per table from its Additional settings tab."
   ],
   "api": []
- }
+ },
+ "dynamodb.aws_backup_vaults": {"title": "AWS Backup vaults, plans, selections, jobs, recovery points, restore jobs, vault lock", "level": {"nano": "limited", "offline": "limited"}, "limitations": ["Backup plan rules with a ScheduleExpression (cron/rate, UTC) really run from the shared scheduler tick (core/schedule_core) against the selection's explicit Resources ARNs, creating attributed backup jobs + recovery points, and recovery points past DeleteAfterDays expire. Offline: background loop; Nano: only while the page is open. Tag/condition-based selections are listed but not expanded; missed runs coalesce into one; ScheduleExpressionTimezone is ignored.", "Real: vault CRUD + lock (min/max retention enforced on lifecycle and recovery-point deletion), plans/selections with validation, backup jobs for DynamoDB (S3-backed backup), RDS (awsbackup:job-* snapshot with table data), S3 (object artifact in vyomi-aws-backup) and EBS (EC2 snapshot), and restore jobs that create the table / DB instance / bucket / volume.", "Plans do not run on their cron schedule (use StartBackupJob); EC2 AMI, EC2 instances (real AMI recovery points, restore launches an instance) and FSx for OpenZFS volumes (file-tree recovery points, restore into an existing volume) ARE protected; EFS and Aurora clusters are refused honestly (the simulator has no EFS file systems or Aurora DB clusters) and Redshift is not backed up; no audit frameworks, report plans, restore testing or logically air-gapped vaults; the IAM role is accepted but not checked."], "tests": ["tests/conformance/test_aws_backup_ec2_fsx.py", "tests/conformance/test_schedule_core.py", "tests/conformance/test_aws_backup_vaults.py"]}
 }

@@ -45,7 +45,7 @@ def run():
     _check("external git stored, scmType ExternalGit", r["status"] == 200 and a.handle("GET", f"{S}/config/web", Q)["body"]["properties"]["scmType"] == "ExternalGit")
     deps = a.handle("GET", f"{S}/deployments", Q)["body"]["value"]
     _check("continuous integration recorded a deployment attempt", len(deps) == 1)
-    _check("attempt is honestly Failed with an explanation", deps[0]["properties"]["status"] == 3 and "no build runner" in deps[0]["properties"]["logs"][0]["message"])
+    _check("attempt is honestly Failed with an explanation", deps[0]["properties"]["status"] == 3 and "failed:" in deps[0]["properties"]["logs"][0]["message"])
     r = a.handle("POST", f"{S}/sync", Q)
     _check("manual sync appends a record", r["status"] == 200 and len(a.handle("GET", f"{S}/deployments", Q)["body"]["value"]) == 2)
     did = deps[0]["name"]

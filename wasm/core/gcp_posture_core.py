@@ -147,16 +147,70 @@ def storage_findings(project, buckets):
     return sorted(out, key=lambda f: (SEV_ORDER.index(f["severity"]), f["category"], f["resourceName"]))
 
 
-def dispatch(vm_store, fw_store, obj_store, method, path):
-    # /v1/projects/{p}/securityPosture/{kind}
+def threat_findings(project, threats):
+    """Deterministic runtime detections (core/secscan_core.py, detector=vyomi-rules) as SCC-style THREAT findings."""
+    return [_f(project, t["type"], t["severity"] if t["severity"] in SEV_ORDER else "LOW", t["resource"], t["description"],
+               "Review the change in Cloud Audit Logs and revert it if it was not intended.",
+               {"findingClass": "THREAT", "eventTime": t["lastSeen"], "eventCount": t["count"], "principal": t["actor"],
+                "detector": "vyomi-rules"}) for t in threats]
+
+
+def vulnerability_findings(project, scans):
+    """Artifact Registry image scans (core/gcp_artifactregistry_core.scan_images) as SCC-style VULNERABILITY findings."""
+    out = []
+    for sc in scans:
+        for v in sc["scan"]["findings"]:
+            sev = v["severity"] if v["severity"] in SEV_ORDER else "LOW"
+            out.append(_f(project, v["vulnerabilityId"], sev, "//artifactregistry.googleapis.com/" + sc["resource"],
+                          "%s %s in image %s:%s - %s. Fixed in %s." % (v["package"], v["installedVersion"], sc["image"], sc["tag"], v["title"], v["fixedVersion"] or "n/a"),
+                          "Rebuild the image with %s %s or later." % (v["package"], v["fixedVersion"] or ""),
+                          {"findingClass": "VULNERABILITY", "cvssScore": v["cvss"], "scanEngine": sc["scan"]["engine"]}))
+        for e in sc["scan"]["endOfLife"]:
+            out.append(_f(project, "END_OF_LIFE_RUNTIME", "MEDIUM", "//artifactregistry.googleapis.com/" + sc["resource"],
+                          "%s %s in image %s:%s reached end of life on %s." % (e["product"], e["version"], sc["image"], sc["tag"], e["endOfLife"]),
+                          "Move to a supported %s release." % e["product"], {"findingClass": "VULNERABILITY"}))
+    return sorted(out, key=lambda f: (SEV_ORDER.index(f["severity"]), f["category"], f["resourceName"]))
+
+
+def occurrence(project, sc, v):
+    """A Container Analysis VULNERABILITY occurrence (v1) for one finding of a scanned image."""
+    return {"name": "projects/%s/occurrences/%s" % (project, hashlib.sha1((sc["resource"] + v["vulnerabilityId"] + v["package"]).encode()).hexdigest()[:16]),
+            "resourceUri": "https://" + sc["resource"], "noteName": "projects/goog-vulnz/notes/" + v["vulnerabilityId"], "kind": "VULNERABILITY",
+            "vulnerability": {"severity": v["severity"], "cvssScore": v["cvss"], "shortDescription": v["vulnerabilityId"], "longDescription": v["title"],
+                              "packageIssue": [{"affectedPackage": v["package"], "affectedVersion": {"name": v["installedVersion"], "kind": "NORMAL"},
+                                                "fixedVersion": {"name": v["fixedVersion"], "kind": "NORMAL" if v["fixedVersion"] else "MAXIMUM"}, "fixAvailable": bool(v["fixedVersion"])}],
+                              "effectiveSeverity": v["severity"]}}
+
+
+def dispatch(vm_store, fw_store, obj_store, method, path, threats=None, scans=None):
+    # /v1/projects/{p}/securityPosture/{kind}      kind: compute | storage | threats | vulnerabilities | all
+    # /v1/projects/{p}/occurrences[:vulnerabilitySummary]   (Container Analysis shape, Artifact Registry image scans)
     segs = path.split("?", 1)[0].strip("/").split("/")
-    if len(segs) != 5 or segs[0] != "v1" or segs[1] != "projects" or segs[3] != "securityPosture" or segs[4] not in ("compute", "storage"):
+    if len(segs) == 4 and segs[0] == "v1" and segs[1] == "projects" and segs[3].split(":")[0] == "occurrences":
+        project = segs[2]
+        occ = [occurrence(project, sc, v) for sc in (scans or []) for v in sc["scan"]["findings"]]
+        if segs[3].endswith(":vulnerabilitySummary"):
+            counts = {}
+            for o in occ:
+                counts[o["vulnerability"]["severity"]] = counts.get(o["vulnerability"]["severity"], 0) + 1
+            return Resp(200, {"counts": [{"severity": k, "totalCount": str(n), "fixableCount": str(sum(1 for o in occ if o["vulnerability"]["severity"] == k and o["vulnerability"]["packageIssue"][0]["fixAvailable"]))} for k, n in counts.items()]})
+        return Resp(200, {"occurrences": occ})
+    kinds = ("compute", "storage", "threats", "vulnerabilities", "all")
+    if len(segs) != 5 or segs[0] != "v1" or segs[1] != "projects" or segs[3] != "securityPosture" or segs[4] not in kinds:
         return Resp(404, {"error": {"code": 404, "message": "Unknown path: %s" % path, "status": "NOT_FOUND"}})
     if method.upper() != "GET":
         return Resp(405, {"error": {"code": 405, "message": "Method not allowed.", "status": "UNIMPLEMENTED"}})
-    project = segs[2]
-    if segs[4] == "compute":
+    project, kind = segs[2], segs[4]
+    if kind == "compute":
         f = compute_findings(project, vm_store.instances, list(fw_store.firewalls.values()))
-    else:
+    elif kind == "storage":
         f = storage_findings(project, obj_store.buckets)
+    elif kind == "threats":
+        f = threat_findings(project, threats or [])
+    elif kind == "vulnerabilities":
+        f = vulnerability_findings(project, scans or [])
+    else:
+        f = (compute_findings(project, vm_store.instances, list(fw_store.firewalls.values())) + storage_findings(project, obj_store.buckets)
+             + threat_findings(project, threats or []) + vulnerability_findings(project, scans or []))
+        f.sort(key=lambda x: (SEV_ORDER.index(x["severity"]), x["category"], x["resourceName"]))
     return Resp(200, {"findings": f, "summary": summarize(f)})

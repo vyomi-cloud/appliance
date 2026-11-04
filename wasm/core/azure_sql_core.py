@@ -36,11 +36,14 @@ database goes the same "protector unavailable" route real Azure SQL does.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import re
+import time
 from dataclasses import dataclass, field
 
 from core import azure_keyvault_keys_core as kv_keys
+from core import azure_netaccess as _netaccess
 from core.sql_store import SqlStore
 
 
@@ -187,6 +190,75 @@ def _delete_database(store: SqlStore, server: str, database: str) -> AzureSqlRes
 
 
 # ── data plane ──────────────────────────────────────────────────────────────
+# ── Measured query telemetry (Query Performance Insight / Performance overview / auditing) ─────────
+# Every statement run through the data plane is timed with perf_counter around the real engine call and
+# appended to a per-database ring on the store. Nothing here is estimated; no statements -> empty views.
+QLOG_CAP = 2000
+_NUM_RE = re.compile(r"\b\d+(\.\d+)?\b")
+_STR_RE = re.compile(r"'(?:[^']|'')*'")
+
+
+def _qrings(store: SqlStore) -> dict:
+    m = getattr(store, "_azure_sql_qtimings", None)
+    if m is None:
+        m = {}
+        store._azure_sql_qtimings = m
+    return m
+
+
+def _record_timing(store, server, database, sql, t0, ok, rows, error=None) -> None:
+    ms = round((time.perf_counter() - t0) * 1000.0, 3)
+    ring = _qrings(store).setdefault(_db_id(server, database), [])
+    norm = " ".join(_NUM_RE.sub("?", _STR_RE.sub("?", sql)).split())
+    ring.append({"ts": time.time(), "sql": sql[:500], "queryText": norm[:500], "queryId": hashlib.sha1(norm.lower().encode()).hexdigest()[:12],
+                 "ms": ms, "ok": bool(ok), "rows": int(rows or 0), "error": error})
+    if len(ring) > QLOG_CAP:
+        del ring[: len(ring) - QLOG_CAP]
+
+
+def query_insights(store: SqlStore, server: str, database: str, window_s: float = 86400.0, now: float | None = None) -> dict:
+    """QPI / performance overview / audit view of the MEASURED statement timings for one database."""
+    now = now if now is not None else time.time()
+    db_id = _db_id(server, database)
+    if not store.instance_exists(db_id):
+        return None
+    ring = [r for r in _qrings(store).get(db_id, []) if r["ts"] >= now - window_s]
+    groups: dict = {}
+    for r in ring:
+        g = groups.setdefault(r["queryId"], {"queryId": r["queryId"], "queryText": r["queryText"], "executions": 0, "failures": 0,
+                                             "totalMs": 0.0, "maxMs": 0.0, "rows": 0, "lat": []})
+        g["executions"] += 1
+        g["failures"] += 0 if r["ok"] else 1
+        g["totalMs"] += r["ms"]
+        g["maxMs"] = max(g["maxMs"], r["ms"])
+        g["rows"] += r["rows"]
+        g["lat"].append(r["ms"])
+    top = []
+    for g in groups.values():
+        lat = sorted(g.pop("lat"))
+        g["avgMs"] = round(g["totalMs"] / g["executions"], 3)
+        g["p95Ms"] = lat[min(len(lat) - 1, int(0.95 * len(lat)))]
+        g["totalMs"] = round(g["totalMs"], 3)
+        top.append(g)
+    top.sort(key=lambda g: g["totalMs"], reverse=True)
+    lats = sorted(r["ms"] for r in ring)
+    step = 60.0 if window_s <= 7200 else 3600.0
+    tl: dict = {}
+    for r in ring:
+        b = tl.setdefault(int(r["ts"] // step) * step, {"ts": int(r["ts"] // step) * step, "count": 0, "errors": 0, "totalMs": 0.0})
+        b["count"] += 1
+        b["errors"] += 0 if r["ok"] else 1
+        b["totalMs"] += r["ms"]
+    timeline = [{**b, "avgMs": round(b["totalMs"] / b["count"], 3)} for b in sorted(tl.values(), key=lambda x: x["ts"])]
+    return {"database": database, "server": server, "windowSeconds": window_s,
+            "overview": {"statements": len(ring), "failed": sum(1 for r in ring if not r["ok"]),
+                         "p50Ms": lats[len(lats) // 2] if lats else 0, "p95Ms": lats[min(len(lats) - 1, int(0.95 * len(lats)))] if lats else 0,
+                         "maxMs": lats[-1] if lats else 0, "totalMs": round(sum(lats), 3), "sizeBytes": _db_size_bytes(store, db_id)},
+            "topQueries": top[:25], "timeline": timeline,
+            "audit": [{"eventTime": r["ts"], "actionName": "BATCH COMPLETED", "succeeded": r["ok"], "statement": r["sql"],
+                       "durationMs": r["ms"], "rowCount": r["rows"], "errorMessage": r["error"]} for r in reversed(ring[-200:])]}
+
+
 def execute_sql(store: SqlStore, server: str, database: str, sql: str,
                 params: list | None = None) -> dict:
     """Run real SQL against the database's engine (sqlite3 in Nano; Postgres behind
@@ -195,11 +267,14 @@ def execute_sql(store: SqlStore, server: str, database: str, sql: str,
     if not store.instance_exists(db_id):
         return {"ok": False, "code": "DatabaseNotFound",
                 "message": f"Database {server}/{database} not found."}
+    t0 = time.perf_counter()
     try:
         result = store.execute_sql(db_id, sql, params)
+        _record_timing(store, server, database, sql, t0, True, result.get("rowcount", 0))
         return {"ok": True, "columns": result.get("columns", []),
                 "rows": result.get("rows", []), "rowCount": result.get("rowcount", 0)}
     except Exception as e:
+        _record_timing(store, server, database, sql, t0, False, 0, str(e))
         return {"ok": False, "code": "SQLError", "message": str(e)}
 
 
@@ -211,11 +286,14 @@ async def aexecute_sql(store: SqlStore, server: str, database: str, sql: str,
     if not store.instance_exists(db_id):
         return {"ok": False, "code": "DatabaseNotFound",
                 "message": f"Database {server}/{database} not found."}
+    t0 = time.perf_counter()
     try:
         result = await store.aexecute_sql(db_id, sql, params)
+        _record_timing(store, server, database, sql, t0, True, result.get("rowcount", 0))
         return {"ok": True, "columns": result.get("columns", []),
                 "rows": result.get("rows", []), "rowCount": result.get("rowcount", 0)}
     except Exception as e:
+        _record_timing(store, server, database, sql, t0, False, 0, str(e))
         return {"ok": False, "code": "SQLError", "message": str(e)}
 
 
@@ -234,7 +312,7 @@ def _db_size_bytes(store: SqlStore, db_id: str) -> int:
 
 
 def _query(store: SqlStore, server: str, database: str, body: bytes,
-          arm_state: dict | None = None, kv_store=None) -> AzureSqlResponse:
+          arm_state: dict | None = None, kv_store=None, headers: dict | None = None) -> AzureSqlResponse:
     try:
         payload = json.loads(body.decode("utf-8")) if body else {}
     except Exception:
@@ -243,7 +321,14 @@ def _query(store: SqlStore, server: str, database: str, body: bytes,
     if not sql:
         return _err(400, "BadRequest", "A 'sql' statement is required.")
 
-    if _server_props(arm_state, server).get("publicNetworkAccess") == "Disabled":
+    _na_ctx = _netaccess.caller_context(headers)
+    _na_rec = _netaccess.find_arm(arm_state, "microsoft.sql/servers", f"servers/{server}") if _na_ctx else None
+    if _na_rec is not None:
+        # caller declared a network identity (x-vyomi-source-*): firewall / vnet rules / private endpoint are enforced
+        _denied = _netaccess.check(arm_state, _na_rec["id"], "sql", _na_rec.get("properties") or {}, _na_ctx)
+        if _denied:
+            return _err(_denied[0], _denied[1], f"Cannot connect to server '{server}.database.windows.net': {_denied[2]}")
+    elif _server_props(arm_state, server).get("publicNetworkAccess") == "Disabled":
         return _err(403, "PublicNetworkAccessDisabled",
                     f"Cannot connect to server '{server}.database.windows.net': "
                     "public network access is disabled.")
@@ -253,6 +338,13 @@ def _query(store: SqlStore, server: str, database: str, body: bytes,
         return tde_err
 
     db_id = _db_id(server, database)
+    from core import azure_sqlbackup_core as sqlbk
+    is_w = sqlbk.is_write(sql)
+    if is_w and sqlbk.is_readonly(arm_state, server, database):
+        return _err(400, "DatabaseReadOnly", f"Failed to update database '{database}' because the database is read-only "
+                    "(error 3906): it is a geo-secondary. Fail over or terminate the replica link first.")
+    if is_w:
+        sqlbk.pre_write(store, server, database)
     if _WRITE_SQL_RE.match(sql) and store.instance_exists(db_id):
         max_size = _database_props(arm_state, server, database).get("maxSizeBytes")
         if max_size and _db_size_bytes(store, db_id) >= int(max_size):
@@ -265,6 +357,8 @@ def _query(store: SqlStore, server: str, database: str, body: bytes,
     if not result.get("ok"):
         return _err(400, result.get("code", "SQLError"), result.get("message", ""))
 
+    if is_w:
+        sqlbk.post_write(store, arm_state, server, database, sql, payload.get("params"))
     _log_select(store, db_id, sql)
     _auto_tune(store, arm_state, server, database)
     return _json(200, {"columns": result["columns"], "rows": result["rows"],
@@ -413,7 +507,16 @@ def dispatch(store: SqlStore, method: str, path: str,
                 return _delete_database(store, server, database)
             return _err(405, "MethodNotAllowed", f"Unsupported method {method} on database")
         if len(segs) == 5 and segs[4] == "query" and method == "POST":
-            return _query(store, server, database, body, arm_state, kv_store)
+            return _query(store, server, database, body, arm_state, kv_store, headers)
+        if len(segs) == 5 and segs[4] == "queryinsights" and method == "GET":
+            try:
+                w = float((query or {}).get("window") or 86400)
+            except ValueError:
+                w = 86400.0
+            out = query_insights(store, server, database, w)
+            if out is None:
+                return _err(404, "ResourceNotFound", f"Database '{database}' was not found.")
+            return _json(200, out)
         if len(segs) == 5 and segs[4] == "recommendations" and method == "GET":
             db_id = _db_id(server, database)
             if not store.instance_exists(db_id):

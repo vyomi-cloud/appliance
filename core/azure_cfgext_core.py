@@ -25,6 +25,10 @@ connections.
 """
 from __future__ import annotations
 
+try:
+    from core import azure_flux_core as flux
+except ImportError:                                  # Pyodide flat layout
+    import azure_flux_core as flux                   # type: ignore
 import ipaddress
 import re
 import uuid
@@ -43,6 +47,11 @@ APIM_DELETED = "microsoft.apimanagement/deletedservices"
 APIM_GW_API = "microsoft.apimanagement/service/gateways/apis"
 VNET = "microsoft.network/virtualnetworks"
 PE = "microsoft.network/privateendpoints"
+ASG = "microsoft.network/applicationsecuritygroups"
+NIC = "microsoft.network/networkinterfaces"
+NSG_RULE = "microsoft.network/networksecuritygroups/securityrules"
+ENC_SCOPE = "microsoft.storage/storageaccounts/encryptionscopes"
+BLOB_CONTAINER = "microsoft.storage/storageaccounts/blobservices/containers"
 
 EXTENSIONS = {
     "microsoft.flux": {"multi": False, "scopes": ("cluster",)},
@@ -83,7 +92,7 @@ def _err(status: int, code: str, message: str) -> dict:
 
 def handles(full_type: str) -> bool:
     ft = full_type.lower()
-    return ft in (AKS, COSMOS, COSMOS_SVC, SBNS, SB_NETRULES, VNET, APIM_GW_API, APIM, SQL_LABEL, STORAGE) or ft.endswith("/providers/extensions")
+    return flux.handles(ft) or ft in (AKS, COSMOS, COSMOS_SVC, SBNS, SB_NETRULES, VNET, APIM_GW_API, APIM, SQL_LABEL, STORAGE, ENC_SCOPE, BLOB_CONTAINER, ASG, NIC, NSG_RULE) or ft.endswith("/providers/extensions")
 
 
 def _merged(existing, payload) -> dict:
@@ -97,13 +106,53 @@ def _vault_exists(state: dict, name: str) -> bool:
                and str(r.get("name", "")).lower() == name.lower() for r in state.values())
 
 
+# Key Vault data-plane lookup, injected by the substrate (offline appliance / Nano registry): callable(key_name, version|None)
+# -> True (exists, enabled) | False (exists, disabled) | None (no such key). Unset (hermetic/ARM-only use) = not cross-checked.
+# The Key Vault keys store is ONE keyspace shared by all vaults, so the lookup is by key name, not per vault.
+KEY_LOOKUP = None
+
+
+def set_key_lookup(fn) -> None:
+    global KEY_LOOKUP
+    KEY_LOOKUP = fn
+
+
+def bind_key_store(store_or_getter) -> None:
+    """Point the lookup at the Key Vault keys core's store (or a zero-arg callable returning it, for lazily-built stores)."""
+    try:
+        from core import azure_keyvault_keys_core as kvk
+    except ImportError:  # pragma: no cover - Pyodide flat layout
+        import azure_keyvault_keys_core as kvk  # type: ignore
+
+    def _lk(name, version):
+        st = store_or_getter() if callable(store_or_getter) else store_or_getter
+        if hasattr(st, "adopt"):
+            st.adopt()
+        return kvk.key_enabled(st, name, version)
+    set_key_lookup(_lk)
+
+
+def check_key_exists(vault: str, key_name: str, version, what: str):
+    if KEY_LOOKUP is None or not key_name:
+        return None
+    try:
+        st = KEY_LOOKUP(key_name, version or None)
+    except Exception:
+        return None
+    if st is None:
+        return _err(400, "KeyVaultKeyNotFound", f"The key '{key_name}' referenced by {what} was not found in Key Vault '{vault}'.")
+    if st is False:
+        return _err(400, "KeyVaultKeyDisabled", f"The key '{key_name}' referenced by {what} is disabled in Key Vault '{vault}'; a customer-managed key must be enabled.")
+    return None
+
+
 def _check_key_uri(state: dict, uri: str, what: str):
     m = KV_KEY_URI.match(str(uri or ""))
     if not m:
         return _err(400, "InvalidKeyVaultKeyUri", f"{what} must be a Key Vault key URI of the form https://<vault>.vault.azure.net/keys/<name>[/<version>]; got '{uri}'.")
     if not _vault_exists(state, m.group(1)):
         return _err(400, "KeyVaultNotFound", f"The Key Vault '{m.group(1)}' referenced by {what} does not exist in this subscription.")
-    return None
+    return check_key_exists(m.group(1), m.group(2), m.group(3) if m.lastindex and m.lastindex >= 3 else None, what)
 
 
 def _has_identity(rec_or_payload: dict) -> bool:
@@ -128,6 +177,8 @@ def _cidr_ok(s: str) -> bool:
 # ── pre-write validation ────────────────────────────────────────────────────────────────
 def validate(state: dict, full_type: str, rid: str, payload: dict, existing: dict | None, sub: str, rg: str | None):
     ft = full_type.lower()
+    if flux.handles(ft):
+        return flux.validate(state, ft, rid, payload, existing, sub, rg)
     props = _merged(existing, payload)
     if ft == AKS:
         return _validate_aks(props, payload, existing)
@@ -149,6 +200,15 @@ def validate(state: dict, full_type: str, rid: str, payload: dict, existing: dic
         return _validate_apim_soft_deleted(state, rid, payload, existing)
     if ft == SQL_LABEL:
         return _validate_sql_label(state, rid, payload)
+    if ft == NIC:
+        return _validate_asg_refs(state, [g for c in (props.get("ipConfigurations") or []) for g in ((c.get("properties") or {}).get("applicationSecurityGroups") or [])],
+                                  (existing or {}).get("location") or (payload or {}).get("location"), "network interface", per_ipconfig=props.get("ipConfigurations"))
+    if ft == NSG_RULE:
+        return _validate_nsg_rule_asgs(state, props)
+    if ft == ENC_SCOPE:
+        return _validate_enc_scope(state, rid, payload, existing)
+    if ft == BLOB_CONTAINER:
+        return _validate_blob_container(state, rid, payload, existing)
     if ft == STORAGE:
         bypass = (props.get("networkAcls") or {}).get("bypass")
         if bypass is not None:
@@ -156,6 +216,101 @@ def validate(state: dict, full_type: str, rid: str, payload: dict, existing: dic
             if not toks or any(t not in ("None", "AzureServices", "Logging", "Metrics") for t in toks) or ("None" in toks and len(toks) > 1):
                 return _err(400, "InvalidNetworkAclsBypass", "networkAcls.bypass must be None or a comma separated combination of AzureServices, Logging and Metrics.")
         return None
+    return None
+
+
+def _validate_asg_refs(state: dict, refs: list, location, what: str, per_ipconfig=None):
+    """A NIC ip configuration may join up to 20 application security groups; each must exist and live in the NIC's region."""
+    for c in per_ipconfig or []:
+        if len((c.get("properties") or {}).get("applicationSecurityGroups") or []) > 20:
+            return _err(400, "ApplicationSecurityGroupLimitExceeded", "A network interface IP configuration can be a member of at most 20 application security groups.")
+    for g in refs:
+        gid = str((g or {}).get("id") or "")
+        rec = state.get(gid.lower())
+        if rec is None or (rec.get("_type") or "").lower() != ASG:
+            return _err(404, "ResourceNotFound", f"The application security group '{gid.rsplit('/', 1)[-1]}' referenced by the {what} was not found.")
+        if location and str(rec.get("location") or "").replace(" ", "").lower() != str(location).replace(" ", "").lower():
+            return _err(400, "ApplicationSecurityGroupLocationMismatch", f"The application security group '{rec['name']}' is in {rec.get('location')} but the {what} is in {location}; they must share a region.")
+    return None
+
+
+def _validate_nsg_rule_asgs(state: dict, props: dict):
+    """Security-rule ASG endpoints must exist and cannot be combined with an address prefix other than '*'."""
+    for side in ("source", "destination"):
+        groups = props.get(f"{side}ApplicationSecurityGroups") or []
+        if not groups:
+            continue
+        prefixes = [x for x in [props.get(f"{side}AddressPrefix")] + list(props.get(f"{side}AddressPrefixes") or []) if x]
+        if any(x != "*" for x in prefixes):
+            return _err(400, "SecurityRuleParameterContainsConflictingValues", f"{side}ApplicationSecurityGroups cannot be combined with a {side}AddressPrefix other than '*'.")
+        for g in groups:
+            gid = str((g or {}).get("id") or "")
+            rec = state.get(gid.lower())
+            if rec is None or (rec.get("_type") or "").lower() != ASG:
+                return _err(404, "ResourceNotFound", f"The application security group '{gid.rsplit('/', 1)[-1]}' referenced by the security rule was not found.")
+    return None
+
+
+_SCOPE_NAME = re.compile(r"^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$", re.I)
+
+
+def _acct_of(state: dict, rid: str):
+    aid = rid[: rid.lower().index("/storageaccounts/") + len("/storageaccounts/")] + rid.split("/")[8]
+    return aid, state.get(aid.lower())
+
+
+def _validate_enc_scope(state: dict, rid: str, payload: dict, existing):
+    """Storage encryption scopes: 3-63 chars, source Microsoft.Storage | Microsoft.KeyVault (the latter needs a Key Vault
+    key URI whose vault exists), state Enabled|Disabled, requireInfrastructureEncryption immutable once set."""
+    aid, acct = _acct_of(state, rid)
+    if acct is None:
+        return _err(404, "ResourceNotFound", f"The storage account '{aid.rsplit('/', 1)[-1]}' was not found.")
+    name = rid.rsplit("/", 1)[-1]
+    if not _SCOPE_NAME.match(name) or "--" in name:
+        return _err(400, "InvalidResourceName", "Encryption scope names are 3-63 characters: lowercase letters, numbers and single hyphens.")
+    p = _merged(existing, payload)
+    src = p.get("source") or "Microsoft.Storage"
+    if src not in ("Microsoft.Storage", "Microsoft.KeyVault"):
+        return _err(400, "InvalidEncryptionScopeSource", "source must be Microsoft.Storage or Microsoft.KeyVault.")
+    if p.get("state") not in (None, "Enabled", "Disabled"):
+        return _err(400, "InvalidEncryptionScopeState", "state must be Enabled or Disabled.")
+    if existing is not None and (existing.get("properties") or {}).get("source") not in (None, src):
+        return _err(400, "EncryptionScopeSourceImmutable", "The source of an encryption scope cannot be changed after creation.")
+    if src == "Microsoft.KeyVault":
+        kv = p.get("keyVaultProperties") or {}
+        bad = _check_key_uri(state, kv.get("keyUri"), "keyVaultProperties.keyUri")
+        if bad:
+            return bad
+    ex_inf = (existing or {}).get("properties", {}).get("requireInfrastructureEncryption")
+    if existing is not None and "requireInfrastructureEncryption" in (payload.get("properties") or {}) \
+            and bool(payload["properties"]["requireInfrastructureEncryption"]) != bool(ex_inf):
+        return _err(400, "RequireInfrastructureEncryptionImmutable", "requireInfrastructureEncryption cannot be changed after the scope is created.")
+    return None
+
+
+def _validate_blob_container(state: dict, rid: str, payload: dict, existing):
+    """blobServices/default/containers: defaultEncryptionScope must name an Enabled encryption scope on the account;
+    immutableStorageWithVersioning (version-level WORM) needs the account flag, and cannot be switched off once on."""
+    aid, acct = _acct_of(state, rid)
+    if acct is None:
+        return _err(404, "ResourceNotFound", f"The storage account '{aid.rsplit('/', 1)[-1]}' was not found.")
+    p = _merged(existing, payload)
+    scope = p.get("defaultEncryptionScope")
+    if scope and scope != "$account-encryption-key":
+        s = state.get(f"{aid}/encryptionScopes/{scope}".lower())
+        if s is None:
+            return _err(404, "EncryptionScopeNotFound", f"The encryption scope '{scope}' does not exist on this storage account.")
+        if (s.get("properties") or {}).get("state", "Enabled") != "Enabled":
+            return _err(400, "EncryptionScopeDisabled", f"The encryption scope '{scope}' is disabled.")
+    if p.get("denyEncryptionScopeOverride") and not (scope and scope != "$account-encryption-key"):
+        return _err(400, "InvalidRequest", "denyEncryptionScopeOverride needs a defaultEncryptionScope.")
+    wants = (p.get("immutableStorageWithVersioning") or {}).get("enabled")
+    if wants:
+        acct_on = ((acct.get("properties") or {}).get("immutableStorageWithVersioning") or {}).get("enabled")
+        if not acct_on:
+            return _err(409, "ImmutableStorageWithVersioningNotEnabled", "Version-level immutability support must be enabled on the storage account before it can be enabled on a container.")
+    if existing is not None and ((existing.get("properties") or {}).get("immutableStorageWithVersioning") or {}).get("enabled") and not wants:
+        return _err(409, "ImmutableStorageWithVersioningCannotBeDisabled", "Version-level immutability cannot be disabled on a container once enabled.")
     return None
 
 
@@ -369,6 +524,9 @@ def _validate_sb_ns(state: dict, payload: dict, existing, props: dict):
                 return _err(400, "BadRequest", "encryption.keyVaultProperties entries require keyVaultUri (https://<vault>.vault.azure.net) and keyName.")
             if not _vault_exists(state, m.group(1)):
                 return _err(400, "KeyVaultNotFound", f"The Key Vault '{m.group(1)}' referenced by encryption.keyVaultProperties does not exist in this subscription.")
+            bad = check_key_exists(m.group(1), k.get("keyName"), k.get("keyVersion"), "encryption.keyVaultProperties")
+            if bad:
+                return bad
         if enc.get("requireInfrastructureEncryption") and not isinstance(enc["requireInfrastructureEncryption"], bool):
             return _err(400, "BadRequest", "encryption.requireInfrastructureEncryption must be a boolean.")
     return None
@@ -438,6 +596,8 @@ def _validate_vnet(state: dict, rid: str, payload: dict, props: dict):
 def after_put(state: dict, rec: dict, payload: dict, prev: dict | None = None) -> None:
     ft = (rec.get("_type") or "").lower()
     p = rec.setdefault("properties", {})
+    if flux.handles(ft):
+        return flux.after_put(state, rec, payload, prev)
     if ft.endswith("/providers/extensions"):
         et = str(p.get("extensionType", "")).lower()
         p.setdefault("autoUpgradeMinorVersion", not p.get("version"))
@@ -478,6 +638,27 @@ def after_put(state: dict, rec: dict, payload: dict, prev: dict | None = None) -
         p["isDisabled"] = bool(p.get("isDisabled", False))
         p.setdefault("managedBy", "Vyomi")
         rec["type"] = "Microsoft.Sql/servers/databases/schemas/tables/columns/sensitivityLabels"
+    elif ft == ASG:
+        p["provisioningState"] = "Succeeded"
+        p.setdefault("resourceGuid", str(uuid.uuid4()))
+    elif ft == ENC_SCOPE:
+        p.setdefault("source", "Microsoft.Storage")
+        p.setdefault("state", "Enabled")
+        p["requireInfrastructureEncryption"] = bool(p.get("requireInfrastructureEncryption", False))
+        p.setdefault("creationTime", rec.get("systemData", {}).get("createdAt"))
+        p["lastModifiedTime"] = rec.get("systemData", {}).get("lastModifiedAt")
+        rec["type"] = "Microsoft.Storage/storageAccounts/encryptionScopes"
+    elif ft == BLOB_CONTAINER:
+        p.setdefault("publicAccess", "None")
+        p.setdefault("denyEncryptionScopeOverride", False)
+        iw = p.get("immutableStorageWithVersioning")
+        if iw is not None:
+            iw["enabled"] = bool(iw.get("enabled"))
+            iw["state"] = "Enabled" if iw["enabled"] else "Disabled"
+        p["hasImmutabilityPolicy"] = False
+        p["hasLegalHold"] = False
+        p["defaultEncryptionScope"] = p.get("defaultEncryptionScope") or "$account-encryption-key"
+        rec["type"] = "Microsoft.Storage/storageAccounts/blobServices/containers"
     elif ft == SB_NETRULES:
         p.setdefault("defaultAction", "Allow")
         p.setdefault("publicNetworkAccess", "Enabled")
@@ -487,8 +668,30 @@ def after_put(state: dict, rec: dict, payload: dict, prev: dict | None = None) -
         rec["type"] = "Microsoft.ServiceBus/Namespaces/NetworkRuleSets"
 
 
+def _asg_users(state: dict, asg_id: str):
+    want = asg_id.lower()
+    out = []
+    for k, r in state.items():
+        t = (r.get("_type") or "").lower() if isinstance(r, dict) else ""
+        if t not in (NIC, NSG_RULE, "microsoft.network/networksecuritygroups"):
+            continue
+        p = r.get("properties") or {}
+        refs = [g for c in (p.get("ipConfigurations") or []) for g in ((c.get("properties") or {}).get("applicationSecurityGroups") or [])]
+        refs += (p.get("sourceApplicationSecurityGroups") or []) + (p.get("destinationApplicationSecurityGroups") or [])
+        refs += [g for sr in (p.get("securityRules") or []) for g in ((sr.get("properties") or {}).get("sourceApplicationSecurityGroups") or []) + ((sr.get("properties") or {}).get("destinationApplicationSecurityGroups") or [])]
+        if any(str((g or {}).get("id") or "").lower() == want for g in refs):
+            out.append(r.get("name"))
+    return out
+
+
 def before_delete(state: dict, rec: dict):
     ft = (rec.get("_type") or "").lower()
+    if flux.handles(ft):
+        return flux.before_delete(state, rec)
+    if ft == ASG:
+        users = _asg_users(state, rec["id"])
+        if users:
+            return _err(400, "ApplicationSecurityGroupInUse", f"Application security group '{rec['name']}' cannot be deleted: it is used by {', '.join(sorted(set(users)))}.")
     if ft == APIM:
         import datetime
         now = datetime.datetime.now(datetime.timezone.utc)

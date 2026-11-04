@@ -28,6 +28,7 @@ await page.goto(UI + "#/s3/get-started");
 await page.getByRole("heading", { name: "Amazon S3" }).first().waitFor();
 await page.getByText("Storage classes").first().waitFor();
 check("get-started is a real page", !/Not simulated in Vyomi/i.test(await body()) && /S3 Glacier Deep Archive/.test(await body()));
+await page.waitForFunction(() => /^\d+$/.test((document.querySelector("[data-testid=gs-bucket-count]")?.innerText || "").trim()), null, { timeout: 30000 }).catch(() => {});
 check("get-started shows live bucket count", /^\d+$/.test((await page.getByTestId("gs-bucket-count").innerText()).trim()));
 
 // S3 Marketplace: subscribe via UI

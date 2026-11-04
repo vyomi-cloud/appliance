@@ -53,9 +53,9 @@ export default function AllProducts() {
             <Typography variant="h1" component="h1" sx={{ fontSize: 28, fontWeight: 400, mb: 1 }}>All products</Typography>
             <Typography variant="body1" color="text.secondary">Explore the Google Cloud products Vyomi simulates at a glance</Typography>
           </Box>
-          <Paper variant="outlined" sx={{ p: 2, maxWidth: 260, bgcolor: "action.hover", borderRadius: 2 }} data-vyomi-not-simulated="Marketplace">
+          <Paper variant="outlined" sx={{ p: 2, maxWidth: 260, bgcolor: "action.hover", borderRadius: 2 }}>
             <Typography variant="body2" sx={{ fontWeight: 500 }}>Marketplace</Typography>
-            <Typography variant="caption" color="text.secondary">Third-party Marketplace products aren't simulated in Vyomi.</Typography>
+            <Typography variant="caption" color="text.secondary">Vyomi SaaS spaces: <a href="#/marketplace">browse the Marketplace catalog</a>.</Typography>
           </Paper>
         </Stack>
 

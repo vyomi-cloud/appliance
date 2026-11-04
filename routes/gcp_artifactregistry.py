@@ -141,10 +141,13 @@ def _sync_registry() -> None:
         for tag in tags:
             try:
                 h, man = get(f"{base}/{repo}/manifests/{tag}", accept)
-            except Exception:
-                continue
-            found.append({"path": path, "tag": tag, "digest": h.get("Docker-Content-Digest", ""), "size": image_size(repo, man)})
-    try:
+                size = sum(int(l.get("size", 0)) for l in man.get("layers", [])) + int((man.get("config") or {}).get("size", 0))
+                cfg = None
+                try:   # the image config blob feeds the vulnerability scanner (core/vuln_scan_core.py)
+                    cfg = get(f"{base}/{repo}/blobs/{(man.get('config') or {}).get('digest')}")[1]
+                except Exception:
+                    pass
+                found.append({"path": path, "tag": tag, "digest": h.get("Docker-Content-Digest", ""), "size": size, "config": cfg})
         if ar.ingest_registry_images(_STORE, project, [f for f in found if f["digest"]], kms_store=_kms_store()):
             _usage("registry_push", project)
     except Exception:

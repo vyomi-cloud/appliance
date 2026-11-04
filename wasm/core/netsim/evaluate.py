@@ -448,6 +448,29 @@ def reach(topo: Topology, src, dst, protocol: str = "tcp", port=None, src_port=N
         return v.block("NO_ROUTE", f"route table {S.route_table} of {S.id} has no route to {dst_ip}", S.route_table or "")
     v.add("route-table", S.route_table or "-", "pass", f"{dst_ip} → {route.dest} via {route.kind} {route.target}".rstrip())
 
+    # 1b. AWS Network Firewall endpoint (bump in the wire): the firewall policy inspects the packet, then the
+    #     FIREWALL SUBNET's route table forwards it (that is how AWS routes through an inspection VPC/subnet).
+    if route.kind == "nfw":
+        fwi = topo.firewalls.get(route.target)
+        if fwi is None or topo.netfw_state is None:
+            return v.block("BLACKHOLE_ROUTE", f"firewall endpoint {route.target} does not exist", route.target)
+        try:
+            from core.netfw_core import evaluate_packet_state
+        except ImportError:                                   # pragma: no cover
+            return v.block("UNSUPPORTED_TARGET", "network firewall evaluator unavailable", route.target)
+        pk = {"proto": {"tcp": 6, "udp": 17, "icmp": 1}.get(proto, 0), "src": s.ip, "dst": dst_ip, "sport": src_port, "dport": port}
+        fv = evaluate_packet_state(topo.netfw_state, fwi["firewall"], pk)
+        v.add("network-firewall", route.target, "pass" if fv["action"] == "pass" else "deny",
+              f"{fwi['firewall']}: {fv['action']} at {fv['stage']} ({fv['rule']})")
+        if fv["action"] != "pass":
+            return v.block("NETWORK_FIREWALL_DROP", f"network firewall {fwi['firewall']} dropped the packet ({fv['stage']}: {fv['rule']})", route.target)
+        fsub = topo.subnets.get(fwi["subnet"])
+        route = route_lookup(topo, fsub, dst_ip) if fsub is not None else None
+        if route is None or route.kind == "nfw":
+            v.add("route-table", fsub.route_table if fsub else "-", "deny", f"firewall subnet has no onward route to {dst_ip}")
+            return v.block("NO_ROUTE", f"firewall subnet {fwi['subnet']} has no onward route to {dst_ip}", fwi["subnet"])
+        v.add("route-table", fsub.route_table or "-", "pass", f"{dst_ip} → {route.dest} via {route.kind} {route.target} (after inspection)".rstrip())
+
     # 2. target semantics
     if route.kind == LOCAL:
         if d is None:

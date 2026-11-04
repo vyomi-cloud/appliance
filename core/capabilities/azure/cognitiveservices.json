@@ -24,10 +24,18 @@
   "title": "Model deployments (create, get, list, delete) over ARM — Azure OpenAI and Azure AI services kinds",
   "level": { "nano": "full", "offline": "full" },
   "limitations": [
-   "Deployment, quota and rate-limit bookkeeping (capacity, Tokens-Per-Minute quota per model) is real; the model itself is not served — Vyomi has no local inference backend, so the deployment's data-plane chat/completions/embeddings endpoint is not simulated (console-only: control plane CRUD).",
+   "Deployment, quota and rate-limit bookkeeping (capacity, Tokens-Per-Minute quota per model) is real, and the deployment's data plane (chat/completions, completions, embeddings) is served by core/ai_models_core over the shared local-LLM seam: every deployment is answered by the same small local model, so the model name is not honoured.",
    "Deployments are only accepted on OpenAI and AIServices kind accounts, matching the real service; other kinds return the native InvalidParameter error, same as Azure."
   ],
-  "tests": ["tests/conformance/test_azure_cognitiveservices_core.py"]
+  "tests": ["tests/conformance/test_azure_cognitiveservices_core.py", "tests/conformance/test_local_llm_seam.py"]
+ },
+ "azure.cognitiveservices.playground": {
+  "title": "Chat playground (Azure OpenAI data plane)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Sends chat/completions to the deployment through the real Azure OpenAI wire; the answer comes from one small local model (llama.cpp on the appliance, WebLLM on Nano when the page registers it), so quality is toy-grade and no model running returns the native 503 ServiceUnavailable instead of an answer. No image/audio, function calling, 'On your data', content filters or fine-tuning."
+  ],
+  "tests": ["tests/conformance/test_local_llm_seam.py"]
  },
  "azure.cognitiveservices.quotas": {
   "title": "Quotas (usages: per-model Tokens-Per-Minute for OpenAI/AIServices, TotalCalls for every other kind)",

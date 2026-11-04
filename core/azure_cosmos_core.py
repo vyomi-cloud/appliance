@@ -329,9 +329,9 @@ def _run_query(docs: list[dict], query: str) -> list[dict]:
 
 
 # ── dispatch ──────────────────────────────────────────────────────────────
-def dispatch(store: CosmosStore, method: str, path: str,
-             query: dict | None = None, headers: dict | None = None,
-             body: bytes = b"") -> Response:
+def _dispatch_inner(store: CosmosStore, method: str, path: str,
+                    query: dict | None = None, headers: dict | None = None,
+                    body: bytes = b"") -> Response:
     query = query or {}
     headers = {(k or "").lower(): v for k, v in (headers or {}).items()}
     method = method.upper()
@@ -546,3 +546,145 @@ def dispatch(store: CosmosStore, method: str, path: str,
         store.persist()
         return Response(status=204, body=b"", media_type=None)
     return _err(400, "BadRequest", f"Unsupported method {method} on document")
+
+
+# ── account-level enforcement (RU/s throughput + network rules) ───────────────────────────────────────
+# The data-plane wire names no account, so the caller says which account it is talking to with `x-vyomi-account`
+# (or a `{name}.documents.azure.com` Host); with neither, the ONLY Cosmos account in the ARM state is used; with
+# several accounts and no signal nothing is enforced (the shared keyspace cannot attribute the call).
+_TP_TYPES = ("microsoft.documentdb/databaseaccounts/sqldatabases/throughputsettings",
+             "microsoft.documentdb/databaseaccounts/sqldatabases/containers/throughputsettings")
+_clock = time.time            # tests replace it
+_WINDOW: dict = {}            # (account_id, scope) -> [(ts, ru)] consumed in the trailing 1 s
+
+
+def request_charge(method: str, nbytes: int, status: int = 200, is_query: bool = False) -> float:
+    """Modelled RU charge (Microsoft's published cost model, same as observability_core): 1 KB point read = 1 RU,
+    1 KB write ~ 5 RU, a query >= 2.5 RU. A MODEL on the measured request size, not a metering engine."""
+    kb = max(1.0, nbytes / 1024.0)
+    if status >= 400:
+        return 1.0
+    if method.upper() in ("POST", "PUT", "PATCH", "DELETE") and not is_query:
+        return round(5.0 * kb, 2)
+    return round(max(2.5, kb) if is_query else kb, 2)
+
+
+def validate_throughput_settings(props: dict) -> str | None:
+    """Error text for a throughputSettings `properties.resource`, else None (manual >= 400 in steps of 100; autoscale max
+    >= 1000 in steps of 1000; exactly one of the two)."""
+    res = (props or {}).get("resource")
+    if not isinstance(res, dict):
+        return "properties.resource is required."
+    tp, au = res.get("throughput"), res.get("autoscaleSettings")
+    if (tp is None) == (au is None):
+        return "Specify exactly one of throughput (manual) or autoscaleSettings.maxThroughput (autoscale)."
+    if tp is not None and (not isinstance(tp, int) or isinstance(tp, bool) or tp < 400 or tp % 100):
+        return "The offer throughput must be at least 400 RU/s and a multiple of 100."
+    if au is not None:
+        mx = (au or {}).get("maxThroughput")
+        if not isinstance(mx, int) or isinstance(mx, bool) or mx < 1000 or mx % 1000:
+            return "autoscaleSettings.maxThroughput must be at least 1000 RU/s and a multiple of 1000."
+    return None
+
+
+def _cosmos_accounts(arm_state: dict) -> list:
+    out = []
+    for key, rec in (arm_state or {}).items():
+        if str(rec.get("_type") or rec.get("type") or "").lower() == "microsoft.documentdb/databaseaccounts":
+            out.append(rec if rec.get("id") else {**rec, "id": key})
+    return out
+
+
+def resolve_account(arm_state: dict | None, headers: dict) -> dict | None:
+    accts = _cosmos_accounts(arm_state or {})
+    name = str(headers.get("x-vyomi-account") or "").strip().lower()
+    if not name:
+        host = str(headers.get("host") or "").split(":")[0].lower()
+        if host.endswith(".documents.azure.com"):
+            name = host.split(".")[0]
+    if name:
+        for a in accts:
+            if (a.get("name") or a["id"].rsplit("/", 1)[-1]).lower() == name:
+                return a
+        return None
+    return accts[0] if len(accts) == 1 else None
+
+
+def _limit_for(arm_state: dict, acct_id: str, db: str, coll: str):
+    """(scope_key, limit RU/s, mode) — the container's own offer, else the database's shared offer, else None."""
+    base = acct_id.lower()
+    cands = []
+    if coll:
+        cands.append((f"{base}/sqldatabases/{db}/containers/{coll}/throughputsettings/default".lower(), f"{db}/{coll}"))
+    if db:
+        cands.append((f"{base}/sqldatabases/{db}/throughputsettings/default".lower(), db))
+    for key, scope in cands:
+        rec = (arm_state or {}).get(key)
+        res = ((rec or {}).get("properties") or {}).get("resource") or {}
+        if res.get("autoscaleSettings"):
+            return scope, int(res["autoscaleSettings"].get("maxThroughput") or 0), "autoscale"
+        if res.get("throughput"):
+            return scope, int(res["throughput"]), "manual"
+    return None
+
+
+def _cosmos_net_denied(arm_state, acct, headers):
+    try:
+        from core import azure_netaccess as na
+    except ImportError:  # pragma: no cover - Pyodide flat layout
+        import azure_netaccess as na  # type: ignore
+    props = acct.get("properties") or {}
+    ctx = na.caller_context(headers)
+    ip_rules = [r.get("ipAddressOrRange", "") for r in props.get("ipRules") or [] if isinstance(r, dict)]
+    vn_rules = [r.get("id", "") for r in props.get("virtualNetworkRules") or [] if isinstance(r, dict)]
+    if ctx and ctx.get("private_endpoint"):
+        ok, why = na._pe_reaches(arm_state, ctx["private_endpoint"], acct["id"])
+        return None if ok else (403, "Forbidden", f"Request is blocked: the private endpoint cannot reach this account ({why}).")
+    if props.get("publicNetworkAccess") == "Disabled":
+        return 403, "Forbidden", "Request is blocked because public network access is disabled for this account; use a private endpoint."
+    if not ctx or not (props.get("isVirtualNetworkFilterEnabled") or ip_rules or vn_rules):
+        return None
+    ip, subnet = ctx.get("source_ip"), ctx.get("source_subnet")
+    if ip and any(na._ip_in_rule(ip, r) for r in ip_rules):
+        return None
+    if subnet and any(v.lower() == subnet.lower() for v in vn_rules) and na._subnet_has_endpoint(arm_state, subnet, "Microsoft.AzureCosmosDB"):
+        return None
+    return 403, "Forbidden", (f"Request originated from client IP {ip or 'unknown'} through public internet. This is blocked by your "
+                              "Cosmos DB account firewall settings.")
+
+
+def dispatch(store: CosmosStore, method: str, path: str, query: dict | None = None, headers: dict | None = None,
+             body: bytes = b"", arm_state: dict | None = None) -> Response:
+    """Data-plane dispatch. With `arm_state` (the Azure ARM state) the target account's network rules and provisioned /
+    autoscale throughput are ENFORCED: a denied caller gets 403, a request that would exceed the offer in the trailing
+    second gets 429 (RequestRateTooLarge) with x-ms-retry-after-ms; every response carries x-ms-request-charge (modelled RU)."""
+    hdrs = {(k or "").lower(): v for k, v in (headers or {}).items()}
+    acct = resolve_account(arm_state, hdrs) if arm_state else None
+    segs = [s for s in path.split("?", 1)[0].split("/") if s]
+    if acct is not None and segs:
+        denied = _cosmos_net_denied(arm_state, acct, hdrs)
+        if denied:
+            return _err(*denied)
+    is_query = str(hdrs.get("x-ms-documentdb-isquery", "")).lower() == "true"
+    charge = request_charge(method, len(body or b""), 200, is_query)
+    lim = None
+    if acct is not None and len(segs) >= 4 and segs[0] == "dbs" and segs[2] == "colls" and (len(segs) >= 5 or method.upper() != "GET"):
+        lim = _limit_for(arm_state, acct["id"], segs[1], segs[3])
+    if lim is not None:
+        scope, limit, mode = lim
+        now = _clock()
+        win = _WINDOW.setdefault((acct["id"].lower(), scope), [])
+        win[:] = [(t, c) for t, c in win if now - t < 1.0]
+        used = sum(c for _, c in win)
+        if used + charge > limit and used > 0 or charge > limit:
+            retry = max(1, int(1000 - (now - win[0][0]) * 1000)) if win else 1000
+            r = _err(429, "RequestRateTooLarge",
+                     f"Request rate is large. More Request Units may be needed, so no changes were made. Please retry this request later. "
+                     f"({mode} offer {limit} RU/s on '{scope}', {round(used, 2)} RU used in the last second, this request costs {charge} RU)")
+            r.headers.update({"x-ms-retry-after-ms": str(retry), "x-ms-request-charge": str(charge), "x-ms-substatus": "3200"})
+            return r
+        win.append((now, charge))
+    r = _dispatch_inner(store, method, path, query, headers, body)
+    if r.status < 400:
+        r.headers.setdefault("x-ms-request-charge", str(charge))
+    return r

@@ -16,6 +16,7 @@ import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { listAllSubnets } from "../../kit/PrivateEndpoints.jsx";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
+import { setPricing } from "../defender/api.js";
 
 const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9-]{0,58}[A-Za-z0-9]$/;
 const RG_RE = /^[-\w._()]{1,90}$/;
@@ -33,7 +34,7 @@ export default function CreateWebApp() {
     planChoice: "__new", newPlanName: "", planSku: "B1", zoneRedundant: "Disabled",
     createDatabase: false,
     containerImageSource: "Quickstart", containerImage: "",
-    continuousDeployment: "Disable", basicAuth: "Disable", ghRepo: "", ghBranch: "main",
+    continuousDeployment: "Disable", basicAuth: "Disable", ghRepo: "", ghBranch: "main", ghToken: "",
     publicAccess: true, networkInjection: false,
     appInsights: "No", defender: false,
     tags: [{ name: "", value: "" }],
@@ -168,9 +169,10 @@ export default function CreateWebApp() {
         </FormRow>
       </FormSection>
       {f.continuousDeployment === "Enable" && (
-        <FormSection title="GitHub Actions details" description="Vyomi records this source control and generates the workflow; it does not authorize a GitHub account or run the pipeline.">
+        <FormSection title="GitHub Actions details" description="Vyomi generates the workflow for the chosen runtime stack and, when you supply a GitHub personal access token (repo + workflow scope), commits it to the repository. The pipeline itself runs on GitHub.">
           <FormRow label="Repository URL" required htmlFor="wa-gh-repo"><Input id="wa-gh-repo" value={f.ghRepo} onChange={set("ghRepo")} placeholder="https://github.com/org/repo" aria-label="GitHub repository URL" /></FormRow>
           <FormRow label="Branch" required htmlFor="wa-gh-branch"><Input id="wa-gh-branch" value={f.ghBranch} onChange={set("ghBranch")} aria-label="GitHub branch" /></FormRow>
+          <FormRow label="Personal access token" htmlFor="wa-gh-token"><Input id="wa-gh-token" type="password" value={f.ghToken} onChange={set("ghToken")} placeholder="optional: needed to commit the workflow file" aria-label="GitHub personal access token" /></FormRow>
         </FormSection>
       )}
 
@@ -219,7 +221,15 @@ export default function CreateWebApp() {
       </FormSection>
       <NotSimulatedContainer title="Application Insights" feature="Application Insights" note="Creating/linking an Application Insights resource (and its Region) is not modelled." />
       <FormSection title="Microsoft Defender for App Service">
-        <NotSimulatedContainer feature="Enable Microsoft Defender for App Service" />
+        <CapabilityContainer id="azure.defender.plans" title="Defender for App Service">
+          <FormRow label="Enable Microsoft Defender for App Service">
+            <RadioGroup layout="horizontal" value={f.defender ? "Yes" : "No"} onChange={(_, d) => setF((x) => ({ ...x, defender: d.value === "Yes" }))} aria-label="Enable Microsoft Defender for App Service">
+              <Radio value="Yes" label="Enable" />
+              <Radio value="No" label="Not now" />
+            </RadioGroup>
+          </FormRow>
+          <InfoBar title="Subscription-wide plan">Like Azure, this turns the Defender for App Service plan on for the whole subscription when the app is created (Defender for Cloud > Environment settings).</InfoBar>
+        </CapabilityContainer>
       </FormSection>
     </>
   );
@@ -273,9 +283,10 @@ export default function CreateWebApp() {
           ...(f.inject ? { virtualNetworkSubnetId: f.injectSubnet || subnets.data?.[0]?.id } : {}) },
       });
       if (f.continuousDeployment === "Enable" && f.ghRepo) {
-        await api.putSourceControl(rg, f.name, { repoUrl: f.ghRepo, branch: f.ghBranch || "main", isGitHubAction: true, gitHubActionConfiguration: {
+        await api.putSourceControl(rg, f.name, { repoUrl: f.ghRepo, branch: f.ghBranch || "main", isGitHubAction: true, ...(f.ghToken ? { vyomiAccessToken: f.ghToken } : {}), gitHubActionConfiguration: {
           codeConfiguration: { runtimeStack: (f.runtimeStack || "").split("|")[0].toLowerCase() || "python", runtimeVersion: (f.runtimeStack || "").split("|")[1] }, isLinux: f.os === "Linux" } });
       }
+      if (f.defender) await setPricing("AppServices", "Standard");
       notify.success(`Deployment of app service '${f.name}' to resource group '${rg}' was successful.`, "Deployment succeeded");
       navigate("appservices", rg, f.name);
     } catch (e) { notify.error(e, "Deployment failed"); }

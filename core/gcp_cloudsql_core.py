@@ -301,6 +301,16 @@ def _check_settings(store, project: str, region: str, settings: dict) -> str | N
     mode = ip.get("sslMode")
     if mode is not None and mode not in _SSL_MODES:
         return f"Invalid value for sslMode: {mode}. Allowed: {', '.join(_SSL_MODES)}."
+    bc = settings.get("backupConfiguration") or {}
+    if bc.get("pointInTimeRecoveryEnabled") and bc.get("enabled") is False:
+        return "Point-in-time recovery requires automated backups to be enabled (backupConfiguration.enabled)."
+    if bc.get("transactionLogRetentionDays") is not None and not (isinstance(bc["transactionLogRetentionDays"], int) and 1 <= bc["transactionLogRetentionDays"] <= 35):
+        return "backupConfiguration.transactionLogRetentionDays must be between 1 and 35."
+    rb = (bc.get("backupRetentionSettings") or {}).get("retainedBackups")
+    if rb is not None and not (isinstance(rb, int) and 1 <= rb <= 365):
+        return "backupConfiguration.backupRetentionSettings.retainedBackups must be between 1 and 365."
+    if bc.get("startTime") is not None and not re.match(r"^([01]\d|2[0-3]):[0-5]\d$", str(bc["startTime"])):
+        return "backupConfiguration.startTime must be HH:MM (UTC)."
     if ip.get("requireSsl") and mode in (None, "ALLOW_UNENCRYPTED_AND_ENCRYPTED"):
         ip["sslMode"] = "ENCRYPTED_ONLY"      # legacy requireSsl maps onto the SSL mode
     return None
@@ -600,6 +610,127 @@ def _delete_user(store: SqlStore, project: str, instance: str, name: str, host: 
                        "status": "DONE", "name": str(uuid.uuid4()), "targetId": instance})
 
 
+
+# ── real data movement for backups / restores / clones / PITR ────────────────────────
+_WRITE_RE = re.compile(r"^\s*(insert|update|delete|replace|create|drop|alter|truncate)\b", re.IGNORECASE)
+_BASE_EVERY_S = 600
+
+
+def _data_script(store: SqlStore, project: str, instance: str) -> str:
+    from core import sql_store as sq
+    db_id = _key(project, instance)
+    if not store.instance_exists(db_id) or sq.is_async_engine(store):
+        return ""
+    try:
+        return sq.sql_dump(sq.dump_tables(store, db_id), sq.engine_dialect(store), f"Cloud SQL backup of {instance}")
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _apply_data(store: SqlStore, project: str, instance: str, script: str, replay=()) -> None:
+    from core import sql_store as sq
+    db_id = _key(project, instance)
+    if not store.instance_exists(db_id):
+        return
+    for t in sq.dump_tables(store, db_id):
+        store.execute_sql(db_id, f"DROP TABLE IF EXISTS {sq.quote_ident(t['name'])}")
+    for stmt in sq.split_sql(script or ""):
+        store.execute_sql(db_id, stmt)
+    for _ts, sql, params in replay:
+        store.execute_sql(db_id, sql, params)
+    w = _wal(store)       # the data was rewritten outside the log: start a fresh history from this state
+    w["bases"][db_id] = [(time.time(), script)] if not replay else [(time.time(), _data_script(store, project, instance))]
+    w["log"][db_id] = []
+
+
+def _wal(store):
+    w = getattr(store, "_cloudsql_wal", None)
+    if w is None:
+        w = {"bases": {}, "log": {}}
+        store._cloudsql_wal = w
+    return w
+
+
+def _wal_pre(store, project, instance, sql):
+    if not _WRITE_RE.match(sql):
+        return
+    w = _wal(store)
+    bases = w["bases"].setdefault(_key(project, instance), [])
+    if not bases or time.time() - bases[-1][0] > _BASE_EVERY_S:
+        bases.append((time.time(), _data_script(store, project, instance)))
+        del bases[:-20]
+
+
+def _wal_post(store, project, instance, sql, params):
+    if _WRITE_RE.match(sql):
+        log = _wal(store)["log"].setdefault(_key(project, instance), [])
+        log.append((time.time(), sql, params))
+        del log[:-5000]
+
+
+def _pitr_state(store, project, instance, when: float):
+    w = _wal(store)
+    k = _key(project, instance)
+    bases, log = w["bases"].get(k) or [], w["log"].get(k) or []
+    if not bases:
+        return _data_script(store, project, instance), []
+    pick = bases[0]
+    for b in bases:
+        if b[0] <= when:
+            pick = b
+    return pick[1], [e for e in log if pick[0] < e[0] <= when]
+
+
+def _clone_instance(store: SqlStore, project: str, instance: str, body: dict) -> CloudSqlResponse:
+    src = _get_instance(store, project, instance)
+    if not src:
+        return _not_found(f"The Cloud SQL instance does not exist. Instance: {instance}")
+    ctx = body.get("cloneContext") or {}
+    dest = str(ctx.get("destinationInstanceName") or "").strip()
+    if not dest:
+        return _err(400, "INVALID_ARGUMENT", "cloneContext.destinationInstanceName is required.")
+    if not re.match(r"^[a-z]([-a-z0-9]{0,96}[a-z0-9])?$", dest):
+        return _err(400, "INVALID_ARGUMENT", "destinationInstanceName must be lowercase letters, digits and '-', starting with a letter.")
+    if _get_instance(store, project, dest):
+        return _err(409, "ALREADY_EXISTS", f"The Cloud SQL instance already exists. Instance: {dest}")
+    pit = ctx.get("pointInTime")
+    script, replay = None, []
+    if pit:
+        bc = (src.get("settings") or {}).get("backupConfiguration") or {}
+        if not bc.get("pointInTimeRecoveryEnabled"):
+            return _err(400, "FAILED_PRECONDITION", f"Point-in-time recovery is not enabled on instance {instance}; enable backupConfiguration.pointInTimeRecoveryEnabled.")
+        try:
+            when = __import__("datetime").datetime.fromisoformat(str(pit).replace("Z", "+00:00")).timestamp()
+        except ValueError:
+            return _err(400, "INVALID_ARGUMENT", "pointInTime must be an RFC 3339 timestamp.")
+        days = bc.get("transactionLogRetentionDays", 7)
+        if when > time.time() + 1:
+            return _err(400, "INVALID_ARGUMENT", "pointInTime is in the future.")
+        if when < time.time() - days * 86400:
+            return _err(400, "INVALID_ARGUMENT", f"pointInTime is outside the {days}-day transaction log retention window.")
+        script, replay = _pitr_state(store, project, instance, when)
+    res = _insert_instance(store, project, {"name": dest, "databaseVersion": src["databaseVersion"], "region": src["region"],
+                                           "settings": json.loads(json.dumps(src.get("settings") or {}))})
+    if res.status >= 300:
+        return res
+    d = _get_instance(store, project, dest)
+    d["databases"] = {k: dict(v) for k, v in src.get("databases", {}).items()}
+    d["users"] = {k: dict(v) for k, v in src.get("users", {}).items()}
+    d["clonedFrom"] = instance
+    db_id = _key(project, dest)
+    if not store.instance_exists(db_id):
+        store.put_instance(db_id, d)
+    try:
+        if script is None:
+            script = _data_script(store, project, instance)
+        _apply_data(store, project, dest, script, replay)
+    except Exception as e:  # noqa: BLE001
+        return _err(500, "INTERNAL", f"Cloning the data failed: {e}")
+    op = _log_op(d, "CLONE")
+    store.persist()
+    return _json(200, _operation_view(op, project, dest))
+
+
 # ── control-plane operations: backup runs ───────────────────────────────────
 def _list_backup_ids(store: SqlStore, project: str, instance: str) -> list[str]:
     prefix = _backup_key(project, instance, "")
@@ -620,6 +751,8 @@ def _insert_backup(store: SqlStore, project: str, instance: str, body: dict) -> 
     rec = _get_instance(store, project, instance)
     if not rec:
         return _not_found(f"The Cloud SQL instance does not exist. Instance: {instance}")
+    if rec.get("masterInstanceName"):
+        return _err(400, "FAILED_PRECONDITION", f"Backups cannot be taken on a read replica. Instance: {instance}")
     backup_id = str(uuid.uuid4().int % 10_000_000_000)
     now = time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime())
     b = {"id": backup_id, "project": project, "instance": instance, "type": "ON_DEMAND",
@@ -629,7 +762,8 @@ def _insert_backup(store: SqlStore, project: str, instance: str, body: dict) -> 
          # by instances.restoreBackup. Row-level SQL data lives in the separate SQL data
          # plane (see module docstring) and isn't captured here.
          "snapshot": {"databases": {k: dict(v) for k, v in rec.get("databases", {}).items()},
-                      "users": {k: dict(v) for k, v in rec.get("users", {}).items()}}}
+                      "users": {k: dict(v) for k, v in rec.get("users", {}).items()}},
+         "databaseVersion": rec.get("databaseVersion"), "dataScript": _data_script(store, project, instance)}
     store.put_snapshot(_backup_key(project, instance, backup_id), b)
     _log_op(rec, "BACKUP_VOLUME")
     store.persist()
@@ -680,6 +814,19 @@ def _restore_backup(store: SqlStore, project: str, instance: str, body: dict) ->
     b = store.get_snapshot(_backup_key(project, source_instance, backup_id))
     if not b:
         return _not_found(f"The backupRun does not exist. BackupRun: {backup_id}")
+    if rec.get("masterInstanceName"):
+        return _err(400, "FAILED_PRECONDITION", "A backup cannot be restored onto a read replica.")
+    if source_instance != instance:
+        src_p = str(ctx.get("project") or project)
+        if src_p != project:
+            return _err(400, "FAILED_PRECONDITION", "Restoring a backup from another project is not supported in this simulator.")
+        fam = lambda v: str(v or "").split("_")[0]
+        if fam(b.get("databaseVersion")) != fam(rec.get("databaseVersion")):
+            return _err(400, "FAILED_PRECONDITION", f"The backup is from a {fam(b.get('databaseVersion'))} instance and cannot be restored onto a {fam(rec.get('databaseVersion'))} instance.")
+    try:
+        _apply_data(store, project, instance, b.get("dataScript") or "")
+    except Exception as e:  # noqa: BLE001
+        return _err(500, "INTERNAL", f"Restoring the data failed: {e}")
     snap = b.get("snapshot") or {}
     rec["databases"] = {k: dict(v) for k, v in snap.get("databases", {}).items()}
     rec["users"] = {k: dict(v) for k, v in snap.get("users", {}).items()}
@@ -928,7 +1075,9 @@ def _run_query(store: SqlStore, project: str, instance: str, body: dict) -> Clou
     db_id = _key(project, instance)
     t0 = time.time()
     try:
+        _wal_pre(store, project, instance, sql)
         res = store.execute_sql(db_id, sql, body.get("params"))
+        _wal_post(store, project, instance, sql, body.get("params"))
         ok, error = True, None
     except Exception as e:  # noqa: BLE001 — a bad statement fails the query, not the RPC
         res, ok, error = {"columns": [], "rows": [], "rowcount": 0}, False, str(e)
@@ -1065,7 +1214,7 @@ def dispatch(store: SqlStore, method: str, path: str,
 
     # Native Admin API RPCs are path segments: POST .../instances/{i}/restart|restoreBackup
     # (what gcloud / the client libraries send; the colon form is kept for older callers).
-    if len(segs) == 5 and verb is None and method == "POST" and segs[4] in ("restart", "restoreBackup",
+    if len(segs) == 5 and verb is None and method == "POST" and segs[4] in ("restart", "restoreBackup", "clone",
                                                                             "export", "import", "query"):
         verb = segs[4]
         segs = segs[:4]
@@ -1074,6 +1223,8 @@ def dispatch(store: SqlStore, method: str, path: str,
     if len(segs) == 4:
         if verb == "restart" and method == "POST":
             return _restart_instance(store, project, instance)
+        if verb == "clone" and method == "POST":
+            return _clone_instance(store, project, instance, payload)
         if verb == "restoreBackup" and method == "POST":
             return _restore_backup(store, project, instance, payload)
         if verb in ("export", "import") and method == "POST":

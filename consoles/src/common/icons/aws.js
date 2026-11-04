@@ -15,6 +15,7 @@ export const AWS_CATEGORY_COLORS = {
   security: "#DD344C",
   integration: "#E7157B",
   management: "#B0084D",
+  ml: "#01A88D",
   other: "#5A6B86",
 };
 
@@ -51,6 +52,8 @@ export const AWS_ICONS = {
   // templates/stacks: three layers
   cloudformation: ["management", '<path d="M12 5 19 8.7 12 12.4 5 8.7z"/><path d="M5 12.3l7 3.7 7-3.7M5 15.7l7 3.7 7-3.7"/>'],
   // data stream: records flowing through shards
+  // generative AI: a spark inside a rounded square
+  bedrock: ["ml", '<rect x="5" y="5" width="14" height="14" rx="3"/><path d="M12 8.2l1.1 2.7 2.7 1.1-2.7 1.1L12 15.8l-1.1-2.7-2.7-1.1 2.7-1.1z"/>'],
   kinesis: ["integration", '<path d="M4.6 8.5h3.6M4.6 12h3.6M4.6 15.5h3.6"/><path d="M9.5 8.5h3.6M9.5 12h3.6M9.5 15.5h3.6"/><path d="M15.5 12h3.9M17.6 10.1l1.9 1.9-1.9 1.9"/>'],
   // workflow: linked state nodes with a branch
   states: ["integration", '<circle cx="6.2" cy="8" r="2"/><circle cx="12" cy="17" r="2"/><circle cx="17.8" cy="8" r="2"/><path d="M7.4 9.6 10.8 15.4M16.6 9.6 13.2 15.4"/>'],

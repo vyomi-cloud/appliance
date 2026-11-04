@@ -148,6 +148,13 @@ def get() -> dict:
         _REG["cw"].logs_store = _REG["logs"]   # real log-based Contributor Insights rules
         _REG["msg"].logs_store = _REG["logs"]   # real SNS delivery-status logging (SQSSuccessFeedbackRoleArn/…)
         _REG["az_arm"].kv_secrets_store = _REG["az_kvsec"]   # APIM Key Vault named values resolve against this space's KV secrets
+        try:   # customer-managed keys (Storage/Cosmos/SQL/Service Bus/App Config) are cross-checked against this space's Key Vault keys
+            from core import azure_cfgext_core as _cfgx
+            _cfgx.bind_key_store(_REG["az_kvkeys"])
+            from core import azure_eventgrid_core as _egx   # StorageQueue delivery works in-browser; WebHook needs an outbound hop Nano does not have
+            _egx.bind_destinations(lambda: _REG["az_queue"], None)
+        except Exception:
+            pass
         _REG["az_arm"].sql_store = _REG.get("rds")       # Azure SQL database export/import (the shared SqlStore)
         _REG["az_arm"].blob_store = _REG.get("az_blob")  # … to/from this space's Azure Blob store (.bacpac)
         _REG["gcp_logging"].mon_store = _REG["gcp_mon"]   # Logs Storage "Create usage alert" mirrors live byte/entry counts into Monitoring

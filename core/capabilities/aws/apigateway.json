@@ -172,11 +172,14 @@
  "apigateway.agentcore-targets": {
   "title": "AgentCore targets (MCP access via Bedrock AgentCore)",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Bedrock AgentCore is a separate AWS product Vyomi does not implement at all; declared in the nav for completeness only."
+   "Lists and manages the targets of Vyomi AgentCore gateways (see bedrock.agentcore.gateway): Lambda targets are real MCP tools; other target kinds are registered only."
+  ],
+  "tests": [
+   "tests/conformance/test_bedrock_agents_core.py"
   ]
  },
  "apigateway.developer-portals": {

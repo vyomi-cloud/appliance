@@ -23,7 +23,8 @@ GET/list never sees one, the same as the real service.
 every live subscription's filter and attempting delivery. Delivery is REAL for ServiceBusQueue
 / ServiceBusTopic destinations (an injected ``core.azure_servicebus_core`` store — pure
 in-memory, no external emulator) — the message actually lands in that entity's backlog. Every
-other destination type (WebHook, EventHub, StorageQueue, HybridConnection, AzureFunction,
+StorageQueue (queue must exist) and WebHook (offline: loopback/private targets only; no validation handshake) are delivered through the injected
+bind_destinations() seams. Every other destination type (EventHub, HybridConnection, AzureFunction,
 NamespaceTopic) has no reachable simulator backend wired yet, so delivery to them fails exactly
 like an unreachable real endpoint would. There is no background retry scheduler (same
 simplification as EventBridge Scheduler's lazy firing): a failed attempt is resolved immediately
@@ -276,6 +277,49 @@ def _cloud_event(event: dict, props: dict) -> dict:
     }
 
 
+# Destination seams injected by the substrate: QUEUE_STORE() -> the Storage Queue store; WEBHOOK_POST(url, body: bytes, headers: dict)
+# -> HTTP status int (raises on a transport failure). Unset = that destination type is not deliverable (the event is dropped /
+# dead-lettered honestly). The offline hook only POSTs to loopback / private-network addresses (no outbound internet).
+QUEUE_STORE = None
+WEBHOOK_POST = None
+
+
+def bind_destinations(queue_store=None, webhook_post=None) -> None:
+    global QUEUE_STORE, WEBHOOK_POST
+    QUEUE_STORE, WEBHOOK_POST = queue_store, webhook_post
+
+
+def _deliver_storage_queue(dprops: dict, event: dict, props: dict) -> bool:
+    qn = dprops.get("queueName")
+    if QUEUE_STORE is None or not qn:
+        return False
+    try:
+        from core import azure_queue_core as aq
+    except ImportError:  # pragma: no cover - Pyodide flat layout
+        import azure_queue_core as aq  # type: ignore
+    try:
+        st = QUEUE_STORE()
+        if qn not in getattr(st, "queues", {}):
+            return False                       # real Event Grid fails the delivery when the queue does not exist
+        text = json.dumps(_cloud_event(event, props))
+        xml = f"<QueueMessage><MessageText>{text.replace('&', '&amp;').replace('<', '&lt;')}</MessageText></QueueMessage>".encode()
+        return aq.dispatch(st, "POST", f"/{qn}/messages", {}, {"content-type": "application/xml"}, xml).status == 201
+    except Exception:
+        return False
+
+
+def _deliver_webhook(dprops: dict, event: dict, props: dict) -> bool:
+    url = str(dprops.get("endpointUrl") or "")
+    if WEBHOOK_POST is None or not url.startswith(("http://", "https://")):
+        return False
+    try:
+        body = json.dumps([event] if (props.get("eventDeliverySchema") or "EventGridSchema") == "EventGridSchema" else _cloud_event(event, props)).encode()
+        st = WEBHOOK_POST(url, body, {"content-type": "application/json", "aeg-event-type": "Notification"})
+        return 200 <= int(st) < 300
+    except Exception:
+        return False
+
+
 def _attempt_delivery(rec: dict, event: dict, *, sb_store=None) -> str:
     """Try to deliver ``event`` to one event subscription's destination. Returns
     'delivered', 'dead-lettered' or 'dropped' — never raises; an unreachable/unmodelled
@@ -297,6 +341,10 @@ def _attempt_delivery(rec: dict, event: dict, *, sb_store=None) -> str:
                 delivered = resp.status == 201
             except Exception:
                 delivered = False
+    elif etype == "storagequeue":
+        delivered = _deliver_storage_queue(dprops, event, props)
+    elif etype == "webhook":
+        delivered = _deliver_webhook(dprops, event, props)
     counters = rec.setdefault("_delivery", {"matched": 0, "delivered": 0, "failed": 0, "deadLettered": 0, "dropped": 0})
     if delivered:
         counters["delivered"] += 1

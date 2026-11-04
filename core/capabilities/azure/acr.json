@@ -157,9 +157,9 @@
   "title": "Tasks",
   "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "Task definitions and run history are real, Standard+-gated, stored ARM resources (registries/tasks + registries/runs) — \"Run now\" records a genuine run, but Vyomi never executes the build itself: there is no container runtime, and a real build would need to pull base images over the real internet, which the simulator never does."
+   "Task definitions are real, Standard+-gated ARM resources; runs are REAL builds through the shared CI seam (core/azure_acr_tasks_core.py): POST registries/{r}/scheduleRun with DockerBuildRequest or TaskRunRequest builds the context (a https://github.com/{o}/{r}[#branch] URL, fetched with the user's own PAT when one is connected, or inline vyomiFiles) with BuildKit on the offline appliance (Dockerfile validated, --pull=false so only base images already on the host are used) and records a registries/runs record with the build log and outputImages only when an image was really built. Nano has no container runtime, so image runs are recorded Failed with that reason (never a fake success). The built image is exported (docker save) and PUSHED into the simulated registry's repository store under every imageName (blobs + schema2 manifest, listed by az acr repository, pullable over /v2), unless isPushEnabled is false or the image exceeds 300 MB. Limits: FileTaskRunRequest/EncodedTaskRunRequest multi-step YAML tasks are rejected; source/timer/base-image triggers do not fire automatically; Azure Repos/Bitbucket/generic git sources are not fetchable."
   ],
-  "tests": ["tests/conformance/test_azure_arm_core.py"]
+  "tests": ["tests/conformance/test_azure_arm_core.py", "tests/conformance/test_ci_core.py"]
  },
  "azure.acr.cache": {
   "title": "Cache",

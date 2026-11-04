@@ -348,6 +348,14 @@ def _arm_dispatch(backends: Backends, method: str, params: dict) -> dict:
     `operation` carries the HTTP method; params carries {path, query, body}.
     Returns the raw HTTP envelope under __http so the SW can honour the real
     ARM status code, headers (Azure-AsyncOperation/Location) and body."""
+    # The native-wire router wires the ARM state to its sibling stores (ACR, Key Vault secrets, SQL/Blob stores) and installs the
+    # Azure Monitor hooks (request telemetry, per-resource metric definitions/series). Build it before ARM serves anything so
+    # ARM-only sessions behave like /_wire ones (otherwise metricDefinitions lack the measured request metrics).
+    try:
+        from wasm.providers import wire_adapter
+        wire_adapter.router()
+    except Exception:
+        import traceback; traceback.print_exc()
     arm = getattr(backends, "_azure_arm", None)
     if arm is None:
         # Prefer the SHARED registry instance (the one nano_persist captures/

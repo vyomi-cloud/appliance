@@ -89,3 +89,6 @@ export const listEndpointAssociations = async () => {
 };
 export const createEndpointAssociation = (v) => call("CreateVpcEndpointAssociation", { FirewallArn: v.firewall, VpcId: v.vpc, SubnetMapping: { SubnetId: v.subnet }, Description: v.description || undefined });
 export const deleteEndpointAssociation = (a) => call("DeleteVpcEndpointAssociation", { VpcEndpointAssociationArn: a.Arn });
+
+/* Simulator verb (not a real Network Firewall API): run one packet through the firewall policy. */
+export const simulateTraffic = (firewallArn, Packet) => call("SimulateTraffic", { FirewallArn: firewallArn, Packet });

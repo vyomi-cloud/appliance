@@ -54,9 +54,9 @@
     "level": { "nano": "limited", "offline": "limited" },
     "limitations": [
       "REAL on publish (core/azure_eventgrid_core.py publish()/deliver(), POST {topic.properties.endpoint}): every live event subscription's filter (subjectBeginsWith/EndsWith + case sensitivity, includedEventTypes, a bounded subset of advancedFilters operators) is actually evaluated against the event, and a ServiceBusQueue/ServiceBusTopic destination is actually delivered to — the message lands in that Service Bus entity's real backlog (core/azure_servicebus_core.py), readable back over its own native wire.",
-      "WebHook, EventHub, StorageQueue, HybridConnection, AzureFunction and NamespaceTopic destinations have no reachable simulator backend wired yet, so delivery to them fails exactly like an unreachable real endpoint would — never a silent fake success. There is no background retry scheduler, so a failed attempt resolves immediately to dead-lettered (deadLetterDestination configured) or dropped, instead of being retried maxDeliveryAttempts times over wall-clock minutes."
+      "StorageQueue destinations are REAL (the event JSON lands in the named queue of this environment's Storage Queue store; the queue must exist) on both substrates, and WebHook destinations are REAL offline for loopback / private-network endpoints only (no internet egress, no webhook validation handshake); on Nano there is no outbound hop, so WebHook delivery fails like an unreachable endpoint. EventHub, HybridConnection, AzureFunction and NamespaceTopic destinations have no reachable simulator backend wired yet, so delivery to them fails exactly like an unreachable real endpoint would — never a silent fake success. There is no background retry scheduler, so a failed attempt resolves immediately to dead-lettered (deadLetterDestination configured) or dropped, instead of being retried maxDeliveryAttempts times over wall-clock minutes."
     ],
-    "tests": ["tests/conformance/test_azure_eventgrid_core.py"]
+    "tests": ["tests/conformance/test_azure_eventgrid_core.py", "tests/conformance/test_azure_eventgrid_destinations.py"]
   },
   "azure.eventgrid.namespaces.crud": {
     "title": "Namespaces — create, list, delete (generic ARM catalog)",

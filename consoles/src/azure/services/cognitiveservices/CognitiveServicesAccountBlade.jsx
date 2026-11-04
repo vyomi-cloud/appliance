@@ -27,6 +27,7 @@ import SharedResourceHealth from "../../kit/ResourceHealth.jsx";
 import { ResourceAlerts, ResourceMetrics, ResourceLogs } from "../../kit/ResourceMonitoring.jsx";
 import SharedDiagnosticSettings from "../../kit/DiagnosticSettings.jsx";
 import SharedSupportPanel from "../../kit/SupportPanel.jsx";
+import { restJson } from "../../../common/wire.js";
 import { PrivateEndpointConnectionsPanel } from "../../kit/PrivateEndpoints.jsx";
 
 export const MENU = [
@@ -36,7 +37,7 @@ export const MENU = [
   { id: "tags", label: "Tags" },
   { id: "diagnose", label: "Diagnose and solve problems" },
   { group: "Resource Management", items: [
-    { id: "keysendpoint", label: "Keys and Endpoint" }, { id: "deployments", label: "Model deployments" }, { id: "quotas", label: "Quotas" },
+    { id: "keysendpoint", label: "Keys and Endpoint" }, { id: "deployments", label: "Model deployments" }, { id: "playground", label: "Chat playground" }, { id: "quotas", label: "Quotas" },
     { id: "networking", label: "Networking" }, { id: "identity", label: "Identity" }, { id: "properties", label: "Properties" }, { id: "locks", label: "Locks" },
   ] },
   { group: "Monitoring", items: [{ id: "alerts", label: "Alerts" }, { id: "metrics", label: "Metrics" }, { id: "diagnosticsettings", label: "Diagnostic settings" }, { id: "logs", label: "Logs" }] },
@@ -73,6 +74,7 @@ export default function CognitiveServicesAccountBlade({ params }) {
       tags: () => <Tags a={a} reload={reload} />,
       keysendpoint: () => <KeysAndEndpoint a={a} />,
       deployments: () => <Deployments a={a} />,
+      playground: () => <ChatPlayground a={a} />,
       quotas: () => <Quotas a={a} />,
       networking: () => <Networking a={a} reload={reload} />,
       identity: () => <Identity a={a} reload={reload} />,
@@ -256,6 +258,43 @@ function KeysAndEndpoint({ a }) {
           </div>
         </Field>
       </section>
+    </>
+  );
+}
+
+// ── Chat playground: Azure OpenAI data plane (/openai/deployments/{d}/chat/completions) over the local model ──
+function ChatPlayground({ a }) {
+  const { data } = useAsync(() => api.listDeployments(a.resourceGroup, a.name), [a.resourceGroup, a.name]);
+  const deps = data || [];
+  const [dep, setDep] = useState("");
+  const [system, setSystem] = useState("You are an AI assistant that helps people find information.");
+  const [input, setInput] = useState("");
+  const [msgs, setMsgs] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+  const cur = dep || deps[0]?.name || "";
+  const send = async () => {
+    const text = input; setInput(""); setBusy(true); setErr(null);
+    const next = [...msgs, { role: "user", content: text }];
+    setMsgs(next);
+    try {
+      const key = (await api.listKeys(a.resourceGroup, a.name)).key1;   // the data plane authenticates with the account key, as on Azure
+      const r = await restJson("POST", `/openai/deployments/${encodeURIComponent(cur)}/chat/completions`, { query: { "api-version": "2024-10-21" }, headers: { "api-key": key }, body: { messages: [{ role: "system", content: system }, ...next], max_tokens: 256 } });
+      setMsgs([...next, { role: "assistant", content: r.choices[0].message.content, usage: r.usage }]);
+    } catch (e) { setErr(e); } finally { setBusy(false); }
+  };
+  return (
+    <>
+      <div className="vy-panel-title">Chat playground</div>
+      <CapabilityContainer id="azure.cognitiveservices.playground" title="Playground">
+        {!api.MODEL_KINDS.includes(a.kind) && <NotSimulated feature="Chat playground" note={`Only Azure OpenAI and Azure AI services accounts serve models, not '${a.kind}'.`} />}
+        {err && <ErrorBar error={err} title={err.code === "ServiceUnavailable" ? "The local model is not available" : "Request failed"} />}
+        <Field label="Deployment"><Select value={cur} onChange={(_, d) => setDep(d.value)} aria-label="Deployment">{deps.map((d) => <option key={d.name} value={d.name}>{d.name}</option>)}</Select></Field>
+        <Field label="System message"><Textarea value={system} onChange={(_, d) => setSystem(d.value)} aria-label="System message" /></Field>
+        <div data-testid="aoai-chat" style={{ minHeight: 60, margin: "8px 0" }}>{msgs.map((m, i) => <p key={i}><b>{m.role === "user" ? "User" : "Assistant"}:</b> {m.content}{m.usage ? ` (${m.usage.total_tokens} tokens)` : ""}</p>)}</div>
+        <Field label="Type user query"><Input value={input} onChange={(_, d) => setInput(d.value)} aria-label="User query" /></Field>
+        <Button appearance="primary" disabled={!cur || !input || busy} onClick={send}>Send</Button>
+      </CapabilityContainer>
     </>
   );
 }

@@ -55,13 +55,29 @@
     "tests": ["tests/conformance/test_gcp_firestore_admin_core.py"]
   },
   "gcp.firestore.security-rules": {
-    "title": "Security rules editor",
+    "title": "Security rules (editor, rulesets/releases, enforcement)",
     "level": { "nano": "limited", "offline": "limited" },
     "limitations": [
-      "Vyomi stores and returns the rules source exactly as written through its own getSecurityRules/updateSecurityRules endpoints (real Firestore security rules are managed by the separate Firebase Rules API), and the Development & test tab's Simulate action runs a real rules-language parser + evaluator (path match/capture, allow read/write/get/list/create/update/delete, request.auth/resource.data/request.resource.data expressions with ==, !=, comparisons, in, &&, ||, !) against the stored (or unsaved draft) rules text.",
-      "That evaluator is the ONLY path that ever evaluates rules: actual document reads/writes over the native wire — what the console's own Data viewer, every Admin-SDK call and this capability's own tests use — stay unconditional, exactly matching real Firestore (only end-user client-SDK requests are rule-checked in production; the Admin SDK, gcloud and the console always bypass them)."
+      "Published rules are really enforced for client-SDK style requests: a Firebase ID token (Bearer JWT, issued by securetoken.google.com/<project> — decoded but its signature is NOT verified, as in the Firebase emulator) or an API-key-only request (?key= / X-Goog-Api-Key, evaluated unauthenticated). Admin SDK / gcloud / the console's data viewer / `Bearer owner` bypass rules exactly like Google Cloud. A database with no published rules denies every client request.",
+      "The evaluator implements rules_version '2' for cloud.firestore: nested matches, {x} and {x=**} captures, functions with let, get()/exists()/getAfter()/existsAfter() (10-read budget), string/list/set/map/MapDiff/timestamp/duration methods, math.*, ternary, `is`/`in`, request.auth.token.*, request.time/query. List queries are checked against the equality filters of the query (like Firestore's query-vs-rule analysis, conservative: a rule needing a field the query does not constrain denies). Not implemented: custom claims verification, hashing.sha512, transactions-level getAfter overlays across separate requests, and range-based query analysis.",
+      "The Firebase Rules API (projects/{p}/rulesets, releases/cloud.firestore[/{db}], projects/{p}:test) is real: rulesets are validated (line/column errors, undefined functions), a release publishes to its database, a ruleset in use cannot be deleted, and :test returns SUCCESS/FAILURE per test case."
     ],
-    "tests": ["tests/conformance/test_gcp_firestore_rules_core.py"]
+    "tests": ["tests/conformance/test_gcp_firestore_rules_core.py", "tests/conformance/test_gcp_firestore_rules_enforce_core.py"]
+  },
+  "gcp.datastore.entities": {
+    "title": "Datastore mode entities (Cloud Datastore API)",
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": [
+      "Entities, keys (ids, names, ancestors, namespaces), insert/update/upsert/delete with versions + baseVersion, transactions (all-or-nothing commit), lookup, runQuery (filters, ordering, limit/offset/cursors, projections, keys-only), a GQL SELECT subset, and COUNT/SUM/AVG aggregations are real and conform to the Datastore REST wire.",
+      "Not implemented: transaction read isolation (a transaction id is accepted but reads inside it are not snapshotted), GQL beyond SELECT … FROM … WHERE … ORDER BY … LIMIT/OFFSET, multi-kind queries, export/import for Datastore mode, and built-in single-property index exemptions. Firestore-API access to a Datastore-mode database is not blocked."
+    ],
+    "tests": ["tests/conformance/test_gcp_datastore_core.py"]
+  },
+  "gcp.datastore.indexes": {
+    "title": "Datastore composite indexes",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": [],
+    "tests": ["tests/conformance/test_gcp_datastore_core.py"]
   },
   "gcp.firestore.import-export": {
     "title": "Import / Export (exportDocuments / importDocuments)",

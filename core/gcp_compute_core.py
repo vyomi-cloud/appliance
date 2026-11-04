@@ -1509,7 +1509,7 @@ def _packet_mirrorings(store: ComputeStore, method: str, project: str, region: s
     return _err(405, "METHOD_NOT_ALLOWED", "Method not allowed")
 
 
-def gcp_flow_log_records(store: ComputeStore, project: str, accepted: list, rejected: list, topo) -> list:
+def gcp_flow_log_records(store: ComputeStore, project: str, accepted: list, rejected: list, topo, collector=None) -> list:
     """GCP VPC Flow Logs (compute.googleapis.com%2Fvpc_flows) for the subnets that actually
     have flow logs ON — real per-packet counters in, real per-subnet config gating out, same
     contract as mirrored_packet_log_entries. ACCEPT flows only, like real VPC Flow Logs
@@ -1518,8 +1518,11 @@ def gcp_flow_log_records(store: ComputeStore, project: str, accepted: list, reje
         from core.netsim.flowlogs import FlowLogCollector
     except ImportError:                                  # pragma: no cover - flat layout
         from netsim.flowlogs import FlowLogCollector     # type: ignore
-    col = FlowLogCollector(topo)
-    col.ingest(accepted, rejected)
+    if collector is not None:            # persistent collector, already ingested once for this window by the caller (per-window deltas)
+        col = collector
+    else:
+        col = FlowLogCollector(topo)
+        col.ingest(accepted, rejected)
     out = []
     for rec in col.gcp_records():
         for side in ("src_instance", "dest_instance"):

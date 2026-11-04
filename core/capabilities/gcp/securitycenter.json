@@ -1,0 +1,52 @@
+{
+ "$doc": "Vyomi capability registry \u2014 Security Command Center (securitycenter.googleapis.com v2). See aws/s3.json for the contract. Core: core/gcp_scc_core.py over core/gcp_posture_core + the secscan threat detector + vuln_scan_core.",
+ "gcp.scc.sources_findings": {
+  "title": "Sources + findings \u2014 list/get with the filter grammar, orderBy, paging, :group, :setState, :setMute, :bulkMute, security marks",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Built-in sources are Vyomi rule engines (Security Health Analytics-style misconfigurations, Event Threat Detection-style deterministic rules over the audit feed, Container Analysis-style image vulnerabilities from the advisory snapshot), not Google's detectors or threat intelligence.",
+   "Organization/folder parents aggregate the single simulated project. No attack paths, toxic combinations, BigQuery exports, resource value configs or IAM on sources."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_scc_core.py"
+  ]
+ },
+ "gcp.scc.custom_findings": {
+  "title": "Custom sources and findings \u2014 create source, create/patch finding with real validation",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_gcp_scc_core.py"
+  ]
+ },
+ "gcp.scc.mute_configs": {
+  "title": "Mute configs \u2014 create/get/list/patch/delete; the filter mutes matching findings (muteInitiator set)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_gcp_scc_core.py"
+  ]
+ },
+ "gcp.scc.notification_configs": {
+  "title": "Notification configs \u2014 filter-matched new/changed findings are published to the config's Pub/Sub topic in the simulator",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Delivery runs on create/update requests and the shared scheduler tick (core/schedule_core, about every minute): offline from a background loop, on Nano only while the page is open; a finding that changes between ticks is delivered once with its latest state."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_scc_core.py"
+  ]
+ }
+}

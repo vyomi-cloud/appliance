@@ -9,7 +9,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 
 const require = createRequire(import.meta.url);
 let pw;
-try { pw = require("playwright"); }
+try { pw = require(process.env.PW || "playwright"); }
 catch { pw = require("/Users/sudhirganti/Applications/simulator/portal/node_modules/playwright"); }
 
 const BASE = process.env.BASE || "http://127.0.0.1:8740";
@@ -58,7 +58,7 @@ const errors = [];
 page.on("pageerror", (e) => errors.push(e.message));
 // Native 404s ("no tag set", "no encryption config") and the deliberate 400 from
 // GetSecretValue against a disabled CMK (below) are expected answers, not page errors.
-page.on("console", (m) => m.type() === "error" && !/status of (400|403|404)/.test(m.text()) && errors.push(m.text()));   // 403 = an expected denial (Object Lock, IAM)
+page.on("console", (m) => m.type() === "error" && !/status of (400|401|403|404)/.test(m.text()) && errors.push(m.text()));   // 403 = an expected denial (Object Lock, IAM); 401 = Security Hub 'not subscribed' probe on Console Home
 const shot = (n) => page.screenshot({ path: `${OUT}/${n}.png`, fullPage: true });
 
 try {
@@ -461,9 +461,10 @@ try {
   await page.getByText("On").first().waitFor({ timeout: 10000 });
   check("DynamoDB stream turned on (UI) → table detail shows Stream status On", true);
   await shot("12c-ddb-stream-on");
-  await ddb("PutItem", { TableName: T, Item: { pk: { S: "stream-smoke" }, total: { N: "9" } } });
-  const streamed = await ddb("DescribeTable", { TableName: T });
+  let streamed = await ddb("DescribeTable", { TableName: T });
+  for (let i = 0; i < 20 && !streamed.Table?.LatestStreamArn; i++) { await page.waitForTimeout(500); streamed = await ddb("DescribeTable", { TableName: T }); }
   const streamArn = streamed.Table?.LatestStreamArn;
+  await ddb("PutItem", { TableName: T, Item: { pk: { S: "stream-smoke" }, total: { N: "9" } } });
   const it = await ddb("GetShardIterator", { StreamArn: streamArn, ShardId: "shardId-00000000000000000000-0000000000000000000", ShardIteratorType: "TRIM_HORIZON" });
   const recs = await ddb("GetRecords", { ShardIterator: it.ShardIterator });
   check("DynamoDB stream enabled over the UI → real CDC record readable over native wire",
@@ -949,15 +950,20 @@ try {
 
   // IAM: assign a virtual MFA device to the smoke user through the console wizard,
   // verify it shows over the native wire (UI → CLI direction). MFA codes are
-  // format-checked, not cryptographically verified (core/iam_core.py _check_mfa_codes).
+  // real TOTP (see below).
   const MFA = `v4smoke-mfa-${Date.now() % 100000}`;
   await page.goto(UI + `#/iam/users/${U}`);
   await page.getByRole("tab", { name: "Security credentials" }).click();
   await page.getByRole("button", { name: "Assign MFA device" }).click();
   await page.getByLabel("Device name").fill(MFA);
   await page.getByRole("button", { name: "Next", exact: true }).click();
-  await page.getByLabel("MFA code 1").fill("111111");
-  await page.getByLabel("MFA code 2").fill("222222");
+  // the MFA codes are verified as real TOTP now (core/iam_core.py _verify_mfa_codes): derive two consecutive codes from the shown secret
+  const mfaSeed = await page.getByLabel("Secret key").inputValue();
+  const { createHmac } = await import("node:crypto");
+  const totp = (seed, step) => { const A = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"; let bits = "", key = []; for (const c of seed.toUpperCase().replace(/=+$/, "")) bits += A.indexOf(c).toString(2).padStart(5, "0"); for (let i = 0; i + 8 <= bits.length; i += 8) key.push(parseInt(bits.slice(i, i + 8), 2)); const m = Buffer.alloc(8); m.writeBigUInt64BE(BigInt(step)); const h = createHmac("sha1", Buffer.from(key)).update(m).digest(); const o = h[19] & 15; return String((h.readUInt32BE(o) & 0x7fffffff) % 1000000).padStart(6, "0"); };
+  const mfaStep = Math.floor(Date.now() / 30000);
+  await page.getByLabel("MFA code 1").fill(totp(mfaSeed, mfaStep));
+  await page.getByLabel("MFA code 2").fill(totp(mfaSeed, mfaStep + 1));
   await page.getByRole("button", { name: "Assign MFA", exact: true }).click();
   await page.getByText(`mfa/${MFA}`).waitFor({ timeout: 10000 });
   const mfaXml = await iamXml({ Action: "ListMFADevices", UserName: U });

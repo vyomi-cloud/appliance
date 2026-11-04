@@ -328,7 +328,7 @@
   "title": "Application Insights",
   "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "Shows the app's real instrumentation key app setting plus request-count/failure-rate derived from the real recorded invocation log — not a real Application Insights resource, Kusto query engine or distributed trace view."
+   "A real Microsoft.Insights/components resource linked through the app's connection string; requests / failures / dependencies / events / traces are read from the OTLP-ingested trace + log store (and requests Vyomi measured for the app). No Kusto query engine, Live Metrics stream or Application Map."
   ],
   "api": ["WebApps_ListApplicationSettings", "WebApps_InvokeFunction"],
   "tests": ["tests/conformance/test_azure_functionapp_core.py"]
@@ -340,11 +340,11 @@
    "offline": "limited"
   },
   "limitations": [
-   "Real ARM control plane: sourcecontrols/web (repo URL, branch, manual/continuous integration, GitHub Actions with a generated workflow YAML per runtime stack; scmType maintained), deployments + log, publishing credentials ($site user, rotating password) and per-protocol basic-auth policies. No build runner and no outbound git/GitHub access exist, so a sync or continuous-integration push is recorded as a Failed deployment with an explanation (never a fake success), the GitHub workflow is generated but not committed, and GitHub/Azure DevOps/Bitbucket account authorization (OAuth) is not performed. Local Git, Container registry and Azure Repos sources are not offered."
+   "Real ARM control plane plus real deployments through the shared CI seam (core/ci_core.py): sourcecontrols/web (repo URL, branch, manual/continuous integration, GitHub Actions with a generated workflow YAML; scmType maintained), deployments + log, publishing credentials and basic-auth policies. Local Git (scmType LocalGit): a push (POST .../localgit, a Vyomi extension of the Kudu git receiver; with the Gitea git host (offline, VYOMI_CI_GITEA=1) a real git clone URL and real `git push`) commits to the app's repo, builds, and records a Success/Failed deployment with the build log. GitHub source: the branch tarball is fetched (public, or private with the user's own personal access token entered in the Deployment Center; stored server-side, never shown) and built on the offline appliance; on Nano there is no outbound HTTP so a GitHub sync is a Failed deployment saying so (Local Git works on Nano). Azure Repos / Bitbucket / generic git cannot be fetched (no HTTP git client) and are recorded Failed with that reason. The build produces a content-addressed package artifact (Dockerfile validated; container image builds use BuildKit on the offline appliance only); the App Service runtime does not hot-swap to the deployed package, the GitHub Actions workflow is generated and, when a personal access token is supplied (properties.vyomiAccessToken; offline appliance only - Nano cannot reach GitHub), committed to the connected repository through the GitHub Contents API (without a token it is generated but not committed; the pipeline itself runs on GitHub), and OAuth account authorization is not performed (PAT only)."
   ],
   "api": [],
   "tests": [
-   "tests/conformance/test_azure_webdeploy_core.py"
+   "tests/conformance/test_azure_webdeploy_core.py", "tests/conformance/test_ci_core.py"
   ]
  },
  "azure.functionapp.extensions": {

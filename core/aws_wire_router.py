@@ -57,6 +57,10 @@ from core import rds_data_core as rds_data
 from core import gcp_project as gcp_proj   # GCP: the one project (ID + number) + Resource Manager
 from core import gcp_storage_core as gcs   # GCP: GCS JSON API, path-routed (not SigV4)
 from core import gcp_firestore_core as gcp_fs
+from core import gcp_datastore_core as gcp_ds
+from core import gcp_eventarc_core as gcp_eventarc
+from core import gcp_hub_core as gcp_hub
+from core import gcp_audit_core as gcp_audit
 from core.gcp_firestore_core import FirestoreStore
 from core import gcp_kms_core as gcp_kms
 from core import gcp_secretmanager_core as gcp_sec
@@ -89,6 +93,8 @@ _SCHED_RUN_JOB_RE = re.compile(r"/v2/projects/([^/]+)/locations/([^/]+)/jobs/([^
 def _gcp_service(path):
     """Route a GCP request by URL path (GCP carries no SigV4; each google-cloud-*
     client is pointed at the relay and the path is the service discriminator)."""
+    if re.match(r"^/v2/(projects|organizations|folders)/[^/]+/(locations/[^/]+/)?(sources|findings|muteConfigs|notificationConfigs)([/:?]|$)", path):
+        return "gcp-scc"   # Security Command Center API v2 (core/gcp_scc_core over the posture/threat/vulnerability engines)
     if re.match(r"^/v2/projects/[^/]+/locations/[^/]+/(services|jobs|workerPools|operations)([/:]|$)", path) \
             or path.lstrip("/").startswith(("apis/serving.knative.dev/", "apis/domains.cloudrun.com/")):
         # Cloud Run Admin API v2 (+ its Knative v1 facades for `gcloud run` and
@@ -96,6 +102,8 @@ def _gcp_service(path):
         # workerPools/operations) because Cloud Logging also lives under /v2/projects/,
         # and Cloud Scheduler's /v1/.../locations/.../jobs shares the shape one version down.
         return "gcp-run"
+    if re.match(r"^/v1(beta1)?/projects/[^/]+/locations/[^/]+/publishers/[^/]+/models/[^/:]+:[A-Za-z]+$", path):
+        return "gcp-aiplatform"   # Vertex AI publisher models (Gemini generateContent/countTokens/embed) -> core/ai_models_core over the local-LLM seam
     if path.startswith(("/storage/v1", "/upload/storage/v1", "/download/storage/v1", "/storage/website/")):
         return "gcp-gcs"
     if re.match(r"^/v[12]/projects/[^/]+/traces([/:]|$)", path) or re.match(r"^/v2/projects/[^/]+/traces/", path) \
@@ -107,7 +115,7 @@ def _gcp_service(path):
     if re.match(r"^/v1/projects/[^/]+/(patchJobs|patchDeployments)([/:]|$)", path) \
             or re.match(r"^/v1/projects/[^/]+/locations/[^/]+/osPolicyAssignments([/:]|$)", path):
         return "gcp-osconfig"   # VM Manager: OS Config patch jobs/deployments + OS policy assignments (core/gcp_osconfig_core, state on the VM store)
-    if re.match(r"^/v1/projects/[^/]+/securityPosture/(compute|storage)$", path):
+    if re.match(r"^/v1/projects/[^/]+/(securityPosture/(compute|storage|threats|vulnerabilities|all)|occurrences(:vulnerabilitySummary)?)$", path):
         return "gcp-posture"   # rule-based posture findings over real VM / firewall / bucket state (core/gcp_posture_core)
     if path.startswith("/v2/entries"):   # Cloud Logging: entries:write / entries:list
         return "gcp-logging"
@@ -185,6 +193,8 @@ def _gcp_service(path):
         return "gcp-monitoring"
     # The /v1/projects/* family — gate on /projects/ so Azure's root /secrets,
     # /keys, /topics never collide (GCP always scopes these under a project).
+    if gcp_hub.is_hub_path(path):
+        return "gcp-hub"
     if "/projects/" in path:
         if re.search(r"^/v1/projects/[^/]+/locations/[^/]+/instances([/:]|$)", path):
             return "gcp-redis"
@@ -196,13 +206,18 @@ def _gcp_service(path):
             return "gcp-container"
         if re.search(r"/locations/[^/]+/jobs([/:]|$)", path) or re.search(r"^/v1(beta1)?/projects/[^/]+/locations/?$", path):
             return "gcp-cloudscheduler"
+        if gcp_ds.is_datastore_path(path):
+            return "gcp-datastore"
+        if gcp_eventarc.is_eventarc_path(path):
+            return "gcp-eventarc"
         if re.search(r"^/v1(beta1)?/projects/[^/]+/locations/[^/]+/backups([/:]|$)", path):
             return "gcp-firestore"
         if "/locations/" in path and ("/repositories" in path or "/operations/" in path):
             return "gcp-artifactregistry"
         if re.search(r"^/v1/projects/[^/]+/projectSettings$", path):
             return "gcp-artifactregistry"
-        if re.search(r"^/v1(beta1)?/projects/[^/]+/databases($|[/:])", path):
+        if re.search(r"^/v1(beta1)?/projects/[^/]+/databases($|[/:])", path) \
+                or re.search(r"^/v1/projects/[^/]+(/(rulesets|releases)([/?]|$)|:test$)", path.split("?", 1)[0]):
             return "gcp-firestore"
         if "/keyRings" in path or "/keyHandles" in path or "autokeyConfig" in path:
             return "gcp-kms"
@@ -265,6 +280,8 @@ from core import azure_iam_core as az_iam
 from core import azure_appconfiguration_core as az_appcfg
 from core import azure_dns_core as az_dns
 from core import azure_acr_core as az_acr
+from core import ecr_core
+from core import gcp_scc_core
 from core.azure_acr_core import AcrRegistryStore
 from core import azure_graph_core as az_graph
 import types as _types
@@ -295,6 +312,8 @@ def _azure_service(path, lheaders, query):
     if path.startswith("/v1.0/") or path.startswith("/beta/"):
         return "az-graph"
     p0 = path.split("?", 1)[0]
+    if re.match(r"^/openai/(deployments/[^/]+/)?(chat/completions|completions|embeddings)$|^/openai/v1/", p0):
+        return "az-openai"   # Azure OpenAI data plane -> core/ai_models_core (deployment must exist in the ARM state)
     if re.search(r"/oauth2(/v2\.0)?/token$", p0):
         return "az-graph"
     p = path
@@ -389,12 +408,18 @@ _SIGNING = {
     "cloudtrail": "cloudtrail",   # minimal CloudTrail (trails + S3 data-event selectors) -> core/s3_ext_core via the S3 store
     "vpc-lattice": "vpc-lattice",   # VPC Lattice control plane (rest-json /servicenetworks, /services, /targetgroups, ...) -> core/vpc_lattice_core over the EC2 model
     "rbin": "rbin",   # EC2 Recycle Bin (rest-json /rules...) -> core/ec2_ops_core.rbin_dispatch over the shared EC2 model
+    "securityhub": "securityhub", "guardduty": "guardduty",   # Security Hub + GuardDuty (rest-json) -> core/secscan_core over the S3 store's persisted account bag
+    "codeconnections": "codeconnections", "codestar-connections": "codeconnections",   # CodeConnections-lite + CloudFormation Git sync (JSON 1.0) -> core/aws_codeconn_core over the S3 store's account bag + the CFN core
     "schemas": "schemas",   # EventBridge Schemas (rest-json /v1/registries, /v1/discoverers) -> core/eventbridge_schemas_core via the EventBridge store
     "aws-marketplace": "marketplace",   # AWS Marketplace (Vyomi SaaS spaces + AMI products; rest-json) -> core/marketplace_core over the S3 + EC2 models
     "s3files": "s3files", "fsx": "fsx",   # S3 Files (rest-json) + FSx for OpenZFS with S3 access points (JSON 1.1) -> core/s3files_core over the S3 + EC2 models
     "application-autoscaling": "appas",   # Application Auto Scaling (DynamoDB) -> core/appautoscaling_core over the DynamoDB store
     "cloudfront": "cloudfront",   # CloudFront public keys + key groups (rest-xml /2020-05-31/...) -> core/cloudfront_keys_core via the S3 store
     "savingsplans": "savingsplans",   # Savings Plans (rest-json POST /<Operation>) + EC2 coverage/capacity views -> core/savingsplans_core over the EC2 model
+    "bedrock-agentcore": "agentcore",   # Bedrock AgentCore control plane + gateway MCP endpoint -> core/bedrock_agents_core (S3 + Lambda stores)
+    "glue": "glue", "redshift-data": "redshift-data",
+    "dms": "dms", "bedrock": "bedrock",   # Bedrock runtime + foundation-model catalogue -> core/ai_models_core over the local-LLM seam (core/llm_core)
+    "ecr": "ecr", "inspector2": "inspector2",   # Amazon ECR control plane + Inspector2 findings -> core/ecr_core over the S3 store (images/layers live in the simulator S3)
     "backup": "backup",   # AWS Backup subset (region settings + DynamoDB copy jobs) -> core/backup_core over the DynamoDB + S3 stores
     "s3vectors": "s3vectors",   # Amazon S3 Vectors (rest-json POST /<Operation>) -> core/s3_vectors_core via the S3 store
     "s3tables": "s3tables",   # Amazon S3 Tables (rest-json /buckets, /namespaces, /tables, /tag) -> core/s3_tables_core via the S3 store
@@ -414,14 +439,19 @@ _TARGET_PREFIX = {
     "Kinesis_20131202": "kinesis",
     "Logs_20140328": "logs",
     "AmazonSSM": "ssm",
+    "AWSGlue": "glue", "RedshiftData": "redshift-data",   # Glue zero-ETL integrations + Redshift Data API over the Redshift-lite warehouse -> core/zeroetl_core
+    "AmazonDMSv20160101": "dms",   # Database Migration Service between simulator RDS instances -> core/dms_core
     "AWSStepFunctions": "stepfunctions",
     "AWSRAMFrontendService": "ram",
     "NetworkFirewall_20201112": "netfw",
     "Route53Resolver": "dnsfw",
     "com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101": "cloudtrail",
     "AWSOrganizationsV20161128": "organizations",
+    "AmazonEC2ContainerRegistry_V20150921": "ecr",   # Amazon ECR
     "AWSInsightsIndexService": "ce",   # Cost Explorer
     "AnyScaleFrontendService": "appas",   # Application Auto Scaling
+    "com.amazonaws.codeconnections.CodeConnections_20231201": "codeconnections",
+    "com.amazonaws.codestar.connections.CodeStar_connections_20191201": "codeconnections",
 }
 
 # Native JSON content-types the real SDK expects back per service.
@@ -429,7 +459,8 @@ _JSON_CT = {
     "dynamodb": "application/x-amz-json-1.0", "dax": "application/x-amz-json-1.1", "kms": "application/x-amz-json-1.1",
     "secretsmanager": "application/x-amz-json-1.1", "sqs": "application/x-amz-json-1.0",
     "events": "application/x-amz-json-1.1", "logs": "application/x-amz-json-1.1",
-    "ssm": "application/x-amz-json-1.1",
+    "ssm": "application/x-amz-json-1.1", "dms": "application/x-amz-json-1.1",
+    "glue": "application/x-amz-json-1.1", "redshift-data": "application/x-amz-json-1.1",
     "stepfunctions": "application/x-amz-json-1.0",
     "ram": "application/x-amz-json-1.1",
     "organizations": "application/x-amz-json-1.1", "ce": "application/x-amz-json-1.1",
@@ -689,6 +720,8 @@ class AwsWireRouter:
         self.gcp_run.logging_store = self.gcp_logging   # Observability "Logs" — real Cloud Logging entries per invocation
         self.gcp_mon.run_store, self.gcp_mon.vm_store = self.gcp_run, self.gcp_compute_vm   # App Hub discovers Cloud Run services + managed instance groups
         self.gcp_run.mon_store = self.gcp_mon       # Observability "Metrics" — real Cloud Monitoring points per invocation
+        if getattr(self.gcp_fs, "on_doc_event", None) is None:
+            self.gcp_fs.on_doc_event = self._firestore_event   # Eventarc Firestore document triggers fire on real writes
         if getattr(self.gcs, "refs", None) is None:
             self.gcs.refs = self._run_refs   # bucket CMEK keys are checked against real Cloud KMS keys
         if getattr(self.gcs, "on_object_event", None) is None:
@@ -706,6 +739,7 @@ class AwsWireRouter:
         self.az_queue = s.get("az_queue") or AzureQueueStore()
         self.az_table = s.get("az_table") or AzureTableStore()
         self.az_arm = s.get("az_arm") or AzureArm()   # ARM control plane — read by the blob core for CORS/lifecycle/static-website enforcement
+        self.az_arm.acr_store = None   # set below once the ACR store exists (Defender for Containers image scanning)
         self.az_arm.kv_secrets_store = self.az_kvsec   # APIM named values: Key Vault-type listValue resolves against this SAME space's KV secrets
         if getattr(self.az_arm, "sql_store", None) is None:   # Azure SQL export/import: this router's SQL data plane + Blob store
             self.az_arm.sql_store = self.rds
@@ -714,6 +748,7 @@ class AwsWireRouter:
         self.az_sb = s.get("az_sb") or InMemoryMessagingStore()   # Service Bus topics (fan-out)
         self.az_arm = s.get("az_arm") or AzureArm()   # Azure Resource Manager — the console's ARM store
         self.az_acr = s.get("az_acr") or AcrRegistryStore()   # Container Registry repositories/tags/manifests
+        self.az_arm.acr_store = self.az_acr
         self.az_graph = s.get("az_graph") or az_graph.GraphStore()   # Microsoft Graph (Entra ID)
         # EventBridge shares the messaging store (rules + SQS delivery); Lambda gets
         # its own lightweight function registry (a namespace the core attaches to).
@@ -735,6 +770,12 @@ class AwsWireRouter:
         self.s3.msg_store, self.s3.lam_store = self.msg, self.lam
         self.kinesis = s.get("kinesis") or kinesis.KinesisStore()   # Kinesis Data Streams
         self.apigwv2 = s.get("apigwv2") or apigw2.ApiGwV2Store()   # API Gateway V2 (HTTP/WebSocket APIs)
+        from core import observability_core as _obsc0
+        self.obs = s.get("obs") or _obsc0.ObsStore()           # shared request-telemetry recorder + OTLP trace/metric store
+        from core import azure_monitor_core as _azmon0
+        _azmon0.request_telemetry = lambda acct, _o=self.obs: _obsc0.azure_storage_request_metrics(_o, acct)   # storage Availability/latency from measured requests
+        _azmon0.resource_metric_defs = _obsc0.azure_metric_defs
+        _azmon0.resource_series = lambda *a, _o=self.obs: _obsc0.azure_series(_o, *a)   # per-resource request/latency/error metrics
         self.cw = s.get("cw") or cw.CloudWatchStore()          # CloudWatch metrics / alarms / dashboards
         self.cw.msg_store, self.cw.lam_store = self.msg, self.lam   # real SNS / Lambda alarm actions
         self.vpc = s.get("vpc") or s.get("vpc_net") or _types.SimpleNamespace()   # EC2/VPC network model
@@ -886,10 +927,92 @@ class AwsWireRouter:
         }
         gcp_logging.write_entries(self.gcp_logging, None, {"entries": [entry]})
 
+    def hub_inputs(self, project):
+        """Live facts for Cloud Hub + Privacy & Security (read from the real stores / Cloud Logging)."""
+        def n(x):
+            try:
+                return len(x)
+            except Exception:
+                return 0
+        pre = "projects/%s/" % project
+        res = {}
+        def put(k, v):
+            if v:
+                res[k] = v
+        put("Cloud Storage buckets", n(getattr(self.gcs, "buckets", {}) or {}))
+        vm = self.gcp_compute_vm
+        put("Compute Engine VM instances", sum(1 for k in (getattr(vm, "instances", {}) or {}) if k.startswith(pre)))
+        put("Compute Engine disks", sum(1 for k in (getattr(vm, "disks", {}) or {}) if k.startswith(pre)))
+        put("Compute Engine snapshots", sum(1 for k in (getattr(vm, "snapshots", {}) or {}) if k.startswith(pre)))
+        put("GKE clusters", sum(1 for k in (getattr(self.gcp_gke, "clusters", {}) or {}) if k.startswith(pre)))
+        put("Cloud Run services", sum(1 for k in (getattr(self.gcp_run, "services", {}) or {}) if k.startswith(pre)))
+        put("Cloud Run jobs", sum(1 for k in (getattr(self.gcp_run, "jobs", {}) or {}) if k.startswith(pre)))
+        put("Firestore databases", n(getattr(self.gcp_fs, "databases", {}) or {}))
+        put("Pub/Sub topics", sum(1 for k in (getattr(self.gcp_msg, "topics", {}) or {}) if str(k).startswith(pre)))
+        keys = [k for k in self.gcp_kms.key_ids() if k.startswith(pre)] if hasattr(self.gcp_kms, "key_ids") else []
+        put("Cloud KMS keys", len(keys))
+        trg = [t for k, t in (self.gcp_mon.ext or {}).get("eventarc_triggers", {}).items() if k.startswith(pre)] if getattr(self.gcp_mon, "ext", None) else []
+        put("Eventarc triggers", len(trg))
+        audit = []
+        for e in reversed(getattr(self.gcp_logging, "entries", []) or []):
+            pp = e.get("protoPayload") or {}
+            if e.get("logName", "").startswith("projects/%s/logs/cloudaudit.googleapis.com" % project) and pp.get("methodName"):
+                audit.append({"time": e.get("timestamp"), "principal": (pp.get("authenticationInfo") or {}).get("principalEmail", ""),
+                              "service": pp.get("serviceName"), "method": pp.get("methodName"), "resource": pp.get("resourceName"),
+                              "logType": e["logName"].rsplit("%2F", 1)[-1]})
+            if len(audit) >= 500:
+                break
+        incidents = []
+        for k, inc in (getattr(self.gcp_mon, "incidents", {}) or {}).items():
+            if k.startswith(pre) and str(inc.get("state", "OPEN")).upper() == "OPEN":
+                incidents.append({"name": k, "summary": inc.get("summary") or inc.get("policyName") or k.rsplit("/", 1)[-1], "startTime": inc.get("startTime")})
+        uptime = [{"name": k.rsplit("/", 1)[-1], "displayName": (u or {}).get("displayName", "")} for k, u in (getattr(self.gcp_mon, "uptime_checks", {}) or {}).items() if k.startswith(pre)]
+        rm = getattr(self.gcp_rm, "org_policies", {}) or {}
+        loc = None
+        for name, pol in rm.items():
+            if name.endswith("constraints/gcp.resourceLocations"):
+                vals = []
+                for rule in (pol.get("spec") or {}).get("rules", []):
+                    vals += ((rule.get("values") or {}).get("allowedValues") or [])
+                loc = {"constraint": "constraints/gcp.resourceLocations", "state": "ENFORCED", "allowedValues": vals}
+        return {"resources": res, "incidents": incidents, "uptime": uptime, "audit": audit, "eventarc": len(trg),
+                "kms_keys": len(keys), "locations": loc, "audit_config": {"dataAccessEnabledServices": []}}
+
+    def _firestore_event(self, db, rel, old, new):
+        """A real Firestore document write -> Eventarc Firestore triggers."""
+        name = (self.gcp_fs.databases.get(db) or {}).get("name", "projects/-/databases/%s" % db)
+        gcp_eventarc.on_firestore_write(self.gcp_mon, self.gcp_run, name.split("/")[1], db, rel, old, new, log_fn=self._run_log)
+
+    def gcp_audit(self, method, path, query, headers, body, status):
+        """Describe a served GCP mutation as an Admin Activity audit log entry (core/gcp_audit_core.py) in Cloud
+        Logging, then fire Eventarc Cloud Audit Logs triggers on it. Best effort, never raises."""
+        try:
+            import time as _t
+            key = (method.upper(), path.split("?", 1)[0], hash(body), tuple(sorted((str(k), str(v)) for k, v in (query or {}).items())))
+            now = _t.monotonic()
+            seen = self.__dict__.setdefault("_audit_seen", {})
+            if now - seen.get(key, -9) < 1.5:
+                return
+            seen[key] = now
+            if len(seen) > 500:
+                seen.clear()
+            try:
+                bj = json.loads(body.decode()) if body else None
+            except Exception:
+                bj = None
+            entry = gcp_audit.build_entry(method, path, status, query, headers, bj if isinstance(bj, dict) else None)
+            if entry is None:
+                return
+            gcp_logging.write_entries(self.gcp_logging, None, {"entries": [entry]})
+            gcp_eventarc.on_audit_entry(self.gcp_mon, self.gcp_run, entry, log_fn=self._run_log)
+        except Exception:
+            pass
+
     def _eventarc_deliver(self, topic_full, messages):
         """A real Pub/Sub publish -> deliver to every Cloud Run Eventarc-style trigger
         bound to that topic (see core/gcp_run_core.deliver_event)."""
         gcp_run.deliver_event(self.gcp_run, topic_full, messages, log_fn=self._run_log)
+        gcp_eventarc.on_pubsub_publish(self.gcp_mon, self.gcp_run, topic_full, messages, log_fn=self._run_log)
 
     def _rm_inputs(self):
         """Existing GCP resources an org-policy simulation evaluates (read as a GCP request)."""
@@ -908,6 +1031,7 @@ class AwsWireRouter:
 
     def _gcs_object_event(self, bucket, name, event, obj):
         gcp_run.deliver_storage_event(self.gcp_run, bucket, name, event, obj, log_fn=self._run_log)
+        gcp_eventarc.on_storage_event(self.gcp_mon, self.gcp_run, bucket, name, event, obj, log_fn=self._run_log)
 
     def _run_refs(self, kind, *args):
         """Existence of a resource a Cloud Run template references (True/False; None = unknown)."""
@@ -966,6 +1090,27 @@ class AwsWireRouter:
         return False
 
     # ── service detection ──────────────────────────────────────────────
+    _SCHED_EVERY_S = 20.0
+
+    def _sched_pulse(self):
+        """Lazy scheduler pulse (core/schedule_core): backup plans/policies, DLM, Cloud SQL backup windows and ECR lifecycle run on
+        their schedules whenever the router is serving traffic (Nano: only while the page is open); the offline appliance also
+        ticks from a background loop. Throttled; never affects the request."""
+        import time as _t
+        now = _t.time()
+        if now - getattr(self, "_sched_last", 0.0) < self._SCHED_EVERY_S:
+            return
+        self._sched_last = now
+        try:
+            from core import schedule_core
+            schedule_core.tick(self, now)
+        except Exception:
+            pass
+
+    def ecr_registry(self, method, path, query, headers, body):
+        r = ecr_core.registry_dispatch(self.s3, method, path, query, headers, bytes(body))
+        return {"status": r.status, "headers": dict(r.headers or {}), "body": r.body or b""}
+
     def service_of(self, method, path, lheaders, body, query=None):
         # Static website hosting: real S3 serves this over its OWN unsigned HTTP(S) origin
         # (bucket.s3-website-<region>.amazonaws.com), never the signed control+data API —
@@ -975,6 +1120,8 @@ class AwsWireRouter:
             return "s3-website"
         # GCP services are unambiguous by path (REST) and carry no SigV4 — route
         # them first so they never fall through to the S3 default.
+        if path.startswith("/v2") and ecr_core.is_registry_request(lheaders, path):
+            return "ecr-registry"   # docker push/pull against <acct>.dkr.ecr.<region>.<host> (AWS:<token> basic auth)
         gcp = _gcp_service(path)
         if gcp:
             return gcp
@@ -1194,9 +1341,147 @@ class AwsWireRouter:
             r = await rds.adispatch(self.rds, self._query_params(query, b), msg_store=self.msg, s3_store=self.s3)
             return {"status": r.status, "headers": {"content-type": r.media_type, **dict(r.headers or {})},
                     "body": r.body.encode() if isinstance(r.body, str) else r.body}
+        if svc in ("bedrock", "gcp-aiplatform", "az-openai"):   # model inference: Nano's WebLLM backend is async (core/llm_core.arun)
+            from core import llm_core
+            return await llm_core.arun(lambda: self.handle(method, path, query, headers, body))
         return self.handle(method, path, query, headers, body)
 
+    # ── security scanning (core/secscan_core.py): audit feed + Security Hub / GuardDuty inputs ──
+    def secscan_bag(self) -> dict:
+        return self.s3.account.setdefault("secscan_root", {})
+
+    def secscan_audit(self, cloud, method, path, query, headers, body, status, svc="", actor=None):
+        """Best-effort: record the served call into the control-plane audit feed (never raises)."""
+        try:
+            from core import secscan_core as sc
+            lh = _lower_headers(headers)
+            if actor is None:
+                m = _AKID_RE.search(lh.get("authorization", "") or "")
+                key = self.iam.access_keys.get(m.group(1)) if m else None
+                actor = key["user_name"] if key else "console"
+            action = self._action_name(svc, lh, query, body) if cloud == "aws" else ""
+            ev = sc.classify(cloud, method, path, query, headers, body, int(status), svc=svc, action=action or "", actor=actor)
+            if ev:
+                sc.append(sc._state(self.secscan_bag())["audit"], ev)
+        except Exception:
+            pass
+
+    def secscan_inventory(self) -> dict:
+        from core import secscan_core as sc
+        try:
+            from core import vpc_core
+            vm = vpc_core._model(self.vpc)
+        except Exception:
+            vm = None
+        trails = 0
+        try:
+            trails = sum(1 for t in self.s3.account.get("s3ext", {}).get("trails", {}).values() if t.get("_logging", True) and not t.get("_stopped"))
+        except Exception:
+            pass
+        return sc.aws_collect(s3=self.s3, vpc_model=vm, rds=self.rds, iam=self.iam, trails=trails, lam=self.lam)
+
+    def secscan_threats(self, cloud="aws") -> list:
+        from core import secscan_core as sc
+        return sc.detect(cloud, sc._state(self.secscan_bag())["audit"])
+
+    def secscan_serve(self, svc, method, path, body: bytes) -> dict:
+        from core import secscan_core as _sc
+        bag = self.secscan_bag()
+        if svc == "guardduty" and path.split("?", 1)[0].startswith("/malware-protection-plan"):   # GuardDuty Malware Protection for S3 (core/malware_scan_core)
+            from core import malware_scan_core as _mw
+            r = _mw.gd_dispatch(self.s3, method, path, body)
+            if method != "GET":
+                try:
+                    self.s3.persist()
+                except Exception:
+                    pass
+            return {"status": r.status, "headers": {**r.headers, "content-type": "application/json"}, "body": r.body}
+        if svc == "securityhub":
+            rows = self.secscan_posture() if _sc._state(bag)["hub"]["enabled"] else []
+            r = _sc.hub_dispatch(bag, method, path, body, rows, self.secscan_threats())
+        else:
+            r = _sc.gd_dispatch(bag, method, path, body, self.secscan_threats())
+        if method != "GET":
+            try:
+                self.s3.persist()
+            except Exception:
+                pass
+        return {"status": r.status, "headers": {**r.headers, "content-type": "application/json"}, "body": r.body}
+
+    def scc_ctx(self) -> dict:
+        """What core/gcp_scc_core needs from the platform: generated posture rows + Pub/Sub for notification configs."""
+        def generated(project):
+            try:
+                scans = gcp_ar.scan_images(self.gcp_ar, project)
+            except Exception:
+                scans = []
+            fws = list(self.gcp_compute.firewalls.values())
+            return (gcp_posture.compute_findings(project, self.gcp_compute_vm.instances, fws) + gcp_posture.storage_findings(project, self.gcs.buckets)
+                    + gcp_posture.threat_findings(project, self.secscan_threats("gcp")) + gcp_posture.vulnerability_findings(project, scans))
+
+        def topic_exists(topic):
+            return gcp_ps.dispatch(self.gcp_msg, "GET", "/v1/" + topic, {}, {}, b"").status == 200
+
+        def publish(topic, data_b64, attrs):
+            r = gcp_ps.dispatch(self.gcp_msg, "POST", "/v1/" + topic + ":publish", {}, {},
+                                json.dumps({"messages": [{"data": data_b64, "attributes": attrs}]}).encode())
+            return r.status == 200
+        return {"generated": generated, "topic_exists": topic_exists, "publish": publish, "default_project": gcp_scc_core.DEFAULT_PROJECT}
+
+    def secscan_posture(self) -> list:
+        from core import secscan_core as sc
+        return sc.aws_posture_findings(self.secscan_inventory(), [])
+
     def handle(self, method, path, query, headers, body):
+        """Telemetry-recording front door: measures each request (resource, op, status, latency) into the shared
+        observability recorder, serves the /_obs OTLP / Jaeger / Prometheus surface, and refreshes the cloud metric
+        stores from the measured series before a read of them."""
+        import time as _t
+        from core import observability_core as _obsc
+        self._sched_pulse()
+        p0 = path.split("?", 1)[0]
+        if p0.startswith(_obsc.BASE + "/") or p0 == _obsc.BASE:
+            r = _obsc.dispatch(self.obs, method, p0, query or {}, headers or {}, body if isinstance(body, (bytes, bytearray)) else (body or "").encode(), cw_store=self.cw, mon_store=self.gcp_mon)
+            return {"status": r.status, "headers": dict(r.headers), "body": r.body}
+        lh = _lower_headers(headers)
+        bb = body if isinstance(body, (bytes, bytearray)) else (body or b"")
+        svc = self.service_of(method, path, lh, bb if isinstance(bb, bytes) else bytes(bb), query)
+        try:
+            if svc == "cloudwatch":
+                _obsc.publish_cloudwatch(self.obs, self.cw)
+            elif svc == "gcp-monitoring":
+                _obsc.publish_gcp(self.obs, self.gcp_mon, _obsc.gcp_project_of(path))
+            elif svc == "gcp-trace":
+                _obsc.sync_gcp_traces(self.obs, self.gcp_mon, _obsc.gcp_project_of(path))
+        except Exception:
+            pass
+        t0 = _t.time()
+        res = self._handle_inner(method, path, query, headers, body)
+        try:
+            if svc and svc != "gcp-trace":   # the tracer does not trace its own reads/writes
+                cloud = "gcp" if svc.startswith("gcp-") else ("azure" if svc.startswith("az-") else "aws")
+                r_, op_ = _obsc.extract_resource(cloud, svc, method, path, lh, bytes(bb))
+                _obsc.record(self.obs, cloud, svc, r_, op_, int(res.get("status", 0)), (_t.time() - t0) * 1000.0,
+                             traceparent=lh.get("traceparent", ""), nbytes_in=len(bb), nbytes_out=len(res.get("body") or b""))
+        except Exception:
+            pass
+        return res
+
+    def _handle_inner(self, method, path, query, headers, body):
+        """Route ONE native-wire request, then record it in the security audit feed."""
+        r = self._handle_raw(method, path, query, headers, body)
+        try:
+            lh = _lower_headers(headers)
+            svc = self.service_of(method, path, lh, body if isinstance(body, (bytes, bytearray)) else (body or b""), query)
+            if svc and not svc.startswith(("gcp-", "az-", "azure")):
+                self.secscan_audit("aws", method, path, query, headers, body, r.get("status", 200), svc=svc)
+            elif svc and svc.startswith("gcp-"):
+                self.secscan_audit("gcp", method, path, query, headers, body, r.get("status", 200), svc=svc)
+        except Exception:
+            pass
+        return r
+
+    def _handle_raw(self, method, path, query, headers, body):
         """Route ONE native-wire request. Returns {status, headers, body(bytes)}.
         SYNC services only — the RDS Data API goes through ahandle()."""
         # /azure-data/queue/{acct} says "queue storage" outright — the one thing a shared
@@ -1236,6 +1521,22 @@ class AwsWireRouter:
             from core import ec2_ops_core
             r = ec2_ops_core.rbin_dispatch(self.vpc, method, path, query or {}, headers or {}, bytes(body))
             return r
+        if svc in ("securityhub", "guardduty"):
+            return self.secscan_serve(svc, method, path, bytes(body))
+        if svc == "codeconnections":
+            from core import aws_codeconn_core as _cc
+            def _cfn_call(params):
+                return cfn.dispatch(self.cfn, params, s3_store=self.s3, ddb_store=self.ddb, iam_store=self.iam, msg_store=self.msg,
+                                    logs_store=self.logs, cw_store=self.cw)
+            status, doc = _cc.dispatch_json(self.s3.account, lheaders.get("x-amz-target", ""), bytes(body), _cfn_call, self.cfn)
+            try:
+                self.s3.persist()
+            except Exception:
+                pass
+            hdrs = {"content-type": "application/x-amz-json-1.0"}
+            if status >= 400:
+                hdrs["x-amzn-errortype"] = doc.get("__type", "")
+            return {"status": status, "headers": hdrs, "body": json.dumps(doc).encode()}
         if svc == "schemas":
             from core import eventbridge_schemas_core as _schemas
             r = _schemas.dispatch(self.msg, method, path, query or {}, headers or {}, bytes(body))
@@ -1260,9 +1561,28 @@ class AwsWireRouter:
             r = s3files_core.fsx_dispatch(self.s3, self.vpc, lheaders.get("x-amz-target", ""), bytes(body))
             return {"status": r.status, "headers": dict(r.headers or {}), "body": r.body or b""}
 
+        if svc == "bedrock":
+            from core import ai_models_core
+            from core import bedrock_agents_core
+            if bedrock_agents_core.handles(path.split("?", 1)[0]):   # Bedrock Agents / Knowledge Bases / agent-runtime share signing name `bedrock`
+                return bedrock_agents_core.dispatch(self.s3, method, path.split("?", 1)[0], query or {}, lheaders, bytes(body))
+            return ai_models_core.bedrock_dispatch(method, path, query or {}, lheaders, bytes(body))
+
+        if svc == "agentcore":
+            from core import bedrock_agents_core
+            return bedrock_agents_core.agentcore_dispatch(self.s3, self.lam, method, path.split("?", 1)[0], query or {}, lheaders, bytes(body))
+
+        if svc == "gcp-aiplatform":
+            from core import ai_models_core
+            return ai_models_core.vertex_dispatch(method, path.split("?", 1)[0], query or {}, lheaders, bytes(body))
+
+        if svc == "az-openai":
+            from core import ai_models_core
+            return ai_models_core.azure_openai_dispatch(self.az_arm.state, method, path.split("?", 1)[0], query or {}, lheaders, bytes(body))
+
         if svc == "backup":
             from core import backup_core
-            r = backup_core.dispatch(self.ddb, self.s3, method, path, query or {}, bytes(body))
+            r = backup_core.dispatch(self.ddb, self.s3, method, path, query or {}, bytes(body), rds_store=self.rds, vpc_store=self.vpc)
             hdrs = dict(r.headers or {})
             hdrs.setdefault("content-type", "application/json")
             return {"status": r.status, "headers": hdrs, "body": r.body or b""}
@@ -1435,8 +1755,21 @@ class AwsWireRouter:
                 hdrs["content-type"] = r.media_type
             return {"status": r.status, "headers": hdrs, "body": r.body or b""}
 
+        if svc == "gcp-scc":
+            r = gcp_scc_core.dispatch(self.s3.account.setdefault("gcp_scc", {}), method, path, query or {}, bytes(body), self.scc_ctx())
+            try:
+                self.s3.persist()
+            except Exception:
+                pass
+            return {"status": r.status, "headers": {"content-type": "application/json"}, "body": r.body}
+
         if svc == "gcp-posture":
-            r = gcp_posture.dispatch(self.gcp_compute_vm, self.gcp_compute, self.gcs, method, path)
+            proj = path.split("/")[3] if path.count("/") >= 3 else ""
+            try:
+                scans = gcp_ar.scan_images(self.gcp_ar, proj)
+            except Exception:
+                scans = []
+            r = gcp_posture.dispatch(self.gcp_compute_vm, self.gcp_compute, self.gcs, method, path, threats=self.secscan_threats("gcp"), scans=scans)
             return {"status": r.status, "headers": {"content-type": r.media_type}, "body": r.body}
 
         if svc and svc.startswith("gcp-"):   # GCP services — native google-cloud-* REST wire
@@ -1454,7 +1787,7 @@ class AwsWireRouter:
             if self.STRICT_GCP_PROJECT and svc != "gcp-gcs" and body[:1] in (b"{", b"["):   # object bytes are never rewritten
                 body = gcp_proj.rewrite_body(bytes(body), proj)
             _gcp_core = {
-                "gcp-gcs": (gcs, self.gcs), "gcp-firestore": (gcp_fs, self.gcp_fs),
+                "gcp-gcs": (gcs, self.gcs), "gcp-firestore": (gcp_fs, self.gcp_fs), "gcp-datastore": (gcp_ds, self.gcp_fs), "gcp-eventarc": (gcp_eventarc, self.gcp_mon), "gcp-hub": (gcp_hub, self.gcp_mon),
                 "gcp-kms": (gcp_kms, self.gcp_kms), "gcp-secretmanager": (gcp_sec, self.gcp_sec),
                 "gcp-pubsub": (gcp_ps, self.gcp_msg), "gcp-iam": (gcp_iam, self.gcp_iam),
                 "gcp-cloudsql": (gcp_sql, self.gcp_sql), "gcp-cloudscheduler": (gcp_sched, self.gcp_sched),
@@ -1499,6 +1832,11 @@ class AwsWireRouter:
                                   rm_store=self.gcp_rm, logger=self._iam_audit_log, iamc_store=self.gcp_iamc)
             elif svc == "gcp-artifactregistry":   # a repository's CMEK key is checked/used through the real KMS core
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), kms_store=self.gcp_kms)
+            elif svc == "gcp-hub":   # Marketplace / Cloud Hub / Privacy & Security — derived from live state
+                r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), inputs=self.hub_inputs)
+            elif svc == "gcp-eventarc":   # triggers validate their Cloud Run destination / bucket / topic for real
+                r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), run_store=self.gcp_run,
+                                  pubsub_store=self.gcp_msg, gcs_store=self.gcs, log_fn=self._run_log)
             elif svc == "gcp-pubsub":   # a message delivered to an Eventarc-style Cloud Run trigger
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), on_publish=self._eventarc_deliver)
             elif svc == "gcp-run":   # real mutations + Eventarc deliveries -> real Cloud Logging entries
@@ -1510,6 +1848,8 @@ class AwsWireRouter:
             hdrs = dict(r.headers or {})
             if r.media_type and not any(k.lower() == "content-type" for k in hdrs):
                 hdrs["content-type"] = r.media_type
+            if method.upper() != "GET":
+                self.gcp_audit(method, path, query or {}, headers or {}, bytes(body), r.status)
             return {"status": r.status, "headers": hdrs, "body": r.body or b""}
 
         if svc == "az-appconfig":   # App Configuration data plane ({store}.azconfig.io: /kv /keys /labels /locks /revisions /snapshots /operations)
@@ -1570,6 +1910,8 @@ class AwsWireRouter:
                 # managementPolicies/default) — the single source of truth the Configuration/
                 # CORS/Lifecycle/Static website panels already write through ARM.
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), arm_state=self.az_arm.state)
+            elif svc == "az-cosmos":   # account network rules + provisioned/autoscale RU/s (429), from the ARM state
+                r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), arm_state=self.az_arm.state)
             elif svc == "az-acr":
                 # Same registry-scoped networking/retention enforcement as the offline substrate
                 # (core/wire_ingress.py) — see azure.acr.networking / azure.acr.retention. The
@@ -1593,6 +1935,19 @@ class AwsWireRouter:
             if r.media_type and not any(k.lower() == "content-type" for k in hdrs):
                 hdrs["content-type"] = r.media_type
             return {"status": r.status, "headers": hdrs, "body": r.body or b""}
+
+        if svc == "ecr":   # ECR JSON 1.1 control plane (region from the SigV4 credential scope)
+            rm = re.search(r"Credential=[^/]+/[^/]+/([^/]+)/", lheaders.get("authorization", "") or "")
+            r = ecr_core.dispatch(self.s3, lheaders.get("x-amz-target", "") or "", self._json_body(body), rm.group(1) if rm else ecr_core.DEFAULT_REGION)
+            return {"status": r.status, "headers": {"content-type": "application/x-amz-json-1.1", **(r.headers or {})}, "body": json.dumps(r.body).encode()}
+
+        if svc == "inspector2":
+            rm = re.search(r"Credential=[^/]+/[^/]+/([^/]+)/", lheaders.get("authorization", "") or "")
+            r = ecr_core.inspector_dispatch(self.s3, method, path, bytes(body), rm.group(1) if rm else ecr_core.DEFAULT_REGION)
+            return {"status": r.status, "headers": {"content-type": "application/json"}, "body": json.dumps(r.body).encode()}
+
+        if svc == "ecr-registry":   # OCI / Docker Registry v2 on the ECR host; layers + manifests stored in the simulator S3
+            return self.ecr_registry(method, path, query or {}, headers or {}, bytes(body))
 
         if svc == "kinesis":   # JSON 1.1 (boto3/Go/CLI) or CBOR (Java SDK) by Content-Type
             status, hdrs, out = kinesis.handle_wire(self.kinesis, lheaders.get("x-amz-target", "") or "",
@@ -1632,6 +1987,15 @@ class AwsWireRouter:
                 r = sfn.dispatch(self.sfn, target, payload, lambda_store=self.lam)
             elif svc == "ram":
                 r = ram.dispatch(self.ram, target, payload, vpc_store=self.vpc)
+            elif svc == "dms":   # DMS: endpoints resolve to simulator RDS instances; tasks copy real rows between them
+                from core import dms_core
+                r = dms_core.dispatch(self.rds, target, payload)
+            elif svc in ("glue", "redshift-data"):   # zero-ETL integrations (DynamoDB/RDS -> Redshift-lite) + the Redshift Data API over them
+                from core import zeroetl_core
+                import types as _ty
+                _fn = zeroetl_core.dispatch_glue if svc == "glue" else zeroetl_core.dispatch_redshift_data
+                _st, _doc = _fn(self.rds, self.ddb, target, payload)
+                r = _ty.SimpleNamespace(status=_st, headers={"x-amzn-errortype": _doc["__type"]} if _st >= 400 else {}, body=_doc)
             elif svc == "netfw":   # AWS Network Firewall (state lives in the VPC model so subnets/VPCs are validated for real)
                 r = netfw.dispatch(self.vpc, target, payload)
             elif svc == "dnsfw":   # Route 53 Resolver DNS Firewall (state in the VPC model)

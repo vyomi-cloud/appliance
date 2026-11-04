@@ -1,6 +1,7 @@
 /* Deployment Center for App Service / Function App (Microsoft.Web/sites): Settings (source control), Logs, FTPS credentials.
- * Real ARM calls against core/azure_webdeploy_core.py. A sync is recorded as a Failed deployment with an explanation:
- * Vyomi has no build runner and no outbound git access (see core/capabilities/azure/appservices.json). */
+ * Real ARM calls against core/azure_webdeploy_core.py, which deploys through the shared CI seam (core/ci_core.py):
+ * Local Git pushes + GitHub (optionally the user's own PAT) are built and recorded as Success/Failed deployments
+ * (see core/capabilities/azure/appservices.json). */
 import { useState } from "react";
 import { Button, Field, Input, Select, Tab, TabList, Textarea, Switch } from "@fluentui/react-components";
 import { restJson } from "../../common/wire.js";
@@ -67,6 +68,7 @@ function Settings({ a, onChanged }) {
       } else {
         if (kind === "local") await patchWeb({ scmType: "None" });
         const properties = { repoUrl: cur.repoUrl, branch: cur.branch, isManualIntegration: cur.source !== "gh" ? cur.manual : false, isGitHubAction: cur.source === "gh" };
+        if (cur.token) properties.vyomiAccessToken = cur.token;
         if (cur.source === "gh") properties.gitHubActionConfiguration = { codeConfiguration: { runtimeStack: cur.stack, runtimeVersion: cur.version || undefined }, isLinux: String(a.kind || "").includes("linux") };
         await restJson("PUT", `${a.id}/sourcecontrols/web`, { query: q, body: { properties } });
         notify.success("Deployment settings were saved.", "Save succeeded");
@@ -83,8 +85,7 @@ function Settings({ a, onChanged }) {
         </Select>
       </Field>
       {cur.source === "local" && (
-        <Field label="Git clone URI" hint="Push to this remote with your deployment credentials (FTPS credentials tab). Vyomi has no Kudu receiver, so a push is not accepted.">
-          <Input readOnly value={`${scm}:443/${a.name}.git`} aria-label="Git clone URI" /></Field>
+        <LocalGit a={a} scm={scm} onPushed={() => { src.reload(); }} />
       )}
       {cur.source === "container" && <>
         <Field label="Image and tag" required hint="registry/repository:tag, for example myregistry.azurecr.io/team/app:v1">
@@ -100,6 +101,8 @@ function Settings({ a, onChanged }) {
         <Field label="Runtime stack"><Select value={cur.stack} onChange={(_, d) => set("stack", d.value)} aria-label="Runtime stack">{STACKS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</Select></Field>
         <Field label="Version"><Input value={cur.version} placeholder="e.g. 3.11" onChange={(_, d) => set("version", d.value)} aria-label="Runtime version" /></Field>
       </>}
+      {cur.source === "gh" || cur.source === "git" ? <Field label="GitHub personal access token (optional)" hint="Needed for private repositories. Stored by the simulator, used only to fetch this repository, never shown again.">
+        <Input type="password" value={cur.token || ""} onChange={(_, d) => set("token", d.value)} aria-label="GitHub personal access token" /></Field> : null}
       {["git", "azrepos", "bitbucket"].includes(cur.source) && <Switch checked={cur.manual} onChange={(_, d) => set("manual", !!d.checked)} label="Manual integration (do not sync on save)" />}
       <div style={{ display: "flex", gap: 8 }}>
         <Button appearance="primary" disabled={busy || (REPO.includes(cur.source) && !cur.repoUrl) || (cur.source === "container" && !cur.image)} onClick={save}>Save</Button>
@@ -109,6 +112,33 @@ function Settings({ a, onChanged }) {
         <Textarea readOnly value={yaml} rows={14} style={{ fontFamily: "monospace" }} aria-label="Generated GitHub workflow" /></Field>}
     </div>
   );
+}
+
+function LocalGit({ a, scm, onPushed }) {
+  const notify = useNotify();
+  const info = useAsync(async () => { try { return await restJson("GET", `${a.id}/localgit`, { query: q }); } catch { return null; } }, [a.id]);
+  const [path, setPath] = useState("app.py");
+  const [content, setContent] = useState("print('hello from Vyomi')\n");
+  const [msg, setMsg] = useState("Update " + a.name);
+  const [busy, setBusy] = useState(false);
+  const push = async () => {
+    setBusy(true);
+    try {
+      await restJson("POST", `${a.id}/localgit`, { query: q, body: { branch: "main", message: msg, files: { [path]: content } } });
+      notify.success("Pushed to main; the build ran and a deployment was recorded (see Logs).", "Push succeeded");
+      info.reload(); onPushed && onPushed();
+    } catch (e) { notify.error(e, "Push failed"); } finally { setBusy(false); }
+  };
+  const clone = info.data?.cloneUrl || `${scm}:443/${a.name}.git`;
+  return <>
+    <Field label="Git clone URI" hint={info.data?.cloneUrl ? "A real Git remote (Gitea) - git push works against it." : "No git HTTP server is running (set VYOMI_CI_GITEA=1 on the appliance for a real remote); use the push form below."}>
+      <Input readOnly value={clone} aria-label="Git clone URI" /></Field>
+    <Field label="File path"><Input value={path} onChange={(_, d) => setPath(d.value)} aria-label="File path" /></Field>
+    <Field label="File content"><Textarea value={content} rows={4} style={{ fontFamily: "monospace" }} onChange={(_, d) => setContent(d.value)} aria-label="File content" /></Field>
+    <Field label="Commit message"><Input value={msg} onChange={(_, d) => setMsg(d.value)} aria-label="Commit message" /></Field>
+    <div><Button disabled={busy || !path} onClick={push}>Push commit to main</Button></div>
+    {info.data?.commits?.length ? <Field label="Commits on main"><ul style={{ margin: 0, paddingLeft: 18 }}>{info.data.commits.map((c) => <li key={c.sha}><code>{c.sha.slice(0, 7)}</code> {c.message} - {c.author}</li>)}</ul></Field> : null}
+  </>;
 }
 
 function Logs({ a }) {
@@ -125,8 +155,8 @@ function Logs({ a }) {
       columns={[
         { key: "time", label: "Date", value: (r) => r.properties?.start_time },
         { key: "status", label: "Status", value: (r) => r.properties?.status_text },
-        { key: "message", label: "Commit / message", value: (r) => r.properties?.message },
-        { key: "log", label: "Logs", value: (r) => r.properties?.logs?.[0]?.message || "--" },
+        { key: "message", label: "Commit / message", value: (r) => `${r.properties?.id_commit ? r.properties.id_commit.slice(0, 7) + " " : ""}${r.properties?.message || ""}` },
+        { key: "log", label: "Logs", value: (r) => r.properties?.logs?.[r.properties.logs.length - 1]?.message || "--" },
       ]}
     />
   );

@@ -86,7 +86,9 @@ const MODULES = [
 // The PROVEN conformance cores (vendored into wasm/core/ by build_cores.py).
 // aws_core_adapter imports these; they ARE the S3/DynamoDB data-plane.
 const CORES = [
-  "object_store.py", "s3_object_core.py", "s3_tables_core.py", "s3_insights_core.py", "s3_ext_core.py", "s3_vectors_core.py", "backup_core.py", "marketplace_core.py", "s3files_core.py", "ec2_metrics_core.py", "organizations_core.py", "qr_png.py", "nosql_store.py", "dynamodb_expr.py", "dynamodb_core.py",
+  "object_store.py", "s3_object_core.py", "s3_tables_core.py", "s3_insights_core.py", "s3_ext_core.py", "s3_vectors_core.py", "backup_core.py", "marketplace_core.py", "s3files_core.py", "ec2_metrics_core.py", "observability_core.py", "organizations_core.py", "qr_png.py", "nosql_store.py", "dynamodb_expr.py", "dynamodb_core.py",
+  "llm_core.py", "ai_models_core.py", "bedrock_agents_core.py", "zeroetl_core.py", "dms_core.py",
+  "backup_vaults_core.py",
   "kms_keystore.py", "kms_core.py", "kv_store.py", "secrets_core.py",
   "sql_store.py", "rds_core.py", "iam_store.py", "iam_core.py",
   "aws_console_detail.py",   // main-side Nano cores (merged)
@@ -110,18 +112,21 @@ const CORES = [
   "azure_locks_core.py",   // Management locks (Microsoft.Authorization/locks, scoped to ANY resource) — loaded before azure_arm_core which delegates to it
   "k8s_yaml.py",   // YAML reader for Kubernetes manifests — azure_aks_k8s_core imports it
   "azure_aks_k8s_core.py",   // AKS Kubernetes object store + kubectl (runCommand) — loaded before azure_arm_core
+  "vuln_scan_core.py", "secscan_core.py", "ecr_core.py", "malware_scan_core.py", "schedule_core.py",   // image vulnerability scan + security detection engines (azure_security_core imports them)
   "kubescape_catalog.py",   // Kubescape control metadata (generated) — kubescape_core imports it
   "kubescape_core.py",   // Kubescape results + scanner seam (calls the OPA-wasm evaluator) — loaded before azure_arm_core
   "azure_security_core.py",   // Microsoft Defender for Cloud (Microsoft.Security) — loaded before azure_arm_core which delegates to it
-  "azure_arm_data.py", "azure_storage_ext_core.py", "azure_policy_core.py", "azure_netsvc_core.py", "azure_netcfg_core.py", "azure_webnet_core.py", "azure_webdeploy_core.py", "azure_arm_core.py",   // Azure ARM control plane (native /subscriptions/* wire)
+  "azure_arm_data.py", "azure_storage_ext_core.py", "azure_policy_core.py", "azure_netsvc_core.py", "azure_netcfg_core.py", "azure_webnet_core.py", "ci_core.py", "azure_acr_tasks_core.py", "aws_codeconn_core.py", "lambda_cicd_core.py", "k8s_render.py", "azure_flux_core.py", "azure_webdeploy_core.py", "azure_arm_core.py", "azure_lb_core.py", "azure_disks_core.py",   // Azure ARM control plane (native /subscriptions/* wire)
+  "azure_firewall_eval.py",
   "azure_cfgext_core.py",
-  "azure_files_core.py", "azure_search_core.py", "azure_storagemover_core.py", "azure_marketplace_core.py", "azure_billing_ext_core.py",
+  "azure_backup_core.py",
+  "azure_sqlbackup_core.py",
+  "azure_files_core.py", "azure_search_vector_core.py", "azure_search_core.py", "azure_storagemover_core.py", "azure_marketplace_core.py", "azure_billing_ext_core.py",
   // GCP conformance cores — the gcp_core_adapter data-plane (console CRUD).
-  "gcp_project.py", "function_shims.py", "gcp_console_tabs.py", "nano_triggers.py",   // main-side cores (merged with v4)
-  "gcp_storageinsights_core.py", "gcp_storage_core.py", "gcp_firestore_core.py", "gcp_kms_core.py",
-  "gcp_secretmanager_core.py", "gcp_pubsub_core.py", "gcp_iam_core.py", "gcp_asset_query_core.py", "gcp_wif_core.py", "gcp_trace_core.py", "gcp_apphub_core.py", "gcp_osconfig_core.py", "gcp_hybrid_core.py", "gcp_posture_core.py", "gcp_cloudsql_core.py", "gcp_artifactregistry_core.py", "gcp_logging_core.py", "gcp_compute_core.py", "instance_catalog.py", "gcp_compute_instances_core.py", "gcp_compute_ext_core.py", "gcp_resourcemanager_core.py", "gcp_pam_core.py", "gcp_run_core.py",
+  "gcp_storageinsights_core.py", "gcp_storage_core.py", "firestore_rules_core.py", "gcp_firestore_core.py", "gcp_datastore_core.py", "gcp_audit_core.py", "gcp_eventarc_core.py", "gcp_hub_core.py", "gcp_kms_import.py", "gcp_kms_core.py",
+  "gcp_secretmanager_core.py", "gcp_pubsub_core.py", "gcp_iam_core.py", "gcp_asset_query_core.py", "gcp_wif_core.py", "gcp_trace_core.py", "gcp_apphub_core.py", "gcp_osconfig_core.py", "gcp_hybrid_core.py", "gcp_posture_core.py", "gcp_cloudsql_core.py", "gcp_artifactregistry_core.py", "gcp_logging_core.py", "gcp_compute_core.py", "instance_catalog.py", "gcp_compute_instances_core.py", "gcp_compute_ext_core.py", "gcp_resourcemanager_core.py", "gcp_pam_core.py", "gcp_run_core.py", "gcp_scc_core.py",
   // Azure data-plane cores — the azure_core_adapter data-plane (console CRUD).
-  "azure_blob_core.py", "azure_cosmos_core.py", "azure_keyvault_secrets_core.py",
+  "azure_netaccess.py", "azure_blob_core.py", "azure_cosmos_core.py", "azure_keyvault_secrets_core.py",
   "azure_keyvault_keys_core.py", "azure_keyvault_certificates_core.py", "azure_queue_core.py", "azure_table_core.py",
   // Generic child/sub-resource store (SQL databases+firewall rules, SB queues) +
   // durable editable settings — azure_core_adapter imports it. Pure stdlib; its
@@ -134,8 +139,8 @@ const CORES = [
   "gcp_compute_core.py",   // main-side Nano cores (merged)
   "azure_graph_core.py",   // Microsoft Graph (Entra ID: users/groups/apps/service principals/domains/admin units) — own data plane, not ARM-delegated
   "azure_servicebus_core.py", "eventbridge_core.py", "eventbridge_schemas_core.py", "scheduler_core.py", "lambda_core.py",
-  "azure_keyvault_x509_core.py",   // main-side cores (merged with v4)
-  "apigateway_core.py", "apigatewayv2_core.py", "apigatewayv2_gateway.py", "vpc_core.py", "vpc_vpn_core.py", "vpc_extras_core.py", "vpc_lattice_core.py", "ec2_ops_core.py", "netfw_core.py", "dnsfw_core.py", "kinesis_core.py", "cost_model.py", "cloudwatch_core.py", "azure_sql_core.py", "azure_iam_core.py", "logs_core.py", "ssm_core.py", "stepfunctions_core.py", "cloudformation_core.py", "gcp_cloudscheduler_core.py", "gcp_container_core.py", "gcp_redis_core.py", "gcp_iamcredentials_core.py", "gcp_monitoring_core.py",
+  "apigateway_core.py", "apigatewayv2_core.py", "apigatewayv2_gateway.py", "vpc_core.py", "vpc_vpn_core.py", "vpc_extras_core.py", "vpc_lattice_core.py", "ec2_ops_core.py", "netfw_core.py", "dnsfw_core.py", "kinesis_core.py", "cost_model.py", "cloudwatch_core.py", "azure_sql_core.py", "azure_iam_core.py", "logs_core.py", "ssh_access_core.py", "ssm_core.py", "stepfunctions_core.py", "cloudformation_core.py", "gcp_cloudscheduler_core.py", "gcp_container_core.py", "gcp_redis_core.py", "gcp_iamcredentials_core.py", "gcp_monitoring_core.py",
+  "vpc_lattice_dataplane.py",
   "eventbridge_partner_core.py", "ce_core.py", "vpc_encryption_core.py", "savingsplans_core.py", "cloudfront_keys_core.py", "rds_restore_core.py", "appautoscaling_core.py", "cloudformation_stacksets_core.py", "cloudformation_registry_core.py",
   // console-next capability manifest dependency (slice 1): the pure conformance
   // signal module (only imports `os` — safe in Pyodide, no FastAPI).
@@ -151,7 +156,7 @@ const CORES = [
 ];
 // core sub-packages (core/netsim: the shared network engine the VPC / Compute / ARM cores import
 // lazily for reachability analysis) — vendored by wasm/build_cores.py CORE_PKGS
-const CORE_PKGS = ["netsim/__init__.py", "netsim/model.py", "netsim/evaluate.py", "netsim/from_aws.py", "netsim/from_gcp.py", "netsim/from_azure.py", "netsim/flowlogs.py", "netsim/enforce.py"];
+const CORE_PKGS = ["netsim/__init__.py", "netsim/model.py", "netsim/evaluate.py", "netsim/from_aws.py", "netsim/from_gcp.py", "netsim/from_azure.py", "netsim/flowlogs.py", "netsim/mirror.py", "netsim/enforce.py"];
 
 
 // Boot screen (wasm/nano-kernel.js): the page paints it first thing in <body>;
@@ -258,6 +263,52 @@ async def _adisp(payload_json):
 import builtins; builtins._disp = _disp; builtins._adisp = _adisp
 `);
   st.ok();
+  // ── Local-LLM bridge (WebLLM) ───────────────────────────────────────
+  // Bedrock / Vertex AI / Azure OpenAI answer from core/llm_core. On Nano the only possible model is one the BROWSER runs, so
+  // a page that has one registers it here: vyomiRegisterLLM({model, chat(reqJson) -> Promise<json string>}) or, when the browser
+  // has WebGPU, vyomiEnableWebLLM() loads @mlc-ai/web-llm and registers a small instruct model. With neither, llm_core reports
+  // no backend and every model call returns the honest ModelNotReady error (never a canned answer).
+  py.runPython(`
+import json, builtins
+async def _llm_bridge_chat(msgs, system, max_tokens, temperature, stop):
+    import js
+    eng = getattr(js.globalThis, "__vyomiLlm", None)
+    if eng is None:
+        raise RuntimeError("no in-browser model is registered")
+    r = await eng.chat(json.dumps({"messages": msgs, "max_tokens": max_tokens, "temperature": temperature, "stop": stop}))
+    return json.loads(str(r))
+def _llm_bridge_set(model):
+    from core import llm_core
+    llm_core.set_async_backend(_llm_bridge_chat if model else None, model=model or None)
+def _llm_bridge_status():
+    from core import llm_core
+    return json.dumps(llm_core.status(probe=False))
+builtins._llm_bridge_set = _llm_bridge_set; builtins._llm_bridge_status = _llm_bridge_status
+`);
+  globalThis.vyomiRegisterLLM = (engine) => {
+    globalThis.__vyomiLlm = engine || null;
+    py.runPython(`_llm_bridge_set(${JSON.stringify(engine ? String(engine.model || "webllm") : "")})`);
+  };
+  globalThis.vyomiLlmStatus = () => JSON.parse(py.runPython("_llm_bridge_status()"));
+  globalThis.vyomiEnableWebLLM = async (modelId, onProgress) => {
+    if (!("gpu" in navigator)) throw new Error("WebGPU is not available in this browser, so WebLLM cannot run here.");
+    const webllm = globalThis.webllm || await import("https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.79/+esm");
+    const list = (webllm.prebuiltAppConfig && webllm.prebuiltAppConfig.model_list) || [];
+    const id = modelId || (list.find((m) => /SmolLM2-360M-Instruct/i.test(m.model_id)) || list.find((m) => /Qwen2\.5-0\.5B-Instruct/i.test(m.model_id)) || {}).model_id;
+    if (!id) throw new Error("No small WebLLM model is listed by this WebLLM build.");
+    const engine = await webllm.CreateMLCEngine(id, { initProgressCallback: (p) => onProgress && onProgress(p) });
+    vyomiRegisterLLM({
+      model: id,
+      chat: async (reqJson) => {
+        const q = JSON.parse(reqJson);
+        const r = await engine.chat.completions.create({ messages: q.messages, max_tokens: q.max_tokens, temperature: q.temperature, ...(q.stop ? { stop: q.stop } : {}), stream: false });
+        const c = r.choices[0];
+        return JSON.stringify({ text: c.message.content || "", input_tokens: r.usage && r.usage.prompt_tokens, output_tokens: r.usage && r.usage.completion_tokens, finish_reason: c.finish_reason === "length" ? "length" : "stop" });
+      },
+    });
+    return id;
+  };
+
   // ── Live engine status (Dashboard > Service status) ─────────────────
   // This runtime checks every registry store (built + state reads back) and
   // records the result; the SW's /api/runtime/readiness builds the cards from

@@ -9,7 +9,7 @@ import { mkdir } from "node:fs/promises";
 
 const require = createRequire(import.meta.url);
 let pw;
-try { pw = require("playwright"); }
+try { pw = require(process.env.PW || "playwright"); }
 catch { pw = require("/Users/sudhirganti/Applications/simulator/portal/node_modules/playwright"); }
 
 const BASE = process.env.BASE || "http://127.0.0.1:8740";
@@ -169,6 +169,9 @@ try {
   // CMEK: setting a Cloud KMS key via the UI validates the shape and really stamps every
   // object created afterward with it (gcp.storage.encryption — see core/gcp_storage_core.py).
   const KMS_KEY = "projects/vyomi-project/locations/us-central1/keyRings/smoke-ring/cryptoKeys/smoke-key";
+  // the key has to exist (real GCS validates a CMEK key against Cloud KMS wherever the router wires that check, e.g. Nano)
+  await wire(`/v1/projects/vyomi-project/locations/us-central1/keyRings?keyRingId=smoke-ring`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+  await wire(`/v1/projects/vyomi-project/locations/us-central1/keyRings/smoke-ring/cryptoKeys?cryptoKeyId=smoke-key`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ purpose: "ENCRYPT_DECRYPT" }) });
   await page.getByRole("button", { name: "Use a Cloud KMS key" }).click();
   await page.getByRole("dialog").getByLabel("Cloud KMS key").fill(KMS_KEY);
   await page.getByRole("dialog").getByRole("button", { name: "Save" }).click();
@@ -1275,8 +1278,8 @@ try {
   await page.getByRole("button", { name: "Set up continuous deployment" }).click();
   await page.getByLabel("Repository").fill("octo/widgets");
   await page.getByRole("button", { name: "Connect", exact: true }).click();
-  await page.getByRole("button", { name: "Simulate push (trigger build)" }).waitFor({ timeout: 10000 });
-  await page.getByRole("button", { name: "Simulate push (trigger build)" }).click();
+  await page.getByRole("button", { name: "Build stored source" }).waitFor({ timeout: 10000 });
+  await page.getByRole("button", { name: "Build stored source" }).click();
   await page.getByText(/build-\d+ — SUCCESS/).waitFor({ timeout: 10000 });
   await page.getByRole("dialog").getByRole("button", { name: "Close" }).click();
   const cdFnRevs = await wjson(`/v2/projects/vyomi-project/locations/us-central1/services/${CDFN}/revisions`);
@@ -2328,12 +2331,12 @@ try {
   const rpRenamed = await wjson(`/v3/projects:search?query=${RP}`);
   check("rename project via UI → native wire shows new displayName", rpRenamed.projects?.[0]?.displayName === "v4 gcp rm renamed");
 
-  // Move is an honest gap: there is no folder/organization to move a project into.
+  // Move is a real dialog now (folders / organization destinations): open it, assert it is not a gap panel, cancel.
   await page.getByRole("button", { name: `Actions for ${RP}` }).click();
   await page.getByRole("menuitem", { name: "Move" }).click();
-  await page.getByText("Not simulated in Vyomi").waitFor({ timeout: 10000 });
-  await page.getByRole("dialog").getByRole("button", { name: "Close" }).click();
-  check("move project → honest Not simulated panel, no silent success", true);
+  await page.getByRole("dialog").getByText("Move project").first().waitFor({ timeout: 10000 });
+  check("move project → real Move dialog (no Not simulated panel)", (await page.getByText("Not simulated in Vyomi").count()) === 0);
+  await page.getByRole("dialog").getByRole("button", { name: "Cancel" }).click();
 
   // Reverse direction: a project created over the wire shows up in the UI without a reload.
   const RP2 = `v4-gcp-rm-wire-${Date.now() % 100000}`;

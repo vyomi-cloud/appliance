@@ -288,7 +288,8 @@ check("Associated VPCs tab lists the VPC", (await body()).includes(vpc));
 await shot("dns-firewall");
 
 // ── honest pages stay honest ──
-for (const [hash, heading] of [["container-associations", "Container associations"], ["service-networks", "Service networks"]]) {
+// (Service networks is a real VPC Lattice page now - see smoke-aws-lattice.mjs.)
+for (const [hash, heading] of [["container-associations", "Container associations"]]) {
   await go(`#/vpc/${hash}`, heading);
   check(`${heading}: still an honest page (badge present)`, (await badges()) > 0 || (await body()).toLowerCase().includes("not simulated"));
 }

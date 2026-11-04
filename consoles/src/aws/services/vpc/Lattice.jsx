@@ -25,6 +25,7 @@ import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { ErrorAlert } from "../../kit/common.jsx";
 import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
+import SimPanel from "../../kit/SimPanel.jsx";
 import * as api from "./latticeApi.js";
 import * as vpcApi from "./api.js";
 
@@ -263,6 +264,20 @@ function RulesPanel({ sid, listener, tgs }) {
   );
 }
 
+function InvokePanel({ host }) {
+  const vpcs = useVpcs();
+  return (
+    <SimPanel title="Test invoke" testId="invoke" description="Evaluates one request through Lattice's data plane (DNS per VPC, associations, security groups, listener, auth policy, rules, target health). Simulator verb: POST /vyomi/invoke."
+      fields={[{ key: "host", label: "Host", default: host }, { key: "sourceVpcId", label: "Source VPC", options: (vpcs.data || []).map((x) => ({ value: x.VpcId, label: `${x.VpcId} (${x.CidrBlock})` })) },
+        { key: "method", label: "Method", default: "GET", options: ["GET", "POST", "PUT", "DELETE"].map((m) => ({ value: m, label: m })) }, { key: "path", label: "Path", default: "/" },
+        { key: "port", label: "Port", default: "80" }, { key: "protocol", label: "Protocol", default: "HTTP", options: ["HTTP", "HTTPS"].map((m) => ({ value: m, label: m })) },
+        { key: "principal", label: "Caller principal ARN (AWS_IAM auth)", default: "" }]}
+      run={(f) => api.testInvoke({ host: f.host, sourceVpcId: f.sourceVpcId, method: f.method, path: f.path, port: Number(f.port) || undefined, protocol: f.protocol, ...(f.principal ? { principal: f.principal } : {}) })}
+      verdict={(r) => (r.statusCode && r.statusCode < 400 ? ["success", `HTTP ${r.statusCode} - ${r.message || ""}`] : r.statusCode ? ["warning", `HTTP ${r.statusCode} - ${r.message || ""}`] : ["error", `No response - ${r.message || r.dnsResult}`])}
+      steps={(r) => r.steps} />
+  );
+}
+
 export function LatticeServiceDetail({ params }) {
   const notify = useNotify();
   const id = params.id;
@@ -289,6 +304,7 @@ export function LatticeServiceDetail({ params }) {
                 empty={<Box textAlign="center" color="inherit">No listeners. Add one to route requests to target groups.</Box>} />
               {open && <RulesPanel sid={id} listener={open} tgs={tgs.data || []} />}
             </SpaceBetween>) },
+          { id: "invoke", label: "Test invoke", content: d ? <InvokePanel host={d.dnsEntry?.domainName || d.customDomainName || d.name} /> : null },
           { id: "assoc", label: "Service network associations", content: <AssocTable title="Service network associations" rows={assoc.data || []} loading={assoc.loading} reload={assoc.reload} onDelete={api.deleteServiceAssociation} createLabel="Manage in service network" onCreate={() => { location.hash = "#/vpc/service-networks"; }}
             cols={[{ id: "id", header: "Association ID", cell: (r) => r.id }, { id: "n", header: "Service network", cell: (r) => link(`#/vpc/service-networks/${r.serviceNetworkId}`, r.serviceNetworkName) }, { id: "s", header: "Status", cell: (r) => status(r.status) }]} /> },
           { id: "auth", label: "Auth policy", content: <AuthPolicyTab id={id} authType={d?.authType} /> },

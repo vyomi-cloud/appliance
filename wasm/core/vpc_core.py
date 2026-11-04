@@ -1215,6 +1215,7 @@ _CODE_TEXT = {
     "NOT_PUBLIC": "destination has no public IPv4 address", "NO_DESTINATION": "no network interface at the destination",
     "UNSUPPORTED_TARGET": "route target type is not simulated",
     "BLOCKED_PUBLIC_ACCESS": "VPC Block Public Access blocks this internet gateway path",
+    "NETWORK_FIREWALL_DROP": "an AWS Network Firewall endpoint on the path drops the packet",
 }
 # Reachability Analyzer explanation codes (closest native code; others pass the netsim code through)
 _EXPLANATION_CODE = {

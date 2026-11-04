@@ -9,6 +9,7 @@
  * account blade uses) are backed by real ARM calls; the remaining menu items are honest
  * CapabilityContainer gaps (core/capabilities/azure/vms.json is the single source of truth for
  * which). */
+import { VmDisasterRecovery, VmVaultBackup } from "./RecoveryPanels.jsx";
 import { ResourceMetrics } from "../../kit/ResourceMonitoring.jsx";
 import { UserAssignedIdentities } from "../../kit/UserAssignedIdentities.jsx";
 import { useEffect, useState } from "react";
@@ -78,14 +79,12 @@ const LABEL = Object.fromEntries(MENU.flatMap((m) => (m.group ? m.items : [m])).
 // third-party service) — never a disabled skeleton of the real UI. A few still share the
 // bundled azure.vms.tools capability id for the orchestrator's own bookkeeping.
 const GAP_CAP = {
-  bastion: "azure.vms.tools", loadbalancing: "azure.vms.tools", asgs: "azure.vms.tools", networkmanager: "azure.vms.tools",
+  bastion: "azure.vms.tools", asgs: "azure.vms.tools", networkmanager: "azure.vms.tools",
   extensions: "azure.vms.tools", disasterrecovery: "azure.vms.tools", updates: "azure.vms.tools", tasks: "azure.vms.tools",
   bootdiagnostics: "azure.vms.tools", perfdiagnostics: "azure.vms.tools", serialconsole: "azure.vms.tools", support: "azure.vms.tools",
 };
 const NOT_SIMULATED_REASON = {
   bastion: "Azure Bastion tunnels a browser session to the guest's own network stack over a private network path. Vyomi's virtual machines have no guest network stack to tunnel to — only the resource's own metadata exists in-browser.",
-  loadbalancing: "Distributing real traffic across two virtual machines needs a live network path forwarding real packets between them. A browser/WASM simulator has no virtual network device to carry that traffic — and Microsoft.Network/loadBalancers is not a resource type this lens's Networking service models.",
-  asgs: "Application security groups are not a resource type this lens's Networking service models yet (see Microsoft.Network/networkSecurityGroups' own rule engine, which the Network settings tab already reuses for real IP-based rules).",
   networkmanager: "Network Manager centrally pushes connectivity/security configuration across a real multi-VNet packet path. There is no virtual network stack in a browser/WASM simulator for that configuration to actually take effect on.",
   extensions: "Installing a VM extension means a real guest agent downloading and executing a package inside the guest OS. Vyomi's virtual machines are metadata-only — no guest OS process exists in-browser to install anything into.",
   disasterrecovery: "Azure Site Recovery continuously replicates this VM's disks, block by block, to a second region and fails over to that replica on demand. Vyomi models one logical copy of each resource — there is no second region-local replica for a failover to cut over to.",
@@ -125,6 +124,8 @@ export default function VmBlade({ params }) {
       autoshutdown: () => <AutoShutdown a={a} reload={reload} />,
       connect: () => <Connect a={a} />,
       networksettings: () => <NetworkSettings a={a} />,
+      loadbalancing: () => <CapabilityContainer id="azure.vms.loadbalancing" title={`${a.name} | Load balancing`}><VmLoadBalancing a={a} /></CapabilityContainer>,
+      asgs: () => <CapabilityContainer id="azure.vms.asgs" title={`${a.name} | Application security groups`}><VmAsgs a={a} /></CapabilityContainer>,
       runcommand: () => <RunCommand a={a} reload={reload} />,
       exporttemplate: () => <SharedExportTemplate id={a.id} name={a.name} resourceGroup={a.resourceGroup} />,
       resourcevisualizer: () => <ResourceVisualizer a={a} />,
@@ -134,7 +135,8 @@ export default function VmBlade({ params }) {
       resourcehealth: () => <ResourceHealth a={a} />,
       changetracking: () => <ChangeTracking a={a} />,
       defender: () => <Defender a={a} />,
-      backup: () => <Backup a={a} reload={reload} />,
+      backup: () => <><Backup a={a} reload={reload} /><VmVaultBackup a={a} /></>,
+      disasterrecovery: () => <VmDisasterRecovery a={a} />,
       resetpassword: () => <ResetPassword a={a} />,
       redeploy: () => <Redeploy a={a} reload={reload} />,
       operatingsystem: () => <OperatingSystem a={a} />,
@@ -647,14 +649,42 @@ function Disks({ a, reload }) {
           <Radio value="Enabled" label="Enabled" /><Radio value="Disabled" label="Disabled" /></RadioGroup></Field>
       </section>
       <AddDiskDialog open={add} onClose={() => setAdd(false)} nextLun={dataDisks.length} onCreate={addDisk} />
-      <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(false)}>
-        <DialogSurface aria-label="Attach existing disks">
-          <DialogBody><DialogTitle>Attach existing disks</DialogTitle>
-            <DialogContent><NotSimulated feature="Picking an existing standalone managed disk to attach" note="This lens does not build a standalone Disks console to pick an existing disk from — data disks are created and attached in one step instead." /></DialogContent>
-            <DialogActions><Button onClick={() => setGap(false)}>Close</Button></DialogActions></DialogBody>
-        </DialogSurface>
-      </Dialog>
+      <AttachExistingDisks open={!!gap} onClose={() => setGap(false)} a={a} nextLun={dataDisks.length} onAttach={addDisk} />
     </CapabilityContainer>
+  );
+}
+
+/* Attach existing disks: unattached standalone managed disks (Microsoft.Compute/disks) in the VM's region, plus a quick-create. */
+function AttachExistingDisks({ open, onClose, a, nextLun, onAttach }) {
+  const notify = useNotify();
+  const disks = useAsync(() => (open ? api.listDisks() : Promise.resolve([])), [open]);
+  const [nm, setNm] = useState(""), [gb, setGb] = useState("32"), [sku, setSku] = useState("StandardSSD_LRS");
+  const region = (a.location || "").replace(/\s/g, "").toLowerCase();
+  const free = (disks.data || []).filter((d) => (d.location || "").replace(/\s/g, "").toLowerCase() === region && d.properties?.diskState !== "Attached");
+  const create = async () => {
+    try { await api.putDisk(a.resourceGroup, nm, { location: a.location, sku: { name: sku }, properties: { diskSizeGB: Number(gb), creationData: { createOption: "Empty" } } }); setNm(""); disks.reload(); }
+    catch (e) { notify.error(e, "Creating the disk failed"); }
+  };
+  return (
+    <Dialog open={open} onOpenChange={(_, d) => !d.open && onClose()}>
+      <DialogSurface aria-label="Attach existing disks">
+        <DialogBody><DialogTitle>Attach existing disks</DialogTitle>
+          <DialogContent>
+            <ErrorBar error={disks.error} />
+            <table className="vy-grid" aria-label="Unattached disks"><thead><tr><th>Disk</th><th>SKU</th><th>Size (GiB)</th><th /></tr></thead>
+              <tbody>{free.map((d) => (<tr key={d.id}><td>{d.name}</td><td>{d.sku?.name}</td><td>{d.properties?.diskSizeGB}</td>
+                <td><Button size="small" aria-label={`Attach ${d.name}`} onClick={async () => { await onAttach({ lun: nextLun, name: d.name, createOption: "Attach", diskSizeGB: d.properties?.diskSizeGB, managedDisk: { id: d.id, storageAccountType: d.sku?.name } }); onClose(); }}>Attach</Button></td></tr>))}
+                {!free.length && <tr><td colSpan={4} className="vy-muted" data-testid="no-free-disks">No unattached disks in {locationLabel(region)}.</td></tr>}</tbody></table>
+            <div style={{ display: "flex", gap: 8, alignItems: "end", marginTop: 8, flexWrap: "wrap" }}>
+              <Field label="New disk name"><Input value={nm} onChange={(_, d) => setNm(d.value)} aria-label="New disk name" /></Field>
+              <Field label="Size (GiB)"><Input type="number" value={gb} onChange={(_, d) => setGb(d.value)} aria-label="New disk size" /></Field>
+              <Field label="SKU"><select value={sku} onChange={(e) => setSku(e.target.value)} aria-label="New disk SKU"><option>Standard_LRS</option><option>StandardSSD_LRS</option><option>Premium_LRS</option></select></Field>
+              <Button disabled={!nm} onClick={create} aria-label="Create standalone disk">Create disk</Button>
+            </div>
+          </DialogContent>
+          <DialogActions><Button onClick={onClose}>Close</Button></DialogActions></DialogBody>
+      </DialogSurface>
+    </Dialog>
   );
 }
 
@@ -815,6 +845,108 @@ function Connect({ a }) {
   );
 }
 
+// ── Application security groups: real Microsoft.Network/applicationSecurityGroups, joined through the NIC's
+// ip configuration (validated in core/azure_cfgext_core.py; netsim evaluates rules that name them).
+/* Load balancing: the load balancers whose backend pool contains this VM's NIC, add/remove membership, and a quick-create. Backend state is
+ * derived from the VM's power state only - no health probe packet is sent and no traffic is balanced (see azure.vms.loadbalancing). */
+function VmLoadBalancing({ a }) {
+  const notify = useNotify();
+  const nicId = nicIdOf(a);
+  const lbs = useAsync(() => api.listLoadBalancers(), [a.id]);
+  const nic = useAsync(() => (nicId ? api.getNic(parseId(nicId).resourceGroup, parseId(nicId).name) : Promise.resolve(null)), [nicId]);
+  const [sel, setSel] = useState(""), [nm, setNm] = useState(""), [fp, setFp] = useState("80"), [bp, setBp] = useState("80");
+  if (!nicId) return <div className="vy-muted" style={{ padding: 16 }}>This virtual machine has no network interface.</div>;
+  const ipc = nic.data?.properties?.ipConfigurations?.[0];
+  const mine = new Set((ipc?.properties?.loadBalancerBackendAddressPools || []).map((p) => p.id.toLowerCase()));
+  const running = statusOf(a) === "Running";
+  const writePools = async (ids) => {
+    const body = JSON.parse(JSON.stringify(nic.data)); body.properties.ipConfigurations[0].properties.loadBalancerBackendAddressPools = ids.map((id) => ({ id }));
+    try { await api.putNic(parseId(nicId).resourceGroup, parseId(nicId).name, body); nic.reload(); lbs.reload(); }
+    catch (e) { notify.error(e, "Updating the backend pool membership failed"); }
+  };
+  const create = async () => {
+    const rg = a.resourceGroup, base = `/subscriptions/${parseId(a.id).subscription}/resourceGroups/${rg}/providers/Microsoft.Network`;
+    try {
+      await api.putPublicIp(rg, `${nm}-ip`, { location: a.location, sku: { name: "Standard" }, properties: { publicIPAllocationMethod: "Static" } });
+      const lb = `${base}/loadBalancers/${nm}`;
+      await api.putLoadBalancer(rg, nm, { location: a.location, sku: { name: "Standard", tier: "Regional" }, properties: {
+        frontendIPConfigurations: [{ name: "frontend", properties: { publicIPAddress: { id: `${base}/publicIPAddresses/${nm}-ip` } } }],
+        backendAddressPools: [{ name: "backend" }],
+        probes: [{ name: "tcp-probe", properties: { protocol: "Tcp", port: Number(bp), intervalInSeconds: 15, probeThreshold: 1 } }],
+        loadBalancingRules: [{ name: "rule-1", properties: { protocol: "Tcp", frontendPort: Number(fp), backendPort: Number(bp), idleTimeoutInMinutes: 4,
+          frontendIPConfiguration: { id: `${lb}/frontendIPConfigurations/frontend` }, backendAddressPool: { id: `${lb}/backendAddressPools/backend` }, probe: { id: `${lb}/probes/tcp-probe` } } }] } });
+      notify.success(`Load balancer '${nm}' was created.`, "Created"); setNm(""); lbs.reload();
+    } catch (e) { notify.error(e, "Creating the load balancer failed"); }
+  };
+  const region = (a.location || "").replace(/\s/g, "").toLowerCase();
+  const usable = (lbs.data || []).filter((l) => (l.location || "").replace(/\s/g, "").toLowerCase() === region);
+  return (
+    <>
+      <ErrorBar error={lbs.error || nic.error} />
+      <table className="vy-grid" aria-label="Load balancers">
+        <thead><tr><th>Load balancer</th><th>SKU</th><th>Backend pool</th><th>Rules</th><th>Member</th><th>Backend state</th></tr></thead>
+        <tbody>{usable.flatMap((l) => (l.properties?.backendAddressPools || []).map((p) => (
+          <tr key={p.id}><td>{l.name}</td><td>{l.sku?.name}</td><td>{p.name}</td>
+            <td>{(l.properties?.loadBalancingRules || []).map((r) => `${r.properties.protocol} ${r.properties.frontendPort}->${r.properties.backendPort}`).join(", ") || "--"}</td>
+            <td><input type="checkbox" aria-label={`Member of ${l.name}/${p.name}`} checked={mine.has(p.id.toLowerCase())} onChange={() => {
+              const cur = (ipc?.properties?.loadBalancerBackendAddressPools || []).map((x) => x.id);
+              writePools(mine.has(p.id.toLowerCase()) ? cur.filter((i) => i.toLowerCase() !== p.id.toLowerCase()) : [...cur, p.id]); }} /></td>
+            <td data-testid="lb-state">{mine.has(p.id.toLowerCase()) ? (running ? "VM running (probe not executed)" : "VM not running") : "--"}</td></tr>)))}</tbody>
+      </table>
+      {!usable.length && <p className="vy-muted" data-testid="lb-empty">No load balancer in {locationLabel(region)} yet.</p>}
+      <p className="vy-muted" style={{ fontSize: 12 }}>Membership is a real network-interface setting. Vyomi balances no traffic and sends no health-probe packet, so the backend state only reflects the VM's power state.</p>
+      <div style={{ display: "flex", gap: 8, alignItems: "end", marginTop: 8, flexWrap: "wrap" }}>
+        <Field label="New load balancer (Standard, public)"><Input value={nm} onChange={(_, d) => setNm(d.value)} aria-label="Load balancer name" /></Field>
+        <Field label="Frontend port"><Input type="number" value={fp} onChange={(_, d) => setFp(d.value)} aria-label="Frontend port" /></Field>
+        <Field label="Backend port"><Input type="number" value={bp} onChange={(_, d) => setBp(d.value)} aria-label="Backend port" /></Field>
+        <Button appearance="primary" disabled={!nm} onClick={create} aria-label="Create load balancer">Create</Button>
+      </div>
+    </>
+  );
+}
+
+function VmAsgs({ a }) {
+  const notify = useNotify();
+  const nicId = nicIdOf(a);
+  const nic = useAsync(() => (nicId ? api.getNic(parseId(nicId).resourceGroup, parseId(nicId).name) : Promise.resolve(null)), [nicId]);
+  const asgs = useAsync(() => api.listAsgs(), []);
+  const [name, setName] = useState("");
+  const mine = new Set((nic.data?.properties?.ipConfigurations?.[0]?.properties?.applicationSecurityGroups || []).map((g) => g.id.toLowerCase()));
+  const region = (nic.data?.location || a.location || "").replace(/\s/g, "").toLowerCase();
+  const write = async (ids) => {
+    const body = JSON.parse(JSON.stringify(nic.data));
+    body.properties.ipConfigurations[0].properties.applicationSecurityGroups = ids.map((id) => ({ id }));
+    try { await api.putNic(parseId(nicId).resourceGroup, parseId(nicId).name, body); nic.reload(); }
+    catch (e) { notify.error(e, "Updating the application security groups failed"); }
+  };
+  const toggle = (g) => {
+    const cur = (nic.data?.properties?.ipConfigurations?.[0]?.properties?.applicationSecurityGroups || []).map((x) => x.id);
+    write(mine.has(g.id.toLowerCase()) ? cur.filter((i) => i.toLowerCase() !== g.id.toLowerCase()) : [...cur, g.id]);
+  };
+  const create = async () => {
+    try { await api.putAsg(a.resourceGroup, name, a.location); notify.success(`Application security group '${name}' was created.`, "Created"); setName(""); asgs.reload(); }
+    catch (e) { notify.error(e, "Creating the application security group failed"); }
+  };
+  if (!nicId) return <div className="vy-muted" style={{ padding: 16 }}>This virtual machine has no network interface.</div>;
+  return (
+    <>
+      <ErrorBar error={asgs.error || nic.error} />
+      <table className="vy-grid" aria-label="Application security groups">
+        <thead><tr><th>Member</th><th>Name</th><th>Resource group</th><th>Location</th></tr></thead>
+        <tbody>{(asgs.data || []).filter((g) => (g.location || "").replace(/\s/g, "").toLowerCase() === region).map((g) => (
+          <tr key={g.id}><td><input type="checkbox" aria-label={`Member of ${g.name}`} checked={mine.has(g.id.toLowerCase())} onChange={() => toggle(g)} /></td>
+            <td>{g.name}</td><td>{g.resourceGroup}</td><td>{locationLabel(g.location)}</td></tr>
+        ))}</tbody>
+      </table>
+      <p className="vy-muted" style={{ fontSize: 12 }}>Only groups in the network interface's region ({locationLabel(region)}) can be joined, as in Azure. Network security rules that name a group are evaluated by the network simulator.</p>
+      <div style={{ display: "flex", gap: 8, alignItems: "end", marginTop: 8 }}>
+        <Field label="New application security group"><Input value={name} onChange={(_, d) => setName(d.value)} aria-label="Application security group name" /></Field>
+        <Button appearance="primary" disabled={!name} onClick={create} aria-label="Create application security group">Create</Button>
+      </div>
+    </>
+  );
+}
+
 // ── Network settings (network interface + attached NSG's rules) ───────────────────────
 const PORT = (r) => r.properties?.destinationPortRange || (r.properties?.destinationPortRanges || []).join(",") || "*";
 
@@ -931,8 +1063,8 @@ function NetworkSettings({ a }) {
       <div style={{ marginTop: 12 }}>
         {tab === "inbound" && <PortRules rg={a.resourceGroup} nsgName={nsgName} direction="Inbound" />}
         {tab === "outbound" && <PortRules rg={a.resourceGroup} nsgName={nsgName} direction="Outbound" />}
-        {tab === "asgs" && <NotSimulated feature="Application security groups" note="This lens does not model Microsoft.Network/applicationSecurityGroups." />}
-        {tab === "lb" && <NotSimulated feature="Load balancing" note="This lens does not model Microsoft.Network/loadBalancers." />}
+        {tab === "asgs" && <VmAsgs a={a} />}
+        {tab === "lb" && <VmLoadBalancing a={a} />}
       </div>
     </CapabilityContainer>
   );

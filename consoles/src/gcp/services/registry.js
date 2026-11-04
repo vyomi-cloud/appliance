@@ -20,9 +20,10 @@ import ArtifactIcon from "@mui/icons-material/esm/ViewInArOutlined.js";
 import ChartIcon from "@mui/icons-material/esm/BarChartOutlined.js";
 import LogIcon from "@mui/icons-material/esm/ArticleOutlined.js";
 import MemorystoreIcon from "@mui/icons-material/esm/CachedOutlined.js";
+import AiIcon from "@mui/icons-material/esm/AutoAwesomeOutlined.js";
 import { classicUrl } from "../../common/classic.js";
 
-export const CATEGORIES = ["Compute", "Storage", "Databases", "Networking", "Serverless", "Integration Services", "Security", "Management", "CI/CD", "Observability"];
+export const CATEGORIES = ["Compute", "Storage", "Databases", "Networking", "Serverless", "Integration Services", "Security", "Management", "CI/CD", "Observability", "AI and Machine Learning"];
 
 export const PRODUCTS = [
   { id: "storage", title: "Cloud Storage", description: "Object storage for companies of all sizes", category: "Storage", icon: BucketIcon, load: () => import("./storage/index.jsx") },
@@ -30,6 +31,9 @@ export const PRODUCTS = [
   { id: "kubernetes", title: "Kubernetes Engine", description: "Managed Kubernetes clusters", category: "Compute", icon: ClusterIcon, load: () => import("./kubernetes/index.jsx") },
   { id: "sql", title: "Cloud SQL", description: "Managed MySQL, PostgreSQL, SQL Server", category: "Databases", icon: SqlIcon, load: () => import("./sql/index.jsx") },
   { id: "firestore", title: "Firestore", description: "Serverless NoSQL document database", category: "Databases", icon: DocumentIcon, load: () => import("./firestore/index.jsx") },
+  { id: "datastore", title: "Datastore", description: "Firestore in Datastore mode: entities, GQL and composite indexes", category: "Databases", icon: DocumentIcon, load: () => import("./firestore/datastore.jsx") },
+  { id: "marketplace", title: "Marketplace", description: "Vyomi SaaS spaces catalog and subscriptions", category: "Management", icon: ChartIcon, load: () => import("./hub/index.jsx") },
+  { id: "cloud-hub", title: "Cloud Hub", description: "Real resource, incident and activity aggregate", category: "Management", icon: ChartIcon, load: () => import("./hub/index.jsx") },
   { id: "memorystore", title: "Memorystore", description: "Fully managed Redis for caching and real-time data", category: "Databases", icon: MemorystoreIcon, load: () => import("./memorystore/index.jsx") },
   { id: "networking", title: "VPC network", description: "Networks, subnets, firewall rules", category: "Networking", icon: NetworkIcon, load: () => import("./networking/index.jsx") },
   { id: "run", title: "Cloud Run", description: "Fully managed container platform", category: "Serverless", icon: RunIcon, load: () => import("./run/index.jsx") },
@@ -41,6 +45,7 @@ export const PRODUCTS = [
   { id: "iam-admin", title: "IAM & Admin", description: "Resource access control", category: "Management", icon: IamIcon, load: () => import("./iam-admin/index.jsx") },
   { id: "resource-manager", title: "Manage resources", description: "Create, organize and administer projects", category: "Management", icon: ResourceManagerIcon, load: () => import("./resource-manager/index.jsx") },
   { id: "artifacts", title: "Artifact Registry", description: "Store, manage and secure container images and packages", category: "CI/CD", icon: ArtifactIcon, load: () => import("./artifacts/index.jsx") },
+  { id: "vertex-ai", title: "Vertex AI", description: "Gemini models and generative AI studio", category: "AI and Machine Learning", icon: AiIcon, load: () => import("./vertex-ai/index.jsx") },
   { id: "monitoring", title: "Monitoring", description: "Metrics, dashboards, alerting, uptime checks", category: "Observability", icon: ChartIcon, load: () => import("./monitoring/index.jsx") },
   { id: "logs", title: "Logging", description: "Logs Explorer, routing and storage", category: "Observability", icon: LogIcon, load: () => import("./logs/index.jsx") },
 ];

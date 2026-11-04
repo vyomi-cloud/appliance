@@ -11,13 +11,14 @@
  },
  "gcp.compute.instances.data_plane": {
   "title": "Guest OS access (SSH, screenshot, OS info)",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "level": { "nano": "not_simulated", "offline": "limited" },
   "limitations": [
-   "SSH: no SSH daemon runs behind an instance — there is no guest OS to open an interactive shell on.",
+   "SSH (offline): the instance is a real Docker container with sshd. Setting the `ssh-keys` metadata (POST /api/gcp/compute/instances/{id}/ssh-keys, USERNAME:KEY lines) creates the user and authorizes the key in the guest the way the guest agent does, so `ssh -i key user@host -p port` really logs in; malformed lines are rejected. OS info (GET .../os-info) is read from the running guest (os-release, kernel, arch, memory, uptime). OS Login keys use the same path. Nano has no instance runtime or inbound TCP, so SSH stays not simulated there.",
    "Screenshot: getScreenshot needs a real virtual display's framebuffer; none is rendered, so there is nothing to capture.",
    "OS info: getGuestAttributes is populated by a guest agent writing back through the metadata server after boot; no guest OS or agent runs to report hostname, OS release or kernel version."
   ],
-  "api": ["instances.getScreenshot", "instances.getGuestAttributes"]
+  "api": ["instances.getScreenshot", "instances.getGuestAttributes", "(Vyomi) POST /api/gcp/compute/instances/{id}/ssh-keys", "(Vyomi) GET /api/gcp/compute/instances/{id}/os-info"],
+  "tests": ["tests/conformance/test_ssh_access.py"]
  },
  "gcp.compute.instances.serial_console": {
   "title": "Serial port output",
@@ -241,10 +242,10 @@
     "title": "Security risk overview",
     "level": { "nano": "limited", "offline": "limited" },
     "limitations": [
-      "Findings come from a deterministic rule engine over the project's real stored VMs and firewall rules (public IP, full-API-access default service account, OS Login / serial port / project SSH keys, Secure Boot, IP forwarding, firewalls open to 0.0.0.0/0 for SSH/RDP/all ports, with the instances each rule affects). It is not Security Command Center: no Trivy/vulnerability scanning of guest OS packages, no threat detection, no attack-path simulation, and no findings history or muting."
+      "Compute findings are a deterministic rule engine over stored VMs/firewalls. Threat findings come from Vyomi's deterministic detector over the control-plane calls the simulator served (bucket opened to allUsers, Owner/Editor granted, log sink deleted, world-open firewall, KMS destruction, service-account key creation) - no ML threat analysis and no attack-path simulation. Image vulnerabilities come from Artifact Registry scanning (core/vuln_scan_core.py: bundled advisory snapshot + EOL table over the image config; the real Trivy container where the offline appliance has it). It is not Security Command Center: no findings history, muting or org-level aggregation."
     ],
     "api": ["securityPosture.compute"],
-    "tests": ["tests/conformance/test_gcp_posture.py"]
+    "tests": ["tests/conformance/test_gcp_posture.py", "tests/conformance/test_gcp_secscan.py"]
   },
   "gcp.compute.migrate-to-vms": {
     "title": "Migrate to Virtual Machines (source connectors, replication, cut-over)",
@@ -315,5 +316,6 @@
     "limitations": [
       "The catalog and enrollment are managed by Google per project and gate real backend rollouts; Vyomi has a single fixed feature set."
     ]
-  }
+  },
+ "gcp.compute.opsagent_metrics": {"title": "Instance Observability: Ops Agent host metrics", "level": {"nano": "limited", "offline": "limited"}, "limitations": ["agent.googleapis.com cpu (cpu_state=used only), network and disk series measured inside the instance (cgroup + /proc counters) and pushed to /_obs/gce-counters by a runtime; there is no built-in sampler for GCE instances on this branch, so a VM with no pushes shows 'No samples'. Memory, process and filesystem metrics are not produced."], "tests": ["tests/conformance/test_obs_collectors.py"]}
 }

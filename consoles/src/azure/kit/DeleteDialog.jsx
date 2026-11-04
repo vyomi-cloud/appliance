@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Button, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, Field, Input, MessageBar, MessageBarBody } from "@fluentui/react-components";
 
-export default function DeleteDialog({ open, onClose, onConfirm, resourceType, names = [], confirmText, warning, children }) {
+export default function DeleteDialog({ open, onClose, onConfirm, resourceType, names = [], confirmText, warning, children, confirmLabel = "Delete", title }) {
   const [typed, setTyped] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -19,7 +19,7 @@ export default function DeleteDialog({ open, onClose, onConfirm, resourceType, n
     <Dialog open={open} onOpenChange={(_, d) => !d.open && close()}>
       <DialogSurface aria-label={`Delete ${resourceType}`}>
         <DialogBody>
-          <DialogTitle>Delete {names.length > 1 ? `${names.length} ${resourceType}s` : resourceType}</DialogTitle>
+          <DialogTitle>{title || <>Delete {names.length > 1 ? `${names.length} ${resourceType}s` : resourceType}</>}</DialogTitle>
           <DialogContent>
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               <MessageBar intent="warning"><MessageBarBody>
@@ -35,7 +35,7 @@ export default function DeleteDialog({ open, onClose, onConfirm, resourceType, n
           </DialogContent>
           <DialogActions>
             <Button appearance="primary" style={typed === need ? { background: "var(--colorPaletteRedBackground3)" } : undefined} disabled={typed !== need || busy} onClick={go}>
-              {busy ? "Deleting..." : "Delete"}
+              {busy ? "Working..." : confirmLabel}
             </Button>
             <Button onClick={close}>Cancel</Button>
           </DialogActions>

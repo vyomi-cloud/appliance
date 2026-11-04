@@ -17,6 +17,9 @@ import { armType, getSubscription, parseId } from "../../kit/arm.js";
 
 export const ARM = armType("Microsoft.Compute", "virtualMachines", "2023-09-01");
 const NIC_ARM = armType("Microsoft.Network", "networkInterfaces", "2023-11-01");
+const ASG_ARM = armType("Microsoft.Network", "applicationSecurityGroups", "2023-11-01");
+export const listAsgs = async () => (await ASG_ARM.list()).map((g) => ({ ...g, resourceGroup: parseId(g.id).resourceGroup }));
+export const putAsg = (rg, name, location) => ASG_ARM.put(rg, name, { location });
 const NSG_ARM = armType("Microsoft.Network", "networkSecurityGroups", "2023-11-01");
 const PIP_ARM = armType("Microsoft.Network", "publicIPAddresses", "2023-11-01");
 const RULE_API_VERSION = "2023-11-01";
@@ -257,3 +260,15 @@ export const connectionCheck = async (location, vmId, destinationAddress, destin
 const SEC_API = "2021-06-01";
 export const listVmAssessments = async (vmId) =>
   (await restJson("GET", `${vmId}/providers/Microsoft.Security/assessments`, { query: { "api-version": SEC_API } })).value || [];
+
+// ── Load balancers (Microsoft.Network/loadBalancers, core/azure_lb_core.py) ──────────────────
+const LB_ARM = armType("Microsoft.Network", "loadBalancers", "2023-11-01");
+export const listLoadBalancers = async () => (await LB_ARM.list()).map((l) => ({ ...l, resourceGroup: parseId(l.id).resourceGroup }));
+export const putLoadBalancer = (rg, name, body) => LB_ARM.put(rg, name, body);
+export const deleteLoadBalancer = (rg, name) => LB_ARM.remove(rg, name);
+
+// ── Standalone managed disks (Microsoft.Compute/disks, core/azure_disks_core.py) ────────────────
+const DISK_ARM = armType("Microsoft.Compute", "disks", "2023-04-02");
+export const listDisks = async () => (await DISK_ARM.list()).map((d) => ({ ...d, resourceGroup: parseId(d.id).resourceGroup }));
+export const putDisk = (rg, name, body) => DISK_ARM.put(rg, name, body);
+export const deleteDisk = (rg, name) => DISK_ARM.remove(rg, name);

@@ -82,5 +82,25 @@
   "tests": [
    "tests/conformance/test_ssm_core.py"
   ]
+ },
+ "ssm.session-manager": {
+  "title": "Session Manager (StartSession, ResumeSession, TerminateSession, DescribeSessions)",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Offline, running Docker instances register as Online managed nodes (DescribeInstanceInformation) and sessions open a command-at-a-time shell in the instance container. The ssmmessages data-channel websocket is not served, so the AWS CLI session-manager-plugin cannot attach; use the console session or ssh. Nano has no instance runtime, so every target answers TargetNotConnected."
+  ],
+  "api": [
+   "AmazonSSM.StartSession",
+   "AmazonSSM.ResumeSession",
+   "AmazonSSM.TerminateSession",
+   "AmazonSSM.DescribeSessions",
+   "AmazonSSM.DescribeInstanceInformation"
+  ],
+  "tests": [
+   "tests/conformance/test_ssh_access.py"
+  ]
  }
 }

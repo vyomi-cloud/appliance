@@ -175,5 +175,6 @@
   "level": { "nano": "limited", "offline": "limited" },
   "limitations": ["The policy (content type, key size/exportable, lifetime actions) is validated like real Key Vault and stored/returned by Get/UpdateCertificatePolicy, but lifetime actions never fire (no auto-renew or e-mail), and generated certificates are self-signed with placeholder bytes."],
   "tests": ["tests/conformance/test_azure_keyvault_certificates_core.py"]
- }
+ },
+ "azure.keyvaults.backup_restore": {"title": "Key and secret backup / restore", "level": {"nano": "full", "offline": "full"}, "limitations": ["Backup returns an opaque integrity-tagged blob containing every version (keys include their material) that restores into any vault of this simulator; a restore over an existing key/secret is a 409 Conflict. Certificate backup/restore and the soft-deleted-object recovery flow are not part of this entry."], "tests": ["tests/conformance/test_azure_keyvault_backup.py"]}
 }

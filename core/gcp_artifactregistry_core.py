@@ -238,12 +238,41 @@ def ingest_registry_images(store: ArtifactRegistryStore, project: str, images: l
         if ver is not None and any(t["name"].rsplit("/", 1)[-1] == im["tag"] for t in ver["_tags"]):
             continue
         try:
-            ingest_package(store, full, image, im["digest"], int(im.get("size") or 0), [im["tag"]],
-                           kms_store=kms_store)
+            ver = ingest_package(store, full, image, im["digest"], int(im.get("size") or 0), [im["tag"]],
+                                 kms_store=kms_store)
         except CmekKeyUnavailable:
             continue
+        if isinstance(im.get("config"), dict):
+            ver["_config"] = im["config"]          # the image config blob, read by scan_images()
         n += 1
     return n
+
+
+def scan_images(store: ArtifactRegistryStore, project: str) -> list:
+    """Vulnerability scan of every tagged Docker image in the project's repositories that has scanning enabled
+    (vulnerabilityScanningConfig.enablementConfig != DISABLED). Returns [{resource, repo, image, tag, digest, scan}].
+    The scan reads the image config the registry sync stored with the version (core/vuln_scan_core.py)."""
+    try:
+        from core import vuln_scan_core as vs
+    except ImportError:
+        import vuln_scan_core as vs                        # type: ignore
+    out = []
+    for full, repo in sorted(store.repos.items()):
+        if not full.startswith(f"projects/{project}/locations/") or repo.get("format") != "DOCKER":
+            continue
+        if (repo.get("vulnerabilityScanningConfig") or {}).get("enablementConfig") == "DISABLED":
+            continue
+        loc = full.split("/")[3]
+        rid = full.rsplit("/", 1)[-1]
+        for pkg in repo["packages"].values():
+            for dg, ver in pkg["versions"].items():
+                tags = [t["name"].rsplit("/", 1)[-1] for t in ver.get("_tags", [])]
+                if not tags:
+                    continue
+                uri = f"{loc}-docker.pkg.dev/{project}/{rid}/{pkg['displayName']}@{dg}"
+                out.append({"resource": uri, "repo": full, "image": pkg["displayName"], "tag": tags[0], "digest": dg,
+                            "scan": vs.scan_image(ver.get("_config"), pkg["displayName"], tags[0])})
+    return out
 
 
 
@@ -727,6 +756,14 @@ def ingest_package(store: ArtifactRegistryStore, repo_name: str, package: str, v
     return ver
 
 
+def push_built_image(store: ArtifactRegistryStore, repo_name: str, image: str, tag: str, img: dict,
+                     kms_store=None) -> dict:
+    """Record an image really built by the CI seam (img = ci_core.image_to_registry) as a Docker version."""
+    ver = ingest_package(store, repo_name, image, img["digest"], img["size"], [tag], kms_store=kms_store)
+    ver["_config"] = img["config"]
+    return ver
+
+
 def ingest_image(store: ArtifactRegistryStore, repo_name: str, image: str = "sample-app",
                  tag: str = "latest", size_bytes: int = 5 * 1024 * 1024,
                  kms_store=None, headers=None) -> dict:
@@ -1119,6 +1156,8 @@ def console_push_sample(store: ArtifactRegistryStore, name: str, body: dict | No
         if repo["format"] == "DOCKER":
             ver = ingest_image(store, full, str(body.get("image") or "sample-app"), str(body.get("tag") or "latest"),
                                kms_store=kms_store, headers=headers)
+            if isinstance(body.get("config"), dict):
+                ver["_config"] = body["config"]
         else:
             ver = ingest_package(store, full, str(body.get("image") or "sample-package"),
                                  str(body.get("tag") or "1.0.0"), 1024 * 1024, [],
