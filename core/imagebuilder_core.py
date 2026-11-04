@@ -66,6 +66,13 @@ def _state(s3_store) -> dict:
     for k in ("components", "recipes", "infra", "dist", "pipelines", "images", "tags"):
         st.setdefault(k, {})
     st.setdefault("seq", 0)
+    # build numbers are int keys; a JSON round-trip of the account bag (Nano's persisted store) turns them into "1" -> restore them
+    for k in ("components", "images"):
+        for vs in st[k].values():
+            for bs in vs.values():
+                if any(isinstance(n, str) for n in bs):
+                    for n in [n for n in bs if isinstance(n, str) and n.isdigit()]:
+                        bs[int(n)] = bs.pop(n)
     return st
 
 
