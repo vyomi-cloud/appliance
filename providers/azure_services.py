@@ -1389,6 +1389,25 @@ def _record_arm_activity(rid: str, operation_name: str, sub: str) -> None:
         pass
 
 
+def _eventgrid_webhook_post(url: str, body: bytes, headers: dict) -> int:
+    """POST an Event Grid delivery to a WebHook — loopback / private-network targets only (the appliance never reaches the internet)."""
+    import ipaddress, socket, urllib.request
+    from urllib.parse import urlsplit
+    host = urlsplit(url).hostname or ""
+    try:
+        ip = ipaddress.ip_address(socket.gethostbyname(host))
+    except Exception:
+        return 0
+    if not (ip.is_loopback or ip.is_private):
+        return 0
+    req = urllib.request.Request(url, data=body, headers=headers, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=3) as r:   # noqa: S310 - restricted above
+            return r.status
+    except urllib.error.HTTPError as e:
+        return e.code
+
+
 def core_arm():
     """The shared core ARM engine bound to the offline ARM state (space-scoped proxy) and
     the offline LRO operation store — so its writes are the same records every other offline
@@ -1398,6 +1417,8 @@ def core_arm():
     try:                                  # CMK key lookups consult the Key Vault keys data-plane store
         from core import azure_cfgext_core as _cfgext, appliance_stores as _aps
         _cfgext.bind_key_store(_aps.az_kv_keys_store)
+        from core import azure_eventgrid_core as _eg
+        _eg.bind_destinations(_aps.az_queue_store, _eventgrid_webhook_post)   # StorageQueue + WebHook event delivery
     except Exception:
         pass
     arm.state = _state

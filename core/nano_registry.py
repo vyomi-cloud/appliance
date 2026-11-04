@@ -149,6 +149,8 @@ def get() -> dict:
         try:   # customer-managed keys (Storage/Cosmos/SQL/Service Bus/App Config) are cross-checked against this space's Key Vault keys
             from core import azure_cfgext_core as _cfgx
             _cfgx.bind_key_store(_REG["az_kvkeys"])
+            from core import azure_eventgrid_core as _egx   # StorageQueue delivery works in-browser; WebHook needs an outbound hop Nano does not have
+            _egx.bind_destinations(lambda: _REG["az_queue"], None)
         except Exception:
             pass
         _REG["az_arm"].sql_store = _REG.get("rds")       # Azure SQL database export/import (the shared SqlStore)
