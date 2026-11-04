@@ -591,6 +591,7 @@ def _site_ops(state, sub, rg, chain, method, payload):
             raise _not_found("sites", name, rg)
         _ensure(rec)
         _migrate_locks(state, rec)
+        _STATE_REF[0] = state
         resp = _site_subresource(state, rec, rest, method, payload)
         _log_site_call(state, rec, rest, method, resp, True)
         return resp
@@ -679,8 +680,9 @@ def _site_subresource(state, rec, rest, method, payload):
         return _slot_ops(rec, rest[1:], method, payload)
     if r0 == "hostnamebindings":
         return _hostname_ops(rec, rest[1:], method, payload)
-    if r0 == "backups":
-        return _backup_ops(rec, rest[1:], method, payload)
+    if r0 in ("backups", "backup", "listbackups", "discoverbackup"):
+        _dp = _dpb()
+        return _conv(_dp.app_ops(state, rec, rest, method, payload))
     if r0 in ("triggeredwebjobs", "continuouswebjobs"):
         return _webjob_ops(rec, r0, rest[1:], method, payload)
     if r0 == "providers" and len(rest) >= 3 and rest[1].lower() == "microsoft.servicelinker" and rest[2].lower() == "linkers":
@@ -730,6 +732,26 @@ def _site_action(rec, action, method, payload):
 
 
 # ── shared: config ────────────────────────────────────────────────────────────
+_STATE_REF = [{}]
+
+
+def _conv(r):
+    if r is None:
+        return _err(404, "ResourceTypeNotSupported", "Unsupported operation.")
+    if r["status"] >= 300:
+        e = r["body"]["error"]
+        return _err(r["status"], e["code"], e["message"])
+    return _ok(r["body"], r["status"])
+
+
+def _dpb():
+    try:
+        from core import azure_dpbackup_core as m
+    except ImportError:
+        import azure_dpbackup_core as m      # type: ignore  (Nano: flat module path)
+    return m
+
+
 def _config_ops(rec, rest, method, payload):
     if not rest:
         return _err(404, "NotFound", "Missing config name.")
@@ -764,6 +786,10 @@ def _config_ops(rec, rest, method, payload):
             rec["_logs"] = _merge(rec["_logs"], _props(payload))
             return _ok({"properties": rec["_logs"]})
     elif kind == "backup":
+        if method in ("PUT", "PATCH"):
+            _bad = _dpb().app_config_backup(_STATE_REF[0], rec, method, payload)
+            if _bad:
+                return _conv(_bad)
         if read:
             return _ok({"properties": rec["_backupconfig"] or DEFAULT_BACKUP_CONFIG})
         if method in ("PUT", "PATCH"):

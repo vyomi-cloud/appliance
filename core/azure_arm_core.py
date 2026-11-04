@@ -119,6 +119,10 @@ try:                                              # v4: Azure Backup + Site Reco
     from core import azure_backup_core as backup_engine
 except ImportError:
     import azure_backup_core as backup_engine      # type: ignore
+try:                                              # v4: AKS/Cosmos/App Service backups + deleted storage restore
+    from core import azure_dpbackup_core as dpb
+except ImportError:
+    import azure_dpbackup_core as dpb              # type: ignore
 try:                                              # v4: Azure SQL copy / PITR / restore / geo-replication / LTR over the SqlStore data plane
     from core import azure_sqlbackup_core as sqlbk
 except ImportError:
@@ -1181,6 +1185,7 @@ class AzureArm:
             return _err(404, "NotFound", f"Not an ARM path: {path}")
         rest = path[i + len("/subscriptions/"):].split("?", 1)[0]
         self._evented = False
+        dpb.BLOB["store"] = self.blob_store
         resp = self._arm(method, rest, query, body if isinstance(body, dict) else ({"_array": body} if isinstance(body, list) else {}))
         if method != "GET" and resp.get("status", 500) < 300 and not self._evented:
             scope, typ, name = _event_target(rest)
@@ -1995,6 +2000,8 @@ class AzureArm:
             if full_type.lower() == "microsoft.storage/storageaccounts" and key in self.state:
                 backup_engine.storage_after_put(self.state, self.state[key])
                 resp["body"] = _view(self.state[key])
+            if full_type.lower() == "microsoft.documentdb/databaseaccounts" and key in self.state:
+                dpb.cosmos_after_restore(self.state, sub, rg, self.state[key], payload)
             if sqlbk.handles(full_type) and key in self.state:
                 blocked = sqlbk.after_put(self.state, self.state[key], payload, _net_prev, self.sql_store, self.blob_store)
                 if blocked:
@@ -2092,6 +2099,9 @@ class AzureArm:
                     if blocked:
                         return blocked
             rec = self.state.pop(key, None)
+            if rec is not None:
+                dpb.cosmos_before_delete(self.state, rec)
+                dpb.storage_before_delete(self.state, rec)
             if rec is not None and sqlbk.handles(rec.get("_type") or ""):
                 sqlbk.on_delete(self.state, rec, self.sql_store, self.blob_store)
             if rec is not None:
@@ -2203,6 +2213,10 @@ class AzureArm:
     def _az08(self, method, sub, rg, namespace, chain, payload, query):
         ns = namespace.lower()
         low = [c.lower() for c in chain]
+        if dpb.handles(namespace, chain) and (rg is not None or ns != "microsoft.dataprotection" or len(chain) == 1):
+            r = dpb.dispatch(self.state, method, sub, rg, namespace, chain, payload, query,
+                             arm_put=lambda rid, api, body: self.handle("PUT", rid, {"api-version": api}, body))
+            return {"status": r["status"], "headers": {}, "body": r["body"]}
         if files_engine.handles(namespace, chain) and rg is not None:
             r = files_engine.dispatch(self.state, method, sub, rg, chain, payload, query)
             return {"status": r["status"], "headers": {}, "body": r["body"]}
@@ -2967,6 +2981,9 @@ class AzureArm:
             return _err(400, "BadRequest", msg) if msg else None
         if type_chain[0].lower() != "microsoft.documentdb" or type_chain[1].lower() != "databaseaccounts" or len(type_chain) != 2:
             return None
+        _rs = dpb.cosmos_validate_restore(self.state, sub, rg, names[-1] if names else "", payload)
+        if _rs:
+            return _rs
         existing_props = (self.state.get(_canonical_id(sub, rg, type_chain, names).lower()) or {}).get("properties") or {}
         payload_props = (payload or {}).get("properties") or {}
         props = _merge(existing_props, payload_props) if payload_props else existing_props
