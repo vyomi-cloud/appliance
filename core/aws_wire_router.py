@@ -74,6 +74,8 @@ from core import gcp_resourcemanager_core as gcp_rm
 from core import gcp_pam_core as gcp_pam
 from core import gcp_run_core as gcp_run
 from core import gcp_trace_core as gcp_trace
+from core import gcp_osconfig_core as gcp_osconfig
+from core import gcp_apphub_core as gcp_apphub
 from core import gcp_posture_core as gcp_posture
 
 # Cloud Scheduler httpTarget that names a Cloud Run job's own Admin API v2 `:run` endpoint
@@ -97,6 +99,11 @@ def _gcp_service(path):
             or re.match(r"^/v1/projects/[^/]+/locations/global/traceScopes([/:]|$)", path) \
             or re.match(r"^/v2/projects/[^/]+/locations/global/logScopes([/:]|$)", path):
         return "gcp-trace"   # Cloud Trace v1/v2 + Trace scopes + Log scopes (core/gcp_trace_core, state on the Monitoring store)
+    if re.match(r"^/v1/projects/[^/]+/locations/[^/]+/(applications|discoveredServices|discoveredWorkloads)([/:?]|$)", path):
+        return "gcp-apphub"   # App Hub applications + registered services/workloads (core/gcp_apphub_core, state on the Monitoring store)
+    if re.match(r"^/v1/projects/[^/]+/(patchJobs|patchDeployments)([/:]|$)", path) \
+            or re.match(r"^/v1/projects/[^/]+/locations/[^/]+/osPolicyAssignments([/:]|$)", path):
+        return "gcp-osconfig"   # VM Manager: OS Config patch jobs/deployments + OS policy assignments (core/gcp_osconfig_core, state on the VM store)
     if re.match(r"^/v1/projects/[^/]+/securityPosture/(compute|storage)$", path):
         return "gcp-posture"   # rule-based posture findings over real VM / firewall / bucket state (core/gcp_posture_core)
     if path.startswith("/v2/entries"):   # Cloud Logging: entries:write / entries:list
@@ -594,6 +601,7 @@ class AwsWireRouter:
         self.gcs.mon_store = self.gcp_mon   # Cloud Storage request-count metering (storage.googleapis.com/api/request_count)
         self.gcp_compute = s.get("gcp_compute") or gcp_compute.ComputeStore()   # VPC: networks, subnets, firewalls, routes, addresses
         self.gcp_compute_vm = s.get("gcp_compute_vm") or gcp_compute_vm.ComputeStore()   # Compute Engine VMs, disks, images, templates
+        self.gcp_mon.redis_store = self.gcp_redis   # Memorystore Monitoring metrics derive from real instance state
         self.gcp_mon.compute_vm_store = self.gcp_compute_vm   # Overview "VMs with Ops Agent" + uptime checks targeting a GCE instance read real Compute Engine state
         self.gcp_mon.gcs_store = self.gcs   # Cost Explorer's Cloud Storage line item prices real bucket bytes stored
         self.gcp_rm = s.get("gcp_rm") or gcp_rm.ResourceManagerStore()   # Resource Manager (project, tags, contacts, org policies)
@@ -602,6 +610,7 @@ class AwsWireRouter:
         self.gcp_run = s.get("gcp_run") or gcp_run.RunStore()   # Cloud Run (backs /functions, which the real console folds into it)
         self.gcp_run.pubsub_store = self.gcp_msg    # Eventarc Pub/Sub-sourced triggers validate/create a real subscription
         self.gcp_run.logging_store = self.gcp_logging   # Observability "Logs" — real Cloud Logging entries per invocation
+        self.gcp_mon.run_store, self.gcp_mon.vm_store = self.gcp_run, self.gcp_compute_vm   # App Hub discovers Cloud Run services + managed instance groups
         self.gcp_run.mon_store = self.gcp_mon       # Observability "Metrics" — real Cloud Monitoring points per invocation
         if getattr(self.gcs, "refs", None) is None:
             self.gcs.refs = self._run_refs   # bucket CMEK keys are checked against real Cloud KMS keys
@@ -824,6 +833,10 @@ class AwsWireRouter:
                     _ctx.REQUEST_PROVIDER.reset(tok)
         if kind == "bucket":
             return bool(self.gcs.bucket_exists(args[0]))
+        if kind == "vpcconn":   # Serverless VPC Access connector: (project, region, name)
+            return "%s/%s/%s" % args in (getattr(self.gcp_compute, "vpc_connectors", None) or {})
+        if kind == "subnet":    # VPC subnetwork: (project, region, name)
+            return "%s/%s/%s" % args in (getattr(self.gcp_compute, "subnetworks", None) or {})
         return None
 
     def _run_topic_exists(self, topic_full):
@@ -1161,6 +1174,8 @@ class AwsWireRouter:
                 "gcp-container": (gcp_gke, self.gcp_gke), "gcp-iamcredentials": (gcp_iamc, self.gcp_iamc),
                 "gcp-monitoring": (gcp_mon, self.gcp_mon),
                 "gcp-trace": (gcp_trace, self.gcp_mon),
+                "gcp-osconfig": (gcp_osconfig, self.gcp_compute_vm),
+                "gcp-apphub": (gcp_apphub, self.gcp_mon),
                 "gcp-redis": (gcp_redis, self.gcp_redis),
                 "gcp-artifactregistry": (gcp_ar, self.gcp_ar),
                 "gcp-logging": (gcp_logging, self.gcp_logging),
@@ -1186,7 +1201,7 @@ class AwsWireRouter:
             elif svc == "gcp-firestore":   # exportDocuments/importDocuments read/write real GCS objects
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), gcs_store=self.gcs)
             elif svc == "gcp-compute-vm":   # image import (rawDisk) / export read+write the simulator's GCS objects
-                r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), gcs_store=self.gcs)
+                r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), gcs_store=self.gcs, vpc_store=self.gcp_compute)
             elif svc == "gcp-compute":   # Connectivity Tests evaluate against the VMs too
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), vm_store=self.gcp_compute_vm)
             elif svc == "gcp-pam":   # grant activation/expiry is a real project IAM policy change

@@ -59,6 +59,7 @@ class MonitoringStore:
         self.traces: dict = {}                  # "project/traceId" -> {spanId: v2 Span} (core/gcp_trace_core)
         self.trace_scopes: dict = {}            # full name -> TraceScope
         self.log_scopes: dict = {}              # full name -> LogScope
+        self.ext: dict = {}                     # core/gcp_apphub_core collections (applications, registered services/workloads)
         self.metrics_scopes: dict = {}          # scoping project id -> {"createTime", "monitoredProjects": [project_id,...]}
 
 
@@ -397,6 +398,15 @@ BUILTIN_METRICS = {m["type"]: m for m in [
         "Ops Agent heartbeat, fed from the Compute Engine instance's own metadata (enable-osconfig=TRUE, "
         "the real flag OS Config uses to manage an Ops Agent policy on a VM) instead of a real agent "
         "process reporting in.", [], "Ops Agent heartbeat", ["gce_instance"]),
+    _md("redis.googleapis.com/stats/memory/maxmemory", "GAUGE", "INT64", "By",
+        "Maximum memory of a Memorystore for Redis instance, from its configured memorySizeGb (real instance "
+        "state). Vyomi runs no Redis process, so usage, client and command metrics are not emitted.", [],
+        "Maximum memory", ["redis_instance"]),
+    _md("redis.googleapis.com/server/uptime", "GAUGE", "INT64", "s",
+        "Seconds since the Memorystore instance became READY (from its createTime).", [], "Uptime", ["redis_instance"]),
+    _md("redis.googleapis.com/replication/role", "GAUGE", "INT64", "1",
+        "1 for the primary node; replicas of STANDARD_HA instances report 0.", [{"key": "role", "valueType": "STRING"}],
+        "Node role", ["redis_instance"]),
     _md("billing.googleapis.com/billing/total_cost", "GAUGE", "DOUBLE", "{USD}",
         "Live month-to-date cost Vyomi computes from this project's actual resource inventory (real "
         "on-demand pricing x real uptime/usage), mirrored into Cloud Monitoring the same way real Cloud "
@@ -424,6 +434,9 @@ MONITORED_RESOURCES = {r["type"]: r for r in [
     {"type": "pubsub_subscription", "displayName": "Cloud Pub/Sub Subscription",
      "description": "A Pub/Sub subscription.",
      "labels": [{"key": "project_id", "valueType": "STRING"}, {"key": "subscription_id", "valueType": "STRING"}]},
+    {"type": "redis_instance", "displayName": "Cloud Memorystore Redis Instance", "description": "A Memorystore for Redis instance.",
+     "labels": [{"key": "project_id", "valueType": "STRING"}, {"key": "region", "valueType": "STRING"},
+                {"key": "instance_id", "valueType": "STRING"}, {"key": "node_id", "valueType": "STRING"}]},
     {"type": "cloud_run_revision", "displayName": "Cloud Run Revision", "description": "A Cloud Run revision.",
      "labels": [{"key": "project_id", "valueType": "STRING"}, {"key": "service_name", "valueType": "STRING"},
                 {"key": "revision_name", "valueType": "STRING"}, {"key": "location", "valueType": "STRING"},
@@ -1675,12 +1688,41 @@ def sync_billing_metrics(store, project, now=None):
                              unit="{USD}", metric_labels={"service": service})
 
 
+# ── Memorystore for Redis: real instance state, not invented runtime telemetry ──
+def sync_redis_metrics(store, project, now=None):
+    rs = getattr(store, "redis_store", None)
+    if rs is None:
+        return
+    now = now or _now_dt()
+    end_iso = _ts(now)
+    pre = "projects/%s/locations/" % project
+    for full, inst in sorted(rs.instances.items()):
+        if not full.startswith(pre) or inst.get("state") != "READY":
+            continue
+        region, iid = full.split("/")[3], full.split("/")[-1]
+        try:
+            created = datetime.strptime(str(inst.get("createTime", ""))[:19], "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
+        except Exception:
+            created = now
+        nodes = 1 + (inst.get("replicaCount", 0) if inst.get("tier") == "STANDARD_HA" else 0)
+        for n in range(nodes):
+            res = {"type": "redis_instance", "labels": {"project_id": project, "region": region, "instance_id": iid, "node_id": "node-%d" % n}}
+            role = "primary" if n == 0 else "replica"
+            record_system_point(store, project, "redis.googleapis.com/stats/memory/maxmemory", res,
+                                int(inst.get("memorySizeGb", 1)) * 1024 ** 3, end_iso, unit="By")
+            record_system_point(store, project, "redis.googleapis.com/server/uptime", res,
+                                max(0, int((now - created).total_seconds())), end_iso, unit="s")
+            record_system_point(store, project, "redis.googleapis.com/replication/role", res, 1 if n == 0 else 0, end_iso,
+                                unit="1", metric_labels={"role": role})
+
+
 def _sync_derived_metrics(store, project, now=None):
     """Every lazily-evaluated real signal Monitoring mirrors in from other cores — called on
     every read path that could show it (like evaluate_incidents), so it's never stale."""
     now = now or _now_dt()
     run_uptime_probes(store, project, now)
     sync_ops_agent_metrics(store, project, now)
+    sync_redis_metrics(store, project, now)
     sync_billing_metrics(store, project, now)
 
 

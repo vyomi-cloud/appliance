@@ -48,6 +48,7 @@ export default function CreateInstance() {
   const [name, setName] = useState(defaultName());
   const [touched, setTouched] = useState(false);
   const [labels, setLabels] = useState([]);
+  const [opsAgent, setOpsAgent] = useState(false);
   const [region, setRegion] = useState(api.DEFAULT_REGION);
   const [zone, setZone] = useState(api.DEFAULT_ZONE);
   const [family, setFamily] = useState("General purpose");
@@ -100,11 +101,12 @@ export default function CreateInstance() {
     const [osProject, osFamily] = api.OS_IMAGES[osIdx];
     const tagItems = [...(httpTag ? ["http-server"] : []), ...(httpsTag ? ["https-server"] : []), ...(lbHealth ? ["lb-health-check"] : []), ...netTags];
     const metaItems = [...metadata.filter((m) => m.key), ...(startupScript ? [{ key: "startup-script", value: startupScript }] : []),
-      ...(manageAccess && sshKeys.length ? [{ key: "ssh-keys", value: sshKeys.map((k) => `${k.user}:${k.key}`).join("\n") }] : [])];
+      ...(manageAccess && sshKeys.length ? [{ key: "ssh-keys", value: sshKeys.map((k) => `${k.user}:${k.key}`).join("\n") }] : []),
+      ...(opsAgent ? [{ key: "enable-osconfig", value: "TRUE" }] : [])];
     const body = {
       name, description: "",
       machineType, zone,
-      labels: labels.length ? Object.fromEntries(labels.map((l) => [l.key, l.value])) : undefined,
+      labels: labels.length || opsAgent ? { ...Object.fromEntries(labels.map((l) => [l.key, l.value])), ...(opsAgent ? { [api.OPS_AGENT_LABEL]: api.OPS_AGENT_LABEL_VALUE } : {}) } : undefined,
       disks: [{ boot: true, autoDelete: true, initializeParams: { sourceImage: api.osImageSource(osProject, osFamily), diskType, diskSizeGb: Number(diskSize) } },
         ...extraDisks.map((d, i) => ({ boot: false, autoDelete: d.autoDelete, initializeParams: { diskName: d.name || `${name}-data-${i + 1}`, diskType: d.type, diskSizeGb: Number(d.size) } }))],
       networkInterfaces: nics.map((n) => (n.network === "default" && n.subnetwork === "default" ? {} : {
@@ -128,6 +130,7 @@ export default function CreateInstance() {
         }
       }
       await api.insertInstance(zone, body);
+      if (opsAgent) await api.ensureOpsAgentPolicy(zone);   // the same OS policy assignment `gcloud compute instances ops-agents` creates
       if (backupPolicy) await api.attachPolicy("disks", zone, name, region, backupPolicy);
       notify.success(`Created instance "${name}"`);
       window.location.hash = hashHref("compute", "instances", zone, name).slice(1);
@@ -302,7 +305,8 @@ export default function CreateInstance() {
 
       <Step n={5} title="Observability">
         <Sub title="Observability - Ops Agent">
-          <NotSimulated compact feature="Install Ops Agent for Monitoring and Logging" note="Metrics/logging agent installation isn't modeled." />
+          <FormControlLabel control={<Checkbox size="small" checked={opsAgent} onChange={(e) => setOpsAgent(e.target.checked)} />} label="Install Ops Agent for Monitoring and Logging" />
+          <Typography variant="caption" color="text.secondary">Opts the VM into OS Config (metadata enable-osconfig=TRUE), labels it for the zone's Ops Agent policy and creates that OS policy assignment. The VM then reports in Monitoring's "VMs with Ops Agent"; no agent process actually runs inside it.</Typography>
         </Sub>
       </Step>
       <Divider />

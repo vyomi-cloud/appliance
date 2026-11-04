@@ -183,23 +183,23 @@
  },
  "gcp.networking.byoip": {
   "title": "Bring your own IP (BYOIP)",
-  "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
-  },
+  "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "Advertising customer-owned IP ranges over Google's network requires real BGP/RPKI infrastructure Vyomi does not have."
-  ]
+   "Public advertised prefixes and public delegated prefixes (regional, with sub-prefix delegation) are real control-plane resources: public-range, size, overlap, containment and announce/withdraw ordering rules are enforced, and deletion is blocked while a prefix is announced or delegated.",
+   "Ownership verification (DNS TXT / RDAP using dnsVerificationIp and sharedSecret) is not performed, so a prefix is VALIDATED immediately, and ANNOUNCED does not advertise anything to the internet: there is no BGP/RPKI or routable address space behind it. External addresses cannot yet be allocated from a delegated prefix."
+  ],
+  "api": ["publicAdvertisedPrefixes.insert", "publicAdvertisedPrefixes.get", "publicAdvertisedPrefixes.list", "publicAdvertisedPrefixes.delete", "publicAdvertisedPrefixes.announce", "publicAdvertisedPrefixes.withdraw", "publicDelegatedPrefixes.insert", "publicDelegatedPrefixes.get", "publicDelegatedPrefixes.list", "publicDelegatedPrefixes.aggregatedList", "publicDelegatedPrefixes.patch", "publicDelegatedPrefixes.delete", "publicDelegatedPrefixes.announce", "publicDelegatedPrefixes.withdraw"],
+  "tests": ["tests/conformance/test_gcp_vmmanager_hybrid.py"]
  },
  "gcp.networking.hybrid-connectivity": {
   "title": "VPC connectivity (Cloud Interconnect, Cloud VPN, Network Connectivity Center)",
-  "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
-  },
+  "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "Hybrid connectivity to on-premises or other clouds needs real tunnels/circuits; Vyomi's network model stops at the project boundary."
-  ]
+   "Dedicated/Partner Interconnects and VLAN attachments are real control-plane resources: link type and count limits, location catalog, Cloud Router cross-check against the VPC core, VLAN-tag uniqueness per interconnect, bandwidth against circuit capacity, link-local /29 allocation, partner pairing keys, and delete-in-use rules. Attachment state follows admin state (ACTIVE only when both the attachment and its interconnect are enabled).",
+   "There is no physical circuit, LACP, BGP session or packet forwarding: ACTIVE means 'enabled', not 'carrying traffic', and the Cloud Router gets no interface or BGP peer automatically. Partner attachments stay PENDING_PARTNER because no service provider exists. Cloud VPN tunnels, HA VPN gateways and Network Connectivity Center hubs/spokes are not modelled here."
+  ],
+  "api": ["interconnects.insert", "interconnects.get", "interconnects.list", "interconnects.patch", "interconnects.delete", "interconnects.getDiagnostics", "interconnectLocations.list", "interconnectLocations.get", "interconnectAttachments.insert", "interconnectAttachments.get", "interconnectAttachments.list", "interconnectAttachments.aggregatedList", "interconnectAttachments.patch", "interconnectAttachments.delete"],
+  "tests": ["tests/conformance/test_gcp_vmmanager_hybrid.py"]
  },
  "gcp.networking.shared-vpc": {
   "title": "Shared VPC (host/service project attachment)",

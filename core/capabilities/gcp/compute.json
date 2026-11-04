@@ -93,13 +93,24 @@
   "api": ["zoneOperations.list", "globalOperations.list", "globalOperations.aggregatedList"],
   "tests": ["tests/conformance/test_gcp_compute_instances_core.py"]
  },
+ "gcp.compute.vm-manager": {
+  "title": "VM Manager (Patch, OS policies, VM extension policies)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "The OS Config control plane is real: patch jobs (instance filters over the real Compute instances, patchConfig/rollout/duration validation, cancel, per-instance details), patch deployments (one-time and recurring schedules with real next-run computation, pause/resume, due runs create real patch jobs), OS policy assignments (resource validation, revisions, matched VMs) and VM extension policies (Compute operations, selector blast radius).",
+   "No guest agent runs inside a Vyomi VM, so no package is ever installed, updated or removed and no OS policy is evaluated for compliance. A running VM with metadata enable-osconfig=TRUE reports patch SUCCEEDED having changed nothing; a running VM without it is NO_AGENT_DETECTED; a stopped VM is INACTIVE. OS policy assignments report rolloutState SUCCEEDED but there are no per-VM compliance reports, and VM extension policies are not installed onto VMs.",
+   "Patch jobs settle on a short wall-clock timer (about 2 seconds) rather than running for the real duration; pre/post patch steps are validated but never executed."
+  ],
+  "api": ["patchJobs.execute", "patchJobs.get", "patchJobs.list", "patchJobs.cancel", "patchJobs.instanceDetails.list", "patchDeployments.create", "patchDeployments.get", "patchDeployments.list", "patchDeployments.patch", "patchDeployments.delete", "patchDeployments.pause", "patchDeployments.resume", "osPolicyAssignments.create", "osPolicyAssignments.get", "osPolicyAssignments.list", "osPolicyAssignments.patch", "osPolicyAssignments.delete", "osPolicyAssignments.listRevisions", "vmExtensionPolicies.insert", "vmExtensionPolicies.get", "vmExtensionPolicies.list", "vmExtensionPolicies.delete"],
+  "tests": ["tests/conformance/test_gcp_vmmanager_hybrid.py"]
+ },
  "gcp.compute.observability": {
   "title": "Observability, recommendations and VM Manager",
   "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
    "The status duration and recent-activity feed shown here are real — Vyomi's own recorded instance lifecycle operations (insert/start/stop/suspend/resume/reset/...) at their real timestamps — not Cloud Monitoring charts or Cloud Logging entries: there's no request-metering engine tying a VM's real CPU/disk/network state to a sampled time series (the same boundary as gcp.storage.observability).",
    "Recommender suggestions are state-derived (see gcp.compute.recommender), not Google's usage-based AI insights.",
-   "VM Manager (Patch, OS policies, VM Extension Manager) needs a guest OS and patch agent to apply anything to — none runs in Vyomi."
+   "VM Manager is modelled as a control plane only (see gcp.compute.vm-manager): no guest agent runs, so nothing is applied to the VM."
   ],
   "api": ["zoneOperations.list", "globalOperations.aggregatedList"],
   "tests": ["tests/conformance/test_gcp_compute_instances_core.py"]

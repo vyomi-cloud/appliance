@@ -11,6 +11,7 @@ import { ErrorAlert, KeyValue, Section } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import InstanceNav from "./InstanceNav.jsx";
 import { FailoverDialog, UpgradeDialog, ExportDialog, ImportDialog, RescheduleDialog } from "./ActionDialogs.jsx";
+import RedisMonitoring from "./RedisMonitoring.jsx";
 import * as api from "./api.js";
 
 export default function InstanceOverview({ params }) {
@@ -53,7 +54,7 @@ export default function InstanceOverview({ params }) {
               ["Labels", api.labelsText(i)],
             ]} />
           </Section>
-          <CapabilityContainer id="gcp.memorystore.monitoring" title="Monitoring" />
+          <RedisMonitoring id={id} />
         </Stack>
       )}
       <FailoverDialog open={dialog === "failover"} instance={i} onClose={() => setDialog(null)} onDone={onDone} />
