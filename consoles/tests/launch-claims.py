@@ -39,6 +39,8 @@ curated = json.load(open(ROOT / "consoles/tests/launch-claims-map.json")) if (RO
 reviewed = json.load(open(ROOT / "consoles/tests/launch-claims-reviewed.json")) if (ROOT / "consoles/tests/launch-claims-reviewed.json").exists() else {}
 panel_ids = curated.get("panel_ids", {})      # "cloud|service|feature" -> registry id
 no_claim = curated.get("no_claim", {})        # "cloud|service|feature" -> reason
+sections = curated.get("sections", {})        # "cloud|service|title" (closed-unmatched baseline section) -> registry id
+no_claim_sec = curated.get("no_claim_sections", {})
 
 def short(t, n=260):
     t = re.sub(r"\s+", " ", t or "").strip()
@@ -75,8 +77,8 @@ if gs.exists():
     st = json.load(open(gs))
     for s in st.get("closed", []) + st.get("remaining", []):
         key = f"{s['cloud']}|{s['service']}|{s['title']}"
-        rid = panel_ids.get(key) or s.get("regid") or s.get("cap")
-        if key in no_claim: state = "editorial (no claim)"
+        rid = sections.get(key) or panel_ids.get(key) or s.get("regid") or s.get("cap")
+        if key in no_claim or key in no_claim_sec: state = "editorial (no claim)"
         elif rid in reg: state = LV.get(reg[rid]["off"], reg[rid]["off"])
         else: state = "unmapped"
         ledger[(s["cloud"], state)] += 1
