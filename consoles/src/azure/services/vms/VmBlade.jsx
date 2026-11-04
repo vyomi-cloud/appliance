@@ -85,7 +85,6 @@ const GAP_CAP = {
 const NOT_SIMULATED_REASON = {
   bastion: "Azure Bastion tunnels a browser session to the guest's own network stack over a private network path. Vyomi's virtual machines have no guest network stack to tunnel to — only the resource's own metadata exists in-browser.",
   loadbalancing: "Distributing real traffic across two virtual machines needs a live network path forwarding real packets between them. A browser/WASM simulator has no virtual network device to carry that traffic — and Microsoft.Network/loadBalancers is not a resource type this lens's Networking service models.",
-  asgs: "Application security groups are not a resource type this lens's Networking service models yet (see Microsoft.Network/networkSecurityGroups' own rule engine, which the Network settings tab already reuses for real IP-based rules).",
   networkmanager: "Network Manager centrally pushes connectivity/security configuration across a real multi-VNet packet path. There is no virtual network stack in a browser/WASM simulator for that configuration to actually take effect on.",
   extensions: "Installing a VM extension means a real guest agent downloading and executing a package inside the guest OS. Vyomi's virtual machines are metadata-only — no guest OS process exists in-browser to install anything into.",
   disasterrecovery: "Azure Site Recovery continuously replicates this VM's disks, block by block, to a second region and fails over to that replica on demand. Vyomi models one logical copy of each resource — there is no second region-local replica for a failover to cut over to.",
@@ -125,6 +124,7 @@ export default function VmBlade({ params }) {
       autoshutdown: () => <AutoShutdown a={a} reload={reload} />,
       connect: () => <Connect a={a} />,
       networksettings: () => <NetworkSettings a={a} />,
+      asgs: () => <CapabilityContainer id="azure.vms.asgs" title={`${a.name} | Application security groups`}><VmAsgs a={a} /></CapabilityContainer>,
       runcommand: () => <RunCommand a={a} reload={reload} />,
       exporttemplate: () => <SharedExportTemplate id={a.id} name={a.name} resourceGroup={a.resourceGroup} />,
       resourcevisualizer: () => <ResourceVisualizer a={a} />,
@@ -815,6 +815,50 @@ function Connect({ a }) {
   );
 }
 
+// ── Application security groups: real Microsoft.Network/applicationSecurityGroups, joined through the NIC's
+// ip configuration (validated in core/azure_cfgext_core.py; netsim evaluates rules that name them).
+function VmAsgs({ a }) {
+  const notify = useNotify();
+  const nicId = nicIdOf(a);
+  const nic = useAsync(() => (nicId ? api.getNic(parseId(nicId).resourceGroup, parseId(nicId).name) : Promise.resolve(null)), [nicId]);
+  const asgs = useAsync(() => api.listAsgs(), []);
+  const [name, setName] = useState("");
+  const mine = new Set((nic.data?.properties?.ipConfigurations?.[0]?.properties?.applicationSecurityGroups || []).map((g) => g.id.toLowerCase()));
+  const region = (nic.data?.location || a.location || "").replace(/\s/g, "").toLowerCase();
+  const write = async (ids) => {
+    const body = JSON.parse(JSON.stringify(nic.data));
+    body.properties.ipConfigurations[0].properties.applicationSecurityGroups = ids.map((id) => ({ id }));
+    try { await api.putNic(parseId(nicId).resourceGroup, parseId(nicId).name, body); nic.reload(); }
+    catch (e) { notify.error(e, "Updating the application security groups failed"); }
+  };
+  const toggle = (g) => {
+    const cur = (nic.data?.properties?.ipConfigurations?.[0]?.properties?.applicationSecurityGroups || []).map((x) => x.id);
+    write(mine.has(g.id.toLowerCase()) ? cur.filter((i) => i.toLowerCase() !== g.id.toLowerCase()) : [...cur, g.id]);
+  };
+  const create = async () => {
+    try { await api.putAsg(a.resourceGroup, name, a.location); notify.success(`Application security group '${name}' was created.`, "Created"); setName(""); asgs.reload(); }
+    catch (e) { notify.error(e, "Creating the application security group failed"); }
+  };
+  if (!nicId) return <div className="vy-muted" style={{ padding: 16 }}>This virtual machine has no network interface.</div>;
+  return (
+    <>
+      <ErrorBar error={asgs.error || nic.error} />
+      <table className="vy-grid" aria-label="Application security groups">
+        <thead><tr><th>Member</th><th>Name</th><th>Resource group</th><th>Location</th></tr></thead>
+        <tbody>{(asgs.data || []).filter((g) => (g.location || "").replace(/\s/g, "").toLowerCase() === region).map((g) => (
+          <tr key={g.id}><td><input type="checkbox" aria-label={`Member of ${g.name}`} checked={mine.has(g.id.toLowerCase())} onChange={() => toggle(g)} /></td>
+            <td>{g.name}</td><td>{g.resourceGroup}</td><td>{locationLabel(g.location)}</td></tr>
+        ))}</tbody>
+      </table>
+      <p className="vy-muted" style={{ fontSize: 12 }}>Only groups in the network interface's region ({locationLabel(region)}) can be joined, as in Azure. Network security rules that name a group are evaluated by the network simulator.</p>
+      <div style={{ display: "flex", gap: 8, alignItems: "end", marginTop: 8 }}>
+        <Field label="New application security group"><Input value={name} onChange={(_, d) => setName(d.value)} aria-label="Application security group name" /></Field>
+        <Button appearance="primary" disabled={!name} onClick={create} aria-label="Create application security group">Create</Button>
+      </div>
+    </>
+  );
+}
+
 // ── Network settings (network interface + attached NSG's rules) ───────────────────────
 const PORT = (r) => r.properties?.destinationPortRange || (r.properties?.destinationPortRanges || []).join(",") || "*";
 
@@ -931,7 +975,7 @@ function NetworkSettings({ a }) {
       <div style={{ marginTop: 12 }}>
         {tab === "inbound" && <PortRules rg={a.resourceGroup} nsgName={nsgName} direction="Inbound" />}
         {tab === "outbound" && <PortRules rg={a.resourceGroup} nsgName={nsgName} direction="Outbound" />}
-        {tab === "asgs" && <NotSimulated feature="Application security groups" note="This lens does not model Microsoft.Network/applicationSecurityGroups." />}
+        {tab === "asgs" && <VmAsgs a={a} />}
         {tab === "lb" && <NotSimulated feature="Load balancing" note="This lens does not model Microsoft.Network/loadBalancers." />}
       </div>
     </CapabilityContainer>
