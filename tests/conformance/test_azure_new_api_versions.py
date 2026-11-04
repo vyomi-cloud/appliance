@@ -1,7 +1,7 @@
 """Upstream drift (#502 Cosmos 2026-07-15, #500 CognitiveServices 2026-09-15-preview,
 #499 Web 2026-08-01, #340 Compute 2026-11-01-preview): Vyomi's ARM layer must accept
 the newly published api-versions the same way it accepts older ones (create, get, delete)."""
-import json, os, sys, urllib.request, urllib.error
+import json, os, sys, time, urllib.request, urllib.error
 
 B = os.environ.get("VYOMI_BASE_URL", "http://localhost:9000").rstrip("/")
 SUB = "00000000-0000-0000-0000-cloudlearn01"
@@ -24,7 +24,9 @@ def call(method, url, body=None):
     except urllib.error.HTTPError as e:
         return e.code, e.read()
 
+RUN = str(int(time.time() * 1000) % 10000000)  # soft-deleted names (Cognitive Services) can't be reused
 for rtype, name, ver, body in CASES:
+    name += RUN
     url = f"{B}/subscriptions/{SUB}/resourceGroups/rg-drift/providers/{rtype}/{name}?api-version={ver}"
     s1, _ = call("PUT", url, body)
     s2, b2 = call("GET", url)
@@ -33,4 +35,14 @@ for rtype, name, ver, body in CASES:
     ok = ok and s3 in (200, 202, 204)
     print(f"[{'PASS' if ok else 'FAIL'}] {rtype} accepts api-version {ver} (put={s1} get={s2} delete={s3})")
     fails += not ok
+
+# #340 Compute 2026-11-01-preview: Vyomi's compute routes are api-version neutral, so the preview
+# version must behave exactly like a known-good one (and never be rejected as an unknown version).
+cu = f"{B}/subscriptions/{SUB}/resourceGroups/rg-drift/providers/Microsoft.Compute/restorePointCollections/vyomidrift340"
+body = {"location": "eastus", "properties": {"source": {"id": "/x"}}}
+sa, ba = call("PUT", cu + "?api-version=2024-07-01", body)
+sb, bb = call("PUT", cu + "?api-version=2026-11-01-preview", body)
+ok = sa == sb and b"InvalidApiVersion" not in bb and b"NoRegisteredProvider" not in bb
+print(f"[{'PASS' if ok else 'FAIL'}] Microsoft.Compute accepts api-version 2026-11-01-preview like 2024-07-01 ({sa} vs {sb})")
+fails += not ok
 sys.exit(1 if fails else 0)
