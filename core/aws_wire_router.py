@@ -261,6 +261,7 @@ from core import cloudwatch_core as cw
 from core import azure_sql_core as az_sql
 from core import azure_iam_core as az_iam
 from core import azure_acr_core as az_acr
+from core import ecr_core
 from core.azure_acr_core import AcrRegistryStore
 from core import azure_graph_core as az_graph
 import types as _types
@@ -384,6 +385,7 @@ _SIGNING = {
     "cloudfront": "cloudfront",   # CloudFront public keys + key groups (rest-xml /2020-05-31/...) -> core/cloudfront_keys_core via the S3 store
     "savingsplans": "savingsplans",   # Savings Plans (rest-json POST /<Operation>) + EC2 coverage/capacity views -> core/savingsplans_core over the EC2 model
     "dms": "dms", "bedrock": "bedrock",   # Bedrock runtime + foundation-model catalogue -> core/ai_models_core over the local-LLM seam (core/llm_core)
+    "ecr": "ecr", "inspector2": "inspector2",   # Amazon ECR control plane + Inspector2 findings -> core/ecr_core over the S3 store (images/layers live in the simulator S3)
     "backup": "backup",   # AWS Backup subset (region settings + DynamoDB copy jobs) -> core/backup_core over the DynamoDB + S3 stores
     "s3vectors": "s3vectors",   # Amazon S3 Vectors (rest-json POST /<Operation>) -> core/s3_vectors_core via the S3 store
     "s3tables": "s3tables",   # Amazon S3 Tables (rest-json /buckets, /namespaces, /tables, /tag) -> core/s3_tables_core via the S3 store
@@ -409,6 +411,7 @@ _TARGET_PREFIX = {
     "Route53Resolver": "dnsfw",
     "com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101": "cloudtrail",
     "AWSOrganizationsV20161128": "organizations",
+    "AmazonEC2ContainerRegistry_V20150921": "ecr",   # Amazon ECR
     "AWSInsightsIndexService": "ce",   # Cost Explorer
     "AnyScaleFrontendService": "appas",   # Application Auto Scaling
 }
@@ -894,6 +897,10 @@ class AwsWireRouter:
         return False
 
     # ── service detection ──────────────────────────────────────────────
+    def ecr_registry(self, method, path, query, headers, body):
+        r = ecr_core.registry_dispatch(self.s3, method, path, query, headers, bytes(body))
+        return {"status": r.status, "headers": dict(r.headers or {}), "body": r.body or b""}
+
     def service_of(self, method, path, lheaders, body, query=None):
         # Static website hosting: real S3 serves this over its OWN unsigned HTTP(S) origin
         # (bucket.s3-website-<region>.amazonaws.com), never the signed control+data API —
@@ -903,6 +910,8 @@ class AwsWireRouter:
             return "s3-website"
         # GCP services are unambiguous by path (REST) and carry no SigV4 — route
         # them first so they never fall through to the S3 default.
+        if path.startswith("/v2") and ecr_core.is_registry_request(lheaders, path):
+            return "ecr-registry"   # docker push/pull against <acct>.dkr.ecr.<region>.<host> (AWS:<token> basic auth)
         gcp = _gcp_service(path)
         if gcp:
             return gcp
@@ -1458,6 +1467,19 @@ class AwsWireRouter:
             if r.media_type and not any(k.lower() == "content-type" for k in hdrs):
                 hdrs["content-type"] = r.media_type
             return {"status": r.status, "headers": hdrs, "body": r.body or b""}
+
+        if svc == "ecr":   # ECR JSON 1.1 control plane (region from the SigV4 credential scope)
+            rm = re.search(r"Credential=[^/]+/[^/]+/([^/]+)/", lheaders.get("authorization", "") or "")
+            r = ecr_core.dispatch(self.s3, lheaders.get("x-amz-target", "") or "", self._json_body(body), rm.group(1) if rm else ecr_core.DEFAULT_REGION)
+            return {"status": r.status, "headers": {"content-type": "application/x-amz-json-1.1", **(r.headers or {})}, "body": json.dumps(r.body).encode()}
+
+        if svc == "inspector2":
+            rm = re.search(r"Credential=[^/]+/[^/]+/([^/]+)/", lheaders.get("authorization", "") or "")
+            r = ecr_core.inspector_dispatch(self.s3, method, path, bytes(body), rm.group(1) if rm else ecr_core.DEFAULT_REGION)
+            return {"status": r.status, "headers": {"content-type": "application/json"}, "body": json.dumps(r.body).encode()}
+
+        if svc == "ecr-registry":   # OCI / Docker Registry v2 on the ECR host; layers + manifests stored in the simulator S3
+            return self.ecr_registry(method, path, query or {}, headers or {}, bytes(body))
 
         if svc == "kinesis":   # JSON 1.1 (boto3/Go/CLI) or CBOR (Java SDK) by Content-Type
             status, hdrs, out = kinesis.handle_wire(self.kinesis, lheaders.get("x-amz-target", "") or "",

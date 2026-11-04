@@ -127,6 +127,10 @@ async def _kv(request: Request):
 
 async def _acr(request: Request):
     body = await request.body()
+    from core import ecr_core as _ecr
+    if _ecr.is_registry_request(dict(request.headers), request.url.path):   # ECR data plane (<acct>.dkr.ecr.* host / AWS:<token> auth)
+        return _wi.to_response(_wi.appliance_router().ecr_registry(
+            request.method, _raw(request)[len("/azure-data/acr"):] or "/", _query(request), dict(request.headers), body))
     path = _raw(request)[len("/azure-data/acr"):] or "/"
     return _wi.to_response(_wi.dispatch_service("azure_acr", request.method, path,
                                                 _query(request), dict(request.headers), body))
