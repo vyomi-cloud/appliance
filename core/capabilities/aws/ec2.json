@@ -750,5 +750,56 @@
   "tests": [
    "tests/conformance/test_ec2_cost_table.py"
   ]
+ },
+ "ec2.image-builder": {
+  "title": "EC2 Image Builder \u2014 components (YAML documents), image recipes, infrastructure/distribution configurations, pipelines and image builds producing an AMI",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Builds run for real only on the offline appliance when Docker/BuildKit is available: the recipe's ExecuteBash/UpdateOS/CreateFile steps are compiled into a Dockerfile and built from a base image already on the host (parent image names map to ubuntu/amazonlinux/debian images); a failing step fails the build with its real log. The result is an AMI record whose source is the built container image - it is not a bootable machine image.",
+   "On Nano (no container runtime in the browser) and on an appliance without Docker every build ends FAILED with 'No container builder on this substrate' - never a fake AVAILABLE. Components, recipes, infrastructure/distribution configurations and pipelines are fully stored and validated on both substrates.",
+   "Only ExecuteBash, UpdateOS, Reboot (a no-op in a container) and CreateFile execute; any other action (S3Download, WebDownload, ExecuteBinary, PowerShell/Windows actions...) fails the build naming the action. AWS-managed components are a small built-in set (update-linux, reboot-linux, simple-boot-test-linux).",
+   "Builds run synchronously inside CreateImage / StartImagePipelineExecution. Pipeline schedules are validated and stored but never fire on their own; no build instance is launched in EC2, so the infrastructure configuration (instance profile, subnet, security groups) is validated but not used; no CloudWatch log group is written (the build log is read through the Vyomi-only VyomiGetImageBuildLog action and shown in the console)."
+  ],
+  "api": [
+   "CreateComponent",
+   "ListComponents",
+   "GetComponent",
+   "DeleteComponent",
+   "CreateImageRecipe",
+   "ListImageRecipes",
+   "GetImageRecipe",
+   "DeleteImageRecipe",
+   "CreateInfrastructureConfiguration",
+   "ListInfrastructureConfigurations",
+   "GetInfrastructureConfiguration",
+   "UpdateInfrastructureConfiguration",
+   "DeleteInfrastructureConfiguration",
+   "CreateDistributionConfiguration",
+   "ListDistributionConfigurations",
+   "GetDistributionConfiguration",
+   "UpdateDistributionConfiguration",
+   "DeleteDistributionConfiguration",
+   "CreateImagePipeline",
+   "ListImagePipelines",
+   "GetImagePipeline",
+   "UpdateImagePipeline",
+   "DeleteImagePipeline",
+   "StartImagePipelineExecution",
+   "CreateImage",
+   "GetImage",
+   "ListImages",
+   "ListImageBuildVersions",
+   "DeleteImage",
+   "CancelImageCreation",
+   "TagResource",
+   "UntagResource",
+   "ListTagsForResource"
+  ],
+  "tests": [
+   "tests/conformance/test_imagebuilder_core.py"
+  ]
  }
 }

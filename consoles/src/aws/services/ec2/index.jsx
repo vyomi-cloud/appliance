@@ -1,3 +1,5 @@
+import { useEffect } from "react";
+import { navigate } from "../../../common/router.js";
 import Dashboard from "./Dashboard.jsx";
 import Instances from "./Instances.jsx";
 import InstanceDetail from "./InstanceDetail.jsx";
@@ -26,6 +28,8 @@ import * as Ops from "./OpsPages.jsx";
 
 const crumb = (text, ...path) => ({ text, href: `#/ec2/${path.join("/")}` });
 const base = [crumb("EC2", "")];
+
+function ImageBuilderRedirect() { useEffect(() => { navigate("imagebuilder", "pipelines"); }, []); return null; }
 
 export default {
   nav: [
@@ -135,7 +139,7 @@ export default {
 
     { pattern: "/ec2/migrate-a-server", component: Honest.MigrateAServer, crumbs: () => [crumb("EC2", ""), crumb("Migrate a server", "migrate-a-server")] },
     { pattern: "/ec2/recycle-bin", component: Ops.RecycleBin, crumbs: () => [crumb("EC2", ""), crumb("Recycle Bin", "recycle-bin")] },
-    { pattern: "/ec2/image-builder", component: Honest.ImageBuilder, crumbs: () => [crumb("EC2", ""), crumb("EC2 Image Builder", "image-builder")] },
+    { pattern: "/ec2/image-builder", component: ImageBuilderRedirect, crumbs: () => [crumb("EC2", ""), crumb("EC2 Image Builder", "image-builder")] },
     { pattern: "/ec2/instance-type-finder", component: Ops.InstanceTypeFinder, crumbs: () => [crumb("EC2", ""), crumb("Instance type finder", "instance-type-finder")] },
     { pattern: "/ec2/create-iam-profile", component: Ops.CreateIamProfile, crumbs: () => [crumb("EC2", ""), crumb("Create IAM profile", "create-iam-profile")] },
     { pattern: "/ec2/compare-security-group-rules", component: Ops.CompareSecurityGroupRules, crumbs: () => [crumb("EC2", ""), crumb("Compare security group rules", "compare-security-group-rules")] },

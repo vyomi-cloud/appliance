@@ -421,6 +421,7 @@ _SIGNING = {
     "dms": "dms", "bedrock": "bedrock",   # Bedrock runtime + foundation-model catalogue -> core/ai_models_core over the local-LLM seam (core/llm_core)
     "ecr": "ecr", "inspector2": "inspector2",   # Amazon ECR control plane + Inspector2 findings -> core/ecr_core over the S3 store (images/layers live in the simulator S3)
     "backup": "backup",   # AWS Backup subset (region settings + DynamoDB copy jobs) -> core/backup_core over the DynamoDB + S3 stores
+    "imagebuilder": "imagebuilder",   # EC2 Image Builder (rest-json PUT/POST/GET /<Operation>) -> core/imagebuilder_core over the S3 account bag + the EC2 model (AMIs)
     "s3vectors": "s3vectors",   # Amazon S3 Vectors (rest-json POST /<Operation>) -> core/s3_vectors_core via the S3 store
     "s3tables": "s3tables",   # Amazon S3 Tables (rest-json /buckets, /namespaces, /tables, /tag) -> core/s3_tables_core via the S3 store
     "elasticloadbalancing": "elbv2",
@@ -1594,6 +1595,10 @@ class AwsWireRouter:
         if svc == "cloudfront":
             from core import cloudfront_keys_core
             return cloudfront_keys_core.dispatch(self.s3, method, path, query or {}, headers or {}, bytes(body))
+
+        if svc == "imagebuilder":
+            from core import imagebuilder_core
+            return imagebuilder_core.dispatch(self.s3, self.vpc, method, path, query or {}, bytes(body))
 
         if svc == "s3vectors":
             r = s3.dispatch(self.s3, method, "/__s3vectors__" + path, query or {}, headers or {}, bytes(body))

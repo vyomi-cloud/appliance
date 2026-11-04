@@ -12,6 +12,7 @@ export const SERVICES = [
   { id: "dynamodb", icon: "dynamodb", title: "DynamoDB", description: "Managed NoSQL database", category: "Database", load: () => import("./dynamodb/index.jsx") },
   { id: "ec2", icon: "ec2", title: "EC2", description: "Virtual servers in the cloud", category: "Compute", load: () => import("./ec2/index.jsx") },
   { id: "ecr", icon: "ecr", title: "Elastic Container Registry", description: "Store, share and deploy container images", category: "Compute", load: () => import("./ecr/index.jsx") },
+  { id: "imagebuilder", icon: "ec2", title: "EC2 Image Builder", description: "Automate the creation, management and deployment of machine images", category: "Compute", load: () => import("./imagebuilder/index.jsx") },
   { id: "lambda", icon: "lambda", title: "Lambda", description: "Run code without thinking about servers", category: "Compute", load: () => import("./lambda/index.jsx") },
   { id: "rds", icon: "rds", title: "RDS", description: "Managed relational database service", category: "Database", load: () => import("./rds/index.jsx") },
   { id: "vpc", icon: "vpc", title: "VPC", description: "Isolated cloud resources", category: "Networking & Content Delivery", load: () => import("./vpc/index.jsx") },
