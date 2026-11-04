@@ -368,6 +368,8 @@ _SIGNING = {
     "vpc-lattice": "vpc-lattice",   # VPC Lattice control plane (rest-json /servicenetworks, /services, /targetgroups, ...) -> core/vpc_lattice_core over the EC2 model
     "rbin": "rbin",   # EC2 Recycle Bin (rest-json /rules...) -> core/ec2_ops_core.rbin_dispatch over the shared EC2 model
     "schemas": "schemas",   # EventBridge Schemas (rest-json /v1/registries, /v1/discoverers) -> core/eventbridge_schemas_core via the EventBridge store
+    "aws-marketplace": "marketplace",   # AWS Marketplace (Vyomi SaaS spaces + AMI products; rest-json) -> core/marketplace_core over the S3 + EC2 models
+    "s3files": "s3files", "fsx": "fsx",   # S3 Files (rest-json) + FSx for OpenZFS with S3 access points (JSON 1.1) -> core/s3files_core over the S3 + EC2 models
     "backup": "backup",   # AWS Backup subset (region settings + DynamoDB copy jobs) -> core/backup_core over the DynamoDB + S3 stores
     "s3vectors": "s3vectors",   # Amazon S3 Vectors (rest-json POST /<Operation>) -> core/s3_vectors_core via the S3 store
     "s3tables": "s3tables",   # Amazon S3 Tables (rest-json /buckets, /namespaces, /tables, /tag) -> core/s3_tables_core via the S3 store
@@ -666,6 +668,7 @@ class AwsWireRouter:
         self.ram = s.get("ram") or _types.SimpleNamespace()   # Resource Access Manager (subnet/SG sharing)
         self.vpc.ram_store = self.ram   # DeleteSubnet/DeleteSecurityGroup refuse while actively shared
         self.ram.vpc_store = self.vpc   # AssociateResourceShare validates the subnet/SG exists
+        self.ram.org_store = self.iam   # principals (org / OU ARNs, member accounts) are checked against AWS Organizations (state in the IAM store)
         self.dax.cw_store = self.cw            # real AWS/DAX ItemCache/QueryCache hit/miss metrics
         self.dlm = s.get("dlm") or dlm.DlmStore()   # Data Lifecycle Manager (ec2.lifecycle-manager)
         self.dlm.vpc_store = self.vpc   # policies really create/prune real snapshots + AMIs
@@ -1036,6 +1039,25 @@ class AwsWireRouter:
             from core import eventbridge_schemas_core as _schemas
             r = _schemas.dispatch(self.msg, method, path, query or {}, headers or {}, bytes(body))
             return {"status": r.status, "headers": {**dict(r.headers or {}), "content-type": "application/json"}, "body": r.body or b""}
+
+        if svc == "marketplace":
+            from core import marketplace_core
+            r = marketplace_core.dispatch(self.s3, self.vpc, method, path, query or {}, bytes(body))
+            hdrs = dict(r.headers or {})
+            hdrs.setdefault("content-type", "application/json")
+            return {"status": r.status, "headers": hdrs, "body": r.body or b""}
+
+        if svc == "s3files":
+            from core import s3files_core
+            r = s3files_core.dispatch(self.s3, self.vpc, method, path, query or {}, bytes(body))
+            hdrs = dict(r.headers or {})
+            hdrs.setdefault("content-type", "application/json")
+            return {"status": r.status, "headers": hdrs, "body": r.body or b""}
+
+        if svc == "fsx":
+            from core import s3files_core
+            r = s3files_core.fsx_dispatch(self.s3, self.vpc, lheaders.get("x-amz-target", ""), bytes(body))
+            return {"status": r.status, "headers": dict(r.headers or {}), "body": r.body or b""}
 
         if svc == "backup":
             from core import backup_core
