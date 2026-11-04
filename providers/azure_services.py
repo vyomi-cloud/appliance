@@ -1395,6 +1395,11 @@ def core_arm():
     ARM consumer (resource-group lists, inventory, locks, activity log) reads."""
     from core.azure_arm_core import AzureArm
     arm = AzureArm()
+    try:                                  # CMK key lookups consult the Key Vault keys data-plane store
+        from core import azure_cfgext_core as _cfgext, appliance_stores as _aps
+        _cfgext.bind_key_store(_aps.az_kv_keys_store)
+    except Exception:
+        pass
     arm.state = _state
     arm.operations = _operations
     arm.sub_names = _subscription_meta("names")   # Microsoft.Subscription/rename

@@ -102,13 +102,53 @@ def _vault_exists(state: dict, name: str) -> bool:
                and str(r.get("name", "")).lower() == name.lower() for r in state.values())
 
 
+# Key Vault data-plane lookup, injected by the substrate (offline appliance / Nano registry): callable(key_name, version|None)
+# -> True (exists, enabled) | False (exists, disabled) | None (no such key). Unset (hermetic/ARM-only use) = not cross-checked.
+# The Key Vault keys store is ONE keyspace shared by all vaults, so the lookup is by key name, not per vault.
+KEY_LOOKUP = None
+
+
+def set_key_lookup(fn) -> None:
+    global KEY_LOOKUP
+    KEY_LOOKUP = fn
+
+
+def bind_key_store(store_or_getter) -> None:
+    """Point the lookup at the Key Vault keys core's store (or a zero-arg callable returning it, for lazily-built stores)."""
+    try:
+        from core import azure_keyvault_keys_core as kvk
+    except ImportError:  # pragma: no cover - Pyodide flat layout
+        import azure_keyvault_keys_core as kvk  # type: ignore
+
+    def _lk(name, version):
+        st = store_or_getter() if callable(store_or_getter) else store_or_getter
+        if hasattr(st, "adopt"):
+            st.adopt()
+        return kvk.key_enabled(st, name, version)
+    set_key_lookup(_lk)
+
+
+def check_key_exists(vault: str, key_name: str, version, what: str):
+    if KEY_LOOKUP is None or not key_name:
+        return None
+    try:
+        st = KEY_LOOKUP(key_name, version or None)
+    except Exception:
+        return None
+    if st is None:
+        return _err(400, "KeyVaultKeyNotFound", f"The key '{key_name}' referenced by {what} was not found in Key Vault '{vault}'.")
+    if st is False:
+        return _err(400, "KeyVaultKeyDisabled", f"The key '{key_name}' referenced by {what} is disabled in Key Vault '{vault}'; a customer-managed key must be enabled.")
+    return None
+
+
 def _check_key_uri(state: dict, uri: str, what: str):
     m = KV_KEY_URI.match(str(uri or ""))
     if not m:
         return _err(400, "InvalidKeyVaultKeyUri", f"{what} must be a Key Vault key URI of the form https://<vault>.vault.azure.net/keys/<name>[/<version>]; got '{uri}'.")
     if not _vault_exists(state, m.group(1)):
         return _err(400, "KeyVaultNotFound", f"The Key Vault '{m.group(1)}' referenced by {what} does not exist in this subscription.")
-    return None
+    return check_key_exists(m.group(1), m.group(2), m.group(3) if m.lastindex and m.lastindex >= 3 else None, what)
 
 
 def _has_identity(rec_or_payload: dict) -> bool:
@@ -478,6 +518,9 @@ def _validate_sb_ns(state: dict, payload: dict, existing, props: dict):
                 return _err(400, "BadRequest", "encryption.keyVaultProperties entries require keyVaultUri (https://<vault>.vault.azure.net) and keyName.")
             if not _vault_exists(state, m.group(1)):
                 return _err(400, "KeyVaultNotFound", f"The Key Vault '{m.group(1)}' referenced by encryption.keyVaultProperties does not exist in this subscription.")
+            bad = check_key_exists(m.group(1), k.get("keyName"), k.get("keyVersion"), "encryption.keyVaultProperties")
+            if bad:
+                return bad
         if enc.get("requireInfrastructureEncryption") and not isinstance(enc["requireInfrastructureEncryption"], bool):
             return _err(400, "BadRequest", "encryption.requireInfrastructureEncryption must be a boolean.")
     return None

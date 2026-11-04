@@ -2577,7 +2577,7 @@ class AzureArm:
         # to a REAL Key Vault in this subscription, instead of round-tripping whatever
         # encryption.keySource/keyvaultproperties the caller sends. The named KEY's own
         # existence/enabled state inside that vault is still not checked (core/azure_arm_core.py
-        # has no reference to the Key Vault keys data-plane store) — an honest, narrower gap.
+        # is checked through the cfgext key-lookup seam when the substrate injects it).
         if type_chain[0].lower() != "microsoft.storage" or type_chain[1].lower() != "storageaccounts" \
                 or len(type_chain) != 2:
             return None
@@ -2600,7 +2600,11 @@ class AzureArm:
             return _err(400, "BadRequest",
                         f"The Key Vault referenced by encryption.keyvaultproperties.keyvaulturi "
                         f"('{uri}') does not exist in this subscription.")
-        return None
+        try:
+            from core.azure_cfgext_core import check_key_exists
+        except ImportError:  # pragma: no cover - Pyodide flat layout
+            from azure_cfgext_core import check_key_exists  # type: ignore
+        return check_key_exists(m.group(1), key_name, kv.get("keyversion"), "encryption.keyvaultproperties")
 
     def _storage_hns_block(self, type_chain, names, payload, sub, rg):
         # v4 WAVE 5b (azure.storage.datalakegen2upgrade): the Data Lake Gen2 upgrade flips

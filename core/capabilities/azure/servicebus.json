@@ -99,7 +99,7 @@
       "offline": "config_only"
     },
     "limitations": [
-      "Premium namespaces only; requires a managed identity and a Key Vault that exists in this subscription. The key is not looked up in the Key Vault data plane and messages are not re-encrypted or blocked when the key is disabled."
+      "Premium namespaces only; requires a managed identity and a Key Vault that exists in this subscription. The key is looked up in the Key Vault keys data plane (400 KeyVaultKeyNotFound / KeyVaultKeyDisabled); that store is one keyspace shared by all vaults, so the lookup is by key name, not per vault; messages are not re-encrypted or blocked when the key is disabled."
     ],
     "tests": [
       "tests/conformance/test_azure_cfgext_core.py"
