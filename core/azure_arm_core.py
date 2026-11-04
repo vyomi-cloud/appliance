@@ -40,6 +40,11 @@ try:                                              # Container Apps engine (Micro
 except ImportError:
     import azure_app_core as app_engine            # type: ignore
 
+try:                                              # Azure Monitor workspaces + Managed Grafana (Microsoft.Monitor, Microsoft.Dashboard)
+    from core import azure_monitorproducts_core as monprod_engine
+except ImportError:
+    import azure_monitorproducts_core as monprod_engine   # type: ignore
+
 try:                                              # App Service engine (Microsoft.Web: web apps, function apps, plans)
     from core import azure_webapp_core as web_engine
 except ImportError:
@@ -1541,6 +1546,9 @@ class AzureArm:
         if namespace.lower() == "microsoft.web":
             return self._web(method, sub, rg, chain, payload, query)
 
+        if monprod_engine.handles(namespace, chain):
+            return self._monprod(method, sub, rg, namespace, chain, payload, query)
+
         top = _BY_TYPE.get((namespace.lower(), type_chain[1].lower()))
         if top is None:
             supported = ", ".join(sorted(c["namespace"] + "/" + c["type"] for c in CATALOG))
@@ -2951,6 +2959,18 @@ class AzureArm:
     def _cost_capacity(self, method, sub, rg, chain, payload, query):
         r = cost_engine.dispatch_capacity(self.state, method, sub, chain, payload, query, base=self._base)
         return {"status": r["status"], "headers": dict(r["headers"]), "body": r["body"]}
+
+    def _monprod(self, method, sub, rg, namespace, chain, payload, query):
+        r = monprod_engine.dispatch(self.state, method, sub, rg, namespace, chain, payload, query)
+        resp = {"status": r["status"], "headers": {}, "body": r["body"]}
+        if r["status"] < 300 and r["rid"] and method in ("PUT", "PATCH", "DELETE"):
+            self._record_activity(r["rid"], f"{'/'.join(r['rid'].split('/providers/')[1].split('/')[:2])}/{'delete' if method == 'DELETE' else 'write'}", sub)
+        if r["lro"] and r["status"] < 300:
+            resp["status"] = 200 if r["status"] == 201 else r["status"]
+            op_id = self._make_operation(r["rid"], method)
+            url = f"{self._base}/api/azure/operations/{op_id}?api-version={query.get('api-version') or monprod_engine.API_VERSIONS[namespace.lower()]}"
+            resp["headers"].update({"Azure-AsyncOperation": url, "Location": url, "Retry-After": "0"})
+        return resp
 
     def _web(self, method, sub, rg, chain, payload, query):
         r = web_engine.dispatch(self.state, method, sub, rg, chain, [], payload, query)
