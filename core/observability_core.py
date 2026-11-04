@@ -154,7 +154,7 @@ def extract_resource(cloud: str, service: str, method: str, path: str, headers: 
             if k in low and low.index(k) + 1 < len(segs):
                 res = segs[low.index(k) + 1]
                 break
-        if not res and segs:
+        if not res and segs and not svc.startswith("az-"):   # native data-plane paths (/dbs, /secrets ...) name no resource
             res = segs[0]
         op = method.upper()
     elif cloud == "gcp":

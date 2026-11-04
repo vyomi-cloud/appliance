@@ -29,6 +29,7 @@ import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
 import SharedActivityLog from "../../kit/ActivityLog.jsx";
 import { ClassicAdminsPanel, DenyAssignmentsPanel, MyAccess } from "../../kit/IamExtras.jsx";
 import SharedResourceHealth from "../../kit/ResourceHealth.jsx";
+import CosmosScale from "./CosmosScale.jsx";
 import { ResourceAlerts, ResourceMetrics, ResourceLogs, ResourceInsightsPanel, ResourceWorkbooks, ResourceNotifications } from "../../kit/ResourceMonitoring.jsx";
 import SharedDiagnosticSettings from "../../kit/DiagnosticSettings.jsx";
 import { ResourceRecommendations } from "../defender/Pages.jsx";
@@ -124,6 +125,7 @@ export default function CosmosAccountBlade({ params }) {
       cors: () => <CosmosCors a={a} reload={reload} />,
       dedicatedgateway: () => <CosmosDedicatedGateway a={a} />,
       dataencryption: () => <CosmosDataEncryption a={a} reload={reload} />,
+      scale: () => <CosmosScale a={a} />,
       dataexplorer: () => <DataExplorer />,
       replicate: () => <Replicate a={a} reload={reload} />,
       consistency: () => <Consistency a={a} reload={reload} />,
