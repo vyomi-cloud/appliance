@@ -586,7 +586,7 @@ def _nic(state, method, sub, rg, after, payload):
                 if other and not str(other.get("id", "")).lower().startswith(key + "/"):
                     return _err(400, "PublicIPAddressInUse",
                                 f"Public IP address {pip_id} is already allocated to {other.get('id')}.")
-            alloc = ip_props.get("privateIPAllocationMethod") or "Dynamic"
+            alloc = ip_props.get("privateIPAllocationMethod") or ("Static" if ip_props.get("privateIPAddress") else "Dynamic")
             ip = ip_props.get("privateIPAddress") if alloc == "Static" else None
             if alloc == "Static":
                 if not ip or ipaddress.ip_address(ip) not in ipaddress.ip_network(prefix, strict=False):
