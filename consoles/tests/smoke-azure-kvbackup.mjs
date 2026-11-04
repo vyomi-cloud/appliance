@@ -1,0 +1,45 @@
+/* Key Vault key/secret Download Backup + Restore Backup in the console.  BASE=http://127.0.0.1:9075 node consoles/tests/smoke-azure-kvbackup.mjs */
+import { createRequire } from "node:module";
+const require = createRequire(import.meta.url);
+let pw;
+try { pw = require(process.env.PW || "playwright"); } catch { pw = require("/Users/sudhirganti/Applications/simulator/portal/node_modules/playwright"); }
+const BASE = process.env.BASE || "http://127.0.0.1:9075";
+const UI = `${BASE}${process.env.UI_PATH || "/v4/azure/"}`;
+const WIRE = `${BASE}${process.env.WIRE_PATH || "/_wire"}`;
+const SUB = "00000000-0000-0000-0000-cloudlearn01";
+const n = Date.now() % 100000;
+const RG = `kvb-rg${n}`, KV = `kvb${n}`, SEC = `sec-${n}`;
+let bad = 0;
+const check = (name, ok, d = "") => { if (!ok) bad++; console.log(`${ok ? "PASS" : "FAIL"} ${name}${d ? " - " + String(d).slice(0, 140) : ""}`); };
+const browser = await pw.chromium.launch();
+const ctx = await browser.newContext({ acceptDownloads: true, viewport: { width: 1440, height: 1000 } });
+const page = await ctx.newPage();
+const errors = []; page.on("pageerror", (e) => errors.push(e.message));
+await page.goto(UI, { waitUntil: "networkidle" });
+const wire = (path, init = {}) => page.evaluate(async ([u, i]) => { const r = await fetch(u, i); return { status: r.status, text: await r.text() }; }, [WIRE + path, init]);
+const json = (r) => { try { return JSON.parse(r.text); } catch { return {}; } };
+const arm = (m, p, b, av) => wire(`/subscriptions/${SUB}${p}?api-version=${av}`, { method: m, headers: { "content-type": "application/json" }, body: b ? JSON.stringify(b) : undefined });
+const dp = (m, p, b) => wire(`${p}?api-version=7.4`, { method: m, headers: { "content-type": "application/json", "x-vyomi-vault": KV }, body: b ? JSON.stringify(b) : undefined });
+await arm("PUT", `/resourceGroups/${RG}`, { location: "eastus" }, "2021-04-01");
+await arm("PUT", `/resourceGroups/${RG}/providers/Microsoft.KeyVault/vaults/${KV}`, { location: "eastus", properties: { sku: { family: "A", name: "standard" }, tenantId: "00000000-0000-0000-0000-000000000000", accessPolicies: [] } }, "2023-07-01");
+await dp("PUT", `/secrets/${SEC}`, { value: "s3cret-value" });
+await page.goto(UI + `#/keyvaults/${RG}/${KV}/secrets`);
+await page.getByText(SEC).first().waitFor({ timeout: 20000 });
+await page.getByRole("row", { name: new RegExp(SEC) }).getByRole("checkbox").check();
+const [dl] = await Promise.all([page.waitForEvent("download"), page.getByRole("button", { name: "Download Backup" }).click()]);
+const path = await dl.path();
+const blob = (await import("node:fs")).readFileSync(path, "utf8");
+check("downloaded backup blob is a Key Vault backup", blob.length > 20, blob.slice(0, 40));
+await dp("DELETE", `/secrets/${SEC}`);
+check("secret deleted", json(await dp("GET", `/secrets/${SEC}`)).error !== undefined);
+// the vault soft-deletes: purge so the restore does not hit the 409
+await dp("DELETE", `/deletedsecrets/${SEC}`).catch(() => {});
+await page.getByRole("button", { name: "Restore Backup" }).click();
+await page.getByRole("dialog").getByRole("textbox", { name: "Backup contents" }).fill(blob);
+await page.getByRole("dialog").getByRole("button", { name: "Restore", exact: true }).click();
+await page.waitForTimeout(1500);
+const got = json(await dp("GET", `/secrets/${SEC}`));
+check("Restore Backup brought the secret back with its value", got.value === "s3cret-value", JSON.stringify(got).slice(0, 100));
+check("no page errors", errors.length === 0, errors.join("|"));
+await browser.close();
+process.exit(bad ? 1 : 0);
