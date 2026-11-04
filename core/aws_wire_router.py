@@ -825,6 +825,10 @@ class AwsWireRouter:
                     _ctx.REQUEST_PROVIDER.reset(tok)
         if kind == "bucket":
             return bool(self.gcs.bucket_exists(args[0]))
+        if kind == "vpcconn":   # Serverless VPC Access connector: (project, region, name)
+            return "%s/%s/%s" % args in (getattr(self.gcp_compute, "vpc_connectors", None) or {})
+        if kind == "subnet":    # VPC subnetwork: (project, region, name)
+            return "%s/%s/%s" % args in (getattr(self.gcp_compute, "subnetworks", None) or {})
         return None
 
     def _run_topic_exists(self, topic_full):
