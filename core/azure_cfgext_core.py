@@ -35,6 +35,7 @@ COSMOS_SVC = "microsoft.documentdb/databaseaccounts/services"
 SBNS = "microsoft.servicebus/namespaces"
 SB_NETRULES = "microsoft.servicebus/namespaces/networkrulesets"
 APPCFG = "microsoft.appconfiguration/configurationstores"
+STORAGE = "microsoft.storage/storageaccounts"
 SQL_LABEL = "microsoft.sql/servers/databases/schemas/tables/columns/sensitivitylabels"
 SQL_RANKS = ("None", "Low", "Medium", "High", "Critical")
 APIM = "microsoft.apimanagement/service"
@@ -82,7 +83,7 @@ def _err(status: int, code: str, message: str) -> dict:
 
 def handles(full_type: str) -> bool:
     ft = full_type.lower()
-    return ft in (AKS, COSMOS, COSMOS_SVC, SBNS, SB_NETRULES, VNET, APIM_GW_API, APIM, SQL_LABEL) or ft.endswith("/providers/extensions")
+    return ft in (AKS, COSMOS, COSMOS_SVC, SBNS, SB_NETRULES, VNET, APIM_GW_API, APIM, SQL_LABEL, STORAGE) or ft.endswith("/providers/extensions")
 
 
 def _merged(existing, payload) -> dict:
@@ -148,6 +149,13 @@ def validate(state: dict, full_type: str, rid: str, payload: dict, existing: dic
         return _validate_apim_soft_deleted(state, rid, payload, existing)
     if ft == SQL_LABEL:
         return _validate_sql_label(state, rid, payload)
+    if ft == STORAGE:
+        bypass = (props.get("networkAcls") or {}).get("bypass")
+        if bypass is not None:
+            toks = [t.strip() for t in str(bypass).split(",") if t.strip()]
+            if not toks or any(t not in ("None", "AzureServices", "Logging", "Metrics") for t in toks) or ("None" in toks and len(toks) > 1):
+                return _err(400, "InvalidNetworkAclsBypass", "networkAcls.bypass must be None or a comma separated combination of AzureServices, Logging and Metrics.")
+        return None
     return None
 
 

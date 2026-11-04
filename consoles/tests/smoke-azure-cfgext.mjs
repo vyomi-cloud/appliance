@@ -156,6 +156,17 @@ try {
   check("label is an ARM child", json(await arm("GET", P("Sql", "servers", SS) + "/databases/db1/schemas/dbo/tables/Customer/columns/EmailAddress/sensitivityLabels/current", null, "2020-11-01-preview")).properties?.informationType === "Contact Info");
   await noNS("SQL data discovery");
 
+  // ── Storage networking exceptions
+  const SA = `cxsa${n}`;
+  await arm("PUT", P("Storage", "storageAccounts", SA), { location: "eastus", kind: "StorageV2", sku: { name: "Standard_LRS" } }, "2023-01-01");
+  await page.goto(UI + `#/storage/${RG}/${SA}/networking`);
+  await page.getByRole("button", { name: /Exceptions|Firewalls/ }).first().click().catch(() => {});
+  const ex = page.getByLabel("Allow read access to storage logging from any network");
+  if (await ex.count() === 0) { await page.getByRole("tab", { name: /Exceptions|Firewalls and virtual networks/ }).first().click().catch(() => {}); }
+  await ex.waitFor({ timeout: 10000 }).then(() => ex.check()).catch(() => {});
+  await page.waitForTimeout(1200);
+  check("storage bypass stored", /Logging/.test(json(await arm("GET", P("Storage", "storageAccounts", SA), null, "2023-01-01")).properties?.networkAcls?.bypass || ""));
+
   // ── App Configuration
   const A = `cxappcfg${n}`;
   await arm("PUT", P("AppConfiguration", "configurationStores", A), { location: "eastus", sku: { name: "standard" } }, "2024-05-01");

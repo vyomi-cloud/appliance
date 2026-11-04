@@ -153,6 +153,14 @@ def run():
     _check("gateway link needs api", put(ap + "/gateways/gw1/apis/nope", {}, AQ2)["status"] == 404)
     _check("gateway link created", put(ap + "/gateways/gw1/apis/echo", {}, AQ2)["status"] in (200, 201))
     _check("gateway apis listed", len(get(ap + "/gateways/gw1/apis", AQ2)["body"]["value"]) == 1)
+    # ── Storage trusted-services exceptions (networkAcls.bypass)
+    sa = f"{RG}/providers/Microsoft.Storage/storageAccounts/cxsa{1}"
+    SAQ = {"api-version": "2023-01-01"}
+    sbody = lambda byp: {"location": "eastus", "kind": "StorageV2", "sku": {"name": "Standard_LRS"}, "properties": {"networkAcls": {"defaultAction": "Deny", "bypass": byp}}}
+    _check("bypass token validated", put(sa, sbody("Everything"), SAQ)["status"] == 400)
+    _check("bypass None cannot combine", put(sa, sbody("None,Logging"), SAQ)["status"] == 400)
+    _check("bypass stored", put(sa, sbody("AzureServices, Logging"), SAQ)["status"] in (200, 201) and "Logging" in get(sa, SAQ)["body"]["properties"]["networkAcls"]["bypass"])
+
     # ── SQL Data Discovery & Classification labels
     SQ2 = {"api-version": "2020-11-01-preview"}
     sqs = f"{RG}/providers/Microsoft.Sql/servers/cxsql"

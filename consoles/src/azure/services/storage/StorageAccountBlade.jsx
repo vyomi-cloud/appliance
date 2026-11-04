@@ -768,7 +768,14 @@ function Networking({ a, reload }) {
               onClick={() => { patch({ networkAcls: { ...p.networkAcls, resourceAccessRules: [...rules, { tenantId: ri.tenantId || "00000000-0000-0000-0000-000000000000", resourceId: ri.resourceId.trim() }] } }, "Resource instance added."); setRi({ tenantId: "", resourceId: "" }); }}>Add</Button>
           </div>
         </CapabilityContainer>
-        <NotSimulatedContainer title="Exceptions" feature="Allow Azure services on the trusted services list to access this storage account" />
+        <CapabilityContainer id="azure.storage.exceptions" title="Exceptions">
+          {["AzureServices", "Logging", "Metrics"].map((k) => {
+            const cur = String(p.networkAcls?.bypass || "AzureServices").split(",").map((x) => x.trim()).filter((x) => x && x !== "None");
+            const label = { AzureServices: "Allow Azure services on the trusted services list to access this storage account", Logging: "Allow read access to storage logging from any network", Metrics: "Allow read access to storage metrics from any network" }[k];
+            return <Checkbox key={k} label={label} checked={cur.includes(k)} aria-label={label}
+              onChange={(_, d) => { const next = d.checked ? [...new Set([...cur, k])] : cur.filter((x) => x !== k); patch({ networkAcls: { ...p.networkAcls, bypass: next.length ? next.join(",") : "None" } }, "Exceptions were saved."); }} />;
+          })}
+        </CapabilityContainer>
       </div>}
       {tab === "private" && <PrivateEndpointConnectionsPanel target={{ id: a.id, name: a.name, type: "Microsoft.Storage/storageAccounts", location: a.location }} />}
       {tab === "advanced" && <div style={{ display: "flex", flexDirection: "column", gap: 16, marginTop: 12 }}>

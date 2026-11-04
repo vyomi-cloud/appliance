@@ -298,5 +298,6 @@
   "level": { "nano": "limited", "offline": "limited" },
   "limitations": ["largeFileSharesState is validated (Standard LRS/ZRS/GRS/GZRS only, one-way) and raises the share quota ceiling to 102400 GiB; isNfsV3Enabled needs hierarchical namespace, secure transfer off and is fixed at creation; isSftpEnabled needs hierarchical namespace. NFS v3 / SFTP protocol servers are NOT served: the flags are validated and reported, not enforced on a data plane."],
   "tests": ["tests/conformance/test_azure_files_core.py"]
- }
+ },
+ "azure.storage.exceptions": {"title": "Networking exceptions (networkAcls.bypass)", "level": {"nano": "config_only", "offline": "config_only"}, "limitations": ["The bypass list (AzureServices, Logging, Metrics) is validated and stored on the account. Trusted Azure services do not run inside Vyomi, so there is nothing to allow or deny through it."], "tests": ["tests/conformance/test_azure_cfgext_core.py"]}
 }
