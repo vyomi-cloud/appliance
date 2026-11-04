@@ -13,6 +13,7 @@ import BrowseGrid from "../../kit/BrowseGrid.jsx";
 import ResourceBlade from "../../kit/ResourceBlade.jsx";
 import { Essentials, ErrorBar, Glyph, Loading, NotSimulatedContainer } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
+import { SqlVnetRules } from "../../kit/NetworkRules.jsx";
 import { PrivateEndpointConnectionsPanel, PeWizardSection, usePeWizard } from "../../kit/PrivateEndpoints.jsx";
 import * as api from "./api.js";
 
@@ -106,7 +107,7 @@ function Networking({ a }) {
               <Radio value="Disable" label="Disable" /><Radio value="Selected networks" label="Selected networks" />
             </RadioGroup>
           </CapabilityContainer>
-          <NotSimulatedContainer title="Virtual networks" feature="Virtual network rules" />
+          <SqlVnetRules a={a} />
           <section className="vy-section"><h3>Firewall rules</h3>
             <BrowseGrid
               resourceName="firewall rule" rowKey={(r) => r.name} filterPlaceholder="Filter for any field..."

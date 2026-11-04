@@ -6,6 +6,19 @@
   "limitations": [],
   "tests": ["tests/conformance/test_azure_arm_core.py"]
  },
+ "azure.sql.vnet_rules": {
+  "title": "Virtual network rules",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Microsoft.Sql/servers/virtualNetworkRules is a real ARM child resource: the subnet must exist and carry the Microsoft.Sql service endpoint (enabled for you from the console). The rule is not enforced against SQL connections: there is no network path to evaluate it against."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_netsvc_core.py"
+  ]
+ },
  "azure.sql.database.crud": {
   "title": "Databases (create, get, list, delete) over ARM",
   "level": { "nano": "full", "offline": "full" },

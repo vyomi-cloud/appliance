@@ -37,6 +37,8 @@ POLICY_RCG = "microsoft.network/firewallpolicies/rulecollectiongroups"
 DDOS = "microsoft.network/ddosprotectionplans"
 FLOWLOG = "microsoft.network/networkwatchers/flowlogs"
 VNET = "microsoft.network/virtualnetworks"
+STORAGE = "microsoft.storage/storageaccounts"
+SQL_VNET_RULE = "microsoft.sql/servers/virtualnetworkrules"
 PEC_SUFFIX = "/privateendpointconnections"
 
 # target resource type -> valid private-link sub-resources (groupIds) and DNS zone suffix per group
@@ -78,7 +80,7 @@ def _err(status: int, code: str, message: str) -> dict:
 
 def handles(full_type: str) -> bool:
     ft = full_type.lower()
-    return ft in (PE, BASTION, FIREWALL, POLICY, POLICY_RCG, DDOS, FLOWLOG, VNET) or ft.endswith(PEC_SUFFIX)
+    return ft in (PE, BASTION, FIREWALL, POLICY, POLICY_RCG, DDOS, FLOWLOG, VNET, STORAGE, SQL_VNET_RULE) or ft.endswith(PEC_SUFFIX)
 
 
 # ── helpers ────────────────────────────────────────────────────────────────────────────
@@ -208,6 +210,17 @@ def validate(state: dict, full_type: str, rid: str, payload: dict, existing: dic
         return _validate_flowlog(state, rid, payload, props, existing)
     if ft == VNET:
         return _validate_vnet_ddos(state, rid, props)
+    if ft == STORAGE:
+        acls = props.get("networkAcls") or {}
+        return _validate_ip_rules(acls.get("ipRules")) or _validate_vnet_rules(state, acls.get("virtualNetworkRules"), "Microsoft.Storage", id_key="id")
+    if ft == SQL_VNET_RULE:
+        sid = props.get("virtualNetworkSubnetId")
+        if not sid:
+            return _err(400, "InvalidVirtualNetworkRule", "properties.virtualNetworkSubnetId is required.")
+        parent = rid.rsplit("/virtualNetworkRules/", 1)[0]
+        if state.get(parent.lower()) is None:
+            return _err(404, "ParentResourceNotFound", f"The SQL server {parent} was not found.")
+        return _validate_vnet_rules(state, [{"id": sid}], "Microsoft.Sql", id_key="id")
     if ft.endswith(PEC_SUFFIX):
         if existing is None:
             return _err(404, "ResourceNotFound", "Private endpoint connections are created by a private endpoint; there is nothing at this id to approve or reject.")
@@ -400,6 +413,49 @@ def _validate_vnet_ddos(state, rid, props):
         plan = state.get(plan_id.lower())
         if plan is None or (plan.get("_type") or "").lower() != DDOS:
             return _err(400, "InvalidResourceReference", f"Resource {plan_id} referenced by resource {rid} was not found.")
+    return None
+
+
+def _validate_ip_rules(rules):
+    seen = set()
+    for r in rules or []:
+        v = str((r or {}).get("value") or "")
+        try:
+            net = ipaddress.ip_network(v, strict=False)
+        except ValueError:
+            return _err(400, "InvalidIpRule", f"The IP rule '{v}' is not a valid IPv4 address or CIDR range.")
+        if net.version != 4:
+            return _err(400, "InvalidIpRule", "Only IPv4 address ranges are supported in storage IP rules.")
+        if net.prefixlen in (31, 32) and "/" in v:
+            return _err(400, "InvalidIpRule", f"The IP rule '{v}' is not allowed: /31 and /32 ranges are not supported (use the plain address).")
+        if net.is_private:
+            return _err(400, "InvalidIpRule", f"The IP rule '{v}' is in a private range (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16), which storage firewall rules do not accept; use a virtual network rule.")
+        if v in seen:
+            return _err(400, "DuplicateIpRule", f"The IP rule '{v}' appears more than once.")
+        seen.add(v)
+    return None
+
+
+def _validate_vnet_rules(state, rules, service, id_key="id"):
+    """Each rule's subnet must exist and carry the matching service endpoint (the portal enables it for you; ARM rejects without)."""
+    seen = set()
+    for r in rules or []:
+        sid = str((r or {}).get(id_key) or "")
+        sn, _v = _subnet(state, sid) if sid else (None, None)
+        if sn is None:
+            return _err(400, "InvalidVirtualNetworkRule", f"The subnet {sid or '(missing id)'} of the virtual network rule was not found.")
+        if sid.lower() in seen:
+            return _err(400, "DuplicateVirtualNetworkRule", f"The subnet {sid} appears more than once in virtualNetworkRules.")
+        seen.add(sid.lower())
+        rec = state.get(sid.lower()) or {}
+        eps = (rec.get("properties") or {}).get("serviceEndpoints")
+        if eps is None:
+            vnet_id, _, name = sid.lower().rpartition("/subnets/")
+            for sub in ((state.get(vnet_id) or {}).get("properties") or {}).get("subnets") or []:
+                if str(sub.get("name", "")).lower() == name:
+                    eps = (sub.get("properties") or {}).get("serviceEndpoints")
+        if not any(str(e.get("service", "")).lower() == service.lower() for e in eps or []):
+            return _err(400, "SubnetsHaveNoServiceEndpointsConfigured", f"Subnet {sn['name']} does not have a '{service}' service endpoint configured; add the service endpoint on the subnet first.")
     return None
 
 

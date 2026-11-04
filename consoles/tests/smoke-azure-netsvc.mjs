@@ -96,6 +96,21 @@ try {
   check("plan tracks the protected vnet", (plan.properties?.virtualNetworks || []).length === 1);
   await noNS("vnet DDoS");
 
+  // ── Storage virtual network + IP rules ──
+  await NV("PUT", net(`virtualNetworks/${V}/subnets/default`), { properties: { addressPrefix: "10.7.0.0/24" } });
+  await page.goto(UI + `#/storage/${RG}/${SA}/networking`);
+  await page.getByRole("button", { name: "Add existing virtual network" }).click();
+  await page.getByLabel("Virtual network subnet").selectOption({ label: `${V}/default` });
+  await page.getByRole("button", { name: /^Add \(enables/ }).click();
+  await page.getByRole("cell", { name: V, exact: true }).waitFor({ timeout: 10000 });
+  const acc = json(await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.Storage/storageAccounts/${SA}`));
+  check("storage vnet rule saved + service endpoint auto-enabled", (acc.properties?.networkAcls?.virtualNetworkRules || []).length === 1
+    && (json(await NV("GET", net(`virtualNetworks/${V}/subnets/default`))).properties?.serviceEndpoints || []).some((e) => e.service === "Microsoft.Storage"));
+  await page.getByLabel("IP address or CIDR").fill("20.1.2.0/24");
+  await page.getByRole("button", { name: "Add IP range" }).click();
+  await page.getByRole("cell", { name: "20.1.2.0/24", exact: true }).waitFor({ timeout: 10000 });
+  await noNS("storage Public access rules", ["trusted services"]);
+
   // ── Target-side Private endpoint connections tab (storage) ──
   await NV("PUT", net("privateEndpoints/pem" + n), { location: "eastus", properties: { subnet: { id: `${vid}/subnets/default` },
     manualPrivateLinkServiceConnections: [{ name: "c", properties: { privateLinkServiceId: `/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Storage/storageAccounts/${SA}`, groupIds: ["file"], requestMessage: "pls" } }] } });

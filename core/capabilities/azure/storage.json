@@ -6,6 +6,19 @@
   "limitations": [],
   "tests": ["tests/conformance/test_azure_arm_core.py"]
  },
+ "azure.storage.vnet_rules": {
+  "title": "Virtual network rules and IP firewall rules",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "networkAcls.virtualNetworkRules and ipRules are real ARM state with real validation: each subnet must exist and carry the Microsoft.Storage service endpoint (the portal enables it for you), IP rules must be public IPv4 addresses / CIDRs (no private ranges, no /31 or /32 CIDR, no duplicates). The rules are not enforced against Blob/Queue/Table data-plane requests: there is no source-network path to evaluate them against."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_netsvc_core.py"
+  ]
+ },
  "azure.storage.account.tags": {
   "title": "Tags",
   "level": { "nano": "full", "offline": "full" },

@@ -117,6 +117,24 @@ def run():
     _check("plan tracks attached vnet", [v["id"].lower() for v in plan["properties"]["virtualNetworks"]] == [vid.lower()])
     _check("in-use plan can't be deleted", dele(f"{N}/ddosProtectionPlans/plan1")["body"]["error"]["code"] == "InUseDdosProtectionPlanCannotBeDeleted")
 
+    # ── service-endpoint vnet rules (storage + SQL)
+    sidn = f"{vid}/subnets/default"
+    r = put(sid, {"location": "eastus", "properties": {"networkAcls": {"defaultAction": "Deny", "virtualNetworkRules": [{"id": sidn}]}}}, {"api-version": "2023-01-01"})
+    _check("storage vnet rule needs a Microsoft.Storage service endpoint", r["status"] == 400 and r["body"]["error"]["code"] == "SubnetsHaveNoServiceEndpointsConfigured")
+    put(f"{vid}/subnets/default", {"properties": {"addressPrefix": "10.0.0.0/24", "serviceEndpoints": [{"service": "Microsoft.Storage"}, {"service": "Microsoft.Sql"}]}})
+    r = put(sid, {"location": "eastus", "properties": {"networkAcls": {"defaultAction": "Deny", "virtualNetworkRules": [{"id": sidn}]}}}, {"api-version": "2023-01-01"})
+    _check("storage vnet rule accepted once the endpoint exists", r["status"] in (200, 201))
+    for bad in ("10.1.2.3", "8.8.8.0/32", "not-an-ip"):
+        r = put(sid, {"location": "eastus", "properties": {"networkAcls": {"ipRules": [{"value": bad}]}}}, {"api-version": "2023-01-01"})
+        _check(f"IP rule {bad} rejected", r["status"] == 400)
+    r = put(sid, {"location": "eastus", "properties": {"networkAcls": {"ipRules": [{"value": "20.1.2.0/24"}, {"value": "8.8.4.4"}]}}}, {"api-version": "2023-01-01"})
+    _check("valid public IP rules accepted", r["status"] in (200, 201))
+    put(f"{RG}/providers/Microsoft.Sql/servers/netsql", {"location": "eastus", "properties": {"administratorLogin": "a"}}, {"api-version": "2023-05-01-preview"})
+    r = put(f"{RG}/providers/Microsoft.Sql/servers/netsql/virtualNetworkRules/r1", {"properties": {"virtualNetworkSubnetId": f"{vid}/subnets/nope"}}, {"api-version": "2023-05-01-preview"})
+    _check("sql rule: missing subnet rejected", r["status"] == 400)
+    r = put(f"{RG}/providers/Microsoft.Sql/servers/netsql/virtualNetworkRules/r1", {"properties": {"virtualNetworkSubnetId": sidn}}, {"api-version": "2023-05-01-preview"})
+    _check("sql vnet rule created", r["status"] in (200, 201))
+
     # ── Flow logs
     nsg = put(f"{N}/networkSecurityGroups/nsg1", {"location": "eastus"})
     nsg2 = put(f"{N}/networkSecurityGroups/nsg-west", {"location": "westus"})
