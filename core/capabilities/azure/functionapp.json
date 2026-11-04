@@ -362,13 +362,40 @@
   "api": ["sites/config/web CreateOrUpdate"],
   "tests": ["tests/conformance/test_azure_webapp_ops.py"]
  },
- "azure.functionapp.advancedtools": {
-  "title": "Advanced Tools (Kudu / SCM site)",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": [
-   "Requires a live SSH/console session attached to a persistently-running compute host. Vyomi executes each function invoke as a one-shot sandboxed call with no persistent OS process behind it to attach a shell, debugger or process explorer to."
-  ],
-  "api": []
+ "azure.functionapp.kudu": {
+  "title": "Advanced Tools (Kudu): environment, settings, deployments, tool links",
+  "level": {"nano": "limited", "offline": "limited"},
+  "limitations": ["Served as an ARM extension under sites/{site}/kudu/api, not as a separate https://{site}.scm.azurewebsites.net host, so the real Kudu dashboard UI and its Git/zip-deploy endpoints are not served there.", "Settings (SCM_*) are stored and read back; they do not change Kudu behaviour."],
+  "api": ["sites/kudu/api/environment", "sites/kudu/api/settings", "sites/kudu/api/deployments"],
+  "tests": ["tests/conformance/test_azure_kudu_diagnose.py"]
+ },
+ "azure.functionapp.console": {
+  "title": "Console (Kudu command console over the function app's files and app settings)",
+  "level": {"nano": "limited", "offline": "limited"},
+  "limitations": ["No operating-system process sits behind the simulated function app, so programs cannot be executed; the interpreter covers file, environment and process-listing commands only (pwd cd ls cat echo head tail wc grep mkdir touch rm cp mv env ps tree find, pipes, > and >>). Writes are real edits to the app's file store; the sandboxed function code is not hot-reloaded."],
+  "api": ["sites/kudu/api/command"],
+  "tests": ["tests/conformance/test_azure_kudu_diagnose.py"]
+ },
+ "azure.functionapp.appeditor": {
+  "title": "App Service Editor (edit the function app's files)",
+  "level": {"nano": "limited", "offline": "limited"},
+  "limitations": ["Edits the app's virtual file system (function sources, host.json, logs); edits persist but the sandboxed runtime does not hot-swap to them. No debugging or Git integration."],
+  "api": ["sites/kudu/api/vfs"],
+  "tests": ["tests/conformance/test_azure_kudu_diagnose.py"]
+ },
+ "azure.functionapp.processes": {
+  "title": "Process explorer (processes of the function host)",
+  "level": {"nano": "limited", "offline": "limited"},
+  "limitations": ["The process table is MODELLED from the app's real state (host worker per instance, the Kudu process); CPU time is the sum of measured invocation durations. It is not an OS process table: no kill/dump/profile actions."],
+  "api": ["sites/kudu/api/processes"],
+  "tests": ["tests/conformance/test_azure_kudu_diagnose.py"]
+ },
+ "azure.functionapp.logstream": {
+  "title": "Log stream (live tail of the function app's logs)",
+  "level": {"nano": "limited", "offline": "limited"},
+  "limitations": ["Tails real recorded lines (function invocations, deployments, lifecycle and console actions) by polling every 2 seconds; there is no always-on stdout because the app runs no persistent process."],
+  "api": ["sites/kudu/api/logstream"],
+  "tests": ["tests/conformance/test_azure_kudu_diagnose.py"]
  },
  "azure.functionapp.serviceconnector": {
   "title": "Service Connector",

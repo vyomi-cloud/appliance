@@ -1,0 +1,39 @@
+/* Smoke: Function App Console / Advanced Tools / App Service Editor / Process explorer / Log stream (Kudu surface shared with the web app).
+ * BASE=http://127.0.0.1:9092 node consoles/tests/smoke-azure-functionapp-kudu.mjs */
+import { createRequire } from "node:module";
+const require = createRequire(import.meta.url);
+const pw = require(process.env.PW || "playwright");
+const BASE = process.env.BASE || "http://127.0.0.1:9092";
+const UI = `${BASE}/v4/azure/`, WIRE = `${BASE}/_wire`;
+const SUB = "00000000-0000-0000-0000-cloudlearn01";
+const n = Date.now() % 100000, RG = `fk-rg-${n}`, APP = `fk${n}`;
+let pass = 0, fail = 0;
+const ok = (name, c, d = "") => { c ? pass++ : fail++; console.log(`[${c ? "PASS" : "FAIL"}] ${name}${c ? "" : " " + d}`); };
+let pg;
+const arm = (m, path, body, v = "2023-12-01") => pg.evaluate(async ([m, url, body]) => {
+  const r = await fetch(url, { method: m, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
+  const t = await r.text(); return { status: r.status, body: t ? JSON.parse(t) : null };
+}, [m, `${WIRE}/subscriptions/${SUB}${path}${path.includes("?") ? "&" : "?"}api-version=${v}`, body]);
+const site = `/resourceGroups/${RG}/providers/Microsoft.Web/sites/${APP}`;
+const b = await pw.chromium.launch(); pg = await (await b.newContext({ viewport: { width: 1400, height: 900 } })).newPage();
+await pg.goto(UI, { waitUntil: "networkidle" });
+await arm("PUT", `/resourcegroups/${RG}`, { location: "eastus" }, "2021-04-01");
+ok("create function app", [200, 201].includes((await arm("PUT", site, { location: "eastus", kind: "functionapp,linux", properties: { reserved: true } })).status));
+await arm("PUT", `${site}/config/appsettings`, { properties: { GREETING: "hello-fn" } });
+const go = async (panel) => { await pg.goto(`${UI}#/`); await pg.waitForTimeout(200); await pg.goto(`${UI}#/functionapp/${RG}/${APP}/${panel}`); await pg.waitForTimeout(1500); };
+const NS = async () => await pg.locator("[data-vyomi-not-simulated]").count();
+await go("console");
+ok("console is real", (await NS()) === 0);
+const input = pg.getByLabel("Console input");
+await input.fill("printenv GREETING"); await input.press("Enter"); await pg.waitForTimeout(700);
+ok("console shows app setting", (await pg.locator("[data-testid=kudu-console]").innerText()).includes("hello-fn"));
+await go("app-service-editor");
+ok("editor not a gap", (await NS()) === 0 && (await pg.locator("[data-testid=editor-tree]").count()) > 0);
+await go("process-explorer");
+ok("processes table", (await NS()) === 0 && (await pg.getByRole("table", { name: "Processes" }).count()) === 1);
+await go("advanced-tools");
+const nsText = await pg.locator("[data-vyomi-not-simulated]").allInnerTexts(); ok("advanced tools not a gap", nsText.length === 0, JSON.stringify(nsText).slice(0, 300));
+await go("log-stream");
+ok("log stream not a gap", (await NS()) === 0);
+await b.close();
+console.log(`${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

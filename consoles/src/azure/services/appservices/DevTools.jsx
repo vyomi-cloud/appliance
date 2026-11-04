@@ -19,7 +19,7 @@ const vfsUrl = (p) => "vfs" + p.replace(/^\/home/, "").split("/").map((s) => enc
 const TITLE = (name, t) => <div className="vy-panel-title">{name} | {t}</div>;
 
 // ── Console ──────────────────────────────────────────────────────────────────────────────
-export function Console({ a, rg, name }) {
+export function Console({ a, rg, name, cap = "azure.appservices.webapp" }) {
   const [cwd, setCwd] = useState("/home");
   const [lines, setLines] = useState([{ k: "sys", t: `Vyomi Kudu console for ${name}. Type "help" for the supported commands (this is not an OS shell).` }]);
   const [cmd, setCmd] = useState("");
@@ -49,7 +49,7 @@ export function Console({ a, rg, name }) {
   return (
     <>
       {TITLE(name, "Console")}
-      <CapabilityContainer id="azure.appservices.webapp.console" title="Console">
+      <CapabilityContainer id={`${cap}.console`} title="Console">
         <div data-testid="kudu-console" style={{ background: "#1e1e1e", color: "#d4d4d4", fontFamily: "Consolas, monospace", fontSize: 13, padding: 12, height: 360, overflow: "auto", borderRadius: 2 }}>
           {lines.map((l, i) => <pre key={i} style={{ margin: 0, whiteSpace: "pre-wrap", color: l.k === "err" ? "#f48771" : l.k === "cmd" ? "#9cdcfe" : l.k === "sys" ? "#6a9955" : undefined }}>{l.t}</pre>)}
           <div style={{ display: "flex", gap: 6 }}>
@@ -65,7 +65,8 @@ export function Console({ a, rg, name }) {
 }
 
 // ── Advanced Tools (Kudu dashboard) ───────────────────────────────────────────────────────
-export function AdvancedTools({ a, rg, name }) {
+export function AdvancedTools({ a, rg, name, cap = "azure.appservices.webapp", base = "appservices", links }) {
+  const L = links || { console: "console", proc: "processexplorer", log: "logstream", ext: "extensions", editor: "appeditor" };
   const notify = useNotify();
   const [tab, setTab] = useState("environment");
   const env = useAsync(() => call("GET", rg, name, "environment"), [rg, name]);
@@ -79,7 +80,7 @@ export function AdvancedTools({ a, rg, name }) {
   return (
     <>
       {TITLE(name, "Advanced Tools")}
-      <CapabilityContainer id="azure.appservices.webapp.kudu" title="Kudu">
+      <CapabilityContainer id={`${cap}.kudu`} title="Kudu">
         <p style={{ fontSize: 13 }}>Kudu is the engine behind Git deployments, file browsing and diagnostics. Scm site: <code>{name}.scm.azurewebsites.net</code> (served here at <code>…/sites/{name}/kudu/api</code>).</p>
         <TabList selectedValue={tab} onTabSelect={(_, d) => setTab(d.value)} style={{ marginBottom: 8 }}>
           <Tab value="environment">Environment</Tab><Tab value="settings">Settings</Tab><Tab value="deployments">Deployments</Tab><Tab value="tools">Tools</Tab>
@@ -107,11 +108,11 @@ export function AdvancedTools({ a, rg, name }) {
               : <tr><td colSpan={5} className="vy-muted">No deployments yet. Configure Deployment Center and push or sync to create one.</td></tr>}</tbody></table>)}
         {tab === "tools" && (
           <ul style={{ fontSize: 13 }}>
-            <li><a href={`#/appservices/${rg}/${name}/console`}>Debug console</a> — browse and run commands over the site's files.</li>
-            <li><a href={`#/appservices/${rg}/${name}/processexplorer`}>Process explorer</a></li>
-            <li><a href={`#/appservices/${rg}/${name}/logstream`}>Log stream</a></li>
-            <li><a href={`#/appservices/${rg}/${name}/extensions`}>Site extensions</a></li>
-            <li><a href={`#/appservices/${rg}/${name}/appeditor`}>App Service Editor</a></li>
+            <li><a href={`#/${base}/${rg}/${name}/${L.console}`}>Debug console</a> — browse and run commands over the site's files.</li>
+            <li><a href={`#/${base}/${rg}/${name}/${L.proc}`}>Process explorer</a></li>
+            <li><a href={`#/${base}/${rg}/${name}/${L.log}`}>Log stream</a></li>
+            <li><a href={`#/${base}/${rg}/${name}/${L.ext}`}>Site extensions</a></li>
+            <li><a href={`#/${base}/${rg}/${name}/${L.editor}`}>App Service Editor</a></li>
           </ul>)}
       </CapabilityContainer>
     </>
@@ -119,7 +120,7 @@ export function AdvancedTools({ a, rg, name }) {
 }
 
 // ── App Service Editor ────────────────────────────────────────────────────────────────────
-export function AppEditor({ a, rg, name }) {
+export function AppEditor({ a, rg, name, cap = "azure.appservices.webapp" }) {
   const notify = useNotify();
   const [dir, setDir] = useState("/home/site/wwwroot");
   const [file, setFile] = useState(null);
@@ -150,7 +151,7 @@ export function AppEditor({ a, rg, name }) {
   return (
     <>
       {TITLE(name, "App Service Editor (Preview)")}
-      <CapabilityContainer id="azure.appservices.webapp.appeditor" title="App Service Editor">
+      <CapabilityContainer id={`${cap}.appeditor`} title="App Service Editor">
         <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
           <Button size="small" icon={<Add20Regular />} onClick={newFile}>New file</Button>
           <Button size="small" icon={<FolderAdd20Regular />} onClick={newDir}>New folder</Button>
@@ -179,12 +180,12 @@ export function AppEditor({ a, rg, name }) {
 }
 
 // ── Process explorer ──────────────────────────────────────────────────────────────────────
-export function ProcessExplorer({ a, rg, name }) {
+export function ProcessExplorer({ a, rg, name, cap = "azure.appservices.webapp" }) {
   const { data, loading, error, reload } = useAsync(() => call("GET", rg, name, "processes"), [rg, name]);
   return (
     <>
       {TITLE(name, "Process explorer")}
-      <CapabilityContainer id="azure.appservices.webapp.processes" title="Processes" actions={<Button size="small" icon={<ArrowClockwise20Regular />} onClick={reload}>Refresh</Button>}>
+      <CapabilityContainer id={`${cap}.processes`} title="Processes" actions={<Button size="small" icon={<ArrowClockwise20Regular />} onClick={reload}>Refresh</Button>}>
         <ErrorBar error={error} />
         {data?.note && <InfoBar>{data.note}</InfoBar>}
         {loading && !data ? <Loading /> : (
@@ -197,7 +198,7 @@ export function ProcessExplorer({ a, rg, name }) {
 }
 
 // ── Log stream ────────────────────────────────────────────────────────────────────────────
-export function LogStream({ a, rg, name }) {
+export function LogStream({ a, rg, name, cap = "azure.appservices.webapp" }) {
   const [type, setType] = useState("all");
   const [on, setOn] = useState(true);
   const [lines, setLines] = useState([]);
@@ -222,7 +223,7 @@ export function LogStream({ a, rg, name }) {
   return (
     <>
       {TITLE(name, "Log stream")}
-      <CapabilityContainer id="azure.appservices.webapp.logstream" title="Log stream"
+      <CapabilityContainer id={`${cap}.logstream`} title="Log stream"
         actions={<Button size="small" icon={on ? <Pause20Regular /> : <Play20Regular />} onClick={() => setOn(!on)}>{on ? "Pause" : "Start"}</Button>}>
         <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
           <Select value={type} onChange={(_, d) => setType(d.value)} aria-label="Log type"><option value="all">All logs</option><option value="Application">Application logs</option><option value="Platform">Platform logs</option></Select>
@@ -238,7 +239,7 @@ export function LogStream({ a, rg, name }) {
 }
 
 // ── Extensions ────────────────────────────────────────────────────────────────────────────
-export function Extensions({ a, rg, name }) {
+export function Extensions({ a, rg, name, cap = "azure.appservices.webapp" }) {
   const notify = useNotify();
   const [scope, setScope] = useState("installed");
   const { data, loading, error, reload } = useAsync(() => call("GET", rg, name, "siteextensions", { query: { scope } }), [rg, name, scope]);
@@ -249,7 +250,7 @@ export function Extensions({ a, rg, name }) {
   return (
     <>
       {TITLE(name, "Extensions")}
-      <CapabilityContainer id="azure.appservices.webapp.extensions" title="Extensions">
+      <CapabilityContainer id={`${cap}.extensions`} title="Extensions">
         <TabList selectedValue={scope} onTabSelect={(_, d) => setScope(d.value)} style={{ marginBottom: 8 }}>
           <Tab value="installed">Installed extensions</Tab><Tab value="gallery">Gallery</Tab>
         </TabList>

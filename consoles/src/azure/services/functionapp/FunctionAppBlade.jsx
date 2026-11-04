@@ -28,6 +28,7 @@ import { ErrorBar, Essentials, fmtDate, Glyph, InfoBar, KV, Loading, NotSimulate
 import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 import * as ops from "../appservices/AppOps.jsx";
+import * as dev from "../appservices/DevTools.jsx";
 import { Configuration as WebConfiguration } from "../appservices/WebAppBlade.jsx";
 import * as api from "./api.js";
 import { ResourceRecommendations } from "../defender/Pages.jsx";
@@ -57,7 +58,7 @@ export const MENU = [
     { id: "networking", label: "Networking" }, { id: "scale-and-concurrency", label: "Scale and concurrency" },
     { id: "service-connector", label: "Service Connector" }, { id: "locks", label: "Locks" },
   ] },
-  { group: "Development Tools", items: [{ id: "advanced-tools", label: "Advanced Tools" }, { id: "extensions", label: "Extensions" }] },
+  { group: "Development Tools", items: [{ id: "console", label: "Console" }, { id: "advanced-tools", label: "Advanced Tools" }, { id: "app-service-editor", label: "App Service Editor" }, { id: "process-explorer", label: "Process explorer" }, { id: "extensions", label: "Extensions" }] },
   { group: "API", items: [{ id: "api-management", label: "API Management" }, { id: "cors", label: "CORS" }] },
   { group: "Monitoring", items: [
     { id: "alerts", label: "Alerts" }, { id: "metrics", label: "Metrics" }, { id: "logs", label: "Logs" },
@@ -74,7 +75,6 @@ const LABEL = Object.fromEntries(MENU.flatMap((m) => (m.group ? m.items : [m])).
 // real human staff) — CapabilityContainer renders their honest Not-simulated panel itself from
 // the registry's limitations text.
 const GAPS = {
-  "advanced-tools": "azure.functionapp.advancedtools",
   "extensions": "azure.functionapp.extensions",
   "tasks": "azure.functionapp.tasks",
 };
@@ -116,7 +116,11 @@ export default function FunctionAppBlade({ params }) {
       "diagnostic-settings": () => <DiagnosticSettings a={a} />,
       "metrics": () => <Metrics a={a} />,
       "logs": () => <LogsPanel a={a} />,
-      "log-stream": () => <LogStream a={a} />,
+      "log-stream": () => <dev.LogStream a={a} rg={rg} name={name} cap="azure.functionapp" />,
+      "console": () => <dev.Console a={a} rg={rg} name={name} cap="azure.functionapp" />,
+      "advanced-tools": () => <dev.AdvancedTools a={a} rg={rg} name={name} cap="azure.functionapp" base="functionapp" links={{ console: "console", proc: "process-explorer", log: "log-stream", ext: "extensions", editor: "app-service-editor" }} />,
+      "app-service-editor": () => <dev.AppEditor a={a} rg={rg} name={name} cap="azure.functionapp" />,
+      "process-explorer": () => <dev.ProcessExplorer a={a} rg={rg} name={name} cap="azure.functionapp" />,
       "events-preview": () => <EventsPreview a={a} />,
       "alerts": () => <Alerts a={a} />,
       "health-check": () => <HealthCheckPanel a={a} reload={reload} />,
