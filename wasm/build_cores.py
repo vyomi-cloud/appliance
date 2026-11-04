@@ -53,7 +53,7 @@ CORES = [
     "gcp_asset_query_core.py",                      # GCP: Cloud Asset Inventory search query language (used by gcp_iam_core)
     "gcp_wif_core.py",                              # GCP: workload/workforce identity federation (providers, mapping, STS exchange)
     "gcp_trace_core.py",                            # GCP: Cloud Trace spans, Trace scopes, Log scopes
-    "gcp_apphub_core.py", "gcp_clouddeploy_core.py", "gcp_cloudbuild_core.py",                           # GCP: App Hub applications (Application monitoring)
+    "gcp_apphub_core.py", "gcp_clouddeploy_core.py", "gcp_backupdr_core.py", "gcp_cloudbuild_core.py",                           # GCP: App Hub applications (Application monitoring)
     "gcp_osconfig_core.py",                         # GCP: VM Manager (OS Config patch jobs/deployments, OS policy assignments, VM extension policies)
     "gcp_hybrid_core.py",                           # GCP: BYOIP prefixes + Interconnect / VLAN attachments (control plane)
     "function_shims.py",                            # flask / functions_framework / azure.functions shims + request plumbing for function code

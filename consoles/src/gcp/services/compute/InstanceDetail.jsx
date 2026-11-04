@@ -20,7 +20,7 @@ import NanoVmPanel, { isNano, pendingAttr, useNanoVmRefresh } from "../../../com
 import { RecommendationsTable } from "./Ext.jsx";
 import OpsAgentMetrics from "./OpsAgentMetrics.jsx";
 
-const TABS = ["Details", "Observability", "Serial port output", "OS info", "Screenshot"];
+const TABS = ["Details", "Observability", "Serial port output", "SSH keys", "OS info", "Screenshot"];
 
 /** Real recorded activity for this instance: status duration (from its own real lifecycle
  * timestamps) + the operations the core actually performed, oldest action last. No Cloud
@@ -82,6 +82,73 @@ function SerialPortPanel({ zone, name }) {
           {data?.contents || "(no output yet)"}
         </Box>
       )}
+    </Stack>
+  );
+}
+
+/** Real instance + project `ssh-keys` metadata (validated USERNAME:KEY lines, SHA256 fingerprints). Saving rewrites the
+ * instance metadata item; offline the guest agent step authorizes each key inside the running container. */
+function SshKeysPanel({ zone, name, onSaved }) {
+  const notify = useNotify();
+  const { data, loading, error, reload } = useAsync(() => api.getInstanceSshKeys(zone, name), [zone, name]);
+  const [line, setLine] = useState("");
+  const [busy, setBusy] = useState(false);
+  const raw = (data?.instanceKeys || []).map((k) => `${k.user}:${k.key}`);
+  const save = async (lines, block) => {
+    setBusy(true);
+    try {
+      const r = await api.setInstanceSshKeys(zone, name, lines.join("\n"), block);
+      notify.success(r?.guest ? `Saved; ${r.guest.delivered}/${r.guest.keys} key(s) authorized in the guest` : "SSH keys saved");
+      setLine(""); reload(); onSaved?.();
+    } catch (e) { notify.error(e.message); } finally { setBusy(false); }
+  };
+  const row = (k) => (
+    <tr key={`${k.source}-${k.user}-${k.fingerprint}`}>
+      <td style={{ padding: 6 }}>{k.user}</td><td style={{ padding: 6 }}>{k.type}</td>
+      <td style={{ padding: 6, fontFamily: "monospace", fontSize: 12 }}>{k.fingerprint}</td><td style={{ padding: 6 }}>{k.source === "project" ? "Project metadata" : "Instance metadata"}</td>
+      <td style={{ padding: 6 }}>{k.source === "instance" && <Button size="small" color="error" disabled={busy} onClick={() => save(raw.filter((r) => r !== `${k.user}:${k.key}`))}>Remove</Button>}</td>
+    </tr>
+  );
+  return (
+    <Stack spacing={1.5}>
+      {error && <ErrorAlert error={error} title="Failed to load SSH keys" />}
+      {loading && !data ? <CircularProgress size={20} /> : (
+        <Box sx={{ overflowX: "auto", ...SECTION_TABLE_BLEED }}>
+          <table style={{ width: "100%", fontSize: 14, borderCollapse: "collapse" }}>
+            <thead><tr>{["Username", "Type", "Fingerprint", "Source", ""].map((h) => <th key={h} style={{ textAlign: "left", padding: 6, borderBottom: "1px solid #ddd" }}>{h}</th>)}</tr></thead>
+            <tbody>
+              {(data?.effectiveKeys || []).map(row)}
+              {!(data?.effectiveKeys || []).length && <tr><td colSpan={5} style={{ padding: 6, color: "#666" }}>No SSH keys apply to this instance.</td></tr>}
+            </tbody>
+          </table>
+        </Box>
+      )}
+      <KeyValue items={[["Block project-wide SSH keys", data?.blockProjectSshKeys ? "On" : "Off"], ["OS Login", data?.osLogin ? "Enabled" : "Disabled"], ["Instance status", data?.status || "—"]]} />
+      <Stack direction="row" spacing={1}>
+        <TextField size="small" fullWidth label="Add key (USERNAME:ssh-ed25519 AAAA… comment)" value={line} onChange={(e) => setLine(e.target.value)} />
+        <Button variant="contained" disabled={!line.trim() || busy} onClick={() => save([...raw, line.trim()])}>Add</Button>
+        <Button disabled={busy} onClick={() => save(raw, !data?.blockProjectSshKeys)}>{data?.blockProjectSshKeys ? "Allow project keys" : "Block project keys"}</Button>
+      </Stack>
+    </Stack>
+  );
+}
+
+/** OS info: from the running guest offline (os-release, kernel, uptime, memory); declared from the boot image otherwise. */
+function OsInfoPanel({ zone, name }) {
+  const { data, loading, error, reload } = useAsync(() => api.getInstanceOsInfo(zone, name), [zone, name]);
+  return (
+    <Stack spacing={1.5}>
+      <Box><Button size="small" startIcon={<RefreshIcon />} onClick={reload}>Refresh</Button></Box>
+      {error && <ErrorAlert error={error} title="Failed to load OS info" />}
+      {loading && !data ? <CircularProgress size={20} /> : data && (
+        <KeyValue items={[
+          ["Operating system", data.prettyName], ["Version", data.version || "—"], ["Hostname", data.hostname], ["Architecture", data.architecture],
+          ["Kernel", data.kernel || "—"], ["Uptime", data.uptimeSeconds != null ? fmtDuration(data.uptimeSeconds) : "—"],
+          ["Memory", data.memoryKb ? `${Math.round(data.memoryKb / 1024)} MiB` : "—"], ["vCPUs", data.cpus || "—"],
+          ["Installed packages", data.packages || "—"], ["Source", data.source === "guest" ? "Running guest" : "Boot image (declared)"],
+        ]} />
+      )}
+      {data?.note && <Typography variant="caption" color="text.secondary">{data.note}</Typography>}
     </Stack>
   );
 }
@@ -190,7 +257,7 @@ export default function InstanceDetail({ params }) {
           <Section title="Security and access">
             <KeyValue items={[
               ["Shielded VM", `Secure boot ${inst.shieldedInstanceConfig?.enableSecureBoot ? "on" : "off"}, vTPM ${inst.shieldedInstanceConfig?.enableVtpm ? "on" : "off"}, Integrity monitoring ${inst.shieldedInstanceConfig?.enableIntegrityMonitoring ? "on" : "off"}`],
-              ["SSH Keys", "Project-wide keys"], ["Service account", inst.serviceAccounts?.[0]?.email || "—"],
+              ["SSH Keys", (() => { const it = inst.metadata?.items || []; const n = (it.find((m) => m.key === "ssh-keys")?.value || "").split("\n").filter(Boolean).length; return (n ? `${n} instance key(s)` : "No instance keys") + (it.some((m) => m.key === "block-project-ssh-keys" && m.value === "true") ? ", project keys blocked" : ", project-wide keys allowed"); })()], ["Service account", inst.serviceAccounts?.[0]?.email || "—"],
               ["Cloud API access scopes", (inst.serviceAccounts?.[0]?.scopes || []).length > 1 ? "Allow full access to all Cloud APIs" : "Allow default access"],
             ]} />
           </Section>
@@ -213,7 +280,12 @@ export default function InstanceDetail({ params }) {
           <SerialPortPanel zone={zone} name={name} />
         </CapabilityContainer>
       )}
-      {tab === "OS info" && <CapabilityContainer id="gcp.compute.instances.data_plane" title="OS info" />}
+      {tab === "SSH keys" && (
+        <CapabilityContainer id="gcp.compute.instances.ssh_metadata" title="SSH keys"><SshKeysPanel zone={zone} name={name} onSaved={reload} /></CapabilityContainer>
+      )}
+      {tab === "OS info" && (
+        <CapabilityContainer id="gcp.compute.instances.ssh_metadata" title="OS info"><OsInfoPanel zone={zone} name={name} /></CapabilityContainer>
+      )}
       {tab === "Screenshot" && <CapabilityContainer id="gcp.compute.instances.data_plane" title="Screenshot" />}
 
       <DeleteDialog

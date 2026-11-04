@@ -500,6 +500,85 @@ def set_instance_field(store, project, zone, name, verb, payload):
     return _operation(store, project, zone, verb, name, _selflink(full))
 
 
+# ── guest access: ssh-keys metadata + OS info (Vyomi verbs :sshKeys / :osInfo) ──────────────────────
+def _md_get(items, key):
+    for i in items or []:
+        if isinstance(i, dict) and i.get("key") == key:
+            return str(i.get("value") or "")
+    return None
+
+
+def _key_views(value, source):
+    import base64
+    from core import ssh_access_core as sa
+    out = []
+    for k in sa.parse_gce_ssh_keys(value or ""):
+        ktype, b64 = k["key"].split()[:2]
+        fp = hashlib.sha256(base64.b64decode(b64)).digest()
+        out.append({"user": k["user"], "type": ktype, "key": k["key"], "source": source,
+                    "fingerprint": "SHA256:" + base64.b64encode(fp).decode().rstrip("=")})
+    return out
+
+
+def get_ssh_keys(store, project, zone, name):
+    _, inst = _instance(store, project, zone, name)
+    iitems = (inst.get("metadata") or {}).get("items") or []
+    pitems = _proj(store, project)["items"]
+    try:
+        ikeys = _key_views(_md_get(iitems, "ssh-keys"), "instance")
+        pkeys = _key_views(_md_get(pitems, "ssh-keys"), "project")
+    except Exception as e:
+        raise _E(400, "INVALID_ARGUMENT", getattr(e, "message", str(e)))
+    block = str(_md_get(iitems, "block-project-ssh-keys") or "").lower() == "true"
+    oslogin = str(_md_get(iitems, "enable-oslogin") or _md_get(pitems, "enable-oslogin") or "").lower() == "true"
+    eff = ikeys + ([] if block else pkeys)
+    return {"kind": "vyomi#instanceSshKeys", "instance": name, "status": inst["status"], "instanceKeys": ikeys, "projectKeys": pkeys,
+            "blockProjectSshKeys": block, "osLogin": oslogin, "effectiveKeys": eff}
+
+
+def set_ssh_keys(store, project, zone, name, payload):
+    """Replace the instance's `ssh-keys` metadata item (validated line by line like the guest agent would)."""
+    from core import ssh_access_core as sa
+    full, inst = _instance(store, project, zone, name)
+    value = str(payload.get("sshKeys") if payload.get("sshKeys") is not None else payload.get("value") or "")
+    try:
+        sa.parse_gce_ssh_keys(value)
+    except sa.SshAccessError as e:
+        raise _E(400, "INVALID_ARGUMENT", e.message)
+    items = [i for i in ((inst.get("metadata") or {}).get("items") or []) if isinstance(i, dict) and i.get("key") != "ssh-keys"]
+    if value.strip():
+        items.append({"key": "ssh-keys", "value": value})
+    if "blockProjectSshKeys" in payload:
+        items = [i for i in items if i.get("key") != "block-project-ssh-keys"]
+        if payload.get("blockProjectSshKeys"):
+            items.append({"key": "block-project-ssh-keys", "value": "true"})
+    inst["metadata"] = {"items": items, "fingerprint": _fingerprint(items)}
+    return _operation(store, project, zone, "setMetadata", name, _selflink(full))
+
+
+_IMAGE_OS = {"debian-12": ("Debian GNU/Linux 12 (bookworm)", "debian", "12"), "debian-11": ("Debian GNU/Linux 11 (bullseye)", "debian", "11"),
+             "ubuntu-2404": ("Ubuntu 24.04 LTS", "ubuntu", "24.04"), "ubuntu-2204": ("Ubuntu 22.04 LTS", "ubuntu", "22.04"),
+             "rocky-linux-9": ("Rocky Linux 9", "rocky", "9"), "cos": ("Container-Optimized OS", "cos", "stable")}
+
+
+def get_os_info(store, project, zone, name):
+    """Declared OS info from the instance's boot image + machine shape. Offline, the server overlays the
+    live guest's os-release/kernel/uptime on top (source 'guest'); on Nano there is no guest to ask."""
+    _, inst = _instance(store, project, zone, name)
+    src = ""
+    for d in inst.get("disks", []):
+        if d.get("boot"):
+            disk = store.disks.get("projects/%s/zones/%s/disks/%s" % (project, zone, _last(d["source"]))) or {}
+            src = str(disk.get("sourceImage") or "")
+    key = next((k for k in _IMAGE_OS if k in src), None)
+    pretty, osid, ver = _IMAGE_OS.get(key, ("Linux", "linux", ""))
+    mt = _last(inst.get("machineType", ""))
+    return {"kind": "vyomi#instanceOsInfo", "instance": name, "status": inst["status"], "source": "image",
+            "prettyName": pretty, "id": osid, "version": ver, "hostname": "%s.%s.c.%s.internal" % (name, zone, project),
+            "architecture": "x86_64", "machineType": mt,
+            "note": "Declared from the boot image; kernel, uptime and package counts need a live guest."}
+
+
 # ── disks ────────────────────────────────────────────────────────────────────
 def _insert_disk_record(store, project, zone, name, spec, source_detail=None):
     full = "projects/%s/zones/%s/disks/%s" % (project, zone, name)
@@ -1438,6 +1517,12 @@ def _zonal(store, method, project, zone, rest, verb, payload, query=None):
                     flag = str((query or {}).get("deletionProtection", "true")).lower()
                     payload = dict(payload, deletionProtection=flag not in ("false", "0"))
                 return _json(200, set_instance_field(store, project, zone, name, verb, payload))
+            if verb == "sshKeys" and method == "GET":
+                return _json(200, get_ssh_keys(store, project, zone, name))
+            if verb == "sshKeys" and method in ("POST", "PUT"):
+                return _json(200, set_ssh_keys(store, project, zone, name, payload))
+            if verb == "osInfo" and method == "GET":
+                return _json(200, get_os_info(store, project, zone, name))
             if verb == "serialPort" and method == "GET":
                 return _json(200, get_serial_port_output(store, project, zone, name, query))
             if verb == "screenshot" and method == "GET":

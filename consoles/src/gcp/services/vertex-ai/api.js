@@ -12,3 +12,7 @@ const contents = (text) => [{ role: "user", parts: [{ text }] }];
 export const generate = (model, text, system, maxOutputTokens = 256) => restJson("POST", path(model, "generateContent"), { body: { contents: contents(text), ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}), generationConfig: { maxOutputTokens, temperature: 0.7 } } });
 export const countTokens = (model, text) => restJson("POST", path(model, "countTokens"), { body: { contents: contents(text) } });
 export const embed = (model, text) => restJson("POST", path(model, "embedContent"), { body: { content: { parts: [{ text }] } } });
+/** Multi-turn chat: the whole history is sent as role-tagged `contents` (user / model), exactly like the Vertex AI Studio chat. */
+export const chat = (model, history, system, maxOutputTokens = 256) => restJson("POST", path(model, "generateContent"), {
+  body: { contents: history.map((m) => ({ role: m.role, parts: [{ text: m.text }] })),
+    ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}), generationConfig: { maxOutputTokens, temperature: 0.7 } } });

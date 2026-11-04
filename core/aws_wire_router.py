@@ -84,6 +84,7 @@ from core import gcp_trace_core as gcp_trace
 from core import gcp_osconfig_core as gcp_osconfig
 from core import gcp_apphub_core as gcp_apphub
 from core import gcp_clouddeploy_core as gcp_clouddeploy
+from core import gcp_backupdr_core as gcp_backupdr
 from core import gcp_cloudbuild_core as gcp_cloudbuild
 from core import gcp_posture_core as gcp_posture
 
@@ -116,6 +117,8 @@ def _gcp_service(path):
         return "gcp-cloudbuild"   # Cloud Build builds + triggers on the shared CI seam (core/gcp_cloudbuild_core; images pushed into Artifact Registry)
     if re.match(r"^/v1/projects/[^/]+/locations/[^/]+/(deliveryPipelines|targets)([/:?]|$)", path):
         return "gcp-clouddeploy"   # Cloud Deploy: pipelines/targets/releases/rollouts state machine deploying to the simulator's Cloud Run + GKE (core/gcp_clouddeploy_core)
+    if re.match(r"^/v1/projects/[^/]+/locations/[^/]+/(backupVaults|backupPlans|backupPlanAssociations)([/:?]|$)", path):
+        return "gcp-backupdr"   # Backup and DR: vaults/plans/associations; backups are real Compute snapshots (core/gcp_backupdr_core, state on the Compute store)
     if re.match(r"^/v1/projects/[^/]+/locations/[^/]+/(applications|discoveredServices|discoveredWorkloads)([/:?]|$)", path):
         return "gcp-apphub"   # App Hub applications + registered services/workloads (core/gcp_apphub_core, state on the Monitoring store)
     if re.match(r"^/v1/projects/[^/]+/(patchJobs|patchDeployments)([/:]|$)", path) \
@@ -1870,6 +1873,7 @@ class AwsWireRouter:
                 "gcp-apphub": (gcp_apphub, self.gcp_mon),
                 "gcp-clouddeploy": (gcp_clouddeploy, self.gcp_mon),
                 "gcp-cloudbuild": (gcp_cloudbuild, self.gcp_mon),
+                "gcp-backupdr": (gcp_backupdr, self.gcp_compute_vm),
                 "gcp-redis": (gcp_redis, self.gcp_redis),
                 "gcp-artifactregistry": (gcp_ar, self.gcp_ar),
                 "gcp-logging": (gcp_logging, self.gcp_logging),

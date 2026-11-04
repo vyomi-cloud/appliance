@@ -46,6 +46,7 @@ export const PRODUCTS = [
   { id: "resource-manager", title: "Manage resources", description: "Create, organize and administer projects", category: "Management", icon: ResourceManagerIcon, load: () => import("./resource-manager/index.jsx") },
   { id: "artifacts", title: "Artifact Registry", description: "Store, manage and secure container images and packages", category: "CI/CD", icon: ArtifactIcon, load: () => import("./artifacts/index.jsx") },
   { id: "clouddeploy", title: "Cloud Deploy", description: "Continuous delivery pipelines, releases and rollouts", category: "CI/CD", icon: ArtifactIcon, load: () => import("./clouddeploy/index.jsx") },
+  { id: "backupdr", title: "Backup and DR", description: "Backup vaults, plans and restore for Compute Engine", category: "Storage", icon: BucketIcon, load: () => import("./backupdr/index.jsx") },
   { id: "cloudbuild", title: "Cloud Build", description: "Build, test and push images on every commit", category: "CI/CD", icon: ArtifactIcon, load: () => import("./cloudbuild/index.jsx") },
   { id: "security/scc", title: "Security Command Center", description: "Findings, sources and mute rules", category: "Security", icon: KeyIcon, load: () => import("./security/scc/index.jsx") },
   { id: "vertex-ai", title: "Vertex AI", description: "Gemini models and generative AI studio", category: "AI and Machine Learning", icon: AiIcon, load: () => import("./vertex-ai/index.jsx") },
