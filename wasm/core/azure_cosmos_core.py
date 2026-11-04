@@ -26,6 +26,9 @@ Wire summary (paths are the azure-cosmos resource hierarchy):
   GET    /dbs/{db}/colls/{c}/docs          list documents    -> {"Documents","_count"}
   GET    /dbs/{db}/colls/{c}/docs/{id}     read document
   DELETE /dbs/{db}/colls/{c}/docs/{id}     delete document
+  GET    /dbs/{db}/colls/{c}/docs          with `A-IM: Incremental feed` = CHANGE FEED (latest-version mode): documents
+                                           whose _lsn is above the `If-None-Match` continuation (none -> from the start);
+                                           the new continuation is returned in `etag`, 304 when nothing changed.
 
 Errors: JSON {"code": "NotFound", "message": ...} matching the HTTP status
 (404 NotFound, 409 Conflict, 400 BadRequest).
@@ -88,6 +91,14 @@ class CosmosStore:
 
     def persist(self) -> None:
         """Write-through hook (no-op in-memory; a backed subclass overrides it)."""
+
+
+def _next_lsn(store: "CosmosStore") -> int:
+    cur = getattr(store, "_lsn_seq", None)
+    if cur is None:   # first write on a (re)loaded store: continue after the highest persisted _lsn
+        cur = max([int(d.get("_lsn", 0)) for cs in store.docs.values() for c in cs.values() for d in c.values()] or [0])
+    store._lsn_seq = cur + 1
+    return store._lsn_seq
 
 
 # ── resource views ────────────────────────────────────────────────────────
@@ -506,10 +517,24 @@ def _dispatch_inner(store: CosmosStore, method: str, path: str,
             doc["_etag"] = _etag()
             doc["_ts"] = _now_ts()
             doc["_attachments"] = "attachments/"
+            doc["_lsn"] = _next_lsn(store)
+            existed = doc_id in docs
             docs[doc_id] = doc
             store.persist()
-            return _json(200 if (doc_id in docs and is_upsert) else 201, doc,
+            return _json(200 if (existed and is_upsert) else 201, doc,
                          {"etag": doc["_etag"]})
+        if method == "GET" and "incremental feed" in str(headers.get("a-im", "")).lower():   # change feed
+            try:
+                since = int(str(headers.get("if-none-match") or "0").strip('"') or 0)
+            except ValueError:
+                return _err(400, "BadRequest", "The If-None-Match continuation token is not valid.")
+            items = sorted((d for d in docs.values() if int(d.get("_lsn", 0)) > since), key=lambda d: d.get("_lsn", 0))
+            top = int(headers.get("x-ms-max-item-count") or 0) or len(items)
+            items = items[:top]
+            if not items:
+                return Response(status=304, body=b"", media_type=None, headers={"etag": f'"{since}"'})
+            return _json(200, {"_rid": coll_entry["_rid"], "Documents": items, "_count": len(items)},
+                         {"etag": f'"{items[-1]["_lsn"]}"', "x-ms-item-count": str(len(items))})
         if method == "GET":                           # list documents
             items = list(docs.values())
             return _json(200, {"_rid": coll_entry["_rid"],
@@ -538,6 +563,7 @@ def _dispatch_inner(store: CosmosStore, method: str, path: str,
         doc["_etag"] = _etag()
         doc["_ts"] = _now_ts()
         doc["_attachments"] = "attachments/"
+        doc["_lsn"] = _next_lsn(store)
         docs[doc_id] = doc
         store.persist()
         return _json(200, doc, {"etag": doc["_etag"]})
@@ -689,4 +715,70 @@ def dispatch(store: CosmosStore, method: str, path: str, query: dict | None = No
     r = _dispatch_inner(store, method, path, query, headers, body)
     if r.status < 400:
         r.headers.setdefault("x-ms-request-charge", str(charge))
+        if arm_state and r.status in (200, 201) and len(segs) >= 5 and segs[0] == "dbs" and segs[2] == "colls" and segs[4] == "docs" \
+                and method.upper() in ("POST", "PUT") and not is_query:
+            try:
+                doc = json.loads(r.body) if isinstance(r.body, (bytes, str)) else r.body
+                if isinstance(doc, dict) and doc.get("id") is not None:
+                    fire_change_feed_triggers(arm_state, acct, segs[1], segs[3], [doc])
+            except Exception:   # a failing trigger never fails the write
+                pass
     return r
+
+
+# ── Azure Functions cosmosDBTrigger (change feed -> function) ──────────────────────────────────────────────────────────
+def _binding_get(b: dict, *names):
+    for n in names:
+        if b.get(n) not in (None, ""):
+            return b[n]
+    return None
+
+
+def _trigger_account(rec: dict, conn_name: str) -> str | None:
+    """Account name a function app's connection setting points at (`<conn>` connection string or `<conn>__accountEndpoint`)."""
+    st = rec.get("_appsettings") or {}
+    val = st.get(conn_name) or st.get(f"{conn_name}__accountEndpoint") or ""
+    m = re.search(r"https?://([a-z0-9-]+)\.documents\.azure\.com", str(val), re.I)
+    return m.group(1).lower() if m else None
+
+
+def change_feed_triggers(arm_state: dict, acct: dict | None, db: str, coll: str) -> list:
+    """(app record, function, binding) for every enabled cosmosDBTrigger function watching this container."""
+    out = []
+    want_acct = ((acct or {}).get("name") or (acct or {}).get("id", "").rsplit("/", 1)[-1]).lower() if acct else None
+    for rec in (arm_state or {}).values():
+        fns = rec.get("_functions") if isinstance(rec, dict) else None
+        if not fns or str((rec.get("properties") or {}).get("state", "Running")).lower() == "stopped":
+            continue
+        for fn in fns.values():
+            fp = fn.get("properties") or {}
+            if fp.get("isDisabled"):
+                continue
+            for b in (fp.get("config") or {}).get("bindings") or []:
+                if str(b.get("type", "")).lower() != "cosmosdbtrigger" or str(b.get("direction", "in")).lower() != "in":
+                    continue
+                if _binding_get(b, "databaseName", "database_name") != db or _binding_get(b, "containerName", "container_name", "collectionName") != coll:
+                    continue
+                conn = _binding_get(b, "connection", "connectionStringSetting")
+                tacct = _trigger_account(rec, conn) if conn else None
+                if want_acct and tacct != want_acct:
+                    continue
+                out.append((rec, fn, b))
+    return out
+
+
+def fire_change_feed_triggers(arm_state: dict, acct: dict | None, db: str, coll: str, docs: list) -> int:
+    """Run every watching function with the changed documents, through the Function App's real sandboxed invoke path
+    (so scale/network/auth gates apply and the run lands in the invocation log). Returns the number of functions run."""
+    try:
+        from core.azure_webapp_core import _invoke_function
+    except ImportError:  # pragma: no cover
+        from azure_webapp_core import _invoke_function  # type: ignore
+    n = 0
+    for rec, fn, b in change_feed_triggers(arm_state, acct, db, coll):
+        req = {"method": "POST", "query": {}, "headers": {"x-vyomi-trigger": "cosmosDBTrigger"},
+               "body": {"documents": docs}, "trigger": {"type": "cosmosDBTrigger", "databaseName": db, "containerName": coll,
+                                                         "bindingName": b.get("name")}}
+        _invoke_function(rec, fn, req)
+        n += 1
+    return n
