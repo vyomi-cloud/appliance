@@ -1,6 +1,6 @@
 # Vyomi service pipeline
 
-_Updated 2026-11-04 03:05 UTC · refreshes after every pipeline run_
+_Updated 2026-11-04 03:30 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
@@ -9,16 +9,16 @@ _Updated 2026-11-04 03:05 UTC · refreshes after every pipeline run_
 - **In the gate / releasing:** Amazon Cognito Identity Provider (AWS), Amazon EC2 Container Service (AWS), Amazon Elastic Container Registry (AWS), Amazon ElastiCache (AWS), Amazon Kinesis (AWS), Amazon Route 53 (AWS), Amazon Simple Email Service (AWS), AWS CloudFormation (AWS), AWS Security Token Service (AWS), BigQuery API (GCP), Cloud DNS API (GCP), Cloud Logging API (GCP), Cloud Run Admin API (GCP), Cloud Tasks API (GCP), Workflows API (GCP), Application Insights (Azure), Container Registry (Azure), Azure Kubernetes Service (Azure), Event Hubs (Azure), Managed Identities (Azure), Azure Cache for Redis (Azure)
 - **Queued:** 41 services (P1 first, then P2)
 - **Consoles really implemented:** offline 97% · Nano 97%
-- **Hourly tests:** 274 of 277 suites passing (run 01:01 UTC)
+- **Hourly tests:** 277 of 277 suites passing (run 02:58 UTC)
 - **Upstream watch:** 64 open changes from the real clouds to adopt
 
 ## By cloud
 
 | Cloud | Released | Building | In gate | Queued | Console live (offline · Nano) |
 |---|---|---|---|---|---|
-| AWS | 19 | 0 | 9 | 17 | 93% · 92% |
+| AWS | 19 | 0 | 9 | 17 | 93% · 93% |
 | GCP | 18 | 0 | 6 | 12 | 100% · 100% |
-| Azure | 18 | 0 | 6 | 12 | 98% · 100% |
+| Azure | 18 | 0 | 6 | 12 | 100% · 100% |
 
 ## In progress
 
@@ -79,7 +79,7 @@ _Updated 2026-11-04 03:05 UTC · refreshes after every pipeline run_
 
 | Service | Real backend | Wired today | Console live | UI issues | Upstream | Release |
 |---|---|---|---|---|---|---|
-| EC2 | — | not audited | 🧩 17/18 · 🧩 14/17 | 0 · 1 | ✅ watched | before gate |
+| EC2 | — | not audited | 🧩 17/18 · 🧩 17/18 | 0 · 0 | ✅ watched | before gate |
 | S3 | — | not audited | 🧩 17/18 · 🧩 17/18 | 0 · 0 | ✅ watched | before gate |
 | IAM | — | not audited | ✅ 11/11 · ✅ 11/11 | 0 · 0 | ✅ watched | before gate |
 | RDS | — | not audited | 🧩 17/18 · 🧩 17/18 | 0 · 0 | ✅ watched | before gate |
@@ -126,8 +126,8 @@ _Updated 2026-11-04 03:05 UTC · refreshes after every pipeline run_
 
 | Service | Real backend | Wired today | Console live | UI issues | Upstream | Release |
 |---|---|---|---|---|---|---|
-| Virtual Machines | — | not audited | 🧩 20/21 · ✅ 22/22 | 1 · 0 | ⚠️ 1 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+compute) | before gate |
-| Storage accounts | — | not audited | 🧩 0/2 · ✅ 22/22 | 1 · 0 | ✅ watched | before gate |
+| Virtual Machines | — | not audited | ✅ 22/22 · ✅ 22/22 | 0 · 0 | ⚠️ 1 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+compute) | before gate |
+| Storage accounts | — | not audited | ✅ 22/22 · ✅ 22/22 | 0 · 0 | ✅ watched | before gate |
 | SQL servers | — | not audited | ✅ 22/22 · ✅ 22/22 | 0 · 0 | ✅ watched | before gate |
 | Service Bus | messaging-core · in-process · + nats agent · + amqp protocol | 🟡 REST management + messaging only; native SDKs need AMQP (in PRs #35-#45, not merged) | ✅ 17/17 · ✅ 17/17 | 0 · 0 | ✅ watched | before gate |
 | Cosmos DB | — | not audited | ✅ 20/20 · ✅ 20/20 | 0 · 0 | ⚠️ 1 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+cosmos-db) | before gate |
@@ -855,7 +855,7 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 
 </details>
 
-<details><summary>Console parts not live yet — AWS (38)</summary>
+<details><summary>Console parts not live yet — AWS (36)</summary>
 
 | Service | Console | Part | State |
 |---|---|---|---|
@@ -877,8 +877,6 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 | CloudWatch Logs | offline | tab: Tags | static |
 | Systems Manager | offline | tab: Tags | static |
 | CloudWatch | offline | tab: Tags | static |
-| EC2 | nano | page: EC2 | static |
-| EC2 | nano | create: create with defaults | unimplemented |
 | EC2 | nano | tab: Tags | static |
 | Lambda | nano | tab: Tags | static |
 | S3 | nano | tab: Tags | static |
@@ -900,21 +898,11 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 
 </details>
 
-<details><summary>Console parts not live yet — Azure (3)</summary>
-
-| Service | Console | Part | State |
-|---|---|---|---|
-| Virtual Machines | offline | create: create with defaults | unimplemented |
-| Storage accounts | offline | page: Storage accounts | static |
-| Storage accounts | offline | create: create with defaults | unimplemented |
-
-</details>
-
 <details><summary>Latest hourly test results</summary>
 
 | Suite | Result | Checks |
 |---|---|---|
-| offline-ui-crawl | ❌ | 56/58 |
+| offline-ui-crawl | ✅ | 58/58 |
 | offline-console-actions | ✅ | 375/375 |
 | offline-api-ec2-instance-detail | ✅ | 3/3 |
 | offline-api-s3-bucket-creation-date | ✅ | 3/3 |
@@ -946,8 +934,8 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 | offline-cli-gcp | ✅ | 6/6 |
 | offline-cli-azure | ✅ | 6/6 |
 | offline-ui-core | ✅ | 9/9 |
-| nano-ui-crawl | ❌ | 62/63 |
-| nano-cores | ✅ | 346/346 |
+| nano-ui-crawl | ✅ | 63/63 |
+| nano-cores | ✅ | 347/347 |
 | nano-gcp-kms-core | ✅ | 35/35 |
 | nano-gcp-cloudsql-core | ✅ | 34/34 |
 | nano-gcp-compute-core | ✅ | 18/18 |
@@ -1072,7 +1060,7 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 | offline-sdk-java-azure-app | ✅ | 15/15 |
 | offline-sdk-go-azure-app | ✅ | 29/29 |
 | offline-cli-azure-app | ✅ | 23/23 |
-| offline-ui-azure-app | ❌ | 28/29 |
+| offline-ui-azure-app | ✅ | 29/29 |
 | nano-ui-azure-app | ✅ | 29/29 |
 | offline-sdk-java-azure-appconfiguration | ✅ | 28/28 |
 | offline-sdk-go-azure-appconfiguration | ✅ | 34/34 |
