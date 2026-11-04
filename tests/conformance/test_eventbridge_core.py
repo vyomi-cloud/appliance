@@ -4,6 +4,7 @@ Rules with event patterns + SQS targets; PutEvents matches each event against ev
 rule and delivers matching events to the rule's target queues (EventBridge→SQS).
 """
 import json
+import time
 
 try:
     from core.messaging_store import InMemoryMessagingStore
@@ -129,65 +130,151 @@ def run(store=None):
     _check("Lambda target invoked through lambda_core store (Nano path)",
            real and real[0][0].endswith("/functions/sink/invocations") and real[0][1]["detail"] == {"k": 8})
 
-    # Event-bus target: default-bus rule forwards to bus "audit"; its rule delivers to SQS.
-    qurl3 = sqs.dispatch(s, "AmazonSQS.CreateQueue", {"QueueName": "audit-q"}).body["QueueUrl"]
-    qarn3 = sqs.dispatch(s, "AmazonSQS.GetQueueAttributes", {"QueueUrl": qurl3}).body["Attributes"]["QueueArn"]
-    call("PutRule", {"Name": "fwd", "EventPattern": json.dumps({"source": ["fwd.app"]})})
-    call("PutTargets", {"Rule": "fwd", "Targets": [{"Id": "b1", "Arn": f"arn:aws:events:us-east-1:{s.account_id}:event-bus/audit"}]})
-    call("PutRule", {"Name": "audit-r", "EventBusName": "audit", "EventPattern": json.dumps({"source": ["fwd.app"]})})
-    call("PutTargets", {"Rule": "audit-r", "Targets": [{"Id": "q", "Arn": qarn3}]})
-    call("PutEvents", {"Entries": [{"Source": "fwd.app", "DetailType": "x", "Detail": "{}"}]})
-    got = sqs.dispatch(s, "AmazonSQS.ReceiveMessage", {"QueueUrl": qurl3, "MaxNumberOfMessages": 10}).body.get("Messages", [])
-    _check("event-bus target forwards to the destination bus's rules", len(got) == 1)
+    # Retry + DLQ: a failing target is retried (RetryPolicy), then the event lands in its DLQ.
+    dq = sqs.dispatch(s, "AmazonSQS.CreateQueue", {"QueueName": "eb-dlq"}).body["QueueUrl"]
+    dqarn = sqs.dispatch(s, "AmazonSQS.GetQueueAttributes", {"QueueUrl": dq}).body["Attributes"]["QueueArn"]
+    attempts = []
+    eb.set_lambda_invoker(lambda n, b: attempts.append(n) or (_ for _ in ()).throw(RuntimeError("boom")))
+    call2("PutRule", {"Name": "rd", "EventPattern": json.dumps({"source": ["dlq.app"]})})
+    call2("PutTargets", {"Rule": "rd", "Targets": [{
+        "Id": "td", "Arn": "arn:aws:lambda:us-east-1:123456789012:function:bad",
+        "RetryPolicy": {"MaximumRetryAttempts": 2}, "DeadLetterConfig": {"Arn": dqarn}}]})
+    r = call2("PutEvents", {"Entries": [{"Source": "dlq.app", "DetailType": "x", "Detail": json.dumps({"k": 1})}]}).body
+    eb.set_lambda_invoker(None)
+    _check("failing target does not fail PutEvents", r["FailedEntryCount"] == 0)
+    _check("failing target retried MaximumRetryAttempts times (1+2)", len(attempts) == 3)
+    m = sqs.dispatch(s, "AmazonSQS.ReceiveMessage", {"QueueUrl": dq, "MaxNumberOfMessages": 10}).body.get("Messages", [])
+    _check("exhausted event dead-lettered to DeadLetterConfig queue",
+           len(m) == 1 and json.loads(m[0]["Body"])["detail"] == {"k": 1})
 
-    # Step Functions target: matching event STARTS an execution with the event as its input.
+    # Event-bus target: a rule on `default` forwards the event to another bus whose rule delivers it.
+    call("PutRule", {"Name": "fwd", "EventPattern": json.dumps({"source": ["bus.app"]})})
+    call("PutTargets", {"Rule": "fwd", "Targets": [{"Id": "tb", "Arn": "arn:aws:events:us-east-1:123456789012:event-bus/other"}]})
+    call("PutRule", {"Name": "onother", "EventBusName": "other", "EventPattern": json.dumps({"source": ["bus.app"]})})
+    call("PutTargets", {"Rule": "onother", "EventBusName": "other", "Targets": [{"Id": "tq", "Arn": qarn}]})
+    drain()
+    call("PutEvents", {"Entries": [{"Source": "bus.app", "DetailType": "x", "Detail": json.dumps({"k": 3})}]})
+    _check("event-bus target forwards to the other bus's rule → SQS", drain() == 1)
+
+    # Step Functions target: StartExecution with the event as input.
     try:
         from core import stepfunctions_core as sfn
     except ImportError:  # pragma: no cover
         import stepfunctions_core as sfn  # type: ignore
     ss = sfn.shared_store()
-    defn = json.dumps({"StartAt": "P", "States": {"P": {"Type": "Pass", "End": True}}})
-    sm = sfn.dispatch(ss, "AWSStepFunctions.CreateStateMachine",
-                      {"name": "eb-sm", "definition": defn, "roleArn": "arn:aws:iam::000000000000:role/r"}).body
-    call("PutRule", {"Name": "sfn-r", "EventPattern": json.dumps({"source": ["sfn.app"]})})
-    call("PutTargets", {"Rule": "sfn-r", "Targets": [{"Id": "s1", "Arn": sm["stateMachineArn"], "RoleArn": "arn:aws:iam::000000000000:role/r"}]})
-    call("PutEvents", {"Entries": [{"Source": "sfn.app", "DetailType": "x", "Detail": json.dumps({"k": 3})}]})
-    exes = [e for e in ss.executions.values() if e["stateMachineArn"] == sm["stateMachineArn"]]
-    _check("Step Functions target starts an execution with the event as input",
-           len(exes) == 1 and json.loads(exes[0]["input"])["detail"] == {"k": 3})
+    sm = sfn.dispatch(ss, "AWSStepFunctions.CreateStateMachine", {
+        "name": "eb-sm", "roleArn": "arn:aws:iam::123456789012:role/r",
+        "definition": json.dumps({"StartAt": "P", "States": {"P": {"Type": "Pass", "End": True}}})}).body
+    call("PutRule", {"Name": "rsf", "EventPattern": json.dumps({"source": ["sfn.app"]})})
+    call("PutTargets", {"Rule": "rsf", "Targets": [{"Id": "ts", "Arn": sm["stateMachineArn"]}]})
+    call("PutEvents", {"Entries": [{"Source": "sfn.app", "DetailType": "x", "Detail": json.dumps({"k": 9})}]})
+    ex = sfn.dispatch(ss, "AWSStepFunctions.ListExecutions", {"stateMachineArn": sm["stateMachineArn"]}).body["executions"]
+    _check("Step Functions target starts an execution", len(ex) == 1)
+    d = sfn.dispatch(ss, "AWSStepFunctions.DescribeExecution", {"executionArn": ex[0]["executionArn"]}).body
+    _check("execution input is the event", json.loads(d["input"])["detail"] == {"k": 9})
 
-    # Kinesis + CloudWatch Logs targets (stores registered like Nano's wire router does).
+    # API destination target: the transformed event is POSTed to the endpoint with the connection's auth.
+    import threading
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+    got = []
+
+    class H(BaseHTTPRequestHandler):
+        def do_POST(self):
+            got.append((self.headers.get("x-api-key"), self.rfile.read(int(self.headers["Content-Length"]))))
+            self.send_response(200); self.end_headers()
+
+        def log_message(self, *a):
+            pass
+    srv = HTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    conn = call("CreateConnection", {"Name": "c1", "AuthorizationType": "API_KEY", "AuthParameters": {
+        "ApiKeyAuthParameters": {"ApiKeyName": "x-api-key", "ApiKeyValue": "k123"}}}).body
+    ad = call("CreateApiDestination", {"Name": "d1", "ConnectionArn": conn["ConnectionArn"], "HttpMethod": "POST",
+                                       "InvocationEndpoint": f"http://127.0.0.1:{srv.server_port}/hook"}).body
+    _check("DescribeApiDestination", call("DescribeApiDestination", {"Name": "d1"}).body["ApiDestinationArn"] == ad["ApiDestinationArn"])
+    call("PutRule", {"Name": "rhttp", "EventPattern": json.dumps({"source": ["http.app"]})})
+    call("PutTargets", {"Rule": "rhttp", "Targets": [{"Id": "th", "Arn": ad["ApiDestinationArn"]}]})
+    call("PutEvents", {"Entries": [{"Source": "http.app", "DetailType": "x", "Detail": json.dumps({"k": 5})}]})
+    srv.shutdown()
+    _check("API destination receives event with API key", len(got) == 1 and got[0][0] == "k123"
+           and json.loads(got[0][1])["detail"] == {"k": 5})
+
+    _check("DescribeConnection", call("DescribeConnection", {"Name": "c1"}).body["ConnectionArn"] == conn["ConnectionArn"])
+    _check("ListApiDestinations", [d["Name"] for d in call("ListApiDestinations", {}).body["ApiDestinations"]] == ["d1"])
+    call("DeleteApiDestination", {"Name": "d1"})
+    _check("DeleteApiDestination", call("ListApiDestinations", {}).body["ApiDestinations"] == [])
+    call("DeleteConnection", {"Name": "c1"})
+    gone = call("DescribeConnection", {"Name": "c1"})
+    _check("DeleteConnection removes it", "ResourceNotFound" in repr(vars(gone)) or "does not exist" in repr(vars(gone)))
+
+    # Kinesis + CloudWatch Logs targets.
     try:
-        from core import kinesis_core as kc, logs_core as lc
+        from core import kinesis_core as kin, logs_core as lg
     except ImportError:  # pragma: no cover
-        import kinesis_core as kc, logs_core as lc  # type: ignore
-    ks, ls = kc.KinesisStore(), lc.LogsStore()
-    eb.set_target_store("kinesis", ks)
-    eb.set_target_store("logs", ls)
-    kc.dispatch(ks, "Kinesis_20131202.CreateStream", {"StreamName": "eb-stream", "ShardCount": 1})
-    karn = f"arn:aws:kinesis:us-east-1:{s.account_id}:stream/eb-stream"
-    garn = f"arn:aws:logs:us-east-1:{s.account_id}:log-group:/aws/events/eb-test:*"
-    call("PutRule", {"Name": "kin-r", "EventPattern": json.dumps({"source": ["kin.app"]})})
-    call("PutTargets", {"Rule": "kin-r", "Targets": [
-        {"Id": "k1", "Arn": karn, "KinesisParameters": {"PartitionKeyPath": "$.detail.id"}},
-        {"Id": "g1", "Arn": garn}]})
-    call("PutEvents", {"Entries": [{"Source": "kin.app", "DetailType": "x", "Detail": json.dumps({"id": "p7"})}]})
-    it = kc.dispatch(ks, "Kinesis_20131202.GetShardIterator", {"StreamName": "eb-stream", "ShardId": "shardId-000000000000",
-                                                                "ShardIteratorType": "TRIM_HORIZON"})
-    it = getattr(it, "body", it)["ShardIterator"]
-    recs = getattr(kc.dispatch(ks, "Kinesis_20131202.GetRecords", {"ShardIterator": it}), "body")["Records"]
+        import kinesis_core as kin, logs_core as lg  # type: ignore
     import base64
-    _check("Kinesis target receives the event with the PartitionKeyPath key",
-           len(recs) == 1 and recs[0]["PartitionKey"] == "p7"
-           and json.loads(base64.b64decode(recs[0]["Data"]))["detail"] == {"id": "p7"})
-    ev = lc.dispatch(ls, "Logs_20140328.FilterLogEvents", {"logGroupName": "/aws/events/eb-test"}).body["events"]
-    _check("CloudWatch Logs target writes the event to the log group",
-           len(ev) == 1 and json.loads(ev[0]["message"])["source"] == "kin.app")
-    eb.set_target_store("kinesis", None)
-    eb.set_target_store("logs", None)
+    ks, ls2 = kin.KinesisStore(), lg.LogsStore()
+    eb.set_target_store("kinesis", ks)
+    eb.set_target_store("logs", ls2)
+    kin.dispatch(ks, "Kinesis_20131202.CreateStream", {"StreamName": "ev-stream", "ShardCount": 1})
+    lg.dispatch(ls2, "Logs_20140328.CreateLogGroup", {"logGroupName": "/ev/logs"})
+    karn = f"arn:aws:kinesis:us-east-1:{s.account_id}:stream/ev-stream"
+    larn = f"arn:aws:logs:us-east-1:{s.account_id}:log-group:/ev/logs:*"
+    call("PutRule", {"Name": "rk", "EventPattern": json.dumps({"source": ["kl.app"]})})
+    call("PutTargets", {"Rule": "rk", "Targets": [
+        {"Id": "tk", "Arn": karn, "KinesisParameters": {"PartitionKeyPath": "$.detail.k"}},
+        {"Id": "tl", "Arn": larn}]})
+    call("PutEvents", {"Entries": [{"Source": "kl.app", "DetailType": "x", "Detail": json.dumps({"k": "abc"})}]})
+    sh = kin.dispatch(ks, "Kinesis_20131202.ListShards", {"StreamName": "ev-stream"}).body["Shards"][0]["ShardId"]
+    it = kin.dispatch(ks, "Kinesis_20131202.GetShardIterator", {"StreamName": "ev-stream", "ShardId": sh,
+                      "ShardIteratorType": "TRIM_HORIZON"}).body["ShardIterator"]
+    recs = kin.dispatch(ks, "Kinesis_20131202.GetRecords", {"ShardIterator": it}).body["Records"]
+    _check("Kinesis target receives the event",
+           len(recs) == 1 and recs[0]["PartitionKey"] == "abc"
+           and json.loads(base64.b64decode(recs[0]["Data"]))["source"] == "kl.app")
+    sts = lg.dispatch(ls2, "Logs_20140328.DescribeLogStreams", {"logGroupName": "/ev/logs"}).body["logStreams"]
+    evs = lg.dispatch(ls2, "Logs_20140328.GetLogEvents", {"logGroupName": "/ev/logs",
+                      "logStreamName": sts[0]["logStreamName"]}).body["events"]
+    _check("CloudWatch Logs target receives the event", len(evs) == 1 and json.loads(evs[0]["message"])["source"] == "kl.app")
+
+    # Archives + replay
+    call("CreateArchive", {"ArchiveName": "arc", "EventSourceArn": f"arn:aws:events:us-east-1:{s.account_id}:event-bus/default",
+                           "EventPattern": json.dumps({"source": ["arc.app"]})})
+    call("PutRule", {"Name": "ra", "EventPattern": json.dumps({"source": ["arc.app"]})})
+    call("PutTargets", {"Rule": "ra", "Targets": [{"Id": "ta", "Arn": qarn}]})
+    drain()
+    for i in range(2):
+        call("PutEvents", {"Entries": [{"Source": "arc.app", "DetailType": "x", "Detail": json.dumps({"i": i})}]})
+    call("PutEvents", {"Entries": [{"Source": "other.app", "DetailType": "x", "Detail": "{}"}]})
+    _check("live events delivered", drain() == 2)
+    d = call("DescribeArchive", {"ArchiveName": "arc"}).body
+    _check("archive stores only matching events", d["EventCount"] == 2 and d["State"] == "ENABLED" and "events" not in d)
+    _check("ListArchives", [a["ArchiveName"] for a in call("ListArchives", {}).body["Archives"]] == ["arc"])
+    rp = call("StartReplay", {"ReplayName": "rp", "EventSourceArn": d["ArchiveArn"], "EventStartTime": 0,
+                              "EventEndTime": time.time() + 5,
+                              "Destination": {"Arn": f"arn:aws:events:us-east-1:{s.account_id}:event-bus/default"}})
+    _check("replay re-delivers archived events", rp.body["State"] == "COMPLETED" and drain() == 2)
+    _check("replay is not re-archived", call("DescribeArchive", {"ArchiveName": "arc"}).body["EventCount"] == 2)
+    _check("DescribeReplay/ListReplays", call("DescribeReplay", {"ReplayName": "rp"}).body["State"] == "COMPLETED"
+           and len(call("ListReplays", {}).body["Replays"]) == 1)
+    call("DeleteArchive", {"ArchiveName": "arc"})
+    _check("DeleteArchive", call("ListArchives", {}).body["Archives"] == [])
+    call("RemoveTargets", {"Rule": "ra", "Ids": ["ta"]}); call("DeleteRule", {"Name": "ra"})
 
     _check("ListRules",call("ListRules", {}).body["Rules"][0]["Name"] == "r1")
     _check("ListTargetsByRule", call("ListTargetsByRule", {"Rule": "r1"}).body["Targets"][0]["Id"] == "t1")
+
+    # Event buses: Create/Describe/List/Delete
+    cb = call("CreateEventBus", {"Name": "orders", "Description": "d"})
+    _check("CreateEventBus returns the bus ARN", cb.status == 200
+           and cb.body["EventBusArn"].endswith(":event-bus/orders"))
+    _check("CreateEventBus duplicate is rejected", call("CreateEventBus", {"Name": "orders"}).status == 400)
+    _check("DescribeEventBus", call("DescribeEventBus", {"Name": "orders"}).body["Name"] == "orders")
+    _check("ListEventBuses includes default and orders",
+           [b["Name"] for b in call("ListEventBuses", {}).body["EventBuses"]] == ["default", "orders"])
+    _check("default bus cannot be deleted", call("DeleteEventBus", {"Name": "default"}).status == 400)
+    call("DeleteEventBus", {"Name": "orders"})
+    _check("DeleteEventBus", call("DescribeEventBus", {"Name": "orders"}).status == 400)
 
     print("\nEventBridge event-bus conformance: ALL GREEN")
     return s

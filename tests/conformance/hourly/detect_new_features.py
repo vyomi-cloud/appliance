@@ -266,6 +266,11 @@ GCP_SDK_ALIASES = {
     ("gcp_monitoring_core", "DeleteGroup"): ("Groups.Delete(",),
     ("gcp_monitoring_core", "CreateUptime"): ("UptimeCheckConfigs.Create(",),
     ("gcp_monitoring_core", "PatchUptime"): ("UptimeCheckConfigs.Patch(",),
+    # Cloud KMS: tests/conformance/test_gcp_kms_sdk_python.py drives these via google-cloud-kms
+    ("gcp_kms_core", "ImportJobRoute"): ("create_import_job(",),
+    ("gcp_kms_core", "ImportJobList"): ("list_import_jobs(",),
+    ("gcp_kms_core", "ImportJobView"): ("get_import_job(",),
+    ("gcp_kms_core", "PurgeDestroyed"): ("destroy_crypto_key_version(",),
     ("gcp_monitoring_core", "PatchPolicy"): ("AlertPolicies.Patch(",),
 }
 

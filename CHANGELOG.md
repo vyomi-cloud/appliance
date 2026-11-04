@@ -4,6 +4,68 @@ All notable changes to Vyomi will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.40] — 2026-11-04
+
+Daily conformance release. **13 product fixes** (AWS 8, GCP 2, Azure 1, all clouds 2); 9 reach Nano and 12 reach the offline appliance; 14 test and harness improvements.
+
+### Highlights
+
+- **EventBridge is much more complete (Nano and offline).** You can now create, describe, list and delete event buses with boto3 (it used to fail with InternalFailure), and use archives and replays, connections and API destinations (HTTP targets get the transformed event with API-key or basic auth), plus delivery to Kinesis, CloudWatch Logs, other event buses and Step Functions targets, with retries and dead-lettering to an SQS queue.
+- **Cloud KMS works with the official google-cloud-kms SDK (Nano and offline).** Integer-encoded enums are accepted and key versions can be created, listed, fetched, patched, destroyed and restored, where these calls used to fail with errors.
+- **Cloud KMS import jobs on the offline REST API.** Creating, getting and listing import jobs now works instead of returning a 404.
+- **EC2 network ACLs work through the SDK on the offline appliance.** Creating, describing, deleting and associating network ACLs and their entries no longer fail with InvalidAction.
+- **Azure Log Analytics queries work with the Go azquery SDK (offline).** The simulator now answers azquery's workspace query endpoint, so RunKql calls succeed.
+- **Container App Properties tab no longer shows "null" (Nano and offline).** The runtime details leave out the empty Docker network value.
+
+### Fixes — AWS
+
+- **[Nano + offline]** EventBridge CreateEventBus/DescribeEventBus/ListEventBuses/DeleteEventBus were unimplemented (boto3 create_event_bus -> InternalFailure); added to core + Nano vendor copy; test_eventbridge_core covers it (refs #171, partial)
+- **[Nano + offline]** EventBridge archives and replays (CreateArchive/Describe/List/Delete, StartReplay/DescribeReplay/ListReplays); replayed events re-delivered, not re-archived (refs #171, partial); test_eventbridge_core covers it
+- **[Nano + offline]** EventBridge delivers to Kinesis (PartitionKeyPath) and CloudWatch Logs targets (refs #171, partial); test_eventbridge_core covers both
+- **[Nano + offline]** EventBridge connections + API destinations; HTTP targets receive the transformed event with API-key/basic auth (refs #171, partial); test_eventbridge_core covers it
+- **[Nano + offline]** EventBridge delivers to event-bus and Step Functions StartExecution targets (refs #171, partial); test_eventbridge_core covers both
+- **[Nano + offline]** EventBridge retries failing targets per RetryPolicy and dead-letters to DeadLetterConfig SQS queue (refs #171, partial); test_eventbridge_core covers it
+- **[offline]** Offline EC2 Create/Describe/Delete/AssociateNetworkAcl(+Entry) reach the VPC handler over the SDK (routes/aws_s3 action set lacked them; were InvalidAction); ops5 boto3 test now green
+- **[offline]** EC2 Create/Delete/DescribeNetworkAcl(+Entry) now reach the VPC engine over the SDK (were InvalidAction); ops5 boto3 test + core test added
+
+### Fixes — GCP
+
+- **[Nano + offline]** Cloud KMS accepts the SDK's integer-encoded enums and serves cryptoKeyVersions create/list/get/patch/destroy/restore natively (were S3 NoSuchBucket / INVALID_ARGUMENT for google-cloud-kms); official-SDK test + suite added, covers untested ImportJob*/PurgeDestroyed ops
+- **[offline]** Serve Cloud KMS importJobs create/get/list on the offline REST surface (was an S3 NoSuchBucket 404); REST test also covers Artifact Registry tags (untested ops)
+
+### Fixes — Azure
+
+- **[offline]** Log Analytics data plane answers azquery's /workspaces/{id}/query (no /v1); Go azquery test covers RunKql
+
+### Fixes — all clouds
+
+- **[Nano]** Rebuild vendored Nano cores (vpc_core/aws_wire_router were stale; nano-cores test_vpc_nacl_core green)
+- **[Nano + offline]** Container App vyomiRuntime omits a null docker network (Properties tab no longer shows 'null'); unit check added
+
+<details><summary>Test and harness improvements (14)</summary>
+
+- Crawler waits for the async list before counting rows (Azure VM/Storage CREATE_NO_ROW was a harness race: rows read 0 while the list was still loading; verified 2->3 and 0->1)
+- Cover /api/providers/gcp/* connect guides, snippets and gcloud/gcutil resolve; suite offline-api-gcp-provider-connect registered
+- Test EventBridge DescribeConnection/DeleteConnection/ListApiDestinations/DeleteApiDestination in test_eventbridge_core
+- Gcloud scheduler pubsubTarget job run delivers to gcloud pubsub pull (refs #149, offline verified working; Nano twin pending); suite registered
+- Cover GCP console consolidate/vpc-reconcile and un-prefixed artifactregistry sub routes; suite registered
+- Crawler logs create row counts under DEBUG_CRAWL (Azure VM/Storage CREATE_NO_ROW no longer reproduces on fresh or populated state; no behaviour change)
+- Cover 21 untested GCP console/tooling routes (console summary/enforcement, gcloud/gcutil resolve, SDK info+snippets); suite registered
+- Crawler logs each create POST/PUT under DEBUG_CRAWL (diagnoses Azure CREATE_NO_ROW; no behaviour change)
+- Azure VM Nano stop/start probe no longer reloads the console mid-test (nano-post-create-azure-vm-ssh all PASS)
+- Crawler fills Azure wizard required names without hyphens and the VM admin password on Basics (false CREATE_NO_ROW for Virtual Machines / Storage accounts)
+- Offline-ui-drawer no longer races the console's cross-cloud auto-switch reload (harness: activate this cloud's space before opening its console)
+- Cover Cloud SQL instances.patch and Monitoring groups.list/uptimeCheckConfigs.get over REST (untested ops)
+- GCE Nano stop/start probe no longer reloads the console mid-test
+- CI simulator runs as root so VM launches can reach docker.sock (fixes offline-post-create-aws-ec2-ssh state=stopped)
+
+</details>
+
+### How to upgrade
+
+- **Offline appliance:** `vyomi update` (Homebrew installs older than 3.0.24: run `brew trust vyomi-cloud/tap && brew upgrade vyomi-docker` once first). Docker: `docker pull vyomi/appliance:3.0.40`.
+- **Nano** ([vyomi.cloud](https://vyomi.cloud)): updates with this release; close all Nano tabs and reopen to load it.
+
 ## [3.0.39] — 2026-11-02
 
 Daily conformance release. **110 product fixes** (AWS 19, GCP 47, Azure 10, all clouds 34); 80 reach Nano and 101 reach the offline appliance; 13 test and harness improvements.

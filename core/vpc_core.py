@@ -241,6 +241,26 @@ def _create_network_acl(store, params):
                      f"<networkAcl><networkAclId>{nacl_id}</networkAclId></networkAcl>")
 
 
+def _describe_network_acls(store, params):
+    m = _model(store)
+    want = {v for k, v in params.items() if k.startswith("NetworkAclId.")}
+    items = ""
+    for nid, n in m["nacls"].items():
+        if want and nid not in want:
+            continue
+        ents = "".join(
+            f"<item><ruleNumber>{e['rule_number']}</ruleNumber><protocol>{e['protocol']}</protocol>"
+            f"<ruleAction>{'allow' if e['allow'] else 'deny'}</ruleAction><egress>{str(e['egress']).lower()}</egress>"
+            f"<cidrBlock>{e['cidr']}</cidrBlock></item>" for e in n["entries"])
+        assoc = "".join(f"<item><networkAclAssociationId>aclassoc-{sid[-8:]}</networkAclAssociationId>"
+                        f"<networkAclId>{nid}</networkAclId><subnetId>{sid}</subnetId></item>" for sid in n["subnets"])
+        items += (f"<item><networkAclId>{nid}</networkAclId><vpcId>{n['vpc_id']}</vpcId><default>false</default>"
+                  f"<entrySet>{ents}</entrySet><associationSet>{assoc}</associationSet><tagSet/></item>")
+    if want and not items and not (want & set(m["nacls"])):
+        raise VpcError("InvalidNetworkAclID.NotFound", f"The network ACL ID '{sorted(want)[0]}' does not exist")
+    return _envelope("DescribeNetworkAcls", f"<networkAclSet>{items}</networkAclSet>")
+
+
 def _create_network_acl_entry(store, params):
     m = _model(store)
     nacl = m["nacls"].get(str(params.get("NetworkAclId", "")))
@@ -542,7 +562,7 @@ _OPS = {
     "CreateInternetGateway": _create_internet_gateway,
     "AttachInternetGateway": _attach_internet_gateway,
     "CreateRoute": _create_route, "DescribeVpcs": _describe_vpcs,
-    "CreateNetworkAcl": _create_network_acl,
+    "CreateNetworkAcl": _create_network_acl, "DescribeNetworkAcls": _describe_network_acls,
     "CreateNetworkAclEntry": _create_network_acl_entry,
     "AssociateNetworkAcl": _associate_network_acl,
     "AnalyzeReachability": _analyze_reachability_action,

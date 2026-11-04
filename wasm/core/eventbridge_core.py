@@ -250,12 +250,13 @@ def _deliver_sns(store, topic_arn, body_str):
         except ImportError:  # Pyodide flat layout
             import sns_core  # type: ignore
         topic = store.get_topic(topic_arn)
-        if topic is not None:
-            sns_core._publish_to_topic(store, topic, {"Message": body_str, "Subject": None,
-                                                      "MessageStructure": "", "attrs": {},
-                                                      "group": "", "dedup": ""})
+        if topic is None:
+            raise LookupError(f"SNS topic {topic_arn} does not exist")
+        sns_core._publish_to_topic(store, topic, {"Message": body_str, "Subject": None,
+                                                  "MessageStructure": "", "attrs": {},
+                                                  "group": "", "dedup": ""})
     except Exception:
-        pass
+        raise  # route_event retries per the target's RetryPolicy, then dead-letters
 
 
 def _deliver_sfn(arn, body_str, lambda_store=None):
@@ -340,6 +341,64 @@ def set_lambda_invoker(fn) -> None:
     _LAMBDA_INVOKER = fn
 
 
+# Stores for Kinesis / CloudWatch Logs targets (they live outside the messaging store);
+# installed by the offline appliance (server.py) and by Nano's registry.
+_TARGET_STORES: dict = {}
+
+
+def set_target_store(kind: str, store) -> None:
+    """kind: "kinesis" | "logs"."""
+    _TARGET_STORES[kind] = store
+
+
+def _deliver_kinesis(arn, body_str, tgt, event_id):
+    """Kinesis rule target: PutRecord of the (transformed) event; partition key from
+    KinesisParameters.PartitionKeyPath if present, else the event id."""
+    import base64
+    st = _TARGET_STORES.get("kinesis")
+    if st is None:
+        raise LookupError("Kinesis is not available")
+    try:
+        from core import kinesis_core
+    except ImportError:  # Pyodide flat layout
+        import kinesis_core  # type: ignore
+    pk = event_id
+    path = ((tgt or {}).get("KinesisParameters") or {}).get("PartitionKeyPath")
+    if path:
+        try:
+            found, v = _json_path(json.loads(body_str), path)
+            if found and v not in (None, ""):
+                pk = str(v)
+        except Exception:
+            pass
+    r = kinesis_core.dispatch(st, "Kinesis_20131202.PutRecord", {
+        "StreamName": arn.rsplit("stream/", 1)[-1], "PartitionKey": pk,
+        "Data": base64.b64encode(body_str.encode("utf-8")).decode()})
+    if r.status >= 300:
+        raise RuntimeError(f"Kinesis PutRecord failed: {r.body}")
+
+
+def _deliver_logs(arn, body_str):
+    """CloudWatch Logs rule target: one log event in a fresh stream of the group."""
+    st = _TARGET_STORES.get("logs")
+    if st is None:
+        raise LookupError("CloudWatch Logs is not available")
+    try:
+        from core import logs_core
+    except ImportError:  # Pyodide flat layout
+        import logs_core  # type: ignore
+    group = arn.split("log-group:", 1)[-1]
+    group = group[:-2] if group.endswith(":*") else group
+    stream = f"{datetime.now(timezone.utc):%Y/%m/%d}/{uuid.uuid4().hex}"
+    h = "Logs_20140328."
+    logs_core.dispatch(st, h + "CreateLogGroup", {"logGroupName": group})  # exists -> benign
+    logs_core.dispatch(st, h + "CreateLogStream", {"logGroupName": group, "logStreamName": stream})
+    r = logs_core.dispatch(st, h + "PutLogEvents", {"logGroupName": group, "logStreamName": stream,
+                           "logEvents": [{"timestamp": int(time.time() * 1000), "message": body_str}]})
+    if r.status >= 300:
+        raise RuntimeError(f"PutLogEvents failed: {r.body}")
+
+
 def _fn_name(arn: str) -> str:
     return arn.split(":function:", 1)[-1].split(":", 1)[0] if ":function:" in arn else arn
 
@@ -359,11 +418,36 @@ def _deliver_lambda(lambda_store, arn, body_str):
             lambda_core.dispatch(lambda_store, "POST", f"/2015-03-31/functions/{name}/invocations", {}, {},
                                  body_str.encode("utf-8"))
     except Exception:
-        pass
+        raise  # route_event retries per the target's RetryPolicy, then dead-letters
 
 
-def route_event(rules, bus, event_obj, envelope, send_sqs, invoke_lambda, publish_sns, forward_bus=None, _depth=0,
-                start_sfn=None, put_kinesis=None, put_logs=None):
+_MAX_LOCAL_RETRIES = 5   # EventBridge allows up to 185 over 24h; retried back-to-back here, capped
+
+
+def _deliver_with_retry(tgt, fn, send_sqs, envelope_str):
+    """Call `fn()`; on failure retry per the target's RetryPolicy.MaximumRetryAttempts, then
+    send the event to DeadLetterConfig.Arn (an SQS queue) if set. Never raises: EventBridge
+    swallows target failures, PutEvents succeeds regardless."""
+    try:
+        extra = int((tgt.get("RetryPolicy") or {}).get("MaximumRetryAttempts", 0) or 0)
+    except (TypeError, ValueError):
+        extra = 0
+    for _ in range(1 + max(0, min(extra, _MAX_LOCAL_RETRIES))):
+        try:
+            fn()
+            return True
+        except Exception:
+            continue
+    dlq = str((tgt.get("DeadLetterConfig") or {}).get("Arn") or "")
+    if dlq and ":sqs:" in dlq:
+        try:
+            send_sqs(dlq, envelope_str)
+        except Exception:
+            pass
+    return False
+
+
+def route_event(rules, bus, event_obj, envelope, send_sqs, invoke_lambda, publish_sns, deliver_other=None):
     """Match `event_obj` against every ENABLED rule on `bus` and hand each matching target
     its (Input/InputPath/InputTransformer-shaped) body via the three delivery callbacks.
     Shared by the Nano wire (eventbridge_core) and the offline appliance. Returns #deliveries."""
@@ -378,30 +462,118 @@ def route_event(rules, bus, event_obj, envelope, send_sqs, invoke_lambda, publis
             arn = tgt["Arn"]
             body_str = _target_input(tgt, envelope, base_str)
             if ":sqs:" in arn:
-                send_sqs(arn, body_str)
+                fn = lambda a=arn, b=body_str: send_sqs(a, b)
             elif ":sns:" in arn:
-                publish_sns(arn, body_str)
+                fn = lambda a=arn, b=body_str: publish_sns(a, b)
             elif ":lambda:" in arn or ":function:" in arn:
-                invoke_lambda(arn, body_str)
-            elif ":states:" in arn and ":stateMachine:" in arn and start_sfn is not None:
-                start_sfn(arn, body_str)
-            elif ":kinesis:" in arn and ":stream/" in arn and put_kinesis is not None:
-                put_kinesis(arn, body_str, tgt, envelope)
-            elif ":logs:" in arn and ":log-group:" in arn and put_logs is not None:
-                put_logs(arn, body_str)
-            elif ":event-bus/" in arn and forward_bus is not None and _depth < 5:
-                # Event-bus target: the event is re-matched against the destination bus's rules.
-                # (Real EventBridge also refuses bus chains deeper than the cycle limit.)
-                dest = arn.split(":event-bus/", 1)[1]
-                n += route_event(rules, dest, event_obj, envelope, send_sqs, invoke_lambda,
-                                 publish_sns, forward_bus, _depth + 1, start_sfn, put_kinesis, put_logs)
+                fn = lambda a=arn, b=body_str: invoke_lambda(a, b)
+            elif deliver_other is not None and (":event-bus/" in arn or ":stateMachine:" in arn or ":api-destination/" in arn
+                                                or ":kinesis:" in arn or ":log-group:" in arn):
+                fn = lambda a=arn, b=body_str, t=tgt: deliver_other(a, b, t)
             else:
                 continue
+            _deliver_with_retry(tgt, fn, send_sqs, base_str)
             n += 1
     return n
 
 
-def _put_events(store, body, lambda_store=None):
+def _store_map(store, attr):
+    m = getattr(store, attr, None)
+    if m is None:
+        m = {}
+        setattr(store, attr, m)
+    return m
+
+
+def _create_connection(store, body):
+    name = str(body.get("Name", "")).strip()
+    if not name:
+        raise _E("ValidationException", "Name is required.")
+    arn = f"arn:aws:events:{REGION}:{store.account_id}:connection/{name}/{uuid.uuid4()}"
+    _store_map(store, "event_connections")[name] = {
+        "Name": name, "ConnectionArn": arn, "ConnectionState": "AUTHORIZED",
+        "AuthorizationType": body.get("AuthorizationType", "API_KEY"),
+        "AuthParameters": body.get("AuthParameters") or {}, "Description": body.get("Description", ""),
+        "CreationTime": time.time(), "LastModifiedTime": time.time()}
+    store.persist()
+    return EventsResponse(body={"ConnectionArn": arn, "ConnectionState": "AUTHORIZED",
+                                "CreationTime": time.time(), "LastModifiedTime": time.time()})
+
+
+def _describe_connection(store, body):
+    c = _store_map(store, "event_connections").get(str(body.get("Name", "")))
+    if not c:
+        raise _E("ResourceNotFoundException", f"Connection {body.get('Name')} does not exist.")
+    return EventsResponse(body={k: v for k, v in c.items() if k != "AuthParameters"})
+
+
+def _delete_connection(store, body):
+    _store_map(store, "event_connections").pop(str(body.get("Name", "")), None)
+    store.persist()
+    return EventsResponse(body={})
+
+
+def _create_api_destination(store, body):
+    name = str(body.get("Name", "")).strip()
+    if not name or not body.get("InvocationEndpoint") or not body.get("ConnectionArn"):
+        raise _E("ValidationException", "Name, ConnectionArn, InvocationEndpoint and HttpMethod are required.")
+    arn = f"arn:aws:events:{REGION}:{store.account_id}:api-destination/{name}/{uuid.uuid4()}"
+    _store_map(store, "event_api_destinations")[name] = {
+        "Name": name, "ApiDestinationArn": arn, "ApiDestinationState": "ACTIVE",
+        "ConnectionArn": body["ConnectionArn"], "InvocationEndpoint": body["InvocationEndpoint"],
+        "HttpMethod": body.get("HttpMethod", "POST"), "Description": body.get("Description", ""),
+        "InvocationRateLimitPerSecond": body.get("InvocationRateLimitPerSecond", 300),
+        "CreationTime": time.time(), "LastModifiedTime": time.time()}
+    store.persist()
+    return EventsResponse(body={"ApiDestinationArn": arn, "ApiDestinationState": "ACTIVE",
+                                "CreationTime": time.time(), "LastModifiedTime": time.time()})
+
+
+def _describe_api_destination(store, body):
+    d = _store_map(store, "event_api_destinations").get(str(body.get("Name", "")))
+    if not d:
+        raise _E("ResourceNotFoundException", f"An api-destination '{body.get('Name')}' does not exist.")
+    return EventsResponse(body=dict(d))
+
+
+def _list_api_destinations(store, body):
+    return EventsResponse(body={"ApiDestinations": list(_store_map(store, "event_api_destinations").values())})
+
+
+def _delete_api_destination(store, body):
+    _store_map(store, "event_api_destinations").pop(str(body.get("Name", "")), None)
+    store.persist()
+    return EventsResponse(body={})
+
+
+def _deliver_api_destination(store, arn, body_str, tgt=None):
+    """POST/PUT/... the (transformed) event to the destination's endpoint with the connection's auth."""
+    import urllib.request
+    dest = next((d for d in _store_map(store, "event_api_destinations").values()
+                 if d["ApiDestinationArn"] == arn), None)
+    if dest is None:
+        raise LookupError(f"API destination {arn} does not exist")
+    headers = {"Content-Type": "application/json"}
+    conn = next((c for c in _store_map(store, "event_connections").values()
+                 if c["ConnectionArn"] == dest["ConnectionArn"]), None)
+    if conn:
+        ap = conn.get("AuthParameters") or {}
+        if conn["AuthorizationType"] == "API_KEY" and ap.get("ApiKeyAuthParameters"):
+            k = ap["ApiKeyAuthParameters"]
+            headers[k.get("ApiKeyName", "x-api-key")] = k.get("ApiKeyValue", "")
+        elif conn["AuthorizationType"] == "BASIC" and ap.get("BasicAuthParameters"):
+            import base64
+            b = ap["BasicAuthParameters"]
+            headers["Authorization"] = "Basic " + base64.b64encode(
+                f"{b.get('Username', '')}:{b.get('Password', '')}".encode()).decode()
+    req = urllib.request.Request(dest["InvocationEndpoint"], data=body_str.encode(),
+                                 method=dest.get("HttpMethod", "POST"), headers=headers)
+    with urllib.request.urlopen(req, timeout=10) as r:
+        if r.status >= 300:
+            raise RuntimeError(f"API destination returned {r.status}")
+
+
+def _put_events(store, body, lambda_store=None, depth=0, replay_name=None):
     entries_out = []
     for entry in body.get("Entries") or []:
         source = entry.get("Source", "")
@@ -419,20 +591,220 @@ def _put_events(store, body, lambda_store=None):
         envelope = {"version": "0", "id": event_id, "detail-type": detail_type, "source": source,
                     "account": store.account_id, "time": _now_iso(), "region": REGION,
                     "resources": resources, "detail": detail}
+        if replay_name:
+            envelope["replay-name"] = replay_name
+        else:
+            _archive_event(store, bus, event_obj, envelope)
 
         def send_sqs(arn, body_str):
             queue = store.get_queue_by_arn(arn)
-            if queue is not None:
-                sqs_core.enqueue(store, queue, body_str)
+            if queue is None:
+                raise LookupError(f"SQS queue {arn} does not exist")
+            sqs_core.enqueue(store, queue, body_str)
+
+        def deliver_other(arn, body_str, tgt=None):
+            if ":kinesis:" in arn:
+                _deliver_kinesis(arn, body_str, tgt, event_id)
+            elif ":log-group:" in arn:
+                _deliver_logs(arn, body_str)
+            elif ":event-bus/" in arn:
+                # Another event bus: re-route the (possibly transformed) event on that bus (depth-capped).
+                if depth >= 3:
+                    return
+                try:
+                    ev2 = json.loads(body_str)
+                except Exception:
+                    return
+                if not isinstance(ev2, dict):
+                    return
+                _put_events(store, {"Entries": [{
+                    "Source": ev2.get("source", source), "DetailType": ev2.get("detail-type", detail_type),
+                    "Detail": json.dumps(ev2.get("detail", {})), "Resources": ev2.get("resources", []),
+                    "EventBusName": arn.rsplit("/", 1)[-1]}]}, lambda_store, depth + 1, replay_name)
+            elif ":api-destination/" in arn:
+                _deliver_api_destination(store, arn, body_str, tgt)
+            else:  # Step Functions StartExecution with the event as input
+                try:
+                    from core import stepfunctions_core as sfn
+                except ImportError:  # Pyodide flat layout
+                    import stepfunctions_core as sfn  # type: ignore
+                r = sfn.dispatch(sfn.shared_store(), "AWSStepFunctions.StartExecution",
+                                 {"stateMachineArn": arn, "input": body_str}, lambda_store)
+                if r.status >= 300:
+                    raise RuntimeError(f"StartExecution failed: {r.body}")
 
         route_event(_rules(store).values(), bus, event_obj, envelope, send_sqs,
                     lambda arn, b: _deliver_lambda(lambda_store, arn, b),
-                    lambda arn, b: _deliver_sns(store, arn, b), forward_bus=True,
-                    start_sfn=lambda arn, b: _deliver_sfn(arn, b),
-                    put_kinesis=_deliver_kinesis, put_logs=_deliver_logs)
+                    lambda arn, b: _deliver_sns(store, arn, b), deliver_other)
         entries_out.append({"EventId": event_id})
     store.persist()
     return EventsResponse(body={"FailedEntryCount": 0, "Entries": entries_out})
+
+
+def _bus_name(arn_or_name):
+    return str(arn_or_name or "default").rsplit("/", 1)[-1] or "default"
+
+
+def _archive_event(store, bus, event_obj, envelope):
+    """Store the event in every ENABLED archive whose source bus is `bus` and whose pattern matches."""
+    for a in _store_map(store, "event_archives").values():
+        if a["State"] != "ENABLED" or _bus_name(a["EventSourceArn"]) != bus:
+            continue
+        if a.get("EventPattern") and not _match_pattern(json.loads(a["EventPattern"]), event_obj):
+            continue
+        a["events"].append({"time": time.time(), "envelope": dict(envelope)})
+        a["EventCount"] = len(a["events"])
+        a["SizeBytes"] = a.get("SizeBytes", 0) + len(json.dumps(envelope))
+
+
+def _archive_view(a):
+    return {k: v for k, v in a.items() if k != "events"}
+
+
+def _create_archive(store, body):
+    name = str(body.get("ArchiveName", "")).strip()
+    src = body.get("EventSourceArn")
+    if not name or not src:
+        raise _E("ValidationException", "ArchiveName and EventSourceArn are required.")
+    arch = _store_map(store, "event_archives")
+    if name in arch:
+        raise _E("ResourceAlreadyExistsException", f"Archive {name} already exists.")
+    pat = body.get("EventPattern") or ""
+    arn = f"arn:aws:events:{REGION}:{store.account_id}:archive/{name}"
+    now = time.time()
+    arch[name] = {"ArchiveName": name, "ArchiveArn": arn, "EventSourceArn": src, "State": "ENABLED",
+                  "Description": body.get("Description", ""), "EventPattern": pat,
+                  "RetentionDays": body.get("RetentionDays", 0), "SizeBytes": 0, "EventCount": 0,
+                  "CreationTime": now, "events": []}
+    store.persist()
+    return EventsResponse(body={"ArchiveArn": arn, "State": "ENABLED", "CreationTime": now})
+
+
+def _get_archive(store, name):
+    a = _store_map(store, "event_archives").get(str(name or ""))
+    if not a:
+        raise _E("ResourceNotFoundException", f"Archive {name} does not exist.")
+    return a
+
+
+def _describe_archive(store, body):
+    return EventsResponse(body=_archive_view(_get_archive(store, body.get("ArchiveName"))))
+
+
+def _list_archives(store, body):
+    pre = str(body.get("NamePrefix") or "")
+    src = body.get("EventSourceArn")
+    return EventsResponse(body={"Archives": [
+        _archive_view(a) for a in _store_map(store, "event_archives").values()
+        if a["ArchiveName"].startswith(pre) and (not src or a["EventSourceArn"] == src)]})
+
+
+def _delete_archive(store, body):
+    _get_archive(store, body.get("ArchiveName"))
+    del _store_map(store, "event_archives")[body["ArchiveName"]]
+    store.persist()
+    return EventsResponse(body={})
+
+
+def _start_replay(store, body, lambda_store=None):
+    name = str(body.get("ReplayName", "")).strip()
+    if not name or not body.get("EventSourceArn") or not body.get("Destination"):
+        raise _E("ValidationException", "ReplayName, EventSourceArn, Destination, EventStartTime and EventEndTime are required.")
+    reps = _store_map(store, "event_replays")
+    if name in reps:
+        raise _E("ResourceAlreadyExistsException", f"Replay {name} already exists.")
+    arch = next((a for a in _store_map(store, "event_archives").values()
+                 if a["ArchiveArn"] == body["EventSourceArn"]), None)
+    if arch is None:
+        raise _E("ResourceNotFoundException", f"Archive {body['EventSourceArn']} does not exist.")
+    t0 = float(body.get("EventStartTime") or 0)
+    t1 = float(body.get("EventEndTime") or time.time() + 1)
+    dest_bus = _bus_name((body["Destination"] or {}).get("Arn"))
+    start = time.time()
+    n = 0
+    for ev in list(arch["events"]):
+        if not (t0 <= ev["time"] <= t1):
+            continue
+        e = ev["envelope"]
+        _put_events(store, {"Entries": [{
+            "Source": e.get("source", ""), "DetailType": e.get("detail-type", ""),
+            "Detail": json.dumps(e.get("detail", {})), "Resources": e.get("resources", []),
+            "EventBusName": dest_bus}]}, lambda_store, replay_name=name)
+        n += 1
+    arn = f"arn:aws:events:{REGION}:{store.account_id}:replay/{name}"
+    reps[name] = {"ReplayName": name, "ReplayArn": arn, "State": "COMPLETED", "EventSourceArn": arch["ArchiveArn"],
+                  "Destination": body["Destination"], "Description": body.get("Description", ""),
+                  "EventStartTime": t0, "EventEndTime": t1, "ReplayStartTime": start,
+                  "ReplayEndTime": time.time(), "EventLastReplayedTime": time.time() if n else None,
+                  "StateReason": "Replay completed"}
+    store.persist()
+    return EventsResponse(body={"ReplayArn": arn, "State": "COMPLETED", "ReplayStartTime": start})
+
+
+def _describe_replay(store, body):
+    r = _store_map(store, "event_replays").get(str(body.get("ReplayName", "")))
+    if not r:
+        raise _E("ResourceNotFoundException", f"Replay {body.get('ReplayName')} does not exist.")
+    return EventsResponse(body=dict(r))
+
+
+def _list_replays(store, body):
+    pre = str(body.get("NamePrefix") or "")
+    return EventsResponse(body={"Replays": [r for r in _store_map(store, "event_replays").values()
+                                            if r["ReplayName"].startswith(pre)]})
+
+
+def _buses(store):
+    return _store_map(store, "event_buses")
+
+
+def _bus_arn(store, name):
+    return f"arn:aws:events:{REGION}:{store.account_id}:event-bus/{name}"
+
+
+def _bus_view(store, name, b=None):
+    v = {"Name": name, "Arn": _bus_arn(store, name)}
+    if b and b.get("Description"):
+        v["Description"] = b["Description"]
+    return v
+
+
+def _create_event_bus(store, body):
+    name = str(body.get("Name", "")).strip()
+    if not name:
+        raise _E("ValidationException", "Name is required.")
+    if name == "default" or name in _buses(store):
+        raise _E("ResourceAlreadyExistsException", f"Event bus {name} already exists.")
+    _buses(store)[name] = {"Description": body.get("Description", ""), "Tags": body.get("Tags") or [],
+                           "CreationTime": _now_iso()}
+    store.persist()
+    out = {"EventBusArn": _bus_arn(store, name)}
+    if body.get("Description"):
+        out["Description"] = body["Description"]
+    return EventsResponse(body=out)
+
+
+def _describe_event_bus(store, body):
+    name = _bus_name(body.get("Name") or "default")
+    if name != "default" and name not in _buses(store):
+        raise _E("ResourceNotFoundException", f"Event bus {name} does not exist.")
+    return EventsResponse(body=_bus_view(store, name, _buses(store).get(name)))
+
+
+def _list_event_buses(store, body):
+    pre = str(body.get("NamePrefix", "") or "")
+    names = ["default"] + sorted(_buses(store))
+    return EventsResponse(body={"EventBuses": [_bus_view(store, n, _buses(store).get(n))
+                                               for n in names if n.startswith(pre)]})
+
+
+def _delete_event_bus(store, body):
+    name = _bus_name(body.get("Name") or "")
+    if name == "default":
+        raise _E("ValidationException", "Cannot delete the default event bus.")
+    _buses(store).pop(name, None)
+    store.persist()
+    return EventsResponse(body={})
 
 
 class _E(Exception):
@@ -443,9 +815,18 @@ class _E(Exception):
 
 
 _OPS = {
+    "CreateEventBus": _create_event_bus, "DescribeEventBus": _describe_event_bus,
+    "ListEventBuses": _list_event_buses, "DeleteEventBus": _delete_event_bus,
     "PutRule": _put_rule, "DeleteRule": _delete_rule, "ListRules": _list_rules,
     "PutTargets": _put_targets, "RemoveTargets": _remove_targets,
     "ListTargetsByRule": _list_targets_by_rule, "PutEvents": _put_events,
+    "CreateConnection": _create_connection, "DescribeConnection": _describe_connection,
+    "DeleteConnection": _delete_connection, "CreateApiDestination": _create_api_destination,
+    "DescribeApiDestination": _describe_api_destination, "ListApiDestinations": _list_api_destinations,
+    "DeleteApiDestination": _delete_api_destination,
+    "CreateArchive": _create_archive, "DescribeArchive": _describe_archive,
+    "ListArchives": _list_archives, "DeleteArchive": _delete_archive,
+    "StartReplay": _start_replay, "DescribeReplay": _describe_replay, "ListReplays": _list_replays,
 }
 
 
@@ -459,8 +840,8 @@ def dispatch(store: MessagingStore, target: str, payload: dict | None = None, la
         return EventsResponse(status=400, body={"__type": "UnknownOperationException",
                                                 "message": f"Unknown operation {action}."})
     try:
-        if action == "PutEvents":
-            return _put_events(store, body, lambda_store)
+        if action in ("PutEvents", "StartReplay"):
+            return op(store, body, lambda_store)
         return op(store, body)
     except _E as e:
         return EventsResponse(status=400, body={"__type": e.code, "message": e.message})

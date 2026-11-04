@@ -21,6 +21,16 @@ const check = (ok, what, detail = "") => { console.log(`[${ok ? "PASS" : "FAIL"}
 const b = await chromium.launch();
 const p = await (await b.newContext({ viewport: { width: 1440, height: 860 } })).newPage();
 const errs = []; p.on("pageerror", e => errs.push(String(e)));
+// The console auto-switches the active space and reloads when it belongs to another cloud (the previous cloud's
+// run leaves exactly that state); make this cloud's space active first so the page doesn't reload mid-test.
+try {
+  const act = await (await p.request.get(`${BASE}/api/spaces/active`)).json();
+  if (String(act?.space?.provider || "").toLowerCase() !== CLOUD) {
+    const all = (await (await p.request.get(`${BASE}/api/spaces`)).json()).spaces || [];
+    const sp = all.find(s => String(s.provider || "").toLowerCase() === CLOUD && s.status === "running");
+    if (sp) await p.request.post(`${BASE}/api/spaces/${sp.space_id}/switch`);
+  }
+} catch (_) {}
 await p.goto(`${BASE}/console/${CLOUD}`); await p.waitForSelector("#vy-appbar .vy-notch a", { timeout: 30000 });
 // let the console finish its first render (it rebuilds header bits on load) before clicking: a cold first load made these clicks race it
 await p.waitForLoadState("networkidle", { timeout: 15000 }).catch(() => {});

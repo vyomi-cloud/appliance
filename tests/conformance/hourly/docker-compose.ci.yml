@@ -3,6 +3,11 @@
 # and keep CI boots out of the install/traction numbers.
 services:
   simulator:
+    # The workflow boots without VYOMI_DOCKER_GID, so the non-root `cloudlearn`
+    # user cannot open /var/run/docker.sock (group differs per runner image) and
+    # every EC2/VM launch failed with "permission denied" -> state=stopped.
+    # CI boots are ephemeral, so run as root to reach the socket on any runner.
+    user: "0:0"
     environment:
       CLOUDLEARN_TIER_ENFORCE: "0"
       # Test boots must not count as installs in the traction numbers.

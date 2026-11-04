@@ -247,7 +247,7 @@ _QUERY_ACTION = {
     "DeleteRouteTable": "vpc", "DeleteNetworkAcl": "vpc",
     "AuthorizeSecurityGroupIngress": "vpc", "AuthorizeSecurityGroupEgress": "vpc",
     "CreateInternetGateway": "vpc", "AttachInternetGateway": "vpc", "CreateRoute": "vpc",
-    "DescribeVpcs": "vpc", "CreateNetworkAcl": "vpc", "CreateNetworkAclEntry": "vpc",
+    "DescribeVpcs": "vpc", "CreateNetworkAcl": "vpc", "DescribeNetworkAcls": "vpc", "CreateNetworkAclEntry": "vpc",
     "AssociateNetworkAcl": "vpc", "AnalyzeReachability": "vpc",
 }
 
@@ -367,7 +367,7 @@ class AwsWireRouter:
         self.cw = s.get("cw") or cw.CloudWatchStore()          # CloudWatch metrics / alarms / dashboards
         self.vpc = s.get("vpc") or _types.SimpleNamespace()   # EC2/VPC network model
         self.logs = s.get("logs") or logs.LogsStore()         # CloudWatch Logs
-        events.set_target_store("kinesis", self.kinesis)   # EventBridge Kinesis / Logs rule targets
+        events.set_target_store("kinesis", self.kinesis)       # EventBridge Kinesis / Logs rule targets
         events.set_target_store("logs", self.logs)
         # Lambda invocations land in CloudWatch Logs (/aws/lambda/<fn>) like real Lambda.
         if getattr(self.lam, "_log_sink", None) is None:

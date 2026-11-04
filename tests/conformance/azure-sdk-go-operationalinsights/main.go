@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -20,7 +19,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"github.com/Azure/azure-sdk-for-go/sdk/monitor/query/azlogs"
+	"github.com/Azure/azure-sdk-for-go/sdk/monitor/azquery"
 	oi "github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/operationalinsights/armoperationalinsights/v2"
 )
 
@@ -30,13 +29,13 @@ func (fakeCred) GetToken(_ context.Context, _ policy.TokenRequestOptions) (azcor
 	return azcore.AccessToken{Token: "fake-token", ExpiresOn: time.Now().Add(time.Hour)}, nil
 }
 
-type rewriteTransport struct{ ep string }
+// azquery's bearer policy refuses http:// endpoints, so the client talks https:// to a transport that
+// forwards over plain http to the local simulator (the SDK itself is unmodified).
+type plainHTTP struct{}
 
-func (t rewriteTransport) Do(r *http.Request) (*http.Response, error) {
-	u, _ := url.Parse(t.ep)
-	r2 := r.Clone(r.Context())
-	r2.URL.Scheme, r2.URL.Host, r2.Host = u.Scheme, u.Host, u.Host
-	return http.DefaultClient.Do(r2)
+func (plainHTTP) Do(r *http.Request) (*http.Response, error) {
+	r.URL.Scheme = "http"
+	return http.DefaultClient.Do(r)
 }
 
 var failed int
@@ -272,6 +271,23 @@ func main() {
 	check("DataSources.ListByWorkspace filtered by kind", err == nil && cnt == 1, fmt.Sprint(cnt, err))
 	_, err = dsc.Delete(ctx, rg, ws, "WinApp", nil)
 	check("DataSources.Delete", err == nil, fmt.Sprint(err))
+
+	// ── KQL query through the official azquery LogsClient (RunKql) ──
+	ing, _ := http.NewRequest("POST", ep+"/azure-data/loganalytics/"+ws+"/api/logs?logType=GoKql",
+		strings.NewReader(`[{"level":"error","latency":900},{"level":"info","latency":15},{"level":"error","latency":120}]`))
+	ing.Header.Set("Content-Type", "application/json")
+	ir, ierr := http.DefaultClient.Do(ing)
+	check("Data Collector ingest → 200", ierr == nil && ir.StatusCode == 200, fmt.Sprint(ierr))
+	lq, _ := azquery.NewLogsClient(fakeCred{}, &azquery.LogsClientOptions{ClientOptions: azcore.ClientOptions{
+		Cloud: cloud.Configuration{Services: map[cloud.ServiceName]cloud.ServiceConfiguration{
+			azquery.ServiceNameLogs: {Endpoint: "https://" + strings.TrimPrefix(ep, "http://") + "/azure-data/loganalytics", Audience: ep}}},
+		Transport: plainHTTP{}}})
+	kql := "GoKql_CL | where level_s == 'error' | count"
+	qr, err := lq.QueryWorkspace(ctx, ws, azquery.Body{Query: to.Ptr(kql)}, nil)
+	check("LogsClient.QueryWorkspace runs KQL (where + count)", err == nil && len(qr.Tables) == 1 &&
+		len(qr.Tables[0].Rows) == 1 && fmt.Sprint(qr.Tables[0].Rows[0][0]) == "2", fmt.Sprint(err, qr.Tables))
+	_, err = lq.QueryWorkspace(ctx, ws, azquery.Body{Query: to.Ptr("GoKql_CL | join kind=inner (X) on a")}, nil)
+	check("unsupported KQL → 400 error", status(err) == 400, fmt.Sprint(err))
 
 	// ── delete ──
 	dpl, err := wsc.BeginDelete(ctx, rg, ws, nil)
