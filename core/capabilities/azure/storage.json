@@ -200,8 +200,8 @@
  "azure.storage.azureaisearch": {
   "title": "Azure AI Search (index this storage account)",
   "level": { "nano": "limited", "offline": "limited" },
-  "limitations": ["Real search service (Microsoft.Search) + Import data: a data source, index and indexer are created and the indexer really reads the container's blobs (text, JSON, JSON arrays, CSV) into a queryable index (TF-IDF ranking, $filter, facets). NOT modelled: AI enrichment skillsets, semantic ranker, vector / hybrid search, scoring profiles, synonym maps, the Lucene query parser."],
-  "tests": ["tests/conformance/test_azure_search_core.py"]
+  "limitations": ["Real search service (Microsoft.Search) + Import data: a data source, index and indexer are created and the indexer really reads the container's blobs (text, JSON, JSON arrays, CSV) into a queryable index (TF-IDF ranking, $filter, facets). Also modelled (core/azure_search_vector_core.py): Collection(Edm.Single) vector fields with vectorSearch profiles, vector / text-vectorizer / hybrid (RRF) queries by exact cosine scan, and skillsets with SplitSkill + AzureOpenAIEmbeddingSkill executed in indexer runs plus index projections (integrated vectorization) over the local embedding model (its vectors are resized to the declared dimensions; a deterministic bag-of-words embedding is used when no model backend is running, so similarity is lexical). NOT modelled: other skills (OCR, entity, language, image, custom WebApi) - an indexer using one fails naming it, semantic ranker, HNSW graphs, scoring profiles, synonym maps, the Lucene query parser."],
+  "tests": ["tests/conformance/test_azure_search_core.py", "tests/conformance/test_azure_search_vector_core.py"]
  },
  "azure.storage.datalakegen2upgrade": {
   "title": "Data Lake Gen2 upgrade",

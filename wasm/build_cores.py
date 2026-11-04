@@ -128,7 +128,7 @@ CORES = [
     "azure_support_core.py",                        # v4: Microsoft.Support support requests filed with Vyomi
     "azure_monitorproducts_core.py",                # v4: Azure Monitor workspaces (Managed Prometheus) + Managed Grafana control plane — before azure_arm_core
     "azure_files_core.py",
-    "azure_search_core.py",
+    "azure_search_vector_core.py", "azure_search_core.py",
     "azure_storagemover_core.py",
     "azure_marketplace_core.py",
     "azure_billing_ext_core.py",
