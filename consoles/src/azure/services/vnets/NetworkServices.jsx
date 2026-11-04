@@ -217,3 +217,84 @@ export function DdosPanel({ a, reload: reloadVnet }) {
     </CapabilityContainer>
   );
 }
+
+// ── Network Manager ────────────────────────────────────────────────────────────────────
+export function NetworkManagerPanel({ a }) {
+  const notify = useNotify();
+  const { data, loading, error, reload } = useAsync(() => ns.listNetworkManagerView(a.id), [a.id]);
+  const [dlg, setDlg] = useState(null);
+  return (
+    <CapabilityContainer id="azure.vnets.network_appliances" title={`${a.name} | Network manager`}>
+      <BrowseGrid
+        resourceName="network manager" rowKey={(r) => r.id} filterPlaceholder="Search network managers"
+        items={data || []} loading={loading} error={error} onRefresh={reload} csvName="network-managers.csv"
+        extraCommands={<>
+          <ToolbarButton icon={<Add20Regular />} onClick={() => setDlg("create")}>Create network manager</ToolbarButton>
+          <ToolbarButton onClick={() => setDlg("group")} disabled={!(data || []).length}>Add to network group</ToolbarButton>
+          <ToolbarButton onClick={() => setDlg("conn")} disabled={!(data || []).some((m) => m._groups.length)}>Add connectivity configuration</ToolbarButton>
+        </>}
+        onDelete={async (sel) => { for (const r of sel) await ns.NM.remove(ns.rgOf(r.id), r.name); notify.success(`Deleted ${sel.length} network manager(s).`, "Delete succeeded"); reload(); }}
+        columns={[
+          { key: "name", label: "Name" },
+          { key: "access", label: "Features", value: (r) => (r.properties?.networkManagerScopeAccesses || []).join(", ") },
+          { key: "groups", label: "Network groups containing this network", value: (r) => r._inGroups.join(", ") || "--" },
+          { key: "conn", label: "Connectivity configurations applied", value: (r) => r._applies.map((c) => `${c.name} (${c.properties?.connectivityTopology})`).join(", ") || "--" },
+          { key: "state", label: "Provisioning state", value: (r) => r.properties?.provisioningState },
+        ]}
+      />
+      {dlg === "create" && <CreateNetworkManager a={a} onClose={() => setDlg(null)} onDone={reload} />}
+      {dlg === "group" && <AddToGroup a={a} managers={data || []} onClose={() => setDlg(null)} onDone={reload} />}
+      {dlg === "conn" && <AddConnectivity a={a} managers={data || []} onClose={() => setDlg(null)} onDone={reload} />}
+    </CapabilityContainer>
+  );
+}
+function CreateNetworkManager({ a, onClose, onDone }) {
+  const notify = useNotify();
+  const [name, setName] = useState("nm-" + a.name);
+  const [acc, setAcc] = useState({ Connectivity: true, SecurityAdmin: false });
+  const [busy, run] = useRun(notify, () => { onDone(); onClose(); });
+  const accesses = Object.keys(acc).filter((k) => acc[k]);
+  return (
+    <Modal title="Create a network manager" valid={!!name && accesses.length > 0} busy={busy} onClose={onClose}
+      onGo={() => run(() => ns.createNetworkManager(a.resourceGroup, name, a.location, accesses), `Network manager '${name}' was created.`, "Failed to create network manager")}>
+      <Field label="Name" required><Input value={name} onChange={(_, d) => setName(d.value)} aria-label="Network manager name" /></Field>
+      <Field label="Features">
+        {Object.keys(acc).map((k) => <Checkbox key={k} checked={acc[k]} onChange={(_, d) => setAcc({ ...acc, [k]: !!d.checked })} label={k === "SecurityAdmin" ? "Security admin" : k} />)}
+      </Field>
+    </Modal>
+  );
+}
+function AddToGroup({ a, managers, onClose, onDone }) {
+  const notify = useNotify();
+  const [nmId, setNmId] = useState(managers[0]?.id || "");
+  const [group, setGroup] = useState("group1");
+  const [busy, run] = useRun(notify, () => { onDone(); onClose(); });
+  const nm = managers.find((m) => m.id === nmId) || managers[0];
+  return (
+    <Modal title="Add to network group" goLabel="Add" valid={!!nm && !!group} busy={busy} onClose={onClose}
+      onGo={() => run(() => ns.addToNetworkGroup(nm, group, a.id), `Virtual network '${a.name}' was added to group '${group}'.`, "Failed to add to network group")}>
+      <Field label="Network manager" required><Select value={nm?.id || ""} onChange={(_, d) => setNmId(d.value)} aria-label="Network manager">{managers.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</Select></Field>
+      <Field label="Network group" required hint="Created when it does not exist"><Input value={group} onChange={(_, d) => setGroup(d.value)} aria-label="Network group name" /></Field>
+    </Modal>
+  );
+}
+function AddConnectivity({ a, managers, onClose, onDone }) {
+  const notify = useNotify();
+  const usable = managers.filter((m) => m._groups.length);
+  const [nmId, setNmId] = useState(usable[0]?.id || "");
+  const nm = usable.find((m) => m.id === nmId) || usable[0];
+  const [name, setName] = useState("connectivity1");
+  const [topology, setTopology] = useState("Mesh");
+  const [group, setGroup] = useState("");
+  const [busy, run] = useRun(notify, () => { onDone(); onClose(); });
+  const grp = group || nm?.["_groups"]?.[0]?.name || "";
+  return (
+    <Modal title="Add connectivity configuration" goLabel="Add" valid={!!nm && !!name && !!grp} busy={busy} onClose={onClose}
+      onGo={() => run(() => ns.createConnectivityConfig(nm, name, topology, grp, a.id), `Connectivity configuration '${name}' was created.`, "Failed to create connectivity configuration")}>
+      <Field label="Network manager" required><Select value={nm?.id || ""} onChange={(_, d) => { setNmId(d.value); setGroup(""); }} aria-label="Network manager">{usable.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</Select></Field>
+      <Field label="Name" required><Input value={name} onChange={(_, d) => setName(d.value)} aria-label="Configuration name" /></Field>
+      <Field label="Topology"><Select value={topology} onChange={(_, d) => setTopology(d.value)} aria-label="Topology"><option>Mesh</option><option value="HubAndSpoke">Hub and spoke (this network is the hub)</option></Select></Field>
+      <Field label="Network group" required><Select value={grp} onChange={(_, d) => setGroup(d.value)} aria-label="Network group">{(nm?._groups || []).map((g) => <option key={g.name}>{g.name}</option>)}</Select></Field>
+    </Modal>
+  );
+}
