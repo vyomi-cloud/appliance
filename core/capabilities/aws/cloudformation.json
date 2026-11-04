@@ -232,5 +232,15 @@
   "tests": [
    "tests/conformance/test_cfn_sweep_core.py"
   ]
+ },
+ "aws.cloudformation.git-sync": {
+  "title": "Git sync (CodeConnections CFN_STACK_SYNC)",
+  "level": {"nano": "limited", "offline": "limited"},
+  "limitations": [
+   "Real: connections, repository links and CFN_STACK_SYNC configurations (CodeConnections JSON API incl. GetResourceSyncStatus) over core/aws_codeconn_core.py. A push to the linked branch reads the deployment file (template-file-path/parameters/tags), then CREATES or UPDATES the stack through the real CloudFormation core; an identical template is recorded as no changes, TriggerResourceUpdateOn=FILE_CHANGE skips pushes that touch neither the deployment file nor the template, and failures carry the real reason.",
+   "Repositories owned by 'vyomi' live inside Vyomi (push with the VyomiPush operation or a real git push to Gitea on the offline appliance). Other GitHub repositories are fetched with the user's own PAT (VyomiSetGitHubToken) on the offline appliance only - GitHub does not call back into Vyomi, so sync on demand (VyomiSync). Nano cannot reach GitHub. Connections are AVAILABLE immediately (no OAuth handshake), other providers (GitLab, Bitbucket, Azure DevOps) cannot be fetched, the RoleArn is validated for shape but not assumed, and CloudFormation provisions only the resource types listed under resource-provisioning."
+  ],
+  "api": ["CreateConnection", "CreateRepositoryLink", "CreateSyncConfiguration", "GetResourceSyncStatus"],
+  "tests": ["tests/conformance/test_aws_cfn_gitsync.py"]
  }
 }

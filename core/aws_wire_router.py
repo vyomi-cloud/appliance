@@ -377,6 +377,7 @@ _SIGNING = {
     "vpc-lattice": "vpc-lattice",   # VPC Lattice control plane (rest-json /servicenetworks, /services, /targetgroups, ...) -> core/vpc_lattice_core over the EC2 model
     "rbin": "rbin",   # EC2 Recycle Bin (rest-json /rules...) -> core/ec2_ops_core.rbin_dispatch over the shared EC2 model
     "securityhub": "securityhub", "guardduty": "guardduty",   # Security Hub + GuardDuty (rest-json) -> core/secscan_core over the S3 store's persisted account bag
+    "codeconnections": "codeconnections", "codestar-connections": "codeconnections",   # CodeConnections-lite + CloudFormation Git sync (JSON 1.0) -> core/aws_codeconn_core over the S3 store's account bag + the CFN core
     "schemas": "schemas",   # EventBridge Schemas (rest-json /v1/registries, /v1/discoverers) -> core/eventbridge_schemas_core via the EventBridge store
     "aws-marketplace": "marketplace",   # AWS Marketplace (Vyomi SaaS spaces + AMI products; rest-json) -> core/marketplace_core over the S3 + EC2 models
     "s3files": "s3files", "fsx": "fsx",   # S3 Files (rest-json) + FSx for OpenZFS with S3 access points (JSON 1.1) -> core/s3files_core over the S3 + EC2 models
@@ -411,6 +412,8 @@ _TARGET_PREFIX = {
     "AWSOrganizationsV20161128": "organizations",
     "AWSInsightsIndexService": "ce",   # Cost Explorer
     "AnyScaleFrontendService": "appas",   # Application Auto Scaling
+    "com.amazonaws.codeconnections.CodeConnections_20231201": "codeconnections",
+    "com.amazonaws.codestar.connections.CodeStar_connections_20191201": "codeconnections",
 }
 
 # Native JSON content-types the real SDK expects back per service.
@@ -1174,6 +1177,20 @@ class AwsWireRouter:
             return r
         if svc in ("securityhub", "guardduty"):
             return self.secscan_serve(svc, method, path, bytes(body))
+        if svc == "codeconnections":
+            from core import aws_codeconn_core as _cc
+            def _cfn_call(params):
+                return cfn.dispatch(self.cfn, params, s3_store=self.s3, ddb_store=self.ddb, iam_store=self.iam, msg_store=self.msg,
+                                    logs_store=self.logs, cw_store=self.cw)
+            status, doc = _cc.dispatch_json(self.s3.account, lheaders.get("x-amz-target", ""), bytes(body), _cfn_call, self.cfn)
+            try:
+                self.s3.persist()
+            except Exception:
+                pass
+            hdrs = {"content-type": "application/x-amz-json-1.0"}
+            if status >= 400:
+                hdrs["x-amzn-errortype"] = doc.get("__type", "")
+            return {"status": status, "headers": hdrs, "body": json.dumps(doc).encode()}
         if svc == "schemas":
             from core import eventbridge_schemas_core as _schemas
             r = _schemas.dispatch(self.msg, method, path, query or {}, headers or {}, bytes(body))
