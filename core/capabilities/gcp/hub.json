@@ -1,0 +1,19 @@
+{
+  "$doc": "Vyomi capability registry — GCP Marketplace and Cloud Hub (Vyomi's own aggregate surfaces). See aws/s3.json for the contract. Feature ids are prefixed gcp.hub.*",
+  "gcp.hub.marketplace": {
+    "title": "Marketplace (catalog, subscribe, cancel)",
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": [
+      "The catalog is Vyomi's SaaS-simulator 'spaces' (the same catalog as the AWS Marketplace page), not Google's Marketplace listings; subscribing creates a live space with an endpoint and API key and cancelling removes it. The page uses Vyomi's own /vyomi/gcp/{project}/marketplace wire because Google has no public API for the console page. There is no billing, EULA text or vendor onboarding."
+    ],
+    "tests": ["tests/conformance/test_gcp_hub_core.py"]
+  },
+  "gcp.hub.cloud-hub": {
+    "title": "Cloud Hub (resource counts per product, open incidents, recent admin activity)",
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": [
+      "Everything is derived live from the project's real Vyomi resources and the Admin Activity audit log (Vyomi's own /vyomi/gcp/{project}/hub wire; Google has no public API for the console page). Service health, optimization and cost panels of the real Cloud Hub are not modelled."
+    ],
+    "tests": ["tests/conformance/test_gcp_hub_core.py"]
+  }
+}
