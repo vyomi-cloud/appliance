@@ -10,6 +10,8 @@ import Input from "@cloudscape-design/components/input";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import StatusIndicator from "@cloudscape-design/components/status-indicator";
 import Tabs from "@cloudscape-design/components/tabs";
+import Textarea from "@cloudscape-design/components/textarea";
+import FormField from "@cloudscape-design/components/form-field";
 import { useAsync } from "../../../common/useAsync.js";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { KeyValue } from "../../kit/common.jsx";
@@ -53,6 +55,63 @@ function Terminal({ instanceId }) {
   );
 }
 
+/* EC2 Instance Connect: SendSSHPublicKey through the appliance's instance-connect route (the key is authorised in the guest for 60 s). */
+function PushKey({ instanceId }) {
+  const [user, setUser] = useState("ubuntu");
+  const [key, setKey] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [res, setRes] = useState(null);
+  const [err, setErr] = useState(null);
+  const send = async () => {
+    setBusy(true); setErr(null); setRes(null);
+    try { setRes(await api(`/api/aws/ec2/instances/${instanceId}/instance-connect`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ os_user: user, public_key: key.trim() }) })); }
+    catch (e) { setErr(e); } finally { setBusy(false); }
+  };
+  return (
+    <SpaceBetween size="m">
+      <FormField label="OS user name"><Input value={user} ariaLabel="OS user name" onChange={({ detail }) => setUser(detail.value)} /></FormField>
+      <FormField label="SSH public key" description="Authorised in the instance for 60 seconds (EC2 Instance Connect SendSSHPublicKey)."><Textarea rows={3} ariaLabel="SSH public key" value={key} placeholder="ssh-ed25519 AAAA... you@host" onChange={({ detail }) => setKey(detail.value)} /></FormField>
+      <div><Button variant="primary" loading={busy} onClick={send}>Send public key</Button></div>
+      {err && <Alert type="error" header="Could not push the key">{err.message}</Alert>}
+      {res && <Alert type="success" header="Public key sent" data-testid="eic-result">
+        <SpaceBetween size="xs"><span>{res.delivered ? "Key authorised in the instance" : "Key recorded but no running guest received it"} - valid for {res.expires_in_seconds} s for new connections.</span>
+          {res.ssh_command && <pre data-testid="eic-command" style={{ margin: 0, whiteSpace: "pre-wrap" }}>{res.ssh_command}</pre>}</SpaceBetween></Alert>}
+    </SpaceBetween>
+  );
+}
+
+/* SSM Session Manager: StartSession/TerminateSession record real sessions; commands run in the target's container. */
+function SsmSession({ instanceId }) {
+  const [sess, setSess] = useState(null);
+  const [lines, setLines] = useState([]);
+  const [cmd, setCmd] = useState("");
+  const [err, setErr] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const start = async () => {
+    setErr(null); setBusy(true);
+    try { const r = await api("/api/ssm/sessions", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ target: instanceId }) }); setSess(r); setLines([{ t: `Session ${r.SessionId} started.` }]); }
+    catch (e) { setErr(e); } finally { setBusy(false); }
+  };
+  const run = async () => {
+    const c = cmd; if (!c.trim() || !sess) return; setCmd("");
+    setLines((l) => [...l, { t: `$ ${c}` }]);
+    try { const r = await api(`/api/ssm/sessions/${sess.SessionId}/exec`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ command: c }) }); setLines((l) => [...l, { t: String(r.output ?? "").replace(/\n$/, "") }]); }
+    catch (e) { setLines((l) => [...l, { t: e.message }]); }
+  };
+  const stop = async () => { try { await api(`/api/ssm/sessions/${sess.SessionId}/terminate`, { method: "POST" }); } catch (e) { setErr(e); } setSess(null); setLines([]); };
+  return (
+    <SpaceBetween size="m">
+      {err && <Alert type="error" header="Session Manager">{err.message}</Alert>}
+      {!sess ? <div><Button variant="primary" loading={busy} onClick={start}>Start session</Button></div> : (<>
+        <KeyValue columns={3} items={[["Session ID", sess.SessionId], ["Target", sess.Target || instanceId], ["Status", sess.Status || "Connected"]]} />
+        <pre data-testid="ssm-terminal" style={{ margin: 0, padding: 12, minHeight: 120, maxHeight: 280, overflow: "auto", background: "#16191f", color: "#d1d5db", whiteSpace: "pre-wrap", fontSize: 13 }}>{lines.map((l, i) => <div key={i}>{l.t}</div>)}</pre>
+        <SpaceBetween direction="horizontal" size="xs">
+          <div style={{ flex: 1, minWidth: 360 }}><Input value={cmd} ariaLabel="Session command" onChange={({ detail }) => setCmd(detail.value)} onKeyDown={({ detail }) => detail.key === "Enter" && run()} /></div>
+          <Button onClick={run}>Run</Button><Button onClick={stop}>Terminate session</Button></SpaceBetween></>)}
+    </SpaceBetween>
+  );
+}
+
 function Body({ instanceId }) {
   const info = useAsync(() => api(`/api/aws/ec2/instances/${instanceId}/connect-info`), [instanceId]);
   const [copied, setCopied] = useState(false);
@@ -62,6 +121,8 @@ function Body({ instanceId }) {
   return (
     <Tabs tabs={[
       { id: "eic", label: "EC2 Instance Connect", content: info.error ? <Alert type="warning">{info.error.message}</Alert> : <Terminal instanceId={instanceId} /> },
+      { id: "push", label: "Send SSH public key", content: <PushKey instanceId={instanceId} /> },
+      { id: "ssm", label: "Session Manager", content: <SsmSession instanceId={instanceId} /> },
       { id: "ssh", label: "SSH client", content: info.error ? <Alert type="warning" header="SSH is not available for this instance">{info.error.message}</Alert> : (
         <SpaceBetween size="m">
           <KeyValue columns={3} items={[["Instance ID", instanceId], ["User name", ssh?.user], ["Host", ssh?.host], ["Port", ssh?.port], ["Private key", ssh?.key_local_filename]]} />

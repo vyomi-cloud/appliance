@@ -63,3 +63,6 @@ export const deleteAuthPolicy = (id) => R("DELETE", `/authpolicy/${id}`);
 export const listTags = (arn) => R("GET", `/tags/${enc(arn)}`).then((r) => r.tags || {});
 export const tagResource = (arn, tags) => R("POST", `/tags/${enc(arn)}`, { body: { tags } });
 export const untagResource = (arn, keys) => R("DELETE", `/tags/${enc(arn)}?${keys.map((k) => `tagKeys=${enc(k)}`).join("&")}`);
+
+/* Simulator verb (not a real Lattice API): evaluate one request through the service network. */
+export const testInvoke = (b) => R("POST", "/vyomi/invoke", { body: b });

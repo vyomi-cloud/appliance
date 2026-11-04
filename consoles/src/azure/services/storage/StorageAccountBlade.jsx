@@ -104,7 +104,7 @@ export default function StorageAccountBlade({ params, query }) {
       accesskeys: () => <AccessKeys a={a} reload={reload} />,
       configuration: () => <Configuration a={a} reload={reload} />,
       endpoints: () => <Endpoints a={a} />,
-      redundancy: () => <Redundancy a={a} self={self} />,
+      redundancy: () => <Redundancy a={a} self={self} reload={reload} />,
       networking: () => <Networking a={a} reload={reload} />,
       encryption: () => <Encryption a={a} reload={reload} />,
       dataprotection: () => <DataProtection a={a} />,
@@ -719,7 +719,9 @@ function Endpoints({ a }) {
   );
 }
 
-function Redundancy({ a, self }) {
+function Redundancy({ a, self, reload }) {
+  const notify = useNotify();
+  const [fo, setFo] = useState(false);
   const ra = api.isReadAccessSku(a.sku?.name);
   const sec = useAsync(() => (ra ? api.listContainersSecondary(a.name) : Promise.resolve(null)), [a.sku?.name, ra]);
   return (
@@ -738,7 +740,20 @@ function Redundancy({ a, self }) {
             {" "}{sec.loading ? "Checking the secondary endpoint…" : sec.error ? `Secondary endpoint error: ${sec.error.message}` : `Secondary endpoint reachable — ${sec.data?.length ?? 0} container(s) visible.`}</p>
         </> : <p style={{ fontSize: 13 }}>Enable RA-GRS or RA-GZRS in Configuration to turn this on.</p>}
       </section>
-      <NotSimulatedContainer title="Geo-replication" feature="Geo-replication lag, the secondary region's own storage and customer-managed failover" note="Vyomi stores data once, locally — only the read-only secondary ENDPOINT above is real." />
+      <section className="vy-section"><h3>Geo-replication</h3>
+        {a.properties?.secondaryLocation ? <>
+          <KV label="Primary region" value={locationLabel(a.location)} />
+          <KV label="Secondary region (paired)" value={locationLabel(a.properties.secondaryLocation)} />
+          <KV label="Replication status" value={a.properties.geoReplicationStats?.status || "Live"} />
+          <KV label="Last sync time" value={a.properties.geoReplicationStats?.lastSyncTime ? fmtDate(a.properties.geoReplicationStats.lastSyncTime) : "--"} />
+          <KV label="Can fail over" value={a.properties.geoReplicationStats?.canFailover === false ? "No" : "Yes"} />
+          <div style={{ marginTop: 8 }}><Button disabled={a.properties.geoReplicationStats?.canFailover === false} onClick={() => setFo(true)}>Prepare for failover</Button></div>
+          <p style={{ fontSize: 13 }}>Failover swaps the primary and secondary regions and converts the account to locally-redundant storage, like Azure. Vyomi stores the data once, so there is no replication lag and the last sync time tracks the present.</p>
+        </> : <p style={{ fontSize: 13 }}>This account uses {api.skuLabel(a.sku?.name)}. Geo-replication and customer-managed failover need GRS, RA-GRS, GZRS or RA-GZRS (change it in Configuration).</p>}
+      </section>
+      <DeleteDialog open={fo} onClose={() => setFo(false)} resourceType="failover" title="Prepare for failover" confirmLabel="Failover" names={[a.name]} confirmText={a.name}
+        warning={<>Failing over <b>{a.name}</b> makes {locationLabel(a.properties?.secondaryLocation)} the primary region and converts the account to LRS. You will need to reconfigure geo-redundancy afterwards.</>}
+        onConfirm={async () => { await api.ARM.action(a.resourceGroup, a.name, "failover"); notify.success(`Failover of '${a.name}' completed.`, "Failover"); reload(); }} />
     </CapabilityContainer>
   );
 }

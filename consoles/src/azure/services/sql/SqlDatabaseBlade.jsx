@@ -3,6 +3,7 @@
  * encryption, Identity, Automatic tuning, Performance recommendations and Export template
  * are backed by native ARM / the azure-sql data-plane wire; everything else in the menu is
  * an honest NotSimulated panel. */
+import { SqlBackups, SqlReplicas } from "./SqlBackupPanels.jsx";
 import { DataDiscovery, DataMasking, Ledger, Maintenance } from "./SqlSecurityPages.jsx";
 import { UserAssignedIdentities } from "../../kit/UserAssignedIdentities.jsx";
 import { useEffect, useState } from "react";
@@ -43,7 +44,7 @@ export const MENU = [
   { id: "queryeditor", label: "Query editor (preview)" },
   { id: "mirrorfabric", label: "Mirror database in Fabric" },
   { group: "Settings", items: [{ id: "computestorage", label: "Compute + storage" }, { id: "connectionstrings", label: "Connection strings" }, { id: "maintenance", label: "Maintenance" }, { id: "properties", label: "Properties" }, { id: "locks", label: "Locks" }] },
-  { group: "Data management", items: [{ id: "replicas", label: "Replicas" }, { id: "syncdatabases", label: "Sync to other databases" }] },
+  { group: "Data management", items: [{ id: "backups", label: "Backups" }, { id: "replicas", label: "Replicas" }, { id: "syncdatabases", label: "Sync to other databases" }] },
   { group: "Integrations", items: [{ id: "streamanalytics", label: "Stream analytics (preview)" }, { id: "addazuresearch", label: "Add Azure Search" }] },
   { group: "Power Platform", items: [{ id: "powerbi", label: "Power BI" }, { id: "powerapps", label: "Power Apps" }, { id: "powerautomate", label: "Power Automate" }] },
   { group: "Security", items: [{ id: "auditing", label: "Auditing" }, { id: "datadiscovery", label: "Data Discovery & Classification" }, { id: "datamasking", label: "Dynamic Data Masking" }, { id: "defender", label: "Microsoft Defender for Cloud" }, { id: "tde", label: "Transparent data encryption" }, { id: "ledger", label: "Ledger" }, { id: "identity", label: "Identity" }] },
@@ -95,6 +96,8 @@ export default function SqlDatabaseBlade({ params }) {
     const a = dbData.data, reload = dbData.reload;
     const P = {
       overview: () => <Overview a={a} reload={reload} self={self} />,
+      replicas: () => <SqlReplicas a={a} />,
+      backups: () => <SqlBackups a={a} />,
       tags: () => <Tags a={a} reload={reload} />,
       gettingstarted: () => <GettingStarted self={self} />,
       queryeditor: () => <QueryEditor a={a} />,
@@ -175,7 +178,7 @@ function Overview({ a, reload, self }) {
           ["Elastic pool", "None"],
           ["Connection strings", <Link href={`${self}/connectionstrings`}>Show database connection strings</Link>],
           ["Pricing tier", a.sku ? `${a.sku.tier}${a.sku.capacity ? ` (${a.sku.capacity} ${a.sku.name?.includes("_S_") || a.sku.name?.includes("_S") ? "vCores, Serverless" : "vCores"})` : ""}` : "--"],
-          ["Earliest restore point", "Not available"],
+          ["Earliest restore point", a.properties?.earliestRestoreDate ? fmtDate(a.properties.earliestRestoreDate) : "Not available"],
           ["Tags", <span>{tags.length ? tags.map(([k, v]) => `${k} : ${v}`).join(", ") : ""} <Link href={`${self}/tags`}>{tags.length ? "Edit" : "Add tags"}</Link></span>],
         ]}
       />

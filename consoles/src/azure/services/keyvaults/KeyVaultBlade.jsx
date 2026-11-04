@@ -447,6 +447,43 @@ function PolicyDialog({ open, policy, onClose, onSave }) {
   );
 }
 
+// ── Backup / Restore (Key Vault Keys + Secrets REST: POST .../{name}/backup, POST /{keys|secrets}/restore) ──
+function saveText(filename, text) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([text], { type: "application/octet-stream" }));
+  a.download = filename; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+function BackupRestoreButtons({ kind, selected, onRestored }) {
+  const notify = useNotify();
+  const [open, setOpen] = useState(false);
+  const [blob, setBlob] = useState("");
+  const [err, setErr] = useState(null);
+  const backup = async () => {
+    try { const v = await (kind === "key" ? api.backupKey : api.backupSecret)(selected[0].name); saveText(`${selected[0].name}.${kind}backup`, v); notify.success(`Backup of ${kind} '${selected[0].name}' downloaded.`, "Download Backup"); }
+    catch (e) { notify.error(e, "Backup failed"); }
+  };
+  const restore = async () => {
+    setErr(null);
+    try { await (kind === "key" ? api.restoreKey : api.restoreSecret)(blob.trim()); notify.success(`The ${kind} was restored from the backup.`, "Restore Backup"); setOpen(false); setBlob(""); onRestored(); }
+    catch (e) { setErr(e); }
+  };
+  return (
+    <>
+      <ToolbarButton icon={<ArrowDownload20Regular />} disabled={selected.length !== 1} onClick={backup}>Download Backup</ToolbarButton>
+      <ToolbarButton onClick={() => { setErr(null); setOpen(true); }}>Restore Backup</ToolbarButton>
+      <Dialog open={open} onOpenChange={(_, d) => !d.open && setOpen(false)}>
+        <DialogSurface aria-label="Restore Backup"><DialogBody><DialogTitle>Restore {kind} from backup</DialogTitle>
+          <DialogContent><div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <ErrorBar error={err} title="Restore failed" />
+            <Field label="Backup file" hint="Choose a downloaded backup file, or paste its contents below."><input type="file" aria-label="Backup file" onChange={async (e) => { const f = e.target.files?.[0]; if (f) setBlob(await f.text()); }} /></Field>
+            <Field label="Backup contents"><Textarea rows={5} value={blob} onChange={(_, d) => setBlob(d.value)} aria-label="Backup contents" /></Field>
+          </div></DialogContent>
+          <DialogActions><Button appearance="primary" disabled={!blob.trim()} onClick={restore}>Restore</Button><Button onClick={() => setOpen(false)}>Cancel</Button></DialogActions></DialogBody></DialogSurface>
+      </Dialog>
+    </>
+  );
+}
+
 // ── Keys ───────────────────────────────────────────────────────────────────────────────
 function Keys() {
   const notify = useNotify();
@@ -459,7 +496,7 @@ function Keys() {
       <BrowseGrid
         resourceName="key" rowKey={(r) => r.name} filterPlaceholder="Filter by name..."
         items={rows} loading={loading} error={error} onRefresh={reload}
-        extraCommands={<ToolbarButton onClick={() => setCreate(true)}>Generate/Import</ToolbarButton>}
+        extraCommands={(sel) => <><ToolbarButton onClick={() => setCreate(true)}>Generate/Import</ToolbarButton><BackupRestoreButtons kind="key" selected={sel} onRestored={reload} /></>}
         onDelete={async (sel) => {
           for (const r of sel) await api.deleteKey(r.name);
           notify.success(`Deleted ${sel.length} key${sel.length === 1 ? "" : "s"}.`, "Delete succeeded");
@@ -472,7 +509,7 @@ function Keys() {
           { key: "expiration", label: "Expiration date", value: (r) => (r.raw.attributes?.exp ? fmtDate(r.raw.attributes.exp * 1000) : "--") },
         ]}
       />
-      <NotSimulatedContainer feature="Restore Backup and Manage deleted keys" />
+      <NotSimulatedContainer feature="Manage deleted keys (recover / purge)" />
       <CreateKeyDialog open={create} onClose={() => setCreate(false)} onCreated={reload} />
     </>
   );
@@ -551,7 +588,7 @@ function SecretsList({ self }) {
       <BrowseGrid
         resourceName="secret" rowKey={(r) => r.name} filterPlaceholder="Filter by name..."
         items={rows} loading={loading} error={error} onRefresh={reload}
-        extraCommands={<ToolbarButton onClick={() => setCreate(true)}>Generate/Import</ToolbarButton>}
+        extraCommands={(sel) => <><ToolbarButton onClick={() => setCreate(true)}>Generate/Import</ToolbarButton><BackupRestoreButtons kind="secret" selected={sel} onRestored={reload} /></>}
         onDelete={async (sel) => {
           for (const r of sel) await api.deleteSecret(r.name);
           notify.success(`Deleted ${sel.length} secret${sel.length === 1 ? "" : "s"}.`, "Delete succeeded");
@@ -565,7 +602,7 @@ function SecretsList({ self }) {
           { key: "expiration", label: "Expiration date", value: (r) => (r.raw.attributes?.exp ? fmtDate(r.raw.attributes.exp * 1000) : "--") },
         ]}
       />
-      <NotSimulatedContainer feature="Restore Backup, View sample code and Manage deleted secrets" />
+      <NotSimulatedContainer feature="View sample code and Manage deleted secrets (recover / purge)" />
       <CreateSecretDialog open={create} onClose={() => setCreate(false)} onCreated={reload} />
     </>
   );
@@ -632,7 +669,7 @@ function SecretDetail({ self, name }) {
         <ToolbarButton onClick={() => setNewVer(true)}>New Version</ToolbarButton>
         <ToolbarButton icon={<ArrowClockwise20Regular />} onClick={reload}>Refresh</ToolbarButton>
         <ToolbarButton icon={<Delete20Regular />} onClick={() => setDel(true)}>Delete</ToolbarButton>
-        <ToolbarButton icon={<ArrowDownload20Regular />}>Download Backup</ToolbarButton>
+        <ToolbarButton icon={<ArrowDownload20Regular />} onClick={async () => { try { saveText(`${name}.secretbackup`, await api.backupSecret(name)); notify.success(`Backup of secret '${name}' downloaded.`, "Download Backup"); } catch (e) { notify.error(e, "Backup failed"); } }}>Download Backup</ToolbarButton>
       </div>
       <Table size="small" aria-label="Versions" style={{ marginTop: 8 }}>
         <TableHeader><TableRow><TableHeaderCell>Version</TableHeaderCell><TableHeaderCell>Status</TableHeaderCell><TableHeaderCell>Activation date</TableHeaderCell><TableHeaderCell>Expiration date</TableHeaderCell></TableRow></TableHeader>

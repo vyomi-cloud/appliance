@@ -57,6 +57,10 @@ const kv = (method, path, { body } = {}) => restJson(method, path, {
 export const listKeys = async () => (await kv("GET", "/keys")).value || [];
 export const createKey = (name, body) => kv("POST", `/keys/${encodeURIComponent(name)}/create`, { body });
 export const getKey = (name, version) => kv("GET", `/keys/${encodeURIComponent(name)}${version ? `/${version}` : ""}`);
+export const backupKey = async (name) => (await kv("POST", `/keys/${encodeURIComponent(name)}/backup`)).value;
+export const restoreKey = (value) => kv("POST", "/keys/restore", { body: { value } });
+export const backupSecret = async (name) => (await kv("POST", `/secrets/${encodeURIComponent(name)}/backup`)).value;
+export const restoreSecret = (value) => kv("POST", "/secrets/restore", { body: { value } });
 export const deleteKey = (name) => kv("DELETE", `/keys/${encodeURIComponent(name)}`);
 
 /** kid (https://vault/keys/{name}/{version}) -> {name, version}. */
