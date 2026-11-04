@@ -28,7 +28,7 @@ const push = await REST("POST", `/2015-03-31/applications/${APP}/pipeline/push`,
 check("push accepted", push.status === 200, push.text);
 inv = await REST("POST", `/2015-03-31/functions/${APP}/invocations`, {});
 check("push redeployed the function (v2)", /ui-shipped v2/.test(inv.text), inv.text);
-await page.reload(); await page.waitForTimeout(2000);
+await page.reload(); await page.getByText(/Succeeded \(v2\)/).first().waitFor({ timeout: 15000 }).catch(() => {});  // Nano renders the list slower
 check("UI shows version 2", await page.getByText(/Succeeded \(v2\)/).count() >= 1);
 await page.getByRole("checkbox").nth(1).check().catch(() => {}); await page.waitForTimeout(300);
 const rel = page.getByRole("button", { name: "Release change" });
