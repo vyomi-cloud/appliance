@@ -375,6 +375,9 @@ _SIGNING = {
     "schemas": "schemas",   # EventBridge Schemas (rest-json /v1/registries, /v1/discoverers) -> core/eventbridge_schemas_core via the EventBridge store
     "aws-marketplace": "marketplace",   # AWS Marketplace (Vyomi SaaS spaces + AMI products; rest-json) -> core/marketplace_core over the S3 + EC2 models
     "s3files": "s3files", "fsx": "fsx",   # S3 Files (rest-json) + FSx for OpenZFS with S3 access points (JSON 1.1) -> core/s3files_core over the S3 + EC2 models
+    "application-autoscaling": "appas",   # Application Auto Scaling (DynamoDB) -> core/appautoscaling_core over the DynamoDB store
+    "cloudfront": "cloudfront",   # CloudFront public keys + key groups (rest-xml /2020-05-31/...) -> core/cloudfront_keys_core via the S3 store
+    "savingsplans": "savingsplans",   # Savings Plans (rest-json POST /<Operation>) + EC2 coverage/capacity views -> core/savingsplans_core over the EC2 model
     "backup": "backup",   # AWS Backup subset (region settings + DynamoDB copy jobs) -> core/backup_core over the DynamoDB + S3 stores
     "s3vectors": "s3vectors",   # Amazon S3 Vectors (rest-json POST /<Operation>) -> core/s3_vectors_core via the S3 store
     "s3tables": "s3tables",   # Amazon S3 Tables (rest-json /buckets, /namespaces, /tables, /tag) -> core/s3_tables_core via the S3 store
@@ -400,6 +403,7 @@ _TARGET_PREFIX = {
     "com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101": "cloudtrail",
     "AWSOrganizationsV20161128": "organizations",
     "AWSInsightsIndexService": "ce",   # Cost Explorer
+    "AnyScaleFrontendService": "appas",   # Application Auto Scaling
 }
 
 # Native JSON content-types the real SDK expects back per service.
@@ -411,6 +415,7 @@ _JSON_CT = {
     "stepfunctions": "application/x-amz-json-1.0",
     "ram": "application/x-amz-json-1.1",
     "organizations": "application/x-amz-json-1.1", "ce": "application/x-amz-json-1.1",
+    "appas": "application/x-amz-json-1.1",
     "netfw": "application/x-amz-json-1.0", "dnsfw": "application/x-amz-json-1.1",
 }
 
@@ -689,6 +694,7 @@ class AwsWireRouter:
         self.msg.kms_store = self.kms             # EventBridge bus/archive KMS encryption (real Encrypt/Decrypt)
         self.elbv2 = s.get("elbv2") or elbv2.Elbv2Store()
         self.elbv2.vpc_store = self.vpc    # target health reacts to real instance state
+        self.vpc.elbv2_store = self.elbv2  # VPC encryption-control audit reads the load balancers
         self.elbv2.cw_store = self.cw      # real AWS/ApplicationELB + AWS/NetworkELB metrics
         self.elbv2.s3_store = self.s3      # trust-store CA bundles are read from Vyomi's own S3
         self.sfn = s.get("sfn") or sfn.StepFunctionsStore()   # Step Functions (state machines + executions)
@@ -1077,6 +1083,14 @@ class AwsWireRouter:
             hdrs.setdefault("content-type", "application/json")
             return {"status": r.status, "headers": hdrs, "body": r.body or b""}
 
+        if svc == "savingsplans":
+            from core import savingsplans_core
+            return savingsplans_core.dispatch(self.vpc, method, path, bytes(body))
+
+        if svc == "cloudfront":
+            from core import cloudfront_keys_core
+            return cloudfront_keys_core.dispatch(self.s3, method, path, query or {}, headers or {}, bytes(body))
+
         if svc == "s3vectors":
             r = s3.dispatch(self.s3, method, "/__s3vectors__" + path, query or {}, headers or {}, bytes(body))
             hdrs = dict(r.headers or {})
@@ -1353,6 +1367,9 @@ class AwsWireRouter:
             elif svc == "ce":   # Cost Explorer over the EC2/EBS (VPC model) + RDS inventory
                 from core import ce_core
                 r = ce_core.dispatch(self.vpc, self.rds, target, payload)
+            elif svc == "appas":   # Application Auto Scaling for DynamoDB (adjusts the table's real provisioned capacity)
+                from core import appautoscaling_core
+                r = appautoscaling_core.dispatch(self.ddb, target, payload)
             else:  # sqs
                 r = sqs.dispatch(self.msg, target, payload, lam_store=self.lam)
             hdrs = dict(r.headers or {})

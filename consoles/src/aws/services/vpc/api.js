@@ -541,3 +541,13 @@ export const enableTransitGatewayRouteTablePropagation = (rtId, attId) => call("
 export const disableTransitGatewayRouteTablePropagation = (rtId, attId) => call("DisableTransitGatewayRouteTablePropagation", { TransitGatewayRouteTableId: rtId, TransitGatewayAttachmentId: attId });
 
 export const ec2call = call;
+
+// ── VPC Encryption Controls (monitor / enforce + audit) ─────────────────────────
+const encFromXml = (x) => ({ Id: x.vpcEncryptionControlId, VpcId: x.vpcId, Mode: x.mode, State: x.state, StateMessage: x.stateMessage,
+  Exclusions: Object.fromEntries(Object.entries(x.resourceExclusions || {}).map(([k, v]) => [k, v?.state === "enabled"])), Tags: tagsFromXml(x.tagSet) });
+export const describeVpcEncryptionControls = async () => asList((await call("DescribeVpcEncryptionControls")).vpcEncryptionControlSet?.item).map(encFromXml);
+export const createVpcEncryptionControl = (vpcId, exclusions = {}) => call("CreateVpcEncryptionControl", { VpcId: vpcId, ...exclusions }).then((r) => encFromXml(r.vpcEncryptionControl));
+export const modifyVpcEncryptionControl = (id, fields) => call("ModifyVpcEncryptionControl", { VpcEncryptionControlId: id, ...fields }).then((r) => encFromXml(r.vpcEncryptionControl));
+export const deleteVpcEncryptionControl = (id) => call("DeleteVpcEncryptionControl", { VpcEncryptionControlId: id });
+export const vpcEncryptionAudit = async (vpcId) => asList((await call("VyomiDescribeVpcEncryptionAudit", { VpcId: vpcId })).resourceSet?.item)
+  .map((x) => ({ Id: x.id, Type: x.type, Description: x.description, Encrypted: x.encrypted === "true", Excluded: x.excluded === "true", Reason: x.reason }));

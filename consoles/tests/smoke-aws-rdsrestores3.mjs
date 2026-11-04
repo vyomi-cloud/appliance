@@ -1,0 +1,42 @@
+/* RDS "Create database by restoring from S3": a .sql dump in the simulator's S3 becomes a new MySQL instance (UI -> wire).
+ *   BASE=http://127.0.0.1:9050 PW=... node consoles/tests/smoke-aws-rdsrestores3.mjs */
+import { createRequire } from "node:module";
+const require = createRequire(import.meta.url);
+let pw;
+try { pw = require(process.env.PW || "playwright"); } catch { pw = require("/Users/sudhirganti/Applications/simulator/portal-OLD/node_modules/playwright"); }
+const BASE = process.env.BASE || "http://127.0.0.1:9050";
+const UI = `${BASE}${process.env.UI_PATH || "/v4/aws/"}`;
+const WIRE = `${BASE}${process.env.WIRE_PATH || "/_wire"}`;
+const N = Date.now() % 100000, DB = `rs${N}`, BK = `bk${N}`;
+const results = [];
+const check = (n, ok, d = "") => { results.push(ok); console.log(`${ok ? "PASS" : "FAIL"} ${n}${d ? " - " + String(d).slice(0, 160) : ""}`); };
+const browser = await pw.chromium.launch();
+const page = await browser.newPage({ viewport: { width: 1440, height: 1500 } });
+const errors = []; page.on("pageerror", (e) => errors.push(e.message));
+const auth = (svc) => `AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/${svc}/aws4_request, SignedHeaders=host, Signature=0`;
+await page.goto(UI + "#/rds");
+const call = (svc, path, init, headers = {}) => page.evaluate(async ([u, i]) => { const r = await fetch(u, i); return { status: r.status, text: await r.text() }; }, [WIRE + path, { ...init, headers: { authorization: auth(svc), ...headers } }]);
+await call("s3", `/${BK}`, { method: "PUT" });
+await call("s3", `/${BK}/dump/d.sql`, { method: "PUT", body: "CREATE TABLE t (id int, v varchar(10));\nINSERT INTO t VALUES (1,'a'),(2,'b');\n" });
+await page.goto(UI + "#/rds/restore-from-s3");
+await page.getByLabel("S3 bucket").fill(BK);
+await page.getByLabel("S3 prefix").fill("dump/");
+await page.getByLabel("IAM role").fill("arn:aws:iam::123456789012:role/rds-s3-ingest");
+await page.getByLabel("DB instance identifier").fill(DB);
+await page.getByLabel("Master password").fill("pw12345678");
+check("page is a real form, not Not-simulated", !/Not simulated in Vyomi/i.test(await page.locator("body").innerText()));
+await page.getByRole("button", { name: "Restore database" }).click();
+await page.waitForURL(/#\/rds\/databases/, { timeout: 15000 }).catch(() => {});
+const d = await call("rds", "/", { method: "POST", body: new URLSearchParams({ Action: "DescribeDBInstances", Version: "2014-10-31", DBInstanceIdentifier: DB }).toString(), }, { "content-type": "application/x-www-form-urlencoded" });
+check("instance exists and is available", d.status === 200 && /<DBInstanceStatus>available<\/DBInstanceStatus>/.test(d.text) && /<Engine>mysql<\/Engine>/.test(d.text), d.text.slice(0, 120));
+await page.goto(UI + "#/rds/restore-from-s3");
+await page.getByLabel("S3 bucket").fill("no-such-bucket-zz");
+await page.getByLabel("IAM role").fill("arn:aws:iam::123456789012:role/rds-s3-ingest");
+await page.getByLabel("DB instance identifier").fill(DB + "x");
+await page.getByLabel("Master password").fill("pw12345678");
+await page.getByRole("button", { name: "Restore database" }).click();
+await page.waitForTimeout(1200);
+check("missing bucket surfaces InvalidS3BucketFault", /InvalidS3BucketFault|does not exist/i.test(await page.locator("body").innerText()));
+check("no page errors", errors.length === 0, errors.join("; "));
+await browser.close();
+process.exit(results.every(Boolean) ? 0 : 1);

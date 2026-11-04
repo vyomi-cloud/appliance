@@ -336,3 +336,8 @@ export async function listSnsTopicArns() {
   const r = await awsQuery("sns", "ListTopics", {});
   return asList(r.ListTopicsResponse?.ListTopicsResult?.Topics?.member).filter(Boolean).map((t) => t.TopicArn);
 }
+
+export async function restoreDBInstanceFromS3(input) {
+  const r = await call("RestoreDBInstanceFromS3", input);
+  return r.DBInstance;
+}

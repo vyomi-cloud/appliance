@@ -1,5 +1,6 @@
 import { TransitGateways, TransitGatewayAttachments, TransitGatewayRouteTables, TransitGatewayRouteTableDetail } from "./TransitGateways.jsx";
 import Dashboard from "./Dashboard.jsx";
+import EncryptionControl from "./EncryptionControl.jsx";
 import { Vpcs, VpcDetail, CreateVpc, EditVpcSettings } from "./Vpcs.jsx";
 import { Subnets, SubnetDetail, CreateSubnet } from "./Subnets.jsx";
 import { RouteTables, RouteTableDetail, EditRoutes, CreateRouteTable } from "./RouteTables.jsx";
@@ -99,6 +100,7 @@ export default {
       { type: "link", text: "Mirror targets", href: "#/vpc/mirror-targets" },
       { type: "link", text: "Mirror filters", href: "#/vpc/mirror-filters" },
     ] },
+    { type: "link", text: "Encryption control", href: "#/vpc/encryption-control" },
     { type: "link", text: "Settings", href: "#/vpc/settings" },
   ],
   routes: [
@@ -198,6 +200,7 @@ export default {
     { pattern: "/vpc/mirror-filters", component: Vpn.MirrorFilters, crumbs: () => [crumb("VPC", ""), crumb("Mirror filters", "mirror-filters")] },
 
     { pattern: "/vpc/all-resources", component: AllResources, crumbs: () => [crumb("VPC", ""), crumb("All VPC resources", "all-resources")] },
+    { pattern: "/vpc/encryption-control", component: EncryptionControl, crumbs: () => [crumb("VPC", ""), crumb("Encryption control", "encryption-control")] },
     { pattern: "/vpc/settings", component: Settings, crumbs: () => [crumb("VPC", ""), crumb("Settings", "settings")] },
   ],
 };

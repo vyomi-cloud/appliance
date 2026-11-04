@@ -1,7 +1,7 @@
 /* "My security credentials" — the account (root) user's credentials page reached from the
  * Dashboard quick link. Root MFA, root access keys and X.509 certificates are real (the same
  * sections as an IAM user's Security credentials tab, targeting the root principal - see
- * core/iam_core.py ROOT_USER); only CloudFront key pairs are a gap. */
+ * core/iam_core.py ROOT_USER); CloudFront key pairs are real too (core/cloudfront_keys_core.py). */
 import Box from "@cloudscape-design/components/box";
 import ContentLayout from "@cloudscape-design/components/content-layout";
 import Header from "@cloudscape-design/components/header";
@@ -11,6 +11,7 @@ import { ErrorAlert, KeyValue } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { MfaSection, AccessKeysSection } from "./UserDetail.jsx";
 import { SigningCertsSection } from "./CredentialSections.jsx";
+import CloudFrontKeys from "./CloudFrontKeys.jsx";
 import * as api from "./api.js";
 
 const ACCOUNT_ID = "123456789012";
@@ -29,7 +30,7 @@ export default function SecurityCredentials() {
         ]} />
         <MfaSection userName="root" />
         <AccessKeysSection userName="root" />
-        <CapabilityContainer id="iam.root.cloudfront-key-pairs" title="CloudFront key pairs" />
+        <CloudFrontKeys />
         <SigningCertsSection userName="root" />
       </SpaceBetween>
     </ContentLayout>

@@ -373,13 +373,25 @@
  "dynamodb.autoscaling": {
   "title": "Auto scaling",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Provisioned-capacity auto scaling is the Application Auto Scaling service (scalable targets and scaling policies), which Vyomi does not implement; set fixed read/write units instead."
+   "Provisioned-capacity auto scaling is Application Auto Scaling for the dynamodb namespace: RegisterScalableTarget (Min/MaxCapacity, SuspendedState; a range that excludes the table's current capacity pulls the table inside it), DeregisterScalableTarget, DescribeScalableTargets, PutScalingPolicy / DeleteScalingPolicy / DescribeScalingPolicies and DescribeScalingActivities, for table and global-secondary-index read/write capacity. TargetTrackingScaling policies really scale: utilization is computed from the table's ConsumedRead/WriteCapacityUnits CloudWatch datapoints per one-minute period, the table scales out after 3 consecutive minutes above the target and scales in after 15 consecutive minutes more than 20 points below it, clamped to the target's Min/MaxCapacity, honouring ScaleIn/ScaleOutCooldown, DisableScaleIn and SuspendedState, and the new capacity is applied to the table (so throttling uses it immediately) and recorded as a scaling activity.",
+   "Evaluation runs on every Application Auto Scaling call, on DynamoDB DescribeTable and while the console's Settings tab is open (there is no background clock), so capacity can lag the metrics until one of those happens. The CloudWatch alarms real Application Auto Scaling creates per policy are not materialised (the policy's Alarms list is empty), StepScaling policies are stored but never invoked automatically, and scheduled actions, tags, custom-metric tracking, the other service namespaces (ecs, ec2, lambda, ...) and DynamoDB's per-day capacity-decrease quota are not implemented. Scalable targets live on the table record, so they go away with the table."
   ],
-  "api": []
+  "api": [
+   "RegisterScalableTarget",
+   "DeregisterScalableTarget",
+   "DescribeScalableTargets",
+   "PutScalingPolicy",
+   "DeleteScalingPolicy",
+   "DescribeScalingPolicies",
+   "DescribeScalingActivities"
+  ],
+  "tests": [
+   "tests/conformance/test_appautoscaling_dynamodb.py"
+  ]
  },
  "dynamodb.lambda-triggers": {
   "title": "Stream triggers (Lambda)",

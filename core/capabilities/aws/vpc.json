@@ -502,5 +502,26 @@
   "tests": [
    "tests/conformance/test_vpc_core.py"
   ]
+ },
+ "vpc.encryption-control": {
+  "title": "VPC encryption control",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "VPC Encryption Controls: Create / Describe / Modify / DeleteVpcEncryptionControl and GetVpcResourcesBlockingEncryptionEnforcement (one control per VPC, monitor and enforce modes, resource exclusions, creating -> available). The audit runs over the VPC's real resources and enforcement is real: switching to enforce is refused while non-excluded unencrypted resources exist, and in an enforced VPC RunInstances of an instance type that cannot encrypt traffic is rejected.",
+   "Vyomi moves no packets, so 'encrypted' is a classification rule, not an observation of traffic. An instance network interface is encrypted when its instance family supports Nitro in-transit encryption - an approximation (6th generation and later Intel/AMD, Graviton2 and later, plus c5n/m5n/m5dn/r5n/r5dn/i3en/g4dn/p3dn), not AWS's authoritative list; AWS-managed interfaces (VPC endpoints, NAT gateways) follow the service; a load balancer is flagged unencrypted when it has a plaintext (HTTP/TCP/UDP) listener, which is a Vyomi audit rule rather than an AWS concept. Unattached interfaces carry no traffic and never block enforcement; only the offline-appliance EC2 model and the shared router are audited (not a separately-run Docker instance runtime)."
+  ],
+  "api": [
+   "CreateVpcEncryptionControl",
+   "DescribeVpcEncryptionControls",
+   "ModifyVpcEncryptionControl",
+   "DeleteVpcEncryptionControl",
+   "GetVpcResourcesBlockingEncryptionEnforcement"
+  ],
+  "tests": [
+   "tests/conformance/test_vpc_encryption_control.py"
+  ]
  }
 }

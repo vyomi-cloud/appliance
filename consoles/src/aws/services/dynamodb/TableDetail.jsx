@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Header from "@cloudscape-design/components/header";
 import Tabs from "@cloudscape-design/components/tabs";
 import Table from "@cloudscape-design/components/table";
@@ -23,6 +23,7 @@ import DeleteModal from "../../kit/DeleteModal.jsx";
 import { ErrorAlert, fmtBytes, fmtDate, KeyValue } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { attrType, capacity, keyOf, statusOf, tableClass } from "./Tables.jsx";
+import AutoScalingFields, { DEFAULT_AS, validateAs } from "./AutoScalingFields.jsx";
 import { getLayoutSettings, TABLE_TAB_ID } from "./prefs.js";
 import * as api from "./api.js";
 
@@ -68,11 +69,16 @@ function CapacityModal({ d, visible, onDismiss, onDone }) {
   const [capW, setCapW] = useState(String(od.MaxWriteRequestUnits >= 0 ? od.MaxWriteRequestUnits : 100));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  const [autoScale, setAutoScale] = useState(DEFAULT_AS);
+  useEffect(() => { if (visible) api.autoScalingSettings(d.TableName).then(setAutoScale).catch(() => {}); }, [visible, d.TableName]);
   const submit = async () => {
     setBusy(true); setError(null);
     try {
+      const asErr = mode === "PROVISIONED" ? validateAs(autoScale) : null;
+      if (asErr) throw new Error(asErr);
       await api.updateTable({ TableName: d.TableName, BillingMode: mode, ...(mode === "PROVISIONED" ? { ProvisionedThroughput: { ReadCapacityUnits: Number(rcu), WriteCapacityUnits: Number(wcu) } }
         : { OnDemandThroughput: capOn ? { MaxReadRequestUnits: Number(capR), MaxWriteRequestUnits: Number(capW) } : { MaxReadRequestUnits: -1, MaxWriteRequestUnits: -1 } }) });
+      if (mode === "PROVISIONED") await api.applyAutoScaling(d.TableName, autoScale);
       notify.success("Capacity settings updated."); onDone(); onDismiss();
     } catch (e) { setError(e); } finally { setBusy(false); }
   };
@@ -100,6 +106,7 @@ function CapacityModal({ d, visible, onDismiss, onDone }) {
             <FormField label="Write capacity units"><Input type="number" value={wcu} onChange={({ detail }) => setWcu(detail.value)} ariaLabel="Write capacity units" /></FormField>
           </SpaceBetween>
         )}
+        {mode === "PROVISIONED" && <AutoScalingFields value={autoScale} onChange={setAutoScale} />}
       </SpaceBetween>
     </Modal>
   );
@@ -618,6 +625,23 @@ function TtlModal({ name, ttl, visible, onDismiss, onDone }) {
   );
 }
 
+function AutoScalingSummary({ table }) {
+  const as = useAsync(async () => ({ cfg: await api.autoScalingSettings(table), acts: await api.scalingActivities(table) }), [table]);
+  useEffect(() => { const t = setInterval(as.reload, 15000); return () => clearInterval(t); }, [table]);
+  const c = as.data?.cfg;
+  const fmt = (x) => x?.enabled ? `On: ${x.min} - ${x.max} units, target ${x.target}%` : "Off";
+  return (
+    <SpaceBetween size="l">
+      <KeyValue title="Auto scaling" columns={2} items={[["Read capacity", c ? fmt(c.read) : "-"], ["Write capacity", c ? fmt(c.write) : "-"]]} />
+      {(as.data?.acts || []).length > 0 && (
+        <Table variant="container" header={<Header variant="h2" counter={`(${as.data.acts.length})`}>Auto scaling activities</Header>} items={as.data.acts}
+          columnDefinitions={[{ id: "t", header: "Start time", cell: (a) => new Date(a.StartTime * 1000).toLocaleString() }, { id: "d", header: "Description", cell: (a) => a.Description },
+            { id: "s", header: "Status", cell: (a) => a.StatusCode }, { id: "c", header: "Cause", cell: (a) => a.Cause }]} />
+      )}
+    </SpaceBetween>
+  );
+}
+
 function Settings({ d, reload }) {
   const ttl = useAsync(() => api.describeTtl(d.TableName), [d.TableName]);
   const tags = useAsync(() => api.tags(d.TableArn), [d.TableArn]);
@@ -627,6 +651,7 @@ function Settings({ d, reload }) {
       <KeyValue title="Read/write capacity" columns={2} items={[["Capacity mode", capacity(d)], ["Read capacity", d.ProvisionedThroughput?.ReadCapacityUnits || "On-demand"], ["Write capacity", d.ProvisionedThroughput?.WriteCapacityUnits || "On-demand"],
         ...(d.OnDemandThroughput ? [["Maximum read request units", d.OnDemandThroughput.MaxReadRequestUnits < 0 ? "No limit" : d.OnDemandThroughput.MaxReadRequestUnits], ["Maximum write request units", d.OnDemandThroughput.MaxWriteRequestUnits < 0 ? "No limit" : d.OnDemandThroughput.MaxWriteRequestUnits]] : []),
         ["Warm read units per second", d.WarmThroughput?.ReadUnitsPerSecond], ["Warm write units per second", d.WarmThroughput?.WriteUnitsPerSecond], ["Warm throughput status", d.WarmThroughput?.Status]]} />
+      {capacity(d) !== "On-demand" && <AutoScalingSummary table={d.TableName} />}
       {ttl.data === null ? <CapabilityContainer id="dynamodb.table.ttl" title="Time to Live (TTL)"><Box color="text-body-secondary">The connected backend did not answer this setting.</Box></CapabilityContainer> : (
         <KeyValue title="Time to Live (TTL)" actions={<Button onClick={() => setTtlModal(true)}>{ttl.data?.TimeToLiveStatus === "ENABLED" ? "Turn off" : "Turn on"}</Button>}
           columns={2} items={[["TTL status", ttl.data?.TimeToLiveStatus === "ENABLED" ? "On" : "Off"], ["TTL attribute", ttl.data?.AttributeName]]} />

@@ -1,0 +1,40 @@
+/* EC2 Savings Plans + Capacity Manager pages: purchase through the UI, coverage reflects running instances (UI -> wire).
+ *   BASE=http://127.0.0.1:9050 PW=... node consoles/tests/smoke-aws-savingsplans.mjs */
+import { createRequire } from "node:module";
+const require = createRequire(import.meta.url);
+let pw;
+try { pw = require(process.env.PW || "playwright"); } catch { pw = require("/Users/sudhirganti/Applications/simulator/portal-OLD/node_modules/playwright"); }
+const BASE = process.env.BASE || "http://127.0.0.1:9050";
+const UI = `${BASE}${process.env.UI_PATH || "/v4/aws/"}`;
+const WIRE = `${BASE}${process.env.WIRE_PATH || "/_wire"}`;
+const results = [];
+const check = (n, ok, d = "") => { results.push(ok); console.log(`${ok ? "PASS" : "FAIL"} ${n}${d ? " - " + String(d).slice(0, 160) : ""}`); };
+const browser = await pw.chromium.launch();
+const page = await browser.newPage({ viewport: { width: 1440, height: 2200 } });
+const errors = []; page.on("pageerror", (e) => errors.push(e.message));
+const auth = (svc) => `AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/${svc}/aws4_request, SignedHeaders=host, Signature=0`;
+await page.goto(UI + "#/ec2");
+const raw = (svc, init, path = "/") => page.evaluate(async ([u, i]) => { const r = await fetch(u, i); return { status: r.status, text: await r.text() }; }, [WIRE + path, { ...init, headers: { authorization: auth(svc), ...init.headers } }]);
+const ec2 = (p) => raw("ec2", { method: "POST", body: new URLSearchParams({ Version: "2016-11-15", ...p }).toString(), headers: { "content-type": "application/x-www-form-urlencoded" } });
+const img = /<imageId>([^<]+)</.exec((await ec2({ Action: "DescribeImages", "Owner.1": "amazon" })).text)?.[1];
+const run = await ec2({ Action: "RunInstances", ImageId: img, InstanceType: "c5.large", MinCount: "2", MaxCount: "2" });
+check("fixture instances running", run.status === 200, run.text.slice(0, 100));
+await page.goto(UI + "#/ec2/savings-plans");
+await page.getByText("Purchase Savings Plans").first().waitFor();
+check("not the Not-simulated panel", !/Not simulated in Vyomi/i.test(await page.locator("body").innerText()));
+await page.getByLabel("Hourly commitment").fill("0.05");
+await page.getByRole("button", { name: "Add to cart and purchase" }).click();
+await page.getByText("active", { exact: true }).first().waitFor({ timeout: 10000 }).catch(() => {});
+const plans = JSON.parse((await raw("savingsplans", { method: "POST", body: "{}", headers: { "content-type": "application/json" } }, "/DescribeSavingsPlans")).text).savingsPlans || [];
+check("plan purchased through the form", plans.length >= 1 && plans[0].commitment === "0.050" && plans[0].state === "active", JSON.stringify(plans[0]));
+await page.reload(); await page.getByText("Coverage and utilization").first().waitFor();
+await page.getByText(/^(?!0\.0%)\d+\.\d%$/).first().waitFor({ timeout: 10000 }).catch(() => {});
+const body = await page.locator("body").innerText();
+check("coverage % is shown for the running instances", /Coverage\s*\n?\s*(?!0\.0%)\d+\.\d%/.test(body), body.match(/Coverage[\s\S]{0,40}/)?.[0]);
+await page.goto(UI + "#/ec2/capacity-manager");
+await page.getByText("Capacity summary").first().waitFor();
+await page.waitForTimeout(800);
+check("capacity manager lists the c5.large usage", /c5\.large/.test(await page.locator("body").innerText()));
+check("no page errors", errors.length === 0, errors.join("; "));
+await browser.close();
+process.exit(results.every(Boolean) ? 0 : 1);

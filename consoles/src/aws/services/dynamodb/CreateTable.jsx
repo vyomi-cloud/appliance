@@ -22,6 +22,7 @@ import { follow, navigate } from "../../../common/router.js";
 import { ErrorAlert } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import * as api from "./api.js";
+import AutoScalingFields, { DEFAULT_AS, validateAs } from "./AutoScalingFields.jsx";
 
 const TYPES = [{ value: "S", label: "String" }, { value: "N", label: "Number" }, { value: "B", label: "Binary" }];
 const PROJECTIONS = [{ value: "ALL", label: "All attributes" }, { value: "KEYS_ONLY", label: "Only keys" }];
@@ -88,6 +89,7 @@ export default function CreateTable() {
   const [settings, setSettings] = useState("default");
   const [mode, setMode] = useState("PAY_PER_REQUEST");
   const [rcu, setRcu] = useState("5"); const [wcu, setWcu] = useState("5");
+  const [autoScale, setAutoScale] = useState(DEFAULT_AS);
   const [capOn, setCapOn] = useState(false); const [capR, setCapR] = useState("100"); const [capW, setCapW] = useState("100");
   const [warmR, setWarmR] = useState(""); const [warmW, setWarmW] = useState("");
   const [tableClass, setTableClass] = useState("STANDARD");
@@ -122,6 +124,8 @@ export default function CreateTable() {
       addAttr(l.sk, l.skType);
       return { IndexName: l.name, KeySchema: [{ AttributeName: pk, KeyType: "HASH" }, { AttributeName: l.sk, KeyType: "RANGE" }], Projection: { ProjectionType: l.projection } };
     }) : [];
+    const asErr = billing === "PROVISIONED" ? validateAs(autoScale) : null;
+    if (asErr) { setError(new Error(asErr)); setBusy(false); return; }
     try {
       await api.createTable({
         TableName: name,
@@ -137,6 +141,7 @@ export default function CreateTable() {
         ...(localIndexes.length ? { LocalSecondaryIndexes: localIndexes } : {}),
         ...(tags.filter((t) => !t.markedForRemoval && t.key).length ? { Tags: tags.filter((t) => !t.markedForRemoval && t.key).map((t) => ({ Key: t.key, Value: t.value })) } : {}),
       });
+      if (billing === "PROVISIONED" && (autoScale.read.enabled || autoScale.write.enabled)) await api.applyAutoScaling(name, autoScale);
       notify.success(`Creating the ${name} table. It will be available for use shortly.`);
       navigate("dynamodb", "tables");
     } catch (e) { setError(e); }
@@ -217,7 +222,7 @@ export default function CreateTable() {
                                 <FormField label="Write capacity units"><Input type="number" value={wcu} onChange={({ detail }) => setWcu(detail.value)} ariaLabel="Write capacity units" /></FormField>
                               </Grid>
                             </FormField>
-                            <CapabilityContainer id="dynamodb.autoscaling" title="Auto scaling" />
+                            <AutoScalingFields value={autoScale} onChange={setAutoScale} />
                           </SpaceBetween>
                         )}
                       </SpaceBetween>

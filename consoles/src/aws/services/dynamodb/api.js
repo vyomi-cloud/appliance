@@ -195,3 +195,35 @@ export const startBackupCopy = ({ backupArn, destRegion, destAccount, vault, rol
   RecoveryPointArn: backupArn, SourceBackupVaultName: "Default", IamRoleArn: roleArn || "arn:aws:iam::123456789012:role/service-role/AWSBackupDefaultServiceRole",
   DestinationBackupVaultArn: `arn:aws:backup:${destRegion}:${destAccount || "123456789012"}:backup-vault:${vault || "Default"}` });
 export const listCopyJobs = async () => (await BKP("GET", "/copy-jobs")).CopyJobs || [];
+
+// ── Application Auto Scaling (provisioned-capacity auto scaling; X-Amz-Target AnyScaleFrontendService.*) ──
+const aas = (op, body) => awsJson("application-autoscaling", `AnyScaleFrontendService.${op}`, body, { version: "1.1" });
+const DIM = { read: "dynamodb:table:ReadCapacityUnits", write: "dynamodb:table:WriteCapacityUnits" };
+const METRIC = { read: "DynamoDBReadCapacityUtilization", write: "DynamoDBWriteCapacityUtilization" };
+export const autoScalingSettings = async (table) => {
+  const rid = `table/${table}`;
+  const [t, p] = await Promise.all([aas("DescribeScalableTargets", { ServiceNamespace: "dynamodb", ResourceIds: [rid] }), aas("DescribeScalingPolicies", { ServiceNamespace: "dynamodb", ResourceId: rid })]);
+  const out = {};
+  for (const kind of ["read", "write"]) {
+    const tg = (t.ScalableTargets || []).find((x) => x.ScalableDimension === DIM[kind]);
+    const pol = (p.ScalingPolicies || []).find((x) => x.ScalableDimension === DIM[kind] && x.PolicyType === "TargetTrackingScaling");
+    out[kind] = tg ? { enabled: true, min: tg.MinCapacity, max: tg.MaxCapacity, target: pol?.TargetTrackingScalingPolicyConfiguration?.TargetValue ?? 70,
+      scaleIn: !pol?.TargetTrackingScalingPolicyConfiguration?.DisableScaleIn } : { enabled: false, min: 1, max: 10, target: 70, scaleIn: true };
+  }
+  return out;
+};
+export async function applyAutoScaling(table, cfg) {
+  const rid = `table/${table}`;
+  for (const kind of ["read", "write"]) {
+    const c = cfg[kind], base = { ServiceNamespace: "dynamodb", ResourceId: rid, ScalableDimension: DIM[kind] };
+    if (!c?.enabled) {
+      try { await aas("DeregisterScalableTarget", base); } catch (e) { if (e.code !== "ObjectNotFoundException") throw e; }
+      continue;
+    }
+    await aas("RegisterScalableTarget", { ...base, MinCapacity: Number(c.min), MaxCapacity: Number(c.max) });
+    await aas("PutScalingPolicy", { ...base, PolicyName: `${table}-${kind}-scaling-policy`, PolicyType: "TargetTrackingScaling",
+      TargetTrackingScalingPolicyConfiguration: { TargetValue: Number(c.target), PredefinedMetricSpecification: { PredefinedMetricType: METRIC[kind] },
+        ScaleInCooldown: 60, ScaleOutCooldown: 60, DisableScaleIn: c.scaleIn === false } });
+  }
+}
+export const scalingActivities = async (table) => (await aas("DescribeScalingActivities", { ServiceNamespace: "dynamodb", ResourceId: `table/${table}`, MaxResults: 20 })).ScalingActivities || [];

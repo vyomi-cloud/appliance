@@ -94,13 +94,18 @@ export default function CreateEventBus({ params }) {
                 <FormField label="Bus type">
                   <Tiles value={busType} onChange={({ detail }) => setBusType(detail.value)} items={[
                     { value: "custom", label: "Custom", description: "An event bus for your own applications and AWS services." },
-                    { value: "partner", label: "Partner", description: "An event bus for a SaaS partner's events (not simulated in Vyomi)." },
+                    { value: "partner", label: "Partner", description: "An event bus for a SaaS partner's events, created by associating a partner event source." },
                   ]} />
                 </FormField>
               </Container>
             )}
             {!editing && busType === "partner" ? (
-              <NotSimulated feature="Partner event buses" note="EventBridge partner integrations aren't modeled in Vyomi." />
+              <Container header={<Header variant="h2">Partner event bus</Header>}>
+                <SpaceBetween size="s">
+                  <Box>A partner event bus is created by associating a partner event source: the bus takes the source's name and receives the partner's events.</Box>
+                  <Button variant="primary" href="#/eventbridge/partner-event-sources" onFollow={follow}>Go to partner event sources</Button>
+                </SpaceBetween>
+              </Container>
             ) : (
               <>
                 <Container header={<Header variant="h2">Event bus detail</Header>}>

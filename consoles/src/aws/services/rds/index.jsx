@@ -1,3 +1,4 @@
+import RestoreFromS3 from "./RestoreFromS3.jsx";
 import { ServiceQuota } from "./RdsExtras.jsx";
 import Dashboard from "./Dashboard.jsx";
 import Databases from "./Databases.jsx";
@@ -19,7 +20,7 @@ import Events from "./Events.jsx";
 import EventSubscriptions from "./EventSubscriptions.jsx";
 import {
   CapacityReservations, CertificateUpdate, CreateCapacityReservation, CreateZeroEtlIntegration,
-  CustomEngineVersions, Recommendations, ReservedInstances, RestoreFromS3, ZeroEtlIntegrations,
+  CustomEngineVersions, Recommendations, ReservedInstances, ZeroEtlIntegrations,
 } from "./Peripheral.jsx";
 
 const crumb = (text, href) => ({ text, href });
