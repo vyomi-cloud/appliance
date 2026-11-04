@@ -230,6 +230,12 @@ function carveSubnetCidr(baseCidr, index) {
 /** Real orchestration over the already-fully-built primitives (CreateVpc/CreateSubnet/
  * CreateRouteTable/CreateInternetGateway/CreateNatGateway/CreateVpcEndpoint) — no new backend
  * state, just the sequence of calls "VPC and more" performs on your behalf. */
+async function applyEncryption(vpcId, mode) {
+  if (mode === "None") return;
+  const c = await api.createVpcEncryptionControl(vpcId);
+  if (mode === "Enforce mode") await api.modifyVpcEncryptionControl(c.Id, { Mode: "enforce" });
+}
+
 async function createVpcAndMore({ cidr, tagMap, tenancy, numAzs, numPublic, numPrivate, natOption, endpointOption, dnsHostnames, dnsSupport }) {
   const vpc = await api.createVpc(cidr, tagMap, tenancy);
   await api.modifyVpcAttribute(vpc.VpcId, { "EnableDnsSupport.Value": dnsSupport });
@@ -282,6 +288,7 @@ export function CreateVpc() {
   const [cidrSource, setCidrSource] = useState("manual");
   const [cidr, setCidr] = useState("10.0.0.0/16");
   const [tenancy, setTenancy] = useState("Default");
+  const [encMode, setEncMode] = useState("None");
   const [tags, setTags] = useState([]);
   const [numAzs, setNumAzs] = useState("2");
   const [numPublic, setNumPublic] = useState("2");
@@ -303,11 +310,13 @@ export function CreateVpc() {
           cidr, tagMap, tenancy, numAzs: Number(numAzs), numPublic: Number(numPublic), numPrivate: Number(numPrivate),
           natOption, endpointOption, dnsHostnames, dnsSupport,
         });
+        await applyEncryption(vpc.VpcId, encMode);
         notify.success(`VPC "${vpc.VpcId}" and its subnets/route tables/gateways created.`);
         navigate("vpc", "vpcs", vpc.VpcId);
         return;
       }
       const vpc = await api.createVpc(cidr, tagMap, tenancy);
+      await applyEncryption(vpc.VpcId, encMode);
       notify.success(`VPC "${vpc.VpcId}" created.`);
       navigate("vpc", "vpcs", vpc.VpcId);
     } catch (e) { setError(e); } finally { setBusy(false); }
@@ -379,7 +388,7 @@ export function CreateVpc() {
                 <Select selectedOption={{ value: tenancy, label: tenancy }} onChange={({ detail }) => setTenancy(detail.selectedOption.value)} options={[{ value: "Default", label: "Default" }, { value: "Dedicated", label: "Dedicated" }]} />
               </FormField>
               <FormField label="VPC encryption control ($)">
-                <Select selectedOption={{ value: "None", label: "None" }} options={[{ value: "None", label: "None" }, { value: "Monitor mode", label: "Monitor mode" }, { value: "Enforce mode", label: "Enforce mode" }]} disabled />
+                <Select selectedOption={{ value: encMode, label: encMode }} onChange={({ detail }) => setEncMode(detail.selectedOption.value)} options={[{ value: "None", label: "None" }, { value: "Monitor mode", label: "Monitor mode" }, { value: "Enforce mode", label: "Enforce mode" }]} ariaLabel="VPC encryption control" />
               </FormField>
             </SpaceBetween>
           </Container>

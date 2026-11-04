@@ -682,6 +682,7 @@ class AwsWireRouter:
         self.msg.kms_store = self.kms             # EventBridge bus/archive KMS encryption (real Encrypt/Decrypt)
         self.elbv2 = s.get("elbv2") or elbv2.Elbv2Store()
         self.elbv2.vpc_store = self.vpc    # target health reacts to real instance state
+        self.vpc.elbv2_store = self.elbv2  # VPC encryption-control audit reads the load balancers
         self.elbv2.cw_store = self.cw      # real AWS/ApplicationELB + AWS/NetworkELB metrics
         self.elbv2.s3_store = self.s3      # trust-store CA bundles are read from Vyomi's own S3
         self.sfn = s.get("sfn") or sfn.StepFunctionsStore()   # Step Functions (state machines + executions)
