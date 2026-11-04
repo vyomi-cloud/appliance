@@ -6,15 +6,13 @@ import UploadPage from "./UploadPage.jsx";
 import CreateFolderPage from "./CreateFolderPage.jsx";
 import EmptyBucketPage from "./EmptyBucketPage.jsx";
 import DeleteBucketPage from "./DeleteBucketPage.jsx";
-import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { AccessPointsSection } from "./Sweep.jsx";
 import { AccountPublicAccessBlock, DirectoryBuckets, ObjectLambdaAccessPoints } from "./AccountPages.jsx";
 import { AccessGrants, BatchOperations, MultiRegionAccessPoints } from "./BatchPages.jsx";
 import { VectorBuckets } from "./VectorPages.jsx";
+import { AccessPointsForFsx, FileSystems } from "./FileSystemPages.jsx";
+import { S3GetStarted, S3Marketplace } from "./MarketplacePages.jsx";
 import { AccessAnalyzer, StorageLensDashboards, StorageLensGroups, TableBuckets } from "./InsightPages.jsx";
-
-// Account-level pages Vyomi has no backend for: each is a registered capability gap (core/capabilities/aws/s3.json).
-const ns = (title, id) => () => <CapabilityContainer id={`s3.account.${id}`} title={title} />;
 
 export default {
   nav: [
@@ -22,8 +20,10 @@ export default {
     { type: "link", text: "Directory buckets", href: "#/s3/directory-buckets" },
     { type: "link", text: "Table buckets", href: "#/s3/table-buckets" },
     { type: "link", text: "Vector buckets", href: "#/s3/vector-buckets" },
+    { type: "link", text: "File systems", href: "#/s3/file-systems" },
     { type: "link", text: "Access Grants", href: "#/s3/access-grants" },
     { type: "link", text: "Access Points", href: "#/s3/access-points" },
+    { type: "link", text: "Access Points for FSx", href: "#/s3/access-points-fsx" },
     { type: "link", text: "Object Lambda Access Points", href: "#/s3/olap" },
     { type: "link", text: "Multi-Region Access Points", href: "#/s3/mrap" },
     { type: "link", text: "Batch Operations", href: "#/s3/batch-operations" },
@@ -57,7 +57,9 @@ export default {
     { pattern: "/s3/access-analyzer", component: AccessAnalyzer, crumbs: () => [{ text: "IAM Access Analyzer for S3", href: "#/s3/access-analyzer" }] },
     { pattern: "/s3/lens/dashboards", component: StorageLensDashboards, crumbs: () => [{ text: "Storage Lens dashboards", href: "#/s3/lens/dashboards" }] },
     { pattern: "/s3/lens/groups", component: StorageLensGroups, crumbs: () => [{ text: "Storage Lens groups", href: "#/s3/lens/groups" }] },
-    ...[["marketplace", "AWS Marketplace for S3", "marketplace"], ["get-started", "Amazon S3", "get-started"]]
-      .map(([p, t, id]) => ({ pattern: `/s3/${p}`, component: ns(t, id), crumbs: () => [{ text: t, href: `#/s3/${p}` }] })),
+    { pattern: "/s3/file-systems", component: FileSystems, crumbs: () => [{ text: "File systems", href: "#/s3/file-systems" }] },
+    { pattern: "/s3/access-points-fsx", component: AccessPointsForFsx, crumbs: () => [{ text: "Access Points for FSx", href: "#/s3/access-points-fsx" }] },
+    { pattern: "/s3/marketplace", component: S3Marketplace, crumbs: () => [{ text: "AWS Marketplace for S3", href: "#/s3/marketplace" }] },
+    { pattern: "/s3/get-started", component: S3GetStarted, crumbs: () => [{ text: "Amazon S3", href: "#/s3/get-started" }] },
   ],
 };

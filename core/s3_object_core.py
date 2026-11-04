@@ -4321,6 +4321,11 @@ def _dispatch_inner(store: ObjectStore, method: str, path: str,
         return _load_core("s3_vectors_core").dispatch(store, method, "/" + raw.partition("/")[2], query, headers, body)
     if bucket == "__s3tables__":  # Amazon S3 Tables REST (SigV4 signing name s3tables), routed by AwsWireRouter
         return _load_core("s3_tables_core").dispatch(store, method, "/" + raw.partition("/")[2], query, headers, body)
+    if bucket.endswith("-ext-s3alias"):   # S3 access point alias of an FSx for OpenZFS volume -> its files (core/s3files_core)
+        _fc = _load_core("s3files_core")
+        _vol = _fc.alias_volume(store, bucket)
+        if _vol is not None:
+            return _fc.alias_dispatch(store, _vol, bucket, method, key, query, headers, body)
     if bucket == "v20180820":     # S3 Control (access points; every other control op -> NotImplemented)
         return _s3control(store, method, raw, query, lheaders, body)
     guard = _grant_cred_guard(store, method, raw, query, lheaders)

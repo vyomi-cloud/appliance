@@ -8,7 +8,7 @@ import Button from "@cloudscape-design/components/button";
 import Grid from "@cloudscape-design/components/grid";
 import { useAsync } from "../../../common/useAsync.js";
 import { follow, href } from "../../../common/router.js";
-import { NotSimulatedContainer } from "../../kit/common.jsx";
+import { CostWidget, ServiceHealthWidget } from "./HealthCost.jsx";
 import * as api from "./api.js";
 import { ZonesWidget, AlarmsWidget } from "./OpsPages.jsx";
 
@@ -44,7 +44,7 @@ export default function Dashboard() {
               <Button href={href("ec2", "migrate-a-server")} onFollow={follow}>Migrate a server</Button>
             </SpaceBetween>
           </Container>
-          <NotSimulatedContainer title="Service health" feature="AWS Health Dashboard" note="Region-wide service health events aren't modeled by Vyomi." />
+          <ServiceHealthWidget />
         </Grid>
 
         <Grid gridDefinition={[{ colspan: 6 }, { colspan: 6 }]}>
@@ -52,7 +52,7 @@ export default function Dashboard() {
           <AlarmsWidget />
         </Grid>
 
-        <NotSimulatedContainer title="EC2 cost" feature="AWS Cost Explorer" note="Cost and usage data isn't modeled by Vyomi." />
+        <CostWidget />
       </SpaceBetween>
     </ContentLayout>
   );

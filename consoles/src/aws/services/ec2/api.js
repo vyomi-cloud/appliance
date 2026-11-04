@@ -53,6 +53,11 @@ export async function describeInstanceStatus(id) {
   return asList(r.instanceStatusSet?.item)[0];
 }
 
+export async function describeAllInstanceStatus() {
+  const r = await call("DescribeInstanceStatus", { IncludeAllInstances: true });
+  return asList(r.instanceStatusSet?.item);
+}
+
 export async function describeInstanceTypes() {
   const r = await call("DescribeInstanceTypes");
   return asList(r.instanceTypeSet?.item).map((x) => ({
