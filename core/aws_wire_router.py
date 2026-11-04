@@ -74,6 +74,7 @@ from core import gcp_resourcemanager_core as gcp_rm
 from core import gcp_pam_core as gcp_pam
 from core import gcp_run_core as gcp_run
 from core import gcp_trace_core as gcp_trace
+from core import gcp_osconfig_core as gcp_osconfig
 from core import gcp_posture_core as gcp_posture
 
 # Cloud Scheduler httpTarget that names a Cloud Run job's own Admin API v2 `:run` endpoint
@@ -97,6 +98,9 @@ def _gcp_service(path):
             or re.match(r"^/v1/projects/[^/]+/locations/global/traceScopes([/:]|$)", path) \
             or re.match(r"^/v2/projects/[^/]+/locations/global/logScopes([/:]|$)", path):
         return "gcp-trace"   # Cloud Trace v1/v2 + Trace scopes + Log scopes (core/gcp_trace_core, state on the Monitoring store)
+    if re.match(r"^/v1/projects/[^/]+/(patchJobs|patchDeployments)([/:]|$)", path) \
+            or re.match(r"^/v1/projects/[^/]+/locations/[^/]+/osPolicyAssignments([/:]|$)", path):
+        return "gcp-osconfig"   # VM Manager: OS Config patch jobs/deployments + OS policy assignments (core/gcp_osconfig_core, state on the VM store)
     if re.match(r"^/v1/projects/[^/]+/securityPosture/(compute|storage)$", path):
         return "gcp-posture"   # rule-based posture findings over real VM / firewall / bucket state (core/gcp_posture_core)
     if path.startswith("/v2/entries"):   # Cloud Logging: entries:write / entries:list
@@ -1139,6 +1143,7 @@ class AwsWireRouter:
                 "gcp-container": (gcp_gke, self.gcp_gke), "gcp-iamcredentials": (gcp_iamc, self.gcp_iamc),
                 "gcp-monitoring": (gcp_mon, self.gcp_mon),
                 "gcp-trace": (gcp_trace, self.gcp_mon),
+                "gcp-osconfig": (gcp_osconfig, self.gcp_compute_vm),
                 "gcp-redis": (gcp_redis, self.gcp_redis),
                 "gcp-artifactregistry": (gcp_ar, self.gcp_ar),
                 "gcp-logging": (gcp_logging, self.gcp_logging),
@@ -1164,7 +1169,7 @@ class AwsWireRouter:
             elif svc == "gcp-firestore":   # exportDocuments/importDocuments read/write real GCS objects
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), gcs_store=self.gcs)
             elif svc == "gcp-compute-vm":   # image import (rawDisk) / export read+write the simulator's GCS objects
-                r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), gcs_store=self.gcs)
+                r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), gcs_store=self.gcs, vpc_store=self.gcp_compute)
             elif svc == "gcp-compute":   # Connectivity Tests evaluate against the VMs too
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), vm_store=self.gcp_compute_vm)
             elif svc == "gcp-pam":   # grant activation/expiry is a real project IAM policy change
