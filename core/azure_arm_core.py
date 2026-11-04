@@ -94,6 +94,11 @@ try:                                              # Management locks (Microsoft.
 except ImportError:
     import azure_locks_core as locks_engine        # type: ignore
 
+try:                                              # Microsoft.Support (support requests filed with Vyomi)
+    from core import azure_support_core as support_engine
+except ImportError:
+    import azure_support_core as support_engine    # type: ignore
+
 try:                                              # Resource health + Advisor (derived from the stored resources)
     from core import azure_health_core as health_engine
 except ImportError:
@@ -1118,6 +1123,13 @@ class AzureArm:
 
         namespace = after[0]
         chain = after[1:]
+
+        # Microsoft.Support: services, problem classifications, checkNameAvailability, supportTickets
+        # (+ communications) — core/azure_support_core.py. Subscription scoped.
+        if namespace.lower() == "microsoft.support" and rg is None and support_engine.find_marker(chain):
+            r = support_engine.dispatch(self.state, method, sub, chain, payload or {}, query or {},
+                                        lambda rid: rid.lower() in self.state)
+            return {"status": r["status"], "headers": {}, "body": r["body"]}
 
         # Microsoft.Subscription/rename: the subscription blade's "Rename" header action.
         if namespace.lower() == "microsoft.subscription" and chain and chain[0].lower() == "rename":
