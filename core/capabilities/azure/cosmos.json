@@ -6,6 +6,19 @@
   "limitations": [],
   "tests": ["tests/conformance/test_azure_arm_core.py"]
  },
+ "azure.cosmos.network_rules": {
+  "title": "Network rules (selected networks) and private endpoints",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "virtualNetworkRules (subnet must carry the Microsoft.AzureCosmosDB service endpoint, enabled for you), ipRules (valid IPv4 addresses/CIDRs), isVirtualNetworkFilterEnabled and publicNetworkAccess are real validated ARM state, and private endpoints (privatelink.documents.azure.com) with approve/reject are real control-plane resources. None of it is enforced against Cosmos DB data-plane requests: there is no network path to evaluate the rules against."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_netsvc_core.py"
+  ]
+ },
  "azure.cosmos.keys": {
   "title": "Keys (listKeys / listReadOnlyKeys / listConnectionStrings / regenerateKey)",
   "level": { "nano": "full", "offline": "full" },

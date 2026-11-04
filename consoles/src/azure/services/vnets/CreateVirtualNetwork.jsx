@@ -10,6 +10,7 @@ import { useAsync } from "../../../common/useAsync.js";
 import { DEFAULT_RG, LOCATIONS, listResourceGroups, locationLabel } from "../../kit/arm.js";
 import CreateWizard, { FormRow, FormSection } from "../../kit/CreateWizard.jsx";
 import { Glyph, NotSimulatedContainer } from "../../kit/common.jsx";
+import * as ns from "./netsvc.js";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
 import { TagRows } from "./VnetBlade.jsx";
@@ -27,6 +28,7 @@ export default function CreateVirtualNetwork() {
   const [f, setF] = useState({
     resourceGroup: DEFAULT_RG, name: "vnet-cloudlearn", location: "eastus",
     encryption: false,
+    bastion: false, firewall: false, firewallTier: "Standard", ddos: "",
     usePool: false, ipamPool: "", ipamPoolSize: "256",
     addressPrefixes: ["10.0.0.0/16"],
     subnets: [{ name: "default", prefix: "10.0.0.0/24" }],
@@ -35,6 +37,7 @@ export default function CreateVirtualNetwork() {
   const set = (k) => (_, d) => setF((x) => ({ ...x, [k]: d.value }));
   const rg = newRg ?? f.resourceGroup;
   const pools = useAsync(() => api.listAllIpamPools(), [sub.id]);
+  const ddosPlans = useAsync(() => ns.DDOS.list(), [sub.id]);
   const [newPool, setNewPool] = useState(null); // {name, prefix} while the inline "Create new" form is open
   const [poolBusy, setPoolBusy] = useState(false);
 
@@ -105,9 +108,31 @@ export default function CreateVirtualNetwork() {
           <Checkbox checked={f.encryption} onChange={(_, d) => setF((x) => ({ ...x, encryption: !!d.checked }))} aria-label="Virtual network encryption" />
         </FormRow>
       </FormSection>
-      <NotSimulatedContainer title="Azure Bastion" feature="Enable Azure Bastion" note="Deploying a Bastion host (Microsoft.Network/bastionHosts) is not modelled." />
-      <NotSimulatedContainer title="Azure Firewall" feature="Enable Azure Firewall" note="Deploying an Azure Firewall (Microsoft.Network/azureFirewalls) is not modelled." />
-      <NotSimulatedContainer title="Azure DDoS Network Protection" feature="Enable Azure DDoS Network Protection" note="Attaching a DDoS protection plan (Microsoft.Network/ddosProtectionPlans) is not modelled." />
+      <FormSection title="Azure Bastion">
+        <FormRow label="Enable Azure Bastion">
+          <Checkbox checked={f.bastion} onChange={(_, d) => setF((x) => ({ ...x, bastion: !!d.checked }))} aria-label="Enable Azure Bastion" />
+        </FormRow>
+        {f.bastion && <p style={{ fontSize: 12 }}>Vyomi creates an AzureBastionSubnet (/26), a Standard static public IP and a Standard-tier bastion host named {f.name}-bastion after the virtual network.</p>}
+      </FormSection>
+      <FormSection title="Azure Firewall">
+        <FormRow label="Enable Azure Firewall">
+          <Checkbox checked={f.firewall} onChange={(_, d) => setF((x) => ({ ...x, firewall: !!d.checked }))} aria-label="Enable Azure Firewall" />
+        </FormRow>
+        {f.firewall && (
+          <FormRow label="Azure Firewall tier" htmlFor="vnet-fw-tier">
+            <Select id="vnet-fw-tier" value={f.firewallTier} onChange={set("firewallTier")} aria-label="Azure Firewall tier">{["Basic", "Standard", "Premium"].map((t) => <option key={t}>{t}</option>)}</Select>
+          </FormRow>
+        )}
+      </FormSection>
+      <FormSection title="Azure DDoS Network Protection">
+        <FormRow label="Enable Azure DDoS Network Protection" htmlFor="vnet-ddos">
+          <Select id="vnet-ddos" value={f.ddos} onChange={set("ddos")} aria-label="Azure DDoS Network Protection plan">
+            <option value="">Disabled</option>
+            <option value="__new__">Enable (create a new plan)</option>
+            {(ddosPlans.data || []).map((p) => <option key={p.id} value={p.id}>Enable: {p.name}</option>)}
+          </Select>
+        </FormRow>
+      </FormSection>
     </>
   );
 
@@ -205,7 +230,10 @@ export default function CreateVirtualNetwork() {
     </>
   );
 
-  const body = () => api.toArmBody(f);
+  const body = () => {
+    const b = api.toArmBody(f);
+    return f.ddos && f.ddos !== "__new__" ? { ...b, properties: { ...b.properties, enableDdosProtection: true, ddosProtectionPlan: { id: f.ddos } } } : b;
+  };
   const review = () => {
     const b = body();
     const dl = (rows) => <dl>{rows.map(([k, v]) => [<dt key={k + "t"}>{k}</dt>, <dd key={k + "d"}>{v}</dd>])}</dl>;
@@ -214,7 +242,8 @@ export default function CreateVirtualNetwork() {
         <h3>Basics</h3>
         {dl([["Subscription", sub.displayName || sub.id], ["Resource Group", rg || "--"], ["Virtual network name", f.name || "--"], ["Region", locationLabel(f.location)]])}
         <h3>Security</h3>
-        {dl([["Virtual network encryption", f.encryption ? "Enabled" : "Disabled"]])}
+        {dl([["Virtual network encryption", f.encryption ? "Enabled" : "Disabled"], ["Azure Bastion", f.bastion ? "Enabled" : "Disabled"],
+          ["Azure Firewall", f.firewall ? `Enabled (${f.firewallTier})` : "Disabled"], ["Azure DDoS Network Protection", f.ddos ? "Enabled" : "Disabled"]])}
         <h3>Address space</h3>
         {f.usePool
           ? dl([["IP address pool", (pools.data || []).find((p) => p.id === f.ipamPool)?.name || f.ipamPool || "--"], ["Number of IP addresses", f.ipamPoolSize]])
@@ -233,6 +262,21 @@ export default function CreateVirtualNetwork() {
         await api.putSubnet(rg, f.name, "default", { properties: { addressPrefix: prefix } });
       } else {
         for (const s of f.subnets) await api.putSubnet(rg, f.name, s.name, { properties: { addressPrefix: s.prefix } });
+      }
+      if (f.bastion || f.firewall || f.ddos === "__new__") {
+        const vnet = await api.getVnet(rg, f.name);
+        const subs = await api.listSubnets(rg, f.name);
+        if (f.ddos === "__new__") {
+          const plan = await ns.DDOS.put(rg, `${f.name}-ddos`, { location: f.location });
+          await ns.setDdos(vnet, plan.id);
+        }
+        if (f.bastion) await ns.deployBastion(vnet, { name: `${f.name}-bastion`, sku: "Standard", prefix: ns.freeBlock(vnet, subs, 26) });
+        if (f.firewall) {
+          const subs2 = await api.listSubnets(rg, f.name);
+          const prefix = ns.freeBlock(vnet, subs2, 26);
+          const mgmtPrefix = f.firewallTier === "Basic" ? ns.freeBlock(vnet, [...subs2, { properties: { addressPrefix: prefix } }], 26) : undefined;
+          await ns.deployFirewall(vnet, { name: `${f.name}-firewall`, tier: f.firewallTier, prefix, mgmtPrefix });
+        }
       }
       notify.success(`Deployment of virtual network '${f.name}' to resource group '${rg}' was successful.`, "Deployment succeeded");
       navigate("vnets", rg, f.name);

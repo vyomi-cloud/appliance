@@ -15,8 +15,10 @@ import { TagRows } from "./KeyVaultBlade.jsx";
 const NAME_RE = /^[a-zA-Z0-9-]{3,24}$/;
 const RG_RE = /^[-\w._()]{1,90}$/;
 
+import { PeWizardSection, usePeWizard } from "../../kit/PrivateEndpoints.jsx";
 export default function CreateKeyVault() {
   const notify = useNotify();
+  const pe = usePeWizard("Microsoft.KeyVault/vaults");
   const sub = useSubscription();
   const rgs = useAsync(() => listResourceGroups(), [sub.id]);
   const existing = useAsync(() => api.listVaults(), [sub.id]);
@@ -130,7 +132,7 @@ export default function CreateKeyVault() {
           </FormRow>
         </FormSection>
       )}
-      <NotSimulatedContainer title="Private endpoint" feature="Private endpoint connections for a key vault" />
+      <PeWizardSection pe={pe} />
     </>
   );
 
@@ -165,7 +167,8 @@ export default function CreateKeyVault() {
 
   const onCreate = async () => {
     try {
-      await api.createVault(rg, f.name, body());
+      const created = await api.createVault(rg, f.name, body());
+      await pe.deploy({ id: created.id, name: f.name });
       notify.success(`Deployment of key vault '${f.name}' to resource group '${rg}' was successful.`, "Deployment succeeded");
       navigate("keyvaults", rg, f.name);
     } catch (e) { notify.error(e, "Deployment failed"); }

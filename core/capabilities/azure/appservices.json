@@ -82,9 +82,17 @@
  },
  "azure.appservices.webapp.deploymentcenter": {
   "title": "Deployment Center (CI/CD source, FTPS credentials)",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["No source-control integration, build pipeline or FTPS deployment credentials."],
-  "api": []
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Real ARM control plane: sourcecontrols/web (repo URL, branch, manual/continuous integration, GitHub Actions with a generated workflow YAML per runtime stack; scmType maintained), deployments + log, publishing credentials ($site user, rotating password) and per-protocol basic-auth policies. No build runner and no outbound git/GitHub access exist, so a sync or continuous-integration push is recorded as a Failed deployment with an explanation (never a fake success), the GitHub workflow is generated but not committed, and GitHub/Azure DevOps/Bitbucket account authorization (OAuth) is not performed. Local Git, Container registry and Azure Repos sources are not offered."
+  ],
+  "api": [],
+  "tests": [
+   "tests/conformance/test_azure_webdeploy_core.py"
+  ]
  },
  "azure.appservices.webapp.monitoring": {
   "title": "Monitoring (Alerts, Metrics, Logs, Advisor recommendations, Health check, Diagnostic settings, Log stream, Process explorer)",

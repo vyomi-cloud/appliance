@@ -24,6 +24,7 @@ import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
 import { SubnetsPanel, PeeringsPanel, ServiceEndpointsPanel, ConnectedDevicesPanel, TopologyPanel } from "./Networking.jsx";
+import { PrivateEndpointsPanel, BastionPanel, FirewallPanel, DdosPanel } from "./NetworkServices.jsx";
 import NetworkWatcherTools, { ConnectionTroubleshootPanel } from "./NetworkWatcher.jsx";
 import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
 import SharedActivityLog from "../../kit/ActivityLog.jsx";
@@ -58,8 +59,7 @@ export const MENU = [
 ];
 const LABEL = Object.fromEntries(MENU.flatMap((m) => (m.group ? m.items : [m])).map((i) => [i.id, i.label]));
 const GAP_CAP = {
-  bastion: "azure.vnets.network_appliances", ddosprotection: "azure.vnets.network_appliances", firewall: "azure.vnets.network_appliances",
-  networkmanager: "azure.vnets.network_appliances", privateendpoints: "azure.vnets.network_appliances",
+  networkmanager: "azure.vnets.network_appliances",
   connecteddevices: "azure.vnets.connected_devices",
 };
 
@@ -86,6 +86,10 @@ export default function VnetBlade({ params }) {
       peerings: () => <PeeringsPanel a={a} />,
       serviceendpoints: () => <ServiceEndpointsPanel a={a} />,
       connecteddevices: () => <ConnectedDevicesPanel a={a} />,
+      privateendpoints: () => <PrivateEndpointsPanel a={a} />,
+      bastion: () => <BastionPanel a={a} />,
+      firewall: () => <FirewallPanel a={a} />,
+      ddosprotection: () => <DdosPanel a={a} reload={reload} />,
       properties: () => <Properties a={a} />,
       locks: () => <Locks a={a} />,
       activitylog: () => <SharedActivityLog scope={a.id} name={a.name} />,

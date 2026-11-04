@@ -248,7 +248,7 @@ export function toArmBody(f) {
       allowCrossTenantReplication: f.allowCrossTenantReplication,
       ...(f.performance === "Standard" ? { accessTier: f.accessTier } : {}),
       publicNetworkAccess: f.networkAccess === "disabled" ? "Disabled" : "Enabled",
-      networkAcls: { defaultAction: f.networkAccess === "all" ? "Allow" : "Deny", bypass: "AzureServices", virtualNetworkRules: [], ipRules: [] },
+      networkAcls: { defaultAction: f.networkAccess === "all" ? "Allow" : "Deny", bypass: "AzureServices", virtualNetworkRules: (f.networkAccess === "selected" ? f.vnetSubnets || [] : []).map((id) => ({ id, action: "Allow" })), ipRules: (f.networkAccess === "selected" ? f.ipRanges || [] : []).map((value) => ({ value, action: "Allow" })) },
       routingPreference: { routingChoice: f.routing },
       encryption: f.cmk && f.keyvaulturi
         ? { keySource: "Microsoft.Keyvault", keyvaultproperties: { keyvaulturi: f.keyvaulturi, keyname: f.keyname },

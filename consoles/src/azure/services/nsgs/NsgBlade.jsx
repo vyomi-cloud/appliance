@@ -23,6 +23,7 @@ import { Essentials, ErrorBar, Glyph, KV, Loading, NotSimulated, NotSimulatedCon
 import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
+import FlowLogsPanel from "./FlowLogs.jsx";
 import EffectiveSecurityRules from "./EffectiveSecurityRules.jsx";
 import NetworkWatcherTools from "./NetworkWatcher.jsx";
 import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
@@ -82,7 +83,7 @@ export default function NsgBlade({ params }) {
       effectivesecurityrules: () => <EffectiveSecurityRules a={a} />,
       alerts: () => <NotSimulatedContainer title={`${name} | Alerts`} feature="Alerts" />,
       logs: () => <NotSimulatedContainer title={`${name} | Logs`} feature="Logs" />,
-      flowlogs: () => <NotSimulatedContainer title={`${name} | NSG flow logs`} feature="NSG flow logs" />,
+      flowlogs: () => <FlowLogsPanel a={a} />,
     }[panel];
     body = P ? P() : (
       <CapabilityContainer id={GAP_CAP[panel] || "azure.nsgs.tools"} title={`${name} | ${LABEL[panel] || panel}`} />

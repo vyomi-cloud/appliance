@@ -16,8 +16,12 @@ const NAME_RE = /^[a-z0-9]{3,24}$/;
 const RG_RE = /^[-\w._()]{1,90}$/;
 const ENFORCEMENT = "Saved on the storage account resource (ARM) and returned to your SDKs and the az CLI. The Vyomi Blob data plane does not enforce these settings.";
 
+import { PeWizardSection, usePeWizard, listAllSubnets } from "../../kit/PrivateEndpoints.jsx";
+import { ensureEndpoint } from "../../kit/NetworkRules.jsx";
 export default function CreateStorageAccount() {
   const notify = useNotify();
+  const pe = usePeWizard("Microsoft.Storage/storageAccounts");
+  const subnetList = useAsync(listAllSubnets, []);
   const sub = useSubscription();
   const rgs = useAsync(() => listResourceGroups(), [sub.id]);
   const existing = useAsync(() => api.listStorageAccounts(), [sub.id]);
@@ -170,8 +174,20 @@ export default function CreateStorageAccount() {
           </FormRow>
         )}
       </FormSection>
-      {f.networkAccess === "selected" && <NotSimulatedContainer title="Virtual networks" feature="Virtual network and IP address rules for storage accounts" />}
-      <NotSimulatedContainer title="Private endpoint" feature="Private endpoints for storage accounts" />
+      {f.networkAccess === "selected" && (
+        <FormSection title="Virtual networks and firewall" description="Allow access from these subnets (the Microsoft.Storage service endpoint is enabled for you) and public IPv4 address ranges.">
+          <FormRow label="Subnet" htmlFor="sa-vnet-subnet">
+            <Select id="sa-vnet-subnet" value={f.vnetSubnets?.[0] || ""} onChange={(_, d) => setF((x) => ({ ...x, vnetSubnets: d.value ? [d.value] : [] }))} aria-label="Allowed subnet">
+              <option value="">None</option>{(subnetList.data || []).map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+            </Select>
+          </FormRow>
+          <FormRow label="Address ranges" htmlFor="sa-ip-ranges">
+            <Input id="sa-ip-ranges" value={(f.ipRanges || []).join(", ")} placeholder="20.1.2.0/24, 8.8.4.4" aria-label="Firewall address ranges"
+              onChange={(_, d) => setF((x) => ({ ...x, ipRanges: d.value.split(",").map((v) => v.trim()).filter(Boolean) }))} />
+          </FormRow>
+        </FormSection>
+      )}
+      <PeWizardSection pe={pe} />
       <FormSection title="Network routing" description="Determine how to route your traffic as it travels from the source to its Azure endpoint.">
         <FormRow label="Routing preference">
           <RadioGroup value={f.routing} onChange={set("routing")} aria-label="Routing preference">
@@ -266,8 +282,10 @@ export default function CreateStorageAccount() {
 
   const onCreate = async () => {
     try {
-      await api.createStorageAccount(rg, f.name, body());
+      if (f.networkAccess === "selected") for (const id of f.vnetSubnets || []) await ensureEndpoint(id, "Microsoft.Storage");
+      const created = await api.createStorageAccount(rg, f.name, body());
       await api.putBlobServiceProperties(rg, f.name, api.blobServiceFromWizard(f));
+      await pe.deploy({ id: created.id, name: f.name });
       notify.success(`Deployment of storage account '${f.name}' to resource group '${rg}' was successful.`, "Deployment succeeded");
       navigate("storage", rg, f.name);
     } catch (e) { notify.error(e, "Deployment failed"); }

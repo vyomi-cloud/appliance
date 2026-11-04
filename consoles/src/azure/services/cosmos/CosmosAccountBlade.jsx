@@ -3,6 +3,7 @@
  * Locks, Access control (IAM) and Export template are backed by native ARM / the native Cosmos
  * DB REST (SQL/Core API) data plane; everything else in the menu is an honest NotSimulated panel
  * (the spec captures them as blade menu items with no further content — "title only"). */
+import { CosmosNetworking } from "../../kit/NetworkRules.jsx";
 import { ManagedIdentityPage } from "../../kit/UserAssignedIdentities.jsx";
 import { useEffect, useState } from "react";
 import {
@@ -75,7 +76,6 @@ const NS_NOTES = {
   quickstart: "The Quick start code samples blade",
   notifications: "Notifications",
   features: "The Features overview",
-  networking: "Private endpoint / VNet networking configuration (see the create wizard's Connectivity method, and Access control for IP-based restrictions)",
   datamigration: "The Data Migration tool integration",
   cors: "CORS rules",
   dedicatedgateway: "Dedicated Gateway (integrated cache) provisioning",
@@ -120,6 +120,7 @@ export default function CosmosAccountBlade({ params }) {
       dataexplorer: () => <DataExplorer />,
       replicate: () => <Replicate a={a} reload={reload} />,
       consistency: () => <Consistency a={a} reload={reload} />,
+      networking: () => <CosmosNetworking a={a} reload={reload} />,
       backup: () => <Backup a={a} reload={reload} />,
       keys: () => <Keys a={a} />,
       locks: () => <Locks a={a} />,
