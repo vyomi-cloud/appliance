@@ -1,24 +1,61 @@
 {
- "at": "2026-11-03T23:28:42+00:00",
+ "at": "2026-11-04T00:28:43+00:00",
  "baseline": false,
  "changes": [
   {
-   "cloud": "azure",
-   "service": "cosmos-db",
-   "kind": "spec-commit",
-   "key": "azure:cosmos-db:6ad5af824e",
-   "title": "Azure cosmos-db: Add 2026-07-15 stable API version for Cosmos DB (#45986)",
-   "link": "https://github.com/Azure/azure-rest-api-specs/commit/6ad5af824ebf340b4a83889dbdd70572124b57a5",
-   "actionable": true
+   "cloud": "gcp",
+   "service": "sqladmin/v1beta4",
+   "kind": "operation-flapping",
+   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.start:1910d4526f14",
+   "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.start changed",
+   "detail": {
+    "request": {
+     "was": "WorkloadCapturesStartRequest",
+     "now": "SqlWorkloadCapturesStartRequest"
+    }
+   },
+   "actionable": false
   },
   {
-   "cloud": "aws",
-   "service": "Amazon RDS",
-   "kind": "announcement",
-   "key": "feed:aws:133f26be517c",
-   "title": "Amazon RDS now supports the latest Cumulative Update and GDR updates for Microsoft SQL Server",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-rds-supports-latest-cumulative-update-gdr-microsoft-sql-server/",
-   "detail": "Amazon Relational Database Service (Amazon RDS) for SQL Server now supports the latest Cumulative Updates (CU) and General Distribution Release (GDR) updates for Microsoft SQL Server. This release includes support for Microsoft SQL Server 2017 CU31+GDR KB5128496 (RDS version 14.00.3560.2.v1), SQL Server 2019 CU32+GDR KB5128494 (RDS version 15.00.4500.2.v1), SQL Server 2022 CU27+GDR KB5126934 (RDS version 16.00.4305.5.v1) and SQL Server 2025 CU10 KB5125471 (RDS version 17.00.5035.5.v1). For additional information on the improvements and fixes included in these updates, see Microsoft documentati",
+   "cloud": "gcp",
+   "service": "sqladmin/v1beta4",
+   "kind": "operation-flapping",
+   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.startReplay:2cfe2f793adc",
+   "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.startReplay changed",
+   "detail": {
+    "request": {
+     "was": "WorkloadCapturesStartReplayRequest",
+     "now": "SqlWorkloadCapturesStartReplayRequest"
+    }
+   },
+   "actionable": false
+  },
+  {
+   "cloud": "gcp",
+   "service": "sqladmin/v1beta4",
+   "kind": "operation-flapping",
+   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.stop:ee7fdfd4ca9e",
+   "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.stop changed",
+   "detail": {
+    "request": {
+     "was": "WorkloadCapturesStopRequest",
+     "now": "SqlWorkloadCapturesStopRequest"
+    }
+   },
+   "actionable": false
+  },
+  {
+   "cloud": "gcp",
+   "service": "sqladmin/v1beta4",
+   "kind": "operation-flapping",
+   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.stopReplay:fff14efd9e7d",
+   "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.stopReplay changed",
+   "detail": {
+    "request": {
+     "was": "WorkloadCapturesStopReplayRequest",
+     "now": "SqlWorkloadCapturesStopReplayRequest"
+    }
+   },
    "actionable": false
   }
  ],
