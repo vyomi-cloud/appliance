@@ -674,7 +674,23 @@ def _list_tags(store, p):
     return {"Tags": _tags_out(_taggable(_st(store), _need(p, "ResourceArn"))["tags"])}
 
 
+def _simulate_traffic(store, p):
+    """Simulator verb (not a real Network Firewall API): run one packet through the firewall's policy."""
+    n = _st(store); f = _fw_find(n, p)
+    pk = p.get("Packet") or {}
+    for k in ("Protocol", "SourceIp", "DestinationIp"):
+        if not pk.get(k):
+            raise NfwError("InvalidRequestException", f"Packet.{k} is required")
+    proto = pk["Protocol"] if isinstance(pk["Protocol"], int) else {"tcp": 6, "udp": 17, "icmp": 1}.get(str(pk["Protocol"]).lower())
+    if proto is None:
+        raise NfwError("InvalidRequestException", "Packet.Protocol must be tcp, udp, icmp or a protocol number")
+    out = evaluate_packet_state(n, f["name"], {"proto": proto, "src": pk["SourceIp"], "dst": pk["DestinationIp"], "sport": pk.get("SourcePort"),
+                                               "dport": pk.get("DestinationPort"), "http_host": pk.get("HttpHost"), "tls_sni": pk.get("TlsSni")})
+    return {"FirewallName": f["name"], "Action": out["action"].upper(), "Stage": out["stage"], "Rule": out["rule"]}
+
+
 OPS: dict = {
+    "SimulateTraffic": _simulate_traffic,
     "CreateFirewallPolicy": _create_policy, "DescribeFirewallPolicy": _describe_policy, "ListFirewallPolicies": _list_policies,
     "UpdateFirewallPolicy": _update_policy, "DeleteFirewallPolicy": _delete_policy,
     "CreateRuleGroup": _create_rg, "DescribeRuleGroup": _describe_rg, "ListRuleGroups": _list_rgs, "UpdateRuleGroup": _update_rg, "DeleteRuleGroup": _delete_rg,
@@ -791,7 +807,23 @@ def _stateful_rules(n, pol):
 def evaluate_packet(store, firewall_name, pkt: dict) -> dict:
     """pkt: {proto:int, src, dst, sport, dport, app?:'http'|'tls'|'dns', http_host?, tls_sni?, domain?}.
     -> {'action': 'pass'|'drop'|'reject', 'stage': 'stateless'|'stateful'|'default', 'rule': str}"""
-    n = _st(store)
+    return evaluate_packet_state(_st(store), firewall_name, pkt)
+
+
+def firewall_endpoints(n: dict) -> dict:
+    """{vpce-id: {'firewall': name, 'subnet': subnet-id, 'vpc': vpc-id}} for every firewall endpoint (own + associated VPC)."""
+    out = {}
+    for f in n.get("firewalls", {}).values():
+        for x in f.get("subnets", []):
+            out[x["endpoint"]] = {"firewall": f["name"], "subnet": x["SubnetId"], "vpc": f["vpc_id"]}
+    for a in n.get("assocs", {}).values():
+        f = n.get("firewalls", {}).get(next((k for k, v in n.get("firewalls", {}).items() if v["arn"] == a["firewall_arn"]), ""))
+        if f:
+            out[a["endpoint"]] = {"firewall": f["name"], "subnet": a["subnet"]["SubnetId"], "vpc": a["vpc_id"]}
+    return out
+
+
+def evaluate_packet_state(n: dict, firewall_name, pkt: dict) -> dict:
     fw = _lookup(n["firewalls"], name=firewall_name, what="Firewall")
     pol = next(x for x in n["policies"].values() if x["arn"] == fw["policy_arn"])
     fp = pol["policy"]

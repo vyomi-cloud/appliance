@@ -367,10 +367,11 @@
    "offline": "limited"
   },
   "limitations": [
-   "Control plane is real with Route 53 Resolver validation: domain syntax (wildcards only as a leading *.), ADD/REMOVE/REPLACE semantics, rule priorities, BLOCK needs BlockResponse (OVERRIDE needs a CNAME domain), association priority 100-9900 unique per VPC, existing-VPC and in-use ConflictException checks. A DNS decision evaluator (associations then rules by priority, wildcard + exact match) is implemented and tested, but the simulator has no Route 53 Resolver data plane, so no live DNS query is filtered and no query logs are produced."
+   "Control plane is real with Route 53 Resolver validation: domain syntax (wildcards only as a leading *.), ADD/REMOVE/REPLACE semantics, rule priorities, BLOCK needs BlockResponse (OVERRIDE needs a CNAME domain), association priority 100-9900 unique per VPC, existing-VPC and in-use ConflictException checks. The Resolver decision is evaluated on both substrates through the simulator verb Route53Resolver.ResolveDnsQuery (VpcId, DomainName, QueryType): VPC associations then rules by priority, exact + leading-wildcard domains, ALLOW/ALERT/BLOCK with NODATA/NXDOMAIN/OVERRIDE (CNAME) answers. There is no live Route 53 Resolver: no real DNS query from an instance is filtered and no query logs are produced."
   ],
   "tests": [
-   "tests/conformance/test_vpc_sweepvpc_core.py"
+   "tests/conformance/test_vpc_sweepvpc_core.py",
+   "tests/conformance/test_dnsfw_resolver_verb.py"
   ]
  },
  "aws.vpc.network-firewall": {
@@ -380,10 +381,11 @@
    "offline": "limited"
   },
   "limitations": [
-   "Control plane is real with AWS validation: subnet/VPC mappings must exist (one subnet per AZ), protection flags, UpdateToken optimistic concurrency, typed rule-group references, rule-group capacity, Suricata rule strings (sid required/unique), stateless priorities/match attributes, domain lists, resource policy JSON, logging destinations. A rule evaluator (stateless priority order + default actions, then stateful 5-tuple/Suricata/domain allow-deny) is implemented and tested, but the firewall endpoint is NOT inserted into netsim routing: no real or simulated traffic is inspected, no alert/flow/TLS logs are delivered and TLS inspection does not decrypt anything. Container associations are not simulated."
+   "Control plane is real with AWS validation: subnet/VPC mappings must exist (one subnet per AZ), protection flags, UpdateToken optimistic concurrency, typed rule-group references, rule-group capacity, Suricata rule strings (sid required/unique), stateless priorities/match attributes, domain lists, resource policy JSON, logging destinations. The rule evaluator (stateless priority order + default actions, then stateful 5-tuple/Suricata/domain allow-deny) is wired into the shared netsim path on both substrates: a route whose target is a firewall endpoint (vpce- from DescribeFirewall / VPC endpoint associations) makes AnalyzeReachability and Network Insights run the packet through the firewall policy (NETWORK_FIREWALL_DROP names the rule), then forward via the firewall subnet's route table; NetworkFirewall.SimulateTraffic evaluates one packet (incl. HttpHost/TlsSni) directly. Not modelled: packet-level enforcement offline (such routes are enforced as drop with a warning), the return path through the endpoint, domain/SNI rules in AnalyzeReachability (no L7 context in a reachability query), alert/flow/TLS log delivery, TLS decryption. Container associations are not simulated."
   ],
   "tests": [
-   "tests/conformance/test_vpc_sweepvpc_core.py"
+   "tests/conformance/test_vpc_sweepvpc_core.py",
+   "tests/conformance/test_netfw_path_inspection.py"
   ]
  },
  "aws.vpc.vpn": {
