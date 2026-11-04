@@ -425,15 +425,18 @@
   ]
  },
  "dynamodb.account.reserved-capacity": {
-  "title": "Reserved capacity",
+  "title": "Reserved capacity (purchase records + real utilization)",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Reserved capacity is a billing purchase; Vyomi has no billing or payment backend."
+   "There is no public DynamoDB API for reserved capacity and Vyomi has no billing or payment: a purchase is a record of the commitment (Vyomi-only service vyomi-reservations; read/write units in multiples of 100, minimum 100, 1 or 3 year term). Utilization is real arithmetic: reserved units vs the RCU/WCU provisioned on every PROVISIONED table and global secondary index in the account (on-demand tables are not counted); unused reserved units and units provisioned above the reservation are reported. Nothing is discounted or charged."
   ],
-  "api": []
+  "api": [],
+  "tests": [
+   "tests/conformance/test_reservations_core.py"
+  ]
  },
  "dynamodb.account.update-settings": {
   "title": "Update settings",

@@ -233,13 +233,17 @@
   ]
  },
  "rds.capacity-reservations": {
-  "title": "Capacity reservations",
+  "title": "Capacity reservations (reservation records + real utilization)",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Capacity reservations are a capacity-market/billing construct Vyomi does not model."
+   "There is no public RDS capacity-reservation API and Vyomi has no billing or capacity market: a reservation is a record (Vyomi-only service vyomi-reservations: DB instance class, instance count 1-100, optional Availability Zone / engine / end date) and nothing is actually held back from other workloads. Utilization is real: the available DB instances of the same class (and AZ / engine when given) are counted against the reserved count - used, unused and over-subscribed instances are reported."
+  ],
+  "api": [],
+  "tests": [
+   "tests/conformance/test_reservations_core.py"
   ]
  },
  "rds.zero-etl": {

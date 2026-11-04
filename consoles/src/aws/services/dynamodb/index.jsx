@@ -17,11 +17,12 @@ import DaxSubnetGroups from "./DaxSubnetGroups.jsx";
 import DaxParameterGroups from "./DaxParameterGroups.jsx";
 import DaxEvents from "./DaxEvents.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
+import ReservedCapacity from "./ReservedCapacity.jsx";
 import { getLayoutSettings } from "./prefs.js";
 import ZeroEtlIntegrations from "../../kit/ZeroEtl.jsx";
 
 const ns = (title, id) => () => <CapabilityContainer id={`dynamodb.account.${id}`} title={title} />;
-const NS = [["update-settings", "Update settings", "update-settings"], ["reserved-capacity", "Reserved capacity", "reserved-capacity"]];
+const NS = [["update-settings", "Update settings", "update-settings"]];
 
 // The bare "/dynamodb" entry route honours the "Default entry page" console preference
 // (Dashboard / Tables / Explore items) — Tables.jsx renders both the Tables and Explore
@@ -71,6 +72,7 @@ export default {
     { pattern: "/dynamodb/dax/parameter-groups", component: DaxParameterGroups, crumbs: () => [{ text: "DAX", href: "#/dynamodb/dax/clusters" }, { text: "Parameter groups", href: "#/dynamodb/dax/parameter-groups" }] },
     { pattern: "/dynamodb/dax/events", component: DaxEvents, crumbs: () => [{ text: "DAX", href: "#/dynamodb/dax/clusters" }, { text: "Events", href: "#/dynamodb/dax/events" }] },
     { pattern: "/dynamodb/integrations", component: () => <ZeroEtlIntegrations kind="dynamodb" />, crumbs: () => [{ text: "Integrations", href: "#/dynamodb/integrations" }] },
+    { pattern: "/dynamodb/reserved-capacity", component: ReservedCapacity, crumbs: () => [{ text: "Reserved capacity", href: "#/dynamodb/reserved-capacity" }] },
     ...NS.map(([p, t, id]) => ({ pattern: `/dynamodb/${p}`, component: ns(t, id), crumbs: () => [{ text: t, href: `#/dynamodb/${p}` }] })),
   ],
 };
