@@ -6,10 +6,12 @@
    "offline": "limited"
   },
   "limitations": [
-   "Every model id is answered by one small local model (llama.cpp on the appliance, WebLLM on Nano when the browser provides it): quality is toy-grade. No local model running -> ModelNotReadyException, never a canned answer. Tool use, images, guardrails and prompt caching are rejected with a validation error rather than ignored. Streaming is real event framing over a response generated whole."
+   "Every model id is answered by one small local model (llama.cpp on the appliance, WebLLM on Nano when the browser provides it): quality is toy-grade. No local model running -> ModelNotReadyException, never a canned answer. Tool use, images, guardrails and prompt caching are rejected with a validation error rather than ignored. Streaming is real event framing over a response generated whole.",
+   "Nano: there is no model until the page registers one. The Bedrock overview offers 'Enable in-browser model (WebLLM)' (needs WebGPU; loads @mlc-ai/web-llm from a CDN and downloads a small model); without it every model call returns ModelNotReadyException. The in-browser model serves the console page that loaded it, not the external SDK relay endpoint."
   ],
   "tests": [
-   "tests/conformance/test_local_llm_seam.py"
+   "tests/conformance/test_local_llm_seam.py",
+   "tests/conformance/test_llm_async_bridge.py"
   ]
  },
  "bedrock.knowledge-bases": {
