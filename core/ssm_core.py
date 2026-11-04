@@ -842,7 +842,13 @@ def _cancel_command(store: SsmStore, b: dict) -> dict:
 
 
 def _describe_instance_info(store: SsmStore, b: dict) -> dict:
-    return {"InstanceInformationList": []}   # no SSM agents register against the simulator
+    lst = []
+    for iid, i in sorted(_instances().items()):   # offline: running Docker instances (sshd + exec) register as managed nodes
+        if i.get("state") == "running":
+            lst.append({"InstanceId": iid, "PingStatus": "Online", "LastPingDateTime": _now(), "AgentVersion": "3.3.0",
+                        "IsLatestVersion": True, "PlatformType": "Linux", "PlatformName": "Ubuntu", "PlatformVersion": "24.04",
+                        "ResourceType": "EC2Instance", "IPAddress": i.get("ip") or "", "ComputerName": i.get("name") or iid})
+    return {"InstanceInformationList": lst}
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1150,3 +1156,39 @@ def console_history(name: str, rec: dict) -> list:
     return [{"version": v["version"], "value": _value_out(v, False), "type": v["type"], "last_modified": _iso(v["last_modified"]),
              "labels": ", ".join(v.get("labels", [])) or "none", "description": v.get("description") or "none",
              "last_modified_user": v["last_modified_user"]} for v in reversed(rec["versions"])]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Session Manager (v4 decision family 1) — thin wrappers over core/ssh_access_core.py.
+# The substrate registers an instance provider; with none registered (Nano: no instance runtime
+# and no inbound TCP) every target is "not connected", the real error for an instance without
+# a running SSM agent.
+# ═══════════════════════════════════════════════════════════════════════════
+INSTANCE_PROVIDER = None     # callable -> {instance_id: {state, az, ...}}
+
+
+def _instances() -> dict:
+    try:
+        return INSTANCE_PROVIDER() if INSTANCE_PROVIDER else {}
+    except Exception:
+        return {}
+
+
+def _wrap_session(fn_name: str):
+    def _op(store: SsmStore, b: dict) -> dict:
+        from core import ssh_access_core as sa
+        ss = sa.shared_store()
+        try:
+            if fn_name == "start_session":
+                return sa.start_session(ss, b, _instances())
+            if fn_name == "describe_sessions":
+                return sa.describe_sessions(ss, b)
+            return getattr(sa, fn_name)(ss, b)
+        except sa.SshAccessError as e:
+            raise SsmError(e.code, e.message, e.status)
+    return _op
+
+
+_OPS.update({"StartSession": _wrap_session("start_session"), "ResumeSession": _wrap_session("resume_session"),
+             "TerminateSession": _wrap_session("terminate_session"), "DescribeSessions": _wrap_session("describe_sessions")})
+OPERATIONS = sorted(_OPS)

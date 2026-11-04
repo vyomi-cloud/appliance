@@ -48,9 +48,9 @@
   "title": "Connect (SSH command)",
   "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "The displayed SSH command is built from the virtual machine's real admin username and its public IP address when one was requested at create time (else its network interface's private IP address), but Vyomi does not open a real SSH session, and Bastion is not modelled."
+   "The displayed SSH command is built from the virtual machine's real admin username and its public IP address when one was requested at create time (else its network interface's private IP address), and on the offline appliance (Docker-backed VM) it is a real sshd login with the shared key. Serial console (GET /api/azure/vm/{id}/serial-console) returns the guest's real dmesg/process view and a line-at-a-time docker-exec shell (not a UART); Bastion Connect (POST /api/azure/vm/{id}/bastion/connect) opens a browser-shell session record plus the ssh command, with no Bastion host, subnet or NSG data plane (that stays under networking). Nano has no VM runtime, so none of this is reachable there."
   ],
-  "tests": ["tests/conformance/test_azure_arm_core.py"]
+  "tests": ["tests/conformance/test_azure_arm_core.py", "tests/conformance/test_ssh_access.py"]
  },
  "azure.vms.identity": {
   "title": "Identity (system-assigned managed identity)",

@@ -11,13 +11,14 @@
  },
  "gcp.compute.instances.data_plane": {
   "title": "Guest OS access (SSH, screenshot, OS info)",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "level": { "nano": "not_simulated", "offline": "limited" },
   "limitations": [
-   "SSH: no SSH daemon runs behind an instance — there is no guest OS to open an interactive shell on.",
+   "SSH (offline): the instance is a real Docker container with sshd. Setting the `ssh-keys` metadata (POST /api/gcp/compute/instances/{id}/ssh-keys, USERNAME:KEY lines) creates the user and authorizes the key in the guest the way the guest agent does, so `ssh -i key user@host -p port` really logs in; malformed lines are rejected. OS info (GET .../os-info) is read from the running guest (os-release, kernel, arch, memory, uptime). OS Login keys use the same path. Nano has no instance runtime or inbound TCP, so SSH stays not simulated there.",
    "Screenshot: getScreenshot needs a real virtual display's framebuffer; none is rendered, so there is nothing to capture.",
    "OS info: getGuestAttributes is populated by a guest agent writing back through the metadata server after boot; no guest OS or agent runs to report hostname, OS release or kernel version."
   ],
-  "api": ["instances.getScreenshot", "instances.getGuestAttributes"]
+  "api": ["instances.getScreenshot", "instances.getGuestAttributes", "(Vyomi) POST /api/gcp/compute/instances/{id}/ssh-keys", "(Vyomi) GET /api/gcp/compute/instances/{id}/os-info"],
+  "tests": ["tests/conformance/test_ssh_access.py"]
  },
  "gcp.compute.instances.serial_console": {
   "title": "Serial port output",

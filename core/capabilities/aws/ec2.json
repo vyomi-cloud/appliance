@@ -71,18 +71,25 @@
   "title": "Connect (SSH / EC2 Instance Connect)",
   "level": {
    "nano": "not_simulated",
-   "offline": "limited"
+   "offline": "full"
   },
   "limitations": [
-   "On the offline appliance an instance is a real Docker container running sshd, so Connect is real: the SSH client tab shows the working ssh command (published host port, or the routable bridge IP / Codespaces jump host), the shared key pair's private key downloads as a .pem, and the EC2 Instance Connect tab is an in-browser terminal that executes each command inside the instance's container (working directory is tracked between commands). It is a command-at-a-time shell, not a full pty: interactive programs (vim, top, a password prompt) do not work in the browser terminal, use the SSH client for those. NOT modelled: Session Manager (no SSM agent), RDP for Windows AMIs, the EC2 serial console, instance-connect endpoints and ephemeral-key push (the instance uses the appliance's shared key pair, not the key pair chosen at launch). Nano has no instance runtime to SSH into (the browser tunnel relay is not built yet), so Connect is not simulated there."
+   "Offline an instance is a real Docker container running sshd, so Connect is real and was verified with live logins: the SSH client tab shows the working ssh command (published host port, routable bridge IP or Codespaces jump host) and each Connect re-authorizes the shared key pair inside the running guest (containers launched before the key existed no longer fail publickey). EC2 Instance Connect is real: SendSSHPublicKey / SendSerialConsoleSSHPublicKey (native AWSEC2InstanceConnectService wire and the console tab) validate the OpenSSH key, instance state, OS user and AvailabilityZone with the real error codes and append the key to the OS user's authorized_keys for 60 seconds (established sessions survive the expiry). Session Manager StartSession/ResumeSession/TerminateSession/DescribeSessions work against running instances and the console session is a command-at-a-time shell (no pty; interactive programs such as vim/top need the SSH client). Honest limits: the SessionManager data-channel websocket (ssmmessages) is not served, so `aws ssm start-session` stops after StartSession, use the console session or ssh; the instance uses the appliance's shared key pair rather than the key pair chosen at launch; no RDP for Windows AMIs. Nano has no instance runtime and no inbound TCP: reach-in needs the vyomi-tunnel TCP relay which exposes only the browser's own endpoints, so Connect stays not simulated there (the SendSSHPublicKey/StartSession core loads in Nano and validates, but there is no guest to deliver to)."
   ],
   "api": [
    "(Vyomi) GET /api/aws/ec2/instances/{id}/connect-info",
    "(Vyomi) GET /api/aws/ec2/instances/{id}/private-key.pem",
-   "(Vyomi) POST /api/ec2/instances/{id}/console/exec"
+   "(Vyomi) POST /api/ec2/instances/{id}/console/exec",
+   "(Vyomi) POST /api/aws/ec2/instances/{id}/instance-connect",
+   "AWSEC2InstanceConnectService.SendSSHPublicKey",
+   "AWSEC2InstanceConnectService.SendSerialConsoleSSHPublicKey",
+   "AmazonSSM.StartSession",
+   "AmazonSSM.DescribeSessions",
+   "(Vyomi) POST /api/ssm/sessions/{id}/exec"
   ],
   "tests": [
-   "tests/conformance/test_ec2_connect_offline.py"
+   "tests/conformance/test_ec2_connect_offline.py",
+   "tests/conformance/test_ssh_access.py"
   ]
  },
  "ec2.instance-types": {
