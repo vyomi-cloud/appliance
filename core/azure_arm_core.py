@@ -89,6 +89,11 @@ try:                                              # Azure Policy rule engine (cu
 except ImportError:
     import azure_policy_core as policy_engine      # type: ignore
 
+try:                                              # Private endpoints / Bastion / Firewall / DDoS / NSG flow logs
+    from core import azure_netsvc_core as netsvc
+except ImportError:
+    import azure_netsvc_core as netsvc             # type: ignore
+
 try:                                              # Management locks (Microsoft.Authorization/locks, scoped to ANY resource)
     from core import azure_locks_core as locks_engine
 except ImportError:
@@ -1585,6 +1590,11 @@ class AzureArm:
             blocked = self._quota_block(sub, full_type, key, payload)
             if blocked:
                 return blocked
+            _net_prev = self.state.get(key)
+            if netsvc.handles(full_type):
+                blocked = netsvc.validate(self.state, full_type, rid, payload, _net_prev, sub, rg)
+                if blocked:
+                    return blocked
             if full_type.lower() == "microsoft.authorization/roleassignments":
                 # Real ARM derives a role assignment's scope from the resource ID it was PUT
                 # under — not from a client-supplied properties.scope — so checkAccess and the
@@ -1602,6 +1612,9 @@ class AzureArm:
             resp = self._upsert(rid, key, full_type, leaf_name, top, payload, base, patch=(method == "PATCH"))
             if resp["status"] >= 300:          # validation error from a type hook (e.g. NIC IP allocation)
                 return resp
+            if netsvc.handles(full_type) and key in self.state:
+                netsvc.after_put(self.state, self.state[key], payload, _net_prev)
+                resp["body"] = _view(self.state[key])
             deployment_failed = False
             if full_type.lower() == "microsoft.resources/deployments":
                 # A bounded but REAL template evaluator (literal parameter/variable
@@ -1672,6 +1685,11 @@ class AzureArm:
                         pid = (pr.get("id") or "").lower()
                         if pid and pid != key:
                             self.state.pop(pid, None)
+            _net_rec = self.state.get(key)
+            if _net_rec is not None:
+                blocked = netsvc.before_delete(self.state, _net_rec)
+                if blocked:
+                    return blocked
             rec = self.state.pop(key, None)
             if rec is not None:
                 if rec.get("_ipam_alloc"):
@@ -1684,6 +1702,7 @@ class AzureArm:
                 prefix = key + "/"
                 for child_key in [k for k in self.state if k.startswith(prefix) and "/__event__/" not in k]:
                     del self.state[child_key]
+                netsvc.on_delete(self.state, rec)
                 self._record_activity(rid, f"{full_type}/delete", sub)
             return _ok(None, status=200 if rec is not None else 204)
         return _err(405, "MethodNotAllowed", f"{method} not allowed.")
