@@ -133,14 +133,16 @@
   "tests": ["tests/conformance/test_cloudformation_core.py"]
  },
  "aws.cloudformation.registry.public-extensions-publisher": {
-  "title": "Public extensions registry and publisher registration",
+  "title": "Public extensions registry: catalog + filters, activation, modules (real expansion), type configuration, publisher registration",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "The third-party extension marketplace and publisher workflow are out of Vyomi's scope."
-  ]
+   "The public catalog is the AWS resource types the engine provisions plus extensions published by Vyomi's own SaaS-partner simulators (publisher vyomi.cloud); the real third-party marketplace is not reachable. Activated modules expand into real resources and activated hooks use the hook engine, but a third-party RESOURCE type has no handler (a stack using one fails). Type configuration is stored and returned; only hooks read it. Publisher verification is simulated (VERIFIED when a ConnectionArn is given); PublishType publishes registered hooks only."
+  ],
+  "api": ["ListTypes", "DescribeType", "ListTypeVersions", "ActivateType", "DeactivateType", "SetTypeConfiguration", "BatchDescribeTypeConfigurations", "RegisterPublisher", "DescribePublisher", "PublishType"],
+  "tests": ["tests/conformance/test_cloudformation_registry.py"]
  },
  "aws.cloudformation.hooks": {
   "title": "Hooks (register, configure, invoke on stack operations, invocation history)",

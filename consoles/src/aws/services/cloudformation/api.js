@@ -220,8 +220,9 @@ export const deleteGeneratedTemplate = (name) => call("DeleteGeneratedTemplate",
 
 // ── registry (extensions) ────────────────────────────────────────────────────
 export async function listTypes() {
-  const r = result(await call("ListTypes", { Visibility: "PUBLIC", Type: "RESOURCE" }), "ListTypes");
-  return asList(r.TypeSummaries?.member);
+  const aws = result(await call("ListTypes", { Visibility: "PUBLIC", Type: "RESOURCE", "Filters.Category": "AWS_TYPES" }), "ListTypes");
+  const mine = result(await call("ListTypes", { Visibility: "PRIVATE", Type: "RESOURCE" }), "ListTypes");   // activated third-party resource types
+  return [...asList(aws.TypeSummaries?.member), ...asList(mine.TypeSummaries?.member)];
 }
 export async function describeType(typeName) {
   return result(await call("DescribeType", { TypeName: typeName }), "DescribeType");
@@ -309,3 +310,30 @@ export async function listOrgUnits() {
   for (const r of roots) await walk(r.Id, "");
   return out;
 }
+
+// ── registry: public extensions, activation, modules, configuration, publisher (sweep AWS-13) ──
+const typeRow = (m) => ({ TypeName: m.TypeName, Type: m.Type, Description: m.Description || "", PublisherId: m.PublisherId || "", PublisherName: m.PublisherName || "",
+  OriginalTypeName: m.OriginalTypeName || "", TypeArn: m.TypeArn, LastUpdated: m.LastUpdated, IsActivated: m.IsActivated === "true" });
+export async function listPublicTypes({ type = "RESOURCE", category } = {}) {
+  const r = result(await call("ListTypes", { Visibility: "PUBLIC", Type: type, ...(category ? { "Filters.Category": category } : {}) }), "ListTypes");
+  return asList(r.TypeSummaries?.member).map(typeRow);
+}
+export async function listActivatedTypes(type) {
+  const r = result(await call("ListTypes", { Visibility: "PRIVATE", Type: type }), "ListTypes");
+  return asList(r.TypeSummaries?.member).map(typeRow);
+}
+export const activateType = ({ type, typeName, publisherId, alias, autoUpdate, executionRoleArn }) =>
+  call("ActivateType", { Type: type, TypeName: typeName, PublisherId: publisherId, ...(alias ? { TypeNameAlias: alias } : {}), AutoUpdate: String(autoUpdate !== false), ...(executionRoleArn ? { ExecutionRoleArn: executionRoleArn } : {}) });
+export const deactivateType = (type, typeName) => call("DeactivateType", { Type: type, TypeName: typeName });
+export async function describeTypeFull(typeName, type) {
+  return result(await call("DescribeType", { TypeName: typeName, ...(type ? { Type: type } : {}) }), "DescribeType");
+}
+export const setTypeConfiguration = (typeName, configuration) => call("SetTypeConfiguration", { TypeName: typeName, Configuration: configuration });
+export async function typeConfiguration(typeName) {
+  const r = result(await call("BatchDescribeTypeConfigurations", { "TypeConfigurationIdentifiers.member.1.TypeName": typeName }), "BatchDescribeTypeConfigurations");
+  return asList(r.TypeConfigurations?.member)[0]?.Configuration || "";
+}
+export async function describePublisher() {
+  try { return result(await call("DescribePublisher"), "DescribePublisher"); } catch (e) { if (/not registered/i.test(e.message || "")) return null; throw e; }
+}
+export const registerPublisher = (connectionArn) => call("RegisterPublisher", { AcceptTermsAndConditions: "true", ...(connectionArn ? { ConnectionArn: connectionArn } : {}) });

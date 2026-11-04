@@ -125,7 +125,11 @@ def _set(store, params):
 
 
 def _ops(store) -> dict:
-    return store.__dict__.setdefault("stack_set_ops", {})
+    ops = getattr(store, "stack_set_ops", None)
+    if ops is None:
+        ops = {}
+        store.stack_set_ops = ops
+    return ops
 
 
 def _record_op(store, ss, action, accounts, regions):

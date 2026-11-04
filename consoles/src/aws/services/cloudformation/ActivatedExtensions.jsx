@@ -19,6 +19,7 @@ import { NotSimulatedContainer, KeyValue, ErrorAlert, fmtDate } from "../../kit/
 import { useAsync } from "../../../common/useAsync.js";
 import { href, follow, navigate } from "../../../common/router.js";
 import * as api from "./api.js";
+import { ModulesTable, ExtensionConfiguration } from "./Registry.jsx";
 
 function ResourceTypesTable() {
   const { data = [], loading, error, reload } = useAsync(() => api.listTypes(), []);
@@ -78,7 +79,7 @@ export default function ActivatedExtensions() {
     <ContentLayout header={<Header variant="h1">Registry: Activated extensions</Header>}>
       <Tabs activeTabId={tab} onChange={({ detail }) => setTab(detail.activeTabId)} tabs={[
         { id: "resource-types", label: "Resource types", content: <ResourceTypesTable /> },
-        { id: "modules", label: "Modules", content: <NotSimulatedContainer title="Modules" feature="CloudFormation modules" /> },
+        { id: "modules", label: "Modules", content: <ModulesTable /> },
         { id: "hooks", label: "Hooks", content: <HooksTable /> },
       ]} />
     </ContentLayout>
@@ -90,7 +91,7 @@ export default function ActivatedExtensions() {
  * extensions, which Vyomi doesn't model. */
 export function ExtensionDetail({ params }) {
   const name = params.name || "AWS::S3::Bucket";
-  const { data, loading, error } = useAsync(() => api.describeType(name), [name]);
+  const { data, loading, error } = useAsync(() => api.describeTypeFull(name), [name]);
   if (loading) return <Box textAlign="center" padding="xxl"><Spinner size="large" /></Box>;
   if (error || !data?.TypeName) return <ErrorAlert error={error || { message: `${name} is not an activated extension.` }} />;
   let schema = data.Schema || "";
@@ -99,12 +100,12 @@ export function ExtensionDetail({ params }) {
     <ContentLayout header={<Header variant="h1">{name}</Header>}>
       <SpaceBetween size="l">
         <KeyValue title="Overview" columns={2} items={[
-          ["ARN", data.Arn], ["Publisher", "Amazon Web Services"], ["Description", data.Description],
+          ["ARN", data.Arn], ["Publisher", data.PublisherId && data.PublisherId !== "AWS" ? data.PublisherId : "Amazon Web Services"], ["Type", data.Type], ["Description", data.Description],
           ["Release date", fmtDate(data.TimeCreated)], ["Visibility", data.Visibility],
         ]} />
         <Tabs tabs={[
           { id: "schema", label: "Schema", content: <Container header={<Header variant="h2">Schema</Header>}><Box variant="pre">{schema}</Box></Container> },
-          { id: "configuration", label: "Configuration", content: <NotSimulatedContainer title="Configuration" feature="Extension configuration" note="Logging role / execution role configuration applies to private and third-party extensions, which Vyomi doesn't model." /> },
+          { id: "configuration", label: "Configuration", content: <ExtensionConfiguration typeName={name} activated={data.IsActivated === "true" && data.Visibility === "PRIVATE"} /> },
         ]} />
       </SpaceBetween>
     </ContentLayout>
