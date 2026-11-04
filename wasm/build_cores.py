@@ -148,7 +148,7 @@ CORES = [
 
 # Core SUB-PACKAGES vendored as directories (wasm/core/<pkg>/…). Every file must also be listed in
 # the CORE_PKGS array of each JS loader (nano-boot.js + the relay loaders) — check_core_pkgs().
-CORE_PKGS = ['netsim/__init__.py', 'netsim/model.py', 'netsim/evaluate.py', 'netsim/from_aws.py', 'netsim/from_gcp.py', 'netsim/from_azure.py', 'netsim/flowlogs.py', 'netsim/enforce.py']
+CORE_PKGS = ['netsim/__init__.py', 'netsim/model.py', 'netsim/evaluate.py', 'netsim/from_aws.py', 'netsim/from_gcp.py', 'netsim/from_azure.py', 'netsim/flowlogs.py', 'netsim/mirror.py', 'netsim/enforce.py']
 
 # Cores vendored byte-for-byte (no GENERATED header): the service gate requires the
 # Nano copy of a new service's engine to be identical to core/.

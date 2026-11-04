@@ -209,9 +209,21 @@ def _gcp_flow_and_mirror_logs(space: str) -> None:
             return
         vpc_store = aps.gcp_compute_vpc_store()
         topo = from_gcp.from_gcp(vpc_store, aps.gcp_compute_vm_store(), None)
+        # ONE persistent collector per space: each apply ingests the cumulative nft counters and reports only the DELTA since the
+        # previous apply (a long-lived flow is no longer re-emitted with its ever-growing totals on every apply).
+        from core.netsim.flowlogs import FlowLogCollector
+        col = _GCP_COLLECTORS.get(space)
+        if col is None:
+            col = _GCP_COLLECTORS[space] = FlowLogCollector(topo)
+            col.keep_history = False
+        col.topo = topo
+        delta = col.ingest(accepted, rejected)
+        if not delta:
+            return
+        accepted = [r for r in delta if r["action"] == "ACCEPT"]
         projects = {p.split("/")[0] for p in vpc_store.networks}
         for project in projects:
-            flows = gcc.gcp_flow_log_records(vpc_store, project, accepted, rejected, topo)
+            flows = gcc.gcp_flow_log_records(vpc_store, project, accepted, [], topo, collector=col)
             if flows:
                 write_entries(log_store, project, {
                     "logName": f"projects/{project}/logs/compute.googleapis.com%2Fvpc_flows",
@@ -230,6 +242,7 @@ def _gcp_flow_and_mirror_logs(space: str) -> None:
 
 
 _COLLECTORS: dict = {}
+_GCP_COLLECTORS: dict = {}
 
 
 def deliver_flows(accepted: list, rejected: list, topo, *, aws_model: dict | None, logs_store=None, s3_store=None,
@@ -241,8 +254,12 @@ def deliver_flows(accepted: list, rejected: list, topo, *, aws_model: dict | Non
     from core.netsim.flowlogs import FlowLogCollector
     col = collector or FlowLogCollector(topo)
     col.topo = topo
-    col.ingest(accepted, rejected, now=now)
-    out = {"aws": {}, "azure": []}
+    delta = col.ingest(accepted, rejected, now=now)
+    out = {"aws": {}, "azure": [], "mirror": {}}
+    if aws_model and aws_model.get("tm_sessions") and delta:     # AWS Traffic Mirroring sessions (core/netsim/mirror.py)
+        from core.netsim import mirror as _mir
+        caps = _mir.mirror_captures(aws_model, topo, delta, int(now if now is not None else time.time()))
+        out["mirror"] = _mir.deliver(aws_model, caps, logs_store)
     rows = col.aws_rows()
     if aws_model and aws_model.get("flow_logs") and rows:
         def cw_put(group, stream, evs):
@@ -302,6 +319,7 @@ def _deliver_cloud_flow_logs(space: str) -> None:
         col = _COLLECTORS.get(space)
         if col is None:                       # persistent: deltas per window, never re-delivering cumulative counters
             col = _COLLECTORS[space] = FlowLogCollector(topo)
+            col.keep_history = False
         deliver_flows(accepted, rejected, topo, aws_model=aws_model(), logs_store=r.logs, s3_store=r.s3,
                       az_state=azure_services._state, az_blob_store=aps.az_blob_store(), collector=col)
     except Exception as exc:

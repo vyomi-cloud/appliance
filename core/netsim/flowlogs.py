@@ -57,6 +57,9 @@ class FlowLogCollector:
         self._last: dict = {}          # (action, 5-tuple) -> (packets, bytes)
         self._window_start: int | None = None
         self.windows: list = []        # [(start, end, [delta rows])]
+        # keep_history=False (the persistent collectors in wiring): `windows` holds ONLY the latest window, so the *_rows()/*_records()
+        # readers never re-emit earlier windows — a flow is reported once, as the counter delta of the window it happened in.
+        self.keep_history = True
 
     def ingest(self, accepted: list, rejected: list, now: int | None = None) -> list:
         now = int(now if now is not None else datetime.datetime.now(datetime.timezone.utc).timestamp())
@@ -72,7 +75,10 @@ class FlowLogCollector:
                 self._last[key] = (f["packets"], f["bytes"])
                 if dp > 0:
                     rows.append({**f, "packets": dp, "bytes": db, "action": action})
+        if not self.keep_history:
+            self.windows = []
         self.windows.append((start, now, rows))
+        del self.windows[:-240]          # bounded either way
         self._window_start = now
         return rows
 
