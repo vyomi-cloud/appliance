@@ -203,11 +203,21 @@
  "gcp.monitoring.trace-explorer": {
   "title": "Trace explorer",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Distributed tracing (Cloud Trace) ingestion and the trace explorer UI are a separate product from Cloud Monitoring; Vyomi doesn't model span ingestion."
+   "Spans are stored and queried for real: Cloud Trace v2 spans.batchWrite/createSpan and v1 patchTraces/traces.list/get (filter span:/root:/label:/latency:, view, orderBy, paging) with real validation. Vyomi does not auto-instrument workloads: no span appears unless your app (OpenTelemetry/Cloud Trace SDK) or a script writes it, and the Trace explorer charts (heatmap/latency percentiles) and Log-trace correlation are not modeled."
+  ],
+  "api": [
+   "spans.batchWrite",
+   "spans.createSpan",
+   "projects.patchTraces",
+   "projects.traces.list",
+   "projects.traces.get"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_trace.py"
   ]
  },
  "gcp.monitoring.error-reporting": {
@@ -262,21 +272,33 @@
  "gcp.monitoring.settings.log-scopes": {
   "title": "Log Scopes (Settings tab)",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Log scopes let a Monitoring workspace search log buckets from other projects in Log Explorer. Vyomi's Log Explorer is itself a separate, unbuilt product in this console (an external link in the nav, like Log router and Logs storage), so there is nothing for a log scope to extend."
+   "Log scopes are created, listed, patched and deleted for real (logging v2 logScopes, with the immutable _Default scope and resource-name validation). Vyomi's Log Explorer is an external link in this console, so a scope only records which log views it covers; it does not yet widen any query, and log-view existence is not cross-checked."
+  ],
+  "api": [
+   "logscopes.CRUD"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_trace.py"
   ]
  },
  "gcp.monitoring.settings.trace-scopes": {
   "title": "Trace Scopes (Settings tab)",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Trace scopes extend Trace Explorer to other projects' spans. Vyomi has no span-ingestion engine at all (see gcp.monitoring.trace-explorer), so there is nothing for a scope to aggregate."
+   "Trace scopes are created, listed, patched and deleted for real (observability v1 traceScopes, immutable _Default, up to 20 projects, resource-name validation). Trace Explorer does not yet aggregate spans across the scope's projects, and listed projects are not cross-checked against Resource Manager."
+  ],
+  "api": [
+   "tracescopes.CRUD"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_trace.py"
   ]
  }
 }
