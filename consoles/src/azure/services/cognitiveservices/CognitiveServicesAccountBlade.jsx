@@ -2,6 +2,7 @@
  * Keys and Endpoint, Model deployments, Quotas, Networking, Identity, Properties, Locks,
  * Activity log and Export template are backed by native ARM / Cognitive Services REST calls;
  * everything else in the menu is an honest NotSimulated panel. */
+import ChatPlayground from "./ChatPlayground.jsx";
 import { UserAssignedIdentities } from "../../kit/UserAssignedIdentities.jsx";
 import { useEffect, useState } from "react";
 import {
@@ -36,7 +37,7 @@ export const MENU = [
   { id: "tags", label: "Tags" },
   { id: "diagnose", label: "Diagnose and solve problems" },
   { group: "Resource Management", items: [
-    { id: "keysendpoint", label: "Keys and Endpoint" }, { id: "deployments", label: "Model deployments" }, { id: "quotas", label: "Quotas" },
+    { id: "keysendpoint", label: "Keys and Endpoint" }, { id: "deployments", label: "Model deployments" }, { id: "playground", label: "Chat playground" }, { id: "quotas", label: "Quotas" },
     { id: "networking", label: "Networking" }, { id: "identity", label: "Identity" }, { id: "properties", label: "Properties" }, { id: "locks", label: "Locks" },
   ] },
   { group: "Monitoring", items: [{ id: "alerts", label: "Alerts" }, { id: "metrics", label: "Metrics" }, { id: "diagnosticsettings", label: "Diagnostic settings" }, { id: "logs", label: "Logs" }] },
@@ -73,6 +74,7 @@ export default function CognitiveServicesAccountBlade({ params }) {
       tags: () => <Tags a={a} reload={reload} />,
       keysendpoint: () => <KeysAndEndpoint a={a} />,
       deployments: () => <Deployments a={a} />,
+      playground: () => <ChatPlayground a={a} />,
       quotas: () => <Quotas a={a} />,
       networking: () => <Networking a={a} reload={reload} />,
       identity: () => <Identity a={a} reload={reload} />,
