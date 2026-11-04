@@ -257,6 +257,20 @@ def _deliver_sns(store, topic_arn, body_str):
         pass
 
 
+def _deliver_sfn(arn, body_str, lambda_store=None):
+    """Step Functions rule target: StartExecution on the state machine with the (transformed)
+    event as its input. A missing machine is a failed delivery, swallowed like the others."""
+    try:
+        try:
+            from core import stepfunctions_core as sfn
+        except ImportError:  # Pyodide flat layout
+            import stepfunctions_core as sfn  # type: ignore
+        sfn.dispatch(sfn.shared_store(), "AWSStepFunctions.StartExecution",
+                     {"stateMachineArn": arn, "input": body_str}, lambda_store)
+    except Exception:
+        pass
+
+
 # Offline hook: the appliance's own Lambda registry (server.py) is not an `lambda_core` store.
 _LAMBDA_INVOKER = None
 
@@ -290,7 +304,8 @@ def _deliver_lambda(lambda_store, arn, body_str):
         pass
 
 
-def route_event(rules, bus, event_obj, envelope, send_sqs, invoke_lambda, publish_sns, forward_bus=None, _depth=0):
+def route_event(rules, bus, event_obj, envelope, send_sqs, invoke_lambda, publish_sns, forward_bus=None, _depth=0,
+                start_sfn=None):
     """Match `event_obj` against every ENABLED rule on `bus` and hand each matching target
     its (Input/InputPath/InputTransformer-shaped) body via the three delivery callbacks.
     Shared by the Nano wire (eventbridge_core) and the offline appliance. Returns #deliveries."""
@@ -310,12 +325,14 @@ def route_event(rules, bus, event_obj, envelope, send_sqs, invoke_lambda, publis
                 publish_sns(arn, body_str)
             elif ":lambda:" in arn or ":function:" in arn:
                 invoke_lambda(arn, body_str)
+            elif ":states:" in arn and ":stateMachine:" in arn and start_sfn is not None:
+                start_sfn(arn, body_str)
             elif ":event-bus/" in arn and forward_bus is not None and _depth < 5:
                 # Event-bus target: the event is re-matched against the destination bus's rules.
                 # (Real EventBridge also refuses bus chains deeper than the cycle limit.)
                 dest = arn.split(":event-bus/", 1)[1]
                 n += route_event(rules, dest, event_obj, envelope, send_sqs, invoke_lambda,
-                                 publish_sns, forward_bus, _depth + 1)
+                                 publish_sns, forward_bus, _depth + 1, start_sfn)
             else:
                 continue
             n += 1
@@ -348,7 +365,8 @@ def _put_events(store, body, lambda_store=None):
 
         route_event(_rules(store).values(), bus, event_obj, envelope, send_sqs,
                     lambda arn, b: _deliver_lambda(lambda_store, arn, b),
-                    lambda arn, b: _deliver_sns(store, arn, b), forward_bus=True)
+                    lambda arn, b: _deliver_sns(store, arn, b), forward_bus=True,
+                    start_sfn=lambda arn, b: _deliver_sfn(arn, b))
         entries_out.append({"EventId": event_id})
     store.persist()
     return EventsResponse(body={"FailedEntryCount": 0, "Entries": entries_out})

@@ -140,6 +140,22 @@ def run(store=None):
     got = sqs.dispatch(s, "AmazonSQS.ReceiveMessage", {"QueueUrl": qurl3, "MaxNumberOfMessages": 10}).body.get("Messages", [])
     _check("event-bus target forwards to the destination bus's rules", len(got) == 1)
 
+    # Step Functions target: matching event STARTS an execution with the event as its input.
+    try:
+        from core import stepfunctions_core as sfn
+    except ImportError:  # pragma: no cover
+        import stepfunctions_core as sfn  # type: ignore
+    ss = sfn.shared_store()
+    defn = json.dumps({"StartAt": "P", "States": {"P": {"Type": "Pass", "End": True}}})
+    sm = sfn.dispatch(ss, "AWSStepFunctions.CreateStateMachine",
+                      {"name": "eb-sm", "definition": defn, "roleArn": "arn:aws:iam::000000000000:role/r"}).body
+    call("PutRule", {"Name": "sfn-r", "EventPattern": json.dumps({"source": ["sfn.app"]})})
+    call("PutTargets", {"Rule": "sfn-r", "Targets": [{"Id": "s1", "Arn": sm["stateMachineArn"], "RoleArn": "arn:aws:iam::000000000000:role/r"}]})
+    call("PutEvents", {"Entries": [{"Source": "sfn.app", "DetailType": "x", "Detail": json.dumps({"k": 3})}]})
+    exes = [e for e in ss.executions.values() if e["stateMachineArn"] == sm["stateMachineArn"]]
+    _check("Step Functions target starts an execution with the event as input",
+           len(exes) == 1 and json.loads(exes[0]["input"])["detail"] == {"k": 3})
+
     _check("ListRules",call("ListRules", {}).body["Rules"][0]["Name"] == "r1")
     _check("ListTargetsByRule", call("ListTargetsByRule", {"Rule": "r1"}).body["Targets"][0]["Id"] == "t1")
 
