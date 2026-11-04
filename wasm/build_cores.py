@@ -30,7 +30,7 @@ CORES = [
     "object_store.py", "s3_object_core.py",        # S3
     "s3_tables_core.py", "s3_insights_core.py", "s3_ext_core.py", "s3_vectors_core.py", "backup_core.py", "marketplace_core.py", "s3files_core.py", "ec2_metrics_core.py", "observability_core.py", "organizations_core.py", "qr_png.py",     # S3 Tables (s3tables REST) + Access Analyzer for S3 / Storage Lens (loaded by s3_object_core)
     "llm_core.py",
-    "ai_models_core.py",
+    "ai_models_core.py", "bedrock_agents_core.py",
     "dms_core.py",
     "backup_vaults_core.py",
     "nosql_store.py", "dynamodb_core.py",           # DynamoDB

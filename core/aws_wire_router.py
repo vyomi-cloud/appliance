@@ -383,6 +383,7 @@ _SIGNING = {
     "application-autoscaling": "appas",   # Application Auto Scaling (DynamoDB) -> core/appautoscaling_core over the DynamoDB store
     "cloudfront": "cloudfront",   # CloudFront public keys + key groups (rest-xml /2020-05-31/...) -> core/cloudfront_keys_core via the S3 store
     "savingsplans": "savingsplans",   # Savings Plans (rest-json POST /<Operation>) + EC2 coverage/capacity views -> core/savingsplans_core over the EC2 model
+    "bedrock-agentcore": "agentcore",   # Bedrock AgentCore control plane + gateway MCP endpoint -> core/bedrock_agents_core (S3 + Lambda stores)
     "dms": "dms", "bedrock": "bedrock",   # Bedrock runtime + foundation-model catalogue -> core/ai_models_core over the local-LLM seam (core/llm_core)
     "backup": "backup",   # AWS Backup subset (region settings + DynamoDB copy jobs) -> core/backup_core over the DynamoDB + S3 stores
     "s3vectors": "s3vectors",   # Amazon S3 Vectors (rest-json POST /<Operation>) -> core/s3_vectors_core via the S3 store
@@ -1200,7 +1201,14 @@ class AwsWireRouter:
 
         if svc == "bedrock":
             from core import ai_models_core
+            from core import bedrock_agents_core
+            if bedrock_agents_core.handles(path.split("?", 1)[0]):   # Bedrock Agents / Knowledge Bases / agent-runtime share signing name `bedrock`
+                return bedrock_agents_core.dispatch(self.s3, method, path.split("?", 1)[0], query or {}, lheaders, bytes(body))
             return ai_models_core.bedrock_dispatch(method, path, query or {}, lheaders, bytes(body))
+
+        if svc == "agentcore":
+            from core import bedrock_agents_core
+            return bedrock_agents_core.agentcore_dispatch(self.s3, self.lam, method, path.split("?", 1)[0], query or {}, lheaders, bytes(body))
 
         if svc == "gcp-aiplatform":
             from core import ai_models_core
