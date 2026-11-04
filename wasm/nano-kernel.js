@@ -37,8 +37,10 @@
   try { last = +localStorage.getItem(SEEN) || 0; } catch (_) {}
   if (!carrying && params.get("kernel") !== "1" && Date.now() - last < LAUNCH_GAP_MS) off = true;
   function seen() { try { localStorage.setItem(SEEN, String(Date.now())); } catch (_) {} }
-  seen(); setInterval(seen, 3000);
-  window.addEventListener("pagehide", seen);
+  // An embedded view (?embed=1: the Spaces/KC/... dialogs, also shown on the enterprise dashboard) is never a launch:
+  // no boot screen in it, and it must not count as an open Nano page either.
+  var embedded = /[?&]embed=1/.test(location.search); if (embedded) off = true;
+  if (!embedded) { seen(); setInterval(seen, 3000); window.addEventListener("pagehide", seen); }
   var reduced = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   // 5x7 dot-matrix font for the wordmark.

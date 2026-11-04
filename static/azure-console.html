@@ -6387,7 +6387,7 @@ function renderDiskWidget(d) {
         '<div style="height:8px;background:#f3f4f6;border-radius:999px;overflow:hidden">'+
           '<div style="height:100%;width:'+pct+'%;background:'+accent+';transition:width 0.3s"></div>'+
         '</div>'+
-        '<div style="font-size:11px;color:#6b7280;margin-top:6px">'+disk.used_gb+' / '+disk.total_gb+' GB · '+disk.avail_gb+' GB free</div>'+
+        '<div style="font-size:11px;color:#6b7280;margin-top:6px">'+(+disk.used_gb).toFixed(2)+' / '+(+disk.total_gb).toFixed(2)+' GB · '+(+disk.avail_gb).toFixed(2)+' GB free</div>'+
       '</div>'+
       '<div style="display:flex;gap:8px">'+
         '<button onclick="openDiskCleanup()" style="font-size:12px;padding:6px 12px;background:#0f1b2d;color:#fff;border:0;border-radius:6px;cursor:pointer">Free up space →</button>'+
@@ -6467,5 +6467,6 @@ boot();
 </script>
 <script src="/assets/lazy_backends.js"></script>
 <script src="/assets/vyomi-appbar.js" data-cloud="azure" defer></script>
+<script src="/assets/nano-disclaimer.js" defer></script>
 </body>
 </html>
