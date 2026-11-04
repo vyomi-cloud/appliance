@@ -33,8 +33,12 @@ def register(app) -> None:
         parts = [p for p in rest.split("/") if p]
         if ws == "v1":                       # endpoint=<base>/azure-data/loganalytics -> /v1/workspaces/{id}/query
             parts = ["v1"] + parts
+        elif ws == "workspaces":             # azquery (Go/.NET/JS) appends /workspaces/{id}/query with no /v1
+            parts = ["workspaces"] + parts
         if parts[:2] == ["v1", "workspaces"] and len(parts) >= 4:       # LogsQueryClient: workspace id is in the path
             ws, parts = parts[2], parts[3:]
+        elif parts[:1] == ["workspaces"] and len(parts) >= 3:
+            ws, parts = parts[1], parts[2:]
         elif parts[:1] == ["v1"] and len(parts) >= 2:
             parts = parts[1:]
         rec = _find(ws)
