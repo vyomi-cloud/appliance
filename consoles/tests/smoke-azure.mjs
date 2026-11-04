@@ -1159,7 +1159,7 @@ try {
   await page.getByRole("tab", { name: "Terraform" }).click();
   const acrTfText = await page.getByRole("textbox").first().inputValue();
   check("UI Export template (Terraform) reflects the real resource",
-    acrTfText.includes("azurerm_container_registry") && acrTfText.includes(ACR), acrTfText.slice(0, 200));
+    /azapi_resource/.test(acrTfText) && acrTfText.includes("Microsoft.ContainerRegistry/registries") && acrTfText.includes(ACR), acrTfText.slice(0, 200));
 
   // ── A repository pushed over the real OCI v2 wire (CLI → UI) ───────────────────────────
   const REPO = `smokerepo${n}`;
@@ -2698,7 +2698,7 @@ try {
   await page.getByRole("tab", { name: "Terraform" }).click();
   const vmTfText = await page.getByRole("textbox").first().inputValue();
   check("UI Export template (Terraform) reflects the real resource",
-    vmTfText.includes("azurerm_linux_virtual_machine") && vmTfText.includes(VM), vmTfText.slice(0, 200));
+    /azapi_resource/.test(vmTfText) && vmTfText.includes("Microsoft.Compute/virtualMachines") && vmTfText.includes(VM), vmTfText.slice(0, 200));
 
   // ── Activity log: the ENFORCED timespan picker narrows the query without losing this VM's
   // own very-recent events ───────────────────────────────────────────────────────────────────
