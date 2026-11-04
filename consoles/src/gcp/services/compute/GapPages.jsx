@@ -26,12 +26,21 @@ import RocketLaunchOutlinedIcon from "@mui/icons-material/esm/RocketLaunchOutlin
 import HubOutlinedIcon from "@mui/icons-material/esm/HubOutlined.js";
 import ScienceOutlinedIcon from "@mui/icons-material/esm/ScienceOutlined.js";
 import { NotSimulatedContainer } from "../../kit/common.jsx";
+import { CapabilityContainer } from "../../kit/Capability.jsx";
 
-const ns = (title, feature) => function NotSimulatedPage() {
+// Gap pages whose "Not simulated" reason is registered in core/capabilities/gcp/compute.json.
+const CAP_IDS = {
+  "migrate-to-virtual-machines": "gcp.compute.migrate-to-vms", "tpus": "gcp.compute.tpus", "committed-use-discounts": "gcp.compute.committed-use-discounts",
+  "capacity-advisor": "gcp.compute.capacity-advisor", "preview-features": "gcp.compute.preview-features",
+  "bms-servers": "gcp.compute.bms", "bms-networks": "gcp.compute.bms", "bms-vrfs": "gcp.compute.bms", "bms-volumes": "gcp.compute.bms",
+  "bms-nfs-shares": "gcp.compute.bms", "bms-procurements": "gcp.compute.bms", "bms-maintenance-events": "gcp.compute.bms",
+};
+
+const ns = (title, feature, id) => function NotSimulatedPage() {
   return (
     <Box sx={{ pt: 2 }}>
       <Typography variant="h1" component="h1" sx={{ mb: 2 }}>{title}</Typography>
-      <NotSimulatedContainer title={title} feature={feature || `Compute Engine ${title}`} />
+      {CAP_IDS[id] ? <CapabilityContainer id={CAP_IDS[id]} title={title} /> : <NotSimulatedContainer title={title} feature={feature || `Compute Engine ${title}`} />}
     </Box>
   );
 };
@@ -64,6 +73,6 @@ export const GAPS = [
   ["preview-features", "Preview Features", "preview-features", ScienceOutlinedIcon],
 ];
 
-export const gapRoutes = () => GAPS.map(([, title, path]) => ({ pattern: `/compute/${path}`, component: ns(title) }));
+export const gapRoutes = () => GAPS.map(([id, title, path]) => ({ pattern: `/compute/${path}`, component: ns(title, undefined, id) }));
 export const gapById = (id) => GAPS.find((g) => g[0] === id);
 export const gapLink = (id) => { const g = gapById(id); return g && { text: g[1], href: `#/compute/${g[2]}`, icon: g[3] }; };

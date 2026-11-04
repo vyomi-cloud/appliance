@@ -1144,6 +1144,8 @@ class AwsWireRouter:
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), gcs_store=self.gcs)
             elif svc == "gcp-firestore":   # exportDocuments/importDocuments read/write real GCS objects
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), gcs_store=self.gcs)
+            elif svc == "gcp-compute-vm":   # image import (rawDisk) / export read+write the simulator's GCS objects
+                r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), gcs_store=self.gcs)
             elif svc == "gcp-compute":   # Connectivity Tests evaluate against the VMs too
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), vm_store=self.gcp_compute_vm)
             elif svc == "gcp-pam":   # grant activation/expiry is a real project IAM policy change

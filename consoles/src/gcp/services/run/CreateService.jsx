@@ -12,6 +12,7 @@ import AddIcon from "@mui/icons-material/esm/Add.js";
 import DeleteIcon from "@mui/icons-material/esm/Delete.js";
 import { useNotify } from "../../../common/notify.jsx";
 import { ErrorAlert, NotSimulated, PageHeader } from "../../kit/common.jsx";
+import { CapabilityContainer } from "../../kit/Capability.jsx";
 import * as api from "./api.js";
 import * as runApi from "../run/api.js";
 import ImagePicker from "../run/ImagePicker.jsx";
@@ -223,7 +224,7 @@ export default function CreateService({ query }) {
                 <TextField label="Container command" value={command} onChange={(e) => setCommand(e.target.value)} helperText="Leave blank to use the entry point command defined in the container image." />
                 <TextField label="Container arguments" value={args} onChange={(e) => setArgs(e.target.value)} helperText="Comma-separated. Arguments passed to the entry point command." />
                 <EphemeralDisk a={adv} set={setAdv} />
-                <NotSimulated compact feature="GPU" />
+                <CapabilityContainer id="gcp.run.gpu" title="GPU" />
                 <HealthChecks a={adv} set={setAdv} />
                 <Box>
                   <Typography variant="body2" sx={{ fontWeight: 500, mb: 1 }}>Variables & Secrets</Typography>
