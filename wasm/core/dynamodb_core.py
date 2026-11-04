@@ -85,6 +85,20 @@ class DdbError(Exception):
         self.extra = extra or {}
 
 
+def _appas_tick(store) -> None:
+    """Application Auto Scaling is evaluated lazily (no background clock): run due target-tracking policies before a read."""
+    if not any(isinstance(t, dict) and t.get("appas", {}).get("targets") for t in store.tables.values()):
+        return
+    try:
+        try:
+            from core import appautoscaling_core as _aa
+        except ImportError:  # Pyodide flat layout
+            import appautoscaling_core as _aa  # type: ignore
+        _aa.evaluate(store)
+    except Exception:
+        pass
+
+
 def _validation(message: str) -> DdbError:
     return DdbError("ValidationException", message, 400)
 
@@ -3184,6 +3198,7 @@ def dispatch(store: NoSqlStore, target: str, payload: dict | None = None, s3_sto
             return _ok({"TableDescription": _table_view(store, table, include_items=False)})
 
         if action == "DescribeTable":
+            _appas_tick(store)
             table = _require_table(store, table_name())
             return _ok({"Table": _table_view(store, table, include_items=True)})
 
