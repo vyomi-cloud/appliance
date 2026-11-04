@@ -150,9 +150,9 @@ def lock_conflict(state, rid: str, method: str):
         return None
     if "/providers/microsoft.authorization/locks" in rid.lower():
         return None
-    # Real ARM exempts role assignments / role definitions from management locks (a lock cannot lock
-    # you out of fixing access), so only the Microsoft.Authorization RBAC types are exempt here.
-    if re.search(r"/providers/microsoft\.authorization/(roleassignments|roledefinitions)(/|$)", rid.lower()):
+    # Real ARM exempts Microsoft.Authorization operations (role assignments/definitions, deployment
+    # credentials, ...) from management locks: a lock cannot lock you out of fixing access.
+    if "/providers/microsoft.authorization/" in rid.lower():
         return None
     # The Microsoft.Web engine also serves lock management in the short form sites/{n}/locks/{lock};
     # lock management is never blocked by the lock it manages (else a ReadOnly lock could not be removed).
