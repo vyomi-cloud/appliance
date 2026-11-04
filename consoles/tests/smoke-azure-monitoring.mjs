@@ -78,6 +78,28 @@ try {
   await page.waitForFunction(() => /\d\s*Operations recorded/.test(document.querySelector('[data-testid="insights-tiles"]')?.textContent || ""), null, { timeout: 15000 }).catch(() => {});
   check("service bus insights rolls up its operations", /[1-9]\s*Operations recorded/.test(await page.getByTestId("insights-tiles").textContent({ timeout: 5000 }).catch(() => "")));
 
+  // Managed Prometheus + Managed Grafana + dashboard
+  await page.goto(UI + "#/monitor/managedprometheus");
+  await page.getByRole("button", { name: "Create" }).first().click();
+  await page.getByLabel("Workspace name").fill(`vymonprom${n}`);
+  await page.getByRole("button", { name: "Create", exact: true }).last().click();
+  await page.getByText(`vymonprom${n}`).first().waitFor({ timeout: 10000 });
+  const acct = json(await arm("GET", `/resourceGroups/cloudlearn-rg/providers/Microsoft.Monitor/accounts/vymonprom${n}`, null, "2023-04-03"));
+  check("Azure Monitor workspace is a real ARM resource with a Prometheus query endpoint", /prometheus\.monitor\.azure\.com/.test(acct.properties?.metrics?.prometheusQueryEndpoint || ""));
+  await page.goto(UI + "#/monitor/managedgrafana");
+  await page.getByRole("button", { name: "Create" }).first().click();
+  await page.getByLabel("Grafana workspace name").fill(`vymongf${n}`);
+  await page.getByLabel("Azure Monitor workspace").selectOption({ label: `vymonprom${n}` });
+  await page.getByRole("button", { name: "Create", exact: true }).last().click();
+  await page.getByText(`vymongf${n}`).first().waitFor({ timeout: 10000 });
+  const gf = json(await arm("GET", `/resourceGroups/cloudlearn-rg/providers/Microsoft.Dashboard/grafana/vymongf${n}`, null, "2023-09-01"));
+  check("Grafana workspace has an endpoint and the Monitor workspace integration", /grafana\.azure\.com/.test(gf.properties?.endpoint || "") && gf.properties?.grafanaIntegrations?.azureMonitorWorkspaceIntegrations?.length === 1);
+  const delOld = await arm("DELETE", `/resourceGroups/cloudlearn-rg/providers/Microsoft.Monitor/accounts/vymonprom${n}`, null, "2023-04-03");
+  check("deleting the integrated Monitor workspace is refused (409)", delOld.status === 409, delOld.text.slice(0, 120));
+  await page.goto(UI + "#/monitor/grafanadashboards");
+  const tot = await page.getByTestId("dash-total").textContent({ timeout: 15000 }).catch(() => "");
+  check("dashboard shows the real operation count", /[1-9]\d* operations recorded/.test(tot), tot);
+
   // Other blades render the shared panels (not the Not-simulated panel)
   for (const [path, label] of [[`#/resourcegroups/${RG}/alerts`, "rg alerts"], [`#/resourcegroups/${RG}/metrics`, "rg metrics"]]) {
     await page.goto(UI + path);
