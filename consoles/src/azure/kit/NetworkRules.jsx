@@ -8,7 +8,7 @@ import { useNotify } from "../../common/notify.jsx";
 import { useAsync } from "../../common/useAsync.js";
 import BrowseGrid from "./BrowseGrid.jsx";
 import { CapabilityContainer } from "./Capability.jsx";
-import { listAllSubnets } from "./PrivateEndpoints.jsx";
+import { listAllSubnets, PrivateEndpointConnectionsPanel } from "./PrivateEndpoints.jsx";
 
 const sapi = { "api-version": "2023-01-01" };
 const sqlq = { "api-version": "2023-05-01-preview" };
@@ -113,5 +113,45 @@ export function SqlVnetRules({ a }) {
       />
       {adding && <AddVnetDialog service="Microsoft.Sql" onClose={() => setAdding(false)} onAdd={add} />}
     </CapabilityContainer>
+  );
+}
+
+const cq = { "api-version": "2024-05-15" };
+/** Cosmos DB account: public network access, selected-network rules (vnet + IP) and private endpoint connections. */
+export function CosmosNetworking({ a, reload }) {
+  const notify = useNotify();
+  const p = a.properties || {};
+  const [adding, setAdding] = useState(false);
+  const [ip, setIp] = useState("");
+  const vr = p.virtualNetworkRules || [];
+  const ipr = p.ipRules || [];
+  const save = async (props, msg) => {
+    try { await restJson("PATCH", a.id, { query: cq, body: { properties: props } }); notify.success(msg, "Saved"); setIp(""); reload?.(); }
+    catch (e) { notify.error(e, "Saving failed"); }
+  };
+  const mode = p.publicNetworkAccess === "Disabled" ? "Disabled" : p.isVirtualNetworkFilterEnabled || ipr.length ? "Selected networks" : "All networks";
+  return (
+    <>
+      <CapabilityContainer id="azure.cosmos.network_rules" title="Public network access">
+        <Field label="Public network access">
+          <Select value={mode} aria-label="Public network access" onChange={(_, d) => save(d.value === "Disabled" ? { publicNetworkAccess: "Disabled" } : { publicNetworkAccess: "Enabled", isVirtualNetworkFilterEnabled: d.value === "Selected networks" }, "Network access was updated.")}>
+            <option>All networks</option><option>Selected networks</option><option>Disabled</option>
+          </Select>
+        </Field>
+        <BrowseGrid resourceName="virtual network rule" rowKey={(r) => r.id} items={vr} csvName="cosmos-vnet-rules.csv" filterPlaceholder="Filter virtual networks"
+          extraCommands={<ToolbarButton icon={<Add20Regular />} onClick={() => setAdding(true)}>Add existing virtual network</ToolbarButton>}
+          onDelete={async (sel) => save({ virtualNetworkRules: vr.filter((r) => !sel.some((s) => s.id === r.id)) }, "Virtual network rules were saved.")}
+          columns={[{ key: "vnet", label: "Virtual network", value: (r) => r.id.split("/virtualNetworks/")[1]?.split("/")[0] }, { key: "subnet", label: "Subnet", value: (r) => r.id.split("/").pop() }]} />
+        {adding && <AddVnetDialog service="Microsoft.AzureCosmosDB" onClose={() => setAdding(false)} onAdd={(id) => save({ isVirtualNetworkFilterEnabled: true, virtualNetworkRules: [...vr, { id, ignoreMissingVNetServiceEndpoint: false }] }, "Virtual network rule was added.")} />}
+        <BrowseGrid resourceName="IP rule" rowKey={(r) => r.ipAddressOrRange} items={ipr} csvName="cosmos-ip-rules.csv" filterPlaceholder="Filter IP rules"
+          onDelete={async (sel) => save({ ipRules: ipr.filter((r) => !sel.some((s) => s.ipAddressOrRange === r.ipAddressOrRange)) }, "IP rules were saved.")}
+          columns={[{ key: "ipAddressOrRange", label: "IP address or range" }]} />
+        <div style={{ display: "flex", gap: 8, alignItems: "flex-end", marginTop: 8 }}>
+          <Field label="IPv4 address or CIDR"><Input value={ip} onChange={(_, d) => setIp(d.value)} aria-label="IP address or CIDR" /></Field>
+          <Button disabled={!ip} onClick={() => save({ ipRules: [...ipr, { ipAddressOrRange: ip }] }, "IP rule was added.")}>Add IP rule</Button>
+        </div>
+      </CapabilityContainer>
+      <PrivateEndpointConnectionsPanel target={{ id: a.id, name: a.name, type: "Microsoft.DocumentDB/databaseAccounts", location: a.location }} />
+    </>
   );
 }

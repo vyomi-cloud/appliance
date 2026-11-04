@@ -135,6 +135,18 @@ def run():
     r = put(f"{RG}/providers/Microsoft.Sql/servers/netsql/virtualNetworkRules/r1", {"properties": {"virtualNetworkSubnetId": sidn}}, {"api-version": "2023-05-01-preview"})
     _check("sql vnet rule created", r["status"] in (200, 201))
 
+    # ── Cosmos DB account vnet + IP rules
+    ca = f"{RG}/providers/Microsoft.DocumentDB/databaseAccounts/netcosmos"
+    cq = {"api-version": "2024-05-15"}
+    r = put(ca, {"location": "eastus", "kind": "GlobalDocumentDB", "properties": {"isVirtualNetworkFilterEnabled": True, "virtualNetworkRules": [{"id": sidn}]}}, cq)
+    _check("cosmos vnet rule needs the Microsoft.AzureCosmosDB endpoint", r["status"] == 400)
+    put(f"{vid}/subnets/default", {"properties": {"addressPrefix": "10.0.0.0/24", "serviceEndpoints": [{"service": "Microsoft.Storage"}, {"service": "Microsoft.Sql"}, {"service": "Microsoft.AzureCosmosDB"}]}})
+    r = put(ca, {"location": "eastus", "kind": "GlobalDocumentDB", "properties": {"isVirtualNetworkFilterEnabled": True, "virtualNetworkRules": [{"id": sidn}], "ipRules": [{"ipAddressOrRange": "20.1.2.3"}]}}, cq)
+    _check("cosmos account with vnet + IP rules created", r["status"] in (200, 201))
+    _check("cosmos bad IP rule", put(ca, {"location": "eastus", "properties": {"ipRules": [{"ipAddressOrRange": "999.1.1.1"}]}}, cq)["status"] == 400)
+    cpe = pe("pe-cosmos", ["Sql"], target=ca)
+    _check("private endpoint to Cosmos DB", cpe["status"] in (200, 201) and cpe["body"]["properties"]["customDnsConfigs"][0]["fqdn"] == "netcosmos.privatelink.documents.azure.com")
+
     # ── Flow logs
     nsg = put(f"{N}/networkSecurityGroups/nsg1", {"location": "eastus"})
     nsg2 = put(f"{N}/networkSecurityGroups/nsg-west", {"location": "westus"})

@@ -111,6 +111,22 @@ try {
   await page.getByRole("cell", { name: "20.1.2.0/24", exact: true }).waitFor({ timeout: 10000 });
   await noNS("storage Public access rules", ["trusted services"]);
 
+  // ── Cosmos DB Networking ──
+  const CQ = armv("2024-05-15");
+  await CQ("PUT", `/resourceGroups/${RG}/providers/Microsoft.DocumentDB/databaseAccounts/cos${n}`, { location: "eastus", kind: "GlobalDocumentDB", properties: { locations: [{ locationName: "eastus", failoverPriority: 0 }], databaseAccountOfferType: "Standard" } });
+  await page.goto(UI + `#/cosmos/${RG}/cos${n}/networking`);
+  await page.getByLabel("IP address or CIDR").first().fill("20.5.6.7");
+  await page.getByRole("button", { name: "Add IP rule" }).click();
+  await page.getByRole("cell", { name: "20.5.6.7", exact: true }).waitFor({ timeout: 10000 });
+  const ca = json(await CQ("GET", `/resourceGroups/${RG}/providers/Microsoft.DocumentDB/databaseAccounts/cos${n}`));
+  check("Cosmos IP rule stored over ARM", (ca.properties?.ipRules || []).some((r) => r.ipAddressOrRange === "20.5.6.7"));
+  await page.getByRole("button", { name: "Private endpoint", exact: true }).first().click();
+  await page.getByLabel("Private endpoint name").fill(`pecos${n}`);
+  await page.getByLabel("Subnet").selectOption({ label: `${V}/default` });
+  await page.getByRole("dialog").getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("cell", { name: new RegExp(`^pecos${n}`) }).first().waitFor({ timeout: 10000 });
+  await noNS("Cosmos networking");
+
   // ── Target-side Private endpoint connections tab (storage) ──
   await NV("PUT", net("privateEndpoints/pem" + n), { location: "eastus", properties: { subnet: { id: `${vid}/subnets/default` },
     manualPrivateLinkServiceConnections: [{ name: "c", properties: { privateLinkServiceId: `/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Storage/storageAccounts/${SA}`, groupIds: ["file"], requestMessage: "pls" } }] } });

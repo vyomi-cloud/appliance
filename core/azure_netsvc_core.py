@@ -39,6 +39,7 @@ FLOWLOG = "microsoft.network/networkwatchers/flowlogs"
 VNET = "microsoft.network/virtualnetworks"
 STORAGE = "microsoft.storage/storageaccounts"
 SQL_VNET_RULE = "microsoft.sql/servers/virtualnetworkrules"
+COSMOS = "microsoft.documentdb/databaseaccounts"
 PEC_SUFFIX = "/privateendpointconnections"
 
 # target resource type -> valid private-link sub-resources (groupIds) and DNS zone suffix per group
@@ -80,7 +81,7 @@ def _err(status: int, code: str, message: str) -> dict:
 
 def handles(full_type: str) -> bool:
     ft = full_type.lower()
-    return ft in (PE, BASTION, FIREWALL, POLICY, POLICY_RCG, DDOS, FLOWLOG, VNET, STORAGE, SQL_VNET_RULE) or ft.endswith(PEC_SUFFIX)
+    return ft in (PE, BASTION, FIREWALL, POLICY, POLICY_RCG, DDOS, FLOWLOG, VNET, STORAGE, COSMOS, SQL_VNET_RULE) or ft.endswith(PEC_SUFFIX)
 
 
 # ── helpers ────────────────────────────────────────────────────────────────────────────
@@ -213,6 +214,10 @@ def validate(state: dict, full_type: str, rid: str, payload: dict, existing: dic
     if ft == STORAGE:
         acls = props.get("networkAcls") or {}
         return _validate_ip_rules(acls.get("ipRules")) or _validate_vnet_rules(state, acls.get("virtualNetworkRules"), "Microsoft.Storage", id_key="id")
+    if ft == COSMOS:
+        rules = props.get("virtualNetworkRules")
+        ips = props.get("ipRules")
+        return _validate_ip_rules([{"value": (r or {}).get("ipAddressOrRange")} for r in ips or []] if ips else None, public_only=False) or _validate_vnet_rules(state, rules, "Microsoft.AzureCosmosDB", id_key="id")
     if ft == SQL_VNET_RULE:
         sid = props.get("virtualNetworkSubnetId")
         if not sid:
@@ -416,7 +421,7 @@ def _validate_vnet_ddos(state, rid, props):
     return None
 
 
-def _validate_ip_rules(rules):
+def _validate_ip_rules(rules, public_only=True):
     seen = set()
     for r in rules or []:
         v = str((r or {}).get("value") or "")
@@ -426,9 +431,9 @@ def _validate_ip_rules(rules):
             return _err(400, "InvalidIpRule", f"The IP rule '{v}' is not a valid IPv4 address or CIDR range.")
         if net.version != 4:
             return _err(400, "InvalidIpRule", "Only IPv4 address ranges are supported in storage IP rules.")
-        if net.prefixlen in (31, 32) and "/" in v:
+        if public_only and net.prefixlen in (31, 32) and "/" in v:
             return _err(400, "InvalidIpRule", f"The IP rule '{v}' is not allowed: /31 and /32 ranges are not supported (use the plain address).")
-        if net.is_private:
+        if public_only and net.is_private:
             return _err(400, "InvalidIpRule", f"The IP rule '{v}' is in a private range (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16), which storage firewall rules do not accept; use a virtual network rule.")
         if v in seen:
             return _err(400, "DuplicateIpRule", f"The IP rule '{v}' appears more than once.")
