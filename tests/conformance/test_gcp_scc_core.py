@@ -7,6 +7,7 @@ import base64
 import json
 
 from core.aws_wire_router import AwsWireRouter
+AwsWireRouter.STRICT_GCP_PROJECT = False   # engine conformance uses ad-hoc project ids (main's one-project-per-space rule is exercised elsewhere)
 
 
 def _check(name, cond):

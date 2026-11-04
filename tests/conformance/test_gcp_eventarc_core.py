@@ -4,6 +4,7 @@ and Nano use it. Run: PYTHONPATH=. python tests/conformance/test_gcp_eventarc_co
 import json
 
 from core.aws_wire_router import AwsWireRouter
+AwsWireRouter.STRICT_GCP_PROJECT = False   # engine conformance uses ad-hoc project ids (main's one-project-per-space rule is exercised elsewhere)
 
 P, L = "demo", "us-central1"
 

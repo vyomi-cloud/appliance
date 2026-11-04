@@ -4,6 +4,7 @@ import json
 import sys
 
 from core.aws_wire_router import AwsWireRouter
+AwsWireRouter.STRICT_GCP_PROJECT = False   # engine conformance uses ad-hoc project ids (main's one-project-per-space rule is exercised elsewhere)
 from core import gcp_artifactregistry_core as ar
 
 n = 0

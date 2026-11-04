@@ -267,11 +267,13 @@ from routes import console, aws_extras, gcp_extras, tenants, config, licensing
 from routes import terraform, azure_console, cloudsim, spaces, gcp_console, runtime
 from routes import aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb, aws_elbv2, aws_sns
 from routes import lazy_backends, shared, console_next, aws_logs, metrics_series, aws_cloudwatch, aws_kinesis, gcp_artifactregistry, gcp_logging, gcp_run, gcp_pam, observability
+from routes import gcp_resourcemanager
 
 for mod in [console, aws_extras, gcp_extras, tenants, config, licensing,
             terraform, azure_console, cloudsim, spaces, gcp_console, runtime,
             aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb, aws_elbv2, aws_sns,
-            lazy_backends, shared, console_next, aws_logs, metrics_series, aws_cloudwatch, aws_kinesis, gcp_artifactregistry, gcp_logging, gcp_run, gcp_pam, observability]:
+            lazy_backends, shared, console_next, aws_logs, metrics_series, aws_cloudwatch, aws_kinesis, gcp_artifactregistry, gcp_logging, gcp_run, gcp_pam, observability,
+            gcp_resourcemanager]:
     mod.register(app)
 
 # ── Middleware registration ──────────────────────────────────────────
@@ -24453,6 +24455,44 @@ async def api_console_azurevm_exec(instance_id: str, request: Request):
     })
     return {"message": "Console command executed", "instance_id": instance_id, **result}
 
+
+# ── Event delivery hooks: EventBridge targets + Step Functions Lambda tasks use the appliance's REAL
+# SQS queues and Lambda functions (the shared cores otherwise look in their own, empty stores).
+def _eb_send_sqs(arn: str, body: str) -> None:
+    queue = _sqs_find_queue(arn.rsplit(":", 1)[-1])
+    if queue is not None:
+        _sqs_enqueue_message(queue, body, source="eventbridge")
+        _persist_state()
+
+
+def _eb_invoke_lambda(name: str, body: str) -> None:
+    try:
+        payload = json.loads(body) if body else {}
+    except Exception:
+        payload = {"raw": body}
+    _lambda_invoke_function(name, payload, invocation_type="Event", source="events.amazonaws.com")
+
+
+def _sfn_invoke_lambda(name: str, payload: Any) -> dict:
+    """Synchronous Lambda call for a Step Functions Task: {found, error, payload}."""
+    if _lambda_find_function(name) is None:
+        return {"found": False}
+    rec = _lambda_invoke_function(name, payload if payload is not None else {}, source="states.amazonaws.com")
+    if rec.get("status") == "error":
+        tb = (rec.get("traceback") or "").strip().splitlines()
+        last = tb[-1] if tb else ""
+        etype = (last.split(":", 1)[0].strip().rsplit(".", 1)[-1]) if ":" in last else "Error"
+        return {"found": True, "error": {"errorType": etype, "errorMessage": rec.get("error", "")}}
+    return {"found": True, "payload": rec.get("response_payload")}
+
+
+try:
+    from core import nats_routes as _nr_hooks, stepfunctions_core as _sfn_hooks
+    _nr_hooks.EB_HOOKS["sqs"] = _eb_send_sqs
+    _nr_hooks.EB_HOOKS["lambda"] = _eb_invoke_lambda
+    _sfn_hooks.set_lambda_invoker(_sfn_invoke_lambda)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[eventing] delivery hooks skipped: {_e}")
 
 # ── SSH / shell access (decision family 1): EC2 Instance Connect, SSM Session Manager, GCE ssh-keys + OS info,
 #    Azure serial console + Bastion. Engine: core/ssh_access_core.py (shared with Nano). Reach-in is `docker exec`

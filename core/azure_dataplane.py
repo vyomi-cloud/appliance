@@ -642,8 +642,7 @@ async def _function_app_handle(app_name: str, function_name: str, request: Reque
     """Invoke an Azure Function App by executing its deployed code (zip deploy or properties.code)."""
     func_rec = _find_function_app(app_name)
     if not func_rec:
-        return JSONResponse(status_code=404, content={"error": f"Function App '{app_name}' not found"})
-
+        return JSONResponse(status_code=404, content={"error": f"Function App '{app_name}' not found in any space"})
     # Access restrictions (config/web ipSecurityRestrictions) are enforced on requests to the site.
     try:
         from core import azure_webnet_core as _wn

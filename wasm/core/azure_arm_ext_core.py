@@ -704,7 +704,9 @@ def on_delete(state, rec):
     for k in [k for k in list(state.keys()) if str(k).startswith(low + "/") and "/__event__/" not in str(k)]:
         state.pop(k, None)   # (a deleted resource's Activity log rows stay, like real Azure)
     if str(rec.get("_type", "")).lower() == SQL_DB_T:
-        _sql_drop(state, rec)
+        _pfx = (rid.split("/databases/")[0] + "/restorableDroppedDatabases/" + str(rec.get("name", "")) + ",").lower()
+        if not any(str(k).startswith(_pfx) for k in state):   # v4's azure_sqlbackup_core already kept a restorable snapshot
+            _sql_drop(state, rec)
     if str(rec.get("_type", "")).lower() == VM_T:
         for ref in _nic_refs(rec.get("properties")):
             nic = state.get(ref["id"].lower())
@@ -2213,6 +2215,11 @@ def _vm_fill(rec):
     md.setdefault("storageAccountType", "Premium_LRS")
     md["id"] = f"{rg_id}/providers/Microsoft.Compute/disks/{od['name']}"
     for d in sp.get("dataDisks") or []:
+        if str((d.get("managedDisk") or {}).get("id") or "") and d.get("createOption") == "Attach":
+            d.setdefault("name", str(d["managedDisk"]["id"]).rsplit("/", 1)[-1])   # an existing disk (v4 azure_disks_core): keep its id
+            d.setdefault("caching", "None")
+            d.setdefault("deleteOption", "Detach")
+            continue
         d.setdefault("name", f"{name}_DataDisk_{d.get('lun', 0)}")
         d.setdefault("createOption", "Empty")
         d.setdefault("caching", "None")
@@ -2273,7 +2280,7 @@ def route(state, method, sub, rg, after, payload=None, query=None, executor=None
             return _health(parent, scope, rest) if method == "GET" else _err(405, "MethodNotAllowed", "GET only.")
         if nsl == "microsoft.managedidentity" and t0 == "identities":
             return _identity_default(parent, scope) if method == "GET" else _err(405, "MethodNotAllowed", "GET only.")
-        if nsl == "microsoft.security" and t0 in ("assessments", "subassessments", "alerts", "recommendations", "securitystatuses"):
+        if nsl == "microsoft.security":
             return None   # Defender for Cloud assessments / sub-assessments: v4's security engine
         if nsl in ("microsoft.kubernetesconfiguration", "microsoft.network"):
             return None   # AKS GitOps/extensions and network extension resources (netcfg/netsvc): v4's engines
@@ -2294,16 +2301,15 @@ def route(state, method, sub, rg, after, payload=None, query=None, executor=None
     if low[0] == "microsoft.network" and low[1] == "ddosprotectionplans" and len(after) <= 3:
         return _ddos_plans(state, method, sub, rg, after, payload)
     if low[0] == "microsoft.network" and low[1] == "networkinterfaces" and len(after) <= 3:
-        if (method in ("PUT", "PATCH") and len(after) == 3 and not _payload_props(payload).get("ipConfigurations")
-                and not state.get(scope_id(sub, rg, after[:3]).lower())):
-            return None   # an IP-less shell NIC (NSG association tabs) is the generic catalog type's (v4)
+        if method in ("PUT", "PATCH", "DELETE") and len(after) == 3:
+            return None   # NIC writes go through v4's generic path so the network/LB/ASG validators + after-put hooks run (IP allocation: after_upsert)
         return _nic(state, method, sub, rg, after, payload)
     if low[0] == "microsoft.network" and low[1] == "publicipaddresses" and len(after) <= 3:
         return _pip(state, method, sub, rg, after, payload)
     if low[0] == "microsoft.devtestlab" and low[1] == "schedules" and len(after) <= 3:
         return _schedules(state, method, sub, rg, after, payload)
     if low[0] == "microsoft.storage" and low[1] == "storageaccounts" and len(after) == 4 and method == "POST" \
-            and low[3] in ("listaccountsas", "failover"):   # (listKeys / regenerateKey: v4 azure_storage_ext_core)
+            and low[3] in ("listaccountsas",):   # (listKeys / regenerateKey: v4 azure_storage_ext_core; failover: v4 azure_backup_core geo-replication)
         rid = scope_id(sub, rg, after[:3])
         rec = state.get(rid.lower())
         if rec is None:

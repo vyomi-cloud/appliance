@@ -1,6 +1,7 @@
 /* Console Home — the widget dashboard of the native console, on live Vyomi data only:
  * every number and status comes from a real call (native wire or Vyomi's event log);
  * the layout (which widgets show) is a per-browser preference. */
+import NanoVideoBanner from "../../common/NanoVideoBanner.jsx";
 import { useEffect, useState } from "react";
 import ContentLayout from "@cloudscape-design/components/content-layout";
 import Header from "@cloudscape-design/components/header";
