@@ -261,6 +261,13 @@ def _query(store: SqlStore, server: str, database: str, body: bytes,
         return tde_err
 
     db_id = _db_id(server, database)
+    from core import azure_sqlbackup_core as sqlbk
+    is_w = sqlbk.is_write(sql)
+    if is_w and sqlbk.is_readonly(arm_state, server, database):
+        return _err(400, "DatabaseReadOnly", f"Failed to update database '{database}' because the database is read-only "
+                    "(error 3906): it is a geo-secondary. Fail over or terminate the replica link first.")
+    if is_w:
+        sqlbk.pre_write(store, server, database)
     if _WRITE_SQL_RE.match(sql) and store.instance_exists(db_id):
         max_size = _database_props(arm_state, server, database).get("maxSizeBytes")
         if max_size and _db_size_bytes(store, db_id) >= int(max_size):
@@ -273,6 +280,8 @@ def _query(store: SqlStore, server: str, database: str, body: bytes,
     if not result.get("ok"):
         return _err(400, result.get("code", "SQLError"), result.get("message", ""))
 
+    if is_w:
+        sqlbk.post_write(store, arm_state, server, database, sql, payload.get("params"))
     _log_select(store, db_id, sql)
     _auto_tune(store, arm_state, server, database)
     return _json(200, {"columns": result["columns"], "rows": result["rows"],

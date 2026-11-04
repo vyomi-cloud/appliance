@@ -10,9 +10,18 @@
    is REAL: the source backup's S3 artifact (core/dynamodb_core backup_*_artifact) is copied to a new location in the
    simulator's own S3 and registered as a new backup under the destination ARN, which can be restored.
 
+Full AWS Backup control plane (see backup_vaults_core): vaults (create/describe/list/delete, vault lock, access policy,
+notifications), plans (rules validated: cron schedule, start/completion windows, lifecycle 90-day cold-storage rule, vault-lock
+retention bounds, copy actions) + versions, selections (ARNs / tag conditions), backup jobs for DynamoDB tables, RDS instances
+(a real ``awsbackup:job-*`` DB snapshot), S3 buckets (every object captured as a JSON artifact in the simulator's own S3) and EBS
+volumes (a real EC2 snapshot), recovery points (list/describe/delete/lifecycle, vault-lock enforced) and RESTORE jobs that create
+real resources (DynamoDB table, RDS instance with the snapshot's data, S3 bucket with the objects, EBS volume).
+
 Honest limit: Vyomi simulates one account and one data plane, so "another Region/account" is a destination ARN + its own
-S3 artifact + its own backup record, not a separate isolated Region. Backup vaults, plans, selections, lock, restore jobs,
-and recovery points for services other than DynamoDB are not implemented. State: `s3_store.account["backup"]`.
+S3 artifact + its own backup record, not a separate isolated Region. Backup PLANS are not run on their cron schedule (there is
+no scheduler): run them with StartBackupJob; EC2 instance/AMI, EFS, FSx, Aurora clusters, Redshift and VM-level resources are not
+backed up (StartBackupJob for them fails with an unsupported-resource message); Backup Audit Manager, report plans, restore testing
+and logically air-gapped vaults are not modelled. State: `s3_store.account["backup"]`.
 """
 from __future__ import annotations
 
@@ -119,7 +128,7 @@ def _start_copy(ddb_store, s3_store, p: dict):
     return _resp(200, {"CopyJobId": jid, "CreationDate": job["CreationDate"], "IsParent": False})
 
 
-def dispatch(ddb_store, s3_store, method: str, raw_path: str, query: dict, body: bytes):
+def dispatch(ddb_store, s3_store, method: str, raw_path: str, query: dict, body: bytes, rds_store=None, vpc_store=None):
     method = method.upper()
     path = "/" + raw_path.strip("/")
     st = _state(s3_store)
@@ -160,4 +169,12 @@ def dispatch(ddb_store, s3_store, method: str, raw_path: str, query: dict, body:
         if not j:
             return _err("ResourceNotFoundException", f"Copy job {mt.group(1)} was not found.", 404)
         return _resp(200, {"CopyJob": _job_view(j)})
+    try:
+        from core import backup_vaults_core as ext
+    except ImportError:  # Pyodide flat layout
+        import backup_vaults_core as ext  # type: ignore
+    r = ext.handle(ddb_store, s3_store, rds_store, vpc_store, st, method, path, query, p)
+    if r is not None:
+        status, doc = r
+        return _resp(status, doc) if status < 400 else _err(doc["Code"], doc["Message"], status)
     return _err("NotFoundException", f"Unsupported AWS Backup operation: {method} {path}", 404)

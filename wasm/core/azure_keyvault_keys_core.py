@@ -450,6 +450,59 @@ def _verify(store: KeyStore, name: str, version: str, body: dict) -> KvResponse:
     return _json(200, {"value": hmac.compare_digest(expected, provided)})
 
 
+_BACKUP_MAGIC = b"vyomi-kv-backup/1:"
+
+
+def _backup_pack(kind: str, doc: dict) -> str:
+    raw = json.dumps({"kind": kind, **doc}, sort_keys=True).encode()
+    mac = hmac.new(b"vyomi-keyvault-backup-v1", raw, hashlib.sha256).hexdigest().encode()
+    return _b64url_encode(_BACKUP_MAGIC + mac + b"." + raw)
+
+
+def backup_unpack(kind: str, value: str):
+    """Returns (doc, error message). Verifies the integrity tag; blobs are portable across vaults in the simulator."""
+    try:
+        blob = _b64url_decode(value)
+        assert blob.startswith(_BACKUP_MAGIC)
+        mac, raw = blob[len(_BACKUP_MAGIC):].split(b".", 1)
+        assert hmac.compare_digest(mac, hmac.new(b"vyomi-keyvault-backup-v1", raw, hashlib.sha256).hexdigest().encode())
+        doc = json.loads(raw)
+        assert doc.get("kind") == kind
+        return doc, None
+    except Exception:  # noqa: BLE001
+        return None, "The backup blob contains invalid or corrupt data (it was not produced by a Key Vault backup of this kind)."
+
+
+def _backup_key(store: KeyStore, name: str) -> KvResponse:
+    versions = _versions_for(store, name)
+    if not versions:
+        return _err(404, "KeyNotFound", f"A key with (name/id) {name} was not found in this key vault.")
+    out = []
+    for m in versions:
+        mat = store.get_material(_kid_key(name, m["version"]))
+        out.append({"meta": m, "material": _b64url_encode(mat or b"")})
+    return _json(200, {"value": _backup_pack("key", {"name": name, "versions": out})})
+
+
+def _restore_key(store: KeyStore, body: dict) -> KvResponse:
+    if not body.get("value"):
+        return _err(400, "BadParameter", "The backup blob (value) is required.")
+    doc, bad = backup_unpack("key", body["value"])
+    if bad:
+        return _err(400, "BadParameter", bad)
+    name = doc["name"]
+    if _versions_for(store, name):
+        return _err(409, "Conflict", f"A key with name {name} already exists in this key vault; delete (and purge) it before restoring a backup.")
+    seq = _next_seq(store)
+    for v in doc["versions"]:
+        meta = dict(v["meta"])
+        meta["seq"] = seq
+        seq += 1
+        store.put_key(_kid_key(name, meta["version"]), meta, _b64url_decode(v["material"]))
+    store.persist()
+    return _json(200, _key_bundle(_latest(store, name)))
+
+
 def _delete_key(store: KeyStore, name: str) -> KvResponse:
     versions = _versions_for(store, name)
     if not versions:
@@ -525,6 +578,11 @@ def dispatch(store: KeyStore, method: str, path: str,
         if method == "GET":
             return _list_keys(store)
         return _err(405, "MethodNotAllowed", f"Unsupported method {method} on /keys")
+
+    if len(segs) == 2 and segs[1] == "restore" and method == "POST":
+        return _restore_key(store, payload)
+    if len(segs) == 3 and segs[2] == "backup" and method == "POST":
+        return _backup_key(store, segs[1])
 
     # /keys/{name}/create → create
     if len(segs) == 3 and segs[2] == "create" and method == "POST":
