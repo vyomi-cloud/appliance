@@ -156,8 +156,10 @@
     })().finally(() => { reconciling = null; });
     return reconciling;
   }
+  let loop = null;
   function kick() {
     if (!enabled()) return;
+    if (!loop && listDesired) loop = setInterval(reconcile, 5000);   // the flag may have been turned on after init (no reload)
     clearTimeout(recTimer);
     recTimer = setTimeout(async () => { await reconcile(); setTimeout(reconcile, 1500); }, 50);
   }
@@ -274,6 +276,8 @@
     const b = h("button", { style: S.btn, onclick: async () => { try { await navigator.clipboard.writeText(cmd); b.textContent = "Copied"; } catch (_) { b.textContent = "Copy failed"; } setTimeout(() => (b.textContent = "Copy"), 1200); } }, "Copy");
     return h("div", { style: "display:flex;gap:8px;align-items:flex-start" }, h("pre", { style: S.pre, "data-nano-cmd": "1" }, cmd), b);
   }
+  // The legacy consoles' fetch shim maps /api/* into the service-worker scope; the v4 consoles (/nano/v4/<cloud>/) have no shim.
+  const apiBase = () => { const m = /^(.*)\/v4\//.exec(location.pathname); return m ? m[1] : ""; };
   function renderConnect(host, cloud, ref) {
     const wrap = h("div", { class: "nano-vm-connect", "data-cloud": cloud, "data-ref": ref });
     host.append(wrap);
@@ -287,7 +291,8 @@
         h("div", { style: S.sub }, "In Vyomi Nano this instance is a real Linux VM running inside this browser tab (v86, 32-bit x86, Alpine Linux). " +
           "The cloud's image is not booted: the OS is Alpine, the login user follows the cloud (" + userHint + ").")));
       let r, j = null;
-      try { r = await fetch(P.ci); j = await r.json(); } catch (e) { r = { status: 0 }; }
+      try { r = await fetch(apiBase() + P.ci); j = await r.json(); } catch (e) { r = { status: 0 }; }
+      if (!wrap.isConnected) return;   // a newer paint (React remount / repaint) owns the host now; never steal its shell
       const d = (j && j.detail) || {};
       if (!r.status || r.status !== 200 || !j || !j.ok) {
         const err = d.error || (j && j.reason) || "unavailable";
@@ -295,7 +300,7 @@
           h("div", { style: S.title }, err === "NoRuntime" ? "In-browser VMs are off" : err === "TunnelRequired" ? "SSH needs vyomi-tunnel" : "VM not ready"),
           h("div", { style: S.sub }, d.hint || String(err)));
         if (err === "NoRuntime") {
-          box.append(h("button", { style: S.btn, onclick: () => { try { localStorage.setItem("nano_vm_compute", "1"); } catch (_) {} kick(); setTimeout(paint, 400); } }, "Turn on in-browser VMs"));  // no page reload: it dropped the user back to the console Home
+          box.append(h("button", { style: S.btn, onclick: () => { try { localStorage.setItem("nano_vm_compute", "1"); } catch (_) {} kick(); try { window.dispatchEvent(new CustomEvent("nano-vm-power", { detail: { id: null, state: "enabled" } })); } catch (_) {} setTimeout(paint, 400); } }, "Turn on in-browser VMs"));  // no page reload: it dropped the user back to the console Home
         } else if (err === "TunnelRequired") {
           box.append(cmdRow("brew install vyomi-cloud/tap/vyomi-tunnel && vyomi-tunnel"));
         }
@@ -309,7 +314,7 @@
           h("div", { style: S.title }, "SSH from your terminal"),
           h("div", { style: S.sub }, `vyomi-tunnel forwards 127.0.0.1:${s.port} on this machine to the VM's SSH port, while this Nano tab is open.`),
           h("div", { style: S.sub }, "1. Download the key (one key per browser profile, valid for every Nano VM)"),
-          h("div", {}, h("a", { href: s.key_download_url, download: s.key_local_filename, onclick: (e) => { e.preventDefault(); (window.vyDownloadKey || ((u, n) => fetch(u).then(r => r.blob()).then(b => { const a = document.createElement("a"); a.href = URL.createObjectURL(b); a.download = n; a.click(); })))(s.key_download_url, s.key_local_filename); }, style: S.btn + ";display:inline-block;text-decoration:none" }, "Download " + s.key_local_filename)),
+          h("div", {}, h("a", { href: s.key_download_url, download: s.key_local_filename, onclick: (e) => { e.preventDefault(); (window.vyDownloadKey || ((u, n) => fetch(apiBase() + u).then(r => r.blob()).then(b => { const a = document.createElement("a"); a.href = URL.createObjectURL(b); a.download = n; a.click(); })))(s.key_download_url, s.key_local_filename); }, style: S.btn + ";display:inline-block;text-decoration:none" }, "Download " + s.key_local_filename)),
           h("div", { style: S.sub }, "2. Move it into place"), cmdRow(s.key_setup_command || ""),
           h("div", { style: S.sub }, "3. Connect"), cmdRow(s.command || ""),
           h("div", { style: S.sub }, `Logs you in as ${s.user} on ${rt.os || "the VM"}, ${rt.mem_mb || "?"} MB RAM.`)));
@@ -357,6 +362,7 @@
     const onFs = () => { if (!holder.isConnected) { document.removeEventListener("fullscreenchange", onFs); return; } holder.style.padding = document.fullscreenElement === holder ? "10px" : "6px"; setTimeout(fit, 80); };
     document.addEventListener("fullscreenchange", onFs);
     loadXterm().then((T) => {
+      if (!holder.isConnected) return;   // painted into a host that was already replaced
       if (!T) { holder.textContent = "Terminal failed to load."; return; }
       let t = terms.get(id);
       if (t) { holder.append(t.el); try { t.term.refresh(0, t.term.rows - 1); } catch (_) {} return; }
@@ -377,6 +383,7 @@
     const st = document.createElement("style");
     st.textContent = "@keyframes vyspin{to{transform:rotate(360deg)}}@keyframes vypulse{50%{opacity:.45}}@keyframes vylive{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(1.35)}}" +
       ".vy-live .pip,.vy-live .dot{animation:vylive 2s ease-in-out infinite}.vy-live:not(:has(.pip,.dot))::before{content:'';display:inline-block;width:7px;height:7px;margin-right:6px;border-radius:50%;background:currentColor;vertical-align:1px;animation:vylive 2s ease-in-out infinite}.vy-spin .pip,.vy-spin .dot{display:none}.vy-spin{animation:vypulse 1.3s ease-in-out infinite}.vy-spin::before{content:'';display:inline-block;width:9px;height:9px;margin-right:6px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;vertical-align:-1px;animation:vyspin .8s linear infinite}";
+    st.textContent += "[data-vy-pending]{animation:vypulse 1.3s ease-in-out infinite}[data-vy-pending=spin]::before{content:'';display:inline-block;width:9px;height:9px;margin-right:6px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;vertical-align:-1px;animation:vyspin .8s linear infinite}";   // class-free hook the v4 status components set
     document.head.appendChild(st);
     const PEND = /^(pending|starting|provisioning|staging|vm starting|creating|stopping|shutting-down|deallocating|vm stopping|vm deallocating)$/i;
     const LIVE = /^(running|vm running)$/i;
@@ -410,6 +417,8 @@
     const st = s && s.state;
     return st === "running" ? "running" : (!st || st === "booting" || st === "launching" || st === "starting") ? "pending" : "stopped";
   };
+  // what a v4 console shows for a store-"running" instance: running | pending | stopped
+  const shownPower = (cloud, ref) => vmPower(cloud, ref);
   const AWS_S = { stopped: "stopped", pending: "pending" }, GCP_S = { stopped: "TERMINATED", pending: "PROVISIONING" };
   const AZ_S = { stopped: "stopped", pending: "starting" };
   function viewFix(node, depth) {
@@ -446,7 +455,7 @@
     };
   }
   window.NanoVM = {
-    enabled, kick, resume, handle, onSerial, serialSend, accountKey, vmId, renderConnect,
+    enabled, kick, resume, handle, onSerial, serialSend, accountKey, vmId, renderConnect, shownPower,
     registry: readReg,
     status: (cloud, ref) => call(vmId(cloud, ref), { type: "status" }, 10000),
     init(o) { listDesired = o.listDesired; annotateFn = o.annotate || null; if (enabled()) { resume(); reconcile(); setInterval(reconcile, 5000); } },

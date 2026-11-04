@@ -22,12 +22,15 @@ import MetricGraphs from "../../kit/MetricGraphs.jsx";
 import { navigate } from "../../../common/router.js";
 import { StateBadge, nameOf } from "./Instances.jsx";
 import * as api from "./api.js";
+import NanoVmPanel, { isNano, nanoVm, useNanoVmRefresh } from "../../../common/NanoVmPanel.jsx";
 
 export default function InstanceDetail({ params }) {
   const id = params.id;
   const t = useAsync(() => api.describeInstance(id), [id]);
   const [connect, setConnect] = useState(false);
-  if (t.loading) return <Box textAlign="center" padding="xxl"><Spinner size="large" /></Box>;
+  const [tab, setTab] = useState("details");
+  useNanoVmRefresh(t.refresh, t.data?.instanceState?.name === "pending");
+  if (t.loading && !t.data) return <Box textAlign="center" padding="xxl"><Spinner size="large" /></Box>;
   if (t.error || !t.data) return <ErrorAlert error={t.error || { message: "Instance not found" }} />;
   const i = t.data;
 
@@ -40,7 +43,8 @@ export default function InstanceDetail({ params }) {
       <Header variant="h1" actions={
         <SpaceBetween direction="horizontal" size="xs">
           <Button iconName="refresh" ariaLabel="Refresh" onClick={t.reload} />
-          <Button onClick={() => setConnect(true)}>Connect</Button>
+          {isNano() && nanoVm() && <Button data-testid="open-shell" onClick={() => setTab("vm")}>Open shell</Button>}
+          <Button onClick={() => (isNano() ? setTab("vm") : setConnect(true))}>Connect</Button>
           <ButtonDropdown items={[{ id: "start", text: "Start instance" }, { id: "stop", text: "Stop instance" }, { id: "reboot", text: "Reboot instance" }, { id: "terminate", text: "Terminate instance" }]}
             onItemClick={({ detail }) => {
               if (detail.id === "start") act(api.startInstances, "Start");
@@ -61,8 +65,9 @@ export default function InstanceDetail({ params }) {
           ["VPC ID", i.vpcId], ["IAM Role", i.iamInstanceProfile?.arn || "-"], ["Subnet ID", i.subnetId],
           ["Instance ARN", `arn:aws:ec2:us-east-1:123456789012:instance/${i.instanceId}`], ["Managed", "No"],
         ]} />
-        <Tabs tabs={[
+        <Tabs activeTabId={tab} onChange={({ detail }) => setTab(detail.activeTabId)} tabs={[
           { id: "details", label: "Details", content: <DetailsTab i={i} /> },
+          ...(isNano() ? [{ id: "vm", label: "In-browser VM", content: <NanoVmPanel cloud="aws" vmRef={id} /> }] : []),
           { id: "status", label: "Status and alarms", content: <StatusTab i={i} /> },
           { id: "monitoring", label: "Monitoring", content: <MonitoringTab i={i} /> },
           { id: "security", label: "Security", content: <SecurityTab i={i} /> },
@@ -72,7 +77,7 @@ export default function InstanceDetail({ params }) {
         ]} />
       </SpaceBetween>
       <Modal visible={connect} onDismiss={() => setConnect(false)} header="Connect to instance" size="large" footer={<Box float="right"><Button onClick={() => setConnect(false)}>Close</Button></Box>}>
-        <ConnectModalBody instanceId={i.instanceId} />
+        {connect && <ConnectModalBody instanceId={i.instanceId} />}
       </Modal>
     </ContentLayout>
   );

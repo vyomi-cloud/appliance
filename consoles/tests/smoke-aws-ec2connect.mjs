@@ -2,7 +2,7 @@
  * EC2 Instance Connect terminal that runs commands through the appliance's console exec endpoint.
  * On the dev server there is no appliance backend, so /api/... is answered by Playwright route stubs shaped exactly like
  * server.py's connect-info / console exec responses (the backend itself is covered live: see the worker report). On the real offline
- * appliance run with LIVE=1 to skip the stubs. Nano: the capability is not simulated; set SUBSTRATE=nano to assert the honest panel.
+ * appliance run with LIVE=1 to skip the stubs. Nano: Connect is the in-browser VM panel (see smoke-nano-browservm.mjs for the full life cycle).
  *   BASE=http://127.0.0.1:9042 node consoles/tests/smoke-aws-ec2connect.mjs */
 import { createRequire } from "node:module";
 import { mkdir } from "node:fs/promises";
@@ -42,8 +42,8 @@ if (!LIVE && !NANO) {
 await page.goto(UI + `#/ec2/instances/${iid}`);
 await page.getByRole("button", { name: "Connect" }).first().click();
 if (NANO) {
-  await page.getByText(/Not simulated in Vyomi/i).first().waitFor({ timeout: 10000 });
-  check("Nano shows the honest Not-simulated panel for Connect", true);
+  await page.getByText(/In-browser VMs are off|VM not ready|In-browser VM/i).first().waitFor({ timeout: 30000 });
+  check("Nano Connect shows the in-browser VM panel (honest Turn-on when off), not Not-simulated", !/Not simulated in Vyomi/i.test(await page.locator("body").innerText()));
 } else {
   await page.getByRole("tab", { name: "SSH client" }).waitFor({ timeout: 10000 });
   check("Connect modal is not the Not-simulated panel", !/Not simulated in Vyomi/i.test(await page.locator("body").innerText()));

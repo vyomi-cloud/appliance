@@ -17,6 +17,7 @@ import Modal from "@cloudscape-design/components/modal";
 import Alert from "@cloudscape-design/components/alert";
 import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
+import { nanoVmOn } from "../../../common/NanoVmPanel.jsx";
 import { follow, href, navigate } from "../../../common/router.js";
 import { ErrorAlert, NotSimulated } from "../../kit/common.jsx";
 import * as api from "./api.js";
@@ -121,7 +122,8 @@ export default function LaunchInstance({ query }) {
         }
       }
       notify.success(`Successfully launched ${insts.length > 1 ? `${insts.length} instances` : "instance"} (${insts.map((i) => i.instanceId).join(", ")}).`);
-      navigate("ec2", "instances");
+      // Nano with in-browser VMs on: land on the new instance so the boot animates and "Open shell" is one click away.
+      if (nanoVmOn() && insts.length === 1) navigate("ec2", "instances", insts[0].instanceId); else navigate("ec2", "instances");
     } catch (e) { setError(e); } finally { setBusy(false); }
   };
 

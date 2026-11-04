@@ -16,9 +16,14 @@ import { useNotify } from "../../../common/notify.jsx";
 import { follow, href, navigate } from "../../../common/router.js";
 import * as api from "./api.js";
 import { HealthRollup } from "./OpsPages.jsx";
+import { nanoVm, pendingAttr, useNanoVmRefresh } from "../../../common/NanoVmPanel.jsx";
 
 export const stateType = (s) => ({ running: "success", stopped: "stopped", terminated: "stopped", pending: "pending", stopping: "pending", "shutting-down": "pending" }[s] || "pending");
-export const StateBadge = ({ s }) => <StatusIndicator type={stateType(s)}>{s}</StatusIndicator>;
+// On Nano the pending state is a VM that is booting: spinner + pulse (the host animates [data-vy-pending]).
+export const StateBadge = ({ s }) => {
+  const pend = s === "pending" && !!nanoVm();
+  return <span {...pendingAttr(pend)}><StatusIndicator type={pend ? "in-progress" : stateType(s)}>{s}</StatusIndicator></span>;
+};
 export const nameOf = (i) => i.name || i.Tags?.Name || "-";
 
 export default function Instances() {
@@ -27,6 +32,7 @@ export default function Instances() {
   const [connect, setConnect] = useState(false);
   const t = useAsync(() => api.describeInstances(), []);
   const rows = t.data || [];
+  useNanoVmRefresh(t.refresh, rows.some((i) => i.instanceState?.name === "pending"));
 
   const act = async (fn, verb) => {
     try { await fn(sel.map((i) => i.instanceId)); notify.success(`${verb} ${sel.length === 1 ? sel[0].instanceId : `${sel.length} instances`}.`); t.reload(); }
@@ -91,7 +97,7 @@ export default function Instances() {
         empty={{ title: "No instances", action: <Button href={href("ec2", "launch-instance")} onFollow={follow}>Launch instances</Button> }}
       />
       <Modal visible={connect} onDismiss={() => setConnect(false)} header="Connect to instance" size="large" footer={<Box float="right"><Button onClick={() => setConnect(false)}>Close</Button></Box>}>
-        <ConnectModalBody instanceId={sel[0]?.instanceId} />
+        {connect && <ConnectModalBody instanceId={sel[0]?.instanceId} />}
       </Modal>
     </SpaceBetween>
   );

@@ -15,6 +15,7 @@ import FormField from "@cloudscape-design/components/form-field";
 import { useAsync } from "../../../common/useAsync.js";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { KeyValue } from "../../kit/common.jsx";
+import NanoVmPanel, { isNano } from "../../../common/NanoVmPanel.jsx";
 
 async function api(path, init) {
   const r = await fetch(path, init);
@@ -141,9 +142,10 @@ function Body({ instanceId }) {
 }
 
 export default function ConnectModalBody({ instanceId }) {
+  // Nano: the instance is a real v86 VM in this browser tab; the host paints boot state, the vyomi-tunnel ssh command and an xterm shell.
   return (
     <CapabilityContainer id="ec2.instances.connect" title="Connect">
-      <Body instanceId={instanceId} />
+      {isNano() ? <NanoVmPanel cloud="aws" vmRef={instanceId} /> : <Body instanceId={instanceId} />}
     </CapabilityContainer>
   );
 }

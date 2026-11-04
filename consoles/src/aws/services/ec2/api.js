@@ -3,6 +3,7 @@
  * core (core/vpc_core.py) — this file only covers the compute/storage/network
  * resource surface the v4 EC2 console needs. */
 import { awsQuery, awsJson, awsRest, asList } from "../../../common/wire.js";
+import { vmShownState } from "../../../common/NanoVmPanel.jsx";
 
 /** Flatten a JS object/array into the Query wire's dotted-index form:
  * {InstanceId: ["i-1"]} -> {"InstanceId.1": "i-1"}
@@ -30,7 +31,14 @@ export const permFromXml = (x) => ({
 });
 
 // ── instances ─────────────────────────────────────────────────────────
-const instanceFromXml = (x) => ({ ...x, GroupSet: asList(x.groupSet?.item), Tags: tagsFromXml(x.tagSet), BlockDeviceMapping: asList(x.blockDeviceMapping?.item) });
+// Nano with in-browser VMs on: a record the store calls "running" is only running once its v86 VM booted (pending -> running animates).
+const NANO_CODE = { pending: 0, running: 16, stopped: 80 };
+function nanoVmState(x) {
+  const st = x.instanceState; if (!st || st.name !== "running" || !x.instanceId) return st;
+  const name = vmShownState("aws", x.instanceId, "running", { running: "running", pending: "pending", stopped: "stopped" });
+  return name === "running" ? st : { ...st, name, code: String(NANO_CODE[name]) };
+}
+const instanceFromXml = (x) => ({ ...x, instanceState: nanoVmState(x), GroupSet: asList(x.groupSet?.item), Tags: tagsFromXml(x.tagSet), BlockDeviceMapping: asList(x.blockDeviceMapping?.item) });
 
 export async function runInstances(input) {
   const r = await call("RunInstances", input);
