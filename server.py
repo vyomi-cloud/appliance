@@ -22071,6 +22071,82 @@ async def api_rds_query(request: Request):
     return _rds_error_response("InvalidAction", f"The action '{action}' is not implemented by the simulator.", 400)
 
 
+_vpc_nacls: dict[str, dict[str, Any]] = {}
+
+
+def _vpc_query_nacl(action: str, params: dict[str, Any]) -> Response:
+    """EC2 network ACLs over the SDK: kept per VPC next to the offline VPC state."""
+    if action == "CreateNetworkAcl":
+        vpc_id = str(params.get("VpcId", "")).strip()
+        if not vpc_id:
+            raise HTTPException(400, detail="MissingParameter: VpcId")
+        if vpc_id not in vpc_state["vpcs"]:
+            raise HTTPException(400, detail=f"InvalidVpcID.NotFound: The vpc ID '{vpc_id}' does not exist")
+        nid = "acl-" + secrets.token_hex(8)
+        _vpc_nacls[nid] = {"id": nid, "vpc_id": vpc_id, "entries": [], "subnets": []}
+
+        def build(root: ET.Element) -> None:
+            n = _ec2_sub(root, "networkAcl")
+            _ec2_sub(n, "networkAclId", nid)
+            _ec2_sub(n, "vpcId", vpc_id)
+        return _ec2_success_response("CreateNetworkAclResponse", build)
+    if action == "DescribeNetworkAcls":
+        want = {str(v) for k, v in params.items() if k.startswith("NetworkAclId") and v}
+        missing = [w for w in want if w not in _vpc_nacls]
+        if missing:
+            raise HTTPException(400, detail=f"InvalidNetworkAclID.NotFound: The networkAcl ID '{missing[0]}' does not exist")
+
+        def build(root: ET.Element) -> None:
+            st = _ec2_sub(root, "networkAclSet")
+            for n in _vpc_nacls.values():
+                if want and n["id"] not in want:
+                    continue
+                it = _ec2_sub(st, "item")
+                _ec2_sub(it, "networkAclId", n["id"])
+                _ec2_sub(it, "vpcId", n["vpc_id"])
+                _ec2_sub(it, "default", "false")
+                es = _ec2_sub(it, "entrySet")
+                for e in n["entries"]:
+                    ei = _ec2_sub(es, "item")
+                    _ec2_sub(ei, "ruleNumber", str(e["rule_number"]))
+                    _ec2_sub(ei, "protocol", e["protocol"])
+                    _ec2_sub(ei, "ruleAction", e["action"])
+                    _ec2_sub(ei, "egress", str(e["egress"]).lower())
+                    _ec2_sub(ei, "cidrBlock", e["cidr"])
+                a = _ec2_sub(it, "associationSet")
+                for sid in n["subnets"]:
+                    ai = _ec2_sub(a, "item")
+                    _ec2_sub(ai, "networkAclAssociationId", "aclassoc-" + sid[-8:])
+                    _ec2_sub(ai, "networkAclId", n["id"])
+                    _ec2_sub(ai, "subnetId", sid)
+                _ec2_sub(it, "tagSet")
+        return _ec2_success_response("DescribeNetworkAclsResponse", build)
+    nid = str(params.get("NetworkAclId", "")).strip()
+    n = _vpc_nacls.get(nid)
+    if not n:
+        raise HTTPException(400, detail=f"InvalidNetworkAclID.NotFound: The networkAcl ID '{nid}' does not exist")
+    if action == "DeleteNetworkAcl":
+        if n["subnets"]:
+            raise HTTPException(400, detail=f"DependencyViolation: network ACL {nid} has associated subnets")
+        del _vpc_nacls[nid]
+    elif action == "CreateNetworkAclEntry":
+        n["entries"].append({
+            "rule_number": int(params.get("RuleNumber", 100)),
+            "protocol": str(params.get("Protocol", "-1")),
+            "action": str(params.get("RuleAction", "allow")).lower(),
+            "egress": str(params.get("Egress", "false")).lower() == "true",
+            "cidr": str(params.get("CidrBlock", "0.0.0.0/0")),
+        })
+    elif action == "AssociateNetworkAcl":
+        sid = str(params.get("SubnetId", "")).strip()
+        if sid not in n["subnets"]:
+            n["subnets"].append(sid)
+
+    def build(root: ET.Element) -> None:
+        _ec2_sub(root, "return", "true")
+    return _ec2_success_response(action + "Response", build)
+
+
 async def api_vpc_query(request: Request):
     params = await _ec2_query_params(request)
     action = str(params.get("Action", "")).strip()
@@ -22083,6 +22159,9 @@ async def api_vpc_query(request: Request):
         return _ec2_error_response("DryRunOperation", "Request would have succeeded, but DryRun flag is set.", 412)
 
     try:
+        if action in ("CreateNetworkAcl", "DescribeNetworkAcls", "DeleteNetworkAcl",
+                      "CreateNetworkAclEntry", "AssociateNetworkAcl"):
+            return _vpc_query_nacl(action, params)
         if action == "CreateVpc":
             return _vpc_query_create_vpc(params)
         if action == "DescribeVpcs":
@@ -22734,6 +22813,8 @@ _EC2_VPC_ACTIONS = {
     "CreateRouteTable", "DescribeRouteTables", "DeleteRouteTable",
     "CreateRoute", "AssociateRouteTable", "DisassociateRouteTable",
     "CreateInternetGateway", "DescribeInternetGateways", "AttachInternetGateway",
+    "DetachInternetGateway", "DeleteInternetGateway",
+    "CreateNetworkAcl", "DescribeNetworkAcls", "CreateNetworkAclEntry", "AssociateNetworkAcl", "DeleteNetworkAcl",
 }
 
 
@@ -24491,6 +24572,10 @@ try:
     _nr_hooks.EB_HOOKS["sqs"] = _eb_send_sqs
     _nr_hooks.EB_HOOKS["lambda"] = _eb_invoke_lambda
     _sfn_hooks.set_lambda_invoker(_sfn_invoke_lambda)
+    from core import eventbridge_core as _ebc_hooks
+    from routes import aws_kinesis as _eb_kin, aws_logs as _eb_logs
+    _ebc_hooks.set_target_store("kinesis", _eb_kin.STORE)   # EventBridge Kinesis / Logs targets use the
+    _ebc_hooks.set_target_store("logs", _eb_logs.STORE)     # console-visible space stores
 except Exception as _e:   # never let this break appliance boot
     print(f"[eventing] delivery hooks skipped: {_e}")
 

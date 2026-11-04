@@ -23,7 +23,10 @@ try {
     start: () => call("POST", `${coll}/${name}/start`),
     del: () => call("DELETE", `${coll}/${name}`),
     openConnect: async (page) => {   // Compute Engine -> the instance -> Connect
-      await page.goto(nano.base + "/gcp-console.html"); await page.waitForSelector("a.res-l", { timeout: 120000 });
+      // Stay on the live console page (like the EC2 probe): a reload here kills the in-browser VM
+      // (no extendedLifetime SharedWorker in this Chromium) and restarts it from the last checkpoint,
+      // which would lose the file the probe wrote and mask what the stop/start check measures.
+      await page.waitForSelector("a.res-l", { timeout: 120000 });
       await page.locator("a.res-l", { hasText: "Compute Engine" }).first().click();
       await sleep(2000);
       await page.locator("#main a.id", { hasText: name }).first().click({ timeout: 15000 });

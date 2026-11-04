@@ -66,12 +66,36 @@
       "timeout": 120
     },
     {
+      "id": "offline-api-gcp-provider-connect",
+      "target": "offline",
+      "cloud": "gcp",
+      "kind": "api",
+      "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/test_gcp_provider_connect_api.py",
+      "timeout": 120
+    },
+    {
       "id": "offline-sdk-python-aws-kms-kem",
       "target": "offline",
       "cloud": "aws",
       "kind": "sdk-python",
       "cmd": "python3 tests/conformance/test_aws_sdk_python_kms_kem.py",
       "timeout": 300
+    },
+    {
+      "id": "offline-sdk-python-aws-ops5",
+      "target": "offline",
+      "cloud": "aws",
+      "kind": "sdk-python",
+      "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/test_aws_sdk_python_ops5.py",
+      "timeout": 300
+    },
+    {
+      "id": "offline-core-aws-vpc-nacl",
+      "target": "offline",
+      "cloud": "aws",
+      "kind": "api",
+      "cmd": "PYTHONPATH=. python3 tests/conformance/test_vpc_nacl_core.py",
+      "timeout": 60
     },
     {
       "id": "offline-sdk-python-aws-ops4",
@@ -1089,6 +1113,30 @@
       "kind": "api",
       "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/test_gcp_cloudscheduler_pubsub_api.py",
       "timeout": 300
+    },
+    {
+      "id": "offline-api-gcp-sql-patch-monitoring",
+      "target": "offline",
+      "cloud": "gcp",
+      "kind": "api",
+      "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/test_gcp_sql_patch_monitoring_api.py",
+      "timeout": 300
+    },
+    {
+      "id": "offline-api-gcp-kms-importjobs-ar-tags",
+      "target": "offline",
+      "cloud": "gcp",
+      "kind": "api",
+      "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/test_gcp_kms_importjobs_ar_tags_api.py",
+      "timeout": 300
+    },
+    {
+      "id": "offline-sdk-gcp-kms-python",
+      "target": "offline",
+      "cloud": "gcp",
+      "kind": "sdk",
+      "cmd": "python3 -m venv /tmp/gkms-venv && /tmp/gkms-venv/bin/pip install -q google-cloud-kms && VYOMI_BASE_URL={ENDPOINT} /tmp/gkms-venv/bin/python tests/conformance/test_gcp_kms_sdk_python.py",
+      "timeout": 600
     },
     {
       "id": "offline-api-gcp-cloudscheduler-http",
@@ -2263,6 +2311,30 @@
       "kind": "ui",
       "cmd": "VYOMI_CONSOLE_URL={ENDPOINT}/console/gcp node wasm/ui-tests/validate-gcp-properties.mjs",
       "timeout": 300
+    },
+    {
+      "id": "offline-api-gcp-console-tools-routes",
+      "target": "offline",
+      "cloud": "gcp",
+      "kind": "api",
+      "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/test_gcp_console_tools_routes_api.py",
+      "timeout": 120
+    },
+    {
+      "id": "offline-cli-gcp-scheduler-pubsub-gcloud",
+      "target": "offline",
+      "cloud": "gcp",
+      "kind": "cli",
+      "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/test_gcp_scheduler_pubsub_gcloud_api.py",
+      "timeout": 240
+    },
+    {
+      "id": "offline-api-gcp-console-maintenance-routes",
+      "target": "offline",
+      "cloud": "gcp",
+      "kind": "api",
+      "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/test_gcp_console_maintenance_routes_api.py",
+      "timeout": 120
     }
   ]
 }

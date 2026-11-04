@@ -653,6 +653,9 @@ def _describe_network_acls(store, params):
     ids = [v for k, v in params.items() if k.startswith("NetworkAclId.")]
     rows = list(m["nacls"].values())
     if ids:
+        missing = [i for i in ids if i not in m["nacls"]]
+        if missing:
+            raise VpcError("InvalidNetworkAclID.NotFound", f"The network ACL ID '{missing[0]}' does not exist")
         rows = [n for n in rows if n["id"] in ids]
     return _envelope("DescribeNetworkAcls", f"<networkAclSet>{''.join(_nacl_xml(n) for n in rows)}</networkAclSet>")
 

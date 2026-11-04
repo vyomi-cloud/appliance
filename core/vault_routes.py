@@ -604,6 +604,44 @@ def _register_gcp(app: FastAPI) -> None:
         return {"name": f"projects/{project}/locations/{loc}/keyRings/{ring}",
                 "createTime": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
 
+    # Cloud KMS importJobs (create / get / list) on the REST surface; the key-pair generation
+    # logic is the same gcp_kms_core code the console's Import jobs tab uses.
+    _gcp_import_jobs: dict = {}
+
+    def _gcp_ij_err(e):
+        return JSONResponse({"error": {"code": e.status, "message": e.message, "status": e.gcp_status}}, status_code=e.status)
+
+    @app.post("/v1/projects/{project}/locations/{loc}/keyRings/{ring}/importJobs")
+    async def gcp_kms_create_import_job(project: str, loc: str, ring: str, request: Request):
+        from core import gcp_kms_core as kc
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        jobs = _gcp_import_jobs.setdefault(_active_space_id(request), {})
+        rname = f"projects/{project}/locations/{loc}/keyRings/{ring}"
+        try:
+            return kc.import_job_create(jobs, rname, request.query_params.get("importJobId", ""), body or {}, 0.6)
+        except kc.KmsTabError as e:
+            return _gcp_ij_err(e)
+
+    @app.get("/v1/projects/{project}/locations/{loc}/keyRings/{ring}/importJobs")
+    async def gcp_kms_list_import_jobs(project: str, loc: str, ring: str, request: Request):
+        from core import gcp_kms_core as kc
+        jobs = _gcp_import_jobs.setdefault(_active_space_id(request), {})
+        out = kc.import_job_list(jobs, f"projects/{project}/locations/{loc}/keyRings/{ring}", 0.6)
+        return {"importJobs": out} if out else {}
+
+    @app.get("/v1/projects/{project}/locations/{loc}/keyRings/{ring}/importJobs/{job}")
+    async def gcp_kms_get_import_job(project: str, loc: str, ring: str, job: str, request: Request):
+        from core import gcp_kms_core as kc
+        jobs = _gcp_import_jobs.setdefault(_active_space_id(request), {})
+        name = f"projects/{project}/locations/{loc}/keyRings/{ring}/importJobs/{job}"
+        if name not in jobs:
+            return JSONResponse({"error": {"code": 404, "message": f"ImportJob {name} not found.", "status": "NOT_FOUND"}}, status_code=404)
+        kc._advance_keygen(jobs[name], 0.6)
+        return kc.import_job_view(name, jobs[name])
+
     def _gcp_cryptokey_view(project: str, loc: str, ring: str, key: str, meta: dict | None = None) -> dict:
         base = f"projects/{project}/locations/{loc}/keyRings/{ring}/cryptoKeys/{key}"
         now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
@@ -631,6 +669,85 @@ def _register_gcp(app: FastAPI) -> None:
     @app.get("/v1/projects/{project}/locations/{loc}/keyRings/{ring}/cryptoKeys/{key}")
     async def gcp_kms_get_cryptokey(project: str, loc: str, ring: str, key: str, request: Request):
         return _gcp_cryptokey_view(project, loc, ring, key, gcp_kms_sync(_active_space_id(request), ring, key))
+
+    # Native cryptoKeyVersions API (list / create / get / patch / :destroy / :restore) over the
+    # same transit versions + KV meta the console's key tabs use.
+    def _gcp_ver_ctx(project, loc, ring, key, request):
+        space = _active_space_id(request)
+        if not any(e == f"{ring}/{key}" for e in _gcp_idx_get(space, "kms")):
+            return None, None, JSONResponse({"error": {"code": 404, "status": "NOT_FOUND",
+                "message": f"CryptoKey projects/{project}/locations/{loc}/keyRings/{ring}/cryptoKeys/{key} not found."}}, status_code=404)
+        return space, f"projects/{project}/locations/{loc}/keyRings/{ring}/cryptoKeys/{key}", None
+
+    def _gcp_ver_view(kname, ver, meta):
+        from core import gcp_kms_core as kc
+        return kc._version_view(kname, ver, meta["versions"][ver])
+
+    @app.get("/v1/projects/{project}/locations/{loc}/keyRings/{ring}/cryptoKeys/{key}/cryptoKeyVersions")
+    async def gcp_kms_list_versions(project: str, loc: str, ring: str, key: str, request: Request):
+        space, kname, err = _gcp_ver_ctx(project, loc, ring, key, request)
+        if err:
+            return err
+        meta = gcp_kms_sync(space, ring, key)
+        vs = [_gcp_ver_view(kname, v, meta) for v in sorted(meta["versions"], key=int)]
+        return {"cryptoKeyVersions": vs, "totalSize": len(vs)}
+
+    @app.post("/v1/projects/{project}/locations/{loc}/keyRings/{ring}/cryptoKeys/{key}/cryptoKeyVersions")
+    async def gcp_kms_create_version(project: str, loc: str, ring: str, key: str, request: Request):
+        space, kname, err = _gcp_ver_ctx(project, loc, ring, key, request)
+        if err:
+            return err
+        nv = vc.transit_rotate("gcp", space, f"{ring}__{key}")
+        if not nv:
+            return JSONResponse({"error": {"code": 503, "status": "UNAVAILABLE", "message": "The key store (Vault transit) is unavailable."}}, status_code=503)
+        meta = gcp_kms_key_meta(space, key)
+        meta.setdefault("versions", {})[str(nv)] = {"state": "ENABLED", "createTime": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
+        gcp_kms_key_meta_put(space, key, meta)
+        return _gcp_ver_view(kname, str(nv), gcp_kms_sync(space, ring, key))
+
+    @app.get("/v1/projects/{project}/locations/{loc}/keyRings/{ring}/cryptoKeys/{key}/cryptoKeyVersions/{ver}")
+    async def gcp_kms_get_version(project: str, loc: str, ring: str, key: str, ver: str, request: Request):
+        space, kname, err = _gcp_ver_ctx(project, loc, ring, key, request)
+        if err:
+            return err
+        meta = gcp_kms_sync(space, ring, key)
+        if ver not in meta["versions"]:
+            return JSONResponse({"error": {"code": 404, "status": "NOT_FOUND", "message": f"CryptoKeyVersion {ver} not found."}}, status_code=404)
+        return _gcp_ver_view(kname, ver, meta)
+
+    async def _gcp_ver_change(project, loc, ring, key, ver, request, action):
+        from core import gcp_kms_core as kc
+        space, kname, err = _gcp_ver_ctx(project, loc, ring, key, request)
+        if err:
+            return err
+        meta = gcp_kms_sync(space, ring, key)
+        try:
+            if action == "patch":
+                try:
+                    body = await request.json()
+                except Exception:
+                    body = {}
+                st = kc._enum((body or {}).get("state"), {2: "ENABLED", 3: "DISABLED"})
+                if st not in ("ENABLED", "DISABLED"):
+                    raise kc.KmsTabError(400, "INVALID_ARGUMENT", "state can only be set to ENABLED or DISABLED.")
+                action = "enable" if st == "ENABLED" else "disable"
+            kc.set_version_state(meta, ver, action)
+        except kc.KmsTabError as e:
+            return _gcp_ij_err(e)
+        gcp_kms_key_meta_put(space, key, meta)
+        return _gcp_ver_view(kname, ver, meta)
+
+    @app.post("/v1/projects/{project}/locations/{loc}/keyRings/{ring}/cryptoKeys/{key}/cryptoKeyVersions/{ver}:destroy")
+    async def gcp_kms_destroy_version(project: str, loc: str, ring: str, key: str, ver: str, request: Request):
+        return await _gcp_ver_change(project, loc, ring, key, ver, request, "destroy")
+
+    @app.post("/v1/projects/{project}/locations/{loc}/keyRings/{ring}/cryptoKeys/{key}/cryptoKeyVersions/{ver}:restore")
+    async def gcp_kms_restore_version(project: str, loc: str, ring: str, key: str, ver: str, request: Request):
+        return await _gcp_ver_change(project, loc, ring, key, ver, request, "restore")
+
+    @app.patch("/v1/projects/{project}/locations/{loc}/keyRings/{ring}/cryptoKeys/{key}/cryptoKeyVersions/{ver}")
+    async def gcp_kms_patch_version(project: str, loc: str, ring: str, key: str, ver: str, request: Request):
+        return await _gcp_ver_change(project, loc, ring, key, ver, request, "patch")
 
     @app.post("/v1/projects/{project}/secrets")
     async def gcp_secrets_create(project: str, request: Request):

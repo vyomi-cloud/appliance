@@ -25,6 +25,7 @@ from __future__ import annotations
 import base64
 import json
 import re
+import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -344,6 +345,32 @@ def _match_pattern(pattern: dict, event: dict) -> bool:
 _LAMBDA_INVOKER = None
 
 
+_FWD_DEPTH = [0]   # guards event-bus forwarding loops
+_TARGET_STORES: dict = {}   # "kinesis" | "logs" -> store, for substrates that deliver rule targets to those services
+
+
+def set_target_store(kind: str, store) -> None:
+    """kind: "kinesis" | "logs"."""
+    _TARGET_STORES[kind] = store
+
+
+def _deliver_logs(arn: str, body_str: str) -> bool:
+    """CloudWatch Logs rule target: one log event in a fresh stream of the group."""
+    st = _TARGET_STORES.get("logs") or None
+    if st is None:
+        return False
+    from core import logs_core
+    group = arn.split("log-group:", 1)[-1]
+    group = group[:-2] if group.endswith(":*") else group
+    stream = f"{datetime.now(timezone.utc):%Y/%m/%d}/{uuid.uuid4().hex}"
+    h = "Logs_20140328."
+    logs_core.dispatch(st, h + "CreateLogGroup", {"logGroupName": group})   # exists -> benign
+    logs_core.dispatch(st, h + "CreateLogStream", {"logGroupName": group, "logStreamName": stream})
+    r = logs_core.dispatch(st, h + "PutLogEvents", {"logGroupName": group, "logStreamName": stream,
+                           "logEvents": [{"timestamp": int(time.time() * 1000), "message": body_str}]})
+    return r.status < 300
+
+
 def set_lambda_invoker(fn) -> None:
     global _LAMBDA_INVOKER
     _LAMBDA_INVOKER = fn
@@ -386,6 +413,15 @@ def deliver(store, lam_store, arn: str, body_str: str, event_obj: dict, group_id
         if lam_store is not None:
             return lam_mod.invoke_by_arn(lam_store, arn, event_obj)
         return False
+    if ":states:" in arn and sfn_store is None:
+        sfn_store = sfn_mod.shared_store()
+    if ":kinesis:" in arn and kinesis_store is None:
+        kinesis_store = _TARGET_STORES.get("kinesis")
+    if ":log-group:" in arn:
+        try:
+            return _deliver_logs(arn, body_str)
+        except Exception:
+            return False
     if ":states:" in arn and sfn_store is not None:
         try:
             sfn_mod.op_start_execution(sfn_store, {"stateMachineArn": arn, "input": body_str})
@@ -401,6 +437,20 @@ def deliver(store, lam_store, arn: str, body_str: str, event_obj: dict, group_id
             return True
         except Exception:
             return False
+    if ":event-bus/" in arn:   # bus-to-bus forwarding: the target bus matches the event against its own rules
+        name = arn.rsplit(":event-bus/", 1)[-1]
+        if name not in _buses(store) or _FWD_DEPTH[0] >= 5:
+            return False
+        try:
+            env = json.loads(body_str)
+        except Exception:
+            return False
+        _FWD_DEPTH[0] += 1
+        try:
+            _deliver_to_bus(store, lam_store, name, env, event_obj, kinesis_store=kinesis_store, sfn_store=sfn_store)
+        finally:
+            _FWD_DEPTH[0] -= 1
+        return True
     if ":api-destination/" in arn:
         return deliver_api_destination(store, arn, body_str)
     return False  # target type Vyomi doesn't deliver to (stored, never invoked — see capability doc)
@@ -494,6 +544,32 @@ def _notify(store, *args) -> None:
             pass
 
 
+_MAX_LOCAL_RETRIES = 3   # the simulator caps retries (no 24 h backoff window)
+
+
+def _deliver_with_retry(tgt, fn, store, lam_store, envelope_str) -> bool:
+    """Call `fn()` (True = delivered); on failure/exception retry per the target's RetryPolicy.MaximumRetryAttempts, then
+    send the event to DeadLetterConfig.Arn (an SQS queue) if set. Never raises: EventBridge swallows target failures,
+    so PutEvents succeeds regardless."""
+    try:
+        extra = int((tgt.get("RetryPolicy") or {}).get("MaximumRetryAttempts", 0) or 0)
+    except (TypeError, ValueError):
+        extra = 0
+    for _ in range(1 + max(0, min(extra, _MAX_LOCAL_RETRIES))):
+        try:
+            if fn():
+                return True
+        except Exception:
+            continue
+    dlq = str((tgt.get("DeadLetterConfig") or {}).get("Arn") or "")
+    if dlq and ":sqs:" in dlq:
+        try:
+            deliver(store, lam_store, dlq, envelope_str, {})
+        except Exception:
+            pass
+    return False
+
+
 def _deliver_to_bus(store, lam_store, bus: str, envelope: dict, event_obj: dict,
                      kinesis_store=None, sfn_store=None) -> int:
     """Match `envelope` against every ENABLED rule on `bus` and deliver to targets.
@@ -515,9 +591,11 @@ def _deliver_to_bus(store, lam_store, bus: str, envelope: dict, event_obj: dict,
             group = (tgt.get("SqsParameters") or {}).get("MessageGroupId")
             pk_path = (tgt.get("KinesisParameters") or {}).get("PartitionKeyPath")
             partition_key = _json_path(envelope, pk_path) if pk_path else None
-            ok = deliver(store, lam_store, tgt["Arn"], body_str, event_obj, group_id=group,
-                         kinesis_store=kinesis_store, sfn_store=sfn_store,
-                         partition_key=partition_key or envelope.get("id"))
+            ok = _deliver_with_retry(
+                tgt, lambda: deliver(store, lam_store, tgt["Arn"], body_str, event_obj, group_id=group,
+                                     kinesis_store=kinesis_store, sfn_store=sfn_store,
+                                     partition_key=partition_key or envelope.get("id")),
+                store, lam_store, json.dumps(envelope))
             for d in (rdims, bdims, [{"Name": "EventBusName", "Value": bus}], []):
                 emit_metric(store, "AWS/Events", "Invocations", d)
                 if not ok:

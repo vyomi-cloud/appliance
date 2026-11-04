@@ -248,7 +248,17 @@ const ROW_SEL = "#main table tr:has(td), #main [role=row]:has([role=cell],[role=
 // Lists page (AWS shows 10 rows by default), so once a service holds a page-full the visible
 // row count cannot grow; use the list's own total ("15 items") when it states one.
 const rowCount = async (page) => {
-  const rows = await page.locator(ROW_SEL).count();
+  // The list loads asynchronously: a count taken while it is still fetching reads 0 for a
+  // service that has rows (Azure VMs: "rows 0 -> 0" with the VM listed seconds later), so
+  // wait until the count is non-zero or has been stable for ~2.5s before trusting it.
+  let rows = await page.locator(ROW_SEL).count(), stable = 0;
+  for (let i = 0; i < 12 && stable < 5; i++) {
+    await sleep(500);
+    const n = await page.locator(ROW_SEL).count();
+    stable = n === rows ? stable + 1 : 0;
+    rows = n;
+    if (rows > 0 && stable >= 2) break;
+  }
   const t = await page.locator("#main").innerText().catch(() => "");
   const m = /\b(\d+)\s+items?\b/i.exec(t);
   return m ? Math.max(rows, +m[1]) : rows;
@@ -289,7 +299,14 @@ async function createWithDefaults(page, drain, cloud, backToList, service) {
     const fillWizardRequired = async () => {
       for (const w of await blade.locator(".wiz-field:has(.req)").all()) {
         const inp = w.locator("input[type=text], input:not([type])").first();
-        if (await inp.count() && !(await inp.inputValue().catch(() => "x"))) await inp.fill(`crawl-${Date.now().toString(36)}`).catch(() => {});
+        // lowercase letters+digits only: valid for every Azure name rule (a storage account
+        // rejects hyphens), as a user typing a real name would
+        if (await inp.count() && !(await inp.inputValue().catch(() => "x"))) await inp.fill(`crawl${Date.now().toString(36)}`).catch(() => {});
+      }
+      // A VM's admin password sits on Basics, a step the walk has left by the time the
+      // generic password fill below runs: fill it where the user would.
+      for (const inp of await blade.locator(".wiz-field:has(.req) input[type=password]").all()) {
+        if (!(await inp.inputValue().catch(() => "x"))) await inp.fill("Vyomi-Crawl-1a!").catch(() => {});
       }
     };
     // Only name fields are renamed (a log class "Standard" equal to a listed cell is not a name).
@@ -357,6 +374,7 @@ async function createWithDefaults(page, drain, cloud, backToList, service) {
     const TAKEN = /already exists|ResourceInUse|ResourceExists|AlreadyExists|name is (already )?(taken|in use)/i;
     let taken = false;
     const onResp = async (r) => {
+      if (process.env.DEBUG_CRAWL && ["POST", "PUT"].includes(r.request().method())) console.log(`[debug] create ${r.status()} ${r.request().method()} ${r.url().slice(0, 200)}`);
       if (r.status() < 400 || !["POST", "PUT"].includes(r.request().method())) return;
       if (r.status() === 409 || TAKEN.test(await r.text().catch(() => ""))) taken = true;
     };
@@ -403,6 +421,7 @@ async function createWithDefaults(page, drain, cloud, backToList, service) {
   }
   await backToList();
   const rowsAfter = await rowCount(page);
+  if (process.env.DEBUG_CRAWL) console.log(`[debug] ${service}: rows ${rowsBefore} -> ${rowsAfter}`);
   if (rowsAfter <= rowsBefore) f.push({ type: "CREATE_NO_ROW", detail: "create with defaults added no resource to the list" });
   f.push(...(await placeholderFindings(page, "after create")));
   if (rowsAfter > rowsBefore) {

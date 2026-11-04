@@ -1291,6 +1291,7 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
         "CreateRouteTable", "DescribeRouteTables", "DeleteRouteTable",
         "CreateRoute", "AssociateRouteTable", "DisassociateRouteTable",
         "CreateInternetGateway", "DescribeInternetGateways", "AttachInternetGateway",
+        "CreateNetworkAcl", "DescribeNetworkAcls", "CreateNetworkAclEntry", "AssociateNetworkAcl", "DeleteNetworkAcl",
     }
 
     @app.post("/")
