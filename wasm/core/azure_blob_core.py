@@ -285,6 +285,27 @@ def _arm_properties(arm_state: dict | None, acct: str, suffix: str) -> dict:
     return {}
 
 
+def _enc_scope(arm_state: dict | None, acct: str, name: str):
+    """The storage account's ARM `encryptionScopes/{name}` record (or None) -- same account-name suffix match."""
+    if not arm_state or not acct or not name:
+        return None
+    want = f"/storageaccounts/{acct.lower()}/encryptionscopes/{name.lower()}"
+    for key, rec in arm_state.items():
+        if key.lower().endswith(want):
+            return rec
+    return None
+
+
+def _scope_check(arm_state: dict | None, acct: str, name: str):
+    """(error-tuple | None) for a scope named on a container/blob request: it must exist and be Enabled."""
+    rec = _enc_scope(arm_state, acct, name)
+    if rec is None:
+        return (400, "InvalidHeaderValue", f"The encryption scope '{name}' does not exist on this storage account.")
+    if ((rec.get("properties") or {}).get("state") or "Enabled") != "Enabled":
+        return (403, "EncryptionScopeDisabled", f"The encryption scope '{name}' is disabled.")
+    return None
+
+
 def _account_sku(arm_state: dict | None, acct: str) -> str:
     """The storage account's `sku.name` (sibling of `properties`, not inside it) — same
     account-name suffix match `_account_properties` uses."""
@@ -696,7 +717,18 @@ def dispatch(store: AzureBlobStore, method: str, path: str,
                     return _err(409, "ContainerAlreadyExists",
                                 "The specified container already exists.")
                 pa = (headers.get("x-ms-blob-public-access") or "").strip().lower()
+                dscope = (headers.get("x-ms-default-encryption-scope") or "").strip()
+                deny = (headers.get("x-ms-deny-encryption-scope-override") or "").strip().lower() == "true"
+                if dscope:
+                    bad = _scope_check(arm_state, acct, dscope)
+                    if bad:
+                        return _err(*bad)
+                elif deny:
+                    return _err(400, "InvalidHeaderValue", "x-ms-deny-encryption-scope-override needs x-ms-default-encryption-scope.")
                 store.create_container(container, pa if pa in ("blob", "container") else "")
+                if dscope:
+                    store.containers[container]["default_encryption_scope"] = dscope
+                    store.containers[container]["deny_scope_override"] = deny
                 store.persist()
                 _bump(store, acct)
                 _reqlog(store, acct, "StorageWrite", "PutContainer", 201, f"/{display}")
@@ -740,6 +772,9 @@ def dispatch(store: AzureBlobStore, method: str, path: str,
                 h["etag"] = _etag()
                 if pa:
                     h["x-ms-blob-public-access"] = pa
+                cm = store.containers[container]
+                h["x-ms-default-encryption-scope"] = cm.get("default_encryption_scope") or "$account-encryption-key"
+                h["x-ms-deny-encryption-scope-override"] = "true" if cm.get("deny_scope_override") else "false"
                 return Response(status=200, headers=h, body=b"", media_type=None)
         return _err(400, "InvalidQueryParameterValue",
                     f"Unsupported container operation {method}")
@@ -767,6 +802,16 @@ def dispatch(store: AzureBlobStore, method: str, path: str,
         # --content-type` set); the request's own Content-Type is the fallback.
         content_type = (headers.get("x-ms-blob-content-type") or headers.get("content-type")
                         or "application/octet-stream")
+        cmeta = store.containers.get(container, {})
+        req_scope = (headers.get("x-ms-encryption-scope") or "").strip()
+        eff_scope = req_scope or cmeta.get("default_encryption_scope") or ""
+        if req_scope and cmeta.get("deny_scope_override") and req_scope != cmeta.get("default_encryption_scope"):
+            return _err(409, "InvalidHeaderValue",
+                        "The container denies overriding its default encryption scope.")
+        if eff_scope:
+            bad = _scope_check(arm_state, acct, eff_scope)
+            if bad:
+                return _err(*bad)
         now = _now_http()
         prev = store.container_blobs(container).get(blob) or {}
         tier = headers.get("x-ms-access-tier") or prev.get("access_tier") or props.get("accessTier") or "Hot"
@@ -780,6 +825,7 @@ def dispatch(store: AzureBlobStore, method: str, path: str,
             "created": prev.get("created") or now,
             "md5": _md5_b64(body),
             "access_tier": tier,
+            "encryption_scope": eff_scope,
             "metadata": {k[len("x-ms-meta-"):]: v for k, v in headers.items()
                          if k.startswith("x-ms-meta-")},
         }
@@ -799,6 +845,8 @@ def dispatch(store: AzureBlobStore, method: str, path: str,
         h["last-modified"] = entry["last_modified"]
         h["content-md5"] = entry["md5"]
         h["x-ms-request-server-encrypted"] = "true"
+        if eff_scope:
+            h["x-ms-encryption-scope"] = eff_scope
         return Response(status=201, headers=h, body=b"", media_type=None)
 
     if method in ("GET", "HEAD") and store.container_exists(container):
@@ -830,6 +878,8 @@ def dispatch(store: AzureBlobStore, method: str, path: str,
             h["content-md5"] = entry["md5"]
         h["x-ms-blob-type"] = entry["blob_type"]
         h["x-ms-access-tier"] = entry.get("access_tier", "Hot")
+        if entry.get("encryption_scope"):
+            h["x-ms-encryption-scope"] = entry["encryption_scope"]
         h["accept-ranges"] = "bytes"
         h["x-ms-server-encrypted"] = "true"
         h["x-ms-creation-time"] = entry.get("created") or entry["last_modified"]
