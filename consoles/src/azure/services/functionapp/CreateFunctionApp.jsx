@@ -10,6 +10,7 @@ import { DEFAULT_RG, LOCATIONS, listResourceGroups, locationLabel } from "../../
 import CreateWizard, { FormRow, FormSection } from "../../kit/CreateWizard.jsx";
 import { Glyph, InfoBar, NotSimulatedContainer } from "../../kit/common.jsx";
 import { useSubscription } from "../../kit/subscription.js";
+import { Components } from "../../kit/AppInsights.jsx";
 import * as api from "./api.js";
 
 const NAME_RE = /^[a-z0-9][a-z0-9-]{0,58}[a-z0-9]$/;
@@ -19,10 +20,10 @@ export default function CreateFunctionApp() {
   const sub = useSubscription();
   const rgs = useAsync(() => listResourceGroups(), [sub.id]);
   const existing = useAsync(() => api.listFunctionApps(), [sub.id]);
-  const [newRg, setNewRg] = useState(null);
+  const workspaces = useAsync(() => api.listWorkspaces(), [sub.id]);  const [newRg, setNewRg] = useState(null);
   const [f, setF] = useState({
     resourceGroup: DEFAULT_RG, name: "", secureHostname: true, runtime: "Python", version: "3.12", location: "eastus",
-    zoneRedundant: false, storageAccount: "vyomistorage", diagnostics: "none", openai: false,
+    zoneRedundant: false, storageAccount: "vyomistorage", diagnostics: "none", workspace: "", openai: false,
     publicAccess: true, vnetIntegration: false, appInsights: "yes", appInsightsName: "", cicd: false, basicAuth: false,
     authType: "secrets", tags: [{ name: "", value: "" }],
   });
@@ -109,6 +110,16 @@ export default function CreateFunctionApp() {
           <Radio value="configure" label="Configure diagnostic settings now" />
         </RadioGroup>
       </FormRow>
+      {f.diagnostics === "configure" && (
+        <FormRow label="Log Analytics workspace" required htmlFor="fa-ws">
+          {workspaces.data?.length ? (
+            <Select id="fa-ws" value={f.workspace || workspaces.data[0].id} onChange={set("workspace")} aria-label="Log Analytics workspace">
+              {workspaces.data.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+            </Select>
+          ) : <span>No Log Analytics workspace yet. Create one in the Log Analytics workspaces service first.</span>}
+          <InfoBar title="Created with the app">A real Microsoft.Insights diagnostic setting (allLogs + AllMetrics) is created on the function app, pointing at the workspace.</InfoBar>
+        </FormRow>
+      )}
     </FormSection>
   );
 
@@ -139,7 +150,7 @@ export default function CreateFunctionApp() {
       {f.appInsights === "yes" && (
         <FormRow label="Application Insights" htmlFor="fa-ai">
           <Input id="fa-ai" value={f.appInsightsName || `${f.name || "func"}-insights`} onChange={set("appInsightsName")} aria-label="Application Insights" />
-          <Link as="button" style={{ marginTop: 4, display: "block" }} onClick={() => notify.info("Vyomi records the instrumentation key on the site; no Application Insights resource is provisioned.")}>Create new</Link>
+          <Link as="button" style={{ marginTop: 4, display: "block" }} onClick={() => notify.info("A real Application Insights resource is created with the function app and linked through its app settings.")}>Create new</Link>
         </FormRow>
       )}
     </FormSection>
@@ -208,6 +219,14 @@ export default function CreateFunctionApp() {
   const onCreate = async () => {
     try {
       await api.createFunctionApp(rg, f.name, body());
+      if (f.appInsights === "yes") {
+        const c = await Components.put(rg, f.appInsightsName || `${f.name}-insights`, { location: f.location, kind: "web", properties: { Application_Type: "web", Flow_Type: "Bluefield", Request_Source: "rest" } });
+        await api.setAppSettings(rg, f.name, { ...(await api.listAppSettings(rg, f.name)), APPLICATIONINSIGHTS_CONNECTION_STRING: c.properties.ConnectionString, APPINSIGHTS_INSTRUMENTATIONKEY: c.properties.InstrumentationKey });
+      }
+      const ws = f.workspace || workspaces.data?.[0]?.id;
+      if (f.diagnostics === "configure" && ws) {
+        await api.putDiagnosticSetting(rg, f.name, "vyomi-diag", { properties: { workspaceId: ws, logs: [{ categoryGroup: "allLogs", enabled: true }], metrics: [{ category: "AllMetrics", enabled: true }] } });
+      }
       notify.success(`Deployment of Function App '${f.name}' to resource group '${rg}' was successful.`, "Deployment succeeded");
       navigate("functionapp", rg, f.name);
     } catch (e) { notify.error(e, "Deployment failed"); }

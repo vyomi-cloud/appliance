@@ -14,6 +14,7 @@ import { Glyph } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { listAllSubnets } from "../../kit/PrivateEndpoints.jsx";
 import { useSubscription } from "../../kit/subscription.js";
+import { setPricing } from "../defender/api.js";
 import * as api from "./api.js";
 import { TagRows } from "./ClusterBlade.jsx";
 
@@ -276,6 +277,7 @@ export default function CreateKubernetesCluster() {
     <>
       <FormSection title="Microsoft Defender for Cloud">
         <FormRow label="Enable Microsoft Defender"><Checkbox checked={f.defender} onChange={chk("defender")} aria-label="Enable Microsoft Defender" /></FormRow>
+        {f.defender && <p style={{ fontSize: 13 }}>Like Azure, this turns the Defender for Containers plan on for the whole subscription when the cluster is created (Defender for Cloud &gt; Environment settings).</p>}
       </FormSection>
       <FormSection title="Image cleaner">
         <FormRow label="Enable image cleaner"><Checkbox checked={f.imageCleaner} onChange={chk("imageCleaner")} aria-label="Enable image cleaner" /></FormRow>
@@ -332,6 +334,7 @@ export default function CreateKubernetesCluster() {
     try {
       const b = body();
       await api.createCluster(rg, f.name, b);
+      if (f.defender) await setPricing("Containers", "Standard");   // Defender for Containers is a subscription-wide plan
       for (const pool of f.nodePools) {
         await api.putNodePool(rg, f.name, pool.name, {
           properties: { mode: pool.mode, vmSize: pool.vmSize, osSKU: pool.osSku, count: pool.count, maxPods: pool.maxPods,
