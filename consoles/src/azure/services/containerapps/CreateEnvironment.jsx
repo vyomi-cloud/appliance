@@ -11,6 +11,7 @@ import { Glyph } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { listAllSubnets } from "../../kit/PrivateEndpoints.jsx";
 import { useSubscription } from "../../kit/subscription.js";
+import { ARM as WS_ARM } from "../loganalytics/api.js";
 import * as api from "./api.js";
 
 const NAME_RE = /^[A-Za-z][-A-Za-z0-9_]{0,59}$/;
@@ -145,7 +146,13 @@ export default function CreateEnvironment() {
 
   const onCreate = async () => {
     try {
-      await api.createEnvironment(rg, f.name, body());
+      // Like the portal: "Create a new workspace" really creates one; a chosen workspace is resolved to its customerId.
+      let ws;
+      if (f.workspace) { const w = (workspaces.data || []).find((x) => x.id === f.workspace); ws = w ? await WS_ARM.get(w.resourceGroup, w.name) : null; }
+      else ws = await WS_ARM.put(rg, `workspace-${f.name}`.slice(0, 63), { location: f.location, properties: { sku: { name: "PerGB2018" }, retentionInDays: 30 } });
+      const b = body();
+      if (ws?.properties?.customerId) b.properties.appLogsConfiguration = { destination: "log-analytics", logAnalyticsConfiguration: { customerId: ws.properties.customerId } };
+      await api.createEnvironment(rg, f.name, b);
       notify.success(`Deployment of environment '${f.name}' to resource group '${rg}' was successful.`, "Deployment succeeded");
       navigate("containerapps", "environments", rg, f.name);
     } catch (e) { notify.error(e, "Deployment failed"); }

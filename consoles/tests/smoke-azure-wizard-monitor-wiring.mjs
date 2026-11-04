@@ -35,4 +35,15 @@ ok("diagnostic setting created", (diag.body?.value || []).some((d) => (d.propert
 ok("Application Insights component created", (await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.Insights/components/${AI}`, null, "2020-02-02")).status === 200);
 const st = await arm("POST", `${site}/config/appsettings/list`, null, "2023-12-01");
 ok("app setting links the component", /InstrumentationKey=/.test(st.body?.properties?.APPLICATIONINSIGHTS_CONNECTION_STRING || ""), JSON.stringify(st.body).slice(0, 200));
+// Container Apps environment: "Create a new workspace" really creates one and links its customerId
+const CE = `mwce${n}`;
+await pg.goto(`${UI}#/containerapps/environments/create`); await pg.waitForTimeout(1500);
+await pg.getByLabel("Resource Group").selectOption({ label: RG });
+await pg.getByLabel("Environment name").fill(CE);
+await pg.getByRole("tab", { name: /Review/ }).click(); await pg.waitForTimeout(500);
+await pg.getByRole("button", { name: "Create", exact: true }).click(); await pg.waitForTimeout(3500);
+const ce = await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.App/managedEnvironments/${CE}`, null, "2024-03-01");
+const wsn = await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.OperationalInsights/workspaces/workspace-${CE}`, null, "2022-10-01");
+ok("new workspace created for the environment", wsn.status === 200, JSON.stringify(wsn.body).slice(0, 150));
+ok("environment logs to that workspace's customerId", !!wsn.body?.properties?.customerId && ce.body?.properties?.appLogsConfiguration?.logAnalyticsConfiguration?.customerId === wsn.body.properties.customerId, JSON.stringify(ce.body?.properties?.appLogsConfiguration));
 await b.close(); console.log(`${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);
