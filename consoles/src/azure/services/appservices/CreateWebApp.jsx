@@ -17,6 +17,12 @@ import { listAllSubnets } from "../../kit/PrivateEndpoints.jsx";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
 import { setPricing } from "../defender/api.js";
+import * as sqlApi from "../sql/api.js";
+import * as cosmosApi from "../cosmos/api.js";
+import { Components } from "../../kit/AppInsights.jsx";
+
+const SCOPES = [["TenantReuse", "Tenant Reuse"], ["SubscriptionReuse", "Subscription Reuse"], ["ResourceGroupReuse", "Resource Group Reuse"], ["NoReuse", "No Reuse"]];
+const hostFor = (name, scope, region) => (scope ? `${name || "<name>"}-<hash>.${region.toLowerCase().replace(/[^a-z0-9]/g, "")}-01.azurewebsites.net` : `${name || "<name>"}.azurewebsites.net`);
 
 const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9-]{0,58}[A-Za-z0-9]$/;
 const RG_RE = /^[-\w._()]{1,90}$/;
@@ -32,11 +38,12 @@ export default function CreateWebApp() {
     resourceGroup: DEFAULT_RG, name: "", location: "eastus",
     publish: "Code", runtimeStack: "PYTHON|3.12", os: "Linux",
     planChoice: "__new", newPlanName: "", planSku: "B1", zoneRedundant: "Disabled",
-    createDatabase: false,
+    createDatabase: false, dbEngine: "sql", dbServer: "", dbName: "", dbLogin: "sqladmin", dbPassword: "",
+    secureHost: false, hostScope: "TenantReuse",
     containerImageSource: "Quickstart", containerImage: "",
     continuousDeployment: "Disable", basicAuth: "Disable", ghRepo: "", ghBranch: "main", ghToken: "",
     publicAccess: true, networkInjection: false,
-    appInsights: "No", defender: false,
+    appInsights: "No", aiName: "", defender: false,
     tags: [{ name: "", value: "" }],
   });
   const [planNameTouched, setPlanNameTouched] = useState(false);
@@ -53,12 +60,17 @@ export default function CreateWebApp() {
     if (!rg) e.push("Resource group is required.");
     else if (!RG_RE.test(rg)) e.push("Resource group names can only include alphanumeric, underscore, parentheses, hyphen and period characters.");
     if (!NAME_RE.test(f.name)) e.push("App name must be 2-60 characters, letters, digits or hyphens, and can't start or end with a hyphen.");
-    else if ((existing.data || []).some((a) => a.name === f.name)) e.push(`The app name '${f.name}' is not available. '${f.name}.azurewebsites.net' is taken.`);
+    else if (!f.secureHost && (existing.data || []).some((a) => a.name === f.name)) e.push(`The app name '${f.name}' is not available. '${f.name}.azurewebsites.net' is taken.`);
+    else if (f.secureHost && f.name.length > 40) e.push("With a secure unique default hostname the app name must be 40 characters or fewer.");
+    if (f.createDatabase) {
+      if (!f.dbServer || !f.dbName) e.push("Database server and database names are required.");
+      if (f.dbEngine === "sql" && (!f.dbLogin || f.dbPassword.length < 8)) e.push("SQL admin login is required and the password must be at least 8 characters.");
+    }
     if (f.planChoice === "__new" && !f.newPlanName) e.push("New App Service Plan name is required.");
     return e;
   };
   const nameError = f.name && !NAME_RE.test(f.name) ? "App name must be 2-60 characters, letters, digits or hyphens." :
-    f.name && (existing.data || []).some((a) => a.name === f.name) ? `The app name '${f.name}' is not available.` : null;
+    f.name && !f.secureHost && (existing.data || []).some((a) => a.name === f.name) ? `The app name '${f.name}' is not available.` : null;
 
   const basics = (
     <>
@@ -87,7 +99,19 @@ export default function CreateWebApp() {
           <Input id="wa-name" value={f.name} onChange={set("name")} aria-label="Name" contentAfter=".azurewebsites.net" />
           {nameError && <div style={{ color: "var(--colorPaletteRedForeground1)", fontSize: 12, marginTop: 4 }}>{nameError}</div>}
         </FormRow>
-        <NotSimulatedContainer title="Secure unique default hostname on." feature="Secure unique default hostname on." note={"Vyomi always uses the exact name you choose; there is no name-collision suffix to secure."} />
+        <CapabilityContainer id="azure.appservices.webapp.securehostname" title="Secure unique default hostname on.">
+          <FormRow label="Secure unique default hostname on.">
+            <Checkbox checked={f.secureHost} onChange={chk("secureHost")} aria-label="Secure unique default hostname on." label="Enabled" />
+          </FormRow>
+          {f.secureHost && (
+            <FormRow label="Domain name label scope" htmlFor="wa-scope">
+              <Select id="wa-scope" value={f.hostScope} onChange={set("hostScope")} aria-label="Domain name label scope">
+                {SCOPES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              </Select>
+            </FormRow>
+          )}
+          <div data-testid="default-hostname" style={{ fontSize: 12, marginBottom: 8 }}>Default hostname: <code>{hostFor(f.name, f.secureHost && f.hostScope, regionLabel)}</code></div>
+        </CapabilityContainer>
         <FormRow label="Publish" required>
           <RadioGroup value={f.publish} onChange={set("publish")} aria-label="Publish">
             <Radio value="Code" label="Code" />
@@ -140,7 +164,32 @@ export default function CreateWebApp() {
   );
 
   const database = (
-    <NotSimulatedContainer title="Database" feature="Create a Database" note={"Provisioning a linked database from the Web App wizard is not modelled; create one directly in the SQL/Cosmos DB lens instead."} />
+    <CapabilityContainer id="azure.appservices.webapp.createdatabase" title="Database">
+      <FormSection title="Database">
+        <FormRow label="Create a database">
+          <Checkbox checked={f.createDatabase} onChange={chk("createDatabase")} aria-label="Create a database" label="Enabled" />
+        </FormRow>
+        {f.createDatabase && (
+          <>
+            <FormRow label="Engine" required>
+              <Select value={f.dbEngine} onChange={set("dbEngine")} aria-label="Database engine">
+                <option value="sql">SQL Server (Azure SQL Database)</option>
+                <option value="cosmos">Azure Cosmos DB for NoSQL</option>
+              </Select>
+            </FormRow>
+            <FormRow label={f.dbEngine === "sql" ? "Server name" : "Account name"} required><Input value={f.dbServer} onChange={set("dbServer")} aria-label="Database server name" /></FormRow>
+            <FormRow label="Database name" required><Input value={f.dbName} onChange={set("dbName")} aria-label="Database name" /></FormRow>
+            {f.dbEngine === "sql" && (
+              <>
+                <FormRow label="Admin username" required><Input value={f.dbLogin} onChange={set("dbLogin")} aria-label="Database admin username" /></FormRow>
+                <FormRow label="Admin password" required><Input type="password" value={f.dbPassword} onChange={set("dbPassword")} aria-label="Database admin password" /></FormRow>
+              </>
+            )}
+            <InfoBar title="Connection string">The wizard creates the database resource, then adds its connection string to the app (Connection strings, and the AZURE_SQL_CONNECTIONSTRING / AZURE_COSMOS_CONNECTIONSTRING app setting).</InfoBar>
+          </>
+        )}
+      </FormSection>
+    </CapabilityContainer>
   );
 
   const container = (
@@ -219,7 +268,13 @@ export default function CreateWebApp() {
           </RadioGroup>
         </FormRow>
       </FormSection>
-      <NotSimulatedContainer title="Application Insights" feature="Application Insights" note="Creating/linking an Application Insights resource (and its Region) is not modelled." />
+      {f.appInsights === "Yes" && (
+        <CapabilityContainer id="azure.appservices.applicationinsights" title="Application Insights resource">
+          <FormRow label="Name" htmlFor="wa-ai"><Input id="wa-ai" value={f.aiName} placeholder={f.name ? `${f.name}-ai` : "Application Insights name"} onChange={set("aiName")} aria-label="Application Insights name" /></FormRow>
+          <FormRow label="Region"><Input value={regionLabel} readOnly aria-label="Application Insights region" /></FormRow>
+          <InfoBar title="Linked at creation">A real Microsoft.Insights/components resource is created in this region and the app's APPLICATIONINSIGHTS_CONNECTION_STRING setting is set to it.</InfoBar>
+        </CapabilityContainer>
+      )}
       <FormSection title="Microsoft Defender for App Service">
         <CapabilityContainer id="azure.defender.plans" title="Defender for App Service">
           <FormRow label="Enable Microsoft Defender for App Service">
@@ -249,11 +304,13 @@ export default function CreateWebApp() {
         <h3>Details</h3>
         {dl([["Subscription", sub.displayName || sub.id], ["Resource Group", rg || "--"]])}
         <h3>Instance Details</h3>
-        {dl([["Name", f.name || "--"], ["Publish", f.publish], ["Runtime stack", api.RUNTIMES.find(([, v]) => v === f.runtimeStack)?.[0]], ["Operating System", f.os], ["Region", regionLabel]])}
+        {dl([["Name", f.name || "--"], ["Default hostname", hostFor(f.name, f.secureHost && f.hostScope, regionLabel)], ["Publish", f.publish], ["Runtime stack", api.RUNTIMES.find(([, v]) => v === f.runtimeStack)?.[0]], ["Operating System", f.os], ["Region", regionLabel]])}
         <h3>App Service Plan (New)</h3>
         {dl([["Name", f.planChoice === "__new" ? f.newPlanName || "--" : f.planChoice], ["Sku and size", f.planSku], ["Zone redundancy", f.zoneRedundant]])}
+        <h3>Database</h3>
+        {dl([["Create a database", f.createDatabase ? `${f.dbEngine === "sql" ? "SQL" : "Cosmos DB"} ${f.dbServer}/${f.dbName}` : "No"]])}
         <h3>Monitor + secure</h3>
-        {dl([["Application Insights", yes(f.appInsights === "Yes")], ["Microsoft Defender for App Service", yes(f.defender)]])}
+        {dl([["Application Insights", f.appInsights === "Yes" ? `Yes (${f.aiName || f.name + "-ai"})` : "No"], ["Microsoft Defender for App Service", yes(f.defender)]])}
         <h3>Deployment</h3>
         {dl([["Continuous deployment", f.continuousDeployment], ["Basic authentication", f.basicAuth]])}
       </>
@@ -279,13 +336,36 @@ export default function CreateWebApp() {
       await api.createSite(rg, f.name, {
         location: f.location, kind: f.os === "Linux" ? "app,linux" : "app",
         tags: Object.fromEntries(f.tags.filter((t) => t.name).map((t) => [t.name, t.value])),
-        properties: { serverFarmId: planId, siteConfig, publicNetworkAccess: f.publicAccess ? "Enabled" : "Disabled",
+        properties: { serverFarmId: planId, siteConfig, ...(f.secureHost ? { autoGeneratedDomainNameLabelScope: f.hostScope } : {}), publicNetworkAccess: f.publicAccess ? "Enabled" : "Disabled",
           ...(f.inject ? { virtualNetworkSubnetId: f.injectSubnet || subnets.data?.[0]?.id } : {}) },
       });
       if (f.continuousDeployment === "Enable" && f.ghRepo) {
         await api.putSourceControl(rg, f.name, { repoUrl: f.ghRepo, branch: f.ghBranch || "main", isGitHubAction: true, ...(f.ghToken ? { vyomiAccessToken: f.ghToken } : {}), gitHubActionConfiguration: {
           codeConfiguration: { runtimeStack: (f.runtimeStack || "").split("|")[0].toLowerCase() || "python", runtimeVersion: (f.runtimeStack || "").split("|")[1] }, isLinux: f.os === "Linux" } });
       }
+      const settings = {};
+      const conns = {};
+      if (f.createDatabase) {
+        if (f.dbEngine === "sql") {
+          await sqlApi.createServer(rg, f.dbServer, { location: f.location, properties: { administratorLogin: f.dbLogin, administratorLoginPassword: f.dbPassword, version: "12.0" } });
+          await sqlApi.createDatabase(rg, f.dbServer, f.dbName, { location: f.location, sku: { name: "Basic" } });
+          await sqlApi.putFirewallRule(rg, f.dbServer, "AllowAllWindowsAzureIps", { properties: { startIpAddress: "0.0.0.0", endIpAddress: "0.0.0.0" } });
+          const cs = `Server=tcp:${f.dbServer}.database.windows.net,1433;Initial Catalog=${f.dbName};User ID=${f.dbLogin};Password=${f.dbPassword};Encrypt=True;`;
+          conns[f.dbName] = { value: cs, type: "SQLAzure" }; settings.AZURE_SQL_CONNECTIONSTRING = cs;
+        } else {
+          await cosmosApi.createAccount(rg, f.dbServer, { location: f.location, kind: "GlobalDocumentDB", properties: { databaseAccountOfferType: "Standard", locations: [{ locationName: f.location, failoverPriority: 0 }] } });
+          const cstr = (await cosmosApi.listConnectionStrings(rg, f.dbServer))?.connectionStrings?.[0]?.connectionString || `AccountEndpoint=${cosmosApi.accountEndpoint(f.dbServer)};`;
+          conns[f.dbName] = { value: cstr, type: "DocDb" }; settings.AZURE_COSMOS_CONNECTIONSTRING = cstr;
+        }
+      }
+      if (f.appInsights === "Yes") {
+        const c = await Components.put(rg, f.aiName || `${f.name}-ai`, { location: f.location, kind: "web", properties: { Application_Type: "web", Flow_Type: "Bluefield", Request_Source: "rest" } });
+        settings.APPLICATIONINSIGHTS_CONNECTION_STRING = c.properties.ConnectionString;
+        settings.APPINSIGHTS_INSTRUMENTATIONKEY = c.properties.InstrumentationKey;
+        settings.ApplicationInsightsAgent_EXTENSION_VERSION = "~3";
+      }
+      if (Object.keys(settings).length) await api.updateAppSettings(rg, f.name, { ...(await api.getAppSettings(rg, f.name)), ...settings });
+      if (Object.keys(conns).length) await api.updateConnectionStrings(rg, f.name, conns);
       if (f.defender) await setPricing("AppServices", "Standard");
       notify.success(`Deployment of app service '${f.name}' to resource group '${rg}' was successful.`, "Deployment succeeded");
       navigate("appservices", rg, f.name);
