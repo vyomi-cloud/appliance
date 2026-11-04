@@ -189,6 +189,49 @@ export function CosmosPitr({ a }) {
   );
 }
 
+/** Cosmos "Restore" on the account list: pick a deleted (or live) continuous-backup account across regions and restore it to a NEW account. */
+export function CosmosRestoreDialog({ open, onClose, onRestored }) {
+  const notify = useNotify();
+  const rows = useAsync(async () => {
+    if (!open) return [];
+    const out = await Promise.all(LOCATIONS.map(async ([id]) => { try { return (await call("GET", `${sub()}/providers/Microsoft.DocumentDB/locations/${id}/restorableDatabaseAccounts`, "2024-05-15")).value || []; } catch { return []; } }));
+    return out.flat();
+  }, [open]);
+  const [sel, setSel] = useState(null);
+  const [f, setF] = useState({ name: "", rg: "", time: "" });
+  const [err, setErr] = useState(null);
+  const pick = (x) => {
+    setSel(x.name);
+    const t = x.properties.deletionTime ? new Date(new Date(x.properties.deletionTime).getTime() - 1000) : new Date();
+    setF({ name: `${x.properties.accountName}-restored`, rg: f.rg, time: iso(t) });
+  };
+  const restore = async () => {
+    setErr(null);
+    try {
+      const x = rows.data.find((r) => r.name === sel);
+      const loc = x.properties.location || x.location;
+      const r = await call("PUT", `${sub()}/resourceGroups/${f.rg}/providers/Microsoft.DocumentDB/databaseAccounts/${f.name}`, "2024-05-15", {
+        location: loc, kind: "GlobalDocumentDB",
+        properties: { databaseAccountOfferType: "Standard", locations: [{ locationName: loc, failoverPriority: 0 }], backupPolicy: { type: "Continuous", continuousModeProperties: { tier: "Continuous7Days" } }, createMode: "Restore", restoreParameters: { restoreMode: "PointInTime", restoreSource: x.id, restoreTimestampInUtc: f.time } },
+      });
+      notify.success(`Account '${r.name}' restored.`, "Restore"); onRestored?.(); onClose();
+    } catch (e) { setErr(e); }
+  };
+  return (
+    <Dlg open={open} title="Restore Azure Cosmos DB account" okLabel="Restore" onClose={onClose} err={err} onOk={restore} busy={!sel || !f.name || !f.rg}>
+      {rows.loading ? <Loading /> : (rows.data || []).length === 0 ? <p className="vy-muted">No continuous-backup accounts exist. Only accounts with the Continuous backup policy can be restored.</p> : (
+        <>
+          <table className="vy-grid" aria-label="Restorable Cosmos accounts"><thead><tr><th /><th>Account</th><th>Location</th><th>Deleted</th></tr></thead><tbody>
+            {rows.data.map((r) => <tr key={r.id}><td><input type="radio" name="rcos" aria-label={`Select ${r.properties.accountName}`} checked={sel === r.name} onChange={() => pick(r)} /></td><td>{r.properties.accountName}</td><td>{locationLabel(r.properties.location || r.location)}</td><td>{r.properties.deletionTime ? fmtDate(r.properties.deletionTime) : "-"}</td></tr>)}
+          </tbody></table>
+          <Field label="New account name" required><Input aria-label="New account name" value={f.name} onChange={(_, d) => setF({ ...f, name: d.value })} /></Field>
+          <Field label="Resource group" required><Input aria-label="Resource group" value={f.rg} onChange={(_, d) => setF({ ...f, rg: d.value })} /></Field>
+          <Field label="Restore point (UTC)" required><Input aria-label="Restore point" value={f.time} onChange={(_, d) => setF({ ...f, time: d.value })} /></Field>
+        </>)}
+    </Dlg>
+  );
+}
+
 export function RestoreDeletedStorage({ open, onClose, onRestored }) {
   const notify = useNotify();
   const rows = useAsync(async () => {
