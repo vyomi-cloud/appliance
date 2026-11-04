@@ -83,9 +83,9 @@
   "api": []
  },
  "azure.containerapps.app.monitoring": {
-  "title": "Metrics, Alerts, Log stream",
+  "title": "Log stream",
   "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["Metrics and Alerts are the shared per-resource panels (azure.common.resource_monitoring: the only metric is the app's own Activity-log operation count; alert rules are stored and evaluated on demand only). No CPU/request telemetry or live log streaming behind a Container App (Diagnostic settings are real — see Automation/Monitoring's generic ARM extension-resource engine)."],
+  "limitations": ["No live log streaming behind a Container App (Metrics and Alerts are real, see azure.common.resource_monitoring; Diagnostic settings are real too, via the generic ARM extension-resource engine)."],
   "api": []
  },
  "azure.containerapps.app.tools": {

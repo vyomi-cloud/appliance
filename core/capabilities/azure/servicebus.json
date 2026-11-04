@@ -124,7 +124,8 @@
     "level": { "nano": "limited", "offline": "limited" },
     "limitations": [
       "Insights and Metrics are the shared per-resource panels (azure.common.resource_monitoring): the only metric is the namespace's own Activity-log operation count, charted over the last 24 hours. Message-count, throttling and size metrics are not sampled or retained over time anywhere in Vyomi (only the live point-in-time counts on the Overview/Queues/Topics pages). The pre-authored Microsoft Insights workbook is not modelled."
-    ]
+    ],
+    "tests": ["tests/conformance/test_azure_resource_monitoring.py"]
   },
   "azure.servicebus.namespace.logs": {
     "title": "Logs (a Log Analytics query scoped to this namespace)",
