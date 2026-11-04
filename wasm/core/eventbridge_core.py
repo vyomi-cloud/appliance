@@ -259,6 +259,77 @@ def _deliver_sns(store, topic_arn, body_str):
         raise  # route_event retries per the target's RetryPolicy, then dead-letters
 
 
+def _deliver_sfn(arn, body_str, lambda_store=None):
+    """Step Functions rule target: StartExecution on the state machine with the (transformed)
+    event as its input. A missing machine is a failed delivery, swallowed like the others."""
+    try:
+        try:
+            from core import stepfunctions_core as sfn
+        except ImportError:  # Pyodide flat layout
+            import stepfunctions_core as sfn  # type: ignore
+        sfn.dispatch(sfn.shared_store(), "AWSStepFunctions.StartExecution",
+                     {"stateMachineArn": arn, "input": body_str}, lambda_store)
+    except Exception:
+        pass
+
+
+# Stores for targets whose engine state lives outside the messaging store ("kinesis", "logs").
+# Nano's wire router and the offline route modules register theirs; delivery to a target
+# whose store isn't registered is a failed delivery (swallowed, like the others).
+_TARGET_STORES: dict = {}
+
+
+def set_target_store(kind: str, store) -> None:
+    _TARGET_STORES[kind] = store
+
+
+def _deliver_kinesis(arn, body_str, tgt=None, envelope=None):
+    """Kinesis rule target: PutRecord with the (transformed) event as data. The partition key
+    is KinesisParameters.PartitionKeyPath (resolved on the event) or the event id."""
+    try:
+        try:
+            from core import kinesis_core as k
+        except ImportError:  # Pyodide flat layout
+            import kinesis_core as k  # type: ignore
+        store = _TARGET_STORES.get("kinesis")
+        if store is None:
+            return
+        pk = (envelope or {}).get("id") or uuid.uuid4().hex
+        path = ((tgt or {}).get("KinesisParameters") or {}).get("PartitionKeyPath")
+        if path:
+            ok, val = _json_path(envelope or {}, path)
+            if ok and val is not None:
+                pk = str(val)
+        import base64
+        k.dispatch(store, "Kinesis_20131202.PutRecord",
+                   {"StreamARN": arn, "StreamName": arn.split(":stream/", 1)[-1],
+                    "PartitionKey": pk, "Data": base64.b64encode(body_str.encode()).decode()})
+    except Exception:
+        pass
+
+
+def _deliver_logs(arn, body_str):
+    """CloudWatch Logs rule target: one log event (the transformed event) in a stream named
+    after the event id/time, in the group named by the ARN (created if absent, as EventBridge does)."""
+    try:
+        try:
+            from core import logs_core as lc
+        except ImportError:  # Pyodide flat layout
+            import logs_core as lc  # type: ignore
+        store = _TARGET_STORES.get("logs")
+        if store is None:
+            return
+        group = arn.split(":log-group:", 1)[-1].split(":", 1)[0]
+        stream = f"{time.strftime('%Y/%m/%d', time.gmtime())}/{uuid.uuid4().hex[:16]}"
+        lc.dispatch(store, "Logs_20140328.CreateLogGroup", {"logGroupName": group})
+        lc.dispatch(store, "Logs_20140328.CreateLogStream", {"logGroupName": group, "logStreamName": stream})
+        lc.dispatch(store, "Logs_20140328.PutLogEvents",
+                    {"logGroupName": group, "logStreamName": stream,
+                     "logEvents": [{"timestamp": int(time.time() * 1000), "message": body_str}]})
+    except Exception:
+        pass
+
+
 # Offline hook: the appliance's own Lambda registry (server.py) is not an `lambda_core` store.
 _LAMBDA_INVOKER = None
 

@@ -530,6 +530,52 @@ def _promote_replica(store: SqlStore, project: str, instance: str) -> CloudSqlRe
     return _json(200, _op(rec, "PROMOTE_REPLICA"))
 
 
+def _workload_captures(store, project, instance, method, verb, workload_id, payload) -> CloudSqlResponse:
+    """sql.workloadCaptures.{start,stop,startReplay,stopReplay,list} (v1beta4, preview).
+    Discovery for these has flapped between request shapes, so the body is read
+    leniently; startReplay takes the workloadId in the path (or body)."""
+    rec = _get_instance(store, project, instance)
+    if not rec:
+        return _not_found(f"The Cloud SQL instance does not exist. Instance: {instance}")
+    caps = rec.setdefault("workloadCaptures", [])
+    if verb is None and method == "GET":
+        return _json(200, {"kind": "sql#workloadCapturesList", **({"items": list(caps)} if caps else {})})
+    if method != "POST":
+        return _err(400, "INVALID_ARGUMENT", f"Unsupported method {method} on workloadCaptures")
+    now = _now_iso()
+    if verb == "start":
+        if any(c.get("state") == "RUNNING" for c in caps):
+            return _err(400, "FAILED_PRECONDITION", "A workload capture is already running on this instance.")
+        wid = str(payload.get("workloadId") or payload.get("name") or uuid.uuid4().hex[:12])
+        caps.insert(0, {"kind": "sql#workloadCapture", "workloadId": wid, "instance": instance,
+                        "state": "RUNNING", "startTime": now})
+        op_type = "START_WORKLOAD_CAPTURE"
+    elif verb == "stop":
+        cap = next((c for c in caps if c.get("state") == "RUNNING"), None)
+        if cap is None:
+            return _err(400, "FAILED_PRECONDITION", "No workload capture is running on this instance.")
+        cap.update(state="COMPLETED", endTime=now)
+        op_type = "STOP_WORKLOAD_CAPTURE"
+    elif verb == "startReplay":
+        wid = str(workload_id or payload.get("workloadId") or "")
+        cap = next((c for c in caps if c.get("workloadId") == wid), None)
+        if cap is None:
+            return _not_found(f"The workload capture does not exist. Workload: {wid}")
+        cap.update(replayState="RUNNING", replayStartTime=now)
+        op_type = "START_WORKLOAD_REPLAY"
+    elif verb == "stopReplay":
+        cap = next((c for c in caps if c.get("replayState") == "RUNNING"), None)
+        if cap is None:
+            return _err(400, "FAILED_PRECONDITION", "No workload replay is running on this instance.")
+        cap.update(replayState="COMPLETED", replayEndTime=now)
+        op_type = "STOP_WORKLOAD_REPLAY"
+    else:
+        return _not_found(f"Unknown workloadCaptures method: {verb}")
+    store.put_instance(_key(project, instance), rec)
+    store.persist()
+    return _json(200, _op(rec, op_type))
+
+
 def _users(store, project, instance, method, payload, query) -> CloudSqlResponse:
     rec = _get_instance(store, project, instance)
     if not rec:
@@ -634,6 +680,12 @@ def dispatch(store: SqlStore, method: str, path: str,
         return _patch_instance(store, project, segs[3], payload)
     if len(segs) == 5 and segs[4] == "promoteReplica" and method == "POST":
         return _promote_replica(store, project, segs[3])
+    if len(segs) in (5, 6) and segs[4].split(":")[0] == "workloadCaptures":
+        verb = segs[4].partition(":")[2]
+        wid = None
+        if len(segs) == 6:
+            wid, _, verb = segs[5].partition(":")
+        return _workload_captures(store, project, segs[3], method, verb or None, wid, payload)
     if len(segs) == 5 and segs[4] == "users":
         return _users(store, project, segs[3], method, payload, query)
     if len(segs) in (5, 6) and segs[4] == "backupRuns":

@@ -4990,7 +4990,7 @@ function renderDiskWidget(d) {
           '<div style="height:100%;width:' + pct + '%;background:' + accent + ';transition:width 0.3s"></div>' +
         '</div>' +
         '<div style="font-size:11px;color:#6b7280;margin-top:6px">' +
-          disk.used_gb + " / " + disk.total_gb + " GB · " + disk.avail_gb + " GB free" +
+          (+disk.used_gb).toFixed(2) + " / " + (+disk.total_gb).toFixed(2) + " GB · " + (+disk.avail_gb).toFixed(2) + " GB free" +
         '</div>' +
       '</div>' +
       '<div style="display:flex;gap:8px">' +
@@ -5122,6 +5122,7 @@ boot();
 </script>
 <script src="/assets/lazy_backends.js"></script>
 <script src="/assets/vyomi-appbar.js" data-cloud="aws" defer></script>
+<script src="/assets/nano-disclaimer.js" defer></script>
 </body>
 </html>
 

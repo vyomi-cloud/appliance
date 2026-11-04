@@ -43,7 +43,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
   :root{
     /* GCP-faithful tokens — verified in the audit (matches real console) */
     --blue:#1a73e8; --blue-d:#1765cc; --blue-l:#e8f0fe; --blue-tint:#cfe2ff;
-    --blue-bg:#f8fbff;  /* lightest blue for hovers */
+    --blue-bg:#f8f9fa;  /* lightest blue for hovers */
     --ink:#202124; --sub:#5f6368; --hint:#80868b;
     --line:#e8eaed; --line-d:#dadce0; --border-blue:#d2e3fc;
     --bg:#f8f9fa;  --panel:#fff;
@@ -191,7 +191,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
 
   /* Buttons — Material Design rounded rectangles (4px), uppercase labels */
   .btn{display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 16px;font-size:13px;font-weight:500;text-transform:uppercase;letter-spacing:.5px;border:1px solid var(--line-d);background:#fff;color:var(--sub);border-radius:4px;cursor:pointer;font-family:'Google Sans',sans-serif}
-  .btn:hover{background:#f1f6fe;color:var(--ink)}
+  .btn:hover{background:#f1f3f4;color:var(--ink)}
   .btn:disabled{opacity:.5;cursor:not-allowed}
   .btn.primary{background:var(--blue);color:#fff;border-color:var(--blue)}
   .btn.primary:hover{background:var(--blue-d);color:#fff}
@@ -438,11 +438,45 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
   .vy-co{display:inline-flex;align-items:center;flex:none;text-decoration:none}.vy-co img{height:22px;width:auto;display:block}.vy-co-sep{width:1px;height:26px;background:#dadce0;flex:none;margin:0 -2px}
 </style>
   <script type="module" src="./nano-boot.js?v=4"></script>
-<style>#avatarBtn{display:none!important;}</style>
+  <script src="./nano-disclaimer.js"></script>
+  <script src="./nano-back.js"></script>
+  <script src="./nano-connect.js"></script>
+  <script src="./vyomi-dl-card.js"></script>
+<style>#avatarBtn{display:none!important;}
+/* ── Small screens: compact header strip + off-canvas navigation drawer ── */
+@media (max-width: 900px){
+  header.gc-top{gap:8px;padding:0 10px}
+  header .right button[title="Support"],header .right button[title="Settings"]{display:none}
+  header .search .kbd{display:none}
+  header .search{min-width:0;flex:1}
+  header .search input{min-width:0;width:100%}
+}
+@media (max-width: 760px){
+  header.gc-top{height:52px;gap:6px;padding:0 6px}
+  header .vy-co-sep{display:none}
+  .vy-co img{height:17px}
+  header .brand{font-size:0;gap:0}               /* keep the cube, drop the wordmark */
+  header .brand .cube{width:26px;height:22px}
+  header .proj-btn{height:34px;padding:0 8px;gap:4px;max-width:112px;min-width:0;overflow:hidden;flex:0 1 auto}
+  header .proj-btn > span:nth-child(2){min-width:0;overflow:hidden}
+  header .proj-btn .name{max-width:60px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block}
+  header .proj-btn .caret{display:none}
+  header .search{flex:1;min-width:0;padding:0 8px}
+  header .search input{min-width:0;width:100%}
+  header .search .kbd{display:none}
+  header .right{gap:2px}
+  header .right button[title="Cloud Shell"]{display:none}
+  aside#rail{position:fixed !important;left:0;top:52px !important;bottom:0;align-self:auto !important;height:auto !important;width:280px !important;z-index:70;transform:translateX(-102%);transition:transform .22s ease;box-shadow:none}
+  aside#rail.m-open{transform:none;box-shadow:0 0 0 100vmax rgba(0,0,0,.35)}
+  aside#rail.collapsed{width:280px !important}
+  aside#rail.collapsed .rail-h,aside#rail.collapsed a.item .lbl{display:revert}
+  main#main{margin:8px !important;min-height:calc(100vh - 52px - 16px) !important;padding:0 !important}
+}
+</style>
 <style id="vy-gcp-m3">
 /* ── Current Google Cloud look (Material 3): tinted shell, white rounded content card, pill controls,
       sentence-case buttons and grid headers. Sampled from the real console captures. ── */
-:root{--shell:#f0f5fe;--shell-sel:#dbedfc;--shell-bar:#545f72;--m3-primary:#0b57d0;--m3-outline:#747775;--m3-field:#e9eef6}
+:root{--shell:#f8fafd;--shell-sel:#e3e5e8;--shell-bar:#545f72;--m3-primary:#0b57d0;--m3-outline:#747775;--m3-field:#e8eaed}
 html,body{background:var(--shell)}
 header.gc-top{background:var(--shell);border-bottom:none}
 header .hamb:hover{background:rgba(0,0,0,.06)}
@@ -500,7 +534,7 @@ table.gc tr:hover td{background:#f6f8fc}
 .table-toolbar input.search{border-radius:20px;border-color:var(--m3-outline);height:36px}
 .vy-colmenu > .btn{height:32px}
 /* dialogs: rounded, tinted surface */
-.proj-modal .box{border-radius:28px;background:#f8fafd}
+.proj-modal .box{border-radius:28px;background:#f8f9fa}
 
 /* create forms — Material outlined fields */
 .wizard-page .field{margin-bottom:20px}
@@ -512,7 +546,7 @@ table.gc tr:hover td{background:#f6f8fc}
 .wizard-page .field input:focus,.wizard-page .field select:focus,.wizard-page .field textarea:focus{outline:none;border-color:#0b57d0;box-shadow:inset 0 0 0 1px #0b57d0}
 .wizard-page .field input[type=radio],.wizard-page .field input[type=checkbox]{accent-color:#0b57d0;width:18px;height:18px;margin:0 10px 0 0;vertical-align:middle}
 .wizard-page label.radio{display:flex;align-items:center;font:400 14px "Google Sans",Roboto,Arial,sans-serif;color:#1f1f1f;padding:6px 0}
-.wizard-page .info-pill{background:#f0f4f9;border-radius:4px;border:none;max-width:560px}
+.wizard-page .info-pill{background:#f1f3f4;border-radius:4px;border:none;max-width:560px}
 
 .crumbs-inline a,.crumbs-inline .current{display:inline-flex;align-items:center;gap:6px}
 .crumbs-inline .ci{font-size:18px;line-height:1}
@@ -520,7 +554,27 @@ table.gc tr:hover td{background:#f6f8fc}
 
 .ov-grid td.ov-k{width:300px;color:#444746;font-weight:500;vertical-align:top}
 .ov-grid td.ov-v{white-space:pre-line;overflow-wrap:anywhere;vertical-align:top}
-.ov-grid tr.ov-sec td{background:#f0f4f9;color:#1f1f1f;font:500 12px "Google Sans",Roboto,Arial,sans-serif;letter-spacing:.3px;text-transform:uppercase;padding:8px 16px}
+.ov-grid tr.ov-sec td{background:#f1f3f4;color:#1f1f1f;font:500 12px "Google Sans",Roboto,Arial,sans-serif;letter-spacing:.3px;text-transform:uppercase;padding:8px 16px}
+
+/* detail inner side menu — classic Google Cloud nav */
+.sub-nav{padding:8px 8px 8px 0;width:248px}
+.sub-nav .group{font:500 11px "Google Sans",Roboto,Arial,sans-serif;letter-spacing:.8px;text-transform:uppercase;color:#5f6368;padding:16px 24px 6px}
+.sub-nav a.nav-item{height:40px;box-sizing:border-box;padding:0 16px 0 24px;gap:14px;font:400 14px "Google Sans",Roboto,Arial,sans-serif;color:#202124;border-left:none;border-radius:0 20px 20px 0;margin-right:0}
+.sub-nav a.nav-item:hover{background:#f1f3f4}
+.sub-nav a.nav-item.active{background:#e8eaed;color:#1f1f1f;font-weight:500}
+.sub-nav a.nav-item .ic{font-size:20px;width:20px;color:#5f6368}
+.sub-nav a.nav-item.active .ic{color:#1f1f1f}
+/* Overview: the grid sits directly in the outer card (no inner box) */
+.sub-content .ov-flat{border:none;border-radius:0;background:none;overflow:visible}
+.sub-content .ov-flat .table-toolbar{padding:0 0 12px;border:none;background:none}
+.sub-content .ov-flat table.gc{border:none;border-radius:0;width:100%}
+.sub-content .ov-flat .ov-scroll{border:1px solid #dadce0;border-radius:12px;overflow:hidden;padding:0;margin:0}
+.sub-content .ov-flat .ov-scroll table.gc{margin:0}
+.sub-content .ov-flat tr:last-child td{border-bottom:none}
+
+/* grids keep their rounded border while scrolling horizontally: the border lives on the scroller */
+.sub-content .vy-scroll{border:1px solid var(--line);border-radius:8px;overflow-x:auto;overflow-y:hidden}
+.sub-content .vy-scroll table.gc{border:none;border-radius:0;margin:0}
 </style>
 </head>
 <body>
@@ -713,6 +767,7 @@ async function boot(){
       INSTANCE_CATALOG = Array.isArray(id.instances) ? id.instances : [];
     } catch(_) { INSTANCE_CATALOG = []; }
     wireHeader();
+    try{ const sv=((performance.getEntriesByType("navigation")[0]||{}).type==="reload")?JSON.parse(sessionStorage.getItem('vy_view_gcp')||'null'):null; if(sv&&sv.view) STATE={...STATE,...sv}; }catch(_){}
     render();
   } catch (e) {
     document.getElementById("main").innerHTML = '<div class="empty">Failed to load GCP catalog: '+e+'</div>';
@@ -720,8 +775,14 @@ async function boot(){
 }
 
 function wireHeader(){
+  document.addEventListener("click", (e) => {
+    const r = document.getElementById("rail");
+    if (r && r.classList.contains("m-open") && !r.contains(e.target) && !e.target.closest("#hambBtn")) r.classList.remove("m-open");
+    else if (r && r.classList.contains("m-open") && e.target.closest("a.item")) r.classList.remove("m-open");
+  });
   document.getElementById("hambBtn").addEventListener("click", () => {
     const rail = document.getElementById("rail");
+    if (window.matchMedia("(max-width: 760px)").matches) { rail.classList.toggle("m-open"); return; }
     rail.classList.add("anim");
     const c = rail.classList.toggle("collapsed");
     try { localStorage.setItem("vyomi.gcp.railcollapsed", c ? "1" : "0"); } catch (_) {}
@@ -794,8 +855,19 @@ function renderProjectModal(){
 }
 
 // ========== Router ===========================================================
+// A VM changed power state (booting -> running): repaint the open view so the state badge flips without a manual Refresh.
+addEventListener("nano-vm-power", () => {
+  try {
+    const ae = document.activeElement;
+    if (ae && ae.closest && ae.closest(".vy-term")) return;                  // never yank the shell away while typing
+    if (typeof _shouldSkipAutoRefresh === "function" && _shouldSkipAutoRefresh()) return;
+    if ((STATE.view === "list" || STATE.view === "detail") && STATE.service === "compute") render();
+  } catch (_) {}
+});
+
 function navigate(next){ STATE = {...STATE, ...next}; render(); }
 function render(){
+  try{ sessionStorage.setItem('vy_view_gcp', JSON.stringify(STATE)); }catch(_){}   // survive a hard refresh
   renderCrumbs(); renderRail();
   const main = document.getElementById("main"); main.innerHTML = "";
   if (STATE.view === "home")   return renderHome(main);
@@ -1093,7 +1165,7 @@ function buildSavingsCard(provider, cloud, accent){
 function buildConnectCard(){
   var card = el("div",{class:"card",style:"margin-bottom:0;display:flex;flex-direction:column"});
   card.append(el("div",{class:"h"}, icon("terminal"), "Connect your SDK or CLI"));
-  card.append(el("div",{class:"b"}, vyCodeTabs({note:"Nano: start the tunnel first (Start tunnel in the bottom bar), or run vyomi-tunnel; then these reach this browser tab.", accent:"var(--blue)", tabs: vyConnectTabs({cloud:"gcp", ep: nanoTunnelEp(), project: PROJECT, nano:true})})));
+  card.append(el("div",{class:"b"}, vyConnectSwitch({accent:"var(--blue)", build:(ep)=>vyConnectTabs({cloud:"gcp", ep, project: PROJECT, nano:true})})));
   return card;
 }
 
@@ -1968,7 +2040,7 @@ function overviewGrid(svc, item, general){
   if (details.rows.length) sections.splice(1, 0, details);
   const seen = new Set(general.map(r => String(r[0]).toLowerCase()));
   sections.slice(1).forEach(s => { s.rows = s.rows.filter(r => !(s.title === "Details" && seen.has(String(r[0]).toLowerCase()))); });
-  const wrap = el("div",{class:"table-wrap"});
+  const wrap = el("div",{class:"table-wrap ov-flat"});
   const tb = el("div",{class:"table-toolbar"});
   const fi = el("input",{class:"search",placeholder:"Filter properties…"}); const stats = el("span",{class:"stats"});
   tb.append(fi, stats); wrap.append(tb);
@@ -2546,7 +2618,7 @@ function tableOf(cols, rows, actions, opts){
   if (cols.length < 3) { t.selectedRows = selectedRows; return t; }   // a two-column key/value list has nothing to hide
   const key = gridKeyOf(cols.map(c => c[1]));
   const menu = columnsMenu(key, cols.map(c => c[1]), () => t);
-  const box = el("div",{class:"vy-grid"}, el("div",{class:"vy-grid-tools"}, menu), t);
+  const box = el("div",{class:"vy-grid"}, el("div",{class:"vy-grid-tools"}, menu), el("div",{class:"vy-scroll"}, t));
   applyColVis(t, hiddenCols(key));
   box.selectedRows = selectedRows;
   return box;
@@ -4358,7 +4430,7 @@ function renderDiskWidget(d) {
       '<div style="height:8px;background:#f3f4f6;border-radius:999px;overflow:hidden">'+
         '<div style="height:100%;width:'+pct+'%;background:'+accent+';transition:width 0.3s"></div>'+
       '</div>'+
-      '<div style="font-size:11px;color:#6b7280;margin-top:6px;margin-bottom:10px">'+disk.used_gb+' / '+disk.total_gb+' GB · '+disk.avail_gb+' GB free</div>'+
+      '<div style="font-size:11px;color:#6b7280;margin-top:6px;margin-bottom:10px">'+(+disk.used_gb).toFixed(2)+' / '+(+disk.total_gb).toFixed(2)+' GB · '+(+disk.avail_gb).toFixed(2)+' GB free</div>'+
       '<div style="display:flex;gap:8px">'+
         '<button onclick="openDiskCleanup()" style="font-size:12px;padding:6px 12px;background:#1a73e8;color:#fff;border:0;border-radius:6px;cursor:pointer">Free up space</button>'+
         (canGrow ? '<button onclick="openDiskGrow()" style="font-size:12px;padding:6px 12px;background:#fff;color:#1a2330;border:1px solid #d8e0ea;border-radius:6px;cursor:pointer">Grow disk</button>' : '')+
@@ -4549,7 +4621,7 @@ setInterval(fetchDiskHealth, 30000);
     epEl.title = external || "";
     // Persist the live endpoint so other views (e.g. the /docs/*/usage per-service
     // samples) can show the SAME relay URL even before their own channel connects.
-    if(phase==="connected" && external){ try{ localStorage.setItem("nano_relay_external", external); if(mode) localStorage.setItem("nano_relay_mode", mode); }catch(_){} }
+    if(phase==="connected" && external){ try{ localStorage.setItem("nano_relay_external", external); if(mode) localStorage.setItem("nano_relay_mode", mode); if(mode) localStorage.setItem(mode==="local"?"nano_local_ext":"nano_relay_cloud_ext", external); }catch(_){} }
     // Gentle GitHub-star nudge at natural moments: the first relayed request (a
     // "win") or the 30-min idle pause. Once per browser, dismissable, never blocks.
     if(served!=null && served>=1 && _prevServed<1) maybeNudge();
@@ -4638,5 +4710,6 @@ setInterval(fetchDiskHealth, 30000);
   scan(document.documentElement);
 })();
 </script>
+<script src="./nano-tunnel-tabs.js" defer></script>
 </body>
 </html>

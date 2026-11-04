@@ -138,6 +138,25 @@ def run() -> int:
     pm = csql.dispatch(st, "PATCH", PROJ + "/ghost", {}, {"content-type": "application/json"}, b"{}")
     _check("patch unknown instance 404", pm.status == 404)
 
+    # 7d. workloadCaptures start/stop/startReplay/stopReplay/list (v1beta4 preview)
+    def wc(method, suffix, body=None):
+        return csql.dispatch(st, method, PROJ + "/shopdb/workloadCaptures" + suffix, {}, {},
+                             json.dumps(body or {}).encode())
+    _check("workloadCaptures stop with none running 400", wc("POST", ":stop").status == 400)
+    ws = wc("POST", ":start", {"workloadId": "w1"})
+    _check("workloadCaptures start op", ws.status == 200 and _jbody(ws)["operationType"] == "START_WORKLOAD_CAPTURE")
+    _check("workloadCaptures double start 400", wc("POST", ":start").status == 400)
+    _check("workloadCaptures stop op", _jbody(wc("POST", ":stop"))["operationType"] == "STOP_WORKLOAD_CAPTURE")
+    wl = _jbody(wc("GET", ""))
+    _check("workloadCaptures list shows completed capture",
+           wl["items"][0]["workloadId"] == "w1" and wl["items"][0]["state"] == "COMPLETED")
+    _check("workloadCaptures startReplay op",
+           _jbody(wc("POST", "/w1:startReplay"))["operationType"] == "START_WORKLOAD_REPLAY")
+    _check("workloadCaptures startReplay unknown id 404", wc("POST", "/nope:startReplay").status == 404)
+    _check("workloadCaptures stopReplay op", _jbody(wc("POST", ":stopReplay"))["operationType"] == "STOP_WORKLOAD_REPLAY")
+    _check("workloadCaptures unknown instance 404",
+           csql.dispatch(st, "POST", PROJ + "/ghost/workloadCaptures:start", {}, {}, b"{}").status == 404)
+
     print("\nRESULT: PASS — GCP Cloud SQL control-plane core conforms "
           "(native Cloud SQL Admin REST wire) on this substrate.")
     return 0
