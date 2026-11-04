@@ -27,7 +27,7 @@ import ComputeStorageFields from "./ComputeStorageFields.jsx";
 import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
 import SharedActivityLog from "../../kit/ActivityLog.jsx";
 import SharedResourceHealth from "../../kit/ResourceHealth.jsx";
-import { ResourceAlerts, ResourceMetrics, ResourceLogs } from "../../kit/ResourceMonitoring.jsx";
+import { ResourceAlerts, ResourceMetrics, ResourceLogs, ResourceNotifications } from "../../kit/ResourceMonitoring.jsx";
 import SharedDiagnosticSettings from "../../kit/DiagnosticSettings.jsx";
 import SharedSupportPanel from "../../kit/SupportPanel.jsx";
 import { ResourceRecommendations } from "../defender/Pages.jsx";
@@ -187,7 +187,7 @@ function Overview({ a, reload, self }) {
       {tab === "monitoring" && <ResourceMetrics id={a.id} name={a.name} title="Monitoring" />}
       {tab === "properties" && <Properties a={a} />}
       {tab === "features" && <NotSimulatedContainer feature="The features overview" />}
-      {tab === "notifications" && <NotSimulatedContainer feature="Notifications" />}
+      {tab === "notifications" && <ResourceNotifications id={a.id} name={a.name} title={null} />}
       {tab === "integrations" && <NotSimulatedContainer feature="Integrations" />}
       {tab === "tutorials" && <NotSimulatedContainer feature="Tutorials" />}
 

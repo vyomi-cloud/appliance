@@ -9,6 +9,7 @@
  * account blade uses) are backed by real ARM calls; the remaining menu items are honest
  * CapabilityContainer gaps (core/capabilities/azure/vms.json is the single source of truth for
  * which). */
+import { ResourceMetrics } from "../../kit/ResourceMonitoring.jsx";
 import { UserAssignedIdentities } from "../../kit/UserAssignedIdentities.jsx";
 import { useEffect, useState } from "react";
 import {
@@ -145,7 +146,7 @@ export default function VmBlade({ params }) {
       logs: () => <VmLogs a={a} />,
       connectionmonitor: () => <ConnectionMonitor a={a} />,
       workbooks: () => <VmWorkbooks a={a} />,
-      metrics: () => <VmMetrics a={a} />,
+      metrics: () => <ResourceMetrics id={a.id} name={a.name} />,
     }[panel];
     body = P ? P() : (
       NOT_SIMULATED_REASON[panel]

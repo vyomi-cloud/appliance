@@ -66,6 +66,18 @@ try {
   const tiles = await page.getByTestId("insights-tiles").textContent({ timeout: 10000 });
   check("insights rolls up alert rules and operations", /1\s*Alert rules/.test(tiles), tiles);
 
+  // App Service + Service Bus use the same shared panels
+  await arm("PUT", `/resourceGroups/${RG}/providers/Microsoft.Web/sites/vymonapp${n}`, { location: "eastus", kind: "app", properties: {} }, "2023-12-01");
+  await arm("PUT", `/resourceGroups/${RG}/providers/Microsoft.ServiceBus/namespaces/vymonsb${n}`, { location: "eastus", sku: { name: "Standard", tier: "Standard" } }, "2022-10-01-preview");
+  await page.goto(UI + `#/appservices/${RG}/vymonapp${n}/metrics`);
+  const wsum = await page.getByTestId("metric-summary").textContent({ timeout: 20000 }).catch(() => "");
+  check("web app metrics panel shows its Activity-log count", /sum [1-9]/.test(wsum), wsum);
+  await page.goto(UI + `#/appservices/${RG}/vymonapp${n}/alerts`);
+  check("web app alerts panel is the shared rule grid", await page.getByRole("button", { name: "Create" }).first().waitFor({ timeout: 10000 }).then(() => true, () => false));
+  await page.goto(UI + `#/servicebus/${RG}/vymonsb${n}/insights`);
+  await page.waitForFunction(() => /\d\s*Operations recorded/.test(document.querySelector('[data-testid="insights-tiles"]')?.textContent || ""), null, { timeout: 15000 }).catch(() => {});
+  check("service bus insights rolls up its operations", /[1-9]\s*Operations recorded/.test(await page.getByTestId("insights-tiles").textContent({ timeout: 5000 }).catch(() => "")));
+
   // Other blades render the shared panels (not the Not-simulated panel)
   for (const [path, label] of [[`#/resourcegroups/${RG}/alerts`, "rg alerts"], [`#/resourcegroups/${RG}/metrics`, "rg metrics"]]) {
     await page.goto(UI + path);

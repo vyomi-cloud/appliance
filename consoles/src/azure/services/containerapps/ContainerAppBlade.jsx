@@ -3,6 +3,7 @@
  * Authentication, Identity, Activity log, Access control (IAM), Tags, Diagnostic settings,
  * Export template and Locks are backed by native ARM calls (core/azure_app_core.py); the rest
  * render their honest capability level via CapabilityContainer. */
+import { ResourceMetrics, ResourceAlerts } from "../../kit/ResourceMonitoring.jsx";
 import { UserAssignedIdentities } from "../../kit/UserAssignedIdentities.jsx";
 import { useEffect, useState } from "react";
 import {
@@ -106,6 +107,8 @@ export default function ContainerAppBlade({ params }) {
       exporttemplate: () => <ExportTemplate a={a} name={a.name} type="Microsoft.App/containerApps" />,
       supportrequest: () => <SharedSupportPanel resourceId={a.id} name={a.name} service="containerapps" />,
       resourcehealth: () => <SharedResourceHealth id={a.id} name={a.name} />,
+      metrics: () => <ResourceMetrics id={a.id} name={a.name} />,
+      alerts: () => <ResourceAlerts id={a.id} name={a.name} />,
     }[panel];
     body = P ? P() : <CapabilityContainer id={CAP[panel] || "azure.containerapps.app.tools"} title={`${a.name} | ${LABEL[panel] || panel}`} />;
   }

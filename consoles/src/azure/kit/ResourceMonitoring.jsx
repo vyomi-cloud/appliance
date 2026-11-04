@@ -277,3 +277,23 @@ export function ResourceInsightsPanel({ id, name, title }) {
 }
 
 export default { ResourceMetrics, ResourceAlerts, ResourceLogs, ResourceWorkbooks, ResourceInsightsPanel };
+
+/** Notifications: the resource's most recent Activity-log events (what the portal's bell/notifications list surfaces). */
+export function ResourceNotifications({ id, name, title }) {
+  const acts = useAsync(() => listActivityLog(id), [id]);
+  return (
+    <>
+      {title !== null && <div className="vy-panel-title">{title || `${name} | Notifications`}</div>}
+      <CapabilityContainer id={CAP} title="Notifications">
+        <ErrorBar error={acts.error} title="Failed to load notifications" />
+        {acts.loading ? <Loading /> : (
+          <ul style={{ margin: 0, paddingLeft: 18 }} data-testid="notifications">
+            {(acts.data || []).slice(0, 20).map((a, i) => <li key={i}>{a.operationName?.localizedValue || a.operationName?.value} - {a.status?.value} ({fmtDate(a.eventTimestamp)})</li>)}
+            {!acts.data?.length && <li>No notifications.</li>}
+          </ul>
+        )}
+        <InfoBar>Shows this resource's real recent Activity-log events. Service-health and fired-alert notifications do not exist because Vyomi has no monitoring pipeline that raises them.</InfoBar>
+      </CapabilityContainer>
+    </>
+  );
+}
