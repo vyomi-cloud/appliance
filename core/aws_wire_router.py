@@ -1050,7 +1050,7 @@ class AwsWireRouter:
         t0 = _t.time()
         res = self._handle_inner(method, path, query, headers, body)
         try:
-            if svc:
+            if svc and svc != "gcp-trace":   # the tracer does not trace its own reads/writes
                 cloud = "gcp" if svc.startswith("gcp-") else ("azure" if svc.startswith("az-") else "aws")
                 r_, op_ = _obsc.extract_resource(cloud, svc, method, path, lh, bytes(bb))
                 _obsc.record(self.obs, cloud, svc, r_, op_, int(res.get("status", 0)), (_t.time() - t0) * 1000.0,
