@@ -125,6 +125,8 @@ def _applications(store, method, project, loc, rest, verb, payload, query):
     apps = _x(store, "apphub_apps")
     pre = "projects/%s/locations/%s/applications/" % (project, loc)
     if not rest:
+        if method == "GET" and loc == "-":      # locations/- lists across every location, like the real API
+            return _page([_app_view(store, v) for k, v in sorted(apps.items()) if k.startswith("projects/%s/locations/" % project)], query, "applications")
         if method == "GET":
             return _page([_app_view(store, v) for k, v in sorted(apps.items()) if k.startswith(pre)], query, "applications")
         if method == "POST":

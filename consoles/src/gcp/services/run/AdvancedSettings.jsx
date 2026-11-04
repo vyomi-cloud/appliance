@@ -8,6 +8,7 @@ import { Box, Button, Checkbox, FormControlLabel, IconButton, MenuItem, Radio, R
 import AddIcon from "@mui/icons-material/esm/Add.js";
 import DeleteIcon from "@mui/icons-material/esm/Delete.js";
 import { CapabilityBadge } from "../../kit/Capability.jsx";
+import { getProject } from "../../project.js";
 
 export const emptyAdvanced = () => ({
   targetUtil: "", cpuTarget: "",
@@ -18,6 +19,8 @@ export const emptyAdvanced = () => ({
   sqlInstances: "",
   binauthz: false, binauthzPolicy: "",
   cmek: false, kmsKey: "",
+  h2: false, affinity: false, vpcKind: "none", connector: "", network: "default", subnet: "", egress: "PRIVATE_RANGES_ONLY", tags: "", mesh: "",
+  noDefaultUrl: false, audiences: "",
 });
 
 const Group = ({ title, capId, children }) => (
@@ -131,6 +134,48 @@ export function CloudSqlPanel({ a, set }) {
   );
 }
 
+export function NetworkingPanel({ a, set, cap = "gcp.run.networking" }) {
+  return (
+    <Group title="Networking" capId={cap}>
+      <FormControlLabel control={<Checkbox size="small" checked={a.h2} onChange={(e) => set({ h2: e.target.checked })} />} label="Use HTTP/2 end-to-end (container port is h2c)" />
+      <FormControlLabel control={<Checkbox size="small" checked={a.affinity} onChange={(e) => set({ affinity: e.target.checked })} />} label="Session affinity" />
+      <FormControl size="small" sx={{ maxWidth: 360 }}>
+        <InputLabel id="vpc-kind">Connect to a VPC for outbound traffic</InputLabel>
+        <Select labelId="vpc-kind" label="Connect to a VPC for outbound traffic" value={a.vpcKind} onChange={(e) => set({ vpcKind: e.target.value })} inputProps={{ "aria-label": "VPC outbound traffic" }}>
+          <MenuItem value="none">None</MenuItem>
+          <MenuItem value="connector">Serverless VPC Access connector</MenuItem>
+          <MenuItem value="direct">Send traffic directly to a VPC</MenuItem>
+        </Select>
+      </FormControl>
+      {a.vpcKind === "connector" && <TextField size="small" label="Connector" value={a.connector} onChange={(e) => set({ connector: e.target.value })}
+        helperText="Name of a connector in the service's region (Networking > Serverless VPC access)." inputProps={{ "aria-label": "VPC connector" }} sx={{ maxWidth: 360 }} />}
+      {a.vpcKind === "direct" && (<>
+        <TextField size="small" label="Network" value={a.network} onChange={(e) => set({ network: e.target.value })} inputProps={{ "aria-label": "VPC network" }} sx={{ maxWidth: 360 }} />
+        <TextField size="small" label="Subnet" value={a.subnet} onChange={(e) => set({ subnet: e.target.value })} helperText="Must exist in the service's region." inputProps={{ "aria-label": "VPC subnet" }} sx={{ maxWidth: 360 }} />
+        <TextField size="small" label="Network tags (comma-separated)" value={a.tags} onChange={(e) => set({ tags: e.target.value })} inputProps={{ "aria-label": "Network tags" }} sx={{ maxWidth: 360 }} />
+      </>)}
+      {a.vpcKind !== "none" && (
+        <RadioGroup value={a.egress} onChange={(e) => set({ egress: e.target.value })} aria-label="Traffic routing">
+          <FormControlLabel value="PRIVATE_RANGES_ONLY" control={<Radio size="small" />} label="Route only requests to private IPs to the VPC" />
+          <FormControlLabel value="ALL_TRAFFIC" control={<Radio size="small" />} label="Route all traffic to the VPC" />
+        </RadioGroup>
+      )}
+      <TextField size="small" label="Service mesh (blank = none)" value={a.mesh} onChange={(e) => set({ mesh: e.target.value })}
+        helperText="projects/PROJECT/locations/global/meshes/NAME" inputProps={{ "aria-label": "Service mesh" }} sx={{ maxWidth: 520 }} />
+    </Group>
+  );
+}
+
+export function CustomUrlsPanel({ a, set, cap = "gcp.run.networking" }) {
+  return (
+    <Group title="Custom URLs" capId={cap}>
+      <FormControlLabel control={<Checkbox size="small" checked={a.noDefaultUrl} onChange={(e) => set({ noDefaultUrl: e.target.checked })} />} label="Disable the default run.app URL" />
+      <TextField size="small" label="Custom audiences (comma-separated)" value={a.audiences} onChange={(e) => set({ audiences: e.target.value })}
+        helperText="Audiences IAM-authenticated callers may mint ID tokens for. Map a custom domain from the Domain mappings page." inputProps={{ "aria-label": "Custom audiences" }} sx={{ maxWidth: 520 }} />
+    </Group>
+  );
+}
+
 export function SecurityPanel({ a, set }) {
   return (<>
     <Group title="Binary Authorization" capId="gcp.run.binary-authorization">
@@ -160,7 +205,7 @@ function probeBody(p) {
 }
 
 /** Fold the advanced state into the container + template (+ service body) being sent. */
-export function applyAdvanced(a, { container, template, body, gen1 }) {
+export function applyAdvanced(a, { container, template, body, gen1, region }) {
   const volumes = [], mounts = [];
   if (a.targetUtil || a.cpuTarget) {
     const ann = { ...(template.annotations || {}) };
@@ -191,6 +236,21 @@ export function applyAdvanced(a, { container, template, body, gen1 }) {
     if (a.binauthz) body.binaryAuthorization = a.binauthzPolicy.trim() ? { policy: a.binauthzPolicy.trim() } : { useDefault: true };
   }
   if (a.cmek && a.kmsKey.trim()) template.encryptionKey = a.kmsKey.trim();
+  if (body) {   // services only: jobs expose no port / affinity / mesh
+    if (a.h2) container.ports = [{ name: "h2c", containerPort: container.ports?.[0]?.containerPort || 8080 }];
+    if (a.affinity) template.sessionAffinity = true;
+    if (a.mesh.trim()) template.serviceMesh = { mesh: a.mesh.trim() };
+    if (a.noDefaultUrl) body.defaultUriDisabled = true;
+    const aud = a.audiences.split(",").map((x) => x.trim()).filter(Boolean);
+    if (aud.length) body.customAudiences = aud;
+  }
+  if (a.vpcKind === "connector" && a.connector.trim()) {
+    const c = a.connector.trim();
+    template.vpcAccess = { connector: c.startsWith("projects/") ? c : `projects/${getProject()}/locations/${region}/connectors/${c}`, egress: a.egress };
+  } else if (a.vpcKind === "direct") {
+    template.vpcAccess = { networkInterfaces: [{ network: a.network.trim() || "default", ...(a.subnet.trim() ? { subnetwork: a.subnet.trim() } : {}),
+      ...(a.tags.trim() ? { tags: a.tags.split(",").map((x) => x.trim()).filter(Boolean) } : {}) }], egress: a.egress };
+  }
 }
 
 export function useAdvanced() {

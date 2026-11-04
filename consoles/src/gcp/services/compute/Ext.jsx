@@ -23,7 +23,7 @@ const last = (v) => String(v || "").split("/").pop();
 const scopeName = (s) => String(s || "").replace(/^(zones|regions)\//, "");
 
 /* ── generic create form ─────────────────────────────────────────────────────────────── */
-function FormDialog({ open, title, fields, onClose, onSubmit, submitLabel = "Create", children }) {
+export function FormDialog({ open, title, fields, onClose, onSubmit, submitLabel = "Create", children }) {
   const init = () => Object.fromEntries(fields.map((f) => [f.key, f.default ?? ""]));
   const [v, setV] = useState(init);
   const [busy, setBusy] = useState(false);
@@ -62,11 +62,11 @@ function FormDialog({ open, title, fields, onClose, onSubmit, submitLabel = "Cre
   );
 }
 
-const ZONE_OPTS = Object.values(api.ZONES_BY_REGION).flat().map((z) => [z, z]);
+export const ZONE_OPTS = Object.values(api.ZONES_BY_REGION).flat().map((z) => [z, z]);
 const REGION_OPTS = api.REGIONS.map(([v, l]) => [v, l]);
 const MT_OPTS = ["e2-micro", "e2-small", "e2-medium", "n2-standard-2", "n2-standard-4", "c2-standard-4"].map((m) => [m, m]);
 
-function ListPage({ title, capId, resourceName, load, columns, rowKey, create, extraActions, tabs, deleteFn, deleteTitle, emptyText, children, sectionTitle }) {
+export function ListPage({ title, capId, resourceName, load, columns, rowKey, create, extraActions, tabs, deleteFn, deleteTitle, emptyText, children, sectionTitle }) {
   const notify = useNotify();
   const project = useProject();
   const [sel, setSel] = useState([]);
@@ -606,3 +606,4 @@ export const EXT_PAGE_IDS = {
   "compute-advisor": ComputeAdvisor, reservations: Reservations, "sole-tenant-nodes": SoleTenantNodes, "storage-pools": StoragePools,
   "async-replication": AsyncReplication, "consistency-groups": ConsistencyGroups, "network-endpoint-groups": NetworkEndpointGroups,
 };
+// VM Manager pages live in VmManager.jsx (it imports ListPage from here), so index.jsx merges them in.

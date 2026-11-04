@@ -19,6 +19,7 @@ import IpAddresses from "./IpAddresses.jsx";
 import ReserveAddress from "./ReserveAddress.jsx";
 import Routes from "./Routes.jsx";
 import CreateRoute from "./CreateRoute.jsx";
+import { Byoip, VpcConnectivity } from "./HybridConnectivity.jsx";
 import VpcFlowLogs from "./VpcFlowLogs.jsx";
 import ConnectivityTests from "./ConnectivityTests.jsx";
 import CreateConnectivityTest from "./CreateConnectivityTest.jsx";
@@ -83,6 +84,8 @@ export default {
     { pattern: "/networking/connectivity-tests/list", component: ConnectivityTests },
     { pattern: "/networking/connectivity-tests/add", component: CreateConnectivityTest },
     { pattern: "/networking/connectivity-tests/details/:name", component: ConnectivityTestDetail },
-    ...GAPS.map(([p, t, , capId]) => ({ pattern: `/networking/${p}`, component: ns(t, capId) })),
+    { pattern: "/networking/bring-your-own-ip", component: Byoip },
+    { pattern: "/networking/vpc-connectivity", component: VpcConnectivity },
+    ...GAPS.filter(([p]) => !["bring-your-own-ip", "vpc-connectivity"].includes(p)).map(([p, t, , capId]) => ({ pattern: `/networking/${p}`, component: ns(t, capId) })),
   ],
 };

@@ -721,6 +721,10 @@ def _assignment_view(store, project, zone, rec, rev=None):
 
 
 def os_policy_assignments(store, method, project, zone, rest, verb, payload, query):
+    if zone == "-" and method == "GET" and not rest:      # locations/- lists across every zone, like the real API
+        pre = "projects/%s/locations/" % project
+        items = [_assignment_view(store, project, k.split("/")[3], v) for k, v in sorted(_x(store, "osc_policy_assignments").items()) if k.startswith(pre)]
+        return _page(items, query, "osPolicyAssignments")
     if not ZONE_RE.match(zone):
         raise _bad("Invalid location %r: OS policy assignments are zonal (for example us-central1-a)." % zone)
     coll = _x(store, "osc_policy_assignments")

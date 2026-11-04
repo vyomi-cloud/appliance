@@ -27,7 +27,10 @@ import Zones from "./Zones.jsx";
 import Operations from "./Operations.jsx";
 import Settings from "./Settings.jsx";
 import { gapById, gapRoutes } from "./GapPages.jsx";
-import { EXT_PAGE_IDS } from "./Ext.jsx";
+import { EXT_PAGE_IDS as EXT_BASE } from "./Ext.jsx";
+import { Patch, OsPolicies, VmExtensionPolicies } from "./VmManager.jsx";
+
+const EXT_PAGE_IDS = { ...EXT_BASE, patch: Patch, "os-policies": OsPolicies, "vm-extension-policies": VmExtensionPolicies };
 
 const link = (id, overrides) => { const g = gapById(id); return g ? { text: g[1], href: `#/compute/${g[2]}`, icon: g[3], ...overrides } : null; };
 
