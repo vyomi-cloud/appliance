@@ -196,7 +196,7 @@
   "limitations": [
    "CreateFlowLogs / DescribeFlowLogs / DeleteFlowLogs manage real flow log resources (status, destination, format, tags) against a VPC, subnet or ENI.",
    "Offline with netsim enforcement on (VYOMI_NETSIM_ENFORCE=1|auto, Docker compute backend) the enforcer's real per-flow packet/byte counters are delivered per flow log: CloudWatch Logs (stream <eni>-<all|accept|reject>, group must exist or deliverLogsStatus becomes FAILED) or S3 (gzip AWSLogs/<acct>/vpcflowlogs/... object with the header line), honouring TrafficType ACCEPT/REJECT, resource scope (VPC/subnet/ENI) and custom LogFormat fields (core/netsim/flowdeliver.py, tests/netsim/test_flow_delivery.py with synthetic counters). Delivery runs on each enforcement apply, not on a fixed 1/10-minute aggregation timer, and ICMP/IPv6 flows are not recorded.",
-   "Nano has no packets, so no flow records are produced there (the control plane only)."
+   "The console offers CloudWatch Logs and S3 destinations and a View flow records dialog that reads delivered records back from the CloudWatch Logs group (S3 flow logs point to the S3 console). Nano has no packets, so no flow records are produced there (the control plane only)."
   ],
   "tests": [
    "tests/conformance/test_vpc_core.py"
