@@ -91,8 +91,12 @@ export const rotateManagedIdentityCert = (name) => restJson("POST", `/v1/${name}
 export const deleteManagedIdentity = (name) => restJson("DELETE", `/v1/${name}`);
 
 // ── Asset Inventory ───────────────────────────────────────────────────────────
-export async function searchAssets(query) {
-  const r = await restJson("GET", `/v1/projects/${getProject()}:searchAllResources`, { query: query ? { query } : {} });
+export async function searchAssets(query, { assetTypes = "", orderBy = "" } = {}) {
+  const q = {};
+  if (query) q.query = query;
+  if (assetTypes) q.assetTypes = assetTypes;
+  if (orderBy) q.orderBy = orderBy;
+  const r = await restJson("GET", `/v1/projects/${getProject()}:searchAllResources`, { query: q });
   return r.results || [];
 }
 

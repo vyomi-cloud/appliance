@@ -69,6 +69,7 @@ from urllib.parse import unquote
 MAX_ACTIVITY = 200
 
 from core.iam_store import IamStore, InMemoryIamStore
+from core import gcp_asset_query_core as aq   # Cloud Asset Inventory search query language
 from core import gcp_wif_core as wif   # provider validation / attribute mapping / STS token exchange
 
 # ── predefined role → permissions map ──────────────────────────────────────
@@ -973,12 +974,12 @@ def _rotate_managed_identity_cert(store, name) -> GcpIamResponse:
 
 
 # ── Asset Inventory: searchAllResources over what Vyomi models for IAM/RM ───
-def _search_assets(store, project, query_str, rm_store=None) -> GcpIamResponse:
+def _search_assets(store, project, query_str, rm_store=None, params=None) -> GcpIamResponse:
     """Real, live search over the IAM & Resource Manager resources this project
     actually has — not Cloud Asset Inventory's full org-wide resource/IAM/policy
     index (which spans every GCP service and keeps a change history Vyomi doesn't
     maintain)."""
-    q = (query_str or "").strip().lower()
+    params = params or {}
     results = []
     for email, sa in sorted(_sa_ns(store).items()):
         if sa["projectId"] != project:
@@ -1010,7 +1011,7 @@ def _search_assets(store, project, query_str, rm_store=None) -> GcpIamResponse:
             results.append({
                 "name": p["name"], "assetType": "cloudresourcemanager.googleapis.com/Project",
                 "displayName": p.get("displayName") or project, "project": f"projects/{project}",
-                "state": p.get("state", "ACTIVE"),
+                "state": p.get("state", "ACTIVE"), "labels": dict(p.get("labels") or {}),
             })
         for name, tk in sorted(getattr(rm_store, "tag_keys", {}).items()):
             if tk.get("parent") != f"projects/{project}":
@@ -1019,9 +1020,25 @@ def _search_assets(store, project, query_str, rm_store=None) -> GcpIamResponse:
                 "name": name, "assetType": "cloudresourcemanager.googleapis.com/TagKey",
                 "displayName": tk.get("shortName", ""), "project": f"projects/{project}", "state": "ACTIVE",
             })
-    if q:
-        results = [r for r in results if q in r["displayName"].lower() or q in r["assetType"].lower()]
-    return _json(200, {"results": results, "totalResults": len(results)})
+        for name, f in sorted(getattr(rm_store, "folders", {}).items()):
+            if f.get("state") == "ACTIVE":
+                results.append({"name": name, "assetType": "cloudresourcemanager.googleapis.com/Folder", "displayName": f["displayName"],
+                                "project": f"projects/{project}", "state": "ACTIVE", "parentFullResourceName": f.get("parent", "")})
+    for r in results:
+        r.setdefault("location", "global")
+    types = params.get("assetTypes") or []
+    if isinstance(types, str):
+        types = [t for t in types.split(",") if t]
+    elif types:
+        types = [t2 for t in types for t2 in str(t).split(",") if t2]
+    try:
+        page, nxt, total = aq.search(results, query_str or "", types, params.get("orderBy") or "", params.get("pageSize"), params.get("pageToken") or "")
+    except aq.QueryError as e:
+        return _err(400, str(e), "INVALID_ARGUMENT")
+    out = {"results": page, "totalResults": total}
+    if nxt:
+        out["nextPageToken"] = nxt
+    return _json(200, out)
 
 
 # ── Security Insights: lint rules evaluated live over the current IAM state ─
@@ -1163,7 +1180,7 @@ def dispatch(store: IamStore, method: str, path: str,
         if verb == "searchAllResources" and method == "GET":
             rsegs = resource.split("/")
             if len(rsegs) == 2 and rsegs[0] == "projects":
-                return _search_assets(store, rsegs[1], query.get("query"), rm_store=rm_store)
+                return _search_assets(store, rsegs[1], query.get("query"), rm_store=rm_store, params=query)
             return _err(400, f"Invalid scope for searchAllResources: {resource}", "INVALID_ARGUMENT")
 
         if verb == "checkAccess" and method == "POST" and "/iap_web/" in resource:
