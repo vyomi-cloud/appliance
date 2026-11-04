@@ -1,0 +1,26 @@
+{
+ "$doc": "Vyomi capability registry — AWS Cost Explorer. See s3.json for the contract.",
+ "cost-explorer.cost-and-usage": {
+  "title": "Cost and usage (GetCostAndUsage, GetCostForecast, GetDimensionValues) over the real EC2/EBS/RDS inventory",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Figures are what AWS would have charged: on-demand list prices x the real uptime of the simulator's EC2 instances, EBS volumes and RDS instances. Other services are not metered; stopped instances accrue nothing from when they are observed stopped; HOURLY granularity, tag / cost-category grouping and ML forecasting are not modeled (the forecast extrapolates the current run rate). There are no invoices and no payment methods."
+  ],
+  "api": ["GetCostAndUsage", "GetCostForecast", "GetDimensionValues"],
+  "tests": ["tests/conformance/test_ce_core.py"]
+ },
+ "cost-explorer.saved-by-vyomi": {
+  "title": "Saved by Vyomi dashboard (AWS-equivalent cost vs the $0 the simulator bills)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "A Vyomi-only view (the VyomiGetSavings action has no AWS equivalent). It reports estimated list-price savings, not an invoice, and covers only the metered services listed under cost-explorer.cost-and-usage."
+  ],
+  "tests": ["tests/conformance/test_ce_core.py"]
+ }
+}

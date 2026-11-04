@@ -25,6 +25,7 @@ export const SERVICES = [
   { id: "cloudformation", icon: "cloudformation", title: "CloudFormation", description: "Create and manage resources with templates", category: "Management & Governance", load: () => import("./cloudformation/index.jsx") },
   { id: "kinesis", icon: "kinesis", title: "Kinesis", description: "Collect, process, and analyze real-time data streams", category: "Application Integration", load: () => import("./kinesis/index.jsx") },
   { id: "states", icon: "states", title: "Step Functions", description: "Coordinate distributed applications with visual workflows", category: "Application Integration", load: () => import("./states/index.jsx") },
+  { id: "cost-explorer", icon: "costexplorer", title: "Cost Explorer", description: "Explore what your resources would cost, and what Vyomi saved", category: "Management & Governance", load: () => import("./cost-explorer/index.jsx") },
   { id: "ssm", icon: "ssm", title: "Systems Manager", description: "Visibility and control of your infrastructure", category: "Management & Governance", load: () => import("./ssm/index.jsx") },
 ];
 
