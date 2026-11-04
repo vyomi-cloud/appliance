@@ -83,6 +83,7 @@ from core import gcp_run_core as gcp_run
 from core import gcp_trace_core as gcp_trace
 from core import gcp_osconfig_core as gcp_osconfig
 from core import gcp_apphub_core as gcp_apphub
+from core import gcp_clouddeploy_core as gcp_clouddeploy
 from core import gcp_posture_core as gcp_posture
 
 # Cloud Scheduler httpTarget that names a Cloud Run job's own Admin API v2 `:run` endpoint
@@ -110,6 +111,8 @@ def _gcp_service(path):
             or re.match(r"^/v1/projects/[^/]+/locations/global/traceScopes([/:]|$)", path) \
             or re.match(r"^/v2/projects/[^/]+/locations/global/logScopes([/:]|$)", path):
         return "gcp-trace"   # Cloud Trace v1/v2 + Trace scopes + Log scopes (core/gcp_trace_core, state on the Monitoring store)
+    if re.match(r"^/v1/projects/[^/]+/locations/[^/]+/(deliveryPipelines|targets)([/:?]|$)", path):
+        return "gcp-clouddeploy"   # Cloud Deploy: pipelines/targets/releases/rollouts state machine deploying to the simulator's Cloud Run + GKE (core/gcp_clouddeploy_core)
     if re.match(r"^/v1/projects/[^/]+/locations/[^/]+/(applications|discoveredServices|discoveredWorkloads)([/:?]|$)", path):
         return "gcp-apphub"   # App Hub applications + registered services/workloads (core/gcp_apphub_core, state on the Monitoring store)
     if re.match(r"^/v1/projects/[^/]+/(patchJobs|patchDeployments)([/:]|$)", path) \
@@ -718,6 +721,7 @@ class AwsWireRouter:
         self.gcp_run = s.get("gcp_run") or gcp_run.RunStore()   # Cloud Run (backs /functions, which the real console folds into it)
         self.gcp_run.pubsub_store = self.gcp_msg    # Eventarc Pub/Sub-sourced triggers validate/create a real subscription
         self.gcp_run.logging_store = self.gcp_logging   # Observability "Logs" — real Cloud Logging entries per invocation
+        self.gcp_mon.gke_store = self.gcp_gke   # Cloud Deploy deploys into GKE data planes
         self.gcp_mon.run_store, self.gcp_mon.vm_store = self.gcp_run, self.gcp_compute_vm   # App Hub discovers Cloud Run services + managed instance groups
         self.gcp_run.mon_store = self.gcp_mon       # Observability "Metrics" — real Cloud Monitoring points per invocation
         if getattr(self.gcp_fs, "on_doc_event", None) is None:
@@ -1796,6 +1800,7 @@ class AwsWireRouter:
                 "gcp-trace": (gcp_trace, self.gcp_mon),
                 "gcp-osconfig": (gcp_osconfig, self.gcp_compute_vm),
                 "gcp-apphub": (gcp_apphub, self.gcp_mon),
+                "gcp-clouddeploy": (gcp_clouddeploy, self.gcp_mon),
                 "gcp-redis": (gcp_redis, self.gcp_redis),
                 "gcp-artifactregistry": (gcp_ar, self.gcp_ar),
                 "gcp-logging": (gcp_logging, self.gcp_logging),
