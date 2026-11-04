@@ -203,13 +203,23 @@
   ]
  },
  "aws.vpc.integrations": {
-  "title": "VPC console third-party integrations (e.g. Transit Gateway Network Manager tiles)",
+  "title": "VPC Integrations tab: transit gateway attachments and Network Manager registration",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "These dashboard tiles link out to genuinely separate things Vyomi cannot stand in for: AWS Network Manager (its own control plane over Transit Gateways) and real third-party network/observability partners (e.g. Aviatrix, Kentik) advertised in the console \u2014 not a resource this core could model, real external services."
+   "Shows this VPC's real transit gateway attachments and whether each gateway is registered in a Network Manager global network (core/networkmanager_core.py, Home Region us-west-2). Third-party partner integrations (Aviatrix, Kentik and similar) are external services and are not simulated."
+  ]
+ },
+ "aws.networkmanager": {
+  "title": "AWS Network Manager global networks, sites, devices, links and transit gateway registrations",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Inventory and registration control plane only: transit gateways are validated against the account's real EC2 model. No topology telemetry, events, route analysis, Connect or Direct Connect associations are collected."
   ]
  },
  "aws.vpc.create-vpc-and-more": {

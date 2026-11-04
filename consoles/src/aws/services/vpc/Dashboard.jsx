@@ -75,7 +75,7 @@ export default function Dashboard() {
           </SpaceBetween>
         </Container>
         <Container header={<Header variant="h2">AWS Network Manager</Header>}>
-          <GapButton text="Open Network Manager" feature="AWS Network Manager" note="Network Manager is a separate, external AWS console." />
+          <Button href="#/networkmanager/global-networks" onFollow={follow}>Open Network Manager</Button>
         </Container>
       </SpaceBetween>
     </ContentLayout>
