@@ -1,6 +1,6 @@
 # Vyomi service pipeline
 
-_Updated 2026-11-04 22:01 UTC · refreshes after every pipeline run_
+_Updated 2026-11-04 22:09 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
@@ -10,7 +10,7 @@ _Updated 2026-11-04 22:01 UTC · refreshes after every pipeline run_
 - **Queued:** 41 services (P1 first, then P2)
 - **Consoles really implemented:** offline 100% · Nano 97%
 - **Hourly tests:** 284 of 286 suites passing (run 21:28 UTC)
-- **Upstream watch:** 10 open changes from the real clouds to adopt
+- **Upstream watch:** 15 open changes from the real clouds to adopt
 
 ## By cloud
 
@@ -83,7 +83,7 @@ _Updated 2026-11-04 22:01 UTC · refreshes after every pipeline run_
 | S3 | — | not audited | 🧩 17/18 | – · 0 | ✅ watched | before gate |
 | IAM | — | not audited | ✅ 11/11 | – · 0 | ✅ watched | before gate |
 | RDS | — | not audited | 🧩 17/18 | – · 0 | ✅ watched | before gate |
-| DynamoDB | — | not audited | 🧩 18/19 | – · 0 | ✅ watched | before gate |
+| DynamoDB | — | not audited | 🧩 18/19 | – · 0 | ⚠️ 4 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+dynamodb) | before gate |
 | SQS | — | not audited | 🧩 12/13 | – · 0 | ✅ watched | before gate |
 | Lambda | — | not audited | 🧩 15/16 | – · 0 | ✅ watched | before gate |
 | API Gateway | caddy · Lite | not audited | 🧩 14/15 | – · 0 | ✅ watched | before gate |
