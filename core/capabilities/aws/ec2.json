@@ -34,7 +34,8 @@
   "tests": [
    "tests/conformance/test_ec2_console_v4_core.py",
    "tests/conformance/test_ec2_offline_monitoring.py",
-   "tests/conformance/test_ec2_metrics_core.py"
+   "tests/conformance/test_ec2_metrics_core.py",
+   "tests/conformance/test_ec2_connect_offline.py"
   ]
  },
  "ec2.instances.status-checks": {
@@ -79,6 +80,9 @@
    "(Vyomi) GET /api/aws/ec2/instances/{id}/connect-info",
    "(Vyomi) GET /api/aws/ec2/instances/{id}/private-key.pem",
    "(Vyomi) POST /api/ec2/instances/{id}/console/exec"
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_connect_offline.py"
   ]
  },
  "ec2.instance-types": {
@@ -681,7 +685,8 @@
    "GetMetricStatistics"
   ],
   "tests": [
-   "tests/conformance/test_ec2_metrics_core.py"
+   "tests/conformance/test_ec2_metrics_core.py",
+   "tests/conformance/test_ec2_connect_offline.py"
   ]
  },
  "ec2.dashboard.service-health": {
