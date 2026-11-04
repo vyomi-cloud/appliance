@@ -1488,6 +1488,10 @@ class AzureArm:
 
         # Microsoft.AppConfiguration: the substrate-free engine owns the store / key-value semantics;
         # this class's flat store is its resource map (so it persists with the rest of ARM).
+        if namespace.lower() in ("microsoft.appconfiguration", "microsoft.cognitiveservices"):
+            _pr = netsvc.pec_request(self.state, method, sub, rg, list(chain), payload)
+            if _pr is not None:
+                return _pr
         if namespace.lower() == "microsoft.appconfiguration":
             return self._appconfig(method, sub, rg, chain, payload, query)
 

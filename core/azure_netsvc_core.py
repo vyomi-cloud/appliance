@@ -64,7 +64,7 @@ PRIVATE_LINK = {
     "microsoft.containerservice/managedclusters": {"management": "privatelink.eastus.azmk8s.io"},
 }
 # resource types whose own engine owns the privateEndpointConnections list (not mirrored as flat children here)
-OWN_ENGINE_PEC = {"microsoft.appconfiguration/configurationstores", "microsoft.cognitiveservices/accounts"}
+OWN_ENGINE_PEC: set = set()
 
 BASTION_SKUS = ("Basic", "Standard", "Developer", "Premium")
 FIREWALL_TIERS = ("Basic", "Standard", "Premium")
@@ -615,6 +615,8 @@ def _sync_target_list(state, trec):
              if isinstance(r, dict) and r.get("id", "").lower().startswith(prefix)
              and "/" not in r["id"][len(prefix):] and r.get("_pe_id")]
     trec.setdefault("properties", {})["privateEndpointConnections"] = conns
+    if "_pec" in trec:                              # Cognitive Services' engine renders connections from its own _pec map
+        trec["_pec"] = {c["name"].lower(): c for c in conns}
     pna = trec["properties"].get("publicNetworkAccess")
     if pna is None:
         trec["properties"]["publicNetworkAccess"] = "Enabled"
@@ -752,3 +754,54 @@ def on_delete(state: dict, rec: dict) -> None:
         _sync_target_list(state, state.get(_pec_target(rec["id"]).lower()))
     elif ft in (DDOS, VNET):
         _sync_ddos_attachments(state)
+
+
+# ── target-side privateEndpointConnections for engines that own their routes (App Configuration, Cognitive Services) ──
+def pec_request(state: dict, method: str, sub: str, rg: str, chain: list, payload: dict | None):
+    """Handle ``{target}/privateEndpointConnections[/{name}]`` for a target whose own engine would otherwise answer
+    (``chain`` = type, name, 'privateEndpointConnections'[, conn]). Returns an ARM response dict or None when not applicable."""
+    if len(chain) < 3 or str(chain[2]).lower() != "privateendpointconnections":
+        return None
+
+    # resolve the target record by scanning (type chain tokens are already after the namespace)
+    tname = str(chain[1]).lower()
+    trec = next((r for r in state.values() if isinstance(r, dict) and str(r.get("name", "")).lower() == tname
+                 and r.get("_sub") == sub and str(r.get("_rg") or "").lower() == str(rg or "").lower()
+                 and str(r.get("_type", "")).lower() in OWN_ENGINE_TARGETS), None)
+    if trec is None:
+        return None
+    method = method.upper()
+    prefix = trec["id"].lower() + PEC_SUFFIX
+    if len(chain) == 3:
+        if method != "GET":
+            return _err(405, "MethodNotAllowed", f"{method} not allowed.")
+        _sync_target_list(state, trec)
+        return {"status": 200, "headers": {}, "body": {"value": (trec["properties"].get("privateEndpointConnections") or [])}}
+    key = f"{prefix}/{chain[3]}".lower()
+    rec = state.get(key)
+    if method == "GET":
+        if rec is None:
+            return _err(404, "PrivateEndpointConnectionNotFound", f"The private endpoint connection '{chain[3]}' was not found.")
+        return {"status": 200, "headers": {}, "body": {k: v for k, v in rec.items() if not k.startswith("_")}}
+    if method == "PUT":
+        if rec is None:
+            return _err(404, "ResourceNotFound", "Private endpoint connections are created by a private endpoint; there is nothing at this id to approve or reject.")
+        props = (payload or {}).get("properties") or {}
+        e = _validate_pec_put(state, rec["id"], props)
+        if e:
+            return e
+        prev = {k: (dict(v) if isinstance(v, dict) else v) for k, v in rec.items()}
+        st = dict(props.get("privateLinkServiceConnectionState") or {})
+        rec["properties"]["privateLinkServiceConnectionState"] = {"status": st.get("status"), "description": st.get("description", ""),
+                                                                    "actionsRequired": st.get("actionsRequired", "None")}
+        after_put(state, rec, payload or {}, prev)
+        return {"status": 200, "headers": {}, "body": {k: v for k, v in rec.items() if not k.startswith("_")}}
+    if method == "DELETE":
+        if rec is not None:
+            state.pop(key, None)
+            on_delete(state, rec)
+        return {"status": 200 if rec is not None else 204, "headers": {}, "body": None}
+    return _err(405, "MethodNotAllowed", f"{method} not allowed.")
+
+
+OWN_ENGINE_TARGETS = {"microsoft.appconfiguration/configurationstores", "microsoft.cognitiveservices/accounts"}
