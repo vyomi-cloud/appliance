@@ -353,10 +353,11 @@
   },
   "limitations": [
    "Control plane is real (core/vpc_lattice_core, native vpc-lattice REST): AWS name/ID/ARN formats, VPC/subnet/security-group/instance checks against the EC2 model, one service network per VPC, unique listener ports and rule priorities, undeletable default rule, in-use target groups/gateways/networks refuse deletion, auth/resource policy and tag APIs.",
-   "No traffic is routed through a service network (no netsim data path): service DNS names do not resolve, listeners/rules are never evaluated against requests, and target health is never probed (targets stay INITIAL/UNUSED). A domain verification stays PENDING because no DNS TXT check is performed. Cross-account sharing (RAM) is not modeled."
+   "Data plane is EVALUATED (core/vpc_lattice_dataplane, simulator verb POST /vyomi/invoke on both substrates): service DNS resolves only inside a VPC associated with a service network that contains the service, association security groups gate the caller, listener port/protocol, AuthType AWS_IAM with service + service-network auth policies (explicit deny wins, implicit deny, Allow/Deny with StringEquals/StringLike conditions on request method/port/path/header/source VPC), rules in ascending priority (method, path exact/prefix, header exact/prefix/contains) then the default rule, fixed responses and weighted forwarding over target groups. Target health is DERIVED, not probed: an INSTANCE/IP target is HEALTHY only when it resolves to a running instance in the target group VPC whose security group admits the health-check port from 169.254.171.0/24, stopped instances are UNAVAILABLE, unowned addresses/blocked security groups are UNHEALTHY (Target.Timeout). No HTTP bytes are proxied to a real application, health-check path/matcher and healthy/unhealthy thresholds are not exercised, access logs are not delivered, unmodelled policy condition keys skip the statement, and a domain verification stays PENDING (no DNS TXT check). Cross-account sharing (RAM) is not modeled."
   ],
   "tests": [
-   "tests/conformance/test_vpc_lattice_core.py"
+   "tests/conformance/test_vpc_lattice_core.py",
+   "tests/conformance/test_vpc_lattice_dataplane.py"
   ]
  },
  "aws.vpc.dns-firewall": {

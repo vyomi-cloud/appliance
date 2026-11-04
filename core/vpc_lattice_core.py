@@ -10,9 +10,10 @@ target groups / gateways / networks that are still referenced cannot be deleted,
 are unique, the default rule cannot be removed.
 Pure Python (no fastapi/boto3) — loads under Pyodide.
 
-Honest limits: this is the CONTROL PLANE. No traffic is routed through a service network (no netsim data path), target
-health is never probed (targets stay INITIAL / UNUSED), service DNS names resolve nowhere, and a domain verification
-stays PENDING (no DNS TXT check is performed).
+Data plane: core/vpc_lattice_dataplane.py EVALUATES requests (simulator verb POST /vyomi/invoke) - DNS-per-VPC
+scoping, association SGs, listeners, auth policies, rule priority/match, weighted forwarding, derived target health.
+Honest limits: no HTTP bytes are proxied (the evaluator answers where a request would go), target health is derived
+from instance state + security groups rather than probed, and a domain verification stays PENDING (no DNS TXT check).
 """
 from __future__ import annotations
 
@@ -615,10 +616,22 @@ def _deregister_targets(st, g, body, query, region):
 def _list_targets(st, g, body, query, region):
     tg = _get(st, "tg", g[0], "Target group")
     ids = {t.get("id") for t in (body.get("targets") or [])}
-    st_ = _target_status(st, tg)
-    items = [{**t, "status": st_, **({"reasonCode": "Target.NotInUse"} if st_ == "UNUSED" else {"reasonCode": "Target.HealthChecksNotRun"})}
-             for t in tg["targets"].values() if not ids or t["id"] in ids]
+    from core import vpc_lattice_dataplane as dp
+    items = []
+    for t in tg["targets"].values():
+        if ids and t["id"] not in ids:
+            continue
+        status, reason = dp.target_health(st, tg, t)      # derived from instance state + SG reachability (no probe)
+        items.append({**t, "status": status, **({"reasonCode": reason} if reason else {})})
     return _page(items, query)
+
+
+def _invoke(st, g, body, query, region):
+    """Simulator data-plane verb (not a real Lattice API): evaluate one request through the service network."""
+    from core import vpc_lattice_dataplane as dp
+    if not body.get("host"):
+        raise _Err("ValidationException", "host is required.", 400)
+    return 200, dp.invoke(st, body)
 
 
 # ── VPC / service / resource associations ────────────────────────────────────────────
@@ -1147,6 +1160,7 @@ _route("DELETE", f"/targetgroups/{_ID}", _delete_target_group)
 _route("POST", f"/targetgroups/{_ID}/registertargets", _register_targets)
 _route("POST", f"/targetgroups/{_ID}/deregistertargets", _deregister_targets)
 _route("POST", f"/targetgroups/{_ID}/listtargets", _list_targets)
+_route("POST", "/vyomi/invoke", _invoke)
 _route("POST", "/servicenetworkvpcassociations", _create_snva)
 _route("GET", "/servicenetworkvpcassociations", _list_snva)
 _route("GET", f"/servicenetworkvpcassociations/{_ID}", _get_of("snva", "Association", lambda st, o: _snva_view(o)))
