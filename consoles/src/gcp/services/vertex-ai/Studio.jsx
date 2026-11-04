@@ -5,6 +5,48 @@ import { PageHeader } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import * as api from "./api.js";
 
+function ChatPanel() {
+  const [model, setModel] = useState("gemini-2.0-flash");
+  const [system, setSystem] = useState("");
+  const [msg, setMsg] = useState("");
+  const [hist, setHist] = useState([]);
+  const [error, setError] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [usage, setUsage] = useState(null);
+  const send = async () => {
+    const next = [...hist, { role: "user", text: msg }];
+    setHist(next); setMsg(""); setBusy(true); setError(null);
+    try {
+      const r = await api.chat(model, next, system);
+      setHist([...next, { role: "model", text: (r.candidates?.[0]?.content?.parts || []).map((p) => p.text).join("") }]);
+      setUsage(r.usageMetadata);
+    } catch (e) { setError(e); } finally { setBusy(false); }
+  };
+  return (
+    <Stack spacing={2} sx={{ maxWidth: 760 }}>
+      <TextField select size="small" label="Model" value={model} onChange={(e) => setModel(e.target.value)}>{api.GEMINI.map((m) => <MenuItem key={m} value={m}>{m}</MenuItem>)}</TextField>
+      <TextField size="small" label="System instructions" value={system} onChange={(e) => setSystem(e.target.value)} multiline minRows={2} />
+      <Stack spacing={1} data-testid="chat-history">
+        {hist.map((m, i) => (
+          <Alert key={i} severity={m.role === "user" ? "info" : "success"} icon={false}>
+            <Typography variant="caption" color="text.secondary">{m.role === "user" ? "You" : model}</Typography>
+            <Typography sx={{ whiteSpace: "pre-wrap" }}>{m.text}</Typography>
+          </Alert>
+        ))}
+        {!hist.length && <Typography variant="body2" color="text.secondary">Start a conversation. Earlier turns are sent with every message.</Typography>}
+      </Stack>
+      {error && <Alert severity="error">{error.code === "UNAVAILABLE" ? "The local model is not available: " : ""}{error.message}</Alert>}
+      <Stack direction="row" spacing={1}>
+        <TextField size="small" fullWidth label="Message" value={msg} onChange={(e) => setMsg(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter" && msg.trim() && !busy) send(); }} />
+        <Button variant="contained" disabled={!msg.trim() || busy} onClick={send}>Send</Button>
+        <Button disabled={!hist.length} onClick={() => { setHist([]); setUsage(null); }}>Clear</Button>
+      </Stack>
+      {usage && <Typography variant="caption" color="text.secondary">Last turn: {usage.promptTokenCount} input / {usage.candidatesTokenCount} output tokens</Typography>}
+    </Stack>
+  );
+}
+
 export default function Studio() {
   const [model, setModel] = useState("gemini-2.0-flash");
   const [system, setSystem] = useState("");
@@ -36,6 +78,9 @@ export default function Studio() {
             {out && <Alert severity="success" icon={false}><Typography data-testid="gemini-output" sx={{ whiteSpace: "pre-wrap" }}>{out.candidates[0].content.parts.map((p) => p.text).join("")}</Typography>
               <Typography variant="caption" color="text.secondary">{out.usageMetadata.promptTokenCount} input / {out.usageMetadata.candidatesTokenCount} output tokens; countTokens: {tokens}; finish: {out.candidates[0].finishReason}</Typography></Alert>}
           </Stack>
+        </CapabilityContainer>
+        <CapabilityContainer id="gcp.vertex-ai.gemini" title="Chat" description="Multi-turn conversation: the full history is sent as role-tagged contents on every generateContent call.">
+          <ChatPanel />
         </CapabilityContainer>
         <CapabilityContainer id="gcp.vertex-ai.embeddings" title="Text embeddings" description="embedContent on a text embedding model.">
           <Stack spacing={2} sx={{ maxWidth: 760 }}>

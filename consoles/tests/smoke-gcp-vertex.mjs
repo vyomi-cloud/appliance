@@ -19,6 +19,13 @@ check("token usage shown", /input \/ .* output tokens; countTokens: \d+/.test(aw
 await page.getByRole("button", { name: "Embed" }).click();
 await page.getByTestId("embedding-dim").waitFor({ timeout: 10000 });
 check("embedContent returns a vector", /\d+ dimensions/.test(await page.getByTestId("embedding-dim").innerText()));
+await page.getByLabel("Message").fill("hello chat");
+await page.getByRole("button", { name: "Send" }).click();
+await page.waitForFunction(() => /STUB ANSWER/.test(document.querySelector('[data-testid="chat-history"]')?.innerText || ""), null, { timeout: 15000 });
+await page.getByLabel("Message").fill("second turn");
+await page.getByRole("button", { name: "Send" }).click();
+await page.waitForFunction(() => (document.querySelector('[data-testid="chat-history"]')?.innerText.match(/STUB ANSWER/g) || []).length >= 2, null, { timeout: 15000 });
+check("multi-turn chat keeps history", /hello chat/.test(await page.getByTestId("chat-history").innerText()) && /second turn/.test(await page.getByTestId("chat-history").innerText()));
 check("no page errors", errs.length === 0, errs[0]);
 await browser.close();
 process.exit(results.every(Boolean) ? 0 : 1);
