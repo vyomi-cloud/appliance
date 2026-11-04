@@ -541,7 +541,7 @@ def hub_dispatch(bag: dict, method: str, path: str, body: bytes, posture_rows: l
             docs = hub_findings(bag, posture_rows, threats)
             return Resp(200, {"BySeverity": {l: sum(d["Severity"]["Label"] == l for d in docs) for l in SEV_ORDER}, "Total": len(docs)})
     except _Err as e:
-        return Resp(e.status, {"Code": e.code, "Message": e.msg}, {"x-amzn-errortype": e.code})
+        return Resp(e.status, {"Code": e.code, "Message": e.msg, "__type": e.code, "message": e.msg}, {"x-amzn-errortype": e.code})
     return Resp(404, {"Code": "ResourceNotFoundException", "Message": f"Unknown Security Hub operation: {method} {path}"})
 
 

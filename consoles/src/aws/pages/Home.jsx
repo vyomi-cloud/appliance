@@ -1,7 +1,7 @@
 /* Console Home — the widget dashboard of the native console, on live Vyomi data only:
  * every number and status comes from a real call (native wire or Vyomi's event log);
  * the layout (which widgets show) is a per-browser preference. */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import ContentLayout from "@cloudscape-design/components/content-layout";
 import Header from "@cloudscape-design/components/header";
 import Container from "@cloudscape-design/components/container";
@@ -27,7 +27,7 @@ const SvcLink = ({ s, size = 20, fontSize }) => (
   </span>
 );
 import { follow } from "../../common/router.js";
-import { awsJson, awsQuery, asList, getRegion, s3, WIRE_BASE } from "../../common/wire.js";
+import { awsJson, awsQuery, awsRest, asList, getRegion, s3, WIRE_BASE } from "../../common/wire.js";
 import { useAsync } from "../../common/useAsync.js";
 import { fmtDate } from "../kit/common.jsx";
 import Tabs from "@cloudscape-design/components/tabs";
@@ -284,12 +284,44 @@ function Explore() {
   );
 }
 
+const SEV = ["CRITICAL", "HIGH", "MEDIUM", "LOW"];
+
+/** Security Hub (core/secscan_core.py): findings derive live from the simulated buckets, security groups, instances,
+ *  databases, IAM users and scanned images, plus GuardDuty-style detections from the control-plane audit feed. */
 function Security() {
+  const [st, setSt] = useState({ loading: true });
+  const load = async () => {
+    try {
+      const hub = await awsRest("securityhub", "GET", "/accounts").then(() => true).catch((e) => (/not subscribed|InvalidAccess/i.test(String(e.message || e)) ? false : Promise.reject(e)));
+      if (!hub) return setSt({ enabled: false });
+      const r = await awsRest("securityhub", "POST", "/findings", { body: { MaxResults: 100 } });
+      setSt({ enabled: true, findings: r.Findings || [] });
+    } catch (e) { setSt({ error: e.message || String(e) }); }
+  };
+  useEffect(() => { load(); }, []);
+  const enable = async () => { try { await awsRest("securityhub", "POST", "/accounts", { body: {} }); setSt({ loading: true }); load(); } catch (e) { setSt({ error: e.message || String(e) }); } };
+  if (st.loading) return <StatusIndicator type="loading">Loading Security Hub</StatusIndicator>;
+  if (st.error) return <StatusIndicator type="error">{st.error}</StatusIndicator>;
+  if (!st.enabled) {
+    return (
+      <SpaceBetween size="s">
+        <Box variant="strong">Security Hub is not enabled</Box>
+        <Box variant="small" color="text-body-secondary">Enable it to evaluate your simulated resources against the AWS Foundational Security Best Practices controls.</Box>
+        <Button onClick={enable}>Enable Security Hub</Button>
+      </SpaceBetween>
+    );
+  }
+  const open = st.findings.filter((f) => f.Workflow?.Status !== "SUPPRESSED" && f.Workflow?.Status !== "RESOLVED");
+  const by = (l) => open.filter((f) => f.Severity.Label === l).length;
   return (
-    <Box textAlign="center" color="text-body-secondary" padding={{ top: "l" }}>
-      <Box variant="strong" color="inherit">No security data</Box>
-      <Box variant="p" color="inherit">Security Hub findings are not simulated in Vyomi.</Box>
-    </Box>
+    <SpaceBetween size="s" data-testid="security-hub-summary">
+      <ColumnLayout columns={4} variant="text-grid">
+        {SEV.map((l) => <div key={l}><Box variant="awsui-key-label">{l[0] + l.slice(1).toLowerCase()}</Box><Box fontSize="heading-xl">{by(l)}</Box></div>)}
+      </ColumnLayout>
+      {open.slice(0, 5).map((f) => <div key={f.Id}><StatusIndicator type={f.Severity.Label === "CRITICAL" || f.Severity.Label === "HIGH" ? "error" : "warning"}>{f.ProductName}: {f.Title}</StatusIndicator><Box variant="small" color="text-body-secondary">{f.Resources[0].Id}</Box></div>)}
+      {!open.length && <StatusIndicator type="success">No active findings</StatusIndicator>}
+      <Box variant="small" color="text-body-secondary">Derived from your resources by Vyomi's rules; Inspector and GuardDuty findings come from the image scanner and the audit-feed detector, not AWS machine learning.</Box>
+    </SpaceBetween>
   );
 }
 
