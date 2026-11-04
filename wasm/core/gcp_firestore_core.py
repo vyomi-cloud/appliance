@@ -47,6 +47,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import math
 import uuid
 from dataclasses import dataclass, field

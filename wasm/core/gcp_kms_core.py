@@ -288,6 +288,7 @@ def _crypto_key_view(store: KeyStore, name: str) -> dict:
     view = {
         "name": name,
         "primary": _version_view(name, primary, versions.get(primary, {})),
+        **{k: meta[k] for k in ("rotationPeriod", "nextRotationTime", "labels") if meta.get(k)},
         "purpose": _enum(meta.get("purpose"), _PURPOSES, "ENCRYPT_DECRYPT"),
         "createTime": meta.get("createTime", _now()),
         "versionTemplate": {
@@ -880,7 +881,7 @@ def dispatch(store: KeyStore, method: str, path: str,
             return _encrypt(store, name, payload, headers)
         if verb == "decrypt":
             return _decrypt(store, name, payload, headers)
-        if verb == "updateCryptoKeyPrimaryVersion":
+        if verb in ("updateCryptoKeyPrimaryVersion", "updatePrimaryVersion"):
             if not store.key_exists(name):
                 return _err(404, "NOT_FOUND", f"CryptoKey {name} not found.")
             meta = store.get_key(name)

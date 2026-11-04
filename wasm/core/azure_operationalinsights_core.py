@@ -25,6 +25,14 @@ ARM REST of the ``operationalinsights`` resource provider (azure-rest-api-specs
 Workspaces live in the shared ARM state map (offline ``azure_services._state``; Nano ``az_arm``), keyed by the
 lower-cased resource id; their child collections live INSIDE the workspace record under underscore keys
 (never serialised to ARM clients), so they are space-scoped and persisted by the same seams as the rest of ARM.
+Data plane (also served by this file, both offline and Nano): ``.../workspaces/{ws}/api/logs`` (HTTP Data Collector: JSON
+array, ``Log-Type`` header or ``logType`` query -> table ``<LogType>_CL``, fields suffixed _s/_d/_b like the real service),
+``.../workspaces/{ws}/dataCollectionRules/{dcr}/streams/{Custom-X_CL}`` (Logs Ingestion API, 204) and
+``.../workspaces/{ws}/api/query`` / ``/query`` (POST {"query"} or GET ?query=) answering with the Log Analytics
+``{"tables":[{"name":"PrimaryResult","columns":[..],"rows":[..]}]}`` shape. KQL subset: ``Table | where`` (==, !=, =~, >, <, >=, <=,
+contains, !contains, startswith, endswith, has, in, and/or) ``| project | extend``-free ``| take/limit | count | order by/sort by |
+summarize count() by col | distinct``. Records live in the workspace record (``_rows``), so they follow the ARM state seams.
+Not modelled: the real KQL language beyond that subset, data export, linked services/storage insights,
 Query results are real for the built-in ``AzureActivity`` table (the SAME ``Microsoft.Insights/eventtypes`` rows
 the Activity log feed reads, filtered to this subscription) and always empty for every other table (Heartbeat,
 Perf, Syslog, Event, Usage, AzureDiagnostics, any custom ``_CL``/``_RST`` table) — there is no agent/telemetry

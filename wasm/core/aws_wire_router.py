@@ -71,6 +71,7 @@ from core import gcp_iamcredentials_core as gcp_iamc
 from core import gcp_monitoring_core as gcp_mon
 from core import gcp_redis_core as gcp_redis
 from core import gcp_artifactregistry_core as gcp_ar
+from core import nano_triggers
 from core import gcp_logging_core as gcp_logging
 from core import gcp_compute_core as gcp_compute
 from core import gcp_compute_instances_core as gcp_compute_vm
@@ -246,6 +247,8 @@ from core import kinesis_core as kinesis
 from core import cloudwatch_core as cw
 from core import azure_sql_core as az_sql
 from core import azure_iam_core as az_iam
+from core import azure_appconfiguration_core as az_appcfg
+from core import azure_dns_core as az_dns
 from core import azure_acr_core as az_acr
 from core.azure_acr_core import AcrRegistryStore
 from core import azure_graph_core as az_graph
@@ -375,6 +378,7 @@ _SIGNING = {
     "s3vectors": "s3vectors",   # Amazon S3 Vectors (rest-json POST /<Operation>) -> core/s3_vectors_core via the S3 store
     "s3tables": "s3tables",   # Amazon S3 Tables (rest-json /buckets, /namespaces, /tables, /tag) -> core/s3_tables_core via the S3 store
     "elasticloadbalancing": "elbv2",
+    "sts": "sts",
     "cloudformation": "cloudformation",
     "ssm": "ssm", "scheduler": "scheduler", "pipes": "pipes", "ram": "ram", "organizations": "organizations",
     "route53resolver": "dnsfw",   # Route 53 Resolver DNS Firewall control plane (core/dnsfw_core)
@@ -640,6 +644,9 @@ class AwsWireRouter:
         self.gcp_iamc = s.get("gcp_iamc") or gcp_iamc.IamCredentialsStore()   # IAM Service Account Credentials issue log
         self.gcp_mon = s.get("gcp_mon") or gcp_mon.MonitoringStore()   # Cloud Monitoring (policies, channels, metrics, series)
         self.gcp_ar = s.get("gcp_ar") or gcp_ar.ArtifactRegistryStore()
+        # The GCP project every GCP request is normalized to (a dict, or a callable
+        # returning one): Nano's fixed project unless the host injects its own.
+        self.gcp_project = s.get("gcp_project") or dict(gcp_proj.NANO_PROJECT)
         self.gcp_logging = s.get("gcp_logging") or gcp_logging.LoggingStore()   # Cloud Logging
         self.gcp_logging.mon_store = self.gcp_mon   # Logs Storage "Create usage alert" mirrors live byte/entry counts into Monitoring
         self.gcp_msg.mon_store = self.gcp_mon   # Pub/Sub topic/subscription Metrics tabs mirror live publish/backlog counts into Monitoring
@@ -678,6 +685,7 @@ class AwsWireRouter:
         if getattr(self.az_arm, "blob_store", None) is None:
             self.az_arm.blob_store = self.az_blob
         self.az_sb = s.get("az_sb") or InMemoryMessagingStore()   # Service Bus topics (fan-out)
+        self.az_arm = s.get("az_arm") or AzureArm()   # Azure Resource Manager — the console's ARM store
         self.az_acr = s.get("az_acr") or AcrRegistryStore()   # Container Registry repositories/tags/manifests
         self.az_graph = s.get("az_graph") or az_graph.GraphStore()   # Microsoft Graph (Entra ID)
         # EventBridge shares the messaging store (rules + SQS delivery); Lambda gets
@@ -722,6 +730,20 @@ class AwsWireRouter:
         self.dlm = s.get("dlm") or dlm.DlmStore()   # Data Lifecycle Manager (ec2.lifecycle-manager)
         self.dlm.vpc_store = self.vpc   # policies really create/prune real snapshots + AMIs
         self.logs = s.get("logs") or logs.LogsStore()         # CloudWatch Logs
+        # Lambda invocations land in CloudWatch Logs (/aws/lambda/<fn>) like real Lambda.
+        if getattr(self.lam, "_log_sink", None) is None:
+            def _lambda_log_sink(group, stream, lines, _logs=self.logs):
+                import time as _tm
+                hdr = "Logs_20140328."
+                logs.dispatch(_logs, hdr + "CreateLogGroup", {"logGroupName": group})
+                logs.dispatch(_logs, hdr + "CreateLogStream", {"logGroupName": group, "logStreamName": stream})
+                now = int(_tm.time() * 1000)
+                logs.dispatch(_logs, hdr + "PutLogEvents", {"logGroupName": group, "logStreamName": stream,
+                              "logEvents": [{"timestamp": now + i, "message": ln + "\n"} for i, ln in enumerate(lines)]})
+            try:
+                self.lam._log_sink = _lambda_log_sink
+            except Exception:
+                pass
         self.logs.lam_store, self.logs.kinesis_store = self.lam, self.kinesis   # real subscription-filter delivery
         self.cw.logs_store = self.logs            # real log-based Contributor Insights rules
         self.msg.cw_store = self.cw               # real AWS/SNS SMS delivery metrics (sns.sms.delivery-statistics)
@@ -928,8 +950,10 @@ class AwsWireRouter:
             return az
         if self._servicebus_service(method, path, lheaders):
             return "az-servicebus"
+        if _execute_api_id(path, lheaders):   # HTTP API invoke URL ({id}.execute-api.* or /apigw/{id}/…)
+            return "apigw-invoke"
         if any(path.startswith(p) for p in (  # Lambda REST (native boto3 lambda wire + sub-resources,
-                "/2015-03-31/functions", "/2015-03-31/layers", "/2015-03-31/event-source-mappings",
+                "/lambda-url/", "/2015-03-31/functions", "/2015-03-31/layers", "/2015-03-31/event-source-mappings",
                 # plus Vyomi-exclusive console surfaces — see core/lambda_core.py module note)
                 "/2015-03-31/capacity-providers", "/2015-03-31/code-signing-configs",
                 "/2015-03-31/network-connectors", "/2015-03-31/microvm-images",
@@ -1154,6 +1178,8 @@ class AwsWireRouter:
         if _tr is not None:
             return _tr
         svc = self.service_of(method, path, lheaders, body, query)
+        if queue_alias and svc == "az-blob":
+            svc = "az-queue"
         self._track_activity(svc, lheaders, query, body)
 
         if svc == "rds-data":  # async-only — guard the sync path
@@ -1211,8 +1237,12 @@ class AwsWireRouter:
             return cw.wire(self.cw, method, path, headers or {}, bytes(body), query or {})
 
         if svc == "lambda":   # native Lambda REST (function mgmt + sandboxed invoke)
-            r = lam.dispatch(self.lam, method, path, query or {}, headers or {}, bytes(body),
-                              msg_store=self.msg, lam_store=self.lam)
+            if path.startswith("/lambda-url/"):
+                _id, _, _rest = path[len("/lambda-url/"):].partition("/")
+                r = lam.url_invoke(self.lam, _id, method, _rest.split("?", 1)[0], query or {}, headers or {}, bytes(body))
+            else:
+                r = lam.dispatch(self.lam, method, path, query or {}, headers or {}, bytes(body),
+                                  msg_store=self.msg, lam_store=self.lam)
             hdrs = dict(r.headers or {})
             if r.media_type and not any(k.lower() == "content-type" for k in hdrs):
                 hdrs["content-type"] = r.media_type
@@ -1263,12 +1293,52 @@ class AwsWireRouter:
             hdrs.setdefault("content-type", r.media_type)
             return {"status": r.status, "headers": hdrs, "body": r.body or b""}
 
-        if svc == "apigateway":   # native API Gateway v1 control plane (/restapis)
+        if svc == "apigateway":   # native API Gateway v1 control plane (/restapis) + the local invoke URL
+            _m = re.match(r"^/restapis/([^/]+)/([^/]+)/_user_request_(/[^?]*)?", path)
+            if _m:   # http://<host>/restapis/<id>/<stage>/_user_request_/<path>  (the standard local invoke form)
+                r = apigw.invoke(self.apigw, _m.group(1), _m.group(2), method, _m.group(3) or "/", lheaders,
+                                 {k: (v[0] if isinstance(v, list) else v) for k, v in (query or {}).items()},
+                                 bytes(body), lambda_store=self.lam)
+                hdrs = dict(r.headers or {})
+                if r.media_type and not any(k.lower() == "content-type" for k in hdrs):
+                    hdrs["content-type"] = r.media_type
+                return {"status": r.status, "headers": hdrs, "body": r.body or b""}
             r = apigw.dispatch(self.apigw, method, path, query or {}, headers or {}, bytes(body))
             hdrs = dict(r.headers or {})
             if r.media_type and not any(k.lower() == "content-type" for k in hdrs):
                 hdrs["content-type"] = r.media_type
             return {"status": r.status, "headers": hdrs, "body": r.body or b""}
+
+        if svc == "azure-arm":   # Azure Resource Manager → the same AzureArm the Nano console uses
+            host = lheaders.get("host", "")
+            # LRO poll URLs must be absolute for az / azure-mgmt pollers.
+            self.az_arm._base = f"{lheaders.get('x-forwarded-proto', 'http')}://{host}" if host else ""
+            r = self.az_arm.handle(method, path, query or {}, self._json_body(body) if body else None)
+            out = r.get("body")
+            if _SQL_DB.search(path.split("?", 1)[0]) and r["status"] < 300 and isinstance(out, dict):
+                out.setdefault("properties", {})["connectionInfo"] = self._azure_sql_conn(self.az_arm._base)
+            hdrs = dict(r.get("headers") or {})
+            if out is not None:
+                hdrs.setdefault("content-type", "application/json")
+            return {"status": r["status"], "headers": hdrs, "body": json.dumps(out).encode() if out is not None else b""}
+
+        if svc == "azure-appconfig":   # /azure-data/appconfig/{store}/... over the ARM state's stores
+            host = lheaders.get("host", "")
+            store, _, rest = path[len("/azure-data/appconfig/"):].partition("/")
+            base = f"{lheaders.get('x-forwarded-proto', 'http')}://{host}/azure-data/appconfig/{store}" if host else ""
+            r = az_appcfg.data_dispatch(self.az_arm.state, store, method, "/" + rest, query or {},
+                                        headers or {}, bytes(body) if method in ("PUT", "PATCH") else b"", base=base)
+            hdrs = dict(r.get("headers") or {})
+            hdrs.setdefault("Sync-Token", "zAJw6V16=Njo4NDk6;sn=849")
+            if r.get("body") is None:
+                return {"status": r["status"], "headers": hdrs, "body": b""}
+            hdrs.setdefault("content-type", r.get("media") or "application/json")
+            return {"status": r["status"], "headers": hdrs, "body": json.dumps(r["body"]).encode()}
+
+        if svc == "azure-dns-query":   # DNS-over-HTTP JSON answers from the ARM state's zones
+            r = az_dns.data_dispatch(self.az_arm.state, method, query or {})
+            return {"status": r["status"], "headers": {"content-type": "application/json"},
+                    "body": json.dumps(r["body"]).encode()}
 
         if svc == "scheduler":   # native EventBridge Scheduler REST (/schedules, /schedule-groups)
             r = sched.dispatch(self.sched, method, path, query or {}, headers or {}, bytes(body),

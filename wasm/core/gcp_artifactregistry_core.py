@@ -196,6 +196,25 @@ def configure_data_plane(host, port=5000):
     DATA_PLANE["host"], DATA_PLANE["port"] = (host or None), int(port or 5000)
 
 
+# host:port a user's machine pushes to (the published loopback port); None → no real push target.
+PUBLIC: dict = {"hostport": None}
+
+
+def configure_public(hostport):
+    PUBLIC["hostport"] = hostport or None
+
+
+def _push_info(repo: dict) -> dict:
+    parts = repo["name"].split("/")
+    hp = PUBLIC["hostport"]
+    if repo.get("format") != "DOCKER":
+        return {}
+    if not hp:
+        return {"push_host": "Not available in this build (no OCI registry runs here; control plane only)", "push_example": ""}
+    return {"push_host": hp,
+            "push_example": "docker tag IMAGE %s/%s/%s/IMAGE:TAG && docker push %s/%s/%s/IMAGE:TAG" % (hp, parts[1], parts[-1], hp, parts[1], parts[-1])}
+
+
 def ingest_registry_images(store: ArtifactRegistryStore, project: str, images: list, kms_store=None) -> int:
     """Fold what a real `docker push` left in the registry into the engine.
     Each item: {"path": "{repo}/{image...}", "tag", "digest", "size"} (registry path minus the

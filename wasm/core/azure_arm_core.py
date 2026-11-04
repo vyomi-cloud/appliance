@@ -751,6 +751,20 @@ def _merge(base: dict, overlay: dict) -> dict:
     return out
 
 
+# What each service SHOWS in Nano: the URL (under the Nano origin) that really answers in the
+# service worker, or an explicit limitation. __BASE__ = the Nano origin the page runs under.
+_NANO_SHOWN = {
+    "microsoft.keyvault/vaults": {"properties.vaultUri": "__BASE__/azure-data/keyvault/__NAME__/"},
+    "microsoft.servicebus/namespaces": {"properties.serviceBusEndpoint": "__BASE__/api/servicebus/topics"},
+    "microsoft.eventgrid/topics": {"properties.vyomiAccess": {
+        "endpoint": "Not available in this build: event publishing needs the offline appliance (no HTTP topic endpoint in the browser)."}},
+    "microsoft.sql/servers": {
+        "properties.fullyQualifiedDomainName": "__BASE__/api/azuresql/servers",
+        "properties.vyomiAccess": {
+            "protocol": "In-browser HTTP data plane only (no TDS wire protocol, no port 1433)",
+            "listServers": "GET __BASE__/api/azuresql/servers",
+            "query": "POST __BASE__/api/azuresql/query"}},
+}
 def _h(*parts, n=8):
     return hashlib.sha1("|".join(str(p) for p in parts).encode()).hexdigest()[:n]
 
@@ -935,7 +949,12 @@ def _parse_kv_secret_identifier(secret_id: str):
 def _view(rec: dict) -> dict:
     if rec.get("_type", "").lower() == "microsoft.compute/virtualmachines":
         _apply_auto_shutdown(rec)
-    return {k: v for k, v in rec.items() if not k.startswith("_")}
+    out = {k: v for k, v in rec.items() if not k.startswith("_")}
+    props = out.get("properties")
+    if isinstance(props, dict) and "administratorLoginPassword" in props:
+        # Real Azure never returns the SQL admin password; it stays stored for the data plane.
+        out["properties"] = {k: v for k, v in props.items() if k != "administratorLoginPassword"}
+    return out
 
 
 def _rg_from_id(rid: str):
@@ -946,6 +965,22 @@ def _rg_from_id(rid: str):
     return None
 
 
+def _event_target(rest: str):
+    """(top-level resource id, full type, leaf name) of an ARM write path, for the
+    activity log: a child op (database, queue, rule…) belongs to its parent."""
+    segs = [x for x in rest.split("/") if x]
+    if not segs:
+        return "", "", ""
+    sub, tail = segs[0], segs[1:]
+    rg = None
+    if len(tail) >= 2 and tail[0].lower() == "resourcegroups":
+        rg, tail = tail[1], tail[2:]
+    if not tail or tail[0].lower() != "providers" or len(tail) < 4:
+        return "", "", ""
+    after = tail[1:]
+    top = f"/subscriptions/{sub}" + (f"/resourceGroups/{rg}" if rg else "") + "/providers/" + "/".join(after[:3])
+    typ = "/".join([after[0]] + [after[k] for k in range(1, len(after), 2)])
+    return top, typ, after[-1] if len(after) % 2 == 1 else after[-2]
 # GET .../Microsoft.Compute/locations/{location}/vmSizes and GET .../virtualMachines/{vm}/vmSizes
 # (azure.vms.size): real ARM VirtualMachineSize shape plus two reference-only extras (series,
 # maxIops) the console's Size table shows — all numbers derived from instance_catalog.AZURE
@@ -1068,6 +1103,11 @@ class AzureArm:
                 base.update({"id": op["id"], "name": op["name"], "startTime": op["startTime"], "endTime": op["endTime"]})
                 base.update(op.get("result") or {})
             return _ok(base)
+        bare = path.split("?", 1)[0].rstrip("/")
+        if bare.endswith("/tenants") and method == "GET":
+            return _ok(tenants_doc())
+        if bare.endswith("/subscriptions") and method == "GET":
+            return _ok({"value": [subscription_doc()]})
         # Microsoft.ResourceGraph/resources ("Open query" on any browse list's command bar):
         # real Azure Resource Graph is TENANT-scoped (no /subscriptions/{sub}/ prefix — the
         # subscriptions to search are in the request body instead), so it's handled before the
@@ -1183,6 +1223,9 @@ class AzureArm:
                         "displayName": self.sub_names.get(sub.lower(), "CloudLearn Subscription"),
                         "state": "Enabled", "tags": self.sub_tags.get(sub.lower(), {}),
                         "subscriptionPolicies": SUBSCRIPTION_POLICIES})
+
+        if len(rest_segs) == 1 and rest_segs[0].lower() == "locations" and method == "GET":
+            return _ok(ext_engine.subscription_locations(sub))
 
         # resource groups
         if rest_segs[0].lower() == "resourcegroups" and len(rest_segs) <= 2:
@@ -1711,6 +1754,9 @@ class AzureArm:
             ext_engine.after_upsert(self.state, rec)
             return _ok(_view(rec))
         if method in ("PUT", "PATCH"):
+            bad = ext_engine.validate_write(self.state, rid, full_type, payload)
+            if bad:
+                return {"status": bad["status"], "headers": {}, "body": bad["body"]}
             blocked = self._lock_block(rid, full_type, for_delete=False)
             if blocked:
                 return blocked
@@ -1769,6 +1815,8 @@ class AzureArm:
                 payload["properties"] = {**(payload.get("properties") or {}),
                                          "scope": asked if inside else path_scope}
             resp = self._upsert(rid, key, full_type, leaf_name, top, payload, base, patch=(method == "PATCH"))
+            if full_type.lower() == ext_engine.VM_T and key in self.state:
+                ext_engine.after_vm_upsert(self.state, self.state[key])
             if resp["status"] >= 300:          # validation error from a type hook (e.g. NIC IP allocation)
                 return resp
             deployment_failed = False
@@ -1827,6 +1875,11 @@ class AzureArm:
             self._record_activity(rid, f"{full_type}/write", sub, status="Failed" if deployment_failed else "Succeeded")
             return resp
         if method == "DELETE":
+            if "/networksecuritygroups/" in key and key.rsplit("/", 2)[-2] == "networksecuritygroups" and self.state.get(key) is not None:
+                ref = key + '"'   # a subnet or NIC referencing it by id
+                if any(k != key and ref in json.dumps(r).lower() for k, r in self.state.items() if isinstance(r, dict)):
+                    return _err(400, "InUseNetworkSecurityGroupCannotBeDeleted",
+                                f"Network security group {key.rsplit('/', 1)[-1]} cannot be deleted because it is in use.")
             blocked = self._lock_block(rid, full_type, for_delete=True)
             if blocked:
                 return blocked
@@ -1843,6 +1896,8 @@ class AzureArm:
                             self.state.pop(pid, None)
             rec = self.state.pop(key, None)
             if rec is not None:
+                ext_engine.on_delete(self.state, rec)
+                self._child_deleted(rec)
                 if rec.get("_ipam_alloc"):
                     self._release_ipam_pool(rec["_ipam_alloc"])
                 # Both extension resources (locks, … keyed "{parent id}/providers/<ext ns>/…")
@@ -1856,6 +1911,30 @@ class AzureArm:
                 self._record_activity(rid, f"{full_type}/delete", sub)
             return _ok(None, status=200 if rec is not None else 204)
         return _err(405, "MethodNotAllowed", f"{method} not allowed.")
+
+    def _child_deleted(self, rec):
+        """Tell the host a resource left ARM state (single DELETE or resource-group
+        cascade) so it can drop the data-plane state the resource owned (Nano wires
+        ``on_child_delete`` to purge Key Vault secrets/keys). Never breaks a delete."""
+        cb = getattr(self, "on_child_delete", None)
+        if cb is not None:
+            try:
+                cb(str(rec.get("type") or ""), rec, self.state)
+            except Exception:
+                pass
+
+    def _event(self, method, scope, typ, name):
+        """Activity-log hook for every successful write: ``scope`` is the resource
+        whose activity log it belongs to (Nano wires ``on_event`` to core/nano_events
+        through the registry; a no-op standalone)."""
+        self._evented = True
+        cb = getattr(self, "on_event", None)
+        if cb:
+            try:
+                cb(method, scope, typ, name)
+            except Exception:
+                pass
+
 
     # ── Policy enforcement (Settings > Policies): the one built-in Vyomi actually evaluates,
     # by its real GUID (POLICY_ALLOWED_LOCATIONS_ID) — a policyAssignment referencing it denies
@@ -3016,17 +3095,15 @@ class AzureArm:
     # ── CRUD primitives ───────────────────────────────────────────────────
     def _list(self, sub, rg, full_type, parent_prefix=None):
         ft = full_type.lower()
-        pfx = parent.lower() + "/" if parent else None
         items = []
         for rec in list(self.state.values()):
             if rec.get("_type", "").lower() != ft:
-                continue
-            if pfx and not str(rec.get("id", "")).lower().startswith(pfx):
                 continue
             if rec.get("_sub") != sub:
                 continue
             if rg is not None and (rec.get("_rg") or "").lower() != rg.lower():
                 continue
+            ext_engine.after_upsert(self.state, rec)
             if parent_prefix and not rec.get("id", "").lower().startswith(parent_prefix):
                 continue
             items.append(_view(rec))
@@ -3078,6 +3155,13 @@ class AzureArm:
         for path_expr, suffix in endpoints.items():
             if _get_path(rec, path_expr) in (None, ""):
                 _set_path(rec, path_expr, base + suffix.replace("__NAME__", name))
+        if is_top:      # URLs that work in Nano's own access path (never a fake Azure hostname)
+            pub = getattr(self, "_public_base", None)
+            if pub is None:
+                pub = base
+            forced = _NANO_SHOWN.get(full_type.lower())
+            for path_expr, val in (forced or {}).items():
+                _set_path(rec, path_expr, _expand_tokens(val, name, pub))
         # systemData.createdAt/lastModifiedAt: real ARM returns this on every resource; the
         # Overview "Created"/"Updated" fields some blades show read it back.
         rec["systemData"] = {"createdAt": rec.get("_created", _now()), "lastModifiedAt": _now()}
