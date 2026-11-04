@@ -17,6 +17,7 @@ import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import { navigate } from "../../../common/router.js";
 import DeleteModal from "../../kit/DeleteModal.jsx";
+import GitSync from "./GitSync.jsx";
 import { StackPolicyPanel, RollbackPanel, NotificationsPanel } from "./StackSettings.jsx";
 import { ErrorAlert, KeyValue, NotSimulatedContainer, fmtDate } from "../../kit/common.jsx";
 import { statusOf } from "./Stacks.jsx";
@@ -223,7 +224,7 @@ export default function StackDetail({ params, query }) {
         { id: "parameters", label: "Parameters", content: <Parameters d={d} /> },
         { id: "template", label: "Template", content: <TemplateTab name={name} /> },
         { id: "changesets", label: "Change sets", content: <ChangeSets name={name} /> },
-        { id: "gitsync", label: "Git sync", content: <NotSimulatedContainer title="Git sync" note="Syncing a stack to a Git repository isn't modeled by Vyomi." /> },
+        { id: "gitsync", label: "Git sync", content: <GitSync name={name} /> },
       ]} />
       <DeleteModal visible={del} resourceType="stack" names={[name]} confirmText="delete"
         onDismiss={() => setDel(false)}

@@ -118,6 +118,14 @@ def purge_untagged(store: AcrRegistryStore, days: int) -> int:
     return purged
 
 
+def push_image(store: AcrRegistryStore, repo_name: str, tag: str, img: dict) -> str:
+    """Push a built image (core/ci_core.image_to_registry) exactly as `docker push` would: layer + config blobs, then
+    the manifest under the tag. Returns the manifest digest. Idempotent."""
+    repo = _get_or_create_repo(store, repo_name)
+    repo["blobs"].update(img["blobs"])
+    return _push_manifest(store, repo_name, tag or "latest", img["manifest"], "application/vnd.docker.distribution.manifest.v2+json")
+
+
 def _has_content(repo: dict | None) -> bool:
     """A repo is only visible (catalog, attrs, tag/manifest listings) once it has at least one
     manifest/tag — uploaded-but-not-yet-referenced blobs are an in-flight push, same as real

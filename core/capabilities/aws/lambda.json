@@ -296,13 +296,15 @@
  "lambda.application.cicd-pipeline": {
   "title": "Lambda application CI/CD pipelines",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "A CI/CD pipeline application wires a CodePipeline/CodeBuild/CodeDeploy pipeline around a stack. Vyomi has no CI/CD pipeline core. Use the Serverless application tab."
+   "Real Source -> Build -> Deploy pipeline (core/lambda_cicd_core.py): the repository (vyomi/<name>, seeded with a working function, or a GitHub repo fetched with the user's own PAT on the offline appliance) is validated and packaged (handler module must exist, every .py must compile), then the function is created or its code updated through the real Lambda core, a version is published and the 'live' alias moved - the deployed function is invocable with the pushed code. A push to a vyomi/ repository (POST .../pipeline/push, or a git push to Gitea on offline) starts an execution; GitHub does not call back, so 'Release change' starts one.",
+   "Not CodePipeline/CodeBuild/CodeDeploy themselves: no pipeline ARNs or CodeBuild project exist, buildspec.yml commands are NOT executed (no build container; only Python syntax is checked), there is no CloudFormation/SAM stack (Vyomi's CloudFormation does not provision Lambda functions), approvals and blue/green traffic shifting are not modelled, and only Python runtimes can run. Nano cannot reach GitHub."
   ],
-  "api": []
+  "api": ["CreateApplication"],
+  "tests": ["tests/conformance/test_lambda_cicd.py"]
  },
  "lambda.application.infrastructure-composer": {
   "title": "AWS Infrastructure Composer (canvas)",

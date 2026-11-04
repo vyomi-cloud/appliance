@@ -34,7 +34,7 @@ export default function CreateWebApp() {
     planChoice: "__new", newPlanName: "", planSku: "B1", zoneRedundant: "Disabled",
     createDatabase: false,
     containerImageSource: "Quickstart", containerImage: "",
-    continuousDeployment: "Disable", basicAuth: "Disable", ghRepo: "", ghBranch: "main",
+    continuousDeployment: "Disable", basicAuth: "Disable", ghRepo: "", ghBranch: "main", ghToken: "",
     publicAccess: true, networkInjection: false,
     appInsights: "No", defender: false,
     tags: [{ name: "", value: "" }],
@@ -169,9 +169,10 @@ export default function CreateWebApp() {
         </FormRow>
       </FormSection>
       {f.continuousDeployment === "Enable" && (
-        <FormSection title="GitHub Actions details" description="Vyomi records this source control and generates the workflow; it does not authorize a GitHub account or run the pipeline.">
+        <FormSection title="GitHub Actions details" description="Vyomi generates the workflow for the chosen runtime stack and, when you supply a GitHub personal access token (repo + workflow scope), commits it to the repository. The pipeline itself runs on GitHub.">
           <FormRow label="Repository URL" required htmlFor="wa-gh-repo"><Input id="wa-gh-repo" value={f.ghRepo} onChange={set("ghRepo")} placeholder="https://github.com/org/repo" aria-label="GitHub repository URL" /></FormRow>
           <FormRow label="Branch" required htmlFor="wa-gh-branch"><Input id="wa-gh-branch" value={f.ghBranch} onChange={set("ghBranch")} aria-label="GitHub branch" /></FormRow>
+          <FormRow label="Personal access token" htmlFor="wa-gh-token"><Input id="wa-gh-token" type="password" value={f.ghToken} onChange={set("ghToken")} placeholder="optional: needed to commit the workflow file" aria-label="GitHub personal access token" /></FormRow>
         </FormSection>
       )}
 
@@ -282,7 +283,7 @@ export default function CreateWebApp() {
           ...(f.inject ? { virtualNetworkSubnetId: f.injectSubnet || subnets.data?.[0]?.id } : {}) },
       });
       if (f.continuousDeployment === "Enable" && f.ghRepo) {
-        await api.putSourceControl(rg, f.name, { repoUrl: f.ghRepo, branch: f.ghBranch || "main", isGitHubAction: true, gitHubActionConfiguration: {
+        await api.putSourceControl(rg, f.name, { repoUrl: f.ghRepo, branch: f.ghBranch || "main", isGitHubAction: true, ...(f.ghToken ? { vyomiAccessToken: f.ghToken } : {}), gitHubActionConfiguration: {
           codeConfiguration: { runtimeStack: (f.runtimeStack || "").split("|")[0].toLowerCase() || "python", runtimeVersion: (f.runtimeStack || "").split("|")[1] }, isLinux: f.os === "Linux" } });
       }
       if (f.defender) await setPricing("AppServices", "Standard");

@@ -3511,6 +3511,18 @@ class AzureArm:
         typ = type_chain[1].lower() if len(type_chain) > 1 else ""
         if ns == "microsoft.resources" and typ == "deployments" and action in ("cancel", "redeploy"):
             return self._deployment_action(action, resource_name, parent_rid, sub, rg)
+        if action in ("reconcile", "vyomipush", "run") and any(m in (parent_rid or "").lower() for m in (
+                "/providers/microsoft.kubernetesconfiguration/fluxconfigurations/", "/vyomiautomateddeployments/")):
+            rec = self.state.get(parent_rid.lower())
+            if not rec:
+                return _err(404, "ResourceNotFound", f"Flux configuration '{resource_name}' not found.")
+            try:
+                from core import azure_flux_core as _flux
+            except ImportError:
+                import azure_flux_core as _flux  # type: ignore
+            if getattr(self, "acr_store", None) is not None:
+                _flux.ACR_STORE = self.acr_store
+            return _flux.action(self.state, rec, action, payload)
         if ns == "microsoft.containerregistry" and typ == "registries" and len(type_chain) == 3 and action == "schedulerun":
             rec = self.state.get(parent_rid.lower()) if parent_rid else None
             if not rec:
@@ -3519,7 +3531,14 @@ class AzureArm:
                 from core import azure_acr_tasks_core as _acrt
             except ImportError:                      # Pyodide flat layout
                 import azure_acr_tasks_core as _acrt  # type: ignore
-            return _acrt.schedule_run(self.state, parent_rid, rec, payload, sub, rg)
+            _st = getattr(self, "acr_store", None)
+            if _st is None:
+                try:
+                    from core import appliance_stores as _aps
+                    _st = _aps.acr_store()
+                except Exception:
+                    _st = None
+            return _acrt.schedule_run(self.state, parent_rid, rec, payload, sub, rg, _st)
         if ns == "microsoft.containerregistry" and typ == "registries" and action in ("listcredentials", "regeneratecredential"):
             rec = self.state.get(parent_rid.lower()) if parent_rid else None
             if not rec:

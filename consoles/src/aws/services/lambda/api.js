@@ -131,6 +131,8 @@ export const deleteMicrovm = (id) => restJson("DELETE", `/2015-03-31/microvms/${
 
 export const listApplications = async () => (await restJson("GET", "/2015-03-31/applications")).Applications || [];
 export const createApplication = (body) => restJson("POST", "/2015-03-31/applications", { body });
+export const runPipeline = (name) => restJson("POST", `/2015-03-31/applications/${enc(name)}/pipeline/executions`, { body: {} });
+export const pipelineExecutions = async (name) => (await restJson("GET", `/2015-03-31/applications/${enc(name)}/pipeline/executions`)).Executions || [];
 export const deleteApplication = (name) => restJson("DELETE", `/2015-03-31/applications/${enc(name)}`);
 
 // Replicas are derived from the function they replicate — never a separate store.
