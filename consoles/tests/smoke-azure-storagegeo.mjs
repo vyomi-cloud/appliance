@@ -1,0 +1,35 @@
+/* Storage account Redundancy blade: geo-replication status + customer-managed failover.  BASE=http://127.0.0.1:9075 node consoles/tests/smoke-azure-storagegeo.mjs */
+import { createRequire } from "node:module";
+const require = createRequire(import.meta.url);
+let pw;
+try { pw = require(process.env.PW || "playwright"); } catch { pw = require("/Users/sudhirganti/Applications/simulator/portal/node_modules/playwright"); }
+const BASE = process.env.BASE || "http://127.0.0.1:9075";
+const UI = `${BASE}${process.env.UI_PATH || "/v4/azure/"}`;
+const WIRE = `${BASE}${process.env.WIRE_PATH || "/_wire"}`;
+const SUB = "00000000-0000-0000-0000-cloudlearn01";
+const n = Date.now() % 100000;
+const RG = `geo-rg${n}`, SA = `geo${n}`;
+let bad = 0;
+const check = (name, ok, d = "") => { if (!ok) bad++; console.log(`${ok ? "PASS" : "FAIL"} ${name}${d ? " - " + String(d).slice(0, 140) : ""}`); };
+const browser = await pw.chromium.launch();
+const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+const errors = []; page.on("pageerror", (e) => errors.push(e.message));
+await page.goto(UI, { waitUntil: "networkidle" });
+const wire = (path, init = {}) => page.evaluate(async ([u, i]) => { const r = await fetch(u, i); return { status: r.status, text: await r.text() }; }, [WIRE + path, init]);
+const json = (r) => { try { return JSON.parse(r.text); } catch { return {}; } };
+const arm = (m, p, b, av = "2023-05-01") => wire(`/subscriptions/${SUB}${p}?api-version=${av}`, { method: m, headers: { "content-type": "application/json" }, body: b ? JSON.stringify(b) : undefined });
+await arm("PUT", `/resourceGroups/${RG}`, { location: "eastus" }, "2021-04-01");
+await arm("PUT", `/resourceGroups/${RG}/providers/Microsoft.Storage/storageAccounts/${SA}`, { location: "eastus", kind: "StorageV2", sku: { name: "Standard_RAGRS" } });
+await page.goto(UI + `#/storage/${RG}/${SA}/redundancy`);
+await page.getByRole("heading", { name: "Geo-replication" }).waitFor({ timeout: 20000 });
+check("geo-replication section shows the paired region + stats", await page.getByText("West US").first().isVisible() && await page.getByText("Live").first().isVisible());
+check("no Not-simulated panel for geo-replication", (await page.locator("[data-vyomi-not-simulated]").count()) === 0);
+await page.getByRole("button", { name: "Prepare for failover" }).click();
+await page.getByRole("dialog").getByRole("textbox", { name: "Confirm deletion" }).fill(SA);
+await page.getByRole("dialog").getByRole("button", { name: "Failover", exact: true }).click();
+await page.waitForTimeout(2000);
+const g = json(await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.Storage/storageAccounts/${SA}`));
+check("failover swapped the primary region and converted to LRS", g.location === "westus" && g.sku?.name === "Standard_LRS", `${g.location} ${g.sku?.name}`);
+check("no page errors", errors.length === 0, errors.join("|"));
+await browser.close();
+process.exit(bad ? 1 : 0);

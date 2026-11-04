@@ -58,7 +58,7 @@
  "azure.storage.redundancy": {
   "title": "Redundancy (replication SKU)",
   "level": { "nano": "limited", "offline": "limited" },
-  "limitations": ["ENFORCED: an RA-GRS/RA-GZRS sku really exposes a separate, read-only `{account}-secondary` Blob endpoint serving this account's own data; any other sku 404s it, and writes against it always 403. Still not simulated: actual geo-replication lag, a genuinely separate secondary-region store and customer-managed failover — Vyomi stores data once, locally."],
+  "limitations": ["ENFORCED: an RA-GRS/RA-GZRS sku really exposes a separate, read-only `{account}-secondary` Blob endpoint serving this account's own data; any other sku 404s it, and writes against it always 403. Geo-replication status (paired secondary region, geoReplicationStats) and customer-managed failover (POST .../failover: swaps primary/secondary and converts to LRS, LRS accounts refused) are real ARM state (tests/conformance/test_azure_backup_core.py storage_geo). Still not simulated: actual replication lag and a genuinely separate secondary-region data store — Vyomi stores data once, locally."],
   "tests": ["tests/conformance/test_azure_arm_core.py", "tests/conformance/test_azure_storage_wave5b_core.py", "tests/conformance/test_azure_netaccess.py"]
  },
  "azure.storage.networking": {
