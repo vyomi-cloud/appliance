@@ -156,6 +156,36 @@ def run(store=None):
     _check("Step Functions target starts an execution with the event as input",
            len(exes) == 1 and json.loads(exes[0]["input"])["detail"] == {"k": 3})
 
+    # Kinesis + CloudWatch Logs targets (stores registered like Nano's wire router does).
+    try:
+        from core import kinesis_core as kc, logs_core as lc
+    except ImportError:  # pragma: no cover
+        import kinesis_core as kc, logs_core as lc  # type: ignore
+    ks, ls = kc.KinesisStore(), lc.LogsStore()
+    eb.set_target_store("kinesis", ks)
+    eb.set_target_store("logs", ls)
+    kc.dispatch(ks, "Kinesis_20131202.CreateStream", {"StreamName": "eb-stream", "ShardCount": 1})
+    karn = f"arn:aws:kinesis:us-east-1:{s.account_id}:stream/eb-stream"
+    garn = f"arn:aws:logs:us-east-1:{s.account_id}:log-group:/aws/events/eb-test:*"
+    call("PutRule", {"Name": "kin-r", "EventPattern": json.dumps({"source": ["kin.app"]})})
+    call("PutTargets", {"Rule": "kin-r", "Targets": [
+        {"Id": "k1", "Arn": karn, "KinesisParameters": {"PartitionKeyPath": "$.detail.id"}},
+        {"Id": "g1", "Arn": garn}]})
+    call("PutEvents", {"Entries": [{"Source": "kin.app", "DetailType": "x", "Detail": json.dumps({"id": "p7"})}]})
+    it = kc.dispatch(ks, "Kinesis_20131202.GetShardIterator", {"StreamName": "eb-stream", "ShardId": "shardId-000000000000",
+                                                                "ShardIteratorType": "TRIM_HORIZON"})
+    it = getattr(it, "body", it)["ShardIterator"]
+    recs = getattr(kc.dispatch(ks, "Kinesis_20131202.GetRecords", {"ShardIterator": it}), "body")["Records"]
+    import base64
+    _check("Kinesis target receives the event with the PartitionKeyPath key",
+           len(recs) == 1 and recs[0]["PartitionKey"] == "p7"
+           and json.loads(base64.b64decode(recs[0]["Data"]))["detail"] == {"id": "p7"})
+    ev = lc.dispatch(ls, "Logs_20140328.FilterLogEvents", {"logGroupName": "/aws/events/eb-test"}).body["events"]
+    _check("CloudWatch Logs target writes the event to the log group",
+           len(ev) == 1 and json.loads(ev[0]["message"])["source"] == "kin.app")
+    eb.set_target_store("kinesis", None)
+    eb.set_target_store("logs", None)
+
     _check("ListRules",call("ListRules", {}).body["Rules"][0]["Name"] == "r1")
     _check("ListTargetsByRule", call("ListTargetsByRule", {"Rule": "r1"}).body["Targets"][0]["Id"] == "t1")
 

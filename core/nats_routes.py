@@ -71,6 +71,10 @@ def _eventbridge_deliver(rule_name: str, rule: dict, payload: dict) -> None:
                 EB_HOOKS["lambda"](ebc._fn_name(arn), body_str)
             elif ":states:" in arn and ":stateMachine:" in arn:
                 ebc._deliver_sfn(arn, body_str)
+            elif ":kinesis:" in arn and ":stream/" in arn:
+                ebc._deliver_kinesis(arn, body_str, tgt, payload)
+            elif ":logs:" in arn and ":log-group:" in arn:
+                ebc._deliver_logs(arn, body_str)
         except Exception:
             pass   # EventBridge swallows target failures (retry/DLQ), never fails PutEvents
 

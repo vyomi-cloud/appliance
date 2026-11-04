@@ -369,6 +369,8 @@ class AwsWireRouter:
         self.cw = s.get("cw") or cw.CloudWatchStore()          # CloudWatch metrics / alarms / dashboards
         self.vpc = s.get("vpc") or _types.SimpleNamespace()   # EC2/VPC network model
         self.logs = s.get("logs") or logs.LogsStore()         # CloudWatch Logs
+        events.set_target_store("kinesis", self.kinesis)   # EventBridge Kinesis / Logs rule targets
+        events.set_target_store("logs", self.logs)
         # Lambda invocations land in CloudWatch Logs (/aws/lambda/<fn>) like real Lambda.
         if getattr(self.lam, "_log_sink", None) is None:
             def _lambda_log_sink(group, stream, lines, _logs=self.logs):

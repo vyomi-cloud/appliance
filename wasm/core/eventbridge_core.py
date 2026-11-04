@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -271,6 +272,63 @@ def _deliver_sfn(arn, body_str, lambda_store=None):
         pass
 
 
+# Stores for targets whose engine state lives outside the messaging store ("kinesis", "logs").
+# Nano's wire router and the offline route modules register theirs; delivery to a target
+# whose store isn't registered is a failed delivery (swallowed, like the others).
+_TARGET_STORES: dict = {}
+
+
+def set_target_store(kind: str, store) -> None:
+    _TARGET_STORES[kind] = store
+
+
+def _deliver_kinesis(arn, body_str, tgt=None, envelope=None):
+    """Kinesis rule target: PutRecord with the (transformed) event as data. The partition key
+    is KinesisParameters.PartitionKeyPath (resolved on the event) or the event id."""
+    try:
+        try:
+            from core import kinesis_core as k
+        except ImportError:  # Pyodide flat layout
+            import kinesis_core as k  # type: ignore
+        store = _TARGET_STORES.get("kinesis")
+        if store is None:
+            return
+        pk = (envelope or {}).get("id") or uuid.uuid4().hex
+        path = ((tgt or {}).get("KinesisParameters") or {}).get("PartitionKeyPath")
+        if path:
+            ok, val = _json_path(envelope or {}, path)
+            if ok and val is not None:
+                pk = str(val)
+        import base64
+        k.dispatch(store, "Kinesis_20131202.PutRecord",
+                   {"StreamARN": arn, "StreamName": arn.split(":stream/", 1)[-1],
+                    "PartitionKey": pk, "Data": base64.b64encode(body_str.encode()).decode()})
+    except Exception:
+        pass
+
+
+def _deliver_logs(arn, body_str):
+    """CloudWatch Logs rule target: one log event (the transformed event) in a stream named
+    after the event id/time, in the group named by the ARN (created if absent, as EventBridge does)."""
+    try:
+        try:
+            from core import logs_core as lc
+        except ImportError:  # Pyodide flat layout
+            import logs_core as lc  # type: ignore
+        store = _TARGET_STORES.get("logs")
+        if store is None:
+            return
+        group = arn.split(":log-group:", 1)[-1].split(":", 1)[0]
+        stream = f"{time.strftime('%Y/%m/%d', time.gmtime())}/{uuid.uuid4().hex[:16]}"
+        lc.dispatch(store, "Logs_20140328.CreateLogGroup", {"logGroupName": group})
+        lc.dispatch(store, "Logs_20140328.CreateLogStream", {"logGroupName": group, "logStreamName": stream})
+        lc.dispatch(store, "Logs_20140328.PutLogEvents",
+                    {"logGroupName": group, "logStreamName": stream,
+                     "logEvents": [{"timestamp": int(time.time() * 1000), "message": body_str}]})
+    except Exception:
+        pass
+
+
 # Offline hook: the appliance's own Lambda registry (server.py) is not an `lambda_core` store.
 _LAMBDA_INVOKER = None
 
@@ -305,7 +363,7 @@ def _deliver_lambda(lambda_store, arn, body_str):
 
 
 def route_event(rules, bus, event_obj, envelope, send_sqs, invoke_lambda, publish_sns, forward_bus=None, _depth=0,
-                start_sfn=None):
+                start_sfn=None, put_kinesis=None, put_logs=None):
     """Match `event_obj` against every ENABLED rule on `bus` and hand each matching target
     its (Input/InputPath/InputTransformer-shaped) body via the three delivery callbacks.
     Shared by the Nano wire (eventbridge_core) and the offline appliance. Returns #deliveries."""
@@ -327,12 +385,16 @@ def route_event(rules, bus, event_obj, envelope, send_sqs, invoke_lambda, publis
                 invoke_lambda(arn, body_str)
             elif ":states:" in arn and ":stateMachine:" in arn and start_sfn is not None:
                 start_sfn(arn, body_str)
+            elif ":kinesis:" in arn and ":stream/" in arn and put_kinesis is not None:
+                put_kinesis(arn, body_str, tgt, envelope)
+            elif ":logs:" in arn and ":log-group:" in arn and put_logs is not None:
+                put_logs(arn, body_str)
             elif ":event-bus/" in arn and forward_bus is not None and _depth < 5:
                 # Event-bus target: the event is re-matched against the destination bus's rules.
                 # (Real EventBridge also refuses bus chains deeper than the cycle limit.)
                 dest = arn.split(":event-bus/", 1)[1]
                 n += route_event(rules, dest, event_obj, envelope, send_sqs, invoke_lambda,
-                                 publish_sns, forward_bus, _depth + 1, start_sfn)
+                                 publish_sns, forward_bus, _depth + 1, start_sfn, put_kinesis, put_logs)
             else:
                 continue
             n += 1
@@ -366,7 +428,8 @@ def _put_events(store, body, lambda_store=None):
         route_event(_rules(store).values(), bus, event_obj, envelope, send_sqs,
                     lambda arn, b: _deliver_lambda(lambda_store, arn, b),
                     lambda arn, b: _deliver_sns(store, arn, b), forward_bus=True,
-                    start_sfn=lambda arn, b: _deliver_sfn(arn, b))
+                    start_sfn=lambda arn, b: _deliver_sfn(arn, b),
+                    put_kinesis=_deliver_kinesis, put_logs=_deliver_logs)
         entries_out.append({"EventId": event_id})
     store.persist()
     return EventsResponse(body={"FailedEntryCount": 0, "Entries": entries_out})
