@@ -160,12 +160,6 @@
   "limitations": ["The form builds a structurally correct SAS query string (sv/ss/srt/sp/st/se/spr/sig) from the selected options and signs it with the account's listKeys value, but core/azure_blob_core.py and core/azure_queue_core.py do not verify any request signature (SharedKey or SAS) — the generated token is not a real, checkable credential."],
   "tests": ["tests/conformance/test_azure_arm_core.py"]
  },
- "azure.storage.defender": {
-  "title": "Microsoft Defender for Cloud",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["A separate security product (threat detection, vulnerability scanning) with its own billing plan — not modelled by any Vyomi core."],
-  "tests": []
- },
  "azure.storage.objectreplication": {
   "title": "Object replication",
   "level": { "nano": "limited", "offline": "limited" },

@@ -28,6 +28,7 @@ import SharedResourceHealth from "../../kit/ResourceHealth.jsx";
 import SharedDiagnosticSettings from "../../kit/DiagnosticSettings.jsx";
 import SharedAdvisor from "../../kit/Advisor.jsx";
 import SharedSupportPanel from "../../kit/SupportPanel.jsx";
+import { ResourceRecommendations } from "../defender/Pages.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -89,6 +90,7 @@ export default function KeyVaultBlade({ params, query }) {
       locks: () => <Locks a={a} />,
       activitylog: () => <SharedActivityLog scope={a.id} name={a.name} />,
       exporttemplate: () => <SharedExportTemplate id={a.id} name={a.name} resourceGroup={a.resourceGroup} />,
+      defender: () => <ResourceRecommendations resourceId={a.id} />,
       support: () => <SharedSupportPanel resourceId={a.id} name={a.name} service="keyvaults" />,
       resourcehealth: () => <SharedResourceHealth id={a.id} name={a.name} />,
       diagnosticsettings: () => <SharedDiagnosticSettings id={a.id} name={a.name} />,

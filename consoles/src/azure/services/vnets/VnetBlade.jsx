@@ -30,6 +30,7 @@ import SharedActivityLog from "../../kit/ActivityLog.jsx";
 import { ClassicAdminsPanel, DenyAssignmentsPanel, MyAccess } from "../../kit/IamExtras.jsx";
 import SharedAdvisor from "../../kit/Advisor.jsx";
 import SharedSupportPanel from "../../kit/SupportPanel.jsx";
+import { ResourceRecommendations } from "../defender/Pages.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -58,7 +59,7 @@ export const MENU = [
 const LABEL = Object.fromEntries(MENU.flatMap((m) => (m.group ? m.items : [m])).map((i) => [i.id, i.label]));
 const GAP_CAP = {
   bastion: "azure.vnets.network_appliances", ddosprotection: "azure.vnets.network_appliances", firewall: "azure.vnets.network_appliances",
-  defender: "azure.vnets.network_appliances", networkmanager: "azure.vnets.network_appliances", privateendpoints: "azure.vnets.network_appliances",
+  networkmanager: "azure.vnets.network_appliances", privateendpoints: "azure.vnets.network_appliances",
   connecteddevices: "azure.vnets.connected_devices",
 };
 
@@ -77,6 +78,7 @@ export default function VnetBlade({ params }) {
     const P = {
       overview: () => <Overview a={a} reload={reload} self={self} />,
       iam: () => <AccessControlIam a={a} />,
+      defender: () => <ResourceRecommendations resourceId={a.id} />,
       tags: () => <Tags a={a} reload={reload} />,
       addressspace: () => <AddressSpace a={a} reload={reload} />,
       dnsservers: () => <DnsServers a={a} reload={reload} />,

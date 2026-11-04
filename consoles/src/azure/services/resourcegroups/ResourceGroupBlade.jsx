@@ -30,6 +30,7 @@ import SharedResourceHealth from "../../kit/ResourceHealth.jsx";
 import SharedDiagnosticSettings from "../../kit/DiagnosticSettings.jsx";
 import SharedAdvisor from "../../kit/Advisor.jsx";
 import SharedSupportPanel from "../../kit/SupportPanel.jsx";
+import { ResourceRecommendations } from "../defender/Pages.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -108,6 +109,7 @@ export default function ResourceGroupBlade({ params }) {
       deployments: () => <Deployments name={name} />,
       locks: () => <Locks name={name} />,
       exporttemplate: () => <SharedExportTemplate all id={a.id} name={a.name} resourceGroup={a.name} />,
+      security: () => <ResourceRecommendations resourceId={a.id} />,
       support: () => <SharedSupportPanel resourceId={a.id} name={a.name} service="resourcegroups" />,
       resourcehealth: () => <SharedResourceHealth id={a.id} name={a.name} group />,
       advisorrecommendations: () => <SharedAdvisor scope={a.id} name={a.name} />,

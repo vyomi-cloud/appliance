@@ -117,10 +117,10 @@
   "tests": ["tests/conformance/test_azure_arm_core.py", "tests/conformance/test_azure_monitor_core.py", "tests/conformance/test_azure_operationalinsights_core.py"]
  },
  "azure.vnets.network_appliances": {
-  "title": "Azure Bastion, DDoS protection, Azure Firewall, Microsoft Defender for Cloud, Network Manager, Private endpoints",
+  "title": "Azure Bastion, DDoS protection, Azure Firewall, Network Manager, Private endpoints",
   "level": { "nano": "not_simulated", "offline": "not_simulated" },
   "limitations": [
-   "Each of these is a separate resource type (bastionHosts, ddosProtectionPlans, azureFirewalls, privateEndpoints) or a security service Vyomi does not model; the virtual network create wizard's Bastion/Firewall/DDoS checkboxes and the resource menu items are an honest gap, not provisioned. Microsoft.Network/networkManagers now exists as a bare, generically-CRUD-able ARM resource (so the Create VNet wizard's IP address pool picker has something real to create against — see azure.vnets.ip_address_management), but the VNet blade's own 'Network manager' menu item (which governs connectivity/security-admin configurations applied to this vnet) is still not built."
+   "Each of these is a separate resource type (bastionHosts, ddosProtectionPlans, azureFirewalls, privateEndpoints) or a service Vyomi does not model (the Microsoft Defender for Cloud page is real: it lists the live recommendations that assess this network, usually none); the virtual network create wizard's Bastion/Firewall/DDoS checkboxes and the resource menu items are an honest gap, not provisioned. Microsoft.Network/networkManagers now exists as a bare, generically-CRUD-able ARM resource (so the Create VNet wizard's IP address pool picker has something real to create against — see azure.vnets.ip_address_management), but the VNet blade's own 'Network manager' menu item (which governs connectivity/security-admin configurations applied to this vnet) is still not built."
   ]
  },
  "azure.vnets.connected_devices": {

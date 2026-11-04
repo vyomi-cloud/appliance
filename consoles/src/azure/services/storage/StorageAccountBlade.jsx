@@ -30,6 +30,7 @@ import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
 import SharedActivityLog from "../../kit/ActivityLog.jsx";
 import SharedAdvisor from "../../kit/Advisor.jsx";
 import SharedSupportPanel from "../../kit/SupportPanel.jsx";
+import { ResourceRecommendations } from "../defender/Pages.jsx";
 
 const ENFORCEMENT = "These settings are stored on the storage account (ARM) and returned to your SDKs and the az CLI. The Vyomi Blob data plane does not enforce them.";
 
@@ -88,6 +89,7 @@ export default function StorageAccountBlade({ params, query }) {
     const a = acct.data, reload = acct.reload;
     const P = {
       overview: () => <Overview a={a} reload={reload} self={self} />,
+      defender: () => <ResourceRecommendations resourceId={a.id} />,
       support: () => <SharedSupportPanel resourceId={a.id} name={a.name} service="storage" />,
       tags: () => <Tags a={a} reload={reload} />,
       containers: () => (query.container ? <Container account={name} container={query.container} self={self} /> : <Containers account={name} self={self} />),

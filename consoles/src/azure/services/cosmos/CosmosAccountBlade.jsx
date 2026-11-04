@@ -28,6 +28,7 @@ import SharedActivityLog from "../../kit/ActivityLog.jsx";
 import { ClassicAdminsPanel, DenyAssignmentsPanel, MyAccess } from "../../kit/IamExtras.jsx";
 import SharedResourceHealth from "../../kit/ResourceHealth.jsx";
 import SharedDiagnosticSettings from "../../kit/DiagnosticSettings.jsx";
+import { ResourceRecommendations } from "../defender/Pages.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -113,6 +114,7 @@ export default function CosmosAccountBlade({ params }) {
       overview: () => <Overview a={a} reload={reload} self={self} />,
       activitylog: () => <SharedActivityLog scope={a.id} name={a.name} />,
       iam: () => <Iam a={a} />,
+      defender: () => <ResourceRecommendations resourceId={a.id} />,
       tags: () => <Tags a={a} reload={reload} />,
       identity: () => <ManagedIdentityPage resourceId={a.id} apiVersion="2024-05-15" name={a.name} onChanged={reload} />,
       dataexplorer: () => <DataExplorer />,

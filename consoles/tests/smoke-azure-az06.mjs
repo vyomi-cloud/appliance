@@ -62,6 +62,11 @@ try {
     check(`${label}: support page lists the filed request`, await page.getByText(t.properties.supportTicketId).first().waitFor({ timeout: 8000 }).then(() => true, () => false));
     check(`${label}: no Not-simulated panel`, (await page.locator("[data-vyomi-not-simulated]").count()) === 0);
   }
+  // Defender for Cloud page on a storage account: live recommendations for that resource
+  await arm("PUT", `/resourceGroups/${RG}/providers/Microsoft.Storage/storageAccounts/vyaz06${n}`, { location: "eastus", kind: "StorageV2", sku: { name: "Standard_LRS" }, properties: { supportsHttpsTrafficOnly: false, allowBlobPublicAccess: true } });
+  await page.goto(UI + `#/storage/${RG}/vyaz06${n}/defender`);
+  check("storage Defender page lists a real recommendation", await page.getByText("secure transfer", { exact: false }).first().waitFor({ timeout: 10000 }).then(() => true, () => false));
+  check("storage Defender page: no Not-simulated panel", (await page.locator("[data-vyomi-not-simulated]").count()) === 0);
   check("no page errors", errors.length === 0, errors.join(" | ").slice(0, 200));
 } catch (e) { check("smoke ran", false, String(e).slice(0, 300)); }
 await browser.close();
