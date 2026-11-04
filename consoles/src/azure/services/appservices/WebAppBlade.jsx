@@ -3,6 +3,7 @@
  * domains, Locks, App Service logs, Diagnostic settings, Access control (IAM), Export
  * template, Identity, Backups and Scale up/out/Change App Service plan are backed by native
  * ARM calls; everything else in the menu is an honest NotSimulated panel. */
+import DeploymentCenter from "../../kit/DeploymentCenter.jsx";
 import { UserAssignedIdentities } from "../../kit/UserAssignedIdentities.jsx";
 import { useEffect, useState } from "react";
 import {
@@ -75,10 +76,7 @@ const LABEL = Object.fromEntries(MENU.flatMap((m) => (m.group ? m.items : [m])).
 
 // Extra honest text for panels whose real-portal page carries more than a bare title, so
 // every spec tab/section/field is at least declared a gap (never silently missing).
-const RICH_NOTES = {
-  deploymentcenter: "Tabs: Settings, Logs, FTPS credentials. Section: Settings. Field: Source "
-    + "(GitHub, Bitbucket, Local Git, Azure Repos, External Git, Container registry).",
-};
+const RICH_NOTES = {};
 
 export default function WebAppBlade({ params, query }) {
   const { rg, name } = params;
@@ -99,6 +97,7 @@ export default function WebAppBlade({ params, query }) {
       iam: () => <AccessControl a={a} />,
       tags: () => <Tags a={a} reload={reload} />,
       slots: () => <Slots rg={rg} name={name} />,
+      deploymentcenter: () => <DeploymentCenter a={a} />,
       envvars: () => <EnvVars rg={rg} name={name} />,
       configuration: () => <Configuration a={a} rg={rg} name={name} reload={reload} />,
       cors: () => <Cors a={a} rg={rg} name={name} reload={reload} />,

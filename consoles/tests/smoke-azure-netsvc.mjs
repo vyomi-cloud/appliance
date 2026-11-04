@@ -114,6 +114,24 @@ try {
   await page.getByLabel("Add a private endpoint").check();
   check("Key Vault wizard offers a real private endpoint section", await page.getByLabel("Private endpoint target sub-resource").isVisible());
 
+  // ── Deployment Center (App Service) ──
+  const WV = armv("2023-12-01");
+  await WV("PUT", `/resourceGroups/${RG}/providers/Microsoft.Web/serverfarms/plan${n}`, { location: "eastus", sku: { name: "B1" } });
+  await WV("PUT", `/resourceGroups/${RG}/providers/Microsoft.Web/sites/wapp${n}`, { location: "eastus", kind: "app,linux", properties: { serverFarmId: `/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Web/serverfarms/plan${n}` } });
+  await page.goto(UI + `#/appservices/${RG}/wapp${n}/deploymentcenter`);
+  await page.getByLabel("Source", { exact: true }).selectOption("gh");
+  await page.getByLabel("Repository", { exact: true }).fill("https://github.com/acme/shop");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await page.getByLabel("Generated GitHub workflow").waitFor({ timeout: 10000 });
+  check("Deployment Center shows the generated workflow", (await page.getByLabel("Generated GitHub workflow").inputValue()).includes("azure/webapps-deploy@v3"));
+  const sc = json(await WV("GET", `/resourceGroups/${RG}/providers/Microsoft.Web/sites/wapp${n}/config/web`));
+  check("scmType = GitHubAction over ARM", sc.properties?.scmType === "GitHubAction");
+  await page.getByRole("tab", { name: "FTPS credentials" }).click();
+  await page.getByLabel("FTPS username").waitFor({ timeout: 10000 });
+  check("FTPS username is $site", (await page.getByLabel("FTPS username").inputValue()) === `$wapp${n}`);
+  await page.getByRole("tab", { name: "Logs" }).click();
+  await noNS("App Service Deployment Center");
+
   // ── NSG flow logs ──
   await page.goto(UI + `#/nsgs/${RG}/nsg${n}/flowlogs`);
   await page.getByRole("button", { name: "Create", exact: true }).click();

@@ -2,6 +2,7 @@
  * Environment variables, Scale and concurrency, Locks, Export template and Access control
  * (role assignments/roles) are backed by native ARM calls; everything else in the menu is an
  * honest NotSimulated panel (Vyomi has no diagnostics/telemetry/identity backend for them). */
+import DeploymentCenter from "../../kit/DeploymentCenter.jsx";
 import { ClassicAdminsPanel, DenyAssignmentsPanel, MyAccess } from "../../kit/IamExtras.jsx";
 import { UserAssignedIdentities } from "../../kit/UserAssignedIdentities.jsx";
 import { useEffect, useState } from "react";
@@ -70,7 +71,6 @@ const LABEL = Object.fromEntries(MENU.flatMap((m) => (m.group ? m.items : [m])).
 // real human staff) — CapabilityContainer renders their honest Not-simulated panel itself from
 // the registry's limitations text.
 const GAPS = {
-  "deployment-center": "azure.functionapp.deploymentcenter",
   "advanced-tools": "azure.functionapp.advancedtools",
   "extensions": "azure.functionapp.extensions",
   "tasks": "azure.functionapp.tasks",
@@ -92,6 +92,7 @@ export default function FunctionAppBlade({ params }) {
     const P = {
       overview: () => <Overview a={a} reload={reload} self={self} />,
       "microsoft-defender-for-cloud": () => <ResourceRecommendations resourceId={a.id} />,
+      "deployment-center": () => <DeploymentCenter a={a} cap="azure.functionapp.deploymentcenter" />,
       tags: () => <Tags a={a} reload={reload} />,
       "app-keys": () => <AppKeys a={a} />,
       "environment-variables": () => <EnvironmentVariables a={a} />,
