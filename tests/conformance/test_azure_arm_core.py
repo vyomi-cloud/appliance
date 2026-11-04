@@ -1320,7 +1320,8 @@ def run() -> int:
     # non-overlapping CIDR block carved out of the pool (AzureArm._allocate_ipam_pool), not a
     # stored label.
     nm1 = _p(RG, "Microsoft.Network", "networkManagers", "nm1")
-    r = arm.handle("PUT", nm1, {"api-version": "2024-05-01"}, {"location": "eastus"})
+    r = arm.handle("PUT", nm1, {"api-version": "2024-05-01"}, {"location": "eastus", "properties": {
+        "networkManagerScopes": {"subscriptions": [f"/subscriptions/{DEFAULT_SUBSCRIPTION}"]}, "networkManagerScopeAccesses": ["Connectivity"]}})
     _check("network manager created", r["status"] == 200)  # top-level type: async LRO shape, same as every other catalog resource
     pool1 = f"{nm1}/ipamPools/pool1"
     r = arm.handle("PUT", pool1, {"api-version": "2024-05-01"}, {"properties": {"addressPrefixes": ["10.50.0.0/16"]}})
