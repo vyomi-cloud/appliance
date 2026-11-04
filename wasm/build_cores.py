@@ -59,7 +59,7 @@ CORES = [
     "gcp_compute_instances_core.py",                # GCP: Compute Engine REST v1 (instances, disks, images, templates, groups, health checks — control plane)
     "gcp_resourcemanager_core.py",                 # GCP: Resource Manager (project, tags, essential contacts, org policies) — IAM & Admin
     "gcp_pam_core.py",                             # GCP: Privileged Access Manager entitlements — IAM & Admin
-    "azure_blob_core.py",                           # Azure: Blob REST (native azure-storage-blob)
+    "azure_netaccess.py", "azure_blob_core.py",                           # Azure: Blob REST (native azure-storage-blob)
     "azure_cosmos_core.py",                         # Azure: Cosmos DB SQL/Core API (native azure-cosmos)
     "azure_keyvault_secrets_core.py",               # Azure: Key Vault secrets (native azure-keyvault-secrets)
     "azure_keyvault_keys_core.py",                  # Azure: Key Vault keys (native azure-keyvault-keys)
