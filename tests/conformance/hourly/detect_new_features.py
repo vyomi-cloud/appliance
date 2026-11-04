@@ -242,6 +242,8 @@ GCP_SDK_ALIASES = {
     ("gcp_container_core", "GetOp"): ("containerpb.GetOperationRequest",),
     ("gcp_redis_core", "GetOp"): ("redispb.CreateInstanceRequest",),   # LRO Wait() polls GetOperation
     ("gcp_redis_core", "PatchInstance"): ("UpdateInstanceRequest",),
+    ("gcp_cloudsql_core", "PatchInstance"): ("sql.Instances.Patch(",),
+    ("gcp_cloudsql_core", "PatchSettings"): ("sql.Instances.Patch(",),   # settings patch is the same RPC
     # Artifact Registry: the Go/Java SDK tests call these RPCs (verified in gcp-sdk-go-artifactregistry)
     ("gcp_artifactregistry_core", "CreateRepo"): ("artifactregistrypb.CreateRepositoryRequest", "pb.CreateRepositoryRequest", "CreateRepositoryRequest"),
     ("gcp_artifactregistry_core", "GetRepo"): ("GetRepositoryRequest",),
@@ -258,6 +260,8 @@ GCP_SDK_ALIASES = {
     ("gcp_monitoring_core", "ListDescriptors"): ("MetricDescriptors.List(",),
     ("gcp_monitoring_core", "DeleteDescriptor"): ("MetricDescriptors.Delete(",),
     ("gcp_monitoring_core", "ListTimeSeries"): ("TimeSeries.List(",),
+    ("gcp_monitoring_core", "ListGroups"): ("Groups.List(",),
+    ("gcp_monitoring_core", "GetUptime"): ("UptimeCheckConfigs.Get(",),
     ("gcp_monitoring_core", "UpdateGroup"): ("Groups.Update(",),
     ("gcp_monitoring_core", "DeleteGroup"): ("Groups.Delete(",),
     ("gcp_monitoring_core", "CreateUptime"): ("UptimeCheckConfigs.Create(",),

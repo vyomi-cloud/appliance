@@ -192,6 +192,8 @@ func main() {
 		u.HttpCheck.Port == 443 && u.Period == "300s", fmt.Sprintf("%v %v", err, u))
 	_, err = svc.Projects.UptimeCheckConfigs.Create(pname, &monitoring.UptimeCheckConfig{DisplayName: "no-timeout"}).Do()
 	check("UptimeCheckConfigs.Create invalid → 400", httpCode(err) == 400, fmt.Sprintf("%v", err))
+	gu, err := svc.Projects.UptimeCheckConfigs.Get(u.Name).Do()
+	check("UptimeCheckConfigs.Get", err == nil && gu.Name == u.Name && gu.Period == "300s", fmt.Sprintf("%v", err))
 	uu, err := svc.Projects.UptimeCheckConfigs.Patch(u.Name, &monitoring.UptimeCheckConfig{DisplayName: "go-home-2-" + sfx}).UpdateMask("display_name").Do()
 	check("UptimeCheckConfigs.Patch", err == nil && strings.HasPrefix(uu.DisplayName, "go-home-2") && uu.HttpCheck.Port == 443, fmt.Sprintf("%v", err))
 	_, err = svc.Projects.UptimeCheckConfigs.Delete(u.Name).Do()
@@ -203,6 +205,16 @@ func main() {
 	check("Groups.Create", err == nil && strings.HasPrefix(grp.Name, pname+"/groups/"), fmt.Sprintf("%v %v", err, grp))
 	gg, err := svc.Projects.Groups.Get(grp.Name).Do()
 	check("Groups.Get", err == nil && gg.DisplayName == "go-prod-"+sfx, fmt.Sprintf("%v", err))
+	lg, err := svc.Projects.Groups.List(pname).Do()
+	listed := false
+	if err == nil {
+		for _, g := range lg.Group {
+			if g.Name == grp.Name {
+				listed = true
+			}
+		}
+	}
+	check("Groups.List", listed, fmt.Sprintf("%v", err))
 	ug, err := svc.Projects.Groups.Update(grp.Name, &monitoring.Group{Name: grp.Name, DisplayName: "go-prod-2-" + sfx,
 		Filter: `resource.metadata.name=has_substring("prod2")`}).Do()
 	check("Groups.Update", err == nil && strings.HasPrefix(ug.DisplayName, "go-prod-2"), fmt.Sprintf("%v", err))
