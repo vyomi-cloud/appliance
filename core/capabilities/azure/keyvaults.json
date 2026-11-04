@@ -1,0 +1,179 @@
+{
+ "$doc": "Vyomi capability registry — Azure Key vaults. See aws/s3.json for the contract.",
+ "azure.keyvaults.vault.crud": {
+  "title": "Vaults (create, get, list, delete) over ARM",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py"
+  ]
+ },
+ "azure.keyvaults.vault.tags": {
+  "title": "Tags",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py"
+  ]
+ },
+ "azure.keyvaults.access_configuration": {
+  "title": "Access configuration (RBAC vs vault access policy, resource access flags)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "ENFORCED: Vyomi models the one thing the product was missing to make this real — a single simulated signed-in identity (core/azure_arm_core.py CALLER_PRINCIPAL_ID) every Keys/Secrets/Certificates call (tagged with its vault via x-vyomi-vault, the same signal azure.keyvaults.networking enforces against) is evaluated against. The permission-model radio really switches which store is checked: RBAC mode checks a real role assignment covering the vault (or an ancestor resource-group/subscription scope) whose role grants the matching Key Vault dataAction (core/azure_arm_data.py's 'Key Vault *' built-in roles — Administrator/Reader/Secrets Officer/Secrets User/Crypto Officer/Crypto User/Certificates Officer — a SEPARATE dataActions namespace from Owner/Contributor/Reader's actions, matching real Azure: being Owner does not, by itself, grant Key Vault data access once RBAC is on); Vault access policy mode checks the vault's own accessPolicies list (azure.keyvaults.access_policies).",
+   "A fresh vault self-grants CALLER_PRINCIPAL_ID full access at creation time (RBAC: a Key Vault Administrator role assignment at the vault's own scope; access policy: a self-granting entry) — exactly what `az keyvault create` already does by default — so this console's own create-vault-then-add-a-secret path keeps working. Clearing or narrowing that grant (the Access policies panel's Delete, or revoking the role) really locks the vault, same as real Azure's own 'you can lock yourself out'.",
+   "The 'Resource access' checkboxes (Azure Virtual Machines for deployment / ARM template deployment / Disk Encryption) round-trip through ARM but gate nothing — Vyomi doesn't model those OTHER services' own Key Vault integration (a VM extension or an ARM template secure parameter pulling a secret at deploy time), so there is no consumer call to check them against."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py",
+   "tests/conformance/test_azure_keyvault_access_core.py"
+  ]
+ },
+ "azure.keyvaults.access_policies": {
+  "title": "Vault access policies (properties.accessPolicies)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "ENFORCED (vault access policy mode only — azure.keyvaults.access_configuration): every Keys/Secrets/Certificates call checks the vault's own accessPolicies list for an entry matching the console's one simulated signed-in principal (CALLER_PRINCIPAL_ID), with the Get/List/Create/Delete bucket the entry's Key/Secret/Certificate Permissions checkboxes already show — Create covers set/update/import too (Vyomi's console exposes those four buckets, not real Key Vault's full per-operation permission set), and a cryptographic operation (encrypt/decrypt/sign/verify/wrap/unwrap) needs at least Get on keys.",
+   "Only CALLER_PRINCIPAL_ID's own entry is ever evaluated — Vyomi has no second signed-in identity to grant a DIFFERENT principal's entry against, so an access policy for any other objectId round-trips through ARM (visible in the table) but never gates a real call."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py",
+   "tests/conformance/test_azure_keyvault_access_core.py"
+  ]
+ },
+ "azure.keyvaults.iam": {
+  "title": "Access control (IAM)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Role assignments and role definitions are real ARM resources (Microsoft.Authorization/roleAssignments, roleDefinitions), and Check access / My access run the real wildcard + scope-inheritance + notActions + explicit-deny decision — all ENFORCED scoped to this vault (plus its subscription/resource-group ancestors, matching real Azure's inherited-access view); Roles stays subscription-wide, which matches real Azure. 'Check access' decides a management action (Microsoft.KeyVault/vaults/write by default) the same way every other resource's IAM blade does; 'My access' is a genuine upgrade over that pattern — since Vyomi has exactly one simulated signed-in principal, it shows THAT principal's real data-plane grant on this vault directly (the RBAC role or access-policy entry azure.keyvaults.access_configuration enforces), not a 'type a principal id' probe.",
+   "Deny assignments and Classic administrators remain an honest gap — Microsoft Entra Privileged Identity Management and the legacy Azure Service Management administrator list are not modelled. Update: the Deny assignments list, Classic administrators (a read-only list of the subscription's account administrator, like the real API) and My access (the simulated signed-in principal, evaluated with checkAccess) are now real shared tabs (azure.common.*); the gap wording above predates them.",
+   "Role assignments are still only PUT-able at the subscription or resource-group scope (real ARM's own constraint in this console — every resource's IAM blade shares it); a vault-scoped grant/revoke needs the Subscription or Resource group blade's 'Add role assignment', not a control on the vault itself."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py",
+   "tests/conformance/test_azure_keyvault_access_core.py"
+  ]
+ },
+ "azure.keyvaults.networking": {
+  "title": "Networking (public network access / firewall default action)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "ENFORCED: the console tags every Keys/Secrets/Certificates call with the vault it's showing (x-vyomi-vault), and publicNetworkAccess:'Disabled' or networkAcls.defaultAction:'Deny' really makes the Key Vault Keys/Secrets/Certificates REST data planes return 403 for that vault (core/azure_arm_core.py keyvault_network_denied, read by core/aws_wire_router.py and core/wire_ingress.py on both substrates).",
+   "'Allow public access from specific virtual networks and IP addresses' is modelled as 'Deny everything' — Vyomi has no caller IP/VNet identity to match an allow-list entry against, so a configured allow-list never lets a call through; it still faithfully blocks the common 'locked down to a VNet, forgot it also blocks me' real-world case, just without the allow-list working.",
+   "A call that names no vault (direct wire/SDK calls bypassing the console, and the AWS-KMS-style simplification this data plane already made before this change) is not checked — same as a vault that doesn't exist."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_keyvault_networking_core.py"
+  ]
+ },
+ "azure.keyvaults.keys.crud": {
+  "title": "Keys (create, get, list, delete) over the Key Vault Keys REST API",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_azure_keyvault_keys_core.py"
+  ]
+ },
+ "azure.keyvaults.keys.crypto": {
+  "title": "Key encrypt/decrypt/wrap/unwrap/sign/verify",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "The RSA public numbers (n/e) advertised on a key are cosmetic (deterministically derived from the private material); the actual cipher behind encrypt/decrypt/wrap/unwrap is a symmetric authenticated envelope, and sign/verify is HMAC-based rather than native RSA/ECDSA. Round-trips (encrypt→decrypt, sign→verify, tamper/cross-key rejection) are real."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_kv_crypto_core.py"
+  ]
+ },
+ "azure.keyvaults.secrets.crud": {
+  "title": "Secrets (set, get, list, list versions, delete) over the Key Vault Secrets REST API",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_azure_keyvault_secrets_core.py"
+  ]
+ },
+ "azure.keyvaults.certificates": {
+  "title": "Certificates (generate self-signed, import, get, list, delete) over the Key Vault Certificates REST API",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Generated (self-signed) certificate creation completes synchronously, and GET .../pending always reports the operation already 'completed' — there is no real multi-step issuance to poll. The `cer`/`x5t` on a GENERATED certificate are deterministic cosmetic bytes, not real X.509 DER.",
+   "Importing a PEM certificate is real: the `-----BEGIN CERTIFICATE-----` block is decoded and its actual DER becomes `cer`, with `x5t` the real SHA-1 thumbprint of that DER. A password-protected PFX (PKCS#12) `value` is accepted but not parsed — this substrate has no ASN.1/PKCS#12 library, so it falls back to the same cosmetic bytes as a generated certificate. Either way the expiration attribute is derived from the request policy's validity_in_months, not read from the certificate's own ASN.1 validity period.",
+   "CA-issued certificates (a real external certificate authority) are not simulated on any substrate."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_keyvault_certificates_core.py"
+  ]
+ },
+ "azure.keyvaults.locks": {
+  "title": "Resource locks (Microsoft.Authorization/locks), scoped to this vault",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "Locks are only simulated at the resource scope (this vault); subscription- and resource-group-scoped lock lists are an honest 'Not simulated' gap, same as the real Subscription/Resource group scope-switch buttons."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py"
+  ]
+ },
+ "azure.keyvaults.activity_log": {
+  "title": "Activity log",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Only console/SDK-triggered mutations made since the simulation booted are recorded (no historical backfill), and `caller` is a fixed placeholder identity rather than the real signed-in principal. Severity/category filtering is not modelled (every recorded event is Informational/Administrative).",
+   "The Timespan picker IS enforced: its lower bound is a real OData `eventTimestamp ge` predicate (core/azure_arm_core.py _activity_log_query) — narrowing it really narrows the result, it isn't a cosmetic control."
+  ],
+  "api": [
+   "ActivityLogs_List"
+  ],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py"
+  ]
+ },
+ "azure.keyvaults.keys.attributes": {
+  "title": "Key activation/expiration dates, enabled state and tags",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["Activation (nbf), expiration (exp) and disabled state are ENFORCED: encrypt/decrypt/wrap/unwrap/sign/verify on a key outside its window or disabled returns 403 Forbidden.", "Key rotation policy is not modelled."],
+  "tests": ["tests/conformance/test_azure_keyvault_keys_core.py"]
+ },
+ "azure.keyvaults.certificates.policy": {
+  "title": "Certificate content type, lifetime actions and advanced policy",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["The policy (content type, key size/exportable, lifetime actions) is validated like real Key Vault and stored/returned by Get/UpdateCertificatePolicy, but lifetime actions never fire (no auto-renew or e-mail), and generated certificates are self-signed with placeholder bytes."],
+  "tests": ["tests/conformance/test_azure_keyvault_certificates_core.py"]
+ }
+}

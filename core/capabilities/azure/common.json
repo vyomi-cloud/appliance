@@ -1,0 +1,115 @@
+{
+ "$doc": "Vyomi capability registry \u2014 Azure blades shared by every service (Export template, Activity log, RBAC extras, Resource health, Tags/Locks, Diagnostics). See aws/s3.json for the contract.",
+ "azure.common.export_template": {
+  "title": "Export template (ARM, Bicep, Terraform) on every resource",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "The ARM template is built from the properties Vyomi stores for the resource (system/read-only properties such as provisioningState are dropped by a fixed list, not each resource provider's real schema), so it may omit or include properties real Azure would treat differently.",
+   "Bicep is a deterministic decompilation of that template (symbolic names, parameters, resource declarations); nested child resources are exported flat and no dependsOn is inferred.",
+   "Terraform output uses the generic azapi_resource form (Azure/azapi provider), not hand-mapped azurerm_* resources."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_templates_core.py"
+  ]
+ },
+ "azure.common.activity_log": {
+  "title": "Activity log (filters, edit columns, insights, export) on every resource",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Events are the ARM control-plane mutations Vyomi itself records (write/delete/action on resources); there is no real Azure platform emitting service-health, autoscale, alert or policy events.",
+   "Export Activity Logs downloads the filtered events as a JSON file; continuous export to a storage account / Event Hub / Log Analytics (a diagnostic setting on the subscription) is not performed from this blade.",
+   "Insights shows counts computed from the loaded events, not the portal's Log Analytics-backed Activity log insights workbook; Feedback is not simulated."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_activity_log_core.py"
+  ]
+ },
+ "azure.common.classic_administrators": {
+  "title": "Classic administrators (subscription co-administrators)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Read-only list, exactly like the real Microsoft.Authorization/classicAdministrators API (the legacy co-administrator model is retired): a modern subscription shows only its Account Administrator / Service Administrator, which in Vyomi is the single simulated signed-in user. Adding or removing classic administrators is not possible and is not modelled."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py"
+  ]
+ },
+ "azure.common.resource_health": {
+  "title": "Resource health on every resource",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Health is derived from the resource's own stored state (failed provisioning, a stopped/deallocated VM or stopped AKS cluster); Vyomi runs no Azure platform, so there are never platform outages, planned maintenance or a health-history feed \u2014 the history section is always empty."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_health_core.py"
+  ]
+ },
+ "azure.common.advisor": {
+  "title": "Advisor recommendations on every resource",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Recommendations come from a small fixed rule set over each resource's stored configuration (Key Vault soft delete / purge protection, storage secure transfer / public blob access / TLS, SQL TLS, NSG open SSH/RDP, App Service HTTPS only, ACR admin user) \u2014 all in the Security category. Cost, Reliability and Performance recommendations need real utilisation telemetry, which Vyomi does not have, so none are produced.",
+   "Postpone (7 days) and Dismiss are real Advisor suppressions persisted with the recommendation, but a postponed recommendation is never re-activated by the clock."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_health_core.py"
+  ]
+ },
+ "azure.common.diagnostic_settings": {
+  "title": "Diagnostic settings on every resource",
+  "level": {
+   "nano": "config_only",
+   "offline": "config_only"
+  },
+  "limitations": [
+   "Settings are stored and validated exactly as the real Microsoft.Insights/diagnosticSettings resource requires (at least one destination; a storage destination must be a real resource), but logs and metrics are never delivered to the workspace, storage account or event hub \u2014 there is no telemetry pipeline.",
+   "The log-category picker lists the categories Vyomi knows for the common resource types plus the allLogs category group; GET diagnosticSettingsCategories is not modelled."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_monitor_core.py",
+   "tests/conformance/test_azure_arm_core.py"
+  ]
+ },
+ "azure.common.resource_visualizer": {
+  "title": "Resource visualizer (resource group graph)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "The graph is drawn from the real ARM resource list of the resource group; an edge exists only where a stored property of one resource holds another resource's id. Layout is a fixed circle (no drag, zoom, or expand-by-type), and cross-resource-group relationships are not shown."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py"
+  ]
+ },
+ "azure.common.grid_tools": {
+  "title": "Browse-grid Open query (Resource Graph) and Assign tags",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Open query runs a minimal Kusto subset (tables Resources and ResourceContainers; where with =~ / == / contains, project, limit, count) evaluated over Vyomi's ARM resource store \u2014 no joins, summarize, extend or order by. The console posts to the subscription-prefixed path; real Azure Resource Graph is tenant-level (Nano also answers that form).",
+   "Assign tags merges the entered tags onto every selected resource with real ARM PATCHes; it needs the list to hold ARM resources (a row id) and is disabled otherwise. Manage view is the grid's column chooser (a console preference), not a saved/shared portal view."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py"
+  ]
+ }
+}

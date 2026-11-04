@@ -20,6 +20,8 @@ All planes ignore credentials and never raise into the control plane.
 """
 from __future__ import annotations
 
+import re
+
 import email.utils
 import hashlib
 import json
@@ -169,7 +171,25 @@ async def _blob_handle(account: str, rest: str, request: Request) -> Response:
             "x-ms-blob-type": "BlockBlob", "x-ms-creation-time": g["mtime"]})
         for mk, mv in (g.get("meta") or {}).items():
             hdrs["x-ms-meta-" + mk] = mv
-        return Response(content=g["data"], media_type=g["ct"], headers=hdrs)
+        # Ranged GET: the azure-storage-blob SDK always downloads with x-ms-range (or Range)
+        # and requires 206 + Content-Range (same semantics as core/azure_blob_core).
+        rng = request.headers.get("x-ms-range") or request.headers.get("range") or ""
+        m = re.match(r"\s*bytes=(\d*)-(\d*)\s*$", rng)
+        data, total = g["data"], len(g["data"])
+        if m and (m.group(1) or m.group(2)):
+            if m.group(1):
+                start = int(m.group(1))
+                end = min(int(m.group(2)) if m.group(2) else total - 1, total - 1)
+            else:                                   # suffix range: last N bytes
+                start, end = max(total - int(m.group(2)), 0), total - 1
+            if start >= total and total > 0:
+                return Response(status_code=416, content="", headers=_blob_headers(
+                    {"x-ms-error-code": "InvalidRange", "Content-Range": f"bytes */{total}"}))
+            part = data[start:end + 1] if total else b""
+            hdrs["Content-Length"] = str(len(part))
+            hdrs["Content-Range"] = f"bytes {start}-{max(end, start)}/{total}" if total else "bytes */0"
+            return Response(status_code=206, content=part, media_type=g["ct"], headers=hdrs)
+        return Response(content=data, media_type=g["ct"], headers=hdrs)
     if method == "DELETE":
         existed = delete_blob(account, container, blob)
         return Response(status_code=202 if existed else 404, content="", headers=_blob_headers())
@@ -902,6 +922,58 @@ async def _apim_handle(service_name: str, rest: str, request: Request) -> Respon
 # immediately readable by azure-storage-blob — and lives in Azurite (durable,
 # real open-source emulator), exactly like S3→MinIO and GCS→fake-gcs.
 # ----------------------------------------------------------------------------
+# v4 C0b — ONE engine. When "azure_blob" is unified (the default), the native Blob
+# REST AND these console helpers go through the shared core (core/azure_blob_core.py)
+# over the appliance's space-scoped, persisted state (core/appliance_stores.py —
+# Azurite becomes a write-through mirror). The helpers below keep their pre-v4
+# signatures/shapes so every console route and caller is unchanged.
+def _unified() -> bool:
+    try:
+        from core import wire_ingress as _wi
+        return _wi.is_unified("azure_blob")
+    except Exception:
+        return False
+
+
+def _core_store(account: str):
+    from core import appliance_stores as _aps
+    st = _aps.az_blob_store()
+    st.adopt(account.lower())
+    return st
+
+
+def _core_call(account: str, method: str, container: str, blob: str = "", query: dict | None = None,
+               headers: dict | None = None, body: bytes = b""):
+    from urllib.parse import quote
+    from core import azure_blob_core as _abc
+    path = "/" + quote(container, safe="") + ("/" + "/".join(quote(x, safe="") for x in blob.split("/")) if blob else "")
+    _core_store(account)
+    from core import appliance_stores as _aps
+    return _abc.dispatch(_aps.az_blob_store(), method, path, query or {}, headers or {}, body,
+                         account=account.lower())
+
+
+def _core_entry(account: str, container: str, blob: str) -> dict | None:
+    st = _core_store(account)
+    ck = f"{account.lower()}/{container}"
+    if not st.container_exists(ck):
+        return None
+    return st.container_blobs(ck).get(blob)
+
+
+def _core_rec(account: str, container: str, blob: str, with_data: bool) -> dict | None:
+    e = _core_entry(account, container, blob)
+    if e is None:
+        return None
+    rec = {"ct": e.get("content_type") or "application/octet-stream", "etag": e.get("etag"),
+           "mtime": e.get("last_modified"), "meta": dict(e.get("metadata") or {}),
+           "size": int(e.get("size") or 0)}
+    if with_data:
+        from core import azure_blob_core as _abc
+        rec["data"] = _abc._entry_bytes(_core_store(account), f"{account.lower()}/{container}", blob, e)
+    return rec
+
+
 def _store():
     """Return the azure_blob_store module if Azurite is configured + reachable,
     else None (caller uses the in-process _blob dict)."""
@@ -914,6 +986,13 @@ def _store():
 
 def put_blob_bytes(account: str, container: str, blob: str, data: bytes,
                    content_type: str | None = None, meta: dict | None = None) -> dict:
+    if _unified():
+        if not _core_store(account).container_exists(f"{account.lower()}/{container}"):
+            _core_call(account, "PUT", container, query={"restype": "container"})   # pre-v4: implicit create
+        h = {"x-ms-blob-type": "BlockBlob", "content-type": content_type or "application/octet-stream"}
+        h.update({"x-ms-meta-" + k: v for k, v in (meta or {}).items()})
+        _core_call(account, "PUT", container, blob, headers=h, body=data)
+        return _core_rec(account, container, blob, with_data=True) or {}
     st = _store()
     if st:
         try:
@@ -930,6 +1009,8 @@ def put_blob_bytes(account: str, container: str, blob: str, data: bytes,
 
 def get_blob_rec(account: str, container: str, blob: str) -> dict | None:
     """Full record {data, ct, etag, mtime, meta} or None."""
+    if _unified():
+        return _core_rec(account, container, blob, with_data=True)
     st = _store()
     if st:
         return st.get_blob(_sid(), account, container, blob)
@@ -938,6 +1019,8 @@ def get_blob_rec(account: str, container: str, blob: str) -> dict | None:
 
 def blob_props_rec(account: str, container: str, blob: str) -> dict | None:
     """Metadata only {size, ct, etag, mtime, meta} or None (for HEAD)."""
+    if _unified():
+        return _core_rec(account, container, blob, with_data=False)
     st = _store()
     if st:
         return st.blob_props(_sid(), account, container, blob)
@@ -949,6 +1032,14 @@ def blob_props_rec(account: str, container: str, blob: str) -> dict | None:
 
 
 def list_blobs(account: str, container: str, prefix: str = "") -> list[dict]:
+    if _unified():
+        st = _core_store(account)
+        ck = f"{account.lower()}/{container}"
+        if not st.container_exists(ck):
+            return []
+        return [{"name": n, "size": int(e.get("size") or 0), "contentType": e.get("content_type"),
+                 "etag": e.get("etag"), "lastModified": e.get("last_modified")}
+                for n, e in sorted(st.container_blobs(ck).items()) if n.startswith(prefix)]
     st = _store()
     if st:
         return st.list_blobs(_sid(), account, container, prefix)
@@ -963,6 +1054,12 @@ def list_blobs(account: str, container: str, prefix: str = "") -> list[dict]:
 
 
 def list_containers(account: str) -> list[dict]:
+    if _unified():
+        st = _core_store(account)
+        pre = account.lower() + "/"
+        return [{"name": k[len(pre):], "created": (st.containers.get(k) or {}).get("created") or _http_date(),
+                 "blobCount": len(st.container_blobs(k))}
+                for k in sorted(st.containers) if k.startswith(pre)]
     st = _store()
     if st:
         out = []
@@ -983,6 +1080,8 @@ def list_containers(account: str) -> list[dict]:
 
 
 def container_exists(account: str, container: str) -> bool:
+    if _unified():
+        return _core_store(account).container_exists(f"{account.lower()}/{container}")
     st = _store()
     if st:
         return container in set(st.list_containers(_sid(), account))
@@ -990,6 +1089,10 @@ def container_exists(account: str, container: str) -> bool:
 
 
 def create_container(account: str, container: str) -> dict:
+    if _unified():
+        _core_call(account, "PUT", container, query={"restype": "container"})   # 409 if it exists: fine
+        meta = _core_store(account).containers.get(f"{account.lower()}/{container}") or {}
+        return {"name": container, "created": meta.get("created") or _http_date()}
     st = _store()
     if st:
         st.create_container(_sid(), account, container)
@@ -1000,6 +1103,8 @@ def create_container(account: str, container: str) -> dict:
 
 
 def delete_blob(account: str, container: str, blob: str) -> bool:
+    if _unified():
+        return _core_call(account, "DELETE", container, blob).status == 202
     st = _store()
     if st:
         return st.delete_blob(_sid(), account, container, blob)
@@ -1008,6 +1113,12 @@ def delete_blob(account: str, container: str, blob: str) -> bool:
 
 
 def delete_container(account: str, container: str) -> int:
+    if _unified():
+        st = _core_store(account)
+        ck = f"{account.lower()}/{container}"
+        n = len(st.container_blobs(ck)) if st.container_exists(ck) else 0
+        _core_call(account, "DELETE", container, query={"restype": "container"})
+        return n
     st = _store()
     if st:
         return st.delete_container(_sid(), account, container)
@@ -1140,6 +1251,12 @@ def register(app) -> None:
     @app.api_route("/azure-data/blob/{account}", methods=BLOB, include_in_schema=False)
     @app.api_route("/azure-data/blob/{account}/{rest:path}", methods=BLOB, include_in_schema=False)
     async def blob_dispatch(account: str, request: Request, rest: str = ""):
+        if _unified():
+            # v4 C0b: the shared core (Nano's engine) over the appliance's persisted state.
+            from urllib.parse import quote
+            from core import wire_ingress as _wi
+            path = "/" + "/".join(quote(x, safe="") for x in rest.split("/")) if rest else "/"
+            return await _wi.serve_service("azure_blob", request, path=path, account=account)
         return await _blob_handle(account, rest, request)
 
     # Native Azure Storage Queue surface (Azurite-backed) — the AMQP→HTTP

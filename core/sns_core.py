@@ -45,10 +45,24 @@ TOPIC_SETTABLE = {"DeliveryPolicy", "DisplayName", "Policy", "TracingConfig", "K
                   "SignatureVersion", "ContentBasedDeduplication", "ArchivePolicy",
                   "FifoThroughputScope", "BeginningArchiveTime"}
 TOPIC_SETTABLE_PREFIXES = ("HTTP", "Lambda", "SQS", "Application", "Firehose")
+# Delivery-status logging feedback attributes (CloudWatch Logs), keyed by botocore's
+# per-protocol prefix on {prefix}SuccessFeedbackRoleArn / SampleRate / FailureFeedbackRoleArn.
+FEEDBACK_PREFIX = {"sqs": "SQS", "http": "HTTP", "https": "HTTP", "lambda": "Lambda",
+                   "application": "Application", "firehose": "Firehose"}
 SUB_SETTABLE = {"DeliveryPolicy", "FilterPolicy", "FilterPolicyScope", "RawMessageDelivery",
                 "RedrivePolicy", "SubscriptionRoleArn", "ReplayPolicy"}
 SMS_ATTRS = {"MonthlySpendLimit", "DeliveryStatusIAMRole", "DeliveryStatusSuccessSamplingRate",
              "DefaultSenderID", "DefaultSMSType", "UsageReportS3Bucket"}
+SMS_COST_USD = 0.00645       # flat per-message estimate (no real carrier billing) for MonthlySpendLimit enforcement
+
+# Built-in data identifiers the data protection policy can scan Publish bodies for. AWS's
+# managed catalog is far larger and ML-backed; this is a representative, regex-based subset.
+DATA_IDENTIFIER_PATTERNS = {
+    "EmailAddress": re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"),
+    "CreditCardNumber": re.compile(r"\b(?:\d[ -]*?){13,16}\b"),
+    "Ssn-US": re.compile(r"\b\d{3}-\d{2}-\d{4}\b"),
+    "IpAddress": re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b"),
+}
 
 
 @dataclass
@@ -87,7 +101,7 @@ def _state(store) -> dict:
         store.sns = s
     for k, default in (("platform_apps", {}), ("endpoints", {}), ("sms_attributes", {}),
                        ("sandbox", {}), ("opted_out", []), ("deliveries", []), ("dedup", {}),
-                       ("sequence", 0)):
+                       ("sequence", 0), ("sms_spend_usd", 0.0)):
         if k not in s:
             s[k] = default.copy() if isinstance(default, (dict, list)) else default
     return s
@@ -202,6 +216,57 @@ def _log_delivery(store, **rec) -> dict:
     s["deliveries"].append(rec)
     del s["deliveries"][:-DELIVERY_LOG_MAX]
     return rec
+
+
+def _feedback_sample_ok(rate_raw) -> bool:
+    try:
+        rate = float(rate_raw) if rate_raw not in (None, "") else 100.0
+    except Exception:
+        rate = 100.0
+    if rate >= 100:
+        return True
+    if rate <= 0:
+        return False
+    return (uuid.uuid4().int % 10000) < rate * 100
+
+
+def _record_delivery_feedback(store, topic: dict, protocol: str, endpoint: str, message_id: str,
+                              success: bool, detail: str = "") -> None:
+    """Write a real CloudWatch Logs delivery-status record when the topic has a
+    {Protocol}SuccessFeedbackRoleArn / FailureFeedbackRoleArn configured (SetTopicAttributes).
+    Only SQS outcomes are known synchronously on this substrate (no durable delivery worker),
+    so other protocols are recorded in the delivery log but never produce a feedback log."""
+    prefix = FEEDBACK_PREFIX.get(protocol)
+    if not prefix:
+        return
+    attrs = topic.get("attributes", {})
+    kind = "Success" if success else "Failure"
+    if not attrs.get(f"{prefix}{kind}FeedbackRoleArn"):
+        return
+    if success and not _feedback_sample_ok(attrs.get(f"{prefix}SuccessFeedbackSampleRate")):
+        return
+    logs_store = getattr(store, "logs_store", None)
+    if logs_store is None:
+        return
+    from core import logs_core
+    group = f"sns/{REGION}/{store.account_id}/{topic['name']}/{kind}"
+    # Log stream names may not contain ':' — an endpoint ARN has to be sanitized, same as real
+    # CloudWatch Logs would reject the raw ARN.
+    stream = (endpoint or "default").replace(":", "_")
+    doc = {"notification": {"messageId": message_id, "topicArn": topic["topic_arn"], "timestamp": _now_iso()},
+           "delivery": {"destination": endpoint, "attempts": 1, **({"providerResponse": detail} if detail else {})},
+           "status": kind.upper()}
+    try:
+        if group not in logs_store.log_groups:
+            logs_core._create_log_group(logs_store, {"logGroupName": group})
+        g = logs_store.log_groups[group]
+        if stream not in g["streams"]:
+            logs_core._create_log_stream(logs_store, {"logGroupName": group, "logStreamName": stream})
+        logs_core._put_log_events(logs_store, {"logGroupName": group, "logStreamName": stream,
+                                               "logEvents": [{"timestamp": int(time.time() * 1000),
+                                                              "message": json.dumps(doc)}]})
+    except Exception:
+        pass
 
 
 # ── topics ──────────────────────────────────────────────────────────────────
@@ -330,8 +395,10 @@ def _set_topic_attributes(store, params):
         raise _invalid("Invalid parameter: AttributeName")
     raw = params.get("AttributeValue")
     raw = "" if raw is None else str(raw)
-    if name in ("Policy", "DeliveryPolicy", "ArchivePolicy", "TracingConfig") and raw:
+    if name in ("Policy", "DeliveryPolicy", "ArchivePolicy") and raw:
         _json_attr(name, raw)
+    if name == "TracingConfig" and raw not in ("", "Active", "PassThrough"):
+        raise _invalid("Invalid parameter: TracingConfig")
     if name == "SignatureVersion" and raw not in ("1", "2"):
         raise _invalid("Invalid parameter: SignatureVersion")
     if name == "ContentBasedDeduplication" and not _is_fifo(topic):
@@ -430,6 +497,68 @@ def _put_data_protection_policy(store, params):
 def _get_data_protection_policy(store, params):
     t = _require_topic(store, _p(params, "ResourceArn"))
     return _envelope("GetDataProtectionPolicy", _el("DataProtectionPolicy", t.get("data_protection_policy", "")))
+
+
+def _scan_data_identifiers(text: str, idents: list) -> dict:
+    hits = {}
+    for ref in idents:
+        name = str(ref).rsplit("/", 1)[-1]
+        pat = DATA_IDENTIFIER_PATTERNS.get(name)
+        if not pat:
+            continue
+        spans = [m.span() for m in pat.finditer(text)]
+        if spans:
+            hits[name] = spans
+    return hits
+
+
+def _enforce_data_protection_policy(store, topic: dict, msg: dict) -> None:
+    """Evaluate the topic's data protection policy (Inbound statements only, since Publish is
+    the only inbound direction Vyomi models) against the outgoing message body: Deny blocks the
+    Publish, Deidentify masks the matched text before fan-out, Audit only records a finding."""
+    raw = topic.get("data_protection_policy")
+    if not raw:
+        return
+    try:
+        doc = json.loads(raw)
+    except Exception:
+        return
+    text = msg.get("Message") or ""
+    denied, mask_spans, audited = set(), [], set()
+    for st in doc.get("Statement", []):
+        if st.get("DataDirection", "Inbound") != "Inbound":
+            continue
+        hits = _scan_data_identifiers(text, st.get("DataIdentifier") or [])
+        if not hits:
+            continue
+        op = st.get("Operation") or {}
+        if "Deny" in op:
+            denied.update(hits)
+        elif "Deidentify" in op:
+            ch = (((op["Deidentify"] or {}).get("MaskConfig") or {}).get("MaskWithCharacter") or "*")[:1] or "*"
+            for spans in hits.values():
+                mask_spans.extend((s, e, ch) for s, e in spans)
+        elif "Audit" in op:
+            audited.update(hits)
+    if denied:
+        raise SnsError("AccessDenied",
+                       "Message contains data denied by the topic's data protection policy: " + ", ".join(sorted(denied)),
+                       403)
+    if mask_spans:
+        mask_spans.sort(key=lambda x: x[0])
+        out, pos = [], 0
+        for s, e, ch in mask_spans:
+            if s < pos:
+                continue
+            out.append(text[pos:s])
+            out.append(ch * (e - s))
+            pos = e
+        out.append(text[pos:])
+        msg["Message"] = "".join(out)
+    if audited:
+        _log_delivery(store, kind="DataProtectionAudit", topic_arn=topic["topic_arn"], protocol="", endpoint="",
+                      subscription_arn="", subject="",
+                      message="Data protection policy audit matched: " + ", ".join(sorted(audited)))
 
 
 # ── subscriptions ───────────────────────────────────────────────────────────
@@ -743,19 +872,52 @@ _PUSH_PROTOCOLS = ("http", "https", "lambda", "email", "email-json")
 def _retry_policy(topic: dict, sub: dict) -> dict:
     """Effective retry policy for a subscription: the subscription's DeliveryPolicy
     (healthyRetryPolicy) wins, then the topic's (http.defaultHealthyRetryPolicy), then
-    SNS's defaults (3 retries, 20 s)."""
+    SNS's defaults (3 retries, 20 s) — unless the topic sets
+    http.disableSubscriptionOverrides, in which case the subscription's own policy is
+    ignored and the topic's default always applies, exactly as real SNS does."""
     out = dict(_DEFAULT_DELIVERY_POLICY["http"]["defaultHealthyRetryPolicy"])
-    for raw, path in ((topic.get("attributes", {}).get("DeliveryPolicy"), ("http", "defaultHealthyRetryPolicy")),
-                      (sub.get("attributes", {}).get("DeliveryPolicy"), ("healthyRetryPolicy",))):
+    try:
+        topic_http = json.loads(topic.get("attributes", {}).get("DeliveryPolicy") or "{}").get("http", {})
+    except Exception:
+        topic_http = {}
+    if not isinstance(topic_http, dict):
+        topic_http = {}
+    if isinstance(topic_http.get("defaultHealthyRetryPolicy"), dict):
+        out.update({k: v for k, v in topic_http["defaultHealthyRetryPolicy"].items() if v is not None})
+    if not topic_http.get("disableSubscriptionOverrides"):
         try:
-            doc = json.loads(raw) if raw else {}
-            for k in path:
-                doc = doc.get(k, {})
-            if isinstance(doc, dict):
-                out.update({k: v for k, v in doc.items() if v is not None})
+            sub_policy = json.loads(sub.get("attributes", {}).get("DeliveryPolicy") or "{}").get("healthyRetryPolicy", {})
         except Exception:
-            pass
+            sub_policy = {}
+        if isinstance(sub_policy, dict):
+            out.update({k: v for k, v in sub_policy.items() if v is not None})
     return out
+
+
+def retry_delay(policy: dict, retry: int) -> float:
+    """Seconds to wait before retry number `retry` (1-based) under an SNS healthyRetryPolicy:
+    no-delay retries, then min-delay retries, then the backoff curve, then max-delay retries.
+    Shared by the offline appliance's real delivery worker (core/sns_delivery.py) so both the
+    Nano/dev_server simulation below and the real retry loop use the exact same schedule."""
+    total = int(policy.get("numRetries", 3))
+    lo, hi = float(policy.get("minDelayTarget", 20)), float(policy.get("maxDelayTarget", 20))
+    n_none = int(policy.get("numNoDelayRetries", 0))
+    n_min = int(policy.get("numMinDelayRetries", 0))
+    n_max = int(policy.get("numMaxDelayRetries", 0))
+    if retry <= n_none:
+        return 0.0
+    if retry <= n_none + n_min:
+        return lo
+    if retry > total - n_max:
+        return hi
+    k = retry - n_none - n_min                         # 1-based position on the backoff curve
+    span = max(1, total - n_none - n_min - n_max)
+    fn = str(policy.get("backoffFunction", "linear")).lower()
+    if fn in ("exponential", "geometric"):
+        return min(hi, lo * (2 ** (k - 1)) if fn == "geometric" else lo * (2 ** k))
+    if fn == "arithmetic":
+        return min(hi, lo * k)
+    return lo + (hi - lo) * (k - 1) / max(1, span - 1) if span > 1 else lo   # linear
 
 
 def _redrive_target(sub: dict) -> str:
@@ -763,6 +925,36 @@ def _redrive_target(sub: dict) -> str:
         return str(json.loads(sub.get("attributes", {}).get("RedrivePolicy") or "{}").get("deadLetterTargetArn", ""))
     except Exception:
         return ""
+
+
+def _simulate_http_retry_exhaustion(store, topic: dict, sub: dict, *, message_id: str, subject: str,
+                                    message: str, envelope: dict) -> None:
+    """Nano / dev_server have no durable delivery worker (no background thread, no real
+    socket to retry an HTTP/S endpoint against), so a push can never actually succeed there —
+    see sns.publish.other-protocols. What CAN be made real on this substrate is the
+    healthyRetryPolicy itself: run its exact attempt count and backoff schedule to completion
+    synchronously (same math as core/sns_delivery.py's real worker uses on the offline
+    appliance) and land the message in the subscription's dead-letter queue when one is
+    configured — so the policy's numRetries/backoff/redrive settings have the SAME observable
+    effect here as they do for real, instead of being inert stored configuration."""
+    policy = _retry_policy(topic, sub)
+    total = max(0, int(policy.get("numRetries", 3)))
+    arn, sub_arn, endpoint, protocol = topic["topic_arn"], sub["subscription_arn"], sub["endpoint"], sub["protocol"]
+    for attempt in range(1, total + 2):             # 1 initial attempt + `total` configured retries
+        if attempt <= total:
+            delay = retry_delay(policy, attempt)
+            note = (f"attempt {attempt} failed (no delivery worker on this substrate); "
+                    f"retry {attempt} of {total} in {delay:g}s per healthyRetryPolicy")
+        else:
+            note = f"gave up after {attempt} attempts per healthyRetryPolicy"
+        _log_delivery(store, kind="DeliveryFailure", topic_arn=arn, protocol=protocol, endpoint=endpoint,
+                      subscription_arn=sub_arn, subject=subject, message=message, message_id=message_id,
+                      error=note)
+    target = _redrive_target(sub)
+    if target and _deliver_sqs(store, target, json.dumps(envelope), None, None, message_id):
+        _log_delivery(store, kind="DeadLetter", topic_arn=arn, protocol=protocol, endpoint=target,
+                      subscription_arn=sub_arn, subject=subject, message=message, message_id=message_id,
+                      error="", note=f"moved to dead-letter queue {target}")
 
 
 def _enqueue_delivery(store, topic: dict, sub: dict, **job) -> bool:
@@ -784,6 +976,7 @@ def _enqueue_delivery(store, topic: dict, sub: dict, **job) -> bool:
 
 def _publish_to_topic(store, topic: dict, msg: dict) -> tuple[str, str]:
     fifo = _is_fifo(topic)
+    _enforce_data_protection_policy(store, topic, msg)
     _check_message(msg, fifo)
     arn = topic["topic_arn"]
     seq = ""
@@ -842,11 +1035,14 @@ def _publish_to_topic(store, topic: dict, msg: dict) -> tuple[str, str]:
                            UnsubscribeURL=envelope["UnsubscribeURL"] % sub["subscription_arn"])
                 body, sattrs = json.dumps(env), None
             if _deliver_sqs(store, sub["endpoint"], body, sattrs, msg.get("group"), dedup):
+                _record_delivery_feedback(store, topic, "sqs", sub["endpoint"], message_id, True)
                 continue
             _log_delivery(store, kind="DeliveryFailure", topic_arn=arn, protocol="sqs",
                           endpoint=sub["endpoint"], subscription_arn=sub["subscription_arn"],
                           subject=msg.get("Subject") or "", message=text, message_id=message_id,
                           error="queue does not exist")
+            _record_delivery_feedback(store, topic, "sqs", sub["endpoint"], message_id, False,
+                                      "queue does not exist")
         else:
             queued = False
             if sub["protocol"] in _PUSH_PROTOCOLS:
@@ -856,7 +1052,10 @@ def _publish_to_topic(store, topic: dict, msg: dict) -> tuple[str, str]:
                     store, topic, sub, kind="Notification", subject=msg.get("Subject") or "", message=text,
                     message_id=message_id, raw=raw, envelope=env, group=msg.get("group") or "",
                     attributes=attrs or {})
-            if not queued:
+            if not queued and sub["protocol"] in ("http", "https"):
+                _simulate_http_retry_exhaustion(store, topic, sub, message_id=message_id,
+                                                subject=msg.get("Subject") or "", message=text, envelope=env)
+            elif not queued:
                 _log_delivery(store, kind="Notification", topic_arn=arn, protocol=sub["protocol"],
                               endpoint=sub["endpoint"], subscription_arn=sub["subscription_arn"],
                               subject=msg.get("Subject") or "", message=text, message_id=message_id)
@@ -887,10 +1086,66 @@ def _publish_to_phone(store, phone: str, msg: dict) -> str:
     sb = s["sandbox"].get(phone)
     if sb is None or sb["status"] != "Verified":
         raise SnsError("InvalidParameter", "Invalid parameter: PhoneNumber Reason: Destination phone number is not verified in the SMS sandbox", 400)
+    limit = float(s["sms_attributes"].get("MonthlySpendLimit", "1") or "1")
+    if s["sms_spend_usd"] + SMS_COST_USD > limit:
+        raise SnsError("Throttling",
+                       f"Rate exceeded for PhoneNumber {phone} Reason: the account's MonthlySpendLimit (${limit:g}) for SMS has been reached",
+                       400)
+    s["sms_spend_usd"] += SMS_COST_USD
     message_id = str(uuid.uuid4())
     _log_delivery(store, kind="Notification", topic_arn="", protocol="sms", endpoint=phone,
                   subscription_arn="", subject="", message=msg["Message"], message_id=message_id)
+    _record_sms_metrics(store, phone, msg, s["sms_spend_usd"])
     return message_id
+
+
+_CALLING_CODES = (("1", "US"), ("7", "RU"), ("20", "EG"), ("27", "ZA"), ("31", "NL"), ("33", "FR"), ("34", "ES"), ("39", "IT"),
+                  ("44", "GB"), ("46", "SE"), ("49", "DE"), ("52", "MX"), ("55", "BR"), ("61", "AU"), ("62", "ID"),
+                  ("65", "SG"), ("81", "JP"), ("82", "KR"), ("86", "CN"), ("91", "IN"), ("971", "AE"), ("353", "IE"))
+
+
+def sms_country(phone: str) -> str:
+    """ISO country of an E.164 number from its calling code (longest prefix); "ZZ" if unknown."""
+    digits = phone.lstrip("+")
+    for code, iso in sorted(_CALLING_CODES, key=lambda t: -len(t[0])):
+        if digits.startswith(code):
+            return iso
+    return "ZZ"
+
+
+def _record_sms_metrics(store, phone: str, msg: dict, spend: float) -> None:
+    """Real AWS/SNS SMS metrics from the publishes that actually happened here: the simulator
+    "delivers" every accepted SMS into its own delivery log (there is no carrier), so each one
+    counts as a delivery. NumberOfNotificationsDelivered / SMSSuccessRate (aggregate and per
+    Country) and SMSMonthToDateSpentUSD land in CloudWatch for the console's statistics."""
+    cw = getattr(store, "cw_store", None)
+    if cw is None:
+        return
+    try:
+        from core import cloudwatch_core as _cw
+        country = sms_country(phone)
+        for dims in ([], [{"Name": "Country", "Value": country}]):
+            _cw.ingest_internal_metric(cw, "AWS/SNS", "NumberOfNotificationsDelivered", dims, 1.0, unit="Count")
+            _cw.ingest_internal_metric(cw, "AWS/SNS", "SMSSuccessRate", dims, 1.0, unit="None")
+        _cw.ingest_internal_metric(cw, "AWS/SNS", "SMSMonthToDateSpentUSD", [], round(spend, 6), unit="None")
+    except Exception:
+        pass
+
+
+def publish_arn(store, topic_arn: str, message: str) -> bool:
+    """Public cross-core seam: publish a raw message to an SNS topic by ARN,
+    for callers that already have an envelope ready (EventBridge targets).
+    Returns False if the topic does not exist, instead of raising."""
+    topic = store.get_topic(topic_arn)
+    if not topic:
+        return False
+    msg = {"Message": message, "Subject": None, "MessageStructure": None,
+           "attrs": {}, "group": None, "dedup": None}
+    try:
+        _publish_to_topic(store, topic, msg)
+    except Exception:
+        return False
+    return True
 
 
 def _msg_from_params(params: dict) -> dict:
@@ -910,10 +1165,14 @@ def _publish(store, params):
         raise _invalid("Invalid parameter: Message Reason: Message is required")
     msg = _msg_from_params(params)
     if phone:
-        return _envelope("Publish", _el("MessageId", _publish_to_phone(store, phone, msg)))
+        mid = _publish_to_phone(store, phone, msg)
+        store.persist()
+        return _envelope("Publish", _el("MessageId", mid))
     dest = topic_arn or target
     if ":endpoint/" in dest:
-        return _envelope("Publish", _el("MessageId", _publish_to_endpoint(store, dest, msg)))
+        mid = _publish_to_endpoint(store, dest, msg)
+        store.persist()
+        return _envelope("Publish", _el("MessageId", mid))
     topic = _require_topic(store, dest)
     message_id, seq = _publish_to_topic(store, topic, msg)
     store.persist()

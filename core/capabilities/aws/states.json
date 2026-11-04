@@ -1,0 +1,51 @@
+{
+  "$doc": "Vyomi capability registry — Step Functions. See s3.json for the contract.",
+  "aws.states.state-machine.crud": {
+    "title": "State machines (create, describe, update, delete, list)",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": [],
+    "tests": ["tests/conformance/test_stepfunctions_core.py"]
+  },
+  "aws.states.state-machine.versions-aliases": {
+    "title": "Versions and aliases (weighted routing)",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": [],
+    "tests": ["tests/conformance/test_stepfunctions_core.py"]
+  },
+  "aws.states.state-machine.tags": {
+    "title": "Tags",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": [],
+    "tests": ["tests/conformance/test_stepfunctions_core.py"]
+  },
+  "aws.states.execution.lifecycle": {
+    "title": "Executions (start, stop, redrive, list, describe, event history)",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": [
+      "The Amazon States Language interpreter runs for real (Pass/Task/Choice/Wait/Succeed/Fail/Parallel/Map), but Wait states complete instantly instead of sleeping for the configured duration."
+    ],
+    "tests": ["tests/conformance/test_stepfunctions_core.py"]
+  },
+  "aws.states.activity.crud": {
+    "title": "Activities (create, describe, delete, list, task polling, SendTaskSuccess/Failure/Heartbeat)",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": [],
+    "tests": ["tests/conformance/test_stepfunctions_core.py"]
+  },
+  "aws.states.state-machine.logging": {
+    "title": "CloudWatch Logs configuration",
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": [
+      "loggingConfiguration is ENFORCED: when a CloudWatch Logs destination is set, a finished execution writes its history events to that log group (level ALL = every event, ERROR = failure events, FATAL = execution-level failure/abort/timeout only; includeExecutionData=false strips payloads). Events are delivered when the execution finishes, not as each state runs, and the log group is created on first write."
+    ],
+    "tests": ["tests/conformance/test_stepfunctions_core.py"]
+  },
+  "aws.states.state-machine.tracing": {
+    "title": "X-Ray active tracing",
+    "level": { "nano": "config_only", "offline": "config_only" },
+    "limitations": [
+      "The tracingConfiguration.enabled flag round-trips through Create/UpdateStateMachine and DescribeStateMachine exactly as set, but Vyomi never emits X-Ray trace segments for an execution."
+    ],
+    "tests": ["tests/conformance/test_stepfunctions_core.py"]
+  }
+}

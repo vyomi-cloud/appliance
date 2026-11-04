@@ -1,0 +1,604 @@
+{
+  "$schema": "../schema.json",
+  "cloud": "gcp",
+  "service": "pubsub",
+  "console_path": "/cloudpubsub/",
+  "status": "reviewed",
+  "captured_at": "2026-10-30",
+  "nav": [
+    {
+      "label": "Overview",
+      "page_id": "overview"
+    },
+    {
+      "label": "Topics",
+      "page_id": "topics"
+    },
+    {
+      "label": "Subscriptions",
+      "page_id": "subscriptions"
+    },
+    {
+      "label": "Snapshots",
+      "page_id": "snapshots"
+    },
+    {
+      "label": "Schemas",
+      "page_id": "schemas"
+    }
+  ],
+  "pages": [
+    {
+      "id": "topics",
+      "kind": "list",
+      "title": "Topics",
+      "route": "/cloudpubsub/topic/list",
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Create topic",
+        "Refresh",
+        "Delete"
+      ],
+      "table": {
+        "selection": "multi",
+        "actions": [
+          "Create subscription",
+          "Create snapshot",
+          "Import",
+          "Export",
+          "View permissions",
+          "Delete"
+        ],
+        "filter_placeholder": "Filter",
+        "pagination": true,
+        "preferences": true,
+        "empty_state_action": "Create topic",
+        "confidence": "medium",
+        "columns": [
+          "Topic ID",
+          "Encryption key",
+          "Topic name",
+          "Retention",
+          "Labels"
+        ]
+      }
+    },
+    {
+      "id": "create-topic",
+      "kind": "create",
+      "title": "Create topic",
+      "provenance": "reference",
+      "confidence": "medium",
+      "submit": "Create",
+      "notes": "Side panel.",
+      "sections": [
+        {
+          "title": "Topic",
+          "fields": [
+            {
+              "label": "Topic ID",
+              "type": "text",
+              "required": true,
+              "help": "Topic name: projects/{project}/topics/{topic-id}"
+            },
+            {
+              "label": "Add a default subscription",
+              "type": "checkbox",
+              "default": true
+            },
+            {
+              "label": "Use a schema",
+              "type": "checkbox",
+              "default": false
+            },
+            {
+              "label": "Enable ingestion",
+              "type": "checkbox",
+              "default": false
+            },
+            {
+              "label": "Enable message retention",
+              "type": "checkbox",
+              "default": false
+            },
+            {
+              "label": "Enable message transforms",
+              "type": "checkbox",
+              "default": false,
+              "confidence": "low"
+            },
+            {
+              "label": "Encryption",
+              "type": "radio",
+              "default": "Google-managed encryption key",
+              "options": [
+                "Google-managed encryption key",
+                "Cloud KMS key"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "topic-details",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "route": "/cloudpubsub/topic/detail/{resource-name}",
+      "breadcrumbs": [
+        "Pub/Sub",
+        "Topics",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Edit",
+        "Import",
+        "Export",
+        "Create subscription",
+        "Create snapshot",
+        "Delete"
+      ],
+      "sections": [
+        {
+          "title": "Topic",
+          "fields": [
+            {
+              "label": "Topic name",
+              "type": "readonly"
+            },
+            {
+              "label": "Encryption key",
+              "type": "readonly"
+            },
+            {
+              "label": "Retention",
+              "type": "readonly"
+            }
+          ]
+        }
+      ],
+      "tabs": [
+        "Subscriptions",
+        "Snapshots",
+        "Metrics",
+        "Details",
+        "Messages"
+      ],
+      "tab_panels": [
+        {
+          "label": "Subscriptions",
+          "sections": [
+            {
+              "title": "Subscriptions",
+              "table": {
+                "header_actions": [
+                  "Create subscription"
+                ],
+                "columns": [
+                  "Subscription ID",
+                  "Subscription name",
+                  "Project",
+                  "Delivery type"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "label": "Messages",
+          "sections": [
+            {
+              "title": "Messages",
+              "fields": [
+                {
+                  "label": "Publish message",
+                  "type": "button"
+                }
+              ],
+              "table": {
+                "columns": [
+                  "Publish time",
+                  "Attribute keys",
+                  "Message body",
+                  "Ordering key"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "publish-message",
+      "kind": "create",
+      "title": "Publish message",
+      "provenance": "reference",
+      "confidence": "medium",
+      "submit": "Publish",
+      "sections": [
+        {
+          "title": "Message",
+          "fields": [
+            {
+              "label": "Number of messages",
+              "type": "number",
+              "default": 1
+            },
+            {
+              "label": "Message body",
+              "type": "textarea",
+              "required": true
+            },
+            {
+              "label": "Message attributes",
+              "type": "table",
+              "columns": [
+                "Key",
+                "Value"
+              ],
+              "actions": [
+                "Add an attribute"
+              ]
+            },
+            {
+              "label": "Ordering key",
+              "type": "text"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "subscriptions",
+      "kind": "list",
+      "title": "Subscriptions",
+      "route": "/cloudpubsub/subscription/list",
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Create subscription",
+        "Refresh",
+        "Delete"
+      ],
+      "table": {
+        "selection": "multi",
+        "filter_placeholder": "Filter",
+        "pagination": true,
+        "preferences": true,
+        "confidence": "medium",
+        "columns": [
+          "Subscription ID",
+          "Delivery type",
+          "Topic name",
+          "Subscription name",
+          "Ack deadline",
+          "Retention",
+          "Message ordering",
+          "Exactly once delivery",
+          "Expiration",
+          "Labels"
+        ]
+      }
+    },
+    {
+      "id": "create-subscription",
+      "kind": "create",
+      "title": "Create subscription",
+      "route": "/cloudpubsub/subscription/create",
+      "provenance": "reference",
+      "confidence": "medium",
+      "submit": "Create",
+      "sections": [
+        {
+          "title": "Subscription",
+          "fields": [
+            {
+              "label": "Subscription ID",
+              "type": "text",
+              "required": true
+            },
+            {
+              "label": "Select a Cloud Pub/Sub topic",
+              "type": "select",
+              "required": true
+            }
+          ]
+        },
+        {
+          "title": "Delivery type",
+          "fields": [
+            {
+              "label": "Delivery type",
+              "type": "radio",
+              "default": "Pull",
+              "options": [
+                "Pull",
+                "Push",
+                "Write to BigQuery",
+                "Write to Cloud Storage"
+              ]
+            },
+            {
+              "label": "Endpoint URL",
+              "type": "text",
+              "visible_when": "Delivery type = Push"
+            }
+          ]
+        },
+        {
+          "title": "Message retention duration",
+          "fields": [
+            {
+              "label": "Message retention duration",
+              "type": "number",
+              "default": 7,
+              "help": "Days"
+            },
+            {
+              "label": "Retain acknowledged messages",
+              "type": "checkbox",
+              "default": false
+            }
+          ]
+        },
+        {
+          "title": "Expiration period",
+          "fields": [
+            {
+              "label": "Expiration period",
+              "type": "radio",
+              "default": "Expire after this many days of inactivity",
+              "options": [
+                "Expire after this many days of inactivity",
+                "Never expire"
+              ]
+            },
+            {
+              "label": "Days",
+              "type": "number",
+              "default": 31
+            }
+          ]
+        },
+        {
+          "title": "Acknowledgement deadline",
+          "fields": [
+            {
+              "label": "Acknowledgement deadline",
+              "type": "number",
+              "default": 10,
+              "help": "Seconds (10 - 600)"
+            }
+          ]
+        },
+        {
+          "title": "Subscription filter",
+          "fields": [
+            {
+              "label": "Subscription filter",
+              "type": "text"
+            }
+          ]
+        },
+        {
+          "title": "Exactly once delivery",
+          "fields": [
+            {
+              "label": "Enable exactly once delivery",
+              "type": "checkbox",
+              "default": false
+            }
+          ]
+        },
+        {
+          "title": "Message ordering",
+          "fields": [
+            {
+              "label": "Order messages with an ordering key",
+              "type": "checkbox",
+              "default": false
+            }
+          ]
+        },
+        {
+          "title": "Dead lettering",
+          "fields": [
+            {
+              "label": "Enable dead lettering",
+              "type": "checkbox",
+              "default": false
+            },
+            {
+              "label": "Dead letter topic",
+              "type": "select"
+            },
+            {
+              "label": "Maximum delivery attempts",
+              "type": "number",
+              "default": 5
+            }
+          ]
+        },
+        {
+          "title": "Retry policy",
+          "fields": [
+            {
+              "label": "Retry policy",
+              "type": "radio",
+              "default": "Retry immediately",
+              "options": [
+                "Retry immediately",
+                "Retry after exponential backoff delay"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Labels",
+          "fields": [
+            {
+              "label": "Labels",
+              "type": "tags",
+              "actions": [
+                "Add label"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "subscription-details",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "route": "/cloudpubsub/subscription/detail/{resource-name}",
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Edit",
+        "Create snapshot",
+        "Replay messages",
+        "Delete"
+      ],
+      "tabs": [
+        "Metrics",
+        "Details",
+        "Messages",
+        "Snapshots"
+      ],
+      "tab_panels": [
+        {
+          "label": "Details",
+          "sections": [
+            {
+              "title": "Subscription details",
+              "fields": [
+                {
+                  "label": "Subscription name",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Topic name",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Delivery type",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Ack deadline",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Message retention duration",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Expiration",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Exactly once delivery",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Message ordering",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Dead lettering",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Retry policy",
+                  "type": "readonly"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "Messages",
+          "sections": [
+            {
+              "title": "Messages",
+              "fields": [
+                {
+                  "label": "Pull",
+                  "type": "button"
+                },
+                {
+                  "label": "Enable ack messages",
+                  "type": "checkbox"
+                }
+              ],
+              "table": {
+                "columns": [
+                  "Publish time",
+                  "Attribute keys",
+                  "Message body",
+                  "Ack"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "snapshots",
+      "kind": "list",
+      "title": "Snapshots",
+      "route": "/cloudpubsub/snapshot/list",
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Create snapshot",
+        "Delete"
+      ],
+      "table": {
+        "confidence": "low",
+        "columns": [
+          "Snapshot ID",
+          "Topic name",
+          "Subscription",
+          "Expiration",
+          "Labels"
+        ]
+      }
+    },
+    {
+      "id": "schemas",
+      "kind": "list",
+      "title": "Schemas",
+      "route": "/cloudpubsub/schema/list",
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Create schema",
+        "Delete"
+      ],
+      "table": {
+        "confidence": "low",
+        "columns": [
+          "Schema ID",
+          "Schema type",
+          "Latest revision",
+          "Revision created"
+        ]
+      }
+    },
+    {
+      "id": "overview",
+      "kind": "dashboard",
+      "title": "Overview",
+      "confidence": "low",
+      "route": "/cloudpubsub",
+      "provenance": "reference"
+    }
+  ],
+  "gaps_note": "Pub/Sub crawl had not run when this spec was written: everything is reference (current console). Re-verify against A-pubsub captures."
+}

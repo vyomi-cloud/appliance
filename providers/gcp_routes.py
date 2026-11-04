@@ -27,6 +27,7 @@ _TARGET_OVERRIDES = {
     "api_gcp_iam_list_service_account_keys": gcp_iam.api_gcp_iam_list_service_account_keys,
     "api_gcp_iam_get_service_account_key": gcp_iam.api_gcp_iam_get_service_account_key,
     "api_gcp_iam_delete_service_account_key": gcp_iam.api_gcp_iam_delete_service_account_key,
+    "api_gcp_iam_service_account_activity": gcp_iam.api_gcp_iam_service_account_activity,
     "api_gcp_iam_list_users": gcp_iam.api_gcp_iam_list_users,
     "api_gcp_iam_create_user": gcp_iam.api_gcp_iam_create_user,
     "api_gcp_iam_delete_user": gcp_iam.api_gcp_iam_delete_user,
@@ -348,6 +349,15 @@ def register(app, h) -> None:
         ("DELETE", "/sql/v1beta4/projects/{project}/instances/{instance}", "api_gcp_sql_delete_instance", "(project: str, instance: str)"),
         ("DELETE", "/api/gcp/rds/databases/{instance}", "api_gcp_sql_delete_instance", "(instance: str, project: str = '')"),
         ("POST", "/sql/v1beta4/projects/{project}/instances/{instance}/restart", "api_gcp_sql_restart_instance", "(project: str, instance: str)"),
+        ("POST", "/sql/v1beta4/projects/{project}/instances/{instance}/backupRuns", "api_gcp_sql_insert_backup_run", "(project: str, instance: str, request: Request)"),
+        ("GET", "/sql/v1beta4/projects/{project}/instances/{instance}/backupRuns", "api_gcp_sql_list_backup_runs", "(project: str, instance: str)"),
+        ("GET", "/sql/v1beta4/projects/{project}/instances/{instance}/backupRuns/{backup_id}", "api_gcp_sql_get_backup_run", "(project: str, instance: str, backup_id: str)"),
+        ("DELETE", "/sql/v1beta4/projects/{project}/instances/{instance}/backupRuns/{backup_id}", "api_gcp_sql_delete_backup_run", "(project: str, instance: str, backup_id: str)"),
+        ("POST", "/sql/v1beta4/projects/{project}/instances/{instance}/restoreBackup", "api_gcp_sql_restore_backup", "(project: str, instance: str, request: Request)"),
+        ("POST", "/sql/v1beta4/projects/{project}/instances/{instance}/export", "api_gcp_sql_export_instance", "(project: str, instance: str, request: Request)"),
+        ("POST", "/api/gcp/sql/v1beta4/projects/{project}/instances/{instance}/export", "api_gcp_sql_export_instance", "(project: str, instance: str, request: Request)"),
+        ("POST", "/sql/v1beta4/projects/{project}/instances/{instance}/import", "api_gcp_sql_import_instance", "(project: str, instance: str, request: Request)"),
+        ("POST", "/api/gcp/sql/v1beta4/projects/{project}/instances/{instance}/import", "api_gcp_sql_import_instance", "(project: str, instance: str, request: Request)"),
         ("GET", "/sql/v1beta4/projects/{project}/instances/{instance}/users", "api_gcp_sql_list_users", "(project: str, instance: str)"),
         ("POST", "/sql/v1beta4/projects/{project}/instances/{instance}/users", "api_gcp_sql_create_user", "(project: str, instance: str, request: Request)"),
         ("PUT", "/sql/v1beta4/projects/{project}/instances/{instance}/users", "api_gcp_sql_create_user", "(project: str, instance: str, request: Request)"),
@@ -372,6 +382,19 @@ def register(app, h) -> None:
         ("GET", "/api/gcp/rds/databases/{instance}/queryInsights", "api_gcp_sql_list_insights", "(project: str, instance: str = \"\")"),
         ("POST", "/sql/v1beta4/projects/{project}/instances/{instance}/queryInsights", "api_gcp_sql_create_insight", "(project: str, instance: str, request: Request)"),
         ("POST", "/api/gcp/rds/databases/{instance}/queryInsights", "api_gcp_sql_create_insight", "(project: str, instance: str, request: Request)"),
+        # gcp.sql.connections-security: sslCerts — NOT a real Admin API collection either
+        # (well, it is — see sqladmin SslCerts — but this simulator adds it the same way
+        # core/gcp_cloudsql_core.py does on Nano, sharing its cert generator).
+        ("GET", "/sql/v1beta4/projects/{project}/instances/{instance}/sslCerts", "api_gcp_sql_list_ssl_certs", "(project: str, instance: str)"),
+        ("POST", "/sql/v1beta4/projects/{project}/instances/{instance}/sslCerts", "api_gcp_sql_insert_ssl_cert", "(project: str, instance: str, request: Request)"),
+        ("DELETE", "/sql/v1beta4/projects/{project}/instances/{instance}/sslCerts/{fingerprint}", "api_gcp_sql_delete_ssl_cert", "(project: str, instance: str, fingerprint: str)"),
+        # gcp.sql.insights: Cloud SQL Studio's query RPC + the real tables/queries/metrics
+        # it's derived from — a Vyomi-added data-plane surface next to the real control
+        # plane, mirroring core/gcp_cloudsql_core.py's Nano routes 1:1.
+        ("POST", "/sql/v1beta4/projects/{project}/instances/{instance}/query", "api_gcp_sql_query", "(project: str, instance: str, request: Request)"),
+        ("GET", "/sql/v1beta4/projects/{project}/instances/{instance}/queries", "api_gcp_sql_list_queries", "(project: str, instance: str)"),
+        ("GET", "/sql/v1beta4/projects/{project}/instances/{instance}/tables", "api_gcp_sql_list_tables", "(project: str, instance: str)"),
+        ("GET", "/sql/v1beta4/projects/{project}/instances/{instance}/metrics", "api_gcp_sql_get_metrics", "(project: str, instance: str)"),
         # Pub/Sub
         ("GET", "/v1/projects/{project}/topics", "api_gcp_pubsub_list_topics", "(project: str)"),
         ("GET", "/api/gcp/sqs/queues", "api_gcp_pubsub_list_topics", "(project: str)"),
@@ -606,6 +629,7 @@ def register(app, h) -> None:
         ("POST", "/v1/projects/{project}/serviceAccounts/{account}/keys", "api_gcp_iam_create_service_account_key", "(project: str, account: str, request: Request)"),
         ("GET", "/v1/projects/{project}/serviceAccounts/{account}/keys", "api_gcp_iam_list_service_account_keys", "(project: str, account: str)"),
         ("GET", "/v1/projects/{project}/serviceAccounts/{account}/keys/{key}", "api_gcp_iam_get_service_account_key", "(project: str, account: str, key: str)"),
+        ("GET", "/v1/projects/{project}/serviceAccounts/{account}/policyActivity", "api_gcp_iam_service_account_activity", "(project: str, account: str)"),
         ("DELETE", "/v1/projects/{project}/serviceAccounts/{account}/keys/{key}", "api_gcp_iam_delete_service_account_key", "(project: str, account: str, key: str)"),
         ("GET", "/api/gcp/iam/users", "api_gcp_iam_list_users", "()"),
         ("POST", "/api/gcp/iam/users", "api_gcp_iam_create_user", "(request: Request)"),
@@ -626,8 +650,18 @@ def register(app, h) -> None:
         ("DELETE", "/api/gcp/iam/identity-providers/{provider_id}", "api_gcp_iam_delete_identity_provider", "(provider_id: str)"),
     ]
 
+    # v4 C0: the GCS JSON API (native /storage/v1, /upload/…, /download/… and the
+    # console's /api/gcp/storage/v1 alias) is served by the shared core
+    # (core/gcp_storage_core.py) — see core.wire_ingress.mount_gcs(). Folders,
+    # transfer jobs, the /upload console helper and /api/gcp/s3/* stay here; they
+    # share the same space-scoped gcp_storage_state the core reads and writes.
+    from core import wire_ingress as _wi
+    _gcs_core = _wi.is_unified("gcs")
+
     for spec in specs:
         method, path, target_name, signature, *rest = spec
+        if _gcs_core and _wi.gcs_core_path(path):
+            continue
         include_in_schema = True
         body_mode = "none"
         body_target = "request"

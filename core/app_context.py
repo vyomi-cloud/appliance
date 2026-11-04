@@ -260,6 +260,7 @@ def appliance_mode_enabled() -> bool:
 def is_gcp_native_path(path: str) -> bool:
     return path.startswith((
         "/compute/v1/",
+        "/compute/beta/",     # v4 C0d: google-cloud-compute / gcloud beta surfaces
         "/storage/v1/",
         "/upload/storage/v1/",
         "/download/storage/v1/",
@@ -268,6 +269,7 @@ def is_gcp_native_path(path: str) -> bool:
         "/firestore/v1/",
         "/v1/projects",       # incl. Cloud Resource Manager GET /v1/projects (no slash)
         "/v3/projects",       # Cloud Resource Manager v3 + Cloud Monitoring v3
+        "/v1beta1/projects/",  # v4 C0d: Firestore v1beta1 (same core as /v1)
         "/v1/operations/",
         "/api/gcp/s3/",
         "/api/gcp/iam/",
@@ -291,6 +293,10 @@ def is_gcp_native_path(path: str) -> bool:
         "/api/gcp/secrets",   # v2.0.9 console CRUD — Vault-backed Secret Manager
         "/api/gcp/kms/",      # v2.0.9 console CRUD — Vault-backed Cloud KMS
         "/api/gcp/artifactregistry/",   # Artifact Registry console CRUD
+        # v4 C0: the GCS console facade must resolve the SAME (gcp) space-scoped
+        # gcp_storage_state as the native GCS JSON API it mirrors — as an "aws"
+        # request it silently read/wrote a different space's copy.
+        "/api/console/gcs/",
     ))
 
 
@@ -347,7 +353,7 @@ def _default_state() -> dict:
         "deployments": {},
         "iam": {"users": {}, "groups": {}, "roles": {}, "policies": {}, "attachments": [], "identity_providers": {}, "account_settings": {"password_policy": {"minimum_length": 8, "require_symbols": True, "require_numbers": True, "require_uppercase": True, "require_lowercase": True}}},
         "ec2": {"instances": {}},
-        "vpc": {"vpcs": {}, "subnets": {}, "security_groups": {}, "route_tables": {}},
+        "vpc": {"vpcs": {}, "subnets": {}, "security_groups": {}, "route_tables": {}, "internet_gateways": {}},
         "apigateway": {"apis": {}, "logs": []},
         "lambda": {"functions": {}, "events": [], "invocations": []},
         "sqs": {"queues": {}, "events": []},
@@ -997,7 +1003,9 @@ sns_state = _SpaceScopedDictProxy("sns", lambda: {"topics": {}, "extra": {}})
 ddb_state = _SpaceScopedDictProxy("dynamodb", lambda: {"tables": {}, "events": []})
 kinesis_state = _SpaceScopedDictProxy("kinesis", lambda: {"streams": {}, "policies": {}, "seq": {"n": 0}})
 logs_state = _SpaceScopedDictProxy("logs", lambda: {"log_groups": {}, "resource_policies": {}, "query_definitions": {}, "queries": {}})
-elbv2_state = _SpaceScopedDictProxy("elbv2", lambda: {"load_balancers": {}, "target_groups": {}, "listeners": {}, "rules": {}, "tags": {}})
+elbv2_state = _SpaceScopedDictProxy("elbv2", lambda: {"load_balancers": {}, "target_groups": {}, "listeners": {}, "rules": {},
+                                                      "tags": {}, "trust_stores": {}, "trust_store_revocations": {}})
+asg_state = _SpaceScopedDictProxy("asg", lambda: {"groups": {}, "policies": {}, "scheduled_actions": {}, "lifecycle_hooks": {}, "instance_refreshes": []})
 
 runtime_state = STATE.setdefault(
     "runtime",

@@ -1,0 +1,66 @@
+{
+ "cloud": "azure",
+ "service": "resourcegroups",
+ "goal": "STATIC-PANEL SWEEP (wave 5c). Every listed `targets` entry is a hard-coded <NotSimulated*> box in this service's console with NO capability id \u2014 it is invisible to the capability registry and to the coverage numbers, and many are STALE (the feature is real now). For EACH one: (1) if the backend already supports it (check core/*_core.py + core/capabilities), replace the static box with the real, live UI; (2) otherwise BUILD it on a real backend (Nano + offline; follow the Offline + Nano parity checklist in consoles/AGENT-UI.md) and render it live; (3) only if it is genuinely impossible locally (real money/hardware/third-party service) replace it with <CapabilityContainer id=\"...\"> backed by a core/capabilities entry at level not_simulated with the concrete reason. When done, this service's directory must contain ZERO bare <NotSimulatedContainer>/<NotSimulated*> usages \u2014 the gate now fails on any. Metrics/monitoring panels show real series derived from actual activity (cloudwatch_core.ingest_internal_metric / the cloud's metrics core), never random data. Nothing leaves the simulator. Update capabilities, tests/conformance, smoke.",
+ "must_build": [
+  "Every page in ui-spec/azure/resourcegroups.json (29 pages; nav: Overview, Activity log, Access control (IAM), Tags, Resource visualizer, Events, Settings, Cost Management, Monitoring, Automation, Help)",
+  "Backend: ARM resource groups (core/azure_arm_core.py, test_azure_arm_core.py): list/create/delete, resources in group, tags, deployments if modeled",
+  "List / create / detail / edit / delete round-trips through the native API the SDK and CLI use"
+ ],
+ "always": [
+  "Every page wired to the native API on /_wire (no static data); liveness fixtures for every list/detail page",
+  "core/capabilities/azure/resourcegroups.json: one entry per console section with an honest level + tests; tests/conformance/test_capabilities.py must pass",
+  "Capability feature ids MUST start with 'azure.' (e.g. 'azure.resourcegroups.<section>') \u2014 ids share one namespace with the AWS registry",
+  "Read the 'Cloud lenses' section of consoles/AGENT-UI.md first \u2014 use this cloud's kit, not Cloudscape"
+ ],
+ "attempt": 2,
+ "phase": "depth",
+ "note": "WAVE 5c static-panel sweep (orchestrator). User: unimplemented panels (e.g. VPC Service Health / Settings / Additional information / AWS Network Manager) must be real.",
+ "targets": [
+  {
+   "where": "consoles/src/azure/services/resourcegroups/ResourceGroupBlade.jsx:109",
+   "component": "NotSimulated",
+   "props": "feature={NS_NOTES[panel] || `The ${LABEL[panel] || panel} panel`}"
+  },
+  {
+   "where": "consoles/src/azure/services/resourcegroups/ResourceGroupBlade.jsx:181",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"Advisor recommendations\""
+  },
+  {
+   "where": "consoles/src/azure/services/resourcegroups/ResourceGroupBlade.jsx:188",
+   "component": "NotSimulated",
+   "props": "feature={{ Create: \"Creating a new resource from the Marketplace\", \"Manage view\": \"Saving a custom blade layout\", \"Open query\": \"Azure Resource Graph Explorer\", Move: \"Moving resources to another resource group or subscription\", \"Open in mobile\": \"Opening this resource group in the Azure mobile app\""
+  },
+  {
+   "where": "consoles/src/azure/services/resourcegroups/ResourceGroupBlade.jsx:531",
+   "component": "NotSimulated",
+   "props": "feature={gap === \"Feedback\" ? \"Sending product feedback\" : \"Locks scoped to the subscription (viewing another scope's lock list)\"}"
+  },
+  {
+   "where": "consoles/src/azure/services/resourcegroups/ResourceGroupBlade.jsx:675",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"Activity, Edit columns, Export Activity Logs, Insights, Feedback, Pin current filters and Reset filters from the command bar\""
+  },
+  {
+   "where": "consoles/src/azure/services/resourcegroups/ResourceGroupBlade.jsx:715",
+   "component": "NotSimulatedContainer",
+   "props": "feature={`${tab === \"bicep\" ? \"Bicep\" : \"Terraform\"} template export`}"
+  },
+  {
+   "where": "consoles/src/azure/services/resourcegroups/ResourceGroups.jsx:46",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"Assign tags across a multi-selection and Open query (Azure Resource Graph) from the command bar\""
+  },
+  {
+   "where": "consoles/src/azure/services/resourcegroups/ResourceGroups.jsx:52",
+   "component": "NotSimulated",
+   "props": "feature=\"Azure Resource Graph Explorer\""
+  },
+  {
+   "where": "consoles/src/azure/services/resourcegroups/DeleteResourceGroup.jsx:58",
+   "component": "NotSimulated",
+   "props": "feature=\"Force delete\" note=\"Every delete in Vyomi already removes the whole group unconditionally and synchronously, so there is no graceful VM/VMSS deprovisioning sequence to skip.\""
+  }
+ ]
+}

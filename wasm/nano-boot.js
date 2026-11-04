@@ -81,15 +81,16 @@ const MODULES = [
   // its Pyodide adapter. console_next_manifest imports `from core import
   // console_conformance` (vendored under /core, see CORES), NO FastAPI.
   "console_next_manifest.py", "providers/console_next_adapter.py",
+  "providers/wire_adapter.py",   // v4 /_wire/* native-wire prefix → AwsWireRouter on the shared registry
 ];
 // The PROVEN conformance cores (vendored into wasm/core/ by build_cores.py).
 // aws_core_adapter imports these; they ARE the S3/DynamoDB data-plane.
 const CORES = [
-  "object_store.py", "s3_object_core.py", "nosql_store.py", "dynamodb_core.py",
+  "object_store.py", "s3_object_core.py", "s3_tables_core.py", "s3_insights_core.py", "s3_ext_core.py", "s3_vectors_core.py", "backup_core.py", "organizations_core.py", "qr_png.py", "nosql_store.py", "dynamodb_expr.py", "dynamodb_core.py",
   "kms_keystore.py", "kms_core.py", "kv_store.py", "secrets_core.py",
   "sql_store.py", "rds_core.py", "iam_store.py", "iam_core.py",
-  "messaging_store.py", "sqs_core.py", "sns_core.py", "elbv2_core.py",
-  "aws_console_detail.py",   // AWS resource-detail tab model (EC2 placement/ENI/volumes/attributes, IAM resource access)
+  "aws_console_detail.py",   // main-side Nano cores (merged)
+  "messaging_store.py", "sqs_core.py", "sns_core.py", "elbv2_core.py", "autoscaling_core.py", "gcp_gke_dataplane_core.py", "dlm_core.py", "ram_core.py", "dax_core.py",
   "azure_cognitiveservices_core.py",  // Azure AI services engine (Microsoft.CognitiveServices) — loaded before azure_arm_core which delegates to it
   "azure_monitor_core.py",   // Azure Monitor engine (Microsoft.Insights) — loaded before azure_arm_core which delegates to it
   "azure_dns_core.py",   // Azure DNS engine (Microsoft.Network/dnsZones) — loaded before azure_arm_core which delegates to it
@@ -98,14 +99,26 @@ const CORES = [
   "azure_keyvault_certificates_core.py",   // Azure Key Vault certificates (self-signed X.509) — imported by the Azure adapter
   "azure_arm_ext_core.py",   // Azure ARM locks / identity / health / NICs / run commands — loaded before azure_arm_core which delegates to it
   "azure_app_core.py",   // Azure Container Apps engine (Microsoft.App) — loaded before azure_arm_core which delegates to it
-  "azure_arm_data.py", "azure_arm_core.py",   // Azure ARM control plane (native /subscriptions/* wire)
+  "azure_cost_core.py",   // Azure Cost Management + Consumption engine — loaded before azure_arm_core which delegates to it
+  "azure_acr_core.py",   // Azure Container Registry engine (registries, repositories, webhooks) — loaded before azure_arm_core which delegates to it
+  "azure_webapp_core.py",   // Azure App Service engine (Microsoft.Web: web apps + function apps, plans) — loaded before azure_arm_core which delegates to it
+  "azure_eventgrid_core.py",   // Azure Event Grid event subscriptions (Microsoft.EventGrid, topic-scoped) — loaded before azure_arm_core which delegates to it
+  "azure_health_core.py",      // Resource health + Advisor (derived from the stored ARM resources)
+  "azure_templates_core.py",   // Export template engine (ARM→Bicep/Terraform) — lazily imported by azure_arm_core
+  "azure_locks_core.py",   // Management locks (Microsoft.Authorization/locks, scoped to ANY resource) — loaded before azure_arm_core which delegates to it
+  "k8s_yaml.py",   // YAML reader for Kubernetes manifests — azure_aks_k8s_core imports it
+  "azure_aks_k8s_core.py",   // AKS Kubernetes object store + kubectl (runCommand) — loaded before azure_arm_core
+  "kubescape_catalog.py",   // Kubescape control metadata (generated) — kubescape_core imports it
+  "kubescape_core.py",   // Kubescape results + scanner seam (calls the OPA-wasm evaluator) — loaded before azure_arm_core
+  "azure_security_core.py",   // Microsoft Defender for Cloud (Microsoft.Security) — loaded before azure_arm_core which delegates to it
+  "azure_arm_data.py", "azure_storage_ext_core.py", "azure_policy_core.py", "azure_arm_core.py",   // Azure ARM control plane (native /subscriptions/* wire)
   // GCP conformance cores — the gcp_core_adapter data-plane (console CRUD).
-  "gcp_project.py", "gcp_storage_core.py", "gcp_firestore_core.py", "gcp_kms_core.py",
-  "gcp_secretmanager_core.py", "gcp_pubsub_core.py", "gcp_iam_core.py", "gcp_cloudsql_core.py", "gcp_artifactregistry_core.py",
-  "function_shims.py", "gcp_console_tabs.py", "instance_catalog.py", "nano_triggers.py",   // GCP resource-detail tabs engine + machine-type catalog (gcp_core_adapter imports them)
+  "gcp_project.py", "function_shims.py", "gcp_console_tabs.py", "nano_triggers.py",   // main-side Nano cores (merged)
+  "gcp_storage_core.py", "gcp_firestore_core.py", "gcp_kms_core.py",
+  "gcp_secretmanager_core.py", "gcp_pubsub_core.py", "gcp_iam_core.py", "gcp_wif_core.py", "gcp_cloudsql_core.py", "gcp_artifactregistry_core.py", "gcp_logging_core.py", "gcp_compute_core.py", "instance_catalog.py", "gcp_compute_instances_core.py", "gcp_compute_ext_core.py", "gcp_resourcemanager_core.py", "gcp_pam_core.py", "gcp_run_core.py",
   // Azure data-plane cores — the azure_core_adapter data-plane (console CRUD).
   "azure_blob_core.py", "azure_cosmos_core.py", "azure_keyvault_secrets_core.py",
-  "azure_keyvault_keys_core.py", "azure_queue_core.py",
+  "azure_keyvault_keys_core.py", "azure_keyvault_certificates_core.py", "azure_queue_core.py", "azure_table_core.py",
   // Generic child/sub-resource store (SQL databases+firewall rules, SB queues) +
   // durable editable settings — azure_core_adapter imports it. Pure stdlib; its
   // state rides az_cosmos's public `nano_sub` attr so nano_persist persists it.
@@ -114,8 +127,11 @@ const CORES = [
   // lock-step with the relay + build_cores (usable now via the Nano relay;
   // dedicated console UI pages are a follow-up). Deps (messaging_store, sql_store,
   // iam_store, lambda_core) are already listed above.
-  "azure_servicebus_core.py", "eventbridge_core.py", "lambda_core.py",
-  "apigateway_core.py", "apigatewayv2_core.py", "apigatewayv2_gateway.py", "gcp_compute_core.py", "vpc_core.py", "kinesis_core.py", "cost_model.py", "cloudwatch_core.py", "azure_sql_core.py", "azure_iam_core.py", "logs_core.py", "ssm_core.py", "stepfunctions_core.py", "gcp_cloudscheduler_core.py", "gcp_container_core.py", "gcp_redis_core.py", "gcp_iamcredentials_core.py", "gcp_monitoring_core.py",
+  "gcp_compute_core.py",   // main-side Nano cores (merged)
+  "azure_graph_core.py",   // Microsoft Graph (Entra ID: users/groups/apps/service principals/domains/admin units) — own data plane, not ARM-delegated
+  "azure_servicebus_core.py", "eventbridge_core.py", "eventbridge_schemas_core.py", "scheduler_core.py", "lambda_core.py",
+  "apigateway_core.py", "apigatewayv2_core.py", "apigatewayv2_gateway.py", "vpc_core.py", "vpc_vpn_core.py", "vpc_extras_core.py", "ec2_ops_core.py", "netfw_core.py", "dnsfw_core.py", "kinesis_core.py", "cost_model.py", "cloudwatch_core.py", "azure_sql_core.py", "azure_iam_core.py", "logs_core.py", "ssm_core.py", "stepfunctions_core.py", "cloudformation_core.py", "gcp_cloudscheduler_core.py", "gcp_container_core.py", "gcp_redis_core.py", "gcp_iamcredentials_core.py", "gcp_monitoring_core.py",
+  "azure_keyvault_x509_core.py",   // main-side Azure cores (merged)
   // console-next capability manifest dependency (slice 1): the pure conformance
   // signal module (only imports `os` — safe in Pyodide, no FastAPI).
   "console_conformance.py",
@@ -125,7 +141,13 @@ const CORES = [
   // nano_events (per-resource cloudsim activity log) MUST precede nano_registry,
   // which imports `from core.nano_events import EventStore`.
   "nano_events.py", "nano_registry.py", "nano_persist.py",
+  // v4 /_wire/*: the relay's native-wire front door (+ its rds_data dep), imported lazily by wire_adapter.
+  "rds_data_core.py", "aws_wire_router.py",
 ];
+// core sub-packages (core/netsim: the shared network engine the VPC / Compute / ARM cores import
+// lazily for reachability analysis) — vendored by wasm/build_cores.py CORE_PKGS
+const CORE_PKGS = ["netsim/__init__.py", "netsim/model.py", "netsim/evaluate.py", "netsim/from_aws.py", "netsim/from_gcp.py", "netsim/from_azure.py", "netsim/flowlogs.py", "netsim/enforce.py"];
+
 
 // Boot screen (wasm/nano-kernel.js): the page paints it first thing in <body>;
 // these steps report the real work + timings to it, then close it when ready.
@@ -149,13 +171,33 @@ function banner(text, bad) {
 async function bootBackend() {
   banner("Nano: booting Pyodide (in-browser cloud backend)…");
   let st = K.step("kernel", "loading Pyodide 0.26.2: CPython on WebAssembly");
-  const { loadPyodide } = await import("https://cdn.jsdelivr.net/pyodide/v0.26.2/full/pyodide.mjs");
-  const py = await loadPyodide();
-  // Time-zone database: Pyodide's zoneinfo has no zone files without it (Cloud
-  // Scheduler, Monitoring and the like would reject every zone but UTC).
-  try { await py.loadPackage("tzdata"); } catch (_) {}
+  // Same-origin runtime first (wasm/fetch_pyodide.py vendors it) — a CDN stall would leave Nano
+  // stuck here; the public CDN stays as the fallback when the bundle doesn't carry it.
+  const PYODIDE_CDN = "https://cdn.jsdelivr.net/pyodide/v0.26.2/full/";
+  const PYODIDE_LOCAL = new URL(BASE + "/vendor/pyodide/", location.origin).href;
+  const pyodideBase = await fetch(PYODIDE_LOCAL + "pyodide.mjs", { method: "HEAD" })
+    .then((r) => (r.ok ? PYODIDE_LOCAL : PYODIDE_CDN), () => PYODIDE_CDN);
+  const { loadPyodide } = await import(pyodideBase + "pyodide.mjs");
+  const py = await loadPyodide({ indexURL: pyodideBase });
+  try { await py.loadPackage("tzdata"); } catch (_) {}   // zoneinfo database (Cloud Scheduler / Monitoring time zones)
   let pyv = ""; try { pyv = py.runPython("import sys; sys.version.split()[0]"); } catch (_) {}
   st.ok("Python " + (pyv || "3") + " · Pyodide " + (py.version || "0.26.2"));
+  // sqlite3 is a separate Pyodide package (vendored by wasm/fetch_pyodide.py): the SQL data
+  // planes (Azure SQL query editor, RDS Data API) need it — the relay worker loads it too.
+  try { await py.loadPackage("sqlite3"); } catch (e) { console.warn("[nano] sqlite3 load skipped:", e); }
+  // Kubernetes posture for Defender for Cloud: the regolibrary (Kubescape) Rego controls compiled to
+  // WebAssembly with OPA (wasm/kubescape/). kubescape_core calls globalThis.__vyomi_kubescape_eval
+  // synchronously; if this fails to load, Defender reports the scanner as unavailable (never fakes).
+  try {
+    const { installKubescape } = await import(BASE + "/kubescape/ks-eval.mjs");
+    await installKubescape(new URL(BASE + "/kubescape/", location.origin).href);
+  } catch (e) { console.warn("[nano] Kubescape evaluator unavailable:", e); }
+  // RDS StartExportTask writes real Parquet: vendored parquet-wasm + apache-arrow
+  // (wasm/parquet/), lazy-loaded on the first export (this only installs the bridge).
+  try {
+    const { installParquet } = await import(BASE + "/parquet/parquet-loader.js");
+    installParquet(new URL(BASE + "/parquet/", location.origin).href);
+  } catch (e) { console.warn("[nano] Parquet bridge unavailable (RDS exports will fail):", e); }
   st = K.step("fs", "mounting /wasm: " + MODULES.length + " console modules");
   py.FS.mkdir("/wasm"); py.FS.mkdir("/wasm/backends"); py.FS.mkdir("/wasm/providers");
   py.FS.writeFile("/wasm/__init__.py", "");
@@ -171,6 +213,10 @@ async function bootBackend() {
   py.FS.mkdir("/core"); py.FS.writeFile("/core/__init__.py", "");
   for (const c of CORES)
     py.FS.writeFile("/core/" + c, await (await fetch(BASE + "/core/" + c)).text());
+  for (const c of CORE_PKGS) {
+    try { py.FS.mkdir("/core/" + c.split("/")[0]); } catch (e) { /* exists */ }
+    py.FS.writeFile("/core/" + c, await (await fetch(BASE + "/core/" + c)).text());
+  }
   st.ok();
   st = K.step("kernel", "importing the engines and wiring the console router");
   py.runPython(`
@@ -191,9 +237,20 @@ def _disp(payload_json):
     # is slice 2). Route it straight to the console_next adapter.
     if prov == "_console":
         return json.dumps(_CN.handle(d["op"], d.get("params") or {}))
+    if prov == "_wire":   # v4 consoles: native wire via the relay's AwsWireRouter (same stores)
+        from wasm.providers import wire_adapter as _W
+        return json.dumps(_W.handle(d.get("params") or {}))
     return json.dumps(P.dispatch(_B, prov, d["service"], d["op"],
                                  params=d.get("params") or {}))
-import builtins; builtins._disp = _disp
+async def _adisp(payload_json):
+    # The native wire on the ASYNC router path (AwsWireRouter.ahandle): RDS snapshots
+    # read the engine and StartExportTask awaits the browser's Parquet writer.
+    d = json.loads(payload_json)
+    if d["provider"] == "_wire":
+        from wasm.providers import wire_adapter as _W
+        return json.dumps(await _W.ahandle(d.get("params") or {}))
+    return _disp(payload_json)
+import builtins; builtins._disp = _disp; builtins._adisp = _adisp
 `);
   st.ok();
   // ── Live engine status (Dashboard > Service status) ─────────────────
@@ -222,6 +279,11 @@ import builtins; builtins._disp = _disp
   const dispatch = (prov, svc, op, params) =>
     JSON.parse(py.runPython(
       `_disp(${JSON.stringify(JSON.stringify({ provider: prov, service: svc, op, params: params || {} }))})`));
+  // `_wire` (v4 native-wire consoles) runs on the async router so awaiting engines
+  // (PGlite snapshots, the Parquet writer for RDS exports) work from the console too.
+  const adispatch = async (prov, svc, op, params) => prov !== "_wire" ? dispatch(prov, svc, op, params)
+    : JSON.parse(await py.runPythonAsync(
+      `await _adisp(${JSON.stringify(JSON.stringify({ provider: prov, service: svc, op, params: params || {} }))})`));
 
   // ── Live resource census ──────────────────────────────────────────
   // The dashboard page has no Pyodide, so it can't see the resources THIS
@@ -282,10 +344,17 @@ import builtins; builtins._disp = _disp
       if (notify && _bc) { try { _bc.postMessage({ k: STORE_KEY, t: Date.now() }); } catch (_) {} }
     } catch (_) { /* best-effort */ }
   }
-  const scheduleStoresSave = () => {
-    if (_storeTimer) return;
-    _storeTimer = setTimeout(() => { _storeTimer = null; writeStores(true); }, 400);
+  // Reads batch their (no-op) saves on a 400 ms debounce; a WRITE saves on the next tick, so a
+  // reload / tab close right after creating something no longer drops it (the 400 ms window
+  // used to lose writes made just before a reload).
+  const scheduleStoresSave = (write) => {
+    if (_storeTimer && !write) return;
+    if (_storeTimer) clearTimeout(_storeTimer);
+    _storeTimer = setTimeout(() => { _storeTimer = null; writeStores(true); }, write ? 0 : 400);
   };
+  const isWrite = (tuple) => tuple[0] === "_wire"
+    ? !["GET", "HEAD", "OPTIONS"].includes(String(tuple[2]).toUpperCase())
+    : !/^(get|list|describe|head|query|search|read)/i.test(String(tuple[2] || ""));
   if (_bc) _bc.onmessage = async (e) => {
     if (!e.data || e.data.k !== STORE_KEY || _restoring) return;
     _restoring = true;
@@ -298,6 +367,8 @@ import builtins; builtins._disp = _disp
 
   // Bridge: SW -> page dispatch -> SW
   navigator.serviceWorker.addEventListener("message", async (ev) => {
+    // A restarted service worker has forgotten who is ready; this page still is.
+    if (ev.data && ev.data.type === "vyomi-ready-ping") { ev.source && ev.source.postMessage({ type: "pyodide-ready" }); return; }
     if (!ev.data || ev.data.type !== "vyomi-dispatch") return;
     const port = ev.ports[0];
     try {
@@ -321,13 +392,12 @@ import builtins; builtins._disp = _disp
       const out = svc === "_vm"
         ? (window.NanoVM ? await window.NanoVM.handle(prov, op, params || {})
                          : { __http: { status: 409, body: { detail: { error: "NoRuntime", hint: "In-browser VM compute is not loaded in this view." } } } })
-        : dispatch(prov, svc, op, params || {});
+        : await adispatch(prov, svc, op, params || {});
       if (window.NanoVM && svc !== "_vm" && !/^(GET|HEAD|List|Get|Describe|Query|Scan)/.test(op)) window.NanoVM.kick();
       scheduleCensus();       // any op may have mutated state — refresh the footprint
-      // Persist + notify the other contexts BEFORE answering: when the console sees the
-      // response, the change is already in the shared snapshot, so a CLI call right after
-      // reads it (and a read changes nothing, so it publishes nothing — writeStores).
-      await writeStores(true);
+      // Persist + notify the other contexts BEFORE answering a write: when the console sees the
+      // response, the change is already in the shared snapshot, so a CLI call right after reads it.
+      if (isWrite(ev.data.tuple)) await writeStores(true); else scheduleStoresSave(false);
       port.postMessage(out);
     } catch (e) {
       port.postMessage({ ok: false, error: String(e) });
@@ -361,6 +431,9 @@ import builtins; builtins._disp = _disp
   const reg = await navigator.serviceWorker.ready;
   (reg.active || navigator.serviceWorker.controller).postMessage({ type: "pyodide-ready" });
   K.ready((CONSOLE_PROVIDER ? CONSOLE_PROVIDER.toUpperCase() + " console" : "console") + " ready: running entirely in your browser");
+  // Public readiness signal (tests, embedding pages): the in-browser backend now answers.
+  window.__vyomiNanoReady = true;
+  try { dispatchEvent(new Event("vyomi-nano-ready")); } catch (_) {}
   banner("Nano: in-browser backend ready — this console runs with no server.");
   setTimeout(() => { const b = document.getElementById("nano-banner"); if (b) b.style.display = "none"; }, 4000);
 

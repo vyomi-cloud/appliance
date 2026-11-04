@@ -31,11 +31,15 @@ JSON-safe dicts (so nano_persist and the offline space slot can snapshot them).
 """
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
+import re
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+
+from core import gcp_kms_core as _gcp_kms
 
 FORMATS = ("DOCKER", "MAVEN", "NPM", "PYTHON", "APT", "YUM", "KFP", "GO", "GENERIC", "GOOGET")
 MODES = ("STANDARD_REPOSITORY", "VIRTUAL_REPOSITORY", "REMOTE_REPOSITORY")
@@ -49,6 +53,10 @@ LOCATIONS = ("us-central1", "us-east1", "us-east4", "us-west1", "us-west2", "eur
 _TYPE = "type.googleapis.com/google.devtools.artifactregistry.v1."
 # Real repository ids: 1-63 chars, lowercase letters / digits / hyphens, start with a letter.
 _ID_OK = set("abcdefghijklmnopqrstuvwxyz0123456789-")
+CLEANUP_ACTIONS = ("DELETE", "KEEP")
+CLEANUP_TAG_STATES = ("ANY", "TAGGED", "UNTAGGED")
+# A virtual repository can only aggregate standard/remote repos (never another virtual one).
+_UPSTREAM_MODES = ("STANDARD_REPOSITORY", "REMOTE_REPOSITORY")
 
 
 @dataclass
@@ -60,12 +68,13 @@ class GcpResponse:
 
 
 class ArtifactRegistryStore:
-    """Plain, JSON-safe state: repositories (with their packages) and operations."""
+    """Plain, JSON-safe state: repositories (with their packages), operations, project settings."""
 
     def __init__(self) -> None:
         self.repos: dict[str, dict] = {}
         self.operations: dict[str, dict] = {}
         self.iam: dict[str, dict] = {}
+        self.settings: dict[str, dict] = {}
 
     def persist(self) -> None:
         """Hook: the offline appliance flushes the space slot, Nano snapshots to IDB."""
@@ -91,6 +100,70 @@ def _err(status: int, message: str, token: str | None = None) -> GcpResponse:
 
 def _repo_name(project: str, loc: str, repo: str) -> str:
     return f"projects/{project}/locations/{loc}/repositories/{repo}"
+
+
+# ── CMEK — ENFORCED against the real Cloud KMS core (the same cross-core seam
+# core/secrets_core.py uses for AWS KMS): a repository's kmsKeyName must name a
+# CryptoKey that actually exists and whose primary version is ENABLED, checked
+# again (not just at creation) every time new content is pushed — and pushing new
+# content genuinely wraps a digest with that key, through real envelope crypto, so
+# a disabled/destroyed key really does stop working rather than being a stored label. ─
+_KMS_KEY_RE = re.compile(r"^projects/[^/]+/locations/[^/]+/keyRings/[^/]+/cryptoKeys/[^/]+$")
+
+
+class CmekKeyUnavailable(Exception):
+    """Raised when a repository's CMEK key cannot presently encrypt new content."""
+
+
+def _kms_crypto_key(kms_store, key_name: str, headers=None) -> tuple[dict | None, str | None]:
+    """GET the CryptoKey through the real GCP KMS core. (view, None) or (None, error)."""
+    r = _gcp_kms.dispatch(kms_store, "GET", f"/v1/{key_name}", {}, headers or {}, b"")
+    if r.status != 200:
+        try:
+            return None, json.loads(r.body)["error"]["message"]
+        except Exception:
+            return None, f"CryptoKey \"{key_name}\" not found."
+    return json.loads(r.body), None
+
+
+def _kms_usable(kms_store, key_name: str, headers=None) -> str | None:
+    """None if `key_name` can right now encrypt new content; else the reason it
+    can't. kms_store is None (no KMS core wired in — e.g. a bare unit test
+    exercising this core in isolation) passes through unchecked, matching the
+    AWS secrets_core.py precedent of degrading gracefully with no kms_store."""
+    if kms_store is None:
+        return None
+    view, err = _kms_crypto_key(kms_store, key_name, headers)
+    if err:
+        return f"Cloud KMS CryptoKey \"{key_name}\" could not be used: {err}"
+    state = (view.get("primary") or {}).get("state", "ENABLED")
+    if state != "ENABLED":
+        return (f"Cloud KMS CryptoKey \"{key_name}\" cannot encrypt new content: its primary "
+                f"version is {state}, not ENABLED.")
+    return None
+
+
+def _validate_kms_key(kms_store, key_name, headers=None) -> str | None:
+    """Repository create-time validation: well-formed resource name AND a real,
+    usable key behind it."""
+    if not isinstance(key_name, str) or not _KMS_KEY_RE.match(key_name):
+        return (f"Invalid kmsKeyName \"{key_name}\": must be a full Cloud KMS CryptoKey "
+                "resource name (projects/P/locations/L/keyRings/R/cryptoKeys/K).")
+    return _kms_usable(kms_store, key_name, headers)
+
+
+def _kms_wrap(kms_store, key_name: str, plaintext: bytes, headers=None) -> str | None:
+    """Actually encrypt `plaintext` with the repository's CMEK key through the real
+    Cloud KMS core, returning the base64 ciphertext — genuine envelope crypto, not a
+    stored label. None if there's no kms_store wired in (bare unit test) or the key
+    just became unusable (caller already re-checked with _kms_usable before writing)."""
+    if kms_store is None:
+        return None
+    r = _gcp_kms.dispatch(kms_store, "POST", f"/v1/{key_name}:encrypt", {}, headers or {},
+                          json.dumps({"plaintext": base64.b64encode(plaintext).decode()}).encode())
+    if r.status != 200:
+        return None
+    return json.loads(r.body)["ciphertext"]
 
 
 def _page(items: list, query: dict) -> tuple[list, str]:
@@ -142,10 +215,13 @@ def _push_info(repo: dict) -> dict:
             "push_example": "docker tag IMAGE %s/%s/%s/IMAGE:TAG && docker push %s/%s/%s/IMAGE:TAG" % (hp, parts[1], parts[-1], hp, parts[1], parts[-1])}
 
 
-def ingest_registry_images(store: ArtifactRegistryStore, project: str, images: list) -> int:
+def ingest_registry_images(store: ArtifactRegistryStore, project: str, images: list, kms_store=None) -> int:
     """Fold what a real `docker push` left in the registry into the engine.
     Each item: {"path": "{repo}/{image...}", "tag", "digest", "size"} (registry path minus the
     project segment). Docker repositories only; unknown repositories and known tags are skipped.
+    A repository whose CMEK key cannot presently encrypt new content (not found, disabled,
+    destroyed) skips that image too — the closest honest analogue of the real push failing
+    upstream, since this is a best-effort sync of a push that already happened on the wire.
     Returns the number of versions/tags newly recorded."""
     n = 0
     for im in images:
@@ -161,7 +237,11 @@ def ingest_registry_images(store: ArtifactRegistryStore, project: str, images: l
         ver = ((pkg or {}).get("versions") or {}).get(im["digest"])
         if ver is not None and any(t["name"].rsplit("/", 1)[-1] == im["tag"] for t in ver["_tags"]):
             continue
-        ingest_package(store, full, image, im["digest"], int(im.get("size") or 0), [im["tag"]])
+        try:
+            ingest_package(store, full, image, im["digest"], int(im.get("size") or 0), [im["tag"]],
+                           kms_store=kms_store)
+        except CmekKeyUnavailable:
+            continue
         n += 1
     return n
 
@@ -234,7 +314,152 @@ _MUTABLE = ("description", "labels", "kmsKeyName", "dockerConfig", "mavenConfig"
             "virtualRepositoryConfig", "disallowUnspecifiedMode")
 
 
-def _create_repo(store, project, loc, query, body) -> GcpResponse:
+# ── cleanup policies — ENFORCED (not just stored): matching versions are actually
+# deleted the next time the repository is read, mirroring the real product's periodic
+# background sweep without needing an actual scheduler. ────────────────────────────────
+def _parse_duration(s) -> int | None:
+    """A protobuf Duration JSON string ("2592000s") → whole seconds, or None if invalid."""
+    if not isinstance(s, str) or not s.endswith("s"):
+        return None
+    try:
+        return int(float(s[:-1]))
+    except ValueError:
+        return None
+
+
+def _validate_cleanup_policies(policies) -> str | None:
+    if not isinstance(policies, dict):
+        return "cleanupPolicies must be a map of policy id to CleanupPolicy."
+    for pid, pol in policies.items():
+        if not isinstance(pol, dict) or pol.get("action") not in CLEANUP_ACTIONS:
+            return f"Invalid cleanup policy \"{pid}\": action must be one of {CLEANUP_ACTIONS}."
+        cond = pol.get("condition") or {}
+        if not isinstance(cond, dict):
+            return f"Invalid cleanup policy \"{pid}\": condition must be an object."
+        if "tagState" in cond and cond["tagState"] not in CLEANUP_TAG_STATES:
+            return f"Invalid cleanup policy \"{pid}\": tagState must be one of {CLEANUP_TAG_STATES}."
+        for key in ("olderThan", "newerThan"):
+            if cond.get(key) is not None and _parse_duration(cond[key]) is None:
+                return f"Invalid cleanup policy \"{pid}\": {key} must be a duration string such as \"2592000s\"."
+    return None
+
+
+def _parse_time(s: str):
+    try:
+        return datetime.strptime(s, "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=timezone.utc)
+    except (ValueError, TypeError):
+        return None
+
+
+def _policy_condition_matches(cond: dict, pkg_display: str, ver: dict, now_dt) -> bool:
+    tag_state = cond.get("tagState", "ANY")
+    tagged = bool(ver.get("_tags"))
+    if tag_state == "TAGGED" and not tagged:
+        return False
+    if tag_state == "UNTAGGED" and tagged:
+        return False
+    prefixes = cond.get("packageNamePrefixes")
+    if prefixes and not any(pkg_display.startswith(p) for p in prefixes):
+        return False
+    vprefixes = cond.get("versionNamePrefixes")
+    vid = ver["name"].rsplit("/", 1)[-1]
+    if vprefixes and not any(vid.startswith(p) for p in vprefixes):
+        return False
+    created = _parse_time(ver.get("createTime", ""))
+    if created is None:
+        return True
+    age = (now_dt - created).total_seconds()
+    older = _parse_duration(cond.get("olderThan")) if cond.get("olderThan") is not None else None
+    if older is not None and age < older:
+        return False
+    newer = _parse_duration(cond.get("newerThan")) if cond.get("newerThan") is not None else None
+    if newer is not None and age > newer:
+        return False
+    return True
+
+
+def _apply_cleanup_policies(repo: dict) -> int:
+    """Delete versions matched by a DELETE policy and not protected by a KEEP policy.
+    No-op while cleanupPolicyDryRun is set (Vyomi accepts dry-run mode but does not
+    produce the real product's Cloud Logging preview report)."""
+    policies = repo.get("cleanupPolicies") or {}
+    if not policies or repo.get("cleanupPolicyDryRun"):
+        return 0
+    deletes = [p.get("condition") or {} for p in policies.values() if p.get("action") == "DELETE"]
+    if not deletes:
+        return 0
+    keeps = [p.get("condition") or {} for p in policies.values() if p.get("action") == "KEEP"]
+    now_dt = datetime.now(timezone.utc)
+    n = 0
+    for pkg in list(repo["packages"].values()):
+        for vid, ver in list(pkg["versions"].items()):
+            if not any(_policy_condition_matches(c, pkg["displayName"], ver, now_dt) for c in deletes):
+                continue
+            if any(_policy_condition_matches(c, pkg["displayName"], ver, now_dt) for c in keeps):
+                continue
+            _drop_version(repo, pkg, vid)
+            n += 1
+    return n
+
+
+# ── virtual repositories — ENFORCED aggregation of other (non-virtual) repositories in
+# the same project/location, highest `priority` wins on a name collision. Remote
+# repositories still just store their config: proxying a real upstream needs real
+# network egress to a third-party registry, which a local simulator cannot do. ─────────
+def _validate_virtual_config(store, project: str, loc: str, cfg, self_name: str) -> str | None:
+    if not isinstance(cfg, dict):
+        return "virtualRepositoryConfig must be an object."
+    policies = cfg.get("upstreamPolicies") or []
+    if not isinstance(policies, list):
+        return "virtualRepositoryConfig.upstreamPolicies must be a list."
+    prefix = f"projects/{project}/locations/{loc}/repositories/"
+    seen = set()
+    for up in policies:
+        if not isinstance(up, dict) or not up.get("id") or not up.get("repository"):
+            return "Each upstream policy needs an \"id\" and a \"repository\"."
+        if up["id"] in seen:
+            return f"Duplicate upstream policy id \"{up['id']}\"."
+        seen.add(up["id"])
+        rname = up["repository"]
+        if rname == self_name:
+            return "A virtual repository cannot reference itself as an upstream."
+        if not rname.startswith(prefix):
+            return f"Upstream repository \"{rname}\" must be in the same project and location."
+        target = store.repos.get(rname)
+        if target is None:
+            return f"Upstream repository \"{rname}\" not found."
+        if target["mode"] not in _UPSTREAM_MODES:
+            return f"Upstream repository \"{rname}\" must be a standard or remote repository."
+        try:
+            pr = int(up.get("priority", 0))
+        except (TypeError, ValueError):
+            return f"Upstream policy \"{up['id']}\" priority must be an integer."
+        if not (0 <= pr <= 100):
+            return f"Upstream policy \"{up['id']}\" priority must be between 0 and 100."
+    return None
+
+
+def _virtual_members(store, repo: dict) -> list:
+    ups = sorted((repo.get("virtualRepositoryConfig") or {}).get("upstreamPolicies") or [],
+                 key=lambda u: -int(u.get("priority", 0)))
+    out = []
+    for u in ups:
+        target = store.repos.get(u["repository"])
+        if target is not None:
+            out.append(target)
+    return out
+
+
+def _virtual_merge(store, repo: dict) -> dict:
+    """Packages keyed by id, highest-priority upstream wins on a name collision."""
+    merged: dict = {}
+    for m in _virtual_members(store, repo):
+        for pkey, p in m["packages"].items():
+            merged.setdefault(pkey, p)
+    return merged
+
+
+def _create_repo(store, project, loc, query, body, kms_store=None) -> GcpResponse:
     rid = query.get("repositoryId") or query.get("repository_id") or ""
     if not rid:
         return _err(400, "repositoryId is required (query parameter).")
@@ -263,6 +488,18 @@ def _create_repo(store, project, loc, query, body) -> GcpResponse:
             "packages": {}}
     for k in _MUTABLE[2:]:
         if body.get(k) is not None:
+            if k == "cleanupPolicies":
+                err = _validate_cleanup_policies(body[k])
+                if err:
+                    return _err(400, err)
+            if k == "virtualRepositoryConfig":
+                err = _validate_virtual_config(store, project, loc, body[k], name)
+                if err:
+                    return _err(400, err)
+            if k == "kmsKeyName":
+                err = _validate_kms_key(kms_store, body[k])
+                if err:
+                    return _err(400, err)
             repo[k] = body[k]
     if fmt == "DOCKER":
         repo.setdefault("dockerConfig", {"immutableTags": False})
@@ -275,54 +512,152 @@ def _get_repo(store, name) -> GcpResponse:
     repo = store.repos.get(name)
     if repo is None:
         return _err(404, f"Repository \"{name}\" not found.")
+    _apply_cleanup_policies(repo)
     return _json(200, _repo_view(repo))
 
 
 def _list_repos(store, project, loc, query) -> GcpResponse:
-    prefix = f"projects/{project}/locations/{loc}/repositories/"
-    repos = [_repo_view(r) for n, r in sorted(store.repos.items()) if n.startswith(prefix)]
+    # loc == "-": aggregate across every location, same as the real API's "-" wildcard
+    # (the console's Repositories page lists repos regardless of region).
+    if loc == "-":
+        base = f"projects/{project}/locations/"
+        pred = lambda n: n.startswith(base) and "/repositories/" in n[len(base):]
+    else:
+        prefix = f"projects/{project}/locations/{loc}/repositories/"
+        pred = lambda n: n.startswith(prefix)
+    matched = [r for n, r in sorted(store.repos.items()) if pred(n)]
+    for r in matched:
+        _apply_cleanup_policies(r)
+    repos = [_repo_view(r) for r in matched]
     return _json(200, _with_page("repositories", repos, query))
 
 
-def _patch_repo(store, name, query, body) -> GcpResponse:
+def _patch_repo(store, name, query, body, headers=None) -> GcpResponse:
     repo = store.repos.get(name)
     if repo is None:
         return _err(404, f"Repository \"{name}\" not found.")
+    denied = _require(store, name, headers, "artifactregistry.repositories.update")
+    if denied:
+        return denied
     mask = [m.strip() for m in (query.get("updateMask") or "").split(",") if m.strip()]
     fields = [m.split(".")[0] for m in mask] if mask else [k for k in _MUTABLE if k in body]
+    project, loc = _pl(name)
     for f in fields:
+        if f == "kmsKeyName":
+            return _err(400, "kmsKeyName is immutable: the Cloud KMS key can only be set when the "
+                             "repository is created.", "FAILED_PRECONDITION")
         if f not in _MUTABLE:
             return _err(400, f"Invalid field mask path: \"{f}\" is not an updatable field of Repository.")
         if f in body:
+            if f == "cleanupPolicies":
+                err = _validate_cleanup_policies(body[f])
+                if err:
+                    return _err(400, err)
+            if f == "virtualRepositoryConfig":
+                err = _validate_virtual_config(store, project, loc, body[f], name)
+                if err:
+                    return _err(400, err)
             repo[f] = body[f]
         else:
             repo.pop(f, None)
     repo["updateTime"] = _now()
+    _apply_cleanup_policies(repo)
     store.persist()
     return _json(200, _repo_view(repo))
 
 
-def _delete_repo(store, project, loc, name) -> GcpResponse:
+def _delete_repo(store, project, loc, name, headers=None) -> GcpResponse:
     if name not in store.repos:
         return _err(404, f"Repository \"{name}\" not found.")
+    denied = _require(store, name, headers, "artifactregistry.repositories.delete")
+    if denied:
+        return denied
     del store.repos[name]
     store.iam.pop(name, None)
     store.persist()
     return _json(200, _operation(store, project, loc, "Empty", None))
 
 
-# ── IAM ───────────────────────────────────────────────────────────────────
+# ── IAM — a real, ENFORCED per-repository policy (like Secret Manager's, not GCP KMS/Pub/
+# Sub's store-only one): repository update/delete/setIamPolicy, package/version/tag
+# deletion and pushSample are denied for a principal the policy doesn't grant. ────────────
 def _etag(policy: dict) -> str:
     return hashlib.sha1(json.dumps(policy.get("bindings", []), sort_keys=True).encode()).hexdigest()[:8]
 
 
-def _iam(store, method, name, verb, body) -> GcpResponse:
+_OWNER_PRINCIPALS = {"", "root", "owner", "admin"}
+
+_ROLE_PERMS: dict[str, list[str]] = {
+    "roles/artifactregistry.admin": ["*"],
+    "roles/artifactregistry.repoAdmin": [
+        "artifactregistry.repositories.get", "artifactregistry.repositories.list",
+        "artifactregistry.repositories.update", "artifactregistry.repositories.delete",
+        "artifactregistry.repositories.getIamPolicy", "artifactregistry.repositories.setIamPolicy",
+        "artifactregistry.repositories.downloadArtifacts", "artifactregistry.repositories.uploadArtifacts",
+        "artifactregistry.repositories.deleteArtifacts",
+    ],
+    "roles/artifactregistry.writer": [
+        "artifactregistry.repositories.get", "artifactregistry.repositories.list",
+        "artifactregistry.repositories.downloadArtifacts", "artifactregistry.repositories.uploadArtifacts",
+    ],
+    "roles/artifactregistry.reader": [
+        "artifactregistry.repositories.get", "artifactregistry.repositories.list",
+        "artifactregistry.repositories.downloadArtifacts",
+    ],
+}
+
+
+def _header(headers: dict | None, name: str) -> str:
+    for k, v in (headers or {}).items():
+        if k.lower() == name:
+            return str(v)
+    return ""
+
+
+def _principal(headers: dict | None) -> str:
+    return _header(headers, "x-cloudlearn-principal").strip().lower()
+
+
+def _granted(policy: dict, principal: str) -> set[str]:
+    perms: set[str] = set()
+    for b in (policy or {}).get("bindings") or []:
+        role = str(b.get("role") or "")
+        for m in b.get("members") or []:
+            ms = str(m)
+            if ms in ("allUsers", "allAuthenticatedUsers") or ms.split(":", 1)[-1].lower() == principal:
+                perms.update(_ROLE_PERMS.get(role, []))
+                break
+    return perms
+
+
+def _authorized(policy: dict, principal: str, permission: str) -> bool:
+    if not principal or principal in _OWNER_PRINCIPALS:
+        return True
+    bindings = (policy or {}).get("bindings") or []
+    if not bindings:
+        return True   # no policy configured yet: nothing to deny against
+    granted = _granted(policy, principal)
+    return permission in granted or "*" in granted
+
+
+def _require(store, name: str, headers, permission: str) -> GcpResponse | None:
+    principal = _principal(headers)
+    if _authorized(store.iam.get(name) or {}, principal, permission):
+        return None
+    return _err(403, f"Permission '{permission}' denied on resource '{name}' "
+                     f"for principal '{principal}' (or it may not exist).")
+
+
+def _iam(store, method, name, verb, body, headers=None) -> GcpResponse:
     if name not in store.repos:
         return _err(404, f"Repository \"{name}\" not found.")
     if verb == "getIamPolicy":
         pol = store.iam.get(name) or {"version": 1, "etag": "ACAB"}
         return _json(200, pol)
     if verb == "setIamPolicy":
+        denied = _require(store, name, headers, "artifactregistry.repositories.setIamPolicy")
+        if denied:
+            return denied
         pol = dict(body.get("policy") or {})
         pol.setdefault("bindings", [])
         pol["version"] = pol.get("version") or 1
@@ -330,7 +665,12 @@ def _iam(store, method, name, verb, body) -> GcpResponse:
         store.iam[name] = pol
         store.persist()
         return _json(200, pol)
-    return _json(200, {"permissions": list(body.get("permissions") or [])})   # testIamPermissions
+    # testIamPermissions: narrow the requested list to what the caller's policy actually grants.
+    principal = _principal(headers)
+    policy = store.iam.get(name) or {}
+    requested = list(body.get("permissions") or [])
+    allowed = [p for p in requested if _authorized(policy, principal, p)]
+    return _json(200, {"permissions": allowed})
 
 
 # ── data plane hook: what a push creates ──────────────────────────────────
@@ -339,12 +679,24 @@ def _pkg_key(display: str) -> str:
 
 
 def ingest_package(store: ArtifactRegistryStore, repo_name: str, package: str, version: str,
-                   size_bytes: int = 0, tags: list | None = None, files: list | None = None) -> dict:
+                   size_bytes: int = 0, tags: list | None = None, files: list | None = None,
+                   kms_store=None, headers=None) -> dict:
     """Record a package version (and tags) in a repository — the data-plane hook.
-    `version` is the version id (a sha256 digest for Docker). Returns the version."""
+    `version` is the version id (a sha256 digest for Docker). Returns the version.
+    Raises CmekKeyUnavailable if the repository has a kmsKeyName that cannot right now
+    encrypt new content (not found, disabled, destroyed) — re-checked here, on every
+    push, not just once at repository creation. A new version is then genuinely wrapped
+    with that key (real envelope crypto through the Cloud KMS core), stored internally
+    (ver["_kms"]) — not on the public Version/DockerImage view, which the real API
+    doesn't expose either; it only proves Vyomi actually used the key, not a label."""
     repo = store.repos.get(repo_name)
     if repo is None:
         raise KeyError(repo_name)
+    key_name = repo.get("kmsKeyName")
+    if key_name:
+        err = _kms_usable(kms_store, key_name, headers)
+        if err:
+            raise CmekKeyUnavailable(err)
     now = _now()
     pkey = _pkg_key(package)
     pkg = repo["packages"].setdefault(pkey, {
@@ -357,6 +709,10 @@ def ingest_package(store: ArtifactRegistryStore, repo_name: str, package: str, v
             "name": f"{pkg['name']}/versions/{version}", "createTime": now, "updateTime": now,
             "sizeBytes": int(size_bytes), "_tags": [],
             "files": {}}
+        if key_name:
+            ciphertext = _kms_wrap(kms_store, key_name, version.encode(), headers)
+            if ciphertext:
+                ver["_kms"] = {"keyName": key_name, "encryptedDigest": ciphertext}
     for fname in (files or [f"{package}/{version}"]):
         fid = fname.replace("/", "%2F")
         ver["files"][fid] = {"name": f"{repo_name}/files/{fid}", "sizeBytes": str(int(size_bytes)),
@@ -366,15 +722,17 @@ def ingest_package(store: ArtifactRegistryStore, repo_name: str, package: str, v
     for t in tags or []:
         _set_tag(pkg, t, ver)
     repo["updateTime"] = now
+    _apply_cleanup_policies(repo)
     store.persist()
     return ver
 
 
 def ingest_image(store: ArtifactRegistryStore, repo_name: str, image: str = "sample-app",
-                 tag: str = "latest", size_bytes: int = 5 * 1024 * 1024) -> dict:
+                 tag: str = "latest", size_bytes: int = 5 * 1024 * 1024,
+                 kms_store=None, headers=None) -> dict:
     """A `docker push {loc}-docker.pkg.dev/{p}/{repo}/{image}:{tag}` as the engine sees it."""
     digest = "sha256:" + hashlib.sha256(f"{repo_name}/{image}:{tag}:{_now()}".encode()).hexdigest()
-    return ingest_package(store, repo_name, image, digest, size_bytes, [tag])
+    return ingest_package(store, repo_name, image, digest, size_bytes, [tag], kms_store=kms_store, headers=headers)
 
 
 def _set_tag(pkg: dict, tag_id: str, ver: dict) -> dict:
@@ -391,6 +749,7 @@ def _find(store, repo_name, pkey=None):
     repo = store.repos.get(repo_name)
     if repo is None:
         return None, None, _err(404, f"Repository \"{repo_name}\" not found.")
+    _apply_cleanup_policies(repo)
     if pkey is None:
         return repo, None, None
     pkg = repo["packages"].get(pkey)
@@ -400,8 +759,35 @@ def _find(store, repo_name, pkey=None):
 
 
 # ── packages / versions / tags ────────────────────────────────────────────
-def _packages(store, method, repo_name, rest, query, body) -> GcpResponse:
+def _virtual_packages(store, repo, rest, query) -> GcpResponse:
+    """Read-only aggregate view: packages/versions/tags come from upstream member
+    repositories, never from the virtual repository's own (always empty) packages map."""
+    merged = _virtual_merge(store, repo)
+    if not rest:
+        items = [_pkg_view(p) for _, p in sorted(merged.items())]
+        return _json(200, _with_page("packages", items, query))
+    pkey = rest[0]
+    pkg = merged.get(pkey)
+    if pkg is None:
+        return _err(404, f"Package \"{repo['name']}/packages/{pkey}\" not found.")
+    if len(rest) == 1:
+        return _json(200, _pkg_view(pkg))
+    if rest[1] == "versions":
+        return _versions(store, "GET", repo["name"], repo, pkg, rest[2:], query, {})
+    if rest[1] == "tags":
+        return _tags(store, "GET", pkg, rest[2:], query, {})
+    return _err(404, "Unknown path.")
+
+
+def _packages(store, method, repo_name, rest, query, body, headers=None) -> GcpResponse:
     """rest = segments after .../packages"""
+    repo, _, err = _find(store, repo_name)
+    if err:
+        return err
+    if repo["mode"] == "VIRTUAL_REPOSITORY":
+        if method != "GET":
+            return _err(400, "Packages in a virtual repository are read-only; configure its upstream repositories instead.")
+        return _virtual_packages(store, repo, rest, query)
     repo, pkg, err = _find(store, repo_name, rest[0] if rest else None)
     if err:
         return err
@@ -415,15 +801,18 @@ def _packages(store, method, repo_name, rest, query, body) -> GcpResponse:
         if method == "GET":
             return _json(200, _pkg_view(pkg))
         if method == "DELETE":
+            denied = _require(store, repo_name, headers, "artifactregistry.repositories.deleteArtifacts")
+            if denied:
+                return denied
             del repo["packages"][pkey]
             store.persist()
             return _json(200, _operation(store, *_pl(repo_name), "Empty", None))
         if method == "PATCH":
             return _json(200, _pkg_view(pkg))    # packages have no mutable fields in v1
     if rest[1] == "versions":
-        return _versions(store, method, repo_name, repo, pkg, rest[2:], query, body)
+        return _versions(store, method, repo_name, repo, pkg, rest[2:], query, body, headers)
     if rest[1] == "tags":
-        return _tags(store, method, pkg, rest[2:], query, body)
+        return _tags(store, method, pkg, rest[2:], query, body, headers)
     return _err(404, "Unknown path.")
 
 
@@ -432,19 +821,22 @@ def _pl(repo_name: str):
     return p[1], p[3]
 
 
-def _versions(store, method, repo_name, repo, pkg, rest, query, body) -> GcpResponse:
+def _versions(store, method, repo_name, repo, pkg, rest, query, body, headers=None) -> GcpResponse:
     if not rest:
         if method == "GET":
             items = [_ver_view(v) for _, v in sorted(pkg["versions"].items())]
             return _json(200, _with_page("versions", items, query))
         return _err(400, f"Unsupported method {method} on versions collection.")
     if rest[0] == "batchDelete" and method == "POST":
+        denied = _require(store, repo_name, headers, "artifactregistry.repositories.deleteArtifacts")
+        if denied:
+            return denied
         for vn in body.get("names") or []:
             vid = vn.rsplit("/", 1)[-1]
             if vid not in pkg["versions"]:
                 return _err(404, f"Version \"{vn}\" not found.")
         for vn in body.get("names") or []:
-            _drop_version(pkg, vn.rsplit("/", 1)[-1])
+            _drop_version(repo, pkg, vn.rsplit("/", 1)[-1])
         store.persist()
         return _json(200, _operation(store, *_pl(repo_name), "Empty", None))
     vid = rest[0]
@@ -454,23 +846,35 @@ def _versions(store, method, repo_name, repo, pkg, rest, query, body) -> GcpResp
     if method == "GET":
         return _json(200, _ver_view(ver))
     if method == "DELETE":
-        _drop_version(pkg, vid)
+        denied = _require(store, repo_name, headers, "artifactregistry.repositories.deleteArtifacts")
+        if denied:
+            return denied
+        _drop_version(repo, pkg, vid)
         store.persist()
         return _json(200, _operation(store, *_pl(repo_name), "Empty", None))
     return _err(400, f"Unsupported method {method} on version.")
 
 
-def _drop_version(pkg: dict, vid: str) -> None:
+def _drop_version(repo: dict, pkg: dict, vid: str) -> None:
+    """Pop a version (and its tags); a package with no versions left isn't a real
+    resource any more, so drop it too — matches a user's expectation that cleaning up
+    the last version of a package makes the package disappear."""
     ver = pkg["versions"].pop(vid, None)
     for t in (ver or {}).get("_tags", []):
         pkg["tags"].pop(t["name"].rsplit("/", 1)[-1], None)
+    if not pkg["versions"]:
+        repo["packages"].pop(pkg["name"].rsplit("/", 1)[-1], None)
 
 
-def _tags(store, method, pkg, rest, query, body) -> GcpResponse:
+def _tags(store, method, pkg, rest, query, body, headers=None) -> GcpResponse:
+    repo_name = pkg["name"].rsplit("/packages/", 1)[0]
     if not rest:
         if method == "GET":
             return _json(200, _with_page("tags", [_tag_view(t) for _, t in sorted(pkg["tags"].items())], query))
         if method == "POST":
+            denied = _require(store, repo_name, headers, "artifactregistry.repositories.uploadArtifacts")
+            if denied:
+                return denied
             tid = query.get("tagId") or query.get("tag_id") or ""
             if not tid:
                 return _err(400, "tagId is required (query parameter).")
@@ -490,12 +894,18 @@ def _tags(store, method, pkg, rest, query, body) -> GcpResponse:
     if method == "GET":
         return _json(200, _tag_view(t))
     if method == "DELETE":
+        denied = _require(store, repo_name, headers, "artifactregistry.repositories.deleteArtifacts")
+        if denied:
+            return denied
         for v in pkg["versions"].values():
             v["_tags"] = [x for x in v.get("_tags", []) if x["name"] != t["name"]]
         del pkg["tags"][tid]
         store.persist()
         return _json(200, {})
     if method == "PATCH":
+        denied = _require(store, repo_name, headers, "artifactregistry.repositories.uploadArtifacts")
+        if denied:
+            return denied
         ver = _tag_target(pkg, body)
         if ver is None:
             return _err(404, f"Version \"{body.get('version', '')}\" not found.")
@@ -515,8 +925,9 @@ def _images(store, method, repo_name, rest, query) -> GcpResponse:
         return err
     project, loc = _pl(repo_name)
     rid = repo_name.rsplit("/", 1)[-1]
+    pkgs = _virtual_merge(store, repo) if repo["mode"] == "VIRTUAL_REPOSITORY" else repo["packages"]
     images = [_image_view(project, loc, rid, p, v)
-              for _, p in sorted(repo["packages"].items()) for _, v in sorted(p["versions"].items())] \
+              for _, p in sorted(pkgs.items()) for _, v in sorted(p["versions"].items())] \
         if repo["format"] == "DOCKER" else []
     if not rest:
         return _json(200, _with_page("dockerImages", images, query))
@@ -553,6 +964,30 @@ def _files(store, method, repo_name, rest, query) -> GcpResponse:
         store.persist()
         return _json(200, _operation(store, *_pl(repo_name), "Empty", None))
     return _json(200, {k: f[k] for k in ("name", "sizeBytes", "hashes", "createTime", "updateTime", "owner")})
+
+
+# ── project settings (the console's Settings page: gcr.io redirection) ────
+_REDIRECTION_STATES = ("REDIRECTION_FROM_GCR_IO_UNSPECIFIED", "REDIRECTION_FROM_GCR_IO_ENABLED",
+                       "REDIRECTION_FROM_GCR_IO_DISABLED", "REDIRECTION_FROM_GCR_IO_FINALIZED")
+
+
+def _project_settings_view(store, project: str) -> dict:
+    s = store.settings.get(project) or {}
+    return {"name": f"projects/{project}/projectSettings",
+            "legacyRedirectionState": s.get("legacyRedirectionState", "REDIRECTION_FROM_GCR_IO_UNSPECIFIED")}
+
+
+def _project_settings(store, method, project, body) -> GcpResponse:
+    if method == "GET":
+        return _json(200, _project_settings_view(store, project))
+    if method == "PATCH":
+        state = body.get("legacyRedirectionState")
+        if state not in _REDIRECTION_STATES:
+            return _err(400, f"Invalid legacyRedirectionState \"{state}\".")
+        store.settings.setdefault(project, {})["legacyRedirectionState"] = state
+        store.persist()
+        return _json(200, _project_settings_view(store, project))
+    return _err(400, f"Unsupported method {method} on projectSettings.")
 
 
 # ── locations / operations ────────────────────────────────────────────────
@@ -641,10 +1076,12 @@ def console_children(store: ArtifactRegistryStore, name: str, kind: str) -> list
     full, repo = console_find(store, name)
     if repo is None:
         return []
+    _apply_cleanup_policies(repo)
     project, loc = _pl(full)
     rid = full.rsplit("/", 1)[-1]
+    pkgs = _virtual_merge(store, repo) if repo["mode"] == "VIRTUAL_REPOSITORY" else repo["packages"]
     out = []
-    for p in sorted(repo["packages"].values(), key=lambda x: x["name"]):
+    for p in sorted(pkgs.values(), key=lambda x: x["name"]):
         if kind == "packages":
             out.append({"name": p["displayName"], "versions": len(p["versions"]), "tags": len(p["tags"]),
                         "created": p["createTime"], "updated": p["updateTime"]})
@@ -665,26 +1102,42 @@ def console_children(store: ArtifactRegistryStore, name: str, kind: str) -> list
     return out
 
 
-def console_push_sample(store: ArtifactRegistryStore, name: str, body: dict | None = None) -> dict:
+def console_push_sample(store: ArtifactRegistryStore, name: str, body: dict | None = None, headers=None,
+                        kms_store=None) -> dict:
     full, repo = console_find(store, name)
     if repo is None:
         return {"ok": False, "code": "NotFound", "name": name}
+    if repo["mode"] == "VIRTUAL_REPOSITORY":
+        return {"ok": False, "code": "FailedPrecondition", "name": name,
+                "message": "Virtual repositories aggregate their upstream repositories; they can't be pushed to directly."}
+    denied = _require(store, full, headers, "artifactregistry.repositories.uploadArtifacts")
+    if denied:
+        return {"ok": False, "code": "PermissionDenied", "name": name,
+                "message": json.loads(denied.body)["error"]["message"]}
     body = body or {}
-    if repo["format"] == "DOCKER":
-        ver = ingest_image(store, full, str(body.get("image") or "sample-app"), str(body.get("tag") or "latest"))
-    else:
-        ver = ingest_package(store, full, str(body.get("image") or "sample-package"),
-                             str(body.get("tag") or "1.0.0"), 1024 * 1024, [])
+    try:
+        if repo["format"] == "DOCKER":
+            ver = ingest_image(store, full, str(body.get("image") or "sample-app"), str(body.get("tag") or "latest"),
+                               kms_store=kms_store, headers=headers)
+        else:
+            ver = ingest_package(store, full, str(body.get("image") or "sample-package"),
+                                 str(body.get("tag") or "1.0.0"), 1024 * 1024, [],
+                                 kms_store=kms_store, headers=headers)
+    except CmekKeyUnavailable as e:
+        return {"ok": False, "code": "FailedPrecondition", "name": name, "message": str(e)}
     return {"ok": True, "name": name, "version": ver["name"]}
 
 
-_VERBS = ("getIamPolicy", "setIamPolicy", "testIamPermissions", "batchDelete")
+# pushSample is Vyomi-only (no real AR REST method creates package data — a real `docker
+# push`/`mvn deploy`/etc. does; this is the console's "Push sample image/package" quickstart
+# the module docstring calls out). It rides the same custom-method syntax as the real verbs.
+_VERBS = ("getIamPolicy", "setIamPolicy", "testIamPermissions", "batchDelete", "pushSample")
 
 
 # ── dispatch ──────────────────────────────────────────────────────────────
 def dispatch(store: ArtifactRegistryStore, method: str, path: str,
              query: dict | None = None, headers: dict | None = None,
-             body: bytes = b"") -> GcpResponse:
+             body: bytes = b"", kms_store=None) -> GcpResponse:
     query = query or {}
     method = method.upper()
     for k, v in (headers or {}).items():     # Java's HttpURLConnection has no PATCH: gax overrides POST
@@ -714,6 +1167,8 @@ def dispatch(store: ArtifactRegistryStore, method: str, path: str,
     if len(segs) < 2 or segs[0] != "projects":
         return _err(404, f"Unknown path: {path}")
     project = segs[1]
+    if len(segs) == 3 and segs[2] == "projectSettings":
+        return _project_settings(store, method, project, payload)
     if len(segs) == 2:
         return _err(404, f"Unknown path: {path}")
     if segs[2] != "locations":
@@ -736,7 +1191,7 @@ def dispatch(store: ArtifactRegistryStore, method: str, path: str,
         return _err(404, f"Unknown path: {path}")
     if len(segs) == 5:
         if method == "POST":
-            return _create_repo(store, project, loc, query, payload)
+            return _create_repo(store, project, loc, query, payload, kms_store=kms_store)
         if method == "GET":
             return _list_repos(store, project, loc, query)
         return _err(400, f"Unsupported method {method} on repositories.")
@@ -744,16 +1199,25 @@ def dispatch(store: ArtifactRegistryStore, method: str, path: str,
     rest = segs[6:]
     if not rest:
         if verb in ("getIamPolicy", "setIamPolicy", "testIamPermissions"):
-            return _iam(store, method, rname, verb, payload)
+            return _iam(store, method, rname, verb, payload, headers)
+        if verb == "pushSample":
+            res = console_push_sample(store, rname, payload, headers, kms_store=kms_store)
+            if not res["ok"]:
+                if res["code"] == "FailedPrecondition":
+                    return _err(400, res["message"], "FAILED_PRECONDITION")
+                if res["code"] == "PermissionDenied":
+                    return _err(403, res["message"])
+                return _err(404, f"Repository \"{rname}\" not found.")
+            return _json(200, {"name": res["name"], "version": res["version"]})
         if method == "GET":
             return _get_repo(store, rname)
         if method == "PATCH":
-            return _patch_repo(store, rname, query, payload)
+            return _patch_repo(store, rname, query, payload, headers)
         if method == "DELETE":
-            return _delete_repo(store, project, loc, rname)
+            return _delete_repo(store, project, loc, rname, headers)
         return _err(400, f"Unsupported method {method} on repository.")
     if rest[0] == "packages":
-        return _packages(store, method, rname, rest[1:], query, payload)
+        return _packages(store, method, rname, rest[1:], query, payload, headers)
     if rest[0] == "dockerImages":
         return _images(store, method, rname, rest[1:], query)
     if rest[0] == "files":

@@ -1,0 +1,86 @@
+{
+ "$doc": "Vyomi capability registry — Systems Manager. See s3.json for the contract.",
+ "ssm.parameter.crud": {
+  "title": "Parameters (create, read, update, delete, history, labels, tags)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_ssm_core.py"
+  ]
+ },
+ "ssm.parameter.securestring": {
+  "title": "SecureString parameters",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_ssm_core.py"
+  ]
+ },
+ "ssm.document.crud": {
+  "title": "Documents (create, update, versions, default version, delete)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_ssm_core.py"
+  ]
+ },
+ "ssm.runcommand": {
+  "title": "Run Command (SendCommand, command history, invocations)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Vyomi has no real SSM Agent or managed-instance fleet behind Run Command: every instance ID you target completes immediately as Success with no real command output, the same shape Run Command reports for an instance it can't actually reach."
+  ],
+  "tests": [
+   "tests/conformance/test_ssm_core.py"
+  ]
+ },
+ "ssm.statemanager.association": {
+  "title": "State Manager associations (create, list, delete)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "An association's status never advances past \"Pending\"/\"Creating\" — Vyomi has no agent to run the document on a schedule and report compliance back."
+  ],
+  "tests": [
+   "tests/conformance/test_ssm_core.py"
+  ]
+ },
+ "ssm.maintenancewindow.crud": {
+  "title": "Maintenance windows (create, update, enable/disable, targets, delete)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_ssm_core.py"
+  ]
+ },
+ "ssm.patchbaseline.crud": {
+  "title": "Patch baselines (create, approval rules, approved/rejected patches, delete)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Approval rules and approved/rejected patches are stored and returned exactly as configured, but never evaluated against real instance patch compliance — there is no patch scan/install behind a baseline."
+  ],
+  "tests": [
+   "tests/conformance/test_ssm_core.py"
+  ]
+ }
+}

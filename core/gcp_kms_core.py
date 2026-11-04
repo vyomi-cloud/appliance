@@ -18,16 +18,54 @@ Custom methods use the `:verb` suffix (`:encrypt`, `:decrypt`). `plaintext` /
 `ciphertext` fields are base64 per the REST wire. Errors use the Google shape
 `{"error":{"code","message","status"}}` (status e.g. NOT_FOUND / INVALID_ARGUMENT).
 
-Scope (v1 slice): keyRings create/get/list, cryptoKeys create/get/list,
-cryptoKeyVersions get/list, :encrypt, :decrypt. IAM policy, rotation, asymmetric
-keys, and key-version lifecycle reuse the same helpers and slot in next.
+Scope (v1 slice): keyRings create/get/list (location "-" aggregates across locations),
+cryptoKeys create/get/list/patch (location/keyRing "-" aggregates project-wide — the
+console's Key inventory), :encrypt, :decrypt (encrypt requires the primary version to
+be ENABLED; decrypt re-checks the state of the version that produced the ciphertext —
+see cryptoKeyVersions below), :updateCryptoKeyPrimaryVersion, :getIamPolicy/:setIamPolicy.
+cryptoKeyVersions get/list/create (each version is minted with its OWN key material, so
+rotation — create + make primary — is genuine new crypto, not bookkeeping over shared
+material), patch (enable/disable), :destroy, :restore.
+
+v4 C0b — the offline appliance serves Cloud KMS through THIS core (over
+core/appliance_stores.py) instead of the retired Vault-transit handlers in
+core/vault_routes.py. Legacy behaviours ported here (pinned by
+tests/conformance/test_c0b_legacy_parity_core.py): key labels / rotationPeriod /
+nextRotationTime (the classic console's key settings) via PATCH cryptoKey with an
+updateMask, ciphertextCrc32c / plaintextCrc32c (real CRC32C) on the wire, key rings
+that persist with the store, and an optional `store.legacy_decrypt(name, blob)` hook
+so ciphertext minted by the pre-v4 Vault-transit handler still decrypts.
+
+v4 DEPTH — IAM policy on a CryptoKey is a real, enforced policy (mirrors the
+per-secret enforcement in gcp_secretmanager_core.py): :encrypt/:decrypt and
+:setIamPolicy are gated by the caller's granted role (identified by the
+X-Cloudlearn-Principal header; an owner/root principal or an unconfigured
+policy always passes). get/list/:getIamPolicy stay open. Rotation and
+key-version lifecycle reuse the same helpers and slot in next.
+
+v4 GAP SWEEP (wave 5b) — Autokey: automatic per-resource key ring/key provisioning.
+The real AutokeyAdmin API configures a singleton AutokeyConfig on a FOLDER (state +
+a dedicated keyProject) and derives each project's "effective" config from its
+ancestry; Vyomi's Resource Manager core models projects only (no folders/orgs —
+see gcp_resourcemanager_core.py), so AutokeyConfig collapses to one singleton per
+PROJECT at `projects/{p}/autokeyConfig` (GET/PATCH) — same fields (keyProject,
+state), same enforcement, one less level of indirection. Once a project's config
+is ACTIVE, POSTing a KeyHandle (`projects/{p}/locations/{l}/keyHandles`) really
+provisions: it creates (or reuses) an `autokey-{location}` key ring in the
+configured key project and mints a brand-new CryptoKey in it with its own key
+material, through the SAME create-key path :encrypt/:decrypt/rotation already
+exercise — not bookkeeping. Creating a KeyHandle before Autokey is ACTIVE is
+refused (FAILED_PRECONDITION), matching the real API.
 """
 from __future__ import annotations
 
 import base64
 import json
+import os
+import re
+import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from core.kms_keystore import KeyStore
 
@@ -46,6 +84,10 @@ def _now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000000Z")
 
 
+def _future(seconds: int) -> str:
+    return (datetime.now(timezone.utc) + timedelta(seconds=seconds)).strftime("%Y-%m-%dT%H:%M:%S.000000Z")
+
+
 def _b64e(b: bytes) -> str:
     return base64.b64encode(b).decode()
 
@@ -62,8 +104,153 @@ def _json(status: int, obj: dict) -> GcpKmsResponse:
 # ── GCP key-ring bookkeeping (crypto-key material lives in the KeyStore seam) ─
 def _rings(store: KeyStore) -> dict:
     # Key rings hold no secret material, so they hang off the store instance
-    # (which is dedicated to this GCP KMS namespace) rather than the key map.
-    return store.__dict__.setdefault("gcp_key_rings", {})
+    # (which is dedicated to this GCP KMS namespace) rather than the key map. A
+    # store may expose its own `gcp_key_rings` mapping (the appliance's persisted
+    # state); otherwise a lazy instance dict is attached (persisted stores list it
+    # in their state attrs).
+    rings = getattr(store, "gcp_key_rings", None)
+    if rings is None:
+        rings = store.__dict__.setdefault("gcp_key_rings", {})
+    return rings
+
+
+# ── Autokey bookkeeping (same seam as _rings: attached to the store instance) ─
+def _autokey_configs(store: KeyStore) -> dict:
+    cfgs = getattr(store, "gcp_autokey_configs", None)
+    if cfgs is None:
+        cfgs = store.__dict__.setdefault("gcp_autokey_configs", {})
+    return cfgs
+
+
+def _key_handles(store: KeyStore) -> dict:
+    handles = getattr(store, "gcp_key_handles", None)
+    if handles is None:
+        handles = store.__dict__.setdefault("gcp_key_handles", {})
+    return handles
+
+
+_PROJECT_ID_RE = re.compile(r"^[a-z][a-z0-9-]{4,28}[a-z0-9]$")
+_RESOURCE_TYPE_SELECTOR_RE = re.compile(r"^[a-z][a-z0-9.-]*\.googleapis\.com/[A-Za-z][A-Za-z0-9]*$")
+
+
+def _autokey_config_view(name: str, cfg: dict) -> dict:
+    return {"name": name, "keyProject": cfg.get("keyProject", ""), "state": cfg.get("state", "DISABLED")}
+
+
+def _key_handle_view(name: str, h: dict) -> dict:
+    view = {"name": name, "resourceTypeSelector": h.get("resourceTypeSelector", ""), "createTime": h.get("createTime", _now())}
+    if h.get("kmsKey"):
+        view["kmsKey"] = h["kmsKey"]
+    return view
+
+
+def _autokey_provision(store: KeyStore, key_project: str, location: str) -> str:
+    """Real provisioning: ensure the project's Autokey key ring exists, then mint a
+    brand-new CryptoKey with its OWN key material in it — the exact same steps
+    CreateCryptoKey takes over the wire, just invoked internally so a KeyHandle's
+    kmsKey is backed by a genuine, immediately usable key (not a stored reference)."""
+    rings = _rings(store)
+    ring_name = f"projects/{key_project}/locations/{location}/keyRings/autokey-{location}"
+    if ring_name not in rings:
+        rings[ring_name] = {"createTime": _now()}
+    key_name = f"{ring_name}/cryptoKeys/autokey-{uuid.uuid4().hex[:16]}"
+    now = _now()
+    meta = {
+        "purpose": "ENCRYPT_DECRYPT",
+        "algorithm": "GOOGLE_SYMMETRIC_ENCRYPTION",
+        "createTime": now,
+        "primary": "1",
+        "versions": {"1": {"state": "ENABLED", "createTime": now}},
+    }
+    material = store.engine.new_key_material()
+    store.put_key(key_name, meta, material)
+    store.material[_version_name(key_name, "1")] = material
+    return key_name
+
+
+def _autokey_config_dispatch(store: KeyStore, project: str, method: str, payload: dict, query: dict) -> GcpKmsResponse:
+    name = f"projects/{project}/autokeyConfig"
+    cfgs = _autokey_configs(store)
+    cfg = cfgs.setdefault(name, {"keyProject": "", "state": "DISABLED"})
+    if method == "GET":
+        return _json(200, _autokey_config_view(name, cfg))
+    if method == "PATCH":
+        mask = [m for m in str(query.get("updateMask") or query.get("update_mask") or "").split(",") if m]
+        fields = mask or [f for f in ("keyProject", "state") if f in payload]
+        if "keyProject" in fields:
+            kp = str(payload.get("keyProject") or "").strip()
+            kp = kp.rsplit("/", 1)[-1] if kp else kp
+            if kp and not _PROJECT_ID_RE.match(kp):
+                return _err(400, "INVALID_ARGUMENT", "keyProject must be a valid project ID.")
+            cfg["keyProject"] = kp
+        if "state" in fields:
+            state = str(payload.get("state") or "").upper()
+            if state not in ("ACTIVE", "DISABLED"):
+                return _err(400, "INVALID_ARGUMENT", "state must be ACTIVE or DISABLED.")
+            if state == "ACTIVE" and not cfg.get("keyProject"):
+                return _err(400, "FAILED_PRECONDITION", "Autokey requires a keyProject before it can be set to ACTIVE.")
+            cfg["state"] = state
+        store.persist()
+        return _json(200, _autokey_config_view(name, cfg))
+    return _err(400, "INVALID_ARGUMENT", f"Unsupported method {method} on autokeyConfig")
+
+
+def _key_handles_dispatch(store: KeyStore, segs: list, verb: str | None, method: str, payload: dict, query: dict) -> GcpKmsResponse:
+    project, location = segs[1], segs[3]
+    handles = _key_handles(store)
+    if len(segs) == 5:   # .../keyHandles collection
+        if method == "POST":
+            cfg = _autokey_configs(store).get(f"projects/{project}/autokeyConfig") or {}
+            if cfg.get("state") != "ACTIVE":
+                return _err(400, "FAILED_PRECONDITION",
+                            f"Autokey is not enabled for project {project}. Set up Autokey before creating a key handle.")
+            selector = str(payload.get("resourceTypeSelector") or "").strip()
+            if not _RESOURCE_TYPE_SELECTOR_RE.match(selector):
+                return _err(400, "INVALID_ARGUMENT",
+                            "resourceTypeSelector must look like '<service>.googleapis.com/<Type>'.")
+            hid = str(query.get("keyHandleId") or payload.get("keyHandleId") or "").strip() or f"autokey-{uuid.uuid4().hex[:16]}"
+            name = f"projects/{project}/locations/{location}/keyHandles/{hid}"
+            if name in handles:
+                return _err(409, "ALREADY_EXISTS", f"KeyHandle {name} already exists.")
+            kms_key = _autokey_provision(store, cfg["keyProject"], location)
+            handles[name] = {"resourceTypeSelector": selector, "createTime": _now(), "kmsKey": kms_key}
+            store.persist()
+            opname = f"projects/{project}/locations/{location}/operations/autokey-{uuid.uuid4().hex[:12]}"
+            return _json(200, {"name": opname, "done": True,
+                                "response": {"@type": "type.googleapis.com/google.cloud.kms.v1.KeyHandle",
+                                             **_key_handle_view(name, handles[name])}})
+        if method == "GET":
+            items = [_key_handle_view(n, h) for n, h in sorted(handles.items())
+                     if n.startswith(f"projects/{project}/locations/") and (location == "-" or n.split("/")[3] == location)]
+            return _json(200, {"keyHandles": items})
+        return _err(400, "INVALID_ARGUMENT", f"Unsupported method {method} on keyHandles")
+    if len(segs) == 6 and method == "GET" and not verb:   # single keyHandle
+        name = "/".join(segs)
+        if name not in handles:
+            return _err(404, "NOT_FOUND", f"KeyHandle {name} not found.")
+        return _json(200, _key_handle_view(name, handles[name]))
+    return _err(400, "INVALID_ARGUMENT", "Unsupported request on keyHandles")
+
+
+# ── CRC32C (Castagnoli) — the checksum the Cloud KMS wire carries ──────────
+def _crc32c_table() -> list:
+    tbl = []
+    for i in range(256):
+        c = i
+        for _ in range(8):
+            c = (c >> 1) ^ 0x82F63B78 if c & 1 else c >> 1
+        tbl.append(c)
+    return tbl
+
+
+_CRC32C = _crc32c_table()
+
+
+def crc32c(data: bytes) -> int:
+    c = 0xFFFFFFFF
+    for b in data:
+        c = _CRC32C[(c ^ b) & 0xFF] ^ (c >> 8)
+    return c ^ 0xFFFFFFFF
 
 
 # ── resource views ─────────────────────────────────────────────────────────
@@ -76,7 +263,7 @@ def _version_name(key_name: str, ver: str) -> str:
 
 
 def _version_view(key_name: str, ver: str, entry: dict) -> dict:
-    return {
+    view = {
         "name": _version_name(key_name, ver),
         "state": entry.get("state", "ENABLED"),
         "protectionLevel": entry.get("protectionLevel", "SOFTWARE"),
@@ -85,23 +272,153 @@ def _version_view(key_name: str, ver: str, entry: dict) -> dict:
         "generateTime": entry.get("createTime", _now()),
         **{k: entry[k] for k in ("destroyTime", "destroyEventTime") if entry.get(k)},
     }
+    if entry.get("destroyTime"):
+        view["destroyTime"] = entry["destroyTime"]
+    if entry.get("destroyEventTime"):
+        view["destroyEventTime"] = entry["destroyEventTime"]
+    return view
 
 
 def _crypto_key_view(store: KeyStore, name: str) -> dict:
     meta = store.get_key(name) or {}
     primary = str(meta.get("primary", "1"))
     versions = meta.get("versions", {primary: {}})
-    return {
+    view = {
         "name": name,
         "primary": _version_view(name, primary, versions.get(primary, {})),
         **{k: meta[k] for k in ("rotationPeriod", "nextRotationTime", "labels") if meta.get(k)},
-        "purpose": meta.get("purpose", "ENCRYPT_DECRYPT"),
+        "purpose": _enum(meta.get("purpose"), _PURPOSES, "ENCRYPT_DECRYPT"),
         "createTime": meta.get("createTime", _now()),
         "versionTemplate": {
             "protectionLevel": "SOFTWARE",
-            "algorithm": meta.get("algorithm", "GOOGLE_SYMMETRIC_ENCRYPTION"),
+            "algorithm": _enum(meta.get("algorithm"), _ALGORITHMS, "GOOGLE_SYMMETRIC_ENCRYPTION"),
         },
     }
+    if meta.get("labels"):
+        view["labels"] = dict(meta["labels"])
+    if meta.get("rotationPeriod"):
+        view["rotationPeriod"] = meta["rotationPeriod"]
+    if meta.get("nextRotationTime"):
+        view["nextRotationTime"] = meta["nextRotationTime"]
+    view["destroyScheduledDuration"] = meta.get("destroyScheduledDuration", "86400s")
+    return view
+
+
+def _default_policy() -> dict:
+    return {"version": 1, "etag": _b64e(b"0"), "bindings": []}
+
+
+# ── IAM on a CryptoKey: a real, enforced policy (v4 DEPTH — was store-only) ──
+# Mirrors the per-secret enforcement in gcp_secretmanager_core.py: owners/root bypass,
+# an unconfigured policy denies nothing (so existing traffic keeps working), and only
+# the "use the key material" + "change who can" operations are gated — get/list/
+# getIamPolicy stay open, matching the real API's least-surprise default.
+_OWNER_PRINCIPALS = {"", "root", "owner", "admin"}
+
+_ROLE_PERMS: dict[str, list[str]] = {
+    "roles/cloudkms.admin": [
+        "cloudkms.cryptoKeys.get", "cloudkms.cryptoKeys.list", "cloudkms.cryptoKeys.update",
+        "cloudkms.cryptoKeys.setIamPolicy",
+        "cloudkms.cryptoKeyVersions.get", "cloudkms.cryptoKeyVersions.list",
+        "cloudkms.cryptoKeyVersions.create", "cloudkms.cryptoKeyVersions.update",
+        "cloudkms.cryptoKeyVersions.destroy", "cloudkms.cryptoKeyVersions.restore",
+    ],
+    "roles/cloudkms.cryptoKeyEncrypterDecrypter": [
+        "cloudkms.cryptoKeyVersions.useToEncrypt", "cloudkms.cryptoKeyVersions.useToDecrypt",
+        "cloudkms.cryptoKeys.get",
+    ],
+    "roles/cloudkms.cryptoKeyEncrypter": ["cloudkms.cryptoKeyVersions.useToEncrypt", "cloudkms.cryptoKeys.get"],
+    "roles/cloudkms.cryptoKeyDecrypter": ["cloudkms.cryptoKeyVersions.useToDecrypt", "cloudkms.cryptoKeys.get"],
+    "roles/cloudkms.cryptoKeyViewer": [
+        "cloudkms.cryptoKeys.get", "cloudkms.cryptoKeys.list",
+        "cloudkms.cryptoKeyVersions.get", "cloudkms.cryptoKeyVersions.list",
+    ],
+}
+
+
+def _header(headers: dict | None, name: str) -> str:
+    for k, v in (headers or {}).items():
+        if k.lower() == name:
+            return str(v)
+    return ""
+
+
+def _principal(headers: dict | None) -> str:
+    return _header(headers, "x-cloudlearn-principal").strip().lower()
+
+
+def _granted(meta: dict, principal: str) -> set[str]:
+    perms: set[str] = set()
+    for b in (meta.get("iamPolicy") or {}).get("bindings") or []:
+        role = str(b.get("role") or "")
+        for m in b.get("members") or []:
+            ms = str(m)
+            if ms in ("allUsers", "allAuthenticatedUsers") or ms.split(":", 1)[-1].lower() == principal:
+                perms.update(_ROLE_PERMS.get(role, []))
+                break
+    return perms
+
+
+def _authorized(meta: dict, principal: str, permission: str) -> bool:
+    if not principal or principal in _OWNER_PRINCIPALS:
+        return True
+    bindings = (meta.get("iamPolicy") or {}).get("bindings") or []
+    if not bindings:
+        return True   # no policy configured yet: nothing to deny against
+    return permission in _granted(meta, principal)
+
+
+def _require(meta: dict, name: str, headers, permission: str) -> GcpKmsResponse | None:
+    principal = _principal(headers)
+    if _authorized(meta, principal, permission):
+        return None
+    return _err(403, "PERMISSION_DENIED",
+                f"Permission '{permission}' denied on resource '{name}' (or it may not exist).")
+
+
+# google-cloud-* REST clients send enums as numbers (`$alt=json;enum-encoding=int`).
+_PURPOSES = {1: "ENCRYPT_DECRYPT", 5: "ASYMMETRIC_SIGN", 6: "ASYMMETRIC_DECRYPT",
+             7: "RAW_ENCRYPT_DECRYPT", 9: "MAC"}
+_ALGORITHMS = {1: "GOOGLE_SYMMETRIC_ENCRYPTION"}
+
+
+def _enum(value, table: dict, default: str) -> str:
+    if value in (None, "", 0, "0"):
+        return default
+    if isinstance(value, int) or (isinstance(value, str) and value.isdigit()):
+        return table.get(int(value), str(value))
+    return str(value)
+
+
+_MUTABLE = {"labels": "labels", "rotation_period": "rotationPeriod", "rotationPeriod": "rotationPeriod",
+            "next_rotation_time": "nextRotationTime", "nextRotationTime": "nextRotationTime",
+            "destroy_scheduled_duration": "destroyScheduledDuration", "destroyScheduledDuration": "destroyScheduledDuration"}
+
+
+def _duration_seconds(d: str | None, default: int = 86400) -> int:
+    """Parse a protobuf Duration string ("2592000s") used on the Cloud KMS wire."""
+    try:
+        return int(str(d).rstrip("s")) if d else default
+    except (TypeError, ValueError):
+        return default
+
+
+def _apply_settings(meta: dict, payload: dict, mask: list) -> str | None:
+    """Apply the mutable CryptoKey fields named by `mask` (all present ones when
+    empty). Returns an error message for an unsupported mask path."""
+    fields = mask or [k for k in ("labels", "rotationPeriod", "nextRotationTime", "destroyScheduledDuration") if k in payload]
+    for f in fields:
+        attr = _MUTABLE.get(f.strip())
+        if not attr:
+            return f"Unsupported update_mask path: {f}"
+        val = payload.get(attr)
+        if attr == "labels":
+            meta["labels"] = {str(k): str(v) for k, v in (val or {}).items()} if isinstance(val, dict) else {}
+        elif val:
+            meta[attr] = str(val)
+        else:
+            meta.pop(attr, None)
+    return None
 
 
 # ── key versions, rotation, primary, import jobs (shared with the offline appliance) ──
@@ -466,6 +783,12 @@ def dispatch(store: KeyStore, method: str, path: str,
     except Exception:
         payload = {}
 
+    # ── Autokey: projects/{p}/autokeyConfig and projects/{p}/locations/{l}/keyHandles[/{id}] ──
+    if len(segs) == 3 and segs[0] == "projects" and segs[2] == "autokeyConfig" and not verb:
+        return _autokey_config_dispatch(store, segs[1], method, payload, query)
+    if len(segs) >= 5 and segs[0] == "projects" and segs[2] == "locations" and segs[4] == "keyHandles":
+        return _key_handles_dispatch(store, segs, verb, method, payload, query)
+
     if len(segs) < 5 or segs[0] != "projects" or segs[2] != "locations" or segs[4] != "keyRings":
         return _err(404, "NOT_FOUND", f"Unknown resource path: {path}")
 
@@ -482,10 +805,12 @@ def dispatch(store: KeyStore, method: str, path: str,
             if name in rings:
                 return _err(409, "ALREADY_EXISTS", f"KeyRing {name} already exists.")
             rings[name] = {"createTime": _now()}
+            store.persist()
             return _json(200, _key_ring_view(name, rings[name]))
         if method == "GET":
+            pseg = parent.split("/")   # projects/{p}/locations/{l-or-"-"}/keyRings
             items = [_key_ring_view(n, e) for n, e in sorted(rings.items())
-                     if n.startswith(parent + "/") and n.count("/") == 5]
+                     if n.count("/") == 5 and all(p == "-" or p == n.split("/")[i] for i, p in enumerate(pseg))]
             return _json(200, {"keyRings": items})
         return _err(400, "INVALID_ARGUMENT", f"Unsupported method {method} on keyRings")
 
@@ -525,20 +850,25 @@ def dispatch(store: KeyStore, method: str, path: str,
             if store.key_exists(name):
                 return _err(409, "ALREADY_EXISTS", f"CryptoKey {name} already exists.")
             now = _now()
-            store.put_key(name, {
-                "purpose": str(payload.get("purpose", "ENCRYPT_DECRYPT")),
-                "algorithm": (payload.get("versionTemplate", {}) or {}).get(
-                    "algorithm", "GOOGLE_SYMMETRIC_ENCRYPTION"),
+            meta = {
+                "purpose": _enum(payload.get("purpose"), _PURPOSES, "ENCRYPT_DECRYPT"),
+                "algorithm": _enum((payload.get("versionTemplate", {}) or {}).get("algorithm"),
+                                   _ALGORITHMS, "GOOGLE_SYMMETRIC_ENCRYPTION"),
                 "createTime": now,
                 "primary": "1",
                 "versions": {"1": {"state": "ENABLED", "createTime": now}},
-            }, store.engine.new_key_material())
+            }
+            _apply_settings(meta, payload, [])
+            material = store.engine.new_key_material()
+            store.put_key(name, meta, material)
+            store.material[_version_name(name, "1")] = material
             store.persist()
             return _json(200, _crypto_key_view(store, name))
         if method == "GET":
+            pseg = ring_name.split("/")   # projects/{p}/locations/{l-or-"-"}/keyRings/{k-or-"-"}
             items = [_crypto_key_view(store, n) for n in store.key_ids()
-                     if n.startswith(ring_name + "/cryptoKeys/")
-                     and n.count("/") == 7]
+                     if n.count("/") == 7 and n.split("/")[6] == "cryptoKeys"
+                     and all(p == "-" or p == n.split("/")[i] for i, p in enumerate(pseg))]
             return _json(200, {"cryptoKeys": items})
         return _err(400, "INVALID_ARGUMENT", f"Unsupported method {method} on cryptoKeys")
 
@@ -546,19 +876,43 @@ def dispatch(store: KeyStore, method: str, path: str,
     if len(segs) == 8:
         name = "/".join(segs)
         if verb == "encrypt":
-            return _encrypt(store, name, payload)
+            return _encrypt(store, name, payload, headers)
         if verb == "decrypt":
-            return _decrypt(store, name, payload)
-        if not store.key_exists(name):
-            return _err(404, "NOT_FOUND", f"CryptoKey {name} not found.")
-        meta = store.get_key(name)
-        if verb == "updatePrimaryVersion" and method == "POST":
-            try:
-                set_primary(meta, str(payload.get("cryptoKeyVersionId") or ""))
-            except KmsTabError as e:
-                return _err(e.status, e.gcp_status, e.message)
+            return _decrypt(store, name, payload, headers)
+        if verb in ("updateCryptoKeyPrimaryVersion", "updatePrimaryVersion"):
+            if not store.key_exists(name):
+                return _err(404, "NOT_FOUND", f"CryptoKey {name} not found.")
+            meta = store.get_key(name)
+            ver = str(payload.get("cryptoKeyVersionId") or "")
+            if ver not in meta.get("versions", {}):
+                return _err(400, "INVALID_ARGUMENT", f"CryptoKeyVersion {ver} not found.")
+            meta["primary"] = ver
+            store.put_key(name, meta, store.get_material(name))
             store.persist()
             return _json(200, _crypto_key_view(store, name))
+        if verb == "getIamPolicy":
+            if not store.key_exists(name):
+                return _err(404, "NOT_FOUND", f"CryptoKey {name} not found.")
+            meta = store.get_key(name)
+            return _json(200, meta.get("iamPolicy") or _default_policy())
+        if verb == "setIamPolicy":
+            if not store.key_exists(name):
+                return _err(404, "NOT_FOUND", f"CryptoKey {name} not found.")
+            meta = store.get_key(name)
+            denied = _require(meta, name, headers, "cloudkms.cryptoKeys.setIamPolicy")
+            if denied:
+                return denied
+            policy = dict(payload.get("policy") or {})
+            for b in policy.get("bindings") or []:
+                if not str(b.get("role") or "") or not isinstance(b.get("members"), list) or not b["members"]:
+                    return _err(400, "INVALID_ARGUMENT",
+                                "Each policy.bindings[] entry requires a role and a non-empty members list.")
+            policy.setdefault("bindings", [])
+            policy.setdefault("etag", _b64e(os.urandom(8)))
+            meta["iamPolicy"] = policy
+            store.put_key(name, meta, store.get_material(name))
+            store.persist()
+            return _json(200, policy)
         if verb:
             return _err(400, "INVALID_ARGUMENT", f"Unknown method :{verb}")
         if method == "GET":
@@ -583,23 +937,42 @@ def dispatch(store: KeyStore, method: str, path: str,
                 return _err(e.status, e.gcp_status, e.message)
             store.persist()
             return _json(200, _crypto_key_view(store, name))
+        if method == "PATCH":                         # UpdateCryptoKey (labels / rotation)
+            if not store.key_exists(name):
+                return _err(404, "NOT_FOUND", f"CryptoKey {name} not found.")
+            mask = [m for m in str(query.get("updateMask") or query.get("update_mask") or "").split(",") if m]
+            meta = store.get_key(name)
+            bad = _apply_settings(meta, payload, mask)
+            if bad:
+                return _err(400, "INVALID_ARGUMENT", bad)
+            store.put_key(name, meta, store.get_material(name))
+            store.persist()
+            return _json(200, _crypto_key_view(store, name))
         return _err(400, "INVALID_ARGUMENT", f"Unsupported method {method} on cryptoKey")
 
-    # ── cryptoKeyVersions: .../cryptoKeys/{k}/cryptoKeyVersions[/{v}] ───────
+    # ── cryptoKeyVersions: .../cryptoKeys/{k}/cryptoKeyVersions[/{v}[:verb]] ─
     if len(segs) >= 9 and segs[8] == "cryptoKeyVersions":
         key_name = "/".join(segs[:8])
         if not store.key_exists(key_name):
             return _err(404, "NOT_FOUND", f"CryptoKey {key_name} not found.")
         meta = store.get_key(key_name) or {}
         versions = meta.get("versions", {})
+
+        def _save() -> None:
+            meta["versions"] = versions
+            store.put_key(key_name, meta, store.get_material(key_name))
+            store.persist()
+
         if len(segs) == 9 and method == "GET":       # list versions
             items = [_version_view(key_name, v, versions[v]) for v in sorted(versions, key=int)]
             return _json(200, {"cryptoKeyVersions": items})
-        if len(segs) == 9 and method == "POST":      # create a version (not primary until promoted)
-            ver = _new_version(store, key_name, meta)
-            store.persist()
-            return _json(200, _version_view(key_name, ver, versions[ver]))
-        if len(segs) == 10:
+        if len(segs) == 9 and method == "POST":      # create a new version with its OWN key material
+            next_id = str(max((int(v) for v in versions), default=0) + 1)
+            versions[next_id] = {"state": "ENABLED", "createTime": _now()}
+            store.material[_version_name(key_name, next_id)] = store.engine.new_key_material()
+            _save()
+            return _json(200, _version_view(key_name, next_id, versions[next_id]))
+        if len(segs) == 10 and method == "GET" and not verb:      # get one version
             ver = segs[9]
             if ver not in versions:
                 return _err(404, "NOT_FOUND", f"CryptoKeyVersion {ver} not found.")
@@ -619,58 +992,119 @@ def dispatch(store: KeyStore, method: str, path: str,
                 return _err(e.status, e.gcp_status, e.message)
             store.persist()
             return _json(200, _version_view(key_name, ver, versions[ver]))
+        if len(segs) == 10 and method == "PATCH" and not verb:    # enable / disable
+            ver = segs[9]
+            if ver not in versions:
+                return _err(404, "NOT_FOUND", f"CryptoKeyVersion {ver} not found.")
+            state = payload.get("state")
+            if state not in ("ENABLED", "DISABLED"):
+                return _err(400, "INVALID_ARGUMENT", "state must be ENABLED or DISABLED.")
+            if versions[ver].get("state") not in ("ENABLED", "DISABLED"):
+                return _err(400, "FAILED_PRECONDITION",
+                            f"CryptoKeyVersion {ver} is in state {versions[ver].get('state')} and cannot be updated.")
+            versions[ver]["state"] = state
+            _save()
+            return _json(200, _version_view(key_name, ver, versions[ver]))
+        if len(segs) == 10 and verb == "destroy":
+            ver = segs[9]
+            if ver not in versions:
+                return _err(404, "NOT_FOUND", f"CryptoKeyVersion {ver} not found.")
+            if versions[ver].get("state") in ("DESTROYED", "DESTROY_SCHEDULED"):
+                return _err(400, "FAILED_PRECONDITION", f"CryptoKeyVersion {ver} is already scheduled for destruction.")
+            versions[ver]["state"] = "DESTROY_SCHEDULED"
+            versions[ver]["destroyTime"] = _future(_duration_seconds(meta.get("destroyScheduledDuration")))
+            _save()
+            return _json(200, _version_view(key_name, ver, versions[ver]))
+        if len(segs) == 10 and verb == "restore":
+            ver = segs[9]
+            if ver not in versions:
+                return _err(404, "NOT_FOUND", f"CryptoKeyVersion {ver} not found.")
+            if versions[ver].get("state") != "DESTROY_SCHEDULED":
+                return _err(400, "FAILED_PRECONDITION", f"CryptoKeyVersion {ver} is not scheduled for destruction.")
+            versions[ver]["state"] = "DISABLED"
+            versions[ver].pop("destroyTime", None)
+            _save()
+            return _json(200, _version_view(key_name, ver, versions[ver]))
         return _err(400, "INVALID_ARGUMENT", f"Unsupported request on cryptoKeyVersions")
 
     return _err(404, "NOT_FOUND", f"Unknown resource path: {path}")
 
 
 # ── crypto operations (reuse the AWS KMS engine + key material) ─────────────
-def _encrypt(store: KeyStore, name: str, payload: dict) -> GcpKmsResponse:
+# Every CryptoKeyVersion gets its OWN key material (minted on create, above), so
+# rotation is real: the new primary encrypts with genuinely different material, not
+# the same bytes under a new label. Encrypt embeds the *version* that did the work
+# (not just the CryptoKey) so Decrypt can re-check that specific version's state —
+# the one piece symmetric Encrypt/Decrypt needs to enforce lifecycle correctly.
+def _encrypt(store: KeyStore, name: str, payload: dict, headers: dict | None = None) -> GcpKmsResponse:
     if not store.key_exists(name):
         return _err(404, "NOT_FOUND", f"CryptoKey {name} not found.")
+    meta = store.get_key(name) or {}
+    denied = _require(meta, name, headers, "cloudkms.cryptoKeyVersions.useToEncrypt")
+    if denied:
+        return denied
+    primary = str(meta.get("primary", "1"))
+    if meta.get("versions", {}).get(primary, {}).get("state", "ENABLED") != "ENABLED":
+        return _err(400, "FAILED_PRECONDITION",
+                    f"CryptoKeyVersion {name}/cryptoKeyVersions/{primary} is not enabled.")
     try:
         plaintext = base64.b64decode(payload.get("plaintext", "") or "")
     except Exception:
         return _err(400, "INVALID_ARGUMENT", "plaintext must be valid base64.")
     if not plaintext:
         return _err(400, "INVALID_ARGUMENT", "plaintext must not be empty.")
-    meta = store.get_key(name) or {}
-    primary = str(meta.get("primary", "1"))
-    pv = (meta.get("versions") or {}).get(primary, {})
-    if pv.get("state", "ENABLED") != "ENABLED":
-        return _err(400, "FAILED_PRECONDITION",
-                    f"The primary version {_version_name(name, primary)} is not enabled ({pv.get('state')}).")
-    kid = name if primary == "1" else _version_name(name, primary)   # v1 ciphertexts keep their original shape
-    blob = store.engine.encrypt(_version_material(store, name, primary), kid, plaintext)
-    return _json(200, {
-        "name": name,
+    vname = _version_name(name, primary)
+    material = store.get_material(vname) or store.get_material(name)
+    blob = store.engine.encrypt(material, vname, plaintext)
+    out = {
+        "name": vname,
         "ciphertext": _b64e(blob),
-        "ciphertextCrc32c": None,
+        "ciphertextCrc32c": str(crc32c(blob)),
         "protectionLevel": "SOFTWARE",
-    })
+    }
+    if payload.get("plaintextCrc32c") not in (None, ""):
+        if str(payload["plaintextCrc32c"]) != str(crc32c(plaintext)):
+            return _err(400, "INVALID_ARGUMENT", "The checksum in field plaintext_crc32c did not match the data in field plaintext.")
+        out["verifiedPlaintextCrc32c"] = True
+    return _json(200, out)
 
 
-def _decrypt(store: KeyStore, name: str, payload: dict) -> GcpKmsResponse:
+def _decrypt(store: KeyStore, name: str, payload: dict, headers: dict | None = None) -> GcpKmsResponse:
     if not store.key_exists(name):
         return _err(404, "NOT_FOUND", f"CryptoKey {name} not found.")
+    denied = _require(store.get_key(name) or {}, name, headers, "cloudkms.cryptoKeyVersions.useToDecrypt")
+    if denied:
+        return denied
     try:
         blob = base64.b64decode(payload.get("ciphertext", "") or "")
     except Exception:
         return _err(400, "INVALID_ARGUMENT", "ciphertext must be valid base64.")
-    # The ciphertext self-identifies its crypto key; it must match this resource.
+    if payload.get("ciphertextCrc32c") not in (None, "") and str(payload["ciphertextCrc32c"]) != str(crc32c(blob)):
+        return _err(400, "INVALID_ARGUMENT", "The checksum in field ciphertext_crc32c did not match the data in field ciphertext.")
+    # The ciphertext self-identifies its CryptoKeyVersion; it must belong to this CryptoKey.
     embedded = store.engine.key_id_in(blob)
-    ver = "1"
-    if embedded and embedded.startswith(name + "/cryptoKeyVersions/"):
-        ver = embedded.rsplit("/", 1)[-1]
-    elif embedded and embedded != name:
+    if not embedded and hasattr(store, "legacy_decrypt"):
+        # pre-v4 ciphertext (the appliance's retired Vault-transit handler)
+        legacy = store.legacy_decrypt(name, blob)
+        if legacy is not None:
+            return _json(200, {"plaintext": _b64e(legacy), "plaintextCrc32c": str(crc32c(legacy)),
+                               "usedPrimary": True, "protectionLevel": "SOFTWARE"})
+    key_part, _, ver_part = (embedded or "").partition("/cryptoKeyVersions/")
+    if embedded and key_part != name:
         return _err(400, "INVALID_ARGUMENT",
                     "Decryption failed: the ciphertext is for a different CryptoKey.")
-    v = ((store.get_key(name) or {}).get("versions") or {}).get(ver, {})
-    if v.get("state", "ENABLED") != "ENABLED":
-        return _err(400, "FAILED_PRECONDITION",
-                    f"{_version_name(name, ver)} is not enabled, current state is: {v.get('state')}.")
+    material = store.get_material(name)
+    meta = store.get_key(name) or {}
+    if ver_part:
+        vstate = (meta.get("versions", {}).get(ver_part) or {}).get("state", "ENABLED")
+        if vstate != "ENABLED":
+            return _err(400, "FAILED_PRECONDITION",
+                        f"Decryption failed: CryptoKeyVersion {name}/cryptoKeyVersions/{ver_part} is not enabled.")
+        material = store.get_material(_version_name(name, ver_part)) or material
     try:
-        plaintext = store.engine.decrypt(_version_material(store, name, ver), blob)
+        plaintext = store.engine.decrypt(material, blob)
     except Exception:
         return _err(400, "INVALID_ARGUMENT", "Decryption failed: the ciphertext is invalid.")
-    return _json(200, {"plaintext": _b64e(plaintext), "protectionLevel": "SOFTWARE"})
+    used_primary = (ver_part or str(meta.get("primary", "1"))) == str(meta.get("primary", "1"))
+    return _json(200, {"plaintext": _b64e(plaintext), "plaintextCrc32c": str(crc32c(plaintext)),
+                       "usedPrimary": used_primary, "protectionLevel": "SOFTWARE"})

@@ -67,11 +67,13 @@ class SqliteStateBackend:
 
     def __init__(self, path: str = ":memory:"):
         self.path = path
-        # A single shared connection so `:memory:` persists across save/load. The
-        # appliance calls the cores from FastAPI's worker threads, so the connection
-        # is shared across threads and serialized by a lock.
-        self._conn = sqlite3.connect(path, check_same_thread=False)
+        # A single shared connection so `:memory:` persists across save/load. Shared across
+        # threads (the appliance serves sync routes from a threadpool, and cross-service runtime
+        # links — e.g. DynamoDB's per-op CloudWatch metrics — write from whichever thread serves
+        # the request), so every use is serialized by a lock.
+        import threading
         self._lock = threading.Lock()
+        self._conn = sqlite3.connect(path, check_same_thread=False)
         self._conn.execute(
             "CREATE TABLE IF NOT EXISTS store_state (id TEXT PRIMARY KEY, blob TEXT)")
         self._conn.commit()
@@ -123,7 +125,7 @@ class PersistentKvStore(_PersistentMixin, InMemoryKvStore):
 
 
 class PersistentNoSqlStore(_PersistentMixin, InMemoryNoSqlStore):
-    _STATE_ATTRS = ("tables",)
+    _STATE_ATTRS = ("tables", "backups", "exports", "imports")
 
     def __init__(self, backend: SqliteStateBackend, store_id: str = "nosql"):
         InMemoryNoSqlStore.__init__(self)
@@ -131,7 +133,10 @@ class PersistentNoSqlStore(_PersistentMixin, InMemoryNoSqlStore):
 
 
 class PersistentMessagingStore(_PersistentMixin, InMemoryMessagingStore):
-    _STATE_ATTRS = ("queues", "topics")
+    # + the SNS core's non-topic state and the EventBridge core's lazy namespaces
+    # (buses / rules / archives / replays live on the SAME store as the queues).
+    _STATE_ATTRS = ("queues", "topics", "sns", "event_buses", "event_rules", "event_archives",
+                    "event_replays", "sqs_move_tasks")
 
     def __init__(self, backend: SqliteStateBackend, store_id: str = "messaging"):
         InMemoryMessagingStore.__init__(self)
@@ -148,7 +153,8 @@ class PersistentCloudWatchStore(_PersistentMixin, CloudWatchStore):
 
 class PersistentKeyStore(_PersistentMixin, InMemoryKeyStore):
     # engine is stateless logic (not persisted); keys/material/aliases are state.
-    _STATE_ATTRS = ("keys", "material", "aliases")
+    _STATE_ATTRS = ("keys", "material", "aliases", "gcp_key_rings",   # + the GCP KMS key rings
+                    "custom_key_stores")                             # + AWS KMS custom key stores
 
     def __init__(self, backend: SqliteStateBackend, store_id: str = "kms"):
         InMemoryKeyStore.__init__(self)
@@ -167,8 +173,9 @@ class PersistentIamStore(_PersistentMixin, InMemoryIamStore):
 
 class PersistentObjectStore(_PersistentMixin, InMemoryObjectStore):
     """The object seam mutates self.objects directly + calls mirror_put/delete
-    (it does NOT call persist()), so we write-through on the seam methods."""
-    _STATE_ATTRS = ("buckets", "objects")
+    (v4 C0: the S3/GCS cores now also call persist() after bucket-config and other
+    mutations), so we write-through on the seam methods AND on persist()."""
+    _STATE_ATTRS = ("buckets", "objects", "_multipart_uploads")
 
     def __init__(self, backend: SqliteStateBackend, store_id: str = "objects"):
         InMemoryObjectStore.__init__(self)
@@ -196,8 +203,8 @@ class PersistentAzureBlobStore(_PersistentMixin, AzureBlobStore):
         AzureBlobStore.__init__(self)
         self._pinit(backend, store_id)
 
-    def create_container(self, name: str) -> None:
-        super().create_container(name)
+    def create_container(self, name: str, public_access: str = "") -> None:
+        super().create_container(name, public_access)
         self._save()
 
     def delete_container(self, name: str) -> None:
@@ -206,20 +213,22 @@ class PersistentAzureBlobStore(_PersistentMixin, AzureBlobStore):
 
 
 class PersistentFirestoreStore(_PersistentMixin, FirestoreStore):
-    """Durable Firestore (v2.5.0): the FirestoreStore has clean put/delete methods,
-    so we persist on those — no core edits needed."""
-    _STATE_ATTRS = ("documents", "databases", "indexes")
+    """Durable Firestore: documents plus the admin plane (databases, indexes, fields,
+    backup schedules, backups, operations, security rules). The core calls persist()
+    after every mutating request; put/delete also save for direct callers."""
+    _STATE_ATTRS = ("documents", "databases", "indexes", "fields", "backup_schedules",
+                    "backups", "operations", "security_rules", "backup_snapshots", "history", "usage")
 
     def __init__(self, backend: SqliteStateBackend, store_id: str = "firestore"):
         FirestoreStore.__init__(self)
         self._pinit(backend, store_id)
 
-    def put(self, rel: str, entry: dict) -> None:
-        super().put(rel, entry)
+    def put(self, db: str, rel: str, entry: dict) -> None:
+        super().put(db, rel, entry)
         self._save()
 
-    def delete(self, rel: str) -> None:
-        super().delete(rel)
+    def delete(self, db: str, rel: str) -> None:
+        super().delete(db, rel)
         self._save()
 
 

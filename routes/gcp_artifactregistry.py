@@ -43,11 +43,11 @@ class SpaceArStore(ar.ArtifactRegistryStore):
     """ArtifactRegistryStore whose dicts are the active space's persisted slot."""
 
     def __init__(self) -> None:           # no super().__init__: the dicts are properties
-        self._fallback = {"repositories": {}, "operations": {}, "iam": {}}
+        self._fallback = {"repositories": {}, "operations": {}, "iam": {}, "settings": {}}
 
     def _s(self) -> dict:
         s = _slot() or self._fallback
-        for k in ("repositories", "operations", "iam"):
+        for k in ("repositories", "operations", "iam", "settings"):
             s.setdefault(k, {})
         return s
 
@@ -62,6 +62,10 @@ class SpaceArStore(ar.ArtifactRegistryStore):
     @property
     def iam(self) -> dict:
         return self._s()["iam"]
+
+    @property
+    def settings(self) -> dict:          # per-project settings (legacy GCR redirection)
+        return self._s()["settings"]
 
     def persist(self) -> None:
         if _slot() is not None:
@@ -141,7 +145,7 @@ def _sync_registry() -> None:
                 continue
             found.append({"path": path, "tag": tag, "digest": h.get("Docker-Content-Digest", ""), "size": image_size(repo, man)})
     try:
-        if ar.ingest_registry_images(_STORE, project, [f for f in found if f["digest"]]):
+        if ar.ingest_registry_images(_STORE, project, [f for f in found if f["digest"]], kms_store=_kms_store()):
             _usage("registry_push", project)
     except Exception:
         pass
@@ -155,6 +159,14 @@ def _usage(op: str, name: str) -> None:
         pass
 
 
+def _kms_store():
+    """The same Cloud KMS core/store the offline appliance's own KMS routes use (v4 C0b),
+    so a repository's CMEK key is checked/used against real key state, not just a stored
+    string — core/gcp_artifactregistry_core.py's cross-core seam into core/gcp_kms_core.py."""
+    from core import appliance_stores as aps
+    return aps.gcp_kms_store()
+
+
 def register(app: FastAPI) -> None:
     _pub = os.environ.get("CLOUDLEARN_REGISTRY_PUBLIC_PORT", "").strip()
     if _pub:
@@ -164,7 +176,7 @@ def register(app: FastAPI) -> None:
         if request.method == "GET":
             await run_in_threadpool(_sync_registry)
         r = ar.dispatch(_STORE, request.method, request.url.path, dict(request.query_params),
-                        dict(request.headers), body)
+                        dict(request.headers), body, kms_store=_kms_store())
         if r.status == 404 and "/operations/" in request.url.path:
             # The /operations/{op} path is shared with Kubernetes Engine and Memorystore LROs.
             from core import gcp_container_core as _gke, gcp_redis_core as _redis
@@ -182,6 +194,7 @@ def register(app: FastAPI) -> None:
     app.add_route("/v1/projects/{project}/locations/{loc}/repositories", _wire, methods=methods)
     app.add_route("/v1/projects/{project}/locations/{loc}/repositories/{rest:path}", _wire, methods=methods)
     app.add_route("/v1/projects/{project}/locations/{loc}/operations/{op}", _wire, methods=["GET"])
+    app.add_route("/v1/projects/{project}/projectSettings", _wire, methods=["GET", "PATCH"])   # legacy GCR redirection
 
     async def _json(request: Request) -> dict:
         try:
@@ -264,6 +277,6 @@ def register(app: FastAPI) -> None:
             out = ar.console_pushpull(_STORE, name)
             return JSONResponse(out, status_code=200 if out.get("ok") else 404)
         if op == "pushSample":
-            out = ar.console_push_sample(_STORE, name, await _json(request))
+            out = ar.console_push_sample(_STORE, name, await _json(request), kms_store=_kms_store())
             return JSONResponse(out, status_code=200 if out.get("ok") else 404)
         return JSONResponse({"ok": False, "code": "UnknownOperation", "name": op}, status_code=404)

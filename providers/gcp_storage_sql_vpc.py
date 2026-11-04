@@ -291,7 +291,15 @@ async def api_gcp_sql_create_instance(project: str, request: Request):
         payload = {}
     if not isinstance(payload, dict):
         payload = {}
+    from core import gcp_cloudsql_core as _csql, wire_ingress
+    bad = _csql.validate_config(wire_ingress.appliance_router()._run_refs,
+                                s._gcp_location_name(payload.get("region") or "us-central1"), payload)
+    if bad:
+        raise HTTPException(400, detail=bad)
     instance = s._gcp_sql_instance_record(project, payload)
+    if isinstance(payload.get("diskEncryptionConfiguration"), dict) and payload["diskEncryptionConfiguration"].get("kmsKeyName"):
+        instance["diskEncryptionConfiguration"] = {"kind": "sql#diskEncryptionConfiguration",
+                                                   "kmsKeyName": payload["diskEncryptionConfiguration"]["kmsKeyName"]}
     existing = gcp_sql_state.get("instances", {}).get(instance["name"])
     if existing:
         # Idempotent create — if the same name+project is requested

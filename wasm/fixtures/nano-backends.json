@@ -45,6 +45,11 @@
   "category": "aws"
  },
  {
+  "name": "dax",
+  "label": "dax \u00b7 DaxStore",
+  "category": "aws"
+ },
+ {
   "name": "apigwv2",
   "label": "ApiGwV2Store",
   "category": "aws"
@@ -65,8 +70,23 @@
   "category": "aws"
  },
  {
+  "name": "asg",
+  "label": "asg \u00b7 AutoScalingStore",
+  "category": "aws"
+ },
+ {
+  "name": "dlm",
+  "label": "dlm \u00b7 DlmStore",
+  "category": "aws"
+ },
+ {
   "name": "sfn",
   "label": "StepFunctionsStore",
+  "category": "aws"
+ },
+ {
+  "name": "cfn",
+  "label": "cfn \u00b7 CloudFormationStore",
   "category": "aws"
  },
  {
@@ -135,6 +155,46 @@
   "category": "gcp"
  },
  {
+  "name": "az_acr",
+  "label": "az_acr \u00b7 AcrRegistryStore",
+  "category": "azure"
+ },
+ {
+  "name": "sched",
+  "label": "sched \u00b7 SchedulerStore",
+  "category": "aws"
+ },
+ {
+  "name": "gcp_logging",
+  "label": "gcp_logging \u00b7 LoggingStore",
+  "category": "gcp"
+ },
+ {
+  "name": "gcp_rm",
+  "label": "gcp_rm \u00b7 ResourceManagerStore",
+  "category": "gcp"
+ },
+ {
+  "name": "gcp_pam",
+  "label": "gcp_pam \u00b7 PamStore",
+  "category": "gcp"
+ },
+ {
+  "name": "gcp_compute_vm",
+  "label": "gcp_compute_vm \u00b7 ComputeStore",
+  "category": "gcp"
+ },
+ {
+  "name": "gcp_compute",
+  "label": "gcp_compute \u00b7 ComputeStore",
+  "category": "gcp"
+ },
+ {
+  "name": "gcp_run",
+  "label": "gcp_run \u00b7 RunStore",
+  "category": "gcp"
+ },
+ {
   "name": "az_blob",
   "label": "AzureBlobStore",
   "category": "azure"
@@ -155,13 +215,28 @@
   "category": "azure"
  },
  {
+  "name": "az_kvcerts",
+  "label": "az_kvcerts \u00b7 InMemoryKvStore",
+  "category": "azure"
+ },
+ {
   "name": "az_queue",
   "label": "AzureQueueStore",
   "category": "azure"
  },
  {
+  "name": "az_table",
+  "label": "az_table \u00b7 AzureTableStore",
+  "category": "azure"
+ },
+ {
   "name": "az_sb",
   "label": "InMemoryMessagingStore",
+  "category": "azure"
+ },
+ {
+  "name": "az_graph",
+  "label": "az_graph \u00b7 GraphStore",
   "category": "azure"
  },
  {

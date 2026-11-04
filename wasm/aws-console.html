@@ -536,6 +536,17 @@ const NOTIFS = [];
 // =====================================================================
 // DOM helpers
 // =====================================================================
+// A tier-locked service answers 403 {error:{code:"tier_…", reason, upgrade_to}}:
+// say which tier unlocks it instead of a bare "HTTP 403".
+function loadFailMsg(r){
+  const e = r && r.json && (r.json.error || r.json);
+  if (r && r.status === 403 && e && /^tier_/.test(String(e.code || ""))) {
+    const t = e.upgrade_to ? e.upgrade_to[0].toUpperCase() + e.upgrade_to.slice(1) : "";
+    return [(e.reason || "This service isn't included in your tier") + ". ",
+            el("a", {href: "clouds.html"}, t ? "Upgrade to " + t + " \u2192" : "See tiers \u2192")];
+  }
+  return ["Failed to load: HTTP " + (r ? r.status : "?")];
+}
 function el(tag, attrs={}, ...kids){
   const e = document.createElement(tag);
   for (const [k,v] of Object.entries(attrs)) {
@@ -1409,7 +1420,7 @@ async function renderList(main){
   // Load
   tableHolder.innerHTML = '<div class="empty">Loading…</div>';
   const r = await api("GET", svc.collection_path);
-  if (!r.ok) { tableHolder.innerHTML = ""; tableHolder.append(el("div",{class:"empty"}, "Failed to load: HTTP "+r.status)); return; }
+  if (!r.ok) { tableHolder.innerHTML = ""; tableHolder.append(el("div",{class:"empty"}, ...loadFailMsg(r))); return; }
   const data = r.json || {};
   // Envelope shapes across services: native AWS endpoints use their service
   // name as the key ({instances:[...], buckets:[...]}); the generic extras
@@ -1730,7 +1741,7 @@ async function renderChildList(main){
   // Load
   tableHolder.innerHTML = '<div class="empty">Loading…</div>';
   const r = await api(apiPath.method, apiPath.path);
-  if (!r.ok) { tableHolder.innerHTML = ""; tableHolder.append(el("div",{class:"empty"}, "Failed to load: HTTP "+r.status)); return; }
+  if (!r.ok) { tableHolder.innerHTML = ""; tableHolder.append(el("div",{class:"empty"}, ...loadFailMsg(r))); return; }
   const data = r.json || {};
   // Lists across AWS use slightly different envelope keys — prefer the
   // explicit arrayKey from the spec, else try common shapes.
@@ -1834,7 +1845,7 @@ async function renderCrudStub(main, svc, fullKey, schema){
   tableHolder.innerHTML = '<div class="empty">Loading…</div>';
   const r = await api("GET", "/api/aws/extras/"+fullKey);
   if (!r.ok) { tableHolder.innerHTML = ""; tableHolder.append(el("div",{class:"empty"},
-    "Failed to load: HTTP "+r.status)); return; }
+    ...loadFailMsg(r))); return; }
   const items = (r.json && r.json.items) || [];
   const isDerived = !!(r.json && r.json.derived);
   if (isDerived) createBtn.setAttribute("disabled","");  // can't create derived items
@@ -1996,7 +2007,7 @@ async function renderConfigStub(main, svc, fullKey, schema){
   main.append(header);
 
   const r = await api("GET", "/api/aws/extras-config/"+fullKey);
-  if (!r.ok) { main.append(el("div",{class:"empty"}, "Failed to load: HTTP "+r.status)); return; }
+  if (!r.ok) { main.append(el("div",{class:"empty"}, ...loadFailMsg(r))); return; }
   const values = (r.json && r.json.values) || {};
 
   const card = el("div",{style:"background:#fff;border:1px solid var(--line);border-radius:8px;padding:24px;max-width:760px"});
@@ -2103,11 +2114,15 @@ async function renderDetail(main, opts){
   const content = el("div",{}); main.append(content);
   const activeTab = tabs[STATE.detailTab] || tabs[0];
   const renderer = SUB_RENDERERS[(activeTab.type || "").toLowerCase()];
-  // Dispatch to the dedicated renderer when one exists; otherwise fall back to
-  // the generic data-driven renderer so NO detail tab is ever left blank.
-  const render = renderer || renderGenericTab;
-  try { render(svc, full, content, activeTab); }
-  catch (e) { content.append(el("div",{class:"alert err"}, "Renderer error: " + e.message)); }
+  if (renderer) {
+    try { renderer(svc, full, content, activeTab); }
+    catch (e) { content.append(el("div",{class:"alert err"}, "Renderer error: " + e.message)); }
+  } else {
+    content.append(el("div",{class:"empty"},
+      el("span",{class:"ic material-symbols-outlined"}, "construction"),
+      el("div",{}, "This pane mirrors the AWS console's "+activeTab.label+" experience."),
+      el("div",{class:"small",style:"font-size:11.5px;color:#a19f9d"}, "Not yet wired — placeholder for portal parity.")));
+  }
 }
 function flattenTabs(subBlades){
   const out = [];
@@ -2888,74 +2903,34 @@ SUB_RENDERERS.overview = function(svc, full, host, tab){
   card.append(grid); host.append(card);
 };
 SUB_RENDERERS.activitylog = async function(svc, full, host){
+  host.append(el("div",{class:"alert info"}, icon("info"),
+    el("div",{}, "Operations recorded against this resource in the current simulator session.")));
   const name = itemKey(svc, full);
-  host.append(el("div",{class:"alert info"}, icon("history"),
-    el("div",{}, "CloudSim activity recorded against ", el("strong",{}, name || "this resource"),
-      " — every create / update / delete / sub-resource op flows through here.")));
-  const panel = el("div",{}); host.append(panel);
-  // Fetch is SERVER-SIDE filtered by this resource's name + provider (the
-  // in-browser event store supports ?resource=&provider=&service=&limit=).
-  async function load(){
-    panel.innerHTML = "";
-    panel.append(el("div",{style:"display:flex;gap:8px;margin-bottom:12px;align-items:center"},
-      el("button",{class:"btn",onclick:load}, icon("refresh"), "Refresh")));
-    let events = [];
-    try {
-      const qs = "resource=" + encodeURIComponent(name) + "&provider=aws&limit=200";
-      const r = await fetch(ORIGIN + "/api/cloudsim/events?" + qs);
-      const j = await r.json();
-      events = Array.isArray(j) ? j : (j.events || []);
-      // Sub-resource / settings ops (detail-tab Create/Delete/Save) are recorded
-      // under a synthetic service id "<svcKey>~<parent>~<tabKey>" with the CHILD
-      // as the event resource — so they don't match the parent `resource=` filter
-      // above. Merge them in here by scanning the global feed for this parent's
-      // namespace prefix, so the Activity tab shows the WHOLE history of this
-      // resource (top-level ops + sub-resource/settings ops), newest-first.
-      try {
-        const gr = await fetch(ORIGIN + "/api/cloudsim/events?provider=aws&limit=200");
-        const gj = await gr.json();
-        const feed = Array.isArray(gj) ? gj : (gj.events || []);
-        const prefix = (svc.key || "") + "~" + (name || "") + "~";
-        const seen = new Set(events.map(e => e.id ?? e.seq));
-        feed.forEach(ev => {
-          if (String(ev.service || "").startsWith(prefix) && !seen.has(ev.id ?? ev.seq)) {
-            events.push(ev);
-          }
-        });
-        events.sort((a,b) => (b.seq||0) - (a.seq||0));
-      } catch(_){}
-    } catch(e) { panel.append(el("div",{class:"empty"}, "Unable to load events.")); return; }
-    if (!events.length) {
-      panel.append(el("div",{class:"empty"},
-        el("span",{class:"ic material-symbols-outlined"}, "history_toggle_off"),
-        el("div",{}, "No activity recorded yet for " + (name || "this resource") + "."),
-        el("div",{style:"font-size:11.5px;color:#a19f9d;margin-top:6px"},
-          "Mutating operations (create/update/delete, sub-resource changes) will appear here.")));
-      return;
-    }
+  try {
+    const r = await fetch(ORIGIN + "/api/cloudsim/events");
+    const j = await r.json();
+    const all = Array.isArray(j) ? j : (j.events || []);
+    const t = name.toLowerCase();
+    const filtered = all.filter(ev => {
+      const d = ev.detail || {};
+      if (d.resource_id && String(d.resource_id).toLowerCase().includes(t)) return true;
+      if (d.name && String(d.name).toLowerCase() === t) return true;
+      if (d.instance_id && String(d.instance_id).toLowerCase() === t) return true;
+      return false;
+    });
+    if (!filtered.length) { host.append(el("div",{class:"empty"}, "No activity yet for this resource.")); return; }
     const tbl = el("table",{class:"aws"});
     tbl.append(el("tr",{}, el("th",{}, "Event time"), el("th",{}, "Operation"),
-      el("th",{}, "Service"), el("th",{}, "Status"), el("th",{}, "Detail")));
-    events.forEach(ev => {
-      const st = String(ev.status || "ok");
-      // Synthetic sub-resource service ids look like "ec2~i-123~console" — show
-      // the human tab segment (last part) rather than the raw namespace.
-      let svcLabel = String(ev.service || "");
-      if (svcLabel.includes("~")) {
-        const segs = svcLabel.split("~");
-        svcLabel = (svc.key || segs[0]) + " · " + segs[segs.length - 1];
-      }
+      el("th",{}, "Status"), el("th",{}, "Detail")));
+    filtered.slice(0, 50).forEach(ev => {
       tbl.append(el("tr",{},
-        el("td",{class:"mono small"}, ev.ts || "—"),
-        el("td",{}, String(ev.action || ev.event || "")),
-        el("td",{class:"small"}, svcLabel),
-        el("td",{}, stateBadge(st === "ok" ? "active" : "failed")),
-        el("td",{class:"small mono"}, typeof ev.detail === "object"
-          ? JSON.stringify(ev.detail) : String(ev.detail || ""))));
+        el("td",{class:"mono small"}, ev.at || ev.ts || "—"),
+        el("td",{}, String(ev.event||"")),
+        el("td",{}, stateBadge("Succeeded")),
+        el("td",{class:"small mono"}, Object.entries(ev.detail||{}).filter(([k,_])=>k!=="resource_id").map(([k,v])=>`${k}=${typeof v==="object"?JSON.stringify(v):v}`).join(", "))));
     });
-    panel.append(tbl);
-  }
-  load();
+    host.append(tbl);
+  } catch(e) { host.append(el("div",{class:"empty"}, "Unable to load events.")); }
 };
 SUB_RENDERERS.tags = function(svc, full, host){
   const tags = (full.tags && typeof full.tags === "object") ? full.tags : {};
@@ -3196,6 +3171,21 @@ SUB_RENDERERS.connect = function(svc, full, host){
               "Save to ~/Downloads. Run `chmod 600` on it before connecting."))));
       }
 
+      // Step 0 — one-time Codespaces jump-host setup. Present only when the
+      // appliance runs in a Codespace (ssh.setup_command set by _docker_connect_info).
+      // The SSH command below connects THROUGH this jump, so without this the dev's
+      // `ssh -J …` has no alias to use. Run once; covers every instance + cloud.
+      if (ssh.setup_command) {
+        wrap.append(el("div",{class:"keyblock"},
+          el("div",{class:"k"}, "Step 0 — one-time setup on your laptop (Codespaces)"),
+          el("pre",{class:"keyval"}, ssh.setup_command),
+          el("div",{class:"row"},
+            el("button",{class:"btn",onclick:()=>{navigator.clipboard.writeText(ssh.setup_command); toast("Copied");}},
+              icon("copy"), "Copy"),
+            el("span",{class:"muted", style:"font-size:12px;margin-left:8px"},
+              `Installs SSH alias ${ssh.jump_host || "cs.<codespace>"} (a secure tunnel into this sandbox over your gh auth). Run once — covers every instance and cloud; the SSH command below connects through it.`))));
+      }
+
       // The SSH command itself — same UI for both modes
       const sshCmd = ssh.command || "";
       const stepLabel = sharedKey ? "Paste this into your terminal" : "Step 2 — SSH command";
@@ -3294,7 +3284,7 @@ SUB_RENDERERS.apitable = async function(svc, full, host, tab){
   if (!ap) { host.append(el("div",{class:"empty"}, "Path not configured.")); return; }
   const r = await api(ap.method, fillPath(ap.path, {name: itemKey(svc, full)}));
   const items = (r.json || {}).items || (r.json || {}).value || [];
-  if (!r.ok) { host.append(el("div",{class:"empty"}, "Failed to load: HTTP "+r.status)); return; }
+  if (!r.ok) { host.append(el("div",{class:"empty"}, ...loadFailMsg(r))); return; }
   if (!items.length) { host.append(el("div",{class:"empty"}, tab.empty || "No items.")); return; }
   const cols = tab.columns || [];
   const tbl = el("table",{class:"aws"});
@@ -3475,7 +3465,7 @@ SUB_RENDERERS.rdsparametergroups = function(svc, full, host){
 
 // API Gateway
 SUB_RENDERERS.apiresources = function(svc, full, host){
-  fetch(ORIGIN+fillPath(svc.api_paths.resources.path, {name: full.id || full.name})).then(r=>r.json()).then(j=>{
+  fetch(ORIGIN+fillPath(svc.api_paths.resources.path, {name: full.rest_api_id || full.id || full.name})).then(r=>r.json()).then(j=>{
     const items = j.resources || j.value || j.items || [];
     if (!items.length) { host.append(el("div",{class:"empty"}, "No resources yet.")); return; }
     const tbl = el("table",{class:"aws"});
@@ -3527,7 +3517,7 @@ SUB_RENDERERS.sfndefinition = async function(svc, full, host){
 };
 
 SUB_RENDERERS.apistages = function(svc, full, host){
-  fetch(ORIGIN+fillPath(svc.api_paths.stages.path, {name: full.id || full.name})).then(r=>r.json()).then(j=>{
+  fetch(ORIGIN+fillPath(svc.api_paths.stages.path, {name: full.rest_api_id || full.id || full.name})).then(r=>r.json()).then(j=>{
     const items = j.stages || j.value || j.items || [];
     if (!items.length) { host.append(el("div",{class:"empty"}, "No stages.")); return; }
     const tbl = el("table",{class:"aws"});
@@ -5546,7 +5536,7 @@ setInterval(fetchDiskHealth, 30000);
 // Boot
 boot();
 </script>
-<!-- lazy_backends.js is offline-only (it starts Docker backends); Nano has none. -->
+<script src="assets/lazy_backends.js"></script>
 
 <style>
  #nano-docs{position:fixed;right:14px;bottom:40px;z-index:100000;font:13px system-ui,-apple-system,sans-serif}
@@ -5613,6 +5603,22 @@ boot();
  <button id="nano-foot-logs">Logs ▴</button>
  <button id="nano-foot-toggle">Start tunnel</button>
 </div>
+<script>
+// The tunnel bar starts right of the left side menu (never over it: the account menu /
+// Sign out lives at the side menu's foot) and follows it as it collapses or expands.
+(function(){
+  var foot = document.getElementById("nano-foot"); if(!foot) return;
+  function fit(){
+    var sb = document.getElementById("app-sidebar");
+    var r = (sb && sb.getClientRects().length) ? sb.getBoundingClientRect() : null;
+    foot.style.left = (r && r.width && r.left < 1 ? Math.round(r.right) : 0) + "px";
+  }
+  fit(); addEventListener("resize", fit); addEventListener("load", fit);
+  var sb = document.getElementById("app-sidebar");
+  if(sb && window.ResizeObserver) new ResizeObserver(fit).observe(sb);
+  new MutationObserver(fit).observe(document.body, { attributes: true, attributeFilter: ["class"] });
+})();
+</script>
 <script>
 (function(){
   var base = window.__NANO_BASE || "";

@@ -24,6 +24,7 @@ the Java / .NET REST clients send `$alt=json;enum-encoding=int` and get integers
 from __future__ import annotations
 
 import base64
+import calendar
 import json
 import math
 import random
@@ -50,6 +51,12 @@ class MonitoringStore:
         self.notification_channels: dict = {}   # full name -> NotificationChannel
         self.groups: dict = {}                  # full name -> Group
         self.uptime_checks: dict = {}           # full name -> UptimeCheckConfig
+        self.dashboards: dict = {}              # full name -> Dashboard (v1 API)
+        self.snoozes: dict = {}                 # full name -> Snooze (v1 API)
+        self.services: dict = {}                # full name -> Service
+        self.slos: dict = {}                    # full name -> ServiceLevelObjective (nested under a service)
+        self.incidents: dict = {}               # full name -> Incident (see evaluate_incidents)
+        self.metrics_scopes: dict = {}          # scoping project id -> {"createTime", "monitoredProjects": [project_id,...]}
 
 
 _SHARED: MonitoringStore | None = None
@@ -346,11 +353,53 @@ BUILTIN_METRICS = {m["type"]: m for m in [
     _md("storage.googleapis.com/api/request_count", "DELTA", "INT64", "1", "Delta count of API calls.",
         [{"key": "method", "valueType": "STRING"}], "Request count", ["gcs_bucket"]),
     _md("pubsub.googleapis.com/subscription/num_undelivered_messages", "GAUGE", "INT64", "1",
-        "Number of unacknowledged messages in a subscription.", [], "Undelivered messages", ["pubsub_subscription"]),
+        "Live count of unacknowledged messages in a subscription, mirrored from Cloud Pub/Sub's "
+        "own backlog — fed by core/gcp_pubsub_core.py on every pull/acknowledge, not written over "
+        "the public timeSeries API.", [], "Unacked messages", ["pubsub_subscription"]),
+    _md("pubsub.googleapis.com/subscription/oldest_unacked_message_age", "GAUGE", "INT64", "s",
+        "Age of the oldest unacknowledged message in a subscription, in seconds, mirrored from "
+        "Cloud Pub/Sub's own backlog.", [], "Oldest unacked message age", ["pubsub_subscription"]),
+    _md("pubsub.googleapis.com/topic/send_message_operation_count", "GAUGE", "INT64", "1",
+        "Live cumulative count of publish calls made against a topic, mirrored from Cloud "
+        "Pub/Sub's own activity — a GAUGE snapshot of the running total, not GCP's per-minute "
+        "DELTA rate.", [], "Publish count", ["pubsub_topic"]),
     _md("cloudsql.googleapis.com/database/cpu/utilization", "GAUGE", "DOUBLE", "10^2.%",
         "Current CPU utilization as a fraction of reserved CPU.", [], "CPU utilization", ["cloudsql_database"]),
     _md("kubernetes.io/container/cpu/core_usage_time", "CUMULATIVE", "DOUBLE", "s",
         "Cumulative CPU usage on all cores in seconds.", [], "CPU usage time", ["k8s_container"]),
+    _md("logging.googleapis.com/byte_count", "GAUGE", "INT64", "By",
+        "Live month-to-date bytes of log entries ingested into this project, mirrored from "
+        "Cloud Logging's own entries — fed by core/gcp_logging_core.py, not written over the "
+        "public timeSeries API.", [], "Log bytes ingested", ["global"]),
+    _md("logging.googleapis.com/log_entry_count", "GAUGE", "INT64", "1",
+        "Live month-to-date count of log entries ingested into this project, mirrored from "
+        "Cloud Logging's own entries.", [], "Log entries ingested", ["global"]),
+    _md("run.googleapis.com/request_count", "GAUGE", "INT64", "1",
+        "Live cumulative count of requests Cloud Run has received for this revision, fed by "
+        "core/gcp_run_core.py's invoke path — real request activity, not synthetic.", [],
+        "Request count", ["cloud_run_revision"]),
+    _md("run.googleapis.com/request_latencies", "GAUGE", "DOUBLE", "ms",
+        "Wall-clock latency of the most recently completed request to this revision.", [],
+        "Request latency", ["cloud_run_revision"]),
+    _md("run.googleapis.com/container/instance_count", "GAUGE", "INT64", "1",
+        "Container instance count for this revision, derived from its minimum-instance "
+        "configuration and whether it has served a request recently.", [],
+        "Container instance count", ["cloud_run_revision"]),
+    _md("monitoring.googleapis.com/uptime_check/check_passed", "GAUGE", "BOOL", "1",
+        "Whether an uptime check passed from a given checked region, fed by Vyomi's own probe "
+        "engine (see run_uptime_probes) instead of a real dispatched network probe.",
+        [{"key": "check_id", "valueType": "STRING"}, {"key": "checked_region", "valueType": "STRING"}],
+        "Uptime check passed", ["uptime_url"]),
+    _md("agent.googleapis.com/agent/uptime", "GAUGE", "DOUBLE", "1",
+        "Ops Agent heartbeat, fed from the Compute Engine instance's own metadata (enable-osconfig=TRUE, "
+        "the real flag OS Config uses to manage an Ops Agent policy on a VM) instead of a real agent "
+        "process reporting in.", [], "Ops Agent heartbeat", ["gce_instance"]),
+    _md("billing.googleapis.com/billing/total_cost", "GAUGE", "DOUBLE", "{USD}",
+        "Live month-to-date cost Vyomi computes from this project's actual resource inventory (real "
+        "on-demand pricing x real uptime/usage), mirrored into Cloud Monitoring the same way real Cloud "
+        "Billing budget alerts expose spend as a Monitoring metric — not Cloud Billing's own BigQuery "
+        "export, which Vyomi doesn't simulate.", [{"key": "service", "valueType": "STRING"}],
+        "Billing total cost", ["global"]),
 ]}
 
 MONITORED_RESOURCES = {r["type"]: r for r in [
@@ -372,6 +421,13 @@ MONITORED_RESOURCES = {r["type"]: r for r in [
     {"type": "pubsub_subscription", "displayName": "Cloud Pub/Sub Subscription",
      "description": "A Pub/Sub subscription.",
      "labels": [{"key": "project_id", "valueType": "STRING"}, {"key": "subscription_id", "valueType": "STRING"}]},
+    {"type": "cloud_run_revision", "displayName": "Cloud Run Revision", "description": "A Cloud Run revision.",
+     "labels": [{"key": "project_id", "valueType": "STRING"}, {"key": "service_name", "valueType": "STRING"},
+                {"key": "revision_name", "valueType": "STRING"}, {"key": "location", "valueType": "STRING"},
+                {"key": "configuration_name", "valueType": "STRING"}]},
+    {"type": "pubsub_topic", "displayName": "Cloud Pub/Sub Topic",
+     "description": "A Pub/Sub topic.",
+     "labels": [{"key": "project_id", "valueType": "STRING"}, {"key": "topic_id", "valueType": "STRING"}]},
     {"type": "generic_node", "displayName": "Generic Node", "description": "A generic node in your system.",
      "labels": [{"key": "project_id", "valueType": "STRING"}, {"key": "location", "valueType": "STRING"},
                 {"key": "namespace", "valueType": "STRING"}, {"key": "node_id", "valueType": "STRING"}]},
@@ -797,8 +853,8 @@ def list_groups(store, project, query):
 
 
 # ── uptime checks ──────────────────────────────────────────────────────────
-_UPTIME_WRITABLE = ("displayName", "monitoredResource", "resourceGroup", "httpCheck", "tcpCheck", "period",
-                    "timeout", "contentMatchers", "checkerType", "selectedRegions", "isInternal",
+_UPTIME_WRITABLE = ("displayName", "monitoredResource", "resourceGroup", "httpCheck", "tcpCheck", "syntheticMonitor",
+                    "period", "timeout", "contentMatchers", "checkerType", "selectedRegions", "isInternal",
                     "internalCheckers", "userLabels")
 _UPTIME_PERIODS = (60, 300, 600, 900)
 
@@ -808,8 +864,8 @@ def _validate_uptime(u):
         raise _bad("Field uptime_check_config.display_name is required and must be non-empty.")
     if sum(1 for k in ("monitoredResource", "resourceGroup") if u.get(k)) != 1:
         raise _bad("Field uptime_check_config must specify exactly one of monitored_resource or resource_group.")
-    if sum(1 for k in ("httpCheck", "tcpCheck") if u.get(k)) != 1:
-        raise _bad("Field uptime_check_config must specify exactly one of http_check or tcp_check.")
+    if sum(1 for k in ("httpCheck", "tcpCheck", "syntheticMonitor") if u.get(k)) != 1:
+        raise _bad("Field uptime_check_config must specify exactly one of http_check, tcp_check or synthetic_monitor.")
     mr = u.get("monitoredResource")
     if mr and not mr.get("type"):
         raise _bad("Field uptime_check_config.monitored_resource.type is required.")
@@ -878,6 +934,386 @@ def patch_uptime(store, project, uid, payload, mask):
     merged["name"] = cur["name"]
     store.uptime_checks[cur["name"]] = merged
     return merged
+
+
+# ── dashboards (Dashboards API, v1) ─────────────────────────────────────────
+_DASHBOARD_WRITABLE = ("displayName", "labels", "etag", "gridLayout", "mosaicLayout", "rowLayout", "columnLayout",
+                       "dashboardFilters")
+_LAYOUTS = ("gridLayout", "mosaicLayout", "rowLayout", "columnLayout")
+
+
+def _dashboard_name(project, did):
+    return "projects/%s/dashboards/%s" % (project, did)
+
+
+def _validate_dashboard(d):
+    if not str(d.get("displayName") or "").strip():
+        raise _bad("Field dashboard.display_name is required and must be non-empty.")
+    if len(d["displayName"]) > 1024:
+        raise _bad("Field dashboard.display_name must be at most 1024 characters.")
+    if sum(1 for k in _LAYOUTS if k in d) > 1:
+        raise _bad("Field dashboard must specify at most one of grid_layout, mosaic_layout, row_layout, column_layout.")
+
+
+def create_dashboard(store, project, payload):
+    d = {k: _copy(v) for k, v in (payload or {}).items() if k in _DASHBOARD_WRITABLE}
+    d.pop("etag", None)
+    _validate_dashboard(d)
+    if not any(k in d for k in _LAYOUTS):
+        d["mosaicLayout"] = {"columns": 12, "tiles": []}
+    d.setdefault("labels", {})
+    did = _rand_id()
+    d["name"] = _dashboard_name(project, did)
+    d["etag"] = did
+    store.dashboards[d["name"]] = d
+    return d
+
+
+def _get_dashboard(store, project, did):
+    d = store.dashboards.get(_dashboard_name(project, did))
+    if not d:
+        raise _E(404, "NOT_FOUND", "Dashboard %s does not exist." % _dashboard_name(project, did))
+    return d
+
+
+def patch_dashboard(store, project, did, payload):
+    cur = _get_dashboard(store, project, did)
+    etag = (payload or {}).get("etag")
+    if etag and etag != cur.get("etag"):
+        raise _E(409, "ABORTED", "Dashboard %s was modified concurrently (etag mismatch)." % cur["name"])
+    d = {k: _copy(v) for k, v in (payload or {}).items() if k in _DASHBOARD_WRITABLE}
+    d.pop("etag", None)
+    _validate_dashboard(d)
+    if not any(k in d for k in _LAYOUTS):
+        d["mosaicLayout"] = cur.get("mosaicLayout") or {"columns": 12, "tiles": []}
+        for k in _LAYOUTS:
+            if k in cur and k != "mosaicLayout":
+                d.pop("mosaicLayout", None)
+                d[k] = cur[k]
+    d.setdefault("labels", cur.get("labels") or {})
+    d["name"] = cur["name"]
+    d["etag"] = _rand_id()
+    store.dashboards[cur["name"]] = d
+    return d
+
+
+def delete_dashboard(store, project, did):
+    d = _get_dashboard(store, project, did)
+    del store.dashboards[d["name"]]
+
+
+def list_dashboards(store, project, query):
+    prefix = "projects/%s/dashboards/" % project
+    items = [_copy(d) for n, d in sorted(store.dashboards.items()) if n.startswith(prefix)]
+    return _paginate(items, query, "dashboards")
+
+
+def _dashboards(store, method, project, rest, payload, query):
+    if not rest:
+        if method == "POST":
+            return _json(200, _copy(create_dashboard(store, project, payload)))
+        if method == "GET":
+            return _json(200, list_dashboards(store, project, query))
+        raise _E(405, "UNIMPLEMENTED", "Method %s not allowed on dashboards." % method)
+    if len(rest) == 1:
+        if method == "GET":
+            return _json(200, _copy(_get_dashboard(store, project, rest[0])))
+        if method == "PATCH":
+            return _json(200, _copy(patch_dashboard(store, project, rest[0], payload)))
+        if method == "DELETE":
+            delete_dashboard(store, project, rest[0])
+            return _json(200, {})
+    raise _E(404, "NOT_FOUND", "Unknown dashboard path.")
+
+
+# ── snoozes (Snoozes API, v1) ────────────────────────────────────────────────
+_SNOOZE_WRITABLE = ("displayName", "criteria", "interval")
+
+
+def _snooze_name(project, sid):
+    return "projects/%s/snoozes/%s" % (project, sid)
+
+
+def _validate_snooze(s, store, project):
+    if not str(s.get("displayName") or "").strip():
+        raise _bad("Field snooze.display_name is required and must be non-empty.")
+    if len(s["displayName"]) > 512:
+        raise _bad("Field snooze.display_name must be at most 512 characters.")
+    crit = s.get("criteria")
+    if not isinstance(crit, dict) or not crit.get("policies"):
+        raise _bad("Field snooze.criteria.policies is required: a snooze needs at least one alert policy.")
+    for pn in crit["policies"]:
+        if pn not in store.alert_policies:
+            raise _bad("Snooze criteria refers to an alert policy that does not exist: %s." % pn)
+    if len(crit["policies"]) > 16:
+        raise _bad("Field snooze.criteria.policies has too many values: at most 16 alert policies.")
+    iv = s.get("interval")
+    if not isinstance(iv, dict) or not iv.get("startTime") or not iv.get("endTime"):
+        raise _bad("Field snooze.interval.start_time and end_time are required.")
+    start, end = parse_ts(iv["startTime"]), parse_ts(iv["endTime"])
+    if end <= start:
+        raise _bad("Field snooze.interval had an invalid value: end_time must be after start_time.")
+
+
+def create_snooze(store, project, payload):
+    s = {k: _copy(v) for k, v in (payload or {}).items() if k in _SNOOZE_WRITABLE}
+    _validate_snooze(s, store, project)
+    sid = _rand_id()
+    s["name"] = _snooze_name(project, sid)
+    store.snoozes[s["name"]] = s
+    return s
+
+
+def _get_snooze(store, project, sid):
+    s = store.snoozes.get(_snooze_name(project, sid))
+    if not s:
+        raise _E(404, "NOT_FOUND", "Snooze %s does not exist." % _snooze_name(project, sid))
+    return s
+
+
+def patch_snooze(store, project, sid, payload, mask):
+    cur = _get_snooze(store, project, sid)
+    payload = dict(payload or {})
+    payload.pop("name", None)
+    merged = _apply_mask(cur, payload, mask, _SNOOZE_WRITABLE, "snooze")
+    _validate_snooze(merged, store, project)
+    merged["name"] = cur["name"]
+    store.snoozes[cur["name"]] = merged
+    return merged
+
+
+def _snooze_active(s, now):
+    iv = s.get("interval") or {}
+    try:
+        return parse_ts(iv["startTime"]) <= now <= parse_ts(iv["endTime"])
+    except Exception:
+        return False
+
+
+def list_snoozes(store, project, query):
+    prefix = "projects/%s/snoozes/" % project
+    items = [_copy(s) for n, s in sorted(store.snoozes.items()) if n.startswith(prefix)]
+    if query.get("filter"):
+        def getter(s, lhs):
+            return s.get(_snake_to_camel(lhs))
+        pred = compile_filter(query["filter"], getter)
+        items = [s for s in items if pred(s)]
+    return _paginate(items, query, "snoozes")
+
+
+def _snoozes(store, method, project, rest, payload, query):
+    if not rest:
+        if method == "POST":
+            return _json(200, _copy(create_snooze(store, project, payload)))
+        if method == "GET":
+            return _json(200, list_snoozes(store, project, query))
+        raise _E(405, "UNIMPLEMENTED", "Method %s not allowed on snoozes." % method)
+    if len(rest) == 1:
+        if method == "GET":
+            return _json(200, _copy(_get_snooze(store, project, rest[0])))
+        if method == "PATCH":
+            return _json(200, _copy(patch_snooze(store, project, rest[0], payload, query.get("updateMask", ""))))
+    raise _E(404, "NOT_FOUND", "Unknown snooze path.")
+
+
+# ── services & SLOs (Service Monitoring API, v3) ───────────────────────────
+_SERVICE_WRITABLE = ("displayName", "custom", "telemetry", "userLabels")
+_SLO_WRITABLE = ("displayName", "goal", "rollingPeriod", "calendarPeriod", "serviceLevelIndicator", "userLabels")
+
+
+def _service_name(project, sid):
+    return "projects/%s/services/%s" % (project, sid)
+
+
+def create_service(store, project, payload):
+    s = {k: _copy(v) for k, v in (payload or {}).items() if k in _SERVICE_WRITABLE}
+    if not str(s.get("displayName") or "").strip():
+        raise _bad("Field service.display_name is required and must be non-empty.")
+    s.setdefault("custom", {})
+    s.setdefault("userLabels", {})
+    sid = _rand_id()
+    s["name"] = _service_name(project, sid)
+    store.services[s["name"]] = s
+    return s
+
+
+def _get_service(store, project, sid):
+    s = store.services.get(_service_name(project, sid))
+    if not s:
+        raise _E(404, "NOT_FOUND", "Service %s does not exist." % _service_name(project, sid))
+    return s
+
+
+def delete_service(store, project, sid):
+    s = _get_service(store, project, sid)
+    for k in [k for k, o in store.slos.items() if o["name"].startswith(s["name"] + "/")]:
+        del store.slos[k]
+    del store.services[s["name"]]
+
+
+def list_services(store, project, query):
+    prefix = "projects/%s/services/" % project
+    items = [_copy(s) for n, s in sorted(store.services.items()) if n.startswith(prefix)]
+    return _paginate(items, query, "services")
+
+
+def _slo_name(service_name, oid):
+    return "%s/serviceLevelObjectives/%s" % (service_name, oid)
+
+
+def create_slo(store, project, sid, payload):
+    svc = _get_service(store, project, sid)
+    o = {k: _copy(v) for k, v in (payload or {}).items() if k in _SLO_WRITABLE}
+    if not str(o.get("displayName") or "").strip():
+        raise _bad("Field service_level_objective.display_name is required and must be non-empty.")
+    goal = o.get("goal")
+    if not isinstance(goal, (int, float)) or isinstance(goal, bool) or not (0 < goal <= 1):
+        raise _bad("Field service_level_objective.goal is required and must be between 0 (exclusive) and 1.")
+    if sum(1 for k in ("rollingPeriod", "calendarPeriod") if k in o) != 1:
+        raise _bad("Field service_level_objective must specify exactly one of rolling_period or calendar_period.")
+    if not isinstance(o.get("serviceLevelIndicator"), dict) or not o["serviceLevelIndicator"]:
+        raise _bad("Field service_level_objective.service_level_indicator is required.")
+    rb = (o["serviceLevelIndicator"].get("requestBased") or {}).get("goodTotalRatio")
+    if rb:
+        if not str(rb.get("goodServiceFilter") or "").strip():
+            raise _bad("Field service_level_objective.service_level_indicator.request_based.good_total_ratio"
+                       ".good_service_filter is required.")
+        if not (rb.get("totalServiceFilter") or rb.get("badServiceFilter")):
+            raise _bad("Field service_level_objective.service_level_indicator.request_based.good_total_ratio "
+                       "must specify total_service_filter or bad_service_filter.")
+        for k in ("goodServiceFilter", "totalServiceFilter", "badServiceFilter"):
+            if rb.get(k):
+                try:
+                    compile_filter(rb[k], _ts_getter, lambda l: True)
+                except _E:
+                    raise _bad("Field service_level_objective.service_level_indicator.request_based."
+                               "good_total_ratio.%s is not a valid filter." % _snake(k))
+    o["name"] = _slo_name(svc["name"], _rand_id())
+    store.slos[o["name"]] = o
+    return o
+
+
+def list_slos(store, project, sid):
+    svc = _get_service(store, project, sid)
+    prefix = svc["name"] + "/serviceLevelObjectives/"
+    items = [_copy(o) for n, o in sorted(store.slos.items()) if n.startswith(prefix)]
+    return items
+
+
+def delete_slo(store, project, sid, oid):
+    svc = _get_service(store, project, sid)
+    name = _slo_name(svc["name"], oid)
+    if name not in store.slos:
+        raise _E(404, "NOT_FOUND", "Service level objective %s does not exist." % name)
+    del store.slos[name]
+
+
+# `timeSeries.list` filter functions the real Monitoring API reserves for SLO burn-down
+# queries (used by `select_slo_health`/`select_slo_compliance`/`select_slo_budget_fraction` in
+# the console's SLO detail charts) — computed here from the request-based good/total-ratio time
+# series an SLO's filters actually match, same engine as a normal aggregation query.
+_SLO_FILTER_RE = re.compile(r'^select_slo_(compliance|budget_fraction|health)\(\s*"([^"]+)"\s*\)$')
+
+
+def _ts_filter_allowed(l):
+    return l in ("metric.type", "resource.type", "project") or bool(re.match(
+        r"^(metric|resource)\.labels?\.", l)) or l.startswith("metadata.")
+
+
+def _sum_filtered_value(store, project, filt, start, end):
+    if not str(filt or "").strip():
+        return None
+    pred = compile_filter(filt, _ts_getter, _ts_filter_allowed)
+    total, seen = 0.0, False
+    prefix = project + "|"
+    for key, s in store.time_series.items():
+        if not key.startswith(prefix) or not pred(s):
+            continue
+        for p in s["points"]:
+            e = parse_ts(p["interval"]["endTime"])
+            if start <= e <= end:
+                v = _num(p["value"])
+                if v is not None:
+                    total += v
+                    seen = True
+    return total if seen else None
+
+
+def _slo_fn_value(store, project, slo, fn, start, end):
+    rb = ((slo.get("serviceLevelIndicator") or {}).get("requestBased") or {}).get("goodTotalRatio")
+    if not rb:
+        return None   # only request-based good/total-ratio SLIs get a live computed number
+    good = _sum_filtered_value(store, project, rb.get("goodServiceFilter") or "", start, end)
+    if rb.get("totalServiceFilter"):
+        total = _sum_filtered_value(store, project, rb["totalServiceFilter"], start, end)
+    else:
+        bad = _sum_filtered_value(store, project, rb.get("badServiceFilter") or "", start, end)
+        total = None if good is None and bad is None else (good or 0.0) + (bad or 0.0)
+    if not total:
+        return None
+    ratio = (good or 0.0) / total
+    goal = slo.get("goal") or 0.0
+    if fn == "compliance":
+        return ratio
+    if fn == "health":
+        return 1.0 if ratio >= goal else 0.0
+    error_budget = 1.0 - goal
+    if error_budget <= 0:
+        return 1.0 if ratio >= 1.0 else 0.0
+    return 1.0 - (1.0 - ratio) / error_budget
+
+
+def _slo_filter_series(store, project, fn, slo_name, query):
+    if not query.get("interval.endTime"):
+        raise _bad("Field interval.end_time is required.")
+    end = parse_ts(query["interval.endTime"])
+    start = parse_ts(query["interval.startTime"]) if query.get("interval.startTime") else end
+    if start > end:
+        raise _bad("Field interval had an invalid value: start_time must not be later than end_time.")
+    slo = store.slos.get(slo_name)
+    if not slo:
+        raise _E(404, "NOT_FOUND", "Service level objective %s does not exist." % slo_name)
+    value = _slo_fn_value(store, project, slo, fn, start, end)
+    if value is None:
+        return {}
+    ts = {"metric": {"type": "select_slo_%s" % fn, "labels": {"slo": slo_name}},
+          "resource": {"type": "global", "labels": {"project_id": project}},
+          "metricKind": "GAUGE", "valueType": "DOUBLE", "unit": "1",
+          "points": [{"interval": {"startTime": _ts(start), "endTime": _ts(end)}, "value": {"doubleValue": value}}]}
+    return {"timeSeries": [ts], "unit": "1"}
+
+
+def _services(store, method, project, rest, payload, query):
+    if not rest:
+        if method == "POST":
+            return _json(200, _copy(create_service(store, project, payload)))
+        if method == "GET":
+            return _json(200, list_services(store, project, query))
+        raise _E(405, "UNIMPLEMENTED", "Method %s not allowed on services." % method)
+    sid = rest[0]
+    if len(rest) == 1:
+        if method == "GET":
+            return _json(200, _copy(_get_service(store, project, sid)))
+        if method == "DELETE":
+            delete_service(store, project, sid)
+            return _json(200, {})
+    if len(rest) >= 2 and rest[1] == "serviceLevelObjectives":
+        if len(rest) == 2:
+            if method == "POST":
+                return _json(200, create_slo(store, project, sid, payload))
+            if method == "GET":
+                return _json(200, {"serviceLevelObjectives": list_slos(store, project, sid)})
+        if len(rest) == 3:
+            oid = rest[2]
+            if method == "GET":
+                name = _slo_name(_get_service(store, project, sid)["name"], oid)
+                if name not in store.slos:
+                    raise _E(404, "NOT_FOUND", "Service level objective %s does not exist." % name)
+                return _json(200, _copy(store.slos[name]))
+            if method == "DELETE":
+                delete_slo(store, project, sid, oid)
+                return _json(200, {})
+    raise _E(404, "NOT_FOUND", "Unknown service path.")
 
 
 # ── metric descriptors ─────────────────────────────────────────────────────
@@ -1067,6 +1503,229 @@ def write_time_series(store, project, payload):
     return {}
 
 
+def record_system_point(store, project, metric_type, resource, value, end_iso, unit="", metric_labels=None):
+    """Internal point writer for a Vyomi SYSTEM metric (one of BUILTIN_METRICS) fed by
+    another core in-process — e.g. Cloud Logging's live byte/entry counters. Unlike
+    `write_time_series`, never reaches the external REST API (callers are other cores, not
+    API clients) so it is not restricted to CUSTOM_PREFIXES; it still enforces the
+    monotonic-points-per-series rule so the evaluate_incidents / timeSeries.list readers see
+    an ordered series. Best effort: swallows stale/out-of-order points instead of raising."""
+    desc = BUILTIN_METRICS.get(metric_type)
+    if desc is None:
+        return
+    metric = {"type": metric_type, "labels": dict(metric_labels or {})}
+    key = _series_key(project, metric, resource)
+    prev = store.time_series.get(key)
+    if prev and prev["points"] and end_iso < prev["points"][-1]["interval"]["endTime"]:
+        return
+    vk = {"INT64": "int64Value", "DOUBLE": "doubleValue", "BOOL": "boolValue"}.get(desc["valueType"])
+    if vk is None:
+        return
+    val = str(int(value)) if vk == "int64Value" else (float(value) if vk == "doubleValue" else bool(value))
+    rec = store.time_series.setdefault(key, {"metric": metric, "resource": _copy(resource),
+                                              "metricKind": desc["metricKind"], "valueType": desc["valueType"],
+                                              "unit": unit, "points": []})
+    if rec["points"] and rec["points"][-1]["interval"]["endTime"] == end_iso:   # same instant: the latest value wins
+        rec["points"][-1]["value"] = {vk: val}
+        return
+    rec["points"].append({"interval": {"endTime": end_iso}, "value": {vk: val}})
+    if len(rec["points"]) > MAX_POINTS_PER_SERIES:
+        del rec["points"][: len(rec["points"]) - MAX_POINTS_PER_SERIES]
+
+
+# ── uptime probing: a real (non-dispatched) reachability engine ────────────
+# Vyomi has no outbound network access (see "Nothing leaves the simulator" in AGENT-UI.md) so
+# an uptime check can never actually reach an arbitrary external host. Rather than leaving the
+# result permanently unevaluated, every check is probed against the ONE thing Vyomi can tell is
+# really up or down: a Compute Engine instance it models. A check whose target is a `gce_instance`
+# reflects that instance's real status; every other target (the `uptime_url` host:path the create
+# wizard always builds) deterministically fails closed, consistent with the no-egress rule — not
+# randomly, and not silently never-evaluated.
+def _instance_reachable(store, project, labels):
+    vm_store = getattr(store, "compute_vm_store", None)
+    zone, iid = (labels or {}).get("zone"), (labels or {}).get("instance_id")
+    if vm_store is None or not zone or not iid:
+        return False
+    inst = vm_store.instances.get("projects/%s/zones/%s/instances/%s" % (project, zone, iid))
+    return bool(inst) and inst.get("status") == "RUNNING"
+
+
+def check_reachable(store, project, check):
+    mr = check.get("monitoredResource") or {}
+    if mr.get("type") == "gce_instance":
+        return _instance_reachable(store, project, mr.get("labels"))
+    return False   # uptime_url (or any other target): no real network path out of the simulator
+
+
+def _uptime_check_regions(check):
+    return check.get("selectedRegions") or [r for r, _, _ in UPTIME_IPS]
+
+
+def run_uptime_probes(store, project, now=None):
+    """Probe every uptime check config in `project` and record a real
+    monitoring.googleapis.com/uptime_check/check_passed point per selected (or default) region —
+    the same metric the console's own alert-policy wizard already filters on. Idempotent within
+    the same second (record_system_point drops non-newer points), cheap enough to call on every
+    read, like evaluate_incidents."""
+    now = now or _now_dt()
+    end_iso = _ts(now)
+    prefix = "projects/%s/uptimeCheckConfigs/" % project
+    for name, check in store.uptime_checks.items():
+        if not name.startswith(prefix):
+            continue
+        check_id = name.rsplit("/", 1)[-1]
+        passed = check_reachable(store, project, check)
+        host = ((check.get("monitoredResource") or {}).get("labels") or {}).get("host", "")
+        resource = {"type": "uptime_url", "labels": {"project_id": project, "host": host}}
+        for region in _uptime_check_regions(check):
+            record_system_point(store, project, "monitoring.googleapis.com/uptime_check/check_passed", resource,
+                                 passed, end_iso, unit="1", metric_labels={"check_id": check_id, "checked_region": region})
+
+
+# ── Ops Agent: real VM metadata, not a fabricated check-in ──────────────────
+# The real "VMs with Ops Agent" panel counts instances actually reporting the agent's own
+# agent.googleapis.com/agent/uptime heartbeat metric. Vyomi has no agent process to run inside a
+# simulated VM, so the heartbeat is derived instead from the SAME real, inspectable signal OS
+# Config uses to decide whether a VM is managed by an Ops Agent policy: metadata key
+# `enable-osconfig=TRUE` (gcloud compute instances create --metadata=enable-osconfig=TRUE). A VM
+# the operator never opted in for is correctly never counted.
+def _instance_has_ops_agent(inst):
+    items = (inst.get("metadata") or {}).get("items") or []
+    return inst.get("status") == "RUNNING" and any(
+        str(i.get("key")) == "enable-osconfig" and str(i.get("value") or "").strip().upper() == "TRUE" for i in items)
+
+
+def ops_agent_instances(store, project):
+    vm_store = getattr(store, "compute_vm_store", None)
+    if vm_store is None:
+        return []
+    prefix = "projects/%s/zones/" % project
+    out = [inst for name, inst in vm_store.instances.items() if name.startswith(prefix) and _instance_has_ops_agent(inst)]
+    return sorted(out, key=lambda i: i["name"])
+
+
+def sync_ops_agent_metrics(store, project, now=None):
+    now = now or _now_dt()
+    end_iso = _ts(now)
+    for inst in ops_agent_instances(store, project):
+        resource = {"type": "gce_instance", "labels": {"project_id": project, "instance_id": str(inst.get("id") or inst["name"]),
+                                                        "zone": inst.get("_zone") or ""}}
+        record_system_point(store, project, "agent.googleapis.com/agent/uptime", resource, 1.0, end_iso, unit="1")
+
+
+# ── Cost Explorer: real spend, derived from actual resource inventory ───────
+# Real Cost Explorer reads from a Cloud Billing BigQuery export Vyomi doesn't run. Real GCP DOES
+# expose project spend as a Cloud Monitoring metric (billing.googleapis.com/billing/total_cost,
+# the same series a Billing Budget alert evaluates) — so that's the native-wire path this
+# appliance uses too, computed for real from the project's actual resource inventory (on-demand
+# pricing x real uptime/storage, same engine core/cost_model.py gives Azure Cost Management)
+# instead of reading a billing export this appliance never generates.
+def _mtd_fraction(now):
+    days_in_month = calendar.monthrange(now.year, now.month)[1]
+    return now.day / days_in_month
+
+
+def _billing_cost_rows(store, project):
+    from core import cost_model
+    rows = []
+    vm_store = getattr(store, "compute_vm_store", None)
+    if vm_store is not None:
+        prefix = "projects/%s/zones/" % project
+        for name, inst in vm_store.instances.items():
+            if not name.startswith(prefix) or inst.get("status") != "RUNNING":
+                continue
+            mt = (inst.get("machineType") or "").rsplit("/", 1)[-1]
+            cost = cost_model.estimate_resource_cost("gcp", "compute", "instance", mt)
+            rows.append(("Compute Engine", cost["monthly_usd"]))
+    gcs_store = getattr(store, "gcs_store", None)
+    if gcs_store is not None:
+        rate_per_gb = cost_model.STORAGE_USAGE_RATES.get("gcp.storage", (0.02, 0.0))[0]
+        for bucket, objs in gcs_store.objects.items():
+            total_bytes = 0
+            for entry in objs.values():
+                versions = entry.get("versions") or []
+                if versions and not versions[0].get("is_delete_marker"):
+                    total_bytes += versions[0].get("size") or 0
+            if total_bytes:
+                rows.append(("Cloud Storage", round(total_bytes / (1024 ** 3) * rate_per_gb, 6)))
+    return rows
+
+
+def billing_cost_by_service(store, project, now=None):
+    """-> {service: month-to-date USD}, the real inventory-derived number the Cost Explorer page
+    and billing.googleapis.com/billing/total_cost both show."""
+    now = now or _now_dt()
+    frac = _mtd_fraction(now)
+    by_service = {}
+    for service, monthly in _billing_cost_rows(store, project):
+        by_service[service] = by_service.get(service, 0.0) + monthly * frac
+    return {k: round(v, 6) for k, v in by_service.items()}
+
+
+def sync_billing_metrics(store, project, now=None):
+    now = now or _now_dt()
+    end_iso = _ts(now)
+    resource = {"type": "global", "labels": {"project_id": project}}
+    by_service = billing_cost_by_service(store, project, now)
+    for service, cost in (by_service or {"none": 0.0}).items():
+        record_system_point(store, project, "billing.googleapis.com/billing/total_cost", resource, cost, end_iso,
+                             unit="{USD}", metric_labels={"service": service})
+
+
+def _sync_derived_metrics(store, project, now=None):
+    """Every lazily-evaluated real signal Monitoring mirrors in from other cores — called on
+    every read path that could show it (like evaluate_incidents), so it's never stale."""
+    now = now or _now_dt()
+    run_uptime_probes(store, project, now)
+    sync_ops_agent_metrics(store, project, now)
+    sync_billing_metrics(store, project, now)
+
+
+# ── Metrics Scope: real cross-project aggregation (Metrics Scopes API, v1) ──
+# A metrics scope lets a Monitoring workspace see time series written by OTHER projects — real
+# GCP's `locations/global/metricsScopes/{scopingProject}` resource and its `monitoredProjects`
+# sub-collection. Vyomi's cores already key every resource by an arbitrary project id in one
+# shared store, so this is modeled for real: once a project is added to another's scope,
+# `list_time_series` (Metrics Explorer, dashboards, Cost Explorer, the Ops Agent / uptime panels
+# above) genuinely includes that project's series. Alert policies stay single-project, like the
+# real product — a policy only ever evaluates its own project's data.
+def _scope_name(pid):
+    return "locations/global/metricsScopes/%s" % pid
+
+
+def get_metrics_scope(store, pid):
+    sc = store.metrics_scopes.get(pid) or {}
+    created = sc.get("createTime") or _now()
+    monitored = list(dict.fromkeys([pid] + list(sc.get("monitoredProjects") or [])))
+    return {"name": _scope_name(pid), "createTime": created,
+            "monitoredProjects": [{"name": "%s/projects/%s" % (_scope_name(pid), mp), "createTime": created}
+                                  for mp in monitored]}
+
+
+def scope_projects(store, pid):
+    sc = store.metrics_scopes.get(pid) or {}
+    return {pid} | set(sc.get("monitoredProjects") or [])
+
+
+def add_monitored_project(store, pid, monitored_id):
+    if not monitored_id:
+        raise _bad("Field monitored_project.name is required.")
+    if monitored_id == pid:
+        raise _bad("Project %s is already in its own metrics scope." % pid)
+    sc = store.metrics_scopes.setdefault(pid, {"createTime": _now(), "monitoredProjects": []})
+    if monitored_id in sc["monitoredProjects"]:
+        raise _E(409, "ALREADY_EXISTS", "Project %s is already monitored by metrics scope %s." % (monitored_id, pid))
+    sc["monitoredProjects"].append(monitored_id)
+    return {"name": "%s/projects/%s" % (_scope_name(pid), monitored_id), "createTime": sc["createTime"]}
+
+
+def remove_monitored_project(store, pid, monitored_id):
+    sc = store.metrics_scopes.get(pid)
+    if not sc or monitored_id not in (sc.get("monitoredProjects") or []):
+        raise _E(404, "NOT_FOUND", "Project %s is not monitored by metrics scope %s." % (monitored_id, pid))
+    sc["monitoredProjects"].remove(monitored_id)
+
+
 def _ts_getter(s, lhs):
     if lhs == "metric.type":
         return s["metric"]["type"]
@@ -1123,9 +1782,13 @@ def _val(x, count=False):
 
 
 def list_time_series(store, project, query):
+    _sync_derived_metrics(store, project)
     filt = query.get("filter")
     if not filt:
         raise _bad("Field filter is required.")
+    m = _SLO_FILTER_RE.match(filt.strip())
+    if m:
+        return _slo_filter_series(store, project, m.group(1), m.group(2), query)
     if "metric.type" not in filt:
         raise _bad("Field filter had an invalid value of \"%s\": must specify a metric type, e.g. "
                    "metric.type = \"custom.googleapis.com/foo\"." % filt)
@@ -1141,8 +1804,7 @@ def list_time_series(store, project, query):
     if view not in ("FULL", "HEADERS", "1"):
         raise _bad("Field view has an invalid value '%s'." % view)
     headers_only = view in ("HEADERS", "1")
-    pred = compile_filter(filt, _ts_getter, lambda l: l in ("metric.type", "resource.type", "project") or re.match(
-        r"^(metric|resource)\.labels?\.", l) or l.startswith("metadata."))
+    pred = compile_filter(filt, _ts_getter, _ts_filter_allowed)
     aligner = query.get("aggregation.perSeriesAligner") or "ALIGN_NONE"
     reducer = query.get("aggregation.crossSeriesReducer") or "REDUCE_NONE"
     aligner = _ENUM_NAMES["perSeriesAligner"].get(int(aligner), aligner) if str(aligner).isdigit() else aligner
@@ -1155,9 +1817,10 @@ def list_time_series(store, project, query):
     if reducer != "REDUCE_NONE" and aligner == "ALIGN_NONE":
         raise _bad("Field aggregation.per_series_aligner is required when cross_series_reducer is set.")
     group_by = [g for g in (query.get("aggregation.groupByFields") or "").split(",") if g]
+    scoped = scope_projects(store, project)
     selected = []
     for key, s in sorted(store.time_series.items()):
-        if not key.startswith(project + "|") or not pred(s):
+        if key.split("|", 1)[0] not in scoped or not pred(s):
             continue
         pts = [p for p in s["points"] if start <= parse_ts(p["interval"]["endTime"]) <= end]
         selected.append((s, pts))
@@ -1234,6 +1897,262 @@ def _group_label(ent, f):
     return (ent[m.group(1)].get("labels") or {}).get(m.group(2), "") if m else ""
 
 
+# ── group membership ─────────────────────────────────────────────────────────
+def _resource_inventory(store, project):
+    """Distinct monitored-resource instances this project has actually emitted time series
+    for — the only real resource inventory this appliance has, so group membership (and the
+    Groups list page's Instances/Resources columns) is evaluated against it instead of
+    always being empty."""
+    seen = {}
+    prefix = project + "|"
+    for key, s in store.time_series.items():
+        if not key.startswith(prefix):
+            continue
+        r = s["resource"]
+        k = (r["type"], tuple(sorted((r.get("labels") or {}).items())))
+        seen.setdefault(k, {"type": r["type"], "labels": dict(r.get("labels") or {})})
+    return list(seen.values())
+
+
+def _resource_getter(inst, lhs):
+    if lhs == "resource.type":
+        return inst["type"]
+    m = re.match(r"^resource\.labels?\.(.+)$", lhs)
+    return inst["labels"].get(m.group(1)) if m else None
+
+
+def group_members(store, project, filt):
+    try:
+        pred = compile_filter(filt, _resource_getter,
+                              lambda l: l == "resource.type" or re.match(r"^resource\.labels?\.", l))
+    except _E:
+        return []   # a filter the real API would also reject at evaluation time: no members
+    members = [inst for inst in _resource_inventory(store, project) if pred(inst)]
+    return sorted(members, key=lambda x: (x["type"], sorted(x["labels"].items())))
+
+
+# ── incidents: the alert-policy rule-evaluation engine ──────────────────────
+# There is no public `incidents.list` method in the Monitoring v3 Discovery doc — incidents
+# only ever reach the outside world as the JSON payload Google documents for notification
+# channels (incident_id / state / started_at / ended_at / policy_name / condition_name / …,
+# see cloud.google.com/monitoring/support/notification-options#webhooks). We expose that same
+# documented shape as a project-scoped collection (`projects/{p}/incidents`), evaluated here
+# instead of delivered to a channel, so the console's Alerts page has real content instead of
+# an always-empty stub. Evaluated lazily (pull, on every incidents read) against the stored
+# time series — equivalent, for a synchronous wire API with no background clock, to a rule
+# engine that runs continuously.
+_COMPARATORS = {"COMPARISON_GT": lambda v, t: v > t, "COMPARISON_GE": lambda v, t: v >= t,
+                "COMPARISON_LT": lambda v, t: v < t, "COMPARISON_LE": lambda v, t: v <= t,
+                "COMPARISON_EQ": lambda v, t: v == t, "COMPARISON_NE": lambda v, t: v != t}
+_MIN_EVAL_WINDOW = 60.0   # seconds; a condition is evaluated against at least this much history
+
+
+def _threshold_breach_map(store, project, cond, now):
+    """-> {series_key: (breaching, series, value)} for a conditionThreshold condition, one
+    entry per matching time series (≈ one incident per breaching resource, like the real
+    engine). `breaching` requires every point inside the condition's `duration` window to
+    cross the threshold, not just the latest one — a sustained breach, like the real API."""
+    body = cond["conditionThreshold"]
+    cmp_fn = _COMPARATORS.get(body.get("comparison"))
+    if cmp_fn is None:
+        return {}
+    threshold = body.get("thresholdValue", 0)
+    duration = parse_duration(body.get("duration") or "0s")
+    aggs = body.get("aggregations") or []
+    aligner = (aggs[0].get("perSeriesAligner") if aggs else None) or "ALIGN_NONE"
+    period = parse_duration(aggs[0]["alignmentPeriod"]) if aggs and aggs[0].get("alignmentPeriod") else 60.0
+    window = max(duration, period, _MIN_EVAL_WINDOW)
+    start = now - timedelta(seconds=window)
+    try:
+        pred = compile_filter(body.get("filter") or "", _ts_getter, _ts_filter_allowed)
+    except _E:
+        return {}
+    out, prefix = {}, project + "|"
+    for key, s in store.time_series.items():
+        if not key.startswith(prefix) or not pred(s):
+            continue
+        pts = [p for p in s["points"] if start <= parse_ts(p["interval"]["endTime"]) <= now]
+        vals = [(p, _num(p["value"])) for p in pts]
+        vals = [(p, v) for p, v in vals if v is not None]
+        if not vals:
+            continue
+        value = _reduce(aligner, [v for _, v in vals]) if aligner != "ALIGN_NONE" else vals[-1][1]
+        breaching = cmp_fn(value, threshold) and (duration <= 0 or all(cmp_fn(v, threshold) for _, v in vals))
+        out[key] = (bool(breaching), s, value)
+    return out
+
+
+def _absent_breach_map(store, project, cond, now):
+    """-> {series_key: (breaching, series, None)} for a conditionAbsent condition. Only
+    series that have reported at least one point are considered — a metric Vyomi never wrote
+    any data for has no resource to say is silent, so it never opens an incident (unlike,
+    say, an uptime check that was configured but never probed going "absent" forever)."""
+    body = cond["conditionAbsent"]
+    duration = parse_duration(body.get("duration") or "0s")
+    try:
+        pred = compile_filter(body.get("filter") or "", _ts_getter, _ts_filter_allowed)
+    except _E:
+        return {}
+    out, prefix = {}, project + "|"
+    for key, s in store.time_series.items():
+        if not key.startswith(prefix) or not pred(s) or not s["points"]:
+            continue
+        last = parse_ts(s["points"][-1]["interval"]["endTime"])
+        out[key] = ((now - last).total_seconds() >= duration, s, None)
+    return out
+
+
+def _condition_breach_map(store, project, cond, now):
+    if "conditionThreshold" in cond:
+        return _threshold_breach_map(store, project, cond, now)
+    if "conditionAbsent" in cond:
+        return _absent_breach_map(store, project, cond, now)
+    return {}   # conditionMatchedLog / MQL / PromQL conditions are never evaluated (no log
+                # ingestion or query-language engine) — see gcp.monitoring.incidents limitations
+
+
+def _policy_breach_map(store, project, p, now):
+    """Single-condition policies (the common case — every policy the console wizard builds
+    has exactly one) are tracked per matching resource. Multi-condition policies are combined
+    at the whole-policy level (AND/OR across each condition's "any resource breaching") into
+    one synthetic "__policy__" incident — Vyomi doesn't cross-match resources between
+    conditions the way AND_WITH_MATCHING_RESOURCE does on the real API."""
+    conds = p.get("conditions") or []
+    if len(conds) == 1:
+        return _condition_breach_map(store, project, conds[0], now)
+    maps = [_condition_breach_map(store, project, c, now) for c in conds]
+    any_breach = [any(v[0] for v in m.values()) for m in maps]
+    overall = all(any_breach) if (p.get("combiner") or "OR") in ("AND", "AND_WITH_MATCHING_RESOURCE") else any(any_breach)
+    sample = next((v for m in maps for v in m.values() if v[0]), (False, None, None))
+    return {"__policy__": (overall, sample[1], sample[2])}
+
+
+def _policy_snoozed(store, project, policy_name, now):
+    prefix = "projects/%s/snoozes/" % project
+    return any(policy_name in (s.get("criteria") or {}).get("policies", []) and _snooze_active(s, now)
+               for n, s in store.snoozes.items() if n.startswith(prefix))
+
+
+def _fmt_num(v):
+    if v is None:
+        return "no data"
+    return ("%.4g" % v) if isinstance(v, float) else str(v)
+
+
+def _incident_summary(p, cond, kind, value, threshold):
+    body = cond.get(kind) or {}
+    metric = _metric_of(body.get("filter")) or p.get("displayName", "")
+    if kind == "conditionThreshold":
+        word = {"COMPARISON_GT": "above", "COMPARISON_GE": "at or above", "COMPARISON_LT": "below",
+                "COMPARISON_LE": "at or below", "COMPARISON_EQ": "equal to", "COMPARISON_NE": "not equal to"
+                }.get(body.get("comparison"), "")
+        return "%s is %s the threshold (%s vs %s)" % (metric, word, _fmt_num(value), _fmt_num(threshold))
+    if kind == "conditionAbsent":
+        return "%s has not reported in at least %s" % (metric, body.get("duration") or "0s")
+    return cond.get("displayName") or p.get("displayName", "")
+
+
+def _incident_name(project, iid):
+    return "projects/%s/incidents/%s" % (project, iid)
+
+
+def _open_incident(store, project, p, cond, kind, rkey, series, value, now):
+    iid = _rand_id()
+    inc = {"name": _incident_name(project, iid), "incidentId": iid, "state": "OPEN", "acknowledged": False,
+           "policyName": p["name"], "policyDisplayName": p.get("displayName", ""),
+           "conditionName": cond.get("name", ""), "severity": p.get("severity") or "",
+           "summary": _incident_summary(p, cond, kind, value, (cond.get(kind) or {}).get("thresholdValue")),
+           "resource": _copy(series["resource"]) if series else {}, "metric": _copy(series["metric"]) if series else {},
+           "observedValue": value, "thresholdValue": (cond.get(kind) or {}).get("thresholdValue"),
+           "startedAt": _ts(now), "endedAt": None, "userLabels": _copy(p.get("userLabels") or {}),
+           "_resourceKey": rkey}
+    store.incidents[inc["name"]] = inc
+    return inc
+
+
+def _close_incident(inc, now):
+    inc["state"] = "CLOSED"
+    inc["endedAt"] = _ts(now)
+
+
+def evaluate_incidents(store, project, now=None):
+    """Sweep every alert policy in `project`, opening/closing incidents against the real
+    stored time series exactly as `_condition_breach_map` sees them right now. Idempotent and
+    cheap enough (bounded by MAX_POLICIES) to call on every incidents read."""
+    now = now or _now_dt()
+    _sync_derived_metrics(store, project, now)
+    prefix = "projects/%s/" % project
+    for name, p in list(store.alert_policies.items()):
+        if not name.startswith(prefix):
+            continue
+        open_by_key = {inc["_resourceKey"]: inc for inc in store.incidents.values()
+                       if inc["policyName"] == name and inc["state"] == "OPEN"}
+        conds = p.get("conditions") or []
+        if not p.get("enabled", True) or not conds:
+            for inc in open_by_key.values():
+                _close_incident(inc, now)
+            continue
+        bmap = _policy_breach_map(store, project, p, now)
+        snoozed = _policy_snoozed(store, project, name, now)
+        cond0 = conds[0]
+        kind0 = next((k for k in _CONDITION_KINDS if k in cond0), None)
+        seen = set()
+        for rkey, (breaching, series, value) in bmap.items():
+            seen.add(rkey)
+            existing = open_by_key.get(rkey)
+            if breaching and not existing and not snoozed:
+                _open_incident(store, project, p, cond0, kind0, rkey, series, value, now)
+            elif not breaching and existing:
+                _close_incident(existing, now)
+        for rkey, existing in open_by_key.items():
+            if rkey not in seen:
+                _close_incident(existing, now)
+
+
+def list_incidents(store, project, query):
+    prefix = "projects/%s/incidents/" % project
+    items = [_copy({k: v for k, v in i.items() if k != "_resourceKey"})
+             for n, i in store.incidents.items() if n.startswith(prefix)]
+    if query.get("filter"):
+        def getter(i, lhs):
+            return i.get(_snake_to_camel(lhs))
+        pred = compile_filter(query["filter"], getter, lambda l: _snake_to_camel(l) in ("state", "policyName", "severity"))
+        items = [i for i in items if pred(i)]
+    items.sort(key=lambda i: i["startedAt"], reverse=True)
+    return _paginate(items, query, "incidents", {"totalSize": len(items)})
+
+
+def _get_incident(store, project, iid):
+    i = store.incidents.get(_incident_name(project, iid))
+    if not i:
+        raise _E(404, "NOT_FOUND", "Incident %s does not exist." % _incident_name(project, iid))
+    return i
+
+
+def _incident_view(i):
+    return {k: v for k, v in i.items() if k != "_resourceKey"}
+
+
+def acknowledge_incident(store, project, iid):
+    i = _get_incident(store, project, iid)
+    i["acknowledged"] = True
+    return _incident_view(_copy(i))
+
+
+def _incidents(store, method, project, rest, verb, query):
+    evaluate_incidents(store, project)
+    if not rest:
+        if method == "GET":
+            return _json(200, list_incidents(store, project, query))
+        raise _E(405, "UNIMPLEMENTED", "Method %s not allowed on incidents." % method)
+    if len(rest) == 1:
+        if verb == "acknowledge" and method == "POST":
+            return _json(200, acknowledge_incident(store, project, rest[0]))
+        if method == "GET" and not verb:
+            return _json(200, _copy(_incident_view(_get_incident(store, project, rest[0]))))
+    raise _E(404, "NOT_FOUND", "Unknown incident path.")
+
+
 # ── console views ──────────────────────────────────────────────────────────
 def _condition_summary(c):
     kind = next((k for k in _CONDITION_KINDS if k in c), None)
@@ -1291,10 +2210,15 @@ def policy_console_view(store, p):
         "last_modified": (p.get("mutationRecord") or {}).get("mutateTime", ""),
         "created": (p.get("creationRecord") or {}).get("mutateTime", ""),
         "created_by": (p.get("creationRecord") or {}).get("mutatedBy", ""),
-        "incidents": "0 open incidents",
+        "incidents": _incidents_text(store, p["name"]),
         "labels_text": ", ".join("%s=%s" % kv for kv in sorted((p.get("userLabels") or {}).items())) or "None",
     })
     return v
+
+
+def _incidents_text(store, policy_name):
+    n = sum(1 for i in store.incidents.values() if i.get("policyName") == policy_name and i.get("state") == "OPEN")
+    return "%d open incident%s" % (n, "" if n == 1 else "s")
 
 
 def console_view(store, p):
@@ -1302,6 +2226,11 @@ def console_view(store, p):
 
 
 def list_all(store, project=None):
+    """Console view of every policy, with `incidents` reflecting the real evaluation engine
+    (see evaluate_incidents) — swept fresh for every project represented, not left stale."""
+    now = _now_dt()
+    for pr in ({project} if project else {n.split("/")[1] for n in store.alert_policies}):
+        evaluate_incidents(store, pr, now)
     return [policy_console_view(store, p) for n, p in sorted(store.alert_policies.items())
             if project is None or n.startswith("projects/%s/" % project)]
 
@@ -1375,6 +2304,20 @@ def _dispatch(store, method, path, query, headers, body):
         payload = {}
     payload = _enum_walk(payload, False)   # integer enums in request bodies → names
     p = path.split("?", 1)[0]
+    if p.startswith("/v1/") or p == "/v1":
+        p = p[len("/v1"):].strip("/")
+        segs = [s for s in p.split("/") if s]
+        try:
+            if len(segs) >= 3 and segs[0] == "projects" and segs[2] in ("dashboards", "snoozes"):
+                project, coll, rest = segs[1], segs[2], segs[3:]
+                if coll == "dashboards":
+                    return _dashboards(store, method, project, rest, payload, query)
+                return _snoozes(store, method, project, rest, payload, query)
+            if len(segs) >= 3 and segs[0] == "locations" and segs[1] == "global" and segs[2] == "metricsScopes":
+                return _metrics_scopes(store, method, segs[3:], payload)
+        except _E as e:
+            return _err(e.status, e.gcp_status, e.message)
+        return _err(404, "NOT_FOUND", "Unknown path: %s" % path)
     if not (p.startswith("/v3/") or p == "/v3"):
         return _err(404, "NOT_FOUND", "Unknown path: %s" % path)
     p = p[len("/v3"):].strip("/")
@@ -1402,6 +2345,10 @@ def _dispatch(store, method, path, query, headers, body):
                 if not d:
                     raise _E(404, "NOT_FOUND", "Notification channel descriptor %s not found." % rest[0])
                 return _json(200, _with_project(d, project))
+        elif coll == "incidents":
+            return _incidents(store, method, project, rest, verb, query)
+        elif coll == "services":
+            return _services(store, method, project, rest, payload, query)
         elif coll == "groups":
             return _groups(store, method, project, rest, payload, query)
         elif coll == "uptimeCheckConfigs":
@@ -1505,8 +2452,11 @@ def _groups(store, method, project, rest, payload, query):
         raise _E(405, "UNIMPLEMENTED", "Method %s not allowed on groups." % method)
     gid = rest[0]
     if len(rest) == 2 and rest[1] == "members" and method == "GET":
-        _get_group(store, project, gid)
-        return _json(200, {"members": [], "totalSize": 0})
+        g = _get_group(store, project, gid)
+        members = group_members(store, project, g.get("filter") or "")
+        res = _paginate(members, query, "members")
+        res["totalSize"] = len(members)
+        return _json(200, res)
     if len(rest) == 1:
         if method == "GET":
             return _json(200, _copy(_get_group(store, project, gid)))
@@ -1518,11 +2468,25 @@ def _groups(store, method, project, rest, payload, query):
     raise _E(404, "NOT_FOUND", "Unknown group path.")
 
 
+def _metrics_scopes(store, method, rest, payload):
+    if len(rest) == 1 and method == "GET":
+        return _json(200, get_metrics_scope(store, rest[0]))
+    if len(rest) == 2 and rest[1] == "projects" and method == "POST":
+        name = str((payload or {}).get("name") or "")
+        monitored_id = name.rsplit("/", 1)[-1]
+        return _json(200, add_monitored_project(store, rest[0], monitored_id))
+    if len(rest) == 3 and rest[1] == "projects" and method == "DELETE":
+        remove_monitored_project(store, rest[0], rest[2])
+        return _json(200, {})
+    raise _E(404, "NOT_FOUND", "Unknown metrics scope path.")
+
+
 def _uptime(store, method, project, rest, payload, query):
     if not rest:
         if method == "POST":
             return _json(200, _copy(create_uptime(store, project, payload)))
         if method == "GET":
+            run_uptime_probes(store, project)
             prefix = "projects/%s/uptimeCheckConfigs/" % project
             items = [_copy(u) for n, u in sorted(store.uptime_checks.items()) if n.startswith(prefix)]
             return _json(200, _paginate(items, query, "uptimeCheckConfigs", {"totalSize": len(items)}))

@@ -28,7 +28,10 @@ OUT = os.path.join(HERE, "core")
 
 CORES = [
     "object_store.py", "s3_object_core.py",        # S3
+    "s3_tables_core.py", "s3_insights_core.py", "s3_ext_core.py", "s3_vectors_core.py", "backup_core.py", "organizations_core.py", "qr_png.py",     # S3 Tables (s3tables REST) + Access Analyzer for S3 / Storage Lens (loaded by s3_object_core)
     "nosql_store.py", "dynamodb_core.py",           # DynamoDB
+    "dynamodb_expr.py",                             # DynamoDB expression engine (v4 C0: key/filter/condition/update/projection)
+    "dax_core.py",                                  # DynamoDB Accelerator (DAX): clusters, subnet/parameter groups, cache engine
     "kms_keystore.py", "kms_core.py",               # KMS
     "kv_store.py", "secrets_core.py",               # Secrets Manager
     "sql_store.py", "rds_core.py",                  # RDS
@@ -42,36 +45,58 @@ CORES = [
     "gcp_secretmanager_core.py",                    # GCP: Secret Manager REST (native google-cloud-secret-manager)
     "gcp_pubsub_core.py",                           # GCP: Pub/Sub REST (native google-cloud-pubsub)
     "gcp_iam_core.py",                              # GCP: Cloud IAM REST (SA + policy eval)
+    "gcp_wif_core.py",                              # GCP: workload/workforce identity federation (providers, mapping, STS exchange)
     "gcp_cloudsql_core.py",                         # GCP: Cloud SQL Admin REST (control plane)
     "gcp_artifactregistry_core.py",                 # GCP: Artifact Registry REST v1 (repositories, packages, versions, tags, docker images)
     "function_shims.py",                            # flask / functions_framework / azure.functions shims + request plumbing for function code
     "gcp_console_tabs.py",                          # GCP console resource-detail tabs (validation + records no engine models)
-    "instance_catalog.py",                          # machine-type catalog (vCPU/RAM per GCE/EC2/Azure size)
+    "gcp_compute_core.py",                          # GCP: Compute Engine networking REST v1 (VPC networks, subnets, firewalls, routes, addresses)
+    "instance_catalog.py",                          # real cloud instance-type catalog (GCP machine type shapes) — gcp_compute_instances_core depends on it
+    "gcp_compute_ext_core.py",                      # GCP Compute extensions: resource policies/schedulers, reservations, sole-tenant, storage pools, NEGs, Recommender
+    "gcp_compute_instances_core.py",                # GCP: Compute Engine REST v1 (instances, disks, images, templates, groups, health checks — control plane)
+    "gcp_resourcemanager_core.py",                 # GCP: Resource Manager (project, tags, essential contacts, org policies) — IAM & Admin
+    "gcp_pam_core.py",                             # GCP: Privileged Access Manager entitlements — IAM & Admin
     "azure_blob_core.py",                           # Azure: Blob REST (native azure-storage-blob)
     "azure_cosmos_core.py",                         # Azure: Cosmos DB SQL/Core API (native azure-cosmos)
     "azure_keyvault_secrets_core.py",               # Azure: Key Vault secrets (native azure-keyvault-secrets)
     "azure_keyvault_keys_core.py",                  # Azure: Key Vault keys (native azure-keyvault-keys)
+    "azure_keyvault_certificates_core.py",          # Azure: Key Vault certificates (native azure-keyvault-certificates)
+    "scheduler_core.py",                            # AWS: EventBridge Scheduler (schedules, schedule groups) — the router imports it
     "azure_queue_core.py",                          # Azure: Storage Queue (native azure-storage-queue)
+    "azure_table_core.py",                          # Azure: Table Storage (native azure-data-tables)
     "azure_servicebus_core.py",                     # v2.5.0 Azure: Service Bus topics (pub/sub fan-out — SNS/Pub-Sub peer)
     "azure_sql_core.py",                            # v2.6.0 Azure: SQL data plane on the SqlStore seam (RDS/Cloud SQL peer)
     "azure_iam_core.py",                            # v2.6.0 Azure: RBAC checkAccess decision core (IAM/testIamPermissions peer)
-    "eventbridge_core.py",                          # v2.6.0 AWS: EventBridge event-bus data plane (rules → SQS delivery)
+    "azure_acr_core.py",                            # v4: Container Registry repository data plane (OCI v2 + ACR v1 REST)
+    "azure_graph_core.py",                          # v4: Microsoft Graph (Entra ID: users/groups/apps/service principals/domains/admin units)
+    "eventbridge_core.py", "eventbridge_schemas_core.py",                          # v2.6.0 AWS: EventBridge event-bus data plane (rules → SQS delivery)
     "lambda_core.py",                              # v2.6.0 AWS: Lambda serverless invoke (sandboxed Python runtime)
     "apigateway_core.py",                          # v2.7.0 AWS: API Gateway data plane (routing + MOCK/Lambda-proxy integrations)
     "cost_model.py",                                # list prices -> the space cost-savings metrics (pure data)
     "kinesis_core.py",                             # AWS: Kinesis Data Streams (shards, records, iterators, consumers)
     "apigatewayv2_core.py",                        # AWS: API Gateway V2 control plane
     "apigatewayv2_gateway.py",                     # AWS: API Gateway V2 data plane (authorizers, throttling, CORS, Lambda proxy)
+    "autoscaling_core.py",                          # AWS: Auto Scaling groups (CloudWatch alarm actions)
     "elbv2_core.py",                                # AWS: Elastic Load Balancing v2 control plane — native Query wire + console REST
+    "ram_core.py",                                  # AWS: Resource Access Manager (subnet/SG resource shares)
+    "dlm_core.py",                                   # AWS: Data Lifecycle Manager (scheduled EBS snapshot policies)
     "ssm_core.py",                                 # AWS: Systems Manager (Parameter Store, documents, Run Command, windows, baselines)
     "gcp_cloudscheduler_core.py",                  # expansion GCP: Cloud Scheduler (jobs, cron, pause/resume/run)
     "gcp_iamcredentials_core.py",                  # expansion GCP: IAM Service Account Credentials (access/ID tokens, signBlob, signJwt)
     "gcp_compute_core.py",                         # Compute Engine REST for gcloud compute (networks, subnets, firewalls, instances)
     "gcp_redis_core.py",                           # expansion GCP: Memorystore for Redis (instances, failover, upgrade, import/export, operations)
     "gcp_monitoring_core.py",                      # expansion GCP: Cloud Monitoring (alert policies, channels, metrics, time series, uptime checks)
+    "gcp_gke_dataplane_core.py",                   # expansion GCP: Kubernetes Engine data plane (Workloads, Services, Secrets, Storage… per cluster)
     "gcp_container_core.py",                       # expansion GCP: Kubernetes Engine (clusters, node pools, operations)
+    "gcp_logging_core.py",                         # GCP: Cloud Logging REST v2 (entries, sinks, log-based metrics, log buckets/views)
+    "gcp_run_core.py",                             # GCP: Cloud Run Admin API v2 (services, jobs, worker pools, domain mappings) — backs /functions
     "stepfunctions_core.py",                       # AWS: Step Functions (ASL interpreter, executions, activities)
+    "cloudformation_core.py",                      # AWS: CloudFormation (stacks, change sets, stack sets — provisions through s3/ddb/sns/sqs/iam)
     "cloudwatch_core.py",                          # AWS CloudWatch: metrics / alarms / dashboards (rpc-v2-cbor + JSON + Query wire)
+    "vpc_vpn_core.py",
+    "vpc_extras_core.py", "ec2_ops_core.py",
+    "netfw_core.py",
+    "dnsfw_core.py",
     "vpc_core.py",                                 # v2.8.0 AWS: VPC network-simulation data plane (reachability analyzer)
     "aws_console_detail.py",                       # AWS console resource-detail tab model (shared with offline routes/aws_console_detail.py)
     "logs_core.py",                                # expansion AWS: CloudWatch Logs (log groups/streams/events/insights) — vendored VERBATIM
@@ -84,7 +109,20 @@ CORES = [
     "azure_operationalinsights_core.py",          # expansion Azure: Log Analytics (Microsoft.OperationalInsights workspaces, saved searches, tables) — vendored VERBATIM
     "azure_appconfiguration_core.py",             # expansion Azure: App Configuration (stores, key-values, snapshots) — vendored VERBATIM
     "azure_app_core.py",                            # expansion Azure: Container Apps (Microsoft.App: environments, apps, revisions, jobs) — vendored VERBATIM
-    "azure_keyvault_certificates_core.py",          # Azure Key Vault certificates (real self-signed X.509 + RSA) — vendored VERBATIM
+    "azure_cost_core.py",                          # expansion Azure: Cost Management + Consumption (query/alerts/exports/budgets over real inventory) — vendored VERBATIM
+    "azure_webapp_core.py",                         # Azure: App Service (Microsoft.Web: web apps + function apps by kind, serverfarms) — vendored VERBATIM
+    "azure_eventgrid_core.py",                      # v4: Azure Event Grid event subscriptions (topic-scoped extension resource)
+    "azure_health_core.py",                         # v4: Resource health + Advisor, imported by azure_arm_core
+    "azure_templates_core.py",                      # v4: Export template (ARM -> Bicep/Terraform), lazily imported by azure_arm_core
+    "azure_storage_ext_core.py",                    # v4: storage keys rotation + route endpoints — before azure_arm_core
+    "azure_policy_core.py",                         # v4: Azure Policy rule engine (custom policyRule evaluation) — before azure_arm_core
+    "azure_locks_core.py",                          # v4: Management locks (Microsoft.Authorization/locks, scoped to ANY resource)
+    "k8s_yaml.py",                                  # v4: dependency-free YAML reader for Kubernetes manifests (AKS kubectl)
+    "azure_aks_k8s_core.py",                        # v4: AKS Kubernetes object store + kubectl subset behind runCommand
+    "kubescape_catalog.py",                         # v4: Kubescape control metadata (GENERATED, regolibrary Apache-2.0)
+    "kubescape_core.py",                            # v4: Kubescape result mapping + scanner seam (Nano: OPA-wasm evaluator)
+    "azure_security_core.py",                       # v4: Microsoft Defender for Cloud (Microsoft.Security), live over the ARM state
+    "azure_keyvault_x509_core.py",          # Azure Key Vault certificates (real self-signed X.509 + RSA) — vendored VERBATIM
     "azure_arm_ext_core.py",                        # Azure ARM: locks, managed identity, resource health, NICs/public IPs, schedules, run commands, restore points — vendored VERBATIM
     "azure_arm_data.py", "azure_arm_core.py",       # Azure ARM control plane (native /subscriptions/* wire)
     "console_conformance.py",                       # console-next capability manifest: per-service conformance signal (pure, `os` only)
@@ -93,9 +131,13 @@ CORES = [
     "nano_persist.py",                              # store serialize/restore + cross-context sync (persistence + console↔SDK parity)
 ]
 
+# Core SUB-PACKAGES vendored as directories (wasm/core/<pkg>/…). Every file must also be listed in
+# the CORE_PKGS array of each JS loader (nano-boot.js + the relay loaders) — check_core_pkgs().
+CORE_PKGS = ['netsim/__init__.py', 'netsim/model.py', 'netsim/evaluate.py', 'netsim/from_aws.py', 'netsim/from_gcp.py', 'netsim/from_azure.py', 'netsim/flowlogs.py', 'netsim/enforce.py']
+
 # Cores vendored byte-for-byte (no GENERATED header): the service gate requires the
 # Nano copy of a new service's engine to be identical to core/.
-VERBATIM = {"gcp_monitoring_core.py", "cloudwatch_core.py", "apigatewayv2_core.py", "logs_core.py", "elbv2_core.py", "ssm_core.py", "stepfunctions_core.py", "gcp_cloudscheduler_core.py", "gcp_container_core.py", "gcp_iamcredentials_core.py", "gcp_redis_core.py", "gcp_artifactregistry_core.py", "azure_app_core.py", "azure_appconfiguration_core.py", "azure_cognitiveservices_core.py", "azure_dns_core.py", "azure_monitor_core.py", "azure_operationalinsights_core.py", "azure_arm_ext_core.py", "azure_keyvault_certificates_core.py"}
+VERBATIM = {"gcp_monitoring_core.py", "cloudwatch_core.py", "apigatewayv2_core.py", "logs_core.py", "elbv2_core.py", "ssm_core.py", "stepfunctions_core.py", "gcp_cloudscheduler_core.py", "gcp_container_core.py", "gcp_iamcredentials_core.py", "gcp_redis_core.py", "gcp_artifactregistry_core.py", "azure_app_core.py", "azure_appconfiguration_core.py", "azure_cognitiveservices_core.py", "azure_dns_core.py", "azure_monitor_core.py", "azure_operationalinsights_core.py", "azure_arm_ext_core.py", "azure_keyvault_x509_core.py", "azure_cost_core.py", "azure_webapp_core.py"}
 
 HEADER = ("# GENERATED — vendored from core/ by wasm/build_cores.py. DO NOT EDIT.\n"
           "# Edit the canonical core/ source, then re-run: python3 wasm/build_cores.py\n")
@@ -173,6 +215,23 @@ def check_relay_cores():
         print("Add the missing modules to the loader's CORES list.")
         raise SystemExit(1)
     print("relay CORES lists are import-closed ✓")
+
+
+def check_core_pkgs():
+    """Every vendored sub-package file must be fetched by every Pyodide loader."""
+    problems = []
+    for loader in ["nano-boot.js"] + _RELAY_LOADERS:
+        path = os.path.join(HERE, loader)
+        if not os.path.exists(path):
+            continue
+        m = re.search(r"const CORE_PKGS\s*=\s*\[(.*?)\]", open(path).read(), re.S)
+        listed = set(re.findall(r'"([a-z0-9_/]+\.py)"', m.group(1))) if m else set()
+        problems += [f"  {loader}: CORE_PKGS lacks '{f}'" for f in CORE_PKGS if f not in listed]
+    if problems:
+        print("\nCORE_PKGS DRIFT — these loaders won't fetch a vendored sub-package file:")
+        print("\n".join(problems))
+        raise SystemExit(1)
+    print("CORE_PKGS lists are complete ✓")
 
 
 def _expansion_cores():
@@ -253,13 +312,22 @@ def main():
         with open(os.path.join(OUT, name), "w") as f:
             f.write(src if name in verbatim else HEADER + src)
         print(f"core/{name:22} -> wasm/core/{name} ({len(src)} bytes)")
+    for name in CORE_PKGS:
+        with open(os.path.join(SRC, name)) as f:
+            src = f.read()
+        os.makedirs(os.path.dirname(os.path.join(OUT, name)), exist_ok=True)
+        with open(os.path.join(OUT, name), "w") as f:
+            f.write(HEADER + src)
+        print(f"core/{name:22} -> wasm/core/{name} ({len(src)} bytes)")
     check_relay_cores()   # fail loudly if a relay loader lags the cores
+    check_core_pkgs()
     write_nano_backends()
 
 
 if __name__ == "__main__":
     if "--check" in sys.argv:          # CI: verify the relay loaders + backend list, write nothing
         check_relay_cores()
+        check_core_pkgs()
         check_nano_backends()
     else:
         main()

@@ -1,0 +1,1559 @@
+{
+  "$schema": "../schema.json",
+  "cloud": "azure",
+  "service": "aks",
+  "console_path": "#browse/Microsoft.ContainerService%2FmanagedClusters",
+  "status": "reviewed",
+  "captured_at": "2026-10-30",
+  "nav": [
+    {
+      "label": "Overview",
+      "page_id": "aks-overview"
+    },
+    {
+      "label": "Activity log",
+      "page_id": "aks-activity-log"
+    },
+    {
+      "label": "Access control (IAM)",
+      "page_id": "aks-access-control-iam"
+    },
+    {
+      "label": "Tags",
+      "page_id": "aks-tags"
+    },
+    {
+      "label": "Diagnose and solve problems",
+      "page_id": "aks-diagnose-and-solve-problems"
+    },
+    {
+      "label": "Microsoft Defender for Cloud",
+      "page_id": "aks-microsoft-defender-for-cloud"
+    },
+    {
+      "label": "Kubernetes resources",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Namespaces",
+          "page_id": "aks-namespaces"
+        },
+        {
+          "label": "Workloads",
+          "page_id": "aks-workloads"
+        },
+        {
+          "label": "Services and ingresses",
+          "page_id": "aks-services-and-ingresses"
+        },
+        {
+          "label": "Storage",
+          "page_id": "aks-storage"
+        },
+        {
+          "label": "Configuration",
+          "page_id": "aks-configuration"
+        },
+        {
+          "label": "Custom resources",
+          "page_id": "aks-custom-resources"
+        },
+        {
+          "label": "Events",
+          "page_id": "aks-events"
+        },
+        {
+          "label": "Run command",
+          "page_id": "aks-run-command"
+        }
+      ]
+    },
+    {
+      "label": "Settings",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Node pools",
+          "page_id": "aks-node-pools"
+        },
+        {
+          "label": "Cluster configuration",
+          "page_id": "aks-cluster-configuration"
+        },
+        {
+          "label": "Application scaling",
+          "page_id": "aks-application-scaling"
+        },
+        {
+          "label": "Networking",
+          "page_id": "aks-networking"
+        },
+        {
+          "label": "Extensions + applications",
+          "page_id": "aks-extensions-applications"
+        },
+        {
+          "label": "Backup",
+          "page_id": "aks-backup"
+        },
+        {
+          "label": "GitOps",
+          "page_id": "aks-gitops"
+        },
+        {
+          "label": "Automated deployments",
+          "page_id": "aks-automated-deployments"
+        },
+        {
+          "label": "Policies",
+          "page_id": "aks-policies"
+        },
+        {
+          "label": "Properties",
+          "page_id": "aks-properties"
+        },
+        {
+          "label": "Locks",
+          "page_id": "aks-locks"
+        }
+      ]
+    },
+    {
+      "label": "Monitoring",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Insights",
+          "page_id": "aks-insights"
+        },
+        {
+          "label": "Alerts",
+          "page_id": "aks-alerts"
+        },
+        {
+          "label": "Metrics",
+          "page_id": "aks-metrics"
+        },
+        {
+          "label": "Diagnostic settings",
+          "page_id": "aks-diagnostic-settings"
+        },
+        {
+          "label": "Advisor recommendations",
+          "page_id": "aks-advisor-recommendations"
+        },
+        {
+          "label": "Logs",
+          "page_id": "aks-logs"
+        },
+        {
+          "label": "Workbooks",
+          "page_id": "aks-workbooks"
+        }
+      ]
+    },
+    {
+      "label": "Automation",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Tasks",
+          "page_id": "aks-tasks"
+        },
+        {
+          "label": "Export template",
+          "page_id": "aks-export-template"
+        }
+      ]
+    },
+    {
+      "label": "Help",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Support + Troubleshooting",
+          "page_id": "aks-support-troubleshooting"
+        }
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "id": "kubernetes-services",
+      "kind": "list",
+      "title": "Kubernetes services",
+      "route": "#browse/Microsoft.ContainerService%2FmanagedClusters",
+      "breadcrumbs": [
+        "Home"
+      ],
+      "captures": [
+        "A-browse-microsoft-containerservice-managedclusters/001-L1-landing"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Browse now lands in Kubernetes center (captured: Create AKS Cluster / AKS Automatic / Fleet / Managed Namespace)",
+      "table": {
+        "columns": [
+          "Name",
+          "Type",
+          "Kubernetes version",
+          "Resource group",
+          "Location",
+          "Subscription"
+        ],
+        "selection": "multi",
+        "header_actions": [
+          "Create",
+          "Manage view",
+          "Refresh",
+          "Export to CSV",
+          "Open query",
+          "Assign tags",
+          "Start",
+          "Stop",
+          "Delete"
+        ],
+        "filter_placeholder": "Filter for any field...",
+        "filters": [
+          "Subscription equals all",
+          "Resource group equals all",
+          "Location equals all",
+          "Add filter"
+        ],
+        "empty_state": "No kubernetes services to display",
+        "empty_state_action": "Create kubernetes service",
+        "pagination": true,
+        "provenance": "reference",
+        "confidence": "medium"
+      }
+    },
+    {
+      "id": "create-kubernetes-cluster",
+      "kind": "create",
+      "title": "Create Kubernetes cluster",
+      "route": "#create/Microsoft.AKS",
+      "breadcrumbs": [
+        "All services",
+        "Create Kubernetes cluster"
+      ],
+      "captures": [
+        "C-forms/13-create-microsoft-aks/step-1",
+        "C-forms/13-create-microsoft-aks/step-1-expanded",
+        "C-forms/13-create-microsoft-aks/step-2",
+        "C-forms/13-create-microsoft-aks/step-3"
+      ],
+      "provenance": "capture",
+      "confidence": "medium",
+      "steps": [
+        {
+          "title": "Basics",
+          "sections": [
+            {
+              "title": "Project details",
+              "fields": [
+                {
+                  "label": "Subscription",
+                  "type": "select",
+                  "required": true,
+                  "placeholder": "Select existing item..."
+                },
+                {
+                  "label": "Resource group",
+                  "type": "select",
+                  "required": true,
+                  "actions": [
+                    "Create new"
+                  ]
+                }
+              ]
+            },
+            {
+              "title": "Cluster details",
+              "fields": [
+                {
+                  "label": "Cluster preset configuration",
+                  "type": "select",
+                  "default": "Production Standard",
+                  "options": [
+                    "Production Standard",
+                    "Dev/Test",
+                    "Production Economy",
+                    "Production Enterprise"
+                  ],
+                  "actions": [
+                    "Compare presets"
+                  ]
+                },
+                {
+                  "label": "Kubernetes cluster name",
+                  "type": "text",
+                  "required": true
+                },
+                {
+                  "label": "Region",
+                  "type": "select",
+                  "required": true,
+                  "placeholder": "Select existing item..."
+                },
+                {
+                  "label": "Fleet Manager",
+                  "type": "select",
+                  "default": "None",
+                  "actions": [
+                    "Create new"
+                  ]
+                },
+                {
+                  "label": "Availability zones",
+                  "type": "select",
+                  "default": "None"
+                },
+                {
+                  "label": "AKS pricing tier",
+                  "type": "select",
+                  "default": "Standard",
+                  "options": [
+                    "Free",
+                    "Standard",
+                    "Premium"
+                  ]
+                },
+                {
+                  "label": "Enable long-term support",
+                  "type": "checkbox",
+                  "default": false
+                },
+                {
+                  "label": "Kubernetes version",
+                  "type": "select"
+                },
+                {
+                  "label": "Automatic upgrade",
+                  "type": "select",
+                  "default": "Enabled with patch (recommended)",
+                  "options": [
+                    "Enabled with patch (recommended)",
+                    "Enabled with stable",
+                    "Enabled with rapid",
+                    "Enabled with node image",
+                    "Disabled"
+                  ]
+                },
+                {
+                  "label": "Automatic upgrade scheduler",
+                  "type": "other",
+                  "default": "Every week on Sunday (recommended)",
+                  "actions": [
+                    "Edit schedule"
+                  ]
+                },
+                {
+                  "label": "Node security channel type",
+                  "type": "select",
+                  "default": "Node Image",
+                  "options": [
+                    "None",
+                    "Unmanaged",
+                    "Security Patch",
+                    "Node Image"
+                  ]
+                },
+                {
+                  "label": "Security channel scheduler",
+                  "type": "other",
+                  "default": "Every week on Sunday (recommended)",
+                  "actions": [
+                    "Edit schedule"
+                  ]
+                }
+              ]
+            },
+            {
+              "title": "Authentication and Authorization",
+              "fields": [
+                {
+                  "label": "Authentication and Authorization",
+                  "type": "select",
+                  "default": "Local accounts with Kubernetes RBAC",
+                  "options": [
+                    "Local accounts with Kubernetes RBAC",
+                    "Microsoft Entra ID authentication with Kubernetes RBAC",
+                    "Microsoft Entra ID authentication with Azure RBAC"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Node pools",
+          "sections": [
+            {
+              "title": "Node auto provisioning",
+              "fields": [
+                {
+                  "label": "Enable node auto-provisioning",
+                  "type": "checkbox",
+                  "default": false
+                }
+              ]
+            },
+            {
+              "title": "Node pools",
+              "fields": [
+                {
+                  "label": "Node pools",
+                  "type": "table",
+                  "columns": [
+                    "Name",
+                    "Mode",
+                    "Node size",
+                    "OS SKU",
+                    "Node count",
+                    "Availability zones",
+                    "Max pods / node"
+                  ],
+                  "actions": [
+                    "Add node pool",
+                    "Delete"
+                  ]
+                }
+              ]
+            },
+            {
+              "title": "Enable virtual nodes",
+              "fields": [
+                {
+                  "label": "Enable virtual nodes",
+                  "type": "checkbox",
+                  "default": false
+                }
+              ]
+            },
+            {
+              "title": "Node pool OS disk encryption",
+              "fields": [
+                {
+                  "label": "Encryption type",
+                  "type": "select",
+                  "default": "(Default) Encryption at-rest with a platform-managed key"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Networking",
+          "sections": [
+            {
+              "title": "Private access",
+              "fields": [
+                {
+                  "label": "Enable private cluster",
+                  "type": "checkbox",
+                  "default": false
+                }
+              ]
+            },
+            {
+              "title": "Public access",
+              "fields": [
+                {
+                  "label": "Set authorized IP ranges",
+                  "type": "checkbox",
+                  "default": false
+                }
+              ]
+            },
+            {
+              "title": "Container networking",
+              "fields": [
+                {
+                  "label": "Network configuration",
+                  "type": "radio",
+                  "default": "Azure CNI Overlay",
+                  "options": [
+                    "Azure CNI Overlay",
+                    "Azure CNI Node Subnet"
+                  ]
+                },
+                {
+                  "label": "Bring your own Azure virtual network",
+                  "type": "checkbox",
+                  "default": false
+                },
+                {
+                  "label": "DNS name prefix",
+                  "type": "text",
+                  "required": true
+                },
+                {
+                  "label": "Enable Cilium dataplane and network policy engine",
+                  "type": "checkbox",
+                  "default": true
+                },
+                {
+                  "label": "Load balancer",
+                  "type": "readonly",
+                  "default": "Standard"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Integrations",
+          "sections": [
+            {
+              "title": "Azure Container Registry",
+              "fields": [
+                {
+                  "label": "Container registry",
+                  "type": "select",
+                  "default": "None",
+                  "actions": [
+                    "Create new"
+                  ]
+                }
+              ]
+            },
+            {
+              "title": "Service mesh",
+              "fields": [
+                {
+                  "label": "Enable Istio",
+                  "type": "checkbox",
+                  "default": false
+                }
+              ]
+            },
+            {
+              "title": "Azure Policy",
+              "fields": [
+                {
+                  "label": "Azure Policy",
+                  "type": "checkbox",
+                  "default": false
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Monitoring",
+          "sections": [
+            {
+              "title": "Container Insights",
+              "fields": [
+                {
+                  "label": "Enable Container Insights",
+                  "type": "checkbox",
+                  "default": true
+                }
+              ]
+            },
+            {
+              "title": "Managed Prometheus",
+              "fields": [
+                {
+                  "label": "Enable Prometheus metrics",
+                  "type": "checkbox",
+                  "default": true
+                }
+              ]
+            },
+            {
+              "title": "Managed Grafana",
+              "fields": [
+                {
+                  "label": "Enable Grafana",
+                  "type": "checkbox",
+                  "default": true
+                }
+              ]
+            },
+            {
+              "title": "Alerts",
+              "fields": [
+                {
+                  "label": "Enable recommended alert rules",
+                  "type": "checkbox",
+                  "default": true
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Security",
+          "sections": [
+            {
+              "title": "Microsoft Defender for Cloud",
+              "fields": [
+                {
+                  "label": "Enable Microsoft Defender",
+                  "type": "checkbox",
+                  "default": false
+                }
+              ]
+            },
+            {
+              "title": "Image cleaner",
+              "fields": [
+                {
+                  "label": "Enable image cleaner",
+                  "type": "checkbox",
+                  "default": false
+                }
+              ]
+            },
+            {
+              "title": "Workload identity",
+              "fields": [
+                {
+                  "label": "Enable OIDC issuer",
+                  "type": "checkbox",
+                  "default": true
+                },
+                {
+                  "label": "Enable workload identity",
+                  "type": "checkbox",
+                  "default": true
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Advanced",
+          "sections": [
+            {
+              "title": "Infrastructure resource group",
+              "fields": [
+                {
+                  "label": "Infrastructure resource group",
+                  "type": "text",
+                  "default": "MC_{rg}_{cluster}_{region}"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Tags",
+          "sections": [
+            {
+              "title": "Tags",
+              "fields": [
+                {
+                  "label": "Tags",
+                  "type": "table",
+                  "columns": [
+                    "Name",
+                    "Value",
+                    "Resource"
+                  ],
+                  "help": "Name/value pairs to categorize resources and view consolidated billing"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Review + create",
+          "sections": [
+            {
+              "title": "Basics"
+            },
+            {
+              "title": "Node pools"
+            },
+            {
+              "title": "Networking"
+            },
+            {
+              "title": "Integrations"
+            },
+            {
+              "title": "Monitoring"
+            },
+            {
+              "title": "Security"
+            },
+            {
+              "title": "Advanced"
+            }
+          ]
+        }
+      ],
+      "submit": "Create",
+      "notes": "Basics/Node pools/Networking captured; Integrations..Advanced fields are reference"
+    },
+    {
+      "id": "aks-overview",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "breadcrumbs": [
+        "Home",
+        "Kubernetes services",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Create",
+        "Connect",
+        "Start",
+        "Stop",
+        "Delete",
+        "Refresh",
+        "Give feedback"
+      ],
+      "tabs": [
+        "Get started",
+        "Monitoring",
+        "Properties",
+        "Capabilities",
+        "Recommendations",
+        "Tutorials"
+      ],
+      "sections": [
+        {
+          "title": "Essentials",
+          "actions": [
+            "JSON View"
+          ],
+          "fields": [
+            {
+              "label": "Resource group",
+              "type": "readonly"
+            },
+            {
+              "label": "Status",
+              "type": "readonly"
+            },
+            {
+              "label": "Location",
+              "type": "readonly"
+            },
+            {
+              "label": "Subscription",
+              "type": "readonly"
+            },
+            {
+              "label": "Subscription ID",
+              "type": "readonly"
+            },
+            {
+              "label": "Kubernetes version",
+              "type": "readonly"
+            },
+            {
+              "label": "API server address",
+              "type": "readonly"
+            },
+            {
+              "label": "Network configuration",
+              "type": "readonly"
+            },
+            {
+              "label": "Node pools",
+              "type": "readonly"
+            },
+            {
+              "label": "Tags",
+              "type": "readonly"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "aks-activity-log",
+      "kind": "list",
+      "title": "{resource-name} | Activity log",
+      "breadcrumbs": [
+        "Home",
+        "Kubernetes services",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "high",
+      "notes": "Same grid as Monitor | Activity log (captured), filtered to this resource",
+      "table": {
+        "columns": [
+          "Operation name",
+          "Status",
+          "Time",
+          "Time stamp",
+          "Subscription",
+          "Event initiated by"
+        ],
+        "header_actions": [
+          "Activity",
+          "Edit columns",
+          "Refresh",
+          "Export Activity Logs",
+          "Download as CSV",
+          "Insights",
+          "Feedback",
+          "Pin current filters",
+          "Reset filters"
+        ],
+        "filters": [
+          "Management Group : None",
+          "Subscription",
+          "Event severity : All",
+          "Timespan : Last 6 hours",
+          "Resource group",
+          "Resource",
+          "Add Filter"
+        ],
+        "empty_state": "No events to display",
+        "pagination": false
+      }
+    },
+    {
+      "id": "aks-access-control-iam",
+      "kind": "other",
+      "title": "{resource-name} | Access control (IAM)",
+      "breadcrumbs": [
+        "Home",
+        "Kubernetes services",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "high",
+      "header_actions": [
+        "Add",
+        "Download role assignments",
+        "Edit columns",
+        "Refresh",
+        "Remove",
+        "Feedback"
+      ],
+      "tabs": [
+        "Check access",
+        "Role assignments",
+        "Roles",
+        "Deny assignments",
+        "Classic administrators"
+      ],
+      "tab_panels": [
+        {
+          "label": "Check access",
+          "sections": [
+            {
+              "title": "My access",
+              "fields": [
+                {
+                  "label": "View my access",
+                  "type": "button"
+                }
+              ]
+            },
+            {
+              "title": "Check access",
+              "fields": [
+                {
+                  "label": "Check access",
+                  "type": "button"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "Role assignments",
+          "sections": [
+            {
+              "title": "Role assignments",
+              "table": {
+                "columns": [
+                  "Name",
+                  "Type",
+                  "Role",
+                  "Scope",
+                  "Condition"
+                ],
+                "selection": "multi",
+                "filter_placeholder": "Search by name or email"
+              }
+            }
+          ]
+        },
+        {
+          "label": "Roles",
+          "sections": [
+            {
+              "title": "Roles",
+              "table": {
+                "columns": [
+                  "Name",
+                  "Description",
+                  "Type",
+                  "Category",
+                  "Details"
+                ],
+                "filter_placeholder": "Search by role name, description, permission, or ID"
+              }
+            }
+          ]
+        },
+        {
+          "label": "Deny assignments",
+          "sections": [
+            {
+              "title": "Deny assignments",
+              "table": {
+                "columns": [
+                  "Name",
+                  "Description",
+                  "Principal",
+                  "Scope"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "label": "Classic administrators"
+        }
+      ]
+    },
+    {
+      "id": "aks-tags",
+      "kind": "settings",
+      "title": "{resource-name} | Tags",
+      "breadcrumbs": [
+        "Home",
+        "Kubernetes services",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "high",
+      "sections": [
+        {
+          "title": "Tags",
+          "fields": [
+            {
+              "label": "Tags",
+              "type": "table",
+              "columns": [
+                "Name",
+                "Value"
+              ],
+              "actions": [
+                "Delete"
+              ],
+              "help": "Name/value pairs; the same tag can apply to multiple resources"
+            }
+          ]
+        }
+      ],
+      "header_actions": [
+        "Apply",
+        "Discard changes",
+        "Delete all"
+      ]
+    },
+    {
+      "id": "aks-diagnose-and-solve-problems",
+      "kind": "other",
+      "title": "{resource-name} | Diagnose and solve problems",
+      "breadcrumbs": [
+        "Home",
+        "Kubernetes services",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Kubernetes service blade menu item; title only"
+    },
+    {
+      "id": "aks-microsoft-defender-for-cloud",
+      "kind": "other",
+      "title": "{resource-name} | Microsoft Defender for Cloud",
+      "breadcrumbs": [
+        "Home",
+        "Kubernetes services",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Kubernetes service blade menu item; title only"
+    },
+    {
+      "id": "aks-namespaces",
+      "kind": "list",
+      "title": "{resource-name} | Namespaces",
+      "breadcrumbs": [
+        "Home",
+        "Kubernetes services",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "table": {
+        "columns": [
+          "Name",
+          "Status",
+          "Age"
+        ],
+        "header_actions": [
+          "Create",
+          "Delete",
+          "Refresh"
+        ],
+        "filter_placeholder": "Filter by namespace name"
+      }
+    },
+    {
+      "id": "aks-workloads",
+      "kind": "list",
+      "title": "{resource-name} | Workloads",
+      "breadcrumbs": [
+        "Home",
+        "Kubernetes services",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "tabs": [
+        "Deployments",
+        "Pods",
+        "Replica sets",
+        "Stateful sets",
+        "Daemon sets",
+        "Jobs",
+        "Cron jobs"
+      ],
+      "table": {
+        "columns": [
+          "Name",
+          "Namespace",
+          "Ready",
+          "Up-to-date",
+          "Available",
+          "Age"
+        ],
+        "header_actions": [
+          "Create",
+          "Delete",
+          "Refresh"
+        ],
+        "filter_placeholder": "Filter by deployment name"
+      }
+    },
+    {
+      "id": "aks-services-and-ingresses",
+      "kind": "list",
+      "title": "{resource-name} | Services and ingresses",
+      "breadcrumbs": [
+        "Home",
+        "Kubernetes services",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "tabs": [
+        "Services",
+        "Ingresses"
+      ],
+      "table": {
+        "columns": [
+          "Name",
+          "Namespace",
+          "Status",
+          "Type",
+          "Cluster IP",
+          "External IP",
+          "Ports",
+          "Age"
+        ],
+        "header_actions": [
+          "Create",
+          "Delete",
+          "Refresh"
+        ]
+      }
+    },
+    {
+      "id": "aks-storage",
+      "kind": "other",
+      "title": "{resource-name} | Storage",
+      "breadcrumbs": [
+        "Home",
+        "Kubernetes services",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Kubernetes service blade menu item; title only"
+    },
+    {
+      "id": "aks-configuration",
+      "kind": "other",
+      "title": "{resource-name} | Configuration",
+      "breadcrumbs": [
+        "Home",
+        "Kubernetes services",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Kubernetes service blade menu item; title only"
+    },
+    {
+      "id": "aks-custom-resources",
+      "kind": "other",
+      "title": "{resource-name} | Custom resources",
+      "breadcrumbs": [
+        "Home",
+        "Kubernetes services",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Kubernetes service blade menu item; title only"
+    },
+    {
+      "id": "aks-events",
+      "kind": "other",
+      "title": "{resource-name} | Events",
+      "breadcrumbs": [
+        "Home",
+        "Kubernetes services",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Kubernetes service blade menu item; title only"
+    },
+    {
+      "id": "aks-run-command",
+      "kind": "other",
+      "title": "{resource-name} | Run command",
+      "breadcrumbs": [
+        "Home",
+        "Kubernetes services",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "sections": [
+        {
+          "title": "Run command",
+          "fields": [
+            {
+              "label": "Command",
+              "type": "textarea",
+              "placeholder": "kubectl get pods -A"
+            },
+            {
+              "label": "Run",
+              "type": "button"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "aks-node-pools",
+      "kind": "list",
+      "title": "{resource-name} | Node pools",
+      "breadcrumbs": [
+        "Home",
+        "Kubernetes services",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "tabs": [
+        "Node pools",
+        "Nodes"
+      ],
+      "table": {
+        "columns": [
+          "Name",
+          "Provisioning state",
+          "Power state",
+          "Scale method",
+          "Target nodes",
+          "Ready nodes",
+          "Autoscaling",
+          "Kubernetes version",
+          "Mode",
+          "Node image version",
+          "OS SKU",
+          "Node size"
+        ],
+        "header_actions": [
+          "Add node pool",
+          "Refresh",
+          "Upgrade Kubernetes",
+          "Update image",
+          "Scale node pool",
+          "Start",
+          "Stop",
+          "Delete"
+        ],
+        "filter_placeholder": "Filter by name"
+      }
+    },
+    {
+      "id": "aks-cluster-configuration",
+      "kind": "settings",
+      "title": "{resource-name} | Cluster configuration",
+      "breadcrumbs": [
+        "Home",
+        "Kubernetes services",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Save",
+        "Discard"
+      ],
+      "sections": [
+        {
+          "title": "Upgrade",
+          "fields": [
+            {
+              "label": "Kubernetes version",
+              "type": "select",
+              "actions": [
+                "Upgrade version"
+              ]
+            },
+            {
+              "label": "Automatic upgrade",
+              "type": "select"
+            }
+          ]
+        },
+        {
+          "title": "Authentication and Authorization",
+          "fields": [
+            {
+              "label": "Authentication and Authorization",
+              "type": "select"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "aks-application-scaling",
+      "kind": "other",
+      "title": "{resource-name} | Application scaling",
+      "breadcrumbs": [
+        "Home",
+        "Kubernetes services",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Kubernetes service blade menu item; title only"
+    },
+    {
+      "id": "aks-networking",
+      "kind": "other",
+      "title": "{resource-name} | Networking",
+      "breadcrumbs": [
+        "Home",
+        "Kubernetes services",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Kubernetes service blade menu item; title only"
+    },
+    {
+      "id": "aks-extensions-applications",
+      "kind": "other",
+      "title": "{resource-name} | Extensions + applications",
+      "breadcrumbs": [
+        "Home",
+        "Kubernetes services",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Kubernetes service blade menu item; title only"
+    },
+    {
+      "id": "aks-backup",
+      "kind": "other",
+      "title": "{resource-name} | Backup",
+      "breadcrumbs": [
+        "Home",
+        "Kubernetes services",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Kubernetes service blade menu item; title only"
+    },
+    {
+      "id": "aks-gitops",
+      "kind": "other",
+      "title": "{resource-name} | GitOps",
+      "breadcrumbs": [
+        "Home",
+        "Kubernetes services",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Kubernetes service blade menu item; title only"
+    },
+    {
+      "id": "aks-automated-deployments",
+      "kind": "other",
+      "title": "{resource-name} | Automated deployments",
+      "breadcrumbs": [
+        "Home",
+        "Kubernetes services",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Kubernetes service blade menu item; title only"
+    },
+    {
+      "id": "aks-policies",
+      "kind": "other",
+      "title": "{resource-name} | Policies",
+      "breadcrumbs": [
+        "Home",
+        "Kubernetes services",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Kubernetes service blade menu item; title only"
+    },
+    {
+      "id": "aks-properties",
+      "kind": "other",
+      "title": "{resource-name} | Properties",
+      "breadcrumbs": [
+        "Home",
+        "Kubernetes services",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Kubernetes service blade menu item; title only"
+    },
+    {
+      "id": "aks-locks",
+      "kind": "list",
+      "title": "{resource-name} | Locks",
+      "breadcrumbs": [
+        "Home",
+        "Kubernetes services",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "high",
+      "table": {
+        "columns": [
+          "Lock name",
+          "Lock type",
+          "Scope",
+          "Notes"
+        ],
+        "header_actions": [
+          "Add",
+          "Subscription",
+          "Resource group",
+          "Refresh",
+          "Feedback"
+        ],
+        "filter_placeholder": "Search to filter items...",
+        "empty_state": "This resource has no locks."
+      },
+      "sections": [
+        {
+          "title": "Add lock",
+          "fields": [
+            {
+              "label": "Lock name",
+              "type": "text",
+              "required": true
+            },
+            {
+              "label": "Lock type",
+              "type": "select",
+              "required": true,
+              "options": [
+                "Read-only",
+                "Delete"
+              ]
+            },
+            {
+              "label": "Notes",
+              "type": "textarea"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "aks-insights",
+      "kind": "other",
+      "title": "{resource-name} | Insights",
+      "breadcrumbs": [
+        "Home",
+        "Kubernetes services",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Kubernetes service blade menu item; title only"
+    },
+    {
+      "id": "aks-alerts",
+      "kind": "other",
+      "title": "{resource-name} | Alerts",
+      "breadcrumbs": [
+        "Home",
+        "Kubernetes services",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Kubernetes service blade menu item; title only"
+    },
+    {
+      "id": "aks-metrics",
+      "kind": "other",
+      "title": "{resource-name} | Metrics",
+      "breadcrumbs": [
+        "Home",
+        "Kubernetes services",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Kubernetes service blade menu item; title only"
+    },
+    {
+      "id": "aks-diagnostic-settings",
+      "kind": "other",
+      "title": "{resource-name} | Diagnostic settings",
+      "breadcrumbs": [
+        "Home",
+        "Kubernetes services",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Kubernetes service blade menu item; title only"
+    },
+    {
+      "id": "aks-advisor-recommendations",
+      "kind": "other",
+      "title": "{resource-name} | Advisor recommendations",
+      "breadcrumbs": [
+        "Home",
+        "Kubernetes services",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Kubernetes service blade menu item; title only"
+    },
+    {
+      "id": "aks-logs",
+      "kind": "other",
+      "title": "{resource-name} | Logs",
+      "breadcrumbs": [
+        "Home",
+        "Kubernetes services",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Kubernetes service blade menu item; title only"
+    },
+    {
+      "id": "aks-workbooks",
+      "kind": "other",
+      "title": "{resource-name} | Workbooks",
+      "breadcrumbs": [
+        "Home",
+        "Kubernetes services",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Kubernetes service blade menu item; title only"
+    },
+    {
+      "id": "aks-tasks",
+      "kind": "other",
+      "title": "{resource-name} | Tasks",
+      "breadcrumbs": [
+        "Home",
+        "Kubernetes services",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Kubernetes service blade menu item; title only"
+    },
+    {
+      "id": "aks-export-template",
+      "kind": "other",
+      "title": "{resource-name} | Export template",
+      "breadcrumbs": [
+        "Home",
+        "Kubernetes services",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Download",
+        "Add to library (preview)",
+        "Deploy",
+        "Visualize template"
+      ],
+      "tabs": [
+        "ARM Template",
+        "Bicep",
+        "Terraform"
+      ],
+      "sections": [
+        {
+          "title": "Template",
+          "fields": [
+            {
+              "label": "Include parameters",
+              "type": "checkbox",
+              "default": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "aks-support-troubleshooting",
+      "kind": "other",
+      "title": "{resource-name} | Support + Troubleshooting",
+      "breadcrumbs": [
+        "Home",
+        "Kubernetes services",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Kubernetes service blade menu item; title only"
+    }
+  ],
+  "gaps_note": "Create Kubernetes cluster: Basics, Node pools and Networking are captured; remaining tabs reference. Browse redirects to Kubernetes center (captured); grid + cluster blade are reference."
+}

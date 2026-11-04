@@ -1,0 +1,1575 @@
+{
+  "$schema": "../schema.json",
+  "cloud": "azure",
+  "service": "cosmos",
+  "console_path": "#browse/Microsoft.DocumentDb%2FdatabaseAccounts",
+  "status": "reviewed",
+  "captured_at": "2026-10-30",
+  "nav": [
+    {
+      "label": "Overview",
+      "page_id": "cosmos-account-overview"
+    },
+    {
+      "label": "Activity log",
+      "page_id": "cosmos-account-activity-log"
+    },
+    {
+      "label": "Access control (IAM)",
+      "page_id": "cosmos-account-access-control-iam"
+    },
+    {
+      "label": "Tags",
+      "page_id": "cosmos-account-tags"
+    },
+    {
+      "label": "Diagnose and solve problems",
+      "page_id": "cosmos-account-diagnose-and-solve-problems"
+    },
+    {
+      "label": "Cost Management",
+      "page_id": "cosmos-account-cost-management"
+    },
+    {
+      "label": "Quick start",
+      "page_id": "cosmos-account-quick-start"
+    },
+    {
+      "label": "Notifications",
+      "page_id": "cosmos-account-notifications"
+    },
+    {
+      "label": "Data Explorer",
+      "page_id": "cosmos-account-data-explorer"
+    },
+    {
+      "label": "Settings",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Features",
+          "page_id": "cosmos-account-features"
+        },
+        {
+          "label": "Replicate data globally",
+          "page_id": "cosmos-account-replicate-data-globally"
+        },
+        {
+          "label": "Default consistency",
+          "page_id": "cosmos-account-default-consistency"
+        },
+        {
+          "label": "Backup & Restore",
+          "page_id": "cosmos-account-backup-restore"
+        },
+        {
+          "label": "Networking",
+          "page_id": "cosmos-account-networking"
+        },
+        {
+          "label": "Keys",
+          "page_id": "cosmos-account-keys"
+        },
+        {
+          "label": "Data Migration",
+          "page_id": "cosmos-account-data-migration"
+        },
+        {
+          "label": "CORS",
+          "page_id": "cosmos-account-cors"
+        },
+        {
+          "label": "Dedicated Gateway",
+          "page_id": "cosmos-account-dedicated-gateway"
+        },
+        {
+          "label": "Microsoft Defender for Cloud",
+          "page_id": "cosmos-account-microsoft-defender-for-cloud"
+        },
+        {
+          "label": "Identity",
+          "page_id": "cosmos-account-identity"
+        },
+        {
+          "label": "Data Encryption",
+          "page_id": "cosmos-account-data-encryption"
+        },
+        {
+          "label": "Locks",
+          "page_id": "cosmos-account-locks"
+        }
+      ]
+    },
+    {
+      "label": "Containers",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Browse",
+          "page_id": "cosmos-account-browse"
+        },
+        {
+          "label": "Scale",
+          "page_id": "cosmos-account-scale"
+        }
+      ]
+    },
+    {
+      "label": "Integrations",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Power BI",
+          "page_id": "cosmos-account-power-bi"
+        },
+        {
+          "label": "Add Azure Cognitive Search",
+          "page_id": "cosmos-account-add-azure-cognitive-search"
+        },
+        {
+          "label": "Add Azure Function",
+          "page_id": "cosmos-account-add-azure-function"
+        }
+      ]
+    },
+    {
+      "label": "Monitoring",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Insights",
+          "page_id": "cosmos-account-insights"
+        },
+        {
+          "label": "Alerts",
+          "page_id": "cosmos-account-alerts"
+        },
+        {
+          "label": "Metrics",
+          "page_id": "cosmos-account-metrics"
+        },
+        {
+          "label": "Logs",
+          "page_id": "cosmos-account-logs"
+        },
+        {
+          "label": "Diagnostic settings",
+          "page_id": "cosmos-account-diagnostic-settings"
+        },
+        {
+          "label": "Workbooks",
+          "page_id": "cosmos-account-workbooks"
+        }
+      ]
+    },
+    {
+      "label": "Automation",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Tasks",
+          "page_id": "cosmos-account-tasks"
+        },
+        {
+          "label": "Export template",
+          "page_id": "cosmos-account-export-template"
+        }
+      ]
+    },
+    {
+      "label": "Help",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Resource health",
+          "page_id": "cosmos-account-resource-health"
+        },
+        {
+          "label": "Support + Troubleshooting",
+          "page_id": "cosmos-account-support-troubleshooting"
+        }
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "id": "cosmos-db-accounts",
+      "kind": "list",
+      "title": "Azure Cosmos DB",
+      "route": "#browse/Microsoft.DocumentDb%2FdatabaseAccounts",
+      "breadcrumbs": [
+        "Home"
+      ],
+      "captures": [
+        "A-browse-microsoft-documentdb-databaseaccounts/001-L1-landing"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "table": {
+        "columns": [
+          "Name",
+          "Type",
+          "Status",
+          "Resource group",
+          "Location",
+          "Subscription"
+        ],
+        "selection": "multi",
+        "header_actions": [
+          "Create",
+          "Restore",
+          "Manage view",
+          "Refresh",
+          "Export to CSV",
+          "Open query",
+          "Assign tags",
+          "Delete"
+        ],
+        "filter_placeholder": "Filter for any field...",
+        "filters": [
+          "Subscription equals all",
+          "Resource group equals all",
+          "Location equals all",
+          "Add filter"
+        ],
+        "empty_state": "No azure cosmos db accounts to display",
+        "empty_state_action": "Create Azure Cosmos DB account",
+        "pagination": true,
+        "provenance": "reference",
+        "confidence": "medium"
+      }
+    },
+    {
+      "id": "create-cosmos-db-select-api",
+      "kind": "create",
+      "title": "Create an Azure Cosmos DB account",
+      "provenance": "reference",
+      "confidence": "medium",
+      "breadcrumbs": [
+        "Home",
+        "Azure Cosmos DB",
+        "Create an Azure Cosmos DB account"
+      ],
+      "captures": [
+        "C-forms/04-create-microsoft-documentdb/step-1"
+      ],
+      "sections": [
+        {
+          "title": "Which API best suits your workload?",
+          "fields": [
+            {
+              "label": "API",
+              "type": "radio",
+              "options": [
+                "Azure Cosmos DB for NoSQL",
+                "Azure Cosmos DB for PostgreSQL",
+                "Azure Cosmos DB for MongoDB",
+                "Azure Cosmos DB for Apache Cassandra",
+                "Azure Cosmos DB for Table",
+                "Azure Cosmos DB for Apache Gremlin"
+              ],
+              "actions": [
+                "Create"
+              ]
+            }
+          ]
+        }
+      ],
+      "submit": "Create"
+    },
+    {
+      "id": "create-cosmos-db-account",
+      "kind": "create",
+      "title": "Create Azure Cosmos DB Account - Azure Cosmos DB for NoSQL",
+      "route": "#create/Microsoft.DocumentDB",
+      "breadcrumbs": [
+        "Home",
+        "Azure Cosmos DB",
+        "Create an Azure Cosmos DB account"
+      ],
+      "captures": [
+        "C-forms/04-create-microsoft-documentdb/step-1"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "steps": [
+        {
+          "title": "Basics",
+          "sections": [
+            {
+              "title": "Workload Type",
+              "fields": [
+                {
+                  "label": "Workload Type",
+                  "type": "radio",
+                  "default": "Development/Testing",
+                  "options": [
+                    "Learning",
+                    "Development/Testing",
+                    "Production"
+                  ]
+                }
+              ]
+            },
+            {
+              "title": "Project Details",
+              "fields": [
+                {
+                  "label": "Subscription",
+                  "type": "select",
+                  "required": true,
+                  "placeholder": "Select a subscription"
+                },
+                {
+                  "label": "Resource Group",
+                  "type": "select",
+                  "required": true,
+                  "actions": [
+                    "Create new"
+                  ]
+                }
+              ]
+            },
+            {
+              "title": "Instance Details",
+              "fields": [
+                {
+                  "label": "Account Name",
+                  "type": "text",
+                  "required": true,
+                  "constraints": ".documents.azure.com; 3-44 lowercase letters, numbers, hyphens"
+                },
+                {
+                  "label": "Availability Zones",
+                  "type": "radio",
+                  "default": "Disable",
+                  "options": [
+                    "Enable",
+                    "Disable"
+                  ]
+                },
+                {
+                  "label": "Location",
+                  "type": "select",
+                  "required": true,
+                  "default": "(US) East US"
+                },
+                {
+                  "label": "Capacity mode",
+                  "type": "radio",
+                  "default": "Provisioned throughput",
+                  "options": [
+                    "Provisioned throughput",
+                    "Serverless"
+                  ]
+                },
+                {
+                  "label": "Apply Free Tier Discount",
+                  "type": "radio",
+                  "default": "Do Not Apply",
+                  "options": [
+                    "Apply",
+                    "Do Not Apply"
+                  ]
+                },
+                {
+                  "label": "Limit total account throughput",
+                  "type": "checkbox",
+                  "default": true
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Global Distribution",
+          "sections": [
+            {
+              "title": "Global Distribution",
+              "fields": [
+                {
+                  "label": "Geo-Redundancy",
+                  "type": "radio",
+                  "default": "Disable",
+                  "options": [
+                    "Enable",
+                    "Disable"
+                  ]
+                },
+                {
+                  "label": "Multi-region Writes",
+                  "type": "radio",
+                  "default": "Disable",
+                  "options": [
+                    "Enable",
+                    "Disable"
+                  ]
+                },
+                {
+                  "label": "Availability Zones",
+                  "type": "radio",
+                  "default": "Disable",
+                  "options": [
+                    "Enable",
+                    "Disable"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Networking",
+          "sections": [
+            {
+              "title": "Network connectivity",
+              "fields": [
+                {
+                  "label": "Connectivity method",
+                  "type": "radio",
+                  "default": "All networks",
+                  "options": [
+                    "All networks",
+                    "Public endpoint (selected networks)",
+                    "Private endpoint"
+                  ]
+                }
+              ]
+            },
+            {
+              "title": "Connection Security Settings",
+              "fields": [
+                {
+                  "label": "Minimum Transport Layer Security Protocol",
+                  "type": "select",
+                  "default": "TLS 1.2"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Backup Policy",
+          "sections": [
+            {
+              "title": "Backup Policy",
+              "fields": [
+                {
+                  "label": "Backup policy",
+                  "type": "radio",
+                  "default": "Periodic",
+                  "options": [
+                    "Periodic",
+                    "Continuous (7 days)",
+                    "Continuous (30 days)"
+                  ]
+                },
+                {
+                  "label": "Backup interval",
+                  "type": "number",
+                  "default": 240,
+                  "help": "Minutes",
+                  "visible_when": "Backup policy = Periodic"
+                },
+                {
+                  "label": "Backup retention",
+                  "type": "number",
+                  "default": 8,
+                  "help": "Hours",
+                  "visible_when": "Backup policy = Periodic"
+                },
+                {
+                  "label": "Copies of data retained",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Backup storage redundancy",
+                  "type": "radio",
+                  "default": "Geo-redundant backup storage",
+                  "options": [
+                    "Geo-redundant backup storage",
+                    "Zone-redundant backup storage",
+                    "Locally-redundant backup storage"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Encryption",
+          "sections": [
+            {
+              "title": "Data Encryption",
+              "fields": [
+                {
+                  "label": "Data Encryption",
+                  "type": "radio",
+                  "default": "Service-managed key",
+                  "options": [
+                    "Service-managed key",
+                    "Customer-managed key (CMK)"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Tags",
+          "sections": [
+            {
+              "title": "Tags",
+              "fields": [
+                {
+                  "label": "Tags",
+                  "type": "table",
+                  "columns": [
+                    "Name",
+                    "Value",
+                    "Resource"
+                  ],
+                  "help": "Name/value pairs to categorize resources and view consolidated billing"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Review + create",
+          "sections": [
+            {
+              "title": "Basics"
+            },
+            {
+              "title": "Global Distribution"
+            },
+            {
+              "title": "Networking"
+            },
+            {
+              "title": "Backup Policy"
+            },
+            {
+              "title": "Encryption"
+            },
+            {
+              "title": "Tags"
+            }
+          ]
+        }
+      ],
+      "submit": "Create",
+      "notes": "Footer: Review + create / < Previous / Next : <tab> >; Download a template for automation"
+    },
+    {
+      "id": "cosmos-account-overview",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "breadcrumbs": [
+        "Home",
+        "Azure Cosmos DB",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "low",
+      "header_actions": [
+        "Add container",
+        "Refresh",
+        "Move",
+        "Delete account",
+        "Feedback"
+      ],
+      "tabs": [
+        "Get started",
+        "Monitoring",
+        "Properties",
+        "Tutorials"
+      ],
+      "sections": [
+        {
+          "title": "Essentials",
+          "actions": [
+            "JSON View"
+          ],
+          "fields": [
+            {
+              "label": "Status",
+              "type": "readonly"
+            },
+            {
+              "label": "Resource group",
+              "type": "readonly"
+            },
+            {
+              "label": "Location",
+              "type": "readonly"
+            },
+            {
+              "label": "Subscription",
+              "type": "readonly"
+            },
+            {
+              "label": "Subscription ID",
+              "type": "readonly"
+            },
+            {
+              "label": "URI",
+              "type": "readonly"
+            },
+            {
+              "label": "Read Locations",
+              "type": "readonly"
+            },
+            {
+              "label": "Write Locations",
+              "type": "readonly"
+            },
+            {
+              "label": "Capacity mode",
+              "type": "readonly"
+            },
+            {
+              "label": "Backup policy",
+              "type": "readonly"
+            },
+            {
+              "label": "Tags",
+              "type": "readonly"
+            }
+          ]
+        }
+      ],
+      "table": {
+        "columns": [
+          "Database",
+          "Container",
+          "Partition key",
+          "Throughput"
+        ],
+        "resource_label": "Containers"
+      }
+    },
+    {
+      "id": "cosmos-account-activity-log",
+      "kind": "list",
+      "title": "{resource-name} | Activity log",
+      "breadcrumbs": [
+        "Home",
+        "Azure Cosmos DB",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "high",
+      "notes": "Same grid as Monitor | Activity log (captured), filtered to this resource",
+      "table": {
+        "columns": [
+          "Operation name",
+          "Status",
+          "Time",
+          "Time stamp",
+          "Subscription",
+          "Event initiated by"
+        ],
+        "header_actions": [
+          "Activity",
+          "Edit columns",
+          "Refresh",
+          "Export Activity Logs",
+          "Download as CSV",
+          "Insights",
+          "Feedback",
+          "Pin current filters",
+          "Reset filters"
+        ],
+        "filters": [
+          "Management Group : None",
+          "Subscription",
+          "Event severity : All",
+          "Timespan : Last 6 hours",
+          "Resource group",
+          "Resource",
+          "Add Filter"
+        ],
+        "empty_state": "No events to display",
+        "pagination": false
+      }
+    },
+    {
+      "id": "cosmos-account-access-control-iam",
+      "kind": "other",
+      "title": "{resource-name} | Access control (IAM)",
+      "breadcrumbs": [
+        "Home",
+        "Azure Cosmos DB",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "high",
+      "header_actions": [
+        "Add",
+        "Download role assignments",
+        "Edit columns",
+        "Refresh",
+        "Remove",
+        "Feedback"
+      ],
+      "tabs": [
+        "Check access",
+        "Role assignments",
+        "Roles",
+        "Deny assignments",
+        "Classic administrators"
+      ],
+      "tab_panels": [
+        {
+          "label": "Check access",
+          "sections": [
+            {
+              "title": "My access",
+              "fields": [
+                {
+                  "label": "View my access",
+                  "type": "button"
+                }
+              ]
+            },
+            {
+              "title": "Check access",
+              "fields": [
+                {
+                  "label": "Check access",
+                  "type": "button"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "Role assignments",
+          "sections": [
+            {
+              "title": "Role assignments",
+              "table": {
+                "columns": [
+                  "Name",
+                  "Type",
+                  "Role",
+                  "Scope",
+                  "Condition"
+                ],
+                "selection": "multi",
+                "filter_placeholder": "Search by name or email"
+              }
+            }
+          ]
+        },
+        {
+          "label": "Roles",
+          "sections": [
+            {
+              "title": "Roles",
+              "table": {
+                "columns": [
+                  "Name",
+                  "Description",
+                  "Type",
+                  "Category",
+                  "Details"
+                ],
+                "filter_placeholder": "Search by role name, description, permission, or ID"
+              }
+            }
+          ]
+        },
+        {
+          "label": "Deny assignments",
+          "sections": [
+            {
+              "title": "Deny assignments",
+              "table": {
+                "columns": [
+                  "Name",
+                  "Description",
+                  "Principal",
+                  "Scope"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "label": "Classic administrators"
+        }
+      ]
+    },
+    {
+      "id": "cosmos-account-tags",
+      "kind": "settings",
+      "title": "{resource-name} | Tags",
+      "breadcrumbs": [
+        "Home",
+        "Azure Cosmos DB",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "high",
+      "sections": [
+        {
+          "title": "Tags",
+          "fields": [
+            {
+              "label": "Tags",
+              "type": "table",
+              "columns": [
+                "Name",
+                "Value"
+              ],
+              "actions": [
+                "Delete"
+              ],
+              "help": "Name/value pairs; the same tag can apply to multiple resources"
+            }
+          ]
+        }
+      ],
+      "header_actions": [
+        "Apply",
+        "Discard changes",
+        "Delete all"
+      ]
+    },
+    {
+      "id": "cosmos-account-diagnose-and-solve-problems",
+      "kind": "other",
+      "title": "{resource-name} | Diagnose and solve problems",
+      "breadcrumbs": [
+        "Home",
+        "Azure Cosmos DB",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Azure Cosmos DB account blade menu item; title only"
+    },
+    {
+      "id": "cosmos-account-cost-management",
+      "kind": "other",
+      "title": "{resource-name} | Cost Management",
+      "breadcrumbs": [
+        "Home",
+        "Azure Cosmos DB",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Azure Cosmos DB account blade menu item; title only"
+    },
+    {
+      "id": "cosmos-account-quick-start",
+      "kind": "other",
+      "title": "{resource-name} | Quick start",
+      "breadcrumbs": [
+        "Home",
+        "Azure Cosmos DB",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Azure Cosmos DB account blade menu item; title only"
+    },
+    {
+      "id": "cosmos-account-notifications",
+      "kind": "other",
+      "title": "{resource-name} | Notifications",
+      "breadcrumbs": [
+        "Home",
+        "Azure Cosmos DB",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Azure Cosmos DB account blade menu item; title only"
+    },
+    {
+      "id": "cosmos-account-data-explorer",
+      "kind": "other",
+      "title": "{resource-name} | Data Explorer",
+      "breadcrumbs": [
+        "Home",
+        "Azure Cosmos DB",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "New Container",
+        "New Database",
+        "Open Full Screen",
+        "Feedback"
+      ],
+      "sections": [
+        {
+          "title": "NOSQL API",
+          "fields": [
+            {
+              "label": "Search",
+              "type": "text",
+              "placeholder": "Search resources"
+            }
+          ]
+        },
+        {
+          "title": "New Container",
+          "fields": [
+            {
+              "label": "Database id",
+              "type": "radio",
+              "options": [
+                "Create new",
+                "Use existing"
+              ],
+              "children": [
+                {
+                  "label": "Database id",
+                  "type": "text",
+                  "required": true
+                },
+                {
+                  "label": "Share throughput across containers",
+                  "type": "checkbox"
+                }
+              ]
+            },
+            {
+              "label": "Database throughput",
+              "type": "radio",
+              "default": "Autoscale",
+              "options": [
+                "Autoscale",
+                "Manual"
+              ]
+            },
+            {
+              "label": "Database Max RU/s",
+              "type": "number",
+              "default": 1000
+            },
+            {
+              "label": "Container id",
+              "type": "text",
+              "required": true
+            },
+            {
+              "label": "Indexing",
+              "type": "radio",
+              "default": "Automatic",
+              "options": [
+                "Automatic",
+                "Off"
+              ]
+            },
+            {
+              "label": "Partition key",
+              "type": "text",
+              "required": true,
+              "placeholder": "/pk"
+            },
+            {
+              "label": "Add hierarchical partition key",
+              "type": "button"
+            },
+            {
+              "label": "Unique keys",
+              "type": "table",
+              "columns": [
+                "Unique key"
+              ],
+              "actions": [
+                "Add unique key"
+              ]
+            },
+            {
+              "label": "Analytical store",
+              "type": "radio",
+              "options": [
+                "On",
+                "Off"
+              ]
+            },
+            {
+              "label": "OK",
+              "type": "button"
+            }
+          ]
+        }
+      ],
+      "notes": "Container tree: Items, Settings, Stored Procedures, User Defined Functions, Triggers"
+    },
+    {
+      "id": "cosmos-account-features",
+      "kind": "other",
+      "title": "{resource-name} | Features",
+      "breadcrumbs": [
+        "Home",
+        "Azure Cosmos DB",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Azure Cosmos DB account blade menu item; title only"
+    },
+    {
+      "id": "cosmos-account-replicate-data-globally",
+      "kind": "settings",
+      "title": "{resource-name} | Replicate data globally",
+      "breadcrumbs": [
+        "Home",
+        "Azure Cosmos DB",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Save",
+        "Discard",
+        "Manual Failover",
+        "Service-Managed Failover"
+      ],
+      "sections": [
+        {
+          "title": "Regions",
+          "fields": [
+            {
+              "label": "Regions",
+              "type": "table",
+              "columns": [
+                "Region",
+                "Read",
+                "Write"
+              ],
+              "actions": [
+                "Add region"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cosmos-account-default-consistency",
+      "kind": "settings",
+      "title": "{resource-name} | Default consistency",
+      "breadcrumbs": [
+        "Home",
+        "Azure Cosmos DB",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Save",
+        "Discard"
+      ],
+      "sections": [
+        {
+          "title": "Default consistency",
+          "fields": [
+            {
+              "label": "Default consistency",
+              "type": "radio",
+              "default": "Session",
+              "options": [
+                "Strong",
+                "Bounded Staleness",
+                "Session",
+                "Consistent Prefix",
+                "Eventual"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cosmos-account-backup-restore",
+      "kind": "settings",
+      "title": "{resource-name} | Backup & Restore",
+      "breadcrumbs": [
+        "Home",
+        "Azure Cosmos DB",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "sections": [
+        {
+          "title": "Backup Policy",
+          "fields": [
+            {
+              "label": "Backup policy",
+              "type": "readonly"
+            },
+            {
+              "label": "Backup Interval",
+              "type": "readonly"
+            },
+            {
+              "label": "Backup Retention",
+              "type": "readonly"
+            },
+            {
+              "label": "Backup storage redundancy",
+              "type": "readonly"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cosmos-account-networking",
+      "kind": "other",
+      "title": "{resource-name} | Networking",
+      "breadcrumbs": [
+        "Home",
+        "Azure Cosmos DB",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Azure Cosmos DB account blade menu item; title only"
+    },
+    {
+      "id": "cosmos-account-keys",
+      "kind": "settings",
+      "title": "{resource-name} | Keys",
+      "breadcrumbs": [
+        "Home",
+        "Azure Cosmos DB",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "tabs": [
+        "Read-write Keys",
+        "Read-only Keys"
+      ],
+      "tab_panels": [
+        {
+          "label": "Read-write Keys",
+          "sections": [
+            {
+              "title": "Read-write Keys",
+              "fields": [
+                {
+                  "label": "URI",
+                  "type": "readonly"
+                },
+                {
+                  "label": "PRIMARY KEY",
+                  "type": "readonly"
+                },
+                {
+                  "label": "SECONDARY KEY",
+                  "type": "readonly"
+                },
+                {
+                  "label": "PRIMARY CONNECTION STRING",
+                  "type": "readonly"
+                },
+                {
+                  "label": "SECONDARY CONNECTION STRING",
+                  "type": "readonly"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "Read-only Keys",
+          "sections": [
+            {
+              "title": "Read-only Keys",
+              "fields": [
+                {
+                  "label": "URI",
+                  "type": "readonly"
+                },
+                {
+                  "label": "PRIMARY KEY",
+                  "type": "readonly"
+                },
+                {
+                  "label": "SECONDARY KEY",
+                  "type": "readonly"
+                },
+                {
+                  "label": "PRIMARY CONNECTION STRING",
+                  "type": "readonly"
+                },
+                {
+                  "label": "SECONDARY CONNECTION STRING",
+                  "type": "readonly"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "header_actions": [
+        "Regenerate Primary Key",
+        "Regenerate Secondary Key"
+      ]
+    },
+    {
+      "id": "cosmos-account-data-migration",
+      "kind": "other",
+      "title": "{resource-name} | Data Migration",
+      "breadcrumbs": [
+        "Home",
+        "Azure Cosmos DB",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Azure Cosmos DB account blade menu item; title only"
+    },
+    {
+      "id": "cosmos-account-cors",
+      "kind": "other",
+      "title": "{resource-name} | CORS",
+      "breadcrumbs": [
+        "Home",
+        "Azure Cosmos DB",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Azure Cosmos DB account blade menu item; title only"
+    },
+    {
+      "id": "cosmos-account-dedicated-gateway",
+      "kind": "other",
+      "title": "{resource-name} | Dedicated Gateway",
+      "breadcrumbs": [
+        "Home",
+        "Azure Cosmos DB",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Azure Cosmos DB account blade menu item; title only"
+    },
+    {
+      "id": "cosmos-account-microsoft-defender-for-cloud",
+      "kind": "other",
+      "title": "{resource-name} | Microsoft Defender for Cloud",
+      "breadcrumbs": [
+        "Home",
+        "Azure Cosmos DB",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Azure Cosmos DB account blade menu item; title only"
+    },
+    {
+      "id": "cosmos-account-identity",
+      "kind": "other",
+      "title": "{resource-name} | Identity",
+      "breadcrumbs": [
+        "Home",
+        "Azure Cosmos DB",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Azure Cosmos DB account blade menu item; title only"
+    },
+    {
+      "id": "cosmos-account-data-encryption",
+      "kind": "other",
+      "title": "{resource-name} | Data Encryption",
+      "breadcrumbs": [
+        "Home",
+        "Azure Cosmos DB",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Azure Cosmos DB account blade menu item; title only"
+    },
+    {
+      "id": "cosmos-account-locks",
+      "kind": "list",
+      "title": "{resource-name} | Locks",
+      "breadcrumbs": [
+        "Home",
+        "Azure Cosmos DB",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "high",
+      "table": {
+        "columns": [
+          "Lock name",
+          "Lock type",
+          "Scope",
+          "Notes"
+        ],
+        "header_actions": [
+          "Add",
+          "Subscription",
+          "Resource group",
+          "Refresh",
+          "Feedback"
+        ],
+        "filter_placeholder": "Search to filter items...",
+        "empty_state": "This resource has no locks."
+      },
+      "sections": [
+        {
+          "title": "Add lock",
+          "fields": [
+            {
+              "label": "Lock name",
+              "type": "text",
+              "required": true
+            },
+            {
+              "label": "Lock type",
+              "type": "select",
+              "required": true,
+              "options": [
+                "Read-only",
+                "Delete"
+              ]
+            },
+            {
+              "label": "Notes",
+              "type": "textarea"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cosmos-account-browse",
+      "kind": "other",
+      "title": "{resource-name} | Browse",
+      "breadcrumbs": [
+        "Home",
+        "Azure Cosmos DB",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Azure Cosmos DB account blade menu item; title only"
+    },
+    {
+      "id": "cosmos-account-scale",
+      "kind": "other",
+      "title": "{resource-name} | Scale",
+      "breadcrumbs": [
+        "Home",
+        "Azure Cosmos DB",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Azure Cosmos DB account blade menu item; title only"
+    },
+    {
+      "id": "cosmos-account-power-bi",
+      "kind": "other",
+      "title": "{resource-name} | Power BI",
+      "breadcrumbs": [
+        "Home",
+        "Azure Cosmos DB",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Azure Cosmos DB account blade menu item; title only"
+    },
+    {
+      "id": "cosmos-account-add-azure-cognitive-search",
+      "kind": "other",
+      "title": "{resource-name} | Add Azure Cognitive Search",
+      "breadcrumbs": [
+        "Home",
+        "Azure Cosmos DB",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Azure Cosmos DB account blade menu item; title only"
+    },
+    {
+      "id": "cosmos-account-add-azure-function",
+      "kind": "other",
+      "title": "{resource-name} | Add Azure Function",
+      "breadcrumbs": [
+        "Home",
+        "Azure Cosmos DB",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Azure Cosmos DB account blade menu item; title only"
+    },
+    {
+      "id": "cosmos-account-insights",
+      "kind": "other",
+      "title": "{resource-name} | Insights",
+      "breadcrumbs": [
+        "Home",
+        "Azure Cosmos DB",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Azure Cosmos DB account blade menu item; title only"
+    },
+    {
+      "id": "cosmos-account-alerts",
+      "kind": "other",
+      "title": "{resource-name} | Alerts",
+      "breadcrumbs": [
+        "Home",
+        "Azure Cosmos DB",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Azure Cosmos DB account blade menu item; title only"
+    },
+    {
+      "id": "cosmos-account-metrics",
+      "kind": "other",
+      "title": "{resource-name} | Metrics",
+      "breadcrumbs": [
+        "Home",
+        "Azure Cosmos DB",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Azure Cosmos DB account blade menu item; title only"
+    },
+    {
+      "id": "cosmos-account-logs",
+      "kind": "other",
+      "title": "{resource-name} | Logs",
+      "breadcrumbs": [
+        "Home",
+        "Azure Cosmos DB",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Azure Cosmos DB account blade menu item; title only"
+    },
+    {
+      "id": "cosmos-account-diagnostic-settings",
+      "kind": "other",
+      "title": "{resource-name} | Diagnostic settings",
+      "breadcrumbs": [
+        "Home",
+        "Azure Cosmos DB",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Azure Cosmos DB account blade menu item; title only"
+    },
+    {
+      "id": "cosmos-account-workbooks",
+      "kind": "other",
+      "title": "{resource-name} | Workbooks",
+      "breadcrumbs": [
+        "Home",
+        "Azure Cosmos DB",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Azure Cosmos DB account blade menu item; title only"
+    },
+    {
+      "id": "cosmos-account-tasks",
+      "kind": "other",
+      "title": "{resource-name} | Tasks",
+      "breadcrumbs": [
+        "Home",
+        "Azure Cosmos DB",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Azure Cosmos DB account blade menu item; title only"
+    },
+    {
+      "id": "cosmos-account-export-template",
+      "kind": "other",
+      "title": "{resource-name} | Export template",
+      "breadcrumbs": [
+        "Home",
+        "Azure Cosmos DB",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Download",
+        "Add to library (preview)",
+        "Deploy",
+        "Visualize template"
+      ],
+      "tabs": [
+        "ARM Template",
+        "Bicep",
+        "Terraform"
+      ],
+      "sections": [
+        {
+          "title": "Template",
+          "fields": [
+            {
+              "label": "Include parameters",
+              "type": "checkbox",
+              "default": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cosmos-account-resource-health",
+      "kind": "other",
+      "title": "{resource-name} | Resource health",
+      "breadcrumbs": [
+        "Home",
+        "Azure Cosmos DB",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Azure Cosmos DB account blade menu item; title only"
+    },
+    {
+      "id": "cosmos-account-support-troubleshooting",
+      "kind": "other",
+      "title": "{resource-name} | Support + Troubleshooting",
+      "breadcrumbs": [
+        "Home",
+        "Azure Cosmos DB",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Azure Cosmos DB account blade menu item; title only"
+    }
+  ],
+  "gaps_note": "Create showed 'No subscriptions': API picker, NoSQL wizard, grid and account blade are provenance=reference. Other APIs (MongoDB, Cassandra, Gremlin, Table, PostgreSQL) have their own wizards; not specced."
+}

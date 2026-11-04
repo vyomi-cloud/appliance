@@ -29,18 +29,32 @@ from core.gcp_artifactregistry_core import ArtifactRegistryStore
 from core.azure_blob_core import AzureBlobStore
 from core.azure_cosmos_core import CosmosStore
 from core.azure_queue_core import AzureQueueStore
+from core.azure_table_core import AzureTableStore
 from core.nano_events import EventStore
 from core.kinesis_core import KinesisStore
+from core.dax_core import DaxStore
 from core.apigatewayv2_core import ApiGwV2Store
 from core.logs_core import LogsStore
 from core.elbv2_core import Elbv2Store
 from core.ssm_core import SsmStore
+from core.autoscaling_core import AutoScalingStore
+from core.dlm_core import DlmStore
 from core.stepfunctions_core import StepFunctionsStore
 from core.gcp_cloudscheduler_core import CloudSchedulerStore
 from core.gcp_iamcredentials_core import IamCredentialsStore
 from core.gcp_redis_core import RedisStore
 from core.gcp_container_core import ContainerStore
+from core.gcp_compute_core import ComputeStore
+from core.gcp_compute_instances_core import ComputeStore as ComputeVmStore
+from core.gcp_resourcemanager_core import ResourceManagerStore
+from core.gcp_pam_core import PamStore
+from core.gcp_logging_core import LoggingStore
+from core.scheduler_core import SchedulerStore
+from core.azure_acr_core import AcrRegistryStore
+from core.gcp_run_core import RunStore
 from core.azure_arm_core import AzureArm
+from core.azure_graph_core import GraphStore
+from core.cloudformation_core import CloudFormationStore
 
 import types
 from core.cloudwatch_core import CloudWatchStore
@@ -65,17 +79,22 @@ def get() -> dict:
             "iam": InMemoryIamStore(),
             "msg": InMemoryMessagingStore(),   # SHARED by sqs + sns (fan-out)
             "kinesis": KinesisStore(),         # Kinesis Data Streams
+            "dax": DaxStore(),                 # DynamoDB Accelerator (clusters + cache engine)
             "apigwv2": ApiGwV2Store(),
             # Console compute/network models: Lambda + API Gateway share ONE namespace
             # (AWS_PROXY reaches the registered functions); VPC has its own. They
             # live here (not as module singletons) so nano_persist snapshots them.
             "compute": types.SimpleNamespace(),
             "vpc_net": types.SimpleNamespace(),
+            "ram": types.SimpleNamespace(),    # Resource Access Manager (subnet/SG resource shares)
             "extras": types.SimpleNamespace(items={}, cfg={}),   # console EC2/VPC/EventBridge sub-resource CRUD
             "logs": LogsStore(),               # CloudWatch Logs (core/logs_core.py)
             "elbv2": Elbv2Store(),             # ELBv2 load balancers / target groups / listeners (control plane)
             "ssm": SsmStore(),
+            "asg": AutoScalingStore(),         # EC2 Auto Scaling groups + scaling policies (CloudWatch alarm actions)
+            "dlm": DlmStore(),                 # Data Lifecycle Manager policies (scheduled EBS snapshots)
             "sfn": StepFunctionsStore(),
+            "cfn": CloudFormationStore(),   # CloudFormation (stacks, change sets, stack sets)
             # ── GCP ── (storage/firestore/kms/secretmanager/pubsub/iam/cloudsql)
             "gcs":     InMemoryObjectStore(),
             "gcp_fs":  FirestoreStore(),
@@ -90,13 +109,24 @@ def get() -> dict:
             "gcp_iam": InMemoryIamStore(),
             "gcp_sql": InMemorySqlStore(),
             "gcp_ar":  ArtifactRegistryStore(),   # Artifact Registry repositories/packages
+            "az_acr": AcrRegistryStore(),   # Azure Container Registry: repositories, tags, manifests
+            "sched": SchedulerStore(),   # EventBridge Scheduler: schedules + schedule groups
+            "gcp_logging": LoggingStore(),   # Cloud Logging: entries, sinks, metrics, buckets, views
+            "gcp_rm": ResourceManagerStore(),   # Resource Manager: project, tags, contacts, org policies
+            "gcp_pam": PamStore(),   # Privileged Access Manager entitlements
+            "gcp_compute_vm": ComputeVmStore(),   # Compute Engine VMs, disks, images, templates
+            "gcp_compute": ComputeStore(),   # VPC network: networks/subnets/firewalls/routes/addresses
+            "gcp_run": RunStore(),   # Cloud Run (services, jobs, worker pools, domain mappings) — backs /functions
             # ── Azure ── (blob/cosmos/keyvault secrets+keys/queue/servicebus)
             "az_blob":   AzureBlobStore(),
             "az_cosmos": CosmosStore(),
             "az_kvsec":  InMemoryKvStore(),
             "az_kvkeys": InMemoryKeyStore(),
+            "az_kvcerts": InMemoryKvStore(),
             "az_queue":  AzureQueueStore(),
+            "az_table":  AzureTableStore(),
             "az_sb":     InMemoryMessagingStore(),   # Service Bus (router-only today)
+            "az_graph":  GraphStore(),               # Microsoft Graph (Entra ID: users/groups/apps)
             "az_arm":    AzureArm(),                 # ARM control plane (VMs, apps, …): public `state` map → persisted + synced
             # ── cross-cloud ── per-resource cloudsim event / activity log. DURABLE
             # + bounded: recorded on every mutating dispatch; persisted + cross-tab
@@ -104,4 +134,23 @@ def get() -> dict:
             "events": EventStore(),
             "cw": CloudWatchStore(),   # CloudWatch (metrics / alarms / dashboards)
         }
+        _REG["cw"].msg_store, _REG["cw"].lam_store = _REG["msg"], _REG["compute"]   # real SNS / Lambda alarm actions
+        _REG["cw"].vpc_store = _REG["vpc_net"]   # real EC2 alarm actions (aws.cloudwatch.alarms.actions.ec2)
+        _REG["vpc_net"].cw_store = _REG["cw"]   # real StatusCheckFailed metrics (ec2.instances.monitoring / .alarms-metrics)
+        _REG["msg"].cw_store = _REG["cw"]   # real AWS/Events + AWS/Scheduler metrics (eventbridge.metrics)
+        _REG["kinesis"].cw_store = _REG["cw"]   # real AWS/Kinesis metrics (kinesis.stream.monitoring-metrics)
+        _REG["rds"].cw_store = _REG["cw"]   # real DatabaseConnections/ReadIOPS/WriteIOPS metrics (rds.monitoring)
+        _REG["vpc_net"].ram_store = _REG["ram"]   # DeleteSubnet/DeleteSecurityGroup refuse while actively shared
+        _REG["ram"].vpc_store = _REG["vpc_net"]   # AssociateResourceShare validates the subnet/SG exists
+        _REG["dax"].ddb_store = _REG["ddb"]   # real read-through/write-through into the fronted table
+        _REG["dax"].cw_store = _REG["cw"]     # real AWS/DAX ItemCache/QueryCache hit/miss metrics
+        _REG["logs"].lam_store, _REG["logs"].kinesis_store = _REG["compute"], _REG["kinesis"]   # real subscription-filter delivery
+        _REG["cw"].logs_store = _REG["logs"]   # real log-based Contributor Insights rules
+        _REG["msg"].logs_store = _REG["logs"]   # real SNS delivery-status logging (SQSSuccessFeedbackRoleArn/…)
+        _REG["az_arm"].kv_secrets_store = _REG["az_kvsec"]   # APIM Key Vault named values resolve against this space's KV secrets
+        _REG["az_arm"].sql_store = _REG.get("rds")       # Azure SQL database export/import (the shared SqlStore)
+        _REG["az_arm"].blob_store = _REG.get("az_blob")  # … to/from this space's Azure Blob store (.bacpac)
+        _REG["gcp_logging"].mon_store = _REG["gcp_mon"]   # Logs Storage "Create usage alert" mirrors live byte/entry counts into Monitoring
+        _REG["gcp_mon"].compute_vm_store = _REG["gcp_compute_vm"]   # Overview "VMs with Ops Agent" + uptime checks targeting a GCE instance read real Compute Engine state
+        _REG["gcp_mon"].gcs_store = _REG["gcs"]   # Cost Explorer's Cloud Storage line item prices real bucket bytes stored
     return _REG

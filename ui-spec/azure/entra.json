@@ -1,0 +1,2153 @@
+{
+  "$schema": "../schema.json",
+  "cloud": "azure",
+  "service": "entra",
+  "console_path": "#view/Microsoft_AAD_IAM/ActiveDirectoryMenuBlade",
+  "status": "reviewed",
+  "captured_at": "2026-10-30",
+  "nav": [
+    {
+      "label": "Overview",
+      "page_id": "entra-overview"
+    },
+    {
+      "label": "Preview features",
+      "page_id": "entra-preview-features"
+    },
+    {
+      "label": "Diagnose and solve problems",
+      "page_id": "entra-diagnose-and-solve-problems"
+    },
+    {
+      "label": "Manage",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Users",
+          "page_id": "entra-users"
+        },
+        {
+          "label": "Groups",
+          "page_id": "entra-groups"
+        },
+        {
+          "label": "External Identities",
+          "page_id": "entra-external-identities"
+        },
+        {
+          "label": "Roles and administrators",
+          "page_id": "entra-roles-and-administrators"
+        },
+        {
+          "label": "Administrative units",
+          "page_id": "entra-administrative-units"
+        },
+        {
+          "label": "Delegated admin partners",
+          "page_id": "entra-delegated-admin-partners"
+        },
+        {
+          "label": "Agents",
+          "page_id": "entra-agents"
+        },
+        {
+          "label": "Enterprise applications",
+          "page_id": "entra-enterprise-applications"
+        },
+        {
+          "label": "Devices",
+          "page_id": "entra-devices"
+        },
+        {
+          "label": "App registrations",
+          "page_id": "entra-app-registrations"
+        },
+        {
+          "label": "Identity Governance",
+          "page_id": "entra-identity-governance"
+        },
+        {
+          "label": "Application proxy",
+          "page_id": "entra-application-proxy"
+        },
+        {
+          "label": "Custom security attributes",
+          "page_id": "entra-custom-security-attributes"
+        },
+        {
+          "label": "Licenses",
+          "page_id": "entra-licenses"
+        },
+        {
+          "label": "Cross-tenant synchronization",
+          "page_id": "entra-cross-tenant-synchronization"
+        },
+        {
+          "label": "Microsoft Entra Connect",
+          "page_id": "entra-microsoft-entra-connect"
+        },
+        {
+          "label": "Custom domain names",
+          "page_id": "entra-custom-domain-names"
+        },
+        {
+          "label": "Mobility (MDM and WIP)",
+          "page_id": "entra-mobility-mdm-and-wip"
+        },
+        {
+          "label": "Password reset",
+          "page_id": "entra-password-reset"
+        },
+        {
+          "label": "Company branding",
+          "page_id": "entra-company-branding"
+        },
+        {
+          "label": "User settings",
+          "page_id": "entra-user-settings"
+        },
+        {
+          "label": "Properties",
+          "page_id": "entra-properties"
+        },
+        {
+          "label": "Security",
+          "page_id": "entra-security"
+        }
+      ]
+    },
+    {
+      "label": "Monitoring",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Sign-in logs",
+          "page_id": "entra-sign-in-logs"
+        },
+        {
+          "label": "Audit logs",
+          "page_id": "entra-audit-logs"
+        },
+        {
+          "label": "Provisioning logs",
+          "page_id": "entra-provisioning-logs"
+        },
+        {
+          "label": "Health",
+          "page_id": "entra-health"
+        },
+        {
+          "label": "Log Analytics",
+          "page_id": "entra-log-analytics"
+        },
+        {
+          "label": "Diagnostic settings",
+          "page_id": "entra-diagnostic-settings"
+        },
+        {
+          "label": "Workbooks",
+          "page_id": "entra-workbooks"
+        },
+        {
+          "label": "Usage & insights",
+          "page_id": "entra-usage-insights"
+        },
+        {
+          "label": "Bulk operation results (Preview)",
+          "page_id": "entra-bulk-operation-results-preview"
+        }
+      ]
+    },
+    {
+      "label": "Help",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Support + Troubleshooting",
+          "page_id": "entra-support-troubleshooting"
+        }
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "id": "entra-overview",
+      "kind": "dashboard",
+      "title": "Default Directory | Overview",
+      "breadcrumbs": [
+        "All services",
+        "Default Directory"
+      ],
+      "captures": [
+        "A-view-microsoft-aad-iam-activedirectorymenublade/001-L1-landing"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Add",
+        "Manage tenants",
+        "What's new",
+        "Preview features",
+        "Got feedback?"
+      ],
+      "tabs": [
+        "Overview",
+        "Monitoring",
+        "Properties",
+        "Recommendations",
+        "Setup guides"
+      ],
+      "sections": [
+        {
+          "title": "Basic information",
+          "fields": [
+            {
+              "label": "Name",
+              "type": "readonly"
+            },
+            {
+              "label": "Tenant ID",
+              "type": "readonly"
+            },
+            {
+              "label": "Primary domain",
+              "type": "readonly"
+            },
+            {
+              "label": "License",
+              "type": "readonly"
+            },
+            {
+              "label": "Users",
+              "type": "readonly"
+            },
+            {
+              "label": "Groups",
+              "type": "readonly"
+            },
+            {
+              "label": "Applications",
+              "type": "readonly"
+            },
+            {
+              "label": "Devices",
+              "type": "readonly"
+            }
+          ]
+        },
+        {
+          "title": "Alerts"
+        },
+        {
+          "title": "My feed"
+        },
+        {
+          "title": "Feature highlights"
+        },
+        {
+          "title": "Quick actions",
+          "fields": [
+            {
+              "label": "Add user",
+              "type": "button"
+            },
+            {
+              "label": "Add group",
+              "type": "button"
+            },
+            {
+              "label": "Add enterprise application",
+              "type": "button"
+            },
+            {
+              "label": "Add application registration",
+              "type": "button"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "entra-preview-features",
+      "kind": "other",
+      "title": "Default Directory | Preview features",
+      "breadcrumbs": [
+        "All services",
+        "Default Directory"
+      ],
+      "captures": [
+        "A-view-microsoft-aad-iam-activedirectorymenublade/003-L2-preview-features"
+      ],
+      "provenance": "capture",
+      "confidence": "high"
+    },
+    {
+      "id": "entra-diagnose-and-solve-problems",
+      "kind": "other",
+      "title": "Default Directory | Diagnose and solve problems",
+      "breadcrumbs": [
+        "All services",
+        "Default Directory"
+      ],
+      "captures": [
+        "A-view-microsoft-aad-iam-activedirectorymenublade/004-L2-diagnose-and-solve-problems"
+      ],
+      "provenance": "capture",
+      "confidence": "high"
+    },
+    {
+      "id": "entra-users",
+      "kind": "list",
+      "title": "Users",
+      "breadcrumbs": [
+        "All services",
+        "Default Directory"
+      ],
+      "captures": [
+        "A-view-microsoft-aad-iam-activedirectorymenublade/005-L2-users"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "table": {
+        "columns": [
+          "Display name",
+          "User principal name",
+          "User type",
+          "Is Agent",
+          "On-premises sync enabled",
+          "Sign-in identifiers",
+          "Company name",
+          "Creation type",
+          "Permanent deletion protection status"
+        ],
+        "selection": "multi",
+        "header_actions": [
+          "New user",
+          "Edit",
+          "Delete",
+          "Download users (Preview)",
+          "Bulk operations",
+          "Refresh",
+          "Manage view",
+          "Per-user MFA",
+          "Got feedback?"
+        ],
+        "filter_placeholder": "Search",
+        "filters": [
+          "Add filter"
+        ]
+      }
+    },
+    {
+      "id": "entra-groups",
+      "kind": "dashboard",
+      "title": "Groups | Overview",
+      "breadcrumbs": [
+        "All services",
+        "Default Directory"
+      ],
+      "captures": [
+        "A-view-microsoft-aad-iam-activedirectorymenublade/006-L2-groups"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "New group",
+        "Download groups"
+      ],
+      "tabs": [
+        "Overview",
+        "Tutorials"
+      ],
+      "sections": [
+        {
+          "title": "Basic information",
+          "fields": [
+            {
+              "label": "Total groups",
+              "type": "readonly"
+            },
+            {
+              "label": "M365 groups",
+              "type": "readonly"
+            },
+            {
+              "label": "Security groups",
+              "type": "readonly"
+            },
+            {
+              "label": "Dynamic groups",
+              "type": "readonly"
+            },
+            {
+              "label": "Cloud groups",
+              "type": "readonly"
+            },
+            {
+              "label": "On-premises groups",
+              "type": "readonly"
+            }
+          ]
+        },
+        {
+          "title": "Quick actions",
+          "fields": [
+            {
+              "label": "Add group",
+              "type": "button"
+            },
+            {
+              "label": "Download groups",
+              "type": "button"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "entra-external-identities",
+      "kind": "dashboard",
+      "title": "External Identities | Overview",
+      "breadcrumbs": [
+        "All services",
+        "Default Directory"
+      ],
+      "captures": [
+        "A-view-microsoft-aad-iam-activedirectorymenublade/007-L2-external-identities"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "sections": [
+        {
+          "title": "Get started with External Identities"
+        }
+      ]
+    },
+    {
+      "id": "entra-roles-and-administrators",
+      "kind": "list",
+      "title": "Roles and administrators | All roles",
+      "breadcrumbs": [
+        "All services",
+        "Default Directory"
+      ],
+      "captures": [
+        "A-view-microsoft-aad-iam-activedirectorymenublade/008-L2-roles-and-administrators"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "table": {
+        "columns": [
+          "Role",
+          "Description",
+          "Privileged",
+          "Assignments",
+          "Type"
+        ],
+        "header_actions": [
+          "New custom role",
+          "Delete custom role",
+          "Download assignments",
+          "Refresh",
+          "Preview features",
+          "Got feedback?"
+        ],
+        "filters": [
+          "Add filters"
+        ]
+      }
+    },
+    {
+      "id": "entra-administrative-units",
+      "kind": "list",
+      "title": "Default Directory | Administrative units",
+      "breadcrumbs": [
+        "All services",
+        "Default Directory"
+      ],
+      "captures": [
+        "A-view-microsoft-aad-iam-activedirectorymenublade/009-L2-administrative-units"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "table": {
+        "columns": [
+          "Name",
+          "Description",
+          "Restricted management",
+          "Membership type"
+        ],
+        "header_actions": [
+          "Add",
+          "Delete",
+          "Refresh",
+          "Preview features",
+          "Got feedback?"
+        ],
+        "filters": [
+          "Add filters"
+        ],
+        "empty_state": "No administrative units found."
+      }
+    },
+    {
+      "id": "entra-delegated-admin-partners",
+      "kind": "other",
+      "title": "Default Directory | Delegated admin partners",
+      "breadcrumbs": [
+        "All services",
+        "Default Directory"
+      ],
+      "captures": [
+        "A-view-microsoft-aad-iam-activedirectorymenublade/010-L2-delegated-admin-partners"
+      ],
+      "provenance": "capture",
+      "confidence": "high"
+    },
+    {
+      "id": "entra-agents",
+      "kind": "other",
+      "title": "Default Directory | Agents",
+      "breadcrumbs": [
+        "All services",
+        "Default Directory"
+      ],
+      "captures": [
+        "A-view-microsoft-aad-iam-activedirectorymenublade/011-L2-agents"
+      ],
+      "provenance": "capture",
+      "confidence": "high"
+    },
+    {
+      "id": "entra-enterprise-applications",
+      "kind": "list",
+      "title": "Enterprise applications | All applications",
+      "breadcrumbs": [
+        "All services",
+        "Default Directory"
+      ],
+      "captures": [
+        "A-view-microsoft-aad-iam-activedirectorymenublade/012-L2-enterprise-applications"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "table": {
+        "columns": [
+          "Name",
+          "Object ID",
+          "Application ID",
+          "Homepage URL",
+          "Created on",
+          "Activation status",
+          "Certificate Expiry Status",
+          "Active Certificate Expiry Date",
+          "Identifier URI (Entity ID)"
+        ],
+        "header_actions": [
+          "New application",
+          "Refresh",
+          "Download (Export)",
+          "Preview info",
+          "Columns",
+          "Preview features",
+          "Got feedback?"
+        ],
+        "filters": [
+          "Application type == Enterprise Applications",
+          "Application ID starts with",
+          "Add filters"
+        ],
+        "empty_state": "No results"
+      }
+    },
+    {
+      "id": "entra-devices",
+      "kind": "dashboard",
+      "title": "Devices | Overview",
+      "breadcrumbs": [
+        "All services",
+        "Default Directory"
+      ],
+      "captures": [
+        "A-view-microsoft-aad-iam-activedirectorymenublade/013-L2-devices"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "tabs": [
+        "Overview",
+        "Monitoring",
+        "Tutorials"
+      ],
+      "sections": [
+        {
+          "title": "Alerts",
+          "fields": [
+            {
+              "label": "Stale devices",
+              "type": "readonly"
+            },
+            {
+              "label": "Noncompliant devices",
+              "type": "readonly"
+            },
+            {
+              "label": "Unmanaged devices",
+              "type": "readonly"
+            }
+          ]
+        },
+        {
+          "title": "Quick actions",
+          "fields": [
+            {
+              "label": "Download devices",
+              "type": "button"
+            },
+            {
+              "label": "BitLocker keys",
+              "type": "button"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "entra-app-registrations",
+      "kind": "list",
+      "title": "Default Directory | App registrations",
+      "breadcrumbs": [
+        "All services",
+        "Default Directory"
+      ],
+      "captures": [
+        "A-view-microsoft-aad-iam-activedirectorymenublade/014-L2-app-registrations",
+        "A-view-microsoft-aad-iam-activedirectorymenublade/014-L2-app-registrations--tab-03-all-applications",
+        "A-view-microsoft-aad-iam-activedirectorymenublade/014-L2-app-registrations--tab-04-owned-applications",
+        "A-view-microsoft-aad-iam-activedirectorymenublade/014-L2-app-registrations--tab-07-applications-from-personal-account"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "tabs": [
+        "All applications",
+        "Owned applications",
+        "Deleted applications",
+        "Deactivated applications",
+        "Applications from personal account"
+      ],
+      "header_actions": [
+        "New registration",
+        "Endpoints",
+        "Troubleshoot",
+        "Refresh",
+        "Download",
+        "Got feedback?"
+      ],
+      "table": {
+        "columns": [
+          "Display name",
+          "Application (client) ID",
+          "Created on",
+          "Certificates & secrets"
+        ],
+        "filters": [
+          "Add filters"
+        ],
+        "empty_state": "There are no applications here.",
+        "empty_state_action": "Register an application",
+        "provenance": "reference",
+        "confidence": "medium"
+      }
+    },
+    {
+      "id": "entra-identity-governance",
+      "kind": "other",
+      "title": "Default Directory | Identity Governance",
+      "breadcrumbs": [
+        "All services",
+        "Default Directory"
+      ],
+      "captures": [
+        "A-view-microsoft-aad-iam-activedirectorymenublade/015-L2-identity-governance"
+      ],
+      "provenance": "capture",
+      "confidence": "high"
+    },
+    {
+      "id": "entra-application-proxy",
+      "kind": "other",
+      "title": "Default Directory | Application proxy",
+      "breadcrumbs": [
+        "All services",
+        "Default Directory"
+      ],
+      "captures": [
+        "A-view-microsoft-aad-iam-activedirectorymenublade/016-L2-application-proxy"
+      ],
+      "provenance": "capture",
+      "confidence": "high"
+    },
+    {
+      "id": "entra-custom-security-attributes",
+      "kind": "other",
+      "title": "Default Directory | Custom security attributes",
+      "breadcrumbs": [
+        "All services",
+        "Default Directory"
+      ],
+      "captures": [
+        "A-view-microsoft-aad-iam-activedirectorymenublade/017-L2-custom-security-attributes"
+      ],
+      "provenance": "capture",
+      "confidence": "high"
+    },
+    {
+      "id": "entra-licenses",
+      "kind": "other",
+      "title": "Licenses | License usage",
+      "breadcrumbs": [
+        "All services",
+        "Default Directory"
+      ],
+      "captures": [
+        "A-view-microsoft-aad-iam-activedirectorymenublade/018-L2-licenses"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "Capture: 'You don't have access' (needs Entra ID Premium); menu: License usage, Licensed features, All products"
+    },
+    {
+      "id": "entra-cross-tenant-synchronization",
+      "kind": "other",
+      "title": "Default Directory | Cross-tenant synchronization",
+      "breadcrumbs": [
+        "All services",
+        "Default Directory"
+      ],
+      "captures": [
+        "A-view-microsoft-aad-iam-activedirectorymenublade/019-L2-cross-tenant-synchronization"
+      ],
+      "provenance": "capture",
+      "confidence": "high"
+    },
+    {
+      "id": "entra-microsoft-entra-connect",
+      "kind": "other",
+      "title": "Default Directory | Microsoft Entra Connect",
+      "breadcrumbs": [
+        "All services",
+        "Default Directory"
+      ],
+      "captures": [
+        "A-view-microsoft-aad-iam-activedirectorymenublade/020-L2-microsoft-entra-connect"
+      ],
+      "provenance": "capture",
+      "confidence": "high"
+    },
+    {
+      "id": "entra-custom-domain-names",
+      "kind": "list",
+      "title": "Default Directory | Custom domain names",
+      "breadcrumbs": [
+        "All services",
+        "Default Directory"
+      ],
+      "captures": [
+        "A-view-microsoft-aad-iam-activedirectorymenublade/021-L2-custom-domain-names"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "table": {
+        "columns": [
+          "Name",
+          "Status",
+          "Federated",
+          "Primary"
+        ],
+        "header_actions": [
+          "Add custom domain",
+          "Diagnose and solve problems",
+          "Refresh",
+          "Columns",
+          "Got feedback?"
+        ],
+        "filters": [
+          "Add filter"
+        ]
+      }
+    },
+    {
+      "id": "entra-mobility-mdm-and-wip",
+      "kind": "other",
+      "title": "Default Directory | Mobility (MDM and WIP)",
+      "breadcrumbs": [
+        "All services",
+        "Default Directory"
+      ],
+      "captures": [
+        "A-view-microsoft-aad-iam-activedirectorymenublade/022-L2-mobility-mdm-and-wip"
+      ],
+      "provenance": "capture",
+      "confidence": "high"
+    },
+    {
+      "id": "entra-password-reset",
+      "kind": "other",
+      "title": "Default Directory | Password reset",
+      "breadcrumbs": [
+        "All services",
+        "Default Directory"
+      ],
+      "captures": [
+        "A-view-microsoft-aad-iam-activedirectorymenublade/023-L2-password-reset"
+      ],
+      "provenance": "capture",
+      "confidence": "high"
+    },
+    {
+      "id": "entra-company-branding",
+      "kind": "other",
+      "title": "Default Directory | Company branding",
+      "breadcrumbs": [
+        "All services",
+        "Default Directory"
+      ],
+      "captures": [
+        "A-view-microsoft-aad-iam-activedirectorymenublade/024-L2-company-branding"
+      ],
+      "provenance": "capture",
+      "confidence": "high"
+    },
+    {
+      "id": "entra-user-settings",
+      "kind": "settings",
+      "title": "Default Directory | User settings",
+      "breadcrumbs": [
+        "All services",
+        "Default Directory"
+      ],
+      "captures": [
+        "A-view-microsoft-aad-iam-activedirectorymenublade/025-L2-user-settings"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Refresh",
+        "Got feedback?"
+      ],
+      "sections": [
+        {
+          "title": "Default user role permissions",
+          "fields": [
+            {
+              "label": "Users can register applications",
+              "type": "radio",
+              "options": [
+                "Yes",
+                "No"
+              ]
+            },
+            {
+              "label": "Users can register agent identity blueprints",
+              "type": "radio",
+              "options": [
+                "Yes",
+                "No"
+              ]
+            },
+            {
+              "label": "Restrict non-admin users from creating tenants",
+              "type": "radio",
+              "options": [
+                "Yes",
+                "No"
+              ]
+            },
+            {
+              "label": "Users can create security groups",
+              "type": "radio",
+              "options": [
+                "Yes",
+                "No"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Guest user access",
+          "fields": [
+            {
+              "label": "Guest user access restrictions",
+              "type": "radio",
+              "options": [
+                "Guest users have the same access as members (most inclusive)",
+                "Guest users have limited access to properties and memberships of directory objects",
+                "Guest user access is restricted to properties and memberships of their own directory objects (most restrictive)"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Administration center",
+          "fields": [
+            {
+              "label": "Restrict access to Microsoft Entra admin center",
+              "type": "radio",
+              "options": [
+                "Yes",
+                "No"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "LinkedIn account connections",
+          "fields": [
+            {
+              "label": "Allow users to connect their work or school account with LinkedIn",
+              "type": "radio",
+              "options": [
+                "Yes",
+                "Selected group",
+                "No"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Show keep user signed in",
+          "fields": [
+            {
+              "label": "Show keep user signed in",
+              "type": "radio",
+              "options": [
+                "Yes",
+                "No"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "entra-properties",
+      "kind": "settings",
+      "title": "Default Directory | Properties",
+      "breadcrumbs": [
+        "All services",
+        "Default Directory"
+      ],
+      "captures": [
+        "A-view-microsoft-aad-iam-activedirectorymenublade/026-L2-properties"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Save",
+        "Discard"
+      ],
+      "sections": [
+        {
+          "title": "Properties",
+          "fields": [
+            {
+              "label": "Name",
+              "type": "text",
+              "required": true
+            },
+            {
+              "label": "Tenant Country/Region",
+              "type": "readonly"
+            },
+            {
+              "label": "Data location (Primary Copy)",
+              "type": "readonly"
+            },
+            {
+              "label": "Notification language",
+              "type": "readonly"
+            },
+            {
+              "label": "Tenant ID",
+              "type": "readonly"
+            },
+            {
+              "label": "Technical contact",
+              "type": "text"
+            },
+            {
+              "label": "Global privacy contact",
+              "type": "text"
+            },
+            {
+              "label": "Privacy statement URL",
+              "type": "text"
+            }
+          ]
+        },
+        {
+          "title": "Access management for Azure resources",
+          "fields": [
+            {
+              "label": "Access management for Azure resources",
+              "type": "radio",
+              "options": [
+                "Yes",
+                "No"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Security defaults",
+          "fields": [
+            {
+              "label": "Manage security defaults",
+              "type": "button"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "entra-security",
+      "kind": "other",
+      "title": "Default Directory | Security",
+      "breadcrumbs": [
+        "All services",
+        "Default Directory"
+      ],
+      "captures": [
+        "A-view-microsoft-aad-iam-activedirectorymenublade/027-L2-security"
+      ],
+      "provenance": "capture",
+      "confidence": "high"
+    },
+    {
+      "id": "entra-sign-in-logs",
+      "kind": "list",
+      "title": "Default Directory | Sign-in logs",
+      "breadcrumbs": [
+        "All services",
+        "Default Directory"
+      ],
+      "captures": [
+        "A-view-microsoft-aad-iam-activedirectorymenublade/028-L2-sign-in-logs",
+        "A-view-microsoft-aad-iam-activedirectorymenublade/028-L2-sign-in-logs--tab-03-user-sign-ins-interactive",
+        "A-view-microsoft-aad-iam-activedirectorymenublade/028-L2-sign-in-logs--tab-04-user-sign-ins-non-interactive",
+        "A-view-microsoft-aad-iam-activedirectorymenublade/028-L2-sign-in-logs--tab-05-service-principal-sign-ins",
+        "A-view-microsoft-aad-iam-activedirectorymenublade/028-L2-sign-in-logs--tab-06-managed-identity-sign-ins"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "tabs": [
+        "User sign-ins (interactive)",
+        "User sign-ins (non-interactive)",
+        "Service principal sign-ins",
+        "Managed identity sign-ins"
+      ],
+      "table": {
+        "columns": [
+          "Date",
+          "Request ID",
+          "User",
+          "Application",
+          "Status",
+          "Sign-in error code",
+          "IP address",
+          "Location",
+          "Conditional Access",
+          "Agent Type",
+          "Authentication requirement"
+        ],
+        "header_actions": [
+          "Download",
+          "Export Data Settings",
+          "Troubleshoot",
+          "Refresh",
+          "Columns",
+          "Got feedback?"
+        ],
+        "filters": [
+          "Date : Last 24 hours",
+          "Show dates as : Local",
+          "Add filters"
+        ]
+      }
+    },
+    {
+      "id": "entra-audit-logs",
+      "kind": "list",
+      "title": "Default Directory | Audit logs",
+      "breadcrumbs": [
+        "All services",
+        "Default Directory"
+      ],
+      "captures": [
+        "A-view-microsoft-aad-iam-activedirectorymenublade/029-L2-audit-logs"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "tabs": [
+        "Directory",
+        "Custom Security"
+      ],
+      "table": {
+        "columns": [
+          "Date",
+          "Service",
+          "Category",
+          "Activity",
+          "Status",
+          "Status Reason"
+        ],
+        "header_actions": [
+          "Download",
+          "Export Data Settings",
+          "Refresh",
+          "Manage view",
+          "Got feedback?"
+        ],
+        "filters": [
+          "Add filter",
+          "Show dates as: Local",
+          "Date range: Last 24 hours",
+          "Service : All",
+          "Category : All",
+          "Activity : All",
+          "Reset filters"
+        ]
+      }
+    },
+    {
+      "id": "entra-provisioning-logs",
+      "kind": "other",
+      "title": "Default Directory | Provisioning logs",
+      "breadcrumbs": [
+        "All services",
+        "Default Directory"
+      ],
+      "captures": [
+        "A-view-microsoft-aad-iam-activedirectorymenublade/030-L2-provisioning-logs"
+      ],
+      "provenance": "capture",
+      "confidence": "high"
+    },
+    {
+      "id": "entra-health",
+      "kind": "other",
+      "title": "Default Directory | Health",
+      "breadcrumbs": [
+        "All services",
+        "Default Directory"
+      ],
+      "captures": [
+        "A-view-microsoft-aad-iam-activedirectorymenublade/031-L2-health"
+      ],
+      "provenance": "capture",
+      "confidence": "high"
+    },
+    {
+      "id": "entra-log-analytics",
+      "kind": "other",
+      "title": "Default Directory | Log Analytics",
+      "breadcrumbs": [
+        "All services",
+        "Default Directory"
+      ],
+      "captures": [
+        "A-view-microsoft-aad-iam-activedirectorymenublade/032-L2-log-analytics"
+      ],
+      "provenance": "capture",
+      "confidence": "high"
+    },
+    {
+      "id": "entra-diagnostic-settings",
+      "kind": "other",
+      "title": "Default Directory | Diagnostic settings",
+      "breadcrumbs": [
+        "All services",
+        "Default Directory"
+      ],
+      "captures": [
+        "A-view-microsoft-aad-iam-activedirectorymenublade/033-L2-diagnostic-settings"
+      ],
+      "provenance": "capture",
+      "confidence": "high"
+    },
+    {
+      "id": "entra-workbooks",
+      "kind": "other",
+      "title": "Default Directory | Workbooks",
+      "breadcrumbs": [
+        "All services",
+        "Default Directory"
+      ],
+      "captures": [
+        "A-view-microsoft-aad-iam-activedirectorymenublade/034-L2-workbooks"
+      ],
+      "provenance": "capture",
+      "confidence": "high"
+    },
+    {
+      "id": "entra-usage-insights",
+      "kind": "other",
+      "title": "Default Directory | Usage & insights",
+      "breadcrumbs": [
+        "All services",
+        "Default Directory"
+      ],
+      "captures": [
+        "A-view-microsoft-aad-iam-activedirectorymenublade/035-L2-usage-insights"
+      ],
+      "provenance": "capture",
+      "confidence": "high"
+    },
+    {
+      "id": "entra-bulk-operation-results-preview",
+      "kind": "other",
+      "title": "Default Directory | Bulk operation results (Preview)",
+      "breadcrumbs": [
+        "All services",
+        "Default Directory"
+      ],
+      "captures": [
+        "A-view-microsoft-aad-iam-activedirectorymenublade/036-L2-bulk-operation-results-preview"
+      ],
+      "provenance": "capture",
+      "confidence": "high"
+    },
+    {
+      "id": "entra-support-troubleshooting",
+      "kind": "other",
+      "title": "Default Directory | Support + Troubleshooting",
+      "breadcrumbs": [
+        "All services",
+        "Default Directory"
+      ],
+      "captures": [
+        "A-view-microsoft-aad-iam-activedirectorymenublade/037-L2-support-troubleshooting"
+      ],
+      "provenance": "capture",
+      "confidence": "high"
+    },
+    {
+      "id": "entra-create-new-user",
+      "kind": "create",
+      "title": "Create new user",
+      "breadcrumbs": [
+        "Home",
+        "Users",
+        "Create new user"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "steps": [
+        {
+          "title": "Basics",
+          "sections": [
+            {
+              "title": "Identity",
+              "fields": [
+                {
+                  "label": "User principal name",
+                  "type": "text",
+                  "required": true,
+                  "help": "Username and domain"
+                },
+                {
+                  "label": "Mail nickname",
+                  "type": "text",
+                  "default": "Derive from user principal name",
+                  "children": [
+                    {
+                      "label": "Derive from user principal name",
+                      "type": "checkbox",
+                      "default": true
+                    }
+                  ]
+                },
+                {
+                  "label": "Display name",
+                  "type": "text",
+                  "required": true
+                },
+                {
+                  "label": "Password",
+                  "type": "text",
+                  "required": true,
+                  "children": [
+                    {
+                      "label": "Auto-generate password",
+                      "type": "checkbox",
+                      "default": true
+                    }
+                  ]
+                },
+                {
+                  "label": "Account enabled",
+                  "type": "checkbox",
+                  "default": true
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Properties",
+          "sections": [
+            {
+              "title": "Identity",
+              "fields": [
+                {
+                  "label": "First name",
+                  "type": "text"
+                },
+                {
+                  "label": "Last name",
+                  "type": "text"
+                },
+                {
+                  "label": "User type",
+                  "type": "select",
+                  "default": "Member",
+                  "options": [
+                    "Member",
+                    "Guest"
+                  ]
+                }
+              ]
+            },
+            {
+              "title": "Job Information",
+              "fields": [
+                {
+                  "label": "Job title",
+                  "type": "text"
+                },
+                {
+                  "label": "Company name",
+                  "type": "text"
+                },
+                {
+                  "label": "Department",
+                  "type": "text"
+                }
+              ]
+            },
+            {
+              "title": "Contact Information",
+              "fields": [
+                {
+                  "label": "Email",
+                  "type": "text"
+                },
+                {
+                  "label": "Mobile phone",
+                  "type": "text"
+                }
+              ]
+            },
+            {
+              "title": "Settings",
+              "fields": [
+                {
+                  "label": "Usage location",
+                  "type": "select"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Assignments",
+          "sections": [
+            {
+              "title": "Assignments",
+              "fields": [
+                {
+                  "label": "Groups and roles",
+                  "type": "table",
+                  "columns": [
+                    "Name",
+                    "Type"
+                  ],
+                  "actions": [
+                    "Add group",
+                    "Add role"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Review + create",
+          "sections": [
+            {
+              "title": "Basics"
+            },
+            {
+              "title": "Properties"
+            },
+            {
+              "title": "Assignments"
+            }
+          ]
+        }
+      ],
+      "submit": "Create",
+      "notes": "New user menu: Create new user / Invite external user"
+    },
+    {
+      "id": "entra-all-groups",
+      "kind": "list",
+      "title": "Groups | All groups",
+      "provenance": "reference",
+      "confidence": "high",
+      "breadcrumbs": [
+        "Home",
+        "Default Directory",
+        "Groups"
+      ],
+      "table": {
+        "columns": [
+          "Name",
+          "Object Id",
+          "Group type",
+          "Membership type",
+          "Email",
+          "Source"
+        ],
+        "selection": "multi",
+        "header_actions": [
+          "New group",
+          "Download groups",
+          "Delete",
+          "Refresh",
+          "Manage view",
+          "Got feedback?"
+        ],
+        "filter_placeholder": "Search",
+        "filters": [
+          "Add filter"
+        ],
+        "empty_state": "No groups found"
+      }
+    },
+    {
+      "id": "entra-new-group",
+      "kind": "create",
+      "title": "New Group",
+      "provenance": "reference",
+      "confidence": "high",
+      "breadcrumbs": [
+        "Home",
+        "Groups | All groups",
+        "New Group"
+      ],
+      "sections": [
+        {
+          "title": "New Group",
+          "fields": [
+            {
+              "label": "Group type",
+              "type": "select",
+              "required": true,
+              "default": "Security",
+              "options": [
+                "Security",
+                "Microsoft 365"
+              ]
+            },
+            {
+              "label": "Group name",
+              "type": "text",
+              "required": true
+            },
+            {
+              "label": "Group description",
+              "type": "textarea"
+            },
+            {
+              "label": "Microsoft Entra roles can be assigned to the group",
+              "type": "radio",
+              "default": "No",
+              "options": [
+                "Yes",
+                "No"
+              ]
+            },
+            {
+              "label": "Membership type",
+              "type": "select",
+              "default": "Assigned",
+              "options": [
+                "Assigned",
+                "Dynamic User",
+                "Dynamic Device"
+              ]
+            },
+            {
+              "label": "Owners",
+              "type": "other",
+              "actions": [
+                "No owners selected"
+              ]
+            },
+            {
+              "label": "Members",
+              "type": "other",
+              "actions": [
+                "No members selected"
+              ]
+            }
+          ]
+        }
+      ],
+      "submit": "Create"
+    },
+    {
+      "id": "entra-register-application",
+      "kind": "create",
+      "title": "Register an application",
+      "provenance": "reference",
+      "confidence": "high",
+      "breadcrumbs": [
+        "Home",
+        "Default Directory | App registrations",
+        "Register an application"
+      ],
+      "sections": [
+        {
+          "title": "Name",
+          "fields": [
+            {
+              "label": "Name",
+              "type": "text",
+              "required": true,
+              "help": "The user-facing display name for this application"
+            }
+          ]
+        },
+        {
+          "title": "Supported account types",
+          "fields": [
+            {
+              "label": "Who can use this application or access this API?",
+              "type": "radio",
+              "default": "Single tenant only - Default Directory",
+              "options": [
+                "Single tenant only - Default Directory",
+                "Multiple Entra ID tenants",
+                "Any Entra ID Tenant + Personal Microsoft accounts",
+                "Personal accounts only"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Redirect URI (optional)",
+          "fields": [
+            {
+              "label": "Select a platform",
+              "type": "select",
+              "options": [
+                "Web",
+                "Single-page application (SPA)",
+                "Public client/native (mobile & desktop)"
+              ]
+            },
+            {
+              "label": "Redirect URI",
+              "type": "text",
+              "placeholder": "e.g. https://example.com/auth"
+            }
+          ]
+        }
+      ],
+      "submit": "Register",
+      "notes": "Account-type option wording changed in 2025; confidence medium on options"
+    },
+    {
+      "id": "entra-app-overview",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "breadcrumbs": [
+        "Home",
+        "App registrations",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Delete",
+        "Endpoints",
+        "Preview features"
+      ],
+      "sections": [
+        {
+          "title": "Essentials",
+          "fields": [
+            {
+              "label": "Display name",
+              "type": "readonly"
+            },
+            {
+              "label": "Application (client) ID",
+              "type": "readonly"
+            },
+            {
+              "label": "Object ID",
+              "type": "readonly"
+            },
+            {
+              "label": "Directory (tenant) ID",
+              "type": "readonly"
+            },
+            {
+              "label": "Supported account types",
+              "type": "readonly"
+            },
+            {
+              "label": "Client credentials",
+              "type": "readonly"
+            },
+            {
+              "label": "Redirect URIs",
+              "type": "readonly"
+            },
+            {
+              "label": "Application ID URI",
+              "type": "readonly"
+            },
+            {
+              "label": "Managed application in local directory",
+              "type": "readonly"
+            }
+          ]
+        }
+      ],
+      "tabs": [
+        "Get Started",
+        "Documentation"
+      ]
+    },
+    {
+      "id": "entra-app-quickstart",
+      "kind": "other",
+      "title": "{resource-name} | Quickstart",
+      "breadcrumbs": [
+        "Home",
+        "App registrations",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "App registration blade menu item; title only"
+    },
+    {
+      "id": "entra-app-integration-assistant",
+      "kind": "other",
+      "title": "{resource-name} | Integration assistant",
+      "breadcrumbs": [
+        "Home",
+        "App registrations",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "App registration blade menu item; title only"
+    },
+    {
+      "id": "entra-app-diagnose-and-solve-problems",
+      "kind": "other",
+      "title": "{resource-name} | Diagnose and solve problems",
+      "breadcrumbs": [
+        "Home",
+        "App registrations",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "App registration blade menu item; title only"
+    },
+    {
+      "id": "entra-app-branding-properties",
+      "kind": "other",
+      "title": "{resource-name} | Branding & properties",
+      "breadcrumbs": [
+        "Home",
+        "App registrations",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "App registration blade menu item; title only"
+    },
+    {
+      "id": "entra-app-authentication",
+      "kind": "settings",
+      "title": "{resource-name} | Authentication",
+      "breadcrumbs": [
+        "Home",
+        "App registrations",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Save",
+        "Discard"
+      ],
+      "sections": [
+        {
+          "title": "Platform configurations",
+          "fields": [
+            {
+              "label": "Add a platform",
+              "type": "button"
+            }
+          ]
+        },
+        {
+          "title": "Supported account types",
+          "fields": [
+            {
+              "label": "Who can use this application or access this API?",
+              "type": "radio"
+            }
+          ]
+        },
+        {
+          "title": "Advanced settings",
+          "fields": [
+            {
+              "label": "Allow public client flows",
+              "type": "radio",
+              "options": [
+                "Yes",
+                "No"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "entra-app-certificates-secrets",
+      "kind": "settings",
+      "title": "{resource-name} | Certificates & secrets",
+      "breadcrumbs": [
+        "Home",
+        "App registrations",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "tabs": [
+        "Certificates",
+        "Client secrets",
+        "Federated credentials"
+      ],
+      "table": {
+        "columns": [
+          "Description",
+          "Expires",
+          "Value",
+          "Secret ID"
+        ],
+        "header_actions": [
+          "New client secret"
+        ]
+      },
+      "sections": [
+        {
+          "title": "Add a client secret",
+          "fields": [
+            {
+              "label": "Description",
+              "type": "text"
+            },
+            {
+              "label": "Expires",
+              "type": "select",
+              "default": "Recommended: 180 days (6 months)",
+              "options": [
+                "Recommended: 180 days (6 months)",
+                "90 days (3 months)",
+                "365 days (12 months)",
+                "545 days (18 months)",
+                "730 days (24 months)",
+                "Custom"
+              ]
+            },
+            {
+              "label": "Add",
+              "type": "button"
+            },
+            {
+              "label": "Cancel",
+              "type": "button"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "entra-app-token-configuration",
+      "kind": "other",
+      "title": "{resource-name} | Token configuration",
+      "breadcrumbs": [
+        "Home",
+        "App registrations",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "App registration blade menu item; title only"
+    },
+    {
+      "id": "entra-app-api-permissions",
+      "kind": "list",
+      "title": "{resource-name} | API permissions",
+      "breadcrumbs": [
+        "Home",
+        "App registrations",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Refresh",
+        "Add a permission",
+        "Grant admin consent for Default Directory"
+      ],
+      "table": {
+        "columns": [
+          "API / Permissions name",
+          "Type",
+          "Description",
+          "Admin consent required",
+          "Status"
+        ]
+      }
+    },
+    {
+      "id": "entra-app-expose-an-api",
+      "kind": "other",
+      "title": "{resource-name} | Expose an API",
+      "breadcrumbs": [
+        "Home",
+        "App registrations",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "App registration blade menu item; title only"
+    },
+    {
+      "id": "entra-app-app-roles",
+      "kind": "other",
+      "title": "{resource-name} | App roles",
+      "breadcrumbs": [
+        "Home",
+        "App registrations",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "App registration blade menu item; title only"
+    },
+    {
+      "id": "entra-app-owners",
+      "kind": "other",
+      "title": "{resource-name} | Owners",
+      "breadcrumbs": [
+        "Home",
+        "App registrations",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "App registration blade menu item; title only"
+    },
+    {
+      "id": "entra-app-roles-and-administrators",
+      "kind": "other",
+      "title": "{resource-name} | Roles and administrators",
+      "breadcrumbs": [
+        "Home",
+        "App registrations",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "App registration blade menu item; title only"
+    },
+    {
+      "id": "entra-app-manifest",
+      "kind": "other",
+      "title": "{resource-name} | Manifest",
+      "breadcrumbs": [
+        "Home",
+        "App registrations",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "App registration blade menu item; title only"
+    },
+    {
+      "id": "entra-app-troubleshooting",
+      "kind": "other",
+      "title": "{resource-name} | Troubleshooting",
+      "breadcrumbs": [
+        "Home",
+        "App registrations",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "App registration blade menu item; title only"
+    },
+    {
+      "id": "entra-app-new-support-request",
+      "kind": "other",
+      "title": "{resource-name} | New support request",
+      "breadcrumbs": [
+        "Home",
+        "App registrations",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "App registration blade menu item; title only"
+    },
+    {
+      "id": "entra-user-overview",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "breadcrumbs": [
+        "Home",
+        "Users",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Edit properties",
+        "Delete",
+        "Refresh",
+        "Reset password",
+        "Revoke sessions",
+        "Manage view",
+        "Got feedback?"
+      ],
+      "tabs": [
+        "Overview",
+        "Monitoring",
+        "Properties"
+      ],
+      "sections": [
+        {
+          "title": "Basic info",
+          "fields": [
+            {
+              "label": "User principal name",
+              "type": "readonly"
+            },
+            {
+              "label": "Object ID",
+              "type": "readonly"
+            },
+            {
+              "label": "Created date time",
+              "type": "readonly"
+            },
+            {
+              "label": "User type",
+              "type": "readonly"
+            },
+            {
+              "label": "Identities",
+              "type": "readonly"
+            },
+            {
+              "label": "Group memberships",
+              "type": "readonly"
+            },
+            {
+              "label": "Applications",
+              "type": "readonly"
+            },
+            {
+              "label": "Assigned roles",
+              "type": "readonly"
+            },
+            {
+              "label": "Assigned licenses",
+              "type": "readonly"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "entra-user-audit-logs",
+      "kind": "other",
+      "title": "{resource-name} | Audit logs",
+      "breadcrumbs": [
+        "Home",
+        "Users",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "User blade menu item; title only"
+    },
+    {
+      "id": "entra-user-sign-in-logs",
+      "kind": "other",
+      "title": "{resource-name} | Sign-in logs",
+      "breadcrumbs": [
+        "Home",
+        "Users",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "User blade menu item; title only"
+    },
+    {
+      "id": "entra-user-diagnose-and-solve-problems",
+      "kind": "other",
+      "title": "{resource-name} | Diagnose and solve problems",
+      "breadcrumbs": [
+        "Home",
+        "Users",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "User blade menu item; title only"
+    },
+    {
+      "id": "entra-user-custom-security-attributes",
+      "kind": "other",
+      "title": "{resource-name} | Custom security attributes",
+      "breadcrumbs": [
+        "Home",
+        "Users",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "User blade menu item; title only"
+    },
+    {
+      "id": "entra-user-assigned-roles",
+      "kind": "other",
+      "title": "{resource-name} | Assigned roles",
+      "breadcrumbs": [
+        "Home",
+        "Users",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "User blade menu item; title only"
+    },
+    {
+      "id": "entra-user-administrative-units",
+      "kind": "other",
+      "title": "{resource-name} | Administrative units",
+      "breadcrumbs": [
+        "Home",
+        "Users",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "User blade menu item; title only"
+    },
+    {
+      "id": "entra-user-groups",
+      "kind": "other",
+      "title": "{resource-name} | Groups",
+      "breadcrumbs": [
+        "Home",
+        "Users",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "User blade menu item; title only"
+    },
+    {
+      "id": "entra-user-applications",
+      "kind": "other",
+      "title": "{resource-name} | Applications",
+      "breadcrumbs": [
+        "Home",
+        "Users",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "User blade menu item; title only"
+    },
+    {
+      "id": "entra-user-licenses",
+      "kind": "other",
+      "title": "{resource-name} | Licenses",
+      "breadcrumbs": [
+        "Home",
+        "Users",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "User blade menu item; title only"
+    },
+    {
+      "id": "entra-user-devices",
+      "kind": "other",
+      "title": "{resource-name} | Devices",
+      "breadcrumbs": [
+        "Home",
+        "Users",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "User blade menu item; title only"
+    },
+    {
+      "id": "entra-user-azure-role-assignments",
+      "kind": "other",
+      "title": "{resource-name} | Azure role assignments",
+      "breadcrumbs": [
+        "Home",
+        "Users",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "User blade menu item; title only"
+    },
+    {
+      "id": "entra-user-authentication-methods",
+      "kind": "other",
+      "title": "{resource-name} | Authentication methods",
+      "breadcrumbs": [
+        "Home",
+        "Users",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "User blade menu item; title only"
+    }
+  ],
+  "gaps_note": "Directory menu crawled (36 L2 pages, Free tier). nav = directory menu. Create-user/group/app-registration forms and the app registration / user blades (entra-app-*, entra-user-*) are reference. Tenant/user names replaced by generic titles."
+}

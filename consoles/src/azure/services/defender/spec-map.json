@@ -1,0 +1,11 @@
+{
+  "_doc": "Defender for Cloud page id -> v4 route (no captured ui-spec yet; ids follow the portal's menu). Fixtures/live hooks: fixtures.mjs.",
+  "defender-overview": { "route": "#/defender", "fixtures": ["az-defender"] },
+  "defender-recommendations": { "route": "#/defender/recommendations", "fixtures": ["az-defender"] },
+  "defender-inventory": { "route": "#/defender/inventory", "fixtures": ["az-defender"], "live": "live-insecure-storage" },
+  "defender-security-posture": { "route": "#/defender/posture", "fixtures": ["az-defender"] },
+  "defender-regulatory-compliance": { "route": "#/defender/compliance", "fixtures": ["az-defender"] },
+  "defender-environment-settings": { "route": "#/defender/environment", "fixtures": ["az-defender"] },
+  "defender-plans": { "route": "#/defender/environment/00000000-0000-0000-0000-cloudlearn01", "fixtures": ["az-defender"] },
+  "defender-security-alerts": { "route": "#/defender/alerts" }
+}

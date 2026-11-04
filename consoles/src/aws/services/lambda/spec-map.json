@@ -1,0 +1,105 @@
+{
+  "_doc": "ui-spec page id → v4 route. honest_page = the whole page is a declared 'Not simulated in Vyomi' gap, allowed ONLY for products on consoles/honest-allowlist.json (base branch); lambda has no allowlist entry, so Applications/EC2 capacity providers/code signing/MicroVMs+network connectors/Lambda@Edge replicas/Step Functions cross-link are all built for real — see core/capabilities/aws/lambda.json for what's genuinely simulated vs stored-only. Unlisted spec pages count as missing.",
+  "dashboard": {
+    "route": "#/lambda/home",
+    "vars": { "region": "us-east-1" }
+  },
+  "get-started": {
+    "route": "#/lambda/get-started"
+  },
+  "extensions": {
+    "route": "#/lambda/extensions"
+  },
+  "event-functions": {
+    "route": "#/lambda/functions",
+    "fixtures": ["lambda-fn"],
+    "live": "live-function"
+  },
+  "web-functions": {
+    "route": "#/lambda/web-functions",
+    "fixtures": ["lambda-fn"],
+    "live": "live-web-function"
+  },
+  "create-function": {
+    "route": "#/lambda/create/function",
+    "expand": ["text=Additional settings", "text=Enable function URL"]
+  },
+  "create-web-function": {
+    "route": "#/lambda/create/web-function",
+    "expand": ["text=Additional configurations - optional"]
+  },
+  "function-detail": {
+    "route": "#/lambda/functions/{live}",
+    "fixtures": ["lambda-fn"],
+    "live": "live-function"
+  },
+  "create-alias": {
+    "route": "#/lambda/functions/uic-function/create-alias",
+    "fixtures": ["lambda-fn"]
+  },
+  "add-trigger": {
+    "route": "#/lambda/functions/uic-function/add-trigger",
+    "fixtures": ["lambda-fn"]
+  },
+  "layers": {
+    "route": "#/lambda/layers",
+    "live": "live-layer"
+  },
+  "create-layer": {
+    "route": "#/lambda/create/layer",
+    "expand": ["text=Create from a file in Amazon S3"]
+  },
+  "event-source-mappings": {
+    "route": "#/lambda/event-source-mappings",
+    "fixtures": ["lambda-fn"],
+    "live": "live-trigger"
+  },
+  "applications": {
+    "route": "#/lambda/applications",
+    "live": "live-application"
+  },
+  "create-application": {
+    "route": "#/lambda/create/application"
+  },
+  "capacity-providers": {
+    "route": "#/lambda/capacity-providers",
+    "live": "live-capacity-provider"
+  },
+  "create-capacity-provider": {
+    "route": "#/lambda/create/capacity-provider",
+    "expand": ["text=Advanced settings"]
+  },
+  "code-signing-configurations": {
+    "route": "#/lambda/code-signing-configurations",
+    "live": "live-csc"
+  },
+  "replicas": {
+    "route": "#/lambda/replicas",
+    "live": "live-replica"
+  },
+  "microvm-images": {
+    "route": "#/lambda/microvm-images",
+    "live": "live-microvm-image"
+  },
+  "create-microvm-image": {
+    "route": "#/lambda/create/microvm-image"
+  },
+  "microvms": {
+    "route": "#/lambda/microvms",
+    "live": "live-microvm"
+  },
+  "run-microvm": {
+    "route": "#/lambda/create/microvm"
+  },
+  "network-connectors": {
+    "route": "#/lambda/network-connectors",
+    "live": "live-network-connector"
+  },
+  "create-network-connector": {
+    "route": "#/lambda/create/network-connector"
+  },
+  "step-functions-state-machines": {
+    "route": "#/lambda/statemachines",
+    "live": "live-state-machine"
+  }
+}

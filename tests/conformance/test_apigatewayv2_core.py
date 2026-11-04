@@ -99,6 +99,23 @@ def run(store=None):
     _check("CreateVpcLink AVAILABLE", st == 201 and vl["vpcLinkStatus"] == "AVAILABLE")
     _check("DeleteVpcLink 202", call("DELETE", f"/v2/vpclinks/{vl['vpcLinkId']}")[0] == 202)
 
+    # domain name access association (private custom domain ↔ VPC endpoint)
+    st, assoc, _ = call("POST", "/v2/domainnameaccessassociations",
+                        {"domainNameArn": dom["domainNameArn"], "accessAssociationSourceType": "VPCE", "accessAssociationSource": "vpce-123"})
+    _check("CreateDomainNameAccessAssociation", st == 201 and assoc["domainNameAccessAssociationArn"])
+    aaid = assoc["domainNameAccessAssociationArn"]
+    _check("bad source type rejected", call("POST", "/v2/domainnameaccessassociations",
+           {"domainNameArn": dom["domainNameArn"], "accessAssociationSourceType": "X", "accessAssociationSource": "y"})[0] == 400)
+    _check("unknown domain rejected", call("POST", "/v2/domainnameaccessassociations",
+           {"domainNameArn": "arn:aws:apigateway:us-east-1::/domainnames/nope", "accessAssociationSourceType": "VPCE", "accessAssociationSource": "y"})[0] == 404)
+    st, lst, _ = call("GET", "/v2/domainnameaccessassociations", None, {"domainNameArn": dom["domainNameArn"]})
+    _check("GetDomainNameAccessAssociations filters by domain", st == 200 and len(lst["items"]) == 1)
+    from urllib.parse import quote as _q
+    st, got, _ = call("GET", f"/v2/domainnameaccessassociations/{_q(aaid, safe='')}")
+    _check("GetDomainNameAccessAssociation", st == 200 and got["accessAssociationSource"] == "vpce-123")
+    _check("DeleteDomainNameAccessAssociation", call("DELETE", f"/v2/domainnameaccessassociations/{_q(aaid, safe='')}")[0] == 202)
+    _check("gone after delete", call("GET", f"/v2/domainnameaccessassociations/{_q(aaid, safe='')}")[0] == 404)
+
     # pagination
     for i in range(3):
         call("POST", "/v2/apis", {"name": f"p{i}", "protocolType": "WEBSOCKET", "routeSelectionExpression": "$request.body.action"})
@@ -122,6 +139,53 @@ def run(store=None):
 
     _check("DeleteApi 204", call("DELETE", f"/v2/apis/{aid}")[0] == 204)
     _check("GetApi after delete → 404", call("GET", f"/v2/apis/{aid}")[0] == 404)
+
+    # developer portal (Portal / PortalProduct — real apigatewayv2 CreatePortal etc.)
+    st, pp, _ = call("POST", "/v2/portalproducts", {"displayName": "Orders API", "description": "d"})
+    _check("CreatePortalProduct", st == 201 and pp["portalProductId"] and pp["displayOrder"]["contents"] == [])
+    ppid, pparn = pp["portalProductId"], pp["portalProductArn"]
+    st, _, _ = call("POST", "/v2/portalproducts", {})
+    _check("CreatePortalProduct missing displayName → 400", st == 400)
+    st, _, _ = call("POST", "/v2/portals", {"authorization": {"none": {}}})
+    _check("CreatePortal missing required members → 400", st == 400)
+    st, _, _ = call("POST", "/v2/portals", {
+        "authorization": {"none": {}}, "endpointConfiguration": {"none": {}},
+        "portalContent": {"displayName": "x"}})
+    _check("CreatePortal missing theme.customColors → 400", st == 400)
+    st, _, h = call("POST", "/v2/portals", {
+        "authorization": {"none": {}}, "endpointConfiguration": {"none": {}},
+        "portalContent": {"displayName": "x", "theme": {"customColors": {"accentColor": "#000"}}},
+        "includedPortalProductArns": ["arn:aws:apigateway:us-east-1::/portalproducts/nope"]})
+    _check("CreatePortal unknown product ARN → 404", st == 404 and h["x-amzn-ErrorType"] == "NotFoundException")
+    st, portal, _ = call("POST", "/v2/portals", {
+        "authorization": {"none": {}}, "endpointConfiguration": {"none": {}},
+        "portalContent": {"displayName": "My portal", "theme": {"customColors": {"accentColor": "#000"}}},
+        "includedPortalProductArns": [pparn]})
+    _check("CreatePortal 201, DISABLED, default domain", st == 201 and portal["portalId"]
+           and portal["publishStatus"] == "DISABLED" and portal["endpointConfiguration"]["portalDefaultDomainName"])
+    pid = portal["portalId"]
+    st, _, _ = call("GET", f"/v2/portals/{pid}")
+    _check("GetPortal", st == 200)
+    st, lst, _ = call("GET", "/v2/portals")
+    _check("ListPortals", st == 200 and len(lst["items"]) == 1)
+    st, prev, _ = call("POST", f"/v2/portals/{pid}/preview")
+    _check("PreviewPortal 202", st == 202)
+    _check("preview reflected on GetPortal", call("GET", f"/v2/portals/{pid}")[1]["preview"]["previewStatus"] == "PREVIEW_READY")
+    st, _, _ = call("POST", f"/v2/portals/{pid}/publish", {"description": "go live"})
+    _check("PublishPortal 202", st == 202)
+    after_publish = call("GET", f"/v2/portals/{pid}")[1]
+    _check("publish flips status + lastPublished", after_publish["publishStatus"] == "PUBLISHED" and after_publish["lastPublished"])
+    st, _, _ = call("DELETE", f"/v2/portals/{pid}/publish")
+    _check("DisablePortal 204", st == 204 and call("GET", f"/v2/portals/{pid}")[1]["publishStatus"] == "DISABLED")
+    st, _, h = call("DELETE", f"/v2/portalproducts/{ppid}")
+    _check("DeletePortalProduct while included in a portal → 409", st == 409 and h["x-amzn-ErrorType"] == "ConflictException")
+    st, _, _ = call("PUT", f"/v2/portalproducts/{ppid}/sharingpolicy", {"policyDocument": "{}"})
+    _check("PutPortalProductSharingPolicy", st == 200)
+    _check("GetPortalProductSharingPolicy", call("GET", f"/v2/portalproducts/{ppid}/sharingpolicy")[1]["policyDocument"] == "{}")
+    _check("DeletePortalProductSharingPolicy", call("DELETE", f"/v2/portalproducts/{ppid}/sharingpolicy")[0] == 204)
+    _check("sharing policy gone → 404", call("GET", f"/v2/portalproducts/{ppid}/sharingpolicy")[0] == 404)
+    _check("DeletePortal 204", call("DELETE", f"/v2/portals/{pid}")[0] == 204)
+    _check("DeletePortalProduct now allowed", call("DELETE", f"/v2/portalproducts/{ppid}")[0] == 204)
     return s
 
 

@@ -94,6 +94,37 @@ def main():
     n = cs.next_run("0 9 * * 1-5", "America/New_York", t0)
     check("cron weekday 9am New York = 14:00Z in January", n.hour == 14 and n.weekday() < 5, n)
     check("cron dom OR dow", cs.next_run("0 0 13 * 5", "UTC", t0).day in (2, 9, 13))
+
+    # legacy App Engine cron.yaml jobs — modeled as real Job records under locations/appengine
+    CRON_P = "/v1/projects/p1/locations/appengine/jobs"
+
+    def cron(name, **kw):
+        j = {"name": f"projects/p1/locations/appengine/jobs/{name}", "schedule": "every 1 hours synchronized",
+             "appEngineHttpTarget": {"relativeUri": "/tasks/cleanup", "httpMethod": "GET"}}
+        j.update(kw)
+        return j
+    s, b = call(st, "POST", CRON_P, cron("c1", description="cleanup"))
+    check("deploy cron.yaml job (appengine location, groc schedule)", s == 200 and b["state"] == "ENABLED" and b["scheduleTime"], b)
+    s, b = call(st, "POST", CRON_P, cron("c2", schedule="0 * * * *"))
+    check("unix-cron rejected for cron.yaml job → 400", s == 400 and b["error"]["status"] == "INVALID_ARGUMENT", b)
+    s, b = call(st, "POST", CRON_P, cron("c3", appEngineHttpTarget=None, httpTarget={"uri": "https://example.com/hook"}))
+    check("non-App Engine target rejected for cron.yaml job → 400", s == 400 and "appEngineHttpTarget" in b["error"]["message"], b)
+    s, b = call(st, "POST", CRON_P, cron("c4", schedule="every monday,wednesday,friday 09:00"))
+    check("weekly groc schedule accepted", s == 200 and b["scheduleTime"], b)
+    s, b = call(st, "GET", CRON_P)
+    check("cron.yaml jobs list separately from regular jobs", s == 200 and {j["name"].rsplit("/", 1)[-1] for j in b["jobs"]} == {"c1", "c4"}, b)
+    s, b = call(st, "GET", "/v1/projects/p1/locations/us-central1/jobs")
+    check("regular jobs.list excludes cron.yaml jobs", s == 200 and all("c1" not in j["name"] for j in b.get("jobs", [])), b)
+    s, b = call(st, "POST", CRON_P + "/c1:run")
+    check("run cron.yaml job stamps lastAttemptTime", s == 200 and b.get("lastAttemptTime"), b)
+    check("groc 'every N hours synchronized' aligns to the hour", cs.next_run_groc("every 1 hours synchronized", "Etc/UTC", t0).minute == 0)
+    check("groc weekday schedule", cs.next_run_groc("every monday 09:00", "Etc/UTC", t0).weekday() == 0)
+    try:
+        cs.next_run_groc("1st monday of month 09:00", "Etc/UTC", t0)
+        check("unsupported groc syntax rejected", False)
+    except ValueError:
+        check("unsupported groc syntax rejected", True)
+
     print(f"\n{PASS} passed, {FAIL} failed")
     return 1 if FAIL else 0
 

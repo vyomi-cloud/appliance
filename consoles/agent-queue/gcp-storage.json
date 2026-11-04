@@ -1,0 +1,51 @@
+{
+ "cloud": "gcp",
+ "service": "storage",
+ "phase": "depth",
+ "attempt": 2,
+ "goal": "STATIC-PANEL SWEEP (wave 5c). Every listed `targets` entry is a hard-coded <NotSimulated*> box in this service's console with NO capability id \u2014 it is invisible to the capability registry and to the coverage numbers, and many are STALE (the feature is real now). For EACH one: (1) if the backend already supports it (check core/*_core.py + core/capabilities), replace the static box with the real, live UI; (2) otherwise BUILD it on a real backend (Nano + offline; follow the Offline + Nano parity checklist in consoles/AGENT-UI.md) and render it live; (3) only if it is genuinely impossible locally (real money/hardware/third-party service) replace it with <CapabilityContainer id=\"...\"> backed by a core/capabilities entry at level not_simulated with the concrete reason. When done, this service's directory must contain ZERO bare <NotSimulatedContainer>/<NotSimulated*> usages \u2014 the gate now fails on any. Metrics/monitoring panels show real series derived from actual activity (cloudwatch_core.ingest_internal_metric / the cloud's metrics core), never random data. Nothing leaves the simulator. Update capabilities, tests/conformance, smoke.",
+ "note": "WAVE 5c static-panel sweep (orchestrator). User: unimplemented panels (e.g. VPC Service Health / Settings / Additional information / AWS Network Manager) must be real.",
+ "targets": [
+  {
+   "where": "consoles/src/gcp/services/storage/CreateBucket.jsx:102",
+   "component": "NotSimulated",
+   "props": "compact feature=\"Tags (optional)\" note=\"GCP resource tags (tagKeys/tagValues bindings) are a separate Resource Manager product Vyomi doesn't integrate with.\""
+  },
+  {
+   "where": "consoles/src/gcp/services/storage/CreateBucket.jsx:120",
+   "component": "NotSimulated",
+   "props": "compact feature=\"Add turbo replication\" note=\"Offered for dual-region buckets; Vyomi always uses default replication (RPO DEFAULT).\""
+  },
+  {
+   "where": "consoles/src/gcp/services/storage/CreateBucket.jsx:130",
+   "component": "NotSimulated",
+   "props": "compact feature=\"Autoclass\" note=\"Vyomi keeps objects in the bucket's default class; storage classes don't change pricing or retrieval here.\""
+  },
+  {
+   "where": "consoles/src/gcp/services/storage/CreateBucket.jsx:132",
+   "component": "NotSimulated",
+   "props": "compact feature=\"Enable hierarchical namespace on this bucket\" note=\"Vyomi models every bucket as a flat namespace; it has no HNS mode with atomic folder rename/delete.\""
+  },
+  {
+   "where": "consoles/src/gcp/services/storage/CreateBucket.jsx:154",
+   "component": "NotSimulated",
+   "props": "compact feature=\"Soft delete policy (For data recovery)\" note=\"Retention duration defaults to 7 days, but recovering a deleted/overwritten object needs the noncurrent-version history Vyomi doesn't keep.\""
+  },
+  {
+   "where": "consoles/src/gcp/services/storage/CreateBucket.jsx:155",
+   "component": "NotSimulated",
+   "props": "compact feature=\"Object versioning (For version control)\""
+  },
+  {
+   "where": "consoles/src/gcp/services/storage/CreateBucket.jsx:175",
+   "component": "NotSimulated",
+   "props": "compact feature=\"Data encryption with Cloud KMS keys (CMEK)\" note=\"Vyomi always encrypts new objects with a Google-managed key; it does not delegate envelope encryption to Cloud KMS.\""
+  },
+  {
+   "where": "consoles/src/gcp/services/storage/BucketDetail.jsx:172",
+   "component": "NotSimulated",
+   "props": "compact feature=\"Object version history and per-object customer-managed encryption keys\" note=\"Object holds and object retention are real \u2014 see the object's Protection section.\""
+  }
+ ],
+ "continue_from": "v4/ui-gcp-storage-41263898111"
+}

@@ -1,0 +1,8 @@
+{
+  "_doc": "ui-spec page id → v4 route. honest_page = the whole page is a declared 'Not simulated in Vyomi' gap. Unlisted spec pages count as missing.",
+  "repositories": { "route": "#/artifacts", "fixtures": ["ar-repo"], "live": "live-repo" },
+  "create-repository": { "route": "#/artifacts/create-repo" },
+  "repository-details": { "route": "#/artifacts/repo/us-central1/uic-repo", "fixtures": ["ar-repo"], "vars": { "resource-name": "uic-repo" }, "live": "live-package" },
+  "image-details": { "route": "#/artifacts/repo/us-central1/uic-repo/package/uic-image", "fixtures": ["ar-repo"], "vars": { "resource-name": "uic-image" }, "live": "live-tag" },
+  "settings": { "route": "#/artifacts/settings" }
+}

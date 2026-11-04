@@ -262,6 +262,20 @@ def run() -> int:
     dv += "=" * (-len(dv) % 4)
     _check("azure kv key encrypt→decrypt round-trips", _b64u.urlsafe_b64decode(dv) == b"vault-secret")
 
+    # App Configuration data plane: bare "/keys" is shared with Key Vault's keys CRUD —
+    # disambiguated by api-version shape (Key Vault "7.x" vs App Configuration's dated
+    # version). The store itself lives inside the ARM record (az_arm.state), selected by the
+    # `x-vyomi-store` header the console sends (Key Vault's `x-vyomi-vault` pattern).
+    R.az_arm.handle("PUT", "/subscriptions/S/resourceGroups/rg1/providers/Microsoft.AppConfiguration/configurationStores/cfg1",
+                    {"api-version": "2024-05-01"}, {"location": "eastus"})
+    AC_H = {"x-vyomi-store": "cfg1"}
+    acput = R.handle("PUT", "/kv/app:color", {"api-version": "2023-11-01", "label": "dev"}, AC_H, _j.dumps({"value": "blue"}).encode())
+    _check("app config kv put routes 200", acput["status"] == 200 and _j.loads(_body(acput))["value"] == "blue")
+    acget = R.handle("GET", "/kv/app:color", {"api-version": "2023-11-01", "label": "dev"}, AC_H, b"")
+    _check("app config kv get round-trips", _j.loads(_body(acget))["value"] == "blue")
+    ackeys = _j.loads(_body(R.handle("GET", "/keys", {"api-version": "2023-11-01"}, AC_H, b"")))
+    _check("app config /keys lists key names, not Key Vault's keys CRUD", {"name": "app:color"} in ackeys["items"])
+
     # ── v2.8.0 net-new + late-wired services on the shared router ──────────
     # Lambda REST + sandboxed invoke
     R.handle("POST", "/2015-03-31/functions", {}, {},
@@ -287,6 +301,24 @@ def run() -> int:
     R.handle("PUT", f"{_AZ}/roleAssignments/ra", {}, {}, _j.dumps({"properties": {"principalId": "u", "roleName": "Reader", "scope": "/subscriptions/S"}}).encode())
     rbac = _j.loads(_body(R.handle("POST", f"{_AZ}/checkAccess", {}, {}, _j.dumps({"principalId": "u", "action": "x/read", "scope": "/subscriptions/S"}).encode())))
     _check("azure rbac checkAccess routes", rbac["value"][0]["accessDecision"] == "Allowed")
+
+    # GCP depth: a Cloud Scheduler job whose httpTarget names a Cloud Run job's own :run
+    # endpoint really triggers that job when it fires — the router's httpTarget invoker
+    # dispatches straight into the Cloud Run core instead of just recording the attempt
+    # (consoles/gcp/run Job details → Triggers tab).
+    RL = "/v2/projects/trigp/locations/us-central1"
+    R.handle("POST", RL + "/jobs", {"jobId": "jobtrig"}, {"content-type": "application/json"},
+             _j.dumps({"template": {"template": {"containers": [{"image": "gcr.io/x/job:1"}]}}}).encode())
+    SL = "/v1/projects/trigp/locations/us-central1/jobs"
+    R.handle("POST", SL, {}, {"content-type": "application/json"}, _j.dumps({
+        "name": "projects/trigp/locations/us-central1/jobs/sched1",
+        "schedule": "* * * * *",
+        "httpTarget": {"uri": "https://run.googleapis.com" + RL + "/jobs/jobtrig:run", "httpMethod": "POST"},
+    }).encode())
+    R.handle("POST", SL + "/sched1:run", {}, {"content-type": "application/json"}, b"{}")
+    trig = _j.loads(_body(R.handle("GET", RL + "/jobs/jobtrig", {}, {}, b"")))
+    _check("cloud scheduler httpTarget really runs the Cloud Run job it names",
+           trig["executionCount"] == 1 and bool(trig.get("latestCreatedExecution")))
 
     print("\nRESULT: PASS — AwsWireRouter routes all 7 AWS + all 7 GCP + all 5 Azure "
           "data-plane services (Blob, Cosmos, Key Vault keys/secrets, Queue) to the "

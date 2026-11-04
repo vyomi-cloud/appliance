@@ -25,6 +25,9 @@ def _check(name, cond):
 def run(store=None):
     s = store or InMemoryMessagingStore()
 
+    from core import cloudwatch_core as cwc
+    cws = cwc.CloudWatchStore(); s.cw_store = cws   # eventbridge.metrics runtime link
+
     def call(a, b):
         return eb.dispatch(s, E + a, b)
 
@@ -131,6 +134,19 @@ def run(store=None):
 
     _check("ListRules",call("ListRules", {}).body["Rules"][0]["Name"] == "r1")
     _check("ListTargetsByRule", call("ListTargetsByRule", {"Rule": "r1"}).body["Targets"][0]["Id"] == "t1")
+
+    # eventbridge.metrics: AWS/Events datapoints derived from the real matching above
+    def _sum(metric, dims):
+        ser = cwc._series(cws, "AWS/Events", metric, dims)
+        return sum(p[1] for p in ser["points"]) if ser else None
+    rd = [{"Name": "RuleName", "Value": "r1"}]
+    _check("TriggeredRules counts only matching events (1 match, 2 misses)", _sum("TriggeredRules", rd) == 1.0)
+    _check("Invocations = deliveries attempted", _sum("Invocations", rd) == 1.0)
+    _check("account-level Invocations (no dimensions)", _sum("Invocations", []) == 1.0)
+    _check("no FailedInvocations for a good target", _sum("FailedInvocations", rd) is None)
+    call("PutTargets", {"Rule": "r1", "Targets": [{"Id": "t2", "Arn": "arn:aws:lambda:us-east-1:123456789012:function:nope"}]})
+    call("PutEvents", {"Entries": [{"Source": "my.app", "DetailType": "x", "Detail": json.dumps({"state": "running"})}]})
+    _check("undeliverable target → FailedInvocations", _sum("FailedInvocations", rd) == 1.0)
 
     print("\nEventBridge event-bus conformance: ALL GREEN")
     return s

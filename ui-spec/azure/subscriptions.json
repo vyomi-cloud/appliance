@@ -1,0 +1,963 @@
+{
+  "$schema": "../schema.json",
+  "cloud": "azure",
+  "service": "subscriptions",
+  "console_path": "#view/Microsoft_Azure_Billing/SubscriptionsBladeV2",
+  "status": "reviewed",
+  "captured_at": "2026-10-30",
+  "nav": [
+    {
+      "label": "Overview",
+      "page_id": "subscription-overview"
+    },
+    {
+      "label": "Activity log",
+      "page_id": "subscription-activity-log"
+    },
+    {
+      "label": "Access control (IAM)",
+      "page_id": "subscription-access-control-iam"
+    },
+    {
+      "label": "Tags",
+      "page_id": "subscription-tags"
+    },
+    {
+      "label": "Diagnose and solve problems",
+      "page_id": "subscription-diagnose-and-solve-problems"
+    },
+    {
+      "label": "Security",
+      "page_id": "subscription-security"
+    },
+    {
+      "label": "Events",
+      "page_id": "subscription-events"
+    },
+    {
+      "label": "Cost Management",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Cost analysis",
+          "page_id": "subscription-cost-analysis"
+        },
+        {
+          "label": "Cost alerts",
+          "page_id": "subscription-cost-alerts"
+        },
+        {
+          "label": "Budgets",
+          "page_id": "subscription-budgets"
+        },
+        {
+          "label": "Advisor recommendations",
+          "page_id": "subscription-advisor-recommendations"
+        }
+      ]
+    },
+    {
+      "label": "Billing",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Invoices",
+          "page_id": "subscription-invoices"
+        },
+        {
+          "label": "Partner information",
+          "page_id": "subscription-partner-information"
+        }
+      ]
+    },
+    {
+      "label": "Settings",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Programmatic deployment",
+          "page_id": "subscription-programmatic-deployment"
+        },
+        {
+          "label": "Billing properties",
+          "page_id": "subscription-billing-properties"
+        },
+        {
+          "label": "Resource groups",
+          "page_id": "subscription-resource-groups"
+        },
+        {
+          "label": "Resources",
+          "page_id": "subscription-resources"
+        },
+        {
+          "label": "Preview features",
+          "page_id": "subscription-preview-features"
+        },
+        {
+          "label": "Usage + quotas",
+          "page_id": "subscription-usage-quotas"
+        },
+        {
+          "label": "Policies",
+          "page_id": "subscription-policies"
+        },
+        {
+          "label": "Management certificates",
+          "page_id": "subscription-management-certificates"
+        },
+        {
+          "label": "My permissions",
+          "page_id": "subscription-my-permissions"
+        },
+        {
+          "label": "Resource providers",
+          "page_id": "subscription-resource-providers"
+        },
+        {
+          "label": "Deployments",
+          "page_id": "subscription-deployments"
+        },
+        {
+          "label": "Deployment stacks",
+          "page_id": "subscription-deployment-stacks"
+        },
+        {
+          "label": "Resource locks",
+          "page_id": "subscription-resource-locks"
+        }
+      ]
+    },
+    {
+      "label": "Help",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Support + Troubleshooting",
+          "page_id": "subscription-support-troubleshooting"
+        }
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "id": "subscriptions",
+      "kind": "list",
+      "title": "Subscriptions",
+      "provenance": "capture",
+      "confidence": "high",
+      "captures": [
+        "A-view-microsoft-azure-billing-subscriptionsbladev2/001-L1-landing"
+      ],
+      "route": "#view/Microsoft_Azure_Billing/SubscriptionsBladeV2",
+      "breadcrumbs": [
+        "All services",
+        "Subscriptions"
+      ],
+      "table": {
+        "columns": [
+          "Subscription name",
+          "Subscription ID",
+          "My role",
+          "Current cost",
+          "Secure Score",
+          "Parent management group",
+          "Status"
+        ],
+        "selection": "multi",
+        "header_actions": [
+          "Add",
+          "Manage Policies",
+          "View Requests",
+          "View eligible subscriptions",
+          "Export to CSV",
+          "Analyze"
+        ],
+        "filter_placeholder": "Search for any field...",
+        "filters": [
+          "My role == all",
+          "Status == all",
+          "Add filter"
+        ],
+        "empty_state": "None of the entries matched the given filter.",
+        "pagination": true
+      }
+    },
+    {
+      "id": "create-subscription",
+      "kind": "create",
+      "title": "Create a subscription",
+      "breadcrumbs": [
+        "Home",
+        "Subscriptions",
+        "Create a subscription"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "steps": [
+        {
+          "title": "Basics",
+          "sections": [
+            {
+              "title": "Project details",
+              "fields": [
+                {
+                  "label": "Subscription name",
+                  "type": "text",
+                  "required": true
+                },
+                {
+                  "label": "Billing account",
+                  "type": "select",
+                  "required": true
+                },
+                {
+                  "label": "Billing profile",
+                  "type": "select",
+                  "required": true
+                },
+                {
+                  "label": "Invoice section",
+                  "type": "select",
+                  "required": true
+                },
+                {
+                  "label": "Plan",
+                  "type": "select",
+                  "default": "Microsoft Azure Plan",
+                  "options": [
+                    "Microsoft Azure Plan",
+                    "Microsoft Azure Plan for DevTest"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Advanced",
+          "sections": [
+            {
+              "title": "Advanced",
+              "fields": [
+                {
+                  "label": "Subscription directory",
+                  "type": "select"
+                },
+                {
+                  "label": "Management group",
+                  "type": "select"
+                },
+                {
+                  "label": "Subscription owner",
+                  "type": "other",
+                  "actions": [
+                    "Add owner"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Tags",
+          "sections": [
+            {
+              "title": "Tags",
+              "fields": [
+                {
+                  "label": "Tags",
+                  "type": "table",
+                  "columns": [
+                    "Name",
+                    "Value",
+                    "Resource"
+                  ],
+                  "help": "Name/value pairs to categorize resources and view consolidated billing"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Review + create",
+          "sections": [
+            {
+              "title": "Basics"
+            },
+            {
+              "title": "Advanced"
+            },
+            {
+              "title": "Tags"
+            }
+          ]
+        }
+      ],
+      "submit": "Create",
+      "notes": "Footer: Review + create / < Previous / Next : <tab> >; Download a template for automation"
+    },
+    {
+      "id": "subscription-overview",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "breadcrumbs": [
+        "Home",
+        "Subscriptions",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "low",
+      "header_actions": [
+        "Cancel subscription",
+        "Rename",
+        "Change directory",
+        "Feedback"
+      ],
+      "sections": [
+        {
+          "title": "Essentials",
+          "fields": [
+            {
+              "label": "Subscription ID",
+              "type": "readonly"
+            },
+            {
+              "label": "Directory",
+              "type": "readonly"
+            },
+            {
+              "label": "My role",
+              "type": "readonly"
+            },
+            {
+              "label": "Offer",
+              "type": "readonly"
+            },
+            {
+              "label": "Offer ID",
+              "type": "readonly"
+            },
+            {
+              "label": "Parent management group",
+              "type": "readonly"
+            },
+            {
+              "label": "Status",
+              "type": "readonly"
+            },
+            {
+              "label": "Secure score",
+              "type": "readonly"
+            }
+          ]
+        }
+      ],
+      "tabs": [
+        "Get started",
+        "Spending",
+        "Costs by resource",
+        "Top free services by usage"
+      ]
+    },
+    {
+      "id": "subscription-activity-log",
+      "kind": "list",
+      "title": "{resource-name} | Activity log",
+      "breadcrumbs": [
+        "Home",
+        "Subscriptions",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "high",
+      "notes": "Same grid as Monitor | Activity log (captured), filtered to this resource",
+      "table": {
+        "columns": [
+          "Operation name",
+          "Status",
+          "Time",
+          "Time stamp",
+          "Subscription",
+          "Event initiated by"
+        ],
+        "header_actions": [
+          "Activity",
+          "Edit columns",
+          "Refresh",
+          "Export Activity Logs",
+          "Download as CSV",
+          "Insights",
+          "Feedback",
+          "Pin current filters",
+          "Reset filters"
+        ],
+        "filters": [
+          "Management Group : None",
+          "Subscription",
+          "Event severity : All",
+          "Timespan : Last 6 hours",
+          "Resource group",
+          "Resource",
+          "Add Filter"
+        ],
+        "empty_state": "No events to display",
+        "pagination": false
+      }
+    },
+    {
+      "id": "subscription-access-control-iam",
+      "kind": "other",
+      "title": "{resource-name} | Access control (IAM)",
+      "breadcrumbs": [
+        "Home",
+        "Subscriptions",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "high",
+      "header_actions": [
+        "Add",
+        "Download role assignments",
+        "Edit columns",
+        "Refresh",
+        "Remove",
+        "Feedback"
+      ],
+      "tabs": [
+        "Check access",
+        "Role assignments",
+        "Roles",
+        "Deny assignments",
+        "Classic administrators"
+      ],
+      "tab_panels": [
+        {
+          "label": "Check access",
+          "sections": [
+            {
+              "title": "My access",
+              "fields": [
+                {
+                  "label": "View my access",
+                  "type": "button"
+                }
+              ]
+            },
+            {
+              "title": "Check access",
+              "fields": [
+                {
+                  "label": "Check access",
+                  "type": "button"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "Role assignments",
+          "sections": [
+            {
+              "title": "Role assignments",
+              "table": {
+                "columns": [
+                  "Name",
+                  "Type",
+                  "Role",
+                  "Scope",
+                  "Condition"
+                ],
+                "selection": "multi",
+                "filter_placeholder": "Search by name or email"
+              }
+            }
+          ]
+        },
+        {
+          "label": "Roles",
+          "sections": [
+            {
+              "title": "Roles",
+              "table": {
+                "columns": [
+                  "Name",
+                  "Description",
+                  "Type",
+                  "Category",
+                  "Details"
+                ],
+                "filter_placeholder": "Search by role name, description, permission, or ID"
+              }
+            }
+          ]
+        },
+        {
+          "label": "Deny assignments",
+          "sections": [
+            {
+              "title": "Deny assignments",
+              "table": {
+                "columns": [
+                  "Name",
+                  "Description",
+                  "Principal",
+                  "Scope"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "label": "Classic administrators"
+        }
+      ]
+    },
+    {
+      "id": "subscription-tags",
+      "kind": "settings",
+      "title": "{resource-name} | Tags",
+      "breadcrumbs": [
+        "Home",
+        "Subscriptions",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "high",
+      "sections": [
+        {
+          "title": "Tags",
+          "fields": [
+            {
+              "label": "Tags",
+              "type": "table",
+              "columns": [
+                "Name",
+                "Value"
+              ],
+              "actions": [
+                "Delete"
+              ],
+              "help": "Name/value pairs; the same tag can apply to multiple resources"
+            }
+          ]
+        }
+      ],
+      "header_actions": [
+        "Apply",
+        "Discard changes",
+        "Delete all"
+      ]
+    },
+    {
+      "id": "subscription-diagnose-and-solve-problems",
+      "kind": "other",
+      "title": "{resource-name} | Diagnose and solve problems",
+      "breadcrumbs": [
+        "Home",
+        "Subscriptions",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Subscription blade menu item; title only"
+    },
+    {
+      "id": "subscription-security",
+      "kind": "other",
+      "title": "{resource-name} | Security",
+      "breadcrumbs": [
+        "Home",
+        "Subscriptions",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Subscription blade menu item; title only"
+    },
+    {
+      "id": "subscription-events",
+      "kind": "other",
+      "title": "{resource-name} | Events",
+      "breadcrumbs": [
+        "Home",
+        "Subscriptions",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Subscription blade menu item; title only"
+    },
+    {
+      "id": "subscription-cost-analysis",
+      "kind": "other",
+      "title": "{resource-name} | Cost analysis",
+      "breadcrumbs": [
+        "Home",
+        "Subscriptions",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Subscription blade menu item; title only"
+    },
+    {
+      "id": "subscription-cost-alerts",
+      "kind": "other",
+      "title": "{resource-name} | Cost alerts",
+      "breadcrumbs": [
+        "Home",
+        "Subscriptions",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Subscription blade menu item; title only"
+    },
+    {
+      "id": "subscription-budgets",
+      "kind": "other",
+      "title": "{resource-name} | Budgets",
+      "breadcrumbs": [
+        "Home",
+        "Subscriptions",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Subscription blade menu item; title only"
+    },
+    {
+      "id": "subscription-advisor-recommendations",
+      "kind": "other",
+      "title": "{resource-name} | Advisor recommendations",
+      "breadcrumbs": [
+        "Home",
+        "Subscriptions",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Subscription blade menu item; title only"
+    },
+    {
+      "id": "subscription-invoices",
+      "kind": "other",
+      "title": "{resource-name} | Invoices",
+      "breadcrumbs": [
+        "Home",
+        "Subscriptions",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Subscription blade menu item; title only"
+    },
+    {
+      "id": "subscription-partner-information",
+      "kind": "other",
+      "title": "{resource-name} | Partner information",
+      "breadcrumbs": [
+        "Home",
+        "Subscriptions",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Subscription blade menu item; title only"
+    },
+    {
+      "id": "subscription-programmatic-deployment",
+      "kind": "other",
+      "title": "{resource-name} | Programmatic deployment",
+      "breadcrumbs": [
+        "Home",
+        "Subscriptions",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Subscription blade menu item; title only"
+    },
+    {
+      "id": "subscription-billing-properties",
+      "kind": "other",
+      "title": "{resource-name} | Billing properties",
+      "breadcrumbs": [
+        "Home",
+        "Subscriptions",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Subscription blade menu item; title only"
+    },
+    {
+      "id": "subscription-resource-groups",
+      "kind": "list",
+      "title": "{resource-name} | Resource groups",
+      "breadcrumbs": [
+        "Home",
+        "Subscriptions",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "table": {
+        "columns": [
+          "Name",
+          "Location"
+        ],
+        "header_actions": [
+          "Create",
+          "Manage view",
+          "Refresh",
+          "Export to CSV",
+          "Open query",
+          "Assign tags"
+        ],
+        "filter_placeholder": "Filter for any field..."
+      }
+    },
+    {
+      "id": "subscription-resources",
+      "kind": "list",
+      "title": "{resource-name} | Resources",
+      "breadcrumbs": [
+        "Home",
+        "Subscriptions",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "table": {
+        "columns": [
+          "Name",
+          "Type",
+          "Resource group",
+          "Location"
+        ],
+        "header_actions": [
+          "Create",
+          "Manage view",
+          "Refresh",
+          "Export to CSV",
+          "Open query",
+          "Assign tags",
+          "Delete"
+        ],
+        "filter_placeholder": "Filter for any field..."
+      }
+    },
+    {
+      "id": "subscription-preview-features",
+      "kind": "other",
+      "title": "{resource-name} | Preview features",
+      "breadcrumbs": [
+        "Home",
+        "Subscriptions",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Subscription blade menu item; title only"
+    },
+    {
+      "id": "subscription-usage-quotas",
+      "kind": "list",
+      "title": "{resource-name} | Usage + quotas",
+      "breadcrumbs": [
+        "Home",
+        "Subscriptions",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "table": {
+        "columns": [
+          "Quota name",
+          "Region",
+          "Subscription",
+          "Current Usage",
+          "Adjustable"
+        ],
+        "header_actions": [
+          "Request increase",
+          "Refresh"
+        ],
+        "filter_placeholder": "Search"
+      }
+    },
+    {
+      "id": "subscription-policies",
+      "kind": "other",
+      "title": "{resource-name} | Policies",
+      "breadcrumbs": [
+        "Home",
+        "Subscriptions",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Subscription blade menu item; title only"
+    },
+    {
+      "id": "subscription-management-certificates",
+      "kind": "other",
+      "title": "{resource-name} | Management certificates",
+      "breadcrumbs": [
+        "Home",
+        "Subscriptions",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Subscription blade menu item; title only"
+    },
+    {
+      "id": "subscription-my-permissions",
+      "kind": "other",
+      "title": "{resource-name} | My permissions",
+      "breadcrumbs": [
+        "Home",
+        "Subscriptions",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Subscription blade menu item; title only"
+    },
+    {
+      "id": "subscription-resource-providers",
+      "kind": "list",
+      "title": "{resource-name} | Resource providers",
+      "breadcrumbs": [
+        "Home",
+        "Subscriptions",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "table": {
+        "columns": [
+          "Provider",
+          "Status"
+        ],
+        "header_actions": [
+          "Register",
+          "Unregister",
+          "Refresh"
+        ],
+        "filter_placeholder": "Filter by name..."
+      }
+    },
+    {
+      "id": "subscription-deployments",
+      "kind": "list",
+      "title": "{resource-name} | Deployments",
+      "breadcrumbs": [
+        "Home",
+        "Subscriptions",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "table": {
+        "columns": [
+          "Deployment name",
+          "Status",
+          "Last modified",
+          "Duration",
+          "Related events"
+        ],
+        "header_actions": [
+          "Refresh",
+          "Cancel",
+          "Redeploy",
+          "Delete"
+        ]
+      }
+    },
+    {
+      "id": "subscription-deployment-stacks",
+      "kind": "other",
+      "title": "{resource-name} | Deployment stacks",
+      "breadcrumbs": [
+        "Home",
+        "Subscriptions",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Subscription blade menu item; title only"
+    },
+    {
+      "id": "subscription-resource-locks",
+      "kind": "list",
+      "title": "{resource-name} | Resource locks",
+      "breadcrumbs": [
+        "Home",
+        "Subscriptions",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "high",
+      "table": {
+        "columns": [
+          "Lock name",
+          "Lock type",
+          "Scope",
+          "Notes"
+        ],
+        "header_actions": [
+          "Add",
+          "Subscription",
+          "Resource group",
+          "Refresh",
+          "Feedback"
+        ],
+        "filter_placeholder": "Search to filter items...",
+        "empty_state": "This resource has no locks."
+      },
+      "sections": [
+        {
+          "title": "Add lock",
+          "fields": [
+            {
+              "label": "Lock name",
+              "type": "text",
+              "required": true
+            },
+            {
+              "label": "Lock type",
+              "type": "select",
+              "required": true,
+              "options": [
+                "Read-only",
+                "Delete"
+              ]
+            },
+            {
+              "label": "Notes",
+              "type": "textarea"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "subscription-support-troubleshooting",
+      "kind": "other",
+      "title": "{resource-name} | Support + Troubleshooting",
+      "breadcrumbs": [
+        "Home",
+        "Subscriptions",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Subscription blade menu item; title only"
+    }
+  ],
+  "gaps_note": "Subscriptions grid is captured (empty account). Create-a-subscription wizard and the subscription blade are reference (no subscription existed to open). nav = subscription resource menu."
+}

@@ -19,11 +19,16 @@ definitions and Logs Insights queries (`fields`, `filter`, `sort`, `limit`,
 """
 from __future__ import annotations
 
+import base64
+import gzip
 import json
 import re
 import time
 import uuid
 from dataclasses import dataclass, field
+
+from core import kinesis_core as _kinesis_mod
+from core import lambda_core as _lam_mod
 
 DEFAULT_ACCOUNT_ID = "123456789012"
 REGION = "us-east-1"
@@ -59,7 +64,11 @@ class LogsStore:
         self.resource_policies: dict[str, dict] = {}
         self.query_definitions: dict[str, dict] = {}
         self.queries: dict[str, dict] = {}
+        self.anomaly_detectors: dict[str, dict] = {}  # anomalyDetectorArn -> detector record
+        self.anomalies: dict[tuple, dict] = {}        # (detectorArn, pattern) -> anomaly record
         self._clock: float | None = None
+        self.lam_store = None       # the shared Lambda function registry (set by the wire router) — real subscription-filter delivery
+        self.kinesis_store = None   # the shared Kinesis stream store (set by the wire router) — real subscription-filter delivery
 
     def now_ms(self) -> int:
         return int((self._clock if self._clock is not None else time.time()) * 1000)
@@ -120,6 +129,10 @@ def _group_view(store, g):
         out["retentionInDays"] = g["retentionInDays"]
     if g.get("kmsKeyId"):
         out["kmsKeyId"] = g["kmsKeyId"]
+    out["deletionProtectionEnabled"] = bool(g.get("deletionProtectionEnabled", False))
+    # Vyomi console convenience fields (ignored by real SDKs, which deserialize by shape).
+    out["dataProtectionMode"] = (g.get("dataProtectionPolicy") or {}).get("_mode")
+    out["dataProtectionFindings"] = g.get("dataProtectionFindings", 0)
     return out
 
 
@@ -157,7 +170,8 @@ def _create_log_group(store, body):
     g = {"name": name, "arn": _group_arn(store, name), "creationTime": store.now_ms(),
          "storedBytes": 0, "tags": dict(body.get("tags") or {}), "streams": {},
          "metricFilters": {}, "subscriptionFilters": {},
-         "logGroupClass": body.get("logGroupClass") or "STANDARD"}
+         "logGroupClass": body.get("logGroupClass") or "STANDARD",
+         "deletionProtectionEnabled": bool(body.get("deletionProtectionEnabled", False))}
     if body.get("kmsKeyId"):
         g["kmsKeyId"] = body["kmsKeyId"]
     store.log_groups[name] = g
@@ -167,8 +181,17 @@ def _create_log_group(store, body):
 
 def _delete_log_group(store, body):
     name = str(_req(body, "logGroupName"))
-    _group(store, name)
+    g = _group(store, name)
+    if g.get("deletionProtectionEnabled"):
+        raise _E("OperationAbortedException", "The specified log group is protected from deletion. Turn off deletion protection to delete it.")
     del store.log_groups[name]
+    store.persist()
+    return LogsResponse(body={})
+
+
+def _update_log_group_deletion_protection(store, body):
+    g = _group(store, str(_req(body, "logGroupName")))
+    g["deletionProtectionEnabled"] = bool(body.get("deletionProtectionEnabled", False))
     store.persist()
     return LogsResponse(body={})
 
@@ -214,6 +237,235 @@ def _associate_kms_key(store, body):
 def _disassociate_kms_key(store, body):
     g = _resolve_group(store, body)
     g.pop("kmsKeyId", None)
+    store.persist()
+    return LogsResponse(body={})
+
+
+# ── data protection (PII masking) ────────────────────────────────────────────
+# A subset of AWS's managed data identifiers — see aws.cloudwatch.logs.data-protection
+# for the ones Vyomi doesn't recognize (accepted and stored, but never matched).
+_DATA_IDENTIFIERS = {
+    "EmailAddress": re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+"),
+    "CreditCardNumber": re.compile(r"\b(?:\d[ -]?){13,16}\b"),
+    "Ssn-US": re.compile(r"\b\d{3}-\d{2}-\d{4}\b"),
+    "AwsSecretKey": re.compile(r"\b[A-Za-z0-9/+=]{40}\b"),
+    "AwsAccessKey": re.compile(r"\b(?:AKIA|ASIA)[A-Z0-9]{16}\b"),
+    "PhoneNumber-US": re.compile(r"\b\(?\d{3}\)?[-.\s]\d{3}[-.\s]\d{4}\b"),
+    "IpAddress": re.compile(r"\b(?:(?:25[0-5]|2[0-4]\d|1?\d{1,2})\.){3}(?:25[0-5]|2[0-4]\d|1?\d{1,2})\b"),
+    "Url": re.compile(r"\bhttps?://[^\s\"']+"),
+}
+
+
+def _dp_identifiers(doc: dict) -> set:
+    ids = set()
+    for stmt in doc.get("Statement") or []:
+        for d in stmt.get("DataIdentifier") or []:
+            name = str(d).rsplit("/", 1)[-1]
+            if name in _DATA_IDENTIFIERS:
+                ids.add(name)
+    return ids
+
+
+def _dp_mode(doc: dict) -> str | None:
+    """'mask' if any Statement Deidentifies (masking wins when a policy mixes Audit
+    statements with Deidentify ones, matching how AWS applies the strictest operation)."""
+    saw_audit = False
+    for stmt in doc.get("Statement") or []:
+        op = stmt.get("Operation") or {}
+        if "Deidentify" in op:
+            return "mask"
+        if "Audit" in op:
+            saw_audit = True
+    return "audit" if saw_audit else None
+
+
+def _dp_parse(doc_str: str) -> dict:
+    try:
+        doc = json.loads(doc_str)
+    except Exception:
+        raise _E("InvalidParameterException", "The data protection policy is not valid JSON.")
+    if not isinstance(doc, dict) or not isinstance(doc.get("Statement"), list) or not doc["Statement"]:
+        raise _E("InvalidParameterException", "The data protection policy document must have a non-empty Statement list.")
+    return doc
+
+
+def _apply_data_protection(g: dict, message: str) -> str:
+    """Masks the managed data identifiers a Deidentify policy names; an Audit-only policy
+    just counts findings (dataProtectionFindings) without altering the stored message —
+    both only recognize the identifiers in _DATA_IDENTIFIERS."""
+    pol = g.get("dataProtectionPolicy")
+    if not pol or not pol["_identifiers"] or not pol["_mode"]:
+        return message
+    out, total = message, 0
+    for name in pol["_identifiers"]:
+        rx = _DATA_IDENTIFIERS[name]
+        total += len(rx.findall(out))
+        if pol["_mode"] == "mask":
+            out = rx.sub(lambda m: "*" * len(m.group(0)), out)
+    if total:
+        g["dataProtectionFindings"] = g.get("dataProtectionFindings", 0) + total
+    return out
+
+
+def _put_data_protection_policy(store, body):
+    g = _resolve_group(store, body)
+    doc_str = str(_req(body, "policyDocument"))
+    doc = _dp_parse(doc_str)
+    g["dataProtectionPolicy"] = {"policyDocument": doc_str, "lastUpdatedTime": store.now_ms(),
+                                 "_identifiers": _dp_identifiers(doc), "_mode": _dp_mode(doc)}
+    store.persist()
+    return LogsResponse(body={"logGroupIdentifier": body.get("logGroupIdentifier") or body.get("logGroupName"),
+                              "policyDocument": doc_str, "lastUpdatedTime": g["dataProtectionPolicy"]["lastUpdatedTime"]})
+
+
+def _get_data_protection_policy(store, body):
+    g = _resolve_group(store, body)
+    pol = g.get("dataProtectionPolicy")
+    if not pol:
+        raise _E("ResourceNotFoundException", "No data protection policy was found for this log group.")
+    return LogsResponse(body={"logGroupIdentifier": body.get("logGroupIdentifier") or body.get("logGroupName"),
+                              "policyDocument": pol["policyDocument"], "lastUpdatedTime": pol["lastUpdatedTime"]})
+
+
+def _delete_data_protection_policy(store, body):
+    g = _resolve_group(store, body)
+    g.pop("dataProtectionPolicy", None)
+    store.persist()
+    return LogsResponse(body={})
+
+
+# ── field indexes ─────────────────────────────────────────────────────────
+_FIELD_NAME_RE = re.compile(r"^[@A-Za-z][\w.\-]{0,127}$")
+
+
+def _index_policy_view(g: dict) -> dict:
+    p = g["fieldIndexPolicy"]
+    return {"logGroupIdentifier": g["arn"], "lastUpdateTime": p["lastUpdateTime"],
+            "policyDocument": p["policyDocument"], "source": "LOG_GROUP"}
+
+
+def _put_index_policy(store, body):
+    g = _resolve_group(store, body)
+    doc_str = str(_req(body, "policyDocument"))
+    try:
+        doc = json.loads(doc_str)
+    except Exception:
+        raise _E("InvalidParameterException", "The index policy document is not valid JSON.")
+    fields = doc.get("fields")
+    if not isinstance(fields, list) or not 1 <= len(fields) <= 20:
+        raise _E("InvalidParameterException", "fields must be a list of 1 to 20 field names.")
+    for f in fields:
+        if not isinstance(f, str) or not _FIELD_NAME_RE.match(f):
+            raise _E("InvalidParameterException", f"Invalid field name: {f!r}")
+    g["fieldIndexPolicy"] = {"policyDocument": doc_str, "lastUpdateTime": store.now_ms()}
+    store.persist()
+    return LogsResponse(body={"indexPolicyDocument": _index_policy_view(g)})
+
+
+def _get_index_policy(store, body):
+    g = _resolve_group(store, body)
+    if "fieldIndexPolicy" not in g:
+        raise _E("ResourceNotFoundException", "There is no index policy for this log group.")
+    return LogsResponse(body={"indexPolicyDocument": _index_policy_view(g)})
+
+
+def _delete_index_policy(store, body):
+    g = _resolve_group(store, body)
+    g.pop("fieldIndexPolicy", None)
+    store.persist()
+    return LogsResponse(body={})
+
+
+def _describe_index_policies(store, body):
+    out = []
+    for ident in body.get("logGroupIdentifiers") or []:
+        try:
+            g = _resolve_group(store, {"logGroupIdentifier": ident})
+        except _E:
+            continue
+        if "fieldIndexPolicy" in g:
+            out.append(_index_policy_view(g))
+    return LogsResponse(body={"indexPolicies": out})
+
+
+# ── transformer (ingestion-time processor pipeline) ────────────────────────
+# A subset of AWS's processors — see aws.cloudwatch.logs.transformer for the rest.
+_TRANSFORMER_PROCESSORS = {"parseJSON", "addKeys", "deleteKeys", "renameKeys"}
+
+
+def _validate_transformer_config(cfg):
+    if not isinstance(cfg, list) or not cfg:
+        raise _E("InvalidParameterException", "transformerConfig must be a non-empty list of processors.")
+    for proc in cfg:
+        if not isinstance(proc, dict) or len(proc) != 1 or next(iter(proc)) not in _TRANSFORMER_PROCESSORS:
+            raise _E("InvalidParameterException", f"Unsupported or malformed processor: {proc!r}")
+
+
+def _run_transformer(cfg: list, message: str) -> str:
+    """Runs the ingestion-time processor pipeline, returning the message that gets stored
+    (a JSON rendering of the working document if any processor touched it, else the raw
+    message unchanged)."""
+    doc: dict = {"@message": message}
+    changed = False
+    for proc in cfg:
+        kind, params = next(iter(proc.items()))
+        params = params or {}
+        if kind == "parseJSON":
+            try:
+                parsed = json.loads(doc.get(params.get("source", "@message"), ""))
+            except Exception:
+                continue
+            if not isinstance(parsed, dict):
+                continue
+            dest = params.get("destination")
+            if dest:
+                doc[dest] = parsed
+            else:
+                doc.update(parsed)
+            changed = True
+        elif kind == "addKeys":
+            for e in params.get("entries") or []:
+                k = e.get("key")
+                if k and (e.get("overwriteIfExists") or k not in doc):
+                    doc[k] = e.get("value")
+                    changed = True
+        elif kind == "deleteKeys":
+            for k in params.get("withKeys") or []:
+                if doc.pop(k, None) is not None:
+                    changed = True
+        elif kind == "renameKeys":
+            for e in params.get("entries") or []:
+                k, new = e.get("key"), e.get("renameTo")
+                if new and k in doc:
+                    doc[new] = doc.pop(k)
+                    changed = True
+    if not changed:
+        return message
+    out = dict(doc)
+    out.pop("@message", None)
+    return json.dumps(out, separators=(",", ":"))
+
+
+def _put_transformer(store, body):
+    g = _resolve_group(store, body)
+    cfg = body.get("transformerConfig")
+    _validate_transformer_config(cfg)
+    g["transformerConfig"] = cfg
+    store.persist()
+    return LogsResponse(body={})
+
+
+def _get_transformer(store, body):
+    g = _resolve_group(store, body)
+    cfg = g.get("transformerConfig")
+    if cfg is None:
+        raise _E("ResourceNotFoundException", "There is no transformer for this log group.")
+    return LogsResponse(body={"logGroupIdentifier": body.get("logGroupIdentifier") or body.get("logGroupName"), "transformerConfig": cfg})
+
+
+def _delete_transformer(store, body):
+    g = _resolve_group(store, body)
+    g.pop("transformerConfig", None)
     store.persist()
     return LogsResponse(body={})
 
@@ -337,7 +589,11 @@ def _put_log_events(store, body):
         elif retention and ts < now - retention * day:
             expired += 1
         else:
-            ok.append({"timestamp": int(ts), "message": str(msg), "ingestionTime": now})
+            out_msg = str(msg)
+            if g.get("transformerConfig"):
+                out_msg = _run_transformer(g["transformerConfig"], out_msg)
+            out_msg = _apply_data_protection(g, out_msg)
+            ok.append({"timestamp": int(ts), "message": out_msg, "ingestionTime": now})
     ok.sort(key=lambda e: e["timestamp"])
     added = sum(len(e["message"].encode("utf-8")) + 26 for e in ok)
     s["events"].extend(ok)
@@ -360,16 +616,44 @@ def _put_log_events(store, body):
     if rej:
         out["rejectedLogEventsInfo"] = rej
     _deliver_subscriptions(store, g, s, ok)
+    _evaluate_anomaly_detectors(store, g, ok)
     store.persist()
     return LogsResponse(body=out)
 
 
+def _subscription_envelope(store, g, s, events) -> bytes:
+    """The gzip-compressed JSON payload a real CloudWatch Logs subscription delivers
+    (CloudWatch Logs -> Lambda/Kinesis), matching the `awslogs`/`DATA_MESSAGE` shape."""
+    doc = {"messageType": "DATA_MESSAGE", "owner": store.account_id, "logGroup": g["name"], "logStream": s["name"],
+           "subscriptionFilters": [f["filterName"] for f in g["subscriptionFilters"].values()],
+           "logEvents": [{"id": uuid.uuid4().hex, "timestamp": e["timestamp"], "message": e["message"]} for e in events]}
+    return gzip.compress(json.dumps(doc).encode())
+
+
 def _deliver_subscriptions(store, g, s, events):
-    """Subscription filters with a Kinesis/Lambda/Firehose destination are recorded
-    on the group; delivery is kept as a counter (no cross-service fan-out here)."""
+    """Subscription filters really fan out: a Lambda destination is invoked (lambda_core.
+    invoke_by_arn) and a Kinesis destination really receives a PutRecord (kinesis_core.
+    put_record), both with the real gzip+base64 `awslogs` envelope. A Firehose destination
+    has no backing core and is kept as a delivery counter — see
+    aws.cloudwatch.logs.subscription-filters."""
     for f in g["subscriptionFilters"].values():
-        n = sum(1 for e in events if _filter_match(f.get("filterPattern", ""), e["message"]))
-        f["deliveredEvents"] = f.get("deliveredEvents", 0) + n
+        matched = [e for e in events if _filter_match(f.get("filterPattern", ""), e["message"])]
+        if not matched:
+            continue
+        f["deliveredEvents"] = f.get("deliveredEvents", 0) + len(matched)
+        arn = str(f.get("destinationArn", ""))
+        if ":lambda:" in arn and store.lam_store is not None:
+            payload = base64.b64encode(_subscription_envelope(store, g, s, matched)).decode()
+            try:
+                _lam_mod.invoke_by_arn(store.lam_store, arn, {"awslogs": {"data": payload}})
+            except Exception:
+                pass
+        elif ":kinesis:" in arn and store.kinesis_store is not None:
+            payload = base64.b64encode(_subscription_envelope(store, g, s, matched)).decode()
+            try:
+                _kinesis_mod.put_record(store.kinesis_store, {"StreamARN": arn, "Data": payload, "PartitionKey": s["name"]})
+            except Exception:
+                pass
 
 
 def _get_log_events(store, body):
@@ -652,6 +936,77 @@ def _start_query(store, body):
     return LogsResponse(body={"queryId": qid})
 
 
+_PATTERN_TOKEN_RE = re.compile(
+    r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|0x[0-9a-fA-F]+|\b[0-9a-fA-F]{12,}\b|\d+(?:\.\d+)?")
+
+
+def _mine_pattern(msg: str) -> str:
+    """The template a log line reduces to once its variable parts (numbers, hex blobs,
+    UUIDs) are masked — the same tokenization Logs Insights' `pattern` command and the
+    console's Patterns tab use to group similar lines (see aws.cloudwatch.logs.patterns-visualization)."""
+    return _PATTERN_TOKEN_RE.sub("<*>", msg)
+
+
+# ── log anomaly detection (aws.cloudwatch.logs.anomaly-detection) ──────────────────────
+# A detector "trains" on the first _ANOMALY_BASELINE_EVENTS real log events a covered
+# group ingests, learning the set of message patterns (via the SAME _mine_pattern
+# tokenizer the Patterns tab uses) it has seen. Once trained, any NEW pattern a later
+# PutLogEvents introduces is a real anomaly: it is really absent from what the detector
+# has actually observed, not a canned/random finding.
+_ANOMALY_BASELINE_EVENTS = 20
+_ANOMALY_ID_RE = re.compile(r"[^A-Za-z0-9]+")
+
+
+def _anomaly_detector_matches(d: dict, group_arn: str) -> bool:
+    return not d["logGroupArnList"] or group_arn in d["logGroupArnList"]
+
+
+def _pattern_id(pattern: str) -> str:
+    import hashlib
+    return hashlib.sha1(pattern.encode()).hexdigest()[:16]
+
+
+def _record_anomaly(d: dict, group_arn: str, pattern: str, message: str, ts: int) -> None:
+    key = (d["anomalyDetectorArn"], pattern)
+    a = d["_store_anomalies"].get(key)
+    if a is None:
+        a = {"anomalyId": uuid.uuid4().hex, "anomalyDetectorArn": d["anomalyDetectorArn"],
+             "patternId": _pattern_id(pattern), "pattern": pattern, "logGroupArnList": [group_arn],
+             "firstSeen": ts, "lastSeen": ts, "sampleCount": 0, "active": True, "suppressed": False,
+             "priority": "HIGH" if re.search(r"error|exception|fail|fatal|panic", pattern, re.I) else "MEDIUM",
+             "logSamples": []}
+        d["_store_anomalies"][key] = a
+    a["lastSeen"] = max(a["lastSeen"], ts)
+    a["sampleCount"] += 1
+    if len(a["logSamples"]) < 3:
+        a["logSamples"].append(message)
+
+
+def _evaluate_anomaly_detectors(store, g: dict, events: list) -> None:
+    detectors = [d for d in store.anomaly_detectors.values()
+                 if d["state"] == "ACTIVE" and _anomaly_detector_matches(d, g["arn"])]
+    if not detectors or not events:
+        return
+    for d in detectors:
+        d["_store_anomalies"] = store.anomalies  # evaluate against the live store (persistence-safe)
+        baseline = d.setdefault("_baseline", set())
+        d.setdefault("_seenCount", 0)
+        for e in events:
+            pattern = _mine_pattern(e["message"])
+            if d["_seenCount"] < _ANOMALY_BASELINE_EVENTS:
+                baseline.add(pattern)
+                d["_seenCount"] += 1
+                continue
+            if pattern not in baseline:
+                _record_anomaly(d, g["arn"], pattern, e["message"], e["timestamp"])
+        d.pop("_store_anomalies", None)   # a live reference, never part of the persisted detector record
+
+
+def _duration_secs(s: str) -> int:
+    total = sum(int(n) * {"s": 1, "m": 60, "h": 3600}[u] for n, u in re.findall(r"(\d+)\s*([smh])", s, re.I))
+    return total or 60
+
+
 def _run_insights(store, groups, qs, start_ms, end_ms):
     stages = [s.strip() for s in qs.split("|") if s.strip()]
     recs = []
@@ -693,14 +1048,37 @@ def _run_insights(store, groups, qs, start_ms, end_ms):
                 recs.sort(key=lambda r: r.get(m.group(1), ""), reverse=(m.group(2) or "asc").lower() == "desc")
         elif low.startswith("limit"):
             recs = recs[:int(st.split()[1])]
+        elif low.startswith("pattern"):
+            m = re.match(r'^pattern\s+(@?\w+)\s*$', st, re.I)
+            field = m.group(1) if m else "@message"
+            mined: dict[str, list] = {}
+            for r in recs:
+                mined.setdefault(_mine_pattern(str(r.get(field, ""))), []).append(r)
+            total = len(recs) or 1
+            rows = []
+            for tmpl, members in mined.items():
+                rows.append({"@pattern": tmpl, "@severityLabel": "ERROR" if re.search(r"error|exception|fail", tmpl, re.I) else "BASELINE",
+                            "@ratio": f"{len(members) / total:.4f}", "@sampleCount": str(len(members)),
+                            "@logSamples": json.dumps([m.get(field, "") for m in members[:3]])})
+            rows.sort(key=lambda r: -int(r["@sampleCount"]))
+            recs = rows
+            fields = ["@pattern", "@severityLabel", "@ratio", "@sampleCount", "@logSamples"]
+            stats_col = True
         elif low.startswith("stats"):
             m = re.match(r'^stats\s+count\(\*?\)\s*(?:as\s+(\w+))?\s*(?:by\s+(.+))?$', st, re.I)
             if m:
                 alias, by = m.group(1) or "count(*)", (m.group(2) or "").strip()
                 if by:
+                    bm = re.match(r'^bin\(\s*([\dsmh]+)\s*\)$', by, re.I)
+                    if bm:
+                        secs_ms = _duration_secs(bm.group(1)) * 1000
+                        key = lambda r: _iso(int(r["_ts"] // secs_ms * secs_ms))
+                    else:
+                        key = lambda r: str(r.get(by, ""))
                     buckets: dict = {}
                     for r in recs:
-                        buckets[str(r.get(by, ""))] = buckets.get(str(r.get(by, "")), 0) + 1
+                        k = key(r)
+                        buckets[k] = buckets.get(k, 0) + 1
                     recs = [{by: k, alias: str(v)} for k, v in sorted(buckets.items())]
                     fields = [by, alias]
                 else:
@@ -749,11 +1127,123 @@ def _describe_queries(store, body):
     return LogsResponse(body={"queries": qs})
 
 
+def _create_log_anomaly_detector(store, body):
+    group_arns = [str(a) for a in (body.get("logGroupArnList") or [])]
+    if not group_arns:
+        raise _E("InvalidParameterException", "logGroupArnList must contain at least 1 log group ARN.")
+    detector_id = uuid.uuid4().hex
+    arn = f"arn:aws:logs:{store.region}:{store.account_id}:anomaly-detector:{detector_id}"
+    now = store.now_ms()
+    d = {
+        "anomalyDetectorArn": arn, "detectorName": str(body.get("detectorName") or ""),
+        "logGroupArnList": group_arns, "evaluationFrequency": str(body.get("evaluationFrequency") or "FIVE_MIN"),
+        "filterPattern": str(body.get("filterPattern") or ""),
+        "anomalyVisibilityTime": int(body.get("anomalyVisibilityTime") or 21),
+        "state": "ACTIVE", "creationTimeStamp": now, "lastModifiedTimeStamp": now,
+        "_baseline": set(), "_seenCount": 0,
+    }
+    store.anomaly_detectors[arn] = d
+    store.persist()
+    return LogsResponse(body={"anomalyDetectorArn": arn})
+
+
+def _detector_view(d: dict) -> dict:
+    return {"anomalyDetectorArn": d["anomalyDetectorArn"], "detectorName": d["detectorName"],
+            "logGroupArnList": d["logGroupArnList"], "evaluationFrequency": d["evaluationFrequency"],
+            "filterPattern": d["filterPattern"], "anomalyVisibilityTime": d["anomalyVisibilityTime"],
+            "anomalyDetectorStatus": d["state"], "creationTimeStamp": d["creationTimeStamp"],
+            "lastModifiedTimeStamp": d["lastModifiedTimeStamp"]}
+
+
+def _list_log_anomaly_detectors(store, body):
+    filt = body.get("filterLogGroupArn")
+    ds = [d for d in store.anomaly_detectors.values() if not filt or filt in d["logGroupArnList"]]
+    return LogsResponse(body={"anomalyDetectors": [_detector_view(d) for d in ds]})
+
+
+def _get_detector(store, arn):
+    d = store.anomaly_detectors.get(str(arn))
+    if d is None:
+        raise _E("ResourceNotFoundException", "The specified anomaly detector does not exist.")
+    return d
+
+
+def _get_log_anomaly_detector(store, body):
+    d = _get_detector(store, _req(body, "anomalyDetectorArn"))
+    return LogsResponse(body=_detector_view(d))
+
+
+def _update_log_anomaly_detector(store, body):
+    d = _get_detector(store, _req(body, "anomalyDetectorArn"))
+    if "enabled" in body:
+        d["state"] = "ACTIVE" if body["enabled"] else "PAUSED"
+    if body.get("evaluationFrequency"):
+        d["evaluationFrequency"] = str(body["evaluationFrequency"])
+    if body.get("anomalyVisibilityTime") is not None:
+        d["anomalyVisibilityTime"] = int(body["anomalyVisibilityTime"])
+    d["lastModifiedTimeStamp"] = store.now_ms()
+    store.persist()
+    return LogsResponse(body={})
+
+
+def _delete_log_anomaly_detector(store, body):
+    arn = str(_req(body, "anomalyDetectorArn"))
+    _get_detector(store, arn)
+    store.anomaly_detectors.pop(arn, None)
+    store.anomalies = {k: v for k, v in store.anomalies.items() if k[0] != arn}
+    store.persist()
+    return LogsResponse(body={})
+
+
+def _anomaly_view(a: dict) -> dict:
+    return {
+        "anomalyId": a["anomalyId"], "anomalyDetectorArn": a["anomalyDetectorArn"],
+        "patternId": a["patternId"], "patternString": a["pattern"],
+        "patternRegex": re.escape(a["pattern"]).replace(re.escape("<*>"), ".*"),
+        "logGroupArnList": a["logGroupArnList"], "firstSeen": a["firstSeen"], "lastSeen": a["lastSeen"],
+        "description": f"A new log pattern was detected: {a['pattern']}",
+        "active": a["active"], "state": "Suppressed" if a["suppressed"] else "Active",
+        "priority": a["priority"], "logSamples": [{"timestamp": a["lastSeen"], "message": m} for m in a["logSamples"]],
+    }
+
+
+def _list_anomalies(store, body):
+    det_arn = body.get("anomalyDetectorArn")
+    group_arns = body.get("logGroupArnList") or []
+    suppression_state = body.get("suppressionState")
+    items = [a for a in store.anomalies.values()
+             if (not det_arn or a["anomalyDetectorArn"] == det_arn)
+             and (not group_arns or any(ga in a["logGroupArnList"] for ga in group_arns))]
+    if suppression_state == "SUPPRESSED":
+        items = [a for a in items if a["suppressed"]]
+    elif suppression_state == "UNSUPPRESSED":
+        items = [a for a in items if not a["suppressed"]]
+    items.sort(key=lambda a: -a["lastSeen"])
+    return LogsResponse(body={"anomalies": [_anomaly_view(a) for a in items]})
+
+
+def _update_anomaly(store, body):
+    aid = str(_req(body, "anomalyId"))
+    rec = next((a for a in store.anomalies.values() if a["anomalyId"] == aid), None)
+    if rec is None:
+        raise _E("ResourceNotFoundException", "The specified anomaly does not exist.")
+    suppression_type = body.get("suppressionType")
+    if suppression_type:
+        rec["suppressed"] = suppression_type != "NONE"
+    store.persist()
+    return LogsResponse(body={})
+
+
 _OPS = {
     "CreateLogGroup": _create_log_group, "DeleteLogGroup": _delete_log_group,
     "DescribeLogGroups": _describe_log_groups, "PutRetentionPolicy": _put_retention_policy,
     "DeleteRetentionPolicy": _delete_retention_policy,
     "AssociateKmsKey": _associate_kms_key, "DisassociateKmsKey": _disassociate_kms_key,
+    "PutDataProtectionPolicy": _put_data_protection_policy, "GetDataProtectionPolicy": _get_data_protection_policy,
+    "DeleteDataProtectionPolicy": _delete_data_protection_policy,
+    "PutIndexPolicy": _put_index_policy, "GetIndexPolicy": _get_index_policy,
+    "DeleteIndexPolicy": _delete_index_policy, "DescribeIndexPolicies": _describe_index_policies,
+    "PutTransformer": _put_transformer, "GetTransformer": _get_transformer, "DeleteTransformer": _delete_transformer,
     "TagLogGroup": _tag_log_group, "UntagLogGroup": _untag_log_group,
     "ListTagsLogGroup": _list_tags_log_group, "TagResource": _tag_resource,
     "UntagResource": _untag_resource, "ListTagsForResource": _list_tags_for_resource,
@@ -773,6 +1263,13 @@ _OPS = {
     "DeleteQueryDefinition": _delete_query_definition,
     "StartQuery": _start_query, "GetQueryResults": _get_query_results,
     "StopQuery": _stop_query, "DescribeQueries": _describe_queries,
+    "UpdateLogGroupDeletionProtection": _update_log_group_deletion_protection,
+    "CreateLogAnomalyDetector": _create_log_anomaly_detector,
+    "ListLogAnomalyDetectors": _list_log_anomaly_detectors,
+    "GetLogAnomalyDetector": _get_log_anomaly_detector,
+    "UpdateLogAnomalyDetector": _update_log_anomaly_detector,
+    "DeleteLogAnomalyDetector": _delete_log_anomaly_detector,
+    "ListAnomalies": _list_anomalies, "UpdateAnomaly": _update_anomaly,
 }
 OPERATIONS = sorted(_OPS)
 
@@ -818,6 +1315,7 @@ def _group_row(g):
             "subscription_filter_count": len(g["subscriptionFilters"]),
             "stored": _human_bytes(g["storedBytes"]),
             "kms_key": g.get("kmsKeyId") or "Not associated",
+            "deletion_protection": bool(g.get("deletionProtectionEnabled", False)),
             "created": _iso_ms(g["creationTime"]),
             "tags": dict(g["tags"])}
 
@@ -846,7 +1344,8 @@ def console_dispatch(store: LogsStore, method: str, path: str, query: dict | Non
                 cls = str(body.get("log_group_class") or "STANDARD")
                 _create_log_group(store, {"logGroupName": name, "tags": body.get("tags") or {},
                                           "logGroupClass": {"Standard": "STANDARD", "Infrequent Access": "INFREQUENT_ACCESS"}.get(cls, cls),
-                                          "kmsKeyId": body.get("kms_key_id") or None})
+                                          "kmsKeyId": body.get("kms_key_id") or None,
+                                          "deletionProtectionEnabled": bool(body.get("deletion_protection"))})
                 days = body.get("retention_in_days")
                 if days not in (None, "", 0, "0", "never"):
                     _put_retention_policy(store, {"logGroupName": name, "retentionInDays": int(days)})
@@ -872,6 +1371,8 @@ def console_dispatch(store: LogsStore, method: str, path: str, query: dict | Non
                         g.pop("retentionInDays", None)
                     else:
                         _put_retention_policy(store, {"logGroupName": name, "retentionInDays": int(days)})
+                if "deletion_protection" in body:
+                    _update_log_group_deletion_protection(store, {"logGroupName": name, "deletionProtectionEnabled": bool(body["deletion_protection"])})
                 store.persist()
                 return 200, _group_row(g)
             return _cerr(405, "method not allowed")

@@ -1,0 +1,103 @@
+{
+ "$doc": "Vyomi capability registry — Azure Network security groups. See aws/s3.json for the contract.",
+ "azure.nsgs.nsg.crud": {
+  "title": "Network security groups (create, get, list, delete) over ARM",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.nsgs.tags": {
+  "title": "Tags",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.nsgs.security_rules": {
+  "title": "Inbound and outbound security rules (Microsoft.Network/networkSecurityGroups/securityRules)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "The 3 default rules per direction (AllowVNetInBound, AllowAzureLoadBalancerInBound, DenyAllInBound, AllowVNetOutBound, AllowInternetOutBound, DenyAllOutBound) are fixed display rows, not stored ARM resources — they can't be edited or deleted, matching the real portal.",
+   "Behaviour comes from the shared netsim evaluator: subnet NSG then NIC NSG inbound (reverse outbound), priorities, the default rules, service tags VirtualNetwork / Internet / AzureLoadBalancer and ASGs — it answers Network Watcher IP flow verify. Azure VMs run on LXD/Multipass offline, not the Docker backend, so NSGs are evaluated, never packet-enforced offline today."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py", "tests/conformance/test_azure_netsim_core.py", "tests/netsim/test_azure.py"]
+ },
+ "azure.nsgs.locks": {
+  "title": "Resource locks (Microsoft.Authorization/locks), scoped to this network security group",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "Locks are only simulated at the resource scope (this network security group); subscription- and resource-group-scoped lock lists are an honest 'Not simulated' gap, same as the real Subscription/Resource group scope-switch buttons."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.nsgs.activity_log": {
+  "title": "Activity log",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Only console/SDK-triggered mutations made since the simulation booted are recorded (no historical backfill); severity/category filtering and the 7/30/90-day timespan picker are not modelled, and `caller` is a fixed placeholder identity rather than the real signed-in principal."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.nsgs.export_template": {
+  "title": "Export template",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Only the ARM Template tab is generated from the live resource; Bicep and Terraform export are not modelled."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.nsgs.iam": {
+  "title": "Access control (IAM)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Role assignments and role definitions are real ARM resources (Microsoft.Authorization/roleAssignments, roleDefinitions), and Check access / My access run the real wildcard + scope-inheritance + notActions + explicit-deny decision — all ENFORCED scoped to this network security group (plus its subscription/resource-group ancestors, matching real Azure's inherited-access view); Roles stays subscription-wide, which matches real Azure (built-in role definitions are listed tenant-wide too). Deny assignments and Classic administrators remain an honest gap — Microsoft Entra Privileged Identity Management and the legacy Azure Service Management administrator list are not modelled. Update: the Deny assignments list, Classic administrators (a read-only list of the subscription's account administrator, like the real API) and My access (the simulated signed-in principal, evaluated with checkAccess) are now real shared tabs (azure.common.*); the gap wording above predates them."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.nsgs.tools": {
+  "title": "Support + Troubleshooting",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": [
+   "Support + Troubleshooting opens a real Microsoft support ticket (Microsoft.Support/supportTickets) against Microsoft's own support organization — a genuine third party Vyomi cannot simulate. Every other 'Diagnose and solve problems' tile (IP flow verify, Next hop, VM connectivity issue, Network configuration diagnostics — azure.nsgs.network_watcher) and Tasks (azure.nsgs.tasks) are built on real backends."
+  ]
+ },
+ "azure.nsgs.effective_rules": {
+  "title": "Effective security rules",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "Lists the merged custom + default inbound/outbound rule sets from both the picked network interface's own network security group and its subnet's network security group, in priority order — the same two-NSG picture `az network nic show-effective-nsg` and the real portal's page show. It lists the rule set; it does not simulate a packet (that's IP flow verify, azure.nsgs.network_watcher). Scoped to network interfaces associated with this network security group directly or through their subnet."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.nsgs.network_watcher": {
+  "title": "Diagnose and solve problems: IP flow verify, Next hop, VM connectivity issue, Network configuration diagnostics (Network Watcher)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "IP flow verify, Next hop, VM connectivity issue (Connection troubleshoot) and Network configuration diagnostics all answer from the shared netsim evaluator (core/netsim) — the same engine behind AWS Reachability Analyzer and GCP Connectivity Tests — scoped to a virtual machine's network interface in this subscription. Vyomi auto-provisions the regional NetworkWatcher_<location> resource the first time any of these tools run in a location, same as the real portal's 'Enable Network Watcher' behaviour. Network configuration diagnostics reports every network security group evaluated on the path (NIC and/or subnet) with its matched rule — the same picture `az network watcher run-configuration-diagnostic` and the real portal's result pane show — but, unlike the real multi-resource version, is scoped to one NIC rather than also reporting route-table/user-defined-route results. There is no standalone Network Watcher service console (browsing/deleting networkWatchers resources) yet, only these diagnostic tools reached from the NSG and Virtual network blades."
+  ],
+  "tests": ["tests/conformance/test_azure_netsim_core.py"]
+ },
+ "azure.nsgs.tasks": {
+  "title": "Tasks",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "Each task (title, status, description) is a real tag on this network security group (hidden-task-<id>, JSON-encoded), written with the same ARM PUT the Tags page uses, so it survives a refresh and a tag written by another tool with that prefix shows up here too; it's hidden from the regular Tags editor, the same way real Azure hides its own internal tags. The cross-resource 'all tasks across every resource in the subscription' aggregate (a separate Azure Resource Graph query) is not built — only the per-resource list this blade shows."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.nsgs.monitoring": {
+  "title": "Alerts, Diagnostic settings, Logs, NSG flow logs",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Diagnostic settings (Microsoft.Insights/diagnosticSettings) is a real ARM extension resource scoped to this network security group: logs/metrics are stored and validated exactly as the real resource requires, but never actually delivered to the configured destination (workspace, storage account or event hub) — there is no agent/telemetry pipeline. Alerts, Logs and NSG flow logs for network security groups remain an honest gap."
+  ],
+  "tests": ["tests/conformance/test_azure_monitor_core.py", "tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.nsgs.associations": {
+  "title": "Network interfaces, Subnets (NSG associations)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "The Network interfaces and Subnets lists are real ARM reads (every Microsoft.Network/networkInterfaces and virtualNetworks/subnets resource in the subscription whose properties.networkSecurityGroup.id matches this network security group), so an association made via ARM/the CLI/another tool shows up here. The 'Associate' button now really works: it picks from every network interface/subnet in the subscription that has no network security group of its own yet (the same constraint the real portal's Associate dialog enforces) and sets its networkSecurityGroup over ARM."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ }
+}

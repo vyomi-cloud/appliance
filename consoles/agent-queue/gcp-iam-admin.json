@@ -1,0 +1,60 @@
+{
+ "cloud": "gcp",
+ "service": "iam-admin",
+ "phase": "depth",
+ "attempt": 2,
+ "goal": "STATIC-PANEL SWEEP (wave 5c). Every listed `targets` entry is a hard-coded <NotSimulated*> box in this service's console with NO capability id \u2014 it is invisible to the capability registry and to the coverage numbers, and many are STALE (the feature is real now). For EACH one: (1) if the backend already supports it (check core/*_core.py + core/capabilities), replace the static box with the real, live UI; (2) otherwise BUILD it on a real backend (Nano + offline; follow the Offline + Nano parity checklist in consoles/AGENT-UI.md) and render it live; (3) only if it is genuinely impossible locally (real money/hardware/third-party service) replace it with <CapabilityContainer id=\"...\"> backed by a core/capabilities entry at level not_simulated with the concrete reason. When done, this service's directory must contain ZERO bare <NotSimulatedContainer>/<NotSimulated*> usages \u2014 the gate now fails on any. Metrics/monitoring panels show real series derived from actual activity (cloudwatch_core.ingest_internal_metric / the cloud's metrics core), never random data. Nothing leaves the simulator. Update capabilities, tests/conformance, smoke.",
+ "note": "WAVE 5c static-panel sweep (orchestrator). User: unimplemented panels (e.g. VPC Service Health / Settings / Additional information / AWS Network Manager) must be real.",
+ "targets": [
+  {
+   "where": "consoles/src/gcp/services/iam-admin/OrgPolicies.jsx:45",
+   "component": "NotSimulated",
+   "props": "feature=\"Simulating a constraint change against existing resources\""
+  },
+  {
+   "where": "consoles/src/gcp/services/iam-admin/OrgPolicies.jsx:46",
+   "component": "NotSimulated",
+   "props": "feature=\"Constraint simulation history\""
+  },
+  {
+   "where": "consoles/src/gcp/services/iam-admin/PolicyAnalyzer.jsx:36",
+   "component": "NotSimulated",
+   "props": "feature=\"Custom Cloud Asset Inventory queries (full query language)\" compact"
+  },
+  {
+   "where": "consoles/src/gcp/services/iam-admin/Iam.jsx:198",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Simulation history\" feature=\"Deny-policy simulation\""
+  },
+  {
+   "where": "consoles/src/gcp/services/iam-admin/AuditLogs.jsx:55",
+   "component": "NotSimulated",
+   "props": "feature=\"Default audit log configuration applied to future services\""
+  },
+  {
+   "where": "consoles/src/gcp/services/iam-admin/WorkforceIdentity.jsx:31",
+   "component": "NotSimulated",
+   "props": "compact feature=\"Connecting an external OIDC/SAML workforce identity provider\""
+  },
+  {
+   "where": "consoles/src/gcp/services/iam-admin/Settings.jsx:26",
+   "component": "NotSimulated",
+   "props": "feature=\"Moving a project to a different resource hierarchy\""
+  },
+  {
+   "where": "consoles/src/gcp/services/iam-admin/Settings.jsx:27",
+   "component": "NotSimulated",
+   "props": "feature=\"Shutting down (deleting) a project\""
+  },
+  {
+   "where": "consoles/src/gcp/services/iam-admin/WorkloadIdentity.jsx:23",
+   "component": "NotSimulated",
+   "props": "compact feature=\"Connecting an external OIDC/SAML identity provider\""
+  },
+  {
+   "where": "consoles/src/gcp/services/iam-admin/WorkloadIdentity.jsx:26",
+   "component": "NotSimulated",
+   "props": "compact feature=\"Attribute mapping and condition configuration for an external provider\""
+  }
+ ]
+}

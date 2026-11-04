@@ -1,0 +1,101 @@
+{
+ "$doc": "Vyomi capability registry — Cloud KMS. See s3.json for the contract. Feature ids share one namespace with AWS; GCP ids start with 'gcp.'.",
+ "gcp.kms.keyring.crud": {
+  "title": "Key rings (create, get, list across locations)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_gcp_kms_core.py"
+  ]
+ },
+ "gcp.kms.key.crud": {
+  "title": "Keys (create, get, list, labels)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_gcp_kms_core.py",
+   "tests/conformance/test_c0b_legacy_parity_core.py"
+  ]
+ },
+ "gcp.kms.key.rotation": {
+  "title": "Key rotation (rotation period + manual Rotate key)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "The rotation period and next rotation time are stored and returned exactly as configured, but Vyomi has no background scheduler — it never rotates a key on its own; use \"Rotate key\" or wait for an external caller to do it."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_kms_core.py"
+  ]
+ },
+ "gcp.kms.key.versions": {
+  "title": "Key versions (create, make primary, enable, disable, destroy, restore)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_gcp_kms_core.py"
+  ]
+ },
+ "gcp.kms.key.permissions": {
+  "title": "Permissions (IAM policy on a key)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "setIamPolicy, :encrypt and :decrypt are enforced against the policy's bindings (an ungranted caller gets PERMISSION_DENIED; a caller with the matching predefined role — cryptoKeyEncrypterDecrypter/Encrypter/Decrypter/Viewer/admin — is let through). getIamPolicy and the key/version CRUD calls stay open to any caller, and conditions, custom roles, and org-policy constraints are not evaluated."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_kms_core.py"
+  ]
+ },
+ "gcp.kms.crypto.symmetric": {
+  "title": "Encrypt / Decrypt",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_gcp_kms_core.py",
+   "tests/conformance/test_c0b_legacy_parity_core.py"
+  ]
+ },
+ "gcp.kms.inventory": {
+  "title": "Key inventory (project-wide key search across all key rings and locations)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_gcp_kms_core.py"
+  ]
+ },
+ "gcp.kms.autokey": {
+  "title": "Autokey (automatic per-resource key ring/key provisioning)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "AutokeyConfig (enable + key project) and CreateKeyHandle are real and enforced: a KeyHandle can only be created once Autokey is ACTIVE for the project, and creating one really provisions an \"autokey-{location}\" key ring and a brand-new CryptoKey (own key material) in the configured key project — not a stored reference.",
+   "The real API configures Autokey on a folder/organization and derives each project's effective config from its ancestry; Vyomi models projects only (no folder/org hierarchy — see core/gcp_resourcemanager_core.py), so AutokeyConfig is a project-scoped singleton instead.",
+   "Other Vyomi services' create flows (Compute disks, Cloud SQL instances, …) don't yet call CreateKeyHandle automatically when a CMEK option is chosen; provision the key handle explicitly via this page or the API first."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_kms_core.py"
+  ]
+ }
+}

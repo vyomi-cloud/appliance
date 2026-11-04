@@ -132,6 +132,51 @@ def run() -> int:
     _check("query WHERE _count 1", qwb["_count"] == 1)
     _check("query WHERE match", qwb["Documents"][0]["id"] == "doc2")
 
+    # 9c. expanded SELECT grammar: AND/OR, CONTAINS/STARTSWITH/ENDSWITH, TOP,
+    # OFFSET/LIMIT, COUNT/VALUE COUNT aggregate, SELECT VALUE projection.
+    cosmos.dispatch(st, "POST", "/dbs/appdb/colls/items/docs", {},
+                    {"content-type": "application/json"},
+                    json.dumps({"id": "doc3", "pk": "p1", "name": "widget-pro", "qty": 12}).encode())
+
+    def _query(qtext):
+        r = cosmos.dispatch(st, "POST", "/dbs/appdb/colls/items/docs", {},
+                            {"x-ms-documentdb-isquery": "true"},
+                            json.dumps({"query": qtext}).encode())
+        return _jbody(r)["Documents"]
+
+    and_ids = sorted(d["id"] for d in _query("SELECT * FROM c WHERE c.pk = 'p1' AND c.qty > 5"))
+    _check("query AND", and_ids == ["doc1", "doc3"])
+
+    or_ids = sorted(d["id"] for d in _query("SELECT * FROM c WHERE c.name = 'gadget' OR c.qty = 12"))
+    _check("query OR", or_ids == ["doc2", "doc3"])
+
+    contains_ids = sorted(d["id"] for d in _query("SELECT * FROM c WHERE CONTAINS(c.name, 'widget')"))
+    _check("query CONTAINS", contains_ids == ["doc1", "doc3"])
+
+    endswith_ids = [d["id"] for d in _query("SELECT * FROM c WHERE ENDSWITH(c.name, 'pro')")]
+    _check("query ENDSWITH", endswith_ids == ["doc3"])
+
+    startswith_ids = sorted(d["id"] for d in _query("SELECT * FROM c WHERE STARTSWITH(c.name, 'widget')"))
+    _check("query STARTSWITH", startswith_ids == ["doc1", "doc3"])
+
+    top_ids = [d["id"] for d in _query("SELECT TOP 2 * FROM c ORDER BY c.qty DESC")]
+    _check("query TOP + ORDER BY", top_ids == ["doc3", "doc1"])
+
+    page_ids = [d["id"] for d in _query("SELECT * FROM c ORDER BY c.qty ASC OFFSET 1 LIMIT 1")]
+    _check("query OFFSET/LIMIT", page_ids == ["doc1"])
+
+    count_rows = _query("SELECT COUNT(1) FROM c WHERE c.pk = 'p1'")
+    _check("query COUNT", count_rows == [{"$1": 2}])
+
+    value_count_rows = _query("SELECT VALUE COUNT(1) FROM c")
+    _check("query VALUE COUNT", value_count_rows == [3])
+
+    value_rows = sorted(_query("SELECT VALUE c.qty FROM c WHERE c.pk = 'p1'"))
+    _check("query SELECT VALUE projection", value_rows == [7, 12])
+
+    delpro = cosmos.dispatch(st, "DELETE", "/dbs/appdb/colls/items/docs/doc3", {}, {}, b"")
+    _check("cleanup doc3 204", delpro.status == 204)
+
     # 10. delete document -> 204, then read 404
     deld = cosmos.dispatch(st, "DELETE", "/dbs/appdb/colls/items/docs/doc1", {}, {}, b"")
     _check("delete doc 204", deld.status == 204)

@@ -716,11 +716,50 @@ def _s3_notification_record_delivery(
             else:
                 record["status"] = "failed"
                 record["error"] = "SQS queue not found"
+        elif target["type"] in ("TopicConfiguration", "EventBridgeConfiguration"):
+            # v4 C0e: SNS topics / the default event bus live in the shared messaging store
+            ok, err = _s3_deliver_messaging(target, bucket, key, event_name, payload or {})
+            if ok is False:
+                record["status"] = "failed"
+                record["error"] = err
         notifications["deliveries"].append(record)
         records.append(record)
     notifications["deliveries"] = notifications["deliveries"][-200:]
     notifications["updatedAt"] = _now()
     return records
+
+
+def _s3_deliver_messaging(target: dict, bucket: str, key: str, event_name: str, payload: dict):
+    """S3 → SNS topic / → EventBridge (default bus) through the shared cores (v4 C0e).
+    Returns (None, "") when the service is opted out (the pre-v4 behaviour: recorded only)."""
+    from core import wire_ingress as _wi
+    try:
+        st = _wi.appliance_router().msg
+        if target["type"] == "TopicConfiguration":
+            if not _wi.is_unified("sns"):
+                return None, ""
+            from core import sns_core
+            ok = sns_core.publish_arn(st, target["destination"], json.dumps(payload, default=str))
+            return ok, "" if ok else "SNS topic not found"
+        if not _wi.is_unified("events") or event_name == "s3:TestEvent":
+            return None, ""   # (AWS sends the s3:TestEvent to SQS / SNS / Lambda only)
+        from core import eventbridge_core
+        rec = (payload.get("Records") or [{}])[0]
+        obj = (rec.get("s3") or {}).get("object") or {}
+        removed = "ObjectRemoved" in event_name
+        detail = {"version": "0", "bucket": {"name": bucket},
+                  "object": {"key": key, **({} if removed else {"size": obj.get("size", 0), "etag": obj.get("eTag", "")}),
+                             **({"version-id": obj["versionId"]} if obj.get("versionId") not in (None, "", "null") else {}),
+                             "sequencer": obj.get("sequencer", "")},
+                  "request-id": ((rec.get("responseElements") or {}).get("x-amz-request-id") or ""),
+                  "requester": AWS_ACCOUNT_ID, "reason": event_name.split(":")[-1]}
+        r = eventbridge_core.dispatch(st, "AWSEvents.PutEvents", {"Entries": [{
+            "Source": "aws.s3", "DetailType": "Object Deleted" if removed else "Object Created",
+            "Resources": [f"arn:aws:s3:::{bucket}"], "Detail": json.dumps(detail)}]},
+            lam_store=_wi._lam_store(_wi.appliance_router()))
+        return r.status == 200, ""
+    except Exception as exc:   # never fail the S3 write over a notification
+        return False, str(exc)
 
 
 def _s3_emit_event(bucket: str, key: str, event_name: str, version: dict | None = None, source: str = "") -> dict:
@@ -1064,7 +1103,29 @@ def _aws_query_target_service(request: Request) -> str:
         return "states"
     if target.startswith("AmazonSQS."):
         return "sqs"
+    if target.startswith("AmazonDAXV3."):
+        return "dax"
+    if target.startswith("AWSRAMFrontendService."):
+        return "ram"
+    if target.startswith("NetworkFirewall_20201112."):
+        return "network-firewall"
+    if target.startswith("com.amazonaws.cloudtrail."):
+        return "cloudtrail"
+    if target.startswith("Route53Resolver."):
+        return "route53resolver"
     return ""
+
+
+# Services the appliance serves ONLY through the shared router (core/aws_wire_router.py) over
+# its durable stores (core/wire_ingress.appliance_router → offline_runtime_stores): the JSON /
+# Query ones on POST / and the REST ones whose paths would otherwise fall into the S3 catch-all.
+_ROUTER_QUERY_SERVICES = ("dax", "ram", "cloudformation", "network-firewall", "route53resolver", "cloudtrail")
+_ROUTER_REST_SERVICES = ("dlm", "pipes", "apigateway", "s3tables", "s3vectors", "rbin", "backup")
+
+
+def _signed_service(request: Request) -> str:
+    m = _AWS_CRED_SCOPE_RE.search(request.headers.get("authorization", "") or "")
+    return m.group(1).strip().lower() if m else ""
 
 
 # Query-protocol Action -> service for UNSIGNED requests (plain curl, docs
@@ -1089,6 +1150,13 @@ _UNSIGNED_QUERY_ACTION = {
     "CreateQueue": "sqs", "DeleteQueue": "sqs", "ListQueues": "sqs", "GetQueueUrl": "sqs",
     "SendMessage": "sqs", "ReceiveMessage": "sqs", "DeleteMessage": "sqs",
     "GetQueueAttributes": "sqs", "SetQueueAttributes": "sqs", "PurgeQueue": "sqs",
+    "SendMessageBatch": "sqs", "DeleteMessageBatch": "sqs", "ChangeMessageVisibility": "sqs",
+    "ChangeMessageVisibilityBatch": "sqs", "ListQueueTags": "sqs", "TagQueue": "sqs", "UntagQueue": "sqs",
+    "ListDeadLetterSourceQueues": "sqs",
+    # SNS (mirrors core/aws_wire_router._QUERY_ACTION)
+    "CreateTopic": "sns", "DeleteTopic": "sns", "ListTopics": "sns", "Subscribe": "sns",
+    "Unsubscribe": "sns", "ListSubscriptions": "sns", "ListSubscriptionsByTopic": "sns", "Publish": "sns",
+    "GetTopicAttributes": "sns", "SetSubscriptionAttributes": "sns", "GetSubscriptionAttributes": "sns",
     # EC2 (compute; VPC actions are matched via _EC2_VPC_ACTIONS in register())
     "RunInstances": "ec2", "DescribeInstances": "ec2", "TerminateInstances": "ec2",
     "StartInstances": "ec2", "StopInstances": "ec2", "DescribeImages": "ec2",
@@ -1100,12 +1168,94 @@ _UNSIGNED_QUERY_ACTION = {
 # ---------------------------------------------------------------------------
 
 
+# Bucket sub-resources stored verbatim (S3 round-trips the document). Anything listed in
+# _S3_SUB_UNSUPPORTED answers 501 NotImplemented — it must never fall through to
+# CreateBucket (PUT → 409) or DeleteBucket (DELETE → bucket gone).
+_S3_SUB_STORED = {
+    "encryption": ("ServerSideEncryptionConfigurationNotFoundError", "The server side encryption configuration was not found."),
+    "publicAccessBlock": ("NoSuchPublicAccessBlockConfiguration", "The public access block configuration was not found."),
+    "policy": ("NoSuchBucketPolicy", "The bucket policy does not exist."),
+    "ownershipControls": ("OwnershipControlsNotFoundError", "The bucket ownership controls were not found."),
+}
+_S3_SUB_UNSUPPORTED = ("website", "logging", "replication", "accelerate", "requestPayment", "object-lock",
+                       "intelligent-tiering", "inventory", "analytics", "metrics")
+
+
+def _s3_sub_unsupported(params: dict) -> str | None:
+    return next((k for k in _S3_SUB_UNSUPPORTED if k in params), None)
+
+
+def _register_unified_s3(app: FastAPI) -> None:
+    """v4 C0: the native S3 wire (bucket + object level) is served by the shared
+    conformance core (core/s3_object_core.py) over the appliance's own S3 state
+    (core/appliance_stores.py) — the same engine Nano and the consoles use. The
+    legacy handlers below stay reachable with VYOMI_UNIFIED_INGRESS_SERVICES
+    excluding "s3" (or VYOMI_LEGACY_WIRE=1)."""
+    from core import wire_ingress as _wi
+
+    methods = ["GET", "PUT", "POST", "DELETE", "HEAD", "PATCH"]   # PATCH: only the GCP REST fallback in _serve
+
+    async def _serve(bucket: str, request: Request) -> Response:
+        from routes import aws_messaging_unified as _amu
+        if _amu.queue_path_request(request):
+            # v4 C0e: an SDK POSTing to a queue URL the appliance handed out (/<account>/<queue>)
+            return await _amu.serve_queue_path(request)
+        await _wi.track_activity(request)   # IAM Last Accessed (a user's own access key)
+        if _signed_service(request) in _ROUTER_REST_SERVICES:
+            # DLM (/policies), EventBridge Pipes (/v1/pipes), API Gateway v1 account-level paths
+            # (/apikeys, /usageplans, …): REST paths with no S3 meaning, told apart by SigV4 scope.
+            return await _wi.serve(_wi.new_services_router() or _wi.appliance_router(), request)
+        path = request.scope.get("path") or request.url.path
+        if path.lstrip("/").split("/", 1)[0] in ("v1", "v1beta1", "v2", "v3"):
+            # A GCP REST family with no dedicated offline route: these catch-alls are registered
+            # LAST, so nothing else claimed it. If the shared router knows the path, serve it there
+            # (Nano's behaviour) over the same durable stores, instead of a bogus S3 NoSuchBucket.
+            from core.aws_wire_router import _gcp_service
+            if _gcp_service(path):
+                from core import app_context as _ctx
+                _tok = _ctx.REQUEST_PROVIDER.set("gcp")
+                try:
+                    return await _wi.serve(_wi.new_services_router() or _wi.appliance_router(), request, path=path)
+                finally:
+                    _ctx.REQUEST_PROVIDER.reset(_tok)
+        if request.method == "PATCH" and bucket != "v20180820":
+            raise HTTPException(status_code=405, detail="Method Not Allowed")   # S3 has no PATCH (S3 Control does: MRAP routes)
+        if _is_reserved_bucket(bucket):
+            raise HTTPException(status_code=404, detail="Not found")
+        if request.method == "POST" and _wi.is_unified("rds"):
+            from core import rds_data_core as _rdc
+            if _rdc.is_data_api_path(path):   # RDS Data API (/Execute, /BeginTransaction, …) — never a bucket
+                return await _wi.serve_rds(request, path=path)
+        if request.method == "GET" and "/" in path.lstrip("/"):
+            # pre-v4 parity: a GCS XML-API style download (`/<gcs-bucket>/<object>`) of a
+            # bucket that is not an S3 bucket is answered from the GCS state.
+            r = _wi.appliance_router()
+            if not r.s3.bucket_exists(bucket) and r.gcs.bucket_exists(bucket):
+                key = path.lstrip("/").split("/", 1)[1]
+                ent = r.gcs.bucket_objects(bucket).get(key)
+                if ent is not None:
+                    from core.gcp_storage_core import _entry_bytes
+                    return Response(content=_entry_bytes(r.gcs, bucket, key, ent),
+                                    media_type=ent.get("contentType") or "application/octet-stream")
+        return await _wi.serve_service("s3", request, path=path)
+
+    @app.api_route("/{bucket}", methods=methods, include_in_schema=False)
+    async def s3_bucket_unified(bucket: str, request: Request) -> Response:
+        return await _serve(bucket, request)
+
+    @app.api_route("/{bucket}/{key:path}", methods=methods, include_in_schema=False)
+    async def s3_object_unified(bucket: str, key: str, request: Request) -> Response:
+        return await _serve(bucket, request)
+
+
 def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
     """Register S3 REST API routes and the root AWS query-protocol dispatcher.
 
     CRITICAL: Call this LAST so the catch-all /{bucket} and
     /{bucket}/{key:path} routes don't shadow other routes.
     """
+    from core import wire_ingress as _wi
+    _s3_unified = _wi.is_unified("s3")
 
     _aws_xamz_dispatchers = aws_xamz_dispatchers or {}
 
@@ -1130,11 +1280,17 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
     async def aws_query_root(request: Request) -> Response:
         """Root dispatch for real AWS SDK/CLI query + JSON protocol requests."""
         service = _aws_query_target_service(request)
+        await _wi.track_activity(request)   # IAM Last Accessed (a user's own access key)
         if not service:
             # Unsigned Query-protocol request: infer the service from Action.
             _p = await _srv()._ec2_query_params(request)
             _a = str(_p.get("Action", "")).strip()
             service = "ec2" if _a in _EC2_VPC_ACTIONS else _UNSIGNED_QUERY_ACTION.get(_a, "")
+        if service == "stepfunctions":   # the v4 console signs Step Functions as "stepfunctions"
+            service = "states"
+        if service in _ROUTER_QUERY_SERVICES:
+            # DAX / RAM / CloudFormation: the shared cores over durable space slots, like Nano.
+            return await _wi.serve(_wi.appliance_router(), request)
         if service == "states":
             # Step Functions (X-Amz-Target AWSStepFunctions.*) — in-process engine, shared with the console REST.
             from core import stepfunctions_core as _sfn
@@ -1148,6 +1304,8 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
         if service == "ec2":
             params = await _srv()._ec2_query_params(request)
             if str(params.get("Action", "")).strip() in _EC2_VPC_ACTIONS:
+                if _srv()._vpc_engine_is_core():   # v4: ONE VPC engine (core/vpc_core) offline + Nano
+                    return _srv().api_vpc_core_query(params)
                 return await _srv().api_vpc_query(request)
             return await _srv().api_ec2_query(request)
         if service == "kinesis":
@@ -1159,6 +1317,10 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
         if service == "monitoring":
             from routes.aws_cloudwatch import handle as _cw_handle
             return await _cw_handle(request)
+        if service in ("sqs", "sns", "events") and _wi.is_unified(service):
+            # v4 C0e — SQS (JSON + Query) / SNS / EventBridge on the shared cores over ONE
+            # messaging store (core/appliance_stores.AppStateMessagingStore), like Nano.
+            return await _wi.serve_service(service, request)
         if service == "sqs":
             return await _srv().api_sqs_query(request)
         if service == "elasticloadbalancing":
@@ -1166,14 +1328,30 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
             from routes.aws_elbv2 import STORE as _elb_store
             _elb_r = _elb.dispatch(_elb_store, await _srv()._ec2_query_params(request))
             return Response(content=_elb_r.body, status_code=_elb_r.status, media_type="text/xml")
+        if service == "autoscaling":
+            from core import autoscaling_core as _asg
+            from routes.aws_autoscaling import STORE as _asg_store
+            _asg_r = _asg.dispatch(_asg_store, await _srv()._ec2_query_params(request))
+            return Response(content=_asg_r.body, status_code=_asg_r.status, media_type="text/xml")
         if service == "sns":
             from routes.aws_sns import sns_query as _sns_wire
             return await _sns_wire(request)
+        if service == "rds" and _wi.is_unified("rds"):
+            # v4 C0h — AWS RDS on the shared core (core/rds_core.py) over the space-scoped
+            # appliance state, like Nano: every action rds_core serves (export tasks → the
+            # simulator's own S3, event subscriptions, certificates, …). The pre-v4 handler
+            # stays reachable with VYOMI_UNIFIED_INGRESS_SERVICES excluding "rds".
+            return await _wi.serve_rds(request)
         if service == "rds":
             return await _srv().api_rds_query(request)
         if service == "dynamodb":
             from routes.aws_dynamodb import api_dynamodb_aws as _ddb_handler
             return await _ddb_handler(request)
+        if service == "iam" and _wi.is_unified("iam"):
+            # v4 C0g — AWS IAM (Query protocol) on the shared core (core/iam_core.py) over the
+            # space-scoped appliance state, like Nano; the pre-v4 handler stays reachable with
+            # VYOMI_UNIFIED_INGRESS_SERVICES excluding "iam" (or VYOMI_LEGACY_WIRE=1).
+            return await _wi.serve_service("iam", request)
         if service == "iam":
             return await _srv().api_iam_query(request)
         if service == "sts":
@@ -1190,6 +1368,11 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
             _srv()._ssm_usage(_tgt, _payload, _r)
             return Response(content=json.dumps(_r.body), status_code=_r.status,
                             media_type="application/x-amz-json-1.1", headers=dict(_r.headers or {}))
+        if service in ("kms", "secretsmanager") and _wi.is_unified(service):
+            # v4 C0c — AWS KMS / Secrets Manager on the shared cores (core/kms_core.py,
+            # core/secrets_core.py) over the space-scoped appliance state; the classic
+            # console REST (routes/aws_secrets_kms_unified.py) reads the same stores.
+            return await _wi.serve_service(service, request)
         if service in ("kms", "secretsmanager", "events"):
             target = request.headers.get("x-amz-target", "")
             prefix = target.split(".", 1)[0] if "." in target else ""
@@ -1216,6 +1399,13 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
                 )
             return Response(content=json.dumps(resp), media_type="application/x-amz-json-1.1",
                             status_code=400 if isinstance(resp, dict) and "__type" in resp else 200)
+        # Anything else the shared router recognises (by SigV4 scope / X-Amz-Target / Action) is
+        # served by it over the appliance's durable stores — never a router-only feature offline.
+        _r = _wi.appliance_router()
+        from core.aws_wire_router import _lower_headers as _lh
+        if _r.service_of("POST", "/", _lh(dict(request.headers)), await request.body(),
+                         dict(request.query_params)) not in (None, "s3"):
+            return await _wi.serve(_r, request)
         params = await _srv()._ec2_query_params(request)
         action = str(params.get("Action", "")).strip()
         hint = "" if service else (
@@ -1242,10 +1432,15 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
             return await aws_query_root(request)
         accept = request.headers.get("accept", "")
         user_agent = request.headers.get("user-agent", "")
-        if "text/html" in accept or "Mozilla" in user_agent:
+        # A SigV4-signed request (or one the v4 console sent through /_wire) is an S3 call even
+        # from a browser; only an unsigned browser navigation gets the launch page.
+        signed = "AWS4-HMAC-SHA256" in request.headers.get("authorization", "") or request.scope.get("vyomi.wire_prefix")
+        if not signed and ("text/html" in accept or "Mozilla" in user_agent):
             with open(_PRICING_HTML, "rb") as f:
                 return Response(content=f.read(), media_type="text/html", headers={"Cache-Control": "no-store, max-age=0"})
 
+        if _s3_unified:
+            return await _wi.serve_service("s3", request, path="/")
         now = _now()
         xml_parts = [
             '<?xml version="1.0" encoding="UTF-8"?>',
@@ -1257,6 +1452,10 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
             xml_parts.append(f"<Bucket><Name>{name}</Name><CreationDate>{meta['created']}</CreationDate></Bucket>")
         xml_parts += ["</Buckets>", "</ListAllMyBucketsResult>"]
         return _xml_response("".join(xml_parts))
+
+    if _s3_unified:
+        _register_unified_s3(app)
+        return
 
     # ── S3 REST API — bucket level ──────────────────────────────────────
 
@@ -1352,10 +1551,18 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
             return _empty_response(200)
 
         # Encryption
-        if "encryption" in params:
+        sub = next((k for k in _S3_SUB_STORED if k in params), None)
+        if sub:
             if not _bucket_exists(bucket):
                 return _error_xml("NoSuchBucket", "The specified bucket does not exist.", f"/{bucket}", 404)
-            return _empty_response(200)
+            body = (await request.body()).decode("utf-8", errors="replace").strip()
+            if not body:
+                return _error_xml("MalformedXML" if sub != "policy" else "MalformedPolicy", "The request body is empty.", f"/{bucket}", 400)
+            buckets[bucket].setdefault("cfg", {})[sub] = body
+            return _empty_response(204 if sub == "policy" else 200)
+        unsupported = _s3_sub_unsupported(params)
+        if unsupported:
+            return _error_xml("NotImplemented", f"Vyomi does not implement the bucket {unsupported} sub-resource yet.", f"/{bucket}?{unsupported}", 501)
 
         # CreateBucket
         err = _validate_bucket_name(bucket)
@@ -1502,9 +1709,18 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
             )
             return _xml_response(xml)
 
-        if "encryption" in params:
-            return _error_xml("ServerSideEncryptionConfigurationNotFoundError",
-                              "The server side encryption configuration was not found.", f"/{bucket}", 404)
+        sub = next((k for k in _S3_SUB_STORED if k in params), None)
+        if sub:
+            doc = buckets[bucket].get("cfg", {}).get(sub)
+            if doc is None:
+                code, msg = _S3_SUB_STORED[sub]
+                return _error_xml(code, msg, f"/{bucket}", 404)
+            if sub == "policy":
+                return Response(content=doc, status_code=200, media_type="application/json")
+            return _xml_response(doc)
+        unsupported = _s3_sub_unsupported(params)
+        if unsupported:
+            return _error_xml("NotImplemented", f"Vyomi does not implement the bucket {unsupported} sub-resource yet.", f"/{bucket}?{unsupported}", 501)
 
         if "lifecycle" in params:
             stored_lifecycle = buckets[bucket].get("lifecycle")
@@ -1574,6 +1790,13 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
         if "tagging" in params:
             buckets[bucket].pop("tags", None)
             return _empty_response(204)
+        sub = next((k for k in _S3_SUB_STORED if k in params), None)
+        if sub:
+            buckets[bucket].get("cfg", {}).pop(sub, None)
+            return _empty_response(204)
+        unsupported = _s3_sub_unsupported(params)
+        if unsupported:
+            return _error_xml("NotImplemented", f"Vyomi does not implement the bucket {unsupported} sub-resource yet.", f"/{bucket}?{unsupported}", 501)
         if objects.get(bucket):
             return _error_xml("BucketNotEmpty", "The bucket you tried to delete is not empty.", f"/{bucket}", 409)
         del buckets[bucket]

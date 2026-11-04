@@ -13,29 +13,42 @@
 // tests / advanced use):
 //   relay → worker : {id, method, path, query, headers, body(base64)}
 //   worker → relay : {id, status, headers, body(base64)}
-import { loadPyodide } from "https://cdn.jsdelivr.net/pyodide/v0.26.2/full/pyodide.mjs";
 import { installPGlite } from "../pglite-loader.js";
+import { installParquet } from "../parquet/parquet-loader.js";   // RDS exports: real Parquet (lazy)
 
-const PYODIDE_INDEX = "https://cdn.jsdelivr.net/pyodide/v0.26.2/full/";
+// Same-origin runtime first (wasm/fetch_pyodide.py vendors it at <bundle>/vendor/pyodide/),
+// the public CDN as fallback — a CDN stall would otherwise leave the relay unable to boot.
+const PYODIDE_CDN = "https://cdn.jsdelivr.net/pyodide/v0.26.2/full/";
+const PYODIDE_LOCAL = new URL("../vendor/pyodide/", import.meta.url).href;
+const pyodideIndex = () => fetch(PYODIDE_LOCAL + "pyodide.mjs", { method: "HEAD" })
+  .then((r) => (r.ok ? PYODIDE_LOCAL : PYODIDE_CDN), () => PYODIDE_CDN);
 // Cores live at ../core/ relative to THIS worker (works at web root AND /nano/).
 const CORE_BASE = new URL("../core/", self.location.href).href.replace(/\/$/, "");
 const CORES = [
-  "object_store.py", "s3_object_core.py", "nosql_store.py", "dynamodb_core.py",
+  "object_store.py", "s3_object_core.py", "s3_tables_core.py", "s3_insights_core.py", "s3_ext_core.py", "s3_vectors_core.py", "backup_core.py", "organizations_core.py", "qr_png.py", "nosql_store.py", "dynamodb_expr.py", "dynamodb_core.py", "dax_core.py",
   "kms_keystore.py", "kms_core.py", "kv_store.py", "secrets_core.py",
   "sql_store.py", "rds_core.py", "iam_store.py", "iam_core.py",
   "messaging_store.py", "sqs_core.py", "sns_core.py", "elbv2_core.py", "rds_data_core.py",
   // GCP + Azure cores — imported by aws_wire_router (must load before it).
-  "gcp_project.py", "gcp_storage_core.py", "gcp_firestore_core.py", "gcp_kms_core.py",
-  "gcp_secretmanager_core.py", "gcp_pubsub_core.py", "gcp_iam_core.py", "gcp_cloudsql_core.py", "gcp_artifactregistry_core.py",
+  "gcp_project.py", "function_shims.py", "gcp_console_tabs.py", "nano_triggers.py",   // main-side Nano cores (merged)
+  "gcp_storage_core.py", "gcp_firestore_core.py", "gcp_kms_core.py",
+  "gcp_secretmanager_core.py", "gcp_pubsub_core.py", "gcp_iam_core.py", "gcp_wif_core.py", "gcp_cloudsql_core.py", "gcp_artifactregistry_core.py", "gcp_logging_core.py", "gcp_compute_core.py", "instance_catalog.py", "gcp_compute_instances_core.py", "gcp_compute_ext_core.py", "gcp_resourcemanager_core.py", "gcp_pam_core.py",
   "azure_blob_core.py", "azure_cosmos_core.py", "azure_keyvault_secrets_core.py",
-  "azure_keyvault_keys_core.py", "azure_queue_core.py", "azure_servicebus_core.py",
-  "gcp_compute_core.py", "function_shims.py", "gcp_console_tabs.py", "nano_triggers.py", "eventbridge_core.py", "lambda_core.py", "apigateway_core.py", "apigatewayv2_core.py", "apigatewayv2_gateway.py", "vpc_core.py", "kinesis_core.py", "cloudwatch_core.py", "logs_core.py", "ssm_core.py", "stepfunctions_core.py", "gcp_cloudscheduler_core.py", "gcp_container_core.py", "gcp_redis_core.py", "gcp_iamcredentials_core.py", "gcp_monitoring_core.py",
-  "azure_sql_core.py", "azure_iam_core.py",
-  "azure_app_core.py", "azure_appconfiguration_core.py", "azure_cognitiveservices_core.py", "azure_dns_core.py", "azure_monitor_core.py", "azure_operationalinsights_core.py", "azure_arm_ext_core.py",
-  "azure_arm_data.py", "azure_arm_core.py",   // Azure ARM control plane — nano_registry imports it
+  "azure_keyvault_keys_core.py", "azure_keyvault_certificates_core.py", "azure_queue_core.py", "azure_table_core.py", "azure_servicebus_core.py",
+  "eventbridge_core.py", "eventbridge_schemas_core.py", "scheduler_core.py", "lambda_core.py", "apigateway_core.py", "apigatewayv2_core.py", "apigatewayv2_gateway.py", "vpc_core.py", "vpc_vpn_core.py", "vpc_extras_core.py", "ec2_ops_core.py", "netfw_core.py", "dnsfw_core.py", "autoscaling_core.py", "ram_core.py", "dlm_core.py", "kinesis_core.py", "cloudwatch_core.py", "cloudformation_core.py", "logs_core.py", "ssm_core.py", "stepfunctions_core.py", "gcp_cloudscheduler_core.py", "gcp_container_core.py", "gcp_redis_core.py", "gcp_iamcredentials_core.py", "gcp_monitoring_core.py", "gcp_run_core.py", "gcp_gke_dataplane_core.py",
+  "azure_sql_core.py", "azure_iam_core.py", "azure_acr_core.py", "azure_graph_core.py",
+  "azure_app_core.py", "azure_webapp_core.py", "azure_appconfiguration_core.py", "azure_cognitiveservices_core.py", "azure_dns_core.py", "azure_monitor_core.py", "azure_operationalinsights_core.py",
+  "azure_eventgrid_core.py", "azure_locks_core.py", "azure_templates_core.py", "azure_health_core.py",
+  "k8s_yaml.py", "azure_aks_k8s_core.py", "kubescape_catalog.py", "kubescape_core.py", "azure_security_core.py",   // AKS objects + Defender for Cloud
+  "azure_arm_ext_core.py", "azure_keyvault_x509_core.py",   // main-side Azure cores (merged)
+  "cost_model.py", "azure_cost_core.py", "azure_arm_data.py", "azure_storage_ext_core.py", "azure_policy_core.py", "azure_arm_core.py",   // Azure ARM control plane — nano_registry imports it
   "aws_wire_router.py",
   "nano_events.py", "nano_registry.py", "nano_persist.py",   // shared registry + store persistence (console↔CLI parity)
 ];
+
+// core sub-packages (core/netsim: the shared network engine the VPC / Compute / ARM cores import
+// lazily for reachability analysis) — vendored by wasm/build_cores.py CORE_PKGS
+const CORE_PKGS = ["netsim/__init__.py", "netsim/model.py", "netsim/evaluate.py", "netsim/from_aws.py", "netsim/from_gcp.py", "netsim/from_azure.py", "netsim/flowlogs.py", "netsim/enforce.py"];
 
 const bc = new BroadcastChannel("nano-relay");
 // Defaults; the page (footer) may override any of these via the `start` message
@@ -123,14 +136,25 @@ async function bootPyodide() {
   if (booting) return booting;
   booting = (async () => {
     log("loading Pyodide…", "dim");
+    const PYODIDE_INDEX = await pyodideIndex();
+    const { loadPyodide } = await import(PYODIDE_INDEX + "pyodide.mjs");
     py = await loadPyodide({ indexURL: PYODIDE_INDEX });   // explicit indexURL: required in a worker
     try { await py.loadPackage("sqlite3"); } catch (e) { log("sqlite3 load skipped: " + e, "dim"); }
     await installTzdata();
     const hasPg = await installPGlite();
     py.globals.set("_USE_PGLITE", hasPg);
+  try { installParquet(new URL("../parquet/", import.meta.url).href); } catch (e) { /* exports then fail with a clear cause */ }
+    try {   // Kubescape (OPA-wasm) evaluator for Defender for Cloud's Kubernetes posture — optional
+      const { installKubescape } = await import(new URL("../kubescape/ks-eval.mjs", import.meta.url).href);
+      await installKubescape(new URL("../kubescape/", import.meta.url).href);
+    } catch (e) { log("Kubescape evaluator unavailable: " + e, "dim"); }
     py.FS.mkdir("/core"); py.FS.writeFile("/core/__init__.py", "");
     for (const f of CORES)
       py.FS.writeFile("/core/" + f, await (await fetch(CORE_BASE + "/" + f)).text());
+    for (const f of CORE_PKGS) {
+      try { py.FS.mkdir("/core/" + f.split("/")[0]); } catch (e) { /* exists */ }
+      py.FS.writeFile("/core/" + f, await (await fetch(CORE_BASE + "/" + f)).text());
+    }
     py.runPython(`
 import sys, json, base64; sys.path.insert(0, "/")
 from core.aws_wire_router import AwsWireRouter

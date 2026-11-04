@@ -1,0 +1,31 @@
+{
+ "cloud": "gcp",
+ "service": "logs",
+ "goal": "STATIC-PANEL SWEEP (wave 5c). Every listed `targets` entry is a hard-coded <NotSimulated*> box in this service's console with NO capability id \u2014 it is invisible to the capability registry and to the coverage numbers, and many are STALE (the feature is real now). For EACH one: (1) if the backend already supports it (check core/*_core.py + core/capabilities), replace the static box with the real, live UI; (2) otherwise BUILD it on a real backend (Nano + offline; follow the Offline + Nano parity checklist in consoles/AGENT-UI.md) and render it live; (3) only if it is genuinely impossible locally (real money/hardware/third-party service) replace it with <CapabilityContainer id=\"...\"> backed by a core/capabilities entry at level not_simulated with the concrete reason. When done, this service's directory must contain ZERO bare <NotSimulatedContainer>/<NotSimulated*> usages \u2014 the gate now fails on any. Metrics/monitoring panels show real series derived from actual activity (cloudwatch_core.ingest_internal_metric / the cloud's metrics core), never random data. Nothing leaves the simulator. Update capabilities, tests/conformance, smoke.",
+ "must_build": [
+  "Every page in ui-spec/gcp/logs.json (9 pages; nav: Overview, Dashboards, Application monitoring, Explore, Detect, Configure, Observability Scopes, Release Notes)",
+  "Backend: Logs Explorer over Vyomi's real event/log stream (grep core/ for logging/event log); query by resource/severity; log router/sinks stored as config",
+  "List / create / detail / edit / delete round-trips through the native API the SDK and CLI use"
+ ],
+ "always": [
+  "Every page wired to the native API on /_wire (no static data); liveness fixtures for every list/detail page",
+  "core/capabilities/gcp/logs.json: one entry per console section with an honest level + tests; tests/conformance/test_capabilities.py must pass",
+  "Capability feature ids MUST start with 'gcp.' (e.g. 'gcp.logs.<section>') \u2014 ids share one namespace with the AWS registry",
+  "Read the 'Cloud lenses' section of consoles/AGENT-UI.md first \u2014 use this cloud's kit, not Cloudscape"
+ ],
+ "attempt": 2,
+ "phase": "depth",
+ "note": "WAVE 5c static-panel sweep (orchestrator). User: unimplemented panels (e.g. VPC Service Health / Settings / Additional information / AWS Network Manager) must be real.",
+ "targets": [
+  {
+   "where": "consoles/src/gcp/services/logs/CreateSink.jsx:86",
+   "component": "NotSimulated",
+   "props": "compact feature={svc[1]} note=\"This destination type isn't backed by a real integration yet \u2014 pick Cloud Logging bucket, BigQuery dataset, Cloud Storage bucket or Pub/Sub topic.\""
+  },
+  {
+   "where": "consoles/src/gcp/services/logs/LogsExplorer.jsx:106",
+   "component": "NotSimulated",
+   "props": "compact feature=\"Correlate by\" note=\"Groups results by a shared trace ID across multiple log streams; Vyomi records trace IDs on entries but doesn't build this cross-log correlation view.\""
+  }
+ ]
+}

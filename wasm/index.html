@@ -29,6 +29,12 @@
   </script>
 
   <meta charset="utf-8">
+  <!-- The standalone launch/landing page is retired — the console at /clouds is
+       the product surface. Redirect browsers there BEFORE this page renders, so
+       the old landing (and its legacy purple sidebar) never shows. SDK / S3
+       clients never reach this HTML — the root handler serves them XML. -->
+  <script>location.replace("clouds.html");</script>
+  <meta http-equiv="refresh" content="0; url=/clouds">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Vyomi — Local multi-cloud dev platform</title>
   <link rel="icon" type="image/png" sizes="32x32" href="assets/brand/favicon-32.png">
@@ -862,14 +868,11 @@
        prefers-reduced-motion: skip the animation entirely. */
     .vyomi-splash {
       position: fixed; inset: 0; z-index: 10000;
-      display: none; align-items: center; justify-content: center;
+      display: flex; align-items: center; justify-content: center;
       flex-direction: column; gap: 24px;
       background: #05071a;
       opacity: 0; animation: vyomi-splash-fade 5000ms ease-in-out forwards;
     }
-    /* JS adds .vyomi-splash-on to show it — explicit class beats the
-       [hidden]-attribute-vs-display:flex quirk that could keep it invisible. */
-    .vyomi-splash.vyomi-splash-on { display: flex; }
     .vyomi-splash .vyomi-splash-logo {
       width: 280px; max-width: 60vw; height: auto; display: block;
       transform: translateY(8px) scale(0.96);
@@ -1121,38 +1124,23 @@
 
   <script>
     // Splash gate — run BEFORE any heavy SPA logic so the user sees brand
-    // immediately. Shown ONCE, on the very first launch; a persistent
-    // localStorage flag `vyomi.nano.splash.seen` suppresses it on every
-    // subsequent visit (no expiry — unlike the old 24h cookie). The
-    // `?nosplash=1` query param also suppresses (screenshot/conformance).
+    // immediately. Cookie `vyomi_splash_seen=v1` valid 24h suppresses on
+    // repeat visits. The `?nosplash=1` query param also suppresses (handy
+    // for screenshot/conformance harness).
     (function() {
       try {
         var url = new URL(window.location.href);
         if (url.searchParams.get('nosplash') === '1') return;
-        // `?splash=1` force-shows it every time (ignores the one-time flag) —
-        // handy to preview/verify without clearing storage.
-        var force = url.searchParams.get('splash') === '1';
-        // nano-sw.js reloads an UNCONTROLLED load (up to 4×) to gain service-worker
-        // control. Painting the splash on those loads would flash it and consume
-        // its one-time flag before the real (controlled) load — so wait until the
-        // page is SW-controlled (or SW is unsupported). `?splash=1` bypasses.
-        var controlled = !('serviceWorker' in navigator) || !!navigator.serviceWorker.controller;
-        if (!controlled && !force) return;
-        // Bump SPLASH_VER to re-show the splash ONCE to everyone after a
-        // change (new branding, etc.); it then persists and never repeats.
-        var KEY = 'vyomi.nano.splash.seen', SPLASH_VER = 'v4';
-        var seen = false;
-        try { seen = localStorage.getItem(KEY) === SPLASH_VER; } catch (_) {}
-        if (seen && !force) return;
-        // The splash now lives on clouds.html — the page /nano/ redirects logged-in
-        // users to. A launch-page splash never survives that redirect, and setting
-        // the one-time flag here would suppress it on clouds.html. So do nothing on
-        // a normal load; ?splash=1 still previews it here.
-        if (!force) return;
+        if (document.cookie.split(';').some(function(c){
+          return c.trim().indexOf('vyomi_splash_seen=v1') === 0;
+        })) return;
         var el = document.getElementById('vyomi-splash');
         if (!el) return;
         el.hidden = false;
-        el.classList.add('vyomi-splash-on');
+        // Set cookie immediately so a fast refresh doesn't re-show.
+        var d = new Date(); d.setTime(d.getTime() + 24 * 3600 * 1000);
+        document.cookie = 'vyomi_splash_seen=v1; expires=' + d.toUTCString() +
+                          '; path=/; SameSite=Lax';
         // Remove from DOM after the animation completes so it stops
         // capturing scroll/focus.
         setTimeout(function() { try { el.remove(); } catch(_) {} }, 5100);
@@ -1999,7 +1987,7 @@
       // services
       const services = tier.service_categories_unlocked;
       if (services === 'ALL') {
-        ul.appendChild(li('check', `<strong>All <span data-svc-total>${window.VYOMI_SVC_TOTAL || 36}</span> services</strong> × ${key === 'pro' ? 'one chosen cloud' : 'all 3 clouds'}`));
+        ul.appendChild(li('check', `<strong>All 35 services</strong> × ${key === 'pro' ? 'one chosen cloud' : 'all 3 clouds'}`));
       } else {
         const count = Array.isArray(services) ? services.length : 0;
         ul.appendChild(li('check', `<strong>${count} service categories</strong> × all 3 clouds`));
@@ -2593,6 +2581,22 @@
  <button id="nano-foot-logs">Logs ▴</button>
  <button id="nano-foot-toggle">Start tunnel</button>
 </div>
+<script>
+// The tunnel bar starts right of the left side menu (never over it: the account menu /
+// Sign out lives at the side menu's foot) and follows it as it collapses or expands.
+(function(){
+  var foot = document.getElementById("nano-foot"); if(!foot) return;
+  function fit(){
+    var sb = document.getElementById("app-sidebar");
+    var r = (sb && sb.getClientRects().length) ? sb.getBoundingClientRect() : null;
+    foot.style.left = (r && r.width && r.left < 1 ? Math.round(r.right) : 0) + "px";
+  }
+  fit(); addEventListener("resize", fit); addEventListener("load", fit);
+  var sb = document.getElementById("app-sidebar");
+  if(sb && window.ResizeObserver) new ResizeObserver(fit).observe(sb);
+  new MutationObserver(fit).observe(document.body, { attributes: true, attributeFilter: ["class"] });
+})();
+</script>
 <script>
 (function(){
   var base = window.__NANO_BASE || "";

@@ -1,0 +1,1390 @@
+{
+  "$schema": "../schema.json",
+  "cloud": "azure",
+  "service": "monitor",
+  "console_path": "#view/Microsoft_Azure_Monitoring/AzureMonitoringBrowseBlade",
+  "status": "reviewed",
+  "captured_at": "2026-10-30",
+  "nav": [
+    {
+      "label": "Overview",
+      "page_id": "monitor-overview"
+    },
+    {
+      "label": "Activity log",
+      "page_id": "monitor-activity-log"
+    },
+    {
+      "label": "Alerts",
+      "page_id": "monitor-alerts"
+    },
+    {
+      "label": "Metrics",
+      "page_id": "monitor-metrics"
+    },
+    {
+      "label": "Observability agents (preview)",
+      "page_id": "monitor-observability-agents-preview"
+    },
+    {
+      "label": "Issues",
+      "page_id": "monitor-issues"
+    },
+    {
+      "label": "Logs",
+      "page_id": "monitor-logs"
+    },
+    {
+      "label": "Health models",
+      "page_id": "monitor-health-models"
+    },
+    {
+      "label": "Change Analysis",
+      "page_id": "monitor-change-analysis"
+    },
+    {
+      "label": "Service health",
+      "page_id": "monitor-service-health"
+    },
+    {
+      "label": "Workbooks",
+      "page_id": "monitor-workbooks"
+    },
+    {
+      "label": "Dashboards with Grafana",
+      "page_id": "monitor-dashboards-with-grafana"
+    },
+    {
+      "label": "Insights",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Applications",
+          "page_id": "monitor-applications"
+        },
+        {
+          "label": "Virtual Machines",
+          "page_id": "monitor-virtual-machines"
+        },
+        {
+          "label": "Storage accounts",
+          "page_id": "monitor-storage-accounts"
+        },
+        {
+          "label": "Containers",
+          "page_id": "monitor-containers"
+        },
+        {
+          "label": "Networks",
+          "page_id": "monitor-networks"
+        },
+        {
+          "label": "Azure Cosmos DB",
+          "page_id": "monitor-azure-cosmos-db"
+        },
+        {
+          "label": "Key Vaults",
+          "page_id": "monitor-key-vaults"
+        },
+        {
+          "label": "Azure Cache for Redis",
+          "page_id": "monitor-azure-cache-for-redis"
+        },
+        {
+          "label": "Azure Data Explorer Clusters",
+          "page_id": "monitor-azure-data-explorer-clusters"
+        },
+        {
+          "label": "Log Analytics workspaces",
+          "page_id": "monitor-log-analytics-workspaces"
+        },
+        {
+          "label": "Azure Local",
+          "page_id": "monitor-azure-local"
+        },
+        {
+          "label": "Service Bus (preview)",
+          "page_id": "monitor-service-bus-preview"
+        },
+        {
+          "label": "Insights Hub",
+          "page_id": "monitor-insights-hub"
+        }
+      ]
+    },
+    {
+      "label": "Managed Services",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Managed Prometheus",
+          "page_id": "monitor-managed-prometheus"
+        },
+        {
+          "label": "Azure Managed Grafana",
+          "page_id": "monitor-azure-managed-grafana"
+        },
+        {
+          "label": "Azure Monitor SCOM managed instance",
+          "page_id": "monitor-azure-monitor-scom-managed-instance"
+        }
+      ]
+    },
+    {
+      "label": "Settings",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Diagnostic settings",
+          "page_id": "monitor-diagnostic-settings"
+        },
+        {
+          "label": "Data Collection Rules",
+          "page_id": "monitor-data-collection-rules"
+        },
+        {
+          "label": "Data Collection Endpoints",
+          "page_id": "monitor-data-collection-endpoints"
+        },
+        {
+          "label": "Azure Monitor pipelines",
+          "page_id": "monitor-azure-monitor-pipelines"
+        },
+        {
+          "label": "Autoscale",
+          "page_id": "monitor-autoscale"
+        },
+        {
+          "label": "Private Link Scopes",
+          "page_id": "monitor-private-link-scopes"
+        },
+        {
+          "label": "Monitoring Coverage",
+          "page_id": "monitor-monitoring-coverage"
+        }
+      ]
+    },
+    {
+      "label": "Support + Troubleshooting",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Advisor recommendations",
+          "page_id": "monitor-advisor-recommendations"
+        },
+        {
+          "label": "New support request",
+          "page_id": "monitor-new-support-request"
+        }
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "id": "monitor-overview",
+      "kind": "dashboard",
+      "title": "Monitor | Overview",
+      "breadcrumbs": [
+        "All services",
+        "Monitor"
+      ],
+      "captures": [
+        "A-view-microsoft-azure-monitoring-azuremonitoringbrowseblade/001-L1-landing",
+        "A-view-microsoft-azure-monitoring-azuremonitoringbrowseblade/001-L1-landing--tab-03-overview",
+        "A-view-microsoft-azure-monitoring-azuremonitoringbrowseblade/001-L1-landing--tab-04-tutorials"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "tabs": [
+        "Overview",
+        "Tutorials"
+      ],
+      "header_actions": [
+        "New overview"
+      ],
+      "sections": [
+        {
+          "title": "Insights",
+          "fields": [
+            {
+              "label": "View all insights",
+              "type": "button"
+            }
+          ]
+        },
+        {
+          "title": "Detection, triage, and diagnosis"
+        }
+      ]
+    },
+    {
+      "id": "monitor-activity-log",
+      "kind": "list",
+      "title": "Monitor | Activity log",
+      "breadcrumbs": [
+        "All services",
+        "Monitor"
+      ],
+      "captures": [
+        "A-view-microsoft-azure-monitoring-azuremonitoringbrowseblade/003-L2-activity-log"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "table": {
+        "columns": [
+          "Operation name",
+          "Status",
+          "Time",
+          "Time stamp",
+          "Subscription",
+          "Event initiated by"
+        ],
+        "header_actions": [
+          "Activity",
+          "Edit columns",
+          "Refresh",
+          "Export Activity Logs",
+          "Download as CSV",
+          "Insights",
+          "Feedback",
+          "Pin current filters",
+          "Reset filters"
+        ],
+        "filters": [
+          "Subscription : None",
+          "Event severity : All",
+          "Timespan : Last 6 hours",
+          "Add Filter"
+        ],
+        "empty_state": "No events to display"
+      },
+      "sections": [
+        {
+          "title": "Quick Insights"
+        }
+      ]
+    },
+    {
+      "id": "monitor-alerts",
+      "kind": "list",
+      "title": "Monitor | Alerts",
+      "breadcrumbs": [
+        "All services",
+        "Monitor"
+      ],
+      "captures": [
+        "A-view-microsoft-azure-monitoring-azuremonitoringbrowseblade/004-L2-alerts"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "View as timeline (preview)",
+        "Create",
+        "Alert rules",
+        "Action groups",
+        "Alert processing rules",
+        "Prometheus rule groups",
+        "Change user response"
+      ],
+      "sections": [
+        {
+          "title": "Summary",
+          "fields": [
+            {
+              "label": "Total alerts",
+              "type": "readonly"
+            },
+            {
+              "label": "Critical",
+              "type": "readonly"
+            },
+            {
+              "label": "Error",
+              "type": "readonly"
+            },
+            {
+              "label": "Warning",
+              "type": "readonly"
+            },
+            {
+              "label": "Informational",
+              "type": "readonly"
+            },
+            {
+              "label": "Verbose",
+              "type": "readonly"
+            }
+          ]
+        }
+      ],
+      "table": {
+        "columns": [
+          "Name",
+          "Severity",
+          "Affected resource",
+          "Alert condition",
+          "User response",
+          "Fire time"
+        ],
+        "filters": [
+          "Subscription",
+          "Time range : Past 24 hours",
+          "Alert condition : Fired",
+          "Severity : all",
+          "Add filter"
+        ],
+        "empty_state": "No alerts found",
+        "empty_state_action": "Clear filters"
+      }
+    },
+    {
+      "id": "monitor-metrics",
+      "kind": "dashboard",
+      "title": "Monitor | Metrics",
+      "breadcrumbs": [
+        "All services",
+        "Monitor"
+      ],
+      "captures": [
+        "A-view-microsoft-azure-monitoring-azuremonitoringbrowseblade/005-L2-metrics",
+        "A-view-microsoft-azure-monitoring-azuremonitoringbrowseblade/005-L2-metrics--tab-03-browse",
+        "A-view-microsoft-azure-monitoring-azuremonitoringbrowseblade/005-L2-metrics--tab-04-recent"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "New chart",
+        "Refresh",
+        "Share",
+        "Local Time: Last 24 hours (Automatic)"
+      ],
+      "tabs": [
+        "Browse",
+        "Recent"
+      ],
+      "sections": [
+        {
+          "title": "Select a scope",
+          "fields": [
+            {
+              "label": "Resource types",
+              "type": "select",
+              "default": "All resource types"
+            },
+            {
+              "label": "Locations",
+              "type": "select",
+              "default": "All locations"
+            },
+            {
+              "label": "Apply",
+              "type": "button"
+            },
+            {
+              "label": "Cancel",
+              "type": "button"
+            }
+          ]
+        },
+        {
+          "title": "Chart Title",
+          "fields": [
+            {
+              "label": "Scope",
+              "type": "select",
+              "placeholder": "Select a scope"
+            },
+            {
+              "label": "Metric Namespace",
+              "type": "select",
+              "placeholder": "Select namespace"
+            },
+            {
+              "label": "Metric",
+              "type": "select",
+              "placeholder": "Select metric"
+            },
+            {
+              "label": "Aggregation",
+              "type": "select",
+              "placeholder": "Select aggregation"
+            },
+            {
+              "label": "Add metric",
+              "type": "button"
+            },
+            {
+              "label": "Add filter",
+              "type": "button"
+            },
+            {
+              "label": "Apply splitting",
+              "type": "button"
+            },
+            {
+              "label": "Line chart",
+              "type": "button"
+            },
+            {
+              "label": "Drill into Logs",
+              "type": "button"
+            },
+            {
+              "label": "New alert rule",
+              "type": "button"
+            },
+            {
+              "label": "Save to dashboard",
+              "type": "button"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "monitor-observability-agents-preview",
+      "kind": "other",
+      "title": "Monitor | Observability agents (preview)",
+      "breadcrumbs": [
+        "All services",
+        "Monitor"
+      ],
+      "captures": [
+        "A-view-microsoft-azure-monitoring-azuremonitoringbrowseblade/006-L2-observability-agents-preview"
+      ],
+      "provenance": "capture",
+      "confidence": "high"
+    },
+    {
+      "id": "monitor-issues",
+      "kind": "other",
+      "title": "Monitor | Issues",
+      "breadcrumbs": [
+        "All services",
+        "Monitor"
+      ],
+      "captures": [
+        "A-view-microsoft-azure-monitoring-azuremonitoringbrowseblade/007-L2-issues"
+      ],
+      "provenance": "capture",
+      "confidence": "high"
+    },
+    {
+      "id": "monitor-logs",
+      "kind": "other",
+      "title": "Monitor | Logs",
+      "breadcrumbs": [
+        "All services",
+        "Monitor"
+      ],
+      "captures": [
+        "A-view-microsoft-azure-monitoring-azuremonitoringbrowseblade/008-L2-logs"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "sections": [
+        {
+          "title": "Welcome to Log Analytics"
+        }
+      ],
+      "notes": "Without a subscription the blade shows the Log Analytics welcome; query editor (KQL) is reference"
+    },
+    {
+      "id": "monitor-health-models",
+      "kind": "other",
+      "title": "Monitor | Health models",
+      "breadcrumbs": [
+        "All services",
+        "Monitor"
+      ],
+      "captures": [
+        "A-view-microsoft-azure-monitoring-azuremonitoringbrowseblade/009-L2-health-models"
+      ],
+      "provenance": "capture",
+      "confidence": "high"
+    },
+    {
+      "id": "monitor-change-analysis",
+      "kind": "list",
+      "title": "Monitor | Change Analysis",
+      "breadcrumbs": [
+        "All services",
+        "Monitor"
+      ],
+      "captures": [
+        "A-view-microsoft-azure-monitoring-azuremonitoringbrowseblade/010-L2-change-analysis"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "table": {
+        "columns": [
+          "Name",
+          "Resource type",
+          "Change type",
+          "Changed by",
+          "Time"
+        ],
+        "confidence": "low",
+        "header_actions": [
+          "Manage view",
+          "Refresh",
+          "Export to CSV",
+          "Open query",
+          "Group by none"
+        ],
+        "filters": [
+          "Subscription equals all",
+          "Resource groups equals all",
+          "Change types equals all",
+          "Time span within Last 24 hours",
+          "Add filter"
+        ],
+        "empty_state": "No resources match your filters"
+      }
+    },
+    {
+      "id": "monitor-service-health",
+      "kind": "other",
+      "title": "Monitor | Service health",
+      "breadcrumbs": [
+        "All services",
+        "Monitor"
+      ],
+      "captures": [
+        "A-view-microsoft-azure-monitoring-azuremonitoringbrowseblade/011-L2-service-health"
+      ],
+      "provenance": "capture",
+      "confidence": "high"
+    },
+    {
+      "id": "monitor-workbooks",
+      "kind": "list",
+      "title": "Monitor | Gallery",
+      "breadcrumbs": [
+        "All services",
+        "Monitor"
+      ],
+      "captures": [
+        "A-view-microsoft-azure-monitoring-azuremonitoringbrowseblade/012-L2-workbooks"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "tabs": [
+        "Workbooks",
+        "Public templates",
+        "My templates"
+      ],
+      "header_actions": [
+        "New",
+        "Refresh",
+        "Feedback",
+        "Help",
+        "Community Git repo",
+        "Browse across galleries",
+        "Recycle Bin"
+      ],
+      "sections": [
+        {
+          "title": "Quick start",
+          "fields": [
+            {
+              "label": "Empty",
+              "type": "button"
+            },
+            {
+              "label": "Dashboard",
+              "type": "button"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "monitor-dashboards-with-grafana",
+      "kind": "list",
+      "title": "Monitor | Dashboards with Grafana",
+      "breadcrumbs": [
+        "All services",
+        "Monitor"
+      ],
+      "captures": [
+        "A-view-microsoft-azure-monitoring-azuremonitoringbrowseblade/013-L2-dashboards-with-grafana"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "New",
+        "Explore",
+        "Refresh",
+        "Browse Grafana dashboards Gallery",
+        "Browse Saved dashboards",
+        "Help",
+        "Feedback",
+        "Group by"
+      ],
+      "tabs": [
+        "All dashboards",
+        "Saved dashboards",
+        "Favorite dashboards"
+      ]
+    },
+    {
+      "id": "monitor-applications",
+      "kind": "other",
+      "title": "Monitor | Applications",
+      "breadcrumbs": [
+        "All services",
+        "Monitor"
+      ],
+      "captures": [
+        "A-view-microsoft-azure-monitoring-azuremonitoringbrowseblade/014-L2-applications"
+      ],
+      "provenance": "capture",
+      "confidence": "high"
+    },
+    {
+      "id": "monitor-virtual-machines",
+      "kind": "other",
+      "title": "Monitor | Virtual Machines",
+      "breadcrumbs": [
+        "All services",
+        "Monitor"
+      ],
+      "captures": [
+        "A-view-microsoft-azure-monitoring-azuremonitoringbrowseblade/015-L2-virtual-machines",
+        "A-view-microsoft-azure-monitoring-azuremonitoringbrowseblade/015-L2-virtual-machines--tab-03-get-started"
+      ],
+      "provenance": "capture",
+      "confidence": "high"
+    },
+    {
+      "id": "monitor-storage-accounts",
+      "kind": "dashboard",
+      "title": "Monitor | Storage accounts",
+      "breadcrumbs": [
+        "All services",
+        "Monitor"
+      ],
+      "captures": [
+        "A-view-microsoft-azure-monitoring-azuremonitoringbrowseblade/016-L2-storage-accounts"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Workbooks",
+        "Customize",
+        "Auto refresh: Off"
+      ],
+      "sections": [
+        {
+          "title": "Filters",
+          "fields": [
+            {
+              "label": "Subscriptions",
+              "type": "select"
+            },
+            {
+              "label": "Time Range",
+              "type": "select"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "monitor-containers",
+      "kind": "other",
+      "title": "Monitor | Containers",
+      "breadcrumbs": [
+        "All services",
+        "Monitor"
+      ],
+      "captures": [
+        "A-view-microsoft-azure-monitoring-azuremonitoringbrowseblade/017-L2-containers"
+      ],
+      "provenance": "capture",
+      "confidence": "high"
+    },
+    {
+      "id": "monitor-networks",
+      "kind": "other",
+      "title": "Monitor | Networks",
+      "breadcrumbs": [
+        "All services",
+        "Monitor"
+      ],
+      "captures": [
+        "A-view-microsoft-azure-monitoring-azuremonitoringbrowseblade/018-L2-networks",
+        "A-view-microsoft-azure-monitoring-azuremonitoringbrowseblade/018-L2-networks--tab-03-network-health"
+      ],
+      "provenance": "capture",
+      "confidence": "high"
+    },
+    {
+      "id": "monitor-azure-cosmos-db",
+      "kind": "other",
+      "title": "Monitor | Azure Cosmos DB",
+      "breadcrumbs": [
+        "All services",
+        "Monitor"
+      ],
+      "captures": [
+        "A-view-microsoft-azure-monitoring-azuremonitoringbrowseblade/019-L2-azure-cosmos-db"
+      ],
+      "provenance": "capture",
+      "confidence": "high"
+    },
+    {
+      "id": "monitor-key-vaults",
+      "kind": "dashboard",
+      "title": "Monitor | Key Vaults",
+      "breadcrumbs": [
+        "All services",
+        "Monitor"
+      ],
+      "captures": [
+        "A-view-microsoft-azure-monitoring-azuremonitoringbrowseblade/020-L2-key-vaults"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Workbooks",
+        "Customize",
+        "Auto refresh: Off"
+      ],
+      "sections": [
+        {
+          "title": "Filters",
+          "fields": [
+            {
+              "label": "Subscriptions",
+              "type": "select"
+            },
+            {
+              "label": "Time Range",
+              "type": "select"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "monitor-azure-cache-for-redis",
+      "kind": "other",
+      "title": "Monitor | Azure Cache for Redis",
+      "breadcrumbs": [
+        "All services",
+        "Monitor"
+      ],
+      "captures": [
+        "A-view-microsoft-azure-monitoring-azuremonitoringbrowseblade/021-L2-azure-cache-for-redis"
+      ],
+      "provenance": "capture",
+      "confidence": "high"
+    },
+    {
+      "id": "monitor-azure-data-explorer-clusters",
+      "kind": "other",
+      "title": "Monitor | Azure Data Explorer Clusters",
+      "breadcrumbs": [
+        "All services",
+        "Monitor"
+      ],
+      "captures": [
+        "A-view-microsoft-azure-monitoring-azuremonitoringbrowseblade/022-L2-azure-data-explorer-clusters"
+      ],
+      "provenance": "capture",
+      "confidence": "high"
+    },
+    {
+      "id": "monitor-log-analytics-workspaces",
+      "kind": "dashboard",
+      "title": "Monitor | Log Analytics workspaces",
+      "breadcrumbs": [
+        "All services",
+        "Monitor"
+      ],
+      "captures": [
+        "A-view-microsoft-azure-monitoring-azuremonitoringbrowseblade/023-L2-log-analytics-workspaces"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Workbooks",
+        "Customize",
+        "Auto refresh: Off"
+      ],
+      "sections": [
+        {
+          "title": "Filters",
+          "fields": [
+            {
+              "label": "Subscriptions",
+              "type": "select"
+            },
+            {
+              "label": "Time Range",
+              "type": "select"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "monitor-azure-local",
+      "kind": "other",
+      "title": "Monitor | Azure Local",
+      "breadcrumbs": [
+        "All services",
+        "Monitor"
+      ],
+      "captures": [
+        "A-view-microsoft-azure-monitoring-azuremonitoringbrowseblade/024-L2-azure-local"
+      ],
+      "provenance": "capture",
+      "confidence": "high"
+    },
+    {
+      "id": "monitor-service-bus-preview",
+      "kind": "other",
+      "title": "Monitor | Service Bus (preview)",
+      "breadcrumbs": [
+        "All services",
+        "Monitor"
+      ],
+      "captures": [
+        "A-view-microsoft-azure-monitoring-azuremonitoringbrowseblade/025-L2-service-bus-preview"
+      ],
+      "provenance": "capture",
+      "confidence": "high"
+    },
+    {
+      "id": "monitor-insights-hub",
+      "kind": "list",
+      "title": "Monitor | Insights Hub",
+      "breadcrumbs": [
+        "All services",
+        "Monitor"
+      ],
+      "captures": [
+        "A-view-microsoft-azure-monitoring-azuremonitoringbrowseblade/026-L2-insights-hub"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Sort",
+        "Expand All",
+        "Collapse All",
+        "Feedback"
+      ],
+      "table": {
+        "columns": [
+          "Service Name",
+          "Description"
+        ]
+      }
+    },
+    {
+      "id": "monitor-managed-prometheus",
+      "kind": "list",
+      "title": "Monitor | Managed Prometheus",
+      "breadcrumbs": [
+        "All services",
+        "Monitor"
+      ],
+      "captures": [
+        "A-view-microsoft-azure-monitoring-azuremonitoringbrowseblade/027-L2-managed-prometheus"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "View manual setup",
+        "Refresh",
+        "Feedback"
+      ],
+      "table": {
+        "columns": [
+          "Name",
+          "Resource group",
+          "Metrics collection"
+        ],
+        "confidence": "low",
+        "filters": [
+          "Subscription == No subscriptions selected",
+          "Metrics collection == All"
+        ],
+        "empty_state": "No valid Kubernetes services to display"
+      }
+    },
+    {
+      "id": "monitor-azure-managed-grafana",
+      "kind": "other",
+      "title": "Monitor | Azure Managed Grafana",
+      "breadcrumbs": [
+        "All services",
+        "Monitor"
+      ],
+      "captures": [
+        "A-view-microsoft-azure-monitoring-azuremonitoringbrowseblade/028-L2-azure-managed-grafana"
+      ],
+      "provenance": "capture",
+      "confidence": "high"
+    },
+    {
+      "id": "monitor-azure-monitor-scom-managed-instance",
+      "kind": "other",
+      "title": "Monitor | Azure Monitor SCOM managed instance",
+      "breadcrumbs": [
+        "All services",
+        "Monitor"
+      ],
+      "captures": [
+        "A-view-microsoft-azure-monitoring-azuremonitoringbrowseblade/029-L2-azure-monitor-scom-managed-instance"
+      ],
+      "provenance": "capture",
+      "confidence": "high"
+    },
+    {
+      "id": "monitor-diagnostic-settings",
+      "kind": "list",
+      "title": "Monitor | Diagnostic settings",
+      "breadcrumbs": [
+        "All services",
+        "Monitor"
+      ],
+      "captures": [
+        "A-view-microsoft-azure-monitoring-azuremonitoringbrowseblade/030-L2-diagnostic-settings"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "table": {
+        "columns": [
+          "Name",
+          "Resource type",
+          "Resource group",
+          "Diagnostics status"
+        ],
+        "confidence": "low",
+        "provenance": "reference"
+      },
+      "notes": "No subscription: capture shows only the subscription-required notice"
+    },
+    {
+      "id": "monitor-data-collection-rules",
+      "kind": "list",
+      "title": "Monitor | Data Collection Rules",
+      "breadcrumbs": [
+        "All services",
+        "Monitor"
+      ],
+      "captures": [
+        "A-view-microsoft-azure-monitoring-azuremonitoringbrowseblade/031-L2-data-collection-rules"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "tabs": [
+        "Overview",
+        "Data collection rules",
+        "Resources"
+      ],
+      "header_actions": [
+        "Create a data collection rule",
+        "Refresh",
+        "Feedback",
+        "Use preview"
+      ],
+      "sections": [
+        {
+          "title": "Summary",
+          "fields": [
+            {
+              "label": "Resources collecting",
+              "type": "readonly"
+            },
+            {
+              "label": "Not collecting",
+              "type": "readonly"
+            },
+            {
+              "label": "Data collection rules",
+              "type": "readonly"
+            },
+            {
+              "label": "Destinations",
+              "type": "readonly"
+            }
+          ]
+        }
+      ],
+      "table": {
+        "columns": [
+          "Name",
+          "Resource group",
+          "Location",
+          "Kind"
+        ],
+        "confidence": "low",
+        "filters": [
+          "Subscription == No subscriptions selected",
+          "Resource Types : All",
+          "Data collected : All",
+          "Destinations : All",
+          "Add filter"
+        ],
+        "empty_state": "No data collection found"
+      }
+    },
+    {
+      "id": "monitor-data-collection-endpoints",
+      "kind": "other",
+      "title": "Monitor | Data Collection Endpoints",
+      "breadcrumbs": [
+        "All services",
+        "Monitor"
+      ],
+      "captures": [
+        "A-view-microsoft-azure-monitoring-azuremonitoringbrowseblade/032-L2-data-collection-endpoints"
+      ],
+      "provenance": "capture",
+      "confidence": "high"
+    },
+    {
+      "id": "monitor-azure-monitor-pipelines",
+      "kind": "other",
+      "title": "Monitor | Azure Monitor pipelines",
+      "breadcrumbs": [
+        "All services",
+        "Monitor"
+      ],
+      "captures": [
+        "A-view-microsoft-azure-monitoring-azuremonitoringbrowseblade/033-L2-azure-monitor-pipelines"
+      ],
+      "provenance": "capture",
+      "confidence": "high"
+    },
+    {
+      "id": "monitor-autoscale",
+      "kind": "list",
+      "title": "Monitor | Autoscale",
+      "breadcrumbs": [
+        "All services",
+        "Monitor"
+      ],
+      "captures": [
+        "A-view-microsoft-azure-monitoring-azuremonitoringbrowseblade/034-L2-autoscale"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Refresh"
+      ],
+      "table": {
+        "columns": [
+          "Name",
+          "Resource type",
+          "Resource group",
+          "Location",
+          "Instance count",
+          "Autoscale status"
+        ],
+        "filters": [
+          "Subscription",
+          "Resource group",
+          "Resource type",
+          "Resource"
+        ],
+        "empty_state": "No results"
+      }
+    },
+    {
+      "id": "monitor-private-link-scopes",
+      "kind": "other",
+      "title": "Monitor | Private Link Scopes",
+      "breadcrumbs": [
+        "All services",
+        "Monitor"
+      ],
+      "captures": [
+        "A-view-microsoft-azure-monitoring-azuremonitoringbrowseblade/035-L2-private-link-scopes"
+      ],
+      "provenance": "capture",
+      "confidence": "high"
+    },
+    {
+      "id": "monitor-monitoring-coverage",
+      "kind": "dashboard",
+      "title": "Monitor | Monitoring Coverage",
+      "breadcrumbs": [
+        "All services",
+        "Monitor"
+      ],
+      "captures": [
+        "A-view-microsoft-azure-monitoring-azuremonitoringbrowseblade/036-L2-monitoring-coverage"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "tabs": [
+        "Overview",
+        "Monitoring Details"
+      ],
+      "header_actions": [
+        "Refresh",
+        "Feedback"
+      ],
+      "sections": [
+        {
+          "title": "Summary"
+        },
+        {
+          "title": "Infrastructure coverage"
+        },
+        {
+          "title": "Platform telemetry coverage"
+        }
+      ]
+    },
+    {
+      "id": "monitor-advisor-recommendations",
+      "kind": "other",
+      "title": "Monitor | Advisor recommendations",
+      "breadcrumbs": [
+        "All services",
+        "Monitor"
+      ],
+      "captures": [
+        "A-view-microsoft-azure-monitoring-azuremonitoringbrowseblade/037-L2-advisor-recommendations"
+      ],
+      "provenance": "capture",
+      "confidence": "high"
+    },
+    {
+      "id": "monitor-new-support-request",
+      "kind": "other",
+      "title": "Monitor | New support request",
+      "breadcrumbs": [
+        "All services",
+        "Monitor"
+      ],
+      "captures": [
+        "A-view-microsoft-azure-monitoring-azuremonitoringbrowseblade/038-L2-new-support-request"
+      ],
+      "provenance": "capture",
+      "confidence": "high"
+    },
+    {
+      "id": "monitor-create-alert-rule",
+      "kind": "create",
+      "title": "Create an alert rule",
+      "breadcrumbs": [
+        "Home",
+        "Monitor | Alerts",
+        "Create an alert rule"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "steps": [
+        {
+          "title": "Scope",
+          "sections": [
+            {
+              "title": "Select a resource",
+              "fields": [
+                {
+                  "label": "Resource",
+                  "type": "table",
+                  "columns": [
+                    "Resource",
+                    "Resource type",
+                    "Location"
+                  ],
+                  "actions": [
+                    "Select scope"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Condition",
+          "sections": [
+            {
+              "title": "Condition",
+              "fields": [
+                {
+                  "label": "Signal name",
+                  "type": "select",
+                  "required": true,
+                  "actions": [
+                    "See all signals"
+                  ]
+                },
+                {
+                  "label": "Threshold",
+                  "type": "select",
+                  "options": [
+                    "Static",
+                    "Dynamic"
+                  ]
+                },
+                {
+                  "label": "Aggregation type",
+                  "type": "select"
+                },
+                {
+                  "label": "Operator",
+                  "type": "select",
+                  "options": [
+                    "Greater than",
+                    "Greater than or equal to",
+                    "Less than",
+                    "Less than or equal to"
+                  ]
+                },
+                {
+                  "label": "Threshold value",
+                  "type": "number"
+                },
+                {
+                  "label": "Check every",
+                  "type": "select"
+                },
+                {
+                  "label": "Lookback period",
+                  "type": "select"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Actions",
+          "sections": [
+            {
+              "title": "Actions",
+              "fields": [
+                {
+                  "label": "Action groups",
+                  "type": "table",
+                  "columns": [
+                    "Action group name",
+                    "Contains actions"
+                  ],
+                  "actions": [
+                    "Select action groups",
+                    "Create action group"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Details",
+          "sections": [
+            {
+              "title": "Project details",
+              "fields": [
+                {
+                  "label": "Subscription",
+                  "type": "select",
+                  "required": true,
+                  "placeholder": "Select a subscription"
+                },
+                {
+                  "label": "Resource group",
+                  "type": "select",
+                  "required": true,
+                  "actions": [
+                    "Create new"
+                  ]
+                }
+              ]
+            },
+            {
+              "title": "Alert rule details",
+              "fields": [
+                {
+                  "label": "Severity",
+                  "type": "select",
+                  "default": "3 - Informational",
+                  "options": [
+                    "0 - Critical",
+                    "1 - Error",
+                    "2 - Warning",
+                    "3 - Informational",
+                    "4 - Verbose"
+                  ]
+                },
+                {
+                  "label": "Alert rule name",
+                  "type": "text",
+                  "required": true
+                },
+                {
+                  "label": "Alert rule description",
+                  "type": "textarea"
+                }
+              ]
+            },
+            {
+              "title": "Advanced options",
+              "fields": [
+                {
+                  "label": "Enable upon creation",
+                  "type": "checkbox",
+                  "default": true
+                },
+                {
+                  "label": "Automatically resolve alerts",
+                  "type": "checkbox",
+                  "default": true
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Tags",
+          "sections": [
+            {
+              "title": "Tags",
+              "fields": [
+                {
+                  "label": "Tags",
+                  "type": "table",
+                  "columns": [
+                    "Name",
+                    "Value",
+                    "Resource"
+                  ],
+                  "help": "Name/value pairs to categorize resources and view consolidated billing"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Review + create",
+          "sections": [
+            {
+              "title": "Scope"
+            },
+            {
+              "title": "Condition"
+            },
+            {
+              "title": "Actions"
+            },
+            {
+              "title": "Details"
+            }
+          ]
+        }
+      ],
+      "submit": "Create",
+      "notes": "Footer: Review + create / < Previous / Next : <tab> >; Download a template for automation"
+    }
+  ],
+  "gaps_note": "Whole Monitor menu crawled (38 L2 pages). Many pages show only 'subscription required' or the Welcome overlay; their grids (Diagnostic settings, Data Collection Rules, Change Analysis columns) are low-confidence reference. Alert rule wizard is reference."
+}

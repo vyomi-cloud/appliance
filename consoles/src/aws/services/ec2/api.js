@@ -1,0 +1,488 @@
+/* EC2 over the native EC2 Query protocol (form-encoded Action=.../XML responses).
+ * EC2 and VPC share one AWS service ("ec2" credential scope) and one backend
+ * core (core/vpc_core.py) — this file only covers the compute/storage/network
+ * resource surface the v4 EC2 console needs. */
+import { awsQuery, awsJson, awsRest, asList } from "../../../common/wire.js";
+
+/** Flatten a JS object/array into the Query wire's dotted-index form:
+ * {InstanceId: ["i-1"]} -> {"InstanceId.1": "i-1"}
+ * {IpPermissions: [{IpProtocol: "tcp", IpRanges: [{CidrIp: "0.0.0.0/0"}]}]}
+ *   -> {"IpPermissions.1.IpProtocol": "tcp", "IpPermissions.1.IpRanges.1.CidrIp": "0.0.0.0/0"} */
+export function flatten(value, prefix = "", out = {}) {
+  if (value === undefined || value === null || value === "") return out;
+  if (Array.isArray(value)) value.forEach((v, i) => flatten(v, prefix ? `${prefix}.${i + 1}` : String(i + 1), out));
+  else if (typeof value === "object") Object.entries(value).forEach(([k, v]) => flatten(v, prefix ? `${prefix}.${k}` : k, out));
+  else out[prefix] = value;
+  return out;
+}
+
+const call = (action, params = {}) => awsQuery("ec2", action, flatten(params)).then((r) => r[`${action}Response`] || {});
+
+export const tagsFromXml = (x) => Object.fromEntries(asList(x?.item).map((t) => [t.key, t.value || ""]));
+export const tagsToArray = (tags) => Object.entries(tags || {}).filter(([k]) => k).map(([Key, Value]) => ({ Key, Value }));
+export const tagSpec = (resourceType, tags) => (Object.keys(tags || {}).length ? [{ ResourceType: resourceType, Tag: tagsToArray(tags) }] : undefined);
+
+export const permFromXml = (x) => ({
+  IpProtocol: x.ipProtocol, FromPort: x.fromPort !== undefined && x.fromPort !== "" ? Number(x.fromPort) : undefined,
+  ToPort: x.toPort !== undefined && x.toPort !== "" ? Number(x.toPort) : undefined,
+  cidrs: asList(x.ipRanges?.item).map((r) => r.cidrIp), groupIds: asList(x.groups?.item).map((g) => g.groupId),
+  RuleId: x.securityGroupRuleId, Description: x.description,
+});
+
+// ── instances ─────────────────────────────────────────────────────────
+const instanceFromXml = (x) => ({ ...x, GroupSet: asList(x.groupSet?.item), Tags: tagsFromXml(x.tagSet), BlockDeviceMapping: asList(x.blockDeviceMapping?.item) });
+
+export async function runInstances(input) {
+  const r = await call("RunInstances", input);
+  return asList(r.instancesSet?.item).map(instanceFromXml);
+}
+export async function describeInstances(filter = {}) {
+  const r = await call("DescribeInstances", filter);
+  return asList(r.reservationSet?.item).flatMap((res) => asList(res.instancesSet?.item)).map(instanceFromXml);
+}
+export const describeInstance = (id) => describeInstances({ InstanceId: [id] }).then((xs) => xs[0]);
+export const startInstances = (ids) => call("StartInstances", { InstanceId: ids });
+export const stopInstances = (ids, force) => call("StopInstances", { InstanceId: ids, Force: force });
+export const rebootInstances = (ids) => call("RebootInstances", { InstanceId: ids });
+export const terminateInstances = (ids, force) => call("TerminateInstances", { InstanceId: ids, Force: force });
+export const modifyInstanceAttribute = (id, attr) => call("ModifyInstanceAttribute", { InstanceId: id, ...attr });
+export const monitorInstances = (ids) => call("MonitorInstances", { InstanceId: ids });
+export const unmonitorInstances = (ids) => call("UnmonitorInstances", { InstanceId: ids });
+export async function describeInstanceStatus(id) {
+  const r = await call("DescribeInstanceStatus", { InstanceId: [id], IncludeAllInstances: true });
+  return asList(r.instanceStatusSet?.item)[0];
+}
+
+export async function describeInstanceTypes() {
+  const r = await call("DescribeInstanceTypes");
+  return asList(r.instanceTypeSet?.item).map((x) => ({
+    InstanceType: x.instanceType, FreeTierEligible: x.freeTierEligible === "true", BareMetal: x.bareMetal === "true",
+    Hypervisor: x.hypervisor, VCpuCount: Number((x.vCpuInfo || x.vcpuInfo)?.defaultVCpus || 0), MemoryMiB: Number(x.memoryInfo?.sizeInMiB || 0),
+    Architectures: asList(x.processorInfo?.supportedArchitectures?.item), NetworkPerformance: x.networkInfo?.networkPerformance,
+  }));
+}
+export async function describeSubnets() {
+  const r = await call("DescribeSubnets");
+  return asList(r.subnetSet?.item);
+}
+export async function describeAvailabilityZones() {
+  const r = await call("DescribeAvailabilityZones");
+  return asList(r.availabilityZoneInfo?.item).map((x) => ({ ZoneName: x.zoneName, ZoneId: x.zoneId, State: x.state, RegionName: x.regionName }));
+}
+
+// ── AMIs ──────────────────────────────────────────────────────────────
+const imageFromXml = (x) => ({ ...x, Tags: tagsFromXml(x.tagSet), LaunchPermissions: asList(x.launchPermission?.item).map((p) => p.userId), BlockDeviceMapping: asList(x.blockDeviceMapping?.item) });
+
+export const createImage = (input) => call("CreateImage", input).then((r) => r.imageId);
+export async function describeImages(filter = {}) {
+  const r = await call("DescribeImages", filter);
+  return asList(r.imagesSet?.item).map(imageFromXml);
+}
+export const describeImage = (id) => describeImages({ ImageId: [id] }).then((xs) => xs[0]);
+export const deregisterImage = (id) => call("DeregisterImage", { ImageId: id });
+export const copyImage = (sourceImageId, name) => call("CopyImage", { SourceImageId: sourceImageId, Name: name }).then((r) => r.imageId);
+export const addLaunchPermission = (id, accountId) => call("ModifyImageAttribute", { ImageId: id, LaunchPermission: { Add: [{ UserId: accountId }] } });
+export const removeLaunchPermission = (id, accountId) => call("ModifyImageAttribute", { ImageId: id, LaunchPermission: { Remove: [{ UserId: accountId }] } });
+
+// ── EBS volumes & snapshots ─────────────────────────────────────────────
+const volumeFromXml = (x) => ({ ...x, Tags: tagsFromXml(x.tagSet), Attachments: asList(x.attachmentSet?.item) });
+const snapshotFromXml = (x) => ({ ...x, Tags: tagsFromXml(x.tagSet) });
+
+export const createVolume = (input) => call("CreateVolume", input).then(volumeFromXml);
+export async function describeVolumes(filter = {}) {
+  const r = await call("DescribeVolumes", filter);
+  return asList(r.volumeSet?.item).map(volumeFromXml);
+}
+export const describeVolume = (id) => describeVolumes({ VolumeId: [id] }).then((xs) => xs[0]);
+export const attachVolume = (volumeId, instanceId, device) => call("AttachVolume", { VolumeId: volumeId, InstanceId: instanceId, Device: device });
+export const detachVolume = (volumeId, instanceId, force) => call("DetachVolume", { VolumeId: volumeId, InstanceId: instanceId, Force: force });
+export const deleteVolume = (id) => call("DeleteVolume", { VolumeId: id });
+export const modifyVolume = (id, input) => call("ModifyVolume", { VolumeId: id, ...input });
+
+export const createSnapshot = (volumeId, description, tags) => call("CreateSnapshot", { VolumeId: volumeId, Description: description, TagSpecification: tagSpec("snapshot", tags) }).then(snapshotFromXml);
+export async function describeSnapshots(filter = {}) {
+  const r = await call("DescribeSnapshots", filter);
+  return asList(r.snapshotSet?.item).map(snapshotFromXml);
+}
+export const deleteSnapshot = (id) => call("DeleteSnapshot", { SnapshotId: id });
+export const copySnapshot = (sourceSnapshotId, description) => call("CopySnapshot", { SourceSnapshotId: sourceSnapshotId, Description: description }).then((r) => r.snapshotId);
+
+// ── key pairs ─────────────────────────────────────────────────────────
+const keyPairFromXml = (x) => ({ ...x, Tags: tagsFromXml(x.tagSet) });
+export const createKeyPair = (name, keyType) => call("CreateKeyPair", { KeyName: name, KeyType: keyType });
+export const importKeyPair = (name, publicKeyMaterialB64) => call("ImportKeyPair", { KeyName: name, PublicKeyMaterial: publicKeyMaterialB64 });
+export async function describeKeyPairs() {
+  const r = await call("DescribeKeyPairs");
+  return asList(r.keySet?.item).map(keyPairFromXml);
+}
+export const deleteKeyPair = (name) => call("DeleteKeyPair", { KeyName: name });
+
+// ── elastic IPs ───────────────────────────────────────────────────────
+const addressFromXml = (x) => ({ ...x, Tags: tagsFromXml(x.tagSet) });
+export const allocateAddress = (tags) => call("AllocateAddress", { TagSpecification: tagSpec("elastic-ip", tags) }).then(addressFromXml);
+export async function describeAddresses() {
+  const r = await call("DescribeAddresses");
+  return asList(r.addressesSet?.item).map(addressFromXml);
+}
+export const associateAddress = (allocationId, instanceId) => call("AssociateAddress", { AllocationId: allocationId, InstanceId: instanceId });
+export const disassociateAddress = (associationId) => call("DisassociateAddress", { AssociationId: associationId });
+export const releaseAddress = (allocationId) => call("ReleaseAddress", { AllocationId: allocationId });
+
+// ── network interfaces ──────────────────────────────────────────────────
+const eniFromXml = (x) => ({ ...x, Tags: tagsFromXml(x.tagSet), Groups: asList(x.groupSet?.item) });
+export const createNetworkInterface = (subnetId, description, securityGroupIds, tags) => call("CreateNetworkInterface", { SubnetId: subnetId, Description: description, SecurityGroupId: securityGroupIds, TagSpecification: tagSpec("network-interface", tags) }).then(eniFromXml);
+export async function describeNetworkInterfaces() {
+  const r = await call("DescribeNetworkInterfaces");
+  return asList(r.networkInterfaceSet?.item).map(eniFromXml);
+}
+export const deleteNetworkInterface = (id) => call("DeleteNetworkInterface", { NetworkInterfaceId: id });
+export const attachNetworkInterface = (eniId, instanceId, deviceIndex) => call("AttachNetworkInterface", { NetworkInterfaceId: eniId, InstanceId: instanceId, DeviceIndex: deviceIndex });
+export const detachNetworkInterface = (attachmentId) => call("DetachNetworkInterface", { AttachmentId: attachmentId });
+
+// ── security groups ──────────────────────────────────────────────────
+const sgFromXml = (x) => ({
+  ...x, GroupId: x.groupId, GroupName: x.groupName, GroupDescription: x.groupDescription, VpcId: x.vpcId,
+  Tags: tagsFromXml(x.tagSet),
+  IpPermissions: asList(x.ipPermissions?.item).map(permFromXml),
+  IpPermissionsEgress: asList(x.ipPermissionsEgress?.item).map(permFromXml),
+});
+export const createSecurityGroup = (name, description, tags) => call("CreateSecurityGroup", { GroupName: name, GroupDescription: description, TagSpecification: tagSpec("security-group", tags) }).then((r) => r.groupId);
+export async function describeSecurityGroups() {
+  const r = await call("DescribeSecurityGroups");
+  return asList(r.securityGroupInfo?.item).map(sgFromXml);
+}
+export const describeSecurityGroup = (id) => call("DescribeSecurityGroups", { GroupId: [id] }).then((r) => { const xs = asList(r.securityGroupInfo?.item).map(sgFromXml); return xs[0]; });
+export const deleteSecurityGroup = (id) => call("DeleteSecurityGroup", { GroupId: id });
+const permParams = (perms) => ({ IpPermissions: (perms || []).map((p) => ({ IpProtocol: p.IpProtocol, ...(p.FromPort !== undefined && p.FromPort !== "" ? { FromPort: p.FromPort, ToPort: p.ToPort } : {}), IpRanges: p.cidr ? [{ CidrIp: p.cidr, Description: p.description }] : undefined, Groups: p.groupId ? [{ GroupId: p.groupId }] : undefined })) });
+export const authorizeIngress = (groupId, perms) => call("AuthorizeSecurityGroupIngress", { GroupId: groupId, ...permParams(perms) });
+export const authorizeEgress = (groupId, perms) => call("AuthorizeSecurityGroupEgress", { GroupId: groupId, ...permParams(perms) });
+export const revokeIngress = (groupId, ruleIds) => call("RevokeSecurityGroupIngress", { GroupId: groupId, SecurityGroupRuleId: ruleIds });
+export const revokeEgress = (groupId, ruleIds) => call("RevokeSecurityGroupEgress", { GroupId: groupId, SecurityGroupRuleId: ruleIds });
+
+// ── placement groups ────────────────────────────────────────────────────
+const pgFromXml = (x) => ({ ...x, Tags: tagsFromXml(x.tagSet) });
+export const createPlacementGroup = (name, strategy, partitionCount, tags) => call("CreatePlacementGroup", { GroupName: name, Strategy: strategy, PartitionCount: partitionCount, TagSpecification: tagSpec("placement-group", tags) }).then(pgFromXml);
+export async function describePlacementGroups() {
+  const r = await call("DescribePlacementGroups");
+  return asList(r.placementGroupSet?.item).map(pgFromXml);
+}
+export const deletePlacementGroup = (name) => call("DeletePlacementGroup", { GroupName: name });
+
+// ── launch templates ────────────────────────────────────────────────────
+const ltFromXml = (x) => ({ ...x, Tags: tagsFromXml(x.tagSet) });
+export const createLaunchTemplate = (name, data, versionDescription, tags) => call("CreateLaunchTemplate", { LaunchTemplateName: name, LaunchTemplateData: data, VersionDescription: versionDescription, TagSpecification: tagSpec("launch-template", tags) }).then((r) => ltFromXml(r.launchTemplate));
+export async function describeLaunchTemplates() {
+  const r = await call("DescribeLaunchTemplates");
+  return asList(r.launchTemplates?.item).map(ltFromXml);
+}
+export const deleteLaunchTemplate = (id) => call("DeleteLaunchTemplate", { LaunchTemplateId: id });
+const ltvFromXml = (x) => ({ ...x, DefaultVersion: x.defaultVersion === "true" });
+export const createLaunchTemplateVersion = (id, sourceVersion, data, versionDescription) =>
+  call("CreateLaunchTemplateVersion", { LaunchTemplateId: id, SourceVersion: sourceVersion, LaunchTemplateData: data, VersionDescription: versionDescription }).then((r) => ltvFromXml(r.launchTemplateVersion));
+export async function describeLaunchTemplateVersions(id) {
+  const r = await call("DescribeLaunchTemplateVersions", { LaunchTemplateId: id });
+  return asList(r.launchTemplateVersionSet?.item).map(ltvFromXml);
+}
+export const modifyLaunchTemplate = (id, defaultVersion) => call("ModifyLaunchTemplate", { LaunchTemplateId: id, DefaultVersion: defaultVersion }).then((r) => ltFromXml(r.launchTemplate));
+
+// ── tags (generic) ──────────────────────────────────────────────────────
+export const createTags = (resourceIds, tags) => call("CreateTags", { ResourceId: resourceIds, Tag: tagsToArray(tags) });
+export const deleteTags = (resourceIds, tagKeys) => call("DeleteTags", { ResourceId: resourceIds, Tag: (tagKeys || []).map((Key) => ({ Key })) });
+export async function describeTags() {
+  const r = await call("DescribeTags");
+  return asList(r.tagSet?.item);
+}
+
+// ── account-wide EBS encryption defaults ────────────────────────────────
+export const getEbsEncryptionByDefault = () => call("GetEbsEncryptionByDefault").then((r) => r.ebsEncryptionByDefault === "true");
+export const enableEbsEncryptionByDefault = () => call("EnableEbsEncryptionByDefault");
+export const disableEbsEncryptionByDefault = () => call("DisableEbsEncryptionByDefault");
+export const getEbsDefaultKmsKeyId = () => call("GetEbsDefaultKmsKeyId").then((r) => r.kmsKeyId);
+export const modifyEbsDefaultKmsKeyId = (kmsKeyId) => call("ModifyEbsDefaultKmsKeyId", { KmsKeyId: kmsKeyId });
+export const resetEbsDefaultKmsKeyId = () => call("ResetEbsDefaultKmsKeyId");
+
+export const b64 = (s) => btoa(unescape(encodeURIComponent(s)));
+
+// ── the one real CloudWatch metric (StatusCheckFailed) + alarms on it ───
+// Real AWS's EC2 console calls straight into CloudWatch for this tab; Vyomi does the same
+// native call rather than duplicating CloudWatch's engine (core/cloudwatch_core.py).
+const CW = (op, payload = {}) => awsJson("monitoring", `GraniteServiceVersion20100801.${op}`, payload);
+export const STATUS_CHECK_METRICS = ["StatusCheckFailed", "StatusCheckFailed_Instance", "StatusCheckFailed_System"];
+const statusCheckDims = (instanceId) => [{ Name: "InstanceId", Value: instanceId }];
+
+export const describeStatusCheckAlarms = (instanceId) =>
+  Promise.all(STATUS_CHECK_METRICS.map((m) => CW("DescribeAlarmsForMetric", { Namespace: "AWS/EC2", MetricName: m, Dimensions: statusCheckDims(instanceId) })
+    .then((r) => r.MetricAlarms || []))).then((lists) => lists.flat());
+
+export const getStatusCheckMetric = (instanceId, metricName, minutes = 30) => {
+  const end = new Date(), start = new Date(end - minutes * 60_000);
+  return CW("GetMetricStatistics", {
+    Namespace: "AWS/EC2", MetricName: metricName, Dimensions: statusCheckDims(instanceId),
+    StartTime: start.toISOString(), EndTime: end.toISOString(), Period: 60, Statistics: ["Maximum"],
+  }).then((r) => (r.Datapoints || []).sort((a, b) => new Date(a.Timestamp) - new Date(b.Timestamp)));
+};
+
+export const putStatusCheckAlarm = (instanceId, { alarmName, metricName, comparison, threshold, evaluationPeriods, snsArn }) =>
+  CW("PutMetricAlarm", {
+    AlarmName: alarmName, Namespace: "AWS/EC2", MetricName: metricName, Dimensions: statusCheckDims(instanceId),
+    Statistic: "Maximum", Period: 60, EvaluationPeriods: evaluationPeriods, DatapointsToAlarm: evaluationPeriods,
+    Threshold: threshold, ComparisonOperator: comparison, AlarmActions: snsArn ? [snsArn] : [],
+  });
+export const deleteStatusCheckAlarms = (names) => CW("DeleteAlarms", { AlarmNames: names });
+
+// ── VPCs (for the Load Balancer / Target Group network pickers) ─────────
+export async function describeVpcs() {
+  const r = await call("DescribeVpcs");
+  return asList(r.vpcSet?.item);
+}
+
+// ── Elastic Load Balancing v2 (ALB/NLB) — separate AWS service, signs as
+// "elasticloadbalancing"; routed by core/elbv2_core.py on the same /_wire. Field names in
+// its Query-protocol XML are already the SDK's PascalCase (no case translation needed). ──
+const ELB_SVC = "elasticloadbalancing";
+const elb = (action, params = {}) => awsQuery(ELB_SVC, action, flatten(params)).then((r) => r[`${action}Response`]?.[`${action}Result`] || {});
+
+const lbFromXml = (x) => ({ ...x, AvailabilityZones: asList(x.AvailabilityZones?.member), SecurityGroups: asList(x.SecurityGroups?.member) });
+export async function createLoadBalancer(input) {
+  const r = await elb("CreateLoadBalancer", input);
+  return lbFromXml(asList(r.LoadBalancers?.member)[0]);
+}
+export async function describeLoadBalancers(filter = {}) {
+  const r = await elb("DescribeLoadBalancers", filter);
+  return asList(r.LoadBalancers?.member).map(lbFromXml);
+}
+export const describeLoadBalancer = (arn) => describeLoadBalancers({ LoadBalancerArns: [arn] }).then((xs) => xs[0]);
+export const deleteLoadBalancer = (arn) => elb("DeleteLoadBalancer", { LoadBalancerArn: arn });
+export async function describeLoadBalancerAttributes(arn) {
+  const r = await elb("DescribeLoadBalancerAttributes", { LoadBalancerArn: arn });
+  return asList(r.Attributes?.member);
+}
+export const modifyLoadBalancerAttributes = (arn, attrs) => elb("ModifyLoadBalancerAttributes", { LoadBalancerArn: arn, Attributes: attrs });
+export const setSecurityGroups = (arn, sgs) => elb("SetSecurityGroups", { LoadBalancerArn: arn, SecurityGroups: sgs });
+
+const tgFromXml = (x) => ({ ...x, LoadBalancerArns: asList(x.LoadBalancerArns?.member) });
+export async function createTargetGroup(input) {
+  const r = await elb("CreateTargetGroup", input);
+  return tgFromXml(asList(r.TargetGroups?.member)[0]);
+}
+export async function describeTargetGroups(filter = {}) {
+  const r = await elb("DescribeTargetGroups", filter);
+  return asList(r.TargetGroups?.member).map(tgFromXml);
+}
+export const describeTargetGroup = (arn) => describeTargetGroups({ TargetGroupArns: [arn] }).then((xs) => xs[0]);
+export const deleteTargetGroup = (arn) => elb("DeleteTargetGroup", { TargetGroupArn: arn });
+export const modifyTargetGroup = (arn, input) => elb("ModifyTargetGroup", { TargetGroupArn: arn, ...input }).then((r) => tgFromXml(asList(r.TargetGroups?.member)[0]));
+export async function describeTargetGroupAttributes(arn) {
+  const r = await elb("DescribeTargetGroupAttributes", { TargetGroupArn: arn });
+  return asList(r.Attributes?.member);
+}
+export const modifyTargetGroupAttributes = (arn, attrs) => elb("ModifyTargetGroupAttributes", { TargetGroupArn: arn, Attributes: attrs });
+export const registerTargets = (arn, targets) => elb("RegisterTargets", { TargetGroupArn: arn, Targets: targets });
+export const deregisterTargets = (arn, targets) => elb("DeregisterTargets", { TargetGroupArn: arn, Targets: targets });
+export async function describeTargetHealth(arn, targets) {
+  const r = await elb("DescribeTargetHealth", { TargetGroupArn: arn, Targets: targets });
+  return asList(r.TargetHealthDescriptions?.member);
+}
+
+const lsFromXml = (x) => ({ ...x, DefaultActions: asList(x.DefaultActions?.member), Certificates: asList(x.Certificates?.member) });
+export async function createListener(input) {
+  const r = await elb("CreateListener", input);
+  return lsFromXml(asList(r.Listeners?.member)[0]);
+}
+export async function describeListeners(filter) {
+  const r = await elb("DescribeListeners", filter);
+  return asList(r.Listeners?.member).map(lsFromXml);
+}
+export const deleteListener = (arn) => elb("DeleteListener", { ListenerArn: arn });
+export const modifyListener = (arn, input) => elb("ModifyListener", { ListenerArn: arn, ...input }).then((r) => lsFromXml(asList(r.Listeners?.member)[0]));
+
+const ruleFromXml = (x) => ({ ...x, Conditions: asList(x.Conditions?.member), Actions: asList(x.Actions?.member) });
+export async function describeRules(filter) {
+  const r = await elb("DescribeRules", filter);
+  return asList(r.Rules?.member).map(ruleFromXml);
+}
+export const createRule = (input) => elb("CreateRule", input).then((r) => ruleFromXml(asList(r.Rules?.member)[0]));
+export const deleteRule = (arn) => elb("DeleteRule", { RuleArn: arn });
+
+export const addElbTags = (arns, tags) => elb("AddTags", { ResourceArns: arns, Tags: tagsToArray(tags) });
+export const removeElbTags = (arns, keys) => elb("RemoveTags", { ResourceArns: arns, TagKeys: keys });
+export async function describeElbTags(arn) {
+  const r = await elb("DescribeTags", { ResourceArns: [arn] });
+  const td = asList(r.TagDescriptions?.member)[0];
+  return Object.fromEntries(asList(td?.Tags?.member).map((t) => [t.Key, t.Value || ""]));
+}
+
+// ── security group VPC associations (ec2.security-groups.sharing) ──────
+export const associateSecurityGroupVpc = (groupId, vpcId) => call("AssociateSecurityGroupVpc", { GroupId: groupId, VpcId: vpcId });
+export const disassociateSecurityGroupVpc = (groupId, vpcId) => call("DisassociateSecurityGroupVpc", { GroupId: groupId, VpcId: vpcId });
+export async function describeSecurityGroupVpcAssociations(groupId) {
+  const r = await call("DescribeSecurityGroupVpcAssociations", { GroupId: [groupId] });
+  return asList(r.securityGroupVpcAssociationSet?.item);
+}
+
+// ── Allowed AMIs / Serial Console / default credit spec (ec2.settings.other) ──
+export const getAllowedImagesSettings = () => call("GetAllowedImagesSettings").then((r) => ({
+  state: r.allowedImagesSettingsState, criteria: asList(r.imageCriteria?.item).map((c) => asList(c.imageProviders?.item)),
+}));
+export const enableAllowedImagesSettings = () => call("EnableAllowedImagesSettings");
+export const disableAllowedImagesSettings = () => call("DisableAllowedImagesSettings");
+export const replaceImageCriteria = (providerLists) => call("ReplaceImageCriteriaInAllowedImagesSettings", {
+  ImageCriteria: providerLists.map((providers) => ({ ImageProviders: providers })),
+});
+export const getSerialConsoleAccessStatus = () => call("GetSerialConsoleAccessStatus").then((r) => r.serialConsoleAccessEnabled === "true");
+export const enableSerialConsoleAccess = () => call("EnableSerialConsoleAccess");
+export const disableSerialConsoleAccess = () => call("DisableSerialConsoleAccess");
+export const getDefaultCreditSpecification = (family) => call("GetDefaultCreditSpecification", { InstanceFamily: family }).then((r) => r.instanceFamilyCreditSpecification?.cpuCredits);
+export const modifyDefaultCreditSpecification = (family, cpuCredits) => call("ModifyDefaultCreditSpecification", { InstanceFamily: family, CpuCredits: cpuCredits });
+
+// ── Auto Scaling (separate AWS service, signs as "autoscaling"; core/autoscaling_core.py) ──
+const ASG_SVC = "autoscaling";
+const asg = (action, params = {}) => awsQuery(ASG_SVC, action, flatten(params), { version: "2011-01-01" }).then((r) => r[`${action}Response`]?.[`${action}Result`] || {});
+
+export async function createAutoScalingGroup(input) {
+  return asg("CreateAutoScalingGroup", input);
+}
+export async function describeAutoScalingGroups(names) {
+  const r = await asg("DescribeAutoScalingGroups", names ? { AutoScalingGroupNames: names } : {});
+  return asList(r.AutoScalingGroups?.member).map((g) => ({ ...g, Instances: asList(g.Instances?.member), AvailabilityZones: asList(g.AvailabilityZones?.member) }));
+}
+export const describeAutoScalingGroup = (name) => describeAutoScalingGroups([name]).then((xs) => xs[0]);
+export const updateAutoScalingGroup = (name, input) => asg("UpdateAutoScalingGroup", { AutoScalingGroupName: name, ...input });
+export const setDesiredCapacity = (name, desired) => asg("SetDesiredCapacity", { AutoScalingGroupName: name, DesiredCapacity: desired });
+export const deleteAutoScalingGroup = (name, force) => asg("DeleteAutoScalingGroup", { AutoScalingGroupName: name, ForceDelete: force });
+export async function describeAutoScalingInstances() {
+  const r = await asg("DescribeAutoScalingInstances");
+  return asList(r.AutoScalingInstances?.member);
+}
+
+export const putScalingPolicy = (groupName, input) => asg("PutScalingPolicy", { AutoScalingGroupName: groupName, ...input }).then((r) => r.PolicyARN);
+export async function describeScalingPolicies(groupName) {
+  const r = await asg("DescribePolicies", { AutoScalingGroupName: groupName });
+  return asList(r.ScalingPolicies?.member).map((p) => ({ ...p, StepAdjustments: asList(p.StepAdjustments?.member) }));
+}
+export const deleteScalingPolicy = (groupName, policyName) => asg("DeletePolicy", { AutoScalingGroupName: groupName, PolicyName: policyName });
+
+export const putScheduledAction = (groupName, input) => asg("PutScheduledUpdateGroupAction", { AutoScalingGroupName: groupName, ...input });
+export async function describeScheduledActions(groupName) {
+  const r = await asg("DescribeScheduledActions", { AutoScalingGroupName: groupName });
+  return asList(r.ScheduledUpdateGroupActions?.member);
+}
+export const deleteScheduledAction = (groupName, name) => asg("DeleteScheduledAction", { AutoScalingGroupName: groupName, ScheduledActionName: name });
+
+export const putLifecycleHook = (groupName, input) => asg("PutLifecycleHook", { AutoScalingGroupName: groupName, ...input });
+export async function describeLifecycleHooks(groupName) {
+  const r = await asg("DescribeLifecycleHooks", { AutoScalingGroupName: groupName });
+  return asList(r.LifecycleHooks?.member);
+}
+export const deleteLifecycleHook = (groupName, name) => asg("DeleteLifecycleHook", { AutoScalingGroupName: groupName, LifecycleHookName: name });
+export const completeLifecycleAction = (groupName, hookName, instanceId, result) =>
+  asg("CompleteLifecycleAction", { AutoScalingGroupName: groupName, LifecycleHookName: hookName, InstanceId: instanceId, LifecycleActionResult: result });
+
+export const startInstanceRefresh = (groupName) => asg("StartInstanceRefresh", { AutoScalingGroupName: groupName }).then((r) => r.InstanceRefreshId);
+export async function describeInstanceRefreshes(groupName) {
+  const r = await asg("DescribeInstanceRefreshes", { AutoScalingGroupName: groupName });
+  return asList(r.InstanceRefreshes?.member);
+}
+export const cancelInstanceRefresh = (groupName) => asg("CancelInstanceRefresh", { AutoScalingGroupName: groupName });
+
+// ── Trust stores (mutual TLS, ec2.trust-stores — core/elbv2_core.py) ─────
+export const createTrustStore = (input) => elb("CreateTrustStore", input).then((r) => asList(r.TrustStores?.member)[0]);
+export async function describeTrustStores(filter = {}) {
+  const r = await elb("DescribeTrustStores", filter);
+  return asList(r.TrustStores?.member);
+}
+export const describeTrustStore = (arn) => describeTrustStores({ TrustStoreArns: [arn] }).then((xs) => xs[0]);
+export const modifyTrustStore = (arn, input) => elb("ModifyTrustStore", { TrustStoreArn: arn, ...input }).then((r) => asList(r.TrustStores?.member)[0]);
+export const deleteTrustStore = (arn) => elb("DeleteTrustStore", { TrustStoreArn: arn });
+export async function describeTrustStoreAssociations(arn) {
+  const r = await elb("DescribeTrustStoreAssociations", { TrustStoreArn: arn });
+  return asList(r.TrustStoreAssociations?.member);
+}
+export const createTrustStoreRevocation = (arn, s3Bucket, s3Key) => elb("CreateTrustStoreRevocation", {
+  TrustStoreArn: arn, RevocationContents: [{ S3Bucket: s3Bucket, S3Key: s3Key }],
+}).then((r) => asList(r.TrustStoreRevocations?.member)[0]);
+export async function describeTrustStoreRevocations(arn) {
+  const r = await elb("DescribeTrustStoreRevocations", { TrustStoreArn: arn });
+  return asList(r.TrustStoreRevocations?.member);
+}
+export const deleteTrustStoreRevocation = (arn, revocationId) => elb("DeleteTrustStoreRevocation", { TrustStoreArn: arn, RevocationId: revocationId });
+
+// ── Data Lifecycle Manager (ec2.lifecycle-manager — core/dlm_core.py, REST JSON) ──
+const DLM_SVC = "dlm";
+const dlmRest = (method, path, body) => awsRest(DLM_SVC, method, path, { body });
+
+export const createLifecyclePolicy = (input) => dlmRest("POST", "/policies", input).then((r) => r.PolicyId);
+export async function getLifecyclePolicies() {
+  const r = await dlmRest("GET", "/policies");
+  return r.Policies || [];
+}
+export const getLifecyclePolicy = (id) => dlmRest("GET", `/policies/${id}`).then((r) => r.Policy);
+export const updateLifecyclePolicy = (id, input) => dlmRest("PATCH", `/policies/${id}`, input);
+export const deleteLifecyclePolicy = (id) => dlmRest("DELETE", `/policies/${id}`);
+
+// ── AWS-03/04 ops: zones, events, health, alarms, Spot, RIs, capacity reservations, hosts, Recycle Bin ──
+export async function describeZones(all = false) {
+  const r = await call("DescribeAvailabilityZones", all ? { AllAvailabilityZones: true } : {});
+  return asList(r.availabilityZoneInfo?.item);
+}
+export const modifyAvailabilityZoneGroup = (groupName, status) => call("ModifyAvailabilityZoneGroup", { GroupName: groupName, OptInStatus: status });
+
+/** Every instance's status (incl. non-running) with its scheduled events + a derived check summary. */
+export async function describeInstanceStatusAll() {
+  const r = await call("DescribeInstanceStatus", { IncludeAllInstances: true });
+  return asList(r.instanceStatusSet?.item).map((x) => ({
+    instanceId: x.instanceId, az: x.availabilityZone, state: x.instanceState?.name,
+    systemStatus: x.systemStatus?.status, instanceStatus: x.instanceStatus?.status,
+    events: asList(x.eventsSet?.item).map((e) => ({ id: e.instanceEventId, code: e.code, description: e.description, notBefore: e.notBefore, notAfter: e.notAfter, deadline: e.notBeforeDeadline, instanceId: x.instanceId })),
+  }));
+}
+export const scheduleInstanceEvent = (input) => call("VyomiScheduleInstanceEvent", input);
+export const modifyInstanceEventStartTime = (instanceId, eventId, notBefore) => call("ModifyInstanceEventStartTime", { InstanceId: instanceId, InstanceEventId: eventId, NotBefore: notBefore });
+
+export async function describeEc2Alarms() {
+  const out = []; let token;
+  do { const r = await CW("DescribeAlarms", { AlarmTypes: ["MetricAlarm"], NextToken: token }); out.push(...(r.MetricAlarms || [])); token = r.NextToken; } while (token);
+  return out.filter((a) => a.Namespace === "AWS/EC2");
+}
+
+const spotFromXml = (x) => ({ ...x, Tags: tagsFromXml(x.tagSet) });
+export async function describeSpotRequests() { const r = await call("DescribeSpotInstanceRequests"); return asList(r.spotInstanceRequestSet?.item).map(spotFromXml); }
+export const requestSpotInstances = (input) => call("RequestSpotInstances", input).then((r) => asList(r.spotInstanceRequestSet?.item));
+export const cancelSpotRequests = (ids) => call("CancelSpotInstanceRequests", { SpotInstanceRequestId: ids });
+export async function describeSpotPriceHistory(types, az) { const r = await call("DescribeSpotPriceHistory", { InstanceType: types, AvailabilityZone: az }); return asList(r.spotPriceHistorySet?.item); }
+
+export async function describeRiOfferings(input) { const r = await call("DescribeReservedInstancesOfferings", input); return asList(r.reservedInstancesOfferingsSet?.item); }
+export const purchaseRi = (offeringId, count) => call("PurchaseReservedInstancesOffering", { ReservedInstancesOfferingId: offeringId, InstanceCount: count }).then((r) => r.reservedInstancesId);
+export async function describeReservedInstances() { const r = await call("DescribeReservedInstances"); return asList(r.reservedInstancesSet?.item); }
+
+export async function describeCapacityReservations() { const r = await call("DescribeCapacityReservations"); return asList(r.capacityReservationSet?.item).map((x) => ({ ...x, Tags: tagsFromXml(x.tagSet) })); }
+export const createCapacityReservation = (input) => call("CreateCapacityReservation", input).then((r) => r.capacityReservation);
+export const cancelCapacityReservation = (id) => call("CancelCapacityReservation", { CapacityReservationId: id });
+export async function describeHosts() { const r = await call("DescribeHosts"); return asList(r.hostSet?.item); }
+export const allocateHosts = (input) => call("AllocateHosts", input).then((r) => asList(r.hostIdSet?.item));
+export const releaseHosts = (ids) => call("ReleaseHosts", { HostId: ids });
+
+// Recycle Bin: native `rbin` REST for rules, EC2 actions for the retained resources.
+const RB = (method, path, body, query) => awsRest("rbin", method, path, { body, query });
+export const listRetentionRules = async (type) => (await RB("POST", "/list-rules", { ResourceType: type })).Rules || [];
+export const getRetentionRule = (id) => RB("GET", `/rules/${id}`);
+export const createRetentionRule = (input) => RB("POST", "/rules", input);
+export const updateRetentionRule = (id, input) => RB("PATCH", `/rules/${id}`, input);
+export const deleteRetentionRule = (id) => RB("DELETE", `/rules/${id}`);
+export const lockRetentionRule = (id, days) => RB("PATCH", `/rules/${id}/lock`, { LockConfiguration: { UnlockDelay: { UnlockDelayValue: days, UnlockDelayUnit: "DAYS" } } });
+export const unlockRetentionRule = (id) => RB("PATCH", `/rules/${id}/unlock`, {});
+export async function listSnapshotsInBin() { const r = await call("ListSnapshotsInRecycleBin"); return asList(r.snapshotSet?.item); }
+export async function listImagesInBin() { const r = await call("ListImagesInRecycleBin"); return asList(r.imageSet?.item); }
+export const restoreSnapshotFromBin = (id) => call("RestoreSnapshotFromRecycleBin", { SnapshotId: id });
+export const restoreImageFromBin = (id) => call("RestoreImageFromRecycleBin", { ImageId: id });
+
+// IAM instance profiles (the real IAM service; "Create IAM profile" page)
+const IAM = (action, params = {}) => awsQuery("iam", action, flatten(params)).then((r) => r[`${action}Response`]?.[`${action}Result`] || {});
+export const createInstanceProfile = (name) => IAM("CreateInstanceProfile", { InstanceProfileName: name }).then((r) => r.InstanceProfile);
+export const addRoleToInstanceProfile = (profile, role) => IAM("AddRoleToInstanceProfile", { InstanceProfileName: profile, RoleName: role });
+export const listInstanceProfiles = () => IAM("ListInstanceProfiles").then((r) => asList(r.InstanceProfiles?.member));
+export const iamCreateRole = (name, trust) => IAM("CreateRole", { RoleName: name, AssumeRolePolicyDocument: trust });
+export const iamAttachRolePolicy = (role, arn) => IAM("AttachRolePolicy", { RoleName: role, PolicyArn: arn });
+export const iamListRoles = () => IAM("ListRoles").then((r) => asList(r.Roles?.Role));
+export const iamListPolicies = () => IAM("ListPolicies", { Scope: "AWS", MaxItems: 200 }).then((r) => asList(r.Policies?.Policy));
+export const asgAccountLimits = () => asg("DescribeAccountLimits");

@@ -38,11 +38,6 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&display=swap">
   <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
   <style>
-/* Clickable things always show the hand cursor. Many console links are <a> without an href
-   (JS-handled), which browsers render with the text I-beam. First in the sheet and low
-   specificity, so later rules (cursor:not-allowed on disabled controls) still win. */
-a,[onclick],[role="link"],[role="button"],[role="tab"],[role="menuitem"],summary,label[for],select,
-button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:not(:disabled){cursor:pointer}
     *, *::before, *::after { box-sizing: border-box; }
     body {
       margin: 0; padding: 0;
@@ -101,6 +96,47 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
       margin: 0 0 10px; letter-spacing: -0.025em; line-height: 1.1;
     }
     header.hero p  { font-size: 16px; color: #5f6b7a; margin: 0; max-width: 580px; margin: 0 auto; }
+    /* Home (Spaces) hero action buttons — Activate appliance + GitHub community. */
+    header.hero .hero-actions { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; margin-top: 22px; }
+    .hero-btn {
+      display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px;
+      border-radius: 9px; font-size: 13.5px; font-weight: 600; font-family: inherit;
+      cursor: pointer; text-decoration: none; border: 1px solid transparent; transition: all .15s;
+    }
+    .hero-btn .material-icons { font-size: 17px; }
+    .hero-btn-activate { background: #1f2937; color: #fff; }
+    .hero-btn-activate:hover { background: #1a2c44; }
+    .hero-btn-github { background: #fff; color: #1f2937; border-color: #d7dbe0; }
+    .hero-btn-github:hover { border-color: #1f2937; background: #f7f8fa; }
+    /* GitHub community dropdown — ported from the launch page (live star count). */
+    .tb-community { position: relative; display: inline-flex; }
+    .tb-community .tb-caret { display: inline-flex; align-items: center; width: 14px; height: 14px; margin-left: 2px; transition: transform .15s; }
+    .tb-community .tb-caret svg { width: 14px; height: 14px; }
+    .tb-community.open .tb-caret { transform: rotate(180deg); }
+    .tb-community-menu {
+      position: absolute; top: calc(100% + 8px); left: 50%; transform: translateX(-50%);
+      width: 320px; max-width: 92vw; text-align: left;
+      background: #fff; border: 1px solid #eceef1; border-radius: 10px;
+      box-shadow: 0 12px 32px rgba(15,27,45,0.16); padding: 12px 10px 8px; display: none; z-index: 200;
+    }
+    .tb-community.open .tb-community-menu { display: block; }
+    .tbc-title { font-size: 14px; font-weight: 700; color: #1f2937; padding: 2px 8px; }
+    .tbc-sub   { font-size: 12px; color: #6b7280; padding: 0 8px 8px; }
+    .tbc-row { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 7px; text-decoration: none; color: #1f2937; font-size: 13.5px; transition: background .12s; }
+    .tbc-row:hover { background: #f3f4f6; }
+    .tbc-row .tbc-row-ic  { font-size: 16px; line-height: 1; width: 18px; text-align: center; }
+    .tbc-row .tbc-row-lbl { flex: 1; line-height: 1.2; }
+    .tbc-row .tbc-row-meta { font-size: 11.5px; color: #6b7280; font-weight: 500; }
+    .tbc-row .tbc-row-arrow { color: #9ca3af; font-size: 13px; }
+    .tbc-row-primary { background: #1f2937; color: #fff; margin-bottom: 4px; }
+    .tbc-row-primary:hover { background: #0f172a; }
+    .tbc-row-primary .tbc-row-meta { color: rgba(255,255,255,.78); background: rgba(255,255,255,.12); padding: 3px 9px; border-radius: 99px; }
+    .tbc-row-primary .tbc-spin { display: inline-block; width: 8px; height: 8px; margin-right: 6px; border: 2px solid rgba(255,255,255,.4); border-top-color: #fff; border-radius: 50%; animation: rspin .8s linear infinite; }
+    .tbc-sep  { height: 1px; background: #f1f5f9; margin: 6px 4px 4px; }
+    .tbc-foot { display: flex; gap: 12px; padding: 4px 10px 2px; }
+    .tbc-foot a { color: #9ca3af; text-decoration: none; font-size: 11.5px; }
+    .tbc-foot a:hover { color: #1f2937; }
+    @keyframes rspin { to { transform: rotate(360deg); } }
 
     /* ── Existing spaces list ────────────────────────────────────── */
     .spaces-section { margin-bottom: 44px; }
@@ -176,19 +212,8 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     }
     .space-savings-track i { display: block; height: 100%; background: linear-gradient(90deg,#16a34a,#22c55e); border-radius: 999px; }
 
-    /* Card footer — pinned to the card bottom: TTL pill left, icon actions right. */
+    /* Card footer — pinned to the card bottom: icon actions (space TTL renew / shutdown). */
     .space-ttl { display: flex; align-items: center; gap: 8px; margin-top: auto; padding-top: 12px; }
-    .ttl-timer {
-      position: relative; display: inline-flex; align-items: center; gap: 5px;
-      padding: 4px 10px 4px 8px; border-radius: 999px;
-      background: rgba(148,163,184,0.10); border: 1px solid rgba(148,163,184,0.18);
-      font: 600 11.5px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
-      font-variant-numeric: tabular-nums; color: #cbd5e1; white-space: nowrap;
-    }
-    .ttl-timer .material-icons { font-size: 14px; opacity: .85; }
-    .ttl-timer.ttl-amber { color: #fbbf24; background: rgba(245,158,11,0.10); border-color: rgba(245,158,11,0.28); }
-    .ttl-timer.ttl-red { color: #f87171; background: rgba(239,68,68,0.10); border-color: rgba(239,68,68,0.30); }
-    .ttl-timer.ttl-expired { color: #fca5a5; background: rgba(239,68,68,0.14); border-color: rgba(239,68,68,0.38); font-weight: 700; }
     .space-ttl-actions { margin-left: auto; display: flex; gap: 2px; }
     /* Icon-only actions; the action is named by the hover tooltip */
     .ttl-btn {
@@ -201,6 +226,22 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     .ttl-btn-shutdown:hover, .ttl-btn-shutdown:focus-visible { color: #f87171; border-color: rgba(248,113,113,0.40); background: rgba(248,113,113,0.10); }
     .ttl-btn-renew:hover, .ttl-btn-renew:focus-visible { color: #60a5fa; border-color: rgba(96,165,250,0.40); background: rgba(96,165,250,0.10); }
     .ttl-btn:focus-visible { outline: none; }
+    /* "Activate appliance" hero button — carries the appliance's 14-day trial. */
+    .hero-btn-activate .hb-badge { margin-left: 4px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700;
+      background: rgba(255,255,255,0.16); letter-spacing: .01em; }
+    .hero-btn-activate .hb-clock { margin-left: 2px; font: 600 12.5px ui-monospace, SFMono-Regular, Menlo, monospace; font-variant-numeric: tabular-nums; }
+    .hero-btn-activate .hb-cta { margin-left: 6px; padding: 2px 9px; border-radius: 6px; font-size: 11.5px; font-weight: 700; background: rgba(255,255,255,0.18); }
+    .hero-btn-activate.is-trial { background: linear-gradient(135deg,#2563eb,#7c3aed); }
+    .hero-btn-activate.is-ended { background: #7f1d1d; }
+    .hero-btn-activate.is-ended:hover { background: #991b1b; }
+    .hero-btn-activate.is-paid { background: #065f46; }
+    .am-trial-note { display: flex; flex-direction: column; align-items: center; gap: 7px; text-align: center;
+      margin-top: 10px; padding: 10px 12px; border-radius: 8px;
+      font-size: 12.5px; background: rgba(59,130,246,0.10); border: 1px solid rgba(59,130,246,0.25); }
+    .am-trial-note .atn-line { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+    .am-trial-note .material-icons { font-size: 16px; color: #60a5fa; }
+    .am-trial-note .atn-pill { padding: 2px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; letter-spacing: .02em;
+      color: #047857; background: rgba(16,185,129,0.14); border: 1px solid rgba(16,185,129,0.35); }
     [data-tip]::after {
       content: attr(data-tip); position: absolute; bottom: calc(100% + 7px); right: 0;
       padding: 5px 8px; border-radius: 6px; background: #0f172a; color: #e2e8f0;
@@ -209,7 +250,6 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
       white-space: nowrap; pointer-events: none; opacity: 0; transform: translateY(3px);
       transition: opacity .12s, transform .12s; z-index: 20;
     }
-    .ttl-timer[data-tip]::after { left: 0; right: auto; }
     [data-tip]:hover::after, [data-tip]:focus-visible::after { opacity: 1; transform: translateY(0); }
 
     .empty-spaces {
@@ -1484,41 +1524,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     @media (max-width: 720px) { .tb-actions .hero-btn-github > span:not(.tb-caret) { display: none; } .tb-actions .hb-badge { display: none; } }
   </style>
 </head>
-<body>
-  <!-- Boot screen ("nano kernel", wasm/nano-kernel.js): once per launch, first thing
-       in <body>, with the dashboard's real boot steps; replaces the old one-time
-       splash, which showed once ever and was then suppressed by a localStorage flag. -->
-  <script src="./nano-kernel.js"></script>
-  <script>
-  (function () {
-    var k = window.__nk = window.NanoKernel && NanoKernel.start("dashboard");
-    if (!k || !NanoKernel.enabled) return;
-    (async function () {
-      var sw = k.step("service", "service worker");
-      try {
-        if ("serviceWorker" in navigator) {
-          var ok = await Promise.race([navigator.serviceWorker.ready.then(function () { return true; }),
-                                       new Promise(function (r) { setTimeout(function () { r(false); }, 6000); })]);
-          if (!navigator.serviceWorker.controller) { sw.ok("installing; reloading under it"); return; }   // nano-sw.js reloads + carries
-          sw.ok(ok ? "active, serving the in-browser cloud" : "starting");
-        } else { sw.fail("this browser has no service workers"); }
-      } catch (e) { sw.fail(e); }
-      var b = k.step("bundle", "Nano bundle");
-      try {
-        var r = await fetch("APPLIANCE_SYNC.json", { cache: "no-store" });
-        if (r.ok) { var j = await r.json(); b.ok("appliance " + String(j.sha || "").slice(0, 7) + (j.date ? " · " + j.date : "")); }
-        else b.ok("local build");
-      } catch (_) { b.ok("local build"); }
-      var sp = k.step("spaces", "loading your spaces");
-      try {
-        var d = await (await fetch("/api/spaces")).json(), list = d.spaces || [];
-        var by = {}; list.forEach(function (x) { var c = (x.provider || x.provider_id || "?").toUpperCase(); by[c] = (by[c] || 0) + 1; });
-        sp.ok(list.length + " space" + (list.length === 1 ? "" : "s") + (list.length ? " (" + Object.keys(by).map(function (c) { return c + " " + by[c]; }).join(" · ") + ")" : ""));
-      } catch (e) { sp.ok("none yet"); }
-      k.ready("dashboard ready: AWS · GCP · Azure, running in your browser");
-    })();
-  })();
-  </script>
+<body class="side-collapsed">
   <div id="app-topbar">
   <!-- v2.0.8: persistent appliance readiness / diagnostics strip. While the
        backends are cold-starting it shows weighted pull progress; once every
@@ -1812,14 +1818,6 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
         @keyframes rspin { to { transform: rotate(360deg); } }
       </style>
     </header>
-    <script>
-      function toggleCommunityMenu(evt){ if(evt)evt.stopPropagation(); var w=document.getElementById('tb-community'); if(!w)return; var was=w.classList.contains('open'); w.classList.toggle('open'); if(!was){ _loadStarCount(); trackCommunityClick('modal_open'); } }
-      function closeCommunityMenu(){ var w=document.getElementById('tb-community'); if(w)w.classList.remove('open'); }
-      (function(){ document.addEventListener('click',function(e){ var w=document.getElementById('tb-community'); if(w&&w.classList.contains('open')&&!w.contains(e.target))closeCommunityMenu(); }); document.addEventListener('keydown',function(e){ if(e.key==='Escape')closeCommunityMenu(); }); })();
-      async function _loadStarCount(){ var tag=document.getElementById('tbc-star-count'); if(!tag)return; try{ var c=JSON.parse(sessionStorage.getItem('vyomi.community.stars')||'null'); if(c&&(Date.now()-c.at)<600000&&typeof c.count==='number'){ _renderStarCount(c.count); return; } }catch(e){} try{ var r=await fetch('https://api.github.com/repos/vyomi-cloud/appliance',{headers:{'Accept':'application/vnd.github+json'}}); if(!r.ok)throw new Error('http '+r.status); var j=await r.json(); var count=j.stargazers_count||0; try{ sessionStorage.setItem('vyomi.community.stars',JSON.stringify({count:count,at:Date.now()})); }catch(e){} _renderStarCount(count); }catch(e){ tag.innerHTML='↗'; } }
-      function _renderStarCount(n){ var tag=document.getElementById('tbc-star-count'); if(!tag)return; var fmt=n>=1000?(n/1000).toFixed(1).replace(/\.0$/,'')+'k':String(n); tag.innerHTML='⭐ '+fmt; }
-      function trackCommunityClick(action){ try{ fetch('/api/runtime/community-click',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:action,where:'nano'})}).catch(function(){}); }catch(e){} }
-    </script>
 
     <!-- ── SPACES surface card — filter pills + grid ────────────────── -->
     <div class="surface-card" id="spaces-card">
@@ -1941,7 +1939,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
         var urlEl = document.getElementById('cx-url'), exEl = document.getElementById('cx-ex'), copyBtn = document.getElementById('cx-copy');
         var _url = null, _k = 'cli';
         function ex(u){ return {
-          cli: 'aws --endpoint-url ' + u + ' s3 ls\naws --endpoint-url ' + u + ' dynamodb list-tables',
+          cli: 'export AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_DEFAULT_REGION=us-east-1 AWS_PAGER=""\naws --endpoint-url ' + u + ' s3 ls\naws --endpoint-url ' + u + ' dynamodb list-tables',
           sdk: 'import boto3\ns3 = boto3.client(\n  "s3", endpoint_url="' + u + '",\n  aws_access_key_id="test", aws_secret_access_key="test",\n  region_name="us-east-1")\nprint(s3.list_buckets())',
           curl: 'curl ' + u + '/            # S3 ListBuckets'
         }; }
@@ -2127,7 +2125,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
       <div class="kc-tiles">
       <a class="kct" href="https://vyomi.cloud/docs/coverage" target="_blank" rel="noopener">
         <h3><span class="material-icons" style="color:#2563eb">grid_view</span> Service matrix</h3>
-        <p><span data-svc-total>36</span> services across 3 clouds with real-backend / simulated tags and an SDK compatibility table.</p>
+        <p>35 services across 3 clouds with real-backend / simulated tags and an SDK compatibility table.</p>
         <span class="kct-foot"><span class="kct-open">Open <span class="material-icons">open_in_new</span></span></span>
       </a>
       <a class="kct" href="https://vyomi.cloud/docs/architecture" target="_blank" rel="noopener">
@@ -2243,6 +2241,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
         <div>
           <h3 id="am-title">Activate this appliance</h3>
           <div class="am-sub">Sign in with your vyomi account — we'll detect your active subscription and apply the right tier automatically. Your workspace is then saved &amp; synced across devices.</div>
+          <div class="am-trial-note"><span class="atn-line"><span class="material-icons">rocket_launch</span><span>New to vyomi? Activating starts your <b>free 14-day Pro trial</b>.</span></span><span class="atn-pill">No card needed</span></div>
         </div>
         <button class="am-close" type="button" aria-label="Close" onclick="closeActivateModal()">×</button>
       </div>
@@ -2283,7 +2282,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     // Curated (not exhaustive) — the "Full per-service reference" link covers all.
     var CLOUDS = [
       { id:'aws', name:'AWS', icon:'cloud', color:'#ff9900',
-        setup:'Any region + dummy creds (aws_access_key_id=test, secret=test).' },
+        setup:'Dummy creds + any region, and disable the CLI pager: export AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_DEFAULT_REGION=us-east-1 AWS_PAGER=""' },
       { id:'gcp', name:'Google Cloud', icon:'cloud_queue', color:'#4285f4',
         setup:'No gcloud login needed: each snippet sets CLOUDSDK_AUTH_DISABLE_CREDENTIALS=true and points the service at your endpoint with a CLOUDSDK_API_ENDPOINT_OVERRIDES_* variable.' },
       { id:'azure', name:'Azure', icon:'cloud_circle', color:'#38b6ff',
@@ -2808,7 +2807,9 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
       if (_sideMQ.matches) _applySideMode();
     })();
     (function () {
-      try { if (localStorage.getItem('vyomi.sidecollapsed') === '1') document.body.classList.add('side-collapsed'); } catch (_) {}
+      // Sidebar is collapsed by DEFAULT (set on <body>); only expand if the
+      // user explicitly expanded it before (stored '0').
+      try { if (localStorage.getItem('vyomi.sidecollapsed') === '0') document.body.classList.remove('side-collapsed'); } catch (_) {}
       // A URL hash (e.g. clouds.html#spaces from a console "back to spaces" link) wins over the last-used view.
       var hv = (location.hash || '').replace('#', '');
       if (APP_VIEWS[hv]) { showAppView(hv); return; }
@@ -2983,7 +2984,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     })();
 
     // ── Inject "Open <Cloud> Console →" buttons on each cloud card ───
-    const PROVIDER_PATHS = { aws: 'aws-console.html', gcp: 'gcp-console.html', azure: 'azure-console.html' };
+    const PROVIDER_PATHS = { aws: 'v4/aws/', gcp: 'v4/gcp/', azure: 'v4/azure/' };
     document.querySelectorAll('.cloud-card').forEach(card => {
       for (const key of Object.keys(PROVIDER_PATHS)) {
         if (card.classList.contains(key)) {
@@ -3068,6 +3069,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     // (merge any spaces saved on another device, then save the union).
     function _onActivated(){
       _saveLicActive = true; _licChecked = true; updateSaveChip();
+      loadTrialState();   // hero button flips to the trial countdown in place
       fetch('/api/nano/workspace/pull', { method:'POST' })
         .then(function(){ return fetch('/api/nano/workspace/push', { method:'POST' }); })
         .then(function(){ if(window.loadSpaces) loadSpaces(); }).catch(function(){});
@@ -3121,6 +3123,24 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     })();
 
     // ── Fetch + render existing spaces ───────────────────────────────
+    // Client-side monthly-savings estimate from a space's resource counts.
+    // The backend only ticks cost_savings for the ACTIVE space, so new /
+    // non-active spaces would otherwise read $0. Rates mirror core/cost_model
+    // (SERVICE_MONTHLY + default VM monthly = hourly × 730h).
+    const _SPACE_RATE = {
+      ec2_count: 30.37, rds_count: 25.55, dynamodb_count: 1.25, sqs_count: 0.40, lambda_count: 0.20,  // AWS
+      gcp_count: 24.53, gcp_functions_count: 0.20,                                                     // GCP
+      azure_count: 30.37, azure_functionapp_count: 0.20,                                               // Azure
+    };
+    function estimateSpaceSavings(s) {
+      let total = 0;
+      for (const key in _SPACE_RATE) {
+        const n = (typeof s[key] === 'number') ? s[key] : 0;
+        total += n * _SPACE_RATE[key];
+      }
+      return total;
+    }
+
     // ── Per-space TTL (live countdown) ──────────────────────────────────────
     // A SINGLE interval ticks every TTL badge on the grid; cleared+restarted on
     // each render so no timers leak when the grid re-renders.
@@ -3152,20 +3172,82 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
         if (remain <= 0) { _markCardExpired(el.closest('.space-card')); return; }
         const c = el.querySelector('.sp-clock'); if (c) c.textContent = _fmtClock(remain);
       });
-      const badges = document.querySelectorAll('.ttl-timer[data-expires]');
-      badges.forEach(function(el) {
-        const expires = el.getAttribute('data-expires');
-        if (!expires) { el.innerHTML = '<span class="material-icons">all_inclusive</span>'; el.className = 'ttl-timer'; return; }
-        const remain = Math.floor((Date.parse(expires) - Date.now()) / 1000);
-        if (remain <= 0) {
-          _markCardExpired(el.closest('.space-card')); el.remove(); return;
-        }
-        let cls = 'ttl-timer';
-        if (remain < 600) cls += ' ttl-red';          // < 10m
-        else if (remain < 3600) cls += ' ttl-amber';   // < 1h
-        el.className = cls;
-        el.innerHTML = '<span class="material-icons">timer</span>' + _fmtClock(remain);
-      });
+    }
+    // ── Offline 14-day trial — shown ON the "Activate appliance" hero button ──
+    // The trial belongs to the APPLIANCE (portal-signed; /api/license/status .trial),
+    // not to a space, so it lives on the activation button:
+    //   not activated → "Activate appliance" + "14-day Pro trial" badge
+    //   trial running → "<Tier> trial · 13d 04:12:09 · Upgrade"
+    //   trial ended   → "Trial ended · Upgrade" (the appliance is back on Free)
+    //   paid          → "Activated · <TIER>"
+    let _trialState = null, _heroTimer = null, _trialReloading = false;
+    async function loadTrialState() {
+      try {
+        const r = await fetch('/api/license/status', { cache: 'no-store' });
+        const d = await r.json();
+        _trialState = d && d.trial ? Object.assign({ tier: d.active_tier }, d.trial) : null;
+      } catch (e) { _trialState = null; }
+      renderHeroActivate();
+    }
+    function openUpgrade(ev) {
+      if (ev) { ev.preventDefault(); ev.stopPropagation(); }
+      const url = (_trialState && _trialState.upgrade_url) || 'https://vyomi.cloud/pricing';
+      window.open(url, '_blank', 'noopener');
+    }
+    function renderHeroActivate() {
+      const b = document.getElementById('hero-activate'); if (!b) return;
+      const t = _trialState;
+      if (_heroTimer) { clearInterval(_heroTimer); _heroTimer = null; }
+      b.className = 'hero-btn hero-btn-activate';
+      b.removeAttribute('data-trial-ends');
+      if (t && t.active && t.ends_at) {
+        const tier = (t.tier || 'pro').toUpperCase();
+        b.classList.add('is-trial');
+        b.setAttribute('data-trial-ends', t.ends_at);
+        b.onclick = openUpgrade;
+        b.title = 'Free ' + tier + ' trial ends ' + new Date(Date.parse(t.ends_at)).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) + ' — click to upgrade';
+        b.innerHTML = '<span class="material-icons">timer</span>' + tier + ' trial<span class="hb-clock"></span><span class="hb-cta">Upgrade</span>';
+        _tickHeroTrial();
+        _heroTimer = setInterval(_tickHeroTrial, 1000);
+      } else if (t && t.ended) {
+        b.classList.add('is-ended');
+        b.onclick = openUpgrade;
+        b.title = "Your free trial has ended — you're on the Free tier. Upgrade to restore paid features.";
+        b.innerHTML = '<span class="material-icons">timer_off</span>Trial ended<span class="hb-cta">Upgrade</span>';
+      } else if (!t || t.tier === 'free') {
+        b.onclick = function(){ openActivateModal(); };
+        b.title = 'Sign in to activate — starts your free 14-day Pro trial';
+        b.innerHTML = '<span class="material-icons">verified</span>Activate appliance<span class="hb-badge">14-day Pro trial</span>';
+      } else {
+        b.classList.add('is-paid');
+        b.onclick = function(){ openActivateModal(); };
+        b.title = 'Appliance activated — click to re-bind to a different account';
+        b.innerHTML = '<span class="material-icons">verified</span>Activated · ' + String(t.tier).toUpperCase();
+      }
+    }
+    function _tickHeroTrial() {
+      const b = document.getElementById('hero-activate'); if (!b) return;
+      const ends = b.getAttribute('data-trial-ends'); if (!ends) return;
+      const remain = Math.floor((Date.parse(ends) - Date.now()) / 1000);
+      if (remain <= 0) {   // trial just ended — re-read status (reads Free + ended) once
+        if (!_trialReloading) { _trialReloading = true; loadTrialState().finally(function(){ _trialReloading = false; }); }
+        return;
+      }
+      const c = b.querySelector('.hb-clock'); if (c) c.textContent = _fmtClock(remain);
+    }
+    function spaceFooterHtml(s) {
+      if (!(Number(s.ttl_seconds) > 0)) return '';
+      return `
+              <div class="space-ttl">
+                <span class="space-ttl-actions">
+                  <button type="button" class="ttl-btn ttl-btn-renew"
+                          onclick="renewSpaceTtl('${ s.space_id }', event)"
+                          data-tip="Renew TTL (admin)" aria-label="Renew TTL (admin)"><span class="material-icons">more_time</span></button>
+                  <button type="button" class="ttl-btn ttl-btn-shutdown"
+                          onclick="forceShutdownSpace('${ s.space_id }', event)"
+                          data-tip="Force shutdown — stop runtimes now" aria-label="Force shutdown"><span class="material-icons">power_settings_new</span></button>
+                </span>
+              </div>`;
     }
     function _startTtlTimer() {
       if (_ttlTimer) { clearInterval(_ttlTimer); _ttlTimer = null; }
@@ -3327,7 +3409,13 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
           // Nano spaces carry no *_count fields: their live count is the census's.
           const totalRes = counts.length ? counts.reduce((a, b) => a + b, 0) : (_resByProvider[provider] || 0);
           const consolePath = PROVIDER_PATHS[provider] || '/ui';
-          const savings = _savingsByProvider[provider] || 0;
+          // Per-space cost savings (core/cost_model; simulator cost = $0).
+          const cs = s.cost_savings || {};
+          // Prefer the backend's ticked figure; for new / non-active spaces the
+          // backend hasn't computed it, so estimate from the space's own counts.
+          let savings = (typeof cs.savings_usd === 'number' && cs.savings_usd > 0) ? cs.savings_usd : estimateSpaceSavings(s);
+          savings = Number(savings) || 0;
+          // Progress bar: scale $/mo against a $50 reference, clamped 6–100%.
           const savingsBar = savings > 0 ? Math.max(6, Math.min(100, Math.round((savings / 50) * 100))) : 0;
           return `
             <a class="space-card ${ isActive ? 'active' : '' }"
@@ -3343,7 +3431,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
               <div class="space-meta">
                 ${ region }<span class="dot">·</span>${ totalRes } resource${ totalRes === 1 ? '' : 's' }
               </div>
-              <div class="space-savings" title="What you'd pay ${ provider.toUpperCase() } for this space's live resources — saved by running in your browser ($0)">
+              <div class="space-savings" title="What you'd pay ${ provider.toUpperCase() } for this space's services — saved by running locally ($0)">
                 <div class="space-savings-top">
                   <span class="material-icons">savings</span>
                   <span class="space-savings-amt">$${ savings.toFixed(2) }<span class="space-savings-unit">/mo saved</span></span>
@@ -3351,17 +3439,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
                 </div>
                 <span class="space-savings-track"><i style="width:${ savingsBar }%"></i></span>
               </div>
-              ${ (Number(s.ttl_seconds) > 0) ? `
-              <div class="space-ttl">
-                <span class="space-ttl-actions">
-                  <button type="button" class="ttl-btn ttl-btn-renew"
-                          onclick="renewSpaceTtl('${ s.space_id }', event)"
-                          data-tip="Renew TTL (admin)" aria-label="Renew TTL (admin)"><span class="material-icons">more_time</span></button>
-                  <button type="button" class="ttl-btn ttl-btn-shutdown"
-                          onclick="forceShutdownSpace('${ s.space_id }', event)"
-                          data-tip="Force shutdown — stop runtimes now" aria-label="Force shutdown"><span class="material-icons">power_settings_new</span></button>
-                </span>
-              </div>` : '' }
+              ${ spaceFooterHtml(s) }
             </a>
           `;
         }).join('');
@@ -3980,9 +4058,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
         desc.textContent = n > 0
           ? ('Live per-cloud footprint across your resources (weighted vCPU / RAM / Disk) · '
              + n + ' active console' + (n === 1 ? '' : 's') + '.')
-          : (d.grand_total_resources > 0
-              ? 'Per-cloud footprint of your saved resources (weighted vCPU / RAM / Disk) · no console open.'
-              : 'Live per-cloud footprint — open a console and create resources to see utilization here.');
+          : 'Live per-cloud footprint — open a console and create resources to see utilization here.';
       } else {
         desc.textContent = 'Per-cloud workload distribution across your clouds (CPU / RAM / Disk).';
       }
@@ -4051,6 +4127,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
 
     document.addEventListener('DOMContentLoaded', () => {
       loadSpaces();
+      loadTrialState();
       refreshHostStats();
       refreshProviderPies();
       setInterval(() => {
@@ -4089,6 +4166,41 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
        #vyomi-readiness-mount above). Shared with the launch page. -->
   <script src="./service-icons.js" defer></script>
   <script src="./readiness-strip.js" defer></script>
+
+  <!-- ══ Profile restriction: hide clouds/spaces not in the active VYOMI_PROFILE ══
+       An aws-full sandbox shows only AWS — GCP/Azure cloud cards, existing spaces,
+       filters and the create-space picker are hidden. No restriction (all-clouds /
+       unset) → everything shows. Enforced server-side too (middleware + console gate);
+       this is the UX layer so out-of-profile clouds aren't even offered. -->
+  <script>
+  (async function applyProfileRestriction(){
+    try {
+      const r = await fetch('/api/runtime/profile', {cache:'no-store'});
+      if(!r.ok) return;
+      const j = await r.json();
+      if(!j || !j.restricted) return;
+      const allowed = new Set(j.allowed_clouds || []);
+      const blocked = ['aws','gcp','azure'].filter(c => !allowed.has(c));
+      if(!blocked.length) return;
+      const sel = [];
+      blocked.forEach(function(c){
+        sel.push('.cloud-card.'+c);                                   // "pick a cloud" cards
+        sel.push('.space-card[data-provider="'+c+'"]');              // existing spaces of that cloud
+        sel.push('[data-prov="'+c+'"]');                             // space filter buttons
+        sel.push('.provider-picker label:has(input[value="'+c+'"])'); // create-space picker
+      });
+      const st = document.createElement('style');
+      st.textContent = sel.join(',') + '{display:none !important;}';
+      document.head.appendChild(st);
+      // Disable the create-space radios for blocked clouds; select an allowed one.
+      blocked.forEach(function(c){
+        document.querySelectorAll('.provider-picker input[value="'+c+'"]').forEach(function(i){ i.disabled = true; i.checked = false; });
+      });
+      const firstAllowed = document.querySelector('.provider-picker input[value="'+[...allowed][0]+'"]');
+      if(firstAllowed) firstAllowed.checked = true;
+    } catch(e) { /* fail-open — server still enforces */ }
+  })();
+  </script>
 
 <style>
  #nano-docs{position:fixed;right:14px;bottom:40px;z-index:100000;font:13px system-ui,-apple-system,sans-serif}
@@ -4159,6 +4271,22 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
  <button id="nano-foot-logs">Logs ▴</button>
  <button id="nano-foot-toggle">Start tunnel</button>
 </div>
+<script>
+// The tunnel bar starts right of the left side menu (never over it: the account menu /
+// Sign out lives at the side menu's foot) and follows it as it collapses or expands.
+(function(){
+  var foot = document.getElementById("nano-foot"); if(!foot) return;
+  function fit(){
+    var sb = document.getElementById("app-sidebar");
+    var r = (sb && sb.getClientRects().length) ? sb.getBoundingClientRect() : null;
+    foot.style.left = (r && r.width && r.left < 1 ? Math.round(r.right) : 0) + "px";
+  }
+  fit(); addEventListener("resize", fit); addEventListener("load", fit);
+  var sb = document.getElementById("app-sidebar");
+  if(sb && window.ResizeObserver) new ResizeObserver(fit).observe(sb);
+  new MutationObserver(fit).observe(document.body, { attributes: true, attributeFilter: ["class"] });
+})();
+</script>
 <script>
 (function(){
   var base = window.__NANO_BASE || "";
@@ -4383,10 +4511,62 @@ function nanoLogout(){
   window.VYOMI_SVC_TOTAL = window.VYOMI_SVC_TOTAL || 36;
   function apply() { document.querySelectorAll("[data-svc-total]").forEach(function (e) { e.textContent = window.VYOMI_SVC_TOTAL; }); }
   try {
-    fetch("/api/service-catalog", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; })
-      .then(function (d) { if (d && d.total > 0) { window.VYOMI_SVC_TOTAL = d.total; apply(); } }).catch(function () {});
-  } catch (_) {}
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", apply); else apply();
+    var _x=new XMLHttpRequest(); _x.open('GET','/api/auth/me',true); _x.withCredentials=true;
+    _x.onload=function(){ if(_x.status!==200) return; try{ paintAccount(JSON.parse(_x.responseText)); }catch(e){} };
+    _x.send();
+  } catch(e){}
+  var btn=document.getElementById('nanoUsrBtn'), menu=document.getElementById('nanoUsrMenu');
+  if(btn&&menu){
+    btn.addEventListener('click',function(e){ e.stopPropagation(); menu.classList.toggle('open'); });
+    document.addEventListener('click',function(){ menu.classList.remove('open'); });
+    menu.addEventListener('click',function(e){ e.stopPropagation(); });
+  }
+})();
+function nanoLogout(){
+  /* XHR (see above) so this reaches the portal and truly clears the cookie. */
+  try {
+    var l = new XMLHttpRequest();
+    l.open('POST', '/api/auth/logout', true); l.withCredentials = true;
+    l.onloadend = function(){ location.href = '/dashboard'; };
+    l.send();
+  } catch (e) { location.href = '/dashboard'; }
+}
+</script>
+<script>
+/* Nano install ping — RESILIENT. The launch page (/nano/ = index.html) redirects
+   here before it renders, and the ping needs the service worker controlling to
+   reach the portal (the SW forwards /api/install/register out of the /nano scope).
+   So fire it here and retry until the SW controls. Same device fingerprint as
+   index.html's nanoDeviceFp → the portal's idempotent upsert keeps one row per
+   machine; the once-per-browser guard latches only on success. */
+(function(){
+  function done(){ try{ return localStorage.getItem("nano_install_recorded")==="1"; }catch(_){ return true; } }
+  if(done()) return;
+  async function nanoFp(){
+    var gpu="";
+    try{ var c=document.createElement("canvas"); var gl=c.getContext("webgl")||c.getContext("experimental-webgl");
+      if(gl){ var e=gl.getExtension("WEBGL_debug_renderer_info"); if(e) gpu=gl.getParameter(e.UNMASKED_RENDERER_WEBGL)||""; } }catch(_){}
+    var parts=[navigator.platform||"", navigator.hardwareConcurrency||"", navigator.deviceMemory||"",
+      screen.width+"x"+screen.height+"x"+screen.colorDepth,
+      (Intl.DateTimeFormat().resolvedOptions().timeZone)||"", navigator.language||"", gpu];
+    try{ var buf=await crypto.subtle.digest("SHA-256", new TextEncoder().encode(parts.join("|")));
+      return "nano-fp-"+Array.from(new Uint8Array(buf)).map(function(b){return b.toString(16).padStart(2,"0");}).join("").slice(0,24); }
+    catch(_){ return null; }
+  }
+  var tries=0;
+  async function attempt(){
+    if(done()) return;
+    tries++;
+    try{
+      var id=await nanoFp(); if(!id) return;
+      var r=await fetch("/api/install/register",{method:"POST",keepalive:true,headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({install_id:id,channel:"nano",state:"DOWNLOADED",host_os:(navigator.platform||"").slice(0,32),webdriver:!!navigator.webdriver})});
+      if(r&&r.ok){ try{ localStorage.setItem("nano_install_recorded","1"); }catch(_){} return; }
+    }catch(_){}
+    if(tries<6) setTimeout(attempt, 3000);
+  }
+  try{ if(navigator.serviceWorker) navigator.serviceWorker.addEventListener("controllerchange", attempt); }catch(_){}
+  attempt();
 })();
 </script>
 <script src="./vyomi-cloudpick.js" data-nano data-entry defer></script>

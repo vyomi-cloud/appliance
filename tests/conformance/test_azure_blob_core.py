@@ -118,6 +118,37 @@ def run() -> int:
     _check("deleted container 404", gone.status == 404 and
            gone.headers.get("x-ms-error-code") == "ContainerNotFound")
 
+    # 10. per-account namespaces: path-style /{account}/... with a SharedKey
+    #     authorization naming that account is scoped to the account.
+    sk = lambda a: {"authorization": f"SharedKey {a}:c2lnbmF0dXJl", "x-ms-version": az.X_MS_VERSION}
+    r = az.dispatch(st, "PUT", "/acctone/data", {"restype": "container"}, sk("acctone"), b"")
+    _check("account-scoped create container 201", r.status == 201)
+    r = az.dispatch(st, "PUT", "/accttwo/data", {"restype": "container"}, sk("accttwo"), b"")
+    _check("same container name in another account 201", r.status == 201)
+    az.dispatch(st, "PUT", "/acctone/data/x.txt", {}, {**sk("acctone"), "x-ms-blob-type": "BlockBlob"}, b"one")
+    g = az.dispatch(st, "GET", "/acctone/data/x.txt", {}, sk("acctone"), b"")
+    _check("account-scoped get blob", g.status == 200 and g.body == b"one")
+    g2 = az.dispatch(st, "GET", "/accttwo/data/x.txt", {}, sk("accttwo"), b"")
+    _check("blob invisible to the other account", g2.status == 404)
+    l1 = _text(az.dispatch(st, "GET", "/acctone", {"comp": "list"}, sk("acctone"), b""))
+    _check("account list shows its container", "<Name>data</Name>" in l1 and "thumbnails" not in l1)
+    l0 = _text(az.dispatch(st, "GET", "/", {"comp": "list"}, {}, b""))
+    _check("default namespace hides account containers", "<Name>data</Name>" not in l0 and "thumbnails" in l0)
+    lb = _text(az.dispatch(st, "GET", "/acctone/data", {"restype": "container", "comp": "list"}, sk("acctone"), b""))
+    _check("account list blobs", 'ContainerName="data"' in lb and "<Name>x.txt</Name>" in lb)
+    dv = az.dispatch(st, "GET", "/devstoreaccount1/thumbnails", {"restype": "container"}, sk("devstoreaccount1"), b"")
+    _check("devstoreaccount1 SharedKey stays on the default namespace", dv.status == 200)
+
+    # 10b. the wire router sends the path-style account root list to Blob (host only).
+    try:
+        from core.aws_wire_router import _azure_service
+        _check("router: /{account}?comp=list → az-blob",
+               _azure_service("/acctone", sk("acctone"), {"comp": "list"}) == "az-blob")
+        _check("router: /{queue} without SharedKey account → az-queue",
+               _azure_service("/orders", {"x-ms-version": "2021-12-02"}, {}) == "az-queue")
+    except ImportError:  # pragma: no cover - Pyodide flat layout
+        pass
+
     print("\nAzure Blob storage-core conformance: ALL GREEN")
     return 0
 

@@ -1,0 +1,282 @@
+{
+ "$doc": "Vyomi capability registry — Cloud Monitoring. One entry per console section; level per substrate (nano = shared core, also dev_server/unified ingress; offline = appliance). Proven by tests/conformance/test_capabilities.py. GCP probes speak REST, not the AWS probe helper, so claims lean on `tests` (the core's own conformance suite) instead of `probe`.",
+ "gcp.monitoring.alert-policy.crud": {
+  "title": "Alerting policies (create, list, get, patch, delete)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_gcp_monitoring_core.py"
+  ]
+ },
+ "gcp.monitoring.notification-channels": {
+  "title": "Notification channels (email, SMS, Slack, PagerDuty, Pub/Sub, webhooks)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Channels are created, verified and attached to policies for real, but Vyomi never actually sends an email/SMS/Slack message/webhook call when an alert would fire — there is no outbound delivery path."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_monitoring_core.py"
+  ]
+ },
+ "gcp.monitoring.incidents": {
+  "title": "Alerts (open incidents)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Vyomi's alert-evaluation engine evaluates condition_threshold and condition_absent conditions for real against the stored time series a policy's filter matches, opening and closing incidents (and honoring active snoozes) exactly like the real engine — there is no public incidents.list API, so this is modeled on the documented webhook notification payload shape (incident_id/state/started_at/ended_at/...) instead. condition_matched_log, MQL (condition_monitoring_query_language) and PromQL (condition_prometheus_query_language) conditions are never evaluated (no log ingestion or query-language engine), so policies that rely solely on those never open an incident. Multi-condition policies are tracked as one whole-policy incident rather than per matching resource (AND_WITH_MATCHING_RESOURCE doesn't cross-match resources between conditions)."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_monitoring_core.py"
+  ]
+ },
+ "gcp.monitoring.snoozes": {
+  "title": "Snoozes",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_gcp_monitoring_core.py"
+  ]
+ },
+ "gcp.monitoring.uptime-checks.config": {
+  "title": "Uptime check configuration (create, list, patch, delete)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Checks are validated and stored exactly like the real UptimeCheckConfigs API, including per-region selection, but Vyomi never dispatches an actual HTTP/HTTPS/TCP probe from any region — there is no pass/fail result to report per-region."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_monitoring_core.py"
+  ]
+ },
+ "gcp.monitoring.uptime-checks.probing": {
+  "title": "Uptime check results (pass/fail per region)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Every check is actually probed (run_uptime_probes), writing a real monitoring.googleapis.com/uptime_check/check_passed point per region — the same metric the console's own alert-policy wizard already filters on. A check whose monitored resource is a Compute Engine instance reflects that instance's real RUNNING/stopped status. Vyomi has no outbound network access (see 'Nothing leaves the simulator' in AGENT-UI.md), so a check against an arbitrary external host — what the create wizard always builds — deterministically fails closed instead of reaching the real internet; the verdict doesn't vary by region, since Vyomi runs one simulated network, not six real checker fleets."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_monitoring_core.py"
+  ]
+ },
+ "gcp.monitoring.synthetic-monitors": {
+  "title": "Synthetic monitors",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "A synthetic monitor is a real UptimeCheckConfig whose check type is synthetic_monitor (a Cloud Functions v2 target) instead of http_check/tcp_check — it's created, listed and deleted for real. Vyomi has no Cloud Functions execution runtime, so a monitor's run status, success rate and average latency are never populated."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_monitoring_core.py"
+  ]
+ },
+ "gcp.monitoring.slos": {
+  "title": "Services & SLOs",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Services and their SLOs (goal, compliance period, indicator) are real resources — the same Service Monitoring API v3 create/get/list/delete the gcloud/client libraries use. For a request-based SLO (service_level_indicator.request_based.good_total_ratio), Vyomi computes a real error-budget fraction from the good/total time series you've written, via the same select_slo_compliance()/select_slo_budget_fraction()/select_slo_health() timeSeries.list filter functions the real API reserves for SLO burn-down queries — the 'SLOs out of error budget' count reflects that. Windows-based and basic SLIs aren't evaluated (shown as '—', since there's no live request/latency pipeline to classify them against). 'SLOs with firing alert' is always 0: an SLO's burn-rate alert condition is a condition_monitoring_query_language (MQL) alert condition, and Vyomi's alert-evaluation engine (see gcp.monitoring.incidents) only evaluates condition_threshold/condition_absent, so a burn-rate condition never actually opens an incident."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_monitoring_core.py"
+  ]
+ },
+ "gcp.monitoring.metric-descriptors": {
+  "title": "Metric and monitored-resource descriptors (built-in catalog + custom metrics)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_gcp_monitoring_core.py"
+  ]
+ },
+ "gcp.monitoring.metrics-explorer": {
+  "title": "Metrics Explorer (query time series: filter, align, reduce)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "The Builder query mode runs against real stored time series (write, filter, per-series alignment, cross-series reduction). PromQL query mode is not parsed — switch to Builder to run a query."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_monitoring_core.py"
+  ]
+ },
+ "gcp.monitoring.dashboards.crud": {
+  "title": "Custom dashboards (create, list, get, patch, delete)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "A dashboard's name, labels and layout are stored and returned exactly as the real Dashboards API (v1) would, round-tripping through etag-checked updates. Tiles built with a classic timeSeriesFilter query render a real chart from live stored time series in the dashboard builder; tiles using MQL (timeSeriesQueryLanguage) are not parsed, matching the Metrics Explorer PromQL gap."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_monitoring_core.py"
+  ]
+ },
+ "gcp.monitoring.groups": {
+  "title": "Groups (static and dynamic resource groups)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_gcp_monitoring_core.py"
+  ]
+ },
+ "gcp.monitoring.metrics-management": {
+  "title": "Metrics Management (billable volume, reads, cardinality per metric)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "The metric catalog itself (type, domain, labels, referencing alert policies) is real, from the same metricDescriptors.list every SDK calls. Billable byte/sample volume, 30-day read counts, custom-dashboard references and label cardinality come from Google's internal billing and usage pipelines, not the Monitoring API — Vyomi has no usage/billing meter for ingested time series, so those columns are always empty. Excluding a metric isn't modeled either; it's a console-only feature with no public API."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_monitoring_core.py"
+  ]
+ },
+ "gcp.monitoring.integrations": {
+  "title": "Integrations catalog",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "The catalog itself (which platforms are available, their type/platform metadata) is reference data, the same on every project, not a simulated resource. Installing one is real: it creates a Dashboards API (v1) dashboard in this project with a tile wired to a real metric filter for that platform, via the same create call the Dashboards page uses. The curated alerting policies a real install also adds aren't modeled, and the catalog's Status filter (installed/not installed) isn't wired up."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_monitoring_core.py"
+  ]
+ },
+ "gcp.monitoring.permissions": {
+  "title": "Permissions (project IAM bindings)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Grant/Remove access calls the real resourcemanager-style projects.getIamPolicy/setIamPolicy round-trip (the same generic IAM policy store every Vyomi GCP resource uses). Vyomi stores and lists the bindings exactly as granted, but never evaluates them — holding (or lacking) a Monitoring role doesn't actually gate any Monitoring API call."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_iam_core.py"
+  ]
+ },
+ "gcp.monitoring.cost-explorer": {
+  "title": "Cost Explorer",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Real Cost Explorer reads a Cloud Billing BigQuery export Vyomi doesn't generate, but real GCP also exposes project spend as a Cloud Monitoring metric (billing.googleapis.com/billing/total_cost, the same series a Billing Budget alert evaluates) — that's the native-wire path this appliance uses instead. The month-to-date cost per service is computed for real from the project's actual resource inventory (on-demand pricing x real uptime/usage, the same engine core/cost_model.py gives Azure Cost Management), today for Compute Engine instances and Cloud Storage bucket bytes only — other services aren't priced into the total yet."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_monitoring_core.py"
+  ]
+ },
+ "gcp.monitoring.trace-explorer": {
+  "title": "Trace explorer",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Distributed tracing (Cloud Trace) ingestion and the trace explorer UI are a separate product from Cloud Monitoring; Vyomi doesn't model span ingestion."
+  ]
+ },
+ "gcp.monitoring.error-reporting": {
+  "title": "Error reporting",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Error Reporting groups errors parsed out of Cloud Logging entries into deduplicated signatures with occurrence counts and charts. Vyomi has no log-based error grouping, so this shows the real ERROR-and-above severity entries from Cloud Logging (the same entries:list API) as a flat, ungrouped list instead."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_logging_core.py"
+  ]
+ },
+ "gcp.monitoring.application-monitoring": {
+  "title": "Application monitoring (APM)",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Application monitoring needs Cloud Profiler/APM language agents reporting into the project; Vyomi has no application runtime to instrument. The alert policy wizard's Application and Service or Workload selectors, which link a policy to Application Monitoring, aren't modeled either."
+  ]
+ },
+ "gcp.monitoring.ops-agent": {
+  "title": "VMs with Ops Agent",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Compute Engine instances are real (core/gcp_compute_instances_core.py). Vyomi has no agent process to run inside a simulated VM, so the agent.googleapis.com/agent/uptime heartbeat a real Ops Agent reports is instead derived from the same real, operator-set signal OS Config uses to decide a VM is managed by an Ops Agent policy: instance metadata enable-osconfig=TRUE (gcloud compute instances create --metadata=enable-osconfig=TRUE) on a RUNNING instance. A VM without that metadata key is correctly never counted."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_monitoring_core.py"
+  ]
+ },
+ "gcp.monitoring.settings.metric-scope": {
+  "title": "Metric Scope (Settings tab)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "A metrics scope's monitored projects are real resources (the Metrics Scopes API's locations/global/metricsScopes/{project}/projects create/get/delete). Once a project is added, Metrics Explorer, dashboards, the Cost Explorer and the Ops Agent/uptime panels genuinely aggregate that project's time series too (list_time_series reads every project in scope_projects()) — real cross-project aggregation, not a stored-but-unused list. Alert policies stay single-project, matching the real product: a policy only ever evaluates its own project's data."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_monitoring_core.py"
+  ]
+ },
+ "gcp.monitoring.settings.log-scopes": {
+  "title": "Log Scopes (Settings tab)",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Log scopes let a Monitoring workspace search log buckets from other projects in Log Explorer. Vyomi's Log Explorer is itself a separate, unbuilt product in this console (an external link in the nav, like Log router and Logs storage), so there is nothing for a log scope to extend."
+  ]
+ },
+ "gcp.monitoring.settings.trace-scopes": {
+  "title": "Trace Scopes (Settings tab)",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Trace scopes extend Trace Explorer to other projects' spans. Vyomi has no span-ingestion engine at all (see gcp.monitoring.trace-explorer), so there is nothing for a scope to aggregate."
+  ]
+ }
+}

@@ -1,0 +1,276 @@
+{
+  "$doc": "Vyomi capability registry — EventBridge (+ EventBridge Scheduler). See s3.json for the contract.",
+  "eventbridge.bus.crud": {
+    "title": "Event buses (default + custom; create, describe, list, delete, tags)",
+    "level": {
+      "nano": "full",
+      "offline": "full"
+    },
+    "limitations": [],
+    "tests": [
+      "tests/conformance/test_eventbridge_console_v4_core.py"
+    ]
+  },
+  "eventbridge.rule.crud": {
+    "title": "Rules (create with event pattern, describe, list, delete, enable/disable, tags)",
+    "level": {
+      "nano": "full",
+      "offline": "full"
+    },
+    "limitations": [],
+    "tests": [
+      "tests/conformance/test_eventbridge_core.py",
+      "tests/conformance/test_eventbridge_console_v4_core.py"
+    ]
+  },
+ "eventbridge.rule.builder": {
+    "title": "Rule Builder (visual canvas)",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "The visual Builder is a real editor over the rule's event pattern and targets: drawing a Triggering event wired to Target nodes is exactly what PutRule/PutTargets send. It has no sample-event library or schema-registry discovery; advanced pattern operators (prefix, anything-but, numeric, exists) go in the 'Other pattern fields' JSON or the pattern editor."
+    ],
+    "api": ["PutRule", "PutTargets"],
+    "tests": [
+      "tests/conformance/test_visual_canvas.py"
+    ]
+  },
+  "eventbridge.rule.targets": {
+    "title": "Targets (SQS, SNS, Lambda, Step Functions, Kinesis)",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "Only SQS, SNS, Lambda, Step Functions state machines and Kinesis data streams are actually invoked. Other target types (API destinations, ECS tasks, CodeBuild/CodePipeline, Batch, Systems Manager, ...) are accepted and stored by PutTargets like the real API, but PutEvents never delivers to them — there is no silent fake success, the delivery simply never happens."
+    ],
+    "tests": [
+      "tests/conformance/test_eventbridge_console_v4_core.py"
+    ]
+  },
+  "eventbridge.events.put": {
+    "title": "PutEvents — pattern matching + fan-out to matching rules' targets",
+    "level": {
+      "nano": "full",
+      "offline": "full"
+    },
+    "limitations": [],
+    "tests": [
+      "tests/conformance/test_eventbridge_core.py",
+      "tests/conformance/test_eventbridge_console_v4_core.py"
+    ]
+  },
+  "eventbridge.archives": {
+    "title": "Archives (capture a bus's events matching a pattern)",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "An archive filters the bus's most recent 500 events (a bounded in-memory log), not a true unlimited-retention store, so RetentionDays can only be enforced within that window — it cannot bring back events the 500-event cap already dropped."
+    ],
+    "tests": [
+      "tests/conformance/test_eventbridge_console_v4_core.py"
+    ]
+  },
+  "eventbridge.replay": {
+    "title": "Replay — redeliver archived events to their original rule targets",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "Replay is synchronous (completes inside the StartReplay call, not asynchronously over minutes) and is bounded by the same 500-event archive window as eventbridge.archives."
+    ],
+    "tests": [
+      "tests/conformance/test_eventbridge_console_v4_core.py"
+    ]
+  },
+  "eventbridge.scheduler.schedule": {
+    "title": "Scheduler: schedules (one-time at(), rate(), cron()) and schedule groups",
+    "level": {
+      "nano": "full",
+      "offline": "full"
+    },
+    "limitations": [],
+    "tests": [
+      "tests/conformance/test_scheduler_core.py"
+    ]
+  },
+  "eventbridge.scheduler.firing": {
+    "title": "Scheduler: target delivery (SQS, SNS, Lambda, Step Functions, Kinesis) when a schedule's time arrives",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "Vyomi has no background timer. A schedule's firing is computed and delivered the next time any Scheduler API call is made after its due time (console navigation and the periodic list/describe calls it makes are usually enough) — it does not fire on the wall clock while nothing is polling."
+    ],
+    "tests": [
+      "tests/conformance/test_scheduler_core.py"
+    ]
+  },
+  "eventbridge.metrics": {
+    "title": "CloudWatch metrics (Invocations, TriggeredRules, MatchedEvents, FailedInvocations; Scheduler attempts/errors)",
+    "level": {
+      "nano": "full",
+      "offline": "full"
+    },
+    "limitations": [],
+    "tests": [
+      "tests/conformance/test_eventbridge_core.py"
+    ]
+  },
+  "eventbridge.pipes.metrics": {
+    "title": "Pipe metrics (Execution, ExecutionSucceeded, ExecutionFailed, Duration)",
+    "level": {
+      "nano": "full",
+      "offline": "full"
+    },
+    "limitations": [],
+    "tests": [
+      "tests/conformance/test_awsb_sweep_core.py"
+    ]
+  },
+  "eventbridge.pipes.crud": {
+    "title": "Pipes (create, describe, list, update, start/stop, delete) with SQS source -> target delivery",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "Only SQS queues are a delivering pipe source; Kinesis, DynamoDB Streams, MSK, MQ sources are accepted and stored but never polled. Enrichment, source filter criteria and target input templates are stored and not applied - the raw message body is forwarded."
+    ],
+    "tests": [
+      "tests/conformance/test_sqs_eventbridge_pipe_core.py"
+    ]
+  },
+  "eventbridge.connections": {
+    "title": "Connections (API key / basic / OAuth credentials; create, describe, list, update, deauthorize, delete)",
+    "level": {
+      "nano": "full",
+      "offline": "full"
+    },
+    "limitations": [],
+    "tests": [
+      "tests/conformance/test_awsb_sweep_core.py"
+    ]
+  },
+  "eventbridge.api-destinations": {
+    "title": "API destinations (HTTP endpoint + connection + method; usable as a rule target)",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "CRUD is real on both substrates. Offline delivers a real HTTP request to InvocationEndpoint with the connection's API-key/basic auth; OAuth client-credentials token exchange is not performed and InvocationRateLimitPerSecond is stored but not throttled. On Nano the browser sandbox cannot make an arbitrary outbound request, so delivery counts as a FailedInvocation."
+    ],
+    "tests": [
+      "tests/conformance/test_awsb_sweep_core.py"
+    ]
+  },
+  "eventbridge.global-endpoints": {
+    "title": "Global endpoints (failover routing config over two event buses)",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "Control plane is real (create, describe, list, update, delete with validation). Vyomi simulates one region so no Route 53 health check is evaluated and no failover/replication actually happens."
+    ],
+    "tests": [
+      "tests/conformance/test_awsb_sweep_core.py"
+    ]
+  },
+  "eventbridge.sandbox": {
+    "title": "Sandbox: TestEventPattern (match an event against a pattern)",
+    "level": {
+      "nano": "full",
+      "offline": "full"
+    },
+    "limitations": [],
+    "tests": [
+      "tests/conformance/test_awsb_sweep_core.py"
+    ]
+  },
+  "eventbridge.bus.kms-encryption": {
+    "title": "Event bus + archive encryption with a customer KMS key (events stored as real KMS ciphertext)",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "Encryption is applied to Vyomi's bounded per-bus event log through the real KMS core (Encrypt on PutEvents, Decrypt on archive read/replay); a disabled key blocks PutEvents and makes archived payloads unreadable. Key grants / key-policy checks for the events.amazonaws.com principal and the encryption-context binding are not modeled."
+    ],
+    "tests": [
+      "tests/conformance/test_eventbridge_sweep_core.py"
+    ]
+  },
+  "eventbridge.bus.logs": {
+    "title": "Event bus logs delivered to CloudWatch Logs (LogConfig Level/IncludeDetail)",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "Only the CloudWatch Logs destination is modeled (log group /aws/vendedlogs/events/event-bus/<bus>); S3 and Firehose log destinations and per-delivery-destination configuration are not. Records cover event receipt, rule-target invocation outcome, no-match and policy denial; they are emitted synchronously."
+    ],
+    "tests": [
+      "tests/conformance/test_eventbridge_sweep_core.py"
+    ]
+  },
+  "eventbridge.bus.resource-policy": {
+    "title": "Event bus resource-based policy (PutPermission/RemovePermission) enforced on cross-account PutEvents",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "The caller's account comes from the x-amz-account-id request header (Vyomi has one real account; SigV4 is not verified). Evaluation covers Principal account/*, events:PutEvents/events:*/* Actions and explicit Deny; Condition blocks (aws:PrincipalOrgID, etc.) are stored but not evaluated. Policy is enforced for PutEvents only."
+    ],
+    "tests": [
+      "tests/conformance/test_eventbridge_sweep_core.py"
+    ]
+  },
+  "eventbridge.bus.archive-at-create": {
+    "title": "Attach an archive while creating an event bus",
+    "level": {
+      "nano": "full",
+      "offline": "full"
+    },
+    "limitations": [
+      "Console convenience: CreateEventBus has no archive parameter in the real API either; the console issues CreateArchive right after the bus is created, and so does Vyomi's."
+    ],
+    "tests": [
+      "tests/conformance/test_eventbridge_sweep_core.py"
+    ]
+  },
+  "eventbridge.schemas.registry": {
+    "title": "EventBridge Schemas: registries, schemas and versions (REST CRUD, search)",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "The AWS-managed aws.events registry is not shipped; only registries and schemas you create or discover exist. Schema content is validated as JSON only (OpenApi3 / JSONSchemaDraft4 structure is not checked); code bindings and GetCodeBindingSource are not modeled."
+    ],
+    "tests": [
+      "tests/conformance/test_eventbridge_schemas_core.py"
+    ]
+  },
+  "eventbridge.schemas.discovery": {
+    "title": "Schema discovery: discoverers infer OpenAPI schemas from PutEvents on a bus",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "Inference is a structural JSON-type inference (string/number/boolean/object/array, nullable not modeled) producing OpenApi3; new versions are created when the shape changes. Cross-account and partner buses are not discovered."
+    ],
+    "tests": [
+      "tests/conformance/test_eventbridge_schemas_core.py"
+    ]
+  }
+}

@@ -1,0 +1,118 @@
+{
+  "$doc": "Vyomi capability registry — GCP Firestore. See aws/s3.json for the contract. Feature ids share one namespace with the AWS registry, so they are prefixed gcp.firestore.*",
+  "gcp.firestore.databases": {
+    "title": "Databases (list, create, get, update, delete)",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": [
+      "Database create/update/delete complete synchronously in Vyomi; the real API returns a long-running operation to poll."
+    ],
+    "tests": ["tests/conformance/test_gcp_firestore_admin_core.py"]
+  },
+  "gcp.firestore.documents": {
+    "title": "Collections and documents (create, get, list, merge, delete) and the Firestore Studio data viewer",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": [],
+    "tests": ["tests/conformance/test_gcp_firestore_core.py"]
+  },
+  "gcp.firestore.query-builder": {
+    "title": "Query builder (structured queries: field filters, composite AND/OR, orderBy, limit)",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": [],
+    "tests": ["tests/conformance/test_firestore_query_core.py"]
+  },
+  "gcp.firestore.indexes": {
+    "title": "Composite indexes (create, list, delete)",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": [
+      "Indexes report state READY immediately; Vyomi does not model the real console's transient BUILDING phase, and it does not reject queries that would need a missing index."
+    ],
+    "tests": ["tests/conformance/test_gcp_firestore_admin_core.py"]
+  },
+  "gcp.firestore.single-field-exemptions": {
+    "title": "Single-field index exemptions",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": [
+      "Exempting a field now really disables its automatic index: a query that needs the removed index (an inequality, orderBy or array-contains on that field) fails with FAILED_PRECONDITION unless a composite index covers it, matching the real service.",
+      "The composite-index coverage check only matches an exact field-path + order/arrayConfig pair; it does not model the full multi-field prefix matching real Firestore uses to pick a usable composite index."
+    ],
+    "tests": ["tests/conformance/test_gcp_firestore_admin_core.py"]
+  },
+  "gcp.firestore.vector-indexes": {
+    "title": "Vector indexes (for vector-similarity search)",
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": [
+      "Vyomi has a real vector field type (the same `__type__: \"__vector__\"` map encoding the SDK's Vector class writes) and a real `findNearest` k-NN search; creating a matching vector index is genuinely required before findNearest works, exactly like production Firestore.",
+      "findNearest performs an exact brute-force scan of every document (correct results, same approach a local emulator uses at small scale) rather than production's approximate-nearest-neighbor search over a distributed index — large collections would be slower than production, never approximate-and-wrong."
+    ],
+    "tests": ["tests/conformance/test_gcp_firestore_vector_core.py"]
+  },
+  "gcp.firestore.ttl": {
+    "title": "Time-to-live (TTL) policies",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": [
+      "Expiry is checked lazily — on the next access to the owning database — rather than by a continuously running background process; real Firestore's own TTL sweep is likewise best-effort and not immediate, so the functional difference is only in timing, not outcome."
+    ],
+    "tests": ["tests/conformance/test_gcp_firestore_admin_core.py"]
+  },
+  "gcp.firestore.security-rules": {
+    "title": "Security rules editor",
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": [
+      "Vyomi stores and returns the rules source exactly as written through its own getSecurityRules/updateSecurityRules endpoints (real Firestore security rules are managed by the separate Firebase Rules API), and the Development & test tab's Simulate action runs a real rules-language parser + evaluator (path match/capture, allow read/write/get/list/create/update/delete, request.auth/resource.data/request.resource.data expressions with ==, !=, comparisons, in, &&, ||, !) against the stored (or unsaved draft) rules text.",
+      "That evaluator is the ONLY path that ever evaluates rules: actual document reads/writes over the native wire — what the console's own Data viewer, every Admin-SDK call and this capability's own tests use — stay unconditional, exactly matching real Firestore (only end-user client-SDK requests are rule-checked in production; the Admin SDK, gcloud and the console always bypass them)."
+    ],
+    "tests": ["tests/conformance/test_gcp_firestore_rules_core.py"]
+  },
+  "gcp.firestore.import-export": {
+    "title": "Import / Export (exportDocuments / importDocuments)",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": [
+      "Export really writes a Cloud Storage object (via Vyomi's own GCS simulator) and import really reads it back, but the file is a Vyomi-internal JSON snapshot, not the real protobuf/LevelDB export layout — the object isn't portable to a real `gcloud firestore import`."
+    ],
+    "tests": ["tests/conformance/test_gcp_firestore_admin_core.py"]
+  },
+  "gcp.firestore.backups": {
+    "title": "Backup schedules and backups",
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": [
+      "Creating a backup schedule is real and immediately takes one backup (there is no background scheduler in Vyomi to fire later ticks on the daily/weekly recurrence).",
+      "`databases:restore` now really repopulates a brand-new database's documents, indexes and fields from the backup's snapshot, synchronously (the real API returns a long-running operation)."
+    ],
+    "tests": ["tests/conformance/test_gcp_firestore_admin_core.py"]
+  },
+  "gcp.firestore.point-in-time-recovery": {
+    "title": "Point-in-time recovery (PITR)",
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": [
+      "While enabled, Vyomi keeps a per-document version history and `documents.get` / `documents.list` / `:runQuery` / `:batchGet` honor a `readTime` in the past, really returning the document as it was at that time.",
+      "There is no one-click whole-database PITR restore into a new database (unlike backup restore) — recovering a prior state means reading documents at that `readTime` yourself."
+    ],
+    "tests": ["tests/conformance/test_gcp_firestore_admin_core.py"]
+  },
+  "gcp.firestore.insights": {
+    "title": "Insights (query and index usage recommendations)",
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": [
+      "Index recommendations and \"unused indexes\" are derived from real activity the core records as it happens (a `:runQuery`/`findNearest` that actually fails with FAILED_PRECONDITION for a missing index, and which composite/vector indexes a query's real filter/orderBy/vector fields actually overlap) — never synthetic or randomly generated data.",
+      "This is current-session telemetry only (counts reset when the database is deleted); it has no historical trend charts or the ML-driven query-shape clustering of the real Insights page."
+    ],
+    "tests": ["tests/conformance/test_gcp_firestore_telemetry_core.py"]
+  },
+  "gcp.firestore.usage": {
+    "title": "Usage dashboard (reads/writes/deletes/storage charts)",
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": [
+      "Vyomi meters real running totals (reads, writes, deletes, current document count and an estimated storage size) via a dedicated `:usage` endpoint, but keeps no history, so it cannot render the real console's over-time charts built from Cloud Monitoring metrics."
+    ],
+    "tests": ["tests/conformance/test_gcp_firestore_admin_core.py"]
+  },
+  "gcp.firestore.key-visualizer": {
+    "title": "Key Visualizer",
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": [
+      "The heatmap is built from real per-document access counts the core records on every read/write/delete/query match, bucketed by collection and a hash of the document key — never synthetic or randomly generated data.",
+      "It is a current-snapshot heatmap with no time axis (production Key Visualizer shows load over days/weeks), and the key-range buckets are a simple hash rather than production's actual tablet key-range splits."
+    ],
+    "tests": ["tests/conformance/test_gcp_firestore_telemetry_core.py"]
+  }
+}

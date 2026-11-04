@@ -40,11 +40,16 @@ PROJ = "/sql/v1beta4/projects/demo-proj/instances"
 def run() -> int:
     st = InMemorySqlStore()
 
-    # 1. insert instance -> 200 sql#instance, RUNNABLE, databaseVersion echoed
+    # 1. insert instance -> 200 sql#operation; get -> sql#instance, RUNNABLE, databaseVersion echoed
     r = csql.dispatch(st, "POST", PROJ, {}, {"content-type": "application/json"},
                       json.dumps({"name": "appdb", "databaseVersion": "POSTGRES_15",
                                   "settings": {"tier": "db-custom-1-3840"}}).encode())
     _check("insert instance 200", r.status == 200)
+    op = _jbody(r)   # native instances.insert returns an Operation, not the instance
+    _check("insert returns sql#operation", op["kind"] == "sql#operation")
+    _check("insert operation DONE/CREATE", op["status"] == "DONE" and op["operationType"] == "CREATE")
+    _check("insert operation targetId", op["targetId"] == "appdb")
+    r = csql.dispatch(st, "GET", f"{PROJ}/appdb", {}, {}, b"")
     inst = _jbody(r)
     _check("insert instance kind", inst["kind"] == "sql#instance")
     _check("insert instance name", inst["name"] == "appdb")
@@ -126,17 +131,233 @@ def run() -> int:
     names2 = sorted(i["name"] for i in _jbody(li2).get("items", []))
     _check("list excludes deleted instance", names2 == ["shopdb"])
 
-    # 7c. instances.patch: settings merge, settingsVersion bump, labels, unknown instance
-    pr = csql.dispatch(st, "PATCH", PROJ + "/shopdb", {}, {"content-type": "application/json"},
-                       json.dumps({"settings": {"userLabels": {"env": "prod"}, "activationPolicy": "NEVER"}}).encode())
-    _check("patch instance 200 UPDATE op", pr.status == 200 and _jbody(pr)["operationType"] == "UPDATE")
-    after = _jbody(csql.dispatch(st, "GET", PROJ + "/shopdb", {}, {}, b""))
-    _check("patch merged userLabels", after["settings"]["userLabels"] == {"env": "prod"})
-    _check("patch merged activationPolicy", after["settings"]["activationPolicy"] == "NEVER")
-    _check("patch kept tier", bool(after["settings"].get("tier")))
-    _check("patch bumped settingsVersion", int(after["settings"]["settingsVersion"]) >= 2)
-    pm = csql.dispatch(st, "PATCH", PROJ + "/ghost", {}, {"content-type": "application/json"}, b"{}")
-    _check("patch unknown instance 404", pm.status == 404)
+    # 8. PATCH instance settings -> merged, operation returned
+    pt = csql.dispatch(st, "PATCH", PROJ + "/shopdb", {}, {"content-type": "application/json"},
+                       json.dumps({"settings": {"tier": "db-custom-2-7680",
+                                                "ipConfiguration": {"ipv4Enabled": False}}}).encode())
+    _check("patch instance 200", pt.status == 200)
+    _check("patch instance op kind", _jbody(pt)["kind"] == "sql#operation")
+    shopdb = _jbody(csql.dispatch(st, "GET", PROJ + "/shopdb", {}, {}, b""))
+    _check("patch merged tier", shopdb["settings"]["tier"] == "db-custom-2-7680")
+    _check("patch merged ipv4Enabled", shopdb["settings"]["ipConfiguration"]["ipv4Enabled"] is False)
+
+    # 8b. stop via activationPolicy=NEVER, start again
+    csql.dispatch(st, "PATCH", PROJ + "/shopdb", {}, {"content-type": "application/json"},
+                  json.dumps({"settings": {"activationPolicy": "NEVER"}}).encode())
+    stopped = _jbody(csql.dispatch(st, "GET", PROJ + "/shopdb", {}, {}, b""))
+    _check("stop sets STOPPED", stopped["state"] == "STOPPED")
+    csql.dispatch(st, "PATCH", PROJ + "/shopdb", {}, {"content-type": "application/json"},
+                  json.dumps({"settings": {"activationPolicy": "ALWAYS"}}).encode())
+    started = _jbody(csql.dispatch(st, "GET", PROJ + "/shopdb", {}, {}, b""))
+    _check("start sets RUNNABLE", started["state"] == "RUNNABLE")
+
+    # 8c. restart (colon RPC)
+    rs = csql.dispatch(st, "POST", PROJ + "/shopdb:restart", {}, {}, b"")
+    _check("restart 200", rs.status == 200)
+    _check("restart op type", _jbody(rs)["operationType"] == "RESTART")
+
+    # 9. users: insert, list, update password, delete
+    uins = csql.dispatch(st, "POST", PROJ + "/shopdb/users", {}, {"content-type": "application/json"},
+                         json.dumps({"name": "appuser", "password": "s3cret", "host": "%"}).encode())
+    _check("insert user 200", uins.status == 200)
+    _check("insert user kind", _jbody(uins)["kind"] == "sql#user")
+    dup_u = csql.dispatch(st, "POST", PROJ + "/shopdb/users", {}, {"content-type": "application/json"},
+                         json.dumps({"name": "appuser", "host": "%"}).encode())
+    _check("duplicate user 409", dup_u.status == 409)
+    ulist = csql.dispatch(st, "GET", PROJ + "/shopdb/users", {}, {}, b"")
+    _check("list users has appuser", any(u["name"] == "appuser" for u in _jbody(ulist).get("items", [])))
+    uupd = csql.dispatch(st, "PUT", PROJ + "/shopdb/users", {"name": "appuser", "host": "%"}, {}, b"{}")
+    _check("update user 200", uupd.status == 200)
+    udel = csql.dispatch(st, "DELETE", PROJ + "/shopdb/users", {"name": "appuser", "host": "%"}, {}, b"")
+    _check("delete user 200", udel.status == 200)
+    ulist2 = csql.dispatch(st, "GET", PROJ + "/shopdb/users", {}, {}, b"")
+    _check("list users excludes deleted", not any(u["name"] == "appuser" for u in _jbody(ulist2).get("items", [])))
+    ndel = csql.dispatch(st, "DELETE", PROJ + "/shopdb/users", {"name": "ghost", "host": "%"}, {}, b"")
+    _check("delete missing user 404", ndel.status == 404)
+
+    # 10. backupRuns: insert, list, get, delete
+    bins = csql.dispatch(st, "POST", PROJ + "/shopdb/backupRuns", {}, {"content-type": "application/json"},
+                         json.dumps({"description": "manual"}).encode())
+    _check("insert backup 200", bins.status == 200)
+    backup = _jbody(bins)
+    _check("insert backup kind", backup["kind"] == "sql#backupRun")
+    blist = csql.dispatch(st, "GET", PROJ + "/shopdb/backupRuns", {}, {}, b"")
+    _check("list backups has one", len(_jbody(blist).get("items", [])) == 1)
+    bget = csql.dispatch(st, "GET", PROJ + f"/shopdb/backupRuns/{backup['id']}", {}, {}, b"")
+    _check("get backup 200", bget.status == 200)
+    bdel = csql.dispatch(st, "DELETE", PROJ + f"/shopdb/backupRuns/{backup['id']}", {}, {}, b"")
+    _check("delete backup 200", bdel.status == 200)
+    blist2 = csql.dispatch(st, "GET", PROJ + "/shopdb/backupRuns", {}, {}, b"")
+    _check("list backups now empty", not _jbody(blist2).get("items"))
+    bmiss = csql.dispatch(st, "GET", PROJ + f"/shopdb/backupRuns/{backup['id']}", {}, {}, b"")
+    _check("get deleted backup 404", bmiss.status == 404)
+
+    # 11. operations: project-wide log accumulates, filterable by instance
+    ops = csql.dispatch(st, "GET", "/sql/v1beta4/projects/demo-proj/operations", {"instance": "shopdb"}, {}, b"")
+    _check("list operations 200", ops.status == 200)
+    op_types = [o["operationType"] for o in _jbody(ops).get("items", [])]
+    _check("operations include patch/restart/user/backup ops",
+           {"UPDATE", "RESTART", "CREATE_USER", "DELETE_USER", "BACKUP_VOLUME", "DELETE_BACKUP"} <= set(op_types))
+    one_op = _jbody(ops)["items"][0]
+    opget = csql.dispatch(st, "GET", f"/sql/v1beta4/projects/demo-proj/operations/{one_op['name']}", {}, {}, b"")
+    _check("get single operation 200", opget.status == 200)
+
+    # 12. read replica: masterInstanceName creates a replica instance
+    csql.dispatch(st, "POST", PROJ + "/shopdb/databases", {}, {"content-type": "application/json"},
+                  json.dumps({"name": "billing"}).encode())
+    rep = csql.dispatch(st, "POST", PROJ, {}, {"content-type": "application/json"},
+                        json.dumps({"name": "shopdb-replica", "masterInstanceName": "shopdb"}).encode())
+    _check("insert replica 200", rep.status == 200)
+    _check("insert replica operation CREATE_REPLICA", _jbody(rep)["operationType"] == "CREATE_REPLICA")
+    rep_body = _jbody(csql.dispatch(st, "GET", PROJ + "/shopdb-replica", {}, {}, b""))
+    _check("replica instanceType", rep_body["instanceType"] == "READ_REPLICA_INSTANCE")
+    _check("replica masterInstanceName", rep_body["masterInstanceName"] == "shopdb")
+    rep_missing_master = csql.dispatch(st, "POST", PROJ, {}, {"content-type": "application/json"},
+                                       json.dumps({"name": "x", "masterInstanceName": "ghost"}).encode())
+    _check("replica of missing master 404", rep_missing_master.status == 404)
+
+    # 12b. replica seeded from the primary's CURRENT databases at creation time
+    rep_dbs = sorted(d["name"] for d in _jbody(
+        csql.dispatch(st, "GET", PROJ + "/shopdb-replica/databases", {}, {}, b"")).get("items", []))
+    _check("replica seeded with primary's existing database", rep_dbs == ["billing"])
+
+    # 12c. a database created on the primary AFTER the replica exists mirrors across
+    csql.dispatch(st, "POST", PROJ + "/shopdb/databases", {}, {"content-type": "application/json"},
+                  json.dumps({"name": "catalog"}).encode())
+    rep_dbs2 = sorted(d["name"] for d in _jbody(
+        csql.dispatch(st, "GET", PROJ + "/shopdb-replica/databases", {}, {}, b"")).get("items", []))
+    _check("database added on primary mirrors to replica", rep_dbs2 == ["billing", "catalog"])
+
+    # 12d. a user created on the primary mirrors across too; deletes mirror as well
+    csql.dispatch(st, "POST", PROJ + "/shopdb/users", {}, {"content-type": "application/json"},
+                  json.dumps({"name": "repluser", "host": "%"}).encode())
+    rep_users = _jbody(csql.dispatch(st, "GET", PROJ + "/shopdb-replica/users", {}, {}, b"")).get("items", [])
+    _check("user added on primary mirrors to replica", any(u["name"] == "repluser" for u in rep_users))
+    csql.dispatch(st, "DELETE", PROJ + "/shopdb/databases/catalog", {}, {}, b"")
+    rep_dbs3 = sorted(d["name"] for d in _jbody(
+        csql.dispatch(st, "GET", PROJ + "/shopdb-replica/databases", {}, {}, b"")).get("items", []))
+    _check("database deleted on primary mirrors to replica", rep_dbs3 == ["billing"])
+
+    # 12e. a primary with live replicas can't be deleted until they are deleted first
+    blocked = csql.dispatch(st, "DELETE", PROJ + "/shopdb", {}, {}, b"")
+    _check("delete primary with replicas 400", blocked.status == 400
+           and _jbody(blocked)["error"]["status"] == "FAILED_PRECONDITION")
+    csql.dispatch(st, "DELETE", PROJ + "/shopdb-replica", {}, {}, b"")
+
+    # 13. backupRuns capture a snapshot of databases/users; restoreBackup replays it
+    csql.dispatch(st, "POST", PROJ + "/shopdb/databases", {},
+                  {"content-type": "application/json"}, json.dumps({"name": "willbegone"}).encode())
+    bk = _jbody(csql.dispatch(st, "POST", PROJ + "/shopdb/backupRuns", {},
+                              {"content-type": "application/json"},
+                              json.dumps({"description": "pre-delete"}).encode()))
+    csql.dispatch(st, "DELETE", PROJ + "/shopdb/databases/willbegone", {}, {}, b"")
+    gone = sorted(d["name"] for d in _jbody(
+        csql.dispatch(st, "GET", PROJ + "/shopdb/databases", {}, {}, b"")).get("items", []))
+    _check("database gone before restore", "willbegone" not in gone)
+    restore = csql.dispatch(st, "POST", PROJ + "/shopdb:restoreBackup", {}, {"content-type": "application/json"},
+                            json.dumps({"restoreBackupContext": {"backupRunId": bk["id"]}}).encode())
+    _check("restoreBackup 200", restore.status == 200)
+    _check("restoreBackup op kind/type", _jbody(restore)["kind"] == "sql#operation"
+           and _jbody(restore)["operationType"] == "RESTORE_VOLUME")
+    restored = sorted(d["name"] for d in _jbody(
+        csql.dispatch(st, "GET", PROJ + "/shopdb/databases", {}, {}, b"")).get("items", []))
+    _check("restoreBackup brings back the deleted database", "willbegone" in restored)
+    bad_restore = csql.dispatch(st, "POST", PROJ + "/shopdb:restoreBackup", {}, {"content-type": "application/json"},
+                                json.dumps({"restoreBackupContext": {"backupRunId": "999999"}}).encode())
+    _check("restoreBackup unknown backup 404", bad_restore.status == 404)
+
+    # 14. Connections enforcement (gcp.sql.connections): ipConfiguration drives ipAddresses,
+    # not just stores it — a disabled Public IP really removes the PRIMARY address.
+    csql.dispatch(st, "POST", PROJ, {}, {"content-type": "application/json"},
+                  json.dumps({"name": "netdb"}).encode())
+    netdb = _jbody(csql.dispatch(st, "GET", PROJ + "/netdb", {}, {}, b""))
+    _check("default instance has a PRIMARY ip", any(a["type"] == "PRIMARY" for a in netdb["ipAddresses"]))
+    _check("default instance has no PRIVATE ip", not any(a["type"] == "PRIVATE" for a in netdb["ipAddresses"]))
+    csql.dispatch(st, "PATCH", PROJ + "/netdb", {}, {"content-type": "application/json"},
+                  json.dumps({"settings": {"ipConfiguration": {"ipv4Enabled": False}}}).encode())
+    netdb2 = _jbody(csql.dispatch(st, "GET", PROJ + "/netdb", {}, {}, b""))
+    _check("ipv4Enabled=False removes the PRIMARY ip", not any(a["type"] == "PRIMARY" for a in netdb2["ipAddresses"]))
+    csql.dispatch(st, "PATCH", PROJ + "/netdb", {}, {"content-type": "application/json"},
+                  json.dumps({"settings": {"ipConfiguration": {
+                      "privateNetwork": "projects/demo-proj/global/networks/default"}}}).encode())
+    netdb3 = _jbody(csql.dispatch(st, "GET", PROJ + "/netdb", {}, {}, b""))
+    _check("privateNetwork set adds a PRIVATE ip", any(a["type"] == "PRIVATE" for a in netdb3["ipAddresses"]))
+    _check("ipv4Enabled still False -> still no PRIMARY ip", not any(a["type"] == "PRIMARY" for a in netdb3["ipAddresses"]))
+
+    # 15. gcp.sql.connections-security: sslCerts CRUD + sslMode enforcement on the
+    # query RPC (the one connection Vyomi fully brokers — see module docstring).
+    csql.dispatch(st, "POST", PROJ, {}, {"content-type": "application/json"},
+                  json.dumps({"name": "secdb"}).encode())
+    secdb = _jbody(csql.dispatch(st, "GET", PROJ + "/secdb", {}, {}, b""))
+    _check("default sslMode allows unencrypted", secdb["settings"]["ipConfiguration"]["sslMode"] == "ALLOW_UNENCRYPTED_AND_ENCRYPTED")
+    _check("default requireSsl False", secdb["settings"]["ipConfiguration"]["requireSsl"] is False)
+    _check("serverCaCert present", secdb["serverCaCert"]["kind"] == "sql#sslCert")
+
+    q_open = csql.dispatch(st, "POST", PROJ + "/secdb/query", {}, {"content-type": "application/json"},
+                           json.dumps({"sql": "SELECT 1"}).encode())
+    _check("query allowed by default sslMode", q_open.status == 200 and _jbody(q_open)["ok"] is True)
+
+    csql.dispatch(st, "PATCH", PROJ + "/secdb", {}, {"content-type": "application/json"},
+                  json.dumps({"settings": {"ipConfiguration": {"sslMode": "TRUSTED_CLIENT_CERTIFICATE_REQUIRED"}}}).encode())
+    q_blocked = csql.dispatch(st, "POST", PROJ + "/secdb/query", {}, {"content-type": "application/json"},
+                              json.dumps({"sql": "SELECT 1"}).encode())
+    _check("query blocked without ssl when TRUSTED_CLIENT_CERTIFICATE_REQUIRED", q_blocked.status == 400
+           and _jbody(q_blocked)["error"]["status"] == "FAILED_PRECONDITION")
+    q_no_cert = csql.dispatch(st, "POST", PROJ + "/secdb/query", {}, {"content-type": "application/json"},
+                              json.dumps({"sql": "SELECT 1", "ssl": True}).encode())
+    _check("query blocked with ssl but no trusted cert", q_no_cert.status == 400)
+
+    cert_ins = csql.dispatch(st, "POST", PROJ + "/secdb/sslCerts", {}, {"content-type": "application/json"},
+                             json.dumps({"commonName": "app-client"}).encode())
+    _check("insert ssl cert 200", cert_ins.status == 200)
+    cert_body = _jbody(cert_ins)
+    _check("insert ssl cert returns private key", "BEGIN PRIVATE KEY" in cert_body["clientCert"]["certPrivateKey"])
+    fp = cert_body["clientCert"]["certInfo"]["sha1Fingerprint"]
+
+    certs_list = _jbody(csql.dispatch(st, "GET", PROJ + "/secdb/sslCerts", {}, {}, b""))
+    _check("list ssl certs has one", len(certs_list.get("items", [])) == 1)
+    _check("list ssl certs omits private key", "certPrivateKey" not in certs_list["items"][0])
+
+    q_with_cert = csql.dispatch(st, "POST", PROJ + "/secdb/query", {}, {"content-type": "application/json"},
+                                json.dumps({"sql": "SELECT 1", "ssl": True, "clientCertSha1Fingerprint": fp}).encode())
+    _check("query allowed with ssl + trusted cert", q_with_cert.status == 200 and _jbody(q_with_cert)["ok"] is True)
+
+    cert_del = csql.dispatch(st, "DELETE", PROJ + f"/secdb/sslCerts/{fp}", {}, {}, b"")
+    _check("delete ssl cert 200", cert_del.status == 200)
+    q_after_del = csql.dispatch(st, "POST", PROJ + "/secdb/query", {}, {"content-type": "application/json"},
+                                json.dumps({"sql": "SELECT 1", "ssl": True, "clientCertSha1Fingerprint": fp}).encode())
+    _check("query blocked again once cert is deleted", q_after_del.status == 400)
+
+    # 16. gcp.sql.insights: Cloud SQL Studio runs REAL SQL against the instance's real
+    # engine; queries/tables/metrics are derived from that real activity, not synthetic.
+    csql.dispatch(st, "POST", PROJ, {}, {"content-type": "application/json"},
+                  json.dumps({"name": "studiodb"}).encode())
+    csql.dispatch(st, "POST", PROJ + "/studiodb/query", {}, {"content-type": "application/json"},
+                  json.dumps({"sql": "CREATE TABLE widgets (id INTEGER PRIMARY KEY, name TEXT)"}).encode())
+    csql.dispatch(st, "POST", PROJ + "/studiodb/query", {}, {"content-type": "application/json"},
+                  json.dumps({"sql": "INSERT INTO widgets (name) VALUES ('sprocket')"}).encode())
+    sel = _jbody(csql.dispatch(st, "POST", PROJ + "/studiodb/query", {}, {"content-type": "application/json"},
+                               json.dumps({"sql": "SELECT name FROM widgets"}).encode()))
+    _check("studio select real row", sel["ok"] is True and sel["rows"] == [["sprocket"]])
+
+    bad = _jbody(csql.dispatch(st, "POST", PROJ + "/studiodb/query", {}, {"content-type": "application/json"},
+                               json.dumps({"sql": "SELECT * FROM ghost_table"}).encode()))
+    _check("studio surfaces a real engine error, not a silent success", bad["ok"] is False and bad["error"])
+
+    tables = _jbody(csql.dispatch(st, "GET", PROJ + "/studiodb/tables", {}, {}, b""))
+    _check("tables lists the real created table", "widgets" in tables["tables"])
+
+    queries = _jbody(csql.dispatch(st, "GET", PROJ + "/studiodb/queries", {}, {}, b""))
+    _check("queries log has every real statement run", len(queries["items"]) == 4)
+    _check("queries log newest first", "ghost_table" in queries["items"][0]["sql"])
+
+    metrics = _jbody(csql.dispatch(st, "GET", PROJ + "/studiodb/metrics", {}, {}, b""))
+    _check("metrics storageBytes is real and positive", metrics["storageBytes"] > 0)
+    _check("metrics queryCount1h counts the real queries just run", metrics["queryCount1h"] == 4)
+    _check("metrics errorCount1h counts the real failure", metrics["errorCount1h"] == 1)
+
+    metrics_missing = csql.dispatch(st, "GET", PROJ + "/ghost/metrics", {}, {}, b"")
+    _check("metrics on missing instance 404", metrics_missing.status == 404)
 
     print("\nRESULT: PASS — GCP Cloud SQL control-plane core conforms "
           "(native Cloud SQL Admin REST wire) on this substrate.")

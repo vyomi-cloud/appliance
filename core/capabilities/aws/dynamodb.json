@@ -1,0 +1,435 @@
+{
+ "$doc": "Vyomi capability registry — DynamoDB. See s3.json for the contract.",
+ "dynamodb.table.crud": {
+  "title": "Tables (create, describe, list, delete)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Table names shorter than 3 characters are accepted (DynamoDB requires 3-255).",
+   "CreateTable with neither BillingMode nor ProvisionedThroughput creates an on-demand table; DynamoDB defaults to PROVISIONED and rejects the request with \"No provisioned throughput specified for the table\".",
+   "New tables and indexes are ACTIVE immediately (no CREATING phase on DescribeTable)."
+  ],
+  "api": [
+   "CreateTable",
+   "DescribeTable",
+   "ListTables",
+   "DeleteTable"
+  ],
+  "probe": {
+   "ddb_ok": [
+    "ListTables",
+    "DescribeTable"
+   ]
+  },
+  "tests": [
+   "tests/conformance/test_dynamodb_core.py"
+  ]
+ },
+ "dynamodb.item.crud": {
+  "title": "Items (put, get, update, delete, query, scan, batch, transactions)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Differential parity vs DynamoDB Local (tests/parity/ddb_differential.py, report in tests/parity/reports/): 149 of 152 hand-written cases (658 of 661 responses) and 400 of 400 random 30-operation sequences match; the 3 deviating cases are the TTL and CreateTable leniencies documented in this file.",
+   "Scan returns items in key order, not DynamoDB's storage-hash order, so Scan page boundaries and Segment membership differ (the union of all pages/segments is identical).",
+   "The 1 MB page limit is not applied to Query/Scan, and BatchGetItem/BatchWriteItem never return Unprocessed keys/items.",
+   "ConsumedCapacity (ReturnConsumedCapacity TOTAL/INDEXES) and provisioned-throughput throttling are real — see dynamodb.monitor.",
+   "TransactWriteItems ClientRequestToken idempotency is not tracked.",
+   "Maximum nesting depth (32) of maps/lists is not enforced."
+  ],
+  "probe": {
+   "ddb_ok": [
+    "Query",
+    "Scan",
+    "BatchWriteItem",
+    "TransactWriteItems"
+   ]
+  },
+  "tests": [
+   "tests/conformance/test_dynamodb_core.py"
+  ]
+ },
+ "dynamodb.table.indexes": {
+  "title": "Secondary indexes (global + local)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_dynamodb_gsi_core.py"
+  ]
+ },
+ "dynamodb.table.settings": {
+  "title": "Table class, deletion protection, encryption (at create)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Deletion protection is enforced (DeleteTable is rejected while it is on).",
+   "Table class and encryption at rest are stored and returned but have no effect; data is not encrypted at rest."
+  ],
+  "tests": [
+   "tests/conformance/test_dynamodb_table_ops_core.py",
+   "tests/conformance/test_dynamodb_table_settings_core.py"
+  ]
+ },
+ "dynamodb.table.tags": {
+  "title": "Tags",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "probe": {
+   "ddb_ok": [
+    "TagResource",
+    "ListTagsOfResource"
+   ]
+  }
+ },
+ "dynamodb.table.update": {
+  "title": "Update capacity / settings (UpdateTable)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Provisioned capacity is ENFORCED: a per-table/GSI token bucket refilled at the provisioned rate with up to 300 seconds of burst (AWS's documented burst window) returns a real ProvisionedThroughputExceededException and publishes Read/WriteThrottleEvents + ThrottledRequests to CloudWatch; on-demand tables never throttle. Adaptive capacity and per-partition limits aren't modelled (the whole table is one bucket)."
+  ],
+  "tests": [
+   "tests/conformance/test_dynamodb_table_ops_core.py"
+  ]
+ },
+ "dynamodb.table.ttl": {
+  "title": "Time to Live (TTL)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Expired items are removed when they are read, queried or scanned — not by a background process within ~48 hours as in AWS."
+  ],
+  "tests": [
+   "tests/conformance/test_dynamodb_table_ops_core.py"
+  ]
+ },
+ "dynamodb.table.pitr": {
+  "title": "Point-in-time recovery (PITR)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "RestoreTableToPointInTime is enforced against the PITR window (rejected without PITR enabled, or for a RestoreDateTime outside [EarliestRestorableDateTime, LatestRestorableDateTime]) but always restores the table's current state — Vyomi keeps no change history, so every point in the window yields the same (latest) data."
+  ],
+  "tests": [
+   "tests/conformance/test_dynamodb_table_ops_core.py"
+  ]
+ },
+ "dynamodb.backups": {
+  "title": "On-demand backups + AWS Backup copy",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "CreateBackup writes the backup's table definition (backup-metadata.json) and every item as DynamoDB-JSON (data/1.json) into the simulator's own S3, in the visible bucket vyomi-dynamodb-backups under AWSDynamoDB/backups/<table>/<id>/. RestoreTableFromBackup reads those objects back, so deleting the S3 object makes the backup unusable (BackupNotFoundException) and DeleteBackup removes the objects. If no S3 store is wired the backup falls back to an in-store snapshot. BackupSizeBytes is the real size of the stored data.",
+   "AWS Backup subset (service backup): DescribeRegionSettings / UpdateRegionSettings (DynamoDB advanced features on/off; copy jobs are refused while off) and StartCopyJob / DescribeCopyJob / ListCopyJobs. A copy job copies the backup's S3 objects to a new location and registers a new backup (type AWS_BACKUP) under the destination Region/account ARN, which can be restored. Vyomi simulates one account and one data plane, so the destination Region/account is an ARN plus its own S3 object set, not an isolated Region; backup vaults, plans, selections, vault lock, restore jobs and other services' recovery points are not implemented, and the IAM role is accepted but not checked.",
+   "Backups are full copies taken synchronously (no incremental backup, no scheduled/continuous backup plan, no point-in-time change history)."
+  ],
+  "api": [
+   "CreateBackup",
+   "ListBackups",
+   "DescribeBackup",
+   "DeleteBackup",
+   "RestoreTableFromBackup",
+   "DescribeRegionSettings",
+   "UpdateRegionSettings",
+   "StartCopyJob",
+   "DescribeCopyJob",
+   "ListCopyJobs"
+  ],
+  "tests": [
+   "tests/conformance/test_dynamodb_table_ops_core.py",
+   "tests/conformance/test_dynamodb_backup_s3.py"
+  ]
+ },
+ "dynamodb.partiql": {
+  "title": "PartiQL editor",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Supported: SELECT (projection, WHERE with = <> < <= > >= BETWEEN IN AND/OR/NOT begins_with contains attribute_type size IS [NOT] MISSING, ? parameters, \"table\".\"index\"), INSERT ... VALUE (maps, lists, <<sets>>), UPDATE ... SET/REMOVE ... WHERE <full key> [AND condition], DELETE FROM ... WHERE <full key>.",
+   "Not supported: BatchExecuteStatement, ExecuteTransaction, NextToken paging, arithmetic in UPDATE SET."
+  ],
+  "tests": [
+   "tests/conformance/test_dynamodb_table_ops_core.py"
+  ]
+ },
+ "dynamodb.streams": {
+  "title": "DynamoDB stream details",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "CreateTable/UpdateTable StreamSpecification opens a real change-data-capture log per table: every PutItem/UpdateItem/DeleteItem (including through BatchWriteItem/TransactWriteItems) appends a real stream record with the correct eventName (INSERT/MODIFY/REMOVE) and NewImage/OldImage per StreamViewType; ListStreams/DescribeStream/GetShardIterator/GetRecords read it back with real sequence numbers and TRIM_HORIZON/LATEST/AT_SEQUENCE_NUMBER/AFTER_SEQUENCE_NUMBER semantics.",
+   "A stream always has exactly one shard that never splits or closes while the stream is enabled (real DynamoDB Streams shards split/close as a table scales); up to 1000 records are retained per generation instead of the real ~24-hour window.",
+   "Lambda triggers on the stream are covered by dynamodb.lambda-triggers."
+  ],
+  "tests": [
+   "tests/conformance/test_dynamodb_streams_core.py"
+  ]
+ },
+ "dynamodb.exports": {
+  "title": "Exports to S3",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Only ExportFormat=DYNAMODB_JSON and ExportType=FULL_EXPORT are implemented (Amazon Ion and incremental exports are rejected with ValidationException).",
+   "The export always reflects the table's current data — Vyomi keeps no change history, so a point-in-time export is really a full export (same limitation as RestoreTableToPointInTime).",
+   "Encryption key type is stored on the job record but has no effect; data is written to S3 in plain bytes."
+  ],
+  "tests": [
+   "tests/conformance/test_dynamodb_export_core.py"
+  ]
+ },
+ "dynamodb.imports": {
+  "title": "Imports from S3",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "ImportTable reads real bytes from the S3 store and really creates and populates a new table: CSV and DYNAMODB_JSON (the exact newline-delimited shape ExportTableToPointInTime writes, so export+import is a genuine round trip) with NONE or GZIP compression.",
+   "Amazon Ion input and ZSTD compression are rejected with ValidationException — Ion parsing and a ZSTD codec are not vendored.",
+   "CSV columns are typed from TableCreationParameters.AttributeDefinitions when the column is a key attribute; every other column is imported as a String, where real DynamoDB applies its CSV type-inference rules."
+  ],
+  "tests": [
+   "tests/conformance/test_dynamodb_import_core.py"
+  ]
+ },
+ "dynamodb.kinesis": {
+  "title": "Amazon Kinesis data stream details",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "EnableKinesisStreamingDestination requires the named stream to really exist in Vyomi's own Kinesis core (core/kinesis_core.py) and rejects it with ResourceNotFoundException otherwise; once enabled, every item write/delete publishes a real change-data-capture record into that stream (readable back with GetRecords) — not stored config.",
+   "Only one Kinesis destination per table is modeled; real DynamoDB allows up to two. UpdateKinesisStreamingDestination (changing precision after the fact) is not implemented — disable and re-enable instead."
+  ],
+  "tests": [
+   "tests/conformance/test_dynamodb_kinesis_destination_core.py"
+  ]
+ },
+ "dynamodb.resource-policy": {
+  "title": "Resource-based policy",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "PutResourcePolicy validates the document (valid JSON, at least one Allow/Deny statement with a Principal), tracks a real RevisionId for optimistic concurrency (ExpectedRevisionId is enforced on Put and Delete), and rejects a policy granting '*' access unless ConfirmRemoveSelfResourceAccess=true — the same guard real PutResourcePolicy applies. What is not modeled is runtime access evaluation: Vyomi has one implicit caller identity, so the policy content never actually denies or allows a specific request the way cross-account IAM evaluation would."
+  ],
+  "tests": [
+   "tests/conformance/test_dynamodb_resource_policy_core.py"
+  ]
+ },
+ "dynamodb.monitor": {
+  "title": "CloudWatch metrics and alarms",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Every PutItem/GetItem/UpdateItem/DeleteItem/Query/Scan/BatchGetItem/BatchWriteItem/TransactWriteItems/TransactGetItems call pushes real AWS/DynamoDB ConsumedRead-/ConsumedWriteCapacityUnits, SuccessfulRequestLatency, ReturnedItemCount, ItemCount and TableSizeBytes datapoints (derived from the actual request, never synthetic) into the shared CloudWatch core, on both the TableName and the TableName+Operation dimension sets — the same engine core/vpc_core.py's EC2 status-check metrics use. Alarms set on these metrics evaluate and fire for real; 'Create alarm' pre-fills the TableName dimension and alarm actions publish to the simulator's own SNS.",
+   "Consumed capacity is computed the AWS way: 1 RCU per 4 KB (eventually-consistent reads cost half), 1 WCU per 1 KB, transactions at 2x; ReturnConsumedCapacity TOTAL/INDEXES is honoured. Provisioned tables enforce it with a real per-table/GSI token bucket (burst = 300s of capacity) and raise ProvisionedThroughputExceededException, pushing ThrottledRequests/Read-/WriteThrottleEvents; on-demand tables never throttle. Every failed call pushes UserErrors (4xx) or SystemErrors (5xx).",
+   "GSI write capacity is approximated as the base item's WCU charged to every GSI it projects onto (no separate per-index item-size accounting), and Query/Scan RCU is billed once for the whole page rather than per evaluated item — both close enough for the Monitor tab and throttling to be real, not AWS-exact to the unit. Latency reflects simulator processing time, not real network/service time."
+  ],
+  "tests": [
+   "tests/conformance/test_dynamodb_monitor_core.py",
+   "tests/conformance/test_dynamodb_capacity_core.py"
+  ]
+ },
+ "dynamodb.global-tables": {
+  "title": "Global tables",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "UpdateTable(ReplicaUpdates) really backfills a new replica with the table's current items and then mirrors every subsequent write/delete into it synchronously (same pattern as core/s3_object_core.py's S3 Cross-Region Replication); DeleteTable is genuinely rejected while replicas exist, exactly like real DynamoDB's 'replication group must be empty' guard.",
+   "Vyomi simulates one AWS region, so a replica has no regional endpoint of its own to query — unlike real cross-region replication (where each replica is reachable and eventually consistent), Vyomi's replica data is only inspectable through the primary table's own Global Tables tab, and replication is synchronous rather than eventually consistent. Per-replica read/write capacity is not independently configurable; it always mirrors the primary table's capacity mode."
+  ],
+  "tests": [
+   "tests/conformance/test_dynamodb_global_tables_core.py"
+  ]
+ },
+ "dynamodb.dax.clusters": {
+  "title": "DAX clusters",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "A rebooted node drops that cluster's whole item cache rather than just its own share (Vyomi models one shared cache per cluster, not per-node partitions)."
+  ],
+  "tests": [
+   "tests/conformance/test_dax_core.py"
+  ]
+ },
+ "dynamodb.dax.subnet-groups": {
+  "title": "DAX subnet groups",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_dax_core.py"
+  ]
+ },
+ "dynamodb.dax.parameter-groups": {
+  "title": "DAX parameter groups",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_dax_core.py"
+  ]
+ },
+ "dynamodb.dax.events": {
+  "title": "DAX events",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_dax_core.py"
+  ]
+ },
+ "dynamodb.dax.cache": {
+  "title": "DAX cache engine (item cache + query cache)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "The cache engine itself is real: read-through/write-through in front of the DynamoDB store (core/nosql_store.py) with record-ttl-millis/query-ttl-millis TTLs from the cluster's parameter group, LRU eviction sized by node type, and strongly-consistent reads genuinely bypassing the cache — proven in tests/conformance/test_dax_core.py by mutating the underlying table directly and showing a cache hit serves the stale value while ConsistentRead doesn't.",
+   "DAX's real client speaks a binary protocol over a persistent TCP connection to the cluster's discovery endpoint; that wire isn't exposed yet (planned: a wave-6 tunnel TCP relay), so the cache engine is reachable only through these conformance hooks (get_item/put_item/delete_item/query/put_query_result), not from an unmodified DAX SDK pointed at the simulated endpoint."
+  ],
+  "tests": [
+   "tests/conformance/test_dax_core.py"
+  ]
+ },
+ "dynamodb.table.max-throughput": {
+  "title": "Maximum table throughput (on-demand caps)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": [
+   "CreateTable",
+   "UpdateTable",
+   "DescribeTable"
+  ],
+  "tests": [
+   "tests/conformance/test_dynamodb_sweepa_core.py"
+  ]
+ },
+ "dynamodb.table.warm-throughput": {
+  "title": "Warm throughput",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "WarmThroughput is stored and described (default 12,000 read / 4,000 write units per second; a request can only raise it, status is always ACTIVE). Vyomi has no physical partitions to pre-warm, so it changes no behaviour."
+  ],
+  "api": [
+   "CreateTable",
+   "UpdateTable",
+   "DescribeTable"
+  ],
+  "tests": [
+   "tests/conformance/test_dynamodb_sweepa_core.py"
+  ]
+ },
+ "dynamodb.autoscaling": {
+  "title": "Auto scaling",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Provisioned-capacity auto scaling is the Application Auto Scaling service (scalable targets and scaling policies), which Vyomi does not implement; set fixed read/write units instead."
+  ],
+  "api": []
+ },
+ "dynamodb.lambda-triggers": {
+  "title": "Stream triggers (Lambda)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "An Enabled event-source mapping on the table's stream ARN invokes its function with the real DynamoDB-Streams event for every INSERT/MODIFY/REMOVE record. Delivery is synchronous, one record per invocation (BatchSize/StartingPosition/FilterCriteria are stored but not applied), and a failed invocation is not retried or sent to a DLQ."
+  ],
+  "api": [
+   "CreateEventSourceMapping",
+   "ListEventSourceMappings",
+   "DeleteEventSourceMapping"
+  ],
+  "tests": [
+   "tests/conformance/test_dynamodb_sweepa_core.py"
+  ]
+ },
+ "dynamodb.account.zero-etl": {
+  "title": "Zero-ETL integrations",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Zero-ETL integrations replicate tables into Amazon Redshift / SageMaker lakehouse, services Vyomi does not implement."
+  ],
+  "api": []
+ },
+ "dynamodb.account.reserved-capacity": {
+  "title": "Reserved capacity",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Reserved capacity is a billing purchase; Vyomi has no billing or payment backend."
+  ],
+  "api": []
+ },
+ "dynamodb.account.update-settings": {
+  "title": "Update settings",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Account-level table defaults are not modeled; edit capacity, class and protection per table from its Additional settings tab."
+  ],
+  "api": []
+ }
+}

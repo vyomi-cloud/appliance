@@ -1,0 +1,1643 @@
+{
+  "$schema": "../schema.json",
+  "cloud": "aws",
+  "service": "s3",
+  "console_path": "/s3/",
+  "status": "reviewed",
+  "captured_at": "2026-10-30",
+  "nav": [
+    {
+      "label": "Buckets",
+      "expandable": true,
+      "children": [
+        {
+          "label": "General purpose buckets",
+          "page_id": "general-purpose-buckets"
+        },
+        {
+          "label": "Directory buckets",
+          "page_id": "directory-buckets"
+        },
+        {
+          "label": "Table buckets",
+          "page_id": "table-buckets"
+        },
+        {
+          "label": "Vector buckets",
+          "page_id": "vector-buckets"
+        }
+      ]
+    },
+    {
+      "label": "Files",
+      "expandable": true,
+      "children": [
+        {
+          "label": "File systems",
+          "page_id": "file-systems"
+        }
+      ]
+    },
+    {
+      "label": "Access management and security",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Access Points",
+          "page_id": "access-points"
+        },
+        {
+          "label": "Access Points for FSx",
+          "page_id": "access-points-for-fsx"
+        },
+        {
+          "label": "Access Grants",
+          "page_id": "access-grants"
+        },
+        {
+          "label": "IAM Access Analyzer",
+          "page_id": "iam-access-analyzer"
+        }
+      ]
+    },
+    {
+      "label": "Storage management and insights",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Storage Lens",
+          "page_id": "storage-lens"
+        },
+        {
+          "label": "Batch Operations",
+          "page_id": "batch-operations"
+        }
+      ]
+    },
+    {
+      "label": "Account and organization settings",
+      "page_id": "account-and-organization-settings"
+    },
+    {
+      "label": "AWS Marketplace for S3",
+      "page_id": "aws-marketplace-for-s3",
+      "expandable": true,
+      "external": true,
+      "children": [
+        {
+          "label": "Storage, Back-up and Recovery",
+          "external": true
+        },
+        {
+          "label": "Data Integration and Analytics",
+          "external": true
+        },
+        {
+          "label": "Observability and Monitoring",
+          "external": true
+        },
+        {
+          "label": "Security and Threat Detection",
+          "external": true
+        },
+        {
+          "label": "Permissions",
+          "external": true
+        }
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "id": "general-purpose-buckets",
+      "kind": "list",
+      "title": "Buckets",
+      "route": "/s3/buckets",
+      "breadcrumbs": [
+        "Amazon S3",
+        "Buckets"
+      ],
+      "captures": [
+        "A-s3/003-L2-general-purpose-buckets",
+        "A-s3/003-L2-general-purpose-buckets--tab-02-directory-buckets",
+        "A-s3/001-L1-landing",
+        "A-s3/001-L1-landing--tab-02-directory-buckets"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "Service landing (/s3/home) renders this same page. Tab 'General purpose buckets' carries an 'All AWS Regions' badge.",
+      "tabs": [
+        "General purpose buckets",
+        "Directory buckets"
+      ],
+      "table": {
+        "resource_label": "General purpose buckets",
+        "counter": true,
+        "selection": "single",
+        "header_actions": [
+          "Refresh",
+          "Copy ARN",
+          "Empty",
+          "Delete",
+          "Create bucket"
+        ],
+        "filter_placeholder": "Find buckets by name",
+        "pagination": true,
+        "preferences": true,
+        "empty_state": "No buckets",
+        "empty_state_action": "Create bucket",
+        "confidence": "high",
+        "columns": [
+          "Name",
+          "AWS Region",
+          "Creation date"
+        ]
+      },
+      "sections": [
+        {
+          "title": "Account snapshot",
+          "actions": [
+            "View dashboard"
+          ],
+          "expandable": true
+        },
+        {
+          "title": "External access summary",
+          "expandable": true
+        }
+      ]
+    },
+    {
+      "id": "directory-buckets",
+      "kind": "list",
+      "title": "Buckets",
+      "route": "/s3/directory-buckets",
+      "breadcrumbs": [
+        "Amazon S3",
+        "Buckets"
+      ],
+      "captures": [
+        "A-s3/004-L2-directory-buckets",
+        "A-s3/004-L2-directory-buckets--tab-01-general-purpose-buckets",
+        "A-s3/004-L2-directory-buckets--tab-02-directory-buckets"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "tabs": [
+        "General purpose buckets",
+        "Directory buckets"
+      ],
+      "table": {
+        "resource_label": "Directory buckets",
+        "counter": true,
+        "selection": "single",
+        "header_actions": [
+          "Refresh",
+          "Copy ARN",
+          "Empty",
+          "Delete",
+          "Import",
+          "Create bucket"
+        ],
+        "filter_placeholder": "Find buckets by name",
+        "pagination": true,
+        "preferences": true,
+        "empty_state": "No buckets",
+        "empty_state_action": "Create bucket",
+        "confidence": "high",
+        "columns": [
+          "Name",
+          "Bucket location type",
+          "Bucket location name",
+          "Creation date"
+        ]
+      }
+    },
+    {
+      "id": "bucket-detail",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "route": "/s3/buckets/{resource-name}",
+      "breadcrumbs": [
+        "Amazon S3",
+        "Buckets",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Not yet crawled (crawler stops at the list). Tabs/sections from the current console; re-verify on next capture.",
+      "tabs": [
+        "Objects",
+        "Metadata",
+        "Properties",
+        "Permissions",
+        "Metrics",
+        "Management",
+        "Access Points"
+      ],
+      "tab_panels": [
+        {
+          "label": "Objects",
+          "sections": [
+            {
+              "title": "Objects",
+              "table": {
+                "resource_label": "Objects",
+                "counter": true,
+                "selection": "multi",
+                "header_actions": [
+                  "Refresh",
+                  "Copy S3 URI",
+                  "Copy URL",
+                  "Download",
+                  "Open",
+                  "Delete",
+                  "Actions",
+                  "Create folder",
+                  "Upload"
+                ],
+                "actions": [
+                  "Download as",
+                  "Share with a presigned URL",
+                  "Calculate total size",
+                  "Copy",
+                  "Move",
+                  "Initiate restore",
+                  "Query with S3 Select",
+                  "Edit storage class",
+                  "Edit server-side encryption",
+                  "Edit metadata",
+                  "Edit tags",
+                  "Make public using ACL",
+                  "Rename object"
+                ],
+                "filter_placeholder": "Find objects by prefix",
+                "filters": [
+                  "Show versions"
+                ],
+                "pagination": true,
+                "preferences": true,
+                "empty_state": "No objects",
+                "empty_state_action": "Upload",
+                "columns": [
+                  "Name",
+                  "Type",
+                  "Last modified",
+                  "Size",
+                  "Storage class"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "label": "Metadata",
+          "sections": [
+            {
+              "title": "Metadata configuration",
+              "actions": [
+                "Create metadata configuration"
+              ]
+            }
+          ]
+        },
+        {
+          "label": "Properties",
+          "sections": [
+            {
+              "title": "Bucket overview",
+              "fields": [
+                {
+                  "label": "AWS Region",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Amazon Resource Name (ARN)",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Creation date",
+                  "type": "readonly"
+                }
+              ]
+            },
+            {
+              "title": "Bucket Versioning",
+              "actions": [
+                "Edit"
+              ],
+              "fields": [
+                {
+                  "label": "Bucket Versioning",
+                  "type": "readonly",
+                  "options": [
+                    "Enabled",
+                    "Suspended",
+                    "Disabled"
+                  ]
+                },
+                {
+                  "label": "Multi-factor authentication (MFA) delete",
+                  "type": "readonly"
+                }
+              ]
+            },
+            {
+              "title": "Tags",
+              "actions": [
+                "Edit"
+              ],
+              "fields": [
+                {
+                  "label": "Tags",
+                  "type": "tags",
+                  "required": false,
+                  "help": "Key / Value pairs; up to 50 tags",
+                  "actions": [
+                    "Add new tag",
+                    "Remove"
+                  ]
+                }
+              ]
+            },
+            {
+              "title": "Default encryption",
+              "actions": [
+                "Edit"
+              ],
+              "fields": [
+                {
+                  "label": "Encryption type",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Bucket Key",
+                  "type": "readonly"
+                }
+              ]
+            },
+            {
+              "title": "Intelligent-Tiering Archive configurations",
+              "actions": [
+                "Create configuration"
+              ]
+            },
+            {
+              "title": "Server access logging",
+              "actions": [
+                "Edit"
+              ],
+              "fields": [
+                {
+                  "label": "Server access logging",
+                  "type": "readonly"
+                }
+              ]
+            },
+            {
+              "title": "AWS CloudTrail data events",
+              "actions": [
+                "Configure in CloudTrail"
+              ]
+            },
+            {
+              "title": "Event notifications",
+              "table": {
+                "header_actions": [
+                  "Edit",
+                  "Delete",
+                  "Create event notification"
+                ],
+                "columns": [
+                  "Name",
+                  "Event types",
+                  "Filters",
+                  "Destination type",
+                  "Destination"
+                ]
+              }
+            },
+            {
+              "title": "Amazon EventBridge",
+              "actions": [
+                "Edit"
+              ],
+              "fields": [
+                {
+                  "label": "Send notifications to Amazon EventBridge for all events in this bucket",
+                  "type": "readonly"
+                }
+              ]
+            },
+            {
+              "title": "Transfer acceleration",
+              "actions": [
+                "Edit"
+              ],
+              "fields": [
+                {
+                  "label": "Transfer acceleration",
+                  "type": "readonly"
+                }
+              ]
+            },
+            {
+              "title": "Object Lock",
+              "actions": [
+                "Edit"
+              ],
+              "fields": [
+                {
+                  "label": "Object Lock",
+                  "type": "readonly"
+                }
+              ]
+            },
+            {
+              "title": "Requester pays",
+              "actions": [
+                "Edit"
+              ],
+              "fields": [
+                {
+                  "label": "Requester pays",
+                  "type": "readonly"
+                }
+              ]
+            },
+            {
+              "title": "Static website hosting",
+              "actions": [
+                "Edit"
+              ],
+              "fields": [
+                {
+                  "label": "Static website hosting",
+                  "type": "readonly"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "Permissions",
+          "sections": [
+            {
+              "title": "Permissions overview",
+              "fields": [
+                {
+                  "label": "Access finding",
+                  "type": "readonly"
+                }
+              ]
+            },
+            {
+              "title": "Block public access (bucket settings)",
+              "actions": [
+                "Edit"
+              ],
+              "fields": [
+                {
+                  "label": "Block all public access",
+                  "type": "readonly",
+                  "options": [
+                    "On",
+                    "Off"
+                  ]
+                }
+              ]
+            },
+            {
+              "title": "Bucket policy",
+              "actions": [
+                "Edit",
+                "Delete"
+              ],
+              "fields": [
+                {
+                  "label": "Policy",
+                  "type": "textarea"
+                }
+              ]
+            },
+            {
+              "title": "Object Ownership",
+              "actions": [
+                "Edit"
+              ],
+              "fields": [
+                {
+                  "label": "Object Ownership",
+                  "type": "readonly"
+                }
+              ]
+            },
+            {
+              "title": "Access control list (ACL)",
+              "table": {
+                "columns": [
+                  "Grantee",
+                  "Objects",
+                  "Bucket ACL"
+                ]
+              },
+              "actions": [
+                "Edit"
+              ]
+            },
+            {
+              "title": "Cross-origin resource sharing (CORS)",
+              "actions": [
+                "Edit"
+              ],
+              "fields": [
+                {
+                  "label": "CORS configuration",
+                  "type": "textarea"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "Metrics",
+          "sections": [
+            {
+              "title": "Bucket metrics",
+              "fields": [
+                {
+                  "label": "Total bucket size",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Total number of objects",
+                  "type": "readonly"
+                }
+              ]
+            },
+            {
+              "title": "Storage Lens metrics"
+            },
+            {
+              "title": "Request metrics"
+            },
+            {
+              "title": "Replication metrics"
+            },
+            {
+              "title": "Data transfer metrics"
+            }
+          ]
+        },
+        {
+          "label": "Management",
+          "sections": [
+            {
+              "title": "Lifecycle rules",
+              "table": {
+                "selection": "single",
+                "header_actions": [
+                  "View details",
+                  "Edit",
+                  "Delete",
+                  "Actions",
+                  "Create lifecycle rule"
+                ],
+                "columns": [
+                  "Lifecycle rule name",
+                  "Status",
+                  "Scope",
+                  "Current version actions",
+                  "Noncurrent versions actions",
+                  "Expired object delete markers",
+                  "Incomplete multipart uploads"
+                ]
+              }
+            },
+            {
+              "title": "Replication rules",
+              "table": {
+                "selection": "single",
+                "header_actions": [
+                  "View details",
+                  "Edit rule",
+                  "Delete",
+                  "Actions",
+                  "Create replication rule"
+                ],
+                "columns": [
+                  "Replication rule name",
+                  "Status",
+                  "Destination bucket",
+                  "Destination Region",
+                  "Priority",
+                  "Scope",
+                  "Storage class",
+                  "Replica owner",
+                  "Replication Time Control",
+                  "KMS-encrypted objects",
+                  "Replica modification sync"
+                ]
+              }
+            },
+            {
+              "title": "Inventory configurations",
+              "table": {
+                "selection": "single",
+                "header_actions": [
+                  "Edit",
+                  "Delete",
+                  "Create inventory configuration"
+                ],
+                "columns": [
+                  "Name",
+                  "Status",
+                  "Scope",
+                  "Destination",
+                  "Frequency",
+                  "Last export",
+                  "Format"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "label": "Access Points",
+          "sections": [
+            {
+              "title": "Access Points",
+              "table": {
+                "resource_label": "Access Points",
+                "counter": true,
+                "selection": "single",
+                "header_actions": [
+                  "Copy ARN",
+                  "Delete",
+                  "Create access point"
+                ],
+                "columns": [
+                  "Name",
+                  "Access Point alias",
+                  "Network origin",
+                  "VPC ID",
+                  "Access Point ARN"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "object-detail",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "route": "/s3/object/{bucket}?prefix={key}",
+      "breadcrumbs": [
+        "Amazon S3",
+        "Buckets",
+        "{bucket}",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Copy S3 URI",
+        "Download",
+        "Open",
+        "Object actions"
+      ],
+      "tabs": [
+        "Properties",
+        "Permissions",
+        "Versions"
+      ],
+      "tab_panels": [
+        {
+          "label": "Properties",
+          "sections": [
+            {
+              "title": "Object overview",
+              "fields": [
+                {
+                  "label": "Owner",
+                  "type": "readonly"
+                },
+                {
+                  "label": "AWS Region",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Last modified",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Size",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Type",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Key",
+                  "type": "readonly"
+                },
+                {
+                  "label": "S3 URI",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Amazon Resource Name (ARN)",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Entity tag (Etag)",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Object URL",
+                  "type": "readonly"
+                }
+              ]
+            },
+            {
+              "title": "Object management overview",
+              "fields": [
+                {
+                  "label": "Bucket properties",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Management configurations",
+                  "type": "readonly"
+                }
+              ]
+            },
+            {
+              "title": "Storage class",
+              "actions": [
+                "Edit"
+              ],
+              "fields": [
+                {
+                  "label": "Storage class",
+                  "type": "readonly"
+                }
+              ]
+            },
+            {
+              "title": "Server-side encryption settings",
+              "actions": [
+                "Edit"
+              ],
+              "fields": [
+                {
+                  "label": "Encryption type",
+                  "type": "readonly"
+                }
+              ]
+            },
+            {
+              "title": "Additional checksums",
+              "fields": [
+                {
+                  "label": "Checksum function",
+                  "type": "readonly"
+                }
+              ]
+            },
+            {
+              "title": "Tags",
+              "actions": [
+                "Edit"
+              ],
+              "fields": [
+                {
+                  "label": "Tags",
+                  "type": "tags",
+                  "required": false,
+                  "help": "Key / Value pairs; up to 50 tags",
+                  "actions": [
+                    "Add new tag",
+                    "Remove"
+                  ]
+                }
+              ]
+            },
+            {
+              "title": "Metadata",
+              "table": {
+                "columns": [
+                  "Type",
+                  "Key",
+                  "Value"
+                ]
+              },
+              "actions": [
+                "Edit"
+              ]
+            },
+            {
+              "title": "Object Lock legal hold",
+              "actions": [
+                "Edit"
+              ],
+              "fields": [
+                {
+                  "label": "Legal hold",
+                  "type": "readonly"
+                }
+              ]
+            },
+            {
+              "title": "Object Lock retention",
+              "actions": [
+                "Edit"
+              ],
+              "fields": [
+                {
+                  "label": "Retention",
+                  "type": "readonly"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "Permissions",
+          "sections": [
+            {
+              "title": "Access control list (ACL)",
+              "table": {
+                "columns": [
+                  "Grantee",
+                  "Object",
+                  "Object ACL"
+                ]
+              },
+              "actions": [
+                "Edit"
+              ]
+            }
+          ]
+        },
+        {
+          "label": "Versions",
+          "sections": [
+            {
+              "title": "Versions",
+              "table": {
+                "selection": "multi",
+                "header_actions": [
+                  "Download",
+                  "Open",
+                  "Delete"
+                ],
+                "columns": [
+                  "Version ID",
+                  "Type",
+                  "Last modified",
+                  "Size",
+                  "Storage class"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "create-bucket",
+      "kind": "create",
+      "title": "Create bucket",
+      "route": "/s3/bucket/create",
+      "breadcrumbs": [
+        "Amazon S3",
+        "Buckets",
+        "Create bucket"
+      ],
+      "captures": [
+        "C-s3/01-create/step-1",
+        "C-s3/01-create/step-1-expanded"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "Single-page form. Fields below are for Bucket type = General purpose; 'Advanced settings' is collapsed by default.",
+      "submit": "Create bucket",
+      "header_actions": [
+        "Cancel",
+        "Create bucket"
+      ],
+      "sections": [
+        {
+          "title": "General configuration",
+          "fields": [
+            {
+              "label": "AWS Region",
+              "type": "readonly",
+              "default": "{current region}",
+              "help": "Region from the console region picker"
+            },
+            {
+              "label": "Bucket type",
+              "type": "radio",
+              "required": true,
+              "default": "General purpose",
+              "options": [
+                "General purpose",
+                "Directory"
+              ]
+            },
+            {
+              "label": "Bucket namespace",
+              "type": "radio",
+              "required": true,
+              "default": "Global namespace",
+              "options": [
+                "Global namespace",
+                "Account Regional namespace (recommended)"
+              ],
+              "visible_when": "Bucket type = General purpose"
+            },
+            {
+              "label": "Bucket name",
+              "type": "text",
+              "required": true,
+              "placeholder": "amzn-s3-demo-bucket",
+              "constraints": "3-63 chars; a-z, 0-9, '.', '-'; begin and end with a letter or number; globally unique"
+            },
+            {
+              "label": "Copy settings from existing bucket",
+              "type": "button",
+              "required": false,
+              "default": "Choose bucket",
+              "help": "Format: s3://bucket/prefix"
+            }
+          ]
+        },
+        {
+          "title": "Object Ownership",
+          "fields": [
+            {
+              "label": "Object Ownership",
+              "type": "radio",
+              "required": true,
+              "default": "ACLs disabled (recommended)",
+              "options": [
+                "ACLs disabled (recommended)",
+                "ACLs enabled"
+              ]
+            },
+            {
+              "label": "Object Ownership",
+              "type": "readonly",
+              "default": "Bucket owner enforced",
+              "visible_when": "Object Ownership = ACLs disabled (recommended)",
+              "options": [
+                "Bucket owner enforced",
+                "Bucket owner preferred",
+                "Object writer"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Block Public Access settings for this bucket",
+          "fields": [
+            {
+              "label": "Block all public access",
+              "type": "checkbox",
+              "default": true,
+              "children": [
+                {
+                  "label": "Block public access to buckets and objects granted through new access control lists (ACLs)",
+                  "type": "checkbox",
+                  "default": true
+                },
+                {
+                  "label": "Block public access to buckets and objects granted through any access control lists (ACLs)",
+                  "type": "checkbox",
+                  "default": true
+                },
+                {
+                  "label": "Block public access to buckets and objects granted through new public bucket or access point policies",
+                  "type": "checkbox",
+                  "default": true
+                },
+                {
+                  "label": "Block public and cross-account access to buckets and objects through any public bucket or access point policies",
+                  "type": "checkbox",
+                  "default": true
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Bucket Versioning",
+          "fields": [
+            {
+              "label": "Bucket Versioning",
+              "type": "radio",
+              "default": "Disable",
+              "options": [
+                "Disable",
+                "Enable"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Tags - optional",
+          "fields": [
+            {
+              "label": "Tags",
+              "type": "tags",
+              "required": false,
+              "help": "No tags associated with this bucket. You can add up to 50 tags.",
+              "actions": [
+                "Add new tag",
+                "Remove"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Default encryption",
+          "fields": [
+            {
+              "label": "Encryption type",
+              "type": "radio",
+              "default": "Server-side encryption with Amazon S3 managed keys (SSE-S3)",
+              "options": [
+                "Server-side encryption with Amazon S3 managed keys (SSE-S3)",
+                "Server-side encryption with AWS Key Management Service keys (SSE-KMS)",
+                "Dual-layer server-side encryption with AWS Key Management Service keys (DSSE-KMS)"
+              ]
+            },
+            {
+              "label": "AWS KMS key",
+              "type": "radio",
+              "options": [
+                "Choose from your AWS KMS keys",
+                "Enter AWS KMS key ARN"
+              ],
+              "visible_when": "Encryption type = SSE-KMS or DSSE-KMS",
+              "provenance": "reference",
+              "confidence": "medium"
+            },
+            {
+              "label": "Bucket Key",
+              "type": "radio",
+              "default": "Enable",
+              "options": [
+                "Disable",
+                "Enable"
+              ],
+              "help": "S3 Bucket Keys aren't supported for DSSE-KMS."
+            }
+          ]
+        },
+        {
+          "title": "Advanced settings",
+          "expandable": true,
+          "fields": [
+            {
+              "label": "Object Lock",
+              "type": "radio",
+              "default": "Disable",
+              "options": [
+                "Disable",
+                "Enable"
+              ],
+              "help": "Object Lock works only in versioned buckets. Enabling Object Lock automatically enables Versioning."
+            },
+            {
+              "label": "I acknowledge that enabling Object Lock will permanently allow objects in this bucket to be locked.",
+              "type": "checkbox",
+              "visible_when": "Object Lock = Enable",
+              "provenance": "reference",
+              "confidence": "medium"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "upload",
+      "kind": "create",
+      "title": "Upload",
+      "route": "/s3/upload/{bucket}",
+      "breadcrumbs": [
+        "Amazon S3",
+        "Buckets",
+        "{bucket}",
+        "Upload"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "submit": "Upload",
+      "sections": [
+        {
+          "title": "Files and folders",
+          "table": {
+            "selection": "multi",
+            "header_actions": [
+              "Remove",
+              "Add files",
+              "Add folder"
+            ],
+            "filter_placeholder": "Find by name",
+            "empty_state": "No files or folders",
+            "columns": [
+              "Name",
+              "Folder",
+              "Type",
+              "Size"
+            ]
+          }
+        },
+        {
+          "title": "Destination",
+          "expandable": true,
+          "fields": [
+            {
+              "label": "Destination",
+              "type": "readonly",
+              "default": "s3://{bucket}"
+            }
+          ]
+        },
+        {
+          "title": "Permissions",
+          "expandable": true
+        },
+        {
+          "title": "Properties",
+          "expandable": true,
+          "fields": [
+            {
+              "label": "Storage class",
+              "type": "radio",
+              "default": "Standard",
+              "options": [
+                "Standard",
+                "Intelligent-Tiering",
+                "Standard-IA",
+                "One Zone-IA",
+                "Glacier Instant Retrieval",
+                "Glacier Flexible Retrieval",
+                "Glacier Deep Archive",
+                "Reduced redundancy"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "create-folder",
+      "kind": "create",
+      "title": "Create folder",
+      "route": "/s3/bucket/{bucket}/create/folder",
+      "breadcrumbs": [
+        "Amazon S3",
+        "Buckets",
+        "{bucket}",
+        "Create folder"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "submit": "Create folder",
+      "sections": [
+        {
+          "title": "Folder",
+          "fields": [
+            {
+              "label": "Folder name",
+              "type": "text",
+              "required": true,
+              "constraints": "Folder names can't contain '/'"
+            }
+          ]
+        },
+        {
+          "title": "Server-side encryption",
+          "fields": [
+            {
+              "label": "Server-side encryption",
+              "type": "radio",
+              "default": "Don't specify an encryption key",
+              "options": [
+                "Don't specify an encryption key",
+                "Specify an encryption key"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "empty-bucket",
+      "kind": "other",
+      "title": "Empty bucket",
+      "route": "/s3/bucket/{bucket}/empty",
+      "provenance": "reference",
+      "confidence": "medium",
+      "sections": [
+        {
+          "title": "Permanently delete all objects in bucket",
+          "fields": [
+            {
+              "label": "To confirm deletion, type permanently delete in the text input field.",
+              "type": "text",
+              "required": true,
+              "placeholder": "permanently delete"
+            }
+          ]
+        }
+      ],
+      "submit": "Empty"
+    },
+    {
+      "id": "delete-bucket",
+      "kind": "other",
+      "title": "Delete bucket",
+      "route": "/s3/bucket/{bucket}/delete",
+      "provenance": "reference",
+      "confidence": "medium",
+      "sections": [
+        {
+          "title": "Delete bucket",
+          "fields": [
+            {
+              "label": "To confirm deletion, enter the name of the bucket in the text input field.",
+              "type": "text",
+              "required": true
+            }
+          ]
+        }
+      ],
+      "submit": "Delete bucket"
+    },
+    {
+      "id": "table-buckets",
+      "kind": "list",
+      "title": "Table buckets",
+      "route": "/s3/table-buckets",
+      "captures": [
+        "A-s3/005-L2-table-buckets"
+      ],
+      "provenance": "capture",
+      "confidence": "medium",
+      "table": {
+        "resource_label": "Table buckets",
+        "selection": "single",
+        "header_actions": [
+          "Delete",
+          "Create table bucket"
+        ],
+        "confidence": "medium",
+        "columns": [
+          "Name",
+          "Type",
+          "Creation date",
+          "Amazon Resource Name (ARN)"
+        ]
+      },
+      "sections": [
+        {
+          "title": "Integration with AWS analytics services",
+          "actions": [
+            "Enable integration"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "vector-buckets",
+      "kind": "list",
+      "title": "Vector buckets",
+      "route": "/s3/vector-buckets",
+      "captures": [
+        "A-s3/006-L2-vector-buckets"
+      ],
+      "provenance": "capture",
+      "confidence": "medium",
+      "table": {
+        "resource_label": "Vector buckets",
+        "counter": true,
+        "selection": "single",
+        "header_actions": [
+          "Delete",
+          "Create vector bucket"
+        ],
+        "empty_state": "No vector buckets",
+        "confidence": "high",
+        "columns": [
+          "Name",
+          "Creation date",
+          "Amazon Resource Name (ARN)"
+        ]
+      }
+    },
+    {
+      "id": "file-systems",
+      "kind": "list",
+      "title": "File systems",
+      "route": "/s3/fs",
+      "captures": [
+        "A-s3/007-L2-file-systems"
+      ],
+      "provenance": "capture",
+      "confidence": "medium",
+      "table": {
+        "resource_label": "File systems",
+        "counter": true,
+        "selection": "single",
+        "header_actions": [
+          "View details",
+          "Delete",
+          "Create file system"
+        ],
+        "confidence": "high",
+        "columns": [
+          "File system ID",
+          "Name",
+          "General purpose bucket",
+          "Status",
+          "Creation date"
+        ]
+      }
+    },
+    {
+      "id": "access-points",
+      "kind": "list",
+      "title": "Access Points",
+      "route": "/s3/ap",
+      "captures": [
+        "A-s3/008-L2-access-points",
+        "A-s3/008-L2-access-points--tab-02-directory-buckets",
+        "A-s3/008-L2-access-points--tab-03-multi-region",
+        "A-s3/008-L2-access-points--tab-04-object-lambda"
+      ],
+      "provenance": "capture",
+      "confidence": "medium",
+      "table": {
+        "resource_label": "Access Points for general purpose buckets",
+        "counter": true,
+        "selection": "single",
+        "header_actions": [
+          "Copy ARN",
+          "Edit policy",
+          "Delete",
+          "Create access point"
+        ],
+        "confidence": "high",
+        "columns": [
+          "Name",
+          "Data source type",
+          "Data source ID",
+          "Access Point alias",
+          "Network origin",
+          "VPC ID",
+          "Bucket owner account ID"
+        ]
+      },
+      "tabs": [
+        "General purpose buckets",
+        "Directory buckets",
+        "Multi-Region",
+        "Object Lambda"
+      ]
+    },
+    {
+      "id": "access-points-for-fsx",
+      "kind": "list",
+      "title": "Access Points for FSx",
+      "route": "/s3/fsxap",
+      "captures": [
+        "A-s3/009-L2-access-points-for-fsx"
+      ],
+      "provenance": "capture",
+      "confidence": "medium",
+      "table": {
+        "resource_label": "Access Points for FSx",
+        "counter": true,
+        "selection": "single",
+        "header_actions": [
+          "Copy ARN",
+          "Edit policy",
+          "Delete"
+        ],
+        "filters": [
+          "Data source type"
+        ],
+        "confidence": "medium",
+        "columns": [
+          "Name",
+          "Data source type",
+          "Data source ID",
+          "Access Point alias",
+          "Network origin",
+          "VPC ID",
+          "Bucket owner account ID"
+        ]
+      }
+    },
+    {
+      "id": "access-grants",
+      "kind": "other",
+      "title": "Access Grants",
+      "route": "/s3/access-grants",
+      "captures": [
+        "A-s3/010-L2-access-grants"
+      ],
+      "provenance": "capture",
+      "confidence": "medium"
+    },
+    {
+      "id": "iam-access-analyzer",
+      "kind": "other",
+      "title": "IAM Access Analyzer for S3",
+      "route": "/s3/access",
+      "captures": [
+        "A-s3/011-L2-iam-access-analyzer"
+      ],
+      "provenance": "capture",
+      "confidence": "medium"
+    },
+    {
+      "id": "storage-lens",
+      "kind": "list",
+      "title": "Storage Lens",
+      "route": "/s3/lens",
+      "captures": [
+        "A-s3/012-L2-storage-lens",
+        "A-s3/012-L2-storage-lens--tab-02-storage-lens-groups"
+      ],
+      "provenance": "capture",
+      "confidence": "medium",
+      "table": {
+        "resource_label": "Storage Lens dashboards",
+        "counter": true,
+        "selection": "single",
+        "header_actions": [
+          "View dashboard configuration",
+          "Edit",
+          "Delete",
+          "Create Storage Lens dashboard"
+        ],
+        "confidence": "high",
+        "columns": [
+          "Dashboard name",
+          "Status"
+        ]
+      },
+      "tabs": [
+        "Storage Lens dashboards",
+        "Storage Lens groups"
+      ]
+    },
+    {
+      "id": "batch-operations",
+      "kind": "list",
+      "title": "Batch Operations",
+      "route": "/s3/jobs",
+      "captures": [
+        "A-s3/013-L2-batch-operations"
+      ],
+      "provenance": "capture",
+      "confidence": "medium",
+      "table": {
+        "resource_label": "Jobs",
+        "counter": true,
+        "selection": "single",
+        "header_actions": [
+          "Run job",
+          "Actions",
+          "Clone job",
+          "Create job"
+        ],
+        "filters": [
+          "All status types"
+        ],
+        "empty_state": "No resources to display",
+        "confidence": "high",
+        "columns": [
+          "Job ID",
+          "Status",
+          "Description",
+          "Operation",
+          "Date created",
+          "Total objects",
+          "% Complete",
+          "Total failed (rate)",
+          "Priority"
+        ]
+      }
+    },
+    {
+      "id": "account-and-organization-settings",
+      "kind": "settings",
+      "title": "Account and organization settings",
+      "route": "/s3/account-settings",
+      "captures": [
+        "A-s3/014-L2-account-and-organization-settings"
+      ],
+      "provenance": "capture",
+      "confidence": "medium",
+      "table": {
+        "resource_label": "Delegated Administrators",
+        "counter": true,
+        "selection": "single",
+        "header_actions": [
+          "De-register account",
+          "Register account"
+        ],
+        "confidence": "medium",
+        "columns": [
+          "Account ID"
+        ]
+      }
+    },
+    {
+      "id": "aws-marketplace-for-s3",
+      "kind": "other",
+      "title": "AWS Marketplace for S3",
+      "route": "/s3/marketplace",
+      "captures": [
+        "A-s3/015-L2-aws-marketplace-for-s3"
+      ],
+      "provenance": "capture",
+      "confidence": "medium",
+      "notes": "Marketplace pages are out of scope for simulation; render as a static 'Not simulated in Vyomi' page."
+    },
+    {
+      "id": "amazon-s3",
+      "kind": "other",
+      "title": "Amazon S3",
+      "route": "/s3/get-started",
+      "captures": [
+        "A-s3/002-L2-amazon-s3"
+      ],
+      "provenance": "capture",
+      "confidence": "medium",
+      "header_actions": [
+        "Create bucket"
+      ],
+      "notes": "Marketing-style homepage: 'Create a bucket' card + How it works / Use cases."
+    },
+    {
+      "id": "create-table-bucket",
+      "kind": "create",
+      "title": "Create table bucket",
+      "route": "/s3/table-bucket/create",
+      "captures": [
+        "A-s3/022-L3-create-table-bucket"
+      ],
+      "provenance": "capture",
+      "confidence": "low",
+      "notes": "Fields not reviewed; regenerate with extract.py --suffix .draft.json for a draft."
+    },
+    {
+      "id": "create-file-system",
+      "kind": "create",
+      "title": "Create file system",
+      "route": "/s3/fs/create",
+      "captures": [
+        "A-s3/023-L3-create-file-system"
+      ],
+      "provenance": "capture",
+      "confidence": "low",
+      "notes": "Fields not reviewed; regenerate with extract.py --suffix .draft.json for a draft."
+    },
+    {
+      "id": "create-storage-lens-group",
+      "kind": "create",
+      "title": "Create Storage Lens group",
+      "route": "/s3/slg/create",
+      "captures": [
+        "A-s3/025-L3-create-storage-lens-group"
+      ],
+      "provenance": "capture",
+      "confidence": "low",
+      "notes": "Fields not reviewed; regenerate with extract.py --suffix .draft.json for a draft."
+    },
+    {
+      "id": "create-job",
+      "kind": "create",
+      "title": "Create job",
+      "route": "/s3/jobs/create",
+      "captures": [
+        "A-s3/027-L3-create-job"
+      ],
+      "provenance": "capture",
+      "confidence": "low",
+      "notes": "Fields not reviewed; regenerate with extract.py --suffix .draft.json for a draft."
+    }
+  ],
+  "gaps_note": "Bucket detail, object detail, Upload, Create folder, Empty and Delete pages are provenance=reference: the crawl did not open a bucket. Re-verify once the crawler captures a bucket. Nav title 'Amazon S3' is the side-nav header."
+}

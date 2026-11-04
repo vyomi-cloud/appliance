@@ -1,0 +1,120 @@
+{
+ "cloud": "aws",
+ "service": "eventbridge",
+ "goal": "STATIC-PANEL SWEEP (wave 5c). Every listed `targets` entry is a hard-coded <NotSimulated*> box in this service's console with NO capability id \u2014 it is invisible to the capability registry and to the coverage numbers, and many are STALE (the feature is real now). For EACH one: (1) if the backend already supports it (check core/*_core.py + core/capabilities), replace the static box with the real, live UI; (2) otherwise BUILD it on a real backend (Nano + offline; follow the Offline + Nano parity checklist in consoles/AGENT-UI.md) and render it live; (3) only if it is genuinely impossible locally (real money/hardware/third-party service) replace it with <CapabilityContainer id=\"...\"> backed by a core/capabilities entry at level not_simulated with the concrete reason. When done, this service's directory must contain ZERO bare <NotSimulatedContainer>/<NotSimulated*> usages \u2014 the gate now fails on any. Metrics/monitoring panels show real series derived from actual activity (cloudwatch_core.ingest_internal_metric / the cloud's metrics core), never random data. Nothing leaves the simulator. Update capabilities, tests/conformance, smoke.",
+ "must_build": [
+  "Event buses (default + custom, create/delete, Send events), Rules (create with event pattern builder + targets SQS/SNS/Lambda, enable/disable), Archives/Replays per registry, Scheduler schedules (create one-time/rate/cron with targets)",
+  "Backend: matching rules really deliver to SQS/SNS/Lambda targets in the router; limitations documented"
+ ],
+ "always": [
+  "Every page wired to the native API on /_wire (no static data); liveness fixtures for every list/detail page",
+  "core/capabilities/aws/<service>.json: one entry per console section with honest level + probe; tests/conformance/test_capabilities.py must pass",
+  "Sections via <CapabilityContainer>; editable settings round-trip through native calls with saveNotice()",
+  "Never edit .github/ (reverted before push)"
+ ],
+ "attempt": 2,
+ "note": "WAVE 5c static-panel sweep (orchestrator). User: unimplemented panels (e.g. VPC Service Health / Settings / Additional information / AWS Network Manager) must be real.",
+ "phase": "depth",
+ "targets": [
+  {
+   "where": "consoles/src/aws/services/eventbridge/CreateSchedule.jsx:157",
+   "component": "NotSimulated",
+   "props": "feature=\"A dedicated per-schedule IAM execution role\" note=\"Vyomi delivers using the appliance's own permissions.\""
+  },
+  {
+   "where": "consoles/src/aws/services/eventbridge/CreateRule.jsx:61",
+   "component": "NotSimulated",
+   "props": "feature=\"A dedicated per-target execution role\" note=\"Vyomi delivers using the appliance's own permissions.\""
+  },
+  {
+   "where": "consoles/src/aws/services/eventbridge/RuleDetail.jsx:143",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Metrics\" note=\"CloudWatch metrics for rule invocations aren't aggregated in Vyomi.\""
+  },
+  {
+   "where": "consoles/src/aws/services/eventbridge/Dashboard.jsx:49",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Account-level metrics\" note=\"CloudWatch metrics for EventBridge aren't aggregated in Vyomi.\""
+  },
+  {
+   "where": "consoles/src/aws/services/eventbridge/Dashboard.jsx:64",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Account-level metrics\" note=\"CloudWatch metrics for EventBridge aren't aggregated in Vyomi.\""
+  },
+  {
+   "where": "consoles/src/aws/services/eventbridge/Dashboard.jsx:65",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Resource-level metrics\" note=\"Per-rule CloudWatch metrics aren't aggregated in Vyomi.\""
+  },
+  {
+   "where": "consoles/src/aws/services/eventbridge/Dashboard.jsx:74",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Account-level metrics\""
+  },
+  {
+   "where": "consoles/src/aws/services/eventbridge/Dashboard.jsx:75",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Resource-level metrics\""
+  },
+  {
+   "where": "consoles/src/aws/services/eventbridge/Dashboard.jsx:83",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Account-level metrics\" note=\"CloudWatch metrics for Scheduler aren't aggregated in Vyomi.\""
+  },
+  {
+   "where": "consoles/src/aws/services/eventbridge/CreateArchive.jsx:92",
+   "component": "NotSimulated",
+   "props": "feature=\"Archive encryption with a customer KMS key\" note=\"Archives are stored unencrypted inside Vyomi's own store.\""
+  },
+  {
+   "where": "consoles/src/aws/services/eventbridge/EventBusDetail.jsx:72",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Encryption\" note=\"Events are stored unencrypted inside Vyomi's own store.\""
+  },
+  {
+   "where": "consoles/src/aws/services/eventbridge/EventBusDetail.jsx:73",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Resource-based policy\" note=\"A policy document can be stored via UpdateEventBus, but Vyomi never evaluates it against a cross-account PutEvents call.\""
+  },
+  {
+   "where": "consoles/src/aws/services/eventbridge/EventBusDetail.jsx:74",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Monitoring\" note=\"Metrics dashboard: CloudWatch metrics for EventBridge aren't aggregated in Vyomi.\""
+  },
+  {
+   "where": "consoles/src/aws/services/eventbridge/EventBusDetail.jsx:75",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Logs\" note=\"Delivering bus logs to CloudWatch Logs isn't modeled.\""
+  },
+  {
+   "where": "consoles/src/aws/services/eventbridge/CreateEventBus.jsx:89",
+   "component": "NotSimulated",
+   "props": "feature=\"Partner event buses\" note=\"EventBridge partner integrations aren't modeled in Vyomi.\""
+  },
+  {
+   "where": "consoles/src/aws/services/eventbridge/CreateEventBus.jsx:118",
+   "component": "NotSimulated",
+   "props": "feature=\"Event bus encryption with a customer KMS key\" note=\"Events are stored unencrypted inside Vyomi's own store.\""
+  },
+  {
+   "where": "consoles/src/aws/services/eventbridge/CreateEventBus.jsx:124",
+   "component": "NotSimulated",
+   "props": "feature=\"Delivering bus logs to CloudWatch Logs / S3 / Firehose\""
+  },
+  {
+   "where": "consoles/src/aws/services/eventbridge/CreateEventBus.jsx:130",
+   "component": "NotSimulated",
+   "props": "feature=\"Resource-based policy enforcement\" note=\"A policy document can be attached but Vyomi never evaluates it against a cross-account PutEvents call.\""
+  },
+  {
+   "where": "consoles/src/aws/services/eventbridge/CreateEventBus.jsx:136",
+   "component": "NotSimulated",
+   "props": "feature=\"Attaching an archive at bus-creation time\""
+  },
+  {
+   "where": "consoles/src/aws/services/eventbridge/CreateEventBus.jsx:142",
+   "component": "NotSimulated",
+   "props": "feature=\"Schema discovery\" note=\"The Schema registry isn't modeled in Vyomi.\""
+  }
+ ]
+}

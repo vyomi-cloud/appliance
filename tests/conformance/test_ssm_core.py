@@ -1,8 +1,12 @@
 """SSM core conformance — host + Pyodide. Parameter Store lifecycle/history/labels/paths,
 documents, Run Command, associations, maintenance windows, patch baselines, tags, errors."""
 try:
+    from core.kms_keystore import InMemoryKeyStore
+    from core import kms_core as kms
     from core import ssm_core as ssm
 except ImportError:  # pragma: no cover - Pyodide flat layout
+    from kms_keystore import InMemoryKeyStore  # type: ignore
+    import kms_core as kms  # type: ignore
     import ssm_core as ssm  # type: ignore
 
 T = "AmazonSSM."
@@ -138,6 +142,47 @@ def run(store=None):
     st, b = call("Bogus")
     _check("unknown action → UnknownOperationException", b["__type"] == "UnknownOperationException")
     _check("operations list", len(ssm.OPERATIONS) >= 40)
+
+    # v4 depth: a SecureString is genuinely encrypted/decrypted through the KMS core when a
+    # kms_store is passed (every check above ran WITHOUT one and kept the pre-v4-depth
+    # simulation — proof this is additive, not a behaviour change for existing callers).
+    ks = InMemoryKeyStore()
+    cmk = kms.dispatch(ks, "TrentService.CreateKey", {}).body["KeyMetadata"]["KeyId"]
+
+    def kcall(op, body=None):
+        r = ssm.dispatch(s, T + op, body or {}, kms_store=ks)
+        return r.status, r.body
+
+    st, b = kcall("PutParameter", {"Name": "/app/kms-secret", "Value": "s3cr3t", "Type": "SecureString"})
+    _check("KMS-backed PutParameter → Version 1", st == 200 and b["Version"] == 1)
+    plain = kcall("GetParameter", {"Name": "/app/kms-secret", "WithDecryption": True})[1]["Parameter"]["Value"]
+    _check("KMS-backed SecureString round-trips plaintext", plain == "s3cr3t")
+    masked = kcall("GetParameter", {"Name": "/app/kms-secret"})[1]["Parameter"]["Value"]
+    _check("KMS-backed SecureString hidden without WithDecryption", masked != "s3cr3t")
+    _check("the masked value is the real KMS CiphertextBlob (base64, not the kms:<key>: wrapper)",
+           not masked.startswith("kms:"))
+    # Default key auto-provisions exactly like every other AWS-managed key.
+    aliases = kms.dispatch(ks, "TrentService.ListAliases", {}).body["Aliases"]
+    _check("alias/aws/ssm auto-provisioned on first SecureString write",
+           any(a["AliasName"] == "alias/aws/ssm" for a in aliases))
+
+    st, b = kcall("PutParameter", {"Name": "/app/kms-cmk", "Value": "v1", "Type": "SecureString", "KeyId": cmk})
+    _check("customer CMK accepted", st == 200)
+    # Disabling the customer key really blocks decryption — proof the value is actually
+    # encrypted under it, not just stored next to a KeyId label.
+    kms.dispatch(ks, "TrentService.DisableKey", {"KeyId": cmk})
+    blocked = kcall("GetParameter", {"Name": "/app/kms-cmk", "WithDecryption": True})
+    _check("disabled customer key blocks GetParameter(WithDecryption)", blocked[0] >= 400)
+    kms.dispatch(ks, "TrentService.EnableKey", {"KeyId": cmk})
+    unblocked = kcall("GetParameter", {"Name": "/app/kms-cmk", "WithDecryption": True})[1]["Parameter"]["Value"]
+    _check("re-enabling the key unblocks decryption", unblocked == "v1")
+
+    hist = kcall("GetParameterHistory", {"Name": "/app/kms-secret", "WithDecryption": True})[1]["Parameters"]
+    _check("GetParameterHistory also decrypts through the KMS core", hist[0]["Value"] == "s3cr3t")
+
+    # Without a kms_store, SecureString keeps the pre-v4-depth simulation on the SAME store/key.
+    legacy = call("GetParameter", {"Name": "/app/kms-secret"})[1]["Parameter"]["Value"]
+    _check("omitting kms_store degrades to the opaque ciphertext blob (no crash)", legacy == masked)
     return True
 
 

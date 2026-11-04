@@ -1,0 +1,166 @@
+{
+ "$doc": "Vyomi capability registry — GCP Artifact Registry. One entry per console section; level per substrate (nano = shared core, also dev_server/unified ingress; offline = appliance). Proven by tests/conformance/test_capabilities.py — a claim the backend does not honour fails CI.",
+ "gcp.artifacts.repository.crud": {
+  "title": "Repositories (create, list, get, edit, delete)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": [
+   "repositories.create",
+   "repositories.get",
+   "repositories.list",
+   "repositories.patch",
+   "repositories.delete"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_artifactregistry_core.py"
+  ]
+ },
+ "gcp.artifacts.packages-versions-tags": {
+  "title": "Packages, versions and tags",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": [
+   "packages.list",
+   "packages.get",
+   "packages.delete",
+   "versions.list",
+   "versions.get",
+   "versions.delete",
+   "versions.batchDelete",
+   "tags.list",
+   "tags.create",
+   "tags.get",
+   "tags.patch",
+   "tags.delete"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_artifactregistry_core.py"
+  ]
+ },
+ "gcp.artifacts.push-sample": {
+  "title": "Push sample image/package",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "Vyomi has no Docker/Maven/npm/pip daemon, so repositories can't be populated by a real `docker push` et al.; this console action creates a sample package/version directly so the console has real data to show."
+  ],
+  "api": [
+   "repositories.pushSample (Vyomi-only convenience; not a real Artifact Registry method)"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_artifactregistry_core.py"
+  ]
+ },
+ "gcp.artifacts.iam": {
+  "title": "Permissions (IAM policy)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "getIamPolicy/setIamPolicy/testIamPermissions store a real per-repository policy that IS enforced (repository update/delete/setIamPolicy, package/version/tag deletion and pushSample are denied for a principal the policy doesn't grant); it covers a curated set of predefined roles (reader/writer/repoAdmin/admin) and a single X-Cloudlearn-Principal header rather than Google's full role catalog and credential model."
+  ],
+  "api": [
+   "repositories.getIamPolicy",
+   "repositories.setIamPolicy",
+   "repositories.testIamPermissions"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_artifactregistry_core.py"
+  ]
+ },
+ "gcp.artifacts.encryption": {
+  "title": "Encryption (customer-managed key)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "kmsKeyName is validated against a real Cloud KMS CryptoKey (core/gcp_kms_core.py): repository creation fails if the key does not exist or its primary version is not ENABLED, the key is immutable after creation (patch rejects changing it), and every subsequent push re-checks the key's live state and genuinely wraps the new version's digest with it through the real KMS core — a key disabled or destroyed after creation makes new pushes fail, not just a cosmetic label. Vyomi still has no byte content to encrypt (Artifact Registry's data plane here is metadata — package/version/tag records, not stored file bytes), so the envelope crypto proves the key is live and usable rather than encrypting an actual artifact payload."
+  ],
+  "api": [
+   "repositories.create (kmsKeyName)",
+   "repositories.patch",
+   "repositories.get",
+   "repositories.pushSample"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_artifactregistry_core.py"
+  ]
+ },
+ "gcp.artifacts.repository-mode": {
+  "title": "Repository mode (remote / virtual)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "A virtual repository's upstream policies are enforced: its packages/versions/tags/images are a live, priority-ordered aggregate of its member (standard/remote) repositories in the same location, and it rejects direct pushes/deletes since it has none of its own. Remote repositories still only store their config — proxying a real upstream (Docker Hub, npm, Maven Central, …) needs real network egress to a third-party registry, which Vyomi does not perform."
+  ],
+  "api": [
+   "repositories.create (mode, remoteRepositoryConfig, virtualRepositoryConfig)",
+   "repositories.patch (virtualRepositoryConfig)",
+   "repositories.packages.{list,get}",
+   "repositories.packages.versions.{list,get}",
+   "repositories.packages.tags.{list,get}"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_artifactregistry_core.py"
+  ]
+ },
+ "gcp.artifacts.cleanup-policies": {
+  "title": "Cleanup policies",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Cleanup policies are enforced, not just stored: a DELETE policy's olderThan/newerThan/tagState/packageNamePrefixes/versionNamePrefixes conditions are evaluated against real package versions (lazily, the next time the repository is read or written, rather than on the real product's periodic schedule), and matching versions are actually deleted unless a KEEP policy protects them. cleanupPolicyDryRun is honoured (nothing is deleted) but Vyomi does not produce the real product's Cloud Logging dry-run preview report, and the mostRecentVersions (keep-N) policy variant is not modeled."
+  ],
+  "api": [
+   "repositories.patch (cleanupPolicies, cleanupPolicyDryRun)"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_artifactregistry_core.py"
+  ]
+ },
+ "gcp.artifacts.vulnerability-scanning": {
+  "title": "Vulnerability scanning (Artifact Analysis)",
+  "level": {
+   "nano": "config_only",
+   "offline": "config_only"
+  },
+  "limitations": [
+   "The vulnerability-scanning setting is stored on the repository and returned by the API; Vyomi does not scan images or report findings."
+  ],
+  "api": [
+   "repositories.patch (vulnerabilityScanningConfig)"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_artifactregistry_core.py"
+  ]
+ },
+ "gcp.artifacts.project-settings": {
+  "title": "Settings (gcr.io redirection)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": [
+   "projects.getProjectSettings",
+   "projects.updateProjectSettings"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_artifactregistry_core.py"
+  ]
+ }
+}

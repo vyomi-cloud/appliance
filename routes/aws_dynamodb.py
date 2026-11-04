@@ -6,6 +6,8 @@ endpoint used by real AWS SDK/CLI clients.
 """
 from __future__ import annotations
 
+import os
+
 import copy
 import json
 import re
@@ -212,6 +214,7 @@ def _ddb_refresh_table_metrics(table: dict) -> None:
 
 
 def _ddb_item_record_view(table: dict, key: str, record: dict) -> dict:
+    from core.dynamodb_core import _rec_av
     native = copy.deepcopy(record.get("item", {}))
     pk_name, sk_name = _ddb_table_key_fields(table)
     key_obj = {pk_name: native.get(pk_name)}
@@ -220,7 +223,8 @@ def _ddb_item_record_view(table: dict, key: str, record: dict) -> dict:
     return {
         "key": key_obj,
         "item": native,
-        "item_json": _ddb_native_item_to_json(native),
+        # typed AttributeValues as the native wire stored them (SS vs L, exact numbers, B)
+        "item_json": copy.deepcopy(_rec_av(record)),
         "created": record.get("created", ""),
         "updated": record.get("updated", ""),
         "size_bytes": int(record.get("size_bytes", 0) or 0),
@@ -659,13 +663,36 @@ def _ddb_error_response(code: str, message: str, status: int = 400) -> Response:
 # ---------------------------------------------------------------------------
 
 
-async def api_dynamodb_aws(request: Request):
-    """POST /api/dynamodb/aws and POST /dynamodb — DynamoDB JSON-RPC endpoint.
+def _ddb_unified() -> bool:
+    from core import wire_ingress as _wi
+    return _wi.is_unified("dynamodb")
 
-    Proxies to amazon/dynamodb-local for real DDB semantics (PartiQL,
-    secondary indexes, Streams, etc.). Falls back to the legacy in-memory
-    handler if DDB Local is unreachable.
+
+def _ddb_local_available() -> bool:
+    """DynamoDB Local is only consulted on the legacy (opt-out) path. Under the v4
+    unified engine it is OPTIONAL and unused — the console REST below and the native
+    wire share one table map (ddb_state["tables"]), so a DDB-Local read would diverge."""
+    if _ddb_unified():
+        return False
+    from core import dynamodb_proxy as _ddbp
+    return _ddbp.available()
+
+
+async def api_dynamodb_aws(request: Request):
+    """POST / (X-Amz-Target DynamoDB_*), POST /api/dynamodb/aws and POST /dynamodb —
+    the DynamoDB JSON-RPC wire.
+
+    v4 C0 (default): served by the shared conformance core (core/dynamodb_core.py)
+    over the appliance's space-scoped table state — the SAME map the console REST
+    (/api/dynamodb/*) reads and writes, persisted with the appliance state. DynamoDB
+    Local is not required.
+
+    Legacy (VYOMI_UNIFIED_INGRESS_SERVICES without "dynamodb", or VYOMI_LEGACY_WIRE=1):
+    proxies to amazon/dynamodb-local, falling back to the core over a SQLite store.
     """
+    if _ddb_unified():
+        from core import wire_ingress as _wi
+        return await _wi.serve_service("dynamodb", request)
     try:
         from core import dynamodb_proxy as _ddbp
         status, body, ctype = await _ddbp.proxy(request)
@@ -673,9 +700,38 @@ async def api_dynamodb_aws(request: Request):
             return Response(content=body, status_code=status, media_type=ctype)
     except Exception:
         pass
-    # Fall back to the provider-level handler.
+    # DDB Local unreachable → serve the NATIVE wire from the shared conformance core (the
+    # same dynamodb_core Nano and the unified ingress use), persisted next to the appliance
+    # state. The legacy provider handler answered SDKs in the console-REST shape
+    # ({"table_names": …}) and ignored KeySchema; it stays only for VYOMI_DDB_LEGACY_FALLBACK=1.
+    if os.environ.get("VYOMI_DDB_LEGACY_FALLBACK", "").strip() not in ("1", "true", "yes"):
+        return _ddb_native_fallback(request.headers.get("x-amz-target", ""), await request.body())
     import providers.aws_services as _aws_svc
     return await _aws_svc._ddb_api_aws(request)
+
+
+_DDB_NATIVE_STORE = None
+
+
+def _ddb_native_store():
+    global _DDB_NATIVE_STORE
+    if _DDB_NATIVE_STORE is None:
+        from core.persistent_store import PersistentNoSqlStore, SqliteStateBackend
+        state = os.environ.get("CLOUDLEARN_STATE_FILE", "/tmp/vyomi-state.sqlite3")
+        path = os.environ.get("VYOMI_DDB_DB") or os.path.join(os.path.dirname(os.path.abspath(state)), "vyomi-ddb.sqlite")
+        _DDB_NATIVE_STORE = PersistentNoSqlStore(SqliteStateBackend(path))
+    return _DDB_NATIVE_STORE
+
+
+def _ddb_native_fallback(target: str, body: bytes) -> Response:
+    from core import dynamodb_core as _ddbc
+    try:
+        payload = json.loads(body or b"{}")
+    except Exception:
+        return _ddb_error_response("SerializationException", "Request body is not valid JSON.", 400)
+    r = _ddbc.dispatch(_ddb_native_store(), target, payload if isinstance(payload, dict) else {})
+    return Response(content=r.json_bytes(), status_code=r.status, media_type="application/x-amz-json-1.0",
+                    headers={"x-amzn-requestid": _req_id(), **(r.headers or {})})
 
 
 # ---------------------------------------------------------------------------
@@ -745,7 +801,7 @@ def api_dynamodb_create_table(req: DynamoDBTableRequest):
     # Proxy to DynamoDB Local (best-effort) AND keep in-memory state in sync.
     try:
         from core import dynamodb_proxy as _ddbp
-        if _ddbp.available():
+        if _ddb_local_available():
             import urllib.request, urllib.error
             key_schema = [{"AttributeName": req.partition_key_name or "id", "KeyType": "HASH"}]
             attr_defs = [{"AttributeName": req.partition_key_name or "id", "AttributeType": req.partition_key_type or "S"}]
@@ -789,7 +845,7 @@ def api_dynamodb_delete_table(table_name: str):
     # Proxy to DynamoDB Local (best-effort) AND delete from in-memory.
     try:
         from core import dynamodb_proxy as _ddbp
-        if _ddbp.available():
+        if _ddb_local_available():
             import urllib.request, urllib.error
             proxy_body = json.dumps({"TableName": table_name}).encode()
             proxy_req = urllib.request.Request(
@@ -820,7 +876,7 @@ def api_dynamodb_put_item(table_name: str, req: DynamoDBItemRequest):
     # Proxy to DynamoDB Local (best-effort write-through).
     try:
         from core import dynamodb_proxy as _ddbp
-        if _ddbp.available():
+        if _ddb_local_available():
             import urllib.request, urllib.error
             item_json = _ddb_native_item_to_json(_ddb_item_to_native_item(req.item))
             proxy_body = json.dumps({"TableName": table_name, "Item": item_json}).encode()
@@ -861,7 +917,7 @@ def api_dynamodb_delete_item(table_name: str, req: DynamoDBItemRequest):
     # Proxy to DynamoDB Local (best-effort).
     try:
         from core import dynamodb_proxy as _ddbp
-        if _ddbp.available():
+        if _ddb_local_available():
             import urllib.request, urllib.error
             key_json = _ddb_native_item_to_json(_ddb_item_to_native_item(req.key or {}))
             proxy_body = json.dumps({"TableName": table_name, "Key": key_json}).encode()
@@ -885,7 +941,7 @@ def api_dynamodb_query_items(table_name: str, req: DynamoDBQueryRequest):
     # Try DynamoDB Local proxy first when a KeyConditionExpression is provided.
     try:
         from core import dynamodb_proxy as _ddbp
-        if _ddbp.available() and req.key_condition_expression:
+        if _ddb_local_available() and req.key_condition_expression:
             import urllib.request, urllib.error
             proxy_payload: dict[str, Any] = {"TableName": table_name,
                                              "KeyConditionExpression": req.key_condition_expression}
@@ -936,7 +992,7 @@ def api_dynamodb_scan_items(table_name: str, req: DynamoDBScanRequest):
     # Try DynamoDB Local proxy first.
     try:
         from core import dynamodb_proxy as _ddbp
-        if _ddbp.available():
+        if _ddb_local_available():
             import urllib.request, urllib.error
             proxy_payload: dict[str, Any] = {"TableName": table_name}
             if req.limit:

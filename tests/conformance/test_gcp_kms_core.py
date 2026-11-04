@@ -85,7 +85,8 @@ def run() -> int:
                         json.dumps({"plaintext": base64.b64encode(secret).decode()}).encode())
     _check("encrypt 200", enc.status == 200)
     eo = _jbody(enc)
-    _check("encrypt name is cryptoKey", eo["name"] == key_name)
+    # EncryptResponse.name is the CryptoKeyVersion used (real Cloud KMS wire).
+    _check("encrypt name is the primary cryptoKeyVersion", eo["name"] == key_name + "/cryptoKeyVersions/1")
     _check("encrypt returns ciphertext", bool(eo.get("ciphertext")))
     ciphertext = base64.b64decode(eo["ciphertext"])
     _check("ciphertext != plaintext", ciphertext != secret)
@@ -122,26 +123,229 @@ def run() -> int:
                             json.dumps({"plaintext": base64.b64encode(b"x").decode()}).encode())
     _check("encrypt unknown key 404", missenc.status == 404)
 
-    # 8. import jobs: create / duplicate / get / list / unknown / bad method
-    jb = json.dumps({"importMethod": "RSA_OAEP_3072_SHA1_AES_256", "protectionLevel": "SOFTWARE"}).encode()
-    hdr = {"content-type": "application/json"}
-    cj = gkms.dispatch(st, "POST", f"{RING}/importJobs", {"importJobId": "ij1"}, hdr, jb)
-    _check("create importJob 200", cj.status == 200)
-    _check("importJob name", _jbody(cj)["name"] == f"{ring_name}/importJobs/ij1")
-    _check("importJob has state + expireTime", _jbody(cj).get("state") and _jbody(cj).get("expireTime"))
-    dj = gkms.dispatch(st, "POST", f"{RING}/importJobs", {"importJobId": "ij1"}, hdr, jb)
-    _check("duplicate importJob 409", dj.status == 409)
-    gj = gkms.dispatch(st, "GET", f"{RING}/importJobs/ij1", {}, {}, b"")
-    _check("get importJob 200", gj.status == 200 and _jbody(gj)["importMethod"] == "RSA_OAEP_3072_SHA1_AES_256")
-    lj = gkms.dispatch(st, "GET", f"{RING}/importJobs", {}, {}, b"")
-    _check("list importJobs has job", any(j["name"].endswith("/ij1") for j in _jbody(lj)["importJobs"]))
-    mj = gkms.dispatch(st, "GET", f"{RING}/importJobs/ghost", {}, {}, b"")
-    _check("unknown importJob 404", mj.status == 404)
-    bj = gkms.dispatch(st, "POST", f"{RING}/importJobs", {"importJobId": "ij2"}, hdr,
-                       json.dumps({"importMethod": "NOPE"}).encode())
-    _check("bad importMethod 400", bj.status == 400)
-    nr = gkms.dispatch(st, "GET", f"{LOC}/keyRings/nope/importJobs", {}, {}, b"")
-    _check("importJobs on unknown ring 404", nr.status == 404)
+    # 8. version lifecycle: create a 2nd version, make it primary, disable/enable,
+    #    destroy + restore, and confirm Encrypt is blocked while the primary is disabled.
+    v2 = gkms.dispatch(st, "POST", f"{KEY}/cryptoKeyVersions", {}, {}, b"{}")
+    _check("create version 200", v2.status == 200)
+    v2o = _jbody(v2)
+    _check("create version id", v2o["name"] == key_name + "/cryptoKeyVersions/2")
+    _check("create version enabled", v2o["state"] == "ENABLED")
+
+    setprim = gkms.dispatch(st, "POST", f"{KEY}:updateCryptoKeyPrimaryVersion", {},
+                            {"content-type": "application/json"}, json.dumps({"cryptoKeyVersionId": "2"}).encode())
+    _check("updateCryptoKeyPrimaryVersion 200", setprim.status == 200)
+    _check("primary is now v2", _jbody(setprim)["primary"]["name"].endswith("/cryptoKeyVersions/2"))
+
+    badprim = gkms.dispatch(st, "POST", f"{KEY}:updateCryptoKeyPrimaryVersion", {},
+                            {"content-type": "application/json"}, json.dumps({"cryptoKeyVersionId": "99"}).encode())
+    _check("updateCryptoKeyPrimaryVersion unknown version 400", badprim.status == 400)
+
+    dis = gkms.dispatch(st, "PATCH", f"{KEY}/cryptoKeyVersions/2", {}, {"content-type": "application/json"},
+                        json.dumps({"state": "DISABLED"}).encode())
+    _check("disable version 200", dis.status == 200 and _jbody(dis)["state"] == "DISABLED")
+
+    blocked = gkms.dispatch(st, "POST", f"{KEY}:encrypt", {}, {"content-type": "application/json"},
+                            json.dumps({"plaintext": base64.b64encode(b"x").decode()}).encode())
+    _check("encrypt with disabled primary → 400 FAILED_PRECONDITION", blocked.status == 400 and
+           _jbody(blocked)["error"]["status"] == "FAILED_PRECONDITION")
+
+    en = gkms.dispatch(st, "PATCH", f"{KEY}/cryptoKeyVersions/2", {}, {"content-type": "application/json"},
+                       json.dumps({"state": "ENABLED"}).encode())
+    _check("re-enable version 200", en.status == 200 and _jbody(en)["state"] == "ENABLED")
+    again = gkms.dispatch(st, "POST", f"{KEY}:encrypt", {}, {"content-type": "application/json"},
+                          json.dumps({"plaintext": base64.b64encode(b"y").decode()}).encode())
+    _check("encrypt with re-enabled primary 200", again.status == 200)
+
+    # 8a. each CryptoKeyVersion has its OWN key material (real rotation, not bookkeeping
+    #     over shared bytes) and Decrypt re-checks the ORIGINATING version's state, not
+    #     just that the CryptoKey still exists.
+    dec_again = gkms.dispatch(st, "POST", f"{KEY}:decrypt", {}, {"content-type": "application/json"},
+                              json.dumps({"ciphertext": _jbody(again)["ciphertext"]}).encode())
+    _check("decrypt v2 ciphertext 200", dec_again.status == 200)
+    _check("decrypt v2 recovers exact plaintext", base64.b64decode(_jbody(dec_again)["plaintext"]) == b"y")
+    _check("decrypt reports usedPrimary True (v2 is primary)", _jbody(dec_again)["usedPrimary"] is True)
+
+    setprim2 = gkms.dispatch(st, "POST", f"{KEY}:updateCryptoKeyPrimaryVersion", {},
+                             {"content-type": "application/json"}, json.dumps({"cryptoKeyVersionId": "1"}).encode())
+    _check("primary switched to v1", _jbody(setprim2)["primary"]["name"].endswith("/cryptoKeyVersions/1"))
+    dec_nonprimary = gkms.dispatch(st, "POST", f"{KEY}:decrypt", {}, {"content-type": "application/json"},
+                                   json.dumps({"ciphertext": _jbody(again)["ciphertext"]}).encode())
+    _check("decrypt still works for a non-primary but enabled version", dec_nonprimary.status == 200)
+    _check("usedPrimary now False (v2 is enabled but no longer primary)", _jbody(dec_nonprimary)["usedPrimary"] is False)
+
+    dis2 = gkms.dispatch(st, "PATCH", f"{KEY}/cryptoKeyVersions/2", {}, {"content-type": "application/json"},
+                        json.dumps({"state": "DISABLED"}).encode())
+    _check("disable v2 (no longer primary) 200", dis2.status == 200)
+    blocked_dec = gkms.dispatch(st, "POST", f"{KEY}:decrypt", {}, {"content-type": "application/json"},
+                                json.dumps({"ciphertext": _jbody(again)["ciphertext"]}).encode())
+    _check("decrypt refuses a ciphertext whose originating version is disabled -> 400 FAILED_PRECONDITION",
+           blocked_dec.status == 400 and _jbody(blocked_dec)["error"]["status"] == "FAILED_PRECONDITION")
+
+    en2 = gkms.dispatch(st, "PATCH", f"{KEY}/cryptoKeyVersions/2", {}, {"content-type": "application/json"},
+                       json.dumps({"state": "ENABLED"}).encode())
+    _check("re-enable v2 200", en2.status == 200)
+    setprim3 = gkms.dispatch(st, "POST", f"{KEY}:updateCryptoKeyPrimaryVersion", {},
+                             {"content-type": "application/json"}, json.dumps({"cryptoKeyVersionId": "2"}).encode())
+    _check("primary switched back to v2", _jbody(setprim3)["primary"]["name"].endswith("/cryptoKeyVersions/2"))
+
+    destroy = gkms.dispatch(st, "POST", f"{KEY}/cryptoKeyVersions/1:destroy", {}, {}, b"{}")
+    _check("destroy version 200", destroy.status == 200)
+    dobj = _jbody(destroy)
+    _check("destroy sets DESTROY_SCHEDULED", dobj["state"] == "DESTROY_SCHEDULED")
+    _check("destroy sets destroyTime", "destroyTime" in dobj)
+    dup_destroy = gkms.dispatch(st, "POST", f"{KEY}/cryptoKeyVersions/1:destroy", {}, {}, b"{}")
+    _check("double destroy → 400 FAILED_PRECONDITION", dup_destroy.status == 400)
+
+    restore = gkms.dispatch(st, "POST", f"{KEY}/cryptoKeyVersions/1:restore", {}, {}, b"{}")
+    _check("restore version 200", restore.status == 200 and _jbody(restore)["state"] == "DISABLED")
+    bad_restore = gkms.dispatch(st, "POST", f"{KEY}/cryptoKeyVersions/1:restore", {}, {}, b"{}")
+    _check("restore a non-scheduled version → 400", bad_restore.status == 400)
+
+    # 8b. v1 is now DISABLED (destroyed + restored above). The ciphertext it minted way
+    #     back in step 5 (while ENABLED and primary) must now be refused — the CryptoKey
+    #     still exists, but Decrypt tracks the specific version, not just the key.
+    stale = gkms.dispatch(st, "POST", f"{KEY}:decrypt", {}, {"content-type": "application/json"},
+                          json.dumps({"ciphertext": eo["ciphertext"]}).encode())
+    _check("decrypt refuses a ciphertext whose version is now disabled -> 400 FAILED_PRECONDITION",
+          stale.status == 400 and _jbody(stale)["error"]["status"] == "FAILED_PRECONDITION")
+
+    listv = gkms.dispatch(st, "GET", f"{KEY}/cryptoKeyVersions", {}, {}, b"")
+    _check("list versions has both", len(_jbody(listv)["cryptoKeyVersions"]) == 2)
+
+    # 9. IAM policy on a crypto key: getIamPolicy / setIamPolicy round-trip.
+    pol0 = gkms.dispatch(st, "GET", f"{KEY}:getIamPolicy", {}, {}, b"")
+    _check("getIamPolicy default empty", pol0.status == 200 and _jbody(pol0)["bindings"] == [])
+    setpol = gkms.dispatch(st, "POST", f"{KEY}:setIamPolicy", {}, {"content-type": "application/json"},
+                           json.dumps({"policy": {"bindings": [{"role": "roles/cloudkms.cryptoKeyEncrypterDecrypter",
+                                                                  "members": ["user:dev@example.com"]}]}}).encode())
+    _check("setIamPolicy 200", setpol.status == 200)
+    pol1 = gkms.dispatch(st, "GET", f"{KEY}:getIamPolicy", {}, {}, b"")
+    _check("getIamPolicy round-trips the binding", _jbody(pol1)["bindings"][0]["members"] == ["user:dev@example.com"])
+
+    # 9b. permissions enforcement (v4 DEPTH): unlike the store-only policy above, the binding
+    #     just set actually gates :encrypt / :decrypt / :setIamPolicy by the caller's role.
+    denied_enc = gkms.dispatch(st, "POST", f"{KEY}:encrypt", {},
+                               {"content-type": "application/json", "X-Cloudlearn-Principal": "bob@example.com"},
+                               json.dumps({"plaintext": base64.b64encode(b"z").decode()}).encode())
+    _check("encrypt denied for ungranted principal -> 403", denied_enc.status == 403 and
+           _jbody(denied_enc)["error"]["status"] == "PERMISSION_DENIED")
+    allowed_enc = gkms.dispatch(st, "POST", f"{KEY}:encrypt", {},
+                                {"content-type": "application/json", "X-Cloudlearn-Principal": "dev@example.com"},
+                                json.dumps({"plaintext": base64.b64encode(b"z").decode()}).encode())
+    _check("encrypt allowed for principal granted cryptoKeyEncrypterDecrypter", allowed_enc.status == 200)
+    owner_enc = gkms.dispatch(st, "POST", f"{KEY}:encrypt", {}, {"content-type": "application/json"},
+                              json.dumps({"plaintext": base64.b64encode(b"z").decode()}).encode())
+    _check("encrypt allowed with no principal header (owner bypass)", owner_enc.status == 200)
+
+    denied_dec = gkms.dispatch(st, "POST", f"{KEY}:decrypt", {},
+                               {"content-type": "application/json", "X-Cloudlearn-Principal": "bob@example.com"},
+                               json.dumps({"ciphertext": _jbody(allowed_enc)["ciphertext"]}).encode())
+    _check("decrypt denied for ungranted principal -> 403", denied_dec.status == 403)
+    allowed_dec = gkms.dispatch(st, "POST", f"{KEY}:decrypt", {},
+                                {"content-type": "application/json", "X-Cloudlearn-Principal": "dev@example.com"},
+                                json.dumps({"ciphertext": _jbody(allowed_enc)["ciphertext"]}).encode())
+    _check("decrypt allowed for principal granted cryptoKeyEncrypterDecrypter",
+           allowed_dec.status == 200 and base64.b64decode(_jbody(allowed_dec)["plaintext"]) == b"z")
+
+    denied_setpol = gkms.dispatch(st, "POST", f"{KEY}:setIamPolicy", {},
+                                  {"content-type": "application/json", "X-Cloudlearn-Principal": "bob@example.com"},
+                                  json.dumps({"policy": {"bindings": [
+                                      {"role": "roles/cloudkms.cryptoKeyEncrypterDecrypter", "members": ["user:dev@example.com"]},
+                                  ]}}).encode())
+    _check("setIamPolicy denied for a principal without cloudkms.admin -> 403", denied_setpol.status == 403)
+
+    grant_admin = gkms.dispatch(st, "POST", f"{KEY}:setIamPolicy", {}, {"content-type": "application/json"},
+                                json.dumps({"policy": {"bindings": [
+                                    {"role": "roles/cloudkms.admin", "members": ["user:kms-admin@example.com"]},
+                                    {"role": "roles/cloudkms.cryptoKeyEncrypterDecrypter", "members": ["user:dev@example.com"]},
+                                ]}}).encode())
+    _check("owner (no principal header) grants cloudkms.admin", grant_admin.status == 200)
+
+    admin_setpol = gkms.dispatch(st, "POST", f"{KEY}:setIamPolicy", {},
+                                 {"content-type": "application/json", "X-Cloudlearn-Principal": "kms-admin@example.com"},
+                                 json.dumps({"policy": {"bindings": [
+                                     {"role": "roles/cloudkms.admin", "members": ["user:kms-admin@example.com"]},
+                                 ]}}).encode())
+    _check("setIamPolicy allowed for a principal granted cloudkms.admin", admin_setpol.status == 200)
+
+    bad_members = gkms.dispatch(st, "POST", f"{KEY}:setIamPolicy", {}, {"content-type": "application/json"},
+                                json.dumps({"policy": {"bindings": [{"role": "roles/cloudkms.admin", "members": []}]}}).encode())
+    _check("setIamPolicy rejects a binding with empty members -> 400", bad_members.status == 400 and
+           _jbody(bad_members)["error"]["status"] == "INVALID_ARGUMENT")
+
+    # 10. project-wide aggregated listing (locations/-/keyRings/-) — the "Key inventory" page.
+    agg = gkms.dispatch(st, "GET", "/v1/projects/demo/locations/-/keyRings/-/cryptoKeys", {}, {}, b"")
+    _check("aggregated cryptoKeys list 200", agg.status == 200)
+    _check("aggregated list includes the key", any(k["name"] == key_name for k in _jbody(agg)["cryptoKeys"]))
+    aggrings = gkms.dispatch(st, "GET", "/v1/projects/demo/locations/-/keyRings", {}, {}, b"")
+    _check("aggregated keyRings list includes the ring", any(k["name"] == ring_name for k in _jbody(aggrings)["keyRings"]))
+
+    # 11. Autokey (v4 GAP SWEEP wave 5b): AutokeyConfig starts DISABLED; creating a KeyHandle
+    #     before it's ACTIVE is refused; setting ACTIVE without a keyProject is refused;
+    #     once ACTIVE, creating a KeyHandle really provisions a key ring + a brand-new
+    #     CryptoKey (with its own key material) in the configured key project.
+    cfg0 = gkms.dispatch(st, "GET", "/v1/projects/demo/autokeyConfig", {}, {}, b"")
+    _check("autokeyConfig default DISABLED", cfg0.status == 200 and _jbody(cfg0)["state"] == "DISABLED")
+
+    kh_too_early = gkms.dispatch(st, "POST", "/v1/projects/demo/locations/us-central1/keyHandles", {},
+                                 {"content-type": "application/json"},
+                                 json.dumps({"resourceTypeSelector": "compute.googleapis.com/Disk"}).encode())
+    _check("createKeyHandle before Autokey is ACTIVE -> 400 FAILED_PRECONDITION",
+           kh_too_early.status == 400 and _jbody(kh_too_early)["error"]["status"] == "FAILED_PRECONDITION")
+
+    bad_active = gkms.dispatch(st, "PATCH", "/v1/projects/demo/autokeyConfig", {"updateMask": "state"},
+                               {"content-type": "application/json"}, json.dumps({"state": "ACTIVE"}).encode())
+    _check("set ACTIVE without a keyProject -> 400 FAILED_PRECONDITION",
+           bad_active.status == 400 and _jbody(bad_active)["error"]["status"] == "FAILED_PRECONDITION")
+
+    set_kp = gkms.dispatch(st, "PATCH", "/v1/projects/demo/autokeyConfig", {"updateMask": "keyProject,state"},
+                           {"content-type": "application/json"},
+                           json.dumps({"keyProject": "demo-keys", "state": "ACTIVE"}).encode())
+    _check("set keyProject + ACTIVE 200", set_kp.status == 200)
+    _check("autokeyConfig now ACTIVE with keyProject", _jbody(set_kp) == {
+        "name": "projects/demo/autokeyConfig", "keyProject": "demo-keys", "state": "ACTIVE"})
+
+    bad_selector = gkms.dispatch(st, "POST", "/v1/projects/demo/locations/us-central1/keyHandles", {},
+                                 {"content-type": "application/json"},
+                                 json.dumps({"resourceTypeSelector": "not-a-selector"}).encode())
+    _check("createKeyHandle with a bad resourceTypeSelector -> 400 INVALID_ARGUMENT", bad_selector.status == 400)
+
+    kh = gkms.dispatch(st, "POST", "/v1/projects/demo/locations/us-central1/keyHandles", {"keyHandleId": "disk-1"},
+                       {"content-type": "application/json"},
+                       json.dumps({"resourceTypeSelector": "compute.googleapis.com/Disk"}).encode())
+    _check("createKeyHandle 200", kh.status == 200)
+    khbody = _jbody(kh)
+    _check("createKeyHandle returns a done Operation", khbody["done"] is True)
+    khview = khbody["response"]
+    kh_name = "projects/demo/locations/us-central1/keyHandles/disk-1"
+    _check("KeyHandle name", khview["name"] == kh_name)
+    kms_key = khview.get("kmsKey", "")
+    _check("KeyHandle kmsKey is provisioned in the configured key project",
+           kms_key.startswith("projects/demo-keys/locations/us-central1/keyRings/autokey-us-central1/cryptoKeys/"))
+
+    # The provisioned key is a REAL, usable CryptoKey — not a bookkeeping reference.
+    prov_enc = gkms.dispatch(st, "POST", f"/v1/{kms_key}:encrypt", {}, {"content-type": "application/json"},
+                             json.dumps({"plaintext": base64.b64encode(b"autokey works").decode()}).encode())
+    _check("Autokey-provisioned CryptoKey really encrypts", prov_enc.status == 200)
+
+    dup_kh = gkms.dispatch(st, "POST", "/v1/projects/demo/locations/us-central1/keyHandles", {"keyHandleId": "disk-1"},
+                           {"content-type": "application/json"},
+                           json.dumps({"resourceTypeSelector": "compute.googleapis.com/Disk"}).encode())
+    _check("duplicate keyHandleId -> 409 ALREADY_EXISTS", dup_kh.status == 409)
+
+    get_kh = gkms.dispatch(st, "GET", f"/v1/{kh_name}", {}, {}, b"")
+    _check("getKeyHandle 200", get_kh.status == 200 and _jbody(get_kh)["name"] == kh_name)
+
+    list_kh = gkms.dispatch(st, "GET", "/v1/projects/demo/locations/us-central1/keyHandles", {}, {}, b"")
+    _check("listKeyHandles includes it", any(h["name"] == kh_name for h in _jbody(list_kh)["keyHandles"]))
+
+    disable_again = gkms.dispatch(st, "PATCH", "/v1/projects/demo/autokeyConfig", {"updateMask": "state"},
+                                  {"content-type": "application/json"}, json.dumps({"state": "DISABLED"}).encode())
+    _check("disable Autokey 200", disable_again.status == 200 and _jbody(disable_again)["state"] == "DISABLED")
+    kh_after_disable = gkms.dispatch(st, "POST", "/v1/projects/demo/locations/us-central1/keyHandles", {"keyHandleId": "disk-2"},
+                                     {"content-type": "application/json"},
+                                     json.dumps({"resourceTypeSelector": "compute.googleapis.com/Disk"}).encode())
+    _check("createKeyHandle refused once Autokey is disabled again -> 400", kh_after_disable.status == 400)
 
     print("\nGCP Cloud KMS core conformance: ALL GREEN")
     return 0

@@ -1,0 +1,86 @@
+{
+ "cloud": "aws",
+ "service": "ec2",
+ "goal": "STATIC-PANEL SWEEP (wave 5c). Every listed `targets` entry is a hard-coded <NotSimulated*> box in this service's console with NO capability id \u2014 it is invisible to the capability registry and to the coverage numbers, and many are STALE (the feature is real now). For EACH one: (1) if the backend already supports it (check core/*_core.py + core/capabilities), replace the static box with the real, live UI; (2) otherwise BUILD it on a real backend (Nano + offline; follow the Offline + Nano parity checklist in consoles/AGENT-UI.md) and render it live; (3) only if it is genuinely impossible locally (real money/hardware/third-party service) replace it with <CapabilityContainer id=\"...\"> backed by a core/capabilities entry at level not_simulated with the concrete reason. When done, this service's directory must contain ZERO bare <NotSimulatedContainer>/<NotSimulated*> usages \u2014 the gate now fails on any. Metrics/monitoring panels show real series derived from actual activity (cloudwatch_core.ingest_internal_metric / the cloud's metrics core), never random data. Nothing leaves the simulator. Update capabilities, tests/conformance, smoke.",
+ "must_build": [
+  "Instances list/detail (Details, Status and alarms, Monitoring, Security, Networking, Storage, Tags), Launch instance wizard (name/tags, AMI, instance type, key pair, network settings, storage, advanced) \u2014 RunInstances real; start/stop/reboot/terminate real",
+  "Security groups (+ inbound/outbound rule editors), Key pairs (create/import/delete), Volumes (create/attach/detach), AMIs, Snapshots, Elastic IPs, Network interfaces",
+  "Offline: real Docker-backed instances where the appliance has them; Nano: honest limited (no real VM) via capability registry"
+ ],
+ "always": [
+  "Every page wired to the native API on /_wire (no static data); liveness fixtures for every list/detail page",
+  "core/capabilities/aws/<service>.json: one entry per console section with honest level + probe; tests/conformance/test_capabilities.py must pass",
+  "Sections via <CapabilityContainer>; editable settings round-trip through native calls with saveNotice()",
+  "Never edit .github/ (reverted before push)"
+ ],
+ "attempt": 2,
+ "note": "WAVE 5c static-panel sweep (orchestrator). User: unimplemented panels (e.g. VPC Service Health / Settings / Additional information / AWS Network Manager) must be real.",
+ "phase": "depth",
+ "targets": [
+  {
+   "where": "consoles/src/aws/services/ec2/InstanceDetail.jsx:197",
+   "component": "NotSimulated",
+   "props": "feature=\"CPU and network metrics\" note=\"CPU utilization (%), Network in (bytes), Network out (bytes), Network packets in (count), Network packets out (count), CPU credit usage (count), CPU credit balance (count) aren't collected \u2014 Vyomi has no CloudWatch metrics pipeline for EC2 beyond the real stat"
+  },
+  {
+   "where": "consoles/src/aws/services/ec2/Dashboard.jsx:45",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Service health\" feature=\"AWS Health Dashboard\" note=\"Region-wide service health events aren't modeled by Vyomi.\""
+  },
+  {
+   "where": "consoles/src/aws/services/ec2/Dashboard.jsx:49",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Zones\" feature=\"Local Zones / Wavelength Zones enablement\""
+  },
+  {
+   "where": "consoles/src/aws/services/ec2/Dashboard.jsx:50",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Instance alarms\" feature=\"CloudWatch alarms\" note=\"No custom alarms are modeled by Vyomi.\""
+  },
+  {
+   "where": "consoles/src/aws/services/ec2/Dashboard.jsx:53",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"EC2 cost\" feature=\"AWS Cost Explorer\" note=\"Cost and usage data isn't modeled by Vyomi.\""
+  },
+  {
+   "where": "consoles/src/aws/services/ec2/Volumes.jsx:44",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Fault tolerance for all volumes in this Region\" feature=\"Data Lifecycle Manager / backup fault-tolerance rollup\""
+  },
+  {
+   "where": "consoles/src/aws/services/ec2/Volumes.jsx:135",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"CloudWatch metrics\""
+  },
+  {
+   "where": "consoles/src/aws/services/ec2/Volumes.jsx:207",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Create volume from an instance\" feature=\"Snapshotting an instance from this form\" note=\"Use Create snapshot from the Snapshots page instead.\""
+  },
+  {
+   "where": "consoles/src/aws/services/ec2/LaunchInstance.jsx:224",
+   "component": "NotSimulated",
+   "props": "feature={purchasing} note=\"Vyomi launches a regular on-demand instance regardless of the purchasing option chosen.\""
+  },
+  {
+   "where": "consoles/src/aws/services/ec2/Instances.jsx:36",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"All instances\" feature=\"Instance alarm states / service health / EC2 health events\" note=\"Account-wide health rollups above the table aren't modeled by Vyomi.\""
+  },
+  {
+   "where": "consoles/src/aws/services/ec2/HonestPages.jsx:13",
+   "component": "NotSimulatedContainer",
+   "props": "title={title} feature={feature}"
+  },
+  {
+   "where": "consoles/src/aws/services/ec2/ElasticIps.jsx:119",
+   "component": "NotSimulated",
+   "props": "feature={pool} note=\"Vyomi only backs allocation from Amazon's own pool of IPv4 addresses.\""
+  },
+  {
+   "where": "consoles/src/aws/services/ec2/Snapshots.jsx:121",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Snapshot an instance\" feature=\"Multi-volume snapshot sets from an instance\" note=\"Create a snapshot of each of the instance's volumes individually instead.\""
+  }
+ ]
+}

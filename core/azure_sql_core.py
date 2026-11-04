@@ -12,12 +12,33 @@ Pyodide. Databases live in the SqlStore keyed `azuresql:{server}/{database}`.
 
 Scope (v1 slice): create/list/delete server + database, execute SQL (sync + async).
 Elastic pools, geo-replication and the TDS wire slot in later.
+
+DEPTH PASS (v2.7.0): the ARM control plane's `publicNetworkAccess` (server) and
+`maxSizeBytes` (database) properties now actually constrain this data plane — the
+same pattern `azure_blob_core.py` uses for CORS/lifecycle (`aws_wire_router.py`
+passes the ARM core's `state` dict as `arm_state=`, read-only, never written back).
+A real "Performance recommendations" engine also lives here: it watches the Query
+editor's own statement log, detects WHERE-equality lookups that need a table scan
+(via the SAME engine's `EXPLAIN QUERY PLAN`, not a guess) and proposes/creates
+indexes — applied on request, or automatically when the database's
+`automaticTuning.options.createIndex` is "On" (mirroring the real feature's name).
+
+DEPTH PASS (wave 5): transparent data encryption's customer-managed key (BYOK)
+protector now takes real effect. When a database's `transparentDataEncryption`
+points at a Key Vault key (`keyVaultKeyUri`), the query data plane requires BOTH
+a system-assigned managed identity on the database (the real precondition Azure
+enforces before trusting a CMK protector) AND an enabled key in Key Vault — same
+read-only-snapshot pattern, `aws_wire_router.py` also passes the Key Vault keys
+core's store as `kv_store=`. Revoke the identity or disable the key and the
+database goes the same "protector unavailable" route real Azure SQL does.
 """
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 
+from core import azure_keyvault_keys_core as kv_keys
 from core.sql_store import SqlStore
 
 
@@ -47,6 +68,81 @@ def _servers(store: SqlStore) -> dict:
 
 def _db_id(server: str, database: str) -> str:
     return f"azuresql:{server}/{database}"
+
+
+# ── ARM config lookup (publicNetworkAccess / maxSizeBytes / automaticTuning) ───────────
+# Same read-only-snapshot pattern as azure_blob_core._arm_properties: the ARM core's
+# `state` dict is keyed by lower-cased resource id with a `_type` discriminator, so a
+# type + id-suffix match finds the server/database record without needing the
+# subscription/resource-group this data plane never learns.
+def _arm_record(arm_state: dict | None, full_type: str, id_suffix: str) -> dict | None:
+    if not arm_state:
+        return None
+    want_id = f"/{id_suffix}".lower()
+    for rec in arm_state.values():
+        if rec.get("_type", "").lower() == full_type and rec.get("id", "").lower().endswith(want_id):
+            return rec
+    return None
+
+
+def _server_props(arm_state: dict | None, server: str) -> dict:
+    rec = _arm_record(arm_state, "microsoft.sql/servers", f"servers/{server}")
+    return (rec or {}).get("properties", {}) or {}
+
+
+def _database_props(arm_state: dict | None, server: str, database: str) -> dict:
+    rec = _arm_record(arm_state, "microsoft.sql/servers/databases", f"servers/{server}/databases/{database}")
+    return (rec or {}).get("properties", {}) or {}
+
+
+def _database_record(arm_state: dict | None, server: str, database: str) -> dict:
+    return _arm_record(arm_state, "microsoft.sql/servers/databases", f"servers/{server}/databases/{database}") or {}
+
+
+def _parse_kv_key_uri(uri: str) -> tuple[str, str | None]:
+    """'https://vault.vault.azure.net/keys/{name}[/{version}]' -> (name, version|None)."""
+    parts = [p for p in str(uri or "").split("/") if p]
+    try:
+        i = parts.index("keys")
+    except ValueError:
+        return uri, None
+    name = parts[i + 1] if len(parts) > i + 1 else uri
+    version = parts[i + 2] if len(parts) > i + 2 else None
+    return name, version
+
+
+def _tde_protector_error(arm_state: dict | None, kv_store, server: str, database: str) -> AzureSqlResponse | None:
+    """Customer-managed-key TDE (BYOK): a Key Vault-backed protector requires the database's
+    OWN system-assigned managed identity (real Azure precondition) and a real, enabled key —
+    both checked at connection time, same as the networking/size gates above. Service-managed
+    keys (the default; no keyVaultKeyUri) and TDE turned Off are always available."""
+    rec = _database_record(arm_state, server, database)
+    tde = (rec.get("properties") or {}).get("transparentDataEncryption") or {}
+    if tde.get("state") == "Disabled":
+        return None
+    key_uri = tde.get("keyVaultKeyUri")
+    if not key_uri:
+        return None
+    identity = rec.get("identity") or {}
+    if identity.get("type") != "SystemAssigned" or not identity.get("principalId"):
+        return _err(403, "TdeProtectorUnavailable",
+                    f"Database '{database}' uses a customer-managed Key Vault key for its "
+                    "transparent data encryption protector, which requires a system-assigned "
+                    "managed identity; none is configured, so the protector is unavailable.")
+    if kv_store is None:
+        return None
+    name, version = _parse_kv_key_uri(key_uri)
+    status = kv_keys.key_enabled(kv_store, name, version)
+    if status is False:
+        return _err(403, "TdeProtectorUnavailable",
+                    f"The Key Vault key protecting database '{database}' with transparent "
+                    "data encryption is disabled; the database is inaccessible until the key "
+                    "is re-enabled or the protector is switched back to service-managed.")
+    if status is None:
+        return _err(403, "TdeProtectorUnavailable",
+                    f"The Key Vault key configured as database '{database}'s transparent data "
+                    "encryption protector was not found.")
+    return None
 
 
 # ── control plane ───────────────────────────────────────────────────────────
@@ -121,7 +217,22 @@ async def aexecute_sql(store: SqlStore, server: str, database: str, sql: str,
         return {"ok": False, "code": "SQLError", "message": str(e)}
 
 
-def _query(store: SqlStore, server: str, database: str, body: bytes) -> AzureSqlResponse:
+_WRITE_SQL_RE = re.compile(r"^\s*(insert|update|replace)\b", re.IGNORECASE)
+
+
+def _db_size_bytes(store: SqlStore, db_id: str) -> int:
+    """The database's current on-disk size, from the engine's OWN page accounting
+    (sqlite `PRAGMA page_count` * `page_size`) — not an estimate."""
+    try:
+        pages = store.execute_sql(db_id, "PRAGMA page_count")["rows"][0][0]
+        size = store.execute_sql(db_id, "PRAGMA page_size")["rows"][0][0]
+        return int(pages) * int(size)
+    except Exception:
+        return 0
+
+
+def _query(store: SqlStore, server: str, database: str, body: bytes,
+          arm_state: dict | None = None, kv_store=None) -> AzureSqlResponse:
     try:
         payload = json.loads(body.decode("utf-8")) if body else {}
     except Exception:
@@ -129,23 +240,152 @@ def _query(store: SqlStore, server: str, database: str, body: bytes) -> AzureSql
     sql = str(payload.get("sql") or payload.get("query") or "")
     if not sql:
         return _err(400, "BadRequest", "A 'sql' statement is required.")
+
+    if _server_props(arm_state, server).get("publicNetworkAccess") == "Disabled":
+        return _err(403, "PublicNetworkAccessDisabled",
+                    f"Cannot connect to server '{server}.database.windows.net': "
+                    "public network access is disabled.")
+
+    tde_err = _tde_protector_error(arm_state, kv_store, server, database)
+    if tde_err is not None:
+        return tde_err
+
+    db_id = _db_id(server, database)
+    if _WRITE_SQL_RE.match(sql) and store.instance_exists(db_id):
+        max_size = _database_props(arm_state, server, database).get("maxSizeBytes")
+        if max_size and _db_size_bytes(store, db_id) >= int(max_size):
+            return _err(400, "DatabaseSizeQuotaExceeded",
+                        f"The database '{database}' has reached its configured maximum "
+                        f"size of {int(max_size)} bytes (Error 40544). Partition or delete "
+                        "data, drop indexes, or increase the maximum size.")
+
     result = execute_sql(store, server, database, sql, payload.get("params"))
     if not result.get("ok"):
         return _err(400, result.get("code", "SQLError"), result.get("message", ""))
+
+    _log_select(store, db_id, sql)
+    _auto_tune(store, arm_state, server, database)
     return _json(200, {"columns": result["columns"], "rows": result["rows"],
                        "rowCount": result["rowCount"]})
+
+
+# ── Performance recommendations (CREATE_INDEX, real EXPLAIN-QUERY-PLAN driven) ─────────
+# A rolling log of SELECTs the Query editor has actually run, kept on the store (same
+# home as the server/database catalog) so recommendations survive across requests.
+_EQ_WHERE_RE = re.compile(r"\bfrom\s+([A-Za-z_]\w*)\b.*?\bwhere\b.*?\b([A-Za-z_]\w*)\s*=",
+                          re.IGNORECASE | re.DOTALL)
+
+
+def _query_log(store: SqlStore, db_id: str) -> list:
+    m = getattr(store, "_azure_sql_query_log", None)
+    if m is None:
+        m = {}
+        store._azure_sql_query_log = m
+    return m.setdefault(db_id, [])
+
+
+def _applied_recs(store: SqlStore, db_id: str) -> set:
+    m = getattr(store, "_azure_sql_applied_recs", None)
+    if m is None:
+        m = {}
+        store._azure_sql_applied_recs = m
+    return m.setdefault(db_id, set())
+
+
+def _log_select(store: SqlStore, db_id: str, sql: str) -> None:
+    if not sql.strip().lower().startswith("select"):
+        return
+    log = _query_log(store, db_id)
+    log.append(sql)
+    del log[:-200]   # cap the log — only recent activity drives a recommendation
+
+
+def _needs_table_scan(store: SqlStore, db_id: str, table: str, column: str) -> bool:
+    """Ask the engine's REAL query planner whether `WHERE {column} = ?` on {table}
+    currently needs a full scan — the same signal Azure's Query Store/DTA use, just
+    read straight off sqlite's EXPLAIN QUERY PLAN instead of reimplementing it."""
+    try:
+        plan = store.execute_sql(db_id, f"EXPLAIN QUERY PLAN SELECT * FROM {table} WHERE {column} = ?", [None])
+    except Exception:
+        return False
+    for row in plan.get("rows", []):
+        detail = str(row[-1] if row else "").upper()
+        if detail.startswith("SCAN") and "USING INDEX" not in detail:
+            return True
+    return False
+
+
+def _candidate_recommendations(store: SqlStore, db_id: str) -> list[dict]:
+    counts: dict[tuple, int] = {}
+    for sql in _query_log(store, db_id):
+        m = _EQ_WHERE_RE.search(sql)
+        if not m:
+            continue
+        key = (m.group(1), m.group(2))
+        counts[key] = counts.get(key, 0) + 1
+    applied = _applied_recs(store, db_id)
+    recs = []
+    for (table, column), count in counts.items():
+        if count < 3:
+            continue
+        # "." not ":" — it survives encodeURIComponent() unescaped (the dev server/relay
+        # never percent-decodes the path before splitting it on "/", so an escaped ":"
+        # — %3A — would never match this plain id again).
+        rec_id = f"{table}.{column}"
+        if rec_id in applied or not _needs_table_scan(store, db_id, table, column):
+            continue
+        recs.append({"id": rec_id, "action": "CREATE_INDEX", "table": table, "column": column,
+                     "script": f"CREATE INDEX ix_{table}_{column} ON {table}({column})",
+                     "impactedQueries": count})
+    recs.sort(key=lambda r: -r["impactedQueries"])
+    return recs
+
+
+def _apply_recommendation(store: SqlStore, db_id: str, rec_id: str) -> tuple[bool, str | None]:
+    recs = {r["id"]: r for r in _candidate_recommendations(store, db_id)}
+    rec = recs.get(rec_id)
+    if rec is None:
+        return False, "This recommendation no longer applies (it may already be indexed)."
+    try:
+        store.execute_sql(db_id, rec["script"])
+    except Exception as e:
+        return False, str(e)
+    _applied_recs(store, db_id).add(rec_id)
+    return True, None
+
+
+def _auto_tune(store: SqlStore, arm_state: dict | None, server: str, database: str) -> None:
+    """Automatic tuning > CREATE INDEX = On: apply every current candidate immediately,
+    the same "automatic" promise the real feature makes. FORCE_LAST_GOOD_PLAN and
+    DROP_INDEX stay config-only — no plan-regression detection or orphan-index pruning
+    is modelled here."""
+    opts = (_database_props(arm_state, server, database).get("automaticTuning") or {}).get("options") or {}
+    if (opts.get("createIndex") or {}).get("desiredState") != "On":
+        return
+    db_id = _db_id(server, database)
+    for rec in _candidate_recommendations(store, db_id):
+        _apply_recommendation(store, db_id, rec["id"])
 
 
 # ── dispatch ────────────────────────────────────────────────────────────────
 def dispatch(store: SqlStore, method: str, path: str,
              query: dict | None = None, headers: dict | None = None,
-             body: bytes = b"") -> AzureSqlResponse:
+             body: bytes = b"", arm_state: dict | None = None, kv_store=None) -> AzureSqlResponse:
     """Native-ish Azure SQL REST wire:
-        PUT    /servers/{server}                             create server
-        PUT    /servers/{server}/databases/{db}             create database
-        GET    /servers/{server}/databases                  list databases
-        DELETE /servers/{server}/databases/{db}             delete database
-        POST   /servers/{server}/databases/{db}/query       execute SQL
+        PUT    /servers/{server}                                   create server
+        PUT    /servers/{server}/databases/{db}                     create database
+        GET    /servers/{server}/databases                          list databases
+        DELETE /servers/{server}/databases/{db}                     delete database
+        POST   /servers/{server}/databases/{db}/query               execute SQL
+        GET    /servers/{server}/databases/{db}/recommendations     tuning recommendations
+        POST   /servers/{server}/databases/{db}/recommendations/{id}/apply   apply one
+
+    `arm_state` is the Azure ARM core's resource map (read-only snapshot, same
+    contract as azure_blob_core's CORS/lifecycle lookup) — it is how publicNetworkAccess,
+    maxSizeBytes, automaticTuning and the TDE protector's identity/key reference reach
+    this data plane. `kv_store` is the Key Vault keys core's store (same contract) — it
+    is how a customer-managed TDE protector's enabled/disabled state reaches this data
+    plane.
     """
     method = (method or "GET").upper()
     segs = [s for s in path.split("?", 1)[0].split("/") if s != ""]
@@ -171,6 +411,115 @@ def dispatch(store: SqlStore, method: str, path: str,
                 return _delete_database(store, server, database)
             return _err(405, "MethodNotAllowed", f"Unsupported method {method} on database")
         if len(segs) == 5 and segs[4] == "query" and method == "POST":
-            return _query(store, server, database, body)
+            return _query(store, server, database, body, arm_state, kv_store)
+        if len(segs) == 5 and segs[4] == "recommendations" and method == "GET":
+            db_id = _db_id(server, database)
+            if not store.instance_exists(db_id):
+                return _err(404, "ResourceNotFound", f"Database '{database}' was not found.")
+            return _json(200, {"value": _candidate_recommendations(store, db_id)})
+        if len(segs) == 7 and segs[4] == "recommendations" and segs[6] == "apply" and method == "POST":
+            db_id = _db_id(server, database)
+            if not store.instance_exists(db_id):
+                return _err(404, "ResourceNotFound", f"Database '{database}' was not found.")
+            ok, message = _apply_recommendation(store, db_id, segs[5])
+            if not ok:
+                return _err(400, "RecommendationNotApplicable", message or "Could not apply recommendation.")
+            return _json(200, {"applied": True})
 
     return _err(404, "NotFound", f"Unknown path: {path}")
+
+
+# ── database export / import (.bacpac) — into / out of the SIMULATOR's own Azure
+# Blob store. The storageUri host (`<account>.blob.core.windows.net`) is only parsed:
+# the account must exist in the simulator (an ARM storage account, an account the
+# blob store already holds containers for, or the emulator's devstoreaccount1) —
+# it is never resolved or contacted. The .bacpac is a zip carrying the database as
+# a replayable SQL script (model.sql) + Origin.json; SqlPackage's DACPAC model XML
+# is not produced, so only simulator-written bacpacs import. ───────────────────
+BACPAC_MODEL = "model.sql"
+
+
+def _blob_target(blob_store, arm_state: dict | None, uri: str):
+    """(account_arg, container_key, path_prefix, blob, error) for a storageUri."""
+    from core import sql_store as sq
+    try:
+        account, container, blob = sq.parse_blob_uri(uri)
+    except ValueError as e:
+        return None, None, None, None, ("InvalidStorageUri", str(e))
+    if account == "devstoreaccount1":
+        acct_arg, key, prefix = None, container, "/devstoreaccount1"
+    else:
+        acct_arg, key, prefix = account, f"{account}/{container}", ""
+        known = any(k.lower().endswith(f"/storageaccounts/{account}") for k in (arm_state or {})) or \
+            any(str(c).startswith(account + "/") for c in getattr(blob_store, "containers", {}) or {})
+        if not known:
+            return None, None, None, None, ("StorageAccountNotFound",
+                                            f"The storage account '{account}' does not exist in this simulator.")
+    if not blob_store.container_exists(key):
+        return None, None, None, None, ("ContainerNotFound",
+                                        f"The container '{container}' does not exist in storage account '{account}'.")
+    return acct_arg, key, prefix, f"{container}/{blob}", None
+
+
+def export_database(store: SqlStore, server: str, database: str, blob_store, storage_uri: str,
+                    arm_state: dict | None = None) -> tuple:
+    """Write the database as a .bacpac blob. Returns (ok, error_code, message, size)."""
+    import io
+    import zipfile
+    from core import sql_store as sq
+    from core import azure_blob_core as blob
+    if blob_store is None:
+        return False, "StorageUnavailable", "No Blob store is attached to this Azure SQL engine.", 0
+    acct, _key, prefix, path, err = _blob_target(blob_store, arm_state, storage_uri)
+    if err:
+        return False, err[0], err[1], 0
+    db_id = _db_id(server, database)
+    if not store.instance_exists(db_id):
+        _create_database(store, server, database)
+    if sq.is_async_engine(store):
+        return False, "EngineUnavailable", "This database engine only answers asynchronously.", 0
+    tables = sq.dump_tables(store, db_id)
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("Origin.json", json.dumps({"server": server, "database": database,
+                                              "tables": [t["name"] for t in tables],
+                                              "format": "vyomi-bacpac/1 (SQL script)"}, indent=2))
+        z.writestr(BACPAC_MODEL, sq.sql_dump(tables, sq.engine_dialect(store),
+                                             f"Azure SQL export of {server}/{database}"))
+    data = buf.getvalue()
+    r = blob.dispatch(blob_store, "PUT", f"{prefix}/{path}", {}, {"x-ms-blob-type": "BlockBlob",
+                      "content-type": "application/octet-stream"}, data, account=acct)
+    if r.status >= 300:
+        return False, "BlobWriteFailed", f"Writing {storage_uri} failed ({r.status}).", 0
+    return True, "", "", len(data)
+
+
+def import_database(store: SqlStore, server: str, database: str, blob_store, storage_uri: str,
+                    arm_state: dict | None = None) -> tuple:
+    """Load a simulator .bacpac into the database. Returns (ok, error_code, message)."""
+    import io
+    import zipfile
+    from core import sql_store as sq
+    from core import azure_blob_core as blob
+    if blob_store is None:
+        return False, "StorageUnavailable", "No Blob store is attached to this Azure SQL engine."
+    acct, _key, prefix, path, err = _blob_target(blob_store, arm_state, storage_uri)
+    if err:
+        return False, err[0], err[1]
+    r = blob.dispatch(blob_store, "GET", f"{prefix}/{path}", {}, {}, b"", account=acct)
+    if r.status != 200:
+        return False, "BlobNotFound", f"The blob {storage_uri} does not exist."
+    try:
+        with zipfile.ZipFile(io.BytesIO(r.body)) as z:
+            script = z.read(BACPAC_MODEL).decode("utf-8")
+    except Exception:
+        return False, "InvalidBacpac", ("The file is not a bacpac this simulator wrote (no model.sql); "
+                                        "SqlPackage DACPAC models are not supported.")
+    _create_database(store, server, database)
+    db_id = _db_id(server, database)
+    try:
+        for stmt in sq.split_sql(script):
+            store.execute_sql(db_id, stmt)
+    except Exception as e:  # noqa: BLE001
+        return False, "ImportFailed", f"Import failed: {e}"
+    return True, "", ""

@@ -24,7 +24,10 @@ GCP errors use the Google JSON API shape `{"error":{"code","message","status"}}`
 """
 from __future__ import annotations
 
+import hashlib
 import json
+import re
+import time
 import uuid
 from dataclasses import dataclass, field
 from typing import Any
@@ -70,12 +73,72 @@ def _not_found(message: str) -> CloudSqlResponse:
 
 
 # ── resource views ─────────────────────────────────────────────────────────
+def _ip_addresses(ip_config: dict) -> list[dict]:
+    """Native Cloud SQL semantics, now ENFORCED: ipAddresses only carries an entry
+    for each network path ipConfiguration actually turns on. Disabling ipv4Enabled
+    means the instance has no public address at all — not a disabled one a client
+    could still dial — and leaving privateNetwork unset means no private address
+    either, matching real instances.get. authorizedNetworks (an allow-list of
+    source IPs) stays unenforced: this simulator has no real client IP to filter
+    against, same honest limit azure_sql_core.py takes for per-IP firewall rules.
+    See gcp.sql.connections in core/capabilities/gcp/sql.json."""
+    addrs = []
+    if ip_config.get("ipv4Enabled", True):
+        addrs.append({"type": "PRIMARY", "ipAddress": "34.148.0.2"})
+    if ip_config.get("privateNetwork"):
+        addrs.append({"type": "PRIVATE", "ipAddress": "10.0.0.2"})
+    return addrs
+
+
+# ── SSL/TLS (gcp.sql.connections-security): deterministic, realistic-shaped certs —
+# same approach gcp_redis_core._ca_cert uses — rather than a real X.509/TLS stack
+# (no cryptography/OpenSSL dependency, so this loads under Pyodide). The CA cert is
+# generated once at instance creation; client certs are generated on sslCerts.insert
+# and their private key is returned ONLY in that response, never stored or
+# retrievable again — matching the real API. ──────────────────────────────────────
+def _ca_cert(project: str, instance: str) -> dict:
+    now = time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime())
+    return {"kind": "sql#sslCert", "certSerialNumber": "0",
+            "cert": ("-----BEGIN CERTIFICATE-----\n"
+                     + hashlib.sha256(f"ca-cert:{project}/{instance}".encode()).hexdigest()
+                     + "\n-----END CERTIFICATE-----"),
+            "commonName": f"C=US,O=Vyomi,CN=Vyomi Cloud SQL Server CA,dnQualifier={instance}",
+            "sha1Fingerprint": hashlib.sha1(f"ca:{project}/{instance}".encode()).hexdigest(),
+            "instance": instance, "createTime": now, "expirationTime": "2036-01-01T00:00:00.000Z"}
+
+
+def _client_cert(project: str, instance: str, common_name: str) -> dict:
+    serial = uuid.uuid4().hex[:16]
+    fingerprint = hashlib.sha1(f"client:{project}/{instance}/{common_name}/{serial}".encode()).hexdigest()
+    now = time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime())
+    return {"kind": "sql#sslCert", "certSerialNumber": serial,
+            "cert": ("-----BEGIN CERTIFICATE-----\n"
+                     + hashlib.sha256(f"client-cert:{serial}".encode()).hexdigest()
+                     + "\n-----END CERTIFICATE-----"),
+            "commonName": common_name, "sha1Fingerprint": fingerprint,
+            "instance": instance, "createTime": now, "expirationTime": "2036-01-01T00:00:00.000Z",
+            "_privateKey": ("-----BEGIN PRIVATE KEY-----\n"
+                           + hashlib.sha256(f"client-key:{serial}".encode()).hexdigest()
+                           + "\n-----END PRIVATE KEY-----")}
+
+
+def _ssl_cert_view(project: str, instance: str, c: dict) -> dict:
+    return {"kind": "sql#sslCert", "certSerialNumber": c["certSerialNumber"], "cert": c["cert"],
+            "commonName": c["commonName"], "sha1Fingerprint": c["sha1Fingerprint"],
+            "instance": instance, "project": project, "createTime": c["createTime"],
+            "expirationTime": c["expirationTime"],
+            "selfLink": (f"https://sqladmin.googleapis.com/sql/v1beta4/projects/{project}/instances/"
+                         f"{instance}/sslCerts/{c['sha1Fingerprint']}")}
+
+
 def _instance_view(rec: dict) -> dict:
     project = rec["project"]
     name = rec["name"]
     region = rec.get("region", _DEFAULT_REGION)
     settings = rec.get("settings", {})
-    return {
+    ip_config = settings.get("ipConfiguration", {})
+    backup_config = settings.get("backupConfiguration", {})
+    view = {
         "kind": "sql#instance",
         "name": name,
         "project": project,
@@ -101,14 +164,41 @@ def _instance_view(rec: dict) -> dict:
             "dataDiskType": settings.get("dataDiskType", "PD_SSD"),
             "pricingPlan": settings.get("pricingPlan", "PER_USE"),
             "settingsVersion": str(settings.get("settingsVersion", "1")),
+            "storageAutoResize": settings.get("storageAutoResize", True),
+            "availabilityType": settings.get("availabilityType", "ZONAL"),
+            "deletionProtectionEnabled": settings.get("deletionProtectionEnabled", False),
+            "userLabels": settings.get("userLabels", {}),
+            "databaseFlags": settings.get("databaseFlags", []),
+            "ipConfiguration": {
+                "ipv4Enabled": ip_config.get("ipv4Enabled", True),
+                "privateNetwork": ip_config.get("privateNetwork"),
+                "authorizedNetworks": ip_config.get("authorizedNetworks", []),
+                "sslMode": ip_config.get("sslMode", "ALLOW_UNENCRYPTED_AND_ENCRYPTED"),
+                "requireSsl": ip_config.get("sslMode", "ALLOW_UNENCRYPTED_AND_ENCRYPTED")
+                != "ALLOW_UNENCRYPTED_AND_ENCRYPTED",
+            },
+            "backupConfiguration": {
+                "kind": "sql#backupConfiguration",
+                "enabled": backup_config.get("enabled", True),
+                "pointInTimeRecoveryEnabled": backup_config.get("pointInTimeRecoveryEnabled", True),
+                "startTime": backup_config.get("startTime", "03:00"),
+            },
         },
-        "ipAddresses": rec.get("ipAddresses", [
-            {"type": "PRIMARY", "ipAddress": "10.0.0.2"}]),
+        "ipAddresses": _ip_addresses(ip_config),
+        "serverCaCert": rec.get("serverCaCert") or _ca_cert(project, name),
         "createTime": rec.get("createTime", ""),
         "etag": rec.get("etag", ""),
         "selfLink": (f"https://sqladmin.googleapis.com/sql/v1beta4/projects/"
                      f"{project}/instances/{name}"),
     }
+    if rec.get("diskEncryptionConfiguration"):
+        view["diskEncryptionConfiguration"] = {"kind": "sql#diskEncryptionConfiguration",
+                                               "kmsKeyName": rec["diskEncryptionConfiguration"]["kmsKeyName"]}
+        view["diskEncryptionStatus"] = {"kind": "sql#diskEncryptionStatus",
+                                        "kmsKeyVersionName": rec["diskEncryptionConfiguration"]["kmsKeyName"] + "/cryptoKeyVersions/1"}
+    if rec.get("masterInstanceName"):
+        view["masterInstanceName"] = rec["masterInstanceName"]
+    return view
 
 
 def _database_view(project: str, instance: str, db: dict) -> dict:
@@ -138,6 +228,115 @@ def _list_instances(store: SqlStore, project: str) -> list[dict]:
     return [r for r in recs if r]
 
 
+def _backup_key(project: str, instance: str, backup_id: str) -> str:
+    return f"cloudsql-backup:{project}/{instance}/{backup_id}"
+
+
+def _replicas_of(store: SqlStore, project: str, master: str) -> list[dict]:
+    return [r for r in _list_instances(store, project) if r.get("masterInstanceName") == master]
+
+
+def _mirror_to_replicas(store: SqlStore, project: str, master: str) -> None:
+    """Read replicas mirror the primary's control-plane metadata (databases, users) —
+    the state this core manages — synchronously on every write, so a replica never
+    lags behind on them (see gcp.sql.replicas in core/capabilities/gcp/sql.json)."""
+    rec = _get_instance(store, project, master)
+    if not rec:
+        return
+    dbs = {k: dict(v) for k, v in rec.get("databases", {}).items()}
+    users = {k: dict(v) for k, v in rec.get("users", {}).items()}
+    for rep in _replicas_of(store, project, master):
+        rep["databases"] = {k: dict(v) for k, v in dbs.items()}
+        rep["users"] = {k: dict(v) for k, v in users.items()}
+
+
+def _operation(instance: str, op_type: str) -> dict:
+    return {"kind": "sql#operation", "name": uuid.uuid4().hex, "operationType": op_type,
+            "status": "DONE", "targetId": instance, "insertTime": "", "endTime": ""}
+
+
+def _log_op(rec: dict, op_type: str) -> dict:
+    op = _operation(rec["name"], op_type)
+    rec.setdefault("operations", []).insert(0, op)
+    return op
+
+
+def _operation_view(op: dict, project: str, instance: str) -> dict:
+    return {**op, "selfLink": (f"https://sqladmin.googleapis.com/sql/v1beta4/projects/"
+                               f"{project}/operations/{op['name']}"),
+            "targetLink": (f"https://sqladmin.googleapis.com/sql/v1beta4/projects/"
+                           f"{project}/instances/{instance}")}
+
+
+_SSL_MODES = ("ALLOW_UNENCRYPTED_AND_ENCRYPTED", "ENCRYPTED_ONLY", "TRUSTED_CLIENT_CERTIFICATE_REQUIRED")
+_SHARED_TIERS = {"db-f1-micro": (1, 614), "db-g1-small": (1, 1700)}
+_CUSTOM_TIER = re.compile(r"^db-custom-(\d+)-(\d+)$")
+
+
+def _check_tier(tier: str, version: str) -> str | None:
+    """Real Cloud SQL machine-shape rules: shared-core tiers are fixed; a custom shape
+    db-custom-<vCPU>-<MB> needs vCPU 1 or an even number up to 96, memory a multiple
+    of 256 MB within 0.9-6.5 GB per vCPU (and at least 3840 MB)."""
+    if tier in _SHARED_TIERS:
+        return None
+    m = _CUSTOM_TIER.match(tier)
+    if not m:
+        return f"Invalid Tier ({tier}) for (PER_USE) Pricing Plan. Use a shared-core tier or db-custom-<vCPUs>-<MB>."
+    cpu, mem = int(m.group(1)), int(m.group(2))
+    if cpu != 1 and (cpu % 2 or cpu > 96):
+        return f"Invalid vCPU count ({cpu}): must be 1 or an even number up to 96."
+    if mem % 256:
+        return f"Invalid memory ({mem} MB): must be a multiple of 256 MB."
+    if mem < 3840 or mem < cpu * 920 or mem > cpu * 6656:
+        return (f"Invalid memory ({mem} MB) for {cpu} vCPU: must be at least 3840 MB and "
+                f"between 0.9 and 6.5 GB per vCPU.")
+    return None
+
+
+def _check_settings(store, project: str, region: str, settings: dict) -> str | None:
+    """Validate tier, SSL mode and the CMEK key on instance create/patch (None = ok)."""
+    if "tier" in settings:
+        bad = _check_tier(str(settings["tier"]), "")
+        if bad:
+            return bad
+    ip = settings.get("ipConfiguration") or {}
+    mode = ip.get("sslMode")
+    if mode is not None and mode not in _SSL_MODES:
+        return f"Invalid value for sslMode: {mode}. Allowed: {', '.join(_SSL_MODES)}."
+    if ip.get("requireSsl") and mode in (None, "ALLOW_UNENCRYPTED_AND_ENCRYPTED"):
+        ip["sslMode"] = "ENCRYPTED_ONLY"      # legacy requireSsl maps onto the SSL mode
+    return None
+
+
+def _check_cmek(store, region: str, cfg: dict) -> str | None:
+    key = (cfg or {}).get("kmsKeyName")
+    if not key:
+        return None
+    m = re.match(r"^projects/[^/]+/locations/([^/]+)/keyRings/[^/]+/cryptoKeys/[^/]+$", key)
+    if not m:
+        return f"Invalid kmsKeyName: {key}"
+    if m.group(1) != region:
+        return (f"The Cloud KMS key location ({m.group(1)}) must match the instance region ({region}).")
+    refs = getattr(store, "refs", None)
+    if refs and refs("kms", key) is False:
+        return f"Cloud KMS key not found: {key}"
+    return None
+
+
+def validate_config(refs, region: str, body: dict, patch: bool = False) -> str | None:
+    """Shared by the Nano core and the offline appliance's Cloud SQL handlers: tier, sslMode
+    and CMEK rules for an instances.insert / patch body (None = ok)."""
+    class _S:  # minimal store shim carrying the optional refs hook
+        pass
+    st = _S()
+    st.refs = refs
+    settings = body.get("settings")
+    bad = _check_settings(st, "", region, settings) if isinstance(settings, dict) else None
+    if bad:
+        return bad
+    return None if patch else _check_cmek(st, region, body.get("diskEncryptionConfiguration") or {})
+
+
 # ── control-plane operations: instances ────────────────────────────────────
 def _insert_instance(store: SqlStore, project: str, body: dict) -> CloudSqlResponse:
     name = str(body.get("name", "")).strip()
@@ -146,20 +345,16 @@ def _insert_instance(store: SqlStore, project: str, body: dict) -> CloudSqlRespo
     if _get_instance(store, project, name):
         return _err(409, "ALREADY_EXISTS",
                     f"The Cloud SQL instance already exists. Instance: {name}")
+    master = str(body.get("masterInstanceName", "") or "").strip()
+    if master and not _get_instance(store, project, master):
+        return _not_found(f"The Cloud SQL instance does not exist. Instance: {master}")
     settings = body.get("settings") or {}
     if "tier" not in settings:
         settings["tier"] = _DEFAULT_TIER
-    master = None
-    if body.get("masterInstanceName"):                    # read replica of an existing primary
-        mname = str(body["masterInstanceName"]).split(":")[-1]
-        master = _get_instance(store, project, mname)
-        if not master:
-            return _not_found(f"The Cloud SQL instance does not exist. Instance: {mname}")
-        if master.get("masterInstanceName"):
-            return _err(400, "INVALID_ARGUMENT", "Invalid request: cannot create a replica of a read replica.")
-    version = str(body.get("databaseVersion") or (master or {}).get("databaseVersion") or "POSTGRES_15")
-    region = str(body.get("region") or (master or {}).get("region") or _DEFAULT_REGION)
-    eng = engine_of(version)
+    region = str(body.get("region", _DEFAULT_REGION))
+    bad = _check_settings(store, project, region, settings) or _check_cmek(store, region, body.get("diskEncryptionConfiguration") or {})
+    if bad:
+        return _err(400, "INVALID_ARGUMENT", bad)
     rec = {
         "name": name,
         "project": project,
@@ -168,24 +363,82 @@ def _insert_instance(store: SqlStore, project: str, body: dict) -> CloudSqlRespo
         "region": region,
         "gceZone": str(body.get("gceZone", f"{region}-a")),
         "settings": settings,
-        "createTime": _now_iso(),
+        "diskEncryptionConfiguration": body.get("diskEncryptionConfiguration") or None,
         "etag": _etag(),
         "databases": {},  # name -> database metadata (control-plane view)
-        # the instance's default admin user (postgres / root / sqlserver), as Cloud SQL creates it
-        "users": [{"kind": "sql#user", "name": {"MYSQL": "root", "SQLSERVER": "sqlserver"}.get(eng, "postgres"),
-                   "host": "%" if eng == "MYSQL" else "", "type": "BUILT_IN"}],
+        "users": {},       # "name@host" -> user metadata
+        "operations": [],  # most-recent-first
+        "serverCaCert": _ca_cert(project, name),
+        "sslCerts": {},     # sha1Fingerprint -> client cert metadata (no private key stored)
+        "queryLog": [],     # most-recent-first real executed-query log (gcp.sql.insights)
     }
-    if master is not None:
-        rec["masterInstanceName"] = master["name"]
+    if master:
+        rec["masterInstanceName"] = master
         rec["instanceType"] = "READ_REPLICA_INSTANCE"
-        rec["users"] = list(master.get("users") or rec["users"])
-        master.setdefault("replicaNames", []).append(name)
-        store.put_instance(_key(project, master["name"]), master)
-        _op(master, "CREATE_REPLICA", name)
-    _op(rec, "CREATE")
+    op = _log_op(rec, "CREATE_REPLICA" if master else "CREATE")
     store.put_instance(_key(project, name), rec)
+    if master:
+        _mirror_to_replicas(store, project, master)  # seed the new replica from the primary's current state
     store.persist()
-    return _json(200, _instance_view(rec))
+    return _json(200, _operation_view(op, project, name))   # native instances.insert → Operation
+
+
+def _DEEP_MERGE(dst: dict, src: dict) -> dict:
+    for k, v in src.items():
+        if isinstance(v, dict) and isinstance(dst.get(k), dict):
+            _DEEP_MERGE(dst[k], v)
+        else:
+            dst[k] = v
+    return dst
+
+
+def _patch_instance(store: SqlStore, project: str, instance: str, body: dict) -> CloudSqlResponse:
+    rec = _get_instance(store, project, instance)
+    if not rec:
+        return _not_found(f"The Cloud SQL instance does not exist. Instance: {instance}")
+    settings = body.get("settings")
+    if isinstance(settings, dict):
+        bad = _check_settings(store, project, rec.get("region", _DEFAULT_REGION), settings)
+        if bad:
+            return _err(400, "INVALID_ARGUMENT", bad)
+        _DEEP_MERGE(rec.setdefault("settings", {}), settings)
+        policy = rec["settings"].get("activationPolicy")
+        if policy == "NEVER":
+            rec["state"] = "STOPPED"
+        elif policy:
+            rec["state"] = "RUNNABLE"
+    rec["etag"] = _etag()
+    op = _log_op(rec, "UPDATE")
+    store.persist()
+    return _json(200, _operation_view(op, project, instance))
+
+
+def _restart_instance(store: SqlStore, project: str, instance: str) -> CloudSqlResponse:
+    rec = _get_instance(store, project, instance)
+    if not rec:
+        return _not_found(f"The Cloud SQL instance does not exist. Instance: {instance}")
+    rec["state"] = "RUNNABLE"
+    op = _log_op(rec, "RESTART")
+    store.persist()
+    return _json(200, _operation_view(op, project, instance))
+
+
+def _list_operations(store: SqlStore, project: str, instance: str | None) -> CloudSqlResponse:
+    if instance:
+        rec = _get_instance(store, project, instance)
+        if not rec:
+            return _not_found(f"The Cloud SQL instance does not exist. Instance: {instance}")
+        ops = rec.get("operations", [])
+    else:
+        ops = []
+        for rec in _list_instances(store, project):
+            ops.extend(rec.get("operations", []))
+        ops.sort(key=lambda o: o.get("name", ""), reverse=True)
+    items = [_operation_view(o, project, o["targetId"]) for o in ops]
+    out: dict = {"kind": "sql#operationsList"}
+    if items:
+        out["items"] = items
+    return _json(200, out)
 
 
 def _get_instance_resp(store: SqlStore, project: str, instance: str) -> CloudSqlResponse:
@@ -207,14 +460,11 @@ def _delete_instance(store: SqlStore, project: str, instance: str) -> CloudSqlRe
     rec = _get_instance(store, project, instance)
     if not rec:
         return _not_found(f"The Cloud SQL instance does not exist. Instance: {instance}")
-    if rec.get("replicaNames"):
-        return _err(400, "INVALID_ARGUMENT",
-                    "Invalid request: the instance has read replicas (%s); delete them first." % ", ".join(rec["replicaNames"]))
-    master = _get_instance(store, project, rec.get("masterInstanceName") or "") if rec.get("masterInstanceName") else None
-    if master:
-        master["replicaNames"] = [n for n in master.get("replicaNames") or [] if n != instance]
-        _op(master, "DELETE_REPLICA", instance)
-        store.put_instance(_key(project, master["name"]), master)
+    if _replicas_of(store, project, instance):
+        return _err(400, "FAILED_PRECONDITION",
+                    f"The instance cannot be deleted because it has read replicas. Instance: {instance}")
+    for bid in _list_backup_ids(store, project, instance):
+        store.snapshots.pop(_backup_key(project, instance, bid), None)
     store.drop_instance(_key(project, instance))
     store.persist()
     return _json(200, {"kind": "sql#operation", "operationType": "DELETE",
@@ -241,7 +491,7 @@ def _insert_database(store: SqlStore, project: str, instance: str,
         "collation": str(body.get("collation", "en_US.UTF8")),
         "etag": _etag(),
     }
-    _op(rec, "CREATE_DATABASE")
+    _mirror_to_replicas(store, project, instance)
     store.persist()
     return _json(200, _database_view(project, instance, dbs[name]))
 
@@ -267,329 +517,495 @@ def _delete_database(store: SqlStore, project: str, instance: str,
     if database not in dbs:
         return _not_found(f"The database does not exist. Database: {database}")
     dbs.pop(database, None)
-    _op(rec, "DELETE_DATABASE")
+    _mirror_to_replicas(store, project, instance)
     store.persist()
     return _json(200, {"kind": "sql#operation", "operationType": "DELETE_DATABASE",
                        "status": "DONE", "name": str(uuid.uuid4()),
                        "targetId": instance})
 
 
-# ── settings validation (instances.patch) — shared with the offline appliance ──
-# Database flags, connectivity (ipConfiguration), automated backups and Query
-# Insights are instance settings; one validator serves Nano's PATCH below and the
-# offline appliance's (providers/gcp_services.py), so both reject the same input
-# with the same Cloud SQL error.
-class SqlSettingsError(Exception):
-    def __init__(self, status: int, code: str, message: str):
-        super().__init__(message)
-        self.status, self.code, self.message = status, code, message
+# ── control-plane operations: users ─────────────────────────────────────────
+def _user_key(name: str, host: str) -> str:
+    return f"{name}@{host or '%'}"
 
 
-_ONOFF = ("on", "off")
-# name -> (kind, allowed) ; kind: int (lo, hi) | enum (values) | float (lo, hi) | str
-FLAGS = {
-    "POSTGRES": {
-        "max_connections": ("int", (14, 262143)), "log_min_duration_statement": ("int", (-1, 2147483647)),
-        "log_connections": ("enum", _ONOFF), "log_disconnections": ("enum", _ONOFF),
-        "log_statement": ("enum", ("none", "ddl", "mod", "all")), "log_lock_waits": ("enum", _ONOFF),
-        "log_temp_files": ("int", (-1, 2147483647)), "work_mem": ("int", (64, 2147483647)),
-        "maintenance_work_mem": ("int", (1024, 2147483647)), "autovacuum": ("enum", _ONOFF),
-        "cloudsql.iam_authentication": ("enum", _ONOFF), "cloudsql.enable_pgaudit": ("enum", _ONOFF),
-        "idle_in_transaction_session_timeout": ("int", (0, 2147483647)), "statement_timeout": ("int", (0, 2147483647)),
-        "temp_file_limit": ("int", (-1, 2147483647)), "track_activity_query_size": ("int", (100, 1048576)),
-        "pg_stat_statements.track": ("enum", ("none", "top", "all")), "timezone": ("str", None),
-    },
-    "MYSQL": {
-        "max_connections": ("int", (1, 100000)), "slow_query_log": ("enum", _ONOFF),
-        "long_query_time": ("float", (0, 30000000)), "general_log": ("enum", _ONOFF),
-        "log_output": ("enum", ("TABLE", "FILE", "NONE")), "innodb_lock_wait_timeout": ("int", (1, 1073741824)),
-        "wait_timeout": ("int", (1, 31536000)), "sql_mode": ("str", None),
-        "character_set_server": ("enum", ("utf8", "utf8mb4", "latin1")), "cloudsql_iam_authentication": ("enum", _ONOFF),
-        "log_bin_trust_function_creators": ("enum", _ONOFF), "max_allowed_packet": ("int", (16384, 1073741824)),
-        "default_time_zone": ("str", None),
-    },
-    "SQLSERVER": {
-        "cross db ownership chaining": ("enum", _ONOFF), "contained database authentication": ("enum", _ONOFF),
-        "max server memory (mb)": ("int", (1000, 2147483647)), "user connections": ("int", (0, 32767)),
-        "cost threshold for parallelism": ("int", (0, 32767)), "remote access": ("enum", _ONOFF),
-    },
-}
+def _user_view(project: str, instance: str, u: dict) -> dict:
+    return {"kind": "sql#user", "name": u["name"], "host": u.get("host", "%"),
+            "project": project, "instance": instance,
+            "type": u.get("type", "BUILT_IN"), "etag": u.get("etag", _etag())}
 
 
-def engine_of(database_version: str) -> str:
-    v = str(database_version or "POSTGRES").upper()
-    return "MYSQL" if v.startswith("MYSQL") else "SQLSERVER" if v.startswith("SQLSERVER") else "POSTGRES"
+def _insert_user(store: SqlStore, project: str, instance: str, body: dict) -> CloudSqlResponse:
+    rec = _get_instance(store, project, instance)
+    if not rec:
+        return _not_found(f"The Cloud SQL instance does not exist. Instance: {instance}")
+    name = str(body.get("name", "")).strip()
+    if not name:
+        return _err(400, "INVALID_ARGUMENT", "User name is required.")
+    host = str(body.get("host", "%") or "%")
+    users = rec.setdefault("users", {})
+    key = _user_key(name, host)
+    if key in users:
+        return _err(409, "ALREADY_EXISTS", f"The user already exists. User: {name}")
+    users[key] = {"name": name, "host": host, "type": body.get("type", "BUILT_IN"),
+                 "password": body.get("password", ""), "etag": _etag()}
+    _log_op(rec, "CREATE_USER")
+    _mirror_to_replicas(store, project, instance)
+    store.persist()
+    return _json(200, _user_view(project, instance, users[key]))
 
 
-def validate_flags(database_version: str, flags) -> list:
-    eng = engine_of(database_version)
-    known = FLAGS[eng]
-    if not isinstance(flags, list):
-        raise SqlSettingsError(400, "INVALID_ARGUMENT", "settings.databaseFlags must be a list of {name, value}.")
-    bad = [str(f.get("name")) for f in flags if isinstance(f, dict) and f.get("name") not in known]
-    if bad:
-        raise SqlSettingsError(400, "INVALID_ARGUMENT",
-                               "Invalid request: invalid flag name(s) for %s: %s." % (database_version, ", ".join(bad)))
-    out, seen = [], set()
-    for f in flags:
-        if not isinstance(f, dict):
-            continue
-        n, v = f["name"], str(f.get("value", "")).strip()
-        if n in seen:
-            raise SqlSettingsError(400, "INVALID_ARGUMENT", "Invalid request: flag %s is set more than once." % n)
-        seen.add(n)
-        kind, allowed = known[n]
-        ok = True
-        if kind in ("int", "float"):
-            try:
-                num = int(v) if kind == "int" else float(v)
-                ok = allowed[0] <= num <= allowed[1]
-            except ValueError:
-                ok = False
-            hint = "%s..%s" % allowed
-        elif kind == "enum":
-            ok = v in allowed
-            hint = "|".join(allowed)
-        else:
-            ok, hint = bool(v), "a non-empty value"
-        if not ok:
-            raise SqlSettingsError(400, "INVALID_ARGUMENT",
-                                   "Invalid request: invalid value '%s' for flag %s (allowed: %s)." % (v, n, hint))
-        out.append({"name": n, "value": v})
-    return out
+def _list_users(store: SqlStore, project: str, instance: str) -> CloudSqlResponse:
+    rec = _get_instance(store, project, instance)
+    if not rec:
+        return _not_found(f"The Cloud SQL instance does not exist. Instance: {instance}")
+    users = rec.get("users", {})
+    items = [_user_view(project, instance, users[k]) for k in sorted(users)]
+    out: dict = {"kind": "sql#usersList"}
+    if items:
+        out["items"] = items
+    return _json(200, out)
 
 
-def _cidr(v: str) -> str:
-    import ipaddress
+def _update_user(store: SqlStore, project: str, instance: str, name: str,
+                 host: str, body: dict) -> CloudSqlResponse:
+    rec = _get_instance(store, project, instance)
+    if not rec:
+        return _not_found(f"The Cloud SQL instance does not exist. Instance: {instance}")
+    users = rec.get("users", {})
+    key = _user_key(name, host)
+    if key not in users:
+        return _not_found(f"The user does not exist. User: {name}")
+    if "password" in body:
+        users[key]["password"] = body["password"]
+    users[key]["etag"] = _etag()
+    _log_op(rec, "UPDATE_USER")
+    _mirror_to_replicas(store, project, instance)
+    store.persist()
+    return _json(200, {"kind": "sql#operation", "operationType": "UPDATE_USER",
+                       "status": "DONE", "name": str(uuid.uuid4()), "targetId": instance})
+
+
+def _delete_user(store: SqlStore, project: str, instance: str, name: str, host: str) -> CloudSqlResponse:
+    rec = _get_instance(store, project, instance)
+    if not rec:
+        return _not_found(f"The Cloud SQL instance does not exist. Instance: {instance}")
+    users = rec.get("users", {})
+    key = _user_key(name, host)
+    if key not in users:
+        return _not_found(f"The user does not exist. User: {name}")
+    users.pop(key, None)
+    _log_op(rec, "DELETE_USER")
+    _mirror_to_replicas(store, project, instance)
+    store.persist()
+    return _json(200, {"kind": "sql#operation", "operationType": "DELETE_USER",
+                       "status": "DONE", "name": str(uuid.uuid4()), "targetId": instance})
+
+
+# ── control-plane operations: backup runs ───────────────────────────────────
+def _list_backup_ids(store: SqlStore, project: str, instance: str) -> list[str]:
+    prefix = _backup_key(project, instance, "")
+    return [k[len(prefix):] for k in store.snapshot_ids() if k.startswith(prefix)]
+
+
+def _backup_view(b: dict) -> dict:
+    return {"kind": "sql#backupRun", "id": b["id"], "project": b["project"], "instance": b["instance"],
+            "status": "SUCCESSFUL", "type": b.get("type", "ON_DEMAND"), "description": b.get("description", ""),
+            "enqueuedTime": b.get("enqueuedTime", ""), "startTime": b.get("startTime", ""),
+            "endTime": b.get("endTime", ""), "location": b.get("location", "us"),
+            "windowStartTime": b.get("windowStartTime", ""),
+            "selfLink": (f"https://sqladmin.googleapis.com/sql/v1beta4/projects/"
+                         f"{b['project']}/instances/{b['instance']}/backupRuns/{b['id']}")}
+
+
+def _insert_backup(store: SqlStore, project: str, instance: str, body: dict) -> CloudSqlResponse:
+    rec = _get_instance(store, project, instance)
+    if not rec:
+        return _not_found(f"The Cloud SQL instance does not exist. Instance: {instance}")
+    backup_id = str(uuid.uuid4().int % 10_000_000_000)
+    now = time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime())
+    b = {"id": backup_id, "project": project, "instance": instance, "type": "ON_DEMAND",
+         "description": str(body.get("description", "")),
+         "enqueuedTime": now, "startTime": now, "endTime": now, "windowStartTime": now,
+         # Point-in-time snapshot of the control-plane metadata this core manages, restored
+         # by instances.restoreBackup. Row-level SQL data lives in the separate SQL data
+         # plane (see module docstring) and isn't captured here.
+         "snapshot": {"databases": {k: dict(v) for k, v in rec.get("databases", {}).items()},
+                      "users": {k: dict(v) for k, v in rec.get("users", {}).items()}}}
+    store.put_snapshot(_backup_key(project, instance, backup_id), b)
+    _log_op(rec, "BACKUP_VOLUME")
+    store.persist()
+    return _json(200, _backup_view(b))
+
+
+def _list_backups(store: SqlStore, project: str, instance: str) -> CloudSqlResponse:
+    rec = _get_instance(store, project, instance)
+    if not rec:
+        return _not_found(f"The Cloud SQL instance does not exist. Instance: {instance}")
+    items = [_backup_view(store.get_snapshot(_backup_key(project, instance, bid)))
+             for bid in sorted(_list_backup_ids(store, project, instance), reverse=True)]
+    out: dict = {"kind": "sql#backupRunsList"}
+    if items:
+        out["items"] = items
+    return _json(200, out)
+
+
+def _get_backup(store: SqlStore, project: str, instance: str, backup_id: str) -> CloudSqlResponse:
+    b = store.get_snapshot(_backup_key(project, instance, backup_id))
+    if not b:
+        return _not_found(f"The backupRun does not exist. BackupRun: {backup_id}")
+    return _json(200, _backup_view(b))
+
+
+def _delete_backup(store: SqlStore, project: str, instance: str, backup_id: str) -> CloudSqlResponse:
+    key = _backup_key(project, instance, backup_id)
+    if not store.get_snapshot(key):
+        return _not_found(f"The backupRun does not exist. BackupRun: {backup_id}")
+    store.snapshots.pop(key, None)
+    rec = _get_instance(store, project, instance)
+    if rec:
+        _log_op(rec, "DELETE_BACKUP")
+    store.persist()
+    return _json(200, {"kind": "sql#operation", "operationType": "DELETE_BACKUP",
+                       "status": "DONE", "name": str(uuid.uuid4()), "targetId": instance})
+
+
+def _restore_backup(store: SqlStore, project: str, instance: str, body: dict) -> CloudSqlResponse:
+    """instances.restoreBackup — replaces the target instance's databases/users with the
+    backupRun's snapshot (native restoreBackupContext.backupRunId[/instanceId])."""
+    rec = _get_instance(store, project, instance)
+    if not rec:
+        return _not_found(f"The Cloud SQL instance does not exist. Instance: {instance}")
+    ctx = body.get("restoreBackupContext") or {}
+    backup_id = str(ctx.get("backupRunId", "")).strip()
+    source_instance = str(ctx.get("instanceId", "") or instance).strip()
+    b = store.get_snapshot(_backup_key(project, source_instance, backup_id))
+    if not b:
+        return _not_found(f"The backupRun does not exist. BackupRun: {backup_id}")
+    snap = b.get("snapshot") or {}
+    rec["databases"] = {k: dict(v) for k, v in snap.get("databases", {}).items()}
+    rec["users"] = {k: dict(v) for k, v in snap.get("users", {}).items()}
+    rec["etag"] = _etag()
+    op = _log_op(rec, "RESTORE_VOLUME")
+    _mirror_to_replicas(store, project, instance)
+    store.persist()
+    return _json(200, _operation_view(op, project, instance))
+
+
+# ── instances.export / instances.import — sqlFile / csvFile in the SIMULATOR's
+# own Cloud Storage (gcs_store: the store the GCS console / gsutil / the
+# google-cloud-storage SDK read). A gs:// URI is only parsed, never fetched from
+# Google; a bucket that doesn't exist fails the operation. The rows are the
+# instance's SQL engine behind the SqlStore seam (`rows_store` / `db_id`). ──────
+def _gcs_put(gcs_store, bucket: str, obj: str, data: bytes, ctype: str) -> str:
     try:
-        net = ipaddress.ip_network(str(v).strip(), strict=False)
-    except ValueError:
-        raise SqlSettingsError(400, "INVALID_ARGUMENT", "Invalid request: '%s' is not a valid CIDR range." % v)
-    rfc1918 = [ipaddress.ip_network(n) for n in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "127.0.0.0/8", "169.254.0.0/16")]
-    if net.version == 4 and any(net.subnet_of(p) for p in rfc1918):
-        raise SqlSettingsError(400, "INVALID_ARGUMENT", "Invalid request: Non-routable or private authorized network (%s)." % v)
-    return str(net)
+        from core import gcp_storage_core as gcs
+    except ImportError:  # pragma: no cover - Pyodide flat layout
+        import gcp_storage_core as gcs  # type: ignore
+    r = gcs.dispatch(gcs_store, "POST", f"/upload/storage/v1/b/{bucket}/o",
+                     {"uploadType": "media", "name": obj}, {"content-type": ctype}, data)
+    if r.status != 200:
+        return f"The bucket gs://{bucket} does not exist or the object could not be written."
+    return ""
 
 
-def validate_ip_config(cur: dict, patch: dict) -> dict:
-    out = dict(cur or {})
-    for k in ("ipv4Enabled", "requireSsl"):
-        if k in patch:
-            out[k] = bool(patch[k])
-    if "sslMode" in patch:
-        mode = str(patch["sslMode"] or "ALLOW_UNENCRYPTED_AND_ENCRYPTED")
-        if mode not in ("ALLOW_UNENCRYPTED_AND_ENCRYPTED", "ENCRYPTED_ONLY", "TRUSTED_CLIENT_CERTIFICATE_REQUIRED"):
-            raise SqlSettingsError(400, "INVALID_ARGUMENT", "Invalid request: unknown sslMode %s." % mode)
-        out["sslMode"] = mode
-        out["requireSsl"] = mode != "ALLOW_UNENCRYPTED_AND_ENCRYPTED"
-    if "privateNetwork" in patch:
-        out["privateNetwork"] = str(patch["privateNetwork"] or "")
-    if "authorizedNetworks" in patch:
-        nets, seen = [], set()
-        for n in patch["authorizedNetworks"] or []:
-            val = _cidr((n or {}).get("value", ""))
-            if val in seen:
-                raise SqlSettingsError(400, "INVALID_ARGUMENT", "Invalid request: duplicate authorized network %s." % val)
-            seen.add(val)
-            nets.append({"kind": "sql#aclEntry", "name": str((n or {}).get("name") or ""), "value": val})
-        out["authorizedNetworks"] = nets
-    if not out.get("ipv4Enabled") and not out.get("privateNetwork"):
-        raise SqlSettingsError(400, "INVALID_ARGUMENT",
-                               "Invalid request: At least one of Public IP or Private IP connectivity must be enabled.")
-    return out
+def _gcs_get(gcs_store, bucket: str, obj: str):
+    try:
+        from core import gcp_storage_core as gcs
+    except ImportError:  # pragma: no cover
+        import gcp_storage_core as gcs  # type: ignore
+    from urllib.parse import quote
+    r = gcs.dispatch(gcs_store, "GET", f"/storage/v1/b/{bucket}/o/{quote(obj, safe='')}",
+                     {"alt": "media"}, {}, b"")
+    return r.body if r.status == 200 else None
 
 
-def validate_backup_config(cur: dict, patch: dict) -> dict:
-    import re as _re
-    out = dict(cur or {})
-    for k in ("enabled", "pointInTimeRecoveryEnabled", "binaryLogEnabled"):
-        if k in patch:
-            out[k] = bool(patch[k])
-    if "startTime" in patch:
-        st = str(patch["startTime"] or "")
-        if not _re.match(r"^([01]\d|2[0-3]):00$", st):
-            raise SqlSettingsError(400, "INVALID_ARGUMENT", "Invalid request: backup start time must be on the hour, HH:00 (UTC).")
-        out["startTime"] = st
-    if "retainedBackups" in patch:
-        n = int(patch["retainedBackups"])
-        if not 1 <= n <= 365:
-            raise SqlSettingsError(400, "INVALID_ARGUMENT", "Invalid request: retained backups must be between 1 and 365.")
-        out["backupRetentionSettings"] = {"retentionUnit": "COUNT", "retainedBackups": n}
-    if "transactionLogRetentionDays" in patch:
-        n = int(patch["transactionLogRetentionDays"])
-        if not 1 <= n <= 7:
-            raise SqlSettingsError(400, "INVALID_ARGUMENT", "Invalid request: transaction log retention must be 1-7 days.")
-        out["transactionLogRetentionDays"] = n
-    if out.get("pointInTimeRecoveryEnabled") and not out.get("enabled"):
-        raise SqlSettingsError(400, "INVALID_ARGUMENT",
-                               "Invalid request: Point-in-time recovery requires automated backups to be enabled.")
-    out.setdefault("kind", "sql#backupConfiguration")
-    return out
+def run_export(rows_store: SqlStore, db_id: str, gcs_store, ctx: dict, label: str = "") -> str:
+    """Write one exportContext's file. Returns "" or the operation error message."""
+    from core import sql_store as sq
+    file_type = str(ctx.get("fileType") or "SQL").upper()
+    bucket, obj = sq.parse_gs_uri(ctx.get("uri"))
+    if gcs_store is None:
+        return "No Cloud Storage store is attached to this Cloud SQL engine."
+    if not gcs_store.bucket_exists(bucket):
+        return f"The bucket gs://{bucket} does not exist."
+    if sq.is_async_engine(rows_store):
+        return "This instance's SQL engine only answers asynchronously; export is unavailable here."
+    dialect = sq.engine_dialect(rows_store)
+    if file_type == "CSV":
+        query = str((ctx.get("csvExportOptions") or {}).get("selectQuery") or "").strip()
+        if not query:
+            return "csvExportOptions.selectQuery is required for a CSV export."
+        try:
+            res = rows_store.execute_sql(db_id, query)
+        except Exception as e:  # noqa: BLE001 — a bad query fails the operation
+            return f"The select query failed: {e}"
+        data = sq.to_csv([[sq.json_cell(v) for v in r] for r in res.get("rows", [])]).encode()
+        return _gcs_put(gcs_store, bucket, obj, data, "text/csv")
+    if file_type != "SQL":
+        return f"Unsupported fileType {file_type!r} (SQL or CSV)."
+    tables = sq.dump_tables(rows_store, db_id)
+    wanted = [str(t) for t in ((ctx.get("sqlExportOptions") or {}).get("tables") or [])]
+    if wanted:
+        tables = [t for t in tables if t["name"] in wanted]
+    header = (f"Cloud SQL export of {label or db_id}\nDatabases: "
+              f"{', '.join(ctx.get('databases') or []) or '(all)'}\nTables: {len(tables)}")
+    return _gcs_put(gcs_store, bucket, obj, sq.sql_dump(tables, dialect, header).encode(), "application/sql")
 
 
-def validate_insights(cur: dict, patch: dict) -> dict:
-    out = dict(cur or {})
-    for k in ("queryInsightsEnabled", "recordApplicationTags", "recordClientAddress"):
-        if k in patch:
-            out[k] = bool(patch[k])
-    if "queryStringLength" in patch:
-        n = int(patch["queryStringLength"])
-        if not 256 <= n <= 4500:
-            raise SqlSettingsError(400, "INVALID_ARGUMENT", "Invalid request: queryStringLength must be between 256 and 4500.")
-        out["queryStringLength"] = n
-    if "queryPlansPerMinute" in patch:
-        n = int(patch["queryPlansPerMinute"])
-        if not 0 <= n <= 20:
-            raise SqlSettingsError(400, "INVALID_ARGUMENT", "Invalid request: queryPlansPerMinute must be between 0 and 20.")
-        out["queryPlansPerMinute"] = n
-    return out
+def run_import(rows_store: SqlStore, db_id: str, gcs_store, ctx: dict) -> str:
+    """Load one importContext's file into the instance's engine. Returns "" or an error."""
+    from core import sql_store as sq
+    file_type = str(ctx.get("fileType") or "SQL").upper()
+    bucket, obj = sq.parse_gs_uri(ctx.get("uri"))
+    if gcs_store is None:
+        return "No Cloud Storage store is attached to this Cloud SQL engine."
+    if not gcs_store.bucket_exists(bucket):
+        return f"The bucket gs://{bucket} does not exist."
+    data = _gcs_get(gcs_store, bucket, obj)
+    if data is None:
+        return f"The object gs://{bucket}/{obj} does not exist."
+    if sq.is_async_engine(rows_store):
+        return "This instance's SQL engine only answers asynchronously; import is unavailable here."
+    text = data.decode("utf-8", "replace")
+    try:
+        if file_type == "CSV":
+            opts = ctx.get("csvImportOptions") or {}
+            table = str(opts.get("table") or "").strip()
+            if not table:
+                return "csvImportOptions.table is required for a CSV import."
+            cols = [str(c) for c in opts.get("columns") or []]
+            for row in sq.parse_csv(text):
+                names = cols or None
+                ph = ", ".join(rows_store.param_placeholder(i + 1) for i in range(len(row)))
+                col_sql = f" ({', '.join(sq.quote_ident(c) for c in names)})" if names else ""
+                rows_store.execute_sql(db_id, f"INSERT INTO {sq.quote_ident(table)}{col_sql} VALUES ({ph})", row)
+            return ""
+        if file_type != "SQL":
+            return f"Unsupported fileType {file_type!r} (SQL or CSV)."
+        for stmt in sq.split_sql(text):
+            rows_store.execute_sql(db_id, stmt)
+    except Exception as e:  # noqa: BLE001 — the failing statement fails the operation
+        return f"Import failed: {e}"
+    return ""
 
 
-def patch_settings(database_version: str, cur: dict, patch: dict) -> dict:
-    """instances.patch on `settings`: validated merge (unknown keys pass through)."""
-    out = dict(cur or {})
-    for k, v in (patch or {}).items():
-        if k == "databaseFlags":
-            out[k] = validate_flags(database_version, v)
-        elif k == "ipConfiguration":
-            out[k] = validate_ip_config(out.get(k) or {"ipv4Enabled": True}, v or {})
-        elif k == "backupConfiguration":
-            out[k] = validate_backup_config(out.get(k) or {}, v or {})
-        elif k == "insightsConfig":
-            out[k] = validate_insights(out.get(k) or {}, v or {})
-        elif k == "userLabels":
-            out[k] = {str(a): str(b) for a, b in (v or {}).items()}
-        else:
-            out[k] = v
-    out["settingsVersion"] = str(int(out.get("settingsVersion") or 1) + 1)
-    return out
-
-
-def validate_user(database_version: str, body: dict, existing: list) -> dict:
-    eng = engine_of(database_version)
-    name = str(body.get("name") or "").strip()
-    utype = str(body.get("type") or "BUILT_IN")
-    if utype not in ("BUILT_IN", "CLOUD_IAM_USER", "CLOUD_IAM_SERVICE_ACCOUNT", "CLOUD_IAM_GROUP"):
-        raise SqlSettingsError(400, "INVALID_ARGUMENT", "Invalid request: unknown user type %s." % utype)
-    limit = 32 if eng == "MYSQL" else 63 if eng == "POSTGRES" else 128
-    if not name or (utype == "BUILT_IN" and len(name) > limit):
-        raise SqlSettingsError(400, "INVALID_ARGUMENT",
-                               "Invalid request: user name must be 1-%d characters for %s." % (limit, database_version))
-    host = str(body.get("host") or ("%" if eng == "MYSQL" else "")) if eng == "MYSQL" else ""
-    if any(u.get("name") == name and (u.get("host") or "") == host for u in existing):
-        raise SqlSettingsError(409, "ALREADY_EXISTS", "Invalid request: user %s%s already exists." % (name, ("@" + host) if host else ""))
-    if utype == "BUILT_IN" and not str(body.get("password") or ""):
-        raise SqlSettingsError(400, "INVALID_ARGUMENT", "Invalid request: a password is required for a built-in user.")
-    return {"kind": "sql#user", "name": name, "host": host, "type": utype}
-
-
-# ── users / backup runs / operations (Nano's control-plane records) ─────────
-def _op(rec: dict, op_type: str, target: str | None = None) -> dict:
-    op = {"kind": "sql#operation", "name": str(uuid.uuid4()), "operationType": op_type, "status": "DONE",
-          "targetId": target or rec["name"], "targetProject": rec["project"], "insertTime": _now_iso(),
-          "startTime": _now_iso(), "endTime": _now_iso(), "user": "%s@%s.iam" % ("console", rec["project"])}
-    rec.setdefault("operations", []).insert(0, op)
-    del rec["operations"][200:]
+def _op_error(op: dict, code: str, message: str) -> dict:
+    op["error"] = {"kind": "sql#operationErrors",
+                   "errors": [{"kind": "sql#operationError", "code": code, "message": message}]}
     return op
 
 
-def _now_iso() -> str:
-    from datetime import datetime, timezone
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
-
-
-def _patch_instance(store: SqlStore, project: str, instance: str, body: dict) -> CloudSqlResponse:
+def _export_import(store: SqlStore, project: str, instance: str, body: dict, kind: str,
+                   gcs_store=None) -> CloudSqlResponse:
     rec = _get_instance(store, project, instance)
     if not rec:
         return _not_found(f"The Cloud SQL instance does not exist. Instance: {instance}")
+    ctx_key = "exportContext" if kind == "EXPORT" else "importContext"
+    ctx = body.get(ctx_key) or {}
+    from core import sql_store as sq
     try:
-        if isinstance(body.get("settings"), dict):
-            rec["settings"] = patch_settings(rec.get("databaseVersion", ""), rec.get("settings") or {}, body["settings"])
-    except SqlSettingsError as e:
-        return _err(e.status, e.code, e.message)
-    rec["etag"] = _etag()
-    store.put_instance(_key(project, instance), rec)
+        sq.parse_gs_uri(ctx.get("uri"))
+    except ValueError as e:
+        return _err(400, "INVALID_ARGUMENT", str(e))
+    db_id = _key(project, instance)
+    msg = (run_export(store, db_id, gcs_store, ctx, label=f"{project}:{instance}") if kind == "EXPORT"
+           else run_import(store, db_id, gcs_store, ctx))
+    op = _log_op(rec, kind)
+    op[ctx_key] = {"kind": f"sql#{ctx_key}", **ctx}
+    if msg:
+        _op_error(op, "ERROR_RDBMS" if kind == "IMPORT" else "INTERNAL_ERROR", msg)
     store.persist()
-    return _json(200, _op(rec, "UPDATE"))
+    return _json(200, _operation_view(op, project, instance))
 
 
-def _promote_replica(store: SqlStore, project: str, instance: str) -> CloudSqlResponse:
+# ── sslCerts sub-resource (gcp.sql.connections-security: client/server certs) ──────
+def _insert_ssl_cert(store: SqlStore, project: str, instance: str, body: dict) -> CloudSqlResponse:
     rec = _get_instance(store, project, instance)
     if not rec:
         return _not_found(f"The Cloud SQL instance does not exist. Instance: {instance}")
-    if not rec.get("masterInstanceName"):
-        return _err(400, "INVALID_ARGUMENT", "Invalid request: the instance is not a read replica.")
-    master = _get_instance(store, project, rec.pop("masterInstanceName"))
-    if master:
-        master["replicaNames"] = [n for n in master.get("replicaNames") or [] if n != instance]
-        _op(master, "PROMOTE_REPLICA", instance)
-        store.put_instance(_key(project, master["name"]), master)
-    rec["instanceType"] = "CLOUD_SQL_INSTANCE"
-    store.put_instance(_key(project, instance), rec)
+    common_name = str(body.get("commonName", "")).strip()
+    if not common_name:
+        return _err(400, "INVALID_ARGUMENT", "commonName is required.")
+    cert = _client_cert(project, instance, common_name)
+    private_key = cert.pop("_privateKey")
+    rec.setdefault("sslCerts", {})[cert["sha1Fingerprint"]] = cert
+    op = _log_op(rec, "CREATE_SSL_CERT")
     store.persist()
-    return _json(200, _op(rec, "PROMOTE_REPLICA"))
+    return _json(200, {"kind": "sql#sslCertsInsert", "operation": _operation_view(op, project, instance),
+                       "serverCaCert": rec.get("serverCaCert") or _ca_cert(project, instance),
+                       "clientCert": {"kind": "sql#sslCert",
+                                      "certInfo": _ssl_cert_view(project, instance, cert),
+                                      "certPrivateKey": private_key}})
 
 
-def _users(store, project, instance, method, payload, query) -> CloudSqlResponse:
+def _list_ssl_certs(store: SqlStore, project: str, instance: str) -> CloudSqlResponse:
     rec = _get_instance(store, project, instance)
     if not rec:
         return _not_found(f"The Cloud SQL instance does not exist. Instance: {instance}")
-    users = rec.setdefault("users", [])
-    if method == "GET":
-        items = [dict(u, instance=instance, project=project) for u in users]
-        return _json(200, {"kind": "sql#usersList", **({"items": items} if items else {})})
-    if method == "POST":
-        try:
-            u = validate_user(rec.get("databaseVersion", ""), payload, users)
-        except SqlSettingsError as e:
-            return _err(e.status, e.code, e.message)
-        users.append(u)
-        store.persist()
-        return _json(200, _op(rec, "CREATE_USER"))
-    if method == "PUT":
-        name, host = str(query.get("name") or payload.get("name") or ""), str(query.get("host") or payload.get("host") or "")
-        if not any(u["name"] == name and (u.get("host") or "") == host for u in users):
-            return _not_found(f"The user does not exist. User: {name}")
-        store.persist()
-        return _json(200, _op(rec, "UPDATE_USER"))
-    if method == "DELETE":
-        name, host = str(query.get("name") or ""), str(query.get("host") or "")
-        keep = [u for u in users if not (u["name"] == name and (u.get("host") or "") == host)]
-        if len(keep) == len(users):
-            return _not_found(f"The user does not exist. User: {name}")
-        rec["users"] = keep
-        store.persist()
-        return _json(200, _op(rec, "DELETE_USER"))
-    return _err(400, "INVALID_ARGUMENT", f"Unsupported method {method} on users")
+    certs = rec.get("sslCerts", {})
+    items = [_ssl_cert_view(project, instance, certs[k]) for k in sorted(certs)]
+    out: dict = {"kind": "sql#sslCertsList"}
+    if items:
+        out["items"] = items
+    return _json(200, out)
 
 
-def _backup_runs(store, project, instance, method, payload, run_id) -> CloudSqlResponse:
+def _get_ssl_cert(store: SqlStore, project: str, instance: str, fingerprint: str) -> CloudSqlResponse:
     rec = _get_instance(store, project, instance)
     if not rec:
         return _not_found(f"The Cloud SQL instance does not exist. Instance: {instance}")
-    runs = rec.setdefault("backupRuns", [])
-    if run_id is None and method == "GET":
-        return _json(200, {"kind": "sql#backupRunsList", **({"items": list(runs)} if runs else {})})
-    if run_id is None and method == "POST":
-        now = _now_iso()
-        run = {"kind": "sql#backupRun", "id": str(int(uuid.uuid4().int % 10**13)), "instance": instance,
-               "status": "SUCCESSFUL", "type": "ON_DEMAND", "description": str(payload.get("description") or ""),
-               "enqueuedTime": now, "startTime": now, "endTime": now, "windowStartTime": now,
-               "location": payload.get("location") or "us", "backupKind": "SNAPSHOT"}
-        runs.insert(0, run)
-        store.persist()
-        return _json(200, _op(rec, "BACKUP_VOLUME"))
-    if run_id is not None:
-        run = next((r for r in runs if r["id"] == run_id), None)
-        if run is None:
-            return _not_found(f"The backup run does not exist. Backup run: {run_id}")
-        if method == "GET":
-            return _json(200, run)
-        if method == "DELETE":
-            runs.remove(run)
-            store.persist()
-            return _json(200, _op(rec, "DELETE_BACKUP"))
-    return _err(400, "INVALID_ARGUMENT", f"Unsupported method {method} on backupRuns")
+    c = rec.get("sslCerts", {}).get(fingerprint)
+    if not c:
+        return _not_found(f"The SSL cert does not exist. Fingerprint: {fingerprint}")
+    return _json(200, _ssl_cert_view(project, instance, c))
+
+
+def _delete_ssl_cert(store: SqlStore, project: str, instance: str, fingerprint: str) -> CloudSqlResponse:
+    rec = _get_instance(store, project, instance)
+    if not rec:
+        return _not_found(f"The Cloud SQL instance does not exist. Instance: {instance}")
+    certs = rec.get("sslCerts", {})
+    if fingerprint not in certs:
+        return _not_found(f"The SSL cert does not exist. Fingerprint: {fingerprint}")
+    certs.pop(fingerprint, None)
+    op = _log_op(rec, "DELETE_SSL_CERT")
+    store.persist()
+    return _json(200, _operation_view(op, project, instance))
+
+
+# ── data-plane query RPC (gcp.sql.insights: Cloud SQL Studio) — NOT a real Admin
+# API method (Cloud SQL Studio isn't part of the public Admin REST surface either);
+# added the same way core/azure_sql_core.py adds its own `/query` data-plane RPC
+# next to the real ARM control plane. Runs against the SAME real engine
+# (store.execute_sql, sqlite3 in Nano / a real Postgres or MySQL in Pro/Max) that
+# instances.export/import already drive — never synthetic rows. ───────────────────
+def _normalize_sql(sql: str) -> str:
+    s = re.sub(r"'[^']*'", "?", sql.strip())
+    s = re.sub(r"\b\d+\b", "?", s)
+    return re.sub(r"\s+", " ", s)[:200]
+
+
+def _ssl_enforcement_error(rec: dict, body: dict) -> str | None:
+    """Cloud SQL Studio is the one client connection Vyomi fully brokers end to end, so
+    it's where 'Require SSL/TLS' (sslMode) gets real teeth: ENCRYPTED_ONLY requires the
+    caller to acknowledge an encrypted session; TRUSTED_CLIENT_CERTIFICATE_REQUIRED also
+    requires a live client cert this instance issued (sslCerts.insert). A raw TCP client
+    connecting directly to the shared engine container (gcp_sql_engine.py) is NOT in a
+    path Vyomi intercepts, so this setting has no effect there — see
+    core/capabilities/gcp/sql.json: gcp.sql.connections-security."""
+    mode = rec.get("settings", {}).get("ipConfiguration", {}).get("sslMode", "ALLOW_UNENCRYPTED_AND_ENCRYPTED")
+    if mode == "ALLOW_UNENCRYPTED_AND_ENCRYPTED":
+        return None
+    if not body.get("ssl"):
+        return ("SSL connection is required. This instance requires an encrypted connection "
+                "(Connections > Security > Require SSL/TLS).")
+    if mode == "TRUSTED_CLIENT_CERTIFICATE_REQUIRED":
+        fp = str(body.get("clientCertSha1Fingerprint") or "")
+        if not fp or fp not in rec.get("sslCerts", {}):
+            return ("This instance only accepts connections that present a trusted client "
+                     "certificate. Create one under Connections > Security and reconnect.")
+    return None
+
+
+def _log_query(rec: dict, sql: str, duration_ms: float, row_count: int, ok: bool, error: str | None) -> None:
+    log = rec.setdefault("queryLog", [])
+    log.insert(0, {"sql": sql, "normalized": _normalize_sql(sql), "durationMs": round(duration_ms, 2),
+                   "rowCount": row_count, "ok": ok, "error": error,
+                   "ts": time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime()), "epoch": time.time()})
+    del log[200:]
+
+
+def _run_query(store: SqlStore, project: str, instance: str, body: dict) -> CloudSqlResponse:
+    rec = _get_instance(store, project, instance)
+    if not rec:
+        return _not_found(f"The Cloud SQL instance does not exist. Instance: {instance}")
+    ssl_err = _ssl_enforcement_error(rec, body)
+    if ssl_err:
+        return _err(400, "FAILED_PRECONDITION", ssl_err)
+    sql = str(body.get("sql") or "").strip()
+    if not sql:
+        return _err(400, "INVALID_ARGUMENT", "sql is required.")
+    from core import sql_store as sq
+    db_id = _key(project, instance)
+    t0 = time.time()
+    try:
+        res = store.execute_sql(db_id, sql, body.get("params"))
+        ok, error = True, None
+    except Exception as e:  # noqa: BLE001 — a bad statement fails the query, not the RPC
+        res, ok, error = {"columns": [], "rows": [], "rowcount": 0}, False, str(e)
+    duration_ms = (time.time() - t0) * 1000
+    _log_query(rec, sql, duration_ms, res.get("rowcount", 0), ok, error)
+    store.persist()
+    return _json(200, {"ok": ok, "columns": res.get("columns", []),
+                       "rows": [[sq.json_cell(v) for v in r] for r in res.get("rows", [])],
+                       "rowCount": res.get("rowcount", 0), "durationMs": round(duration_ms, 2),
+                       "error": error})
+
+
+def _list_queries(store: SqlStore, project: str, instance: str) -> CloudSqlResponse:
+    rec = _get_instance(store, project, instance)
+    if not rec:
+        return _not_found(f"The Cloud SQL instance does not exist. Instance: {instance}")
+    return _json(200, {"items": list(rec.get("queryLog", []))})
+
+
+def _list_tables(store: SqlStore, project: str, instance: str) -> CloudSqlResponse:
+    rec = _get_instance(store, project, instance)
+    if not rec:
+        return _not_found(f"The Cloud SQL instance does not exist. Instance: {instance}")
+    from core import sql_store as sq
+    db_id = _key(project, instance)
+    names: list[str] = []
+    try:
+        if sq.engine_dialect(store) == "sqlite":
+            res = store.execute_sql(db_id, "SELECT name FROM sqlite_master WHERE type='table' "
+                                            "AND name NOT LIKE 'sqlite_%' ORDER BY name")
+        else:
+            res = store.execute_sql(db_id, "SELECT table_name FROM information_schema.tables "
+                                            "WHERE table_schema = current_schema() ORDER BY table_name")
+        names = [r[0] for r in res.get("rows", [])]
+    except Exception:
+        pass
+    return _json(200, {"tables": names})
+
+
+# ── gcp.sql.insights: System insights — real storage/connection/throughput series
+# derived from actual activity (never synthetic). CPU/memory utilization is NOT
+# surfaced: no virtualized compute resource backs a Vyomi instance, so there is no
+# real OS process to sample — see core/capabilities/gcp/sql.json. ──────────────────
+def _storage_bytes(store: SqlStore, db_id: str) -> int:
+    from core import sql_store as sq
+    try:
+        if sq.engine_dialect(store) == "sqlite":
+            res = store.execute_sql(db_id, "SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()")
+        else:
+            res = store.execute_sql(db_id, "SELECT pg_database_size(current_database())")
+        if res.get("rows"):
+            return int(res["rows"][0][0] or 0)
+    except Exception:
+        pass
+    return 0
+
+
+def _get_metrics(store: SqlStore, project: str, instance: str) -> CloudSqlResponse:
+    rec = _get_instance(store, project, instance)
+    if not rec:
+        return _not_found(f"The Cloud SQL instance does not exist. Instance: {instance}")
+    db_id = _key(project, instance)
+    now = time.time()
+    buckets = [0] * 12   # 12 x 5-minute buckets, oldest -> newest, covering the last hour
+    errors = 0
+    for entry in rec.get("queryLog", []):
+        age = now - entry.get("epoch", now)
+        if 0 <= age < 3600:
+            buckets[11 - int(age // 300)] += 1
+            if not entry.get("ok"):
+                errors += 1
+    return _json(200, {"storageBytes": _storage_bytes(store, db_id),
+                       "activeConnections": store.open_transaction_count(db_id),
+                       "queryCount1h": sum(buckets), "errorCount1h": errors,
+                       "series": buckets})
 
 
 # ── native-wire dispatcher (REST path + method → operation) ────────────────
@@ -597,28 +1013,20 @@ def _backup_runs(store, project, instance, method, payload, run_id) -> CloudSqlR
 # unmodified google-cloud-sql-admin / gcloud sql client speaks.
 def dispatch(store: SqlStore, method: str, path: str,
              query: dict | None = None, headers: dict | None = None,
-             body: bytes = b"") -> CloudSqlResponse:
+             body: bytes = b"", gcs_store=None) -> CloudSqlResponse:
     method = method.upper()
 
     # Strip the API prefix; keep only the resource path.
-    p = path.split("?", 1)[0]
+    raw_path = path.split("?", 1)[0]
+    p = raw_path
     for pre in ("/sql/v1beta4", "/v1beta4", "/sql/v1", "/v1"):
         if p.startswith(pre):
             p = p[len(pre):]
             break
     segs = [s for s in p.strip("/").split("/") if s != ""]
-
     query = query or {}
-    # operations.list: /projects/{p}/operations?instance=I — the instance's operation log
-    if len(segs) == 3 and segs[0] == "projects" and segs[2] == "operations" and method == "GET":
-        rec = _get_instance(store, segs[1], str(query.get("instance") or ""))
-        if not rec:
-            return _not_found(f"The Cloud SQL instance does not exist. Instance: {query.get('instance')}")
-        ops = list(rec.get("operations") or [])
-        return _json(200, {"kind": "sql#operationsList", **({"items": ops} if ops else {})})
 
-    # Expected: projects/{project}/instances[/{instance}[/databases[/{db}]]]
-    if len(segs) < 3 or segs[0] != "projects" or segs[2] != "instances":
+    if len(segs) < 2 or segs[0] != "projects":
         return _not_found(f"Unknown path: {path}")
     project = segs[1]
 
@@ -629,15 +1037,21 @@ def dispatch(store: SqlStore, method: str, path: str,
     if not isinstance(payload, dict):
         payload = {}
 
-    # verbs on an instance: promoteReplica, users, backupRuns, PATCH
-    if len(segs) == 4 and method in ("PATCH", "PUT"):
-        return _patch_instance(store, project, segs[3], payload)
-    if len(segs) == 5 and segs[4] == "promoteReplica" and method == "POST":
-        return _promote_replica(store, project, segs[3])
-    if len(segs) == 5 and segs[4] == "users":
-        return _users(store, project, segs[3], method, payload, query)
-    if len(segs) in (5, 6) and segs[4] == "backupRuns":
-        return _backup_runs(store, project, segs[3], method, payload, segs[5] if len(segs) == 6 else None)
+    # /projects/{p}/operations[/{name}]  → project-wide operations log
+    if len(segs) >= 3 and segs[2] == "operations":
+        if method != "GET":
+            return _err(400, "INVALID_ARGUMENT", f"Unsupported method {method} on operations")
+        if len(segs) == 3:
+            return _list_operations(store, project, query.get("instance"))
+        op_name = segs[3]
+        for rec in _list_instances(store, project):
+            for op in rec.get("operations", []):
+                if op["name"] == op_name:
+                    return _json(200, _operation_view(op, project, rec["name"]))
+        return _not_found(f"The operation does not exist. Operation: {op_name}")
+
+    if len(segs) < 3 or segs[2] != "instances":
+        return _not_found(f"Unknown path: {path}")
 
     # /projects/{p}/instances  → instances collection
     if len(segs) == 3:
@@ -647,12 +1061,31 @@ def dispatch(store: SqlStore, method: str, path: str,
             return _list_instances_resp(store, project)
         return _err(400, "INVALID_ARGUMENT", f"Unsupported method {method} on instances")
 
-    instance = segs[3]
+    # Colon-suffixed RPCs (instances.restart) arrive as "{instance}:restart" in one segment.
+    instance_seg = segs[3]
+    instance, verb = (instance_seg.split(":", 1) + [None])[:2] if ":" in instance_seg else (instance_seg, None)
 
-    # /projects/{p}/instances/{i}  → single instance
+    # Native Admin API RPCs are path segments: POST .../instances/{i}/restart|restoreBackup
+    # (what gcloud / the client libraries send; the colon form is kept for older callers).
+    if len(segs) == 5 and verb is None and method == "POST" and segs[4] in ("restart", "restoreBackup",
+                                                                            "export", "import", "query"):
+        verb = segs[4]
+        segs = segs[:4]
+
+    # /projects/{p}/instances/{i}  → single instance (+ colon RPCs)
     if len(segs) == 4:
+        if verb == "restart" and method == "POST":
+            return _restart_instance(store, project, instance)
+        if verb == "restoreBackup" and method == "POST":
+            return _restore_backup(store, project, instance, payload)
+        if verb in ("export", "import") and method == "POST":
+            return _export_import(store, project, instance, payload, verb.upper(), gcs_store=gcs_store)
+        if verb == "query" and method == "POST":
+            return _run_query(store, project, instance, payload)
         if method == "GET":
             return _get_instance_resp(store, project, instance)
+        if method == "PATCH":
+            return _patch_instance(store, project, instance, payload)
         if method == "DELETE":
             return _delete_instance(store, project, instance)
         return _err(400, "INVALID_ARGUMENT", f"Unsupported method {method} on instance")
@@ -678,5 +1111,61 @@ def dispatch(store: SqlStore, method: str, path: str,
                     return _not_found(f"The database does not exist. Database: {database}")
                 return _json(200, _database_view(project, instance, dbs[database]))
             return _err(400, "INVALID_ARGUMENT", f"Unsupported method {method} on database")
+
+    # /projects/{p}/instances/{i}/users  (name + host are query params, not path segments)
+    if segs[4] == "users" and len(segs) == 5:
+        if method == "POST":
+            return _insert_user(store, project, instance, payload)
+        if method == "GET":
+            return _list_users(store, project, instance)
+        if method == "PUT":
+            return _update_user(store, project, instance, query.get("name", ""), query.get("host", "%"), payload)
+        if method == "DELETE":
+            return _delete_user(store, project, instance, query.get("name", ""), query.get("host", "%"))
+        return _err(400, "INVALID_ARGUMENT", f"Unsupported method {method} on users")
+
+    # /projects/{p}/instances/{i}/backupRuns[/{id}]
+    if segs[4] == "backupRuns":
+        if len(segs) == 5:
+            if method == "POST":
+                return _insert_backup(store, project, instance, payload)
+            if method == "GET":
+                return _list_backups(store, project, instance)
+            return _err(400, "INVALID_ARGUMENT", f"Unsupported method {method} on backupRuns")
+        if len(segs) == 6:
+            backup_id = segs[5]
+            if method == "GET":
+                return _get_backup(store, project, instance, backup_id)
+            if method == "DELETE":
+                return _delete_backup(store, project, instance, backup_id)
+            return _err(400, "INVALID_ARGUMENT", f"Unsupported method {method} on backupRun")
+
+    # /projects/{p}/instances/{i}/sslCerts[/{fingerprint}]
+    if segs[4] == "sslCerts":
+        if len(segs) == 5:
+            if method == "POST":
+                return _insert_ssl_cert(store, project, instance, payload)
+            if method == "GET":
+                return _list_ssl_certs(store, project, instance)
+            return _err(400, "INVALID_ARGUMENT", f"Unsupported method {method} on sslCerts")
+        if len(segs) == 6:
+            fingerprint = segs[5]
+            if method == "GET":
+                return _get_ssl_cert(store, project, instance, fingerprint)
+            if method == "DELETE":
+                return _delete_ssl_cert(store, project, instance, fingerprint)
+            return _err(400, "INVALID_ARGUMENT", f"Unsupported method {method} on sslCert")
+
+    # /projects/{p}/instances/{i}/queries — Cloud SQL Studio's real query log (gcp.sql.insights)
+    if segs[4] == "queries" and len(segs) == 5 and method == "GET":
+        return _list_queries(store, project, instance)
+
+    # /projects/{p}/instances/{i}/tables — schema browser (gcp.sql.insights)
+    if segs[4] == "tables" and len(segs) == 5 and method == "GET":
+        return _list_tables(store, project, instance)
+
+    # /projects/{p}/instances/{i}/metrics — System insights (gcp.sql.insights)
+    if segs[4] == "metrics" and len(segs) == 5 and method == "GET":
+        return _get_metrics(store, project, instance)
 
     return _not_found(f"Unknown path: {path}")

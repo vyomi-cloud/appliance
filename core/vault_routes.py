@@ -1025,7 +1025,7 @@ def _register_azure(app: FastAPI) -> None:
     # ── Key Vault CERTIFICATES — the shared certificates core (real self-signed
     # X.509 + RSA key), persisted per vault in Vault KV; a certificate's PEM bundle
     # is also its secret (sid), so GET secrets/{name} returns it like Key Vault.
-    from core import azure_keyvault_certificates_core as _kvc
+    from core import azure_keyvault_x509_core as _kvc
 
     @app.api_route("/azure-data/keyvault/{vault}/certificates", methods=["GET"])
     @app.api_route("/azure-data/keyvault/{vault}/certificates/{rest:path}", methods=["GET", "POST", "PATCH", "DELETE"])
@@ -1476,11 +1476,51 @@ def _register_aws_console(app: FastAPI) -> None:
         return {"ok": True, "scheduled": True, "key_id": key_id}
 
 
+class _SkipRoutes:
+    """Proxy `app` for a legacy registrar: route decorators whose path starts with
+    one of `prefixes` become no-ops (that surface is served by the shared cores)."""
+
+    def __init__(self, app, prefixes):
+        self._app, self._prefixes = app, tuple(prefixes)
+
+    def __getattr__(self, name):
+        attr = getattr(self._app, name)
+        if name not in ("get", "post", "put", "patch", "delete", "api_route"):
+            return attr
+
+        def deco_factory(path, *a, **kw):
+            if path.startswith(self._prefixes):
+                return lambda fn: fn
+            return attr(path, *a, **kw)
+        return deco_factory
+
+
 def register(app: FastAPI, aws_dispatchers: dict | None = None) -> None:
-    """Mount GCP + Azure routes and expose AWS dispatchers for server.py to wire."""
-    _register_gcp(app)
+    """Mount GCP + Azure routes and expose AWS dispatchers for server.py to wire.
+
+    v4 C0b: GCP Secret Manager / Cloud KMS (native + classic console REST) are served by
+    the shared cores (routes/gcp_secrets_kms_unified.py) unless opted out; the Vault
+    handlers below are then not registered for those paths.
+
+    v4 C0c: likewise AWS KMS / Secrets Manager — the classic console REST is served by
+    routes/aws_secrets_kms_unified.py and the native wire by the shared cores
+    (routes/aws_s3.aws_query_root checks the unified set before these dispatchers,
+    which stay registered as the opted-out path)."""
+    skip: set = set()
+    try:
+        from routes import gcp_secrets_kms_unified as _gsk
+        skip = _gsk.register(app)
+    except Exception as exc:   # never let this break appliance boot — legacy stays
+        print(f"[wire_ingress] GCP secrets/KMS core mount skipped: {exc}")
+    _register_gcp(_SkipRoutes(app, skip) if skip else app)
     _register_azure(app)
-    _register_aws_console(app)
+    aws_skip: set = set()
+    try:
+        from routes import aws_secrets_kms_unified as _ask
+        aws_skip = _ask.register(app)
+    except Exception as exc:   # never let this break appliance boot — legacy stays
+        print(f"[wire_ingress] AWS KMS/Secrets Manager core mount skipped: {exc}")
+    _register_aws_console(_SkipRoutes(app, aws_skip) if aws_skip else app)
     if aws_dispatchers is not None:
         aws_dispatchers["TrentService"] = _aws_kms_dispatch        # KMS uses TrentService
         aws_dispatchers["secretsmanager"] = _aws_secrets_dispatch  # Secrets uses secretsmanager

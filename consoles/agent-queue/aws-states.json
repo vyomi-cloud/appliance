@@ -1,0 +1,7 @@
+{
+ "cloud": "aws",
+ "service": "states",
+ "phase": "base",
+ "goal": "Step Functions console (state machines list/create with the ASL code editor, executions list/detail with the event history + graph, activities) on the EXISTING core/stepfunctions_core.py.",
+ "note": "WAVE 7 (orchestrator): native console for a service whose backend ALREADY EXISTS. Step Functions console (state machines list/create with the ASL code editor, executions list/detail with the event history + graph, activities) on the EXISTING core/stepfunctions_core.py.\n\nHouse rules: native look per consoles/AGENT-UI.md; real backend only (no static data); capability registry core/capabilities/<cloud>/<service>.json with honest levels; works on Nano (wasm cores) AND offline (route the native paths offline, durable state via core/appliance_stores._CoreSlotStore); UI<->wire smoke round trips; run gate + smoke + conformance in the FOREGROUND before your final message; commit source."
+}

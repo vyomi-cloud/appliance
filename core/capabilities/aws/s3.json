@@ -1,0 +1,986 @@
+{
+ "$doc": "Vyomi capability registry \u2014 S3. One entry per console feature; level per substrate (nano = shared core, also dev_server/unified ingress; offline = appliance). Proven by tests/conformance/test_capabilities.py \u2014 a claim the backend does not honour fails CI.",
+ "s3.bucket.crud": {
+  "title": "Buckets (create, list, delete)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": [
+   "CreateBucket",
+   "ListBuckets",
+   "HeadBucket",
+   "DeleteBucket"
+  ],
+  "probe": {
+   "s3": "bucket-crud"
+  },
+  "tests": [
+   "tests/conformance/test_s3_core.py"
+  ]
+ },
+ "s3.bucket.location": {
+  "title": "AWS Region",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": [
+   "GetBucketLocation"
+  ],
+  "probe": {
+   "s3_get": "location"
+  }
+ },
+ "s3.object.crud": {
+  "title": "Objects (upload, download, delete, folders)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": [
+   "PutObject",
+   "GetObject",
+   "DeleteObject",
+   "ListObjectsV2",
+   "CopyObject"
+  ],
+  "probe": {
+   "s3": "object-crud"
+  },
+  "tests": [
+   "tests/conformance/test_s3_core.py",
+   "tests/conformance/test_s3_multipart_core.py"
+  ]
+ },
+ "s3.bucket.versioning": {
+  "title": "Bucket Versioning",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": [
+   "PutBucketVersioning",
+   "GetBucketVersioning",
+   "ListObjectVersions"
+  ],
+  "probe": {
+   "s3_versioning": true
+  },
+  "tests": [
+   "tests/conformance/test_s3_versions_core.py"
+  ]
+ },
+ "s3.bucket.tagging": {
+  "title": "Tags",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": [
+   "PutBucketTagging",
+   "GetBucketTagging",
+   "DeleteBucketTagging"
+  ],
+  "probe": {
+   "s3_roundtrip": "tagging",
+   "doc": "<Tagging><TagSet><Tag><Key>team</Key><Value>web</Value></Tag></TagSet></Tagging>"
+  }
+ },
+ "s3.bucket.encryption": {
+  "title": "Default encryption",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Every PutObject/GetObject/HeadObject/CopyObject/CompleteMultipartUpload response carries x-amz-server-side-encryption (and the KMS key id / bucket-key header when configured) reflecting the bucket's default-encryption setting \u2014 AES256 by default, matching S3's own always-on default \u2014 but objects are not actually encrypted at rest."
+  ],
+  "api": [
+   "PutBucketEncryption",
+   "GetBucketEncryption"
+  ],
+  "probe": {
+   "s3_roundtrip": "encryption",
+   "doc": "<ServerSideEncryptionConfiguration><Rule><ApplyServerSideEncryptionByDefault><SSEAlgorithm>AES256</SSEAlgorithm></ApplyServerSideEncryptionByDefault></Rule></ServerSideEncryptionConfiguration>"
+  },
+  "tests": [
+   "tests/conformance/test_s3_depth_core.py"
+  ]
+ },
+ "s3.bucket.public-access-block": {
+  "title": "Block public access (bucket settings)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "PutBucketAcl/PutObjectAcl with a public canned ACL (public-read, public-read-write, authenticated-read) is rejected with AccessDenied when BlockPublicAcls is on, and PutBucketPolicy is rejected when the policy is public (Principal \"*\", Effect Allow) and BlockPublicPolicy is on. Existing grants/policies already stored before the block was enabled are not retroactively revoked, and Vyomi does not authenticate requests, so there is no per-request anonymous-access check."
+  ],
+  "api": [
+   "PutPublicAccessBlock",
+   "GetPublicAccessBlock",
+   "DeletePublicAccessBlock"
+  ],
+  "probe": {
+   "s3_roundtrip": "publicAccessBlock",
+   "doc": "<PublicAccessBlockConfiguration><BlockPublicAcls>true</BlockPublicAcls><IgnorePublicAcls>true</IgnorePublicAcls><BlockPublicPolicy>true</BlockPublicPolicy><RestrictPublicBuckets>true</RestrictPublicBuckets></PublicAccessBlockConfiguration>"
+  },
+  "tests": [
+   "tests/conformance/test_s3_depth_core.py"
+  ]
+ },
+ "s3.bucket.policy": {
+  "title": "Bucket policy",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "PutBucketPolicy validates the document is well-formed JSON and is rejected (see Block Public Access) when it is public and blocked; otherwise the policy is stored and returned verbatim and is not evaluated for request authorization \u2014 Vyomi has no IAM principal/condition evaluator."
+  ],
+  "api": [
+   "PutBucketPolicy",
+   "GetBucketPolicy",
+   "DeleteBucketPolicy"
+  ],
+  "probe": {
+   "s3_roundtrip": "policy",
+   "doc": "{\"Version\":\"2012-10-17\",\"Statement\":[]}"
+  },
+  "tests": [
+   "tests/conformance/test_s3_depth_core.py"
+  ]
+ },
+ "s3.bucket.lifecycle": {
+  "title": "Lifecycle rules",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "All rule actions are enforced, evaluated lazily on list/get/head rather than by a background scheduler: Date-based rules fire deterministically once the date has passed; Days-based rules (Expiration, NoncurrentVersionExpiration, Transition, AbortIncompleteMultipartUpload) use the real elapsed wall-clock, as in real S3. In a versioned bucket, Expiration inserts a delete marker rather than destroying history. Transition flips the current version's reported storage class (no physical tiering of bytes, matching what GetObject/HeadObject can actually observe in real S3 too)."
+  ],
+  "api": [
+   "PutBucketLifecycleConfiguration",
+   "GetBucketLifecycleConfiguration",
+   "DeleteBucketLifecycle"
+  ],
+  "probe": {
+   "s3_roundtrip": "lifecycle",
+   "doc": "<LifecycleConfiguration><Rule><ID>r1</ID><Status>Enabled</Status><Filter><Prefix>logs/</Prefix></Filter><Expiration><Days>30</Days></Expiration></Rule></LifecycleConfiguration>"
+  },
+  "tests": [
+   "tests/conformance/test_s3_depth_core.py",
+   "tests/conformance/test_s3_depth3_core.py"
+  ]
+ },
+ "s3.bucket.cors": {
+  "title": "Cross-origin resource sharing (CORS)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "OPTIONS preflight and the Access-Control-* response headers are enforced on actual GET/HEAD/PUT/DELETE requests whose Origin and method match a configured rule; this is wire-level header emulation of CORS, not a real browser's same-origin/CORS enforcement engine."
+  ],
+  "api": [
+   "PutBucketCors",
+   "GetBucketCors",
+   "DeleteBucketCors"
+  ],
+  "probe": {
+   "s3_roundtrip": "cors",
+   "doc": "<CORSConfiguration><CORSRule><AllowedMethod>GET</AllowedMethod><AllowedOrigin>*</AllowedOrigin></CORSRule></CORSConfiguration>"
+  },
+  "tests": [
+   "tests/conformance/test_s3_depth_core.py"
+  ]
+ },
+ "s3.bucket.ownership": {
+  "title": "Object Ownership",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "BucketOwnerEnforced is enforced: every PutBucketAcl/PutObjectAcl call on the bucket is rejected (InvalidBucketAclWithObjectOwnership), matching real S3's \"ACLs disabled\" behaviour. BucketOwnerPreferred/ObjectWriter are stored and returned but have no further effect, since Vyomi has no per-request uploader identity to attribute ownership to."
+  ],
+  "api": [
+   "PutBucketOwnershipControls",
+   "GetBucketOwnershipControls"
+  ],
+  "probe": {
+   "s3_roundtrip": "ownershipControls",
+   "doc": "<OwnershipControls><Rule><ObjectOwnership>BucketOwnerEnforced</ObjectOwnership></Rule></OwnershipControls>"
+  },
+  "tests": [
+   "tests/conformance/test_s3_depth_core.py"
+  ]
+ },
+ "s3.bucket.acl": {
+  "title": "Access control list (ACL)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Bucket and object ACLs are stored and returned (Get/PutBucketAcl, Get/PutObjectAcl); a canned ACL (private, public-read, public-read-write, authenticated-read) now produces the real grant list GetAcl returns. Writes are rejected under Block Public Access / BucketOwnerEnforced (see those capabilities), but grants are not evaluated for request authorization \u2014 Vyomi does not authenticate requests."
+  ],
+  "api": [
+   "GetBucketAcl"
+  ],
+  "probe": {
+   "s3_get": "acl"
+  },
+  "tests": [
+   "tests/conformance/test_c0_legacy_parity_core.py",
+   "tests/conformance/test_s3_depth_core.py"
+  ]
+ },
+ "s3.bucket.object-lock": {
+  "title": "Object Lock",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "Object Lock can only be enabled at bucket creation (as in real S3) \u2014 PutObjectLockConfiguration on a bucket created without it returns InvalidBucketState. Legal hold (Put/GetObjectLegalHold) and retention (Put/GetObjectRetention, GOVERNANCE/COMPLIANCE) are enforced: DeleteObject for a held/retained version id is rejected, GOVERNANCE can be overridden with x-amz-bypass-governance-retention, COMPLIANCE cannot. A bucket-level DefaultRetention rule (Mode + Days/Years) is now stored and stamped onto every new object version (PutObject/CopyObject/CompleteMultipartUpload) that doesn't carry its own explicit x-amz-object-lock-* headers."
+  ],
+  "api": [
+   "PutObjectLockConfiguration",
+   "GetObjectLockConfiguration",
+   "PutObjectLegalHold",
+   "GetObjectLegalHold",
+   "PutObjectRetention",
+   "GetObjectRetention"
+  ],
+  "tests": [
+   "tests/conformance/test_s3_depth_core.py",
+   "tests/conformance/test_s3_depth3_core.py"
+  ]
+ },
+ "s3.bucket.website": {
+  "title": "Static website hosting",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "GET/HEAD are REALLY served over the bucket's own website origin (the relay/dev_server's unsigned /__s3_website__/<bucket>/<key> path, standing in for the real bucket-name.s3-website-<region>.amazonaws.com host): the configured IndexDocument resolves for '/' and any key ending in '/', the ErrorDocument's actual content is served with a 404 status for a missing key, RedirectAllRequestsTo issues a real redirect, and RoutingRules (KeyPrefixEquals, optionally HttpErrorCodeReturnedEquals) rewrite the key (ReplaceKeyWith/ReplaceKeyPrefixWith) and redirect for real. Vyomi has no per-request identity model (same documented gap as s3.bucket.public-access-block), so this never checks whether the object/bucket is actually publicly readable \u2014 it serves whatever the bucket's current content is regardless of ACL/policy/Block-Public-Access."
+  ],
+  "api": [
+   "PutBucketWebsite",
+   "GetBucketWebsite",
+   "DeleteBucketWebsite"
+  ],
+  "probe": {
+   "s3_roundtrip": "website",
+   "doc": "<WebsiteConfiguration><IndexDocument><Suffix>index.html</Suffix></IndexDocument><ErrorDocument><Key>error.html</Key></ErrorDocument></WebsiteConfiguration>"
+  },
+  "tests": [
+   "tests/conformance/test_s3_depth2_core.py",
+   "tests/conformance/test_s3_depth4_core.py"
+  ]
+ },
+ "s3.bucket.logging": {
+  "title": "Server access logging",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Server access logging is enforced: once PutBucketLogging names a target bucket, every GET/PUT/HEAD/DELETE/CopyObject on the source bucket writes a real log-line object (bucket, timestamp, operation, key, status, bytes) into the target bucket under TargetPrefix. The one divergence from real S3: delivery is immediate and per-request in this simulator, not the batched/delayed delivery (every few minutes, pooled into one object per window) real S3's internal logging pipeline uses."
+  ],
+  "api": [
+   "PutBucketLogging",
+   "GetBucketLogging"
+  ],
+  "probe": {
+   "s3_roundtrip": "logging",
+   "doc": "<BucketLoggingStatus><LoggingEnabled><TargetBucket>log-dest</TargetBucket><TargetPrefix>logs/</TargetPrefix></LoggingEnabled></BucketLoggingStatus>"
+  },
+  "tests": [
+   "tests/conformance/test_s3_depth2_core.py",
+   "tests/conformance/test_s3_depth3_core.py"
+  ]
+ },
+ "s3.bucket.notification": {
+  "title": "Event notifications",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Events (ObjectCreated, ObjectRemoved, DeleteMarkerCreated, TestEvent) are delivered to the configured SQS queues, SNS topics and Lambda functions in this simulator on both substrates \u2014 Nano/dev_server delivers through the same in-context SQS/SNS/Lambda stores the native wire itself reaches; the offline appliance delivers through its own appliance-wide stores. Delivery retries/DLQ on failure are not modeled."
+  ],
+  "api": [
+   "PutBucketNotificationConfiguration",
+   "GetBucketNotificationConfiguration"
+  ],
+  "probe": {
+   "s3_roundtrip": "notification",
+   "doc": "<NotificationConfiguration></NotificationConfiguration>"
+  },
+  "tests": [
+   "tests/conformance/test_c0_legacy_parity_core.py",
+   "tests/conformance/test_s3_depth4_core.py"
+  ]
+ },
+ "s3.bucket.replication": {
+  "title": "Replication rules",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "PutBucketReplication requires source-bucket Versioning Enabled (as real S3 does). Enabled rules are enforced SYNCHRONOUSLY on PutObject/CopyObject/CompleteMultipartUpload \u2014 a matching key is copied into its destination bucket immediately (no async replication-time delay), and the source version's GetObject/HeadObject response carries x-amz-replication-status: COMPLETED. A rule with DeleteMarkerReplication Enabled also propagates a plain DeleteObject's delete marker to the destination. Only destination buckets that exist in this same Vyomi appliance are reachable \u2014 real cross-account/cross-region destinations outside it are not. RTC/metrics and replica-modification-sync (bi-directional metadata sync) are not yet enforced."
+  ],
+  "api": [
+   "PutBucketReplication",
+   "GetBucketReplication",
+   "DeleteBucketReplication"
+  ],
+  "probe": {
+   "s3_roundtrip": "replication",
+   "need_versioning": true,
+   "doc": "<ReplicationConfiguration><Role>arn:aws:iam::123456789012:role/repl</Role><Rule><ID>cap-rule</ID><Status>Enabled</Status><Filter><Prefix>cap/</Prefix></Filter><Destination><Bucket>arn:aws:s3:::cap-replication-dest</Bucket></Destination></Rule></ReplicationConfiguration>"
+  },
+  "tests": [
+   "tests/conformance/test_s3_depth2_core.py",
+   "tests/conformance/test_s3_depth3_core.py"
+  ]
+ },
+ "s3.bucket.accelerate": {
+  "title": "Transfer acceleration",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Put/GetBucketAccelerateConfiguration are real (Enabled/Suspended, MalformedXML on anything else, buckets with periods in the name rejected, empty config before first set), and the <bucket>.s3-accelerate[.dualstack].amazonaws.com Host form is accepted for Enabled buckets and rejected with InvalidRequest for buckets that are not Enabled. It does NOT speed anything up: Vyomi has a single local endpoint and no CloudFront edge network, so the setting is stored and gated but there is no accelerated network path and no transfer-speed difference."
+  ],
+  "api": [
+   "PutBucketAccelerateConfiguration",
+   "GetBucketAccelerateConfiguration"
+  ],
+  "tests": [
+   "tests/conformance/test_s3_sweeps3d_core.py"
+  ]
+ },
+ "s3.bucket.request-payment": {
+  "title": "Requester pays",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Requester Pays changes who is BILLED for data transfer and requests; Vyomi has no billing system, so it cannot attribute cost to a payer. What IS enforced is the one wire-visible contract a client actually observes: once Payer is Requester, GetObject/HeadObject reject a request that omits x-amz-request-payer:requester (403 AccessDenied) and echo x-amz-request-charged:requester on one that includes it, exactly like real S3. PutObject/ListObjects are not gated."
+  ],
+  "api": [
+   "PutBucketRequestPayment",
+   "GetBucketRequestPayment"
+  ],
+  "probe": {
+   "s3_roundtrip": "requestPayment",
+   "doc": "<RequestPaymentConfiguration><Payer>Requester</Payer></RequestPaymentConfiguration>"
+  },
+  "tests": [
+   "tests/conformance/test_s3_depth2_core.py",
+   "tests/conformance/test_s3_depth4_core.py"
+  ]
+ },
+ "s3.bucket.intelligent-tiering": {
+  "title": "Intelligent-Tiering Archive configurations",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Archive-tier transitions are enforced for objects explicitly uploaded with StorageClass INTELLIGENT_TIERING, evaluated lazily on HeadObject/GetObject like lifecycle Transition: once the elapsed real wall-clock time since the object's last-modified date passes a Tiering's Days threshold, matching Filter prefix, HeadObject/GetObject report it via x-amz-archive-status (ARCHIVE_ACCESS / DEEP_ARCHIVE_ACCESS) \u2014 the deepest tier whose threshold has fired. The automatic, config-free Frequent<->Infrequent-Access tiering every object gets after 30 days with no reads is not modeled (Vyomi doesn't track per-object read recency), and an archived object's bytes stay retrievable without a RestoreObject call (no restore-request/temporary-copy lifecycle)."
+  ],
+  "api": [
+   "PutBucketIntelligentTieringConfiguration",
+   "GetBucketIntelligentTieringConfiguration",
+   "ListBucketIntelligentTieringConfigurations",
+   "DeleteBucketIntelligentTieringConfiguration"
+  ],
+  "probe": {
+   "s3_roundtrip": "intelligent-tiering",
+   "id": "cap-cfg",
+   "doc": "<IntelligentTieringConfiguration><Id>cap-cfg</Id><Status>Enabled</Status><Tierings><Tiering><AccessTier>ARCHIVE_ACCESS</AccessTier><Days>90</Days></Tiering></Tierings></IntelligentTieringConfiguration>"
+  },
+  "tests": [
+   "tests/conformance/test_s3_depth2_core.py",
+   "tests/conformance/test_s3_depth4_core.py"
+  ]
+ },
+ "s3.bucket.inventory": {
+  "title": "Inventory configurations",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "A real manifest.json + manifest.checksum + CSV data file, listing the source bucket's ACTUAL objects (sizes, ETags, storage classes, every version when IncludedObjectVersions=All), is written into the destination bucket \u2014 lazily evaluated (no background scheduler): the first access generates it immediately, later ones regenerate only once the configuration's real Schedule.Frequency (Daily/Weekly) has actually elapsed. Only Format=CSV produces a data file; ORC/Parquet configurations are accepted and stored but Vyomi has no ORC/Parquet encoder, so no data file is written for them (the manifest still lists the real object count, with a note in fileFormat). Only a destination bucket that exists in this same appliance is reachable."
+  ],
+  "api": [
+   "PutBucketInventoryConfiguration",
+   "GetBucketInventoryConfiguration",
+   "ListBucketInventoryConfigurations",
+   "DeleteBucketInventoryConfiguration"
+  ],
+  "probe": {
+   "s3_roundtrip": "inventory",
+   "id": "cap-cfg",
+   "doc": "<InventoryConfiguration><Id>cap-cfg</Id><IsEnabled>true</IsEnabled><IncludedObjectVersions>Current</IncludedObjectVersions><Schedule><Frequency>Daily</Frequency></Schedule><Destination><S3BucketDestination><Bucket>arn:aws:s3:::cap-inventory-dest</Bucket><Format>CSV</Format></S3BucketDestination></Destination></InventoryConfiguration>"
+  },
+  "tests": [
+   "tests/conformance/test_s3_depth2_core.py",
+   "tests/conformance/test_s3_depth4_core.py"
+  ]
+ },
+ "s3.bucket.metrics": {
+  "title": "Metrics",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Every PutObject/GetObject/HeadObject/DeleteObject/ListObjects(V2) request that matches a configured filter's prefix publishes real AWS/S3 CloudWatch datapoints AS IT HAPPENS \u2014 AllRequests, GetRequests/PutRequests/HeadRequests/DeleteRequests/ListRequests, 4xxErrors, BytesDownloaded, BytesUploaded, dimensioned by BucketName + FilterId \u2014 derived from actual request activity, never synthetic. There is no recurring publish schedule (a point lands the instant the request is served) and PostRequests/5xxErrors/FirstByteLatency/TotalRequestLatency are not yet produced."
+  ],
+  "api": [
+   "PutBucketMetricsConfiguration",
+   "GetBucketMetricsConfiguration",
+   "ListBucketMetricsConfigurations",
+   "DeleteBucketMetricsConfiguration"
+  ],
+  "probe": {
+   "s3_roundtrip": "metrics",
+   "id": "cap-cfg",
+   "doc": "<MetricsConfiguration><Id>cap-cfg</Id><Filter><Prefix>logs/</Prefix></Filter></MetricsConfiguration>"
+  },
+  "tests": [
+   "tests/conformance/test_s3_depth2_core.py",
+   "tests/conformance/test_s3_depth4_core.py"
+  ]
+ },
+ "s3.object.checksums": {
+  "title": "Additional checksums (x-amz-checksum-*)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "CRC-32, CRC-32C, CRC-64/NVME, SHA-1 and SHA-256 are computed against the standard algorithms and VERIFIED on PutObject (a mismatch is rejected with 400 BadDigest and the object is not stored), whether sent as a header or as an aws-chunked trailer; they are stored with the version, returned on Put/Copy, and on Head/Get when x-amz-checksum-mode is ENABLED. Multipart uploads do not yet carry per-part/composite checksums, and GetObjectAttributes is not implemented."
+  ],
+  "tests": [
+   "tests/conformance/test_s3_checksums_core.py"
+  ]
+ },
+ "s3.bucket.eventbridge": {
+  "title": "Amazon EventBridge notifications",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "With EventBridgeConfiguration on, every object create/delete publishes a real aws.s3 event (Object Created / Object Deleted, native detail shape) onto the account's default event bus, where rules and targets match it. Lifecycle-transition and restore event types are not published."
+  ],
+  "api": [
+   "PutBucketNotificationConfiguration",
+   "PutEvents"
+  ],
+  "probe": {
+   "s3_roundtrip": "notification",
+   "doc": "<NotificationConfiguration><EventBridgeConfiguration></EventBridgeConfiguration></NotificationConfiguration>"
+  },
+  "tests": [
+   "tests/conformance/test_s3_sweepa_core.py"
+  ]
+ },
+ "s3.bucket.storage-metrics": {
+  "title": "Storage metrics (BucketSizeBytes, NumberOfObjects)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Published to CloudWatch (AWS/S3) from the bucket's actual contents every time they change, per StorageType; real S3 publishes once a day."
+  ],
+  "api": [
+   "GetMetricStatistics"
+  ],
+  "tests": [
+   "tests/conformance/test_s3_sweepa_core.py"
+  ]
+ },
+ "s3.bucket.replication-metrics": {
+  "title": "Replication metrics",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Published for rules with Replication metrics (or Replication Time Control) enabled: measured ReplicationLatency; replication is synchronous so BytesPendingReplication/OperationsPendingReplication are always 0."
+  ],
+  "api": [
+   "GetMetricStatistics"
+  ],
+  "tests": [
+   "tests/conformance/test_s3_sweepa_core.py"
+  ]
+ },
+ "s3.bucket.cloudtrail-data-events": {
+  "title": "AWS CloudTrail data events",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "A minimal CloudTrail control plane (CreateTrail, UpdateTrail, GetTrail, DescribeTrails, ListTrails, DeleteTrail, StartLogging, StopLogging, GetTrailStatus, Put/GetEventSelectors, Put/GetAdvancedEventSelectors, AddTags, ListTags) is real. S3 object-level data events for requests Vyomi actually serves (GetObject, HeadObject, PutObject, CopyObject, UploadPart, DeleteObject, DeleteObjects, multipart create/complete/abort, object tagging/ACL) are recorded in the CloudTrail event shape against trails that are logging and whose basic (DataResources arn:aws:s3:::bucket/prefix, ReadWriteType) or advanced (eventCategory, resources.type, resources.ARN, eventName, readOnly) selectors match; a failed request carries an errorCode. Events are viewable in the console (and the Vyomi route /v20180820/_vyomi/bucket-trail/{bucket}). Not modelled: log-file delivery to the trail's S3 bucket (no gzip JSON digests, no log-file validation), CloudWatch Logs and EventBridge delivery, LookupEvents, management events, Insights, trail event data stores (CloudTrail Lake), organization and multi-region trails (settings are stored only), non-S3 data resource types (accepted, never matched), and buckets owned by other accounts. Events are kept in a bounded in-memory/persisted ring (3000)."
+  ],
+  "api": [
+   "CreateTrail",
+   "UpdateTrail",
+   "GetTrail",
+   "DescribeTrails",
+   "ListTrails",
+   "DeleteTrail",
+   "StartLogging",
+   "StopLogging",
+   "GetTrailStatus",
+   "PutEventSelectors",
+   "GetEventSelectors",
+   "PutAdvancedEventSelectors",
+   "GetAdvancedEventSelectors",
+   "AddTags",
+   "ListTags",
+   "(Vyomi-internal) GET /v20180820/_vyomi/bucket-trail/{bucket}"
+  ],
+  "tests": [
+   "tests/conformance/test_s3_sweeps3d_core.py"
+  ]
+ },
+ "s3.bucket.storage-lens": {
+  "title": "Storage Lens metrics",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Per-bucket Storage Lens view computed from the real object store on every read: total / current / noncurrent bytes and objects, delete markers, incomplete multipart upload bytes, current-version percentage, average object size, breakdown by storage class and top first-level prefixes. Request activity (all / GET / PUT / HEAD / DELETE / LIST / POST requests, bytes uploaded and downloaded, 4xx and 5xx counts and rates) is counted from the requests Vyomi actually serves for this bucket (including the console's own calls), kept per day for the last 30 days, starting when this version first served the bucket - there is no history before that. Not modelled: advanced cost-optimization and data-protection metric groups, retrieval/latency metrics, and the 15-month retention. Account-level dashboards are the separate Storage Lens capability."
+  ],
+  "api": [
+   "(Vyomi-internal) GET /v20180820/_vyomi/bucket-lens/{bucket}"
+  ],
+  "tests": [
+   "tests/conformance/test_s3_sweeps3d_core.py"
+  ]
+ },
+ "s3.object.upload-acl": {
+  "title": "Upload-time permissions (ACLs)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": [
+   "PutObject",
+   "CreateMultipartUpload",
+   "GetObjectAcl"
+  ],
+  "tests": [
+   "tests/conformance/test_s3_sweepa_core.py"
+  ]
+ },
+ "s3.account.snapshot": {
+  "title": "Account snapshot",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": [
+   "ListBuckets",
+   "ListObjectsV2"
+  ],
+  "tests": [
+   "tests/conformance/test_s3_core.py"
+  ]
+ },
+ "s3.object.management-overview": {
+  "title": "Object management overview",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": [
+   "GetBucketVersioning",
+   "GetBucketReplication",
+   "GetBucketLifecycleConfiguration",
+   "HeadObject"
+  ],
+  "tests": [
+   "tests/conformance/test_s3_core.py"
+  ]
+ },
+ "s3.account.external-access": {
+  "title": "External access summary / IAM Access Analyzer for S3",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Findings are COMPUTED ON EVERY READ from each general purpose bucket's and access point's effective configuration, so they never go stale: Allow statements in the bucket / access point policy (Principal * or accounts other than yours, with aws:PrincipalOrgID / aws:SourceOrgID, aws:SourceAccount / aws:PrincipalAccount / aws:SourceArn / aws:PrincipalArn conditions narrowing the reach and aws:SourceVpc / aws:SourceVpce marking it VPC-only), bucket ACL grants (AllUsers / AuthenticatedUsers = Public; other canonical users / e-mail grantees = shared) and the effective Block Public Access (bucket OR account; RestrictPublicBuckets neutralises public policy statements, IgnorePublicAcls neutralises public ACL grants, both listed as suppressed). Each finding states the statement or grant that causes it, can be archived/unarchived (archive state is kept per finding and a changed finding re-activates), and disappears when the cause is removed. Not modelled: Deny statements, NotPrincipal / NotAction reasoning, negated condition operators, object ACLs, Multi-Region and Object Lambda access points, KMS/IAM-role/other-service findings and the standalone accessanalyzer service API (analyzers, archive rules, unused access, policy validation, CreateAnalyzer, ListFindings) - those return NotImplemented. The console reads a Vyomi-internal route (/v20180820/_vyomi/access-analysis), not an AWS API."
+  ],
+  "api": [
+   "(Vyomi-internal) GET /v20180820/_vyomi/access-analysis",
+   "(Vyomi-internal) PUT /v20180820/_vyomi/access-analysis/findings/{id}/archive|unarchive"
+  ],
+  "tests": [
+   "tests/conformance/test_s3_sweeps3c_core.py"
+  ]
+ },
+ "s3.account.directory-buckets": {
+  "title": "Directory buckets",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "S3 Express One Zone directory buckets are real records in the same store: CreateBucket with the --<zone-id>--x-s3 name and Location/Bucket-type configuration (validated), ListDirectoryBuckets (paginated, separate from ListBuckets), CreateSession (returns session credentials), object CRUD/list/delete/empty with EXPRESS_ONEZONE storage, and realistic errors (ListObjectsV2 only, '/' delimiter only, no ACLs / versioning / lifecycle-style configurations). Everything lives in one simulated store: there is no zonal endpoint, no single-digit-millisecond latency, and session credentials are issued but never verified (Vyomi does not authenticate requests). Directory-bucket bucket policy, lifecycle and tagging sub-resources are not modeled."
+  ],
+  "api": [
+   "CreateBucket (directory)",
+   "ListDirectoryBuckets",
+   "CreateSession",
+   "PutObject",
+   "GetObject",
+   "HeadObject",
+   "DeleteObject",
+   "DeleteObjects",
+   "ListObjectsV2",
+   "DeleteBucket"
+  ],
+  "tests": [
+   "tests/conformance/test_s3_sweeps3_core.py"
+  ]
+ },
+ "s3.bucket.access-points": {
+  "title": "Access Points",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Create/Get/List/Delete AccessPoint and Put/Get/Delete AccessPointPolicy (+PolicyStatus) are real s3control operations; the access point ALIAS is accepted anywhere a bucket name is and resolves to the bucket. Simulator requests are not authenticated, so an access point's policy, VPC origin and Block Public Access settings are stored and returned but never evaluated against a caller. Object Lambda, Multi-Region Access Points and Access Grants are separate capabilities."
+  ],
+  "api": [
+   "CreateAccessPoint",
+   "GetAccessPoint",
+   "ListAccessPoints",
+   "DeleteAccessPoint",
+   "PutAccessPointPolicy",
+   "GetAccessPointPolicy",
+   "DeleteAccessPointPolicy",
+   "GetAccessPointPolicyStatus"
+  ],
+  "tests": [
+   "tests/conformance/test_s3_sweepa_core.py"
+  ]
+ },
+ "s3.account.table-buckets": {
+  "title": "Table buckets",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Amazon S3 Tables control plane (service s3tables, rest-json): Create/Get/List/DeleteTableBucket (name rules, ConflictException, deleting a bucket that still has namespaces is refused), Put/Get/DeleteTableBucketPolicy, Put/Get/DeleteTableBucketEncryption, Put/GetTableBucketStorageClass, Put/GetTableBucketMaintenanceConfiguration, Create/Get/List/DeleteNamespace (refused while tables exist), CreateTable (ICEBERG, optional schema), GetTable, ListTables, DeleteTable, RenameTable (versionToken checked), Get/UpdateTableMetadataLocation (versionToken compare-and-swap; the new metadata file must exist in the table's warehouse), Put/Get/DeleteTablePolicy, Put/GetTableMaintenanceConfiguration, GetTableMaintenanceJobStatus, GetTableEncryption/StorageClass, and Tag/Untag/ListTagsForResource. Every table owns a hidden warehouse bucket <uuid>--table-s3 in the same object store (omitted from ListBuckets): CreateTable writes a real Iceberg v2 metadata JSON there and files you upload through the S3 API under data/ and metadata/ are the table's files. Vyomi has no Iceberg catalog or query engine: it never reads or writes Parquet/manifest contents, no snapshots are created, and maintenance (compaction, snapshot management, unreferenced-file removal) is configured and returned but never runs (job status stays Not_Yet_Run). Resource policies and encryption are stored, never enforced against a caller. The Iceberg REST catalog endpoint (s3tables.<region>.amazonaws.com/iceberg), table/bucket replication, record expiration, bucket metrics configuration and the AWS-managed metadata tables are not implemented (NotImplementedException)."
+  ],
+  "api": [
+   "CreateTableBucket",
+   "GetTableBucket",
+   "ListTableBuckets",
+   "DeleteTableBucket",
+   "PutTableBucketPolicy",
+   "GetTableBucketPolicy",
+   "DeleteTableBucketPolicy",
+   "PutTableBucketEncryption",
+   "GetTableBucketEncryption",
+   "DeleteTableBucketEncryption",
+   "PutTableBucketStorageClass",
+   "GetTableBucketStorageClass",
+   "PutTableBucketMaintenanceConfiguration",
+   "GetTableBucketMaintenanceConfiguration",
+   "CreateNamespace",
+   "GetNamespace",
+   "ListNamespaces",
+   "DeleteNamespace",
+   "CreateTable",
+   "GetTable",
+   "ListTables",
+   "DeleteTable",
+   "RenameTable",
+   "GetTableMetadataLocation",
+   "UpdateTableMetadataLocation",
+   "PutTablePolicy",
+   "GetTablePolicy",
+   "DeleteTablePolicy",
+   "PutTableMaintenanceConfiguration",
+   "GetTableMaintenanceConfiguration",
+   "GetTableMaintenanceJobStatus",
+   "GetTableEncryption",
+   "GetTableStorageClass",
+   "TagResource",
+   "UntagResource",
+   "ListTagsForResource"
+  ],
+  "tests": [
+   "tests/conformance/test_s3_sweeps3c_core.py"
+  ]
+ },
+ "s3.account.access-grants": {
+  "title": "Access Grants",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Create/Get/List/Delete AccessGrantsInstance, Create/Get/List/Update/Delete AccessGrantsLocation, Create/Get/List/Delete AccessGrant, Put/Get/Delete the instance resource policy, Associate/Dissociate IAM Identity Center (ARN shape validated only; no directory is contacted), GetAccessGrantsInstanceForPrefix and GetDataAccess are real s3control operations with real ordering rules (grants before locations before the instance). GetDataAccess returns temporary credentials (ASIA key id, secret, session token) that the data plane ENFORCES: a request whose SigV4 Credential is that key id is confined to the matched grant's bucket/prefix and narrowed permission (READ/WRITE), cannot list outside the prefix, cannot use bucket-level operations, and is refused after expiry or with a wrong session token. The secret and signature are not verified (the simulator never authenticates) and the grantee is not matched against a caller identity, so any caller can request credentials for any existing grant. Directory (IAM Identity Center) users and groups are accepted as grantees when an Identity Center ARN is associated but no directory exists to resolve them. ListCallerAccessGrants, tagging of grants/locations/instance after creation, cross-account/organization resource-policy evaluation and CloudTrail data-event auditing (AuditContext) are not implemented."
+  ],
+  "api": [
+   "CreateAccessGrantsInstance",
+   "GetAccessGrantsInstance",
+   "ListAccessGrantsInstances",
+   "DeleteAccessGrantsInstance",
+   "AssociateAccessGrantsIdentityCenter",
+   "DissociateAccessGrantsIdentityCenter",
+   "GetAccessGrantsInstanceForPrefix",
+   "PutAccessGrantsInstanceResourcePolicy",
+   "GetAccessGrantsInstanceResourcePolicy",
+   "DeleteAccessGrantsInstanceResourcePolicy",
+   "CreateAccessGrantsLocation",
+   "GetAccessGrantsLocation",
+   "ListAccessGrantsLocations",
+   "UpdateAccessGrantsLocation",
+   "DeleteAccessGrantsLocation",
+   "CreateAccessGrant",
+   "GetAccessGrant",
+   "ListAccessGrants",
+   "DeleteAccessGrant",
+   "GetDataAccess"
+  ],
+  "tests": [
+   "tests/conformance/test_s3_sweeps3b_core.py"
+  ]
+ },
+ "s3.account.object-lambda-access-points": {
+  "title": "Object Lambda Access Points",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Create/Get/List/Delete AccessPointForObjectLambda, Put/Get AccessPointConfigurationForObjectLambda and Put/Get/Delete AccessPointPolicyForObjectLambda (+PolicyStatus) are real s3control operations, layered on an existing standard access point (validated). GetObject through the OLAP alias (name-<id>--ol-s3) or ARN invokes the configured Lambda synchronously with the real event shape and returns the Lambda's response. Vyomi contract: the Lambda returns {statusCode, body, headers, isBase64Encoded} (the transformed bytes), and the event carries the original object as getObjectContext.vyomiInputBase64; the real WriteGetObjectResponse call-back and the presigned inputS3Url GET are not usable because the Lambda runs inside the request. HeadObject / ListObjects / ListObjectsV2 transformations are stored but answered NotImplemented; PutObject etc. through an OLAP are rejected like real S3. Simulator requests are not authenticated, so the OLAP policy is stored, never evaluated."
+  ],
+  "api": [
+   "CreateAccessPointForObjectLambda",
+   "GetAccessPointForObjectLambda",
+   "ListAccessPointsForObjectLambda",
+   "DeleteAccessPointForObjectLambda",
+   "PutAccessPointConfigurationForObjectLambda",
+   "GetAccessPointConfigurationForObjectLambda",
+   "PutAccessPointPolicyForObjectLambda",
+   "GetAccessPointPolicyForObjectLambda",
+   "DeleteAccessPointPolicyForObjectLambda",
+   "GetAccessPointPolicyStatusForObjectLambda",
+   "GetObject (via OLAP)"
+  ],
+  "tests": [
+   "tests/conformance/test_s3_sweeps3_core.py"
+  ]
+ },
+ "s3.account.multi-region-access-points": {
+  "title": "Multi-Region Access Points",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Create/Delete/PutPolicy are asynchronous in real S3; here they complete inline and DescribeMultiRegionAccessPointOperation returns the token already SUCCEEDED. Get/List/GetPolicy/GetPolicyStatus/GetRoutes/SubmitRoutes are real s3control operations; member buckets must exist in DISTINCT regions (bucket LocationConstraint) and each bucket can belong to one MRAP. Object requests addressed to the alias (<id>.mrap) or the MRAP ARN go to the highest-dial member bucket (reads: the first active bucket holding the key; dial 0 = passive, never read); PUT/DELETE/CompleteMultipartUpload are mirrored to every other member bucket synchronously (real MRAP replication is asynchronous and has latency/failover behaviour that is not modelled). Bucket-level operations (ListObjects) through an MRAP are refused like real S3. The SDK path needs SigV4A signing; Vyomi does not verify signatures, so it accepts a SigV4 request on the alias. The MRAP policy and Block Public Access settings are stored and returned, never evaluated against a caller. Failover controls beyond traffic dials, replication rules for MRAPs and MRAP metrics are not implemented."
+  ],
+  "api": [
+   "CreateMultiRegionAccessPoint",
+   "DescribeMultiRegionAccessPointOperation",
+   "GetMultiRegionAccessPoint",
+   "ListMultiRegionAccessPoints",
+   "DeleteMultiRegionAccessPoint",
+   "PutMultiRegionAccessPointPolicy",
+   "GetMultiRegionAccessPointPolicy",
+   "GetMultiRegionAccessPointPolicyStatus",
+   "GetMultiRegionAccessPointRoutes",
+   "SubmitMultiRegionAccessPointRoutes",
+   "GetObject/PutObject/HeadObject/DeleteObject (via MRAP alias/ARN)"
+  ],
+  "tests": [
+   "tests/conformance/test_s3_sweeps3b_core.py"
+  ]
+ },
+ "s3.account.batch-operations": {
+  "title": "Batch Operations",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "CreateJob/DescribeJob/ListJobs/UpdateJobStatus/UpdateJobPriority/Put/Get/DeleteJobTagging are real s3control operations. Manifests are CSV (S3BatchOperations_CSV_20180820, Spec.Fields incl. VersionId) or inventory CSV (S3InventoryReport_CSV_20161130) read from the store, ETag-checked; a missing/unreadable manifest produces a Failed job. Operations really executed per row against the store: S3PutObjectCopy (target bucket/prefix, storage class, new tags/metadata, canned ACL, object-lock fields), S3PutObjectTagging, S3DeleteObjectTagging, S3PutObjectAcl (canned or explicit grants), S3InitiateRestoreObject (archived classes only; marks the version restored and HEAD returns x-amz-restore), S3PutObjectLegalHold, S3PutObjectRetention, S3ReplicateObject (runs the bucket's replication rules; fails per task when none applies) and LambdaInvoke (schema 1.0/2.0, one task per invocation through the Lambda core, Succeeded/TemporaryFailure/PermanentFailure honoured). Lifecycle Suspended (ConfirmationRequired) -> Ready -> Active -> Complete/Failed, Cancelled, priority, progress summary, >50% failures after 1000 tasks fails the job, and a CSV completion report + manifest.json are written to the report bucket/prefix. There is no worker: a job advances one stage per request to the simulator, so poll DescribeJob/ListJobs; tasks run synchronously inside the request that carries the job into Complete, so a very large manifest or slow Lambda delays that one request, and jobs run in priority order within a stage, not concurrently. The role is validated by ARN shape and account only (never assumed). Not implemented (501): S3ComputeObjectChecksum, S3UpdateObjectEncryption, ManifestGenerator-generated manifests, Modified-since constraints on S3PutObjectCopy, TemporaryFailure retries, job completion EventBridge/CloudWatch events and Batch Operations metrics."
+  ],
+  "api": [
+   "CreateJob",
+   "DescribeJob",
+   "ListJobs",
+   "UpdateJobStatus",
+   "UpdateJobPriority",
+   "PutJobTagging",
+   "GetJobTagging",
+   "DeleteJobTagging"
+  ],
+  "tests": [
+   "tests/conformance/test_s3_sweeps3b_core.py"
+  ]
+ },
+ "s3.account.account-public-access-block": {
+  "title": "Block Public Access settings for this account",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "s3control Get/Put/DeletePublicAccessBlock are real and the four account toggles are persisted per account. BlockPublicAcls and BlockPublicPolicy are ENFORCED: the effective setting of every bucket is its own Block Public Access OR the account's, so public ACLs (bucket, object and upload-time) and public bucket policies are rejected with the account-level error. IgnorePublicAcls and RestrictPublicBuckets are stored and returned but have no observable effect because Vyomi has no anonymous (unauthenticated) callers to ignore or restrict."
+  ],
+  "api": [
+   "GetPublicAccessBlock",
+   "PutPublicAccessBlock",
+   "DeletePublicAccessBlock"
+  ],
+  "tests": [
+   "tests/conformance/test_s3_sweeps3_core.py"
+  ]
+ },
+ "s3.account.storage-lens": {
+  "title": "Storage Lens",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "s3control Put/Get/List/DeleteStorageLensConfiguration (+ Get/Put/DeleteStorageLensConfigurationTagging), Create/Get/List/Update/DeleteStorageLensGroup and TagResource/UntagResource/ListTagsForResource for dashboards and groups are real, with validation (id and Id must match, Include XOR Exclude, prefix delimiter / depth / percentage bounds, data-export destination bucket must exist, group filters: exactly one of a single condition, And or Or; prefix / suffix / tag / age / size with consistent bounds) and the built-in default-account-dashboard (cannot be deleted). Dashboard DATA is computed from the real object store on every read: total storage, object count, average object size, % current-version bytes, noncurrent bytes, delete markers, incomplete multipart upload bytes, and breakdowns by bucket, storage class and prefix (top N, depth / delimiter / minimum-percentage from the configuration); Include/Exclude bucket and region filters are applied; dashboards that select Storage Lens groups report the bytes/objects each group's filter matches; a group can also be applied as a filter to the whole dashboard. A daily snapshot (last 30) is recorded lazily when a dashboard is read, so the trend starts when the dashboard is first opened. Not modelled: activity metrics (requests, bytes uploaded/downloaded, error rates - Vyomi keeps no account-wide request counters, the page says so instead of inventing numbers), advanced cost-optimization / data-protection / performance metric groups, organization (AwsOrg) dashboards, data-export delivery (CSV/Parquet reports, CloudWatch publishing, S3 Tables export) and the 15-month retention - exports are stored and validated but never written. The dashboard data route (/v20180820/_vyomi/storage-lens/{id}) is Vyomi-internal."
+  ],
+  "api": [
+   "PutStorageLensConfiguration",
+   "GetStorageLensConfiguration",
+   "ListStorageLensConfigurations",
+   "DeleteStorageLensConfiguration",
+   "PutStorageLensConfigurationTagging",
+   "GetStorageLensConfigurationTagging",
+   "DeleteStorageLensConfigurationTagging",
+   "CreateStorageLensGroup",
+   "GetStorageLensGroup",
+   "ListStorageLensGroups",
+   "UpdateStorageLensGroup",
+   "DeleteStorageLensGroup",
+   "TagResource",
+   "UntagResource",
+   "ListTagsForResource",
+   "(Vyomi-internal) GET /v20180820/_vyomi/storage-lens/{id}"
+  ],
+  "tests": [
+   "tests/conformance/test_s3_sweeps3c_core.py"
+  ]
+ },
+ "s3.account.marketplace": {
+  "title": "AWS Marketplace for S3",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "AWS Marketplace listings are not part of Vyomi."
+  ],
+  "api": []
+ },
+ "s3.account.get-started": {
+  "title": "Amazon S3",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "This marketing/getting-started page has no backing resource."
+  ],
+  "api": []
+ },
+ "s3.bucket.metadata-configuration": {
+  "title": "Metadata configuration",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Create/Get/DeleteBucketMetadataConfiguration (V2 ?metadataConfiguration), the V1 Create/Get/DeleteBucketMetadataTableConfiguration (?metadataTable) and Update Journal / Inventory table configuration are real, with validation (journal record expiration ENABLED needs Days >= 7, inventory ENABLED|DISABLED, encryption). The JOURNAL is a real per-bucket record log written by the object mutations Vyomi serves (CREATE for puts/copies/multipart/delete markers, DELETE for deletes and lifecycle expiry; sequence_number, version_id, size, etag, storage class, tags, user metadata, requester, request id) honouring the record-expiration window, and the INVENTORY is computed from the live object store on every read. Both are queryable (prefix / key / record type, paging) in the console and via /v20180820/_vyomi/bucket-metadata/{bucket}. NOT modelled: the tables are not materialized as Apache Iceberg tables in an S3 Tables table bucket (Athena/SQL over them is not available; table ARNs are synthetic and TableStatus is always ACTIVE with no CREATING/BACKFILLING phase), customer-managed destination table buckets for V2, KMS encryption of the tables, and the journal only covers mutations made after the configuration was created (no backfill)."
+  ],
+  "api": [
+   "CreateBucketMetadataConfiguration",
+   "GetBucketMetadataConfiguration",
+   "DeleteBucketMetadataConfiguration",
+   "CreateBucketMetadataTableConfiguration",
+   "GetBucketMetadataTableConfiguration",
+   "DeleteBucketMetadataTableConfiguration",
+   "UpdateBucketMetadataJournalTableConfiguration",
+   "UpdateBucketMetadataInventoryTableConfiguration",
+   "(Vyomi-internal) GET /v20180820/_vyomi/bucket-metadata/{bucket}"
+  ],
+  "tests": [
+   "tests/conformance/test_s3_sweeps3d_core.py"
+  ]
+ },
+ "s3.account.vector-buckets": {
+  "title": "Vector buckets",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Amazon S3 Vectors (service s3vectors, rest-json, every operation a JSON POST): Create/Get/List/DeleteVectorBucket (name rules, ConflictException; deleting a bucket that still has indexes is refused), Put/Get/DeleteVectorBucketPolicy, CreateIndex (float32, dimension 1-4096, euclidean or cosine, nonFilterableMetadataKeys), GetIndex, ListIndexes, DeleteIndex, PutVectors (up to 500 per call, validated all-or-nothing, upsert by key, metadata size limits), GetVectors, ListVectors (paginated), DeleteVectors and QueryVectors (topK 1-100, returnDistance, returnMetadata, and the real metadata filter grammar: implicit AND, $and, $or, $eq, $ne, $gt, $gte, $lt, $lte, $in, $nin, $exists). Search is an exact brute-force scan over the whole index, not an approximate (ANN) index: results are the true nearest neighbours, but it is meant for thousands of vectors, not millions, and no recall/latency/throughput behaviour is modelled. Bucket policies and encryption settings are stored, never enforced against a caller. Not implemented: KMS-backed encryption keys (the setting is recorded only), tagging, Bedrock Knowledge Bases / OpenSearch integrations and S3 Vectors export."
+  ],
+  "api": [
+   "CreateVectorBucket",
+   "GetVectorBucket",
+   "ListVectorBuckets",
+   "DeleteVectorBucket",
+   "PutVectorBucketPolicy",
+   "GetVectorBucketPolicy",
+   "DeleteVectorBucketPolicy",
+   "CreateIndex",
+   "GetIndex",
+   "ListIndexes",
+   "DeleteIndex",
+   "PutVectors",
+   "GetVectors",
+   "ListVectors",
+   "DeleteVectors",
+   "QueryVectors"
+  ],
+  "tests": [
+   "tests/conformance/test_s3_vectors_core.py"
+  ]
+ }
+}

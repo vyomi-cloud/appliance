@@ -1,0 +1,288 @@
+# v4 console-UI agents: one Claude Code agent per <cloud>/<service>, building that service's
+# native-fidelity console pages on the real Vyomi backend (consoles/AGENT-UI.md), gated by
+# UI conformance against the spec from the real console. Each job opens a PR into
+# release/v4.0.0-dev; nothing here touches main.
+#
+# Trigger: commit a queue file consoles/agent-queue/<cloud>-<service>.json on
+# release/v4.0.0-dev (push triggers run from that branch, so this works before the workflow
+# exists on main), or workflow_dispatch once it is on main.
+name: console-ui-agent
+
+on:
+  push:
+    branches: [release/v4.0.0-dev]
+    paths: [consoles/agent-queue/*.json]
+  workflow_dispatch:
+    inputs:
+      targets:
+        description: 'Space-separated <cloud>-<service> list, e.g. "aws-sqs aws-sns"'
+        required: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  BASE_BRANCH: release/v4.0.0-dev
+  MIN_FIDELITY: '0.90'
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      targets: ${{ steps.t.outputs.targets }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 2 }
+      - id: t
+        run: |
+          if [ -n "${{ github.event.inputs.targets }}" ]; then
+            list="${{ github.event.inputs.targets }}"
+          else
+            list=$(git diff --name-only --diff-filter=AM HEAD~1 HEAD -- consoles/agent-queue/ | xargs -n1 basename 2>/dev/null | sed 's/\.json$//' | tr '\n' ' ')
+          fi
+          list=$(printf '%s\n' $list | grep -E '^(aws|gcp|azure)-[a-z0-9_-]+$' || true)
+          echo "targets=$(printf '%s\n' $list | grep . | jq -R . | jq -cs .)" >> "$GITHUB_OUTPUT"
+          echo "Targets: $list"
+
+  build:
+    needs: plan
+    if: needs.plan.outputs.targets != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      max-parallel: 10
+      matrix:
+        target: ${{ fromJson(needs.plan.outputs.targets) }}
+    concurrency:
+      group: console-ui-${{ matrix.target }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.BASE_BRANCH }}
+          fetch-depth: 0
+
+      - name: Target
+        id: tg
+        run: |
+          t="${{ matrix.target }}"
+          echo "cloud=${t%%-*}" >> "$GITHUB_OUTPUT"
+          s="${t#*-}"; echo "service=${s//__//}" >> "$GITHUB_OUTPUT"   # gcp-security__kms → security/kms
+          echo "branch=v4/ui-${t}-${{ github.run_id }}" >> "$GITHUB_OUTPUT"
+          git checkout -b "v4/ui-${t}-${{ github.run_id }}"
+          # Resume: a queue file may name an earlier run's branch (turn limit / gate feedback) —
+          # start from its work (merged onto the current base) instead of from scratch.
+          cf=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('continue_from',''))" "consoles/agent-queue/${t}.json" 2>/dev/null || true)
+          if [ -n "$cf" ] && git fetch -q origin "$cf"; then
+            git -c user.name=ci -c user.email=ci@local merge -q --no-edit "origin/$cf" \
+              && echo "resumed from $cf" || { git merge --abort; echo "::warning::could not resume from $cf — starting fresh"; }
+          fi
+
+      # Private reference captures (screenshots + page text). Optional: without the deploy
+      # key the agent works from the committed text spec alone.
+      - name: Reference captures (private, optional)
+        env:
+          KEY: ${{ secrets.CAPTURES_DEPLOY_KEY }}
+        run: |
+          if [ -z "$KEY" ]; then echo "::notice::CAPTURES_DEPLOY_KEY not set — spec-only mode"; exit 0; fi
+          mkdir -p ~/.ssh && printf '%s\n' "$KEY" > ~/.ssh/captures && chmod 600 ~/.ssh/captures
+          GIT_SSH_COMMAND="ssh -i ~/.ssh/captures -o StrictHostKeyChecking=accept-new" \
+            git clone --depth 1 --filter=blob:none --sparse git@github.com:vyomi-cloud/console-captures.git captures
+          cd captures && git sparse-checkout set "${{ steps.tg.outputs.cloud }}/live/A-${{ steps.tg.outputs.service }}*" "${{ steps.tg.outputs.cloud }}/live/C-${{ steps.tg.outputs.service }}*" "${{ steps.tg.outputs.cloud }}/live/manifest.jsonl" "aws/cloudscape"
+          cd .. && echo "captures/" >> .git/info/exclude
+
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - name: Tooling
+        run: |
+          (cd consoles && npm ci)
+          pip install -q -r requirements.txt   # the REAL offline appliance (server.py) for the offline-parity smoke
+          npm i --no-save --prefix .ci-node playwright@1.48.2 && npx --prefix .ci-node playwright install --with-deps chromium
+          echo ".ci-node/" >> .git/info/exclude
+          echo "NODE_PATH=$PWD/.ci-node/node_modules" >> "$GITHUB_ENV"
+
+      - name: Draft spec if missing
+        run: |
+          s=ui-spec/${{ steps.tg.outputs.cloud }}/${{ steps.tg.outputs.service }}.json
+          if [ ! -f "$s" ] && [ -d captures ]; then
+            python3 tools/ui_spec/extract.py --captures captures/${{ steps.tg.outputs.cloud }}/live \
+              --out ui-spec/${{ steps.tg.outputs.cloud }} --service ${{ steps.tg.outputs.service }} || true
+          fi
+          ls -la ui-spec/${{ steps.tg.outputs.cloud }}/ || true
+
+      - name: Baseline UI conformance
+        continue-on-error: true
+        run: |
+          (cd consoles && node build.mjs)
+          pkill -f dev_server.py || true
+          python3 consoles/dev_server.py -q --port 8790 & for i in $(seq 60); do curl -sf localhost:8790/_wire/ >/dev/null && break; sleep 1; done
+          BASE=http://127.0.0.1:8790 OUT=$RUNNER_TEMP/ui-out-before node consoles/tests/ui-conformance.mjs ${{ steps.tg.outputs.cloud }} ${{ steps.tg.outputs.service }} || true
+          cp -r $RUNNER_TEMP/ui-out-before ui-out-before && echo "ui-out-before/" >> .git/info/exclude
+          pkill -f dev_server.py || true
+
+      # Headless Claude Code CLI (claude-code-action rejects `push` events; this workflow is
+      # triggered by queue-file pushes on the v4 branch so it never has to live on main).
+      - name: Console-UI agent — ${{ matrix.target }}
+        timeout-minutes: 100
+        continue-on-error: true
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          npm i -g @anthropic-ai/claude-code >/dev/null 2>&1
+          git config user.name "vyomi-console-ui-agent"
+          git config user.email "console-ui-agent@users.noreply.github.com"
+          claude -p "Follow consoles/AGENT-UI.md exactly.
+          Cloud lens: ${{ steps.tg.outputs.cloud }}. Service: ${{ steps.tg.outputs.service }}.
+          Spec: ui-spec/${{ steps.tg.outputs.cloud }}/${{ steps.tg.outputs.service }}.json.
+          Extra goals for this run (mandatory): consoles/agent-queue/${{ matrix.target }}.json.
+          Baseline UI conformance report: ui-out-before/${{ steps.tg.outputs.cloud }}.md (if present).
+          Reference captures: captures/ (present only if the private checkout succeeded).
+          Commit your work on the current branch ${{ steps.tg.outputs.branch }}; do not push.
+          This is a headless run: it ENDS the moment you stop replying. Never start commands in the
+          background or with '&' and never stop to 'wait' for something — run builds and tests in the
+          foreground (split long suites) and finish the whole task before your final message." \
+            --max-turns 250 \
+            --allowedTools "Bash,Read,Edit,Write,Glob,Grep" \
+            --permission-mode acceptEdits \
+            --output-format text 2>&1 | tee $RUNNER_TEMP/agent-summary.txt | tail -60
+          # An agent that still ended its turn "waiting" for a background job gets resumed (up to 3x)
+          for i in 1 2 3; do
+            tail -c 3000 $RUNNER_TEMP/agent-summary.txt | grep -qiE "wait(ing)? for|in the background|background (test|run|job|task)|once (it|the .*) (finishes|completes)" || break
+            echo "::notice::agent ended while waiting on a background job — resuming ($i)"
+            claude -p --continue "You ended your turn waiting on a background job, but this headless run stops when you stop. Check that job's result now (re-run it in the FOREGROUND if needed) and finish the task completely, committing your source. Do not use background commands." \
+              --max-turns 120 \
+              --allowedTools "Bash,Read,Edit,Write,Glob,Grep" \
+              --permission-mode acceptEdits \
+              --output-format text 2>&1 | tee -a $RUNNER_TEMP/agent-summary.txt | tail -40
+          done
+
+      # The agents share the owner's Claude subscription: if the agent stopped on a usage
+      # limit, postpone (no gate, no PR) instead of reporting a meaningless 0 % failure.
+      - name: Usage-limit check
+        id: limit
+        run: |
+          if grep -qiE "hit your (session|usage|weekly) limit|usage limit reached|rate limit exceeded" $RUNNER_TEMP/agent-summary.txt 2>/dev/null; then
+            echo "::warning::agent stopped on a Claude usage limit — re-queue ${{ matrix.target }} after it resets: $(grep -oiE 'resets [^·]*' $RUNNER_TEMP/agent-summary.txt | head -1)"
+            echo "hit=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "hit=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Independent gate — the agent's own claims are not trusted.
+      - name: Gate — build, UI conformance (no gaming), smoke, core conformance
+        id: gate
+        if: steps.limit.outputs.hit != 'true'
+        run: |
+          pkill -f dev_server.py || true     # never score against a server the agent left running
+          # No statics: a Not-simulated feature renders its title + note only, never a disabled
+          # skeleton built from spec labels (empty cells, "Not simulated" input stubs).
+          if grep -rnE 'placeholder="Not simulated|cell: \(\) => ""|FieldStub' consoles/src/${{ steps.tg.outputs.cloud }}/services/${{ steps.tg.outputs.service }}/; then
+            echo "::error::static skeleton UI found (see above)"; echo "ok=false" >> "$GITHUB_OUTPUT"; exit 0; fi
+          # No unregistered gaps: a bare <NotSimulated*> box has no capability id, so it is invisible to
+          # the registry + coverage numbers (523 of them were found 2026-11-01). Never add new ones —
+          # build the feature, or use <CapabilityContainer id=…> backed by a core/capabilities entry.
+          svcdir=consoles/src/${{ steps.tg.outputs.cloud }}/services/${{ steps.tg.outputs.service }}
+          now=$(grep -rhoE '<NotSimulated[A-Za-z]*' $svcdir 2>/dev/null | wc -l)
+          before=$(git archive origin/${{ env.BASE_BRANCH }} $svcdir 2>/dev/null | tar -xO 2>/dev/null | grep -oE '<NotSimulated[A-Za-z]*' | wc -l)
+          echo "bare NotSimulated boxes in $svcdir: before=$before now=$now"
+          if [ "$now" -gt "$before" ]; then
+            echo "::error::new unregistered NotSimulated box(es) — use CapabilityContainer + a capability entry"; echo "ok=false" >> "$GITHUB_OUTPUT"; exit 0; fi
+          git rm -q --cached --ignore-unmatch agent-summary.txt ui-out-before -r 2>/dev/null || true
+          (cd consoles && node build.mjs)
+          python3 consoles/dev_server.py -q --port 8790 & for i in $(seq 60); do curl -sf localhost:8790/_wire/ >/dev/null && break; sleep 1; done
+          set +e
+          # Spec, smoke tests and allowlist come from the BASE branch — an agent cannot shrink them.
+          mkdir -p $RUNNER_TEMP/base && git archive origin/${{ env.BASE_BRANCH }} ui-spec consoles/tests | tar -x -C $RUNNER_TEMP/base
+          SPEC_DIR=$RUNNER_TEMP/base/ui-spec BASE=http://127.0.0.1:8790 OUT=$RUNNER_TEMP/ui-out node consoles/tests/ui-conformance.mjs ${{ steps.tg.outputs.cloud }} ${{ steps.tg.outputs.service }}
+          git show origin/${{ env.BASE_BRANCH }}:consoles/honest-allowlist.json > $RUNNER_TEMP/allow.json 2>/dev/null || echo '{}' > $RUNNER_TEMP/allow.json
+          node consoles/tests/gate-compare.mjs $RUNNER_TEMP/ui-out-before/${{ steps.tg.outputs.cloud }}.json $RUNNER_TEMP/ui-out/${{ steps.tg.outputs.cloud }}.json \
+            ${{ steps.tg.outputs.cloud }} ${{ steps.tg.outputs.service }} $RUNNER_TEMP/allow.json \
+            consoles/src/${{ steps.tg.outputs.cloud }}/services/${{ steps.tg.outputs.service }}/spec-map.json | tee $RUNNER_TEMP/gate.txt; ui=${PIPESTATUS[0]}
+          smoke=0
+          for c in aws gcp azure; do   # base smoke tests (existing checks) AND the branch's (new checks)
+            for t in $RUNNER_TEMP/base/consoles/tests/smoke-$c.mjs consoles/tests/smoke-$c.mjs; do
+              [ -f "$t" ] || continue
+              cp "$t" consoles/tests/.gate-smoke.mjs
+              BASE=http://127.0.0.1:8790 UI_PATH=/v4/$c/ OUT=$RUNNER_TEMP/smoke-out/$c node consoles/tests/.gate-smoke.mjs || smoke=1
+            done
+          done
+          rm -f consoles/tests/.gate-smoke.mjs
+          PYTHONPATH=. python3 tests/conformance/test_capabilities.py | tail -3 || smoke=1
+          # Offline parity: dev_server.py is the shared router with in-memory stores (= Nano's logic);
+          # the shipped offline appliance is server.py with its own routes + durable space stores.
+          # A feature that only works through the router (missing offline route / in-memory store)
+          # passes the smoke above but is broken offline — so smoke the target cloud on server.py too.
+          offline=0
+          mkdir -p $RUNNER_TEMP/offline
+          CLOUDLEARN_STATE_FILE=$RUNNER_TEMP/offline/state.json VYOMI_NO_TELEMETRY=1 VYOMI_PERSIST_DEBOUNCE_MS=0 \
+            python3 -m uvicorn server:app --host 127.0.0.1 --port 8791 > $RUNNER_TEMP/offline/server.log 2>&1 &
+          for i in $(seq 120); do curl -sf -o /dev/null localhost:8791/v4/aws/ && break; sleep 1; done
+          c=${{ steps.tg.outputs.cloud }}
+          for t in $RUNNER_TEMP/base/consoles/tests/smoke-$c.mjs consoles/tests/smoke-$c.mjs; do
+            [ -f "$t" ] || continue
+            cp "$t" consoles/tests/.gate-smoke.mjs
+            BASE=http://127.0.0.1:8791 UI_PATH=/v4/$c/ OUT=$RUNNER_TEMP/smoke-out/offline-$c node consoles/tests/.gate-smoke.mjs || offline=1
+          done
+          rm -f consoles/tests/.gate-smoke.mjs
+          pkill -f "uvicorn server:app --host 127.0.0.1 --port 8791" || true
+          core=0
+          for f in $(git diff --name-only origin/${{ env.BASE_BRANCH }}...HEAD -- tests/conformance/ | grep '\.py$'); do PYTHONPATH=. python3 "$f" || core=1; done
+          for f in tests/conformance/test_s3_core.py tests/conformance/test_dynamodb_core.py tests/conformance/test_aws_wire_router.py tests/conformance/test_capabilities.py tests/conformance/test_gcp_storage_core.py tests/conformance/test_azure_blob_core.py tests/conformance/test_azure_arm_core.py tests/conformance/test_nano_core_manifest.py tests/conformance/test_console_registry_unique.py; do PYTHONPATH=. python3 "$f" >/dev/null || core=1; done
+          echo "ui=$ui smoke=$smoke core=$core offline=$offline"
+          echo "ok=$([ $ui -eq 0 ] && [ $smoke -eq 0 ] && [ $core -eq 0 ] && [ $offline -eq 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          cp -r $RUNNER_TEMP/ui-out ui-out 2>/dev/null; cp -r $RUNNER_TEMP/smoke-out smoke-out 2>/dev/null; cp $RUNNER_TEMP/gate.txt gate.txt 2>/dev/null
+          printf 'ui-out/\nsmoke-out/\ngate.txt\nconsoles/tests/.gate-smoke.mjs\n' >> .git/info/exclude
+
+      - name: Rebuild outputs + push branch + PR
+        if: always() && steps.limit.outputs.hit != 'true'
+        env:
+          # The repo forbids GITHUB_TOKEN from opening PRs; the conformance bot account can.
+          GH_TOKEN: ${{ secrets.CONFORMANCE_BOT_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.name "vyomi-console-ui-agent"
+          git config user.email "console-ui-agent@users.noreply.github.com"
+          # Agents may never change CI (their own gate): restore .github/ from the base branch.
+          # (The CI token also can't push workflow changes, which would lose the whole branch.)
+          if ! git diff --quiet origin/${{ env.BASE_BRANCH }}...HEAD -- .github; then
+            echo "::warning::agent modified .github/ — reverting those changes"
+            git checkout origin/${{ env.BASE_BRANCH }} -- .github && git commit -qm "ci: revert agent changes to .github (agents may not edit CI)" || true
+          fi
+          # The gate scored the WORKSPACE: anything the agent wrote but didn't commit must ship too,
+          # or the PR carries bundles without their source (seen: azure-cosmos). .github stays out.
+          git add -A && git reset -q -- .github
+          git diff --cached --quiet || git commit -qm "v4: agent work left uncommitted in the workspace (committed by the runner)"
+          git add static/v4 wasm/v4 && git commit -qm "build(v4): rebuild console bundles" || true
+          if git diff --quiet origin/${{ env.BASE_BRANCH }}...HEAD; then echo "no changes"; exit 0; fi
+          git push -q origin HEAD
+          {
+            echo "Console-UI agent: \`${{ matrix.target }}\` (run ${{ github.run_id }})"; echo
+            echo "**Gate:** ${{ steps.gate.outputs.ok == 'true' && '✅ passed' || '❌ failed — do not merge' }}"; echo
+            echo '```'; cat gate.txt 2>/dev/null; echo '```'; echo
+            echo "### UI conformance (before)"; cat ui-out-before/*.md 2>/dev/null | sed -n '1,8p'; echo
+            echo "### UI conformance (after)"; cat ui-out/*.md 2>/dev/null | sed -n '1,8p'; echo
+            echo "🤖 Generated with [Claude Code](https://claude.com/claude-code)"
+          } > pr.md
+          gh pr create --base ${{ env.BASE_BRANCH }} --head "${{ steps.tg.outputs.branch }}" \
+            --title "v4 UI: ${{ matrix.target }}" --body-file pr.md \
+            --label "v4-console-ui" 2>/dev/null || gh pr create --base ${{ env.BASE_BRANCH }} --head "${{ steps.tg.outputs.branch }}" --title "v4 UI: ${{ matrix.target }}" --body-file pr.md
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ui-conformance-${{ matrix.target }}
+          path: |
+            ui-out-before/
+            ui-out/
+            smoke-out/
+            ${{ runner.temp }}/agent-summary.txt
+            gate.txt
+          if-no-files-found: ignore
+
+      - name: Fail if gate failed
+        if: steps.limit.outputs.hit != 'true' && steps.gate.outputs.ok != 'true'
+        run: exit 1

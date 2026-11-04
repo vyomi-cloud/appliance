@@ -160,6 +160,13 @@ def _encode_state_value(value: Any, put_blob: Callable[[bytes], dict] | None = N
         return [_encode_state_value(v, put_blob) for v in value]
     if isinstance(value, tuple):
         return [_encode_state_value(v, put_blob) for v in value]
+    if isinstance(value, (set, frozenset)):   # e.g. Microsoft Graph group memberships
+        items = [_encode_state_value(v, put_blob) for v in value]
+        try:
+            items.sort()
+        except TypeError:
+            pass
+        return {"__cloudlearn_type__": "set", "items": items}
     return value
 
 
@@ -170,6 +177,8 @@ def _decode_state_value(value: Any, get_blob: Callable[[dict], bytes] | None = N
             return base64.b64decode(value["base64"])
         if kind == "bytes-ref" and "sha256" in value:
             return get_blob(value) if get_blob is not None else b""
+        if value.get("__cloudlearn_type__") == "set" and "items" in value:
+            return {_decode_state_value(v, get_blob) for v in value["items"]}
         return {k: _decode_state_value(v, get_blob) for k, v in value.items()}
     if isinstance(value, list):
         return [_decode_state_value(v, get_blob) for v in value]

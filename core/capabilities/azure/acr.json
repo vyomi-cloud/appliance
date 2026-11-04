@@ -1,0 +1,217 @@
+{
+ "$doc": "Vyomi capability registry — Azure Container registries. See aws/s3.json for the contract. 'nano' = Nano/dev_server (core/azure_arm_core.py + core/azure_acr_core.py + core/azure_locks_core.py); 'offline' = the appliance, which shares the same generic ARM catalog.",
+ "azure.acr.registry.crud": {
+  "title": "Registries — create, get, list, delete (generic ARM catalog)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.acr.registry.tags": {
+  "title": "Tags",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.acr.registry.listactions": {
+  "title": "\"Manage view\", \"Open query\" (Azure Resource Graph) and \"Assign tags\" on the registries list",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "\"Manage view\" is the lens kit's own column chooser (BrowseGrid), a console preference that needs no backend. \"Open query\" runs a real, minimal KQL subset (table Resources/ResourceContainers, where/project/limit/order by/count) evaluated over the ARM engine's own resource store — not a canned response, but not full Kusto either (no joins, summarize, or time-series operators). \"Assign tags\" PATCHes real ARM tags onto every selected registry."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.acr.admin_credentials": {
+  "title": "Admin user credentials (listCredentials / regenerateCredential)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "The admin username/passwords are generated and rotated for real and persist on the registry, but Vyomi's repository data plane never checks them (or any other credential) — a docker/oras client can push and pull without presenting them."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.acr.locks": {
+  "title": "Resource locks (Microsoft.Authorization/locks), scoped to this registry",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "Locks are only simulated at the resource scope (this registry); subscription- and resource-group-scoped lock lists are an honest 'Not simulated' gap, same as the real Subscription/Resource group scope-switch buttons."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.acr.activity_log": {
+  "title": "Activity log",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "A simplified, generic ARM activity feed (create/update/delete on this resource), not the real Microsoft.Insights audit trail (callers, correlation ids, full operation metadata); severity/timespan filtering and the secondary toolbar (Edit columns, Export, Insights, Feedback) are not modeled."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.acr.repositories": {
+  "title": "Repositories and tags, over the OCI/Docker Registry v2 wire and the ACR REST repository-metadata extension",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Repositories are process-global (not scoped to one registry's login server), the same simplification Key Vault's keys/secrets data planes make. Blob content is stored and digest-verified but never unpacked/executed — Vyomi doesn't run containers."
+  ],
+  "tests": ["tests/conformance/test_azure_acr_core.py"]
+ },
+ "azure.acr.webhooks": {
+  "title": "Webhooks (Microsoft.ContainerRegistry/registries/webhooks)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Webhook definitions round-trip through ARM for real (create/list/delete, scoped to this registry), but Vyomi never fires them — a push/delete/quarantine event on this registry never POSTs to the configured Service URI, and there is no Ping action."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.acr.iam": {
+  "title": "Access control (IAM): role assignments and built-in role definitions over ARM",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Role assignments and role definitions are real ARM resources (Microsoft.Authorization/roleAssignments, roleDefinitions). The Role assignments list is ENFORCED scoped to this registry (plus its subscription/resource-group ancestors, matching real Azure's inherited-access view) instead of the whole subscription — the same engine the VM/NSG/Cosmos DB blades use; Roles stays subscription-wide, which matches real Azure (built-in role definitions are listed tenant-wide too). Assignments are still created at the subscription scope (az role assignment create), and 'Check access' / 'My access' evaluation and Deny assignments / Classic administrators remain an honest gap. Update: the Deny assignments list, Classic administrators (a read-only list of the subscription's account administrator, like the real API) and My access (the simulated signed-in principal, evaluated with checkAccess) are now real shared tabs (azure.common.*); the gap wording above predates them."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.acr.overview_tabs": {
+  "title": "Overview Monitoring, Capabilities and Recommendations tabs",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "Monitoring shows a live snapshot of this registry's own state (repository/webhook/geo-replication counts read off the real data plane and ARM child resources) — Vyomi doesn't meter push/pull bandwidth over time, so there is no historical throughput chart. Capabilities computes a real Yes/No feature matrix from the registry's actual sku tier, not a static reference table. Recommendations reuses the same live Defender for Cloud rule engine as the Microsoft Defender for Cloud blade (azure.acr.defender / azure.defender.recommendations)."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py", "tests/conformance/test_azure_security_core.py"]
+ },
+ "azure.acr.monitoring": {
+  "title": "Insights, Alerts, Metrics, Diagnostic settings and Logs",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Diagnostic settings (Microsoft.Insights/diagnosticSettings) is a real ARM extension resource scoped to this registry: logs/metrics are stored and validated exactly as the real resource requires, but never actually delivered to the configured destination (workspace, storage account or event hub) — there is no agent/telemetry pipeline. Insights, Alerts, Metrics and Logs for container registries remain an honest gap."
+  ],
+  "tests": ["tests/conformance/test_azure_monitor_core.py", "tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.acr.exporttemplate_formats": {
+  "title": "Export template — ARM, Bicep and Terraform formats, generated client-side from this registry",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "Download, Add to library, Deploy and Visualize template are honest 'Not simulated' actions — only template generation (ARM/Bicep/Terraform) from the registry's current ARM properties is real."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.acr.create_fields": {
+  "title": "Domain name label scope and Role assignment permissions mode (create wizard)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "Both 2025 ARM additions are stored on the registry's own properties for real (ARM PUT/GET round-trip), surfaced in Properties/Essentials and included in Export template — Vyomi does not model a DNS-label-reuse layer or an ABAC-repository-permission ENGINE for them to additionally gate (repository-scoped Tokens/Scope maps remain usable regardless of the selected mode, same as real ACR's own RBAC-vs-ABAC rollout)."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.acr.defender": {
+  "title": "Microsoft Defender for Cloud (this container registry's recommendations)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": ["Shows the live Defender for Cloud recommendations for this resource from Vyomi's rule engine (see azure.defender.recommendations); Azure's full built-in recommendation catalogue is not reproduced."],
+  "api": ["Assessments_List (resource scope)"],
+  "tests": ["tests/conformance/test_azure_security_core.py"]
+ },
+ "azure.acr.quickstart": {
+  "title": "Quick start",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": ["Docker/az-acr sign-in, push and pull snippets are generated from this registry's own live login server and admin-user state — there is nothing further to simulate."],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.acr.events": {
+  "title": "Events",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Event Grid system topics scoped to this registry (Microsoft.EventGrid/systemTopics, filtered by source) are real, stored ARM resources using the same engine the Event Grid service itself ships — but, like Webhooks, Vyomi never actually fires a push/delete event at a subscriber endpoint."
+  ],
+  "tests": ["tests/conformance/test_azure_eventgrid_core.py"]
+ },
+ "azure.acr.encryption": {
+  "title": "Encryption",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Customer-managed key encryption is ENFORCED Premium-only (server-side, not just a disabled UI control) and requires a system assigned managed identity to be turned on first, same as real ACR requiring an identity to reach the key. The key identifier is stored and round-tripped for real; Vyomi does not re-encrypt or validate repository content against the referenced Key Vault key."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.acr.identity": {
+  "title": "Identity",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "System assigned managed identity mints a real, stable principalId/tenantId (generic over every ARM catalog type, core/azure_arm_core.py's _apply_identity) that persists across PUT/PATCH and clears on 'None'. User assigned identities stay an honest gap — Vyomi has no Managed Identity resource of its own to attach, same as the App Service/VM Identity blades."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.acr.networking": {
+  "title": "Networking",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Disabling public network access is ENFORCED on the registry's own data-plane endpoint for real (push/pull/_catalog/… are rejected with a 403 while it's off — core/azure_arm_core.py's acr_network_denied, wired through the x-vyomi-registry header in core/aws_wire_router.py and core/wire_ingress.py) and is Premium-gated server-side. Vyomi has no private-endpoint/VNet path to let a caller back in, and per-IP firewall allow-list rules are not evaluated (same simplification Key Vault's own networking makes)."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.acr.georeplications": {
+  "title": "Geo-replications",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Replication resources are real, Premium-gated nested ARM child resources, server-side validated (no replicating to the registry's own primary location, no duplicate-region replication). Actual cross-region data redundancy isn't modeled — this registry's repositories are already a single process-global store (see azure.acr.repositories)."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.acr.tasks": {
+  "title": "Tasks",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Task definitions and run history are real, Standard+-gated, stored ARM resources (registries/tasks + registries/runs) — \"Run now\" records a genuine run, but Vyomi never executes the build itself: there is no container runtime, and a real build would need to pull base images over the real internet, which the simulator never does."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.acr.cache": {
+  "title": "Cache",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Cache rule definitions are real, Premium-gated nested ARM child resources, server-side validated (each target repository can only be mapped by one rule). Vyomi never actually fetches from the upstream registry — nothing leaves the simulator."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.acr.connectedregistries": {
+  "title": "Connected registries",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Connected registry definitions are real, Premium-gated nested ARM child resources. Vyomi runs no edge/offline sync agent, so content never actually replicates to one."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.acr.tokens": {
+  "title": "Tokens",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Token resources are real, Premium-gated nested ARM child resources: a token's scopeMapId is server-side validated against a real scope map on the same registry. Tokens are not wired to the data plane's own authentication — a docker/oras client is never actually challenged for one (same gap as azure.acr.admin_credentials)."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.acr.scopemaps": {
+  "title": "Scope maps",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Scope map resources are real, Premium-gated nested ARM child resources: `actions` entries are server-side validated against the real grammar (<repository>:<content|metadata>/<read|write|delete>[,...]). They are not enforced against the data plane's own authorization (same gap as Tokens)."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.acr.retention": {
+  "title": "Retention (Preview)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "ENFORCED for real: once enabled, an untagged manifest is purged after it has gone untagged for longer than the configured number of days (core/azure_acr_core.py's purge_untagged, swept on every data-plane call via the x-vyomi-registry header) — not a stored setting nobody acts on. Because repositories are process-global (azure.acr.repositories), the policy that applies during a sweep is whichever registry's data-plane call triggered it, not cleanly isolated per registry if more than one registry has retention enabled at once."
+  ],
+  "tests": ["tests/conformance/test_azure_acr_core.py"]
+ },
+ "azure.acr.support_troubleshooting": {
+  "title": "Support + Troubleshooting",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": [
+   "Opening a support request routes to Microsoft's own support ticketing system — a genuine third party Vyomi has no backing support organization to open a ticket against."
+  ]
+ },
+ "azure.acr.import": {
+  "title": "Import image (copy between repositories/registries)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["Copies a manifest and every blob it references to the target tags (NoForce refuses to overwrite a different digest, Force retags). Sources outside Vyomi (Docker Hub, MCR, GHCR) are refused because there is no internet egress.", "Vyomi keeps one repository store shared by all its registries, so a source image is looked up by repository name across that shared store, and the action is carried on the data plane (POST /acr/v1/_import) rather than the ARM importImage action, so `az acr import` is not supported."],
+  "tests": ["tests/conformance/test_azure_acr_core.py"]
+ }
+}

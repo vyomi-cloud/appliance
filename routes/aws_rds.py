@@ -124,6 +124,9 @@ def _rds_runtime_reboot(db: dict) -> dict:
 # ---------------------------------------------------------------------------
 
 async def api_rds_query(request: Request):
+    from core import wire_ingress as _wi
+    if _wi.is_unified("rds"):   # v4 C0h — the shared RDS core over the space-scoped slot
+        return await _wi.serve_rds(request)
     return await _srv().api_rds_query(request)
 
 

@@ -1,0 +1,149 @@
+{
+ "$doc": "Vyomi capability registry — Azure Virtual networks. See aws/s3.json for the contract.",
+ "azure.vnets.vnet.crud": {
+  "title": "Virtual networks (create, get, list, delete) over ARM",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.vnets.tags": {
+  "title": "Tags",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.vnets.address_space": {
+  "title": "Address space (IPv4 prefixes)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "Only IPv4 CIDR prefixes are modelled; IPv6 address spaces are not."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.vnets.subnets": {
+  "title": "Subnets (Microsoft.Network/virtualNetworks/subnets)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "Name, address range, the private-subnet (defaultOutboundAccess) flag, NSG, route table and NAT gateway associations are real and drive behaviour (system routes incl. None for RFC1918 outside the vnet, UDRs, NAT/default outbound egress). The console's Add subnet dialog's NAT gateway and Route table pickers select from real Microsoft.Network/natGateways and routeTables (created over ARM/CLI; this lens has no dedicated console for either yet, same as NSGs' earlier state). NIC private IPs are allocated from the subnet (.0-.3 and the last address reserved). Subnet delegation is not modelled.",
+   "Offline, the rules are enforced on REAL packets (one Docker bridge per subnet + an nftables table per space, core/netsim/enforce.py) only when VYOMI_NETSIM_ENFORCE=1|auto and the instance runs on the Docker compute backend; with enforcement off (the default) or on LXD/Multipass runtimes they are evaluated, not enforced."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py", "tests/conformance/test_azure_netsim_core.py", "tests/netsim/test_azure.py"]
+ },
+ "azure.vnets.dns_servers": {
+  "title": "DNS servers (default vs. custom)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.vnets.peerings": {
+  "title": "Virtual network peerings (Microsoft.Network/virtualNetworks/virtualNetworkPeerings)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "Adding a peering creates the real ARM peering object on both virtual networks (same as the portal's Add blade), with peeringState fixed at 'Connected' and peeringSyncLevel fixed at 'FullyInSync' — Vyomi has no asynchronous sync process to model, so 'Sync' is a no-op refresh.",
+   "Traffic only crosses a peering once BOTH virtual networks hold a Connected link (one-sided links carry nothing), and it is non-transitive."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py", "tests/netsim/test_azure.py"]
+ },
+ "azure.vnets.service_endpoints": {
+  "title": "Service endpoints (subnet properties.serviceEndpoints)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "A service endpoint is stored as a {service, locations} entry on the subnet, same as real ARM. Service endpoint policies (restricting which resource instances are reachable) are not modelled."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.vnets.locks": {
+  "title": "Resource locks (Microsoft.Authorization/locks), scoped to this virtual network",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "Locks are only simulated at the resource scope (this virtual network); subscription- and resource-group-scoped lock lists are an honest 'Not simulated' gap, same as the real Subscription/Resource group scope-switch buttons."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.vnets.activity_log": {
+  "title": "Activity log",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Only console/SDK-triggered mutations made since the simulation booted are recorded (no historical backfill); severity/category filtering and the 7/30/90-day timespan picker are not modelled, and `caller` is a fixed placeholder identity rather than the real signed-in principal."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.vnets.export_template": {
+  "title": "Export template",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "The ARM Template, Bicep and Terraform tabs are all generated client-side from this resource's live ARM state; linked/nested templates and deployment history are not modelled."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.vnets.iam": {
+  "title": "Access control (IAM)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Role assignments and role definitions are real ARM resources (Microsoft.Authorization/roleAssignments, roleDefinitions), and Check access / My access run the real wildcard + scope-inheritance + notActions + explicit-deny decision — all ENFORCED scoped to this virtual network (plus its subscription/resource-group ancestors, matching real Azure's inherited-access view); Roles stays subscription-wide, which matches real Azure (built-in role definitions are listed tenant-wide too). Deny assignments and Classic administrators remain an honest gap — Microsoft Entra Privileged Identity Management and the legacy Azure Service Management administrator list are not modelled. Update: the Deny assignments list, Classic administrators (a read-only list of the subscription's account administrator, like the real API) and My access (the simulated signed-in principal, evaluated with checkAccess) are now real shared tabs (azure.common.*); the gap wording above predates them."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.vnets.tools": {
+  "title": "Diagnose and solve problems (remaining tiles), Resource visualizer, Tasks, Support + Troubleshooting",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Resource visualizer is real — the same ARM reads the Subnets/Connected devices/Peerings panels use, grouped into cards per subnet — rendered as cards rather than Azure's interactive canvas diagram. Tasks (preview) is built as a browser-local (localStorage) per-resource task list: real Azure's Tasks feature isn't a documented ARM resource provider Vyomi can model natively, and it's the same kind of console-local bookkeeping as 'Pin to dashboard'. Support + Troubleshooting is a real navigational hub (links to Diagnose and solve problems, a static 'Available' resource-health readout) except filing an actual support ticket, which needs Microsoft's own support ticketing service. Diagnose and solve problems' IP flow verify, Next hop and Connection troubleshoot tiles are real — see azure.vnets.network_watcher — but its remaining diagnostic tiles stay an honest gap: they run Azure's AI-driven troubleshooting recommendations (VPN/ExpressRoute/DNS) against Microsoft's own analytics backend, not a deterministic local ARM read."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.vnets.network_watcher": {
+  "title": "Diagnose and solve problems / Monitoring: IP flow verify, Next hop, Connection troubleshoot (Network Watcher)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "IP flow verify, Next hop and Connection troubleshoot all answer from the shared netsim evaluator (core/netsim) — the same engine behind AWS Reachability Analyzer and GCP Connectivity Tests — scoped to a virtual machine's network interface in this virtual network's subnets. Vyomi auto-provisions the regional NetworkWatcher_<location> resource the first time any of the three tools runs in a location, same as the real portal's 'Enable Network Watcher' behaviour. Connection troubleshoot's hop-by-hop trace uses Vyomi's own component labels (route-table/nsg/peering/...), not real Network Watcher's hop-type enum, and offers TCP/UDP (this evaluator's protocols) rather than real Azure's TCP/ICMP. There is no standalone Network Watcher service console yet, only these diagnostic tools reached from the NSG and Virtual network blades."
+  ],
+  "tests": ["tests/conformance/test_azure_netsim_core.py"]
+ },
+ "azure.vnets.topology": {
+  "title": "Topology (subnets, their connected devices, and peered virtual networks)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "The data is real — the same ARM reads the Subnets, Connected devices and Peerings panels use (subnet address ranges, NSG/route table/NAT gateway associations, attached network interfaces, peering state) — but it is rendered as a structured list rather than Azure's interactive canvas diagram."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.vnets.monitoring": {
+  "title": "Alerts, Metrics, Diagnostic settings, Logs",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Diagnostic settings is real — the same Microsoft.Insights/diagnosticSettings extension-resource mechanism the NSG lens wires (core/azure_monitor_core.py); logs/metrics are stored and validated exactly as the real resource requires, but — same as every other resource in this lens — never delivered anywhere. Logs runs real KQL (core/azure_operationalinsights_core.py's small supported subset: where/project/sort by/take/count) against a chosen Log Analytics workspace's real AzureActivity table, the SAME rows this vnet's own Activity log tab reads; every other table is always empty (no agent/telemetry ingestion pipeline). Alerts lists real Microsoft.Insights/metricAlerts and activityLogAlerts rules whose own 'scopes' names this vnet (the generic alert-rule resources the Monitor service's Alerts page lists subscription-wide) — Vyomi stores alert rules but runs no live metric-evaluation loop, so none has ever fired, same honest limitation as azure.monitor.alert_rules. Metrics: Microsoft.Network/virtualNetworks publishes no real-time telemetry Vyomi can emulate (core/azure_monitor_core.py: 'Not modelled: metric definitions / metrics'), so instead of a stored/random chart this tile shows a REAL derived series — this vnet's own management-operation count per hour, read back from its Activity log — never synthetic data; it is a Vyomi-native substitute for the real ARM metric catalog, not that catalog itself."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py", "tests/conformance/test_azure_monitor_core.py", "tests/conformance/test_azure_operationalinsights_core.py"]
+ },
+ "azure.vnets.network_appliances": {
+  "title": "Azure Bastion, DDoS protection, Azure Firewall, Microsoft Defender for Cloud, Network Manager, Private endpoints",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": [
+   "Each of these is a separate resource type (bastionHosts, ddosProtectionPlans, azureFirewalls, privateEndpoints) or a security service Vyomi does not model; the virtual network create wizard's Bastion/Firewall/DDoS checkboxes and the resource menu items are an honest gap, not provisioned. Microsoft.Network/networkManagers now exists as a bare, generically-CRUD-able ARM resource (so the Create VNet wizard's IP address pool picker has something real to create against — see azure.vnets.ip_address_management), but the VNet blade's own 'Network manager' menu item (which governs connectivity/security-admin configurations applied to this vnet) is still not built."
+  ]
+ },
+ "azure.vnets.connected_devices": {
+  "title": "Connected devices",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "The list is a real ARM read (every Microsoft.Network/networkInterfaces resource in the subscription whose ipConfigurations[].subnet.id points at one of this vnet's subnets), so a NIC attached via ARM/the CLI/another tool shows up here. Device Type is always reported as 'Network interface' — Vyomi has no DHCP lease / ARP table to discover non-NIC clients (VMs/devices that never registered a network interface resource)."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.vnets.ip_address_management": {
+  "title": "IP address pools (Allocate using IP address pools) and advertised address prefixes (BGP)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "IP address pools are real: Microsoft.Network/networkManagers/{nm}/ipamPools is a genuine nested ARM resource (core/azure_arm_data.py CATALOG, reached through the generic type/name alternation — no dedicated code, same mechanic as a container registry's webhooks), and the Create VNet wizard's 'Allocate using IP address pools' checkbox ENFORCES a real, non-overlapping CIDR block carved out of the chosen pool's own address space (AzureArm._allocate_ipam_pool) — never a stored label; the block is released back to the pool when its vnet is deleted. Per-subnet pool allocation is not modelled: a pool-allocated vnet always gets one 'default' subnet spanning its full allocated range. Advertised address prefixes (custom BGP route advertisement) are not modelled: they only affect routing once this vnet peers with a real ExpressRoute circuit's carrier-network routers — hardware outside anything a local simulator can model — so Vyomi stores no advertised gateway prefixes."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.vnets.subnetservices": {
+  "title": "Subnet service endpoints and delegation (create-subnet dialog)",
+  "level": { "nano": "config_only", "offline": "config_only" },
+  "limitations": ["Service endpoints and the subnet delegation are stored on the subnet and returned by the API exactly as set; Vyomi does not route service traffic over the endpoint or restrict the delegated subnet to the named service."],
+  "api": ["subnets CreateOrUpdate (serviceEndpoints, delegations)", "subnets Get"],
+  "tests": ["tests/conformance/test_azure_vnets_subnet_services.py"]
+ }
+}

@@ -532,7 +532,7 @@ def test_messaging_apim_rbac_blades():
 
 def test_key_vault_certificates():
     import base64
-    from core import azure_keyvault_certificates_core as kvc
+    from core import azure_keyvault_x509_core as kvc
     st = kvc.CertStore()
     s, op = kvc.dispatch(st, "kv1", "POST", "/certificates/web/create", {"policy": {"issuer": {"name": "Self"},
         "x509_props": {"subject": "CN=web.contoso.com", "sans": {"dns_names": ["web.contoso.com"]}, "validity_months": 6}}})

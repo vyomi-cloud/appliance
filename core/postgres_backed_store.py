@@ -31,21 +31,23 @@ class PostgresBackedSqlStore(SqlStore):
         safe = "".join(c if c.isalnum() else "_" for c in db_id)
         return f"{self._prefix}{safe}"
 
-    def _connect(self):
-        # base open_engine() calls this per db_id; we can't see db_id here, so a
-        # per-instance connection is opened via open_engine override below.
-        return psycopg2.connect(self._dsn)
+    def _connect(self, db_id: str):
+        # A standalone connection scoped to this instance's schema — used by
+        # open_engine() for the one-shot connection AND by SqlStore.begin_transaction()
+        # for a SECOND, independent connection held open across a Data API transaction
+        # (a real Postgres backend has genuine concurrent connections, unlike sqlite).
+        conn = psycopg2.connect(self._dsn)
+        schema = self._schema(db_id)
+        cur = conn.cursor()
+        cur.execute(f'CREATE SCHEMA IF NOT EXISTS "{schema}"')
+        cur.execute(f'SET search_path TO "{schema}"')
+        conn.commit()
+        cur.close()
+        return conn
 
     def open_engine(self, db_id: str):
         if db_id not in self._conns:
-            conn = psycopg2.connect(self._dsn)
-            schema = self._schema(db_id)
-            cur = conn.cursor()
-            cur.execute(f'CREATE SCHEMA IF NOT EXISTS "{schema}"')
-            cur.execute(f'SET search_path TO "{schema}"')
-            conn.commit()
-            cur.close()
-            self._conns[db_id] = conn
+            self._conns[db_id] = self._connect(db_id)
         return self._conns[db_id]
 
     def drop_schema(self, db_id: str) -> None:

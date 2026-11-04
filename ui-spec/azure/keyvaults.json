@@ -1,0 +1,1443 @@
+{
+  "$schema": "../schema.json",
+  "cloud": "azure",
+  "service": "keyvaults",
+  "console_path": "#browse/Microsoft.KeyVault%2Fvaults",
+  "status": "reviewed",
+  "captured_at": "2026-10-30",
+  "nav": [
+    {
+      "label": "Overview",
+      "page_id": "key-vault-overview"
+    },
+    {
+      "label": "Activity log",
+      "page_id": "key-vault-activity-log"
+    },
+    {
+      "label": "Access control (IAM)",
+      "page_id": "key-vault-access-control-iam"
+    },
+    {
+      "label": "Tags",
+      "page_id": "key-vault-tags"
+    },
+    {
+      "label": "Diagnose and solve problems",
+      "page_id": "key-vault-diagnose-and-solve-problems"
+    },
+    {
+      "label": "Access policies",
+      "page_id": "key-vault-access-policies"
+    },
+    {
+      "label": "Events",
+      "page_id": "key-vault-events"
+    },
+    {
+      "label": "Objects",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Keys",
+          "page_id": "key-vault-keys"
+        },
+        {
+          "label": "Secrets",
+          "page_id": "key-vault-secrets"
+        },
+        {
+          "label": "Certificates",
+          "page_id": "key-vault-certificates"
+        }
+      ]
+    },
+    {
+      "label": "Settings",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Access configuration",
+          "page_id": "key-vault-access-configuration"
+        },
+        {
+          "label": "Networking",
+          "page_id": "key-vault-networking"
+        },
+        {
+          "label": "Microsoft Defender for Cloud",
+          "page_id": "key-vault-microsoft-defender-for-cloud"
+        },
+        {
+          "label": "Properties",
+          "page_id": "key-vault-properties"
+        },
+        {
+          "label": "Locks",
+          "page_id": "key-vault-locks"
+        }
+      ]
+    },
+    {
+      "label": "Monitoring",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Alerts",
+          "page_id": "key-vault-alerts"
+        },
+        {
+          "label": "Metrics",
+          "page_id": "key-vault-metrics"
+        },
+        {
+          "label": "Diagnostic settings",
+          "page_id": "key-vault-diagnostic-settings"
+        },
+        {
+          "label": "Logs",
+          "page_id": "key-vault-logs"
+        },
+        {
+          "label": "Insights",
+          "page_id": "key-vault-insights"
+        },
+        {
+          "label": "Workbooks",
+          "page_id": "key-vault-workbooks"
+        }
+      ]
+    },
+    {
+      "label": "Automation",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Tasks",
+          "page_id": "key-vault-tasks"
+        },
+        {
+          "label": "Export template",
+          "page_id": "key-vault-export-template"
+        }
+      ]
+    },
+    {
+      "label": "Help",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Resource health",
+          "page_id": "key-vault-resource-health"
+        },
+        {
+          "label": "Support + Troubleshooting",
+          "page_id": "key-vault-support-troubleshooting"
+        }
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "id": "key-vaults",
+      "kind": "list",
+      "title": "Key vaults",
+      "route": "#browse/Microsoft.KeyVault%2Fvaults",
+      "breadcrumbs": [
+        "Home"
+      ],
+      "captures": [
+        "A-browse-microsoft-keyvault-vaults/001-L1-landing"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "table": {
+        "columns": [
+          "Name",
+          "Type",
+          "Resource group",
+          "Location",
+          "Subscription"
+        ],
+        "selection": "multi",
+        "header_actions": [
+          "Create",
+          "Manage deleted vaults",
+          "Manage view",
+          "Refresh",
+          "Export to CSV",
+          "Open query",
+          "Assign tags",
+          "Delete"
+        ],
+        "filter_placeholder": "Filter for any field...",
+        "filters": [
+          "Subscription equals all",
+          "Resource group equals all",
+          "Location equals all",
+          "Add filter"
+        ],
+        "empty_state": "No key vaults to display",
+        "empty_state_action": "Create key vault",
+        "pagination": true,
+        "provenance": "reference",
+        "confidence": "medium"
+      }
+    },
+    {
+      "id": "create-key-vault",
+      "kind": "create",
+      "title": "Create a key vault",
+      "route": "#create/Microsoft.KeyVault",
+      "breadcrumbs": [
+        "Home",
+        "Key vaults",
+        "Create a key vault"
+      ],
+      "captures": [
+        "C-forms/06-create-microsoft-keyvault/step-1-expanded"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "steps": [
+        {
+          "title": "Basics",
+          "sections": [
+            {
+              "title": "Project details",
+              "fields": [
+                {
+                  "label": "Subscription",
+                  "type": "select",
+                  "required": true,
+                  "placeholder": "Select a subscription"
+                },
+                {
+                  "label": "Resource group",
+                  "type": "select",
+                  "required": true,
+                  "actions": [
+                    "Create new"
+                  ]
+                }
+              ]
+            },
+            {
+              "title": "Instance details",
+              "fields": [
+                {
+                  "label": "Key vault name",
+                  "type": "text",
+                  "required": true,
+                  "constraints": "3-24 chars; letters, numbers, hyphens; globally unique"
+                },
+                {
+                  "label": "Region",
+                  "type": "select",
+                  "required": true,
+                  "default": "(US) East US"
+                },
+                {
+                  "label": "Pricing tier",
+                  "type": "select",
+                  "default": "Standard",
+                  "options": [
+                    "Standard",
+                    "Premium"
+                  ]
+                }
+              ]
+            },
+            {
+              "title": "Recovery options",
+              "fields": [
+                {
+                  "label": "Soft-delete",
+                  "type": "readonly",
+                  "default": "Enabled"
+                },
+                {
+                  "label": "Days to retain deleted vaults",
+                  "type": "number",
+                  "default": 90,
+                  "constraints": "7-90"
+                },
+                {
+                  "label": "Purge protection",
+                  "type": "radio",
+                  "default": "Disable purge protection (allow key vault and objects to be purged during retention period)",
+                  "options": [
+                    "Disable purge protection (allow key vault and objects to be purged during retention period)",
+                    "Enable purge protection (enforce a mandatory retention period for deleted vaults and vault objects)"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Access configuration",
+          "sections": [
+            {
+              "title": "Configure data plane access for this key vault",
+              "fields": [
+                {
+                  "label": "Permission model",
+                  "type": "radio",
+                  "default": "Azure role-based access control (recommended)",
+                  "options": [
+                    "Azure role-based access control (recommended)",
+                    "Vault access policy"
+                  ]
+                }
+              ]
+            },
+            {
+              "title": "Resource access",
+              "fields": [
+                {
+                  "label": "Azure Virtual Machines for deployment",
+                  "type": "checkbox",
+                  "default": false
+                },
+                {
+                  "label": "Azure Resource Manager for template deployment",
+                  "type": "checkbox",
+                  "default": false
+                },
+                {
+                  "label": "Azure Disk Encryption for volume encryption",
+                  "type": "checkbox",
+                  "default": false
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Networking",
+          "sections": [
+            {
+              "title": "Network connectivity",
+              "fields": [
+                {
+                  "label": "Enable public access",
+                  "type": "checkbox",
+                  "default": true
+                }
+              ]
+            },
+            {
+              "title": "Public Access",
+              "fields": [
+                {
+                  "label": "Allow access from",
+                  "type": "radio",
+                  "default": "All networks",
+                  "options": [
+                    "All networks",
+                    "Selected networks"
+                  ]
+                }
+              ]
+            },
+            {
+              "title": "Private endpoint",
+              "fields": [
+                {
+                  "label": "Private endpoint",
+                  "type": "table",
+                  "columns": [
+                    "Name",
+                    "Subscription",
+                    "Resource group",
+                    "Region",
+                    "Subnet",
+                    "Private DNS zone"
+                  ],
+                  "actions": [
+                    "Create a private endpoint"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Tags",
+          "sections": [
+            {
+              "title": "Tags",
+              "fields": [
+                {
+                  "label": "Tags",
+                  "type": "table",
+                  "columns": [
+                    "Name",
+                    "Value",
+                    "Resource"
+                  ],
+                  "help": "Name/value pairs to categorize resources and view consolidated billing"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Review + create",
+          "sections": [
+            {
+              "title": "Basics"
+            },
+            {
+              "title": "Access configuration"
+            },
+            {
+              "title": "Networking"
+            },
+            {
+              "title": "Tags"
+            }
+          ]
+        }
+      ],
+      "submit": "Create",
+      "notes": "Capture shows CreateKeyVaultBlade erroring without a subscription; fields are reference"
+    },
+    {
+      "id": "key-vault-overview",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "breadcrumbs": [
+        "Home",
+        "Key vaults",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Delete",
+        "Move",
+        "Refresh",
+        "Open in mobile",
+        "Feedback"
+      ],
+      "tabs": [
+        "Get started",
+        "Monitoring",
+        "Properties",
+        "Capabilities",
+        "Recommendations",
+        "Tutorials"
+      ],
+      "sections": [
+        {
+          "title": "Essentials",
+          "actions": [
+            "JSON View"
+          ],
+          "fields": [
+            {
+              "label": "Resource group",
+              "type": "readonly"
+            },
+            {
+              "label": "Location",
+              "type": "readonly"
+            },
+            {
+              "label": "Subscription",
+              "type": "readonly"
+            },
+            {
+              "label": "Subscription ID",
+              "type": "readonly"
+            },
+            {
+              "label": "Vault URI",
+              "type": "readonly"
+            },
+            {
+              "label": "Sku (Pricing tier)",
+              "type": "readonly"
+            },
+            {
+              "label": "Directory ID",
+              "type": "readonly"
+            },
+            {
+              "label": "Directory Name",
+              "type": "readonly"
+            },
+            {
+              "label": "Soft-delete",
+              "type": "readonly"
+            },
+            {
+              "label": "Purge protection",
+              "type": "readonly"
+            },
+            {
+              "label": "Tags",
+              "type": "readonly"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "key-vault-activity-log",
+      "kind": "list",
+      "title": "{resource-name} | Activity log",
+      "breadcrumbs": [
+        "Home",
+        "Key vaults",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "high",
+      "notes": "Same grid as Monitor | Activity log (captured), filtered to this resource",
+      "table": {
+        "columns": [
+          "Operation name",
+          "Status",
+          "Time",
+          "Time stamp",
+          "Subscription",
+          "Event initiated by"
+        ],
+        "header_actions": [
+          "Activity",
+          "Edit columns",
+          "Refresh",
+          "Export Activity Logs",
+          "Download as CSV",
+          "Insights",
+          "Feedback",
+          "Pin current filters",
+          "Reset filters"
+        ],
+        "filters": [
+          "Management Group : None",
+          "Subscription",
+          "Event severity : All",
+          "Timespan : Last 6 hours",
+          "Resource group",
+          "Resource",
+          "Add Filter"
+        ],
+        "empty_state": "No events to display",
+        "pagination": false
+      }
+    },
+    {
+      "id": "key-vault-access-control-iam",
+      "kind": "other",
+      "title": "{resource-name} | Access control (IAM)",
+      "breadcrumbs": [
+        "Home",
+        "Key vaults",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "high",
+      "header_actions": [
+        "Add",
+        "Download role assignments",
+        "Edit columns",
+        "Refresh",
+        "Remove",
+        "Feedback"
+      ],
+      "tabs": [
+        "Check access",
+        "Role assignments",
+        "Roles",
+        "Deny assignments",
+        "Classic administrators"
+      ],
+      "tab_panels": [
+        {
+          "label": "Check access",
+          "sections": [
+            {
+              "title": "My access",
+              "fields": [
+                {
+                  "label": "View my access",
+                  "type": "button"
+                }
+              ]
+            },
+            {
+              "title": "Check access",
+              "fields": [
+                {
+                  "label": "Check access",
+                  "type": "button"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "Role assignments",
+          "sections": [
+            {
+              "title": "Role assignments",
+              "table": {
+                "columns": [
+                  "Name",
+                  "Type",
+                  "Role",
+                  "Scope",
+                  "Condition"
+                ],
+                "selection": "multi",
+                "filter_placeholder": "Search by name or email"
+              }
+            }
+          ]
+        },
+        {
+          "label": "Roles",
+          "sections": [
+            {
+              "title": "Roles",
+              "table": {
+                "columns": [
+                  "Name",
+                  "Description",
+                  "Type",
+                  "Category",
+                  "Details"
+                ],
+                "filter_placeholder": "Search by role name, description, permission, or ID"
+              }
+            }
+          ]
+        },
+        {
+          "label": "Deny assignments",
+          "sections": [
+            {
+              "title": "Deny assignments",
+              "table": {
+                "columns": [
+                  "Name",
+                  "Description",
+                  "Principal",
+                  "Scope"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "label": "Classic administrators"
+        }
+      ]
+    },
+    {
+      "id": "key-vault-tags",
+      "kind": "settings",
+      "title": "{resource-name} | Tags",
+      "breadcrumbs": [
+        "Home",
+        "Key vaults",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "high",
+      "sections": [
+        {
+          "title": "Tags",
+          "fields": [
+            {
+              "label": "Tags",
+              "type": "table",
+              "columns": [
+                "Name",
+                "Value"
+              ],
+              "actions": [
+                "Delete"
+              ],
+              "help": "Name/value pairs; the same tag can apply to multiple resources"
+            }
+          ]
+        }
+      ],
+      "header_actions": [
+        "Apply",
+        "Discard changes",
+        "Delete all"
+      ]
+    },
+    {
+      "id": "key-vault-diagnose-and-solve-problems",
+      "kind": "other",
+      "title": "{resource-name} | Diagnose and solve problems",
+      "breadcrumbs": [
+        "Home",
+        "Key vaults",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Key vault blade menu item; title only"
+    },
+    {
+      "id": "key-vault-access-policies",
+      "kind": "list",
+      "title": "{resource-name} | Access policies",
+      "breadcrumbs": [
+        "Home",
+        "Key vaults",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "table": {
+        "columns": [
+          "Name",
+          "Email",
+          "Key Permissions",
+          "Secret Permissions",
+          "Certificate Permissions"
+        ],
+        "header_actions": [
+          "Create",
+          "Edit",
+          "Delete",
+          "Refresh"
+        ]
+      }
+    },
+    {
+      "id": "key-vault-events",
+      "kind": "other",
+      "title": "{resource-name} | Events",
+      "breadcrumbs": [
+        "Home",
+        "Key vaults",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Key vault blade menu item; title only"
+    },
+    {
+      "id": "key-vault-keys",
+      "kind": "list",
+      "title": "{resource-name} | Keys",
+      "breadcrumbs": [
+        "Home",
+        "Key vaults",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "table": {
+        "columns": [
+          "Name",
+          "Status",
+          "Expiration date"
+        ],
+        "selection": "single",
+        "header_actions": [
+          "Generate/Import",
+          "Refresh",
+          "Restore Backup",
+          "Manage deleted keys"
+        ],
+        "filter_placeholder": "Filter by name...",
+        "empty_state": "There are no keys available."
+      }
+    },
+    {
+      "id": "key-vault-secrets",
+      "kind": "list",
+      "title": "{resource-name} | Secrets",
+      "breadcrumbs": [
+        "Home",
+        "Key vaults",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "table": {
+        "columns": [
+          "Name",
+          "Type",
+          "Status",
+          "Expiration date"
+        ],
+        "selection": "single",
+        "header_actions": [
+          "Generate/Import",
+          "Refresh",
+          "Restore Backup",
+          "View sample code",
+          "Manage deleted secrets"
+        ],
+        "filter_placeholder": "Filter by name...",
+        "empty_state": "There are no secrets available."
+      }
+    },
+    {
+      "id": "key-vault-certificates",
+      "kind": "list",
+      "title": "{resource-name} | Certificates",
+      "breadcrumbs": [
+        "Home",
+        "Key vaults",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "table": {
+        "columns": [
+          "Name",
+          "Thumbprint",
+          "Status",
+          "Expiration date"
+        ],
+        "selection": "single",
+        "header_actions": [
+          "Generate/Import",
+          "Refresh",
+          "Restore Backup",
+          "Manage deleted certificates",
+          "Certificate Contacts",
+          "Certificate Authorities"
+        ],
+        "filter_placeholder": "Filter by name...",
+        "empty_state": "There are no certificates available."
+      }
+    },
+    {
+      "id": "key-vault-access-configuration",
+      "kind": "settings",
+      "title": "{resource-name} | Access configuration",
+      "breadcrumbs": [
+        "Home",
+        "Key vaults",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Apply",
+        "Discard changes"
+      ],
+      "sections": [
+        {
+          "title": "Permission model",
+          "fields": [
+            {
+              "label": "Permission model",
+              "type": "radio",
+              "options": [
+                "Azure role-based access control (recommended)",
+                "Vault access policy"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Resource access",
+          "fields": [
+            {
+              "label": "Azure Virtual Machines for deployment",
+              "type": "checkbox"
+            },
+            {
+              "label": "Azure Resource Manager for template deployment",
+              "type": "checkbox"
+            },
+            {
+              "label": "Azure Disk Encryption for volume encryption",
+              "type": "checkbox"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "key-vault-networking",
+      "kind": "settings",
+      "title": "{resource-name} | Networking",
+      "breadcrumbs": [
+        "Home",
+        "Key vaults",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "tabs": [
+        "Firewalls and virtual networks",
+        "Private endpoint connections"
+      ],
+      "header_actions": [
+        "Apply",
+        "Discard changes",
+        "Refresh"
+      ],
+      "sections": [
+        {
+          "title": "Firewalls and virtual networks",
+          "fields": [
+            {
+              "label": "Allow access from",
+              "type": "radio",
+              "options": [
+                "Allow public access from all networks",
+                "Allow public access from specific virtual networks and IP addresses",
+                "Disable public access"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "key-vault-microsoft-defender-for-cloud",
+      "kind": "other",
+      "title": "{resource-name} | Microsoft Defender for Cloud",
+      "breadcrumbs": [
+        "Home",
+        "Key vaults",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Key vault blade menu item; title only"
+    },
+    {
+      "id": "key-vault-properties",
+      "kind": "settings",
+      "title": "{resource-name} | Properties",
+      "breadcrumbs": [
+        "Home",
+        "Key vaults",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "sections": [
+        {
+          "title": "Properties",
+          "fields": [
+            {
+              "label": "Name",
+              "type": "readonly"
+            },
+            {
+              "label": "Sku (Pricing tier)",
+              "type": "readonly"
+            },
+            {
+              "label": "Location",
+              "type": "readonly"
+            },
+            {
+              "label": "Vault URI",
+              "type": "readonly"
+            },
+            {
+              "label": "Resource ID",
+              "type": "readonly"
+            },
+            {
+              "label": "Directory ID",
+              "type": "readonly"
+            },
+            {
+              "label": "Soft-delete",
+              "type": "readonly"
+            },
+            {
+              "label": "Days to retain deleted vaults",
+              "type": "readonly"
+            },
+            {
+              "label": "Purge protection",
+              "type": "readonly"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "key-vault-locks",
+      "kind": "list",
+      "title": "{resource-name} | Locks",
+      "breadcrumbs": [
+        "Home",
+        "Key vaults",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "high",
+      "table": {
+        "columns": [
+          "Lock name",
+          "Lock type",
+          "Scope",
+          "Notes"
+        ],
+        "header_actions": [
+          "Add",
+          "Subscription",
+          "Resource group",
+          "Refresh",
+          "Feedback"
+        ],
+        "filter_placeholder": "Search to filter items...",
+        "empty_state": "This resource has no locks."
+      },
+      "sections": [
+        {
+          "title": "Add lock",
+          "fields": [
+            {
+              "label": "Lock name",
+              "type": "text",
+              "required": true
+            },
+            {
+              "label": "Lock type",
+              "type": "select",
+              "required": true,
+              "options": [
+                "Read-only",
+                "Delete"
+              ]
+            },
+            {
+              "label": "Notes",
+              "type": "textarea"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "key-vault-alerts",
+      "kind": "other",
+      "title": "{resource-name} | Alerts",
+      "breadcrumbs": [
+        "Home",
+        "Key vaults",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Key vault blade menu item; title only"
+    },
+    {
+      "id": "key-vault-metrics",
+      "kind": "other",
+      "title": "{resource-name} | Metrics",
+      "breadcrumbs": [
+        "Home",
+        "Key vaults",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Key vault blade menu item; title only"
+    },
+    {
+      "id": "key-vault-diagnostic-settings",
+      "kind": "other",
+      "title": "{resource-name} | Diagnostic settings",
+      "breadcrumbs": [
+        "Home",
+        "Key vaults",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Key vault blade menu item; title only"
+    },
+    {
+      "id": "key-vault-logs",
+      "kind": "other",
+      "title": "{resource-name} | Logs",
+      "breadcrumbs": [
+        "Home",
+        "Key vaults",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Key vault blade menu item; title only"
+    },
+    {
+      "id": "key-vault-insights",
+      "kind": "other",
+      "title": "{resource-name} | Insights",
+      "breadcrumbs": [
+        "Home",
+        "Key vaults",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Key vault blade menu item; title only"
+    },
+    {
+      "id": "key-vault-workbooks",
+      "kind": "other",
+      "title": "{resource-name} | Workbooks",
+      "breadcrumbs": [
+        "Home",
+        "Key vaults",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Key vault blade menu item; title only"
+    },
+    {
+      "id": "key-vault-tasks",
+      "kind": "other",
+      "title": "{resource-name} | Tasks",
+      "breadcrumbs": [
+        "Home",
+        "Key vaults",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Key vault blade menu item; title only"
+    },
+    {
+      "id": "key-vault-export-template",
+      "kind": "other",
+      "title": "{resource-name} | Export template",
+      "breadcrumbs": [
+        "Home",
+        "Key vaults",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Download",
+        "Add to library (preview)",
+        "Deploy",
+        "Visualize template"
+      ],
+      "tabs": [
+        "ARM Template",
+        "Bicep",
+        "Terraform"
+      ],
+      "sections": [
+        {
+          "title": "Template",
+          "fields": [
+            {
+              "label": "Include parameters",
+              "type": "checkbox",
+              "default": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "key-vault-resource-health",
+      "kind": "other",
+      "title": "{resource-name} | Resource health",
+      "breadcrumbs": [
+        "Home",
+        "Key vaults",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Key vault blade menu item; title only"
+    },
+    {
+      "id": "key-vault-support-troubleshooting",
+      "kind": "other",
+      "title": "{resource-name} | Support + Troubleshooting",
+      "breadcrumbs": [
+        "Home",
+        "Key vaults",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Key vault blade menu item; title only"
+    },
+    {
+      "id": "create-secret",
+      "kind": "create",
+      "title": "Create a secret",
+      "provenance": "reference",
+      "confidence": "high",
+      "breadcrumbs": [
+        "Home",
+        "Key vaults",
+        "{resource-name} | Secrets",
+        "Create a secret"
+      ],
+      "sections": [
+        {
+          "title": "Create a secret",
+          "fields": [
+            {
+              "label": "Upload options",
+              "type": "select",
+              "default": "Manual",
+              "options": [
+                "Manual",
+                "Certificate"
+              ]
+            },
+            {
+              "label": "Name",
+              "type": "text",
+              "required": true
+            },
+            {
+              "label": "Secret value",
+              "type": "textarea",
+              "required": true
+            },
+            {
+              "label": "Content type (optional)",
+              "type": "text"
+            },
+            {
+              "label": "Set activation date",
+              "type": "checkbox"
+            },
+            {
+              "label": "Set expiration date",
+              "type": "checkbox"
+            },
+            {
+              "label": "Enabled",
+              "type": "radio",
+              "default": "Yes",
+              "options": [
+                "Yes",
+                "No"
+              ]
+            },
+            {
+              "label": "Tags",
+              "type": "other",
+              "actions": [
+                "0 tags"
+              ]
+            }
+          ]
+        }
+      ],
+      "submit": "Create"
+    },
+    {
+      "id": "create-key",
+      "kind": "create",
+      "title": "Create a key",
+      "provenance": "reference",
+      "confidence": "high",
+      "breadcrumbs": [
+        "Home",
+        "Key vaults",
+        "{resource-name} | Keys",
+        "Create a key"
+      ],
+      "sections": [
+        {
+          "title": "Create a key",
+          "fields": [
+            {
+              "label": "Options",
+              "type": "select",
+              "default": "Generate",
+              "options": [
+                "Generate",
+                "Import",
+                "Restore from Backup"
+              ]
+            },
+            {
+              "label": "Name",
+              "type": "text",
+              "required": true
+            },
+            {
+              "label": "Key type",
+              "type": "radio",
+              "default": "RSA",
+              "options": [
+                "RSA",
+                "EC"
+              ]
+            },
+            {
+              "label": "RSA key size",
+              "type": "radio",
+              "default": "2048",
+              "options": [
+                "2048",
+                "3072",
+                "4096"
+              ],
+              "visible_when": "Key type = RSA"
+            },
+            {
+              "label": "Elliptic curve name",
+              "type": "radio",
+              "options": [
+                "P-256",
+                "P-384",
+                "P-521",
+                "P-256K"
+              ],
+              "visible_when": "Key type = EC"
+            },
+            {
+              "label": "Set activation date",
+              "type": "checkbox"
+            },
+            {
+              "label": "Set expiration date",
+              "type": "checkbox"
+            },
+            {
+              "label": "Enabled",
+              "type": "radio",
+              "default": "Yes",
+              "options": [
+                "Yes",
+                "No"
+              ]
+            },
+            {
+              "label": "Tags",
+              "type": "other",
+              "actions": [
+                "0 tags"
+              ]
+            },
+            {
+              "label": "Enable rotation policy",
+              "type": "other",
+              "actions": [
+                "Not configured"
+              ]
+            },
+            {
+              "label": "Exportable",
+              "type": "radio",
+              "default": "No",
+              "options": [
+                "Yes",
+                "No"
+              ]
+            }
+          ]
+        }
+      ],
+      "submit": "Create"
+    },
+    {
+      "id": "secret-detail",
+      "kind": "detail",
+      "title": "{secret-name}",
+      "provenance": "reference",
+      "confidence": "medium",
+      "breadcrumbs": [
+        "Home",
+        "Key vaults",
+        "{resource-name} | Secrets",
+        "{secret-name}"
+      ],
+      "header_actions": [
+        "New Version",
+        "Refresh",
+        "Delete",
+        "Download Backup"
+      ],
+      "table": {
+        "columns": [
+          "Version",
+          "Status",
+          "Activation date",
+          "Expiration date"
+        ],
+        "resource_label": "CURRENT VERSION"
+      }
+    },
+    {
+      "id": "secret-version-detail",
+      "kind": "detail",
+      "title": "{secret-version}",
+      "provenance": "reference",
+      "confidence": "medium",
+      "breadcrumbs": [
+        "Home",
+        "Key vaults",
+        "{resource-name} | Secrets",
+        "{secret-name}",
+        "{secret-version}"
+      ],
+      "header_actions": [
+        "Save",
+        "Discard changes"
+      ],
+      "sections": [
+        {
+          "title": "Properties",
+          "fields": [
+            {
+              "label": "Secret Identifier",
+              "type": "readonly"
+            },
+            {
+              "label": "Set activation date",
+              "type": "checkbox"
+            },
+            {
+              "label": "Set expiration date",
+              "type": "checkbox"
+            },
+            {
+              "label": "Enabled",
+              "type": "radio",
+              "options": [
+                "Yes",
+                "No"
+              ]
+            },
+            {
+              "label": "Tags",
+              "type": "other"
+            },
+            {
+              "label": "Content type (optional)",
+              "type": "text"
+            },
+            {
+              "label": "Secret value",
+              "type": "readonly",
+              "actions": [
+                "Show Secret Value"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "gaps_note": "Create blade errored ('subscriptionId') without a subscription; all pages provenance=reference. nav = key vault resource menu."
+}

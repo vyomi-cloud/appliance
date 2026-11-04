@@ -1,0 +1,331 @@
+{
+  "$schema": "../../schema.json",
+  "cloud": "gcp",
+  "service": "security/kms",
+  "console_path": "/security/kms",
+  "status": "reviewed",
+  "captured_at": "2026-10-30",
+  "nav": [
+    {
+      "label": "Key management",
+      "page_id": "key-rings"
+    },
+    {
+      "label": "Key inventory",
+      "page_id": "key-inventory"
+    },
+    {
+      "label": "Autokey",
+      "page_id": "autokey"
+    }
+  ],
+  "pages": [
+    {
+      "id": "key-rings",
+      "kind": "list",
+      "title": "Key management",
+      "route": "/security/kms/keyrings",
+      "provenance": "reference",
+      "confidence": "medium",
+      "tabs": [
+        "Key rings",
+        "Key inventory",
+        "Autokey"
+      ],
+      "header_actions": [
+        "Create key ring",
+        "Refresh"
+      ],
+      "table": {
+        "resource_label": "Key rings",
+        "selection": "multi",
+        "filter_placeholder": "Filter",
+        "confidence": "medium",
+        "columns": [
+          "Name",
+          "Location",
+          "Keys"
+        ]
+      }
+    },
+    {
+      "id": "create-key-ring",
+      "kind": "create",
+      "title": "Create key ring",
+      "route": "/security/kms/keyring/create",
+      "captures": [
+        "C-forms/09-security-kms-keyring-create/step-1"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "submit": "Create",
+      "notes": "Capture blocked by 'Enable billing'.",
+      "sections": [
+        {
+          "title": "Key ring",
+          "fields": [
+            {
+              "label": "Key ring name",
+              "type": "text",
+              "required": true
+            },
+            {
+              "label": "Location type",
+              "type": "radio",
+              "default": "Region",
+              "options": [
+                "Region",
+                "Multi-region"
+              ]
+            },
+            {
+              "label": "Region",
+              "type": "select",
+              "required": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "create-key",
+      "kind": "create",
+      "title": "Create key",
+      "route": "/security/kms/key/create",
+      "provenance": "reference",
+      "confidence": "medium",
+      "submit": "Create",
+      "sections": [
+        {
+          "title": "Key name",
+          "fields": [
+            {
+              "label": "Key name",
+              "type": "text",
+              "required": true
+            }
+          ]
+        },
+        {
+          "title": "Protection level",
+          "fields": [
+            {
+              "label": "Protection level",
+              "type": "radio",
+              "default": "Software",
+              "options": [
+                "Software",
+                "HSM",
+                "External",
+                "External via VPC"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Key material",
+          "fields": [
+            {
+              "label": "Key material",
+              "type": "radio",
+              "default": "Generated key",
+              "options": [
+                "Generated key",
+                "Imported key"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Purpose and algorithm",
+          "fields": [
+            {
+              "label": "Purpose",
+              "type": "select",
+              "default": "Symmetric encrypt/decrypt",
+              "options": [
+                "Symmetric encrypt/decrypt",
+                "Asymmetric sign",
+                "Asymmetric decrypt",
+                "MAC signing",
+                "Raw encrypt/decrypt"
+              ]
+            },
+            {
+              "label": "Algorithm",
+              "type": "select",
+              "default": "Google symmetric key"
+            }
+          ]
+        },
+        {
+          "title": "Versions",
+          "fields": [
+            {
+              "label": "Key rotation period",
+              "type": "select",
+              "default": "90 days"
+            },
+            {
+              "label": "Starting on",
+              "type": "text"
+            }
+          ]
+        },
+        {
+          "title": "Additional settings",
+          "fields": [
+            {
+              "label": "Duration of 'scheduled for destruction' state",
+              "type": "number",
+              "default": 30,
+              "help": "days"
+            },
+            {
+              "label": "Labels",
+              "type": "tags",
+              "actions": [
+                "Add label"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "key-ring-details",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "route": "/security/kms/keyring/manage/{location}/{resource-name}",
+      "breadcrumbs": [
+        "Key management",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Create key",
+        "Refresh"
+      ],
+      "tabs": [
+        "Keys",
+        "Import jobs"
+      ],
+      "table": {
+        "resource_label": "Keys for \"{resource-name}\" key ring",
+        "selection": "multi",
+        "filter_placeholder": "Filter",
+        "confidence": "medium",
+        "columns": [
+          "Name",
+          "Status",
+          "Protection level",
+          "Purpose",
+          "Labels",
+          "Primary version",
+          "Primary state",
+          "Creation date",
+          "Next rotation"
+        ]
+      }
+    },
+    {
+      "id": "key-details",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "route": "/security/kms/key/manage/{location}/{keyring}/{resource-name}",
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Edit rotation period",
+        "Rotate key",
+        "Edit labels"
+      ],
+      "tabs": [
+        "Versions",
+        "Overview",
+        "Permissions"
+      ],
+      "tab_panels": [
+        {
+          "label": "Versions",
+          "sections": [
+            {
+              "title": "Versions",
+              "table": {
+                "header_actions": [
+                  "Disable",
+                  "Enable",
+                  "Destroy",
+                  "Restore"
+                ],
+                "actions": [
+                  "Make primary",
+                  "Disable",
+                  "Destroy"
+                ],
+                "columns": [
+                  "Version",
+                  "State",
+                  "Algorithm",
+                  "Created on",
+                  "Scheduled for destruction on",
+                  "Actions"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "label": "Overview",
+          "sections": [
+            {
+              "title": "Key details",
+              "fields": [
+                {
+                  "label": "Purpose",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Protection level",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Primary version",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Rotation period",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Next rotation",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Labels",
+                  "type": "readonly"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "key-inventory",
+      "kind": "list",
+      "title": "Key inventory",
+      "provenance": "reference",
+      "confidence": "medium"
+    },
+    {
+      "id": "autokey",
+      "kind": "other",
+      "title": "Autokey",
+      "provenance": "reference",
+      "confidence": "medium"
+    }
+  ],
+  "gaps_note": "Key ring create form was billing-gated and the KMS crawl had not run: all reference (current console)."
+}

@@ -1,0 +1,306 @@
+{
+ "$doc": "Vyomi capability registry — IAM. See s3.json for the contract.",
+ "iam.user.crud": {
+  "title": "Users (create, get, list, delete, rename)",
+  "level": {"nano": "full", "offline": "full"},
+  "limitations": [],
+  "tests": ["tests/conformance/test_iam_core.py"]
+ },
+ "iam.user.permissions": {
+  "title": "User permissions (attach/detach managed policies, inline policies)",
+  "level": {"nano": "full", "offline": "full"},
+  "limitations": [],
+  "tests": ["tests/conformance/test_iam_core.py"]
+ },
+ "iam.user.groups": {
+  "title": "User group membership",
+  "level": {"nano": "full", "offline": "full"},
+  "limitations": [],
+  "tests": ["tests/conformance/test_iam_core.py"]
+ },
+ "iam.user.tags": {
+  "title": "User tags",
+  "level": {"nano": "full", "offline": "full"},
+  "limitations": [],
+  "tests": ["tests/conformance/test_iam_core.py"]
+ },
+ "iam.user.access-keys": {
+  "title": "Access keys (create, list, activate/deactivate, delete, last used)",
+  "level": {"nano": "full", "offline": "full"},
+  "limitations": [],
+  "tests": ["tests/conformance/test_iam_core.py", "tests/conformance/test_iam_sweepiam_core.py"]
+ },
+ "iam.user.console-password": {
+  "title": "Console sign-in (password)",
+  "level": {"nano": "limited", "offline": "limited"},
+  "limitations": [
+   "The login profile is real: the password is checked against the ENFORCED account password policy (minimum length, character classes, reuse prevention; the IAM default of 8+ characters with 3 of 4 character types applies when no policy is set) and stored only as a salted hash; ChangePassword works as the calling IAM user (request signed with that user's access key). There is no console sign-in page in this environment to authenticate against it, so password_last_used is never recorded and MaxPasswordAge/HardExpiry do not block anything (the credential report shows the computed next rotation)."
+  ],
+  "tests": ["tests/conformance/test_iam_core.py", "tests/conformance/test_iam_sweepiam_core.py"]
+ },
+ "iam.user.mfa": {
+  "title": "Multi-factor authentication (MFA) devices",
+  "level": {"nano": "limited", "offline": "limited"},
+  "limitations": [
+   "Virtual MFA devices are real (QRCodePNG is a genuine scannable QR of the otpauth:// URI, generated in pure Python): EnableMFADevice and ResyncMFADevice verify two consecutive RFC 6238 TOTP codes (HMAC-SHA1, 30 s) against the device's secret seed (use any authenticator app, or iam_core.current_totp), and the resulting aws:MultiFactorAuthPresent condition key is evaluated by SimulatePrincipalPolicy and is_authorized. The root user's MFA device is modeled too (UserName root) and drives the account summary and Dashboard recommendations. There is no console sign-in flow to challenge a code at,.",
+   "Hardware MFA devices, security keys (FIDO) and passkeys are not modeled — only the virtual (authenticator app) device type."
+  ],
+  "tests": ["tests/conformance/test_iam_core.py", "tests/conformance/test_iam_sweepiam_core.py"]
+ },
+ "iam.role.crud": {
+  "title": "Roles (create, get, list, delete)",
+  "level": {"nano": "full", "offline": "full"},
+  "limitations": [],
+  "tests": ["tests/conformance/test_iam_core.py"]
+ },
+ "iam.role.trust-policy": {
+  "title": "Trust policy + maximum session duration",
+  "level": {"nano": "full", "offline": "full"},
+  "limitations": [],
+  "tests": ["tests/conformance/test_iam_core.py"]
+ },
+ "iam.role.permissions": {
+  "title": "Role permissions (attach/detach managed policies, inline policies)",
+  "level": {"nano": "full", "offline": "full"},
+  "limitations": [],
+  "tests": ["tests/conformance/test_iam_core.py"]
+ },
+ "iam.role.tags": {
+  "title": "Role tags",
+  "level": {"nano": "full", "offline": "full"},
+  "limitations": [],
+  "tests": ["tests/conformance/test_iam_core.py"]
+ },
+ "iam.permissions-boundary": {
+  "title": "Permissions boundaries",
+  "level": {"nano": "full", "offline": "full"},
+  "limitations": [
+   "SimulatePrincipalPolicy and the in-tab authorization check (is_authorized) clip the effective permission to the intersection of the identity policy and the boundary, explicit deny on either side winning — real AWS semantics. This doesn't change whether other services' native API calls are actually gated on IAM at all (see iam.enforcement)."
+  ],
+  "tests": ["tests/conformance/test_iam_core.py"]
+ },
+ "iam.policy.crud": {
+  "title": "Managed policies (create, get, list, delete)",
+  "level": {"nano": "full", "offline": "full"},
+  "limitations": [],
+  "tests": ["tests/conformance/test_iam_core.py"]
+ },
+ "iam.policy.versions": {
+  "title": "Policy versions (create, list, get, set default, delete)",
+  "level": {"nano": "full", "offline": "full"},
+  "limitations": [],
+  "tests": ["tests/conformance/test_iam_core.py"]
+ },
+ "iam.policy.entities-attached": {
+  "title": "Entities attached (as permissions policy or boundary)",
+  "level": {"nano": "full", "offline": "full"},
+  "limitations": [],
+  "tests": ["tests/conformance/test_iam_core.py"]
+ },
+ "iam.policy.simulate": {
+  "title": "Policy simulator (SimulatePrincipalPolicy, SimulateCustomPolicy)",
+  "level": {"nano": "limited", "offline": "limited"},
+  "limitations": [
+   "Evaluates identity policies (managed, inline, group), permissions boundaries, a supplied ResourcePolicy (same-account: an Allow naming the caller grants on its own, any Deny wins), caller-supplied ContextEntries and derived keys (aws:PrincipalTag/*, aws:username, aws:PrincipalOrgID, aws:MultiFactorAuthPresent, ...) with the full operator set (String/Arn/Numeric/Date/IpAddress/Bool/Null, IfExists, ForAnyValue/ForAllValues, ${policy variables}); unresolved condition keys come back as MissingContextValues.",
+   "Not evaluated: service control / resource control policies (every principal belongs to the management account, which SCPs never restrict), session policies, and resource policies are not fetched from the resource automatically (pass ResourcePolicy)."
+  ],
+  "tests": ["tests/conformance/test_iam_core.py", "tests/conformance/test_iam_sweepiam2_core.py"]
+ },
+ "iam.enforcement": {
+  "title": "Cross-service authorization enforcement",
+  "level": {"nano": "limited", "offline": "limited"},
+  "limitations": [
+   "IAM policies are stored and evaluated faithfully by SimulatePrincipalPolicy / the Policy simulator page, but Vyomi does not gate other services' native API calls on them: an action an IAM policy would deny still succeeds against S3, DynamoDB, etc. in this environment."
+  ],
+  "tests": ["tests/conformance/test_iam_core.py"]
+ },
+ "iam.identity-providers": {
+  "title": "Identity providers (SAML, OpenID Connect): create/list/delete, OIDC client IDs + thumbprints, SAML metadata update, tags",
+  "level": {"nano": "full", "offline": "full"},
+  "limitations": [],
+  "tests": ["tests/conformance/test_iam_core.py", "tests/conformance/test_iam_sweepiam2_core.py"]
+ },
+ "iam.account-settings.password-policy": {
+  "title": "Account password policy",
+  "level": {"nano": "full", "offline": "full"},
+  "limitations": [],
+  "tests": ["tests/conformance/test_iam_core.py"]
+ },
+ "iam.account-settings.alias": {
+  "title": "Account alias",
+  "level": {"nano": "full", "offline": "full"},
+  "limitations": [],
+  "tests": ["tests/conformance/test_iam_core.py"]
+ },
+ "iam.credential-report": {
+  "title": "Credentials report",
+  "level": {"nano": "limited", "offline": "limited"},
+  "limitations": [
+   "The report is generated synchronously (no 4-hour cache window) with the full 22-column AWS layout: password state and next rotation, MFA, both access keys with REAL last-used date/region/service (from requests signed with the key), signing certificates. password_last_used stays N/A because there is no console sign-in."
+  ],
+  "tests": ["tests/conformance/test_iam_core.py", "tests/conformance/test_iam_sweepiam_core.py"]
+ },
+ "iam.last-accessed": {
+  "title": "Last Accessed (service last-accessed data)",
+  "level": {"nano": "limited", "offline": "limited"},
+  "limitations": [
+   "Generated from Vyomi's own native-wire activity log, not AWS's background telemetry: only requests signed with an IAM USER's own access key (a real aws-cli/boto3/SDK caller configured with CreateAccessKey credentials) are attributable. The console's own operator session and roles (which get temporary AssumeRole credentials Vyomi does not mint) never show activity.",
+   "SERVICE_LEVEL and ACTION_LEVEL (TrackedActionsLastAccessed) are both real, plus GetServiceLastAccessedDetailsWithEntities and ListPoliciesGrantingServiceAccess; actions are only known for query/JSON-protocol services (REST services such as S3 record the service, not the operation), and region is not recorded."
+  ],
+  "tests": ["tests/conformance/test_iam_core.py", "tests/conformance/test_iam_sweepiam2_core.py"]
+ },
+ "iam.cloudtrail-policy-generator": {
+  "title": "Generate policy based on CloudTrail events",
+  "level": {"nano": "limited", "offline": "limited"},
+  "limitations": [
+   "Vyomi does not simulate CloudTrail; the generated policy is mined from the same real signal CloudTrail would have recorded for the principal — Vyomi's own native-wire activity log (see iam.last-accessed) — synchronously rather than through Access Analyzer's StartPolicyGeneration/GetGeneratedPolicy job.",
+   "Only activity attributable to an IAM user's own access key counts (see iam.last-accessed); for services where Vyomi only has service-level activity, the generated statement grants the whole service namespace (e.g. \"s3:*\") rather than the exact actions invoked."
+  ],
+  "tests": ["tests/conformance/test_iam_core.py"]
+ },
+ "iam.roles-anywhere": {
+  "title": "IAM Roles Anywhere",
+  "level": {"nano": "limited", "offline": "limited"},
+  "limitations": [
+   "Trust anchors and profiles are real, stored resources on IAM's native wire. The certificate is format-checked (a well-formed PEM block), never cryptographically verified — the same limitation as the virtual-MFA code check (see iam.user.mfa).",
+   "CreateSession (exchanging a signed challenge for temporary role credentials) is not modeled; only the trust-anchor/profile control plane is."
+  ],
+  "tests": ["tests/conformance/test_iam_core.py"]
+ },
+ "iam.access-analyzer": {
+  "title": "IAM Access Analyzer",
+  "level": {"nano": "limited", "offline": "limited"},
+  "limitations": [
+   "External-access findings are real: computed from IAM role trust policies and S3 bucket policies that name a principal outside this account or \"*\". KMS key policies, SQS/SNS resource policies and Secrets Manager resource policies are not yet scanned.",
+   "Unused-access findings cover IAM user access keys only (an access key at least `unused_access_age` days old with zero entries in the activity log, see iam.last-accessed) — unused role permissions and unused console passwords are not modeled.",
+   "Vyomi simulates a single AWS account: organization-wide analyzers and cross-account zone-of-trust membership are not modeled (see iam.organizations)."
+  ],
+  "tests": ["tests/conformance/test_iam_core.py"]
+ },
+ "iam.account-authorization-details": {
+  "title": "GetAccountAuthorizationDetails (users, groups, roles, managed policies with versions)",
+  "level": {"nano": "full", "offline": "full"},
+  "limitations": [],
+  "tests": ["tests/conformance/test_iam_sweepiam2_core.py"]
+ },
+ "iam.root.cloudfront-key-pairs": {
+  "title": "CloudFront key pairs (root user)",
+  "level": {"nano": "not_simulated", "offline": "not_simulated"},
+  "limitations": [
+   "Vyomi has no Amazon CloudFront service, so there is nothing for a root CloudFront signing key pair to sign. AWS itself has deprecated root-account CloudFront key pairs in favour of CloudFront public keys and key groups, which would live in a CloudFront control plane that does not exist here."
+  ]
+ },
+ "iam.organizations": {
+  "title": "AWS Organizations (organization, root, OUs, member accounts, handshakes, service access, delegated administrators, tags)",
+  "level": {"nano": "limited", "offline": "limited"},
+  "limitations": [
+   "The management-account control plane is real on the native Organizations wire (AWSOrganizationsV20161128 JSON 1.1; boto3/CLI/Terraform): CreateOrganization, root, OU tree (create/rename/delete, not-empty checks), CreateAccount (completes immediately; AWS finishes asynchronously), invite/accept/decline/cancel handshakes, MoveAccount, RemoveAccountFromOrganization, CloseAccount, trusted service access, delegated administrators and tags — all persisted.",
+   "Vyomi is still a single-account simulator: a member account is a record (id, email, name, parent, status) with NO resources, principals, credentials or traffic of its own, so the per-account service activity, member-account root credentials and cross-account access that AWS shows for them are not modeled. Consolidated billing and AWS-side email verification do not exist."
+  ],
+  "tests": ["tests/conformance/test_organizations_core.py"]
+ },
+ "iam.organizations.policies": {
+  "title": "Service control policies (SCPs), resource control policies (RCPs) and the other organization policy types",
+  "level": {"nano": "limited", "offline": "limited"},
+  "limitations": [
+   "Real on the Organizations wire for every policy type (SCP, RCP, tag, backup, AI-services opt-out, declarative, ...): create/update/delete/describe, attach/detach to the root, OUs and accounts, ListTargetsForPolicy / ListPoliciesForTarget, EnablePolicyType / DisablePolicyType, with AWS's rules (disabled type cannot be attached, last SCP on a target cannot be detached, in-use policy cannot be deleted, FullAWSAccess is AWS managed and read-only).",
+   "SCP/RCP documents are stored and validated as JSON, and the attached chain root -> OUs -> account can be evaluated (organizations_core.effective_scp_decision, AWS allow-at-every-level / deny-anywhere semantics), but because every IAM principal and resource in Vyomi belongs to the management account — which SCPs never restrict, as in AWS — no live request is ever denied by an SCP/RCP. Tag/backup/opt-out policy documents are not interpreted."
+  ],
+  "tests": ["tests/conformance/test_organizations_core.py", "tests/conformance/test_iam_core.py"]
+ },
+ "iam.organizations.root-access": {
+  "title": "Centralized root access (EnableOrganizationsRootCredentialsManagement / RootSessions, delegated administrator)",
+  "level": {"nano": "limited", "offline": "limited"},
+  "limitations": [
+   "Real: the IAM API ListOrganizationsFeatures / Enable- and DisableOrganizationsRootCredentialsManagement / Enable- and DisableOrganizationsRootSessions, with AWS's preconditions (an organization with all features and trusted access for iam.amazonaws.com), and delegating the capability through RegisterDelegatedAdministrator.",
+   "Member accounts have no root credentials or resources, so the root-credential inventory per member account and privileged root actions (sts:AssumeRoot -> delete credentials, unlock bucket policy, ...) have nothing to act on; Vyomi has no STS AssumeRoot."
+  ],
+  "tests": ["tests/conformance/test_organizations_core.py"]
+ },
+ "iam.organizations.role-manager": {
+  "title": "Role manager (IAM account setting)",
+  "level": {"nano": "not_simulated", "offline": "not_simulated"},
+  "limitations": [
+   "The IAM Role manager account setting has no public API and no Vyomi backing; it is not simulated."
+  ]
+ },
+ "iam.organizations.service-access-report": {
+  "title": "Service access report for an SCP",
+  "level": {"nano": "limited", "offline": "limited"},
+  "limitations": [
+   "Real GenerateOrganizationsAccessReport / GetOrganizationsAccessReport over the IAM wire, scoped to a root/OU/account and to the services the SCP allows (Allow statements minus unconditional Deny). It is derived from the activity Vyomi itself recorded for the management account's IAM users (the same signal as the user-level last-accessed report). Member accounts have no principals or traffic, so they contribute nothing; roles are not attributable; the report covers only the services Vyomi implements and has no region breakdown, no CloudTrail log-file source and no pagination."
+  ],
+  "api": ["GenerateOrganizationsAccessReport", "GetOrganizationsAccessReport"],
+  "tests": ["tests/conformance/test_iam_access_report.py"]
+ },
+ "iam.organizations.access-requests": {
+  "title": "Temporary delegation requests (centralized root access)",
+  "level": {"nano": "limited", "offline": "limited"},
+  "limitations": [
+   "Vyomi has no member accounts to originate a real cross-account access request; this stores and lists request records created over the native wire, with no approval workflow."
+  ],
+  "tests": ["tests/conformance/test_iam_core.py"]
+ },
+ "iam.user.ssh-keys": {
+  "title": "SSH public keys for AWS CodeCommit",
+  "level": {"nano": "limited", "offline": "limited"},
+  "limitations": [
+   "Upload/list/get/update/delete are real (key format and MD5 fingerprint validated, duplicate detection, 5 keys per user), but AWS CodeCommit is not simulated so nothing authenticates with the key."
+  ],
+  "tests": ["tests/conformance/test_iam_sweepiam_core.py"]
+ },
+ "iam.user.service-credentials": {
+  "title": "HTTPS Git credentials (CodeCommit), Keyspaces credentials and Bedrock API keys",
+  "level": {"nano": "limited", "offline": "limited"},
+  "limitations": [
+   "Create/list/reset/update/delete are real (one-time password shown on create and reset, 2 per service per user) but CodeCommit, Keyspaces and Bedrock API-key authentication are not simulated, so nothing validates the issued username/password."
+  ],
+  "tests": ["tests/conformance/test_iam_sweepiam_core.py"]
+ },
+ "iam.user.signing-certificates": {
+  "title": "X.509 signing certificates",
+  "level": {"nano": "limited", "offline": "limited"},
+  "limitations": [
+   "Upload/list/activate/deactivate/delete are real (PEM structure validated, 2 per user) but the certificate chain and signature are never verified, and the legacy SOAP APIs that used them are not simulated."
+  ],
+  "tests": ["tests/conformance/test_iam_sweepiam_core.py"]
+ },
+ "iam.server-certificates": {
+  "title": "Server certificates (IAM certificate store)",
+  "level": {"nano": "limited", "offline": "limited"},
+  "limitations": [
+   "Upload/get/list/rename/delete are real (PEM validated; the Expiration is parsed from the certificate's notAfter) but the private key is only format-checked and the certificate is not usable by load balancers/CloudFront in this environment unless that service reads it."
+  ],
+  "tests": ["tests/conformance/test_iam_sweepiam_core.py"]
+ },
+ "iam.account-settings.sts": {
+  "title": "Security Token Service (STS) global endpoint token version",
+  "level": {"nano": "limited", "offline": "limited"},
+  "limitations": [
+   "The v1/v2 global-endpoint token version is a real stored account setting (SetSecurityTokenServicePreferences, reported by GetAccountSummary), but Vyomi's STS does not mint region-scoped tokens, so the setting does not change which regions accept a session token."
+  ],
+  "tests": ["tests/conformance/test_iam_sweepiam_core.py"]
+ },
+ "iam.account-summary": {
+  "title": "Account summary and Dashboard resource counts",
+  "level": {"nano": "full", "offline": "full"},
+  "limitations": [],
+  "tests": ["tests/conformance/test_iam_sweepiam_core.py"]
+ },
+ "iam.security-recommendations": {
+  "title": "Dashboard security recommendations",
+  "level": {"nano": "limited", "offline": "limited"},
+  "limitations": [
+   "Vyomi-only API (GetSecurityRecommendations) computed from real state: root MFA, root access keys, console users without MFA, access keys older than 90 days or never used for 45+ days, weak/missing password policy. The set is Vyomi's, a superset of the two AWS shows."
+  ],
+  "tests": ["tests/conformance/test_iam_sweepiam_core.py"]
+ },
+ "iam.event-log": {
+  "title": "IAM admin-action event log",
+  "level": {"nano": "limited", "offline": "limited"},
+  "limitations": [
+   "Vyomi-only (ListIamEvents): every mutating IAM call with caller, target and outcome, newest first (last 2000). This is IAM's own audit trail, not CloudTrail, and not multi-account."
+  ],
+  "tests": ["tests/conformance/test_iam_sweepiam_core.py"]
+ }
+}

@@ -1,0 +1,797 @@
+{
+  "$schema": "../schema.json",
+  "cloud": "gcp",
+  "service": "run",
+  "console_path": "/run/",
+  "status": "reviewed",
+  "captured_at": "2026-10-30",
+  "nav": [
+    {
+      "label": "Overview",
+      "page_id": "overview"
+    },
+    {
+      "label": "Services",
+      "page_id": "services"
+    },
+    {
+      "label": "Jobs",
+      "page_id": "jobs"
+    },
+    {
+      "label": "Worker pools",
+      "page_id": "worker-pools"
+    },
+    {
+      "label": "Domain mappings",
+      "page_id": "domain-mappings"
+    },
+    {
+      "label": "Release Notes",
+      "external": true
+    }
+  ],
+  "pages": [
+    {
+      "id": "services",
+      "kind": "list",
+      "title": "Services",
+      "route": "/run/services",
+      "captures": [
+        "A-functions/001-L1-landing",
+        "A-run/004-L2-services",
+        "A-run/001-L1-landing"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Deploy container",
+        "Connect repo",
+        "Write a function",
+        "Refresh"
+      ],
+      "table": {
+        "selection": "multi",
+        "actions": [
+          "Copy",
+          "Delete"
+        ],
+        "filter_placeholder": "Filter services",
+        "preferences": true,
+        "empty_state": "Run your app on a fully managed platform",
+        "empty_state_action": "Create service",
+        "columns": [
+          "Name",
+          "Deployment type",
+          "Req/sec",
+          "Region",
+          "Cost",
+          "Authentication",
+          "Ingress",
+          "Last deployed",
+          "Deployed by",
+          "Recommendation"
+        ]
+      },
+      "notes": "Captured via /functions, which now lands on Cloud Run Services."
+    },
+    {
+      "id": "create-service",
+      "kind": "create",
+      "title": "Create service",
+      "route": "/run/create",
+      "captures": [
+        "C-forms/08-run-create/step-1",
+        "C-forms/08-run-create/step-1--tab-02-networking",
+        "C-forms/08-run-create/step-1--tab-03-security"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "submit": "Create",
+      "notes": "Service name and region cannot be changed later.",
+      "sections": [
+        {
+          "title": "Source",
+          "fields": [
+            {
+              "label": "Deployment source",
+              "type": "radio",
+              "default": "Container image",
+              "options": [
+                "Deploy one revision from an existing container image",
+                "Continuously deploy from a repository (source or function)",
+                "Use an inline editor to create a function"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Container image",
+          "fields": [
+            {
+              "label": "Container image URL",
+              "type": "text",
+              "required": true,
+              "actions": [
+                "Select",
+                "Test with a sample container"
+              ],
+              "help": "Should listen for HTTP requests on $PORT (default: 8080) and not rely on local state."
+            }
+          ]
+        },
+        {
+          "title": "Configure",
+          "fields": [
+            {
+              "label": "Service name",
+              "type": "text",
+              "required": true
+            },
+            {
+              "label": "Region",
+              "type": "select",
+              "required": true,
+              "default": "us-central1 (Iowa)"
+            },
+            {
+              "label": "Custom URLs",
+              "type": "button",
+              "actions": [
+                "Add a custom URL"
+              ]
+            },
+            {
+              "label": "Endpoint URL",
+              "type": "readonly"
+            }
+          ]
+        },
+        {
+          "title": "Authentication",
+          "fields": [
+            {
+              "label": "Authentication",
+              "type": "radio",
+              "required": true,
+              "options": [
+                "Allow public access",
+                "Require authentication"
+              ],
+              "help": "Require authentication: select between IAM and/or Identity-Aware Proxy (IAP)"
+            }
+          ]
+        },
+        {
+          "title": "Billing",
+          "fields": [
+            {
+              "label": "Billing",
+              "type": "radio",
+              "default": "Request-based",
+              "options": [
+                "Request-based",
+                "Instance-based"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Service scaling",
+          "fields": [
+            {
+              "label": "Service scaling",
+              "type": "radio",
+              "default": "Auto scaling",
+              "options": [
+                "Auto scaling",
+                "Manual scaling"
+              ]
+            },
+            {
+              "label": "Minimum number of instances",
+              "type": "number",
+              "default": 0,
+              "help": "Set to 1 to reduce cold starts."
+            },
+            {
+              "label": "Maximum number of instances",
+              "type": "number"
+            },
+            {
+              "label": "Customize autoscaling factors",
+              "type": "checkbox",
+              "default": false
+            }
+          ]
+        },
+        {
+          "title": "Ingress",
+          "fields": [
+            {
+              "label": "Ingress",
+              "type": "radio",
+              "default": "All",
+              "options": [
+                "Internal",
+                "All"
+              ]
+            },
+            {
+              "label": "Allow traffic from external Application Load Balancers",
+              "type": "checkbox",
+              "visible_when": "Ingress = Internal"
+            }
+          ]
+        },
+        {
+          "title": "Containers, Networking, Security",
+          "fields": [
+            {
+              "label": "Containers",
+              "type": "other",
+              "children": [
+                {
+                  "label": "Container image URL",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Container port",
+                  "type": "number",
+                  "default": 8080
+                },
+                {
+                  "label": "Container command",
+                  "type": "text",
+                  "help": "Leave blank to use the entry point command defined in the container image."
+                },
+                {
+                  "label": "Container arguments",
+                  "type": "text",
+                  "help": "Arguments passed to the entry point command."
+                },
+                {
+                  "label": "Memory",
+                  "type": "select",
+                  "default": "512 MiB"
+                },
+                {
+                  "label": "CPU",
+                  "type": "select",
+                  "default": "1"
+                },
+                {
+                  "label": "Ephemeral disk",
+                  "type": "checkbox"
+                },
+                {
+                  "label": "GPU",
+                  "type": "checkbox"
+                },
+                {
+                  "label": "Health checks",
+                  "type": "button",
+                  "actions": [
+                    "Add health check"
+                  ]
+                },
+                {
+                  "label": "Variables & Secrets",
+                  "type": "table",
+                  "columns": [
+                    "Name",
+                    "Value"
+                  ],
+                  "actions": [
+                    "Add variable",
+                    "Reference a secret"
+                  ],
+                  "provenance": "reference",
+                  "confidence": "medium"
+                },
+                {
+                  "label": "Volumes",
+                  "type": "table",
+                  "actions": [
+                    "Add volume"
+                  ],
+                  "provenance": "reference",
+                  "confidence": "medium"
+                },
+                {
+                  "label": "Request timeout",
+                  "type": "number",
+                  "default": 300,
+                  "help": "seconds (maximum 3600)"
+                },
+                {
+                  "label": "Maximum concurrent requests per instance",
+                  "type": "number",
+                  "default": 80
+                },
+                {
+                  "label": "Execution environment",
+                  "type": "radio",
+                  "default": "Default",
+                  "options": [
+                    "Default",
+                    "First generation",
+                    "Second generation"
+                  ]
+                },
+                {
+                  "label": "Revision scaling",
+                  "type": "other"
+                },
+                {
+                  "label": "Startup CPU boost",
+                  "type": "checkbox",
+                  "default": true
+                },
+                {
+                  "label": "Cloud SQL connections",
+                  "type": "button",
+                  "actions": [
+                    "Add connection"
+                  ]
+                }
+              ],
+              "actions": [
+                "Add Container"
+              ]
+            },
+            {
+              "label": "Networking",
+              "type": "other",
+              "children": [
+                {
+                  "label": "Use HTTP/2 end-to-end",
+                  "type": "checkbox"
+                },
+                {
+                  "label": "Session affinity",
+                  "type": "checkbox"
+                },
+                {
+                  "label": "Connect to a VPC for outbound traffic",
+                  "type": "checkbox"
+                },
+                {
+                  "label": "Join a Service Mesh.",
+                  "type": "checkbox"
+                }
+              ]
+            },
+            {
+              "label": "Security",
+              "type": "other",
+              "children": [
+                {
+                  "label": "Service account",
+                  "type": "select",
+                  "default": "Default compute service account"
+                },
+                {
+                  "label": "Verify container deployment with Binary Authorization",
+                  "type": "checkbox"
+                },
+                {
+                  "label": "Encryption",
+                  "type": "radio",
+                  "default": "Google-managed encryption key",
+                  "options": [
+                    "Google-managed encryption key",
+                    "Cloud KMS key"
+                  ]
+                }
+              ]
+            }
+          ],
+          "expandable": true
+        }
+      ]
+    },
+    {
+      "id": "service-details",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "route": "/run/detail/{region}/{resource-name}",
+      "breadcrumbs": [
+        "Cloud Run",
+        "Services",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Edit & deploy new revision",
+        "Set up continuous deployment",
+        "Delete"
+      ],
+      "notes": "URL of the service shown under the title with a copy icon.",
+      "tabs": [
+        "Observability",
+        "Revisions",
+        "Source",
+        "Networking",
+        "Security",
+        "Triggers",
+        "YAML"
+      ],
+      "tab_panels": [
+        {
+          "label": "Observability",
+          "sections": [
+            {
+              "title": "Metrics",
+              "fields": [
+                {
+                  "label": "Request count",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Request latencies",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Container instance count",
+                  "type": "readonly"
+                }
+              ],
+              "confidence": "low"
+            },
+            {
+              "title": "Logs",
+              "confidence": "low"
+            }
+          ],
+          "confidence": "low"
+        },
+        {
+          "label": "Revisions",
+          "sections": [
+            {
+              "title": "Revisions",
+              "table": {
+                "header_actions": [
+                  "Manage traffic"
+                ],
+                "columns": [
+                  "Name",
+                  "Traffic",
+                  "Deployed",
+                  "Revision tags",
+                  "Actions"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "label": "Networking",
+          "sections": [
+            {
+              "title": "Ingress control",
+              "fields": [
+                {
+                  "label": "Ingress",
+                  "type": "radio",
+                  "options": [
+                    "Internal",
+                    "All"
+                  ]
+                }
+              ],
+              "actions": [
+                "Save"
+              ]
+            }
+          ],
+          "confidence": "low"
+        },
+        {
+          "label": "Security",
+          "sections": [
+            {
+              "title": "Authentication",
+              "fields": [
+                {
+                  "label": "Authentication",
+                  "type": "radio",
+                  "options": [
+                    "Allow public access",
+                    "Require authentication"
+                  ]
+                }
+              ],
+              "actions": [
+                "Save"
+              ]
+            }
+          ],
+          "confidence": "low"
+        },
+        {
+          "label": "Triggers",
+          "sections": [
+            {
+              "title": "Triggers",
+              "table": {
+                "header_actions": [
+                  "Add trigger"
+                ],
+                "columns": [
+                  "Name",
+                  "Type",
+                  "Event",
+                  "Destination"
+                ]
+              }
+            }
+          ],
+          "confidence": "low"
+        },
+        {
+          "label": "YAML",
+          "sections": [
+            {
+              "title": "YAML",
+              "fields": [
+                {
+                  "label": "Service YAML",
+                  "type": "textarea"
+                }
+              ]
+            }
+          ],
+          "confidence": "low"
+        }
+      ]
+    },
+    {
+      "id": "jobs",
+      "kind": "list",
+      "title": "Jobs",
+      "route": "/run/jobs",
+      "captures": [
+        "A-run/005-L2-jobs"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Deploy container",
+        "Refresh"
+      ],
+      "table": {
+        "selection": "multi",
+        "actions": [
+          "Execute",
+          "Delete"
+        ],
+        "filter_placeholder": "Filter jobs",
+        "empty_state": "Execute jobs on a fully managed platform",
+        "empty_state_action": "Create job",
+        "columns": [
+          "Name",
+          "Status of last execution",
+          "Last executed",
+          "Region",
+          "Cost",
+          "Created by"
+        ]
+      }
+    },
+    {
+      "id": "create-job",
+      "kind": "create",
+      "title": "Create job",
+      "route": "/run/jobs/create",
+      "provenance": "reference",
+      "confidence": "medium",
+      "submit": "Create",
+      "sections": [
+        {
+          "title": "Container image",
+          "fields": [
+            {
+              "label": "Container image URL",
+              "type": "text",
+              "required": true,
+              "actions": [
+                "Select",
+                "Test with a sample container"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Configure",
+          "fields": [
+            {
+              "label": "Job name",
+              "type": "text",
+              "required": true
+            },
+            {
+              "label": "Region",
+              "type": "select",
+              "required": true,
+              "default": "us-central1 (Iowa)"
+            },
+            {
+              "label": "Number of tasks",
+              "type": "number",
+              "default": 1
+            },
+            {
+              "label": "Execute job immediately",
+              "type": "checkbox",
+              "default": false
+            }
+          ]
+        },
+        {
+          "title": "Containers, Volumes, Connections, Security",
+          "fields": [
+            {
+              "label": "Memory",
+              "type": "select",
+              "default": "512 MiB"
+            },
+            {
+              "label": "CPU",
+              "type": "select",
+              "default": "1"
+            },
+            {
+              "label": "Task timeout",
+              "type": "number",
+              "default": 10,
+              "help": "minutes"
+            },
+            {
+              "label": "Number of retries per failed task",
+              "type": "number",
+              "default": 3
+            },
+            {
+              "label": "Parallelism",
+              "type": "number"
+            }
+          ],
+          "expandable": true
+        }
+      ]
+    },
+    {
+      "id": "job-details",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "route": "/run/jobs/details/{region}/{resource-name}",
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Execute",
+        "Edit",
+        "Delete"
+      ],
+      "tabs": [
+        "History",
+        "Observability",
+        "Triggers",
+        "YAML"
+      ],
+      "tab_panels": [
+        {
+          "label": "History",
+          "sections": [
+            {
+              "title": "Executions",
+              "table": {
+                "columns": [
+                  "Execution",
+                  "Status",
+                  "Creation time",
+                  "Tasks",
+                  "Completed"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "overview",
+      "kind": "dashboard",
+      "title": "Overview",
+      "route": "/run/overview",
+      "captures": [
+        "A-run/003-L2-overview"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Refresh"
+      ],
+      "sections": [
+        {
+          "title": "Deploy a web service",
+          "actions": [
+            "Connect repository",
+            "Deploy container"
+          ]
+        },
+        {
+          "title": "Create a batch job or a background worker pool",
+          "actions": [
+            "Create job",
+            "Create worker pool"
+          ]
+        },
+        {
+          "title": "Write a function",
+          "fields": [
+            {
+              "label": "Language",
+              "type": "button",
+              "options": [
+                "Node.js",
+                "Python",
+                "Go",
+                "Java",
+                "PHP",
+                ".NET",
+                "Ruby"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "worker-pools",
+      "kind": "list",
+      "title": "Worker pools",
+      "route": "/run/worker-pools",
+      "captures": [
+        "A-run/006-L2-worker-pools"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Deploy container",
+        "Refresh"
+      ],
+      "table": {
+        "filter_placeholder": "Filter",
+        "empty_state": "Run your non-request workload on a fully managed platform",
+        "empty_state_action": "Create worker pool",
+        "columns": [
+          "Name",
+          "Deployment type",
+          "Region",
+          "Cost",
+          "Last updated",
+          "Instances",
+          "Modified by",
+          "Labels"
+        ]
+      }
+    },
+    {
+      "id": "domain-mappings",
+      "kind": "list",
+      "title": "Domain mappings",
+      "captures": [
+        "A-functions/001-L1-landing",
+        "A-run/004-L2-services",
+        "A-run/001-L1-landing"
+      ],
+      "route": "/run/domains",
+      "provenance": "reference",
+      "confidence": "medium"
+    }
+  ],
+  "gaps_note": "Nav, Overview, Services/Jobs/Worker pools lists and the Create service form (incl. Networking/Security tabs) are from capture. Region list was not loadable (API disabled). Service/job details and create job are reference."
+}

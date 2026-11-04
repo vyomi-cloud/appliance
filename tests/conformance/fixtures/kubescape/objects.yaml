@@ -1,0 +1,230 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: shop
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: priv-app
+  namespace: shop
+  labels: {app: priv}
+spec:
+  replicas: 2
+  selector:
+    matchLabels: {app: priv}
+  template:
+    metadata:
+      labels: {app: priv}
+    spec:
+      hostNetwork: true
+      containers:
+      - name: web
+        image: nginx:1.25
+        ports:
+        - containerPort: 80
+          hostPort: 8080
+        securityContext:
+          privileged: true
+          capabilities:
+            add: ["NET_ADMIN", "SYS_ADMIN"]
+        env:
+        - name: DB_PASSWORD
+          value: "hunter2"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hardened
+  namespace: shop
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: hardened}
+  template:
+    metadata:
+      labels: {app: hardened}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+      - name: api
+        image: myregistry.azurecr.io/api@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+        imagePullPolicy: Always
+        resources:
+          limits: {cpu: 500m, memory: 256Mi}
+          requests: {cpu: 100m, memory: 128Mi}
+        livenessProbe: {httpGet: {path: /healthz, port: 8080}}
+        readinessProbe: {httpGet: {path: /ready, port: 8080}}
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          capabilities: {drop: ["ALL"]}
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: debug-shell
+  namespace: default
+spec:
+  hostPID: true
+  containers:
+  - name: shell
+    image: busybox
+    command: ["sh", "-c", "sleep 3600"]
+    volumeMounts:
+    - name: host
+      mountPath: /host
+  volumes:
+  - name: host
+    hostPath:
+      path: /
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: node-agent
+  namespace: kube-system
+spec:
+  selector:
+    matchLabels: {app: node-agent}
+  template:
+    metadata:
+      labels: {app: node-agent}
+    spec:
+      containers:
+      - name: agent
+        image: example/agent:latest
+        securityContext:
+          allowPrivilegeEscalation: true
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: db
+  namespace: shop
+spec:
+  serviceName: db
+  replicas: 1
+  selector:
+    matchLabels: {app: db}
+  template:
+    metadata:
+      labels: {app: db}
+    spec:
+      containers:
+      - name: pg
+        image: postgres:16
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+  namespace: shop
+spec:
+  type: LoadBalancer
+  selector: {app: priv}
+  ports:
+  - port: 80
+    targetPort: 80
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: shop
+data:
+  aws_access_key_id: AKIAIOSFODNN7EXAMPLE
+  log_level: debug
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: db-creds
+  namespace: shop
+type: Opaque
+data:
+  password: aHVudGVyMg==
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: deployer
+  namespace: shop
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: everything
+rules:
+- apiGroups: ["*"]
+  resources: ["*"]
+  verbs: ["*"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: deployer-everything
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: everything
+subjects:
+- kind: ServiceAccount
+  name: deployer
+  namespace: shop
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: secret-reader
+  namespace: shop
+rules:
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: read-secrets
+  namespace: shop
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: secret-reader
+subjects:
+- kind: User
+  name: jane
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  namespace: default
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress", "Egress"]
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: web
+  namespace: shop
+spec:
+  rules:
+  - host: shop.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: web
+            port: {number: 80}

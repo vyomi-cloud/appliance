@@ -1,0 +1,83 @@
+{
+ "$doc": "Vyomi capability registry — Cloud Scheduler. One entry per console section; level per substrate (nano = shared core, also dev_server/unified ingress; offline = appliance). Proven by tests/conformance/test_capabilities.py — a claim the backend does not honour fails CI.",
+ "gcp.cloudscheduler.jobs.crud": {
+  "title": "Jobs (create, list, get, update, delete)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": [
+   "jobs.create",
+   "jobs.get",
+   "jobs.list",
+   "jobs.patch",
+   "jobs.delete",
+   "locations.list"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_cloudscheduler_core.py"
+  ]
+ },
+ "gcp.cloudscheduler.jobs.schedule": {
+  "title": "Pause, resume and force run",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "On Nano (and the dev server) schedules are advanced lazily on read/run, not by a background timer: a due job fires the first time any request touches its project (list, get or run), not at the exact wall-clock instant. The offline appliance runs a 15 s background ticker, so a due job fires on its own within 15 s — no SDK/console call needed — though still not at the exact wall-clock instant.",
+   "A missed tick is never replayed on either substrate — only the single next occurrence is computed."
+  ],
+  "api": [
+   "jobs.pause",
+   "jobs.resume",
+   "jobs.run"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_cloudscheduler_core.py"
+  ]
+ },
+ "gcp.cloudscheduler.jobs.targets": {
+  "title": "HTTP, Pub/Sub and App Engine HTTP targets",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "A Pub/Sub target is delivered into Vyomi's Pub/Sub core for real on every substrate — a subscriber receives an actual message.",
+   "On Nano (and the dev server) there is no outbound network path, so an HTTP target is recorded as attempted only (lastAttemptTime/status are stamped; the target URL is never actually invoked). The offline appliance really sends the request (method, headers, body), retries it per retryConfig, and maps the real response code onto the job's status.",
+   "App Engine HTTP targets are recorded as attempted (lastAttemptTime/status stamped) on every substrate; Vyomi doesn't model App Engine, so the relative URL is never dispatched anywhere.",
+   "OAuth and OIDC auth headers are stored and returned to the SDK exactly as configured; the offline appliance sends a placeholder bearer token rather than minting or verifying a real one for the configured service account."
+  ],
+  "api": [
+   "jobs.create",
+   "jobs.patch",
+   "jobs.run"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_cloudscheduler_core.py"
+  ]
+ },
+ "gcp.cloudscheduler.cron-jobs": {
+  "title": "App Engine cron jobs (legacy cron.yaml)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "cron.yaml has no public create/list API of its own on real GCP either; Vyomi models a deploy the same way Google executes it under the hood — as a real Cloud Scheduler job with an appEngineHttpTarget, stored under a reserved 'appengine' location so it lists separately from ordinary Scheduler jobs.",
+   "Schedules use App Engine's groc syntax (not unix-cron): 'every N minutes|hours|days [synchronized]' and 'every <weekday[,weekday...]|day> HH:MM' are supported; other groc forms (e.g. ordinal weekday-of-month) are rejected with INVALID_ARGUMENT rather than silently accepted.",
+   "Vyomi doesn't model App Engine itself, so Run now records the attempt (lastAttemptTime/status stamped) rather than actually invoking an app instance — the same limitation that applies to any appEngineHttpTarget job (see gcp.cloudscheduler.jobs.targets)."
+  ],
+  "api": [
+   "jobs.create",
+   "jobs.get",
+   "jobs.list",
+   "jobs.run"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_cloudscheduler_core.py"
+  ]
+ }
+}

@@ -5,7 +5,9 @@ import sys
 from datetime import datetime, timedelta, timezone
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+from core import gcp_compute_instances_core as vmcore  # noqa: E402
 from core import gcp_monitoring_core as mon  # noqa: E402
+from core import object_store  # noqa: E402
 
 PASS = FAIL = 0
 
@@ -17,11 +19,17 @@ def check(name, ok, detail=""):
 
 
 P = "/v3/projects/p1"
+P1 = "/v1/projects/p1"
 
 
 def call(st, method, path, body=None, query=None):
     r = mon.dispatch(st, method, P + path if path.startswith("/") and not path.startswith("/v3") else path,
                      query or {}, {}, json.dumps(body).encode() if body is not None else b"")
+    return r.status, json.loads(r.body or b"{}")
+
+
+def call1(st, method, path, body=None, query=None):
+    r = mon.dispatch(st, method, P1 + path, query or {}, {}, json.dumps(body).encode() if body is not None else b"")
     return r.status, json.loads(r.body or b"{}")
 
 
@@ -185,6 +193,18 @@ def main():
     s, b = call(st, "DELETE", "/groups/" + gid, query={"recursive": "true"})
     check("recursive delete", s == 200 and not st.groups, b)
 
+    # group membership is evaluated for real against the resource instances this project's
+    # own time series have actually reported — not an always-empty stub
+    s, g2 = call(st, "POST", "/groups", {"displayName": "globals", "filter": 'resource.type = "global"'})
+    s, b = call(st, "GET", "/groups/%s/members" % g2["name"].rsplit("/", 1)[-1])
+    check("group members matches real resource instances", s == 200 and b["totalSize"] == 1
+          and b["members"][0]["type"] == "global" and b["members"][0]["labels"]["project_id"] == "p1", b)
+    s, g3 = call(st, "POST", "/groups", {"displayName": "nothing", "filter": 'resource.type = "gce_instance"'})
+    s, b = call(st, "GET", "/groups/%s/members" % g3["name"].rsplit("/", 1)[-1])
+    check("group with no matching resources → empty members", s == 200 and b["totalSize"] == 0, b)
+    call(st, "DELETE", "/groups/" + g2["name"].rsplit("/", 1)[-1])
+    call(st, "DELETE", "/groups/" + g3["name"].rsplit("/", 1)[-1])
+
     # uptime checks
     up = {"displayName": "homepage", "monitoredResource": {"type": "uptime_url", "labels": {"host": "example.com"}},
           "httpCheck": {"path": "/", "port": 443, "useSsl": True}, "period": "300s", "timeout": "10s"}
@@ -219,6 +239,293 @@ def main():
                           "channels_text", "combiner_text", "last_modified", "incidents", "documentation_text") if v.get(k) in (None, "")]
     check("console view has no blank columns", not blanks, blanks)
     check("unknown path → 404", call(st, "GET", "/v3/nope")[0] == 404)
+
+    # dashboards (v1 API)
+    s, d = call1(st, "POST", "/dashboards", {"displayName": "My Dashboard"})
+    check("create dashboard", s == 200 and d["name"].startswith("projects/p1/dashboards/")
+          and d["mosaicLayout"]["tiles"] == [] and d["etag"], d)
+    s, b = call1(st, "POST", "/dashboards", {"displayName": ""})
+    check("dashboard missing displayName → 400", s == 400, b)
+    did = d["name"].rsplit("/", 1)[-1]
+    s, b = call1(st, "GET", "/dashboards/" + did)
+    check("get dashboard", s == 200 and b["displayName"] == "My Dashboard", b)
+    s, b = call1(st, "GET", "/dashboards/nope")
+    check("get missing dashboard → 404", s == 404, b)
+    s, b = call1(st, "PATCH", "/dashboards/" + did, {"displayName": "Renamed", "etag": d["etag"]})
+    check("patch dashboard (etag ok)", s == 200 and b["displayName"] == "Renamed" and b["etag"] != d["etag"], b)
+    s, b = call1(st, "PATCH", "/dashboards/" + did, {"displayName": "Stale", "etag": "wrong"})
+    check("patch dashboard stale etag → 409", s == 409, b)
+    call1(st, "POST", "/dashboards", {"displayName": "Second"})
+    s, b = call1(st, "GET", "/dashboards")
+    check("list dashboards", s == 200 and len(b["dashboards"]) == 2, b)
+    s, b = call1(st, "DELETE", "/dashboards/" + did)
+    check("delete dashboard", s == 200 and b == {}, b)
+    s, b = call1(st, "GET", "/dashboards/" + did)
+    check("get deleted dashboard → 404", s == 404, b)
+
+    # snoozes (v1 API)
+    s, pol = call(st, "POST", "/alertPolicies", policy("snooze-target"))
+    snooze = {"displayName": "maintenance", "criteria": {"policies": [pol["name"]]},
+              "interval": {"startTime": iso(now), "endTime": iso(now + timedelta(hours=1))}}
+    s, sn = call1(st, "POST", "/snoozes", snooze)
+    check("create snooze", s == 200 and sn["name"].startswith("projects/p1/snoozes/")
+          and sn["criteria"]["policies"] == [pol["name"]], sn)
+    s, b = call1(st, "POST", "/snoozes", dict(snooze, criteria={"policies": ["projects/p1/alertPolicies/nope"]}))
+    check("snooze unknown policy → 400", s == 400, b)
+    s, b = call1(st, "POST", "/snoozes", dict(snooze, interval={"startTime": iso(now), "endTime": iso(now)}))
+    check("snooze end before/eq start → 400", s == 400, b)
+    sid = sn["name"].rsplit("/", 1)[-1]
+    s, b = call1(st, "GET", "/snoozes/" + sid)
+    check("get snooze", s == 200 and b["displayName"] == "maintenance", b)
+    s, b = call1(st, "PATCH", "/snoozes/" + sid, {"displayName": "extended"}, {"updateMask": "display_name"})
+    check("patch snooze", s == 200 and b["displayName"] == "extended" and b["criteria"]["policies"] == [pol["name"]], b)
+    s, b = call1(st, "GET", "/snoozes")
+    check("list snoozes", s == 200 and len(b["snoozes"]) == 1, b)
+    check("unknown v1 path → 404", call1(st, "GET", "/nope")[0] == 404)
+
+    # services & SLOs (Service Monitoring API, v3)
+    s, svc = call(st, "POST", "/services", {"displayName": "checkout"})
+    check("create service", s == 200 and svc["name"].startswith("projects/p1/services/") and svc["custom"] == {}, svc)
+    s, b = call(st, "POST", "/services", {"displayName": ""})
+    check("service missing displayName → 400", s == 400, b)
+    svcid = svc["name"].rsplit("/", 1)[-1]
+    slo = {"displayName": "99% availability", "goal": 0.99, "rollingPeriod": "2592000s",
+           "serviceLevelIndicator": {"basicSli": {"availability": {}}}}
+    s, o = call(st, "POST", "/services/%s/serviceLevelObjectives" % svcid, slo)
+    check("create SLO", s == 200 and o["name"].startswith(svc["name"] + "/serviceLevelObjectives/") and o["goal"] == 0.99, o)
+    s, b = call(st, "POST", "/services/%s/serviceLevelObjectives" % svcid, dict(slo, goal=1.5))
+    check("SLO bad goal → 400", s == 400, b)
+    s, b = call(st, "POST", "/services/%s/serviceLevelObjectives" % svcid, dict(slo, rollingPeriod="2592000s", calendarPeriod="MONTH"))
+    check("SLO both periods → 400", s == 400, b)
+    oid = o["name"].rsplit("/", 1)[-1]
+    s, b = call(st, "GET", "/services/%s/serviceLevelObjectives/%s" % (svcid, oid))
+    check("get SLO", s == 200 and b["displayName"] == "99% availability", b)
+    s, b = call(st, "GET", "/services/%s/serviceLevelObjectives" % svcid)
+    check("list SLOs", s == 200 and len(b["serviceLevelObjectives"]) == 1, b)
+    s, b = call(st, "GET", "/services")
+    check("list services", s == 200 and len(b["services"]) == 1, b)
+    s, b = call(st, "DELETE", "/services/" + svcid)
+    check("delete service cascades SLOs", s == 200 and not st.slos and not st.services, b)
+
+    # SLO error-budget computation: request-based good/total-ratio SLOs get a real number
+    # back from the same `select_slo_*()` timeSeries.list filter functions the real API
+    # reserves for SLO burn-down queries, computed from the good/total time series the SLI's
+    # filters actually match (not a stored-but-unevaluated stub).
+    s, svc2 = call(st, "POST", "/services", {"displayName": "checkout2"})
+    svc2id = svc2["name"].rsplit("/", 1)[-1]
+    rb_slo = {"displayName": "99% good", "goal": 0.99, "rollingPeriod": "86400s",
+              "serviceLevelIndicator": {"requestBased": {"goodTotalRatio": {
+                  "goodServiceFilter": 'metric.type = "custom.googleapis.com/req/good"',
+                  "totalServiceFilter": 'metric.type = "custom.googleapis.com/req/total"'}}}}
+    s, b = call(st, "POST", "/services/%s/serviceLevelObjectives" % svc2id,
+               {**rb_slo, "serviceLevelIndicator": {"requestBased": {"goodTotalRatio": {
+                   "goodServiceFilter": 'metric.type = "custom.googleapis.com/req/good"'}}}})
+    check("request-based SLO without total/bad filter → 400", s == 400, b)
+    s, rbo = call(st, "POST", "/services/%s/serviceLevelObjectives" % svc2id, rb_slo)
+    check("create request-based good/total-ratio SLO", s == 200, rbo)
+    rboid = rbo["name"].rsplit("/", 1)[-1]
+    win_end = now + timedelta(minutes=1)
+    write(98.0, win_end, metric="custom.googleapis.com/req/good")
+    write(100.0, win_end, metric="custom.googleapis.com/req/total")
+    q_slo = {"interval.startTime": iso(t0 - timedelta(minutes=5)), "interval.endTime": iso(win_end)}
+    s, b = call(st, "GET", "/timeSeries", query=dict(q_slo, filter='select_slo_compliance("%s")' % rbo["name"]))
+    check("select_slo_compliance computes real good/total ratio", s == 200
+          and abs(b["timeSeries"][0]["points"][0]["value"]["doubleValue"] - 0.98) < 1e-9, b)
+    s, b = call(st, "GET", "/timeSeries", query=dict(q_slo, filter='select_slo_budget_fraction("%s")' % rbo["name"]))
+    # goal 0.99 → error budget 0.01; actual error 0.02 → burned 2x the budget → fraction -1.0
+    check("select_slo_budget_fraction computes real burn against the goal", s == 200
+          and abs(b["timeSeries"][0]["points"][0]["value"]["doubleValue"] - (-1.0)) < 1e-9, b)
+    s, b = call(st, "GET", "/timeSeries", query=dict(q_slo, filter='select_slo_health("%s")' % rbo["name"]))
+    check("select_slo_health reflects goal miss", s == 200 and b["timeSeries"][0]["points"][0]["value"]["doubleValue"] == 0.0, b)
+    s, b = call(st, "GET", "/timeSeries", query=dict(q_slo, filter='select_slo_compliance("projects/p1/services/%s/serviceLevelObjectives/nope")' % svc2id))
+    check("select_slo_* on unknown SLO → 404", s == 404, b)
+    s, b = call(st, "GET", "/timeSeries", query=dict(
+        {"interval.startTime": iso(now - timedelta(days=2)), "interval.endTime": iso(now - timedelta(days=1))},
+        filter='select_slo_compliance("%s")' % rbo["name"]))
+    check("select_slo_* with no data in the window → empty result", s == 200 and b == {}, b)
+    s, basic = call(st, "POST", "/services/%s/serviceLevelObjectives" % svc2id, slo)
+    s, b = call(st, "GET", "/timeSeries", query=dict(q_slo, filter='select_slo_budget_fraction("%s")' % basic["name"]))
+    check("basic SLI (non request-based) is honestly not computed → empty result", s == 200 and b == {}, b)
+    call(st, "DELETE", "/services/" + svc2id)
+
+    # uptime check with a synthetic-monitor target (same collection, different check type)
+    s, sm = call(st, "POST", "/uptimeCheckConfigs", {
+        "displayName": "synthetic-login", "monitoredResource": {"type": "uptime_url", "labels": {"host": "example.com"}},
+        "syntheticMonitor": {"cloudFunctionV2": {"name": "projects/p1/locations/us-central1/functions/login-check"}},
+        "period": "300s", "timeout": "10s"})
+    check("create synthetic monitor (uptime check with synthetic_monitor target)", s == 200 and sm["syntheticMonitor"]["cloudFunctionV2"]["name"].endswith("login-check"), sm)
+    s, b = call(st, "POST", "/uptimeCheckConfigs", {
+        "displayName": "both", "monitoredResource": {"type": "uptime_url", "labels": {"host": "example.com"}},
+        "httpCheck": {"path": "/"}, "syntheticMonitor": {"cloudFunctionV2": {"name": "x"}}, "period": "300s", "timeout": "10s"})
+    check("synthetic monitor + http_check → 400", s == 400, b)
+    call(st, "DELETE", "/uptimeCheckConfigs/" + sm["name"].rsplit("/", 1)[-1])
+
+    # incidents: the alert-policy rule-evaluation engine opens/closes real incidents against
+    # stored time series — see core.evaluate_incidents.
+    s, inc_pol = call(st, "POST", "/alertPolicies", {
+        "displayName": "latency-high", "combiner": "OR",
+        "conditions": [{"displayName": "p99 high", "conditionThreshold": {
+            "filter": 'metric.type = "custom.googleapis.com/req/latency" AND resource.type = "global"',
+            "comparison": "COMPARISON_GT", "thresholdValue": 100}}]})
+    write(150.0, now - timedelta(seconds=10), metric="custom.googleapis.com/req/latency", route="/lat")
+    s, b = call(st, "GET", "/incidents")
+    check("breaching threshold opens a real incident", s == 200 and len(b.get("incidents", [])) == 1
+          and b.get("incidents", [{}])[0]["state"] == "OPEN" and b.get("incidents", [{}])[0]["policyName"] == inc_pol["name"]
+          and b.get("incidents", [{}])[0]["observedValue"] == 150.0 and "incidentId" in b.get("incidents", [{}])[0]
+          and "_resourceKey" not in b.get("incidents", [{}])[0], b)
+    incid = b.get("incidents", [{}])[0]["name"].rsplit("/", 1)[-1]
+    s, b = call(st, "GET", "/incidents/" + incid)
+    check("get incident", s == 200 and b["state"] == "OPEN", b)
+    s, b = call(st, "POST", "/incidents/%s:acknowledge" % incid)
+    check("acknowledge incident", s == 200 and b["acknowledged"] is True, b)
+    s, pv = call(st, "GET", "/alertPolicies", query={"filter": 'display_name = "latency-high"'})
+    check("policy console view would show it (checked via list_all below)", s == 200, pv)
+    view = mon.list_all(st, "p1")
+    pview = next(v for v in view if v["name"] == inc_pol["name"])
+    check("console view reflects the real open-incident count", pview["incidents"] == "1 open incident", pview)
+
+    write(10.0, now - timedelta(seconds=9), metric="custom.googleapis.com/req/latency", route="/lat")
+    s, b = call(st, "GET", "/incidents", query={"filter": 'state = "OPEN"'})
+    check("value dropping below threshold closes the incident", s == 200 and len(b.get("incidents", [])) == 0, b)
+    s, b = call(st, "GET", "/incidents", query={"filter": 'policy_name = "%s"' % inc_pol["name"]})
+    check("closed incident still visible unfiltered by state", s == 200 and len(b.get("incidents", [])) == 1
+          and b.get("incidents", [{}])[0]["state"] == "CLOSED" and b.get("incidents", [{}])[0]["endedAt"], b)
+
+    # disabling a policy with an open incident closes it
+    s, dis_pol = call(st, "POST", "/alertPolicies", {
+        "displayName": "cpu-wild", "combiner": "OR",
+        "conditions": [{"displayName": "c", "conditionThreshold": {
+            "filter": 'metric.type = "custom.googleapis.com/req/cpu2" AND resource.type = "global"',
+            "comparison": "COMPARISON_GT", "thresholdValue": 1}}]})
+    write(99.0, now - timedelta(seconds=8), metric="custom.googleapis.com/req/cpu2", route="/c")
+    s, b = call(st, "GET", "/incidents", query={"filter": 'policy_name = "%s" AND state = "OPEN"' % dis_pol["name"]})
+    check("second policy also opens an incident", s == 200 and len(b.get("incidents", [])) == 1, b)
+    did = dis_pol["name"].rsplit("/", 1)[-1]
+    call(st, "PATCH", "/alertPolicies/" + did, {"enabled": False}, {"updateMask": "enabled"})
+    s, b = call(st, "GET", "/incidents", query={"filter": 'policy_name = "%s" AND state = "OPEN"' % dis_pol["name"]})
+    check("disabling the policy closes its open incident", s == 200 and len(b.get("incidents", [])) == 0, b)
+
+    # condition_absent: only series that have reported at least one point are ever "absent"
+    s, absent_pol = call(st, "POST", "/alertPolicies", {
+        "displayName": "heartbeat-silent", "combiner": "OR",
+        "conditions": [{"displayName": "silent", "conditionAbsent": {
+            "filter": 'metric.type = "custom.googleapis.com/req/heartbeat" AND resource.type = "global"',
+            "duration": "1s"}}]})
+    s, b = call(st, "GET", "/incidents", query={"filter": 'policy_name = "%s"' % absent_pol["name"]})
+    check("absent condition on a never-written metric never fires", s == 200 and len(b.get("incidents", [])) == 0, b)
+    write(1.0, t0, metric="custom.googleapis.com/req/heartbeat", route="/hb")   # old point, nothing since
+    s, b = call(st, "GET", "/incidents", query={"filter": 'policy_name = "%s" AND state = "OPEN"' % absent_pol["name"]})
+    check("metric that stopped reporting opens an absence incident", s == 200 and len(b.get("incidents", [])) == 1, b)
+
+    # a snooze covering the policy suppresses NEW incidents (but real GCP behavior: it does
+    # not retroactively close ones already open)
+    s, snooze_pol = call(st, "POST", "/alertPolicies", {
+        "displayName": "snoozed-metric", "combiner": "OR",
+        "conditions": [{"displayName": "c", "conditionThreshold": {
+            "filter": 'metric.type = "custom.googleapis.com/req/snoozeme" AND resource.type = "global"',
+            "comparison": "COMPARISON_GT", "thresholdValue": 1}}]})
+    call1(st, "POST", "/snoozes", {"displayName": "maint2", "criteria": {"policies": [snooze_pol["name"]]},
+                                   "interval": {"startTime": iso(now), "endTime": iso(now + timedelta(hours=1))}})
+    write(99.0, now - timedelta(seconds=7), metric="custom.googleapis.com/req/snoozeme", route="/s")
+    s, b = call(st, "GET", "/incidents", query={"filter": 'policy_name = "%s" AND state = "OPEN"' % snooze_pol["name"]})
+    check("an active snooze suppresses a new incident from opening", s == 200 and len(b.get("incidents", [])) == 0, b)
+    s, b = call(st, "GET", "/incidents/nope")
+    check("get unknown incident → 404", s == 404, b)
+
+    # ── uptime probing: a real reachability engine, not a never-evaluated stub ──────────
+    vm_store = vmcore.ComputeStore()
+    st.compute_vm_store = vm_store
+    vmcore.insert_instance(vm_store, "p1", "us-central1-a", {
+        "name": "web-1", "machineType": "e2-medium",
+        "disks": [{"boot": True, "initializeParams": {"diskSizeGb": 10}}]})
+    s, url_check = call(st, "POST", "/uptimeCheckConfigs", {
+        "displayName": "homepage2", "monitoredResource": {"type": "uptime_url", "labels": {"host": "example.com"}},
+        "httpCheck": {"path": "/"}, "period": "60s", "timeout": "10s", "selectedRegions": ["EUROPE", "ASIA_PACIFIC"]})
+    s, vm_check = call(st, "POST", "/uptimeCheckConfigs", {
+        "displayName": "vm-check", "monitoredResource": {"type": "gce_instance", "labels": {"zone": "us-central1-a", "instance_id": "web-1"}},
+        "httpCheck": {"path": "/"}, "period": "60s", "timeout": "10s"})
+    mon.run_uptime_probes(st, "p1")
+    url_id, vm_id = url_check["name"].rsplit("/", 1)[-1], vm_check["name"].rsplit("/", 1)[-1]
+    win_start = iso(datetime.now(timezone.utc) - timedelta(minutes=5))
+
+    def win_end():
+        return iso(datetime.now(timezone.utc) + timedelta(seconds=1))
+    s, b = call(st, "GET", "/timeSeries", query={
+        "filter": 'metric.type = "monitoring.googleapis.com/uptime_check/check_passed" AND metric.labels.check_id = "%s"' % url_id,
+        "interval.startTime": win_start, "interval.endTime": win_end()})
+    url_series = b.get("timeSeries", [])
+    check("uptime_url check (no egress) probes as failing in every selected region", len(url_series) == 2
+          and all(ts["points"][0]["value"]["boolValue"] is False for ts in url_series)
+          and {ts["metric"]["labels"]["checked_region"] for ts in url_series} == {"EUROPE", "ASIA_PACIFIC"}, b)
+    s, b = call(st, "GET", "/timeSeries", query={
+        "filter": 'metric.type = "monitoring.googleapis.com/uptime_check/check_passed" AND metric.labels.check_id = "%s"' % vm_id,
+        "interval.startTime": win_start, "interval.endTime": win_end()})
+    check("uptime check on a RUNNING instance probes as passing", b["timeSeries"][0]["points"][0]["value"]["boolValue"] is True, b)
+    vmcore.set_instance_status(vm_store, "p1", "us-central1-a", "web-1", "stop")
+    mon.run_uptime_probes(st, "p1")
+    s, b = call(st, "GET", "/timeSeries", query={
+        "filter": 'metric.type = "monitoring.googleapis.com/uptime_check/check_passed" AND metric.labels.check_id = "%s"' % vm_id,
+        "interval.startTime": win_start, "interval.endTime": win_end()})
+    check("stopping the instance flips the check to failing", b["timeSeries"][0]["points"][0]["value"]["boolValue"] is False, b)
+    call(st, "DELETE", "/uptimeCheckConfigs/" + url_id)
+    call(st, "DELETE", "/uptimeCheckConfigs/" + vm_id)
+
+    # ── Ops Agent: real VM metadata (enable-osconfig=TRUE), not a fabricated check-in ───
+    vmcore.insert_instance(vm_store, "p1", "us-central1-a", {
+        "name": "agent-vm", "machineType": "e2-medium", "metadata": {"items": [{"key": "enable-osconfig", "value": "TRUE"}]},
+        "disks": [{"boot": True, "initializeParams": {"diskSizeGb": 10}}]})
+    vmcore.insert_instance(vm_store, "p1", "us-central1-a", {
+        "name": "bare-vm", "machineType": "e2-medium",
+        "disks": [{"boot": True, "initializeParams": {"diskSizeGb": 10}}]})
+    agents = mon.ops_agent_instances(st, "p1")
+    check("only the VM with enable-osconfig=TRUE metadata counts as having Ops Agent",
+          [i["name"] for i in agents] == ["agent-vm"], [i["name"] for i in agents])
+    mon.sync_ops_agent_metrics(st, "p1")
+    s, b = call(st, "GET", "/timeSeries", query={
+        "filter": 'metric.type = "agent.googleapis.com/agent/uptime"', "interval.startTime": win_start, "interval.endTime": win_end()})
+    check("Ops Agent heartbeat metric written for the opted-in VM only", len(b["timeSeries"]) == 1, b)
+
+    # ── Cost Explorer: real spend derived from actual resource inventory ───────────────
+    gcs_store = object_store.InMemoryObjectStore()
+    st.gcs_store = gcs_store
+    gcs_store.objects["vy-cost-bucket"] = {"obj.bin": {"versions": [{"size": 5 * 1024 ** 3, "is_delete_marker": False}]}}
+    by_service = mon.billing_cost_by_service(st, "p1")
+    check("Cost Explorer prices real Compute Engine inventory", by_service.get("Compute Engine", 0) > 0, by_service)
+    check("Cost Explorer prices real Cloud Storage bytes stored", by_service.get("Cloud Storage", 0) > 0, by_service)
+    mon.sync_billing_metrics(st, "p1")
+    s, b = call(st, "GET", "/timeSeries", query={
+        "filter": 'metric.type = "billing.googleapis.com/billing/total_cost"', "interval.startTime": win_start, "interval.endTime": win_end()})
+    check("billing total_cost metric written per service", {ts["metric"]["labels"]["service"] for ts in b["timeSeries"]}
+          >= {"Compute Engine", "Cloud Storage"}, b)
+
+    # ── Metrics Scope: real cross-project aggregation (Metrics Scopes API v1) ──────────
+    r = mon.dispatch(st, "GET", "/v1/locations/global/metricsScopes/p1", {}, {}, b"")
+    body = json.loads(r.body)
+    check("get metrics scope defaults to just itself", r.status == 200 and [p["name"].rsplit("/", 1)[-1] for p in body["monitoredProjects"]] == ["p1"], body)
+    r = mon.dispatch(st, "POST", "/v1/locations/global/metricsScopes/p1/projects", {}, {},
+                     json.dumps({"name": "locations/global/metricsScopes/p1/projects/p2"}).encode())
+    check("add monitored project", r.status == 200, r.body)
+    r = mon.dispatch(st, "POST", "/v1/locations/global/metricsScopes/p1/projects", {}, {},
+                     json.dumps({"name": "locations/global/metricsScopes/p1/projects/p2"}).encode())
+    check("adding the same monitored project twice → 409", r.status == 409, r.body)
+    r = mon.dispatch(st, "POST", "/v3/projects/p2/timeSeries", {}, {}, json.dumps({"timeSeries": [{
+        "metric": {"type": "custom.googleapis.com/app/latency", "labels": {"route": "/p2"}},
+        "resource": {"type": "global", "labels": {"project_id": "p2"}},
+        "points": [{"interval": {"endTime": iso(datetime.now(timezone.utc))}, "value": {"doubleValue": 7.0}}]}]}).encode())
+    check("write time series into project p2", r.status == 200, r.body)
+    r = mon.dispatch(st, "GET", "/v3/projects/p1/timeSeries", {
+        "filter": 'metric.type = "custom.googleapis.com/app/latency" AND metric.labels.route = "/p2"',
+        "interval.startTime": win_start, "interval.endTime": win_end()}, {}, b"")
+    body = json.loads(r.body)
+    check("metrics scope makes another project's time series visible from the scoping project",
+          len(body.get("timeSeries", [])) == 1 and body["timeSeries"][0]["resource"]["labels"]["project_id"] == "p2", body)
+    r = mon.dispatch(st, "DELETE", "/v1/locations/global/metricsScopes/p1/projects/p2", {}, {}, b"")
+    check("remove monitored project", r.status == 200, r.body)
+    r = mon.dispatch(st, "GET", "/v3/projects/p1/timeSeries", {
+        "filter": 'metric.type = "custom.googleapis.com/app/latency" AND metric.labels.route = "/p2"',
+        "interval.startTime": win_start, "interval.endTime": win_end()}, {}, b"")
+    check("after removal, the other project's series is gone again", json.loads(r.body) == {}, r.body)
+
     print(f"\n{PASS} passed, {FAIL} failed")
     sys.exit(1 if FAIL else 0)
 

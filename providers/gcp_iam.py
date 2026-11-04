@@ -30,10 +30,52 @@ def _strip_action_suffix(value: str, *suffixes: str) -> str:
     return text
 
 
+# v4 C0i: the service-account + project-policy handlers below only serve the opt-out
+# (VYOMI_UNIFIED_INGRESS_SERVICES without gcp_iam / VYOMI_LEGACY_WIRE=1); by default
+# routes/gcp_iam_unified.py wins those paths and this slot is the core's projection.
+# ── org policy enforcement + Data Access audit log, shared with core/gcp_iam_core.py ──
+# This legacy handler keeps its own service-account state (gcp_iam_state) rather than
+# core/gcp_iam_core's, but the console's Org Policies and Audit logs pages are backed by
+# the SAME durable stores on both substrates (net_new_core_stores()["gcp_rm"], the
+# active space's Cloud Logging slot) — so a policy created there must be honoured here too.
+def _deny_if_org_policy_enforced(project: str, constraint_id: str) -> None:
+    from core.appliance_stores import net_new_core_stores
+    from core.gcp_iam_core import org_policy_enforced
+    rm_store = net_new_core_stores()["gcp_rm"]
+    if org_policy_enforced(rm_store, project, constraint_id):
+        from core.native_errors import NativeHTTPError   # top-level {"error": …}, like GCP
+        raise NativeHTTPError(412, {
+            "error": {"code": 412,
+                      "message": f"Operation denied by org policy: 'constraints/{constraint_id}' "
+                                 f"is enforced on 'projects/{project}'.",
+                      "status": "FAILED_PRECONDITION"}})
+
+
+def _iam_audit_log(project: str, log_type: str, message: str) -> None:
+    from core.gcp_iam_core import audit_log_enabled
+    policy = gcp_iam_state.get("policies", {}).get(project) or {}
+    if not audit_log_enabled(policy, "iam.googleapis.com", log_type):
+        return
+    try:
+        from core import gcp_logging_core as lg
+        from routes.gcp_logging import _STORE
+    except Exception:
+        return
+    entry = {
+        "logName": f"projects/{project}/logs/iam.googleapis.com%2Fdata_access",
+        "resource": {"type": "project", "labels": {"project_id": project}},
+        "severity": "NOTICE",
+        "textPayload": message,
+        "labels": {"logType": log_type},
+    }
+    lg.write_entries(_STORE, None, {"entries": [entry]})
+
+
 def api_gcp_iam_get_policy(project: str):
     s = _server()
     project = _strip_action_suffix(project, ":getIamPolicy", ":setIamPolicy", ":testIamPermissions")
     project = _gcp_project_name(project)
+    _iam_audit_log(project, "ADMIN_READ", f"iam.googleapis.com getIamPolicy on projects/{project}")
     return s._gcp_iam_policy_view(project)
 
 
@@ -81,6 +123,7 @@ async def api_gcp_iam_test_permissions(project: str, request):
 def api_gcp_iam_list_service_accounts(project: str):
     s = _server()
     project = _gcp_project_name(project)
+    _iam_audit_log(project, "ADMIN_READ", f"iam.googleapis.com serviceAccounts.list on projects/{project}")
     sas = []
     for sa in gcp_iam_state.setdefault("service_accounts", {}).get(project, {}).values():
         sas.append({
@@ -101,6 +144,7 @@ def api_gcp_iam_list_service_accounts(project: str):
 async def api_gcp_iam_create_service_account(project: str, request):
     s = _server()
     project = _gcp_project_name(project)
+    _deny_if_org_policy_enforced(project, "iam.disableServiceAccountCreation")
     payload = {}
     try:
         payload = await request.json()
@@ -120,8 +164,17 @@ def api_gcp_iam_get_service_account(project: str, account: str):
     project = _gcp_project_name(project)
     s = _server()
     accounts = gcp_iam_state.setdefault("service_accounts", {}).setdefault(project, {})
+    if account.endswith(":metrics"):   # the console's Metrics tab ({account}:metrics custom verb)
+        from core.gcp_iam_core import service_account_metrics
+        from core.gcp_iamcredentials_core import shared_store as _iamc_store
+        ident = account[: -len(":metrics")]
+        for key, rec in accounts.items():
+            if ident in {key, rec.get("email", ""), rec.get("name", "")}:
+                return service_account_metrics(rec["email"], _iamc_store())
+        raise HTTPException(404, detail=f"Unknown service account: {ident}")
     for key, rec in accounts.items():
         if account in {key, rec.get("email", ""), rec.get("name", "")}:
+            _iam_audit_log(project, "ADMIN_READ", f"iam.googleapis.com serviceAccounts.get {rec.get('email', account)}")
             return {
                 "name": f"projects/{project}/serviceAccounts/{rec['email']}",
                 "projectId": project,
@@ -176,8 +229,13 @@ async def api_gcp_iam_patch_service_account(project: str, account: str, request)
         rec["displayName"] = str(body.get("displayName") or "")
     if "description" in body:
         rec["description"] = str(body.get("description") or "")
+    was_disabled = bool(rec.get("disabled"))
     if "disabled" in body:
         rec["disabled"] = bool(body.get("disabled"))
+    if "disabled" in body and bool(rec["disabled"]) != was_disabled:
+        _sa_event(rec, project, "DISABLE" if rec["disabled"] else "ENABLE")
+    if "displayName" in body or "description" in body:
+        _sa_event(rec, project, "UPDATE")
     accounts[target] = rec
     return {"name": f"projects/{project}/serviceAccounts/{rec['email']}", "projectId": project, "uniqueId": rec.get("uniqueId", ""), "email": rec["email"], "displayName": rec.get("displayName", ""), "description": rec.get("description", ""), "oauth2ClientId": rec.get("oauth2ClientId", ""), "disabled": rec.get("disabled", False), "etag": rec.get("etag", "")}
 
@@ -374,6 +432,7 @@ def _iam_find_sa(project: str, account: str):
 async def api_gcp_iam_create_service_account_key(project: str, account: str, request=None):
     """POST serviceAccounts/{account}/keys — mint a user-managed key (google_service_account_key)."""
     project = _gcp_project_name(project)
+    _deny_if_org_policy_enforced(project, "iam.disableServiceAccountKeyCreation")
     sa = _iam_find_sa(project, account)
     if not sa:
         raise HTTPException(404, detail="Service account not found")
@@ -383,7 +442,9 @@ async def api_gcp_iam_create_service_account_key(project: str, account: str, req
     if sum(1 for k in keys.values() if k.get("keyType") == "USER_MANAGED") >= _iamc.MAX_USER_KEYS:
         raise HTTPException(400, detail="Precondition check failed: the service account has the maximum of 10 keys.")
     rec, created = _iamc.new_key_record(project, sa.get("email", account), str(sa.get("uniqueId") or ""))
-    keys[rec["name"].rsplit("/", 1)[-1]] = rec
+    key_id = rec["name"].rsplit("/", 1)[-1]
+    keys[key_id] = rec
+    _sa_event(sa, project, "CREATE_KEY", key_id)
     return created  # create is the only call that returns privateKeyData
 
 
@@ -396,6 +457,7 @@ def api_gcp_iam_list_service_account_keys(project: str, account: str):
     sa = _iam_find_sa(project, account)
     if not sa:
         raise HTTPException(404, detail="Service account not found")
+    _iam_audit_log(project, "ADMIN_READ", f"iam.googleapis.com keys.list for {sa.get('email', account)}")
     return {"keys": [_key_public_view(k) for k in sa.get("keys", {}).values()]}
 
 
@@ -407,6 +469,7 @@ def api_gcp_iam_get_service_account_key(project: str, account: str, key: str):
     rec = sa.get("keys", {}).get(str(key).split("/")[-1])
     if not rec:
         raise HTTPException(404, detail="Key not found")
+    _iam_audit_log(project, "ADMIN_READ", f"iam.googleapis.com keys.get {key} for {sa.get('email', account)}")
     return _key_public_view(rec)
 
 
@@ -415,5 +478,27 @@ def api_gcp_iam_delete_service_account_key(project: str, account: str, key: str)
     sa = _iam_find_sa(project, account)
     if not sa:
         raise HTTPException(404, detail="Service account not found")
-    sa.setdefault("keys", {}).pop(str(key).split("/")[-1], None)
+    kid = str(key).split("/")[-1]
+    if sa.setdefault("keys", {}).pop(kid, None) is not None:
+        _sa_event(sa, project, "DELETE_KEY", kid)
     return {}
+
+
+# ── per-service-account admin activity (what the console's service-account Logs tab reads via
+# GET .../serviceAccounts/{email}/policyActivity — same entry shape as core/gcp_iam_core on Nano) ──
+def _sa_event(sa: dict, project: str, action: str, detail: str = "") -> None:
+    from datetime import datetime, timezone
+    log = sa.setdefault("_activity", [])
+    log.append({"id": uuid.uuid4().hex[:12], "resource": f"projects/{project}/serviceAccounts/{sa.get('email', '')}",
+                "action": action, "role": "", "member": detail,
+                "time": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")})
+    del log[:max(0, len(log) - 500)]
+
+
+def api_gcp_iam_service_account_activity(project: str, account: str):
+    project = _gcp_project_name(project)
+    sa = _iam_find_sa(project, account)
+    if not sa:
+        raise HTTPException(404, detail="Service account not found")
+    return {"activity": [dict(e) for e in reversed(sa.get("_activity") or [])]}
+

@@ -1,0 +1,20 @@
+{
+  "_doc": "ui-spec page id → v4 route. honest_page = the whole page is a declared 'Not simulated in Vyomi' gap. Unlisted spec pages count as missing.",
+  "jobs": {
+    "route": "#/cloudscheduler/jobs",
+    "fixtures": ["sched-job"],
+    "live": "live-job"
+  },
+  "create-job": {
+    "route": "#/cloudscheduler/jobs/new",
+    "expand": [
+      "role=combobox[name='Target type']",
+      "role=option[name='Pub/Sub']"
+    ]
+  },
+  "job-details": {
+    "route": "#/cloudscheduler/jobs/us-central1/{live}",
+    "fixtures": ["sched-job"],
+    "live": "live-job"
+  }
+}

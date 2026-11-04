@@ -1,0 +1,1450 @@
+{
+ "$schema": "../schema.json",
+ "cloud": "azure",
+ "service": "containerapps",
+ "console_path": "#browse/Microsoft.App%2FcontainerApps",
+ "status": "draft",
+ "captured_at": "2026-11-01",
+ "nav": [
+  {
+   "label": "Overview",
+   "page_id": "container-app-overview"
+  },
+  {
+   "label": "Activity log",
+   "page_id": "container-app-activity-log"
+  },
+  {
+   "label": "Access control (IAM)",
+   "page_id": "container-app-access-control-iam"
+  },
+  {
+   "label": "Tags",
+   "page_id": "container-app-tags"
+  },
+  {
+   "label": "Diagnose and solve problems",
+   "page_id": "container-app-diagnose-and-solve-problems"
+  },
+  {
+   "label": "Events",
+   "page_id": "container-app-events"
+  },
+  {
+   "label": "Application",
+   "expandable": true,
+   "children": [
+    {
+     "label": "Containers",
+     "page_id": "container-app-containers"
+    },
+    {
+     "label": "Revisions",
+     "page_id": "container-app-revisions"
+    },
+    {
+     "label": "Revision management",
+     "page_id": "container-app-revision-management"
+    },
+    {
+     "label": "Scale",
+     "page_id": "container-app-scale"
+    }
+   ]
+  },
+  {
+   "label": "Networking",
+   "expandable": true,
+   "children": [
+    {
+     "label": "Ingress",
+     "page_id": "container-app-ingress"
+    },
+    {
+     "label": "Custom domains",
+     "page_id": "container-app-custom-domains"
+    },
+    {
+     "label": "Networking",
+     "page_id": "container-app-networking"
+    }
+   ]
+  },
+  {
+   "label": "Settings",
+   "expandable": true,
+   "children": [
+    {
+     "label": "Secrets",
+     "page_id": "container-app-secrets"
+    },
+    {
+     "label": "Authentication",
+     "page_id": "container-app-authentication"
+    },
+    {
+     "label": "Identity",
+     "page_id": "container-app-identity"
+    },
+    {
+     "label": "Dapr configuration",
+     "page_id": "container-app-dapr-configuration"
+    },
+    {
+     "label": "Service Connector",
+     "page_id": "container-app-service-connector"
+    },
+    {
+     "label": "Console",
+     "page_id": "container-app-console"
+    },
+    {
+     "label": "Continuous deployment",
+     "page_id": "container-app-continuous-deployment"
+    },
+    {
+     "label": "Locks",
+     "page_id": "container-app-locks"
+    }
+   ]
+  },
+  {
+   "label": "Monitoring",
+   "expandable": true,
+   "children": [
+    {
+     "label": "Metrics",
+     "page_id": "container-app-metrics"
+    },
+    {
+     "label": "Alerts",
+     "page_id": "container-app-alerts"
+    },
+    {
+     "label": "Log stream",
+     "page_id": "container-app-log-stream"
+    },
+    {
+     "label": "Diagnostic settings",
+     "page_id": "container-app-diagnostic-settings"
+    }
+   ]
+  },
+  {
+   "label": "Automation",
+   "expandable": true,
+   "children": [
+    {
+     "label": "Export template",
+     "page_id": "container-app-export-template"
+    }
+   ]
+  },
+  {
+   "label": "Help",
+   "expandable": true,
+   "children": [
+    {
+     "label": "Resource health",
+     "page_id": "container-app-resource-health"
+    },
+    {
+     "label": "New support request",
+     "page_id": "container-app-new-support-request"
+    }
+   ]
+  }
+ ],
+ "pages": [
+  {
+   "id": "container-apps-environments",
+   "kind": "list",
+   "title": "Container Apps Environments",
+   "table": {
+    "resource_label": "Container apps environments",
+    "counter": true,
+    "selection": "multi",
+    "columns": [
+     "Name",
+     "Resource group",
+     "Location",
+     "Subscription"
+    ],
+    "header_actions": [
+     "Create",
+     "Manage view",
+     "Refresh",
+     "Export to CSV",
+     "Delete"
+    ],
+    "filter_placeholder": "Filter for any field...",
+    "filters": [
+     "Subscription equals all",
+     "Resource group equals all",
+     "Location equals all"
+    ],
+    "empty_state": "No container apps environments to display",
+    "empty_state_action": "Create container apps environment"
+   }
+  },
+  {
+   "id": "create-container-apps-environment",
+   "kind": "create",
+   "title": "Create Container Apps Environment",
+   "steps": [
+    {
+     "title": "Basics",
+     "sections": [
+      {
+       "title": "Project details",
+       "fields": [
+        {
+         "label": "Subscription",
+         "type": "select",
+         "required": true
+        },
+        {
+         "label": "Resource group",
+         "type": "select",
+         "required": true,
+         "actions": [
+          "Create new"
+         ]
+        }
+       ]
+      },
+      {
+       "title": "Environment details",
+       "fields": [
+        {
+         "label": "Environment name",
+         "type": "text",
+         "required": true
+        },
+        {
+         "label": "Region",
+         "type": "select",
+         "required": true
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "Monitoring",
+     "sections": [
+      {
+       "title": "Log Analytics workspace",
+       "fields": [
+        {
+         "label": "Log Analytics workspace",
+         "type": "select"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "Networking",
+     "sections": [
+      {
+       "title": "Virtual network"
+      }
+     ]
+    },
+    {
+     "title": "Tags",
+     "sections": [
+      {
+       "title": "Tags"
+      }
+     ]
+    },
+    {
+     "title": "Review + create"
+    }
+   ],
+   "submit": "Create"
+  },
+  {
+   "id": "container-app-environment-overview",
+   "kind": "detail",
+   "title": "{resource-name}",
+   "header_actions": [
+    "Delete",
+    "Refresh"
+   ],
+   "sections": [
+    {
+     "title": "Essentials"
+    },
+    {
+     "title": "Container Apps",
+     "table": {
+      "columns": [
+       "Name",
+       "Status",
+       "Location"
+      ]
+     }
+    },
+    {
+     "title": "Container Apps Jobs",
+     "table": {
+      "columns": [
+       "Name",
+       "Trigger type",
+       "Location"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "container-app-environment-activity-log",
+   "kind": "detail",
+   "title": "{resource-name} | Activity log",
+   "table": {
+    "columns": [
+     "Operation name",
+     "Status",
+     "Time",
+     "Time stamp",
+     "Subscription",
+     "Event initiated by"
+    ]
+   }
+  },
+  {
+   "id": "container-app-environment-access-control-iam",
+   "kind": "detail",
+   "title": "{resource-name} | Access control (IAM)",
+   "tabs": [
+    "Check access",
+    "Role assignments",
+    "Roles",
+    "Deny assignments",
+    "Classic administrators"
+   ],
+   "tab_panels": [
+    {
+     "label": "Role assignments",
+     "sections": [
+      {
+       "title": "Role assignments"
+      }
+     ]
+    },
+    {
+     "label": "Roles",
+     "sections": [
+      {
+       "title": "Roles"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "container-app-environment-tags",
+   "kind": "detail",
+   "title": "{resource-name} | Tags"
+  },
+  {
+   "id": "container-app-environment-diagnose-and-solve-problems",
+   "kind": "detail",
+   "title": "{resource-name} | Diagnose and solve problems"
+  },
+  {
+   "id": "container-app-environment-dapr-components",
+   "kind": "detail",
+   "title": "{resource-name} | Dapr components",
+   "table": {
+    "columns": [
+     "Component name",
+     "Component type",
+     "Version"
+    ],
+    "header_actions": [
+     "Create",
+     "Manage view",
+     "Refresh",
+     "Export to CSV",
+     "Delete"
+    ],
+    "filter_placeholder": "Filter for any field..."
+   }
+  },
+  {
+   "id": "container-app-environment-certificates",
+   "kind": "detail",
+   "title": "{resource-name} | Certificates",
+   "table": {
+    "columns": [
+     "Name",
+     "Subject name",
+     "Thumbprint",
+     "Provisioning state"
+    ],
+    "header_actions": [
+     "Create",
+     "Manage view",
+     "Refresh",
+     "Export to CSV",
+     "Delete"
+    ],
+    "filter_placeholder": "Filter for any field..."
+   }
+  },
+  {
+   "id": "container-app-environment-workload-profiles",
+   "kind": "detail",
+   "title": "{resource-name} | Workload profiles"
+  },
+  {
+   "id": "container-app-environment-networking",
+   "kind": "detail",
+   "title": "{resource-name} | Networking",
+   "sections": [
+    {
+     "title": "Essentials"
+    }
+   ]
+  },
+  {
+   "id": "container-app-environment-logs",
+   "kind": "detail",
+   "title": "{resource-name} | Logs"
+  },
+  {
+   "id": "container-app-environment-diagnostic-settings",
+   "kind": "detail",
+   "title": "{resource-name} | Diagnostic settings",
+   "table": {
+    "columns": [
+     "Name",
+     "Destination details",
+     "Log categories",
+     "Metric categories"
+    ],
+    "header_actions": [
+     "Create",
+     "Manage view",
+     "Refresh",
+     "Export to CSV",
+     "Delete"
+    ],
+    "filter_placeholder": "Filter for any field..."
+   }
+  },
+  {
+   "id": "container-app-environment-export-template",
+   "kind": "detail",
+   "title": "{resource-name} | Export template",
+   "tabs": [
+    "ARM Template",
+    "Bicep",
+    "Terraform"
+   ]
+  },
+  {
+   "id": "container-app-environment-locks",
+   "kind": "detail",
+   "title": "{resource-name} | Locks",
+   "sections": [
+    {
+     "title": "Add lock",
+     "fields": [
+      {
+       "label": "Lock name",
+       "type": "text",
+       "required": true
+      },
+      {
+       "label": "Lock type",
+       "type": "select",
+       "required": true
+      },
+      {
+       "label": "Notes",
+       "type": "textarea"
+      }
+     ]
+    }
+   ],
+   "table": {
+    "columns": [
+     "Lock name",
+     "Lock type",
+     "Scope",
+     "Notes"
+    ],
+    "header_actions": [
+     "Manage view",
+     "Refresh",
+     "Export to CSV",
+     "Delete"
+    ]
+   }
+  },
+  {
+   "id": "container-apps",
+   "kind": "list",
+   "title": "Container Apps",
+   "table": {
+    "resource_label": "Container apps",
+    "counter": true,
+    "selection": "multi",
+    "columns": [
+     "Name",
+     "Status",
+     "Resource group",
+     "Location",
+     "Environment",
+     "Subscription"
+    ],
+    "header_actions": [
+     "Create",
+     "Manage view",
+     "Refresh",
+     "Export to CSV",
+     "Start",
+     "Stop",
+     "Delete"
+    ],
+    "filter_placeholder": "Filter for any field...",
+    "filters": [
+     "Subscription equals all",
+     "Resource group equals all",
+     "Location equals all"
+    ],
+    "empty_state": "No container apps to display",
+    "empty_state_action": "Create container app"
+   }
+  },
+  {
+   "id": "create-container-app",
+   "kind": "create",
+   "title": "Create Container App",
+   "steps": [
+    {
+     "title": "Basics",
+     "sections": [
+      {
+       "title": "Project details",
+       "fields": [
+        {
+         "label": "Subscription",
+         "type": "select",
+         "required": true
+        },
+        {
+         "label": "Resource group",
+         "type": "select",
+         "required": true,
+         "actions": [
+          "Create new"
+         ]
+        }
+       ]
+      },
+      {
+       "title": "Container app details",
+       "fields": [
+        {
+         "label": "Container app name",
+         "type": "text",
+         "required": true
+        },
+        {
+         "label": "Region",
+         "type": "select",
+         "required": true
+        }
+       ]
+      },
+      {
+       "title": "Container Apps Environment",
+       "fields": [
+        {
+         "label": "Container Apps Environment",
+         "type": "select",
+         "required": true
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "Container",
+     "sections": [
+      {
+       "title": "Container details",
+       "fields": [
+        {
+         "label": "Image source",
+         "type": "text",
+         "required": true
+        }
+       ]
+      },
+      {
+       "title": "Resource allocation",
+       "fields": [
+        {
+         "label": "CPU and Memory",
+         "type": "select",
+         "required": true
+        }
+       ]
+      },
+      {
+       "title": "Environment variables"
+      }
+     ]
+    },
+    {
+     "title": "Ingress",
+     "sections": [
+      {
+       "title": "Ingress",
+       "fields": [
+        {
+         "label": "Ingress",
+         "type": "checkbox"
+        },
+        {
+         "label": "Ingress traffic",
+         "type": "radio"
+        },
+        {
+         "label": "Target port",
+         "type": "number",
+         "required": true
+        },
+        {
+         "label": "Transport",
+         "type": "select"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "Tags",
+     "sections": [
+      {
+       "title": "Tags"
+      }
+     ]
+    },
+    {
+     "title": "Review + create"
+    }
+   ],
+   "submit": "Create"
+  },
+  {
+   "id": "container-app-overview",
+   "kind": "detail",
+   "title": "{resource-name}",
+   "header_actions": [
+    "Start",
+    "Stop",
+    "Delete",
+    "Refresh"
+   ],
+   "sections": [
+    {
+     "title": "Essentials"
+    },
+    {
+     "title": "Revisions",
+     "table": {
+      "columns": [
+       "Revision",
+       "Active",
+       "Created",
+       "Traffic %",
+       "Replicas"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "container-app-activity-log",
+   "kind": "detail",
+   "title": "{resource-name} | Activity log",
+   "table": {
+    "columns": [
+     "Operation name",
+     "Status",
+     "Time",
+     "Time stamp",
+     "Subscription",
+     "Event initiated by"
+    ]
+   }
+  },
+  {
+   "id": "container-app-access-control-iam",
+   "kind": "detail",
+   "title": "{resource-name} | Access control (IAM)",
+   "tabs": [
+    "Check access",
+    "Role assignments",
+    "Roles",
+    "Deny assignments",
+    "Classic administrators"
+   ],
+   "tab_panels": [
+    {
+     "label": "Role assignments",
+     "sections": [
+      {
+       "title": "Role assignments"
+      }
+     ]
+    },
+    {
+     "label": "Roles",
+     "sections": [
+      {
+       "title": "Roles"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "container-app-tags",
+   "kind": "detail",
+   "title": "{resource-name} | Tags"
+  },
+  {
+   "id": "container-app-diagnose-and-solve-problems",
+   "kind": "detail",
+   "title": "{resource-name} | Diagnose and solve problems"
+  },
+  {
+   "id": "container-app-events",
+   "kind": "detail",
+   "title": "{resource-name} | Events"
+  },
+  {
+   "id": "container-app-containers",
+   "kind": "detail",
+   "title": "{resource-name} | Containers",
+   "sections": [
+    {
+     "title": "Container details",
+     "fields": [
+      {
+       "label": "Image",
+       "type": "text",
+       "required": true
+      },
+      {
+       "label": "CPU and Memory",
+       "type": "select"
+      }
+     ]
+    },
+    {
+     "title": "Environment variables"
+    }
+   ]
+  },
+  {
+   "id": "container-app-revisions",
+   "kind": "detail",
+   "title": "{resource-name} | Revisions",
+   "table": {
+    "columns": [
+     "Revision",
+     "Active",
+     "Created",
+     "Traffic %",
+     "Replicas",
+     "Provisioning status",
+     "Running status",
+     "Health state"
+    ],
+    "header_actions": [
+     "Activate",
+     "Deactivate",
+     "Restart",
+     "Refresh"
+    ]
+   }
+  },
+  {
+   "id": "container-app-revision-management",
+   "kind": "detail",
+   "title": "{resource-name} | Revision management",
+   "sections": [
+    {
+     "title": "Revision mode",
+     "fields": [
+      {
+       "label": "Revision mode",
+       "type": "radio"
+      }
+     ]
+    },
+    {
+     "title": "Traffic split"
+    }
+   ]
+  },
+  {
+   "id": "container-app-scale",
+   "kind": "detail",
+   "title": "{resource-name} | Scale",
+   "sections": [
+    {
+     "title": "Scale",
+     "fields": [
+      {
+       "label": "Min replicas",
+       "type": "number"
+      },
+      {
+       "label": "Max replicas",
+       "type": "number"
+      }
+     ]
+    },
+    {
+     "title": "Scale rules"
+    }
+   ]
+  },
+  {
+   "id": "container-app-ingress",
+   "kind": "detail",
+   "title": "{resource-name} | Ingress",
+   "sections": [
+    {
+     "title": "Ingress",
+     "fields": [
+      {
+       "label": "Ingress",
+       "type": "checkbox"
+      },
+      {
+       "label": "Ingress traffic",
+       "type": "radio"
+      },
+      {
+       "label": "Target port",
+       "type": "number"
+      },
+      {
+       "label": "Transport",
+       "type": "select"
+      },
+      {
+       "label": "Insecure connections",
+       "type": "checkbox"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "container-app-custom-domains",
+   "kind": "detail",
+   "title": "{resource-name} | Custom domains",
+   "sections": [
+    {
+     "title": "Custom domains",
+     "fields": [
+      {
+       "label": "Custom domain",
+       "type": "text",
+       "required": true
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "container-app-networking",
+   "kind": "detail",
+   "title": "{resource-name} | Networking"
+  },
+  {
+   "id": "container-app-secrets",
+   "kind": "detail",
+   "title": "{resource-name} | Secrets",
+   "table": {
+    "columns": [
+     "Key",
+     "Value"
+    ],
+    "header_actions": [
+     "Create",
+     "Manage view",
+     "Refresh",
+     "Export to CSV",
+     "Show value",
+     "Delete"
+    ],
+    "filter_placeholder": "Filter for any field..."
+   }
+  },
+  {
+   "id": "container-app-authentication",
+   "kind": "detail",
+   "title": "{resource-name} | Authentication",
+   "sections": [
+    {
+     "title": "Authentication settings",
+     "fields": [
+      {
+       "label": "Unauthenticated requests",
+       "type": "radio"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "container-app-identity",
+   "kind": "detail",
+   "title": "{resource-name} | Identity",
+   "sections": [
+    {
+     "title": "System assigned",
+     "fields": [
+      {
+       "label": "Status",
+       "type": "radio"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "container-app-dapr-configuration",
+   "kind": "detail",
+   "title": "{resource-name} | Dapr configuration"
+  },
+  {
+   "id": "container-app-service-connector",
+   "kind": "detail",
+   "title": "{resource-name} | Service Connector"
+  },
+  {
+   "id": "container-app-console",
+   "kind": "detail",
+   "title": "{resource-name} | Console"
+  },
+  {
+   "id": "container-app-continuous-deployment",
+   "kind": "detail",
+   "title": "{resource-name} | Continuous deployment"
+  },
+  {
+   "id": "container-app-locks",
+   "kind": "detail",
+   "title": "{resource-name} | Locks",
+   "sections": [
+    {
+     "title": "Add lock",
+     "fields": [
+      {
+       "label": "Lock name",
+       "type": "text",
+       "required": true
+      },
+      {
+       "label": "Lock type",
+       "type": "select",
+       "required": true
+      },
+      {
+       "label": "Notes",
+       "type": "textarea"
+      }
+     ]
+    }
+   ],
+   "table": {
+    "columns": [
+     "Lock name",
+     "Lock type",
+     "Scope",
+     "Notes"
+    ],
+    "header_actions": [
+     "Manage view",
+     "Refresh",
+     "Export to CSV",
+     "Delete"
+    ]
+   }
+  },
+  {
+   "id": "container-app-metrics",
+   "kind": "detail",
+   "title": "{resource-name} | Metrics"
+  },
+  {
+   "id": "container-app-alerts",
+   "kind": "detail",
+   "title": "{resource-name} | Alerts"
+  },
+  {
+   "id": "container-app-log-stream",
+   "kind": "detail",
+   "title": "{resource-name} | Log stream"
+  },
+  {
+   "id": "container-app-diagnostic-settings",
+   "kind": "detail",
+   "title": "{resource-name} | Diagnostic settings",
+   "table": {
+    "columns": [
+     "Name",
+     "Destination details",
+     "Log categories",
+     "Metric categories"
+    ],
+    "header_actions": [
+     "Create",
+     "Manage view",
+     "Refresh",
+     "Export to CSV",
+     "Delete"
+    ],
+    "filter_placeholder": "Filter for any field..."
+   }
+  },
+  {
+   "id": "container-app-export-template",
+   "kind": "detail",
+   "title": "{resource-name} | Export template",
+   "tabs": [
+    "ARM Template",
+    "Bicep",
+    "Terraform"
+   ]
+  },
+  {
+   "id": "container-app-resource-health",
+   "kind": "detail",
+   "title": "{resource-name} | Resource health"
+  },
+  {
+   "id": "container-app-new-support-request",
+   "kind": "detail",
+   "title": "{resource-name} | New support request"
+  },
+  {
+   "id": "container-apps-jobs",
+   "kind": "list",
+   "title": "Container Apps Jobs",
+   "table": {
+    "resource_label": "Container apps jobs",
+    "counter": true,
+    "selection": "multi",
+    "columns": [
+     "Name",
+     "Trigger type",
+     "Resource group",
+     "Location",
+     "Environment",
+     "Subscription"
+    ],
+    "header_actions": [
+     "Create",
+     "Manage view",
+     "Refresh",
+     "Export to CSV",
+     "Delete"
+    ],
+    "filter_placeholder": "Filter for any field...",
+    "filters": [
+     "Subscription equals all",
+     "Resource group equals all",
+     "Location equals all"
+    ],
+    "empty_state": "No container apps jobs to display",
+    "empty_state_action": "Create container apps job"
+   }
+  },
+  {
+   "id": "create-container-apps-job",
+   "kind": "create",
+   "title": "Create Container Apps Job",
+   "steps": [
+    {
+     "title": "Basics",
+     "sections": [
+      {
+       "title": "Project details",
+       "fields": [
+        {
+         "label": "Subscription",
+         "type": "select",
+         "required": true
+        },
+        {
+         "label": "Resource group",
+         "type": "select",
+         "required": true,
+         "actions": [
+          "Create new"
+         ]
+        }
+       ]
+      },
+      {
+       "title": "Job details",
+       "fields": [
+        {
+         "label": "Job name",
+         "type": "text",
+         "required": true
+        },
+        {
+         "label": "Region",
+         "type": "select",
+         "required": true
+        }
+       ]
+      },
+      {
+       "title": "Container Apps Environment",
+       "fields": [
+        {
+         "label": "Container Apps Environment",
+         "type": "select",
+         "required": true
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "Container",
+     "sections": [
+      {
+       "title": "Container details",
+       "fields": [
+        {
+         "label": "Image",
+         "type": "text",
+         "required": true
+        },
+        {
+         "label": "CPU and Memory",
+         "type": "select",
+         "required": true
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "Configuration",
+     "sections": [
+      {
+       "title": "Trigger",
+       "fields": [
+        {
+         "label": "Trigger type",
+         "type": "select",
+         "required": true
+        },
+        {
+         "label": "Parallelism",
+         "type": "number"
+        },
+        {
+         "label": "Replica completion count",
+         "type": "number"
+        },
+        {
+         "label": "Replica timeout (seconds)",
+         "type": "number"
+        },
+        {
+         "label": "Replica retry limit",
+         "type": "number"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "Tags",
+     "sections": [
+      {
+       "title": "Tags"
+      }
+     ]
+    },
+    {
+     "title": "Review + create"
+    }
+   ],
+   "submit": "Create"
+  },
+  {
+   "id": "container-apps-job-overview",
+   "kind": "detail",
+   "title": "{resource-name}",
+   "header_actions": [
+    "Run now",
+    "Refresh",
+    "Delete"
+   ],
+   "sections": [
+    {
+     "title": "Essentials"
+    },
+    {
+     "title": "Execution history",
+     "table": {
+      "columns": [
+       "Execution",
+       "Status",
+       "Start time",
+       "End time"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "container-apps-job-activity-log",
+   "kind": "detail",
+   "title": "{resource-name} | Activity log",
+   "table": {
+    "columns": [
+     "Operation name",
+     "Status",
+     "Time",
+     "Time stamp",
+     "Subscription",
+     "Event initiated by"
+    ]
+   }
+  },
+  {
+   "id": "container-apps-job-access-control-iam",
+   "kind": "detail",
+   "title": "{resource-name} | Access control (IAM)",
+   "tabs": [
+    "Check access",
+    "Role assignments",
+    "Roles",
+    "Deny assignments",
+    "Classic administrators"
+   ],
+   "tab_panels": [
+    {
+     "label": "Role assignments",
+     "sections": [
+      {
+       "title": "Role assignments"
+      }
+     ]
+    },
+    {
+     "label": "Roles",
+     "sections": [
+      {
+       "title": "Roles"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "container-apps-job-tags",
+   "kind": "detail",
+   "title": "{resource-name} | Tags"
+  },
+  {
+   "id": "container-apps-job-diagnose-and-solve-problems",
+   "kind": "detail",
+   "title": "{resource-name} | Diagnose and solve problems"
+  },
+  {
+   "id": "container-apps-job-containers",
+   "kind": "detail",
+   "title": "{resource-name} | Containers",
+   "sections": [
+    {
+     "title": "Container details",
+     "fields": [
+      {
+       "label": "Image",
+       "type": "text",
+       "required": true
+      },
+      {
+       "label": "CPU and Memory",
+       "type": "select"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "container-apps-job-secrets",
+   "kind": "detail",
+   "title": "{resource-name} | Secrets",
+   "table": {
+    "columns": [
+     "Key",
+     "Value"
+    ],
+    "header_actions": [
+     "Create",
+     "Manage view",
+     "Refresh",
+     "Export to CSV",
+     "Show value",
+     "Delete"
+    ],
+    "filter_placeholder": "Filter for any field..."
+   }
+  },
+  {
+   "id": "container-apps-job-triggers",
+   "kind": "detail",
+   "title": "{resource-name} | Triggers",
+   "sections": [
+    {
+     "title": "Trigger",
+     "fields": [
+      {
+       "label": "Trigger type",
+       "type": "select"
+      },
+      {
+       "label": "Parallelism",
+       "type": "number"
+      },
+      {
+       "label": "Replica completion count",
+       "type": "number"
+      },
+      {
+       "label": "Replica timeout (seconds)",
+       "type": "number"
+      },
+      {
+       "label": "Replica retry limit",
+       "type": "number"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "container-apps-job-identity",
+   "kind": "detail",
+   "title": "{resource-name} | Identity"
+  },
+  {
+   "id": "container-apps-job-execution-history",
+   "kind": "detail",
+   "title": "{resource-name} | Execution history",
+   "table": {
+    "columns": [
+     "Name",
+     "Status",
+     "Start time",
+     "End time"
+    ],
+    "header_actions": [
+     "Refresh"
+    ]
+   }
+  },
+  {
+   "id": "container-apps-job-log-stream",
+   "kind": "detail",
+   "title": "{resource-name} | Log stream"
+  },
+  {
+   "id": "container-apps-job-diagnostic-settings",
+   "kind": "detail",
+   "title": "{resource-name} | Diagnostic settings",
+   "table": {
+    "columns": [
+     "Name",
+     "Destination details",
+     "Log categories",
+     "Metric categories"
+    ],
+    "header_actions": [
+     "Create",
+     "Manage view",
+     "Refresh",
+     "Export to CSV",
+     "Delete"
+    ],
+    "filter_placeholder": "Filter for any field..."
+   }
+  },
+  {
+   "id": "container-apps-job-export-template",
+   "kind": "detail",
+   "title": "{resource-name} | Export template",
+   "tabs": [
+    "ARM Template",
+    "Bicep",
+    "Terraform"
+   ]
+  },
+  {
+   "id": "container-apps-job-locks",
+   "kind": "detail",
+   "title": "{resource-name} | Locks",
+   "sections": [
+    {
+     "title": "Add lock",
+     "fields": [
+      {
+       "label": "Lock name",
+       "type": "text",
+       "required": true
+      },
+      {
+       "label": "Lock type",
+       "type": "select",
+       "required": true
+      },
+      {
+       "label": "Notes",
+       "type": "textarea"
+      }
+     ]
+    }
+   ],
+   "table": {
+    "columns": [
+     "Lock name",
+     "Lock type",
+     "Scope",
+     "Notes"
+    ],
+    "header_actions": [
+     "Manage view",
+     "Refresh",
+     "Export to CSV",
+     "Delete"
+    ]
+   }
+  }
+ ],
+ "gaps_note": "No private captures were available for this service (reference knowledge of the real Azure Container Apps portal, built alongside the console in the same change). Environments, Container Apps and Container Apps Jobs each have their own browse/create/detail pages; honest_page is not used anywhere \u2014 every page is either built on core/azure_app_core.py or carries an explicit CapabilityContainer/NotSimulated gap for the parts the core does not model (live metrics/logs, Dapr sidecar execution, identity providers, Console, CI/CD, VNet bring-your-own)."
+}

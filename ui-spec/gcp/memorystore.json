@@ -1,0 +1,571 @@
+{
+  "$schema": "../schema.json",
+  "cloud": "gcp",
+  "service": "memorystore",
+  "console_path": "/memorystore/redis/instances",
+  "status": "draft",
+  "captured_at": "2026-11-01",
+  "gaps_note": "No private capture was available for this service (console-captures repo not checked out for this run); every page is provenance:reference from Memorystore for Redis product knowledge and the existing core/gcp_redis_core.py wire contract. Re-verify against a real capture before marking reviewed. Memcached and Valkey instance types (separate nav items in the native console) are out of scope; the core models Redis instances only.",
+  "nav": [
+    {
+      "label": "Instances",
+      "page_id": "instances"
+    },
+    {
+      "label": "{resource-name}",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Overview",
+          "page_id": "instance-overview"
+        },
+        {
+          "label": "Connections",
+          "page_id": "connections"
+        },
+        {
+          "label": "Configuration",
+          "page_id": "configuration"
+        },
+        {
+          "label": "Nodes",
+          "page_id": "nodes"
+        },
+        {
+          "label": "Maintenance",
+          "page_id": "maintenance"
+        }
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "id": "instances",
+      "kind": "list",
+      "title": "Instances",
+      "route": "/memorystore/redis/instances",
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Create instance",
+        "Refresh"
+      ],
+      "table": {
+        "selection": "single",
+        "counter": true,
+        "resource_label": "Instances",
+        "actions": [
+          "Failover",
+          "Upgrade",
+          "Export",
+          "Import",
+          "Reschedule maintenance",
+          "Delete"
+        ],
+        "filter_placeholder": "Filter",
+        "preferences": true,
+        "empty_state": "No instances in this project",
+        "empty_state_action": "Create instance",
+        "confidence": "medium",
+        "columns": [
+          "Name",
+          "Status",
+          "Tier",
+          "Version",
+          "Capacity",
+          "Region",
+          "Zone",
+          "Network",
+          "Labels"
+        ]
+      }
+    },
+    {
+      "id": "create-instance",
+      "kind": "create",
+      "title": "Create a Redis instance",
+      "route": "/memorystore/redis/instances/create",
+      "provenance": "reference",
+      "confidence": "medium",
+      "submit": "Create instance",
+      "sections": [
+        {
+          "title": "Instance info",
+          "fields": [
+            {
+              "label": "Instance ID",
+              "type": "text",
+              "required": true,
+              "constraints": "Lowercase letters, numbers, hyphens; start with a letter; up to 40 characters"
+            },
+            {
+              "label": "Display name",
+              "type": "text"
+            },
+            {
+              "label": "Tier",
+              "type": "radio",
+              "required": true,
+              "default": "Basic",
+              "options": [
+                "Basic",
+                "Standard (high availability)"
+              ],
+              "help": "Standard adds a replica and automatic failover across zones."
+            },
+            {
+              "label": "Redis version",
+              "type": "select",
+              "default": "Redis 7.0",
+              "options": [
+                "Redis 7.2",
+                "Redis 7.0",
+                "Redis 6.x",
+                "Redis 5.0",
+                "Redis 4.0",
+                "Redis 3.2"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Capacity",
+          "fields": [
+            {
+              "label": "Capacity (GB)",
+              "type": "number",
+              "required": true,
+              "default": 1,
+              "constraints": "1-300 GB",
+              "help": "Memory size per node. Approximate node count and estimated monthly cost update as you change this."
+            }
+          ]
+        },
+        {
+          "title": "Region and zone",
+          "fields": [
+            {
+              "label": "Region",
+              "type": "select",
+              "required": true,
+              "default": "us-central1 (Iowa)"
+            },
+            {
+              "label": "Zone",
+              "type": "select",
+              "default": "Any"
+            },
+            {
+              "label": "Alternative zone",
+              "type": "select",
+              "help": "Zone for the replica; must differ from Zone."
+            }
+          ]
+        },
+        {
+          "title": "Configure instance connection",
+          "expandable": true,
+          "fields": [
+            {
+              "label": "Network",
+              "type": "select",
+              "default": "default",
+              "help": "VPC network the instance is reachable from (authorizedNetwork)."
+            },
+            {
+              "label": "Connection mode",
+              "type": "radio",
+              "default": "Direct peering",
+              "options": [
+                "Direct peering",
+                "Private services access"
+              ]
+            },
+            {
+              "label": "Reserved IP range",
+              "type": "text",
+              "placeholder": "10.0.0.0/29",
+              "help": "CIDR block reserved for the instance; auto-allocated if left blank."
+            },
+            {
+              "label": "Enable AUTH",
+              "type": "checkbox",
+              "default": false,
+              "help": "Require an AUTH string to connect."
+            },
+            {
+              "label": "In-transit encryption",
+              "type": "checkbox",
+              "default": false,
+              "help": "Enforce TLS (server authentication) between clients and the instance."
+            }
+          ]
+        },
+        {
+          "title": "Read replicas (Standard tier only)",
+          "expandable": true,
+          "fields": [
+            {
+              "label": "Read replicas",
+              "type": "radio",
+              "default": "Disabled",
+              "options": [
+                "Disabled",
+                "Enabled"
+              ]
+            },
+            {
+              "label": "Number of replicas",
+              "type": "number",
+              "default": 1,
+              "constraints": "1-5"
+            }
+          ]
+        },
+        {
+          "title": "Data persistence",
+          "expandable": true,
+          "fields": [
+            {
+              "label": "Persistence mode",
+              "type": "radio",
+              "default": "Disabled",
+              "options": [
+                "Disabled",
+                "RDB snapshot"
+              ]
+            },
+            {
+              "label": "Snapshot period",
+              "type": "select",
+              "default": "Every 24 hours",
+              "options": [
+                "Every 1 hour",
+                "Every 6 hours",
+                "Every 12 hours",
+                "Every 24 hours"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Redis configuration",
+          "expandable": true,
+          "fields": [
+            {
+              "label": "maxmemory-policy",
+              "type": "select",
+              "default": "volatile-lru",
+              "options": [
+                "volatile-lru",
+                "allkeys-lru",
+                "volatile-lfu",
+                "allkeys-lfu",
+                "volatile-random",
+                "allkeys-random",
+                "volatile-ttl",
+                "noeviction"
+              ]
+            },
+            {
+              "label": "Additional parameters",
+              "type": "table",
+              "columns": [
+                "Parameter",
+                "Value"
+              ],
+              "actions": [
+                "Add a parameter"
+              ],
+              "help": "notify-keyspace-events, activedefrag, timeout, slowlog-*, stream-node-max-* and others the engine supports."
+            }
+          ]
+        },
+        {
+          "title": "Maintenance window",
+          "expandable": true,
+          "fields": [
+            {
+              "label": "Day",
+              "type": "select",
+              "default": "No preference"
+            },
+            {
+              "label": "Start time",
+              "type": "select"
+            }
+          ]
+        },
+        {
+          "title": "Labels",
+          "fields": [
+            {
+              "label": "Labels",
+              "type": "tags",
+              "actions": [
+                "Add label"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "instance-overview",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "route": "/memorystore/redis/locations/{region}/instances/{resource-name}/details/overview",
+      "breadcrumbs": [
+        "Memorystore",
+        "Redis instances",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Failover",
+        "Upgrade Redis version",
+        "Export",
+        "Import",
+        "Reschedule maintenance",
+        "Delete"
+      ],
+      "sections": [
+        {
+          "title": "Basic information",
+          "fields": [
+            {
+              "label": "Display name",
+              "type": "readonly"
+            },
+            {
+              "label": "Status",
+              "type": "readonly"
+            },
+            {
+              "label": "Tier",
+              "type": "readonly"
+            },
+            {
+              "label": "Redis version",
+              "type": "readonly"
+            },
+            {
+              "label": "Capacity",
+              "type": "readonly"
+            },
+            {
+              "label": "Region",
+              "type": "readonly"
+            },
+            {
+              "label": "Zone",
+              "type": "readonly"
+            },
+            {
+              "label": "Alternative zone",
+              "type": "readonly"
+            },
+            {
+              "label": "Created",
+              "type": "readonly"
+            },
+            {
+              "label": "Labels",
+              "type": "readonly"
+            }
+          ]
+        },
+        {
+          "title": "Monitoring",
+          "confidence": "low",
+          "fields": [
+            {
+              "label": "Memory usage",
+              "type": "readonly"
+            },
+            {
+              "label": "Connected clients",
+              "type": "readonly"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "connections",
+      "kind": "settings",
+      "title": "Connections",
+      "route": "/memorystore/redis/locations/{region}/instances/{resource-name}/details/connections",
+      "provenance": "reference",
+      "confidence": "medium",
+      "sections": [
+        {
+          "title": "Connect to this instance",
+          "fields": [
+            {
+              "label": "Primary endpoint",
+              "type": "readonly",
+              "help": "host:port"
+            },
+            {
+              "label": "Read endpoint",
+              "type": "readonly",
+              "help": "Only set when read replicas are enabled."
+            },
+            {
+              "label": "Port",
+              "type": "readonly"
+            },
+            {
+              "label": "AUTH string",
+              "type": "other",
+              "actions": [
+                "Show"
+              ],
+              "help": "Only available when AUTH is enabled on the instance."
+            },
+            {
+              "label": "Connect command",
+              "type": "readonly"
+            }
+          ]
+        },
+        {
+          "title": "Network",
+          "fields": [
+            {
+              "label": "Network",
+              "type": "readonly"
+            },
+            {
+              "label": "Connection mode",
+              "type": "readonly"
+            },
+            {
+              "label": "Reserved IP range",
+              "type": "readonly"
+            },
+            {
+              "label": "In-transit encryption",
+              "type": "readonly"
+            },
+            {
+              "label": "Server CA certificate",
+              "type": "other",
+              "actions": [
+                "Download"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "configuration",
+      "kind": "settings",
+      "title": "Configuration",
+      "route": "/memorystore/redis/locations/{region}/instances/{resource-name}/details/configuration",
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Edit configuration"
+      ],
+      "sections": [
+        {
+          "title": "Redis configuration parameters",
+          "table": {
+            "columns": [
+              "Parameter",
+              "Value"
+            ],
+            "confidence": "medium"
+          }
+        },
+        {
+          "title": "Data persistence",
+          "fields": [
+            {
+              "label": "Persistence mode",
+              "type": "readonly"
+            },
+            {
+              "label": "Snapshot period",
+              "type": "readonly"
+            },
+            {
+              "label": "Next snapshot time",
+              "type": "readonly"
+            }
+          ]
+        },
+        {
+          "title": "Read replicas",
+          "fields": [
+            {
+              "label": "Read replicas",
+              "type": "readonly"
+            },
+            {
+              "label": "Replica count",
+              "type": "readonly"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "nodes",
+      "kind": "list",
+      "title": "Nodes",
+      "route": "/memorystore/redis/locations/{region}/instances/{resource-name}/details/nodes",
+      "provenance": "reference",
+      "confidence": "low",
+      "table": {
+        "columns": [
+          "Node ID",
+          "Zone",
+          "Role"
+        ]
+      }
+    },
+    {
+      "id": "maintenance",
+      "kind": "settings",
+      "title": "Maintenance",
+      "route": "/memorystore/redis/locations/{region}/instances/{resource-name}/details/maintenance",
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Edit maintenance policy"
+      ],
+      "sections": [
+        {
+          "title": "Maintenance window",
+          "fields": [
+            {
+              "label": "Preferred window",
+              "type": "readonly"
+            }
+          ]
+        },
+        {
+          "title": "Scheduled maintenance",
+          "fields": [
+            {
+              "label": "Scheduled start",
+              "type": "readonly"
+            },
+            {
+              "label": "Can reschedule",
+              "type": "readonly"
+            }
+          ],
+          "actions": [
+            "Reschedule"
+          ]
+        }
+      ]
+    }
+  ]
+}

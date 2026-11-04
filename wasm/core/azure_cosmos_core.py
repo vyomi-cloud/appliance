@@ -123,74 +123,117 @@ def _coll_view(db: dict, coll_id: str, entry: dict) -> dict:
     }
 
 
-# ── SQL query (minimal SELECT support) ─────────────────────────────────────
+# ── SQL query (pragmatic SELECT subset) ─────────────────────────────────────
+def _lit(rhs: str) -> Any:
+    rhs = rhs.strip()
+    if (rhs.startswith("'") and rhs.endswith("'")) or \
+       (rhs.startswith('"') and rhs.endswith('"')):
+        return rhs[1:-1]
+    if rhs.lower() in ("true", "false"):
+        return rhs.lower() == "true"
+    if rhs.lower() == "null":
+        return None
+    try:
+        return int(rhs)
+    except ValueError:
+        try:
+            return float(rhs)
+        except ValueError:
+            return rhs
+
+
+def _match_condition(doc: dict, cond: str) -> bool:
+    """A single WHERE condition: a scalar function call, an IN membership
+    test, or a comparison. Unrecognised conditions pass through (don't
+    filter the document out) — same fallback the original subset used."""
+    cond = cond.strip()
+
+    fm = re.match(
+        r"^(contains|startswith|endswith)\s*\(\s*(?:c|root)\.([A-Za-z_]\w*)\s*,\s*(.+?)\s*\)$",
+        cond, re.IGNORECASE)
+    if fm:
+        fn, field_name, rhs = fm.group(1).lower(), fm.group(2), fm.group(3)
+        actual, val = doc.get(field_name), _lit(rhs)
+        if not isinstance(actual, str) or not isinstance(val, str):
+            return False
+        if fn == "contains":
+            return val in actual
+        if fn == "startswith":
+            return actual.startswith(val)
+        return actual.endswith(val)
+
+    inm = re.match(r"^(?:c|root)\.([A-Za-z_]\w*)\s+in\s*\((.*)\)$",
+                   cond, re.IGNORECASE | re.DOTALL)
+    if inm:
+        field_name = inm.group(1)
+        members = [_lit(p) for p in inm.group(2).split(",")]
+        return doc.get(field_name) in members
+
+    cm = re.match(
+        r"""^(?:c|root)\.([A-Za-z_]\w*)\s*
+            (=|==|!=|<>|>=|<=|>|<)\s*
+            (.+?)\s*$""",
+        cond, re.VERBOSE)
+    if not cm:
+        return True  # unsupported predicate -> don't filter it out
+    field_name, op, rhs = cm.group(1), cm.group(2), cm.group(3).strip()
+    val: Any = _lit(rhs)
+    actual = doc.get(field_name)
+    if op in ("=", "=="):
+        return actual == val
+    if op in ("!=", "<>"):
+        return actual != val
+    try:
+        if op == ">":
+            return actual > val
+        if op == "<":
+            return actual < val
+        if op == ">=":
+            return actual >= val
+        if op == "<=":
+            return actual <= val
+    except TypeError:
+        return False
+    return True
+
+
 def _run_query(docs: list[dict], query: str) -> list[dict]:
     """A pragmatic subset of the Cosmos SQL grammar sufficient for the native
-    SDK's common patterns: SELECT * / SELECT c.a, c.b, with an optional
-    WHERE c.field = value (=, !=, >, <, >=, <=). Unrecognised queries fall
-    back to returning all documents (SELECT * semantics)."""
+    SDK's common patterns: SELECT */fields/TOP n/VALUE, an optional WHERE
+    combining comparisons (=,!=,>,<,>=,<=), IN (...) and CONTAINS/STARTSWITH/
+    ENDSWITH(...) with a single logical operator throughout (either all AND
+    or all OR — mixed/parenthesized boolean expressions are not parsed),
+    ORDER BY one field, OFFSET n LIMIT n, and a top-level COUNT(...) / VALUE
+    COUNT(...) aggregate. Unrecognised queries fall back to SELECT * / don't
+    filter the predicate out, so the subset degrades gracefully rather than
+    silently dropping rows."""
     q = query.strip()
-    ql = q.lower()
 
-    # WHERE clause -> filter predicate.
+    # TOP n — a row cap baked into the projection clause.
+    top_n = None
+    mtop = re.match(r"^\s*select\s+top\s+(\d+)\s+(.*)$", q, re.IGNORECASE | re.DOTALL)
+    if mtop:
+        top_n = int(mtop.group(1))
+        q = "SELECT " + mtop.group(2)
+
+    value_mode = bool(re.match(r"^\s*select\s+value\s+", q, re.IGNORECASE))
+
+    # WHERE clause -> filter predicate, terminated by ORDER BY / OFFSET / end.
     where = None
-    m = re.search(r"\bwhere\b(.*?)(?:\border\s+by\b|$)", q, re.IGNORECASE | re.DOTALL)
+    m = re.search(r"\bwhere\b(.*?)(?:\border\s+by\b|\boffset\b|$)", q, re.IGNORECASE | re.DOTALL)
     if m:
         where = m.group(1).strip()
-
-    def _lit(rhs: str) -> Any:
-        rhs = rhs.strip()
-        if (rhs.startswith("'") and rhs.endswith("'")) or \
-           (rhs.startswith('"') and rhs.endswith('"')):
-            return rhs[1:-1]
-        if rhs.lower() in ("true", "false"):
-            return rhs.lower() == "true"
-        if rhs.lower() == "null":
-            return None
-        try:
-            return int(rhs)
-        except ValueError:
-            try:
-                return float(rhs)
-            except ValueError:
-                return rhs
 
     def _match(doc: dict) -> bool:
         if not where:
             return True
-        # c.field IN (v1, v2, ...) — membership test.
-        inm = re.match(r"^\s*(?:c|root)\.([A-Za-z_][\w]*)\s+in\s*\((.*)\)\s*$",
-                       where, re.IGNORECASE | re.DOTALL)
-        if inm:
-            field_name = inm.group(1)
-            members = [_lit(p) for p in inm.group(2).split(",")]
-            return doc.get(field_name) in members
-        cm = re.match(
-            r"""^\s*(?:c|root)\.([A-Za-z_][\w]*)\s*
-                (=|==|!=|<>|>=|<=|>|<)\s*
-                (.+?)\s*$""",
-            where, re.VERBOSE)
-        if not cm:
-            return True  # unsupported predicate -> don't filter it out
-        field_name, op, rhs = cm.group(1), cm.group(2), cm.group(3).strip()
-        val: Any = _lit(rhs)
-        actual = doc.get(field_name)
-        if op in ("=", "=="):
-            return actual == val
-        if op in ("!=", "<>"):
-            return actual != val
-        try:
-            if op == ">":
-                return actual > val
-            if op == "<":
-                return actual < val
-            if op == ">=":
-                return actual >= val
-            if op == "<=":
-                return actual <= val
-        except TypeError:
-            return False
-        return True
+        # Pragmatic subset: a single logical operator throughout (no mixing,
+        # no parentheses) — OR takes precedence over an all-AND reading.
+        or_parts = re.split(r"\s+or\s+", where, flags=re.IGNORECASE)
+        if len(or_parts) > 1:
+            return any(_match_condition(doc, p) for p in or_parts)
+        and_parts = re.split(r"\s+and\s+", where, flags=re.IGNORECASE)
+        return all(_match_condition(doc, p) for p in and_parts)
 
     matched = [d for d in docs if _match(d)]
 
@@ -208,13 +251,29 @@ def _run_query(docs: list[dict], query: str) -> list[dict]:
             return (not present, type(v).__name__ if present else "", v if present else "")
         matched = sorted(matched, key=_sort_key, reverse=(direction == "desc"))
 
-    # Projection: SELECT * vs SELECT c.a, c.b
-    sm = re.match(r"^\s*select\s+(.*?)\s+from\b", ql, re.DOTALL)
+    # OFFSET n LIMIT n — a page of the (filtered, ordered) result set.
+    offm = re.search(r"\boffset\s+(\d+)\s+limit\s+(\d+)\b", q, re.IGNORECASE)
+    if offm:
+        offset, limit = int(offm.group(1)), int(offm.group(2))
+        matched = matched[offset:offset + limit]
+    if top_n is not None:
+        matched = matched[:top_n]
+
+    # Aggregate: SELECT [VALUE] COUNT(...) FROM c — no GROUP BY.
+    if re.match(r"^\s*select\s+(?:value\s+)?count\s*\([^)]*\)\s+from\b", q, re.IGNORECASE):
+        n = len(matched)
+        return [n] if value_mode else [{"$1": n}]
+
+    # Projection: SELECT * / SELECT c.a, c.b [AS alias] / SELECT VALUE c.a
+    sm = re.match(r"^\s*select\s+(?:value\s+)?(.*?)\s+from\b", q, re.IGNORECASE | re.DOTALL)
     proj = sm.group(1).strip() if sm else "*"
     if proj == "*":
         return matched
 
-    # projected fields
+    if value_mode:
+        vm = re.match(r"^(?:c|root)\.([A-Za-z_]\w*)$", proj, re.IGNORECASE)
+        return [d.get(vm.group(1)) for d in matched] if vm else matched
+
     fields = []
     for part in proj.split(","):
         part = part.strip()

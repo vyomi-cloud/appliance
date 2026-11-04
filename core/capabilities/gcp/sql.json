@@ -1,0 +1,127 @@
+{
+  "$doc": "Vyomi capability registry — GCP Cloud SQL. See aws/s3.json for the contract. Feature ids share one namespace with the AWS registry, so they are prefixed gcp.sql.*",
+  "gcp.sql.instances": {
+    "title": "Instances (create, list, get, patch, delete, restart, stop/start)",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": [
+      "Instances are RUNNABLE immediately; Vyomi has no provisioning delay (PENDING_CREATE) to model.",
+      "Stop/start is simulated by toggling settings.activationPolicy; Vyomi does not actually tear down compute."
+    ],
+    "tests": ["tests/conformance/test_gcp_cloudsql_core.py"]
+  },
+  "gcp.sql.databases": {
+    "title": "Databases (create, list, delete)",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": [],
+    "tests": ["tests/conformance/test_gcp_cloudsql_core.py"]
+  },
+  "gcp.sql.users": {
+    "title": "Users (add, list, change password, delete)",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": [
+      "Cloud IAM authentication type is stored and returned, but Vyomi never checks IAM identity on connect — only the stored password gates access."
+    ],
+    "tests": ["tests/conformance/test_gcp_cloudsql_core.py"]
+  },
+  "gcp.sql.backups": {
+    "title": "Backups (on-demand backupRuns: create, list, delete, restore)",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": [
+      "A backupRun snapshots the control-plane metadata this core manages (databases, users) and instances.restoreBackup replays that snapshot back onto the instance; it does not capture an actual point-in-time copy of table row data (the separate SQL data plane, out of scope for this core).",
+      "Automated (scheduled) backups are not taken in the background — only on-demand backupRuns created from the console or API exist."
+    ],
+    "tests": ["tests/conformance/test_gcp_cloudsql_core.py"]
+  },
+  "gcp.sql.operations": {
+    "title": "Operations log (list per-instance and project-wide)",
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": [
+      "Every operation completes synchronously and is logged with status DONE; Vyomi has no asynchronous lifecycle to show PENDING/RUNNING operations."
+    ],
+    "tests": ["tests/conformance/test_gcp_cloudsql_core.py"]
+  },
+  "gcp.sql.connections": {
+    "title": "Connections (public/private IP toggle, authorized networks)",
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": [
+      "ipv4Enabled and privateNetwork are now enforced on instances.get/list: disabling Public IP removes the PRIMARY entry from ipAddresses (no public address to connect to at all, not a disabled one a client could still dial) and leaving privateNetwork unset means no PRIVATE entry either — the Instances list, instance overview and Connections pages all read this live. authorizedNetworks (the per-IP allow-list) stays unenforced: Vyomi has no real client IP to match against a simulated instance's allow-list, the same honest limit azure_sql_core.py takes for per-IP SQL firewall rules."
+    ],
+    "tests": ["tests/conformance/test_gcp_cloudsql_core.py"]
+  },
+  "gcp.sql.replicas": {
+    "title": "Read replicas",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": [
+      "A read replica is a real instance created with masterInstanceName; it mirrors the primary's databases and users — the control-plane metadata this core manages — synchronously on every write, so Replication lag always reads \"0s\" rather than modeling real async replication delay. Table row data (the separate SQL data plane) isn't mirrored, and promoting a replica to a standalone primary (instances.promoteReplica) isn't modeled.",
+      "A primary instance can't be deleted while it has live replicas (matching the native API), but a replica can still be written to directly — Vyomi doesn't enforce the real engine's read-only restriction on replicas."
+    ],
+    "tests": ["tests/conformance/test_gcp_cloudsql_core.py"]
+  },
+  "gcp.sql.connections-security": {
+    "title": "Connections: Security (SSL/TLS enforcement, client/server certificates)",
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": [
+      "A server CA cert is generated for every instance and client certs are real sslCerts.insert/list/delete resources (the private key is returned once, at creation, and never stored again — same as the real API) — but Vyomi issues deterministic, realistic-shaped PEM blobs rather than real X.509/TLS material (no cryptography/OpenSSL dependency, so this loads under Pyodide).",
+      "'Require SSL/TLS' (sslMode) is ENFORCED on Cloud SQL Studio's query RPC — the one client connection Vyomi fully brokers end to end: ENCRYPTED_ONLY requires the caller to acknowledge an encrypted session and TRUSTED_CLIENT_CERTIFICATE_REQUIRED additionally requires a live client cert this instance issued, both checked on every query, not just stored. Vyomi never terminates TLS in front of the shared engine container (core/gcp_sql_engine.py) that a raw TCP client connects to directly, so sslMode has no effect on THAT path — the same boundary core/azure_sql_core.py's per-IP firewall rules accept."
+    ],
+    "tests": ["tests/conformance/test_gcp_cloudsql_core.py"]
+  },
+  "gcp.sql.insights": {
+    "title": "System insights, Query insights and Cloud SQL Studio",
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": [
+      "Cloud SQL Studio runs real SQL against the instance's real engine (sqlite3 in Nano, a real Postgres/MySQL in Pro/Max — the SAME engine instances.export/import already drive) and surfaces the engine's own errors; System insights (storage used, active connections, query throughput/error series) and Query insights (recent + top queries with real durations) are derived entirely from that real activity and the real queryLog it writes — never synthetic data.",
+      "CPU and memory utilization are NOT surfaced: no virtualized compute resource backs a Vyomi instance, so there is no real OS process to sample — physically impossible for a local simulator to measure, not merely unmodelled."
+    ],
+    "tests": ["tests/conformance/test_gcp_cloudsql_core.py"]
+  },
+  "gcp.sql.export-import": {
+    "title": "Export / import (instances.export, instances.import — SQL and CSV files in Cloud Storage)",
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": [
+      "Files are written to / read from the simulator's OWN Cloud Storage (a gs:// URI is only parsed, never fetched from Google); a missing bucket or object fails the operation (the Operation carries an error). Each operation completes synchronously.",
+      "A SQL export is a plain DDL + INSERT script of the instance's SQL engine (Vyomi's sqlite3/PGlite engine in Nano and for engine-less offline instances, the real Postgres database for offline instances backed by the shared engine container) — not a pg_dump/mysqldump archive; exportContext.databases is recorded but the instance's engine is exported as one database. CSV export requires csvExportOptions.selectQuery and writes no header row.",
+      "Offline instances backed by the shared MySQL engine are not supported (the operation fails with that reason); serverless exports, offload, BAK (SQL Server) files and encryption options are not simulated."
+    ],
+    "tests": ["tests/conformance/test_db_exports_local.py", "tests/conformance/test_no_cloud_egress.py"]
+  },
+ "gcp.sql.custom-machine-shapes": {
+  "title": "Custom machine shapes (db-custom-<vCPU>-<MB>)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "vCPU/memory rules are validated like Cloud SQL (1 or even vCPUs up to 96, memory a multiple of 256 MB, 0.9-6.5 GB per vCPU, at least 3840 MB); the shape is stored and billed in the cost model but the database engine is not resource-limited to it."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_sql_config.py"
+  ]
+ },
+ "gcp.sql.ssl-mode": {
+  "title": "SSL/TLS enforcement (sslMode)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "sslMode is validated and reported (requireSsl derived); ENCRYPTED_ONLY is enforced on the connection-test path, but client-certificate validation for TRUSTED_CLIENT_CERTIFICATE_REQUIRED is not performed on the wire."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_sql_config.py"
+  ]
+ },
+ "gcp.sql.cmek": {
+  "title": "Customer-managed encryption key (diskEncryptionConfiguration)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "The key name shape, same-region rule and existence in Cloud KMS are checked; disk data is not actually encrypted with the key and key disable/destroy does not affect the instance."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_sql_config.py"
+  ]
+ }
+}

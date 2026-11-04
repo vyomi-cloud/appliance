@@ -1,0 +1,11 @@
+{
+  "_doc": "ui-spec page id → v4 route. honest_page = the whole page is a declared 'Not simulated in Vyomi' gap. Unlisted spec pages count as missing. The real console's /functions redirects into Cloud Run > Services (see gaps_note in ui-spec/gcp/functions.json); our routes live under #/functions/... regardless.",
+  "services": { "route": "#/functions/services", "fixtures": ["fn-service"], "live": "live-service" },
+  "create-function": { "route": "#/functions/create", "expand": ["text=Containers, Networking, Security", "text=Internal"] },
+  "function-details": { "route": "#/functions/detail/us-central1/uic-function", "fixtures": ["fn-service"], "vars": { "resource-name": "uic-function" }, "live": "live-function-detail" },
+  "function-source": { "route": "#/functions/detail/us-central1/uic-function?tab=source", "fixtures": ["fn-service"], "vars": { "resource-name": "uic-function" }, "live": "live-function-source" },
+  "overview": { "route": "#/functions/overview" },
+  "jobs": { "route": "#/functions/jobs", "live": "live-job" },
+  "worker-pools": { "route": "#/functions/worker-pools", "live": "live-workerpool" },
+  "domain-mappings": { "route": "#/functions/domain-mappings", "fixtures": ["fn-service"], "live": "live-domain-mapping" }
+}

@@ -158,6 +158,15 @@ app = FastAPI(title="CloudLearn Cloud Simulator", version="2.0.0", docs_url=None
 # client error, not a crash: an unhandled JSONDecodeError surfaced as a 500 and
 # closed the keep-alive connection, so the client's NEXT request failed with
 # "Remote end closed connection" (console-actions ssm.create -> ssm.list).
+from core.native_errors import NativeHTTPError as _NativeHTTPError  # noqa: E402
+
+
+@app.exception_handler(_NativeHTTPError)
+async def _native_http_error(request, exc: _NativeHTTPError):
+    """Return a native cloud error body verbatim (no FastAPI {"detail": …} wrapper)."""
+    return JSONResponse(status_code=exc.status_code, content=exc.body, headers=exc.headers)
+
+
 @app.exception_handler(json.JSONDecodeError)
 async def _invalid_json_body(request: Request, exc: json.JSONDecodeError):
     return JSONResponse({"detail": f"Request body is not valid JSON: {exc.msg}",
@@ -165,6 +174,36 @@ async def _invalid_json_body(request: Request, exc: json.JSONDecodeError):
 
 # ── Backend route registration (EARLY) ───────────────────────────────
 _aws_xamz_dispatchers: dict = {}
+# v4 offline durability — the cores' shared_store() singletons (API Gateway V2, SSM, Step
+# Functions, Cloud Scheduler, Memorystore, GKE, IAM Credentials, Cloud Monitoring) become
+# space slots of the persisted state BEFORE any route captures them (core/appliance_stores.py).
+try:
+    from core import appliance_stores as _aps_durable
+    _aps_durable.install_core_slot_stores()
+except Exception as _e:   # never let this break appliance boot
+    print(f"[durability] core slot stores not installed: {_e}")
+# v4 C0e — ONE engine + ONE messaging store for SQS / SNS / EventBridge / Scheduler: the
+# classic console REST (/api/sqs/*, /api/eventbridge/rules*, /api/aws/extras/eventbridge/*)
+# and the Scheduler REST are registered FIRST so they win over the nats / provider / extras
+# routes; opted-out services mount nothing here (the pre-v4 handlers stay).
+try:
+    from routes import aws_messaging_unified as _amu_unified
+    _amu_unified.register(app)
+except Exception as _e:   # never let this break appliance boot — legacy stays
+    print(f"[wire_ingress] SQS/SNS/EventBridge core mount skipped: {_e}")
+# v4 C0f — ONE engine: AWS Lambda (native REST + classic console REST, real runtime for
+# Invoke) and the Azure Key Vault / Container Registry data planes on the shared cores.
+# Registered BEFORE vault_routes (pre-v4 /azure-data/keyvault/*) and the provider routes.
+try:
+    from routes import aws_lambda_unified as _lam_unified
+    _lam_unified.register(app)
+except Exception as _e:   # never let this break appliance boot — legacy stays
+    print(f"[wire_ingress] Lambda core mount skipped: {_e}")
+try:
+    from routes import azure_dataplane_unified as _azdp_unified
+    _azdp_unified.register(app)
+except Exception as _e:   # never let this break appliance boot — legacy stays
+    print(f"[wire_ingress] Key Vault / ACR / Service Bus core mount skipped: {_e}")
 try:
     from core import vault_routes as _vault_routes
     _vault_routes.register(app, aws_dispatchers=_aws_xamz_dispatchers)
@@ -187,6 +226,35 @@ try:
 except Exception:
     pass
 
+# v4 C0d — ONE engine: Firestore + Compute Engine (native wire and the classic console
+# aliases) on the shared cores. Registered BEFORE the provider routes so these paths win;
+# opted-out services (VYOMI_UNIFIED_INGRESS_SERVICES / VYOMI_LEGACY_WIRE) mount nothing.
+try:
+    from routes import gcp_firestore_compute_unified as _gfc_unified
+    _gfc_unified.register(app)
+except Exception as _e:   # never let this break appliance boot — legacy stays
+    print(f"[wire_ingress] Firestore/Compute core mount skipped: {_e}")
+# v4 C0g — ONE engine: GCP Pub/Sub (native /v1/projects/{p}/topics|subscriptions|snapshots|
+# schemas… and the classic /api/gcp/pubsub/*, /api/gcp/sqs/queues* aliases) on the shared core.
+try:
+    from routes import gcp_pubsub_unified as _gps_unified
+    _gps_unified.register(app)
+except Exception as _e:   # never let this break appliance boot — legacy stays
+    print(f"[wire_ingress] Pub/Sub core mount skipped: {_e}")
+# v4 C0i — ONE engine: GCP IAM (service accounts + keys, project :get/:set/:testIamPermissions and
+# the classic /api/gcp/iam aliases) on the shared core, like custom roles / Asset Inventory already.
+try:
+    from routes import gcp_iam_unified as _giam_unified
+    _giam_unified.register(app)
+except Exception as _e:   # never let this break appliance boot — legacy stays
+    print(f"[wire_ingress] GCP IAM core mount skipped: {_e}")
+# v4 C0h — ONE engine: Microsoft Graph (Entra ID directory, /v1.0 + /beta) on the shared core.
+try:
+    from routes import azure_graph_unified as _graph_unified
+    _graph_unified.register(app)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[wire_ingress] Microsoft Graph core mount skipped: {_e}")
+
 # ── Provider route registration ──────────────────────────────────────
 register_aws_ec2_routes(app, None)
 register_gcp_compute_routes(app, None)
@@ -198,13 +266,13 @@ register_azure_routes(app, None)
 from routes import console, aws_extras, gcp_extras, tenants, config, licensing
 from routes import terraform, azure_console, cloudsim, spaces, gcp_console, runtime
 from routes import aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb, aws_elbv2, aws_sns
-from routes import lazy_backends, shared, console_next, aws_logs, metrics_series, aws_cloudwatch, aws_kinesis, gcp_artifactregistry
+from routes import lazy_backends, shared, console_next, aws_logs, metrics_series, aws_cloudwatch, aws_kinesis, gcp_artifactregistry, gcp_logging, gcp_run, gcp_pam
 from routes import gcp_resourcemanager
 
 for mod in [console, aws_extras, gcp_extras, tenants, config, licensing,
             terraform, azure_console, cloudsim, spaces, gcp_console, runtime,
             aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb, aws_elbv2, aws_sns,
-            lazy_backends, shared, console_next, aws_logs, metrics_series, aws_cloudwatch, aws_kinesis, gcp_artifactregistry,
+            lazy_backends, shared, console_next, aws_logs, metrics_series, aws_cloudwatch, aws_kinesis, gcp_artifactregistry, gcp_logging, gcp_run, gcp_pam,
             gcp_resourcemanager]:
     mod.register(app)
 
@@ -237,6 +305,12 @@ os.makedirs(STATIC_DIR, exist_ok=True)
 _UI_HTML = os.path.join(STATIC_DIR, "index.html")
 _PRICING_HTML = os.path.join(STATIC_DIR, "pricing.html")
 app.mount("/assets", StaticFiles(directory=STATIC_DIR), name="assets")
+# v4 native-fidelity consoles (built by consoles/build.mjs) at /v4/<cloud>/. They call the
+# native cloud wire through /_wire (routes/wire_prefix.py). Note: shadows a path-style S3
+# bucket literally named "v4" on this port.
+_V4_DIR = os.path.join(STATIC_DIR, "v4")
+if os.path.isdir(_V4_DIR):
+    app.mount("/v4", StaticFiles(directory=_V4_DIR, html=True), name="console-v4")
 
 # S3 routes are registered at the BOTTOM of this file (see end-of-file
 # block) so the catch-all @app.post("/{bucket}/{key:path}") doesn't
@@ -2455,6 +2529,14 @@ def _cloudsim_add_runtime_instance(runtime_instances: dict, resource_id: str, pr
     }
 
 
+def _core_records(store, space: dict | None, field: str) -> dict:
+    """One collection of a shared core's store as kept in `space` (core/appliance_stores
+    _CoreSlotStore: the data lives per space; a plain store is global)."""
+    if hasattr(store, "records_in"):
+        return store.records_in(space).get(field) or {}
+    return getattr(store, field, None) or {}
+
+
 def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[str, int], dict[str, dict]]:
     if not isinstance(space, dict):
         return [], {}, {}
@@ -2551,48 +2633,71 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
         if isinstance(api, dict):
             add("aws", "apigateway", "api", api_id, api)
 
-    _iam_src = _cloudsim_service_state(space, "iam")
-    if not _iam_src.get("users") and space.get("space_id") == _spaces_state().get("active_space_id"):
-        _iam_src = _iam_state()   # IAM lives in the live (active-space) STATE, not service_states
+    try:   # IAM — v4 C0g: the shared core's space state (console + SDK/CLI share it)
+        from core import wire_ingress as _wi_iam
+        _iam_unified = _wi_iam.is_unified("iam")
+    except Exception:
+        _iam_unified = False
+    if _iam_unified:
+        _iam_src = _cloudsim_service_state(space, "iam_core")
+    else:
+        _iam_src = _cloudsim_service_state(space, "iam")
+        if not _iam_src.get("users") and space.get("space_id") == _spaces_state().get("active_space_id"):
+            _iam_src = _iam_state()   # IAM lives in the live (active-space) STATE, not service_states
     for _iam_kind, _iam_coll in (("user", "users"), ("group", "groups"), ("role", "roles")):
         for _iam_id, _iam_rec in _iam_src.get(_iam_coll, {}).items():
             if isinstance(_iam_rec, dict):
                 add("aws", "iam", _iam_kind, str(_iam_id), _iam_rec)
 
-    try:   # Secrets Manager + KMS — the Vault-backed stores the console and SDK/CLI share
-        from core import vault_routes as _vr
-        for _sec_name in _vr._aws_secret_index_get(str(space.get("space_id") or _spaces_state().get("active_space_id") or "default")):
-            add("aws", "secretsmanager", "secret", _sec_name, {"name": _sec_name})
-        for _key_id, _key in list(_vr._kms_keys.items()):
-            if isinstance(_key, dict) and _key.get("KeyState") != "PendingDeletion":
+    try:   # Secrets Manager + KMS — v4 C0c: the shared cores' space state (console + SDK/CLI share it)
+        from core import wire_ingress as _wi_g
+        from routes import aws_secrets_kms_unified as _ask_g
+        _aws_core_inv = _ask_g.inventory(space)
+        if _wi_g.is_unified("secretsmanager"):
+            for _sec_name in _aws_core_inv[("secretsmanager", "secret")]:
+                add("aws", "secretsmanager", "secret", _sec_name, {"name": _sec_name})
+        if _wi_g.is_unified("kms"):
+            for _key_id in _aws_core_inv[("kms", "key")]:
                 add("aws", "kms", "key", _key_id, {"name": _key_id})
+    except Exception:
+        pass
+    try:   # … or, opted out, the pre-v4 Vault-backed stores
+        from core import vault_routes as _vr
+        from core import wire_ingress as _wi_g
+        if not _wi_g.is_unified("secretsmanager"):
+            for _sec_name in _vr._aws_secret_index_get(str(space.get("space_id") or _spaces_state().get("active_space_id") or "default")):
+                add("aws", "secretsmanager", "secret", _sec_name, {"name": _sec_name})
+        if not _wi_g.is_unified("kms"):
+            for _key_id, _key in list(_vr._kms_keys.items()):
+                if isinstance(_key, dict) and _key.get("KeyState") != "PendingDeletion":
+                    add("aws", "kms", "key", _key_id, {"name": _key_id})
     except Exception:
         pass
 
     try:   # API Gateway V2 — the shared wire/console store (console + SDK/CLI created APIs)
         from core.apigatewayv2_core import shared_store as _apigwv2_store
-        for api_id, api in _apigwv2_store().apis.items():
+        for api_id, api in _core_records(_apigwv2_store(), space, "apis").items():
             add("aws", "apigatewayv2", "api", api_id, {"name": api["name"], "created": api["createdDate"]})
     except Exception:
         pass
 
     try:   # Systems Manager parameters — the shared wire/console store
         from core.ssm_core import shared_store as _ssm_store
-        for _n in _ssm_store().parameters:
+        for _n in _core_records(_ssm_store(), space, "parameters"):
             add("aws", "ssm", "parameter", _n, {"name": _n})
     except Exception:
         pass
 
     try:   # Step Functions — the shared wire/console store (console + SDK/CLI created state machines)
         from core.stepfunctions_core import shared_store as _sfn_store
-        for sm_name, sm in _sfn_store().machines.items():
+        for sm_name, sm in _core_records(_sfn_store(), space, "machines").items():
             add("aws", "stepfunctions", "state_machine", sm_name, {"name": sm_name, "created": sm["creationDate"]})
     except Exception:
         pass
 
     try:   # Cloud Scheduler — the shared wire/console store (console + SDK/CLI created jobs)
         from core.gcp_cloudscheduler_core import shared_store as _gcs_sched_store
-        for _jn, _job in _gcs_sched_store().jobs.items():
+        for _jn, _job in _core_records(_gcs_sched_store(), space, "jobs").items():
             add("gcp", "cloudscheduler", "job", _jn.rsplit("/", 1)[-1],
                 {"name": _jn.rsplit("/", 1)[-1], "created": _job.get("userUpdateTime", "")})
     except Exception:
@@ -2600,7 +2705,7 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
 
     try:   # Memorystore for Redis — the shared wire/console store (console + SDK/CLI created instances)
         from core.gcp_redis_core import shared_store as _redis_store
-        for _rn, _ri in _redis_store().instances.items():
+        for _rn, _ri in _core_records(_redis_store(), space, "instances").items():
             add("gcp", "redis", "instance", _rn.rsplit("/", 1)[-1],
                 {"name": _rn.rsplit("/", 1)[-1], "created": _ri.get("createTime", "")})
     except Exception:
@@ -2608,7 +2713,7 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
 
     try:   # Kubernetes Engine — the shared wire/console store (console + SDK/CLI created clusters)
         from core.gcp_container_core import shared_store as _gke_store
-        for _cn, _cl in _gke_store().clusters.items():
+        for _cn, _cl in _core_records(_gke_store(), space, "clusters").items():
             add("gcp", "container", "cluster", _cn.rsplit("/", 1)[-1],
                 {"name": _cn.rsplit("/", 1)[-1], "created": _cl.get("createTime", "")})
     except Exception:
@@ -2616,7 +2721,7 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
 
     try:   # IAM Credentials — the shared wire/console issue log (never the secrets)
         from core.gcp_iamcredentials_core import shared_store as _iamc_store
-        for _cid, _cr in _iamc_store().issued.items():
+        for _cid, _cr in _core_records(_iamc_store(), space, "issued").items():
             add("gcp", "iamcredentials", "credential", _cid,
                 {"name": _cid, "created": _cr.get("issueTime", "")})
     except Exception:
@@ -2624,7 +2729,7 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
 
     try:   # Cloud Monitoring — alert policies from the shared wire/console store
         from core.gcp_monitoring_core import shared_store as _mon_store
-        for _pn, _pol in _mon_store().alert_policies.items():
+        for _pn, _pol in _core_records(_mon_store(), space, "alert_policies").items():
             add("gcp", "monitoring", "policy", _pn.rsplit("/", 1)[-1],
                 {"name": _pn.rsplit("/", 1)[-1], "created": (_pol.get("creationRecord") or {}).get("mutateTime", "")})
     except Exception:
@@ -2700,7 +2805,19 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
         if isinstance(repo, dict):
             add("gcp", "artifactregistry", "repository", repo_name, repo)
 
-    gcp_firestore = _cloudsim_service_state(space, "gcp_firestore")
+    # v4 C0d: Firestore databases + VPC resources served by the shared cores live in the
+    # space's gcp_gcp_firestore_engine / gcp_gcp_compute_vpc slots.
+    try:
+        from routes import gcp_firestore_compute_unified as _gfc_inv
+        _gfc_core_inv = _gfc_inv.inventory(space)
+    except Exception:
+        _gfc_core_inv = {}
+    for (_svc, _kind), _items in _gfc_core_inv.items():
+        if _svc in ("firestore", "vpc"):
+            for _entry, _created in _items.items():
+                add("gcp", _svc, _kind, f"core:{_svc}:{_entry}", {"name": _entry.rsplit("/", 1)[-1], "created": _created})
+
+    gcp_firestore = {} if ("firestore", "database") in _gfc_core_inv else _cloudsim_service_state(space, "gcp_firestore")
     for db_id, db in gcp_firestore.get("databases", {}).items():
         if isinstance(db, dict):
             add("gcp", "firestore", "database", db_id, db)
@@ -2714,7 +2831,9 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
     # service_states), so list them under the space's project.
     try:
         from core import gcp_pubsub_emulator as _ps_emu
-        if str(space.get("provider") or "") == "gcp" and _ps_emu.available():
+        from core import wire_ingress as _wi_ps
+        # v4 C0g: unified, the core's records ARE gcp_pubsub (counted above); the emulator is not read
+        if str(space.get("provider") or "") == "gcp" and _ps_emu.available() and not _wi_ps.is_unified("gcp_pubsub"):
             from core import gcp_project as _gp
             for _pp in (_gp.ensure_identity(space)[0],):
                 for _t in _ps_emu.list_topics(_pp):
@@ -2748,7 +2867,7 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
         if isinstance(gw, dict):
             add("gcp", "apigateway", "gateway", gw_id, gw)
 
-    gcp_vpc = _cloudsim_service_state(space, "gcp_vpc")
+    gcp_vpc = {} if ("vpc", "network") in _gfc_core_inv else _cloudsim_service_state(space, "gcp_vpc")
     for network_id, network in gcp_vpc.get("networks", {}).items():
         if isinstance(network, dict):
             add("gcp", "vpc", "network", network_id, network)
@@ -2764,7 +2883,12 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
 
     gcp_iam = _cloudsim_service_state(space, "gcp_iam")
     for account_id, account in gcp_iam.get("service_accounts", {}).items():
-        if isinstance(account, dict):
+        if not isinstance(account, dict):
+            continue
+        if account and all(isinstance(v, dict) and "email" in v for v in account.values()):
+            for nested_id, nested in account.items():   # {project: {id: record}}
+                add("gcp", "iam", "service_account", nested_id, nested)
+        elif account:   # a flat record (terraform import)
             add("gcp", "iam", "service_account", account_id, account)
     for policy_id, policy in gcp_iam.get("policies", {}).items():
         if isinstance(policy, dict):
@@ -2773,9 +2897,14 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
     # Rail extras (generic create backend): billable AWS/GCP resources that live
     # under service_states["aws_extras"|"gcp_extras"][<svc>/<kind>]["items"].
     # (service, kind) pairs priced in core/cost_model.SERVICE_MONTHLY.
+    try:
+        from core import wire_ingress as _wi_eb
+        _eb_unified = _wi_eb.is_unified("events")
+    except Exception:
+        _eb_unified = False
     for provider, extras_key, scan in (
-        ("aws", "aws_extras", (("secretsmanager", "secrets"), ("kms", "keys"),
-                               ("eventbridge", "rules"), ("eventbridge", "event-buses"))),
+        ("aws", "aws_extras", (("secretsmanager", "secrets"), ("kms", "keys"))
+         + (() if _eb_unified else (("eventbridge", "rules"), ("eventbridge", "event-buses")))),
         ("gcp", "gcp_extras", (("secretmanager", "secrets"), ("kms", "keys"),
                                ("eventarc", "triggers"))),
     ):
@@ -2789,27 +2918,70 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
                 if isinstance(item, dict):
                     add(provider, svc, kind.rstrip("s"), str(item_id), item)
 
-    # Vault-backed GCP Secret Manager secrets / Cloud KMS keys (console + SDK
-    # create them in Vault with a name index, not in service_states).
+    # v4 C0e: EventBridge rules / custom buses and Scheduler schedules served by the
+    # shared cores live in the space's service_states (eventbridge / scheduler).
+    try:
+        from routes import aws_messaging_unified as _amu_inv
+        from core import wire_ingress as _wi_eb2
+        for (_svc, _kind), _items in _amu_inv.inventory(space).items():
+            if not _wi_eb2.is_unified("events" if _svc == "eventbridge" else _svc):
+                continue
+            for _entry, _created in _items.items():
+                add("aws", _svc, _kind, f"core:{_svc}:{_entry}", {"name": _entry.split("|")[-1].rsplit("/", 1)[-1], "created": _created})
+    except Exception:
+        pass
+
+    # v4 C0b: GCP Secret Manager secrets / Cloud KMS keys served by the shared cores
+    # live in the space's service_states (gcp_gcp_secretmanager / gcp_gcp_kms).
+    try:
+        from routes import gcp_secrets_kms_unified as _gsk
+        for (_svc, _kind), _items in _gsk.inventory(space).items():
+            for _entry, _created in _items.items():
+                _name = _entry.rsplit("/", 1)[-1]
+                add("gcp", _svc, _kind, f"core:{_svc}:{_entry}", {"name": _name, "created": _created})
+    except Exception:
+        pass
+
+    # Vault-backed GCP Secret Manager secrets / Cloud KMS keys (pre-v4 handlers, or
+    # opted out of the unified engine: Vault with a name index, not service_states).
     try:
         from core import vault_routes as _vr
+        from core import wire_ingress as _wi_inv
         _sid = next((k for k, v in _spaces_state().get("spaces", {}).items() if v is space), "")
         if _sid:
             for _svc, _kind, _vkind in (("secretmanager", "secret", "secrets"), ("kms", "key", "kms")):
+                if _wi_inv.is_unified("gcp_secrets" if _vkind == "secrets" else "gcp_kms"):
+                    continue
                 for _entry, _created in _vr.gcp_vault_index(_sid, _vkind).items():
                     _name = _entry.partition("/")[2] or _entry
                     add("gcp", _svc, _kind, f"vault:{_vkind}:{_entry}", {"name": _name, "created": _created})
     except Exception:
         pass
 
-    # Vault-backed AWS Secrets Manager secrets / KMS keys (console + SDK write
-    # to Vault and _kms_keys, not to service_states["aws_extras"]).
+    # v4 C0c: AWS Secrets Manager secrets / customer managed KMS keys served by the
+    # shared cores live in the space's service_states (secretsmanager / kms).
+    try:
+        from routes import aws_secrets_kms_unified as _ask
+        from core import wire_ingress as _wi_inv
+        for (_svc, _kind), _items in _ask.inventory(space).items():
+            if not _wi_inv.is_unified(_svc):
+                continue
+            for _entry, _created in _items.items():
+                add("aws", _svc, _kind, f"core:{_svc}:{_entry}", {"name": _entry, "created": _created})
+    except Exception:
+        pass
+
+    # Vault-backed AWS Secrets Manager secrets / KMS keys (pre-v4 handlers, or opted
+    # out of the unified engine: Vault + _kms_keys, not service_states).
     try:
         from core import vault_routes as _vr
+        from core import wire_ingress as _wi_inv
         _sid = next((k for k, v in _spaces_state().get("spaces", {}).items() if v is space), "")
-        if _sid:
+        if _sid and not (_wi_inv.is_unified("secretsmanager") and _wi_inv.is_unified("kms")):
             _aws_v = _vr.aws_vault_resources(_sid)
             for _svc, _kind, _bucket in (("secretsmanager", "secret", "secrets"), ("kms", "key", "keys")):
+                if _wi_inv.is_unified(_svc):
+                    continue
                 for _name, _created in _aws_v[_bucket].items():
                     add("aws", _svc, _kind, f"vault:{_bucket}:{_name}", {"name": _name, "created": _created})
     except Exception:
@@ -3547,7 +3719,23 @@ def _lambda_default_code(function_name: str = "my-function") -> str:
     ).strip() + "\n"
 
 
+def _lambda_unified():
+    """routes/aws_lambda_unified while "lambda" is on the shared engine (v4 C0f), else None."""
+    try:
+        from core import wire_ingress as _wi_l
+        if _wi_l.is_unified("lambda"):
+            from routes import aws_lambda_unified as _lu
+            return _lu
+    except Exception:
+        pass
+    return None
+
+
 def _lambda_find_function(function_name: str) -> dict | None:
+    _lu = _lambda_unified()
+    if _lu is not None:
+        _fn = _lu._find(function_name)
+        return _lu.legacy_view(_fn) if _fn else None
     key = _lambda_function_key(function_name)
     if not key:
         return None
@@ -3581,6 +3769,9 @@ def _lambda_set_function(function: dict) -> dict:
 
 
 def _lambda_list_functions() -> list[dict]:
+    _lu = _lambda_unified()
+    if _lu is not None:
+        return [_lu.legacy_view(f) for f in _lu._fns().values()]
     functions = list(_lambda_state().setdefault("functions", {}).values())
     functions.sort(key=lambda item: (item.get("created", ""), item.get("function_name", "")))
     return functions
@@ -4080,6 +4271,10 @@ def _lambda_record_invocation(function: dict, invocation_type: str, event_payloa
 
 
 def _lambda_invoke_function(function_name: str, event_payload: Any, invocation_type: str = "RequestResponse", source: str = "", source_principal: str = "", source_arn: str = "", source_account: str = "") -> dict:
+    _lu = _lambda_unified()
+    if _lu is not None:   # v4 C0f: the shared engine + the real runtime
+        return _lu.invoke(function_name, event_payload, invocation_type=invocation_type, source=source,
+                          source_principal=source_principal, source_arn=source_arn, source_account=source_account)
     function = _lambda_find_function(function_name)
     if not function:
         raise HTTPException(404, detail="ResourceNotFoundException")
@@ -4380,6 +4575,17 @@ def _sqs_redrive_queue_name(queue: dict) -> str:
 
 
 def _sqs_enqueue_message(queue: dict, body: str, attributes: dict | None = None, message_attributes: dict | None = None, group_id: str = "", dedup_id: str = "", source: str = "") -> dict:
+    from core import wire_ingress as _wi_sqs
+    if _wi_sqs.is_unified("sqs"):
+        # v4 C0e: the queue records are the shared SQS core's (S3 notifications, SNS, …
+        # enqueue through the core so the message is receivable over every wire).
+        from core import sqs_core as _sqs_core
+        _st = _wi_sqs.appliance_router().msg
+        _st.adopt()
+        _q = _st.get_queue(queue.get("queue_name", "")) or queue
+        body = body if isinstance(body, str) else json.dumps(body, default=str)
+        return _sqs_core.enqueue(_st, _q, body, message_attributes or None,
+                                 message_group_id=group_id or None, message_dedup_id=dedup_id or None)
     queue = _sqs_normalize_queue(queue)
     _sqs_sweep_queue(queue)
     body = body if isinstance(body, str) else json.dumps(body, default=str)
@@ -4465,6 +4671,10 @@ def _sqs_queue_from_name_or_url(name_or_url: str) -> dict | None:
     if ":queue/" in name_or_url:
         candidate = name_or_url.rsplit(":", 1)[-1]
         return _sqs_find_queue(candidate)
+    if name_or_url.startswith("arn:aws:sqs:"):
+        # the real queue ARN form (arn:aws:sqs:<region>:<account>:<name>) — what S3
+        # notifications / SNS subscriptions carry; pre-v4 only resolved ":queue/<name>"
+        return _sqs_find_queue(name_or_url.rsplit(":", 1)[-1])
     return _sqs_find_queue(name_or_url)
 
 
@@ -5319,7 +5529,7 @@ def _ec2_instance_xml(instance: dict) -> ET.Element:
     _ec2_sub(placement, "groupName", "")
     _ec2_sub(placement, "tenancy", "default")
     monitoring = _ec2_sub(item, "monitoring")
-    _ec2_sub(monitoring, "state", "disabled")
+    _ec2_sub(monitoring, "state", "enabled" if instance.get("monitoring") else "disabled")
     _ec2_sub(item, "subnetId", instance.get("subnet_id", ""))
     _ec2_sub(item, "vpcId", instance.get("vpc_id", ""))
     _ec2_sub(item, "privateIpAddress", instance.get("private_ip", ""))
@@ -7645,6 +7855,27 @@ def _docker_available() -> bool:
     return _runtime_available("docker")
 
 
+# ── netsim: enforced VPC networking for Docker-backed instances (core/netsim) ──
+# OFF unless VYOMI_NETSIM_ENFORCE=1|auto (see core/netsim/README.md). Every call is
+# best-effort and swallowed: networking enforcement must never break a launch.
+def _netsim_kick(reason: str) -> None:
+    try:
+        from core.netsim import wiring as _nsw
+        _nsw.schedule_apply(reason)
+    except Exception:
+        pass
+
+
+def _netsim_attach(instance: dict) -> dict | None:
+    if str(instance.get("state") or "") in ("terminated", "shutting-down"):
+        return None
+    try:
+        from core.netsim import wiring as _nsw
+        return _nsw.docker_attach(instance)
+    except Exception:
+        return None
+
+
 # ── instance SSH reachability (port-publish + routable-IP) ────────────────────
 # The Docker backend had NO SSH exposure after the LXD proxy-device path was
 # dropped — the advertised IP is a placeholder, and `docker run` mapped no port,
@@ -7978,6 +8209,9 @@ def _docker_instance_obj(instance: dict):
         _ssh_port = int(_ssh_port) if str(_ssh_port or "").strip().isdigit() else None
     except (TypeError, ValueError):
         _ssh_port = None
+    _ns = _netsim_attach(instance)   # enforced VPC: the subnet's own bridge + the model IP
+    if _ns:
+        instance["netsim_network"], instance["netsim_interface"] = _ns["network"], _ns["interface"]
     return Instance(
         instance_id=str(instance["instance_id"]),
         image=image,
@@ -7986,7 +8220,8 @@ def _docker_instance_obj(instance: dict):
         ssh_pubkey=pubkey,
         # routable-IP: attach to the VPC bridge (Linux) so the container gets a
         # host-routable IP; else honour an explicit operator network.
-        network=(_ensure_vpc_network() or os.environ.get("VYOMI_INSTANCE_NETWORK") or None),
+        network=((_ns or {}).get("network") or _ensure_vpc_network() or os.environ.get("VYOMI_INSTANCE_NETWORK") or None),
+        ip_address=(_ns or {}).get("ip"),
         # port-publish: map this host port -> container :22 (set at first start).
         ssh_port=(_ssh_port if _port_publish_enabled() else None),
     )
@@ -8050,6 +8285,7 @@ def _start_docker_instance(instance: dict) -> dict:
         instance["private_ip"] = ip
         instance["runtime_internal_ip"] = ip
     _update_docker_ssh_metadata(instance)
+    _netsim_kick(f"start {instance.get('instance_id')}")
     return instance
 
 
@@ -8095,6 +8331,7 @@ def _terminate_docker_instance(instance: dict) -> dict:
     instance["container_status"] = "removed"
     instance["pid"] = None
     _post_terminate_cleanup(instance)
+    _netsim_kick(f"terminate {instance.get('instance_id')}")
     return instance
 
 
@@ -11804,6 +12041,16 @@ def _restore_license_from_backup() -> bool:
         return False
 
 
+@app.on_event("shutdown")
+def _flush_state_at_shutdown():
+    """Write any coalesced (debounced) state save that hasn't run yet."""
+    try:
+        from core.middleware import flush_pending_state
+        flush_pending_state()
+    except Exception:
+        pass
+
+
 @app.on_event("startup")
 def _restore_license_at_boot():
     """v2.0.6: re-apply the cached JWT from /data/license-backup.jwt if
@@ -12458,12 +12705,15 @@ def api_ec2_create_instance(req: EC2InstanceRequest, *, auto_start: bool = True,
     _disk_preflight(getattr(req, "storage_gb", None))
     instance_id = _id("i")
     pack = _activate_pack("cloudlearn.ec2.basic")
-    if req.vpc_id and req.vpc_id not in vpc_state["vpcs"]:
+    # VPC objects live in two stores offline: the pre-v4 vpc_state (REST console) and the
+    # shared EC2/VPC core slot (the EC2 Query API / v4 console) — accept either.
+    _core_m = _Ec2CoreSpaceStore()._vpc_model or {}
+    if req.vpc_id and req.vpc_id not in vpc_state["vpcs"] and req.vpc_id not in _core_m.get("vpcs", {}):
         raise HTTPException(404, detail="NoSuchVpc")
-    if req.subnet_id and req.subnet_id not in vpc_state["subnets"]:
+    if req.subnet_id and req.subnet_id not in vpc_state["subnets"] and req.subnet_id not in _core_m.get("subnets", {}):
         raise HTTPException(404, detail="NoSuchSubnet")
     for sg in req.security_group_ids:
-        if sg not in vpc_state["security_groups"]:
+        if sg not in vpc_state["security_groups"] and sg not in _core_m.get("sgs", {}):
             raise HTTPException(404, detail=f"NoSuchSecurityGroup:{sg}")
     profile = _ami_profile(req.ami)
     requested_backend = (req.runtime_backend or "").strip().lower()
@@ -12546,11 +12796,25 @@ def api_ec2_create_instance(req: EC2InstanceRequest, *, auto_start: bool = True,
         # Real EC2 auto-assigns a public IPv4 to launches into the default VPC/subnet.
         instance["public_ip"] = _public_ip()
         instance["public_dns"] = _ec2_public_dns_name(instance)
+    if req.subnet_id and req.subnet_id in _core_m.get("subnets", {}):
+        # a core-VPC subnet: the address comes from the subnet's CIDR like EC2 (.4+, reserved and
+        # in-use excluded — including the other offline instances in that subnet)
+        try:
+            from core import vpc_core as _vpc_core
+            _taken = {i.get("private_ip") for i in ec2_state["instances"].values()
+                      if isinstance(i, dict) and i.get("subnet_id") == req.subnet_id and i.get("state") != "terminated"}
+            _probe = {**_core_m, "instances": {**_core_m.get("instances", {}),
+                                               **{f"x{n}": {"subnet_id": req.subnet_id, "private_ip": ip, "state": "running"}
+                                                  for n, ip in enumerate(_taken)}}}
+            instance["private_ip"] = _vpc_core._allocate_private_ip(_probe, req.subnet_id)
+        except Exception:
+            pass
     ec2_state["instances"][instance_id] = instance
     _cloudsim_sync_ec2_resource(instance, "upsert")
     if auto_start:
         _queue_runtime_start(instance_id)
     _record_usage("ec2.create_instance", instance)
+    _netsim_kick(f"ec2 launch {instance_id}")
     return instance
 
 
@@ -12626,6 +12890,47 @@ def _stop_runtime_process(instance: dict) -> None:
         _stop_lxd_instance(instance)
         return
     raise HTTPException(status_code=503, detail="RuntimeUnavailable")
+
+
+def _ec2_terminate_runtime(instance: dict) -> None:
+    backend = str(instance.get("runtime_backend") or "").strip().lower()
+    if instance.get("launch_status") == "error" and not str(instance.get("container_id") or "").strip():
+        _terminate_simulated_instance(instance)
+    elif backend == "docker":
+        _terminate_docker_instance(instance)
+    elif backend == "multipass":
+        _terminate_multipass_instance(instance)
+    elif backend == "lxd":
+        _terminate_lxd_instance(instance)
+    else:
+        _terminate_simulated_instance(instance)
+
+
+def ec2_runtime_alarm_action(instance_id: str, action: str) -> bool | None:
+    """A CloudWatch EC2 alarm action (aws.cloudwatch.alarms.actions.ec2) on an instance the offline
+    EC2 runtime owns (ec2_state — RunInstances / the launch wizard): the SAME stop / terminate /
+    reboot path StopInstances / TerminateInstances / RebootInstances take. None when the instance
+    isn't a runtime instance (core/vpc_core's own model then handles it)."""
+    instance = ec2_state["instances"].get(instance_id)
+    if not instance:
+        return None
+    try:
+        if action == "stop":
+            if instance.get("disable_api_stop"):
+                return False
+            _stop_runtime_process(instance)
+        elif action == "terminate":
+            if instance.get("disable_api_termination"):
+                return False
+            _ec2_terminate_runtime(instance)
+        elif action == "reboot":
+            _reboot_runtime_process(instance)
+        else:
+            return False
+    except HTTPException:
+        return False
+    _persist_state()
+    return True
 
 
 def _reboot_runtime_process(instance: dict) -> None:
@@ -13064,8 +13369,33 @@ def _ec2_query_cancel_capacity_reservation_fleets(params: dict[str, Any]) -> Res
     return _ec2_success_response("CancelCapacityReservationFleetsResponse", build)
 
 
+_EC2_STATUS_METRICS = ("StatusCheckFailed", "StatusCheckFailed_Instance", "StatusCheckFailed_System")
+
+
+def _ec2_push_status_metric(instance: dict) -> None:
+    """Real CloudWatch datapoints derived from the instance's own lifecycle state (see
+    ec2.instances.monitoring / ec2.instances.alarms-metrics capabilities): a running instance
+    always passes, so each point is 0. 'Detailed monitoring' only changes how often a poll is
+    allowed to record a fresh point (1 vs 5 minutes, AWS's basic/detailed granularity) — there's
+    no background ticker, so a point lands only when DescribeInstanceStatus is actually called."""
+    if instance.get("state") != "running":
+        return
+    period = 60.0 if instance.get("monitoring") else 300.0
+    now = time.time()
+    if now - (instance.get("_cw_metric_ts") or 0.0) < period:
+        return
+    instance["_cw_metric_ts"] = now
+    from core import cloudwatch_core as _cw
+    store = aws_cloudwatch.get_store()
+    dims = [{"Name": "InstanceId", "Value": instance["instance_id"]}]
+    for name in _EC2_STATUS_METRICS:
+        _cw.ingest_internal_metric(store, "AWS/EC2", name, dims, 0.0, unit="Count", ts=now)
+
+
 def _ec2_query_describe_instance_status(params: dict[str, Any]) -> Response:
     instances = _ec2_query_filter_instances(params)
+    for instance in instances:
+        _ec2_push_status_metric(instance)
 
     def build(root: ET.Element) -> None:
         status_set = _ec2_sub(root, "instanceStatusSet")
@@ -13264,6 +13594,7 @@ def _ec2_query_run_instances(params: dict[str, Any]) -> Response:
         # consistent with the GCP query path, which already queues the start.
         # The start is async (non-blocking), so the SDK response isn't delayed.
         instance = api_ec2_create_instance(req, auto_start=True)
+        instance["monitoring"] = str(params.get("Monitoring.Enabled", "")).lower() == "true"
         launched.append(instance)
 
     def build(root: ET.Element) -> None:
@@ -14004,6 +14335,62 @@ def _ec2_query_state_change_response(root_name: str, changes: list[tuple[dict, s
     return _ec2_success_response(root_name, build)
 
 
+_EC2_CORE_INSTANCE_ACTIONS = ("DescribeInstances", "DescribeInstanceStatus", "StartInstances", "StopInstances",
+                              "RebootInstances", "TerminateInstances", "MonitorInstances", "UnmonitorInstances")
+
+
+def _ec2_core_dispatch(params: dict) -> Response:
+    """One EC2 Query action on the shared EC2/VPC core (core/vpc_core.py) over the space slot."""
+    from core import vpc_core as _vpc_core
+    action = str(params.get("Action", "")).strip()
+    vpc_store = _Ec2CoreSpaceStore()
+    vpc_store.cw_store = aws_cloudwatch.get_store()
+    vpc_store.ram_store = _aps_durable.aws_runtime_core_stores()["ram"]
+    r = _vpc_core.dispatch(vpc_store, dict(params))
+    if r.status < 300 and not action.startswith(("Describe", "Get", "List", "AnalyzeReachability")):
+        _persist_state()
+    return Response(content=r.body, status_code=r.status, media_type=r.media_type, headers=r.headers or None)
+
+
+def _ec2_core_instance_bridge(action: str, params: dict) -> Response | None:
+    """Instances the shared EC2 core launched (Auto Scaling groups — core/autoscaling_core via
+    core/vpc_core.launch_for_autoscaling) live in the vpc_core model, not in this handler's
+    runtime-backed ec2_state. Requests naming ONLY such instances go to the core; an unfiltered
+    DescribeInstances lists both, so a scaled group's instances show in the EC2 console."""
+    if action not in _EC2_CORE_INSTANCE_ACTIONS:
+        return None
+    try:
+        model = _Ec2CoreSpaceStore()._vpc_model or {}
+    except Exception:
+        return None
+    core_instances = model.get("instances") or {}
+    if not core_instances:
+        return None
+    ids = _ec2_parse_instance_ids(params)
+    if ids:
+        if all(i in core_instances and i not in ec2_state["instances"] for i in ids):
+            return _ec2_core_dispatch(params)
+        return None
+    if action != "DescribeInstances":
+        return None
+    legacy = _ec2_query_describe_instances(params)
+    core = _ec2_core_dispatch(params)
+    try:
+        lb = legacy.body.decode("utf-8")
+        cb = core.body.decode("utf-8") if isinstance(core.body, (bytes, bytearray)) else str(core.body)
+        m = re.search(r"<reservationSet>(.*)</reservationSet>", cb, re.S)
+        items = m.group(1).strip() if m else ""
+        if not items:
+            return legacy
+        if "<reservationSet />" in lb or "<reservationSet/>" in lb:
+            lb = re.sub(r"<reservationSet\s*/>", f"<reservationSet>{items}</reservationSet>", lb, count=1)
+        else:
+            lb = lb.replace("</reservationSet>", items + "</reservationSet>", 1)
+        return Response(content=lb, status_code=legacy.status_code, media_type=legacy.media_type)
+    except Exception:
+        return legacy
+
+
 async def api_ec2_query(request: Request):
     params = await _ec2_query_params(request)
     action = str(params.get("Action", "")).strip()
@@ -14015,6 +14402,10 @@ async def api_ec2_query(request: Request):
 
     if str(params.get("DryRun", "")).lower() == "true":
         return _ec2_error_response("DryRunOperation", "Request would have succeeded, but DryRun flag is set.", 412)
+
+    bridged = _ec2_core_instance_bridge(action, params)
+    if bridged is not None:
+        return bridged
 
     try:
         if action == "DescribeInstances":
@@ -14036,12 +14427,16 @@ async def api_ec2_query(request: Request):
         if action == "DescribeInstanceTypes":
             return _ec2_query_describe_instance_types(params)
         if action == "DescribeSecurityGroups":
+            if _vpc_engine_is_core():
+                return api_vpc_core_query(params)
             return _ec2_query_describe_security_groups(params)
         if action == "DescribeVolumes":
             return _ec2_query_describe_volumes(params)
         if action == "DescribeRegions":
             return _ec2_query_describe_regions(params)
         if action == "DescribeAvailabilityZones":
+            if _vpc_engine_is_core():   # zones + Local/Wavelength Zone opt-in groups live in core/ec2_ops_core (same as Nano)
+                return api_vpc_core_query(params)
             return _ec2_query_describe_availability_zones(params)
         if action == "RunInstances":
             return _ec2_query_run_instances(params)
@@ -14087,25 +14482,146 @@ async def api_ec2_query(request: Request):
                 if not instance:
                     raise HTTPException(404, detail=f"InvalidInstanceID.NotFound: {instance_id}")
                 previous = instance.get("state", "running")
-                backend = str(instance.get("runtime_backend") or "").strip().lower()
-                if instance.get("launch_status") == "error" and not str(instance.get("container_id") or "").strip():
-                    _terminate_simulated_instance(instance)
-                elif backend == "docker":
-                    _terminate_docker_instance(instance)
-                elif backend == "multipass":
-                    _terminate_multipass_instance(instance)
-                elif backend == "lxd":
-                    _terminate_lxd_instance(instance)
-                else:
-                    _terminate_simulated_instance(instance)
+                _ec2_terminate_runtime(instance)
                 changes.append((instance, previous, "shutting-down"))
             return _ec2_query_state_change_response("TerminateInstancesResponse", changes)
+        if action in ("MonitorInstances", "UnmonitorInstances"):
+            enabled = action == "MonitorInstances"
+            touched: list[dict] = []
+            for instance_id in _ec2_parse_instance_ids(params):
+                instance = ec2_state["instances"].get(instance_id)
+                if not instance:
+                    raise HTTPException(404, detail=f"InvalidInstanceID.NotFound: {instance_id}")
+                instance["monitoring"] = enabled
+                touched.append(instance)
+
+            def build(root: ET.Element) -> None:
+                items = _ec2_sub(root, "instancesSet")
+                for instance in touched:
+                    item = _ec2_sub(items, "item")
+                    _ec2_sub(item, "instanceId", instance["instance_id"])
+                    monitoring = _ec2_sub(item, "monitoring")
+                    _ec2_sub(monitoring, "state", "enabled" if enabled else "disabled")
+            return _ec2_success_response(f"{action}Response", build)
     except HTTPException as exc:
         code = str(exc.detail).split(":", 1)[0]
         message = str(exc.detail)
         return _ec2_error_response(code, message, exc.status_code)
 
+    # Actions this legacy handler doesn't implement (key pairs, launch templates, ENIs, EBS
+    # extras, …) are served by the shared EC2/VPC core Nano uses (core/vpc_core.py), with its
+    # model in the active space's persisted slot — so e.g. CreateKeyPair works offline too.
+    from core import vpc_core as _vpc_core
+    if action in _vpc_core._OPS:
+        vpc_store = _Ec2CoreSpaceStore()
+        vpc_store.cw_store = aws_cloudwatch.get_store()
+        vpc_store.ram_store = _aps_durable.aws_runtime_core_stores()["ram"]   # shared subnets/SGs can't be deleted
+        r = _vpc_core.dispatch(vpc_store, dict(params))
+        if r.status < 300 and not action.startswith(("Describe", "Get", "List", "AnalyzeReachability")):
+            _persist_state()
+            if "NetworkInsights" not in action:
+                _netsim_kick(f"ec2 {action}")
+        return Response(content=r.body, status_code=r.status, media_type=r.media_type, headers=r.headers or None)
     return _ec2_error_response("InvalidAction", f"The action '{action}' is not implemented by the simulator.", 400)
+
+
+def _vpc_engine_is_core() -> bool:
+    """v4 netsim: the EC2/VPC wire's VPC objects are served by the ONE shared engine
+    (core/vpc_core.py — what Nano runs and core/netsim evaluates/enforces). The pre-v4 handlers
+    behind VYOMI_VPC_ENGINE=legacy remain as an escape hatch."""
+    return (os.environ.get("VYOMI_VPC_ENGINE") or "core").strip().lower() != "legacy"
+
+
+def _vpc_mirror_from_core() -> None:
+    """Bridge for pre-v4 READERS of vpc_state (REST views, RDS/ELB subnet pickers, launch
+    validation): mirror the core's VPCs / subnets / security groups in the legacy shape, tagged
+    `_engine: vpc_core`; the core stays authoritative (mirrors are rebuilt on every core write)."""
+    m = _Ec2CoreSpaceStore()._vpc_model or {}
+    for coll in ("vpcs", "subnets", "security_groups"):
+        for k in [k for k, v in vpc_state[coll].items() if isinstance(v, dict) and v.get("_engine") == "vpc_core"]:
+            del vpc_state[coll][k]
+    for vid, v in (m.get("vpcs") or {}).items():
+        if vid in vpc_state["vpcs"]:
+            continue
+        vpc_state["vpcs"][vid] = {"vpc_id": vid, "name": (v.get("tags") or {}).get("Name", vid), "cidr_block": v.get("cidr", ""),
+                                  "tenancy": v.get("tenancy", "default"), "tags": [], "state": "available",
+                                  "created": v.get("created", ""), "internet_gateway_id": v.get("igw") or "",
+                                  "default_security_group_id": next((g["id"] for g in (m.get("sgs") or {}).values()
+                                                                     if g.get("vpc_id") == vid and g.get("is_default")), ""),
+                                  "main_route_table_id": next((r["id"] for r in (m.get("route_tables") or {}).values()
+                                                               if r.get("vpc_id") == vid and r.get("main")), ""),
+                                  "_engine": "vpc_core"}
+    for sid, sn in (m.get("subnets") or {}).items():
+        if sid in vpc_state["subnets"]:
+            continue
+        vpc_state["subnets"][sid] = {"subnet_id": sid, "vpc_id": sn.get("vpc_id", ""), "cidr_block": sn.get("cidr", ""),
+                                     "availability_zone": sn.get("az", ""), "name": (sn.get("tags") or {}).get("Name", sid),
+                                     "route_table_id": sn.get("route_table") or "", "tags": [], "created": "",
+                                     "_engine": "vpc_core"}
+    for gid, g in (m.get("sgs") or {}).items():
+        if gid in vpc_state["security_groups"]:
+            continue
+        vpc_state["security_groups"][gid] = {"security_group_id": gid, "vpc_id": g.get("vpc_id", ""),
+                                             "group_name": g.get("name", ""), "description": g.get("description", ""),
+                                             "ingress": [], "egress": [], "is_default": bool(g.get("is_default")),
+                                             "tags": [], "created": "", "_engine": "vpc_core"}
+
+
+def api_vpc_core_query(params: dict) -> Response:
+    """EC2 Query VPC actions → core/vpc_core (same engine as Nano), legacy readers kept in sync."""
+    from core import vpc_core as _vpc_core
+    action = str(params.get("Action", "")).strip()
+    vpc_store = _Ec2CoreSpaceStore()
+    vpc_store.cw_store = aws_cloudwatch.get_store()
+    vpc_store.ram_store = _aps_durable.aws_runtime_core_stores()["ram"]   # shared subnets/SGs can't be deleted
+    r = _vpc_core.dispatch(vpc_store, dict(params))
+    if r.status < 300 and not action.startswith(("Describe", "Get", "List", "AnalyzeReachability")):
+        try:
+            _vpc_mirror_from_core()
+        except Exception:
+            pass
+        _persist_state()
+        _netsim_kick(f"ec2 {action}")
+    return Response(content=r.body, status_code=r.status, media_type=r.media_type, headers=r.headers or None)
+
+
+class _Ec2CoreSpaceStore:
+    """vpc_core keeps its whole model in `store._vpc_model`; point it at the active space's
+    service_states["ec2_vpc_core"] slot, which persists with the appliance state."""
+
+    @staticmethod
+    def _slot_owner() -> dict:
+        spaces = PLATFORM.kernel.state.setdefault("spaces", {"spaces": {}, "active_space_id": "", "settings": {}})
+        sid = spaces.get("active_space_id", "") or "default"
+        return spaces.setdefault("spaces", {}).setdefault(sid, {}).setdefault("service_states", {})
+
+    @property
+    def _vpc_model(self):
+        owner = self._slot_owner()
+        model = owner.get("ec2_vpc_core")
+        if _vpc_engine_is_core() and not (isinstance(model, dict) and model.get("_adopted_legacy")):
+            # upgrade path: the space's pre-v4 VPC objects move into the one engine, once, IDs kept
+            try:
+                from core import vpc_core as _vpc_core
+                legacy = owner.get("vpc")
+                if not isinstance(legacy, dict):
+                    legacy = {k: vpc_state.get(k, {}) for k in ("vpcs", "subnets", "security_groups",
+                                                                "route_tables", "internet_gateways")}
+                model = _vpc_core.adopt_legacy_slot(owner, legacy)
+                if isinstance(model, dict) and model.get("_adopted_counts"):
+                    for coll in ("vpcs", "subnets", "security_groups", "route_tables", "internet_gateways"):
+                        for rec in (legacy.get(coll) or {}).values():
+                            if isinstance(rec, dict) and rec.get("_engine") != "vpc_core":
+                                rec.setdefault("_adopted_into", "vpc_core")
+                    # persisted with the next state write; until then a restart simply re-adopts
+                    # (idempotent — same IDs, nothing duplicated)
+            except Exception as exc:
+                print(f"[vyomi] legacy VPC adoption skipped: {exc}")
+        return model
+
+    @_vpc_model.setter
+    def _vpc_model(self, model):
+        self._slot_owner()["ec2_vpc_core"] = model
 
 
 def api_gcp_compute_list_instances(project: str, zone: str):
@@ -14820,6 +15336,7 @@ def _gcp_storage_policy_view(bucket: str, policy: dict[str, Any] | None = None) 
 
 
 def _gcp_sql_instance_record(project: str, payload: dict[str, Any]) -> dict:
+    from core import gcp_cloudsql_core as _csql
     name = str(payload.get("name") or payload.get("instance") or payload.get("instanceId") or "sql-instance")
     region = _gcp_location_name(payload.get("region") or payload.get("location") or "us-central1")
     now = _now()
@@ -14852,7 +15369,12 @@ def _gcp_sql_instance_record(project: str, payload: dict[str, Any]) -> dict:
         "labels": payload.get("labels", {}) if isinstance(payload.get("labels"), dict) else {},
         "settings": settings,
         "ipAddresses": payload.get("ipAddresses") or [{"type": "PRIMARY", "ipAddress": _public_ip()}],
-        "serverCaCert": {"cert": "", "commonName": name, "createTime": now, "expirationTime": ""},
+        # gcp.sql.connections-security: a real (deterministic, Pyodide-safe — see
+        # core/gcp_cloudsql_core.py:_ca_cert) server CA cert, generated once at creation
+        # so it stays stable across gets, the same as the Nano core.
+        "serverCaCert": _csql._ca_cert(project, name),
+        "sslCerts": {},
+        "queryLog": [],
         "createTime": now,
         "updateTime": now,
     }
@@ -15316,6 +15838,19 @@ def _gcp_iam_set_policy(project: str, payload: dict[str, Any]) -> dict:
         "etag": str(payload.get("etag") or ""),
         "bindings": payload.get("bindings", []) if isinstance(payload.get("bindings"), list) else [],
     }
+    # Data Access audit log config (auditConfigs) — round-tripped verbatim, same
+    # shape as core/gcp_iam_core._set_iam_policy, so the Audit logs page's toggles
+    # survive on the offline substrate too (they used to be dropped here).
+    if isinstance(payload.get("auditConfigs"), list):
+        policy["auditConfigs"] = [
+            {"service": a.get("service", ""),
+             "auditLogConfigs": [dict(c) for c in a.get("auditLogConfigs", []) if isinstance(c, dict)]}
+            for a in payload["auditConfigs"] if isinstance(a, dict)
+        ]
+    else:
+        prev = gcp_iam_state.get("policies", {}).get(project) or {}
+        if prev.get("auditConfigs"):
+            policy["auditConfigs"] = prev["auditConfigs"]
     gcp_iam_state.setdefault("policies", {})[project] = policy
     return policy
 
@@ -17190,8 +17725,24 @@ def _gcp_storage_object_view(project: str, bucket: str, name: str, obj: dict) ->
 
 
 def _gcp_sql_instance_view(project: str, instance: dict) -> dict:
+    from core import gcp_cloudsql_core as _csql
     name = str(instance.get("name") or "")
     region = str(instance.get("region") or "us-central1")
+    settings = instance.get("settings")
+    if not isinstance(settings, dict):
+        settings = {"tier": "db-f1-micro", "activationPolicy": "ALWAYS", "dataDiskType": "PD_SSD",
+                    "dataDiskSizeGb": "10", "availabilityType": "ZONAL", "pricingPlan": "PER_USE"}
+    ip_config = settings.get("ipConfiguration")
+    if not isinstance(ip_config, dict):
+        ip_config = {}
+    ip_config.setdefault("ipv4Enabled", True)
+    ip_config.setdefault("privateNetwork", "")
+    # gcp.sql.connections-security: sslMode drives requireSsl (legacy bool) the same
+    # way core/gcp_cloudsql_core.py derives it on Nano — one setting, two field names.
+    ssl_mode = ip_config.get("sslMode", "ALLOW_UNENCRYPTED_AND_ENCRYPTED")
+    ip_config["sslMode"] = ssl_mode
+    ip_config["requireSsl"] = ssl_mode != "ALLOW_UNENCRYPTED_AND_ENCRYPTED"
+    settings["ipConfiguration"] = ip_config
     return {
         "kind": "sql#instance",
         "id": str(instance.get("id") or _gcp_compute_numeric_id(f"{project}:{name}")),
@@ -17208,21 +17759,9 @@ def _gcp_sql_instance_view(project: str, instance: dict) -> dict:
         "selfLink": f"{_gcp_sql_root()}/projects/{project}/instances/{name}",
         "databaseInstalledVersion": instance.get("databaseInstalledVersion", ""),
         "maintenanceVersion": instance.get("maintenanceVersion", ""),
-        "settings": instance.get("settings", {
-            "tier": "db-f1-micro",
-            "activationPolicy": "ALWAYS",
-            "dataDiskType": "PD_SSD",
-            "dataDiskSizeGb": "10",
-            "availabilityType": "ZONAL",
-            "pricingPlan": "PER_USE",
-            "ipConfiguration": {
-                "ipv4Enabled": True,
-                "privateNetwork": "",
-                "requireSsl": False,
-            },
-        }),
+        "settings": settings,
         "ipAddresses": instance.get("ipAddresses", [{"type": "PRIMARY", "ipAddress": instance.get("ipAddress", _public_ip())}]),
-        "serverCaCert": instance.get("serverCaCert", {"cert": "", "commonName": name, "createTime": _now(), "expirationTime": ""}),
+        "serverCaCert": instance.get("serverCaCert") or _csql._ca_cert(project, name),
         "createTime": instance.get("createTime", _now()),
         "updateTime": instance.get("updateTime", _now()),
         # Real connection endpoint for the backing OSS engine (None when the
@@ -17232,6 +17771,10 @@ def _gcp_sql_instance_view(project: str, instance: dict) -> dict:
         # Codespace sandbox: laptop-side tunnel + client command through the jump.
         "connect_help": _db_connect_help(instance.get("_backend"),
                                          instance.get("databaseVersion", "postgres")),
+        # read replicas (core/gcp_cloudsql_core — the Replicas tab filters on masterInstanceName)
+        **{k: instance[k] for k in ("masterInstanceName", "replicaNames", "replicaConfiguration",
+                                    "failoverReplica", "diskEncryptionConfiguration")
+           if instance.get(k)},
     }
 
 
@@ -17444,11 +17987,14 @@ def _gcp_apigateway_gateway_view(project: str, location: str, gw: dict) -> dict:
 
 def _gcp_iam_policy_view(project: str) -> dict:
     policy = gcp_iam_state.setdefault("policies", {}).setdefault(project, {"bindings": [], "etag": "", "version": 1})
-    return {
+    out = {
         "version": policy.get("version", 1),
         "etag": policy.get("etag", ""),
         "bindings": policy.get("bindings", []),
     }
+    if policy.get("auditConfigs"):
+        out["auditConfigs"] = policy["auditConfigs"]
+    return out
 
 
 def api_vpc_list_vpcs():
@@ -17639,7 +18185,7 @@ def api_vpc_list_internet_gateways():
 def api_vpc_create_internet_gateway(req: InternetGatewayRequest):
     igw_id = _id("igw")
     igw = {"internet_gateway_id": igw_id, "name": req.name or igw_id, "attached_vpc_id": "", "created": _now(), "tags": req.tags or []}
-    vpc_state["internet_gateways"][igw_id] = igw
+    vpc_state.setdefault("internet_gateways", {})[igw_id] = igw   # pre-v4 states lack the key
     _record_usage("vpc.create_internet_gateway", igw)
     return igw
 
@@ -22128,6 +22674,9 @@ async def aws_query_root(request: Request) -> Response:
     if service == "sqs":
         return await api_sqs_query(request)
     if service == "rds":
+        from core import wire_ingress as _wi_rds
+        if _wi_rds.is_unified("rds"):   # v4 C0h — the shared RDS core (see routes/aws_s3.py)
+            return await _wi_rds.serve_rds(request)
         return await api_rds_query(request)
     if service == "dynamodb":
         return await api_dynamodb_aws(request)
@@ -24052,12 +24601,44 @@ if not _UNIFIED_INGRESS:
         _mount_new_services(app)
     except Exception as _e:   # never let this break appliance boot
         print(f"[wire_ingress] net-new service mount skipped: {_e}")
+    # v4 C0 — ONE engine: native S3 / DynamoDB / GCS wire is served by the shared
+    # conformance cores over the appliance's own (space-scoped, persisted) state —
+    # see core/wire_ingress.py + core/appliance_stores.py. Per-service opt-out:
+    # VYOMI_UNIFIED_INGRESS_SERVICES (default "s3,dynamodb,gcs"; "none" = legacy).
+    from core import wire_ingress as _wire_ingress
+    print(f"[wire_ingress] unified engine for: {sorted(_wire_ingress.unified_services()) or 'none (legacy handlers)'}")
+    if _wire_ingress.is_unified("gcs"):
+        _wire_ingress.mount_gcs(app)   # after the provider routes (folders/transfers win), before the S3 catch-all
     aws_s3.register(app, aws_xamz_dispatchers=_aws_xamz_dispatchers)
 else:
     # Retire the bespoke S3 handler; the unified ingress (final fallback catch-all)
-    # serves S3 + any native cloud wire no explicit route claims.
-    from core.wire_ingress import mount as _mount_unified_ingress
-    _mount_unified_ingress(app)
+    # serves S3 + any native cloud wire no explicit route claims. S3 / GCS / DynamoDB
+    # use the appliance-state stores (C0) so the console REST shares their state.
+    from core import wire_ingress as _wire_ingress
+    if _wire_ingress.is_unified("gcs"):
+        _wire_ingress.mount_gcs(app)
+    _wire_ingress.mount(app, _wire_ingress.build_backed_router(overrides={
+        k: v for k, v in _wire_ingress.appliance_stores().items()
+        if _wire_ingress.STORE_SERVICE[k] in _wire_ingress.unified_services()}))
+
+# v4 C0 upgrade path: tables/items a pre-v4 appliance kept in DynamoDB Local are copied
+# ONCE into the core's state (core/ddb_local_migration.py; opt out with
+# VYOMI_DDB_MIGRATE_FROM_LOCAL=0). Never blocks or breaks boot.
+@app.on_event("startup")
+def _migrate_dynamodb_local_once():
+    try:
+        from core import ddb_local_migration as _ddb_mig
+        _ddb_mig.start_at_boot()
+    except Exception as _e:
+        print(f"[ddb-migrate] skipped: {_e}")
+
+
+# v4 consoles: `/_wire/<native path>` → same app at `/<native path>` (outermost middleware; see routes/wire_prefix.py).
+try:
+    from routes import wire_prefix as _wire_prefix
+    _wire_prefix.register(app)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[wire_prefix] /_wire routes skipped: {_e}")
 
 
 if __name__ == "__main__":

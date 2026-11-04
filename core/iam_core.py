@@ -18,11 +18,15 @@ pure-Python NativeIamEvaluator; cedar-wasm can swap in behind the seam in-browse
 Scope (v1 slice): users (Create/Get/List/Delete), roles (Create/Get/List/Delete),
 managed policies (Create/Get/List/Delete), groups (Create/AddUserToGroup),
 attach/detach + ListAttachedUserPolicies, inline Put/Get UserPolicy, access keys
-(Create/List), and SimulatePrincipalPolicy. MFA / SAML / instance profiles /
-policy versions reuse the same helpers and slot in next.
+(Create/List), virtual MFA devices (Create/Enable/Deactivate/Delete/List), and
+SimulatePrincipalPolicy — which factors a user's real MFA-device state into the
+`aws:MultiFactorAuthPresent` condition key. SAML / instance profiles / policy
+versions reuse the same helpers and slot in next.
 """
 from __future__ import annotations
 
+import base64
+import hashlib
 import json
 import uuid
 from dataclasses import dataclass, field
@@ -30,6 +34,7 @@ from datetime import datetime, timezone
 from xml.sax.saxutils import escape as _xml_escape
 
 from core.iam_store import IamStore
+from core.iam_store import NativeIamEvaluator as _NativeEval
 
 IAM_NS = "https://iam.amazonaws.com/doc/2010-05-08/"
 
@@ -67,6 +72,15 @@ def _user_arn(store, name): return f"arn:aws:iam::{store.account_id}:user/{name}
 def _role_arn(store, name): return f"arn:aws:iam::{store.account_id}:role/{name}"
 def _group_arn(store, name): return f"arn:aws:iam::{store.account_id}:group/{name}"
 def _policy_arn(store, name): return f"arn:aws:iam::{store.account_id}:policy/{name}"
+def _mfa_arn(store, name): return f"arn:aws:iam::{store.account_id}:mfa/{name}"
+
+
+def _has_mfa(store, user_name: str) -> bool:
+    """True if `user_name` has an ENABLED virtual MFA device — the real signal behind
+    the `aws:MultiFactorAuthPresent` condition key (see _simulate_principal_policy /
+    is_authorized). There is no console sign-in flow to actually challenge for the
+    code, so this reflects device assignment, not an authenticated session."""
+    return any(d.get("user_name") == user_name for d in store.virtual_mfa_devices.values())
 
 
 # ── form-encoded param helpers (Query protocol) ────────────────────────────
@@ -78,6 +92,22 @@ def _members(params: dict, base: str) -> list[str]:
         if key not in params:
             break
         out.append(params[key])
+        i += 1
+    return out
+
+
+def _context_entries(params: dict) -> list[dict]:
+    """SimulatePrincipalPolicy's ContextEntries.member.N.{ContextKeyName,ContextKeyValues} —
+    the real AWS mechanism for supplying per-request condition keys (aws:MultiFactorAuthPresent,
+    aws:SourceIp, …) that the simulator has no live request to read them from. Only the first
+    value of a multi-valued entry is honored (the evaluator's context is single-valued)."""
+    out, i = [], 1
+    while True:
+        key = params.get(f"ContextEntries.member.{i}.ContextKeyName")
+        if key is None:
+            break
+        values = _members(params, f"ContextEntries.member.{i}.ContextKeyValues")
+        out.append({"key": key, "value": values[0] if values else ""})
         i += 1
     return out
 
@@ -119,7 +149,9 @@ def _el(tag, value): return f"<{tag}>{_xml_escape(str(value))}</{tag}>"
 def _user_xml(store, u: dict) -> str:
     return ("<User>" + _el("Path", u.get("path", "/")) + _el("UserName", u["user_name"])
             + _el("UserId", u["user_id"]) + _el("Arn", u["arn"])
-            + _el("CreateDate", u["created"]) + "</User>")
+            + _el("CreateDate", u["created"])
+            + (_el("PermissionsBoundary", u["permissions_boundary"]) if u.get("permissions_boundary") else "")
+            + "</User>")
 
 
 def _role_xml(store, r: dict) -> str:
@@ -127,16 +159,19 @@ def _role_xml(store, r: dict) -> str:
     trust = _xml_escape(json.dumps(doc)) if doc else ""
     return ("<Role>" + _el("Path", r.get("path", "/")) + _el("RoleName", r["role_name"])
             + _el("RoleId", r["role_id"]) + _el("Arn", r["arn"]) + _el("CreateDate", r["created"])
+            + _el("Description", r.get("description", "")) + _el("MaxSessionDuration", r.get("max_session_duration", 3600))
             + (f"<AssumeRolePolicyDocument>{trust}</AssumeRolePolicyDocument>" if trust else "")
+            + (_el("PermissionsBoundary", r["permissions_boundary"]) if r.get("permissions_boundary") else "")
             + "</Role>")
 
 
 def _policy_xml(store, p: dict) -> str:
     return ("<Policy>" + _el("PolicyName", p["policy_name"]) + _el("PolicyId", p["policy_id"])
             + _el("Arn", p["arn"]) + _el("Path", p.get("path", "/"))
+            + _el("Description", p.get("description", ""))
             + _el("DefaultVersionId", p.get("default_version_id", "v1"))
             + _el("AttachmentCount", p.get("attachment_count", 0))
-            + _el("CreateDate", p["created"]) + "</Policy>")
+            + _el("CreateDate", p["created"]) + _el("UpdateDate", p.get("updated", p["created"])) + "</Policy>")
 
 
 # ── helpers ────────────────────────────────────────────────────────────────
@@ -161,6 +196,30 @@ def _require_policy(store, arn):
     return p
 
 
+def _require_group(store, name):
+    g = store.get_group(name)
+    if not g:
+        raise IamError("NoSuchEntity", f"The group with name {name} cannot be found.", 404)
+    return g
+
+
+# ── tag helpers (shared shape: Tags.member.N.{Key,Value}) ──────────────────
+def _parse_tags(params: dict) -> dict:
+    out, i = {}, 1
+    while True:
+        k = params.get(f"Tags.member.{i}.Key")
+        if k is None:
+            break
+        out[k] = params.get(f"Tags.member.{i}.Value", "")
+        i += 1
+    return out
+
+
+def _tags_xml(tags: dict) -> str:
+    items = "".join("<member>" + _el("Key", k) + _el("Value", v) + "</member>" for k, v in tags.items())
+    return f"<Tags>{items}</Tags>"
+
+
 # ── user operations ─────────────────────────────────────────────────────────
 def _create_user(store, params):
     name = str(params.get("UserName", "")).strip()
@@ -170,7 +229,8 @@ def _create_user(store, params):
         raise IamError("EntityAlreadyExists", f"User with name {name} already exists.", 409)
     u = {"user_name": name, "user_id": _id("AIDA"), "path": params.get("Path", "/"),
          "arn": _user_arn(store, name), "created": _now(),
-         "attached_policies": [], "inline_policies": {}, "groups": []}
+         "attached_policies": [], "inline_policies": {}, "groups": [],
+         "tags": _parse_tags(params), "permissions_boundary": None, "login_profile": None}
     store.users[name] = u
     store.persist()
     return _envelope("CreateUser", _user_xml(store, u))
@@ -189,6 +249,14 @@ def _list_users(store, params):
 def _delete_user(store, params):
     name = str(params.get("UserName", "")).strip()
     _require_user(store, name)
+    x = _x(store)
+    for what, coll in (("access keys", store.access_keys.values()), ("SSH public keys", x["ssh_keys"].values()),
+                       ("signing certificates", x["signing_certs"].values()),
+                       ("service-specific credentials", x["service_creds"].values())):
+        if any(i["user_name"] == name for i in coll):
+            raise IamError("DeleteConflict", f"Cannot delete entity, must delete {what} first.", 409)
+    if any(d.get("user_name") == name for d in store.virtual_mfa_devices.values()):
+        raise IamError("DeleteConflict", "Cannot delete entity, must delete MFA device first.", 409)
     del store.users[name]
     store.persist()
     return _envelope("DeleteUser")
@@ -205,7 +273,9 @@ def _create_role(store, params):
          "arn": _role_arn(store, name), "created": _now(),
          "assume_role_policy_document": _json_param(params, "AssumeRolePolicyDocument"),
          "description": params.get("Description", ""),
-         "attached_policies": [], "inline_policies": {}}
+         "max_session_duration": int(params.get("MaxSessionDuration") or 3600),
+         "attached_policies": [], "inline_policies": {},
+         "tags": _parse_tags(params), "permissions_boundary": None}
     store.roles[name] = r
     store.persist()
     return _envelope("CreateRole", _role_xml(store, r))
@@ -224,6 +294,8 @@ def _list_roles(store, params):
 def _delete_role(store, params):
     name = str(params.get("RoleName", "")).strip()
     _require_role(store, name)
+    if any(name in ip["roles"] for ip in _ip_all(store).values()):
+        raise IamError("DeleteConflict", "Cannot delete entity, must remove role from instance profiles first.", 409)
     del store.roles[name]
     store.persist()
     return _envelope("DeleteRole")
@@ -237,9 +309,13 @@ def _create_policy(store, params):
     arn = _policy_arn(store, name)
     if store.get_policy(arn):
         raise IamError("EntityAlreadyExists", f"Policy {name} already exists.", 409)
+    doc = _json_param(params, "PolicyDocument")
+    now = _now()
     p = {"policy_name": name, "policy_id": _id("ANPA"), "arn": arn,
-         "path": params.get("Path", "/"), "document": _json_param(params, "PolicyDocument"),
-         "created": _now(), "default_version_id": "v1", "attachment_count": 0}
+         "path": params.get("Path", "/"), "document": doc, "description": params.get("Description", ""),
+         "created": now, "updated": now, "default_version_id": "v1", "attachment_count": 0,
+         "tags": _parse_tags(params),
+         "versions": {"v1": {"document": doc, "created": now}}}
     store.policies[arn] = p
     store.persist()
     return _envelope("CreatePolicy", _policy_xml(store, p))
@@ -334,6 +410,83 @@ def _get_user_policy(store, params):
     return _envelope("GetUserPolicy", inner)
 
 
+def _list_user_policies(store, params):
+    u = _require_user(store, str(params.get("UserName", "")).strip())
+    inner = "<PolicyNames>" + "".join(_el("member", n) for n in u["inline_policies"]) + "</PolicyNames>"
+    return _envelope("ListUserPolicies", inner)
+
+
+def _delete_user_policy(store, params):
+    u = _require_user(store, str(params.get("UserName", "")).strip())
+    u["inline_policies"].pop(str(params.get("PolicyName", "")).strip(), None)
+    store.persist()
+    return _envelope("DeleteUserPolicy")
+
+
+def _update_user(store, params):
+    name = str(params.get("UserName", "")).strip()
+    u = _require_user(store, name)
+    new_name = str(params.get("NewUserName", "")).strip()
+    if new_name and new_name != name:
+        if store.get_user(new_name):
+            raise IamError("EntityAlreadyExists", f"User with name {new_name} already exists.", 409)
+        u["user_name"] = new_name
+        u["arn"] = _user_arn(store, new_name)
+        del store.users[name]
+        store.users[new_name] = u
+        for g in store.groups.values():
+            if name in g["members"]:
+                g["members"] = [new_name if m == name else m for m in g["members"]]
+    if params.get("NewPath"):
+        u["path"] = params["NewPath"]
+    store.persist()
+    return _envelope("UpdateUser")
+
+
+def _tag_user(store, params):
+    u = _require_user(store, str(params.get("UserName", "")).strip())
+    u["tags"].update(_parse_tags(params))
+    store.persist()
+    return _envelope("TagUser")
+
+
+def _untag_user(store, params):
+    u = _require_user(store, str(params.get("UserName", "")).strip())
+    for k in _members(params, "TagKeys"):
+        u["tags"].pop(k, None)
+    store.persist()
+    return _envelope("UntagUser")
+
+
+def _list_user_tags(store, params):
+    u = _require_user(store, str(params.get("UserName", "")).strip())
+    return _envelope("ListUserTags", _tags_xml(u["tags"]))
+
+
+def _put_user_permissions_boundary(store, params):
+    u = _require_user(store, str(params.get("UserName", "")).strip())
+    arn = str(params.get("PermissionsBoundary", "")).strip()
+    _require_policy(store, arn)
+    u["permissions_boundary"] = arn
+    store.persist()
+    return _envelope("PutUserPermissionsBoundary")
+
+
+def _delete_user_permissions_boundary(store, params):
+    u = _require_user(store, str(params.get("UserName", "")).strip())
+    u["permissions_boundary"] = None
+    store.persist()
+    return _envelope("DeleteUserPermissionsBoundary")
+
+
+# ── console sign-in (login profile) — limited: stored, never actually authenticated ──
+def _delete_login_profile(store, params):
+    u = _require_user(store, str(params.get("UserName", "")).strip())
+    u["login_profile"] = None
+    store.persist()
+    return _envelope("DeleteLoginProfile")
+
+
 # ── groups ───────────────────────────────────────────────────────────────────
 def _create_group(store, params):
     name = str(params.get("GroupName", "")).strip()
@@ -342,12 +495,115 @@ def _create_group(store, params):
     if store.get_group(name):
         raise IamError("EntityAlreadyExists", f"Group {name} already exists.", 409)
     g = {"group_name": name, "group_id": _id("AGPA"), "path": params.get("Path", "/"),
-         "arn": _group_arn(store, name), "created": _now(), "members": [], "attached_policies": []}
+         "arn": _group_arn(store, name), "created": _now(), "members": [], "attached_policies": [],
+         "inline_policies": {}}
     store.groups[name] = g
     store.persist()
-    inner = ("<Group>" + _el("Path", g["path"]) + _el("GroupName", name) + _el("GroupId", g["group_id"])
-             + _el("Arn", g["arn"]) + _el("CreateDate", g["created"]) + "</Group>")
-    return _envelope("CreateGroup", inner)
+    return _envelope("CreateGroup", _group_xml(store, g))
+
+
+def _group_xml(store, g: dict) -> str:
+    return ("<Group>" + _el("Path", g.get("path", "/")) + _el("GroupName", g["group_name"])
+            + _el("GroupId", g["group_id"]) + _el("Arn", g["arn"]) + _el("CreateDate", g["created"]) + "</Group>")
+
+
+def _list_groups(store, params):
+    inner = "<Groups>" + "".join(_group_xml(store, store.groups[n]) for n in sorted(store.groups)) + "</Groups>"
+    return _envelope("ListGroups", inner)
+
+
+def _get_group(store, params):
+    g = _require_group(store, str(params.get("GroupName", "")).strip())
+    users = "".join(_user_xml(store, store.users[u]) for u in g["members"] if u in store.users)
+    return _envelope("GetGroup", _group_xml(store, g) + f"<Users>{users}</Users>")
+
+
+def _delete_group(store, params):
+    name = str(params.get("GroupName", "")).strip()
+    g = _require_group(store, name)
+    if g["members"] or g["attached_policies"] or g["inline_policies"]:
+        raise IamError("DeleteConflict", "Cannot delete a group with members or attached policies.", 409)
+    for u in store.users.values():
+        if name in u["groups"]:
+            u["groups"].remove(name)
+    del store.groups[name]
+    store.persist()
+    return _envelope("DeleteGroup")
+
+
+def _remove_user_from_group(store, params):
+    g = _require_group(store, str(params.get("GroupName", "")).strip())
+    name = str(params.get("UserName", "")).strip()
+    u = _require_user(store, name)
+    if name in g["members"]:
+        g["members"].remove(name)
+    if g["group_name"] in u["groups"]:
+        u["groups"].remove(g["group_name"])
+    store.persist()
+    return _envelope("RemoveUserFromGroup")
+
+
+def _list_groups_for_user(store, params):
+    u = _require_user(store, str(params.get("UserName", "")).strip())
+    inner = "<Groups>" + "".join(_group_xml(store, store.groups[n]) for n in u["groups"] if n in store.groups) + "</Groups>"
+    return _envelope("ListGroupsForUser", inner)
+
+
+def _detach_group_policy(store, params):
+    g = _require_group(store, str(params.get("GroupName", "")).strip())
+    arn = str(params.get("PolicyArn", "")).strip()
+    if arn in g["attached_policies"]:
+        g["attached_policies"].remove(arn)
+        p = store.get_policy(arn)
+        if p:
+            p["attachment_count"] = max(0, p.get("attachment_count", 1) - 1)
+    store.persist()
+    return _envelope("DetachGroupPolicy")
+
+
+def _list_attached_group_policies(store, params):
+    g = _require_group(store, str(params.get("GroupName", "")).strip())
+    items = []
+    for arn in g["attached_policies"]:
+        p = store.get_policy(arn)
+        if p:
+            items.append("<member>" + _el("PolicyName", p["policy_name"]) + _el("PolicyArn", arn) + "</member>")
+    return _envelope("ListAttachedGroupPolicies", f"<AttachedPolicies>{''.join(items)}</AttachedPolicies>")
+
+
+def _put_group_policy(store, params):
+    g = _require_group(store, str(params.get("GroupName", "")).strip())
+    pname = str(params.get("PolicyName", "")).strip()
+    if not pname:
+        raise IamError("ValidationError", "PolicyName is required.", 400)
+    g["inline_policies"][pname] = _json_param(params, "PolicyDocument")
+    store.persist()
+    return _envelope("PutGroupPolicy")
+
+
+def _get_group_policy(store, params):
+    g = _require_group(store, str(params.get("GroupName", "")).strip())
+    pname = str(params.get("PolicyName", "")).strip()
+    doc = g["inline_policies"].get(pname)
+    if doc is None:
+        raise IamError("NoSuchEntity", f"Inline policy {pname} not found.", 404)
+    inner = _el("GroupName", g["group_name"]) + _el("PolicyName", pname) + \
+        f"<PolicyDocument>{_xml_escape(json.dumps(doc))}</PolicyDocument>"
+    return _envelope("GetGroupPolicy", inner)
+
+
+def _list_group_policies(store, params):
+    g = _require_group(store, str(params.get("GroupName", "")).strip())
+    inner = "<PolicyNames>" + "".join(_el("member", n) for n in g["inline_policies"]) + "</PolicyNames>"
+    return _envelope("ListGroupPolicies", inner)
+
+
+def _delete_group_policy(store, params):
+    g = _require_group(store, str(params.get("GroupName", "")).strip())
+    pname = str(params.get("PolicyName", "")).strip()
+    g["inline_policies"].pop(pname, None)
+    store.persist()
+    return _envelope("DeleteGroupPolicy")
 
 
 def _add_user_to_group(store, params):
@@ -376,37 +632,458 @@ def _attach_group_policy(store, params):
 
 
 # ── access keys ──────────────────────────────────────────────────────────────
-def _create_access_key(store, params):
-    u = _require_user(store, str(params.get("UserName", "")).strip())
-    akid = "AKIA" + uuid.uuid4().hex[:16].upper()
-    secret = uuid.uuid4().hex + uuid.uuid4().hex[:8]
-    store.access_keys[akid] = {"access_key_id": akid, "user_name": u["user_name"],
-                              "status": "Active", "secret_access_key": secret, "created": _now()}
+def _require_access_key(store, akid, user_name=None):
+    k = store.access_keys.get(akid)
+    if user_name and user_name.lower() == "root":
+        user_name = ROOT_USER
+    if not k or (user_name and k["user_name"] != user_name):
+        raise IamError("NoSuchEntity", f"Access key {akid} not found.", 404)
+    return k
+
+
+def _update_access_key(store, params):
+    akid = str(params.get("AccessKeyId", "")).strip()
+    k = _require_access_key(store, akid, str(params.get("UserName", "")).strip() or None)
+    status = str(params.get("Status", "")).strip()
+    if status not in ("Active", "Inactive"):
+        raise IamError("ValidationError", "Status must be Active or Inactive.", 400)
+    k["status"] = status
     store.persist()
-    inner = ("<AccessKey>" + _el("UserName", u["user_name"]) + _el("AccessKeyId", akid)
-             + _el("Status", "Active") + _el("SecretAccessKey", secret)
-             + _el("CreateDate", store.access_keys[akid]["created"]) + "</AccessKey>")
-    return _envelope("CreateAccessKey", inner)
+    return _envelope("UpdateAccessKey")
 
 
-def _list_access_keys(store, params):
-    name = str(params.get("UserName", "")).strip()
-    _require_user(store, name)
+def _delete_access_key(store, params):
+    akid = str(params.get("AccessKeyId", "")).strip()
+    _require_access_key(store, akid, str(params.get("UserName", "")).strip() or None)
+    del store.access_keys[akid]
+    store.persist()
+    return _envelope("DeleteAccessKey")
+
+
+# ── multi-factor authentication (virtual MFA devices) — limited: assignment is real,
+# there is no console sign-in flow to challenge the code against (see console-password) ──
+def _virtual_mfa_device_xml(store, d: dict, with_seed: bool = False) -> str:
+    inner = _el("SerialNumber", d["serial_number"])
+    if with_seed:
+        # BootstrapDatum blobs are base64 on the wire (boto3/the SDKs decode them back to the base32 text)
+        inner += (_el("Base32StringSeed", base64.b64encode(d["base32_seed"].encode()).decode())
+                  + _el("QRCodePNG", base64.b64encode(_qr_png(store, d)).decode()))
+    if d.get("user_name"):
+        inner += "<User>" + _el("UserName", d["user_name"]) + "</User>" + _el("EnableDate", d["enable_date"])
+    return f"<VirtualMFADevice>{inner}</VirtualMFADevice>"
+
+
+def _qr_png(store, d: dict) -> bytes:
+    """A real, scannable QR code (core/qr_png.py, pure stdlib) of the otpauth:// URI an authenticator app enrolls."""
+    from urllib.parse import quote
+    from core.qr_png import qr_png
+    issuer = "Amazon Web Services"
+    label = f"{quote(issuer)}:{quote(d['device_name'])}@{store.account_id}"
+    return qr_png(f"otpauth://totp/{label}?secret={d['base32_seed']}&issuer={quote(issuer)}")
+
+
+def _create_virtual_mfa_device(store, params):
+    name = str(params.get("VirtualMFADeviceName", "")).strip()
+    if not name:
+        raise IamError("ValidationError", "VirtualMFADeviceName is required.", 400)
+    arn = _mfa_arn(store, name)
+    if arn in store.virtual_mfa_devices:
+        raise IamError("EntityAlreadyExists", f"MFA device {name} already exists.", 409)
+    seed = base64.b32encode((uuid.uuid4().hex + uuid.uuid4().hex).encode())[:32].decode()
+    d = {"serial_number": arn, "device_name": name, "path": params.get("Path", "/"),
+         "base32_seed": seed, "created": _now(), "user_name": None, "enable_date": None}
+    store.virtual_mfa_devices[arn] = d
+    store.persist()
+    return _envelope("CreateVirtualMFADevice", _virtual_mfa_device_xml(store, d, with_seed=True))
+
+
+def _require_virtual_mfa_device(store, serial):
+    d = store.virtual_mfa_devices.get(str(serial or "").strip())
+    if not d:
+        raise IamError("NoSuchEntity", f"MFA device {serial} not found.", 404)
+    return d
+
+
+def _delete_virtual_mfa_device(store, params):
+    d = _require_virtual_mfa_device(store, params.get("SerialNumber"))
+    if d.get("user_name"):
+        raise IamError("DeleteConflict", "Cannot delete an MFA device that is still assigned to a user.", 409)
+    del store.virtual_mfa_devices[d["serial_number"]]
+    store.persist()
+    return _envelope("DeleteVirtualMFADevice")
+
+
+def _list_virtual_mfa_devices(store, params):
+    status = str(params.get("AssignmentStatus", "Any")).strip() or "Any"
+    devices = list(store.virtual_mfa_devices.values())
+    if status == "Assigned":
+        devices = [d for d in devices if d.get("user_name")]
+    elif status == "Unassigned":
+        devices = [d for d in devices if not d.get("user_name")]
+    items = "".join(_virtual_mfa_device_xml(store, d) for d in sorted(devices, key=lambda d: d["created"]))
+    return _envelope("ListVirtualMFADevices", f"<VirtualMFADevices>{items}</VirtualMFADevices>")
+
+
+# ── roles: trust policy, session duration, tags, inline/attached policies ──────
+def _update_role(store, params):
+    r = _require_role(store, str(params.get("RoleName", "")).strip())
+    if params.get("Description") is not None:
+        r["description"] = params["Description"]
+    if params.get("MaxSessionDuration"):
+        r["max_session_duration"] = int(params["MaxSessionDuration"])
+    store.persist()
+    return _envelope("UpdateRole")
+
+
+def _update_assume_role_policy(store, params):
+    r = _require_role(store, str(params.get("RoleName", "")).strip())
+    r["assume_role_policy_document"] = _json_param(params, "PolicyDocument")
+    store.persist()
+    return _envelope("UpdateAssumeRolePolicy")
+
+
+def _list_attached_role_policies(store, params):
+    r = _require_role(store, str(params.get("RoleName", "")).strip())
     items = []
-    for k in store.access_keys.values():
-        if k["user_name"] == name:
-            items.append("<member>" + _el("UserName", name) + _el("AccessKeyId", k["access_key_id"])
-                         + _el("Status", k["status"]) + _el("CreateDate", k["created"]) + "</member>")
-    return _envelope("ListAccessKeys", f"<AccessKeyMetadata>{''.join(items)}</AccessKeyMetadata>")
+    for arn in r["attached_policies"]:
+        p = store.get_policy(arn)
+        if p:
+            items.append("<member>" + _el("PolicyName", p["policy_name"]) + _el("PolicyArn", arn) + "</member>")
+    return _envelope("ListAttachedRolePolicies", f"<AttachedPolicies>{''.join(items)}</AttachedPolicies>")
+
+
+def _detach_role_policy(store, params):
+    r = _require_role(store, str(params.get("RoleName", "")).strip())
+    arn = str(params.get("PolicyArn", "")).strip()
+    if arn in r["attached_policies"]:
+        r["attached_policies"].remove(arn)
+        p = store.get_policy(arn)
+        if p:
+            p["attachment_count"] = max(0, p.get("attachment_count", 1) - 1)
+    store.persist()
+    return _envelope("DetachRolePolicy")
+
+
+def _put_role_policy(store, params):
+    r = _require_role(store, str(params.get("RoleName", "")).strip())
+    pname = str(params.get("PolicyName", "")).strip()
+    if not pname:
+        raise IamError("ValidationError", "PolicyName is required.", 400)
+    r["inline_policies"][pname] = _json_param(params, "PolicyDocument")
+    store.persist()
+    return _envelope("PutRolePolicy")
+
+
+def _get_role_policy(store, params):
+    r = _require_role(store, str(params.get("RoleName", "")).strip())
+    pname = str(params.get("PolicyName", "")).strip()
+    doc = r["inline_policies"].get(pname)
+    if doc is None:
+        raise IamError("NoSuchEntity", f"Inline policy {pname} not found.", 404)
+    inner = _el("RoleName", r["role_name"]) + _el("PolicyName", pname) + \
+        f"<PolicyDocument>{_xml_escape(json.dumps(doc))}</PolicyDocument>"
+    return _envelope("GetRolePolicy", inner)
+
+
+def _list_role_policies(store, params):
+    r = _require_role(store, str(params.get("RoleName", "")).strip())
+    inner = "<PolicyNames>" + "".join(_el("member", n) for n in r["inline_policies"]) + "</PolicyNames>"
+    return _envelope("ListRolePolicies", inner)
+
+
+def _delete_role_policy(store, params):
+    r = _require_role(store, str(params.get("RoleName", "")).strip())
+    r["inline_policies"].pop(str(params.get("PolicyName", "")).strip(), None)
+    store.persist()
+    return _envelope("DeleteRolePolicy")
+
+
+def _tag_role(store, params):
+    r = _require_role(store, str(params.get("RoleName", "")).strip())
+    r["tags"].update(_parse_tags(params))
+    store.persist()
+    return _envelope("TagRole")
+
+
+def _untag_role(store, params):
+    r = _require_role(store, str(params.get("RoleName", "")).strip())
+    for k in _members(params, "TagKeys"):
+        r["tags"].pop(k, None)
+    store.persist()
+    return _envelope("UntagRole")
+
+
+def _list_role_tags(store, params):
+    r = _require_role(store, str(params.get("RoleName", "")).strip())
+    return _envelope("ListRoleTags", _tags_xml(r["tags"]))
+
+
+def _put_role_permissions_boundary(store, params):
+    r = _require_role(store, str(params.get("RoleName", "")).strip())
+    arn = str(params.get("PermissionsBoundary", "")).strip()
+    _require_policy(store, arn)
+    r["permissions_boundary"] = arn
+    store.persist()
+    return _envelope("PutRolePermissionsBoundary")
+
+
+def _delete_role_permissions_boundary(store, params):
+    r = _require_role(store, str(params.get("RoleName", "")).strip())
+    r["permissions_boundary"] = None
+    store.persist()
+    return _envelope("DeleteRolePermissionsBoundary")
+
+
+# ── managed-policy versions + entities attached ─────────────────────────────
+def _create_policy_version(store, params):
+    p = _require_policy(store, str(params.get("PolicyArn", "")).strip())
+    doc = _json_param(params, "PolicyDocument")
+    n = max((int(v[1:]) for v in p["versions"]), default=0) + 1
+    vid = f"v{n}"
+    now = _now()
+    p["versions"][vid] = {"document": doc, "created": now}
+    set_default = str(params.get("SetAsDefault", "false")).lower() == "true"
+    if set_default:
+        p["default_version_id"] = vid
+        p["document"] = doc
+        p["updated"] = now
+    store.persist()
+    inner = ("<PolicyVersion>" + _el("VersionId", vid)
+             + _el("IsDefaultVersion", str(set_default).lower()) + _el("CreateDate", now)
+             + f"<Document>{_xml_escape(json.dumps(doc))}</Document>" + "</PolicyVersion>")
+    return _envelope("CreatePolicyVersion", inner)
+
+
+def _list_policy_versions(store, params):
+    p = _require_policy(store, str(params.get("PolicyArn", "")).strip())
+    items = []
+    for vid in sorted(p["versions"], key=lambda v: int(v[1:])):
+        v = p["versions"][vid]
+        items.append("<member>" + _el("VersionId", vid)
+                     + _el("IsDefaultVersion", str(vid == p["default_version_id"]).lower())
+                     + _el("CreateDate", v["created"]) + "</member>")
+    return _envelope("ListPolicyVersions", f"<Versions>{''.join(items)}</Versions>")
+
+
+def _get_policy_version(store, params):
+    p = _require_policy(store, str(params.get("PolicyArn", "")).strip())
+    vid = str(params.get("VersionId", "")).strip()
+    v = p["versions"].get(vid)
+    if not v:
+        raise IamError("NoSuchEntity", f"Policy version {vid} not found.", 404)
+    inner = ("<PolicyVersion>" + _el("VersionId", vid)
+             + _el("IsDefaultVersion", str(vid == p["default_version_id"]).lower())
+             + _el("CreateDate", v["created"])
+             + f"<Document>{_xml_escape(json.dumps(v['document']))}</Document>" + "</PolicyVersion>")
+    return _envelope("GetPolicyVersion", inner)
+
+
+def _set_default_policy_version(store, params):
+    p = _require_policy(store, str(params.get("PolicyArn", "")).strip())
+    vid = str(params.get("VersionId", "")).strip()
+    v = p["versions"].get(vid)
+    if not v:
+        raise IamError("NoSuchEntity", f"Policy version {vid} not found.", 404)
+    p["default_version_id"] = vid
+    p["document"] = v["document"]
+    p["updated"] = _now()
+    store.persist()
+    return _envelope("SetDefaultPolicyVersion")
+
+
+def _delete_policy_version(store, params):
+    p = _require_policy(store, str(params.get("PolicyArn", "")).strip())
+    vid = str(params.get("VersionId", "")).strip()
+    if vid == p["default_version_id"]:
+        raise IamError("DeleteConflict", "Cannot delete the default policy version.", 409)
+    if vid not in p["versions"]:
+        raise IamError("NoSuchEntity", f"Policy version {vid} not found.", 404)
+    del p["versions"][vid]
+    store.persist()
+    return _envelope("DeletePolicyVersion")
+
+
+def _list_entities_for_policy(store, params):
+    arn = str(params.get("PolicyArn", "")).strip()
+    _require_policy(store, arn)
+    users = [("<member>" + _el("UserName", u["user_name"]) + "</member>")
+             for u in store.users.values() if arn in u["attached_policies"]]
+    groups = [("<member>" + _el("GroupName", g["group_name"]) + "</member>")
+              for g in store.groups.values() if arn in g["attached_policies"]]
+    roles = [("<member>" + _el("RoleName", r["role_name"]) + "</member>")
+             for r in store.roles.values() if arn in r["attached_policies"]]
+    boundary_users = [("<member>" + _el("UserName", u["user_name"]) + "</member>")
+                      for u in store.users.values() if u.get("permissions_boundary") == arn]
+    boundary_roles = [("<member>" + _el("RoleName", r["role_name"]) + "</member>")
+                      for r in store.roles.values() if r.get("permissions_boundary") == arn]
+    inner = (f"<PolicyUsers>{''.join(users)}</PolicyUsers>" + f"<PolicyGroups>{''.join(groups)}</PolicyGroups>"
+             + f"<PolicyRoles>{''.join(roles)}</PolicyRoles>"
+             + f"<PolicyBoundaryUsers>{''.join(boundary_users)}</PolicyBoundaryUsers>"
+             + f"<PolicyBoundaryRoles>{''.join(boundary_roles)}</PolicyBoundaryRoles>")
+    return _envelope("ListEntitiesForPolicy", inner)
+
+
+# ── identity providers (SAML / OIDC) ────────────────────────────────────────
+def _create_saml_provider(store, params):
+    name = str(params.get("Name", "")).strip()
+    if not name:
+        raise IamError("ValidationError", "Name is required.", 400)
+    arn = f"arn:aws:iam::{store.account_id}:saml-provider/{name}"
+    if arn in store.saml_providers:
+        raise IamError("EntityAlreadyExists", f"SAML provider {name} already exists.", 409)
+    p = {"name": name, "arn": arn, "created": _now(),
+         "metadata_document": params.get("SAMLMetadataDocument", ""), "tags": _parse_tags(params)}
+    store.saml_providers[arn] = p
+    store.persist()
+    return _envelope("CreateSAMLProvider", _el("SAMLProviderArn", arn))
+
+
+def _get_saml_provider(store, params):
+    arn = str(params.get("SAMLProviderArn", "")).strip()
+    p = store.saml_providers.get(arn)
+    if not p:
+        raise IamError("NoSuchEntity", f"SAML provider {arn} not found.", 404)
+    inner = (_el("CreateDate", p["created"]) + f"<SAMLMetadataDocument>{_xml_escape(p['metadata_document'])}</SAMLMetadataDocument>"
+             + _tags_xml(p.get("tags") or {}))
+    return _envelope("GetSAMLProvider", inner)
+
+
+def _list_saml_providers(store, params):
+    items = ["<member>" + _el("Arn", arn) + _el("CreateDate", p["created"]) + "</member>"
+             for arn, p in sorted(store.saml_providers.items())]
+    return _envelope("ListSAMLProviders", f"<SAMLProviderList>{''.join(items)}</SAMLProviderList>")
+
+
+def _delete_saml_provider(store, params):
+    arn = str(params.get("SAMLProviderArn", "")).strip()
+    if arn not in store.saml_providers:
+        raise IamError("NoSuchEntity", f"SAML provider {arn} not found.", 404)
+    del store.saml_providers[arn]
+    store.persist()
+    return _envelope("DeleteSAMLProvider")
+
+
+def _create_open_id_connect_provider(store, params):
+    url = str(params.get("Url", "")).strip()
+    if not url:
+        raise IamError("ValidationError", "Url is required.", 400)
+    host = url.split("//")[-1]
+    arn = f"arn:aws:iam::{store.account_id}:oidc-provider/{host}"
+    if arn in store.oidc_providers:
+        raise IamError("EntityAlreadyExists", f"OIDC provider {host} already exists.", 409)
+    store.oidc_providers[arn] = {"url": url, "arn": arn, "created": _now(),
+                                "client_ids": _members(params, "ClientIDList"),
+                                "thumbprints": _members(params, "ThumbprintList"), "tags": _parse_tags(params)}
+    store.persist()
+    return _envelope("CreateOpenIDConnectProvider", _el("OpenIDConnectProviderArn", arn))
+
+
+def _get_open_id_connect_provider(store, params):
+    arn = str(params.get("OpenIDConnectProviderArn", "")).strip()
+    p = store.oidc_providers.get(arn)
+    if not p:
+        raise IamError("NoSuchEntity", f"OIDC provider {arn} not found.", 404)
+    inner = (_el("Url", p["url"]) + _el("CreateDate", p["created"])
+             + "<ClientIDList>" + "".join(_el("member", c) for c in p["client_ids"]) + "</ClientIDList>"
+             + "<ThumbprintList>" + "".join(_el("member", t) for t in p["thumbprints"]) + "</ThumbprintList>"
+             + _tags_xml(p.get("tags") or {}))
+    return _envelope("GetOpenIDConnectProvider", inner)
+
+
+def _list_open_id_connect_providers(store, params):
+    items = ["<member>" + _el("Arn", arn) + "</member>" for arn in sorted(store.oidc_providers)]
+    return _envelope("ListOpenIDConnectProviders", f"<OpenIDConnectProviderList>{''.join(items)}</OpenIDConnectProviderList>")
+
+
+def _delete_open_id_connect_provider(store, params):
+    arn = str(params.get("OpenIDConnectProviderArn", "")).strip()
+    if arn not in store.oidc_providers:
+        raise IamError("NoSuchEntity", f"OIDC provider {arn} not found.", 404)
+    del store.oidc_providers[arn]
+    store.persist()
+    return _envelope("DeleteOpenIDConnectProvider")
+
+
+# ── account settings ─────────────────────────────────────────────────────────
+_PASSWORD_POLICY_DEFAULTS = {"MinimumPasswordLength": 8, "RequireSymbols": False, "RequireNumbers": False,
+                             "RequireUppercaseCharacters": False, "RequireLowercaseCharacters": False,
+                             "AllowUsersToChangePassword": False, "ExpirePasswords": False,
+                             "MaxPasswordAge": 0, "PasswordReusePrevention": 0, "HardExpiry": False}
+
+
+def _get_account_password_policy(store, params):
+    pol = store.password_policy or _PASSWORD_POLICY_DEFAULTS
+    inner = "".join(_el(k, str(v).lower() if isinstance(v, bool) else v) for k, v in pol.items() if v not in (0, False) or k == "MinimumPasswordLength")
+    return _envelope("GetAccountPasswordPolicy", f"<PasswordPolicy>{inner}</PasswordPolicy>")
+
+
+def _update_account_password_policy(store, params):
+    pol = dict(_PASSWORD_POLICY_DEFAULTS)
+    for k in pol:
+        if k in params:
+            v = params[k]
+            pol[k] = str(v).lower() == "true" if isinstance(pol[k], bool) else int(v)
+    store.password_policy = pol
+    store.persist()
+    return _envelope("UpdateAccountPasswordPolicy")
+
+
+def _delete_account_password_policy(store, params):
+    store.password_policy = None
+    store.persist()
+    return _envelope("DeleteAccountPasswordPolicy")
+
+
+def _list_account_aliases(store, params):
+    inner = "<AccountAliases>" + "".join(_el("member", a) for a in store.account_aliases) + "</AccountAliases>"
+    return _envelope("ListAccountAliases", inner)
+
+
+def _create_account_alias(store, params):
+    alias = str(params.get("AccountAlias", "")).strip()
+    if not alias:
+        raise IamError("ValidationError", "AccountAlias is required.", 400)
+    store.account_aliases = [alias]
+    store.persist()
+    return _envelope("CreateAccountAlias")
+
+
+def _delete_account_alias(store, params):
+    alias = str(params.get("AccountAlias", "")).strip()
+    store.account_aliases = [a for a in store.account_aliases if a != alias]
+    store.persist()
+    return _envelope("DeleteAccountAlias")
+
+
+# ── credential report — generated synchronously (no background job) ────────
+def _generate_credential_report(store, params):
+    store.credential_report = {"generated": _now(), "content": _credential_report_csv(store)}
+    store.persist()
+    return _envelope("GenerateCredentialReport", _el("State", "COMPLETE") + _el("Description", "Report generated."))
+
+
+def _get_credential_report(store, params):
+    if not store.credential_report:
+        raise IamError("ReportNotPresent", "Call GenerateCredentialReport first.", 410)
+    content = base64.b64encode(store.credential_report["content"].encode()).decode()
+    inner = f"<Content>{content}</Content>" + _el("ReportFormat", "text/csv") + _el("GeneratedTime", store.credential_report["generated"])
+    return _envelope("GetCredentialReport", inner)
 
 
 # ── policy evaluation (the decision path) ─────────────────────────────────────
-def _resolve_policy_docs(store, principal: str) -> tuple[dict, list[dict]]:
-    """Resolve a principal (name or ARN) to its identity context + effective policy
-    documents (attached managed + inline + group-attached)."""
+def _resolve_policy_docs(store, principal: str) -> tuple[dict, list[dict], dict | None]:
+    """Resolve a principal (name or ARN) to its identity context, its effective policy
+    documents (attached managed + inline + group-attached), and its permissions-boundary
+    document (None if it has none, or the boundary policy no longer exists)."""
     ref = (principal or "").strip()
     name = ref.split("/")[-1] if ":" in ref else ref
     docs: list[dict] = []
+
+    def boundary_doc(rec: dict) -> dict | None:
+        arn = rec.get("permissions_boundary")
+        p = store.get_policy(arn) if arn else None
+        return p["document"] if p else None
+
     u = store.get_user(name)
     if u:
         for arn in u["attached_policies"]:
@@ -421,7 +1098,8 @@ def _resolve_policy_docs(store, principal: str) -> tuple[dict, list[dict]]:
                     p = store.get_policy(arn)
                     if p:
                         docs.append(p["document"])
-        return ({"arn": u["arn"], "type": "user", "name": u["user_name"]}, docs)
+                docs.extend(g.get("inline_policies", {}).values())
+        return ({"arn": u["arn"], "type": "user", "name": u["user_name"], "tags": u.get("tags") or {}, "id": u.get("user_id", "")}, docs, boundary_doc(u))
     r = store.get_role(name)
     if r:
         for arn in r["attached_policies"]:
@@ -429,8 +1107,115 @@ def _resolve_policy_docs(store, principal: str) -> tuple[dict, list[dict]]:
             if p:
                 docs.append(p["document"])
         docs.extend(r["inline_policies"].values())
-        return ({"arn": r["arn"], "type": "role", "name": r["role_name"]}, docs)
-    return ({"arn": ref, "type": "unknown", "name": name}, [])
+        return ({"arn": r["arn"], "type": "role", "name": r["role_name"], "tags": r.get("tags") or {}, "id": r.get("role_id", "")}, docs, boundary_doc(r))
+    return ({"arn": ref, "type": "unknown", "name": name}, [], None)
+
+
+def _apply_boundary(store, boundary_doc: dict | None, decision: str, action: str, resource: str, ctx: dict) -> str:
+    """A permissions boundary clips what the identity policies allow: the effective
+    permission is the INTERSECTION of the identity decision and the boundary decision
+    (real AWS semantics) — an explicit deny from either side wins; otherwise both sides
+    must allow. Boundaries never WIDEN access, so a non-"allowed" identity decision is
+    returned unchanged."""
+    if boundary_doc is None or decision != "allowed":
+        return decision
+    b_decision, _ = store.engine.evaluate([boundary_doc], action, resource, ctx)
+    return b_decision if b_decision != "allowed" else "allowed"
+
+
+def _principal_matches(principal, caller_arn: str, account_id: str) -> str | None:
+    """How a resource-policy statement's Principal relates to the caller: "direct" (names the caller, or "*"),
+    "delegate" (the account root: defers to identity policies) or None (someone else)."""
+    if principal in (None, ""):
+        return None
+    vals = []
+    if principal == "*":
+        return "direct"
+    if isinstance(principal, dict):
+        for v in principal.values():
+            vals.extend(v if isinstance(v, list) else [v])
+    else:
+        vals = principal if isinstance(principal, list) else [principal]
+    for v in vals:
+        if v == "*" or v == caller_arn:
+            return "direct"
+    if any(v == f"arn:aws:iam::{account_id}:root" or v == account_id for v in vals):
+        return "delegate"
+    return None
+
+
+def _resource_policy_decision(store, rdoc: dict | None, caller_arn: str, action: str, resource: str, ctx: dict):
+    """(effect, ) of a resource-based policy for this caller: "explicitDeny", "allowed" (an Allow naming the caller
+    directly) or None (no applicable statement / only an account-root delegation)."""
+    if not rdoc:
+        return None
+    stmts = rdoc.get("Statement") or []
+    stmts = [stmts] if isinstance(stmts, dict) else stmts
+    allow = False
+    for st in stmts:
+        rel = _principal_matches(st.get("Principal"), caller_arn, store.account_id)
+        if rel is None:
+            continue
+        if not _NativeEval._statement_matches(st, action, resource, ctx):
+            continue
+        eff = str(st.get("Effect", "")).lower()
+        if eff == "deny":
+            return "explicitDeny"
+        if eff == "allow" and rel == "direct":
+            allow = True
+    return "allowed" if allow else None
+
+
+def _missing_context(docs: list, action: str, resource: str, ctx: dict) -> list[str]:
+    """Condition keys referenced by statements that match the action/resource but have no value in the
+    simulation context (AWS reports these as MissingContextValues so the caller can supply them)."""
+    miss = []
+    ev = _NativeEval
+    for doc in docs:
+        stmts = (doc or {}).get("Statement") or []
+        for st in ([stmts] if isinstance(stmts, dict) else stmts):
+            if not isinstance(st, dict) or not (st.get("Condition") or {}):
+                continue
+            if not ev._statement_matches({k: v for k, v in st.items() if k != "Condition"}, action, resource, ctx):
+                continue
+            for operands in st["Condition"].values():
+                for key in (operands or {}):
+                    if key not in ctx and key not in miss and not key.startswith("aws:PrincipalTag/"):
+                        miss.append(key)
+    return miss
+
+
+def _evaluation_results(store, actions, resources, docs, boundary, rdoc, caller_arn, ctx) -> str:
+    out = []
+    for action in actions:
+        for resource in resources:
+            ctx_r = dict(ctx, **{"aws:ResourceArn": resource})
+            decision, _ = store.engine.evaluate(docs, action, resource, ctx_r)
+            decision = _apply_boundary(store, boundary, decision, action, resource, ctx_r)
+            rp = _resource_policy_decision(store, rdoc, caller_arn, action, resource, ctx_r)
+            if rp == "explicitDeny":
+                decision = "explicitDeny"
+            elif rp == "allowed" and decision == "implicitDeny":
+                decision = "allowed"       # same-account: a resource policy naming the caller is sufficient on its own
+            missing = _missing_context(docs + ([boundary] if boundary else []) + ([rdoc] if rdoc else []), action, resource, ctx_r)
+            out.append("<member>" + _el("EvalActionName", action) + _el("EvalResourceName", resource)
+                       + _el("EvalDecision", decision)
+                       + ("<MissingContextValues>" + "".join(_el("member", k) for k in missing) + "</MissingContextValues>" if missing else "")
+                       + "</member>")
+    return "".join(out)
+
+
+def _base_context(store, identity: dict, mfa_present: bool) -> dict:
+    ctx = {"aws:PrincipalArn": identity["arn"], "aws:PrincipalType": identity["type"].capitalize(),
+           "aws:username": identity["name"], "aws:RequestedRegion": "us-east-1",
+           "aws:MultiFactorAuthPresent": str(mfa_present).lower(), "aws:PrincipalAccount": store.account_id,
+           "aws:SecureTransport": "true", "aws:CurrentTime": _now(), "aws:userid": identity.get("id", "")}
+    org = store.extras.get("org")
+    if org:
+        ctx["aws:PrincipalOrgID"] = org["id"]
+    for k, v in (identity.get("tags") or {}).items():
+        ctx[f"aws:PrincipalTag/{k}"] = v
+    return ctx
 
 
 def simulate_xml(engine, action_name: str, docs: list, actions: list, resources: list, base_ctx: dict) -> IamResponse:
@@ -450,82 +1235,1906 @@ def _simulate_principal_policy(store, params):
     source = str(params.get("PolicySourceArn", "")).strip()
     if not source:
         raise IamError("ValidationError", "PolicySourceArn is required.", 400)
-    identity, docs = _resolve_policy_docs(store, source)
-    if identity["type"] == "unknown":
-        raise IamError("NoSuchEntity", f"Entity {source} not found.", 404)
-    extra = [_json_param({"p": x}, "p") for x in _members(params, "PolicyInputList")]
-    ctx = {"aws:PrincipalArn": identity["arn"], "aws:PrincipalType": identity["type"],
-           "aws:username": identity["name"], "aws:RequestedRegion": "us-east-1"}
-    return simulate_xml(store.engine, "SimulatePrincipalPolicy", docs + extra, _members(params, "ActionNames"),
-                        _members(params, "ResourceArns") or ["*"], ctx)
+    actions = _members(params, "ActionNames")
+    resources = _members(params, "ResourceArns") or ["*"]
+    identity, docs, boundary = _resolve_policy_docs(store, source)
+    docs = docs + [_parse_policy_input(d) for d in _members(params, "PolicyInputList")]
+    mfa_present = identity["type"] == "user" and _has_mfa(store, identity["name"])
+    ctx = _base_context(store, identity, mfa_present)
+    for entry in _context_entries(params):
+        ctx[entry["key"]] = entry["value"]
+    rdoc = _parse_policy_input(params["ResourcePolicy"]) if params.get("ResourcePolicy") else None
+    caller = str(params.get("CallerArn", "")).strip() or identity["arn"]
+    return _envelope("SimulatePrincipalPolicy", "<EvaluationResults>"
+                     + _evaluation_results(store, actions, resources, docs, boundary, rdoc, caller, ctx) + "</EvaluationResults>")
+
+
+def _parse_policy_input(raw) -> dict:
+    try:
+        d = json.loads(raw) if isinstance(raw, str) else raw
+    except Exception:
+        raise IamError("InvalidInput", "A policy input is not valid JSON.", 400)
+    if not isinstance(d, dict):
+        raise IamError("InvalidInput", "A policy input must be a JSON policy document.", 400)
+    return d
 
 
 def _simulate_custom_policy(store, params):
-    docs = [_json_param({"p": x}, "p") for x in _members(params, "PolicyInputList")]
+    """SimulateCustomPolicy: evaluate caller-supplied policy documents (no stored principal needed)."""
+    docs = [_parse_policy_input(d) for d in _members(params, "PolicyInputList")]
     if not docs:
         raise IamError("ValidationError", "PolicyInputList is required.", 400)
-    return simulate_xml(store.engine, "SimulateCustomPolicy", docs, _members(params, "ActionNames"),
-                        _members(params, "ResourceArns") or ["*"], {"aws:RequestedRegion": "us-east-1"})
+    actions = _members(params, "ActionNames")
+    resources = _members(params, "ResourceArns") or ["*"]
+    bl = _members(params, "PermissionsBoundaryPolicyInputList")
+    boundary = None
+    if bl:   # several boundary documents combine as one allow-set (any may allow, any deny wins)
+        stmts = []
+        for d in bl:
+            st = _parse_policy_input(d).get("Statement") or []
+            stmts.extend([st] if isinstance(st, dict) else st)
+        boundary = {"Version": "2012-10-17", "Statement": stmts}
+    caller = str(params.get("CallerArn", "")).strip() or f"arn:aws:iam::{store.account_id}:user/simulated"
+    ctx = {"aws:PrincipalArn": caller, "aws:RequestedRegion": "us-east-1", "aws:PrincipalAccount": store.account_id,
+           "aws:SecureTransport": "true", "aws:CurrentTime": _now()}
+    for entry in _context_entries(params):
+        ctx[entry["key"]] = entry["value"]
+    rdoc = _parse_policy_input(params["ResourcePolicy"]) if params.get("ResourcePolicy") else None
+    return _envelope("SimulateCustomPolicy", "<EvaluationResults>"
+                     + _evaluation_results(store, actions, resources, docs, boundary, rdoc, caller, ctx) + "</EvaluationResults>")
 
 
-def _delete_user_policy(store, params):
-    u = _require_user(store, str(params.get("UserName", "")).strip())
-    pname = str(params.get("PolicyName", "")).strip()
-    if pname not in u["inline_policies"]:
-        raise IamError("NoSuchEntity", f"The user policy with name {pname} cannot be found.", 404)
-    del u["inline_policies"][pname]
+# ── Organizations policies (SCP/RCP) — Vyomi-only ───────────────────────────
+# Real AWS exposes service/resource control policies through a SEPARATE
+# "organizations" service (JSON protocol, target AWSOrganizationsV20161128.*).
+# The IAM console surfaces them under its own nav ("Multi-account access") for
+# convenience, so Vyomi models them here, on IAM's native Query wire, to back
+# that console without a second service stack — Vyomi simulates a single
+# account, so attachment/enforcement across member accounts is not modeled
+# (see core/capabilities/aws/iam.json: iam.organizations = "limited").
+_ORG_POLICY_TYPES = {"SERVICE_CONTROL_POLICY", "RESOURCE_CONTROL_POLICY"}
+
+
+def _org_policy_xml(p: dict) -> str:
+    return ("<Policy>" + _el("Id", p["id"]) + _el("Arn", p["arn"]) + _el("Name", p["name"])
+            + _el("Description", p.get("description", "")) + _el("Type", p["type"])
+            + _el("AwsManaged", "false") + _el("CreatedTimestamp", p["created"])
+            + f"<Content>{_xml_escape(p['content'])}</Content>" + "</Policy>")
+
+
+def _create_org_policy(store, params):
+    name = str(params.get("Name", "")).strip()
+    ptype = str(params.get("Type", "")).strip().upper()
+    if not name:
+        raise IamError("ValidationError", "Name is required.", 400)
+    if ptype not in _ORG_POLICY_TYPES:
+        raise IamError("ValidationError", f"Type must be one of {sorted(_ORG_POLICY_TYPES)}.", 400)
+    content = str(params.get("Content", "") or "{}")
+    try:
+        json.loads(content)
+    except Exception:
+        raise IamError("MalformedPolicyDocument", "Content is not valid JSON.", 400)
+    pid = "p-" + uuid.uuid4().hex[:8]
+    p = {"id": pid, "arn": f"arn:aws:organizations::{store.account_id}:policy/o-vyomi/{ptype.lower()}/{pid}",
+         "name": name, "description": params.get("Description", ""), "type": ptype,
+         "content": content, "created": _now()}
+    store.org_policies[pid] = p
     store.persist()
-    return _envelope("DeleteUserPolicy")
+    return _envelope("CreateOrgPolicy", _org_policy_xml(p))
 
 
-def _list_user_policies(store, params):
-    u = _require_user(store, str(params.get("UserName", "")).strip())
-    names = "".join(f"<member>{_xml_escape(n)}</member>" for n in sorted(u["inline_policies"]))
-    return _envelope("ListUserPolicies", f"<PolicyNames>{names}</PolicyNames><IsTruncated>false</IsTruncated>")
+def _list_org_policies(store, params):
+    ptype = str(params.get("Type", "")).strip().upper()
+    items = [p for p in store.org_policies.values() if not ptype or p["type"] == ptype]
+    inner = "<Policies>" + "".join(_org_policy_xml(p) for p in sorted(items, key=lambda p: p["created"])) + "</Policies>"
+    return _envelope("ListOrgPolicies", inner)
 
 
-def _delete_access_key(store, params):
-    akid = str(params.get("AccessKeyId", "")).strip()
-    k = store.access_keys.get(akid)
-    if not k or (params.get("UserName") and k["user_name"] != params["UserName"]):
-        raise IamError("NoSuchEntity", f"The Access Key with id {akid} cannot be found.", 404)
-    del store.access_keys[akid]
+def _require_org_policy(store, policy_id):
+    p = store.org_policies.get(policy_id)
+    if not p:
+        raise IamError("NoSuchEntity", f"Policy {policy_id} does not exist.", 404)
+    return p
+
+
+def _describe_org_policy(store, params):
+    p = _require_org_policy(store, str(params.get("PolicyId", "")).strip())
+    return _envelope("DescribeOrgPolicy", _org_policy_xml(p))
+
+
+def _delete_org_policy(store, params):
+    pid = str(params.get("PolicyId", "")).strip()
+    _require_org_policy(store, pid)
+    del store.org_policies[pid]
     store.persist()
-    return _envelope("DeleteAccessKey")
+    return _envelope("DeleteOrgPolicy")
 
 
-def _update_access_key(store, params):
-    akid = str(params.get("AccessKeyId", "")).strip()
-    k = store.access_keys.get(akid)
-    if not k:
-        raise IamError("NoSuchEntity", f"The Access Key with id {akid} cannot be found.", 404)
-    if params.get("Status") not in ("Active", "Inactive"):
+# ── Account access requests ("Temporary delegation requests") — Vyomi-only ──
+# Centralized root access lets a member account request temporary elevated
+# access from the management account; Vyomi has no member accounts to
+# originate a request, so there is no "Create" action in the console UI
+# itself — this models the record a request would leave behind so the page
+# has real (not static) data when one is simulated over the wire.
+def _access_request_xml(r: dict) -> str:
+    return ("<AccountAccessRequest>" + _el("RequestId", r["id"]) + _el("Status", r["status"])
+            + _el("RequestorId", r["requestor_id"]) + _el("InitiatedBy", r["initiated_by"])
+            + _el("RequestCreated", r["created"]) + _el("RequestExpires", r["expires"])
+            + "</AccountAccessRequest>")
+
+
+def _request_account_access(store, params):
+    requestor = str(params.get("RequestorId", "")).strip() or store.account_id
+    initiated_by = str(params.get("InitiatedBy", "")).strip() or requestor
+    rid = "ar-" + uuid.uuid4().hex[:12]
+    r = {"id": rid, "status": params.get("Status", "Pending"), "requestor_id": requestor,
+         "initiated_by": initiated_by, "created": _now(), "expires": params.get("RequestExpires", _now())}
+    store.access_requests[rid] = r
+    store.persist()
+    return _envelope("RequestAccountAccess", _access_request_xml(r))
+
+
+def _list_account_access_requests(store, params):
+    inner = "<AccountAccessRequests>" + "".join(
+        _access_request_xml(r) for r in sorted(store.access_requests.values(), key=lambda r: r["created"])) + "</AccountAccessRequests>"
+    return _envelope("ListAccountAccessRequests", inner)
+
+
+# ── IAM sweep 2: identity-provider detail operations (real IAM API) ─────────
+def _oidc(store, params):
+    arn = str(params.get("OpenIDConnectProviderArn", "")).strip()
+    p = store.oidc_providers.get(arn)
+    if not p:
+        raise IamError("NoSuchEntity", f"OIDC provider {arn} not found.", 404)
+    return p
+
+
+def _saml(store, params):
+    arn = str(params.get("SAMLProviderArn", "")).strip()
+    p = store.saml_providers.get(arn)
+    if not p:
+        raise IamError("NoSuchEntity", f"SAML provider {arn} not found.", 404)
+    return p
+
+
+def _add_client_id(store, params):
+    p = _oidc(store, params)
+    cid = str(params.get("ClientID", "")).strip()
+    if not cid:
+        raise IamError("ValidationError", "ClientID is required.", 400)
+    if cid not in p["client_ids"]:
+        if len(p["client_ids"]) >= 100:
+            raise IamError("LimitExceeded", "An OpenID Connect provider can have at most 100 client IDs.", 409)
+        p["client_ids"].append(cid)
+    store.persist()
+    return _envelope("AddClientIDToOpenIDConnectProvider")
+
+
+def _remove_client_id(store, params):
+    p = _oidc(store, params)
+    cid = str(params.get("ClientID", "")).strip()
+    p["client_ids"] = [c for c in p["client_ids"] if c != cid]
+    store.persist()
+    return _envelope("RemoveClientIDFromOpenIDConnectProvider")
+
+
+def _update_oidc_thumbprint(store, params):
+    p = _oidc(store, params)
+    tps = _members(params, "ThumbprintList")
+    if not tps or any(len(t) != 40 or not all(c in "0123456789abcdefABCDEF" for c in t) for t in tps):
+        raise IamError("InvalidInput", "ThumbprintList must contain 40-character hexadecimal SHA-1 thumbprints.", 400)
+    if len(tps) > 5:
+        raise IamError("LimitExceeded", "An OpenID Connect provider can have at most 5 thumbprints.", 409)
+    p["thumbprints"] = tps
+    store.persist()
+    return _envelope("UpdateOpenIDConnectProviderThumbprint")
+
+
+def _update_saml_provider(store, params):
+    p = _saml(store, params)
+    doc = params.get("SAMLMetadataDocument", "")
+    if not str(doc).strip():
+        raise IamError("InvalidInput", "SAMLMetadataDocument is required.", 400)
+    p["metadata_document"] = doc
+    store.persist()
+    return _envelope("UpdateSAMLProvider", _el("SAMLProviderArn", p["arn"]))
+
+
+def _provider_tagging(kind: str):
+    getter = _oidc if kind == "OpenIDConnect" else _saml
+    tag_op, untag_op, list_op = f"Tag{kind}Provider", f"Untag{kind}Provider", f"List{kind}ProviderTags"
+
+    def tag(store, params):
+        p = getter(store, params)
+        p.setdefault("tags", {}).update(_parse_tags(params))
+        store.persist()
+        return _envelope(tag_op)
+
+    def untag(store, params):
+        p = getter(store, params)
+        for k in _members(params, "TagKeys"):
+            p.setdefault("tags", {}).pop(k, None)
+        store.persist()
+        return _envelope(untag_op)
+
+    def lst(store, params):
+        return _envelope(list_op, _tags_xml(getter(store, params).get("tags") or {}) + "<IsTruncated>false</IsTruncated>")
+    return {tag_op: tag, untag_op: untag, list_op: lst}
+
+
+# ── IAM sweep 2: GetAccountAuthorizationDetails (real, straight from the store) ─
+def _pdoc(doc) -> str:
+    return _xml_escape(json.dumps(doc))
+
+
+def _attached_xml(store, arns) -> str:
+    out = []
+    for arn in arns:
+        pol = store.get_policy(arn)
+        out.append("<member>" + _el("PolicyName", pol["policy_name"] if pol else arn.rsplit("/", 1)[-1]) + _el("PolicyArn", arn) + "</member>")
+    return "<AttachedManagedPolicies>" + "".join(out) + "</AttachedManagedPolicies>"
+
+
+def _inline_xml(inline: dict) -> str:
+    return "<{0}>".format("POLICYLIST") + "".join(
+        "<member>" + _el("PolicyName", n) + f"<PolicyDocument>{_pdoc(d)}</PolicyDocument></member>" for n, d in inline.items()) + "</POLICYLIST>"
+
+
+def _managed_detail_xml(store, p: dict) -> str:
+    versions = "".join(
+        "<member>" + f"<Document>{_pdoc(v['document'])}</Document>" + _el("VersionId", vid)
+        + _el("IsDefaultVersion", "true" if vid == p.get("default_version_id", "v1") else "false") + _el("CreateDate", v["created"]) + "</member>"
+        for vid, v in (p.get("versions") or {"v1": {"document": p.get("document"), "created": p["created"]}}).items())
+    bound = sum(1 for e in list(store.users.values()) + list(store.roles.values()) if e.get("permissions_boundary") == p["arn"])
+    return ("<member>" + _el("PolicyName", p["policy_name"]) + _el("PolicyId", p["policy_id"]) + _el("Arn", p["arn"])
+            + _el("Path", p.get("path", "/")) + _el("DefaultVersionId", p.get("default_version_id", "v1"))
+            + _el("AttachmentCount", p.get("attachment_count", 0)) + _el("PermissionsBoundaryUsageCount", bound)
+            + _el("IsAttachable", "true") + _el("CreateDate", p["created"]) + _el("UpdateDate", p.get("updated", p["created"]))
+            + f"<PolicyVersionList>{versions}</PolicyVersionList></member>")
+
+
+def _get_account_authorization_details(store, params):
+    filt = set(_members(params, "Filter")) or {"User", "Role", "Group", "LocalManagedPolicy", "AWSManagedPolicy"}
+    parts = []
+    if "User" in filt:
+        us = []
+        for n in sorted(store.users):
+            u = store.users[n]
+            us.append("<member>" + _el("Path", u.get("path", "/")) + _el("UserName", n) + _el("UserId", u["user_id"]) + _el("Arn", u["arn"])
+                      + _el("CreateDate", u["created"])
+                      + _inline_xml(u["inline_policies"]).replace("POLICYLIST", "UserPolicyList")
+                      + "<GroupList>" + "".join(_el("member", g) for g in u.get("groups", [])) + "</GroupList>"
+                      + _attached_xml(store, u["attached_policies"])
+                      + (f"<PermissionsBoundary>{_el('PermissionsBoundaryType', 'Policy')}{_el('PermissionsBoundaryArn', u['permissions_boundary'])}</PermissionsBoundary>" if u.get("permissions_boundary") else "")
+                      + _tags_xml(u.get("tags") or {}) + "</member>")
+        parts.append("<UserDetailList>" + "".join(us) + "</UserDetailList>")
+    if "Group" in filt:
+        gs = []
+        for n in sorted(store.groups):
+            g = store.groups[n]
+            gs.append("<member>" + _el("Path", g.get("path", "/")) + _el("GroupName", n) + _el("GroupId", g["group_id"]) + _el("Arn", g["arn"])
+                      + _el("CreateDate", g["created"]) + _inline_xml(g["inline_policies"]).replace("POLICYLIST", "GroupPolicyList")
+                      + _attached_xml(store, g["attached_policies"]) + "</member>")
+        parts.append("<GroupDetailList>" + "".join(gs) + "</GroupDetailList>")
+    if "Role" in filt:
+        rs = []
+        for n in sorted(store.roles):
+            r = store.roles[n]
+            rs.append("<member>" + _el("Path", r.get("path", "/")) + _el("RoleName", n) + _el("RoleId", r["role_id"]) + _el("Arn", r["arn"])
+                      + _el("CreateDate", r["created"])
+                      + f"<AssumeRolePolicyDocument>{_pdoc(r.get('assume_role_policy_document') or {})}</AssumeRolePolicyDocument>"
+                      + "<InstanceProfileList></InstanceProfileList>"
+                      + _inline_xml(r["inline_policies"]).replace("POLICYLIST", "RolePolicyList")
+                      + _attached_xml(store, r["attached_policies"])
+                      + (f"<PermissionsBoundary>{_el('PermissionsBoundaryType', 'Policy')}{_el('PermissionsBoundaryArn', r['permissions_boundary'])}</PermissionsBoundary>" if r.get("permissions_boundary") else "")
+                      + _tags_xml(r.get("tags") or {}) + "</member>")
+        parts.append("<RoleDetailList>" + "".join(rs) + "</RoleDetailList>")
+    if filt & {"LocalManagedPolicy", "AWSManagedPolicy"}:
+        pol = []
+        for arn in sorted(store.policies):
+            aws_managed = arn.startswith("arn:aws:iam::aws:")
+            if ("AWSManagedPolicy" if aws_managed else "LocalManagedPolicy") in filt:
+                pol.append(_managed_detail_xml(store, store.policies[arn]))
+        parts.append("<Policies>" + "".join(pol) + "</Policies>")
+    return _envelope("GetAccountAuthorizationDetails", "".join(parts) + "<IsTruncated>false</IsTruncated>")
+
+
+# ── IAM sweep 2: action-level + with-entities last-accessed, policies granting access ──
+def _la_job(arn: str, granularity: str) -> str:
+    return "vyomi-" + base64.urlsafe_b64encode(f"{arn}|{granularity}".encode()).decode().rstrip("=")
+
+
+def _la_decode(job_id: str):
+    raw = _decode_last_accessed_job(job_id)
+    arn, _, gran = raw.partition("|")
+    return arn, gran or "SERVICE_LEVEL"
+
+
+def _generate_sla_v2(store, params):
+    arn = str(params.get("Arn", "")).strip()
+    if not arn:
+        raise IamError("ValidationError", "Arn is required.", 400)
+    gran = str(params.get("Granularity", "SERVICE_LEVEL") or "SERVICE_LEVEL")
+    if gran not in ("SERVICE_LEVEL", "ACTION_LEVEL"):
+        raise IamError("InvalidInput", "Granularity must be SERVICE_LEVEL or ACTION_LEVEL.", 400)
+    return _envelope("GenerateServiceLastAccessedDetails", _el("JobId", _la_job(arn, gran)))
+
+
+def _tracked_actions(store, names: list[str]) -> dict[str, list[dict]]:
+    per: dict[str, dict] = {}
+    for e in store.activity:
+        if e["principal_arn"].rsplit("/", 1)[-1] not in names or not e.get("action"):
+            continue
+        rec = per.setdefault(_namespace(e["service"]), {}).setdefault(e["action"], {"time": e["time"], "who": e["principal_arn"]})
+        if e["time"] > rec["time"]:
+            rec["time"], rec["who"] = e["time"], e["principal_arn"]
+    return {ns: [{"ActionName": a, "LastAccessedTime": r["time"], "LastAccessedEntity": r["who"]} for a, r in sorted(acts.items())]
+            for ns, acts in per.items()}
+
+
+def _get_sla_v2(store, params):
+    arn, gran = _la_decode(str(params.get("JobId", "")).strip())
+    names = _principal_names_for_last_accessed(store, arn)
+    report = _service_last_accessed_report(store, names)
+    tracked = _tracked_actions(store, names) if gran == "ACTION_LEVEL" else {}
+    now = _now()
+    items = []
+    for r in report:
+        acts = "".join("<member>" + _el("ActionName", a["ActionName"]) + _el("LastAccessedEntity", a["LastAccessedEntity"])
+                       + _el("LastAccessedTime", a["LastAccessedTime"]) + "</member>" for a in tracked.get(r["ServiceNamespace"], []))
+        items.append("<member>" + _el("ServiceNamespace", r["ServiceNamespace"]) + _el("ServiceName", r["ServiceName"])
+                     + _el("LastAuthenticated", r["LastAuthenticated"]) + _el("LastAuthenticatedEntity", r["LastAuthenticatedEntity"])
+                     + _el("TotalAuthenticatedEntities", r["TotalAuthenticatedEntities"])
+                     + (f"<TrackedActionsLastAccessed>{acts}</TrackedActionsLastAccessed>" if gran == "ACTION_LEVEL" else "") + "</member>")
+    inner = (_el("JobStatus", "COMPLETED") + _el("JobType", gran) + _el("JobCreationDate", now) + _el("JobCompletionDate", now)
+             + f"<ServicesLastAccessed>{''.join(items)}</ServicesLastAccessed>" + "<IsTruncated>false</IsTruncated>")
+    return _envelope("GetServiceLastAccessedDetails", inner)
+
+
+def _get_sla_with_entities(store, params):
+    arn, gran = _la_decode(str(params.get("JobId", "")).strip())
+    ns = str(params.get("ServiceNamespace", "")).strip()
+    if not ns:
+        raise IamError("ValidationError", "ServiceNamespace is required.", 400)
+    names = _principal_names_for_last_accessed(store, arn)
+    last: dict[str, str] = {}
+    for e in store.activity:
+        if e["principal_arn"].rsplit("/", 1)[-1] in names and _namespace(e["service"]) == ns:
+            last[e["principal_arn"]] = max(last.get(e["principal_arn"], ""), e["time"])
+    ents = []
+    for parn, t in sorted(last.items()):
+        kind = "USER" if ":user/" in parn else "ROLE" if ":role/" in parn else "GROUP"
+        name = parn.rsplit("/", 1)[-1]
+        rec = (store.users.get(name) if kind == "USER" else store.roles.get(name)) or {}
+        ents.append("<member><EntityInfo>" + _el("Arn", parn) + _el("Name", name) + _el("Type", kind)
+                    + _el("Id", rec.get("user_id") or rec.get("role_id") or "") + _el("Path", rec.get("path", "/")) + "</EntityInfo>"
+                    + _el("LastAuthenticated", t) + "</member>")
+    now = _now()
+    return _envelope("GetServiceLastAccessedDetailsWithEntities",
+                     _el("JobStatus", "COMPLETED") + _el("JobCreationDate", now) + _el("JobCompletionDate", now)
+                     + f"<EntityDetailsList>{''.join(ents)}</EntityDetailsList><IsTruncated>false</IsTruncated>")
+
+
+def _list_policies_granting_service_access(store, params):
+    arn = str(params.get("Arn", "")).strip()
+    nss = _members(params, "ServiceNamespaces")
+    if not arn or not nss:
+        raise IamError("ValidationError", "Arn and ServiceNamespaces are required.", 400)
+    name = arn.rsplit("/", 1)[-1]
+    ent = (store.users.get(name) if ":user/" in arn else store.roles.get(name) if ":role/" in arn else store.groups.get(name) if ":group/" in arn else None)
+    if ent is None:
+        raise IamError("NoSuchEntity", f"The entity {arn} cannot be found.", 404)
+    etype = "USER" if ":user/" in arn else "ROLE" if ":role/" in arn else "GROUP"
+
+    def grants(doc, ns):
+        for st in (doc or {}).get("Statement") or []:
+            if str(st.get("Effect", "")).lower() != "allow":
+                continue
+            acts = st.get("Action") or []
+            for a in ([acts] if isinstance(acts, str) else acts):
+                if a == "*" or a.lower().startswith(ns.lower() + ":") or (a.endswith("*") and ns.lower().startswith(a[:-1].lower())):
+                    return True
+        return False
+
+    def sources():
+        for n, d in (ent.get("inline_policies") or {}).items():
+            yield {"PolicyName": n, "PolicyType": "INLINE", "EntityType": etype, "EntityName": name}, d
+        for parn in ent.get("attached_policies", []):
+            p = store.get_policy(parn)
+            if p:
+                yield {"PolicyName": p["policy_name"], "PolicyType": "MANAGED", "PolicyArn": parn}, p.get("document")
+        for g in ent.get("groups", []):
+            ge = store.groups.get(g) or {}
+            for n, d in (ge.get("inline_policies") or {}).items():
+                yield {"PolicyName": n, "PolicyType": "INLINE", "EntityType": "GROUP", "EntityName": g}, d
+            for parn in ge.get("attached_policies", []):
+                p = store.get_policy(parn)
+                if p:
+                    yield {"PolicyName": p["policy_name"], "PolicyType": "MANAGED", "PolicyArn": parn}, p.get("document")
+    out = []
+    for ns in nss:
+        pols = "".join("<member>" + "".join(_el(k, v) for k, v in meta.items()) + "</member>" for meta, d in sources() if grants(d, ns))
+        out.append("<member>" + _el("ServiceNamespace", ns) + f"<Policies>{pols}</Policies></member>")
+    return _envelope("ListPoliciesGrantingServiceAccess", f"<PoliciesGrantingServiceAccess>{''.join(out)}</PoliciesGrantingServiceAccess><IsTruncated>false</IsTruncated>")
+
+
+# ── Organizations-integrated features (centralized root access) — real IAM API ──
+# EnableOrganizationsRootCredentialsManagement / RootSessions and ListOrganizationsFeatures operate on
+# the organization held by core/organizations_core.py (store.extras["org"]). As in AWS they require an
+# organization with all features and trusted access for iam.amazonaws.com (EnableAWSServiceAccess).
+_ORG_FEATURES = ("RootCredentialsManagement", "RootSessions")
+
+
+def _org_for_features(store):
+    o = store.extras.get("org")
+    if not o:
+        raise IamError("OrganizationNotFoundException", "The request was rejected because no organization is associated with your account.", 404)
+    if o.get("feature_set") != "ALL":
+        raise IamError("OrganizationNotInAllFeaturesModeException", "The request was rejected because your organization does not have all features enabled.", 409)
+    return o
+
+
+def _features_result(action: str, o: dict) -> IamResponse:
+    feats = "".join(f"<member>{f}</member>" for f in o.get("iam_features", []))
+    return _envelope(action, _el("OrganizationId", o["id"]) + f"<EnabledFeatures>{feats}</EnabledFeatures>")
+
+
+def _list_organizations_features(store, params):
+    return _features_result("ListOrganizationsFeatures", _org_for_features(store))
+
+
+def _set_org_feature(action: str, feature: str, on: bool):
+    def op(store, params):
+        o = _org_for_features(store)
+        if "iam.amazonaws.com" not in o.get("service_access", {}):
+            raise IamError("ServiceAccessNotEnabledException", "The request was rejected because trusted access is not enabled for IAM in AWS Organizations.", 409)
+        cur = list(o.get("iam_features", []))
+        if on and feature not in cur:
+            cur.append(feature)
+        if not on:
+            cur = [f for f in cur if f != feature]
+        o["iam_features"] = cur
+        store.persist()
+        return _features_result(action, o)
+    return op
+
+
+# ── native-wire activity log (Vyomi-only) ───────────────────────────────────
+# Recorded by core/aws_wire_router.py for every request signed with an IAM USER's own
+# access key (a real aws-cli/boto3 caller configured with CreateAccessKey credentials —
+# distinguishable because the AKID sits in clear in the SigV4 credential scope even
+# though Vyomi never verifies the signature itself). The console's own fixed operator
+# credential and the conformance harness's placeholder credentials never match a real
+# access key, so they never appear here: every entry is real recorded activity, not
+# fabricated. Backs GenerateServiceLastAccessedDetails, the Vyomi-only policy-from-activity
+# generator ("Generate policy based on CloudTrail events"), and Access Analyzer's
+# unused-access findings below. Roles have no long-term access keys in real AWS either
+# (they get temporary AssumeRole credentials, which Vyomi does not mint), so role activity
+# is always empty here — a real, honest limitation, not a bug.
+_ACTIVITY_CAP = 5000
+
+
+def record_activity(store, user_name: str, service: str, action: str | None,
+                    access_key_id: str | None = None, region: str | None = None) -> None:
+    if access_key_id and access_key_id in store.access_keys:
+        store.access_keys[access_key_id]["last_used"] = {"time": _now(), "service": _namespace(service),
+                                                          "region": region or "us-east-1"}
+    store.activity.append({"principal_arn": _user_arn(store, user_name), "service": service,
+                           "action": action, "time": _now()})
+    if len(store.activity) > _ACTIVITY_CAP:
+        del store.activity[: len(store.activity) - _ACTIVITY_CAP]
+    store.persist()
+
+
+_SERVICE_NAMESPACE = {   # internal router service-key -> AWS IAM policy prefix (ServiceNamespace)
+    "vpc": "ec2", "elbv2": "elasticloadbalancing", "stepfunctions": "states",
+}
+_SERVICE_NAME = {   # ServiceNamespace -> the display name real AWS's Last Accessed table shows
+    "s3": "Amazon S3", "dynamodb": "Amazon DynamoDB", "kms": "AWS Key Management Service",
+    "secretsmanager": "AWS Secrets Manager", "sqs": "Amazon Simple Queue Service (SQS)",
+    "sns": "Amazon Simple Notification Service (SNS)", "iam": "AWS Identity and Access Management (IAM)",
+    "rds": "Amazon Relational Database Service", "ec2": "Amazon EC2", "lambda": "AWS Lambda",
+    "cloudwatch": "Amazon CloudWatch", "logs": "Amazon CloudWatch Logs", "events": "Amazon EventBridge",
+    "kinesis": "Amazon Kinesis", "ssm": "AWS Systems Manager", "states": "AWS Step Functions",
+    "cloudformation": "AWS CloudFormation", "apigateway": "Amazon API Gateway",
+    "elasticloadbalancing": "Elastic Load Balancing", "scheduler": "Amazon EventBridge Scheduler",
+}
+
+
+def _namespace(service: str) -> str:
+    return _SERVICE_NAMESPACE.get(service, service)
+
+
+def _principal_names_for_last_accessed(store, arn: str) -> list[str]:
+    """Resolve an Arn argument to the IAM USER names whose activity to aggregate — the
+    only principal kind Vyomi can attribute activity to (see record_activity). A group
+    or policy Arn aggregates its member/attached users; a role Arn always yields none."""
+    if ":user/" in arn:
+        name = arn.split(":user/", 1)[1]
+        return [name] if store.get_user(name) else []
+    if ":group/" in arn:
+        g = store.get_group(arn.split(":group/", 1)[1])
+        return list(g["members"]) if g else []
+    if ":policy/" in arn:
+        if not store.get_policy(arn):
+            return []
+        names = [u["user_name"] for u in store.users.values() if arn in u["attached_policies"]]
+        for g in store.groups.values():
+            if arn in g["attached_policies"]:
+                names.extend(g["members"])
+        return sorted(set(names))
+    return []
+
+
+def _service_last_accessed_report(store, names: list[str]) -> list[dict]:
+    per_service: dict[str, dict] = {}
+    for entry in store.activity:
+        principal_name = entry["principal_arn"].rsplit("/", 1)[-1]
+        if principal_name not in names:
+            continue
+        ns = _namespace(entry["service"])
+        rec = per_service.setdefault(ns, {"last": entry["time"], "entities": set()})
+        if entry["time"] > rec["last"]:
+            rec["last"] = entry["time"]
+        rec["entities"].add(entry["principal_arn"])
+    return [{"ServiceNamespace": ns, "ServiceName": _SERVICE_NAME.get(ns, ns), "LastAuthenticated": rec["last"],
+             "LastAuthenticatedEntity": sorted(rec["entities"])[0], "TotalAuthenticatedEntities": len(rec["entities"])}
+            for ns, rec in sorted(per_service.items())]
+
+
+def _decode_last_accessed_job(job_id: str):
+    if not job_id.startswith("vyomi-"):
+        raise IamError("NoSuchEntity", f"Job {job_id} not found.", 404)
+    rest = job_id[6:]
+    padded = rest + "=" * (-len(rest) % 4)
+    try:
+        return base64.urlsafe_b64decode(padded).decode()
+    except Exception:
+        raise IamError("NoSuchEntity", f"Job {job_id} not found.", 404)
+
+
+def _generate_service_last_accessed_details(store, params):
+    arn = str(params.get("Arn", "")).strip()
+    if not arn:
+        raise IamError("ValidationError", "Arn is required.", 400)
+    job_id = "vyomi-" + base64.urlsafe_b64encode(arn.encode()).decode().rstrip("=")
+    return _envelope("GenerateServiceLastAccessedDetails", _el("JobId", job_id))
+
+
+def _get_service_last_accessed_details(store, params):
+    arn = _decode_last_accessed_job(str(params.get("JobId", "")).strip())
+    report = _service_last_accessed_report(store, _principal_names_for_last_accessed(store, arn))
+    now = _now()
+    items = "".join(
+        "<member>" + _el("ServiceNamespace", r["ServiceNamespace"]) + _el("ServiceName", r["ServiceName"])
+        + _el("LastAuthenticated", r["LastAuthenticated"]) + _el("LastAuthenticatedEntity", r["LastAuthenticatedEntity"])
+        + _el("TotalAuthenticatedEntities", r["TotalAuthenticatedEntities"]) + "</member>"
+        for r in report)
+    inner = (_el("JobStatus", "COMPLETED") + _el("JobCreationDate", now) + _el("JobCompletionDate", now)
+             + f"<ServicesLastAccessed>{items}</ServicesLastAccessed>")
+    return _envelope("GetServiceLastAccessedDetails", inner)
+
+
+# ── Organizations service access report (IAM GenerateOrganizationsAccessReport / GetOrganizationsAccessReport) ──
+# Real AWS reports, for an organization root/OU/account (EntityPath = "o-…/r-…/ou-…/<account>"), which services its
+# principals actually authenticated to, optionally scoped to the services an SCP allows. Vyomi derives it from the
+# same recorded native-wire activity as the user-level report above. HONEST scope: only the MANAGEMENT account has
+# principals and traffic, so member accounts contribute no activity; the report is empty unless the management
+# account sits under the chosen entity. Roles carry no attributable activity either (see record_activity).
+def _org_scope_accounts(o, entity_id):
+    if entity_id in o["accounts"]:
+        return {entity_id}
+    if entity_id not in o["roots"] and entity_id not in o["ous"]:
+        return None
+    out, stack = set(), [entity_id]
+    while stack:
+        cur = stack.pop()
+        out |= {a["id"] for a in o["accounts"].values() if a["parent"] == cur}
+        stack += [u["id"] for u in o["ous"].values() if u["parent"] == cur]
+    return out
+
+
+def _scp_allows_service(content_json: str, ns: str) -> bool:
+    import fnmatch
+    try:
+        doc = json.loads(content_json)
+    except Exception:
+        return False
+    stmts = doc.get("Statement", [])
+    stmts = [stmts] if isinstance(stmts, dict) else stmts
+    def hits(st):
+        acts = st.get("Action", [])
+        acts = [acts] if isinstance(acts, str) else acts
+        return any(fnmatch.fnmatchcase(f"{ns}:x", a) or fnmatch.fnmatchcase(f"{ns}:*", a) for a in acts)
+    allowed = any(st.get("Effect") == "Allow" and hits(st) for st in stmts)
+    denied = any(st.get("Effect") == "Deny" and hits(st) and not st.get("Condition") and st.get("Resource", "*") in ("*", ["*"]) for st in stmts)
+    return allowed and not denied
+
+
+def _generate_organizations_access_report(store, params):
+    path = str(params.get("EntityPath", "")).strip()
+    o = store.extras.get("org")
+    if not o:
+        raise IamError("NoSuchEntity", "Your account is not a member of an organization.", 404)
+    parts = [x for x in path.split("/") if x]
+    if len(parts) < 2 or parts[0] != o["id"]:
+        raise IamError("ValidationError", "EntityPath must look like o-<org>/r-<root>/[ou-…/]<id>.", 400)
+    if _org_scope_accounts(o, parts[-1]) is None:
+        raise IamError("NoSuchEntity", f"No organization root, OU or account {parts[-1]}.", 404)
+    pol = str(params.get("OrganizationsPolicyId", "")).strip()
+    if pol and pol not in store.org_policies:
+        raise IamError("NoSuchEntity", f"Policy {pol} not found.", 404)
+    job = "vyomi-oar-" + base64.urlsafe_b64encode(json.dumps([path, pol]).encode()).decode().rstrip("=")
+    return _envelope("GenerateOrganizationsAccessReport", _el("JobId", job))
+
+
+def _get_organizations_access_report(store, params):
+    job = str(params.get("JobId", "")).strip()
+    if not job.startswith("vyomi-oar-"):
+        raise IamError("NoSuchEntity", f"Job {job} not found.", 404)
+    rest = job[len("vyomi-oar-"):]
+    try:
+        path, pol = json.loads(base64.urlsafe_b64decode(rest + "=" * (-len(rest) % 4)).decode())
+    except Exception:
+        raise IamError("NoSuchEntity", f"Job {job} not found.", 404)
+    o = store.extras.get("org")
+    if not o:
+        raise IamError("NoSuchEntity", "Your account is not a member of an organization.", 404)
+    scope = _org_scope_accounts(o, path.rstrip("/").rsplit("/", 1)[-1]) or set()
+    content = store.org_policies[pol]["content"] if pol in store.org_policies else None
+    accessible = [ns for ns in sorted(_SERVICE_NAME) if content is None or _scp_allows_service(content, ns)]
+    seen = {}
+    if o["master_account_id"] in scope:
+        for e in store.activity:
+            ns = _namespace(e["service"])
+            if ns not in accessible:
+                continue
+            rec = seen.setdefault(ns, {"last": e["time"], "ents": set()})
+            rec["last"] = max(rec["last"], e["time"]); rec["ents"].add(e["principal_arn"])
+    items = "".join("<member>" + _el("ServiceName", _SERVICE_NAME.get(ns, ns)) + _el("ServiceNamespace", ns) + _el("EntityPath", path)
+                    + _el("LastAuthenticatedTime", r["last"]) + _el("TotalAuthenticatedEntities", len(r["ents"])) + "</member>"
+                    for ns, r in sorted(seen.items()))
+    now = _now()
+    inner = (_el("JobStatus", "COMPLETED") + _el("JobCreationDate", now) + _el("JobCompletionDate", now)
+             + _el("NumberOfServicesAccessible", len(accessible)) + _el("NumberOfServicesNotAccessed", len(accessible) - len(seen))
+             + f"<AccessDetails>{items}</AccessDetails>" + _el("IsTruncated", "false"))
+    return _envelope("GetOrganizationsAccessReport", inner)
+
+
+# ── policy generation from activity (Vyomi-only) ────────────────────────────
+# Real AWS mines CloudTrail management events for "Generate policy based on CloudTrail
+# events" (the IAM console routes it through Access Analyzer's StartPolicyGeneration /
+# GetGeneratedPolicy). Vyomi doesn't simulate CloudTrail, so this mines the same real
+# signal CloudTrail would have recorded for the principal — Vyomi's own native-wire
+# activity log (see record_activity) — synchronously, in one call.
+def _generate_policy_from_activity(store, params):
+    arn = str(params.get("Arn", "")).strip()
+    if not arn:
+        raise IamError("ValidationError", "Arn is required.", 400)
+    names = _principal_names_for_last_accessed(store, arn)
+    pairs = set()
+    for entry in store.activity:
+        if entry["principal_arn"].rsplit("/", 1)[-1] not in names:
+            continue
+        ns = _namespace(entry["service"])
+        pairs.add(f"{ns}:{entry['action']}" if entry.get("action") else f"{ns}:*")
+    doc = {"Version": "2012-10-17", "Statement": [{"Effect": "Allow", "Action": sorted(pairs), "Resource": "*"}] if pairs else []}
+    return _envelope("GeneratePolicyFromActivity", f"<GeneratedPolicyDocument>{_xml_escape(json.dumps(doc))}</GeneratedPolicyDocument>")
+
+
+# ── IAM Access Analyzer (Vyomi-only) ─────────────────────────────────────────
+# Real AWS exposes this through a separate "accessanalyzer" service; the IAM console
+# surfaces it under its own nav for convenience, same as the SCP/RCP precedent above, so
+# Vyomi models it on IAM's native wire. Two real, non-fabricated signals back it:
+#   external access — resource-based/trust policies (IAM role trust policies, S3 bucket
+#                      policies) naming a principal outside this account, or "*"
+#   unused access   — IAM user access keys at least `unused_access_age` days old with NO
+#                      entries in the activity log (see record_activity above)
+# Vyomi simulates a single account, so cross-account "zone of trust" membership and
+# organization-wide analyzers are not modeled (see iam.organizations); external-access
+# analysis currently covers IAM role trust policies and S3 bucket policies — not yet KMS
+# key policies, SQS/SNS resource policies or Secrets Manager resource policies.
+_ANALYZER_TYPES = {"ACCOUNT", "ACCOUNT_UNUSED_ACCESS"}
+_NEEDS_S3_STORE = {"ListFindings", "GetFinding"}
+
+
+def _external_principals(doc: dict, account_id: str) -> list[str]:
+    found = []
+    for st in (doc or {}).get("Statement") or []:
+        if str(st.get("Effect", "")).strip().lower() != "allow":
+            continue
+        principal = st.get("Principal")
+        if principal == "*":
+            found.append("*")
+            continue
+        if isinstance(principal, dict):
+            aws = principal.get("AWS")
+            for a in ([aws] if isinstance(aws, str) else (aws or [])):
+                a = str(a)
+                if a == "*" or (f":{account_id}:" not in a and a != account_id):
+                    found.append(a)
+    return found
+
+
+def _age_days(iso: str) -> int:
+    try:
+        then = datetime.strptime(iso, "%Y-%m-%dT%H:%M:%S.000Z").replace(tzinfo=timezone.utc)
+    except Exception:
+        return 0
+    return max(0, (datetime.now(timezone.utc) - then).days)
+
+
+def _finding_id(analyzer_name: str, kind: str, resource: str) -> str:
+    return hashlib.sha1(f"{analyzer_name}|{kind}|{resource}".encode()).hexdigest()[:20]
+
+
+def _finding(analyzer, kind, resource_type, resource, principals, extra=None):
+    fid = _finding_id(analyzer["name"], kind, resource)
+    f = {"id": fid, "type": kind, "resource_type": resource_type, "resource": resource,
+         "principals": principals, "status": "ARCHIVED" if fid in analyzer["archived"] else "ACTIVE",
+         "created": analyzer["created"]}
+    if extra:
+        f.update(extra)
+    return f
+
+
+def _compute_findings(store, analyzer, s3_store=None) -> list[dict]:
+    out = []
+    if analyzer["type"] == "ACCOUNT":
+        for r in store.roles.values():
+            ext = _external_principals(r.get("assume_role_policy_document") or {}, store.account_id)
+            if ext:
+                out.append(_finding(analyzer, "ExternalAccess", "AWS::IAM::Role", r["arn"], ext))
+        for bname, meta in (getattr(s3_store, "buckets", None) or {}).items():
+            txt = (meta.get("cfg") or {}).get("policy")
+            if not txt:
+                continue
+            try:
+                doc = json.loads(txt)
+            except Exception:
+                continue
+            ext = _external_principals(doc, store.account_id)
+            if ext:
+                out.append(_finding(analyzer, "ExternalAccess", "AWS::S3::Bucket", f"arn:aws:s3:::{bname}", ext))
+    else:   # ACCOUNT_UNUSED_ACCESS
+        age = int(analyzer.get("unused_access_age", 90))
+        used_users = {e["principal_arn"].rsplit("/", 1)[-1] for e in store.activity}
+        for k in store.access_keys.values():
+            if k["user_name"] in used_users or _age_days(k["created"]) < age:
+                continue
+            out.append(_finding(analyzer, "UnusedIAMUserAccessKey", "AWS::IAM::AccessKey", k["access_key_id"],
+                                [_user_arn(store, k["user_name"])], {"age_days": _age_days(k["created"])}))
+    return out
+
+
+def _analyzer_xml(a: dict) -> str:
+    return ("<AnalyzerSummary>" + _el("Name", a["name"]) + _el("Arn", a["arn"]) + _el("Type", a["type"])
+            + _el("Status", "ACTIVE") + _el("CreatedAt", a["created"]) + _el("UnusedAccessAge", a.get("unused_access_age", 90))
+            + "</AnalyzerSummary>")
+
+
+def _create_analyzer(store, params):
+    name = str(params.get("AnalyzerName", "")).strip()
+    if not name:
+        raise IamError("ValidationError", "AnalyzerName is required.", 400)
+    atype = str(params.get("Type", "")).strip().upper()
+    if atype not in _ANALYZER_TYPES:
+        raise IamError("ValidationError", f"Type must be one of {sorted(_ANALYZER_TYPES)}.", 400)
+    if name in store.analyzers:
+        raise IamError("ConflictException", f"Analyzer {name} already exists.", 409)
+    a = {"name": name, "arn": f"arn:aws:access-analyzer:us-east-1:{store.account_id}:analyzer/{name}",
+         "type": atype, "created": _now(), "unused_access_age": int(params.get("UnusedAccessAge") or 90), "archived": []}
+    store.analyzers[name] = a
+    store.persist()
+    return _envelope("CreateAnalyzer", _analyzer_xml(a))
+
+
+def _list_analyzers(store, params):
+    inner = "<Analyzers>" + "".join(_analyzer_xml(a) for a in sorted(store.analyzers.values(), key=lambda a: a["created"])) + "</Analyzers>"
+    return _envelope("ListAnalyzers", inner)
+
+
+def _require_analyzer(store, name):
+    a = store.analyzers.get(name)
+    if not a:
+        raise IamError("ResourceNotFoundException", f"Analyzer {name} not found.", 404)
+    return a
+
+
+def _get_analyzer(store, params):
+    return _envelope("GetAnalyzer", _analyzer_xml(_require_analyzer(store, str(params.get("AnalyzerName", "")).strip())))
+
+
+def _update_analyzer(store, params):
+    a = _require_analyzer(store, str(params.get("AnalyzerName", "")).strip())
+    if params.get("UnusedAccessAge") is not None:
+        a["unused_access_age"] = int(params["UnusedAccessAge"])
+    store.persist()
+    return _envelope("UpdateAnalyzer", _analyzer_xml(a))
+
+
+def _delete_analyzer(store, params):
+    name = str(params.get("AnalyzerName", "")).strip()
+    _require_analyzer(store, name)
+    del store.analyzers[name]
+    store.persist()
+    return _envelope("DeleteAnalyzer")
+
+
+def _finding_xml(f: dict) -> str:
+    principals = "".join(_el("member", p) for p in f["principals"])
+    extra = _el("AgeDays", f["age_days"]) if "age_days" in f else ""
+    return ("<member>" + _el("Id", f["id"]) + _el("FindingType", f["type"]) + _el("ResourceType", f["resource_type"])
+            + _el("Resource", f["resource"]) + _el("Status", f["status"]) + _el("CreatedAt", f["created"])
+            + f"<Principals>{principals}</Principals>" + extra + "</member>")
+
+
+def _list_findings(store, params, s3_store=None):
+    a = _require_analyzer(store, str(params.get("AnalyzerName", "")).strip())
+    status_filter = str(params.get("Status", "")).strip().upper() or None
+    findings = _compute_findings(store, a, s3_store=s3_store)
+    if status_filter:
+        findings = [f for f in findings if f["status"] == status_filter]
+    return _envelope("ListFindings", "<Findings>" + "".join(_finding_xml(f) for f in findings) + "</Findings>")
+
+
+def _get_finding(store, params, s3_store=None):
+    a = _require_analyzer(store, str(params.get("AnalyzerName", "")).strip())
+    fid = str(params.get("Id", "")).strip()
+    for f in _compute_findings(store, a, s3_store=s3_store):
+        if f["id"] == fid:
+            return _envelope("GetFinding", _finding_xml(f))
+    raise IamError("ResourceNotFoundException", f"Finding {fid} not found.", 404)
+
+
+def _update_finding_status(store, params):
+    a = _require_analyzer(store, str(params.get("AnalyzerName", "")).strip())
+    fid = str(params.get("Id", "")).strip()
+    status = str(params.get("Status", "")).strip().upper()
+    if status not in ("ACTIVE", "ARCHIVED"):
+        raise IamError("ValidationError", "Status must be ACTIVE or ARCHIVED.", 400)
+    if status == "ARCHIVED" and fid not in a["archived"]:
+        a["archived"].append(fid)
+    elif status == "ACTIVE":
+        a["archived"] = [x for x in a["archived"] if x != fid]
+    store.persist()
+    return _envelope("UpdateFindingStatus")
+
+
+# ── IAM Roles Anywhere (Vyomi-only) ──────────────────────────────────────────
+# Real AWS exposes this through a separate "rolesanywhere" service (X.509-authenticated
+# on-prem/non-AWS workloads exchange a certificate for short-term role credentials).
+# Vyomi models the control plane (trust anchors, profiles) on IAM's native wire, same
+# reason as the other Vyomi-only extensions above. The certificate is format-checked (a
+# well-formed PEM block), never cryptographically verified — no different in kind from
+# the virtual-MFA flow's two-code format check (see iam.user.mfa); CreateSession (minting
+# actual temporary credentials from a signed challenge) is not modeled.
+def _is_pem_certificate(text: str) -> bool:
+    t = (text or "").strip()
+    return t.startswith("-----BEGIN CERTIFICATE-----") and t.endswith("-----END CERTIFICATE-----") and len(t) > 64
+
+
+def _trust_anchor_xml(t: dict) -> str:
+    return ("<TrustAnchorDetail>" + _el("TrustAnchorId", t["id"]) + _el("TrustAnchorArn", t["arn"])
+            + _el("Name", t["name"]) + _el("Enabled", "true") + _el("CreatedAt", t["created"]) + "</TrustAnchorDetail>")
+
+
+def _create_trust_anchor(store, params):
+    name = str(params.get("Name", "")).strip()
+    if not name:
+        raise IamError("ValidationError", "Name is required.", 400)
+    cert = str(params.get("SourceData", "")).strip()
+    if not _is_pem_certificate(cert):
+        raise IamError("ValidationException", "SourceData must be a PEM-encoded X.509 certificate.", 400)
+    tid = uuid.uuid4().hex[:12]
+    arn = f"arn:aws:rolesanywhere:us-east-1:{store.account_id}:trust-anchor/{tid}"
+    t = {"id": tid, "arn": arn, "name": name, "source_data": cert, "created": _now()}
+    store.trust_anchors[arn] = t
+    store.persist()
+    return _envelope("CreateTrustAnchor", _trust_anchor_xml(t))
+
+
+def _list_trust_anchors(store, params):
+    items = sorted(store.trust_anchors.values(), key=lambda t: t["created"])
+    return _envelope("ListTrustAnchors", "<TrustAnchors>" + "".join(_trust_anchor_xml(t) for t in items) + "</TrustAnchors>")
+
+
+def _delete_trust_anchor(store, params):
+    arn = str(params.get("TrustAnchorArn", "")).strip()
+    if arn not in store.trust_anchors:
+        raise IamError("ResourceNotFoundException", f"Trust anchor {arn} not found.", 404)
+    del store.trust_anchors[arn]
+    store.persist()
+    return _envelope("DeleteTrustAnchor")
+
+
+def _profile_xml(p: dict) -> str:
+    roles = "".join(_el("member", r) for r in p["role_arns"])
+    return ("<ProfileDetail>" + _el("ProfileId", p["id"]) + _el("ProfileArn", p["arn"]) + _el("Name", p["name"])
+            + f"<RoleArns>{roles}</RoleArns>" + _el("Enabled", "true") + _el("CreatedAt", p["created"]) + "</ProfileDetail>")
+
+
+def _create_profile(store, params):
+    name = str(params.get("Name", "")).strip()
+    if not name:
+        raise IamError("ValidationError", "Name is required.", 400)
+    role_arns = _members(params, "RoleArns")
+    if not role_arns:
+        raise IamError("ValidationError", "RoleArns must have at least one role.", 400)
+    for arn in role_arns:
+        if not any(r["arn"] == arn for r in store.roles.values()):
+            raise IamError("ValidationException", f"Role {arn} does not exist.", 400)
+    pid = uuid.uuid4().hex[:12]
+    arn = f"arn:aws:rolesanywhere:us-east-1:{store.account_id}:profile/{pid}"
+    p = {"id": pid, "arn": arn, "name": name, "role_arns": role_arns, "created": _now()}
+    store.rolesanywhere_profiles[arn] = p
+    store.persist()
+    return _envelope("CreateProfile", _profile_xml(p))
+
+
+def _list_profiles(store, params):
+    items = sorted(store.rolesanywhere_profiles.values(), key=lambda p: p["created"])
+    return _envelope("ListProfiles", "<Profiles>" + "".join(_profile_xml(p) for p in items) + "</Profiles>")
+
+
+def _delete_profile(store, params):
+    arn = str(params.get("ProfileArn", "")).strip()
+    if arn not in store.rolesanywhere_profiles:
+        raise IamError("ResourceNotFoundException", f"Profile {arn} not found.", 404)
+    del store.rolesanywhere_profiles[arn]
+    store.persist()
+    return _envelope("DeleteProfile")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Sweep IAM-1: real credentials lifecycle + account-level behaviour.
+#   * virtual MFA codes are VERIFIED (RFC 6238 TOTP, HMAC-SHA1, 30 s step) against the seed
+#   * the account password policy is ENFORCED on CreateLoginProfile/UpdateLoginProfile/ChangePassword
+#   * GetAccountSummary / GetAccessKeyLastUsed / full credential report are computed from real state
+#   * SSH public keys, service-specific credentials, signing + server certificates (real lifecycle)
+#   * root principal state (root MFA, root access keys) so the Dashboard recommendations are real
+#   * an IAM admin-action event log (Vyomi-only) and security recommendations (Vyomi-only)
+# ═══════════════════════════════════════════════════════════════════════════
+import hmac as _hmac
+import re as _re
+import struct as _struct
+import time as _time
+
+ROOT_USER = "<root_account>"
+_ROOT_ALIASES = ("", ROOT_USER, "root")
+
+
+def _x(store) -> dict:
+    """Mutable bag for the credential kinds that have no first-class store dict."""
+    x = store.extras
+    for k, v in (("ssh_keys", {}), ("service_creds", {}), ("signing_certs", {}), ("server_certs", {}), ("events", [])):
+        if k not in x:
+            x[k] = v
+    x.setdefault("root_created", _now())
+    return x
+
+
+def _totp(seed_b32: str, step: int) -> str:
+    seed = seed_b32.strip().upper()
+    key = base64.b32decode(seed + "=" * (-len(seed) % 8))
+    h = _hmac.new(key, _struct.pack(">Q", step), hashlib.sha1).digest()
+    o = h[-1] & 15
+    return f"{(_struct.unpack('>I', h[o:o + 4])[0] & 0x7fffffff) % 1000000:06d}"
+
+
+def current_totp(seed_b32: str, at: float | None = None) -> str:
+    """The code an authenticator app would show right now (tests / tooling)."""
+    return _totp(seed_b32, int((_time.time() if at is None else at) // 30))
+
+
+def _verify_mfa_codes(device: dict, code1, code2, window: int) -> None:
+    c1, c2 = str(code1 or "").strip(), str(code2 or "").strip()
+    if not (len(c1) == 6 and c1.isdigit() and len(c2) == 6 and c2.isdigit()):
+        raise IamError("InvalidAuthenticationCode", "Authentication codes must be two consecutive 6-digit codes.", 403)
+    now = int(_time.time() // 30)
+    for s in range(now - window, now + window + 1):
+        if _totp(device["base32_seed"], s) == c1 and _totp(device["base32_seed"], s + 1) == c2:
+            return
+    raise IamError("InvalidAuthenticationCode", "The authentication codes do not match this device's current "
+                   "one-time passwords. Enter two consecutive codes from the virtual MFA application.", 403)
+
+
+# ── account password policy enforcement ────────────────────────────────────
+def _hash_pw(salt: str, pw: str) -> str:
+    return hashlib.sha256((salt + pw).encode()).hexdigest()
+
+
+def _check_password_policy(store, pw) -> None:
+    pw = str(pw or "")
+    pol = store.password_policy
+    problems = []
+    if pol:
+        if len(pw) < int(pol.get("MinimumPasswordLength", 8)):
+            problems.append(f"at least {pol.get('MinimumPasswordLength', 8)} characters")
+        if pol.get("RequireSymbols") and not _re.search(r"[^A-Za-z0-9]", pw):
+            problems.append("a non-alphanumeric character")
+        if pol.get("RequireNumbers") and not _re.search(r"[0-9]", pw):
+            problems.append("a number")
+        if pol.get("RequireUppercaseCharacters") and not _re.search(r"[A-Z]", pw):
+            problems.append("an uppercase letter")
+        if pol.get("RequireLowercaseCharacters") and not _re.search(r"[a-z]", pw):
+            problems.append("a lowercase letter")
+    else:   # the IAM default policy: 8+ characters, at least 3 of the 4 character types
+        kinds = sum(bool(_re.search(p, pw)) for p in (r"[A-Z]", r"[a-z]", r"[0-9]", r"[^A-Za-z0-9]"))
+        if len(pw) < 8:
+            problems.append("at least 8 characters")
+        if kinds < 3:
+            problems.append("at least three of: uppercase, lowercase, number, non-alphanumeric")
+    if problems:
+        raise IamError("PasswordPolicyViolation", "Password does not conform to the account password policy. "
+                       "It must contain " + "; ".join(problems) + ".", 400)
+
+
+def _set_password(store, u: dict, pw: str, enforce_reuse: bool) -> None:
+    _check_password_policy(store, pw)
+    lp = u["login_profile"]
+    n = int((store.password_policy or {}).get("PasswordReusePrevention", 0))
+    hist = lp.get("history") or []
+    if enforce_reuse and n and any(_hash_pw(lp["salt"], pw) == h for h in hist[-n:]):
+        raise IamError("PasswordPolicyViolation", f"Password cannot match any of your last {n} passwords.", 400)
+    lp["salt"] = lp.get("salt") or uuid.uuid4().hex[:16]
+    h = _hash_pw(lp["salt"], pw)
+    lp["pw_hash"] = h
+    lp["history"] = (hist + [h])[-24:]
+    lp["password_last_changed"] = _now()
+
+
+def _create_login_profile(store, params):
+    u = _require_user(store, str(params.get("UserName", "")).strip())
+    if u["login_profile"]:
+        raise IamError("EntityAlreadyExists", "Login profile already exists.", 409)
+    pw = params.get("Password")
+    if not pw:
+        raise IamError("ValidationError", "Password is required.", 400)
+    _check_password_policy(store, pw)
+    u["login_profile"] = {"created": _now(),
+                          "password_reset_required": str(params.get("PasswordResetRequired", "false")).lower() == "true"}
+    _set_password(store, u, pw, enforce_reuse=False)
+    store.persist()
+    return _envelope("CreateLoginProfile", _login_profile_xml(u))
+
+
+def _login_profile_xml(u: dict) -> str:
+    return ("<LoginProfile>" + _el("UserName", u["user_name"]) + _el("CreateDate", u["login_profile"]["created"])
+            + _el("PasswordResetRequired", str(u["login_profile"]["password_reset_required"]).lower()) + "</LoginProfile>")
+
+
+def _get_login_profile(store, params):
+    u = _require_user(store, str(params.get("UserName", "")).strip())
+    if not u["login_profile"]:
+        raise IamError("NoSuchEntity", "Login profile not found.", 404)
+    return _envelope("GetLoginProfile", _login_profile_xml(u))
+
+
+def _update_login_profile(store, params):
+    u = _require_user(store, str(params.get("UserName", "")).strip())
+    if not u["login_profile"]:
+        raise IamError("NoSuchEntity", "Login profile not found.", 404)
+    if params.get("Password"):
+        _set_password(store, u, params["Password"], enforce_reuse=True)
+    if "PasswordResetRequired" in params:
+        u["login_profile"]["password_reset_required"] = str(params["PasswordResetRequired"]).lower() == "true"
+    store.persist()
+    return _envelope("UpdateLoginProfile")
+
+
+def _change_password(store, params):
+    """ChangePassword acts on the CALLING IAM user: requests signed with that user's own access key
+    (the wire router injects __caller). The console operator has no IAM user identity to change."""
+    name = str(params.get("__caller") or "").strip()
+    if not name or name not in store.users:
+        raise IamError("InvalidUserType", "ChangePassword must be called with an IAM user's own access key "
+                       "(the console operator session is not an IAM user).", 400)
+    u = store.users[name]
+    if not u.get("login_profile"):
+        raise IamError("NoSuchEntity", "Login profile not found.", 404)
+    pol = store.password_policy
+    if pol is not None and not pol.get("AllowUsersToChangePassword"):
+        raise IamError("AccessDenied", "The account password policy does not allow users to change their own password.", 403)
+    lp = u["login_profile"]
+    if _hash_pw(lp.get("salt", ""), str(params.get("OldPassword", ""))) != lp.get("pw_hash"):
+        raise IamError("InvalidUserType", "The old password is incorrect.", 400)
+    _set_password(store, u, params.get("NewPassword"), enforce_reuse=True)
+    lp["password_reset_required"] = False
+    store.persist()
+    return _envelope("ChangePassword")
+
+
+# ── root principal (MFA + access keys) ─────────────────────────────────────
+def _is_root(name) -> bool:
+    return str(name or "").strip() in _ROOT_ALIASES
+
+
+def _root_mfa_serial(store):
+    for d in store.virtual_mfa_devices.values():
+        if d.get("user_name") == ROOT_USER:
+            return d["serial_number"]
+    return None
+
+
+def _enable_mfa_device(store, params):
+    uname = str(params.get("UserName", "")).strip()
+    root = _is_root(uname) or uname.lower() == "root"
+    u = {"user_name": ROOT_USER} if root else _require_user(store, uname)
+    d = _require_virtual_mfa_device(store, params.get("SerialNumber"))
+    if d.get("user_name"):
+        raise IamError("EntityAlreadyExists", "MFA device is already assigned to a user.", 409)
+    if root and _root_mfa_serial(store):
+        raise IamError("EntityAlreadyExists", "The root user already has an MFA device.", 409)
+    _verify_mfa_codes(d, params.get("AuthenticationCode1"), params.get("AuthenticationCode2"), 3)
+    d["user_name"] = u["user_name"]
+    d["enable_date"] = _now()
+    store.persist()
+    return _envelope("EnableMFADevice")
+
+
+def _deactivate_mfa_device(store, params):
+    uname = str(params.get("UserName", "")).strip()
+    name = ROOT_USER if (_is_root(uname) or uname.lower() == "root") else _require_user(store, uname)["user_name"]
+    d = _require_virtual_mfa_device(store, params.get("SerialNumber"))
+    if d.get("user_name") != name:
+        raise IamError("NoSuchEntity", "MFA device is not assigned to this user.", 404)
+    d["user_name"] = None
+    d["enable_date"] = None
+    store.persist()
+    return _envelope("DeactivateMFADevice")
+
+
+def _resync_mfa_device(store, params):
+    uname = str(params.get("UserName", "")).strip()
+    name = ROOT_USER if (_is_root(uname) or uname.lower() == "root") else _require_user(store, uname)["user_name"]
+    d = _require_virtual_mfa_device(store, params.get("SerialNumber"))
+    if d.get("user_name") != name:
+        raise IamError("NoSuchEntity", "MFA device is not assigned to this user.", 404)
+    _verify_mfa_codes(d, params.get("AuthenticationCode1"), params.get("AuthenticationCode2"), 20)
+    return _envelope("ResyncMFADevice")
+
+
+def _list_mfa_devices(store, params):
+    uname = str(params.get("UserName", "")).strip()
+    name = ROOT_USER if (uname.lower() == "root" or uname == ROOT_USER) else _require_user(store, uname)["user_name"]
+    items = [("<member>" + _el("UserName", name) + _el("SerialNumber", d["serial_number"])
+              + _el("EnableDate", d["enable_date"]) + "</member>")
+             for d in store.virtual_mfa_devices.values() if d.get("user_name") == name]
+    return _envelope("ListMFADevices", f"<MFADevices>{''.join(items)}</MFADevices>")
+
+
+def _key_owner(store, params) -> str:
+    """Access-key operations default to the CALLER when UserName is omitted (as real IAM does);
+    with no IAM-user caller the target is the account root user."""
+    name = str(params.get("UserName", "")).strip()
+    if not name:
+        name = str(params.get("__caller") or "").strip() or ROOT_USER
+    if name == ROOT_USER or name.lower() == "root":
+        return ROOT_USER
+    return _require_user(store, name)["user_name"]
+
+
+def _create_access_key(store, params):
+    owner = _key_owner(store, params)
+    if sum(1 for k in store.access_keys.values() if k["user_name"] == owner) >= 2:
+        raise IamError("LimitExceeded", "Cannot exceed quota for AccessKeysPerUser: 2", 409)
+    akid = "AKIA" + uuid.uuid4().hex[:16].upper()
+    secret = uuid.uuid4().hex + uuid.uuid4().hex[:8]
+    store.access_keys[akid] = {"access_key_id": akid, "user_name": owner,
+                              "status": "Active", "secret_access_key": secret, "created": _now()}
+    store.persist()
+    inner = ("<AccessKey>" + _el("UserName", owner) + _el("AccessKeyId", akid)
+             + _el("Status", "Active") + _el("SecretAccessKey", secret)
+             + _el("CreateDate", store.access_keys[akid]["created"]) + "</AccessKey>")
+    return _envelope("CreateAccessKey", inner)
+
+
+def _list_access_keys(store, params):
+    name = _key_owner(store, params)
+    items = []
+    for k in store.access_keys.values():
+        if k["user_name"] == name:
+            items.append("<member>" + _el("UserName", name) + _el("AccessKeyId", k["access_key_id"])
+                         + _el("Status", k["status"]) + _el("CreateDate", k["created"]) + "</member>")
+    return _envelope("ListAccessKeys", f"<AccessKeyMetadata>{''.join(items)}</AccessKeyMetadata>")
+
+
+def _get_access_key_last_used(store, params):
+    k = _require_access_key(store, str(params.get("AccessKeyId", "")).strip())
+    lu = k.get("last_used")
+    inner = _el("UserName", k["user_name"]) + "<AccessKeyLastUsed>"
+    if lu:
+        inner += _el("LastUsedDate", lu["time"]) + _el("ServiceName", lu["service"]) + _el("Region", lu["region"])
+    else:
+        inner += _el("ServiceName", "N/A") + _el("Region", "N/A")
+    return _envelope("GetAccessKeyLastUsed", inner + "</AccessKeyLastUsed>")
+
+
+# ── SSH public keys (CodeCommit) ───────────────────────────────────────────
+def _ssh_fingerprint(body: str) -> str:
+    parts = body.split()
+    if len(parts) < 2 or not parts[0].startswith(("ssh-", "ecdsa-")):
+        raise IamError("InvalidPublicKey", "The SSH public key is malformed (expected 'ssh-rsa AAAA… [comment]').", 400)
+    try:
+        blob = base64.b64decode(parts[1], validate=True)
+    except Exception:
+        raise IamError("InvalidPublicKey", "The SSH public key is malformed (key data is not valid base64).", 400)
+    d = hashlib.md5(blob).hexdigest()
+    return ":".join(d[i:i + 2] for i in range(0, 32, 2))
+
+
+def _ssh_xml(k: dict, full: bool) -> str:
+    inner = _el("UserName", k["user_name"]) + _el("SSHPublicKeyId", k["id"])
+    if full:
+        inner += _el("Fingerprint", k["fingerprint"]) + _el("SSHPublicKeyBody", k["body"])
+    return inner + _el("Status", k["status"]) + _el("UploadDate", k["uploaded"])
+
+
+def _require_ssh(store, params):
+    k = _x(store)["ssh_keys"].get(str(params.get("SSHPublicKeyId", "")).strip())
+    if not k or k["user_name"] != str(params.get("UserName", "")).strip():
+        raise IamError("NoSuchEntity", "The SSH public key does not exist.", 404)
+    return k
+
+
+def _upload_ssh_public_key(store, params):
+    u = _require_user(store, str(params.get("UserName", "")).strip())
+    body = str(params.get("SSHPublicKeyBody", "")).strip()
+    fp = _ssh_fingerprint(body)
+    keys = _x(store)["ssh_keys"]
+    mine = [k for k in keys.values() if k["user_name"] == u["user_name"]]
+    if len(mine) >= 5:
+        raise IamError("LimitExceeded", "Cannot exceed quota for SSHPublicKeysPerUser: 5", 409)
+    if any(k["fingerprint"] == fp for k in mine):
+        raise IamError("DuplicateSSHPublicKey", "The SSH public key is already associated with the specified IAM user.", 400)
+    kid = "APKA" + uuid.uuid4().hex[:17].upper()
+    keys[kid] = {"id": kid, "user_name": u["user_name"], "body": body, "fingerprint": fp, "status": "Active", "uploaded": _now()}
+    store.persist()
+    return _envelope("UploadSSHPublicKey", f"<SSHPublicKey>{_ssh_xml(keys[kid], True)}</SSHPublicKey>")
+
+
+def _get_ssh_public_key(store, params):
+    k = _require_ssh(store, params)
+    if str(params.get("Encoding", "")).strip() not in ("SSH", "PEM"):
+        raise IamError("ValidationError", "Encoding must be SSH or PEM.", 400)
+    return _envelope("GetSSHPublicKey", f"<SSHPublicKey>{_ssh_xml(k, True)}</SSHPublicKey>")
+
+
+def _list_ssh_public_keys(store, params):
+    name = str(params.get("UserName", "")).strip() or None
+    if name:
+        _require_user(store, name)
+    items = "".join(f"<member>{_ssh_xml(k, False)}</member>" for k in _x(store)["ssh_keys"].values()
+                    if not name or k["user_name"] == name)
+    return _envelope("ListSSHPublicKeys", f"<SSHPublicKeys>{items}</SSHPublicKeys>")
+
+
+def _update_ssh_public_key(store, params):
+    k = _require_ssh(store, params)
+    st = str(params.get("Status", "")).strip()
+    if st not in ("Active", "Inactive"):
         raise IamError("ValidationError", "Status must be Active or Inactive.", 400)
-    k["status"] = params["Status"]
+    k["status"] = st
     store.persist()
-    return _envelope("UpdateAccessKey")
+    return _envelope("UpdateSSHPublicKey")
+
+
+def _delete_ssh_public_key(store, params):
+    k = _require_ssh(store, params)
+    del _x(store)["ssh_keys"][k["id"]]
+    store.persist()
+    return _envelope("DeleteSSHPublicKey")
+
+
+# ── service-specific credentials (CodeCommit HTTPS Git, Keyspaces, Bedrock API keys) ──
+_SERVICE_CRED_SERVICES = ("codecommit.amazonaws.com", "cassandra.amazonaws.com", "bedrock.amazonaws.com")
+
+
+def _svc_cred_xml(c: dict, with_password: bool) -> str:
+    inner = (_el("CreateDate", c["created"]) + _el("ServiceName", c["service"]) + _el("ServiceUserName", c["service_user"]))
+    if with_password:
+        inner += _el("ServicePassword", c["password"])
+    return inner + _el("ServiceSpecificCredentialId", c["id"]) + _el("UserName", c["user_name"]) + _el("Status", c["status"])
+
+
+def _require_svc_cred(store, params):
+    c = _x(store)["service_creds"].get(str(params.get("ServiceSpecificCredentialId", "")).strip())
+    uname = str(params.get("UserName", "")).strip()
+    if not c or (uname and c["user_name"] != uname):
+        raise IamError("NoSuchEntity", "The service-specific credential does not exist.", 404)
+    return c
+
+
+def _create_service_specific_credential(store, params):
+    u = _require_user(store, str(params.get("UserName", "")).strip())
+    svc = str(params.get("ServiceName", "")).strip()
+    if svc not in _SERVICE_CRED_SERVICES:
+        raise IamError("NoSuchEntity", f"ServiceName must be one of {', '.join(_SERVICE_CRED_SERVICES)}.", 404)
+    creds = _x(store)["service_creds"]
+    if sum(1 for c in creds.values() if c["user_name"] == u["user_name"] and c["service"] == svc) >= 2:
+        raise IamError("LimitExceeded", "Cannot exceed quota for ServiceSpecificCredentialsPerUser: 2", 409)
+    cid = "ACCA" + uuid.uuid4().hex[:17].upper()
+    creds[cid] = {"id": cid, "user_name": u["user_name"], "service": svc, "status": "Active", "created": _now(),
+                  "service_user": f"{u['user_name']}-at-{store.account_id}", "password": base64.b64encode(uuid.uuid4().bytes + uuid.uuid4().bytes[:8]).decode()}
+    store.persist()
+    return _envelope("CreateServiceSpecificCredential", f"<ServiceSpecificCredential>{_svc_cred_xml(creds[cid], True)}</ServiceSpecificCredential>")
+
+
+def _list_service_specific_credentials(store, params):
+    name = str(params.get("UserName", "")).strip() or None
+    if name:
+        _require_user(store, name)
+    svc = str(params.get("ServiceName", "")).strip() or None
+    items = "".join(f"<member>{_svc_cred_xml(c, False)}</member>" for c in _x(store)["service_creds"].values()
+                    if (not name or c["user_name"] == name) and (not svc or c["service"] == svc))
+    return _envelope("ListServiceSpecificCredentials", f"<ServiceSpecificCredentials>{items}</ServiceSpecificCredentials>")
+
+
+def _reset_service_specific_credential(store, params):
+    c = _require_svc_cred(store, params)
+    c["password"] = base64.b64encode(uuid.uuid4().bytes + uuid.uuid4().bytes[:8]).decode()
+    store.persist()
+    return _envelope("ResetServiceSpecificCredential", f"<ServiceSpecificCredential>{_svc_cred_xml(c, True)}</ServiceSpecificCredential>")
+
+
+def _update_service_specific_credential(store, params):
+    c = _require_svc_cred(store, params)
+    st = str(params.get("Status", "")).strip()
+    if st not in ("Active", "Inactive"):
+        raise IamError("ValidationError", "Status must be Active or Inactive.", 400)
+    c["status"] = st
+    store.persist()
+    return _envelope("UpdateServiceSpecificCredential")
+
+
+def _delete_service_specific_credential(store, params):
+    c = _require_svc_cred(store, params)
+    del _x(store)["service_creds"][c["id"]]
+    store.persist()
+    return _envelope("DeleteServiceSpecificCredential")
+
+
+# ── X.509 certificates: user signing certificates + server certificates ────
+def _pem_der(text: str, label: str = "CERTIFICATE") -> bytes:
+    m = _re.search(r"-----BEGIN %s-----(.+?)-----END %s-----" % (label, label), str(text or ""), _re.S)
+    if not m:
+        raise IamError("MalformedCertificate", f"The certificate is not a well-formed PEM {label} block.", 400)
+    try:
+        return base64.b64decode("".join(m.group(1).split()), validate=True)
+    except Exception:
+        raise IamError("MalformedCertificate", "The certificate body is not valid base64.", 400)
+
+
+def _der_read(b: bytes, i: int):
+    tag = b[i]
+    n = b[i + 1]
+    i += 2
+    if n & 0x80:
+        k = n & 0x7F
+        n = int.from_bytes(b[i:i + k], "big")
+        i += k
+    return tag, i, n   # tag, content start, content length
+
+
+def _cert_not_after(der: bytes):
+    """notAfter of an X.509 certificate (minimal DER walk); None if it doesn't parse."""
+    try:
+        _, i, _ = _der_read(der, 0)                 # Certificate
+        _, i, _ = _der_read(der, i)                 # TBSCertificate
+        tag, j, n = _der_read(der, i)
+        if tag == 0xA0:                             # [0] version
+            i = j + n
+        for _skip in range(3):                      # serial, signature alg, issuer
+            _, j, n = _der_read(der, i)
+            i = j + n
+        _, i, _ = _der_read(der, i)                 # Validity
+        _, j, n = _der_read(der, i)                 # notBefore
+        i = j + n
+        tag, j, n = _der_read(der, i)               # notAfter
+        t = der[j:j + n].decode()
+        fmt = "%y%m%d%H%M%SZ" if tag == 0x17 else "%Y%m%d%H%M%SZ"
+        return datetime.strptime(t, fmt).replace(tzinfo=timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+    except Exception:
+        return None
+
+
+def _cert_xml(c: dict, full: bool) -> str:
+    inner = _el("UserName", c["user_name"]) + _el("CertificateId", c["id"])
+    if full:
+        inner += _el("CertificateBody", c["body"])
+    return inner + _el("Status", c["status"]) + _el("UploadDate", c["uploaded"])
+
+
+def _require_cert(store, params):
+    c = _x(store)["signing_certs"].get(str(params.get("CertificateId", "")).strip())
+    uname = str(params.get("UserName", "")).strip()
+    if not c or (uname and c["user_name"] != uname):
+        raise IamError("NoSuchEntity", "The signing certificate does not exist.", 404)
+    return c
+
+
+def _upload_signing_certificate(store, params):
+    u = _require_user(store, str(params.get("UserName", "")).strip())
+    body = str(params.get("CertificateBody", "")).strip()
+    _pem_der(body)
+    certs = _x(store)["signing_certs"]
+    if sum(1 for c in certs.values() if c["user_name"] == u["user_name"]) >= 2:
+        raise IamError("LimitExceeded", "Cannot exceed quota for SigningCertificatesPerUser: 2", 409)
+    if any(c["body"] == body for c in certs.values()):
+        raise IamError("DuplicateCertificate", "The certificate is already uploaded.", 409)
+    cid = uuid.uuid4().hex.upper()[:24] + uuid.uuid4().hex.upper()[:8]
+    certs[cid] = {"id": cid, "user_name": u["user_name"], "body": body, "status": "Active", "uploaded": _now()}
+    store.persist()
+    return _envelope("UploadSigningCertificate", f"<Certificate>{_cert_xml(certs[cid], True)}</Certificate>")
+
+
+def _list_signing_certificates(store, params):
+    name = _key_owner(store, params) if (params.get("UserName") or params.get("__caller")) else None
+    items = "".join(f"<member>{_cert_xml(c, True)}</member>" for c in _x(store)["signing_certs"].values()
+                    if not name or c["user_name"] == name)
+    return _envelope("ListSigningCertificates", f"<Certificates>{items}</Certificates>")
+
+
+def _update_signing_certificate(store, params):
+    c = _require_cert(store, params)
+    st = str(params.get("Status", "")).strip()
+    if st not in ("Active", "Inactive"):
+        raise IamError("ValidationError", "Status must be Active or Inactive.", 400)
+    c["status"] = st
+    store.persist()
+    return _envelope("UpdateSigningCertificate")
+
+
+def _delete_signing_certificate(store, params):
+    c = _require_cert(store, params)
+    del _x(store)["signing_certs"][c["id"]]
+    store.persist()
+    return _envelope("DeleteSigningCertificate")
+
+
+def _sc_meta_xml(store, c: dict) -> str:
+    return ("<ServerCertificateMetadata>" + _el("Path", c["path"]) + _el("ServerCertificateName", c["name"])
+            + _el("ServerCertificateId", c["id"])
+            + _el("Arn", f"arn:aws:iam::{store.account_id}:server-certificate{c['path']}{c['name']}")
+            + _el("UploadDate", c["uploaded"]) + _el("Expiration", c["expiration"]) + "</ServerCertificateMetadata>")
+
+
+def _require_server_cert(store, name):
+    c = _x(store)["server_certs"].get(str(name or "").strip())
+    if not c:
+        raise IamError("NoSuchEntity", f"The Server Certificate with name {name} cannot be found.", 404)
+    return c
+
+
+def _upload_server_certificate(store, params):
+    name = str(params.get("ServerCertificateName", "")).strip()
+    if not name:
+        raise IamError("ValidationError", "ServerCertificateName is required.", 400)
+    cert_body = str(params.get("CertificateBody", ""))
+    der = _pem_der(cert_body)
+    if "PRIVATE KEY" not in str(params.get("PrivateKey", "")):
+        raise IamError("MalformedCertificate", "The private key is not a well-formed PEM private key block.", 400)
+    certs = _x(store)["server_certs"]
+    if name in certs:
+        raise IamError("EntityAlreadyExists", f"The Server Certificate with name {name} already exists.", 409)
+    path = str(params.get("Path", "/") or "/")
+    now = _now()
+    certs[name] = {"name": name, "path": path, "id": "ASCA" + uuid.uuid4().hex[:17].upper(), "body": cert_body.strip(),
+                   "chain": str(params.get("CertificateChain", "")).strip(), "uploaded": now,
+                   "expiration": _cert_not_after(der) or now}
+    store.persist()
+    return _envelope("UploadServerCertificate", _sc_meta_xml(store, certs[name]))
+
+
+def _get_server_certificate(store, params):
+    c = _require_server_cert(store, params.get("ServerCertificateName"))
+    inner = ("<ServerCertificate>" + _sc_meta_xml(store, c) + _el("CertificateBody", c["body"])
+             + (_el("CertificateChain", c["chain"]) if c["chain"] else "") + "</ServerCertificate>")
+    return _envelope("GetServerCertificate", inner)
+
+
+def _list_server_certificates(store, params):
+    prefix = str(params.get("PathPrefix", "/") or "/")
+    items = "".join(f"<member>{_sc_meta_xml(store, c)[len('<ServerCertificateMetadata>'):-len('</ServerCertificateMetadata>')]}</member>"
+                    for c in sorted(_x(store)["server_certs"].values(), key=lambda c: c["name"]) if c["path"].startswith(prefix))
+    return _envelope("ListServerCertificates", f"<ServerCertificateMetadataList>{items}</ServerCertificateMetadataList>")
+
+
+def _update_server_certificate(store, params):
+    c = _require_server_cert(store, params.get("ServerCertificateName"))
+    certs = _x(store)["server_certs"]
+    new = str(params.get("NewServerCertificateName", "")).strip()
+    if new and new != c["name"]:
+        if new in certs:
+            raise IamError("EntityAlreadyExists", f"The Server Certificate with name {new} already exists.", 409)
+        del certs[c["name"]]
+        c["name"] = new
+        certs[new] = c
+    if params.get("NewPath"):
+        c["path"] = str(params["NewPath"])
+    store.persist()
+    return _envelope("UpdateServerCertificate")
+
+
+def _delete_server_certificate(store, params):
+    c = _require_server_cert(store, params.get("ServerCertificateName"))
+    del _x(store)["server_certs"][c["name"]]
+    store.persist()
+    return _envelope("DeleteServerCertificate")
+
+
+# ── account summary + security recommendations (computed from real state) ──
+def _sum_stats(store) -> dict:
+    x = _x(store)
+    mfa_in_use = sum(1 for d in store.virtual_mfa_devices.values() if d.get("user_name"))
+    root_keys = sum(1 for k in store.access_keys.values() if k["user_name"] == ROOT_USER)
+    return {
+        "Users": len(store.users), "UsersQuota": 5000, "Groups": len(store.groups), "GroupsQuota": 300,
+        "ServerCertificates": len(x["server_certs"]), "ServerCertificatesQuota": 20,
+        "UserPolicySizeQuota": 2048, "GroupPolicySizeQuota": 5120, "GroupsPerUserQuota": 10,
+        "SigningCertificatesPerUserQuota": 2, "AccessKeysPerUserQuota": 2,
+        "MFADevices": len(store.virtual_mfa_devices), "MFADevicesInUse": mfa_in_use,
+        "AccountMFAEnabled": 1 if _root_mfa_serial(store) else 0,
+        "AccountAccessKeysPresent": root_keys,
+        "AccountSigningCertificatesPresent": sum(1 for c in x["signing_certs"].values() if c["user_name"] == ROOT_USER),
+        "AttachedPoliciesPerGroupQuota": 10, "AttachedPoliciesPerRoleQuota": 10, "AttachedPoliciesPerUserQuota": 10,
+        "Policies": sum(1 for p in store.policies.values()), "PoliciesQuota": 1500, "PolicySizeQuota": 6144,
+        "PolicyVersionsInUse": sum(len(p.get("versions") or {"v1": 1}) for p in store.policies.values()),
+        "PolicyVersionsInUseQuota": 10000, "VersionsPerPolicyQuota": 5, "GlobalEndpointTokenVersion": 2 if x.get("sts_token_version") == "v2Token" else 1,
+        "Roles": len(store.roles), "RolesQuota": 1000, "RolePolicySizeQuota": 10240,
+        "InstanceProfiles": len(_ip_all(store)), "InstanceProfilesQuota": 1000,
+    }
+
+
+def _set_sts_preferences(store, params):
+    v = str(params.get("GlobalEndpointTokenVersion", "")).strip()
+    if v not in ("v1Token", "v2Token"):
+        raise IamError("ValidationError", "GlobalEndpointTokenVersion must be v1Token or v2Token.", 400)
+    _x(store)["sts_token_version"] = v
+    store.persist()
+    return _envelope("SetSecurityTokenServicePreferences")
+
+
+def _get_account_summary(store, params):
+    entries = "".join("<entry>" + _el("key", k) + _el("value", v) + "</entry>" for k, v in _sum_stats(store).items())
+    return _envelope("GetAccountSummary", f"<SummaryMap>{entries}</SummaryMap>")
+
+
+def _key_last_used_time(k: dict):
+    return (k.get("last_used") or {}).get("time")
+
+
+def _recommendations(store) -> list[dict]:
+    recs = []
+
+    def add(rid, title, severity, resources, fix):
+        recs.append({"id": rid, "title": title, "severity": severity, "resources": resources, "fix": fix})
+
+    if not _root_mfa_serial(store):
+        add("root-mfa", "Add MFA for the root user", "High", [f"arn:aws:iam::{store.account_id}:root"],
+            "Register a virtual MFA device for the root user under My security credentials.")
+    root_keys = [k["access_key_id"] for k in store.access_keys.values() if k["user_name"] == ROOT_USER]
+    if root_keys:
+        add("root-keys", "Deactivate or delete access keys for the root user", "High", root_keys,
+            "Create IAM users or roles with scoped permissions and delete the root access keys.")
+    no_mfa = [u["arn"] for n, u in store.users.items() if u.get("login_profile") and not _has_mfa(store, n)]
+    if no_mfa:
+        add("user-mfa", "Enable MFA for IAM users with a console password", "Medium", no_mfa,
+            "Assign a virtual MFA device on each user's Security credentials tab.")
+    old = [k["access_key_id"] for k in store.access_keys.values()
+           if k["user_name"] != ROOT_USER and k["status"] == "Active" and _age_days(k["created"]) >= 90]
+    if old:
+        add("key-rotation", "Rotate access keys older than 90 days", "Medium", old,
+            "Create a second key, move workloads to it, then deactivate and delete the old key.")
+    unused = [k["access_key_id"] for k in store.access_keys.values()
+              if k["status"] == "Active" and not _key_last_used_time(k) and _age_days(k["created"]) >= 45]
+    if unused:
+        add("unused-keys", "Delete unused access keys (never used, 45+ days old)", "Low", unused,
+            "Keys that have never signed a request should be deleted.")
+    if store.password_policy is None and any(u.get("login_profile") for u in store.users.values()):
+        add("password-policy", "Set an account password policy", "Low", [f"arn:aws:iam::{store.account_id}:account"],
+            "Account settings > Password policy: require length, character types and rotation.")
+    elif store.password_policy and int(store.password_policy.get("MinimumPasswordLength", 8)) < 14:
+        add("password-length", "Raise the minimum password length to 14", "Low", [f"arn:aws:iam::{store.account_id}:account"],
+            "Account settings > Password policy.")
+    return recs
+
+
+def _get_security_recommendations(store, params):
+    items = "".join("<member>" + _el("Id", r["id"]) + _el("Title", r["title"]) + _el("Severity", r["severity"])
+                    + _el("Remediation", r["fix"]) + "<Resources>" + "".join(_el("member", x) for x in r["resources"])
+                    + "</Resources></member>" for r in _recommendations(store))
+    return _envelope("GetSecurityRecommendations", f"<Recommendations>{items}</Recommendations>")
+
+
+# ── IAM admin-action event log (Vyomi-only) ────────────────────────────────
+_MUTATING = ("Create", "Delete", "Update", "Put", "Attach", "Detach", "Add", "Remove", "Tag", "Untag", "Enable",
+             "Deactivate", "Resync", "Upload", "Reset", "Set", "Change", "Request")
+_EVENT_CAP = 2000
+_TARGET_KEYS = ("UserName", "RoleName", "GroupName", "PolicyArn", "PolicyName", "SerialNumber", "AccessKeyId",
+                "ServerCertificateName", "AccountAlias", "VirtualMFADeviceName", "AnalyzerName", "ProviderName")
+
+
+def _record_event(store, action: str, params: dict, ok: bool, code: str = "") -> None:
+    if not action.startswith(_MUTATING):
+        return
+    target = next((str(params[k]) for k in _TARGET_KEYS if params.get(k)), "")
+    ev = _x(store)["events"]
+    ev.append({"time": _now(), "action": action, "principal": str(params.get("__caller") or "operator"),
+               "resource": target, "status": "Success" if ok else (code or "Failed")})
+    if len(ev) > _EVENT_CAP:
+        del ev[: len(ev) - _EVENT_CAP]
+    store.persist()
+
+
+def _list_iam_events(store, params):
+    try:
+        limit = max(1, min(500, int(params.get("MaxItems", 100))))
+    except Exception:
+        limit = 100
+    ev = list(reversed(_x(store)["events"]))
+    name = str(params.get("EventName", "")).strip()
+    if name:
+        ev = [e for e in ev if e["action"] == name]
+    items = "".join("<member>" + _el("EventTime", e["time"]) + _el("EventName", e["action"]) + _el("Principal", e["principal"])
+                    + _el("Resource", e["resource"]) + _el("Status", e["status"]) + "</member>" for e in ev[:limit])
+    return _envelope("ListIamEvents", f"<Events>{items}</Events><TotalEvents>{len(ev)}</TotalEvents>")
+
+
+# ── credential report (full AWS column set, with real last-used) ───────────
+_CRED_COLS = ("user,arn,user_creation_time,password_enabled,password_last_used,password_last_changed,"
+              "password_next_rotation,mfa_active,access_key_1_active,access_key_1_last_rotated,"
+              "access_key_1_last_used_date,access_key_1_last_used_region,access_key_1_last_used_service,"
+              "access_key_2_active,access_key_2_last_rotated,access_key_2_last_used_date,"
+              "access_key_2_last_used_region,access_key_2_last_used_service,cert_1_active,cert_1_last_rotated,"
+              "cert_2_active,cert_2_last_rotated\n")
+
+
+def _credential_report_csv(store) -> str:
+    x = _x(store)
+
+    def key_cols(k):
+        if not k:
+            return ["false", "N/A", "N/A", "N/A", "N/A"]
+        lu = k.get("last_used") or {}
+        return ["true" if k["status"] == "Active" else "false", k["created"], lu.get("time", "N/A"),
+                lu.get("region", "N/A"), lu.get("service", "N/A")]
+
+    def cert_cols(c):
+        return ["true" if c["status"] == "Active" else "false", c["uploaded"]] if c else ["false", "N/A"]
+
+    def row(name, arn, created, pw, last_changed, next_rot, mfa, owner):
+        keys = [k for k in store.access_keys.values() if k["user_name"] == owner]
+        certs = [c for c in x["signing_certs"].values() if c["user_name"] == owner]
+        return ",".join([name, arn, created, pw, "N/A", last_changed, next_rot, mfa]
+                        + key_cols(keys[0] if keys else None) + key_cols(keys[1] if len(keys) > 1 else None)
+                        + cert_cols(certs[0] if certs else None) + cert_cols(certs[1] if len(certs) > 1 else None))
+
+    maxage = int((store.password_policy or {}).get("MaxPasswordAge", 0) or 0)
+    rows = []
+    for name in sorted(store.users):
+        u = store.users[name]
+        lp = u.get("login_profile")
+        changed = (lp.get("password_last_changed") or lp["created"]) if lp else "N/A"
+        nxt = "N/A"
+        if lp and maxage:
+            try:
+                t = datetime.strptime(changed, "%Y-%m-%dT%H:%M:%S.000Z").replace(tzinfo=timezone.utc)
+                nxt = (t + __import__("datetime").timedelta(days=maxage)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+            except Exception:
+                pass
+        rows.append(row(name, u["arn"], u["created"], "true" if lp else "false", changed, nxt,
+                        "true" if _has_mfa(store, name) else "false", name))
+    rows.insert(0, row("<root_account>", f"arn:aws:iam::{store.account_id}:root", x.get("root_created", "N/A"),
+                       "not_supported", "not_supported", "not_supported", "true" if _root_mfa_serial(store) else "false", ROOT_USER))
+    return _CRED_COLS + "\n".join(rows) + "\n"
+
+
+# `ChangePassword` etc. are reached through the same Query-protocol dispatcher.
+_OPS_NEW = {
+    "CreateLoginProfile": _create_login_profile, "GetLoginProfile": _get_login_profile,
+    "UpdateLoginProfile": _update_login_profile, "ChangePassword": _change_password,
+    "EnableMFADevice": _enable_mfa_device, "DeactivateMFADevice": _deactivate_mfa_device,
+    "ResyncMFADevice": _resync_mfa_device, "ListMFADevices": _list_mfa_devices,
+    "CreateAccessKey": _create_access_key, "ListAccessKeys": _list_access_keys,
+    "GetAccessKeyLastUsed": _get_access_key_last_used,
+    "UploadSSHPublicKey": _upload_ssh_public_key, "GetSSHPublicKey": _get_ssh_public_key,
+    "ListSSHPublicKeys": _list_ssh_public_keys, "UpdateSSHPublicKey": _update_ssh_public_key,
+    "DeleteSSHPublicKey": _delete_ssh_public_key,
+    "CreateServiceSpecificCredential": _create_service_specific_credential,
+    "ListServiceSpecificCredentials": _list_service_specific_credentials,
+    "ResetServiceSpecificCredential": _reset_service_specific_credential,
+    "UpdateServiceSpecificCredential": _update_service_specific_credential,
+    "DeleteServiceSpecificCredential": _delete_service_specific_credential,
+    "UploadSigningCertificate": _upload_signing_certificate, "ListSigningCertificates": _list_signing_certificates,
+    "UpdateSigningCertificate": _update_signing_certificate, "DeleteSigningCertificate": _delete_signing_certificate,
+    "UploadServerCertificate": _upload_server_certificate, "GetServerCertificate": _get_server_certificate,
+    "ListServerCertificates": _list_server_certificates, "UpdateServerCertificate": _update_server_certificate,
+    "DeleteServerCertificate": _delete_server_certificate,
+    "GetAccountSummary": _get_account_summary, "SetSecurityTokenServicePreferences": _set_sts_preferences,
+    "GetSecurityRecommendations": _get_security_recommendations, "ListIamEvents": _list_iam_events,
+}
 
 
 # ── native-wire dispatcher (Query-protocol Action → operation) ─────────────
 _OPS = {
     "CreateUser": _create_user, "GetUser": _get_user, "ListUsers": _list_users, "DeleteUser": _delete_user,
+    "UpdateUser": _update_user, "TagUser": _tag_user, "UntagUser": _untag_user, "ListUserTags": _list_user_tags,
+    "ListUserPolicies": _list_user_policies, "DeleteUserPolicy": _delete_user_policy,
+    "PutUserPermissionsBoundary": _put_user_permissions_boundary,
+    "DeleteUserPermissionsBoundary": _delete_user_permissions_boundary,
+    "CreateLoginProfile": _create_login_profile, "GetLoginProfile": _get_login_profile,
+    "UpdateLoginProfile": _update_login_profile, "DeleteLoginProfile": _delete_login_profile,
     "CreateRole": _create_role, "GetRole": _get_role, "ListRoles": _list_roles, "DeleteRole": _delete_role,
+    "UpdateRole": _update_role, "UpdateAssumeRolePolicy": _update_assume_role_policy,
+    "ListAttachedRolePolicies": _list_attached_role_policies, "DetachRolePolicy": _detach_role_policy,
+    "PutRolePolicy": _put_role_policy, "GetRolePolicy": _get_role_policy,
+    "ListRolePolicies": _list_role_policies, "DeleteRolePolicy": _delete_role_policy,
+    "TagRole": _tag_role, "UntagRole": _untag_role, "ListRoleTags": _list_role_tags,
+    "PutRolePermissionsBoundary": _put_role_permissions_boundary,
+    "DeleteRolePermissionsBoundary": _delete_role_permissions_boundary,
     "CreatePolicy": _create_policy, "GetPolicy": _get_policy, "ListPolicies": _list_policies, "DeletePolicy": _delete_policy,
+    "CreatePolicyVersion": _create_policy_version, "ListPolicyVersions": _list_policy_versions,
+    "GetPolicyVersion": _get_policy_version, "SetDefaultPolicyVersion": _set_default_policy_version,
+    "DeletePolicyVersion": _delete_policy_version, "ListEntitiesForPolicy": _list_entities_for_policy,
     "AttachUserPolicy": _attach_user_policy, "DetachUserPolicy": _detach_user_policy,
     "ListAttachedUserPolicies": _list_attached_user_policies, "AttachRolePolicy": _attach_role_policy,
     "PutUserPolicy": _put_user_policy, "GetUserPolicy": _get_user_policy,
-    "CreateGroup": _create_group, "AddUserToGroup": _add_user_to_group, "AttachGroupPolicy": _attach_group_policy,
+    "CreateGroup": _create_group, "ListGroups": _list_groups, "GetGroup": _get_group, "DeleteGroup": _delete_group,
+    "AddUserToGroup": _add_user_to_group, "RemoveUserFromGroup": _remove_user_from_group,
+    "ListGroupsForUser": _list_groups_for_user,
+    "AttachGroupPolicy": _attach_group_policy, "DetachGroupPolicy": _detach_group_policy,
+    "ListAttachedGroupPolicies": _list_attached_group_policies,
+    "PutGroupPolicy": _put_group_policy, "GetGroupPolicy": _get_group_policy,
+    "ListGroupPolicies": _list_group_policies, "DeleteGroupPolicy": _delete_group_policy,
     "CreateAccessKey": _create_access_key, "ListAccessKeys": _list_access_keys,
+    "UpdateAccessKey": _update_access_key, "DeleteAccessKey": _delete_access_key,
+    "CreateVirtualMFADevice": _create_virtual_mfa_device, "DeleteVirtualMFADevice": _delete_virtual_mfa_device,
+    "EnableMFADevice": _enable_mfa_device, "DeactivateMFADevice": _deactivate_mfa_device,
+    "ResyncMFADevice": _resync_mfa_device, "ListMFADevices": _list_mfa_devices,
+    "ListVirtualMFADevices": _list_virtual_mfa_devices,
+    "CreateSAMLProvider": _create_saml_provider, "GetSAMLProvider": _get_saml_provider,
+    "ListSAMLProviders": _list_saml_providers, "DeleteSAMLProvider": _delete_saml_provider,
+    "CreateOpenIDConnectProvider": _create_open_id_connect_provider,
+    "GetOpenIDConnectProvider": _get_open_id_connect_provider,
+    "ListOpenIDConnectProviders": _list_open_id_connect_providers,
+    "DeleteOpenIDConnectProvider": _delete_open_id_connect_provider,
+    "GetAccountPasswordPolicy": _get_account_password_policy,
+    "UpdateAccountPasswordPolicy": _update_account_password_policy,
+    "DeleteAccountPasswordPolicy": _delete_account_password_policy,
+    "ListAccountAliases": _list_account_aliases, "CreateAccountAlias": _create_account_alias,
+    "DeleteAccountAlias": _delete_account_alias,
+    "GenerateCredentialReport": _generate_credential_report, "GetCredentialReport": _get_credential_report,
     "SimulatePrincipalPolicy": _simulate_principal_policy, "SimulateCustomPolicy": _simulate_custom_policy,
-    "DeleteUserPolicy": _delete_user_policy, "ListUserPolicies": _list_user_policies,
-    "DeleteAccessKey": _delete_access_key, "UpdateAccessKey": _update_access_key,
+    # Vyomi-only (see the functions' docstrings above): SCP/RCP + account access requests.
+    "CreateOrgPolicy": _create_org_policy, "ListOrgPolicies": _list_org_policies,
+    "DescribeOrgPolicy": _describe_org_policy, "DeleteOrgPolicy": _delete_org_policy,
+    "RequestAccountAccess": _request_account_access,
+    "ListOrganizationsFeatures": _list_organizations_features,
+    "AddClientIDToOpenIDConnectProvider": _add_client_id, "RemoveClientIDFromOpenIDConnectProvider": _remove_client_id,
+    "UpdateOpenIDConnectProviderThumbprint": _update_oidc_thumbprint, "UpdateSAMLProvider": _update_saml_provider,
+    **_provider_tagging("OpenIDConnect"), **_provider_tagging("SAML"),
+    "GetAccountAuthorizationDetails": _get_account_authorization_details,
+    "GenerateServiceLastAccessedDetails": _generate_sla_v2, "GetServiceLastAccessedDetails": _get_sla_v2,
+    "GetServiceLastAccessedDetailsWithEntities": _get_sla_with_entities,
+    "GenerateOrganizationsAccessReport": _generate_organizations_access_report, "GetOrganizationsAccessReport": _get_organizations_access_report,
+    "ListPoliciesGrantingServiceAccess": _list_policies_granting_service_access,
+    "EnableOrganizationsRootCredentialsManagement": _set_org_feature("EnableOrganizationsRootCredentialsManagement", "RootCredentialsManagement", True),
+    "DisableOrganizationsRootCredentialsManagement": _set_org_feature("DisableOrganizationsRootCredentialsManagement", "RootCredentialsManagement", False),
+    "EnableOrganizationsRootSessions": _set_org_feature("EnableOrganizationsRootSessions", "RootSessions", True),
+    "DisableOrganizationsRootSessions": _set_org_feature("DisableOrganizationsRootSessions", "RootSessions", False),
+    "ListAccountAccessRequests": _list_account_access_requests,
+    # Real IAM API: service last-accessed data (see iam.last-accessed).
+    # Vyomi-only (see the functions' docstrings above): policy-from-activity generator,
+    # Access Analyzer, Roles Anywhere.
+    "GeneratePolicyFromActivity": _generate_policy_from_activity,
+    "CreateAnalyzer": _create_analyzer, "ListAnalyzers": _list_analyzers, "GetAnalyzer": _get_analyzer,
+    "UpdateAnalyzer": _update_analyzer, "DeleteAnalyzer": _delete_analyzer,
+    "ListFindings": _list_findings, "GetFinding": _get_finding, "UpdateFindingStatus": _update_finding_status,
+    "CreateTrustAnchor": _create_trust_anchor, "ListTrustAnchors": _list_trust_anchors,
+    "DeleteTrustAnchor": _delete_trust_anchor,
+    "CreateProfile": _create_profile, "ListProfiles": _list_profiles, "DeleteProfile": _delete_profile,
 }
+_OPS.update(_OPS_NEW)
 
 
-def dispatch(store: IamStore, params: dict | None = None) -> IamResponse:
+# ── instance profiles (EC2 "Create IAM profile"; ec2.iam-instance-profiles) ──────────────────
+# A profile holds at most one role. Real state in store.extras["instance_profiles"]; EC2's
+# RunInstances records the profile name/ARN on the instance (core/vpc_core) but does NOT mint
+# role credentials into the instance (there is no metadata service credential vending).
+def _ip_all(store) -> dict:
+    return _x(store).setdefault("instance_profiles", {})
+
+
+def _ip_arn(store, name, path="/"):
+    return f"arn:aws:iam::{store.account_id}:instance-profile{path}{name}"
+
+
+def _ip_xml(store, ip) -> str:
+    roles = "".join(_role_xml(store, store.roles[r]) .replace("<Role>", "<member>", 1).replace("</Role>", "</member>") for r in ip["roles"] if r in store.roles)
+    return ("<InstanceProfile>" + _el("Path", ip["path"]) + _el("InstanceProfileName", ip["name"]) + _el("InstanceProfileId", ip["id"])
+            + _el("Arn", ip["arn"]) + _el("CreateDate", ip["created"]) + f"<Roles>{roles}</Roles>" + _tags_xml(ip.get("tags") or {}) + "</InstanceProfile>")
+
+
+def _ip_need(store, name):
+    ip = _ip_all(store).get(str(name or "").strip())
+    if ip is None:
+        raise IamError("NoSuchEntity", f"Instance Profile {name} cannot be found.", 404)
+    return ip
+
+
+def _create_instance_profile(store, params):
+    name = str(params.get("InstanceProfileName", "")).strip()
+    if not name or not _re.fullmatch(r"[\w+=,.@-]{1,128}", name):
+        raise IamError("ValidationError", "InstanceProfileName must be 1-128 characters of [\\w+=,.@-].", 400)
+    if name in _ip_all(store):
+        raise IamError("EntityAlreadyExists", f"Instance Profile {name} already exists.", 409)
+    path = params.get("Path", "/") or "/"
+    ip = {"name": name, "id": _id("AIPA"), "path": path, "arn": _ip_arn(store, name, path), "created": _now(), "roles": [], "tags": _parse_tags(params)}
+    _ip_all(store)[name] = ip
+    store.persist()
+    return _envelope("CreateInstanceProfile", _ip_xml(store, ip))
+
+
+def _get_instance_profile(store, params):
+    return _envelope("GetInstanceProfile", _ip_xml(store, _ip_need(store, params.get("InstanceProfileName"))))
+
+
+def _list_instance_profiles(store, params):
+    pfx = params.get("PathPrefix", "/")
+    rows = [ip for ip in sorted(_ip_all(store).values(), key=lambda i: i["name"]) if ip["path"].startswith(pfx)]
+    return _envelope("ListInstanceProfiles", "<InstanceProfiles>" + "".join(_ip_xml(store, i).replace("<InstanceProfile>", "<member>", 1).replace("</InstanceProfile>", "</member>") for i in rows) + "</InstanceProfiles><IsTruncated>false</IsTruncated>")
+
+
+def _list_instance_profiles_for_role(store, params):
+    rn = str(params.get("RoleName", "")).strip()
+    _require_role(store, rn)
+    rows = [ip for ip in _ip_all(store).values() if rn in ip["roles"]]
+    return _envelope("ListInstanceProfilesForRole", "<InstanceProfiles>" + "".join(_ip_xml(store, i).replace("<InstanceProfile>", "<member>", 1).replace("</InstanceProfile>", "</member>") for i in rows) + "</InstanceProfiles><IsTruncated>false</IsTruncated>")
+
+
+def _delete_instance_profile(store, params):
+    ip = _ip_need(store, params.get("InstanceProfileName"))
+    if ip["roles"]:
+        raise IamError("DeleteConflict", "Cannot delete entity, must remove roles from instance profile first.", 409)
+    del _ip_all(store)[ip["name"]]
+    store.persist()
+    return _envelope("DeleteInstanceProfile")
+
+
+def _add_role_to_instance_profile(store, params):
+    ip = _ip_need(store, params.get("InstanceProfileName"))
+    rn = str(params.get("RoleName", "")).strip()
+    _require_role(store, rn)
+    if ip["roles"]:
+        raise IamError("LimitExceeded", "Cannot exceed quota for InstanceSessionsPerInstanceProfile: 1", 409)
+    ip["roles"].append(rn)
+    store.persist()
+    return _envelope("AddRoleToInstanceProfile")
+
+
+def _remove_role_from_instance_profile(store, params):
+    ip = _ip_need(store, params.get("InstanceProfileName"))
+    rn = str(params.get("RoleName", "")).strip()
+    if rn not in ip["roles"]:
+        raise IamError("NoSuchEntity", f"The role with name {rn} cannot be found.", 404)
+    ip["roles"].remove(rn)
+    store.persist()
+    return _envelope("RemoveRoleFromInstanceProfile")
+
+
+_OPS.update({"CreateInstanceProfile": _create_instance_profile, "GetInstanceProfile": _get_instance_profile,
+             "ListInstanceProfiles": _list_instance_profiles, "ListInstanceProfilesForRole": _list_instance_profiles_for_role,
+             "DeleteInstanceProfile": _delete_instance_profile, "AddRoleToInstanceProfile": _add_role_to_instance_profile,
+             "RemoveRoleFromInstanceProfile": _remove_role_from_instance_profile})
+
+
+def dispatch(store: IamStore, params: dict | None = None, s3_store=None) -> IamResponse:
     """The single routing point for the native AWS IAM Query protocol — what an
     unmodified aws-cli / boto3 IAM client speaks. `params` is the parsed
-    form-encoded body ({"Action": "CreateUser", "UserName": ...})."""
+    form-encoded body ({"Action": "CreateUser", "UserName": ...}). `s3_store` backs
+    Access Analyzer's external-access scan over S3 bucket policies (Vyomi-only)."""
     params = params if isinstance(params, dict) else {}
     action = str(params.get("Action", "")).strip()
     if not action:
@@ -534,8 +3143,11 @@ def dispatch(store: IamStore, params: dict | None = None) -> IamResponse:
     if op is None:
         return _error("InvalidAction", f"The action {action} is not implemented.", 400)
     try:
-        return op(store, params)
+        r = op(store, params, s3_store=s3_store) if action in _NEEDS_S3_STORE else op(store, params)
+        _record_event(store, action, params, True)
+        return r
     except IamError as e:
+        _record_event(store, action, params, False, e.code)
         return _error(e.code, e.message, e.status)
 
 
@@ -544,11 +3156,15 @@ def is_authorized(store: IamStore, principal: str, action: str, resource: str,
                   context: dict | None = None) -> dict:
     """Convenience authorization probe used by in-tab enforcement / the console —
     the analogue of server.py's _iam_authorize. Returns {allowed, decision, reason}."""
-    identity, docs = _resolve_policy_docs(store, principal)
+    identity, docs, boundary = _resolve_policy_docs(store, principal)
+    mfa_present = identity["type"] == "user" and _has_mfa(store, identity["name"])
     ctx = {"aws:PrincipalArn": identity["arn"], "aws:PrincipalType": identity["type"],
            "aws:username": identity["name"], "aws:RequestedRegion": "us-east-1",
-           "aws:ResourceArn": resource}
+           "aws:ResourceArn": resource, "aws:MultiFactorAuthPresent": str(mfa_present).lower()}
     if context:
         ctx.update({k: str(v) for k, v in context.items()})
     decision, reason = store.engine.evaluate(docs, action, resource, ctx)
+    decision = _apply_boundary(store, boundary, decision, action, resource, ctx)
+    if decision != "allowed" and reason == "":
+        reason = f"permissions boundary clips {action} on {resource}"
     return {"allowed": decision == "allowed", "decision": decision, "reason": reason}

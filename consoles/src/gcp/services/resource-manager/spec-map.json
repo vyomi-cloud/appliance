@@ -1,0 +1,5 @@
+{
+  "_doc": "ui-spec page id → v4 route. honest_page = the whole page is a declared 'Not simulated in Vyomi' gap. Unlisted spec pages count as missing.",
+  "manage-resources": { "route": "#/resource-manager", "live": "live-project" },
+  "create-project": { "route": "#/resource-manager/create" }
+}

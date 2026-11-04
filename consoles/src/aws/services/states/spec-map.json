@@ -1,0 +1,36 @@
+{
+  "_doc": "ui-spec page id -> v4 route. honest_page = the whole page is a declared 'Not simulated in Vyomi' gap. Unlisted spec pages count as missing.",
+  "state-machines": {
+    "route": "#/states/state-machines",
+    "live": "live-sm"
+  },
+  "create-state-machine": {
+    "route": "#/states/create"
+  },
+  "state-machine-detail": {
+    "route": "#/states/state-machines/{live}",
+    "live": "live-sm"
+  },
+  "start-execution": {
+    "route": "#/states/state-machines/uic-sm/start",
+    "fixtures": ["sm-fixture"],
+    "vars": { "resource-name": "uic-sm" }
+  },
+  "execution-detail": {
+    "route": "#/states/state-machines/uic-sm/executions/{live}",
+    "live": "live-execution"
+  },
+  "activities": {
+    "route": "#/states/activities",
+    "live": "live-activity"
+  },
+  "create-activity": {
+    "route": "#/states/activities",
+    "fixtures": ["live-activity"],
+    "expand": ["text=Create activity"]
+  },
+  "activity-detail": {
+    "route": "#/states/activities/{live}",
+    "live": "live-activity"
+  }
+}

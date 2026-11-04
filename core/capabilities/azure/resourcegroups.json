@@ -1,0 +1,109 @@
+{
+ "$doc": "Vyomi capability registry — Azure Resource groups. See aws/s3.json for the contract.",
+ "azure.resourcegroups.rg.crud": {
+  "title": "Resource groups (create, get, list, delete) over ARM",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py"
+  ]
+ },
+ "azure.resourcegroups.rg.tags": {
+  "title": "Tags",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py"
+  ]
+ },
+ "azure.resourcegroups.resources_in_group": {
+  "title": "Resources (every resource type inside the group, at once)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py"
+  ]
+ },
+ "azure.resourcegroups.locks": {
+  "title": "Resource locks (Microsoft.Authorization/locks), scoped to the resource group itself",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py"
+  ]
+ },
+ "azure.resourcegroups.deployments": {
+  "title": "Deployments (Microsoft.Resources/deployments) history",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Every resource listed in properties.template.resources is actually created (a real PUT through the same ARM dispatcher, with [parameters('x')] / [variables('y')] resolved to literal values) — but there is no full template-language evaluation: no concat()/resourceId()/reference()/copy-loop support, and dependsOn is not topologically sorted (resources are provisioned in template order). Redeploy re-runs the stored template for real; Cancel honestly 409s, since every deployment here completes synchronously and is never still 'Running' by the time a Cancel call could reach it."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py"
+  ]
+ },
+ "azure.resourcegroups.activity_log": {
+  "title": "Activity log",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "Only console/SDK-triggered mutations made since the simulation booted are recorded (no historical backfill), and `caller` is a fixed placeholder identity rather than a real signed-in principal."
+  ],
+  "api": [
+   "ActivityLogs_List"
+  ],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py"
+  ]
+ },
+ "azure.resourcegroups.access_control_iam": {
+  "title": "Access control (IAM) — role assignments, roles and checkAccess",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Role assignments are real ARM resources scoped to the resource group they were created under (list + checkAccess only see assignments at or above that scope, same hierarchy inheritance and explicit-deny-wins semantics as the Entra RBAC engine), and the Roles tab + checkAccess cover the built-in Owner/Contributor/Reader/… roles plus any custom role definitions. But checkAccess is a standalone decision tool: no other ARM call in Vyomi consults it, so every other data-plane/control-plane operation still succeeds regardless of what is assigned. Deny assignments and classic administrators are always empty."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py"
+  ]
+ },
+ "azure.resourcegroups.cost_management": {
+  "title": "Cost analysis, budgets and cost alerts, scoped to this resource group",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_azure_cost_core.py"
+  ]
+ },
+ "azure.resourcegroups.deploymentstacks": {
+  "title": "Deployment stacks (Microsoft.Resources/deploymentStacks)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "A stack evaluates its ARM template through the same bounded template engine as a plain deployment and OWNS the resources it provisions: deleting the stack deletes them (or detaches them with unmanageAction.Resources=detach), and denySettings.mode denyDelete / denyWriteAndDelete really blocks a direct delete (and write) of a managed resource with 403 DenyAssignmentAuthorizationFailed.",
+   "Not modelled: resourceGroups/managementGroups unmanage actions (only resources), deny-settings excludedPrincipals/excludedActions/applyToChildScopes, subscription- and management-group-scope stacks, what-if / validate, and template specs. Template functions beyond the bounded evaluator fail the stack."
+  ],
+  "tests": ["tests/conformance/test_azure_deploymentstacks_core.py"]
+ }
+}

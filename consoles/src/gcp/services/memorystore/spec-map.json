@@ -1,0 +1,10 @@
+{
+  "_doc": "ui-spec page id → v4 route. honest_page = the whole page is a declared 'Not simulated in Vyomi' gap. Unlisted spec pages count as missing.",
+  "instances": { "route": "#/memorystore", "live": "live-instance" },
+  "create-instance": { "route": "#/memorystore/create" },
+  "instance-overview": { "route": "#/memorystore/instances/us-central1/{live}/overview", "live": "live-instance" },
+  "connections": { "route": "#/memorystore/instances/us-central1/{live}/connections", "live": "live-instance" },
+  "configuration": { "route": "#/memorystore/instances/us-central1/{live}/configuration", "live": "live-instance" },
+  "nodes": { "route": "#/memorystore/instances/us-central1/{live}/nodes", "live": "live-instance" },
+  "maintenance": { "route": "#/memorystore/instances/us-central1/{live}/maintenance", "live": "live-instance" }
+}

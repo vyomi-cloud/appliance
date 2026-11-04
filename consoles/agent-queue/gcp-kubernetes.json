@@ -1,0 +1,101 @@
+{
+ "cloud": "gcp",
+ "service": "kubernetes",
+ "phase": "depth",
+ "attempt": 1,
+ "goal": "GAP SWEEP (wave 5b): every listed depth_target is currently not_simulated/config_only in the shipped console. Build each one on a REAL backend (Nano + offline) and lift its capability level to full or limited. 'Out of Vyomi's scope', 'separate product', 'single-account' or 'not modeled' are NOT acceptable reasons: model it in the shared core (Python core/*_core.py, vendored to wasm), wire it through the native wire, enforce behaviour (not stored config), and make the console section live. Only leave a target not_simulated if it needs something physically impossible in a local simulator (real external hardware, real money, a real third-party service) \u2014 and then write that concrete reason. config_only targets must become enforced (the setting changes observable behaviour). Update core/capabilities, tests/conformance, ui-spec mapping and smoke where relevant.",
+ "note": "WAVE 5b gap sweep (orchestrator). Approved by the user: finish all the gaps with real backends.",
+ "depth_targets": [
+  {
+   "id": "gcp.kubernetes.cluster.nodes",
+   "title": "Nodes (kubectl get nodes)",
+   "now": {
+    "offline": "not_simulated",
+    "nano": "not_simulated"
+   },
+   "current_reason": "Kubernetes Node objects live in the cluster's API server, which Vyomi does not run. Node pools (the GKE control-plane resource) are fully modeled \u2014 see the Node pools table."
+  },
+  {
+   "id": "gcp.kubernetes.workloads",
+   "title": "Workloads (Deployments, StatefulSets, Pods, Jobs)",
+   "now": {
+    "offline": "not_simulated",
+    "nano": "not_simulated"
+   },
+   "current_reason": "Needs a live Kubernetes API server behind the cluster endpoint; below the Max tier Vyomi only models the GKE control plane (clusters and node pools)."
+  },
+  {
+   "id": "gcp.kubernetes.secrets-configmaps",
+   "title": "Secrets & ConfigMaps",
+   "now": {
+    "offline": "not_simulated",
+    "nano": "not_simulated"
+   },
+   "current_reason": "Kubernetes-native Secret/ConfigMap objects live in the cluster's API server, which Vyomi does not run."
+  },
+  {
+   "id": "gcp.kubernetes.discovery",
+   "title": "Gateways, Services & Ingress",
+   "now": {
+    "offline": "not_simulated",
+    "nano": "not_simulated"
+   },
+   "current_reason": "Gateway/Service/Ingress objects live in the cluster's API server, which Vyomi does not run."
+  },
+  {
+   "id": "gcp.kubernetes.storage",
+   "title": "Kubernetes Storage (PersistentVolumes, StorageClasses, snapshots)",
+   "now": {
+    "offline": "not_simulated",
+    "nano": "not_simulated"
+   },
+   "current_reason": "PersistentVolume/StorageClass objects live in the cluster's API server, which Vyomi does not run."
+  },
+  {
+   "id": "gcp.kubernetes.object-browser",
+   "title": "Object Browser (generic Kubernetes resource browser)",
+   "now": {
+    "offline": "not_simulated",
+    "nano": "not_simulated"
+   },
+   "current_reason": "Browses live objects from the cluster's API server, which Vyomi does not run."
+  },
+  {
+   "id": "gcp.kubernetes.config",
+   "title": "Config (Config Sync / Policy Controller / fleet configuration)",
+   "now": {
+    "offline": "not_simulated",
+    "nano": "not_simulated"
+   },
+   "current_reason": "GKE Enterprise fleet configuration is not implemented."
+  },
+  {
+   "id": "gcp.kubernetes.applications",
+   "title": "Applications",
+   "now": {
+    "offline": "not_simulated",
+    "nano": "not_simulated"
+   },
+   "current_reason": "Groups live Kubernetes objects by application label; needs the cluster's API server, which Vyomi does not run."
+  },
+  {
+   "id": "gcp.kubernetes.fleet-registration",
+   "title": "Fleet registration (GKE Hub / Anthos)",
+   "now": {
+    "offline": "not_simulated",
+    "nano": "not_simulated"
+   },
+   "current_reason": "GKE Hub fleet membership (gkehub.googleapis.com) is not implemented."
+  },
+  {
+   "id": "gcp.kubernetes.observability",
+   "title": "Observability & Cost optimization",
+   "now": {
+    "offline": "not_simulated",
+    "nano": "not_simulated"
+   },
+   "current_reason": "Cluster/fleet metrics, logs-based observability and cost-optimization recommendations need Cloud Monitoring data this simulator does not generate for GKE.",
+   "hint": "telemetry: emit real metrics/logs from the simulated engine (wave-6 Prometheus/OTel are the offline sinks once landed; until then derive real series from actual API activity in the core) \u2014 never synthetic random data"
+  }
+ ]
+}

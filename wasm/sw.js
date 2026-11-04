@@ -28,20 +28,18 @@ const FIX = BASE + "/fixtures";
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (e) => e.waitUntil(self.clients.claim()));
 
-// ── Pyodide ready-gate ────────────────────────────────────────────────
+// ── Pyodide readiness ─────────────────────────────────────────────────
 // boot() in the console fires at parse and awaits its fetches, which can race
-// ahead of Pyodide loading. We hold /api/* dispatch until the page signals the
-// backend is up, so early calls just wait instead of failing.
-let _ready, readyPromise = new Promise((r) => (_ready = r));
+// ahead of Pyodide loading: early calls wait for a ready page (runInPage).
 // A page that reloads (or a second tab) boots its own Pyodide, so readiness is
 // per window client: dispatching to a client that hasn't signalled yet (or has
 // gone) would drop the message and surface as a 500 "backend timeout".
+// This set lives in the worker's memory, and the browser stops idle workers (and an
+// update replaces them) while pages keep running — so runInPage re-asks open pages
+// ("vyomi-ready-ping") instead of waiting for a boot-time signal that won't come again.
 const readyClients = new Set();
 self.addEventListener("message", (e) => {
-  if (e.data && e.data.type === "pyodide-ready") {
-    if (e.source && e.source.id) readyClients.add(e.source.id);
-    _ready();
-  }
+  if (e.data && e.data.type === "pyodide-ready" && e.source && e.source.id) readyClients.add(e.source.id);
 });
 
 // ── Route table (built once from the dumped catalog) ──────────────────
@@ -149,8 +147,12 @@ async function nanoBackends() {
 }
 
 function json(obj, status, extraHeaders) {
-  return new Response(obj === null ? "" : JSON.stringify(obj),
-    { status: status || 200, headers: { "content-type": "application/json", ...(extraHeaders || {}) } });
+  // 101/204/205/304 must not carry a body — even "" — or the Response constructor throws
+  // (e.g. an ARM DELETE of an already-absent resource answering 204 became a 500).
+  const st = status || 200;
+  const noBody = [101, 204, 205, 304].includes(st);
+  return new Response(noBody ? null : (obj === null ? "" : JSON.stringify(obj)),
+    { status: st, headers: { "content-type": "application/json", ...(extraHeaders || {}) } });
 }
 
 // Decode a JWT's payload (no signature check — the token comes straight from the
@@ -360,16 +362,19 @@ async function providerOf(clientId) {
 
 // Ask the page (where Pyodide lives) to run a dispatch tuple.
 async function runInPage(tuple) {
-  await readyPromise;
-  // Wait (bounded) for a live window whose Pyodide has signalled ready; after a
-  // reload the old client id is gone and the new page is still booting.
+  // Wait (bounded: a page that never gets ready is an error, not an endless spinner) for a
+  // live window whose Pyodide has signalled ready; after a reload the old client id is gone
+  // and the new page is still booting.
   let client = null;
   for (let i = 0; i < 240 && !client; i++) {
     const all = await self.clients.matchAll({ includeUncontrolled: true });
     const wins = all.filter((c) => c.type === "window");
     client = wins.find((c) => readyClients.has(c.id)) || null;
     if (!client && !wins.length && all[0]) client = all[0];
-    if (!client) await new Promise((r) => setTimeout(r, 250));
+    if (!client) {
+      if (i % 4 === 0) for (const w of wins) w.postMessage({ type: "vyomi-ready-ping" });
+      await new Promise((r) => setTimeout(r, 250));
+    }
   }
   if (!client) throw new Error("no client to run the in-browser backend");
   return await new Promise((resolve, reject) => {
@@ -999,8 +1004,64 @@ async function metricsSeries(q) {
            total_requests: points.reduce((a, p) => a + p.requests, 0), total_errors: points.reduce((a, p) => a + p.errors, 0) };
 }
 
+// ── v4 native-wire prefix: <BASE>/_wire/<native path> ─────────────────
+// The v4 consoles speak each cloud's NATIVE wire (S3 REST+XML, X-Amz-Target JSON,
+// Query+XML, GCP REST, Azure data plane) at /_wire/<native path>. We strip the
+// prefix and run the request through the page's AwsWireRouter (wire_adapter.py)
+// on the SAME shared registry the relay serves an SDK/CLI from, so console and
+// CLI see one state (persisted + cross-tab synced by the normal dispatch bridge).
+// Azure ARM (/subscriptions/*) is not in the router; it rides the existing ARM
+// tuple (same AzureArm store as the /subscriptions/* console path). Bodies cross
+// the bridge as base64 (binary-safe). Mirrors the appliance's routes/wire_prefix.py.
+function bufFromB64(b64) {
+  const bin = atob(b64 || "");
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+async function handleWire(request, url) {
+  const wirePath = url.pathname.slice((BASE + "/_wire").length) || "/";
+  if (wirePath === "/_wire" || wirePath.startsWith("/_wire/"))
+    return json({ error: { code: "WirePrefixRecursion", message: "Nested /_wire/ prefixes are not allowed." } }, 400);
+  const method = request.method.toUpperCase();
+  const query = Object.fromEntries(url.searchParams.entries());
+  const hasBody = !["GET", "HEAD"].includes(method);
+  const raw = hasBody ? await request.arrayBuffer() : new ArrayBuffer(0);
+  if (wirePath.startsWith("/subscriptions/")) {
+    let body = null;
+    if (raw.byteLength) { const t = new TextDecoder().decode(raw); try { body = JSON.parse(t); } catch (_) { body = { raw: t }; } }
+    const res = await runInPage(["azure", "_arm", method, { path: wirePath, query, body }]);
+    const h = (res && res.__http) || { status: 200, body: res };
+    return json(h.body === undefined ? null : h.body, h.status, h.headers);
+  }
+  const headers = {};
+  request.headers.forEach((v, k) => { headers[k] = v; });
+  const res = await runInPage(["_wire", "wire", method,
+    { method, path: wirePath, query, headers, body_b64: raw.byteLength ? b64FromBuf(raw) : "" }]);
+  if (!res || typeof res.status !== "number") return json({ ok: false, error: (res && res.error) || "bad /_wire response" }, 500);
+  const h = new Headers();
+  const nullBody = method === "HEAD" || [101, 204, 205, 304].includes(res.status);
+  // A bodied response gets its length from the body; a HEAD has none, so keep the engine's
+  // Content-Length (HeadObject / GetBlobProperties sizes would otherwise read as 0).
+  for (const [k, v] of Object.entries(res.headers || {}))
+    if (!/^(transfer-encoding|connection|set-cookie)$/i.test(k) && (method === "HEAD" || !/^content-length$/i.test(k))) { try { h.set(k, v); } catch (_) {} }
+  return new Response(nullBody ? null : bufFromB64(res.body_b64), { status: res.status, headers: h });
+}
+
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
+  // v4 consoles' native-wire prefix (see handleWire above).
+  if (url.origin === self.location.origin && (url.pathname === BASE + "/_wire" || url.pathname.startsWith(BASE + "/_wire/"))) {
+    const _tw = Date.now();
+    event.respondWith((async () => {
+      let _res;
+      try { _res = await handleWire(event.request, url); }
+      catch (e) { _res = json({ ok: false, error: String(e) }, 500); }
+      try { recordReq(event.request.method, url.pathname.slice(BASE.length), url.search.slice(1), _res.status, Date.now() - _tw); } catch (_) {}
+      return _res;
+    })());
+    return;
+  }
   // We own /api/* (console REST) AND /subscriptions/* (native Azure ARM).
   const inApi = url.pathname.startsWith(BASE + "/api/");
   const inArm = url.pathname.startsWith(BASE + "/subscriptions/") || url.pathname === BASE + "/subscriptions" ||

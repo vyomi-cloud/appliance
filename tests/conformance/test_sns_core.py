@@ -114,6 +114,78 @@ def run(store=None):
     call("Publish", TopicArn=arn, Message=json.dumps({"order": {"kind": "slow"}}))
     _check("body filter policy delivers only the match", len(st.get_queue("q2")["messages"]) == 1)
 
+    # data protection policy — Deny / Deidentify / Audit really enforced on Publish
+    sqs.dispatch(st, SQS + "CreateQueue", {"QueueName": "q3"})
+    q3_url = sqs.dispatch(st, SQS + "GetQueueUrl", {"QueueName": "q3"}).body["QueueUrl"]
+    q3_arn = st.get_queue("q3")["queue_arn"]
+    s3sub = _v(call("Subscribe", TopicArn=arn, Protocol="sqs", Endpoint=q3_arn).body, "SubscriptionArn")
+    call("SetSubscriptionAttributes", SubscriptionArn=s3sub, AttributeName="RawMessageDelivery", AttributeValue="true")
+    email_id = "arn:aws:dataprotection::aws:data-identifier/EmailAddress"
+    deny_policy = json.dumps({"Name": "p", "Version": "2021-06-01", "Statement": [
+        {"Sid": "deny-email", "DataDirection": "Inbound", "Principal": ["*"],
+         "DataIdentifier": [email_id], "Operation": {"Deny": {}}}]})
+    call("PutDataProtectionPolicy", ResourceArn=arn, DataProtectionPolicy=deny_policy)
+    _check("data protection denies publish containing an email", err(call("Publish", TopicArn=arn, Message="reach me at a@b.com"), "AccessDenied"))
+    _check("data protection allows publish without a match", call("Publish", TopicArn=arn, Message="no pii here").status == 200)
+    sqs.dispatch(st, SQS + "ReceiveMessage", {"QueueUrl": q3_url})  # drain
+
+    mask_policy = json.dumps({"Name": "p", "Version": "2021-06-01", "Statement": [
+        {"Sid": "mask-email", "DataDirection": "Inbound", "Principal": ["*"], "DataIdentifier": [email_id],
+         "Operation": {"Deidentify": {"MaskConfig": {"MaskWithCharacter": "#"}}}}]})
+    call("PutDataProtectionPolicy", ResourceArn=arn, DataProtectionPolicy=mask_policy)
+    call("Publish", TopicArn=arn, Message="reach me at a@b.com")
+    masked = sqs.dispatch(st, SQS + "ReceiveMessage", {"QueueUrl": q3_url}).body["Messages"][0]["Body"]
+    _check("data protection deidentify masks the match", "a@b.com" not in masked and "#" in masked and "reach me at" in masked)
+
+    audit_policy = json.dumps({"Name": "p", "Version": "2021-06-01", "Statement": [
+        {"Sid": "audit-email", "DataDirection": "Inbound", "Principal": ["*"],
+         "DataIdentifier": [email_id], "Operation": {"Audit": {}}}]})
+    call("PutDataProtectionPolicy", ResourceArn=arn, DataProtectionPolicy=audit_policy)
+    call("Publish", TopicArn=arn, Message="reach me at a@b.com")
+    _check("data protection audit records a finding without blocking", any(d["kind"] == "DataProtectionAudit" for d in st.sns["deliveries"]))
+    call("PutDataProtectionPolicy", ResourceArn=arn, DataProtectionPolicy=json.dumps({"Name": "p", "Version": "2021-06-01", "Statement": []}))
+
+    # delivery policy (HTTP/S healthyRetryPolicy) — really retried, not just stored. This
+    # substrate (Nano/dev_server) has no durable delivery worker so an HTTP/S push can never
+    # truly succeed here (see sns.publish.other-protocols), but the retry policy's own attempt
+    # count / backoff / redrive settings must still have a real, observable effect.
+    sqs.dispatch(st, SQS + "CreateQueue", {"QueueName": "dlq"})
+    dlq_arn = st.get_queue("dlq")["queue_arn"]
+    dlq_url = sqs.dispatch(st, SQS + "GetQueueUrl", {"QueueName": "dlq"}).body["QueueUrl"]
+    call("Subscribe", TopicArn=arn, Protocol="https", Endpoint="https://example.invalid/hook")
+    htok = next(d["token"] for d in st.sns["deliveries"]
+                if d["kind"] == "SubscriptionConfirmation" and d["endpoint"] == "https://example.invalid/hook")
+    hsub = _v(call("ConfirmSubscription", TopicArn=arn, Token=htok).body, "SubscriptionArn")
+    call("SetSubscriptionAttributes", SubscriptionArn=hsub, AttributeName="RedrivePolicy",
+         AttributeValue=json.dumps({"deadLetterTargetArn": dlq_arn}))
+    call("SetSubscriptionAttributes", SubscriptionArn=hsub, AttributeName="DeliveryPolicy",
+         AttributeValue=json.dumps({"healthyRetryPolicy": {"numRetries": 2, "minDelayTarget": 1, "maxDelayTarget": 1}}))
+    before = len(st.sns["deliveries"])
+    call("Publish", TopicArn=arn, Message="will not be delivered")
+    fails = [d for d in st.sns["deliveries"][before:] if d["kind"] == "DeliveryFailure" and d["subscription_arn"] == hsub]
+    _check("http delivery retried per policy (numRetries=2 -> 3 attempts)", len(fails) == 3)
+    _check("http delivery gives up after exhausting retries", "gave up after 3 attempts" in fails[-1]["error"])
+    dead = sqs.dispatch(st, SQS + "ReceiveMessage", {"QueueUrl": dlq_url}).body["Messages"]
+    _check("exhausted http delivery lands in the dead-letter queue", len(dead) == 1 and "will not be delivered" in dead[0]["Body"])
+
+    # changing numRetries changes the observed attempt count — proves it's enforced, not stored
+    call("SetSubscriptionAttributes", SubscriptionArn=hsub, AttributeName="DeliveryPolicy",
+         AttributeValue=json.dumps({"healthyRetryPolicy": {"numRetries": 0}}))
+    before = len(st.sns["deliveries"])
+    call("Publish", TopicArn=arn, Message="zero retries")
+    fails0 = [d for d in st.sns["deliveries"][before:] if d["kind"] == "DeliveryFailure" and d["subscription_arn"] == hsub]
+    _check("numRetries=0 gives up after a single attempt", len(fails0) == 1 and "gave up after 1 attempts" in fails0[0]["error"])
+
+    # a topic's disableSubscriptionOverrides pins the effective policy to the topic default
+    call("SetTopicAttributes", TopicArn=arn, AttributeName="DeliveryPolicy", AttributeValue=json.dumps(
+        {"http": {"defaultHealthyRetryPolicy": {"numRetries": 1}, "disableSubscriptionOverrides": True}}))
+    before = len(st.sns["deliveries"])
+    call("Publish", TopicArn=arn, Message="topic policy wins")
+    fails1 = [d for d in st.sns["deliveries"][before:] if d["kind"] == "DeliveryFailure" and d["subscription_arn"] == hsub]
+    _check("disableSubscriptionOverrides ignores the subscription's own policy", len(fails1) == 2 and "gave up after 2 attempts" in fails1[-1]["error"])
+    call("SetTopicAttributes", TopicArn=arn, AttributeName="DeliveryPolicy", AttributeValue="")
+    call("SetSubscriptionAttributes", SubscriptionArn=hsub, AttributeName="RedrivePolicy", AttributeValue="")
+
     # batch
     b = call("PublishBatch", TopicArn=arn, **{
         "PublishBatchRequestEntries.member.1.Id": "a", "PublishBatchRequestEntries.member.1.Message": "m1",
@@ -165,12 +237,44 @@ def run(store=None):
     call("VerifySMSSandboxPhoneNumber", PhoneNumber="+15555550100", OneTimePassword=otp)
     _check("verified listed", "<Status>Verified</Status>" in call("ListSMSSandboxPhoneNumbers").body)
     _check("sms publish", bool(_v(call("Publish", PhoneNumber="+15555550100", Message="hi").body, "MessageId")))
+    call("SetSMSAttributes", **{"attributes.entry.1.key": "MonthlySpendLimit", "attributes.entry.1.value": "0"})
+    _check("sms spend limit blocks publish once reached", err(call("Publish", PhoneNumber="+15555550100", Message="hi"), "Throttling"))
+    call("SetSMSAttributes", **{"attributes.entry.1.key": "MonthlySpendLimit", "attributes.entry.1.value": "10"})
+    _check("raising the spend limit allows publish again", bool(_v(call("Publish", PhoneNumber="+15555550100", Message="hi").body, "MessageId")))
     _check("opt-out check", _v(call("CheckIfPhoneNumberIsOptedOut", phoneNumber="+15555550100").body, "isOptedOut") == "false")
     _check("list opted out", "<phoneNumbers>" in call("ListPhoneNumbersOptedOut").body)
     _check("opt in", call("OptInPhoneNumber", phoneNumber="+15555550100").status == 200)
     _check("origination numbers", call("ListOriginationNumbers").status == 200)
     call("DeleteSMSSandboxPhoneNumber", PhoneNumber="+15555550100")
     _check("delete sandbox number twice", err(call("DeleteSMSSandboxPhoneNumber", PhoneNumber="+15555550100"), "ResourceNotFound"))
+
+    # delivery status logging — real CloudWatch Logs feedback for SQS success/failure
+    try:
+        from core.logs_core import LogsStore
+    except ImportError:  # pragma: no cover - Pyodide flat layout
+        from logs_core import LogsStore  # type: ignore
+    st.logs_store = LogsStore()
+    call("SetTopicAttributes", TopicArn=arn, AttributeName="SQSSuccessFeedbackRoleArn",
+         AttributeValue="arn:aws:iam::123456789012:role/Success")
+    call("SetTopicAttributes", TopicArn=arn, AttributeName="SQSFailureFeedbackRoleArn",
+         AttributeValue="arn:aws:iam::123456789012:role/Failure")
+    call("Publish", TopicArn=arn, Message="feedback-ok")
+    ok_group = st.logs_store.log_groups.get(f"sns/us-east-1/{ACCT}/orders/Success")
+    _check("success feedback log group created", ok_group is not None)
+    ok_stream = ok_group["streams"].get(q1_arn.replace(":", "_")) if ok_group else None
+    ok_evt = json.loads(ok_stream["events"][-1]["message"]) if ok_stream and ok_stream["events"] else {}
+    _check("success feedback event", ok_evt.get("status") == "SUCCESS" and ok_evt["delivery"]["destination"] == q1_arn)
+
+    ghost_arn = "arn:aws:sqs:us-east-1:123456789012:ghost"
+    gsub = _v(call("Subscribe", TopicArn=arn, Protocol="sqs", Endpoint=ghost_arn).body, "SubscriptionArn")
+    call("Publish", TopicArn=arn, Message="feedback-fail")
+    fail_group = st.logs_store.log_groups.get(f"sns/us-east-1/{ACCT}/orders/Failure")
+    _check("failure feedback log group created", fail_group is not None)
+    fail_stream = fail_group["streams"].get(ghost_arn.replace(":", "_")) if fail_group else None
+    fail_evt = json.loads(fail_stream["events"][-1]["message"]) if fail_stream and fail_stream["events"] else {}
+    _check("failure feedback event", fail_evt.get("status") == "FAILURE" and fail_evt["delivery"]["destination"] == ghost_arn)
+    call("SetTopicAttributes", TopicArn=arn, AttributeName="SQSSuccessFeedbackRoleArn", AttributeValue="")
+    call("SetTopicAttributes", TopicArn=arn, AttributeName="SQSFailureFeedbackRoleArn", AttributeValue="")
 
     # unsubscribe + delete
     _check("unsubscribe", call("Unsubscribe", SubscriptionArn=sub).status == 200)

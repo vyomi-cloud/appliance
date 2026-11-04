@@ -26,26 +26,38 @@ import copy
 import json
 
 _B64 = "__b64__"
+_SET = "__vyomi_set__"
 
 # Every store the AwsWireRouter owns (AWS + GCP + Azure). Keyed names match the
 # router attrs AND the shared-registry keys (nano_registry), so one snapshot maps
 # cleanly onto either the router or the console adapter's registry.
 STORE_ATTRS = [
-    "s3", "ddb", "kms", "sec", "rds", "iam", "msg", "logs", "elbv2", "kinesis",
+    "s3", "ddb", "dax", "kms", "sec", "rds", "iam", "msg", "logs", "elbv2", "kinesis",
     "gcs", "gcp_fs", "gcp_kms", "gcp_sec", "gcp_msg", "gcp_iam", "gcp_sql", "gcp_ar",
-    "az_blob", "az_cosmos", "az_kvsec", "az_kvkeys", "az_queue", "az_sb",
+    "az_blob", "az_cosmos", "az_kvsec", "az_kvkeys", "az_kvcerts", "az_queue", "az_table", "az_sb", "az_graph",
     "apigwv2",  # API Gateway V2 (core/apigatewayv2_core.ApiGwV2Store)
     "compute", "vpc_net", "extras",   # Lambda/API Gateway + VPC models (private _lambda_functions etc., see _DURABLE_PRIVATE)
     "az_arm",   # Azure ARM control plane (core/azure_arm_core.AzureArm.state — Container Apps, VMs, …)
     "ssm",      # Systems Manager (core/ssm_core.SsmStore)
+    "asg",      # EC2 Auto Scaling (core/autoscaling_core.AutoScalingStore)
+    "dlm",      # Data Lifecycle Manager (core/dlm_core.DlmStore)
     "gcp_gke",    # Kubernetes Engine (core/gcp_container_core.ContainerStore)
     "gcp_mon",    # Cloud Monitoring (core/gcp_monitoring_core.MonitoringStore)
     "gcp_redis",  # Memorystore for Redis (core/gcp_redis_core.RedisStore)
     "gcp_iamc",   # IAM Credentials issue log (core/gcp_iamcredentials_core.IamCredentialsStore)
     "gcp_sched",  # Cloud Scheduler (core/gcp_cloudscheduler_core.CloudSchedulerStore)
+    "az_acr",  # Azure Container Registry (core/azure_acr_core.AcrRegistryStore)
+    "sched",  # EventBridge Scheduler (core/scheduler_core.SchedulerStore)
+    "gcp_logging",  # Cloud Logging (core/gcp_logging_core.LoggingStore)
+    "ram",      # Resource Access Manager (core/ram_core — subnet/SG resource shares)
+    "gcp_rm", "gcp_pam",  # IAM & Admin: Resource Manager + Privileged Access Manager
+    "gcp_compute_vm",  # Compute Engine VMs/disks/images/templates (core/gcp_compute_instances_core.ComputeStore)
+    "gcp_compute",  # VPC network: networks/subnets/firewalls/routes/addresses (core/gcp_compute_core.ComputeStore)
+    "gcp_run",    # Cloud Run (core/gcp_run_core.RunStore) — backs /functions
     "resources",  # generic catalog CRUD (EC2, Lambda-adjacent, every GCP service; wasm/backends/store.ResourceStore)
     "compute",  # Lambda functions + API Gateway APIs + VPC model (core/nano_registry.ComputeStore)
     "sfn",      # Step Functions (core/stepfunctions_core.StepFunctionsStore)
+    "cfn",      # CloudFormation (core/cloudformation_core.CloudFormationStore)
     "cw",       # CloudWatch metrics / alarms / dashboards
     "events",   # per-resource cloudsim event/activity log (core/nano_events.EventStore)
 ]
@@ -59,6 +71,13 @@ def _enc(v):
         return {k: _enc(x) for k, x in v.items()}
     if isinstance(v, (list, tuple)):
         return [_enc(x) for x in v]
+    if isinstance(v, (set, frozenset)):   # e.g. Microsoft Graph group memberships
+        items = [_enc(x) for x in v]
+        try:
+            items.sort()
+        except TypeError:
+            pass
+        return {_SET: items}
     return v
 
 
@@ -66,6 +85,8 @@ def _dec(v):
     if isinstance(v, dict):
         if set(v.keys()) == {_B64}:
             return base64.b64decode(v[_B64])
+        if set(v.keys()) == {_SET}:
+            return {_dec(x) for x in v[_SET]}
         return {k: _dec(x) for k, x in v.items()}
     if isinstance(v, list):
         return [_dec(x) for x in v]
@@ -76,7 +97,9 @@ def _dec(v):
 # their model lazily on the store (getattr/setattr) rather than as a public dict.
 # Without these, a Lambda function / API / VPC created in the console vanishes on
 # the next reload. Add a core's attr here when it keeps state this way.
-_DURABLE_PRIVATE = ("_lambda_functions", "_apigateway_apis", "_vpc_model")
+_DURABLE_PRIVATE = ("_lambda_functions", "_lambda_layers", "_lambda_esms", "_apigateway_apis", "_vpc_model",
+                     "_lambda_capacity_providers", "_lambda_code_signing_configs", "_lambda_network_connectors",
+                     "_lambda_microvm_images", "_lambda_microvms", "_lambda_applications", "_ram_model")
 
 
 def _public_state(store) -> dict:

@@ -1,0 +1,7 @@
+{
+  "_doc": "ui-spec page id → v4 route. honest_page = the whole page is a declared 'Not simulated in Vyomi' gap. Unlisted spec pages count as missing.",
+  "secrets": { "route": "#/security/secret-manager", "fixtures": ["sm-secret"], "live": "live-secret" },
+  "create-secret": { "route": "#/security/secret-manager/create" },
+  "secret-details": { "route": "#/security/secret-manager/secret/uic-secret?tab=overview", "fixtures": ["sm-secret"], "vars": { "resource-name": "uic-secret" }, "live": "live-detail-label" },
+  "add-version": { "route": "#/security/secret-manager/secret/uic-secret", "fixtures": ["sm-secret"], "expand": ["role=tab[name=\"Versions\"]", "text=New version"] }
+}

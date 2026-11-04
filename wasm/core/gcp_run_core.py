@@ -1,0 +1,2274 @@
+# GENERATED — vendored from core/ by wasm/build_cores.py. DO NOT EDIT.
+# Edit the canonical core/ source, then re-run: python3 wasm/build_cores.py
+"""GCP Cloud Run core — substrate-independent. Speaks the native **Cloud Run Admin API v2**
+(`run.googleapis.com/v2`) so the `google-cloud-run` SDKs and `gcloud run ...` work unchanged
+against it (point them at the endpoint via api_endpoint / api_endpoint_overrides).
+
+NO fastapi / google-cloud / socket / subprocess imports → loads under Pyodide, so the SAME
+file runs offline and in Nano. This is the Cloud Run *control plane*: services, revisions, jobs,
+executions, tasks, IAM policies and long-running operations. Containers are not executed here;
+on Pro the Docker compute backend can run them, below that the console says so.
+
+Resources (Discovery doc `run/v2`):
+    projects/{p}/locations/{l}/services/{s}
+    projects/{p}/locations/{l}/services/{s}/revisions/{r}
+    projects/{p}/locations/{l}/jobs/{j}
+    projects/{p}/locations/{l}/jobs/{j}/executions/{e}
+    projects/{p}/locations/{l}/jobs/{j}/executions/{e}/tasks/{t}
+    projects/{p}/locations/{l}/operations/{op}
+Methods: services.create/get/list/patch/delete/getIamPolicy/setIamPolicy/testIamPermissions,
+services.revisions.get/list/delete, jobs.create/get/list/patch/delete/run/getIamPolicy/
+setIamPolicy/testIamPermissions, jobs.executions.get/list/delete/cancel, executions.tasks.
+get/list, operations.get/list/delete/wait. Every mutation returns a completed (`done`)
+long-running Operation like a very fast real cloud; errors use the Google shape
+`{"error":{"code","message","status"}}`.
+"""
+from __future__ import annotations
+
+import base64
+import hashlib
+import json
+import random
+import re
+import time
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+
+from core import gcp_logging_core as gcp_logging   # real Observability logs (never a disclaimer)
+from core import gcp_monitoring_core as gcp_mon     # real Observability metrics
+from core import gcp_pubsub_core as gcp_ps          # Eventarc Pub/Sub-sourced triggers
+
+REGIONS = ["us-central1", "us-east1", "us-east4", "us-east5", "us-south1", "us-west1", "us-west2", "us-west3",
+           "us-west4", "europe-west1", "europe-west2", "europe-west3", "europe-west4", "europe-west8",
+           "europe-west9", "europe-north1", "europe-central2", "asia-east1", "asia-east2", "asia-northeast1",
+           "asia-northeast2", "asia-south1", "asia-southeast1", "asia-southeast2", "australia-southeast1",
+           "southamerica-east1", "northamerica-northeast1", "me-west1", "africa-south1"]
+DEFAULT_IMAGE = "us-docker.pkg.dev/cloudrun/container/hello"
+IAM_INVOKER = "roles/run.invoker"
+
+# Proto enums are strings on the wire; the gapic REST clients (`$alt=json;enum-encoding=int`) may
+# send integers, so request bodies accept both and responses always use the names.
+_ENUMS = {
+    "ingress": ["INGRESS_TRAFFIC_UNSPECIFIED", "INGRESS_TRAFFIC_ALL", "INGRESS_TRAFFIC_INTERNAL_ONLY",
+                "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER", "INGRESS_TRAFFIC_NONE"],
+    "launchStage": {0: "LAUNCH_STAGE_UNSPECIFIED", 1: "EARLY_ACCESS", 2: "ALPHA", 3: "BETA", 4: "GA",
+                    5: "DEPRECATED", 6: "UNIMPLEMENTED", 7: "PRELAUNCH"},
+    "executionEnvironment": ["EXECUTION_ENVIRONMENT_UNSPECIFIED", "EXECUTION_ENVIRONMENT_GEN1",
+                             "EXECUTION_ENVIRONMENT_GEN2"],
+    "egress": ["VPC_EGRESS_UNSPECIFIED", "ALL_TRAFFIC", "PRIVATE_RANGES_ONLY"],
+}
+_TRAFFIC_TYPES = ["TRAFFIC_TARGET_ALLOCATION_TYPE_UNSPECIFIED", "TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST",
+                  "TRAFFIC_TARGET_ALLOCATION_TYPE_REVISION"]
+LATEST, REVISION = _TRAFFIC_TYPES[1], _TRAFFIC_TYPES[2]
+PERMISSIONS = ["run.services.get", "run.services.list", "run.services.create", "run.services.update",
+               "run.services.delete", "run.services.invoke", "run.services.getIamPolicy",
+               "run.services.setIamPolicy", "run.jobs.get", "run.jobs.list", "run.jobs.create",
+               "run.jobs.update", "run.jobs.delete", "run.jobs.run", "run.executions.get",
+               "run.executions.list", "run.executions.delete", "run.revisions.get", "run.revisions.list",
+               "run.revisions.delete", "run.operations.get", "run.operations.list", "run.operations.delete",
+               "run.tasks.get", "run.tasks.list", "run.routes.invoke"]
+
+
+# ── store ──────────────────────────────────────────────────────────────────
+class RunStore:
+    """Public dict attrs only → persisted/synced by core/nano_persist."""
+
+    def __init__(self):
+        self.services: dict = {}     # full service name -> Service resource
+        self.revisions: dict = {}    # full revision name -> Revision resource
+        self.jobs: dict = {}         # full job name -> Job resource
+        self.executions: dict = {}   # full execution name -> Execution resource
+        self.tasks: dict = {}        # full task name -> Task resource
+        self.operations: dict = {}   # full operation name -> Operation resource
+        self.policies: dict = {}     # full resource name -> IAM Policy
+        self.worker_pools: dict = {}     # full worker pool name -> WorkerPool resource
+        self.domain_mappings: dict = {}  # full domain mapping name -> DomainMapping resource
+        self.triggers: dict = {}         # full trigger name -> THE Eventarc Trigger (services/{s}/triggers; eventarcTriggers is an alias)
+        self.builds: dict = {}           # full build name -> Build resource (nested under a service)
+        self.seq: dict = {"op": 0, "uid": 0}
+        # Cross-store refs set once by the wire router (never persisted — see nano_persist):
+        # Observability (real metrics/logs fed by invoke_service) and Eventarc Pub/Sub delivery.
+        self.pubsub_store = None
+        self.logging_store = None
+        self.mon_store = None
+        self.refs = None   # callable(kind, *args) -> True/False/None: Cloud SQL / KMS / GCS / Secret Manager existence (wired by the router)
+
+
+_SHARED: RunStore | None = None
+
+
+def shared_store() -> RunStore:
+    """The appliance-wide store: the native wire and the console REST share it."""
+    global _SHARED
+    if _SHARED is None:
+        _SHARED = RunStore()
+    return _SHARED
+
+
+@dataclass
+class RunResponse:
+    status: int = 200
+    headers: dict = field(default_factory=dict)
+    body: bytes = b""
+    media_type: str | None = "application/json"
+
+
+class _E(Exception):
+    def __init__(self, status, gcp_status, message):
+        super().__init__(message)
+        self.status, self.gcp_status, self.message = status, gcp_status, message
+
+
+def _err(status, gcp_status, message):
+    body = {"error": {"code": status, "message": message, "status": gcp_status}}
+    return RunResponse(status=status, body=json.dumps(body).encode())
+
+
+def _json(status, obj):
+    return RunResponse(status=status, body=json.dumps(obj).encode())
+
+
+def _ts():
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+
+
+def _copy(x):
+    return json.loads(json.dumps(x))
+
+
+def _h(*parts):
+    return hashlib.sha1("|".join(str(p) for p in parts).encode()).hexdigest()
+
+
+# ── names / validation ─────────────────────────────────────────────────────
+_NAME = re.compile(r"^[a-z]([-a-z0-9]{0,47}[a-z0-9])?$")
+_LABEL = re.compile(r"^[a-z][-_a-z0-9]{0,62}$")
+_DUR = re.compile(r"^\d+(\.\d+)?s$")
+_MEM = re.compile(r"^\d+(\.\d+)?(Ki|Mi|Gi|Ti|K|M|G|T|k|m)?$")
+_CPU = re.compile(r"^(\d+(\.\d+)?|\d+m)$")
+
+
+def project_number(project):
+    """Stable 12-digit pseudo project number (real Cloud Run URLs/service accounts embed it)."""
+    return str(int(_h("pn", project)[:10], 16) % 900000000000 + 100000000000)
+
+
+def service_name(project, location, sid):
+    return "projects/%s/locations/%s/services/%s" % (project, location, sid)
+
+
+def job_name(project, location, jid):
+    return "projects/%s/locations/%s/jobs/%s" % (project, location, jid)
+
+
+def _check_name(kind, name):
+    if not _NAME.match(name or ""):
+        raise _E(400, "INVALID_ARGUMENT",
+                 "Invalid %s name %r: must be 1-49 chars of lowercase letters, digits and hyphens, "
+                 "start with a letter and not end with a hyphen." % (kind, name))
+
+
+def _check_location(location):
+    if location not in REGIONS:
+        raise _E(400, "INVALID_ARGUMENT", "Location %r is not a valid Cloud Run region." % location)
+
+
+def _check_map(m, what):
+    if not isinstance(m, dict):
+        raise _E(400, "INVALID_ARGUMENT", "Invalid %s." % what)
+    if len(m) > 64:
+        raise _E(400, "INVALID_ARGUMENT", "At most 64 %s are allowed." % what)
+    if what == "labels":
+        for k, v in m.items():
+            if not _LABEL.match(str(k)) or len(str(v)) > 63:
+                raise _E(400, "INVALID_ARGUMENT", "Invalid label %r: keys must match [a-z][-_a-z0-9]{0,62} "
+                                                  "and values be at most 63 characters." % k)
+
+
+def _enum_in(key, v):
+    """Accept a proto enum as its name or its number."""
+    table = _ENUMS.get(key)
+    if isinstance(v, int) and table is not None:
+        return table.get(v) if isinstance(table, dict) else (table[v] if 0 <= v < len(table) else v)
+    return v
+
+
+def _norm_enums(o):
+    """Normalise integer enums inside a Service/Job request body to names."""
+    if isinstance(o, list):
+        return [_norm_enums(x) for x in o]
+    if not isinstance(o, dict):
+        return o
+    out = {}
+    for k, v in o.items():
+        if k == "type" and isinstance(v, int) and 0 <= v < len(_TRAFFIC_TYPES):
+            out[k] = _TRAFFIC_TYPES[v]
+        elif k in _ENUMS:
+            out[k] = _enum_in(k, v)
+        else:
+            out[k] = _norm_enums(v)
+    return out
+
+
+# ── pagination ─────────────────────────────────────────────────────────────
+def _page(items, query):
+    try:
+        size = int(query.get("pageSize") or 0)
+    except ValueError:
+        raise _E(400, "INVALID_ARGUMENT", "Invalid pageSize.")
+    if size < 0:
+        raise _E(400, "INVALID_ARGUMENT", "pageSize must be non-negative.")
+    size = size or 1000
+    try:
+        start = int(query.get("pageToken") or 0)
+    except ValueError:
+        raise _E(400, "INVALID_ARGUMENT", "Invalid pageToken.")
+    chunk = items[start:start + size]
+    nxt = str(start + size) if start + size < len(items) else ""
+    return chunk, nxt
+
+
+# ── conditions / operations ────────────────────────────────────────────────
+def _conditions(now, *types):
+    return [{"type": t, "state": "CONDITION_SUCCEEDED", "lastTransitionTime": now, "severity": "INFO"
+             if t != "Ready" else "ERROR"} for t in types]
+
+
+def _uid(store, *parts):
+    store.seq["uid"] += 1
+    h = _h(*parts, store.seq["uid"])
+    return "%s-%s-%s-%s-%s" % (h[:8], h[8:12], h[12:16], h[16:20], h[20:32])
+
+
+_TYPES = {"service": "Service", "job": "Job", "execution": "Execution", "revision": "Revision",
+          "workerpool": "WorkerPool", "domainmapping": "DomainMapping"}
+
+
+def _operation(store, project, location, kind, resource):
+    """A completed LRO: metadata + response are the resource (Any, `@type` tagged)."""
+    store.seq["op"] += 1
+    oid = _uid(store, "op", project, location, store.seq["op"])
+    name = "projects/%s/locations/%s/operations/%s" % (project, location, oid)
+    t = "type.googleapis.com/google.cloud.run.v2.%s" % _TYPES[kind]
+    meta = dict(_copy(resource), **{"@type": t})
+    op = {"name": name, "metadata": meta, "done": True, "response": dict(_copy(resource), **{"@type": t})}
+    store.operations[name] = op
+    return op
+
+
+# ── containers / templates ─────────────────────────────────────────────────
+def _norm_container(c, idx, count, is_job):
+    if not isinstance(c, dict) or not c.get("image"):
+        raise _E(400, "INVALID_ARGUMENT", "Container image is required: template.containers[%d].image." % idx)
+    c = dict(c)
+    if not c.get("name"):
+        base = re.sub(r"[^a-z0-9]", "", c["image"].rsplit("/", 1)[-1].split(":")[0].split("@")[0].lower())[:20]
+        c["name"] = "%s-%d" % (base or "container", idx + 1)
+    res = dict(c.get("resources") or {})
+    lim = dict(res.get("limits") or {})
+    lim.setdefault("cpu", "1000m")
+    lim.setdefault("memory", "512Mi")
+    if not _CPU.match(str(lim["cpu"])):
+        raise _E(400, "INVALID_ARGUMENT", "Invalid CPU limit %r." % lim["cpu"])
+    if not _MEM.match(str(lim["memory"])):
+        raise _E(400, "INVALID_ARGUMENT", "Invalid memory limit %r." % lim["memory"])
+    res["limits"] = lim
+    if not is_job:
+        res.setdefault("cpuIdle", True)
+        res.setdefault("startupCpuBoost", False)
+        if idx == 0 and not c.get("ports"):
+            c["ports"] = [{"name": "http1", "containerPort": 8080}]
+    c["resources"] = res
+    return c
+
+
+def _norm_timeout(v, default):
+    v = v or default
+    if not _DUR.match(str(v)):
+        raise _E(400, "INVALID_ARGUMENT", "Invalid duration %r (use e.g. \"300s\")." % v)
+    return str(v)
+
+
+def _revision_template(project, spec, is_job, store=None, location=""):
+    """Normalise a RevisionTemplate / TaskTemplate (defaults the real service reports)."""
+    spec = dict(spec or {})
+    cs = spec.get("containers") or []
+    if not cs:
+        raise _E(400, "INVALID_ARGUMENT", "template.containers must contain at least one container with an image.")
+    if len(cs) > 10:
+        raise _E(400, "INVALID_ARGUMENT", "A revision may have at most 10 containers.")
+    spec["containers"] = [_norm_container(c, i, len(cs), is_job) for i, c in enumerate(cs)]
+    spec["timeout"] = _norm_timeout(spec.get("timeout"), "600s" if is_job else "300s")
+    spec.setdefault("serviceAccount", "%s-compute@developer.gserviceaccount.com" % project_number(project))
+    spec.setdefault("executionEnvironment", "EXECUTION_ENVIRONMENT_GEN2")
+    if is_job:
+        spec.setdefault("maxRetries", 3)
+    else:
+        sc = dict(spec.get("scaling") or {})
+        sc.setdefault("minInstanceCount", 0)
+        sc.setdefault("maxInstanceCount", 100)
+        if sc["minInstanceCount"] < 0 or sc["maxInstanceCount"] < 0 or \
+                (sc["maxInstanceCount"] and sc["minInstanceCount"] > sc["maxInstanceCount"]):
+            raise _E(400, "INVALID_ARGUMENT", "scaling.minInstanceCount must not exceed scaling.maxInstanceCount.")
+        spec["scaling"] = sc
+        conc = spec.get("maxInstanceRequestConcurrency", 80)
+        if not isinstance(conc, int) or conc < 0 or conc > 1000:
+            raise _E(400, "INVALID_ARGUMENT", "maxInstanceRequestConcurrency must be between 0 and 1000.")
+        spec["maxInstanceRequestConcurrency"] = conc
+    if spec.get("labels") is not None:
+        _check_map(spec["labels"], "labels")
+    _validate_template_ext(spec, is_job, store, project, location)
+    return spec
+
+
+# ── advanced template settings (probes, volumes, Cloud SQL, CMEK, autoscaling) ─────────────
+# Real Cloud Run v2 validation rules for fields that used to be unmodelled. Cross-service
+# references (Cloud SQL instance, KMS key, GCS bucket, secret) are checked against the real
+# sibling stores through `store.refs(kind, *args) -> True | False | None` (None = no store
+# wired, skip), so a typo'd instance is rejected exactly like the real control plane does.
+_QTY = re.compile(r"^\d+(\.\d+)?(Ki|Mi|Gi|Ti|K|M|G|T)?$")
+_SQL_INST = re.compile(r"^[a-z0-9][-a-z0-9]*:[a-z0-9-]+:[a-z][-a-z0-9]*$")
+_KMS_KEY = re.compile(r"^projects/([^/]+)/locations/([^/]+)/keyRings/([^/]+)/cryptoKeys/([^/]+)$")
+_TAG_RE = re.compile(r"^[a-z]([-a-z0-9]{0,45}[a-z0-9])?$")
+_MIN_ERR = "Invalid %s: %s"
+_ANN_SQL = "run.googleapis.com/cloudsql-instances"
+_ANN_TARGET = "autoscaling.knative.dev/target-utilization-percentage"
+_ANN_CPU_TARGET = "run.googleapis.com/autoscaling-target-cpu-utilization"
+
+
+def _ref(store, kind, *args):
+    fn = getattr(store, "refs", None)
+    if not callable(fn):
+        return None
+    try:
+        return fn(kind, *args)
+    except Exception:   # noqa: BLE001 — a sibling store hiccup must never fail a deploy
+        return None
+
+
+def _int_in(v, lo, hi, what):
+    if isinstance(v, bool) or not isinstance(v, int) or v < lo or v > hi:
+        raise _E(400, "INVALID_ARGUMENT", "%s must be an integer between %d and %d." % (what, lo, hi))
+    return v
+
+
+def _check_probe(p, which, where):
+    if not isinstance(p, dict):
+        raise _E(400, "INVALID_ARGUMENT", "%s must be an object." % where)
+    kinds = [k for k in ("httpGet", "tcpSocket", "grpc") if p.get(k) is not None]
+    if len(kinds) != 1:
+        raise _E(400, "INVALID_ARGUMENT", "%s: exactly one of httpGet, tcpSocket or grpc must be set." % where)
+    period = _int_in(p.get("periodSeconds", 10), 1, 240, where + ".periodSeconds")
+    timeout = _int_in(p.get("timeoutSeconds", 1), 0, 3600, where + ".timeoutSeconds")
+    if timeout > period:
+        raise _E(400, "INVALID_ARGUMENT", "%s.timeoutSeconds (%d) must not exceed periodSeconds (%d)." % (where, timeout, period))
+    _int_in(p.get("initialDelaySeconds", 0), 0, 240, where + ".initialDelaySeconds")
+    _int_in(p.get("failureThreshold", 3), 1, 1000, where + ".failureThreshold")
+    k = kinds[0]
+    port = (p[k] or {}).get("port")
+    if k == "httpGet":
+        path = (p[k] or {}).get("path", "/")
+        if not str(path).startswith("/"):
+            raise _E(400, "INVALID_ARGUMENT", "%s.httpGet.path must start with '/'." % where)
+        for h in (p[k] or {}).get("httpHeaders") or []:
+            if not isinstance(h, dict) or not h.get("name"):
+                raise _E(400, "INVALID_ARGUMENT", "%s.httpGet.httpHeaders entries need a name." % where)
+    if port is not None:
+        _int_in(port, 1, 65535, "%s.%s.port" % (where, k))
+    if which == "liveness" and k == "grpc" and not p[k]:
+        pass
+
+
+def _check_volumes(spec, is_job, store, project):
+    vols = spec.get("volumes") or []
+    if not isinstance(vols, list):
+        raise _E(400, "INVALID_ARGUMENT", "template.volumes must be a list.")
+    names, gen1 = {}, spec.get("executionEnvironment") == "EXECUTION_ENVIRONMENT_GEN1"
+    for i, v in enumerate(vols):
+        w = "template.volumes[%d]" % i
+        if not isinstance(v, dict) or not v.get("name"):
+            raise _E(400, "INVALID_ARGUMENT", "%s.name is required." % w)
+        if not re.match(r"^[a-z0-9]([-a-z0-9_.]*[a-z0-9])?$", v["name"]) or len(v["name"]) > 63:
+            raise _E(400, "INVALID_ARGUMENT", "%s.name %r is not a valid volume name." % (w, v["name"]))
+        if v["name"] in names:
+            raise _E(400, "INVALID_ARGUMENT", "Volume name %r is used more than once." % v["name"])
+        kinds = [k for k in ("secret", "cloudSqlInstance", "emptyDir", "nfs", "gcs") if v.get(k) is not None]
+        if len(kinds) != 1:
+            raise _E(400, "INVALID_ARGUMENT", "%s: exactly one of secret, cloudSqlInstance, emptyDir, nfs or gcs must be set." % w)
+        kind = kinds[0]
+        names[v["name"]] = kind
+        body = v[kind] or {}
+        if kind == "emptyDir":
+            if body.get("medium") not in (None, "", "MEMORY", "MEDIUM_UNSPECIFIED", "DISK"):
+                raise _E(400, "INVALID_ARGUMENT", "%s.emptyDir.medium must be MEMORY (in-memory) or DISK." % w)
+            if body.get("sizeLimit") and not _QTY.match(str(body["sizeLimit"])):
+                raise _E(400, "INVALID_ARGUMENT", "%s.emptyDir.sizeLimit %r is not a valid quantity (e.g. 512Mi, 10Gi)." % (w, body["sizeLimit"]))
+            if body.get("medium") == "DISK" and gen1:
+                raise _E(400, "INVALID_ARGUMENT", "Ephemeral disk (emptyDir medium DISK) requires the second-generation execution environment.")
+            if body.get("medium") == "DISK" and not body.get("sizeLimit"):
+                raise _E(400, "INVALID_ARGUMENT", "%s.emptyDir.sizeLimit is required for an ephemeral disk." % w)
+        elif kind == "cloudSqlInstance":
+            insts = body.get("instances") or []
+            if not insts or not isinstance(insts, list):
+                raise _E(400, "INVALID_ARGUMENT", "%s.cloudSqlInstance.instances must list at least one connection name." % w)
+            _check_sql_instances(insts, store)
+        elif kind == "secret":
+            if not body.get("secret"):
+                raise _E(400, "INVALID_ARGUMENT", "%s.secret.secret (Secret Manager secret name) is required." % w)
+            if _ref(store, "secret", project, str(body["secret"]).rsplit("/", 1)[-1]) is False:
+                raise _E(400, "INVALID_ARGUMENT", "Secret Manager secret '%s' does not exist." % body["secret"])
+            for it in body.get("items") or []:
+                if not isinstance(it, dict) or not it.get("path") or not it.get("version"):
+                    raise _E(400, "INVALID_ARGUMENT", "%s.secret.items entries need a path and a version." % w)
+        elif kind == "nfs":
+            if not body.get("server") or not str(body.get("path", "")).startswith("/"):
+                raise _E(400, "INVALID_ARGUMENT", "%s.nfs needs a server and an absolute path." % w)
+            if gen1:
+                raise _E(400, "INVALID_ARGUMENT", "NFS volumes require the second-generation execution environment.")
+        elif kind == "gcs":
+            if not body.get("bucket"):
+                raise _E(400, "INVALID_ARGUMENT", "%s.gcs.bucket is required." % w)
+            if _ref(store, "bucket", str(body["bucket"])) is False:
+                raise _E(400, "INVALID_ARGUMENT", "Cloud Storage bucket '%s' does not exist." % body["bucket"])
+            if gen1:
+                raise _E(400, "INVALID_ARGUMENT", "Cloud Storage volumes require the second-generation execution environment.")
+    paths = set()
+    for ci, c in enumerate(spec.get("containers") or []):
+        for m in c.get("volumeMounts") or []:
+            w = "template.containers[%d].volumeMounts" % ci
+            if not isinstance(m, dict) or m.get("name") not in names:
+                raise _E(400, "INVALID_ARGUMENT", "%s references volume %r, which is not defined in template.volumes." % (w, (m or {}).get("name")))
+            mp = m.get("mountPath", "")
+            if not str(mp).startswith("/"):
+                raise _E(400, "INVALID_ARGUMENT", "%s mountPath %r must be an absolute path." % (w, mp))
+            if names[m["name"]] == "cloudSqlInstance" and mp != "/cloudsql":
+                raise _E(400, "INVALID_ARGUMENT", "A Cloud SQL volume must be mounted at /cloudsql (got %r)." % mp)
+            if (ci, mp) in paths:
+                raise _E(400, "INVALID_ARGUMENT", "Mount path %r is used more than once in container %d." % (mp, ci))
+            paths.add((ci, mp))
+    used = {m.get("name") for c in (spec.get("containers") or []) for m in (c.get("volumeMounts") or [])}
+    for n, kind in names.items():
+        if n not in used and kind != "cloudSqlInstance":
+            raise _E(400, "INVALID_ARGUMENT", "Volume %r is defined but not mounted by any container." % n)
+
+
+def _check_sql_instances(insts, store):
+    for conn in insts:
+        if not isinstance(conn, str) or not _SQL_INST.match(conn):
+            raise _E(400, "INVALID_ARGUMENT", "Invalid Cloud SQL connection name %r (expected PROJECT:REGION:INSTANCE)." % (conn,))
+        proj, _reg, name = conn.split(":")
+        if _ref(store, "sql", proj, name) is False:
+            raise _E(400, "INVALID_ARGUMENT", "Cloud SQL instance '%s' does not exist." % conn)
+
+
+def _validate_template_ext(spec, is_job, store, project, location):
+    ann = spec.get("annotations") or {}
+    for c in spec.get("containers") or []:
+        for key, which in (("startupProbe", "startup"), ("livenessProbe", "liveness")):
+            if c.get(key) is not None:
+                if is_job:
+                    raise _E(400, "INVALID_ARGUMENT", "Jobs do not support %s." % key)
+                _check_probe(c[key], which, "container.%s" % key)
+    _check_volumes(spec, is_job, store, project)
+    if ann.get(_ANN_SQL):   # the annotation form functions / gcloud use
+        _check_sql_instances([x.strip() for x in str(ann[_ANN_SQL]).split(",") if x.strip()], store)
+    if not is_job:
+        for k in (_ANN_TARGET, _ANN_CPU_TARGET):
+            if ann.get(k) is not None:
+                try:
+                    ok = 1 <= int(ann[k]) <= 100
+                except (TypeError, ValueError):
+                    ok = False
+                if not ok:
+                    raise _E(400, "INVALID_ARGUMENT", "Annotation %s must be an integer between 1 and 100." % k)
+    key = spec.get("encryptionKey")
+    if key:
+        m = _KMS_KEY.match(str(key))
+        if not m:
+            raise _E(400, "INVALID_ARGUMENT", "template.encryptionKey must be a Cloud KMS CryptoKey (projects/P/locations/L/keyRings/R/cryptoKeys/K).")
+        if location and m.group(2) not in (location, "global"):
+            raise _E(400, "INVALID_ARGUMENT", "The Cloud KMS key location %r must match the region %r." % (m.group(2), location))
+        if _ref(store, "kms", str(key)) is False:
+            raise _E(400, "INVALID_ARGUMENT", "Cloud KMS key '%s' does not exist." % key)
+        if spec.get("encryptionKeyRevocationAction") not in (None, "", "PREVENT_NEW", "SHUTDOWN", "ENCRYPTION_KEY_REVOCATION_ACTION_UNSPECIFIED"):
+            raise _E(400, "INVALID_ARGUMENT", "encryptionKeyRevocationAction must be PREVENT_NEW or SHUTDOWN.")
+    elif spec.get("encryptionKeyRevocationAction") or spec.get("encryptionKeyShutdownDuration"):
+        raise _E(400, "INVALID_ARGUMENT", "encryptionKeyRevocationAction requires template.encryptionKey.")
+
+
+def _check_binauthz(b):
+    if b is None:
+        return
+    if not isinstance(b, dict) or bool(b.get("useDefault")) == bool(b.get("policy")):
+        raise _E(400, "INVALID_ARGUMENT", "binaryAuthorization: set exactly one of useDefault or policy.")
+    if b.get("policy") and not re.match(r"^projects/[^/]+/platforms/cloudRun/policies/[^/]+$", str(b["policy"])):
+        raise _E(400, "INVALID_ARGUMENT", "binaryAuthorization.policy must look like projects/P/platforms/cloudRun/policies/default.")
+
+
+def _check_tags(traffic):
+    seen = set()
+    for tt in traffic or []:
+        tag = tt.get("tag")
+        if not tag:
+            continue
+        if not _TAG_RE.match(str(tag)):
+            raise _E(400, "INVALID_ARGUMENT", "Invalid revision tag %r: use lowercase letters, digits and '-', start with a letter (max 47)." % tag)
+        if tag in seen:
+            raise _E(400, "INVALID_ARGUMENT", "Revision tag %r is assigned to more than one traffic target." % tag)
+        seen.add(tag)
+
+
+def desired_instances(template, in_flight=0, cpu_utilization=0.0):
+    """What the autoscaler would run for this load: the real Cloud Run rule of thumb.
+    Concurrency-bound (in_flight / (concurrency x target utilisation)), raised by the CPU target,
+    then clamped to the revision's min/max instance counts. Pure — the console shows it."""
+    sc = template.get("scaling") or {}
+    lo, hi = int(sc.get("minInstanceCount") or 0), int(sc.get("maxInstanceCount") or 0) or 100
+    ann = template.get("annotations") or {}
+    conc = int(template.get("maxInstanceRequestConcurrency") or 80) or 1
+    tgt = int(ann.get(_ANN_TARGET) or 60) / 100.0
+    cpu_tgt = int(ann.get(_ANN_CPU_TARGET) or 60) / 100.0
+    by_conc = -(-in_flight // max(1, int(conc * tgt))) if in_flight else 0
+    base = max(1, lo) if in_flight or cpu_utilization else lo
+    by_cpu = 0
+    if cpu_utilization:
+        by_cpu = max(1, int(-(-cpu_utilization // cpu_tgt))) if cpu_utilization > cpu_tgt else 1
+    return max(lo, min(hi, max(by_conc, by_cpu, 1 if (in_flight or cpu_utilization) else 0, base if in_flight else 0)))
+
+
+# ── inline function source (Cloud Run functions: the "Function" deploy source) ─────────────
+# Annotation keys the console's inline-editor deploy path uses to carry entry point, runtime
+# and source text on the Service resource (see consoles/src/gcp/services/functions/api.js).
+# A real deploy builds and runs this; Vyomi validates it parses and the entry point exists
+# (same bar as a build failing on bad code) but does not build a container or execute it.
+_FN_ANN_RUNTIME = "vyomi.dev/function-runtime"
+_FN_ANN_ENTRY = "vyomi.dev/function-entry-point"
+_FN_ANN_SOURCE = "vyomi.dev/function-source"
+
+
+def _validate_function_source(annotations):
+    runtime = str((annotations or {}).get(_FN_ANN_RUNTIME) or "")
+    if not runtime.lower().startswith("python"):
+        return   # only Python source is parsed server-side; other runtimes are stored as-is
+    source = (annotations or {}).get(_FN_ANN_SOURCE) or ""
+    if not source.strip():
+        return
+    import ast
+    entry = (annotations or {}).get(_FN_ANN_ENTRY) or "handler"
+    try:
+        tree = ast.parse(source)
+    except SyntaxError as e:
+        raise _E(400, "INVALID_ARGUMENT", "Function source has a syntax error: %s" % e)
+    defs = {n.name for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
+    if entry not in defs:
+        raise _E(400, "INVALID_ARGUMENT", "Function entry point %r not found in source." % entry)
+
+
+# ── data plane: invoke (feeds Observability with REAL metrics/logs, never synthetic) ──────
+# A minimal, safe-builtins sandbox — same shape/rationale as core/lambda_core.py's, kept
+# local so this GCP core never imports an AWS one. No filesystem / network / process access.
+_INVOKE_BUILTINS = {
+    name: __builtins__[name] if isinstance(__builtins__, dict) else getattr(__builtins__, name)
+    for name in ("abs", "all", "any", "bool", "dict", "enumerate", "filter", "float", "int", "len",
+                 "list", "map", "max", "min", "range", "reversed", "round", "set", "sorted", "str",
+                 "sum", "tuple", "zip", "isinstance", "hasattr", "getattr", "repr", "type", "chr",
+                 "ord", "Exception", "ValueError", "KeyError", "TypeError", "IndexError")
+}
+
+
+def _run_function_source(annotations, event):
+    """Actually execute the stored Python function source against `event` — the real
+    workload, not a stored config echo. Non-Python runtimes have no interpreter here
+    (Vyomi doesn't build/run arbitrary container images below the Pro compute tier); the
+    caller still records a genuine request for those, it just can't run the app code."""
+    runtime = str((annotations or {}).get(_FN_ANN_RUNTIME) or "")
+    if not runtime.lower().startswith("python"):
+        return {"ok": None}
+    source = (annotations or {}).get(_FN_ANN_SOURCE) or ""
+    entry = (annotations or {}).get(_FN_ANN_ENTRY) or "handler"
+    sandbox = {"__builtins__": dict(_INVOKE_BUILTINS), "json": json}
+    try:
+        exec(compile(source, "<function:%s>" % entry, "exec"), sandbox)
+        handler = sandbox.get(entry)
+        if not callable(handler):
+            raise RuntimeError("entry point %r is not defined" % entry)
+        return {"ok": True, "result": handler(event)}
+    except Exception as e:
+        return {"ok": False, "error": "%s: %s" % (type(e).__name__, e)}
+
+
+def _pick_revision(svc):
+    """Which revision serves this request — weighted by the real traffic split, exactly
+    how a load balancer honours a percentage split (not a fabricated metric)."""
+    statuses = svc.get("trafficStatuses") or []
+    if not statuses:
+        return (svc.get("latestReadyRevision") or "").rsplit("/", 1)[-1]
+    if len(statuses) == 1:
+        return statuses[0]["revision"]
+    roll, acc = random.randint(1, 100), 0
+    for st in statuses:
+        acc += int(st.get("percent") or 0)
+        if roll <= acc:
+            return st["revision"]
+    return statuses[-1]["revision"]
+
+
+def _record_observability(store, project, location, sid, revision, svc, out, latency_ms):
+    """Writes a real Cloud Logging entry + Cloud Monitoring points for this request —
+    exactly what the Observability tab's Metrics/Logs sections read back. Fed by
+    invoke_service's actual activity (direct :invoke calls, Eventarc trigger deliveries),
+    never random/synthetic data; a service nobody has called legitimately shows zeros."""
+    now = _ts()
+    ok = out.get("ok") is not False
+    logging_store = getattr(store, "logging_store", None)
+    if logging_store is not None:
+        msg = "%s %s %s %.1fms" % (sid, revision, "OK" if ok else "ERROR", latency_ms)
+        if out.get("ok") is False:
+            msg += " - %s" % out["error"]
+        gcp_logging.write_entries(logging_store, None, {"entries": [{
+            "logName": "projects/%s/logs/run.googleapis.com%%2Frequests" % project,
+            "resource": {"type": "cloud_run_revision",
+                         "labels": {"project_id": project, "service_name": sid, "revision_name": revision,
+                                    "location": location, "configuration_name": sid}},
+            "severity": "ERROR" if not ok else "INFO", "textPayload": msg,
+        }]})
+    mon_store = getattr(store, "mon_store", None)
+    if mon_store is not None:
+        # Metric series are keyed to the service's CURRENT revision (not whichever revision
+        # this particular request landed on) so a traffic-split service still reports ONE
+        # continuous series per metric instead of fragmenting across every pinned revision.
+        metric_revision = (svc.get("latestReadyRevision") or "").rsplit("/", 1)[-1] or revision
+        resource = {"type": "cloud_run_revision",
+                    "labels": {"project_id": project, "service_name": sid, "revision_name": metric_revision, "location": location}}
+        gcp_mon.record_system_point(mon_store, project, "run.googleapis.com/request_count", resource,
+                                     svc.get("_requestCount", 1), now)
+        gcp_mon.record_system_point(mon_store, project, "run.googleapis.com/request_latencies", resource,
+                                     round(latency_ms, 2), now, unit="ms")
+        min_inst = ((svc.get("template") or {}).get("scaling") or {}).get("minInstanceCount", 0)
+        gcp_mon.record_system_point(mon_store, project, "run.googleapis.com/container/instance_count", resource,
+                                     max(min_inst, 1), now)
+
+
+def _check_invoker(store, full, headers):
+    """Enforce the IAM invoker policy, exactly like the real serving path does before a
+    request ever reaches a revision: allUsers roles/run.invoker, or a Bearer token."""
+    if public_invoker(store, full):
+        return
+    auth = next((str(v) for k, v in (headers or {}).items() if k.lower() == "authorization"), "")
+    if not auth.lower().startswith("bearer ") or len(auth) < 15:
+        raise _E(403, "PERMISSION_DENIED",
+                 "The request was not authenticated. Either allow unauthenticated invocations "
+                 "or include a valid Authorization: Bearer token.")
+
+
+def invoke_service(store, project, location, sid, event=None, headers=None, internal=False):
+    """Deliver one real request to `sid`'s currently-serving revision, after the IAM invoker
+    check. The mechanism Observability's metrics/logs are fed from: a direct :invoke call, or
+    an Eventarc trigger firing for real (deliver_event). Internal callers (Eventarc delivery)
+    skip the IAM check: the trigger's service account is granted run.invoker automatically,
+    as in real Eventarc."""
+    full, svc = _get_service(store, project, location, sid)
+    if not internal:
+        _check_invoker(store, full, headers)
+    revision = _pick_revision(svc)
+    t0 = time.perf_counter()
+    out = _run_function_source(svc.get("annotations"), event if isinstance(event, dict) else {"raw": event})
+    latency_ms = (time.perf_counter() - t0) * 1000
+    svc["_requestCount"] = svc.get("_requestCount", 0) + 1
+    svc["_lastInvokeTime"] = _ts()
+    _record_observability(store, project, location, sid, revision, svc, out, latency_ms)
+    if out.get("ok") is False:
+        return {"status": 500, "body": {"error": out["error"]}}
+    if out.get("ok") is None:
+        return {"status": 202, "body": {"note": "Vyomi received the request but does not execute non-Python "
+                                                  "container workloads (see the Source tab's limitations)."}}
+    return {"status": 200, "body": out.get("result")}
+
+
+def _rev_suffix(svc_full, n):
+    return "%s-%05d-%s" % (svc_full.rsplit("/", 1)[-1], n, "".join(
+        "abcdefghijklmnopqrstuvwxyz"[int(c, 16) % 26] for c in _h("rev", svc_full, n)[:3]))
+
+
+def _new_revision(store, svc_full, svc, now):
+    t = _copy(svc["template"])
+    n = svc.pop("_revSeq", 0) + 1
+    svc["_revSeq"] = n
+    want = t.pop("revision", "") or ""
+    short = want if want else _rev_suffix(svc_full, n)
+    sname = svc_full.rsplit("/", 1)[-1]
+    if want and not want.startswith(sname + "-"):
+        raise _E(400, "INVALID_ARGUMENT", "Revision name %r must begin with the service name %r followed by a hyphen." % (want, sname))
+    parts = svc_full.split("/")
+    full = "projects/%s/locations/%s/services/%s/revisions/%s" % (parts[1], parts[3], sname, short)
+    if full in store.revisions:
+        raise _E(409, "ALREADY_EXISTS", "Revision named %s already exists." % short)
+    rev = {"name": full, "uid": _uid(store, "rev", full), "generation": "1",
+           "labels": t.pop("labels", {}) or {}, "annotations": t.pop("annotations", {}) or {},
+           "createTime": now, "updateTime": now, "launchStage": svc.get("launchStage", "GA"),
+           "service": svc_full, "logUri": "https://console.cloud.google.com/logs/viewer?project=%s&resource=cloud_run_revision/service_name/%s/revision_name/%s" % (parts[1], sname, short),
+           "observedGeneration": "1", "reconciling": False,
+           "conditions": _conditions(now, "Ready", "ResourcesAvailable", "ContainerReady", "Active"),
+           "etag": '"%s"' % _h("rev", full, now)[:16]}
+    rev.update(t)
+    store.revisions[full] = rev
+    return rev
+
+
+# ── services ───────────────────────────────────────────────────────────────
+def _service_uri(project, location, sid):
+    return "https://%s-%s.%s.run.app" % (sid, project_number(project), location)
+
+
+def _traffic_check(store, svc_full, traffic):
+    if not isinstance(traffic, list):
+        raise _E(400, "INVALID_ARGUMENT", "Invalid traffic.")
+    total = 0
+    for tt in traffic:
+        total += int(tt.get("percent", 0) or 0)
+        if tt.get("type") == REVISION or tt.get("revision"):
+            rn = "%s/revisions/%s" % (svc_full, tt.get("revision", ""))
+            if rn not in store.revisions:
+                raise _E(400, "INVALID_ARGUMENT", "Revision %r referenced by traffic does not exist." % tt.get("revision"))
+    if traffic and total != 100:
+        raise _E(400, "INVALID_ARGUMENT", "Traffic percentages must sum to 100, got %d." % total)
+
+
+def _traffic_statuses(store, svc_full, svc):
+    out = []
+    latest = svc.get("latestReadyRevision", "")
+    for tt in svc.get("traffic", []):
+        st = {"type": tt.get("type", LATEST), "percent": tt.get("percent", 0)}
+        if tt.get("type", LATEST) == LATEST:
+            st["revision"] = latest.rsplit("/", 1)[-1]
+        else:
+            st["revision"] = tt.get("revision", "")
+        if tt.get("tag"):
+            st["tag"] = tt["tag"]
+            st["uri"] = svc["uri"].replace("https://", "https://%s---" % tt["tag"], 1)
+        out.append(st)
+    return out
+
+
+def _settle_service(store, svc_full, svc, now, new_revision):
+    if new_revision:
+        rev = _new_revision(store, svc_full, svc, now)
+        svc["latestCreatedRevision"] = svc["latestReadyRevision"] = rev["name"]
+    svc["updateTime"] = now
+    svc["observedGeneration"] = svc["generation"]
+    svc["reconciling"] = False
+    svc["conditions"] = _conditions(now, "Ready", "RoutesReady", "ConfigurationsReady")
+    svc["terminalCondition"] = svc["conditions"][0]
+    svc["trafficStatuses"] = _traffic_statuses(store, svc_full, svc)
+    svc["etag"] = '"%s"' % _h("svc", svc_full, svc["generation"], now)[:16]
+
+
+def service_view(svc):
+    return {k: _copy(v) for k, v in svc.items() if not k.startswith("_")}
+
+
+def create_service(store, project, location, query, payload):
+    _check_location(location)
+    sid = query.get("serviceId") or ""
+    if not sid:
+        raise _E(400, "INVALID_ARGUMENT", "Service ID must be specified (serviceId).")
+    _check_name("service", sid)
+    spec = _norm_enums(payload)
+    if not spec.get("template"):
+        raise _E(400, "INVALID_ARGUMENT", "template is required.")
+    full = service_name(project, location, sid)
+    if full in store.services:
+        raise _E(409, "ALREADY_EXISTS", "Resource '%s' already exists." % full)
+    for k in ("labels", "annotations"):
+        if spec.get(k) is not None:
+            _check_map(spec[k], k)
+    _validate_function_source(spec.get("annotations"))
+    template = _revision_template(project, spec["template"], False, store, location)
+    _check_binauthz(spec.get("binaryAuthorization"))
+    _check_tags(spec.get("traffic"))
+    traffic = spec.get("traffic") or [{"type": LATEST, "percent": 100}]
+    now = _ts()
+    svc = {"name": full, "description": spec.get("description", ""), "uid": _uid(store, "svc", full),
+           "generation": "1", "labels": spec.get("labels", {}) or {}, "annotations": spec.get("annotations", {}) or {},
+           "createTime": now, "creator": "admin@vyomi.cloud", "lastModifier": "admin@vyomi.cloud",
+           "client": spec.get("client", ""), "clientVersion": spec.get("clientVersion", ""),
+           "ingress": spec.get("ingress") or "INGRESS_TRAFFIC_ALL", "launchStage": spec.get("launchStage") or "GA",
+           "template": template, "traffic": traffic, "uri": _service_uri(project, location, sid),
+           "defaultUriDisabled": bool(spec.get("defaultUriDisabled", False)), "urls": []}
+    if spec.get("binaryAuthorization"):
+        svc["binaryAuthorization"] = spec["binaryAuthorization"]
+    if spec.get("scaling"):
+        svc["scaling"] = spec["scaling"]
+    svc["urls"] = [svc["uri"]]
+    if query.get("validateOnly") in ("true", "True", True):
+        return _operation(store, project, location, "service", service_view(svc))
+    _traffic_check(store, full, traffic)
+    store.services[full] = svc
+    _settle_service(store, full, svc, now, True)
+    return _operation(store, project, location, "service", service_view(svc))
+
+
+def _get_service(store, project, location, sid):
+    full = service_name(project, location, sid)
+    svc = store.services.get(full)
+    if not svc:
+        raise _E(404, "NOT_FOUND", "Resource '%s' of kind 'SERVICE' in region '%s' in project '%s' does not exist." % (sid, location, project))
+    return full, svc
+
+
+_PATCHABLE = ("description", "labels", "annotations", "client", "clientVersion", "ingress", "launchStage",
+              "template", "traffic", "binaryAuthorization", "scaling", "defaultUriDisabled")
+
+
+def _mask_fields(query, payload):
+    mask = query.get("updateMask") or ""
+    if mask:
+        return [m.split(".", 1)[0] for m in mask.split(",") if m]
+    return [k for k in payload if k in _PATCHABLE]
+
+
+def update_service(store, project, location, sid, query, payload):
+    full = service_name(project, location, sid)
+    svc = store.services.get(full)
+    allow_missing = query.get("allowMissing") in ("true", "True", True)
+    if not svc:
+        if allow_missing:
+            return create_service(store, project, location, {"serviceId": sid}, payload)
+        _get_service(store, project, location, sid)
+    spec = _norm_enums(payload)
+    if spec.get("name") and spec["name"] != full:
+        raise _E(400, "INVALID_ARGUMENT", "Service name in the body does not match the request path.")
+    fields = _mask_fields(query, spec)
+    new = _copy(service_view(svc))
+    changed_template = False
+    for f in fields:
+        if f not in _PATCHABLE:
+            raise _E(400, "INVALID_ARGUMENT", "Field %r is not updatable." % f)
+        if f not in spec:
+            if f in ("labels", "annotations"):
+                new[f] = {}
+            continue
+        if f in ("labels", "annotations"):
+            _check_map(spec[f], f)
+        if f == "template":
+            tpl = _revision_template(project, spec["template"], False, store, location)
+            cur = _copy(svc["template"])
+            cur.pop("revision", None)
+            differs = json.dumps(cur, sort_keys=True) != json.dumps({k: v for k, v in tpl.items() if k != "revision"}, sort_keys=True)
+            named = ("%s/revisions/%s" % (full, tpl["revision"])) if tpl.get("revision") else ""
+            if named and named in store.revisions:   # re-sending an existing revision's name (gcloud update-traffic does)
+                if differs:
+                    raise _E(409, "ALREADY_EXISTS", "Revision named %s with different configuration already exists." % tpl["revision"])
+            elif differs or named:
+                changed_template = True
+            new["template"] = tpl
+        else:
+            new[f] = spec[f]
+    if "binaryAuthorization" in fields:
+        _check_binauthz(new.get("binaryAuthorization"))
+    if "traffic" in fields:
+        _check_tags(new.get("traffic", []))
+        _traffic_check(store, full, new.get("traffic", []))
+        if not new.get("traffic"):
+            new["traffic"] = [{"type": LATEST, "percent": 100}]
+    if "annotations" in fields:
+        _validate_function_source(new.get("annotations"))
+    if query.get("validateOnly") in ("true", "True", True):
+        return _operation(store, project, location, "service", new)
+    svc.update({k: new[k] for k in fields if k in new})
+    if "traffic" in fields and not svc.get("traffic"):
+        svc["traffic"] = new["traffic"]
+    svc["generation"] = str(int(svc["generation"]) + 1)
+    svc["lastModifier"] = "admin@vyomi.cloud"
+    _settle_service(store, full, svc, _ts(), changed_template)
+    return _operation(store, project, location, "service", service_view(svc))
+
+
+def delete_service(store, project, location, sid, query):
+    full, svc = _get_service(store, project, location, sid)
+    etag = query.get("etag")
+    if etag and etag != svc.get("etag"):
+        raise _E(409, "ABORTED", "The supplied etag does not match the service's current etag.")
+    view = service_view(svc)
+    now = _ts()
+    view["deleteTime"] = now
+    view["expireTime"] = now
+    if query.get("validateOnly") not in ("true", "True", True):
+        del store.services[full]
+        for n in [n for n in store.revisions if n.startswith(full + "/revisions/")]:
+            del store.revisions[n]
+        store.policies.pop(full, None)
+    return _operation(store, project, location, "service", view)
+
+
+# ── revisions ──────────────────────────────────────────────────────────────
+def revision_view(rev):
+    return _copy(rev)
+
+
+def _get_revision(store, project, location, sid, rid):
+    full = "%s/revisions/%s" % (service_name(project, location, sid), rid)
+    rev = store.revisions.get(full)
+    if not rev:
+        raise _E(404, "NOT_FOUND", "Revision '%s' of service '%s' does not exist." % (rid, sid))
+    return full, rev
+
+
+def delete_revision(store, project, location, sid, rid, query):
+    full, rev = _get_revision(store, project, location, sid, rid)
+    svc = store.services.get(rev["service"])
+    if svc:
+        serving = {tt.get("revision") for tt in svc.get("traffic", []) if tt.get("percent")}
+        latest_serves = any(tt.get("type", LATEST) == LATEST and tt.get("percent") for tt in svc.get("traffic", []))
+        if rid in serving or (latest_serves and rev["name"] == svc.get("latestReadyRevision")):
+            raise _E(400, "FAILED_PRECONDITION", "Revision '%s' is serving traffic and cannot be deleted." % rid)
+    view = revision_view(rev)
+    view["deleteTime"] = _ts()
+    if query.get("validateOnly") not in ("true", "True", True):
+        del store.revisions[full]
+    return _operation(store, project, location, "revision", view)
+
+
+# ── jobs ───────────────────────────────────────────────────────────────────
+def _job_template(project, spec, store=None, location=""):
+    spec = dict(spec or {})
+    if not spec.get("template"):
+        raise _E(400, "INVALID_ARGUMENT", "template.template is required (the task template).")
+    task = _revision_template(project, spec["template"], True, store, location)
+    out = {"labels": spec.get("labels", {}) or {}, "annotations": spec.get("annotations", {}) or {},
+           "parallelism": spec.get("parallelism", 1), "taskCount": spec.get("taskCount", 1), "template": task}
+    for k in ("parallelism", "taskCount"):
+        if not isinstance(out[k], int) or out[k] < 0 or out[k] > 10000:
+            raise _E(400, "INVALID_ARGUMENT", "%s must be between 0 and 10000." % k)
+    if out["taskCount"] < 1:
+        raise _E(400, "INVALID_ARGUMENT", "taskCount must be at least 1.")
+    if out["parallelism"] > out["taskCount"]:
+        out["parallelism"] = out["taskCount"]
+    return out
+
+
+def _settle_job(store, full, job, now):
+    job["updateTime"] = now
+    job["observedGeneration"] = job["generation"]
+    job["reconciling"] = False
+    job["conditions"] = _conditions(now, "Ready", "JobExecutionsReady")
+    job["terminalCondition"] = job["conditions"][0]
+    job["etag"] = '"%s"' % _h("job", full, job["generation"], now)[:16]
+
+
+def job_view(job):
+    return {k: _copy(v) for k, v in job.items() if not k.startswith("_")}
+
+
+def create_job(store, project, location, query, payload):
+    _check_location(location)
+    jid = query.get("jobId") or ""
+    if not jid:
+        raise _E(400, "INVALID_ARGUMENT", "Job ID must be specified (jobId).")
+    _check_name("job", jid)
+    spec = _norm_enums(payload)
+    full = job_name(project, location, jid)
+    if full in store.jobs:
+        raise _E(409, "ALREADY_EXISTS", "Resource '%s' already exists." % full)
+    for k in ("labels", "annotations"):
+        if spec.get(k) is not None:
+            _check_map(spec[k], k)
+    now = _ts()
+    job = {"name": full, "uid": _uid(store, "job", full), "generation": "1",
+           "labels": spec.get("labels", {}) or {}, "annotations": spec.get("annotations", {}) or {},
+           "createTime": now, "creator": "admin@vyomi.cloud", "lastModifier": "admin@vyomi.cloud",
+           "client": spec.get("client", ""), "clientVersion": spec.get("clientVersion", ""),
+           "launchStage": spec.get("launchStage") or "GA", "template": _job_template(project, spec.get("template"), store, location),
+           "executionCount": 0}
+    if query.get("validateOnly") in ("true", "True", True):
+        return _operation(store, project, location, "job", job_view(job))
+    store.jobs[full] = job
+    _settle_job(store, full, job, now)
+    return _operation(store, project, location, "job", job_view(job))
+
+
+def _get_job(store, project, location, jid):
+    full = job_name(project, location, jid)
+    job = store.jobs.get(full)
+    if not job:
+        raise _E(404, "NOT_FOUND", "Resource '%s' of kind 'JOB' in region '%s' in project '%s' does not exist." % (jid, location, project))
+    return full, job
+
+
+def update_job(store, project, location, jid, query, payload):
+    full = job_name(project, location, jid)
+    job = store.jobs.get(full)
+    if not job:
+        if query.get("allowMissing") in ("true", "True", True):
+            return create_job(store, project, location, {"jobId": jid}, payload)
+        _get_job(store, project, location, jid)
+    spec = _norm_enums(payload)
+    fields = _mask_fields(query, spec)
+    new = job_view(job)
+    for f in fields:
+        if f not in ("labels", "annotations", "client", "clientVersion", "launchStage", "template"):
+            raise _E(400, "INVALID_ARGUMENT", "Field %r is not updatable." % f)
+        if f not in spec:
+            continue
+        if f in ("labels", "annotations"):
+            _check_map(spec[f], f)
+            new[f] = spec[f]
+        elif f == "template":
+            new["template"] = _job_template(project, spec["template"], store, location)
+        else:
+            new[f] = spec[f]
+    if query.get("validateOnly") in ("true", "True", True):
+        return _operation(store, project, location, "job", new)
+    job.update({k: new[k] for k in fields if k in new})
+    job["generation"] = str(int(job["generation"]) + 1)
+    job["lastModifier"] = "admin@vyomi.cloud"
+    _settle_job(store, full, job, _ts())
+    return _operation(store, project, location, "job", job_view(job))
+
+
+def delete_job(store, project, location, jid, query):
+    full, job = _get_job(store, project, location, jid)
+    etag = query.get("etag")
+    if etag and etag != job.get("etag"):
+        raise _E(409, "ABORTED", "The supplied etag does not match the job's current etag.")
+    view = job_view(job)
+    now = _ts()
+    view["deleteTime"] = now
+    view["expireTime"] = now
+    if query.get("validateOnly") not in ("true", "True", True):
+        del store.jobs[full]
+        for n in [n for n in store.executions if n.startswith(full + "/executions/")]:
+            del store.executions[n]
+        for n in [n for n in store.tasks if n.startswith(full + "/executions/")]:
+            del store.tasks[n]
+        store.policies.pop(full, None)
+    return _operation(store, project, location, "job", view)
+
+
+# ── executions / tasks ─────────────────────────────────────────────────────
+def run_job(store, project, location, jid, payload):
+    full, job = _get_job(store, project, location, jid)
+    ov = payload.get("overrides") or {}
+    count = ov.get("taskCount") or job["template"]["taskCount"]
+    if not isinstance(count, int) or count < 1:
+        raise _E(400, "INVALID_ARGUMENT", "overrides.taskCount must be at least 1.")
+    now = _ts()
+    job["executionCount"] += 1
+    n = job["executionCount"]
+    eid = "%s-%s" % (jid, "".join("abcdefghijklmnopqrstuvwxyz"[int(c, 16) % 26] for c in _h("exe", full, n)[:5]))
+    ename = "%s/executions/%s" % (full, eid)
+    tpl = _copy(job["template"])
+    tpl["taskCount"] = count
+    if ov.get("timeout"):
+        tpl["template"]["timeout"] = _norm_timeout(ov["timeout"], "600s")
+    for i, co in enumerate(ov.get("containerOverrides") or []):
+        if i < len(tpl["template"]["containers"]):
+            c = tpl["template"]["containers"][i]
+            if co.get("args"):
+                c["args"] = co["args"]
+            if co.get("env"):
+                c["env"] = (c.get("env") or []) + co["env"]
+            if co.get("clearArgs"):
+                c.pop("args", None)
+    ex = {"name": ename, "uid": _uid(store, "exe", ename), "generation": "1", "labels": tpl.get("labels", {}),
+          "annotations": tpl.get("annotations", {}), "createTime": now, "startTime": now, "completionTime": now,
+          "updateTime": now, "job": jid, "launchStage": job.get("launchStage", "GA"),
+          "parallelism": min(tpl["parallelism"], count), "taskCount": count, "template": tpl["template"],
+          "reconciling": False, "conditions": _conditions(now, "Completed", "Started", "ResourcesAvailable"),
+          "observedGeneration": "1", "runningCount": 0, "succeededCount": count, "failedCount": 0,
+          "cancelledCount": 0, "retriedCount": 0,
+          "logUri": "https://console.cloud.google.com/logs/viewer?project=%s&resource=cloud_run_job/job_name/%s/location/%s" % (project, jid, location),
+          "etag": '"%s"' % _h("exe", ename, now)[:16]}
+    store.executions[ename] = ex
+    for i in range(count):
+        tname = "%s/tasks/%s-task%d" % (ename, eid, i)
+        store.tasks[tname] = {"name": tname, "uid": _uid(store, "task", tname), "generation": "1", "createTime": now,
+                              "startTime": now, "completionTime": now, "updateTime": now, "job": jid, "execution": eid,
+                              "containers": [{"name": c.get("name", ""), "image": c["image"]} for c in ex["template"]["containers"]],
+                              "volumes": ex["template"].get("volumes", []), "maxRetries": ex["template"]["maxRetries"],
+                              "timeout": ex["template"]["timeout"], "serviceAccount": ex["template"]["serviceAccount"],
+                              "executionEnvironment": ex["template"]["executionEnvironment"], "reconciling": False,
+                              "conditions": _conditions(now, "Ready", "ResourcesAvailable", "Started", "Retried"),
+                              "observedGeneration": "1", "index": i, "retried": 0,
+                              "lastAttemptResult": {"status": {"code": 0, "message": ""}, "exitCode": 0},
+                              "logUri": ex["logUri"], "etag": '"%s"' % _h("task", tname)[:16]}
+    job["latestCreatedExecution"] = {"name": ename, "createTime": now, "completionTime": now}
+    job["updateTime"] = now
+    return _operation(store, project, location, "execution", ex)
+
+
+def _get_execution(store, project, location, jid, eid):
+    full = "%s/executions/%s" % (job_name(project, location, jid), eid)
+    ex = store.executions.get(full)
+    if not ex:
+        raise _E(404, "NOT_FOUND", "Execution '%s' of job '%s' does not exist." % (eid, jid))
+    return full, ex
+
+
+def delete_execution(store, project, location, jid, eid, query):
+    full, ex = _get_execution(store, project, location, jid, eid)
+    view = _copy(ex)
+    view["deleteTime"] = _ts()
+    if query.get("validateOnly") not in ("true", "True", True):
+        del store.executions[full]
+        for n in [n for n in store.tasks if n.startswith(full + "/tasks/")]:
+            del store.tasks[n]
+    return _operation(store, project, location, "execution", view)
+
+
+def cancel_execution(store, project, location, jid, eid):
+    _, ex = _get_execution(store, project, location, jid, eid)
+    raise _E(400, "FAILED_PRECONDITION", "Execution %s has already completed and cannot be cancelled." % ex["name"].rsplit("/", 1)[-1])
+
+
+# ── IAM ────────────────────────────────────────────────────────────────────
+def _policy(store, full):
+    return store.policies.get(full) or {"version": 1, "etag": "ACAB", "bindings": []}
+
+
+def get_iam_policy(store, full, query):
+    return _copy(_policy(store, full))
+
+
+def set_iam_policy(store, full, payload):
+    pol = payload.get("policy")
+    if not isinstance(pol, dict):
+        raise _E(400, "INVALID_ARGUMENT", "policy must be specified.")
+    cur = _policy(store, full)
+    if pol.get("etag") and pol["etag"] != cur["etag"] and cur["bindings"]:
+        raise _E(409, "ABORTED", "There were concurrent policy changes. Please retry the whole read-modify-write with exponential backoff.")
+    bindings = []
+    for b in pol.get("bindings") or []:
+        if not b.get("role") or not b.get("members"):
+            raise _E(400, "INVALID_ARGUMENT", "Each binding needs a role and at least one member.")
+        bindings.append({"role": b["role"], "members": list(b["members"])})
+    new = {"version": pol.get("version", 1) or 1, "bindings": bindings,
+           "etag": "CAE=" if not bindings else base64.b64encode(bytes.fromhex(_h("pol", json.dumps(bindings, sort_keys=True))[:16])).decode()}
+    store.policies[full] = new
+    return _copy(new)
+
+
+def public_invoker(store, full):
+    return any(b["role"] == IAM_INVOKER and "allUsers" in b["members"] for b in _policy(store, full)["bindings"])
+
+
+# ── console views ──────────────────────────────────────────────────────────
+def console_view(store, full):
+    svc = store.services[full]
+    seg = full.split("/")
+    tpl = svc["template"]
+    c0 = tpl["containers"][0]
+    lim = c0["resources"]["limits"]
+    latest = (svc.get("latestReadyRevision") or "").rsplit("/", 1)[-1]
+    sc = tpl["scaling"]
+    revs = sorted((r for n, r in store.revisions.items() if r["service"] == full), key=lambda r: r["createTime"])
+    v = service_view(svc)
+    ports = c0.get("ports") or [{"containerPort": 8080}]
+    v.update({
+        "id": seg[5], "resourceName": full, "project": seg[1], "region": seg[3],
+        "deployment": "Container",
+        "image": c0["image"],
+        "authentication": "Allow unauthenticated" if public_invoker(store, full) else "Require authentication",
+        "ingress_text": {"INGRESS_TRAFFIC_ALL": "All", "INGRESS_TRAFFIC_INTERNAL_ONLY": "Internal",
+                         "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER": "Internal and Cloud Load Balancing",
+                         "INGRESS_TRAFFIC_NONE": "None"}.get(svc["ingress"], "All"),
+        "last_deployed": svc["updateTime"], "deployed_by": svc["lastModifier"],
+        "revision": latest, "revisions_count": len(revs), "url": svc["uri"],
+        "cpu": str(lim["cpu"]), "memory": str(lim["memory"]), "port": str(ports[0]["containerPort"]),
+        "instances": "%s-%s" % (sc["minInstanceCount"], sc["maxInstanceCount"] or "unlimited"),
+        "concurrency": str(tpl["maxInstanceRequestConcurrency"]), "timeout": tpl["timeout"],
+        "service_account": tpl["serviceAccount"],
+        "exec_env": tpl["executionEnvironment"].replace("EXECUTION_ENVIRONMENT_", "").title().replace("Gen", "Gen "),
+        "cpu_allocation": "CPU is only allocated during request processing" if c0["resources"]["cpuIdle"] else "CPU is always allocated",
+        "traffic_text": ", ".join("%s%% → %s" % (t.get("percent", 0), "latest revision" if t.get("type", LATEST) == LATEST else t.get("revision", ""))
+                                  for t in svc["traffic"]) or "None",
+        "revisions_text": ", ".join(r["name"].rsplit("/", 1)[-1] for r in revs) or "None",
+        "labels_text": ", ".join("%s=%s" % kv for kv in sorted((svc.get("labels") or {}).items())) or "None",
+        "description_text": svc.get("description") or "No description",
+        "created": svc["createTime"], "creator_text": svc["creator"],
+        "data_plane": "Control plane (containers are not executed below the Pro tier)",
+        "status": "Ready",
+    })
+    return v
+
+
+def list_all(store, project=None):
+    """Console grid: every service (optionally for one project)."""
+    return [console_view(store, n) for n in sorted(store.services)
+            if project is None or n.startswith("projects/%s/" % project)]
+
+
+def view_by_name(store, full):
+    return console_view(store, full)
+
+
+def job_from_form(b, project="demo"):
+    """Console create form (catalog createFields) → REST body + query for services.create, shared
+    by the offline console REST and the Nano adapter so both consoles create identical services."""
+    location = str(b.get("region") or b.get("location") or "us-central1")
+    sid = str(b.get("name") or "").strip()
+
+    def num(key, default):
+        v = b.get(key)
+        try:
+            return int(v) if v not in (None, "") else default
+        except (TypeError, ValueError):
+            return -1
+
+    container = {"image": str(b.get("image") or DEFAULT_IMAGE).strip(),
+                 "ports": [{"containerPort": num("port", 8080)}],
+                 "resources": {"limits": {"cpu": str(b.get("cpu") or "1"), "memory": str(b.get("memory") or "512Mi")}}}
+    tpl = {"containers": [container], "scaling": {"minInstanceCount": num("minInstances", 0),
+                                                  "maxInstanceCount": num("maxInstances", 100)},
+           "maxInstanceRequestConcurrency": num("concurrency", 80),
+           "timeout": "%ss" % num("timeoutSeconds", 300)}
+    ingress = str(b.get("ingress") or "all").lower()
+    body = {"template": tpl,
+            "ingress": {"all": "INGRESS_TRAFFIC_ALL", "internal": "INGRESS_TRAFFIC_INTERNAL_ONLY",
+                        "internal-and-cloud-load-balancing": "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"}.get(ingress, "INGRESS_TRAFFIC_ALL")}
+    if b.get("description"):
+        body["description"] = str(b["description"])
+    if isinstance(b.get("labels"), dict) and b["labels"]:
+        body["labels"] = b["labels"]
+    unauth = str(b.get("allowUnauthenticated", "true")).lower() in ("true", "yes", "1", "allow unauthenticated")
+    return {"parent": "projects/%s/locations/%s" % (project, location), "location": location, "serviceId": sid,
+            "service": body, "allowUnauthenticated": unauth}
+
+
+# ── Knative v1 façade (what `gcloud run services|revisions ...` speaks) ─────────────────────────
+# gcloud's Cloud Run commands use the regional Knative-style API
+#   {region}-run.googleapis.com/apis/serving.knative.dev/v1/namespaces/{project}/services[/{name}]
+# rather than the v2 Admin API. It is a second view of the SAME services and revisions: the region
+# comes from the Host header's `{region}-` prefix; bodies are converted to/from the v2 resources.
+_KN = "apis/serving.knative.dev/v1/namespaces/"
+_KN_DOM = "apis/domains.cloudrun.com/v1/namespaces/"   # `gcloud run domain-mappings ...`
+_INGRESS_KN = {"all": "INGRESS_TRAFFIC_ALL", "internal": "INGRESS_TRAFFIC_INTERNAL_ONLY",
+               "internal-and-cloud-load-balancing": "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER", "none": "INGRESS_TRAFFIC_NONE"}
+_INGRESS_V2 = {v: k for k, v in _INGRESS_KN.items()}
+
+
+def _kn_region(headers):
+    for k, v in headers.items():
+        if k.lower() == "host":
+            m = re.match(r"^([a-z]+-[a-z]+[0-9]+)-", str(v))
+            if m:
+                return m.group(1)
+    return "us-central1"
+
+
+def _kn_conditions(conds):
+    return [{"type": c["type"], "status": "True", "lastTransitionTime": c["lastTransitionTime"]} for c in conds]
+
+
+def _kn_service(store, full):
+    svc = store.services[full]
+    parts = full.split("/")
+    project, location, sid = parts[1], parts[3], parts[5]
+    t = svc["template"]
+    ann = dict(svc.get("annotations") or {})
+    ann["run.googleapis.com/ingress"] = _INGRESS_V2.get(svc["ingress"], "all")
+    ann["run.googleapis.com/urls"] = json.dumps(svc.get("urls") or [svc["uri"]])
+    ann["serving.knative.dev/creator"] = svc["creator"]
+    ann["serving.knative.dev/lastModifier"] = svc["lastModifier"]
+    tann = {"autoscaling.knative.dev/maxScale": str(t["scaling"]["maxInstanceCount"])}
+    if t["scaling"]["minInstanceCount"]:
+        tann["autoscaling.knative.dev/minScale"] = str(t["scaling"]["minInstanceCount"])
+    tann["run.googleapis.com/execution-environment"] = "gen2" if t["executionEnvironment"].endswith("GEN2") else "gen1"
+    containers = []
+    for c in t["containers"]:
+        kc = {"name": c.get("name", ""), "image": c["image"], "resources": {"limits": dict(c["resources"]["limits"])}}
+        for key in ("command", "args", "env", "ports"):
+            if c.get(key):
+                kc[key] = c[key]
+        containers.append(kc)
+    traffic = []
+    for tt in svc["traffic"]:
+        e = {"percent": tt.get("percent", 0)}
+        if tt.get("type", LATEST) == LATEST:
+            e["latestRevision"] = True
+        else:
+            e["revisionName"] = tt.get("revision", "")
+        if tt.get("tag"):
+            e["tag"] = tt["tag"]
+        traffic.append(e)
+    latest = (svc.get("latestReadyRevision") or "").rsplit("/", 1)[-1]
+    return {"apiVersion": "serving.knative.dev/v1", "kind": "Service",
+            "metadata": {"name": sid, "namespace": project, "uid": svc["uid"], "resourceVersion": "AAZ" + svc["generation"],
+                         "generation": int(svc["generation"]), "creationTimestamp": svc["createTime"],
+                         "selfLink": "/apis/serving.knative.dev/v1/namespaces/%s/services/%s" % (project, sid),
+                         "labels": dict(svc.get("labels") or {}, **{"cloud.googleapis.com/location": location}),
+                         "annotations": ann},
+            "spec": {"template": {"metadata": {"name": latest, "annotations": tann, "labels": {}},
+                                  "spec": {"containerConcurrency": t["maxInstanceRequestConcurrency"],
+                                           "timeoutSeconds": int(float(t["timeout"][:-1])),
+                                           "serviceAccountName": t["serviceAccount"], "containers": containers}},
+                     "traffic": traffic},
+            "status": {"observedGeneration": int(svc["observedGeneration"]), "conditions": _kn_conditions(svc["conditions"]),
+                       "latestReadyRevisionName": latest, "latestCreatedRevisionName": latest,
+                       "traffic": [dict({"revisionName": ts["revision"], "percent": ts["percent"]},
+                                        **({"latestRevision": True} if ts["type"] == LATEST else {}))
+                                   for ts in svc["trafficStatuses"]],
+                       "url": svc["uri"], "address": {"url": svc["uri"]}}}
+
+
+def _kn_to_v2(body):
+    """A Knative Service body → the v2 Service fields it sets."""
+    meta, spec = body.get("metadata") or {}, body.get("spec") or {}
+    out = {}
+    ann = dict(meta.get("annotations") or {})
+    ing = ann.pop("run.googleapis.com/ingress", None)
+    for k in [k for k in ann if k.startswith(("serving.knative.dev/", "run.googleapis.com/urls", "run.googleapis.com/operation-id"))]:
+        ann.pop(k)
+    labels = {}
+    for k, v in (meta.get("labels") or {}).items():
+        if k == "cloud.googleapis.com/location":
+            continue
+        if _LABEL.match(str(k)):
+            labels[k] = v
+        else:   # Knative-qualified labels (client.knative.dev/nonce, ...) aren't v2 labels; keep them as annotations
+            ann[k] = v
+    out["labels"], out["annotations"] = labels, ann
+    if ing:
+        out["ingress"] = _INGRESS_KN.get(ing, ing)
+    tpl = spec.get("template") or {}
+    tmeta, tspec = tpl.get("metadata") or {}, tpl.get("spec") or {}
+    tann = tmeta.get("annotations") or {}
+    v2t = {"containers": [dict(c) for c in tspec.get("containers") or []]}
+    for c in v2t["containers"]:
+        if not c.get("name"):
+            c.pop("name", None)
+    scaling = {}
+    if "autoscaling.knative.dev/minScale" in tann:
+        scaling["minInstanceCount"] = int(tann["autoscaling.knative.dev/minScale"])
+    if "autoscaling.knative.dev/maxScale" in tann:
+        scaling["maxInstanceCount"] = int(tann["autoscaling.knative.dev/maxScale"])
+    if scaling:
+        v2t["scaling"] = scaling
+    if tspec.get("containerConcurrency") is not None:
+        v2t["maxInstanceRequestConcurrency"] = tspec["containerConcurrency"]
+    if tspec.get("timeoutSeconds"):
+        v2t["timeout"] = "%ds" % tspec["timeoutSeconds"]
+    if tspec.get("serviceAccountName"):
+        v2t["serviceAccount"] = tspec["serviceAccountName"]
+    if tann.get("run.googleapis.com/execution-environment"):
+        v2t["executionEnvironment"] = "EXECUTION_ENVIRONMENT_" + tann["run.googleapis.com/execution-environment"].upper()
+    if tmeta.get("name"):
+        v2t["revision"] = tmeta["name"]
+    tl = {k: v for k, v in (tmeta.get("labels") or {}).items() if _LABEL.match(str(k))}
+    if tl:
+        v2t["labels"] = tl
+    out["template"] = v2t
+    traffic = []
+    for tt in spec.get("traffic") or []:
+        e = {"percent": tt.get("percent", 0)}
+        if tt.get("revisionName"):
+            e.update({"type": REVISION, "revision": tt["revisionName"]})
+        else:
+            e["type"] = LATEST
+        if tt.get("tag"):
+            e["tag"] = tt["tag"]
+        traffic.append(e)
+    if traffic:
+        out["traffic"] = traffic
+    return out
+
+
+def _kn_revision(store, rev):
+    t = rev
+    sname = rev["service"].rsplit("/", 1)[-1]
+    short = rev["name"].rsplit("/", 1)[-1]
+    containers = [{"name": c.get("name", ""), "image": c["image"], "resources": {"limits": dict(c["resources"]["limits"])}}
+                  for c in t["containers"]]
+    return {"apiVersion": "serving.knative.dev/v1", "kind": "Revision",
+            "metadata": {"name": short, "namespace": rev["name"].split("/")[1], "uid": rev["uid"], "generation": 1,
+                         "creationTimestamp": rev["createTime"],
+                         "labels": {"serving.knative.dev/service": sname, "serving.knative.dev/configuration": sname,
+                                    "cloud.googleapis.com/location": rev["name"].split("/")[3]},
+                         "annotations": {"serving.knative.dev/creator": "admin@vyomi.cloud"},
+                         "ownerReferences": [{"kind": "Service", "name": sname, "apiVersion": "serving.knative.dev/v1"}]},
+            "spec": {"containerConcurrency": t["maxInstanceRequestConcurrency"], "timeoutSeconds": int(float(t["timeout"][:-1])),
+                     "serviceAccountName": t["serviceAccount"], "containers": containers},
+            "status": {"observedGeneration": 1, "conditions": _kn_conditions(rev["conditions"]), "logUrl": rev["logUri"]}}
+
+
+def _kn_status(code, status, message):
+    return _json(code, {"kind": "Status", "apiVersion": "v1", "metadata": {}, "status": status, "message": message, "code": code})
+
+
+def _knative(store, method, ns, rest, query, headers, payload):
+    region = _kn_region(headers)
+    try:
+        if rest[0] == "services":
+            if len(rest) == 1 and method == "GET":
+                names = sorted(n for n in store.services if n.startswith("projects/%s/locations/%s/services/" % (ns, region)))
+                return _json(200, {"apiVersion": "serving.knative.dev/v1", "kind": "ServiceList", "metadata": {},
+                                   "items": [_kn_service(store, n) for n in names]})
+            if len(rest) == 1 and method == "POST":
+                sid = (payload.get("metadata") or {}).get("name") or ""
+                op = create_service(store, ns, region, {"serviceId": sid}, _kn_to_v2(payload))
+                return _json(200, _kn_service(store, service_name(ns, region, sid)))
+            if len(rest) == 2:
+                full, svc = _get_service(store, ns, region, rest[1])
+                if method == "GET":
+                    return _json(200, _kn_service(store, full))
+                if method == "PUT":
+                    update_service(store, ns, region, rest[1], {}, _kn_to_v2(payload))
+                    return _json(200, _kn_service(store, full))
+                if method == "DELETE":
+                    delete_service(store, ns, region, rest[1], {})
+                    return _kn_status(200, "Success", "")
+        elif rest[0] == "revisions":
+            if len(rest) == 1 and method == "GET":
+                want = ""
+                for sel in (query.get("labelSelector") or "").split(","):
+                    if sel.startswith("serving.knative.dev/service="):
+                        want = sel.split("=", 1)[1]
+                revs = sorted((r for r in store.revisions.values() if r["name"].startswith("projects/%s/locations/%s/" % (ns, region))
+                               and (not want or r["service"].rsplit("/", 1)[-1] == want)), key=lambda r: (r["createTime"], r["name"]), reverse=True)
+                return _json(200, {"apiVersion": "serving.knative.dev/v1", "kind": "RevisionList", "metadata": {},
+                                   "items": [_kn_revision(store, r) for r in revs]})
+            if len(rest) == 2:
+                rev = next((r for r in store.revisions.values() if r["name"].startswith("projects/%s/locations/%s/" % (ns, region))
+                            and r["name"].rsplit("/", 1)[-1] == rest[1]), None)
+                if not rev:
+                    raise _E(404, "NOT_FOUND", "Revision '%s' does not exist." % rest[1])
+                if method == "GET":
+                    return _json(200, _kn_revision(store, rev))
+                if method == "DELETE":
+                    delete_revision(store, ns, region, rev["service"].rsplit("/", 1)[-1], rest[1], {})
+                    return _kn_status(200, "Success", "")
+    except _E as e:
+        return _err(e.status, e.gcp_status, e.message)
+    return _err(404, "NOT_FOUND", "Unknown path or method: %s %s" % (method, "/".join(rest)))
+
+
+# ── dispatch ───────────────────────────────────────────────────────────────
+def dispatch(store, method, path, query=None, headers=None, body=b"", log_fn=None, topic_exists=None):
+    return _dispatch(store, method, path, query or {}, headers or {}, body, log_fn=log_fn, topic_exists=topic_exists)
+
+
+def _dispatch(store, method, path, query, headers, body, log_fn=None, topic_exists=None):
+    method = method.upper()
+    for k, v in headers.items():   # REST clients without PATCH/PUT tunnel them over POST
+        if k.lower() == "x-http-method-override" and method == "POST" and v:
+            method = str(v).upper()
+    try:
+        payload = json.loads(body.decode("utf-8")) if body else {}
+    except Exception:
+        return _err(400, "INVALID_ARGUMENT", "Invalid JSON payload received.")
+    if not isinstance(payload, dict):
+        payload = {}
+    p = path.split("?", 1)[0]
+    if p.lstrip("/").startswith(_KN):
+        segs = [x for x in p.lstrip("/")[len(_KN):].split("/") if x]
+        if len(segs) < 2:
+            return _err(404, "NOT_FOUND", "Unknown path: %s" % path)
+        return _knative(store, method, segs[0], segs[1:], query, headers, payload)
+    if p.lstrip("/").startswith(_KN_DOM):
+        segs = [x for x in p.lstrip("/")[len(_KN_DOM):].split("/") if x]
+        if len(segs) < 2 or segs[1] != "domainmappings":
+            return _err(404, "NOT_FOUND", "Unknown path: %s" % path)
+        return _domain_mappings_dispatch(store, method, segs[0], _kn_region(headers), segs[2:], query, payload)
+    for pre in ("/v2", "/v1"):   # /v1 only carries the v1 Admin IAM verbs on services (gcloud run)
+        if p.startswith(pre + "/"):
+            p = p[len(pre):]
+            break
+    p = p.strip("/")
+    verb = ""
+    if ":" in p:
+        p, verb = p.rsplit(":", 1)
+    segs = [s for s in p.split("/") if s]
+    if len(segs) < 4 or segs[0] != "projects" or segs[2] != "locations":
+        return _err(404, "NOT_FOUND", "Unknown path: %s" % path)
+    project, location = segs[1], segs[3]
+    rest = segs[4:]
+    try:
+        if not rest:
+            return _err(404, "NOT_FOUND", "Unknown path: %s" % path)
+        kind = rest[0]
+        if path.startswith("/v1/") and kind != "services":
+            return _err(404, "NOT_FOUND", "Unknown path: %s" % path)
+        if kind == "services":
+            return _services(store, method, project, location, rest[1:], verb, query, payload,
+                             log_fn=log_fn, topic_exists=topic_exists, headers=headers)
+        if kind == "jobs":
+            return _jobs(store, method, project, location, rest[1:], verb, query, payload, log_fn=log_fn)
+        if kind == "workerPools":
+            return _worker_pools_dispatch(store, method, project, location, rest[1:], verb, query, payload)
+        if kind == "operations":
+            return _operations(store, method, project, location, rest[1:], verb, query)
+        return _err(404, "NOT_FOUND", "Unknown path: %s" % path)
+    except _E as e:
+        return _err(e.status, e.gcp_status, e.message)
+
+
+def _iam_verb(store, full, method, verb, query, payload):
+    if verb == "getIamPolicy" and method in ("GET", "POST"):
+        return _json(200, get_iam_policy(store, full, query))
+    if verb == "setIamPolicy" and method == "POST":
+        return _json(200, set_iam_policy(store, full, payload))
+    if verb == "testIamPermissions" and method == "POST":
+        perms = payload.get("permissions") or []
+        return _json(200, {"permissions": [x for x in perms if x in PERMISSIONS]})
+    return None
+
+
+def _services(store, method, project, location, rest, verb, query, payload, log_fn=None, topic_exists=None, headers=None):
+    if not rest:
+        if method == "POST" and not verb:
+            op = create_service(store, project, location, query, payload)
+            if log_fn and query.get("validateOnly") not in ("true", "True", True):
+                sid = op["response"]["name"].rsplit("/", 1)[-1]
+                image = op["response"]["template"]["containers"][0]["image"]
+                log_fn("service", project, location, sid, "Service %s created (image %s)" % (sid, image))
+            return _json(200, op)
+        if method == "GET" and not verb:
+            _check_location(location)
+            names = sorted(n for n in store.services if n.startswith("projects/%s/locations/%s/services/" % (project, location)))
+            chunk, nxt = _page(names, query)
+            out = {"services": [service_view(store.services[n]) for n in chunk]}
+            if nxt:
+                out["nextPageToken"] = nxt
+            return _json(200, out)
+    elif len(rest) == 1:
+        sid = rest[0]
+        full = service_name(project, location, sid)
+        if verb == "invoke" and method == "POST":
+            out = invoke_service(store, project, location, sid, payload, headers=headers)
+            body = out["body"]
+            return _json(out["status"], body if isinstance(body, (dict, list)) else {"result": body})
+        if verb == "connectRepo" and method == "POST":
+            return _json(200, connect_repo(store, project, location, sid, payload))
+        if verb == "disconnectRepo" and method == "POST":
+            return _json(200, disconnect_repo(store, project, location, sid))
+        if verb:
+            _get_service(store, project, location, sid)
+            r = _iam_verb(store, full, method, verb, query, payload)
+            if r:
+                if verb == "setIamPolicy" and method == "POST" and log_fn:
+                    public = public_invoker(store, full)
+                    log_fn("service", project, location, sid, "Authentication changed for service %s: %s"
+                           % (sid, "allow unauthenticated" if public else "require authentication"))
+                return r
+        elif method == "GET":
+            return _json(200, service_view(_get_service(store, project, location, sid)[1]))
+        elif method == "PATCH":
+            before_rev = (store.services.get(full) or {}).get("latestCreatedRevision")
+            op = update_service(store, project, location, sid, query, payload)
+            if log_fn and query.get("validateOnly") not in ("true", "True", True):
+                after_rev = op["response"].get("latestCreatedRevision")
+                if after_rev and after_rev != before_rev:
+                    image = op["response"]["template"]["containers"][0]["image"]
+                    log_fn("service", project, location, sid, "New revision deployed for service %s (image %s)" % (sid, image))
+                else:
+                    fields = ", ".join(_mask_fields(query, _norm_enums(payload))) or "configuration"
+                    log_fn("service", project, location, sid, "Service %s updated (%s)" % (sid, fields))
+            return _json(200, op)
+        elif method == "DELETE":
+            op = delete_service(store, project, location, sid, query)
+            if log_fn and query.get("validateOnly") not in ("true", "True", True):
+                log_fn("service", project, location, sid, "Service %s deleted" % sid)
+            return _json(200, op)
+    elif rest[1] == "revisions":
+        sid = rest[0]
+        if len(rest) == 2 and method == "GET" and not verb:
+            _get_service(store, project, location, sid)
+            full = service_name(project, location, sid)
+            revs = sorted((r for r in store.revisions.values() if r["service"] == full), key=lambda r: (r["createTime"], r["name"]), reverse=True)
+            chunk, nxt = _page(revs, query)
+            out = {"revisions": [revision_view(r) for r in chunk]}
+            if nxt:
+                out["nextPageToken"] = nxt
+            return _json(200, out)
+        if len(rest) == 3 and not verb:
+            if method == "GET":
+                return _json(200, revision_view(_get_revision(store, project, location, sid, rest[2])[1]))
+            if method == "DELETE":
+                return _json(200, delete_revision(store, project, location, sid, rest[2], query))
+    elif rest[1] in ("triggers", "eventarcTriggers"):   # one Trigger resource, two wire paths
+        return _triggers_dispatch(store, method, project, location, rest[0], rest[2:], verb, query, payload,
+                                  topic_exists=topic_exists, alias=rest[1] == "eventarcTriggers")
+    elif rest[1] == "builds":
+        return _builds_dispatch(store, method, project, location, rest[0], rest[2:], verb, query, payload)
+    return _err(404, "NOT_FOUND", "Unknown path or method: %s %s" % (method, "/".join(rest)))
+
+
+def _jobs(store, method, project, location, rest, verb, query, payload, log_fn=None):
+    if not rest:
+        if method == "POST" and not verb:
+            op = create_job(store, project, location, query, payload)
+            if log_fn and query.get("validateOnly") not in ("true", "True", True):
+                jid = op["response"]["name"].rsplit("/", 1)[-1]
+                log_fn("job", project, location, jid, "Job %s created" % jid)
+            return _json(200, op)
+        if method == "GET" and not verb:
+            _check_location(location)
+            names = sorted(n for n in store.jobs if n.startswith("projects/%s/locations/%s/jobs/" % (project, location)))
+            chunk, nxt = _page(names, query)
+            out = {"jobs": [job_view(store.jobs[n]) for n in chunk]}
+            if nxt:
+                out["nextPageToken"] = nxt
+            return _json(200, out)
+    elif len(rest) == 1:
+        jid = rest[0]
+        full = job_name(project, location, jid)
+        if verb == "run" and method == "POST":
+            op = run_job(store, project, location, jid, payload)
+            if log_fn:
+                eid = op["response"]["name"].rsplit("/", 1)[-1]
+                log_fn("job", project, location, jid, "Execution %s started (%d task(s))" % (eid, op["response"]["taskCount"]))
+            return _json(200, op)
+        if verb:
+            _get_job(store, project, location, jid)
+            r = _iam_verb(store, full, method, verb, query, payload)
+            if r:
+                return r
+        elif method == "GET":
+            return _json(200, job_view(_get_job(store, project, location, jid)[1]))
+        elif method == "PATCH":
+            op = update_job(store, project, location, jid, query, payload)
+            if log_fn and query.get("validateOnly") not in ("true", "True", True):
+                log_fn("job", project, location, jid, "Job %s updated" % jid)
+            return _json(200, op)
+        elif method == "DELETE":
+            op = delete_job(store, project, location, jid, query)
+            if log_fn and query.get("validateOnly") not in ("true", "True", True):
+                log_fn("job", project, location, jid, "Job %s deleted" % jid)
+            return _json(200, op)
+    elif rest[1] == "executions":
+        jid = rest[0]
+        if len(rest) == 2 and method == "GET" and not verb:
+            _get_job(store, project, location, jid)
+            full = job_name(project, location, jid)
+            exs = sorted((e for n, e in store.executions.items() if n.startswith(full + "/executions/")),
+                         key=lambda e: (e["createTime"], e["name"]), reverse=True)
+            chunk, nxt = _page(exs, query)
+            out = {"executions": [_copy(e) for e in chunk]}
+            if nxt:
+                out["nextPageToken"] = nxt
+            return _json(200, out)
+        if len(rest) == 3:
+            if verb == "cancel" and method == "POST":
+                return _json(200, cancel_execution(store, project, location, jid, rest[2]))
+            if not verb and method == "GET":
+                return _json(200, _copy(_get_execution(store, project, location, jid, rest[2])[1]))
+            if not verb and method == "DELETE":
+                return _json(200, delete_execution(store, project, location, jid, rest[2], query))
+        if len(rest) >= 4 and rest[3] == "tasks" and not verb and method == "GET":
+            _, ex = _get_execution(store, project, location, jid, rest[2])
+            if len(rest) == 4:
+                prefix = ex["name"] + "/tasks/"
+                ts = sorted((t for n, t in store.tasks.items() if n.startswith(prefix)), key=lambda t: t["index"])
+                chunk, nxt = _page(ts, query)
+                out = {"tasks": [_copy(t) for t in chunk]}
+                if nxt:
+                    out["nextPageToken"] = nxt
+                return _json(200, out)
+            t = store.tasks.get("%s/tasks/%s" % (ex["name"], rest[4]))
+            if not t:
+                raise _E(404, "NOT_FOUND", "Task '%s' of execution '%s' does not exist." % (rest[4], rest[2]))
+            return _json(200, _copy(t))
+    return _err(404, "NOT_FOUND", "Unknown path or method: %s %s" % (method, "/".join(rest)))
+
+
+def worker_pool_name(project, location, wid):
+    return "projects/%s/locations/%s/workerPools/%s" % (project, location, wid)
+
+
+def _settle_worker_pool(store, full, wp, now):
+    wp["updateTime"] = now
+    wp["observedGeneration"] = wp["generation"]
+    wp["reconciling"] = False
+    wp["conditions"] = _conditions(now, "Ready", "ConfigurationsReady")
+    wp["terminalCondition"] = wp["conditions"][0]
+    wp["etag"] = '"%s"' % _h("wp", full, wp["generation"], now)[:16]
+
+
+def worker_pool_view(wp):
+    return {k: _copy(v) for k, v in wp.items() if not k.startswith("_")}
+
+
+def create_worker_pool(store, project, location, query, payload):
+    _check_location(location)
+    wid = query.get("workerPoolId") or ""
+    if not wid:
+        raise _E(400, "INVALID_ARGUMENT", "Worker pool ID must be specified (workerPoolId).")
+    _check_name("worker pool", wid)
+    spec = _norm_enums(payload)
+    full = worker_pool_name(project, location, wid)
+    if full in store.worker_pools:
+        raise _E(409, "ALREADY_EXISTS", "Resource '%s' already exists." % full)
+    for k in ("labels", "annotations"):
+        if spec.get(k) is not None:
+            _check_map(spec[k], k)
+    template = _revision_template(project, spec.get("template"), False, store, location)
+    now = _ts()
+    wp = {"name": full, "description": spec.get("description", ""), "uid": _uid(store, "wp", full),
+          "generation": "1", "labels": spec.get("labels", {}) or {}, "annotations": spec.get("annotations", {}) or {},
+          "createTime": now, "creator": "admin@vyomi.cloud", "lastModifier": "admin@vyomi.cloud",
+          "client": spec.get("client", ""), "clientVersion": spec.get("clientVersion", ""),
+          "launchStage": spec.get("launchStage") or "GA", "template": template, "instanceSplits": []}
+    if query.get("validateOnly") in ("true", "True", True):
+        return _operation(store, project, location, "workerpool", worker_pool_view(wp))
+    store.worker_pools[full] = wp
+    _settle_worker_pool(store, full, wp, now)
+    return _operation(store, project, location, "workerpool", worker_pool_view(wp))
+
+
+def _get_worker_pool(store, project, location, wid):
+    full = worker_pool_name(project, location, wid)
+    wp = store.worker_pools.get(full)
+    if not wp:
+        raise _E(404, "NOT_FOUND", "Resource '%s' of kind 'WORKER_POOL' in region '%s' in project '%s' does not exist." % (wid, location, project))
+    return full, wp
+
+
+def delete_worker_pool(store, project, location, wid, query):
+    full, wp = _get_worker_pool(store, project, location, wid)
+    view = worker_pool_view(wp)
+    now = _ts()
+    view["deleteTime"] = now
+    view["expireTime"] = now
+    if query.get("validateOnly") not in ("true", "True", True):
+        del store.worker_pools[full]
+        store.policies.pop(full, None)
+    return _operation(store, project, location, "workerpool", view)
+
+
+def worker_pool_console_view(wp):
+    seg = wp["name"].split("/")
+    c0 = wp["template"]["containers"][0]
+    lim = c0["resources"]["limits"]
+    v = worker_pool_view(wp)
+    v.update({
+        "id": seg[5], "resourceName": wp["name"], "project": seg[1], "region": seg[3],
+        "image": c0["image"], "cpu": str(lim["cpu"]), "memory": str(lim["memory"]),
+        "instances": "%s-%s" % (wp["template"]["scaling"]["minInstanceCount"], wp["template"]["scaling"]["maxInstanceCount"] or "unlimited"),
+        "last_deployed": wp["updateTime"], "deployed_by": wp["lastModifier"], "created": wp["createTime"],
+        "labels_text": ", ".join("%s=%s" % kv for kv in sorted((wp.get("labels") or {}).items())) or "None",
+        "status": "Ready",
+    })
+    return v
+
+
+def list_worker_pools(store, project=None):
+    return [worker_pool_console_view(store.worker_pools[n]) for n in sorted(store.worker_pools)
+            if project is None or n.startswith("projects/%s/" % project)]
+
+
+# ── domain mappings (v1 domains.cloudrun.com) ───────────────────────────────
+_DOMAIN = re.compile(r"^(\*\.)?([a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?\.)+[a-z]{2,}$")
+CERT_MODES = ("AUTOMATIC", "NONE")
+
+
+def domain_mapping_name(project, location, domain):
+    return "projects/%s/locations/%s/domainmappings/%s" % (project, location, domain)
+
+
+def _dns_records(domain, cert_mode):
+    apex = domain.count(".") == 1   # "example.com" (no subdomain) needs A/AAAA, not CNAME
+    if apex:
+        out = [{"name": domain, "type": "A", "rrdata": ip} for ip in ("216.239.32.21", "216.239.34.21", "216.239.36.21", "216.239.38.21")]
+    else:
+        out = [{"name": domain, "type": "CNAME", "rrdata": "ghs.googlehosted.com."}]
+    if cert_mode == "AUTOMATIC":
+        out.append({"name": domain, "type": "TXT", "rrdata": '"google-site-verification=%s"' % _h("dv", domain)[:32]})
+    return out
+
+
+def create_domain_mapping(store, project, location, query, payload):
+    _check_location(location)
+    meta = (payload or {}).get("metadata") or {}
+    domain = meta.get("name") or ""
+    if not domain or not _DOMAIN.match(domain):
+        raise _E(400, "INVALID_ARGUMENT", "Invalid domain name %r." % domain)
+    full = domain_mapping_name(project, location, domain)
+    if full in store.domain_mappings:
+        raise _E(409, "ALREADY_EXISTS", "Resource '%s' already exists." % full)
+    spec = (payload or {}).get("spec") or {}
+    route = spec.get("routeName") or ""
+    if not route:
+        raise _E(400, "INVALID_ARGUMENT", "spec.routeName is required.")
+    if route not in {n.rsplit("/", 1)[-1] for n in store.services
+                      if n.startswith("projects/%s/locations/%s/services/" % (project, location))}:
+        raise _E(400, "INVALID_ARGUMENT", "Service '%s' referenced by routeName does not exist." % route)
+    cert_mode = spec.get("certificateMode") or "AUTOMATIC"
+    if cert_mode not in CERT_MODES:
+        raise _E(400, "INVALID_ARGUMENT", "Invalid certificateMode %r; valid: %s." % (cert_mode, ", ".join(CERT_MODES)))
+    now = _ts()
+    records = _dns_records(domain, cert_mode)
+    dm = {"apiVersion": "domains.cloudrun.com/v1", "kind": "DomainMapping",
+          "metadata": {"name": domain, "namespace": project, "creationTimestamp": now,
+                       "labels": meta.get("labels") or {}, "annotations": meta.get("annotations") or {},
+                       "uid": _uid(store, "dm", full), "generation": 1, "resourceVersion": "1"},
+          "spec": {"routeName": route, "certificateMode": cert_mode, "forceOverride": bool(spec.get("forceOverride", False))},
+          "status": {"resourceRecords": records, "mappedRouteName": route,
+                      "conditions": [{"type": "Ready", "status": "True", "lastTransitionTime": now},
+                                     {"type": "CertificateProvisioned", "status": "True" if cert_mode == "AUTOMATIC" else "Unknown",
+                                      "lastTransitionTime": now}],
+                      "observedGeneration": 1}}
+    if query.get("validateOnly") in ("true", "True", True):
+        return _operation(store, project, location, "domainmapping", _copy(dm))
+    store.domain_mappings[full] = dm
+    return _operation(store, project, location, "domainmapping", _copy(dm))
+
+
+def _get_domain_mapping(store, project, location, domain):
+    full = domain_mapping_name(project, location, domain)
+    dm = store.domain_mappings.get(full)
+    if not dm:
+        raise _E(404, "NOT_FOUND", "Resource '%s' of kind 'DOMAIN_MAPPING' in region '%s' in project '%s' does not exist." % (domain, location, project))
+    return full, dm
+
+
+def delete_domain_mapping(store, project, location, domain, query):
+    full, dm = _get_domain_mapping(store, project, location, domain)
+    view = _copy(dm)
+    if query.get("validateOnly") not in ("true", "True", True):
+        del store.domain_mappings[full]
+    return _operation(store, project, location, "domainmapping", view)
+
+
+def domain_mapping_console_view(dm):
+    v = _copy(dm)
+    v.update({
+        "id": dm["metadata"]["name"], "domain": dm["metadata"]["name"], "resourceName": dm["metadata"]["name"],
+        "route": dm["spec"]["routeName"], "certificate": "Automatic" if dm["spec"]["certificateMode"] == "AUTOMATIC" else "None",
+        "status": "Ready" if any(c["type"] == "Ready" and c["status"] == "True" for c in dm["status"]["conditions"]) else "Pending",
+        "records_text": ", ".join("%s %s" % (r["type"], r["rrdata"]) for r in dm["status"]["resourceRecords"]),
+        "created": dm["metadata"]["creationTimestamp"],
+    })
+    return v
+
+
+def list_domain_mappings(store, project=None):
+    return [domain_mapping_console_view(dm) for n, dm in sorted(store.domain_mappings.items())
+            if project is None or n.startswith("projects/%s/" % project)]
+
+
+def _worker_pools_dispatch(store, method, project, location, rest, verb, query, payload):
+    if not rest:
+        if method == "POST" and not verb:
+            return _json(200, create_worker_pool(store, project, location, query, payload))
+        if method == "GET" and not verb:
+            _check_location(location)
+            names = sorted(n for n in store.worker_pools if n.startswith("projects/%s/locations/%s/workerPools/" % (project, location)))
+            chunk, nxt = _page(names, query)
+            out = {"workerPools": [worker_pool_view(store.worker_pools[n]) for n in chunk]}
+            if nxt:
+                out["nextPageToken"] = nxt
+            return _json(200, out)
+    elif len(rest) == 1:
+        wid = rest[0]
+        full = worker_pool_name(project, location, wid)
+        if verb:
+            _get_worker_pool(store, project, location, wid)
+            r = _iam_verb(store, full, method, verb, query, payload)
+            if r:
+                return r
+        elif method == "GET":
+            return _json(200, worker_pool_view(_get_worker_pool(store, project, location, wid)[1]))
+        elif method == "DELETE":
+            return _json(200, delete_worker_pool(store, project, location, wid, query))
+    return _err(404, "NOT_FOUND", "Unknown path or method: %s %s" % (method, "/".join(rest)))
+
+
+def _domain_mappings_dispatch(store, method, project, location, rest, query, payload):
+    try:
+        if not rest:
+            if method == "POST":
+                return _json(200, create_domain_mapping(store, project, location, query, payload))
+            if method == "GET":
+                _check_location(location)
+                names = sorted(n for n in store.domain_mappings if n.startswith("projects/%s/locations/%s/domainmappings/" % (project, location)))
+                chunk, nxt = _page(names, query)
+                out = {"items": [_copy(store.domain_mappings[n]) for n in chunk]}
+                if nxt:
+                    out["nextPageToken"] = nxt
+                return _json(200, out)
+        elif len(rest) == 1:
+            domain = rest[0]
+            if method == "GET":
+                return _json(200, _copy(_get_domain_mapping(store, project, location, domain)[1]))
+            if method == "DELETE":
+                return _json(200, delete_domain_mapping(store, project, location, domain, query))
+    except _E as e:
+        return _err(e.status, e.gcp_status, e.message)
+    return _err(404, "NOT_FOUND", "Unknown path or method: %s %s" % (method, "/".join(rest)))
+
+
+def _operations(store, method, project, location, rest, verb, query):
+    prefix = "projects/%s/locations/%s/operations/" % (project, location)
+    if not rest and method == "GET" and not verb:
+        ops = [o for n, o in sorted(store.operations.items()) if n.startswith(prefix)]
+        chunk, nxt = _page(ops, query)
+        out = {"operations": _copy(chunk)}
+        if nxt:
+            out["nextPageToken"] = nxt
+        return _json(200, out)
+    if len(rest) == 1:
+        name = prefix + rest[0]
+        op = store.operations.get(name)
+        if verb == "wait" and method == "POST":
+            if not op:
+                raise _E(404, "NOT_FOUND", "Operation %s not found." % name)
+            return _json(200, _copy(op))
+        if not verb and method == "GET":
+            if not op:
+                raise _E(404, "NOT_FOUND", "Operation %s not found." % name)
+            return _json(200, _copy(op))
+        if not verb and method == "DELETE":
+            if not op:
+                raise _E(404, "NOT_FOUND", "Operation %s not found." % name)
+            del store.operations[name]
+            return _json(200, {})
+    return _err(404, "NOT_FOUND", "Unknown operations path: %s" % "/".join(rest))
+
+
+# ── Eventarc triggers (nested under a service — the Triggers tab's destination is always
+# that service) ─────────────────────────────────────────────────────────────────────────
+# Vyomi has no eventarc.googleapis.com, so ONE Trigger resource lives under its destination
+# service in store.triggers, reachable on two wire paths: services/{s}/triggers (canonical,
+# the Functions console) and services/{s}/eventarcTriggers (alias, the Run console; its `name`
+# is reported on the path it was asked through). The view carries both consoles' fields.
+# Vyomi only has a real event source for ONE Eventarc provider: Pub/Sub. A trigger for any
+# other real event type (Cloud Storage, Cloud Audit Logs, …) is honestly rejected at create
+# time rather than accepted and silently never firing — see core/capabilities/gcp/functions.json.
+# Delivery is deliver_event alone, wired from the Pub/Sub core's on_publish hook
+# (core/aws_wire_router.py, routes/gcp_pubsub_unified.py), so a publish fires a trigger once.
+STORAGE_EVENT_TYPES = ("google.cloud.storage.object.v1.finalized", "google.cloud.storage.object.v1.deleted")
+TRIGGER_EVENT_TYPES = ("google.cloud.pubsub.topic.v1.messagePublished",) + STORAGE_EVENT_TYPES
+_TOPIC_RE = re.compile(r"^projects/[^/]+/topics/[^/]+$")
+
+
+def trigger_name(project, location, sid, tid):
+    return "%s/triggers/%s" % (service_name(project, location, sid), tid)
+
+
+def trigger_view(t, alias=False):
+    view = {k: _copy(v) for k, v in t.items() if not k.startswith("_")}
+    if alias:
+        view["name"] = _alias_name(view["name"])
+    return view
+
+
+def _alias_name(name):
+    head, tid = name.rsplit("/triggers/", 1)
+    return "%s/eventarcTriggers/%s" % (head, tid)
+
+
+def _get_trigger(store, project, location, sid, tid):
+    full = trigger_name(project, location, sid, tid)
+    t = store.triggers.get(full)
+    if not t:
+        raise _E(404, "NOT_FOUND", "Trigger '%s' of service '%s' does not exist." % (tid, sid))
+    return full, t
+
+
+def list_triggers(store, project, location, sid, alias=False):
+    prefix = service_name(project, location, sid) + "/triggers/"
+    return sorted((trigger_view(t, alias) for n, t in store.triggers.items() if n.startswith(prefix)),
+                  key=lambda t: (t["createTime"], t["name"]))
+
+
+def _topic_known(store, topic, topic_exists):
+    if topic_exists is not None:
+        return topic_exists(topic)
+    pubsub_store = getattr(store, "pubsub_store", None)
+    return pubsub_store is None or gcp_ps.dispatch(pubsub_store, "GET", "/v1/%s" % topic, {}, {}, b"").status == 200
+
+
+def create_trigger(store, project, location, sid, query, payload, topic_exists=None, alias=False):
+    _get_service(store, project, location, sid)
+    tid = str(query.get("triggerId") or query.get("eventarcTriggerId") or "").strip()
+    if not tid:
+        raise _E(400, "INVALID_ARGUMENT", "%s must be specified." % ("eventarcTriggerId" if alias else "triggerId"))
+    _check_name("trigger", tid)
+    tfull = trigger_name(project, location, sid, tid)
+    if tfull in store.triggers:
+        raise _E(409, "ALREADY_EXISTS", "Resource '%s' already exists." % (_alias_name(tfull) if alias else tfull))
+    filters = payload.get("eventFilters") or []
+    if alias and not filters:   # the eventarcTriggers wire names only the transport: always a Pub/Sub trigger
+        filters = [{"attribute": "type", "value": TRIGGER_EVENT_TYPES[0]}]
+    event_type = next((f.get("value") for f in filters if isinstance(f, dict) and f.get("attribute") == "type"), None)
+    if not event_type:
+        raise _E(400, "INVALID_ARGUMENT", "eventFilters must include an entry with attribute \"type\".")
+    if event_type not in TRIGGER_EVENT_TYPES:
+        raise _E(400, "INVALID_ARGUMENT",
+                 "Event type %r is not simulated: Vyomi has no event source for it (only %s)." % (event_type, ", ".join(TRIGGER_EVENT_TYPES)))
+    if event_type in STORAGE_EVENT_TYPES:
+        return _create_storage_trigger(store, project, location, sid, tid, tfull, filters, event_type, payload, alias)
+    topic = str(payload.get("pubsubTopic") or ((payload.get("transport") or {}).get("pubsub") or {}).get("topic") or "").strip()
+    if not topic:
+        raise _E(400, "INVALID_ARGUMENT", "pubsubTopic (or transport.pubsub.topic) is required for event type %r." % event_type)
+    if not _TOPIC_RE.match(topic):
+        raise _E(400, "INVALID_ARGUMENT", "Invalid topic resource name %r; expected projects/{p}/topics/{t}." % topic)
+    if not _topic_known(store, topic, topic_exists):
+        raise _E(400, "INVALID_ARGUMENT", "Pub/Sub topic '%s' does not exist." % topic)
+    now = _ts()
+    trig = {"name": tfull, "uid": _uid(store, "trg", tfull), "createTime": now, "updateTime": now,
+            "eventFilters": _copy(filters), "eventType": event_type, "pubsubTopic": topic,
+            "transport": {"pubsub": {"topic": topic}},
+            "serviceAccount": payload.get("serviceAccount") or "%s-compute@developer.gserviceaccount.com" % project_number(project),
+            "destination": {"service": sid, "region": location,
+                            "cloudRun": {"service": sid, "region": location, "path": "/"}},
+            "labels": payload.get("labels") or {}, "state": "ACTIVE",
+            "etag": '"%s"' % _h("trg", tfull, now)[:16],
+            "_eventCount": 0, "_lastEventTime": "", "_lastError": ""}
+    pubsub_store = getattr(store, "pubsub_store", None)
+    if pubsub_store is not None:   # the subscription real Eventarc creates, visible in Pub/Sub
+        sub_full = "projects/%s/subscriptions/eventarc-%s" % (project, tid)
+        r = gcp_ps.dispatch(pubsub_store, "PUT", "/v1/%s" % sub_full, {}, {}, json.dumps({
+            "topic": topic,
+            "pushConfig": {"pushEndpoint": "https://eventarc-%s.%s.vyomi.internal/" % (tid, location)},
+        }).encode())
+        if r.status < 300:
+            sub = pubsub_store.get_queue(sub_full)
+            if sub is not None:   # push-delivered by deliver_event: _fanout keeps no pull backlog for it
+                sub["_eventarc_trigger"] = {"project": project, "location": location, "service": sid}
+            trig["_subscription"] = sub_full
+    store.triggers[tfull] = trig
+    return trigger_view(trig, alias)
+
+
+def _create_storage_trigger(store, project, location, sid, tid, tfull, filters, event_type, payload, alias):
+    bucket = next((f.get("value") for f in filters if isinstance(f, dict) and f.get("attribute") == "bucket"), "")
+    if not bucket:
+        raise _E(400, "INVALID_ARGUMENT", "A Cloud Storage trigger needs an eventFilters entry with attribute \"bucket\".")
+    if _ref(store, "bucket", bucket) is False:
+        raise _E(400, "INVALID_ARGUMENT", "Cloud Storage bucket '%s' does not exist." % bucket)
+    now = _ts()
+    trig = {"name": tfull, "uid": _uid(store, "trg", tfull), "createTime": now, "updateTime": now,
+            "eventFilters": _copy(filters), "eventType": event_type, "bucket": bucket,
+            "serviceAccount": payload.get("serviceAccount") or "%s-compute@developer.gserviceaccount.com" % project_number(project),
+            "destination": {"service": sid, "region": location, "cloudRun": {"service": sid, "region": location, "path": "/"}},
+            "labels": payload.get("labels") or {}, "state": "ACTIVE",
+            "etag": '"%s"' % _h("trg", tfull, now)[:16],
+            "_eventCount": 0, "_lastEventTime": "", "_lastError": ""}
+    store.triggers[tfull] = trig
+    return trigger_view(trig, alias)
+
+
+def deliver_storage_event(store, bucket, name, event, obj, log_fn=None):
+    """A real object finalize/delete in `bucket` -> one CloudEvent request to every Cloud Storage
+    trigger bound to it (same never-raises contract as deliver_event)."""
+    etype = "google.cloud.storage.object.v1.%s" % event
+    for full, trg in list(store.triggers.items()):
+        if trg.get("eventType") != etype or trg.get("bucket") != bucket:
+            continue
+        parts = full.split("/")
+        project, location, sid, tid = parts[1], parts[3], parts[5], parts[7]
+        ev = {"specversion": "1.0", "type": etype, "id": "%s-%s" % (_h("evt", full, name)[:8], trg.get("_eventCount", 0) + 1),
+              "source": "//storage.googleapis.com/projects/_/buckets/%s" % bucket, "subject": "objects/%s" % name,
+              "time": _ts(), "data": obj}
+        error = ""
+        try:
+            out = invoke_service(store, project, location, sid, ev, internal=True)
+            if out["status"] >= 500:
+                error = str(out["body"].get("error", "")) if isinstance(out["body"], dict) else "delivery failed"
+        except Exception as e:   # noqa: BLE001
+            error = getattr(e, "message", str(e))
+        trg["_eventCount"] = trg.get("_eventCount", 0) + (0 if error else 1)
+        trg["_lastEventTime"] = _ts()
+        trg["_lastError"] = error
+        if log_fn:
+            log_fn("service", project, location, sid, "Eventarc trigger %s %s for gs://%s/%s" % (tid, "failed: " + error if error else "delivered %s" % etype, bucket, name),
+                   "ERROR" if error else "INFO")
+
+
+def delete_trigger(store, project, location, sid, tid, alias=False):
+    full, t = _get_trigger(store, project, location, sid, tid)
+    sub_full = t.get("_subscription")
+    pubsub_store = getattr(store, "pubsub_store", None)
+    if sub_full and pubsub_store is not None:
+        gcp_ps.dispatch(pubsub_store, "DELETE", "/v1/%s" % sub_full, {}, {}, b"")
+    del store.triggers[full]
+    return trigger_view(t, alias)
+
+
+def _cloud_event(topic_full, message):
+    return {"specversion": "1.0", "type": TRIGGER_EVENT_TYPES[0], "id": message.get("messageId", ""),
+            "source": "//pubsub.googleapis.com/%s" % topic_full,
+            "data": {"message": {"data": message.get("data", ""), "attributes": message.get("attributes") or {},
+                                  "messageId": message.get("messageId", "")}}}
+
+
+def deliver_event(store, topic_full, messages, log_fn=None):
+    """A real Pub/Sub publish on `topic_full` -> one real request per message to every trigger
+    bound to it. Never raises: a delivery failure is recorded on the trigger and logged, not
+    propagated to the publisher — exactly like real Eventarc, which acks the publish
+    independently of delivery."""
+    if not messages:
+        return
+    for full, trg in list(store.triggers.items()):
+        if ((trg.get("transport") or {}).get("pubsub") or {}).get("topic") != topic_full:
+            continue
+        parts = full.split("/")
+        project, location, sid, tid = parts[1], parts[3], parts[5], parts[7]
+        delivered, error = 0, ""
+        for message in messages:
+            try:
+                out = invoke_service(store, project, location, sid, _cloud_event(topic_full, message), internal=True)
+            except _E as e:
+                error = e.message
+                break
+            except Exception as e:   # noqa: BLE001 — never let a bad trigger break the publish call
+                error = str(e)
+                break
+            if out["status"] >= 500:
+                error = out["body"]["error"]
+            else:
+                delivered += 1
+        trg["_eventCount"] = trg.get("_eventCount", 0) + delivered
+        trg["_lastEventTime"] = _ts()
+        trg["_lastError"] = error
+        if log_fn and delivered:
+            log_fn("service", project, location, sid,
+                   "Eventarc trigger %s delivered %d event(s) from %s" % (tid, delivered, topic_full))
+        if log_fn and error:
+            log_fn("service", project, location, sid,
+                   "Eventarc trigger %s failed to deliver from %s: %s" % (tid, topic_full, error), "ERROR")
+
+
+def _triggers_dispatch(store, method, project, location, sid, rest, verb, query, payload, topic_exists=None, alias=False):
+    _get_service(store, project, location, sid)
+    if not rest:
+        if method == "POST" and not verb:
+            return _json(200, create_trigger(store, project, location, sid, query, payload, topic_exists, alias))
+        if method == "GET" and not verb:
+            return _json(200, {"triggers": list_triggers(store, project, location, sid, alias)})
+    elif len(rest) == 1 and not verb:
+        if method == "GET":
+            return _json(200, trigger_view(_get_trigger(store, project, location, sid, rest[0])[1], alias))
+        if method == "DELETE":
+            return _json(200, delete_trigger(store, project, location, sid, rest[0], alias))
+    return _err(404, "NOT_FOUND", "Unknown path or method: %s %s" % (method, "/".join(rest)))
+
+
+# ── continuous deployment (nested under a service: "Set up continuous deployment" / the
+# create-service "Continuously deploy from a repository" source) ──────────────────────────
+# Vyomi has no real GitHub/Cloud Source Repositories integration, so the "repository" a
+# service connects to is Vyomi's own stored source (the same inline source the Source tab
+# edits) — connecting one just names it; triggerBuild is the real, enforced behaviour: it
+# "builds" (parses/validates) whatever source is handed to it and only deploys a new
+# revision — a real one, visible on the Revisions tab — if that build succeeds, exactly
+# like Cloud Build cutting a revision from a successful build and refusing to on a failed one.
+_REPO_ANN = "vyomi.dev/repo-connection"
+
+
+def repo_connection(svc):
+    raw = (svc.get("annotations") or {}).get(_REPO_ANN)
+    try:
+        return json.loads(raw) if raw else None
+    except Exception:
+        return None
+
+
+def connect_repo(store, project, location, sid, payload):
+    full, svc = _get_service(store, project, location, sid)
+    repo = str(payload.get("repository") or "").strip()
+    branch = str(payload.get("branch") or "main").strip() or "main"
+    if not repo or "/" not in repo or repo.startswith("/") or repo.endswith("/"):
+        raise _E(400, "INVALID_ARGUMENT", "repository must be of the form \"owner/repo\".")
+    ann = dict(svc.get("annotations") or {})
+    ann[_REPO_ANN] = json.dumps({"repository": repo, "branch": branch, "connectedAt": _ts()})
+    svc["annotations"] = ann
+    svc["updateTime"] = _ts()
+    return service_view(svc)
+
+
+def disconnect_repo(store, project, location, sid):
+    full, svc = _get_service(store, project, location, sid)
+    ann = dict(svc.get("annotations") or {})
+    ann.pop(_REPO_ANN, None)
+    svc["annotations"] = ann
+    svc["updateTime"] = _ts()
+    return service_view(svc)
+
+
+def _pseudo_image(runtime, entry, source):
+    """Deterministic pseudo-image for a build's output — the Python-side twin of api.js's
+    functionImage() so a build that actually changes the code cuts a real new revision."""
+    tag = _h("fnsrc", entry or "", source or "")[:12]
+    rt = re.sub(r"[^a-z0-9.]+", "-", (runtime or "node").lower())
+    return "vyomi.dev/function-source/%s:%s" % (rt, tag)
+
+
+def build_name(project, location, sid, bid):
+    return "%s/builds/%s" % (service_name(project, location, sid), bid)
+
+
+def trigger_build(store, project, location, sid, payload):
+    """A "push": builds the given (or currently-stored) source and, only on success, lands
+    it as a real new revision. Reuses update_service — the SAME validated redeploy path the
+    Source tab's "Save and redeploy" uses — so a continuous-deployment build is held to
+    exactly the bar a manual redeploy is."""
+    full, svc = _get_service(store, project, location, sid)
+    conn = repo_connection(svc)
+    if not conn:
+        raise _E(400, "FAILED_PRECONDITION", "Service '%s' is not connected to a repository; call connectRepo first." % sid)
+    cur_ann = svc.get("annotations") or {}
+    runtime = payload.get("runtime") or cur_ann.get(_FN_ANN_RUNTIME) or "Node.js 22"
+    entry = payload.get("entryPoint") or cur_ann.get(_FN_ANN_ENTRY) or "handler"
+    source = payload.get("source") if payload.get("source") is not None else cur_ann.get(_FN_ANN_SOURCE, "")
+    store.seq["build"] = store.seq.get("build", 0) + 1
+    bid = "build-%05d" % store.seq["build"]
+    bfull = build_name(project, location, sid, bid)
+    now = _ts()
+    build = {"name": bfull, "id": bid, "createTime": now, "repository": conn["repository"], "branch": conn["branch"]}
+    new_ann = dict(cur_ann, **{_FN_ANN_RUNTIME: runtime, _FN_ANN_ENTRY: entry, _FN_ANN_SOURCE: source})
+    try:
+        _validate_function_source(new_ann)
+    except _E as e:
+        build["status"], build["finishTime"] = "FAILURE", _ts()
+        build["logs"] = "Build failed: %s" % e.message
+        store.builds[bfull] = build
+        return trigger_build_view(build)
+    template = _copy(svc["template"])
+    template["containers"][0]["image"] = _pseudo_image(runtime, entry, source)
+    update_service(store, project, location, sid, {"updateMask": "annotations,template"},
+                    {"annotations": new_ann, "template": template})
+    build["status"], build["finishTime"] = "SUCCESS", _ts()
+    build["revision"] = store.services[full]["latestReadyRevision"].rsplit("/", 1)[-1]
+    build["logs"] = "Build succeeded; deployed revision %s." % build["revision"]
+    store.builds[bfull] = build
+    logging_store = getattr(store, "logging_store", None)
+    if logging_store is not None:
+        gcp_logging.write_entries(logging_store, None, {"entries": [{
+            "logName": "projects/%s/logs/cloudbuild" % project,
+            "resource": {"type": "cloud_run_revision",
+                         "labels": {"project_id": project, "service_name": sid, "revision_name": build.get("revision", ""),
+                                    "location": location, "configuration_name": sid}},
+            "severity": "INFO",
+            "textPayload": "Cloud Build %s: %s (%s@%s)" % (bid, build["status"], conn["repository"], conn["branch"]),
+        }]})
+    return trigger_build_view(build)
+
+
+def trigger_build_view(b):
+    return _copy(b)
+
+
+def list_builds(store, project, location, sid):
+    prefix = service_name(project, location, sid) + "/builds/"
+    return sorted((trigger_build_view(b) for n, b in store.builds.items() if n.startswith(prefix)),
+                  key=lambda b: b["createTime"], reverse=True)
+
+
+def _builds_dispatch(store, method, project, location, sid, rest, verb, query, payload):
+    _get_service(store, project, location, sid)
+    if not rest:
+        if method == "POST" and not verb:
+            return _json(200, trigger_build(store, project, location, sid, payload))
+        if method == "GET" and not verb:
+            chunk, nxt = _page(list_builds(store, project, location, sid), query)
+            out = {"builds": chunk}
+            if nxt:
+                out["nextPageToken"] = nxt
+            return _json(200, out)
+    elif len(rest) == 1 and not verb and method == "GET":
+        b = store.builds.get(build_name(project, location, sid, rest[0]))
+        if not b:
+            raise _E(404, "NOT_FOUND", "Build '%s' does not exist." % rest[0])
+        return _json(200, trigger_build_view(b))
+    return _err(404, "NOT_FOUND", "Unknown path or method: %s %s" % (method, "/".join(rest)))

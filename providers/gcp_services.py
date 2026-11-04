@@ -70,6 +70,20 @@ TARGETS = [
     "api_gcp_sql_get_database",
     "api_gcp_sql_create_database",
     "api_gcp_sql_delete_database",
+    "api_gcp_sql_insert_backup_run",
+    "api_gcp_sql_list_backup_runs",
+    "api_gcp_sql_get_backup_run",
+    "api_gcp_sql_delete_backup_run",
+    "api_gcp_sql_restore_backup",
+    "api_gcp_sql_export_instance",
+    "api_gcp_sql_import_instance",
+    "api_gcp_sql_list_ssl_certs",
+    "api_gcp_sql_insert_ssl_cert",
+    "api_gcp_sql_delete_ssl_cert",
+    "api_gcp_sql_query",
+    "api_gcp_sql_list_queries",
+    "api_gcp_sql_list_tables",
+    "api_gcp_sql_get_metrics",
     "api_gcp_pubsub_list_topics",
     "api_gcp_pubsub_create_topic",
     "api_gcp_pubsub_get_topic",
@@ -369,7 +383,31 @@ async def api_gcp_sql_create_instance(project: str, request: Request):
     except Exception:
         payload = {}
     payload = payload if isinstance(payload, dict) else {}
+    from core import gcp_cloudsql_core as _csql, wire_ingress
+    bad = _csql.validate_config(wire_ingress.appliance_router()._run_refs,
+                                s._gcp_location_name(payload.get("region") or "us-central1"), payload)
+    if bad:
+        raise HTTPException(400, detail=bad)
     instance = s._gcp_sql_instance_record(project, payload)
+    _cm = (payload.get("diskEncryptionConfiguration") or {}).get("kmsKeyName") if isinstance(payload.get("diskEncryptionConfiguration"), dict) else None
+    if _cm:
+        instance["diskEncryptionConfiguration"] = {"kind": "sql#diskEncryptionConfiguration", "kmsKeyName": _cm}
+    # Read replica (masterInstanceName): a READ_REPLICA_INSTANCE of an existing primary, listed
+    # in the primary's replicaNames and seeded with the primary's databases (as the shared
+    # core does on Nano — gcp.sql.replicas).
+    master_name = str(payload.get("masterInstanceName") or "").strip()
+    master_name = master_name.split(":")[-1] if master_name else ""
+    if master_name:
+        master = gcp_sql_state.get("instances", {}).get(master_name)
+        if not master or str(master.get("project") or project) != project:
+            raise HTTPException(404, detail=f"The Cloud SQL instance does not exist: {master_name}")
+        if master.get("masterInstanceName"):
+            raise HTTPException(400, detail="A read replica can't be created from another read replica.")
+        instance["masterInstanceName"] = master_name
+        instance["instanceType"] = "READ_REPLICA_INSTANCE"
+        instance["databaseVersion"] = master.get("databaseVersion", instance.get("databaseVersion"))
+        instance["replicaConfiguration"] = {"kind": "sql#replicaConfiguration", "failoverTarget": False}
+        instance["databases"] = [dict(d) for d in (master.get("databases") or [])]
     existing = gcp_sql_state.get("instances", {}).get(instance["name"])
     if existing:
         # Idempotent create — same name+project returns the existing
@@ -398,6 +436,10 @@ async def api_gcp_sql_create_instance(project: str, request: Request):
         instance["_backend"] = None
         instance["_backend_error"] = str(exc)[:200]
     gcp_sql_state.setdefault("instances", {})[instance["name"]] = instance
+    if master_name:
+        reps = gcp_sql_state["instances"][master_name].setdefault("replicaNames", [])
+        if instance["name"] not in reps:
+            reps.append(instance["name"])
     # Real Cloud SQL insert returns a long-running Operation (clients/Terraform
     # poll operations.get until DONE), not the instance — so does the simulator.
     return s._gcp_sql_make_operation(project, instance["name"], "CREATE")
@@ -426,6 +468,10 @@ async def api_gcp_sql_patch_instance(project: str, instance: str, request: Reque
     except Exception:
         payload = {}
     payload = payload if isinstance(payload, dict) else {}
+    from core import gcp_cloudsql_core as _csql
+    bad = _csql.validate_config(None, rec.get("region") or "us-central1", payload, patch=True)
+    if bad:
+        raise HTTPException(400, detail=bad)
     if isinstance(payload.get("settings"), dict):
         # flags / ipConfiguration / backups / insights validated by the Cloud SQL engine
         # (core/gcp_cloudsql_core) — the rules Nano's instances.patch applies.
@@ -544,9 +590,13 @@ async def api_gcp_sql_create_database(project: str, instance: str, request: Requ
     name = str(payload.get("name") or "").strip()
     if not name:
         raise HTTPException(400, detail="Database name is required")
-    dbs = rec.setdefault("databases", [])
-    if not any(d.get("name") == name for d in dbs):
-        dbs.append({"name": name, "charset": str(payload.get("charset") or "UTF8"), "collation": str(payload.get("collation") or "")})
+    if rec.get("masterInstanceName"):
+        raise HTTPException(400, detail="A read replica is read-only: create databases on its primary.")
+    new_db = {"name": name, "charset": str(payload.get("charset") or "UTF8"), "collation": str(payload.get("collation") or "")}
+    for target in [rec] + [gcp_sql_state.get("instances", {}).get(r) or {} for r in rec.get("replicaNames") or []]:
+        dbs = target.setdefault("databases", [])          # replicas mirror the primary's databases
+        if not any(d.get("name") == name for d in dbs):
+            dbs.append(dict(new_db))
     return s._gcp_sql_make_operation(project, instance, "CREATE_DATABASE")
 
 
@@ -556,6 +606,314 @@ def api_gcp_sql_delete_database(project: str, instance: str, database: str):
     rec = _sql_instance_or_404(s, project, instance)
     rec["databases"] = [d for d in rec.get("databases", []) if d.get("name") != database]
     return s._gcp_sql_make_operation(project, instance, "DELETE_DATABASE")
+
+
+# ── Cloud SQL backup runs (gcp.sql.backups — same semantics as core/gcp_cloudsql_core on Nano):
+# an on-demand backupRun snapshots the instance's databases + users metadata; restoreBackup puts
+# that snapshot back (and onto the instance's read replicas). Row-level data on the backing
+# engine is not captured — the same honest limit the core documents.
+def _backup_view(project: str, instance: str, b: dict) -> dict:
+    s = _server()
+    return {"kind": "sql#backupRun", "id": b["id"], "project": project, "instance": instance,
+            "status": "SUCCESSFUL", "type": b.get("type", "ON_DEMAND"), "description": b.get("description", ""),
+            "enqueuedTime": b["time"], "startTime": b["time"], "endTime": b["time"], "location": "us",
+            "windowStartTime": b["time"],
+            "selfLink": f"{s._gcp_sql_root()}/projects/{project}/instances/{instance}/backupRuns/{b['id']}"}
+
+
+async def api_gcp_sql_insert_backup_run(project: str, instance: str, request: Request):
+    import uuid as _uuid
+    s = _server()
+    project = _gcp_project_name(project)
+    rec = _sql_instance_or_404(s, project, instance)
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    payload = payload if isinstance(payload, dict) else {}
+    b = {"id": str(_uuid.uuid4().int % 10_000_000_000), "type": "ON_DEMAND", "time": s._now(),
+         "description": str(payload.get("description") or ""),
+         "snapshot": {"databases": [dict(d) for d in rec.get("databases") or []],
+                      "users": [dict(u) for u in rec.get("users") or []]}}
+    rec.setdefault("_backup_runs", []).append(b)
+    return s._gcp_sql_make_operation(project, instance, "BACKUP_VOLUME")
+
+
+def api_gcp_sql_list_backup_runs(project: str, instance: str):
+    s = _server()
+    project = _gcp_project_name(project)
+    rec = _sql_instance_or_404(s, project, instance)
+    items = [_backup_view(project, instance, b) for b in reversed(rec.get("_backup_runs") or [])]
+    return {"kind": "sql#backupRunsList", **({"items": items} if items else {})}
+
+
+def _backup_or_404(rec: dict, backup_id: str) -> dict:
+    b = next((x for x in rec.get("_backup_runs") or [] if str(x["id"]) == str(backup_id)), None)
+    if b is None:
+        raise HTTPException(404, detail=f"The backupRun does not exist. BackupRun: {backup_id}")
+    return b
+
+
+def api_gcp_sql_get_backup_run(project: str, instance: str, backup_id: str):
+    s = _server()
+    project = _gcp_project_name(project)
+    return _backup_view(project, instance, _backup_or_404(_sql_instance_or_404(s, project, instance), backup_id))
+
+
+def api_gcp_sql_delete_backup_run(project: str, instance: str, backup_id: str):
+    s = _server()
+    project = _gcp_project_name(project)
+    rec = _sql_instance_or_404(s, project, instance)
+    b = _backup_or_404(rec, backup_id)
+    rec["_backup_runs"] = [x for x in rec["_backup_runs"] if x is not b]
+    return s._gcp_sql_make_operation(project, instance, "DELETE_BACKUP")
+
+
+async def api_gcp_sql_restore_backup(project: str, instance: str, request: Request):
+    s = _server()
+    project = _gcp_project_name(project)
+    rec = _sql_instance_or_404(s, project, instance)
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    ctx = (payload or {}).get("restoreBackupContext") or {}
+    source = str(ctx.get("instanceId") or instance).strip()
+    b = _backup_or_404(_sql_instance_or_404(s, project, source), str(ctx.get("backupRunId", "")).strip())
+    snap = b.get("snapshot") or {}
+    rec["databases"] = [dict(d) for d in snap.get("databases") or []]
+    rec["users"] = [dict(u) for u in snap.get("users") or []]
+    for r in rec.get("replicaNames") or []:                    # replicas mirror the primary
+        rep = gcp_sql_state.get("instances", {}).get(r)
+        if rep is not None:
+            rep["databases"] = [dict(d) for d in rec["databases"]]
+    return s._gcp_sql_make_operation(project, instance, "RESTORE_VOLUME")
+
+
+class _PhysicalPgRows:
+    """SqlStore over an offline Cloud SQL instance's REAL Postgres database (the shared
+    engine container core/gcp_sql_engine provisioned — local, never a cloud endpoint)."""
+
+    def __new__(cls, cfg: dict, dbname: str):
+        from core.sql_store import SqlStore
+
+        class _Store(SqlStore):
+            def param_placeholder(self, index: int) -> str:
+                return "%s"
+
+            def _connect(self, db_id: str):
+                import psycopg2
+                conn = psycopg2.connect(host=cfg["host"], port=cfg["port"], user=cfg["admin_user"],
+                                        password=cfg["admin_password"], dbname=dbname)
+                conn.autocommit = True
+                return conn
+        return _Store()
+
+
+def _sql_rows_for(project: str, instance: str, rec: dict):
+    """(rows_store, db_id, error) for an offline Cloud SQL instance's data."""
+    backend = rec.get("_backend") or None
+    db_id = f"cloudsql:{project}/{instance}"
+    if isinstance(backend, dict) and backend.get("database"):
+        if str(backend.get("engine", "")).upper() != "POSTGRES":
+            return None, db_id, ("Export/import of a MySQL-engine instance is not supported by the "
+                                 "simulator; only PostgreSQL instances are.")
+        from core import gcp_sql_engine
+        return _PhysicalPgRows(gcp_sql_engine._engine_config("postgres"), backend["database"]), db_id, ""
+    from core.appliance_stores import cloudsql_rows_store
+    return cloudsql_rows_store(), db_id, ""
+
+
+async def _gcp_sql_export_import(project: str, instance: str, request: Request, kind: str):
+    from core import gcp_cloudsql_core as _csql
+    from core import sql_store as _sq
+    from core.appliance_stores import gcs_store
+    s = _server()
+    project = _gcp_project_name(project)
+    rec = _sql_instance_or_404(s, project, instance)
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    key = "exportContext" if kind == "EXPORT" else "importContext"
+    ctx = (payload or {}).get(key) or {}
+    try:
+        _sq.parse_gs_uri(ctx.get("uri"))
+    except ValueError as e:
+        raise HTTPException(400, detail=f"INVALID_ARGUMENT: {e}")
+    rows, db_id, msg = _sql_rows_for(project, instance, rec)
+    if not msg:
+        try:
+            msg = (_csql.run_export(rows, db_id, gcs_store(), ctx, label=f"{project}:{instance}")
+                   if kind == "EXPORT" else _csql.run_import(rows, db_id, gcs_store(), ctx))
+        except Exception as e:  # noqa: BLE001 — e.g. the engine container went away
+            msg = f"{kind.title()} failed: {e}"
+    op = s._gcp_sql_make_operation(project, instance, kind)
+    op[key] = {"kind": f"sql#{key}", **ctx}
+    if msg:
+        op["error"] = {"kind": "sql#operationErrors",
+                       "errors": [{"kind": "sql#operationError",
+                                   "code": "ERROR_RDBMS" if kind == "IMPORT" else "INTERNAL_ERROR",
+                                   "message": msg}]}
+    return op
+
+
+async def api_gcp_sql_export_instance(project: str, instance: str, request: Request):
+    """instances.export → sqlFile/csvFile into the appliance's OWN GCS store (gs:// is never
+    resolved to Google). Missing bucket → the operation carries an error."""
+    return await _gcp_sql_export_import(project, instance, request, "EXPORT")
+
+
+async def api_gcp_sql_import_instance(project: str, instance: str, request: Request):
+    """instances.import ← sqlFile/csvFile from the appliance's OWN GCS store."""
+    return await _gcp_sql_export_import(project, instance, request, "IMPORT")
+
+
+# ── gcp.sql.connections-security (sslCerts) + gcp.sql.insights (Cloud SQL Studio's query
+# RPC, tables, metrics) — offline twins of the Nano routes in core/gcp_cloudsql_core.py.
+# Cert generation, SSL enforcement and query-log bookkeeping are the SAME pure helpers
+# that core uses (imported here, not reimplemented) so the two substrates can't drift;
+# only the real-engine lookup differs (_sql_rows_for — the SAME seam export/import use
+# above: the real Postgres container when one was provisioned, else the shared durable
+# fallback store), consistent with how this offline layer already runs real SQL. ────────
+def api_gcp_sql_list_ssl_certs(project: str, instance: str):
+    from core import gcp_cloudsql_core as _csql
+    s = _server()
+    project = _gcp_project_name(project)
+    rec = _sql_instance_or_404(s, project, instance)
+    certs = rec.get("sslCerts") or {}
+    items = [_csql._ssl_cert_view(project, instance, certs[k]) for k in sorted(certs)]
+    return {"kind": "sql#sslCertsList", **({"items": items} if items else {})}
+
+
+async def api_gcp_sql_insert_ssl_cert(project: str, instance: str, request: Request):
+    from core import gcp_cloudsql_core as _csql
+    s = _server()
+    project = _gcp_project_name(project)
+    rec = _sql_instance_or_404(s, project, instance)
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    common_name = str((payload or {}).get("commonName") or "").strip()
+    if not common_name:
+        raise HTTPException(400, detail="commonName is required")
+    cert = _csql._client_cert(project, instance, common_name)
+    private_key = cert.pop("_privateKey")
+    rec.setdefault("sslCerts", {})[cert["sha1Fingerprint"]] = cert
+    if not rec.get("serverCaCert", {}).get("sha1Fingerprint"):
+        rec["serverCaCert"] = _csql._ca_cert(project, instance)
+    op = s._gcp_sql_make_operation(project, instance, "CREATE_SSL_CERT")
+    return {"kind": "sql#sslCertsInsert", "operation": op, "serverCaCert": rec.get("serverCaCert"),
+            "clientCert": {"kind": "sql#sslCert", "certInfo": _csql._ssl_cert_view(project, instance, cert),
+                           "certPrivateKey": private_key}}
+
+
+def api_gcp_sql_delete_ssl_cert(project: str, instance: str, fingerprint: str):
+    s = _server()
+    project = _gcp_project_name(project)
+    rec = _sql_instance_or_404(s, project, instance)
+    certs = rec.get("sslCerts") or {}
+    if fingerprint not in certs:
+        raise HTTPException(404, detail="The SSL cert does not exist.")
+    certs.pop(fingerprint, None)
+    return s._gcp_sql_make_operation(project, instance, "DELETE_SSL_CERT")
+
+
+async def api_gcp_sql_query(project: str, instance: str, request: Request):
+    import time as _time
+    from core import gcp_cloudsql_core as _csql
+    from core import sql_store as _sq
+    s = _server()
+    project = _gcp_project_name(project)
+    rec = _sql_instance_or_404(s, project, instance)
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    payload = payload if isinstance(payload, dict) else {}
+    ssl_err = _csql._ssl_enforcement_error(rec, payload)
+    if ssl_err:
+        raise HTTPException(400, detail=ssl_err)
+    sql = str(payload.get("sql") or "").strip()
+    if not sql:
+        raise HTTPException(400, detail="sql is required")
+    rows, db_id, err = _sql_rows_for(project, instance, rec)
+    t0 = _time.time()
+    if err:
+        res, ok, error = {"columns": [], "rows": [], "rowcount": 0}, False, err
+    else:
+        try:
+            res = rows.execute_sql(db_id, sql, payload.get("params"))
+            ok, error = True, None
+        except Exception as e:  # noqa: BLE001 — a bad statement fails the query, not the RPC
+            res, ok, error = {"columns": [], "rows": [], "rowcount": 0}, False, str(e)
+    duration_ms = (_time.time() - t0) * 1000
+    _csql._log_query(rec, sql, duration_ms, res.get("rowcount", 0), ok, error)
+    return {"ok": ok, "columns": res.get("columns", []),
+            "rows": [[_sq.json_cell(v) for v in r] for r in res.get("rows", [])],
+            "rowCount": res.get("rowcount", 0), "durationMs": round(duration_ms, 2), "error": error}
+
+
+def api_gcp_sql_list_queries(project: str, instance: str):
+    s = _server()
+    project = _gcp_project_name(project)
+    rec = _sql_instance_or_404(s, project, instance)
+    return {"items": list(rec.get("queryLog") or [])}
+
+
+def api_gcp_sql_list_tables(project: str, instance: str):
+    from core import sql_store as _sq
+    s = _server()
+    project = _gcp_project_name(project)
+    rec = _sql_instance_or_404(s, project, instance)
+    rows, db_id, err = _sql_rows_for(project, instance, rec)
+    names: list = []
+    if not err:
+        try:
+            if _sq.engine_dialect(rows) == "sqlite":
+                res = rows.execute_sql(db_id, "SELECT name FROM sqlite_master WHERE type='table' "
+                                               "AND name NOT LIKE 'sqlite_%' ORDER BY name")
+            else:
+                res = rows.execute_sql(db_id, "SELECT table_name FROM information_schema.tables "
+                                               "WHERE table_schema = current_schema() ORDER BY table_name")
+            names = [r[0] for r in res.get("rows", [])]
+        except Exception:
+            names = []
+    return {"tables": names}
+
+
+def api_gcp_sql_get_metrics(project: str, instance: str):
+    import time as _time
+    from core import sql_store as _sq
+    s = _server()
+    project = _gcp_project_name(project)
+    rec = _sql_instance_or_404(s, project, instance)
+    rows, db_id, err = _sql_rows_for(project, instance, rec)
+    storage_bytes = 0
+    active = 0
+    if not err:
+        try:
+            if _sq.engine_dialect(rows) == "sqlite":
+                res = rows.execute_sql(db_id, "SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()")
+            else:
+                res = rows.execute_sql(db_id, "SELECT pg_database_size(current_database())")
+            if res.get("rows"):
+                storage_bytes = int(res["rows"][0][0] or 0)
+        except Exception:
+            storage_bytes = 0
+        active = rows.open_transaction_count(db_id)
+    now = _time.time()
+    buckets = [0] * 12
+    errors = 0
+    for entry in rec.get("queryLog") or []:
+        age = now - entry.get("epoch", now)
+        if 0 <= age < 3600:
+            buckets[11 - int(age // 300)] += 1
+            if not entry.get("ok"):
+                errors += 1
+    return {"storageBytes": storage_bytes, "activeConnections": active,
+            "queryCount1h": sum(buckets), "errorCount1h": errors, "series": buckets}
 
 
 def _pubsub_mirror(s, kind: str, project: str, rid: str, payload: dict | None = None, delete: bool = False) -> None:

@@ -1,0 +1,141 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vyomi.cloud/schemas/ui-spec/v1/service.json",
+  "title": "Vyomi native-fidelity console UI spec (one service)",
+  "description": "Text-only contract describing what a native cloud console page shows: nav, list columns and actions, detail tabs, create-form fields. Vyomi consoles are built against it and the Playwright UI-conformance suite checks every element is present. No screenshots, no long copy, no account data.",
+  "type": "object",
+  "required": ["cloud", "service", "nav", "pages"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {"type": "string"},
+    "cloud": {"enum": ["aws", "gcp", "azure"]},
+    "service": {"type": "string", "description": "Vyomi service key, e.g. s3, dynamodb"},
+    "console_path": {"type": ["string", "null"], "description": "Native console path segment, e.g. /s3/ or /dynamodbv2/"},
+    "status": {"enum": ["draft", "reviewed"], "description": "draft = extractor output; reviewed = hand-checked against screenshots (extractor will not overwrite)"},
+    "captured_at": {"type": "string", "description": "ISO date of the capture the spec was reviewed against"},
+    "nav": {"type": "array", "items": {"$ref": "#/$defs/navNode"}},
+    "pages": {"type": "array", "items": {"$ref": "#/$defs/page"}},
+    "gaps_note": {"type": "string", "description": "Known gaps of the spec itself (uncaptured pages, inferred items)"}
+  },
+  "$defs": {
+    "confidence": {"enum": ["high", "medium", "low"], "description": "low = heuristic guess; verify before asserting in conformance"},
+    "provenance": {
+      "enum": ["capture", "reference"],
+      "description": "capture = seen in a native console capture; reference = added from product knowledge/docs because the crawl has not reached it yet (re-verify on next capture)"
+    },
+    "shortText": {"type": "string", "maxLength": 120},
+    "navNode": {
+      "type": "object",
+      "required": ["label"],
+      "additionalProperties": false,
+      "properties": {
+        "label": {"$ref": "#/$defs/shortText"},
+        "page_id": {"type": "string"},
+        "external": {"type": "boolean", "description": "link leaves the service console (other service / marketplace)"},
+        "expandable": {"type": "boolean", "description": "collapsible group in the native side nav"},
+        "children": {"type": "array", "items": {"$ref": "#/$defs/navNode"}}
+      }
+    },
+    "field": {
+      "type": "object",
+      "required": ["label", "type"],
+      "additionalProperties": false,
+      "properties": {
+        "label": {"$ref": "#/$defs/shortText"},
+        "type": {"enum": ["text", "number", "select", "radio", "checkbox", "toggle", "tags", "textarea", "file", "readonly", "button", "table", "other"]},
+        "required": {"type": "boolean"},
+        "default": {},
+        "options": {"type": "array", "items": {"$ref": "#/$defs/shortText"}},
+        "placeholder": {"$ref": "#/$defs/shortText"},
+        "help": {"$ref": "#/$defs/shortText"},
+        "constraints": {"$ref": "#/$defs/shortText", "description": "validation rule shown under the field"},
+        "visible_when": {"$ref": "#/$defs/shortText", "description": "condition, e.g. 'Table settings = Customize settings'"},
+        "children": {"type": "array", "items": {"$ref": "#/$defs/field"}, "description": "nested fields (e.g. the 4 Block Public Access sub-checkboxes)"},
+        "columns": {"type": "array", "items": {"$ref": "#/$defs/shortText"}, "description": "for type=table"},
+        "actions": {"type": "array", "items": {"$ref": "#/$defs/shortText"}},
+        "confidence": {"$ref": "#/$defs/confidence"},
+        "provenance": {"$ref": "#/$defs/provenance"}
+      }
+    },
+    "section": {
+      "type": "object",
+      "required": ["title"],
+      "additionalProperties": false,
+      "properties": {
+        "title": {"$ref": "#/$defs/shortText"},
+        "expandable": {"type": "boolean"},
+        "actions": {"type": "array", "items": {"$ref": "#/$defs/shortText"}, "description": "buttons in the section header (Edit, ...)"},
+        "fields": {"type": "array", "items": {"$ref": "#/$defs/field"}},
+        "table": {"$ref": "#/$defs/table"},
+        "confidence": {"$ref": "#/$defs/confidence"},
+        "provenance": {"$ref": "#/$defs/provenance"}
+      }
+    },
+    "table": {
+      "type": "object",
+      "required": ["columns"],
+      "additionalProperties": false,
+      "properties": {
+        "resource_label": {"type": ["string", "null"], "maxLength": 120, "description": "header text before the '(N)' count"},
+        "counter": {"type": "boolean", "description": "header shows a '(N)' count"},
+        "selection": {"enum": ["none", "single", "multi"]},
+        "columns": {"type": "array", "items": {"$ref": "#/$defs/shortText"}},
+        "header_actions": {"type": "array", "items": {"$ref": "#/$defs/shortText"}, "description": "buttons in the table header, left to right"},
+        "actions": {"type": "array", "items": {"$ref": "#/$defs/shortText"}, "description": "items inside an 'Actions' dropdown"},
+        "filter_placeholder": {"$ref": "#/$defs/shortText"},
+        "filters": {"type": "array", "items": {"$ref": "#/$defs/shortText"}},
+        "empty_state": {"$ref": "#/$defs/shortText"},
+        "empty_state_action": {"$ref": "#/$defs/shortText"},
+        "pagination": {"type": "boolean"},
+        "preferences": {"type": "boolean", "description": "gear icon (page size / visible columns)"},
+        "confidence": {"$ref": "#/$defs/confidence"},
+        "provenance": {"$ref": "#/$defs/provenance"}
+      }
+    },
+    "tabPanel": {
+      "type": "object",
+      "required": ["label"],
+      "additionalProperties": false,
+      "properties": {
+        "label": {"$ref": "#/$defs/shortText"},
+        "sections": {"type": "array", "items": {"$ref": "#/$defs/section"}},
+        "confidence": {"$ref": "#/$defs/confidence"},
+        "provenance": {"$ref": "#/$defs/provenance"}
+      }
+    },
+    "step": {
+      "type": "object",
+      "required": ["title"],
+      "additionalProperties": false,
+      "properties": {
+        "title": {"$ref": "#/$defs/shortText"},
+        "optional": {"type": "boolean"},
+        "sections": {"type": "array", "items": {"$ref": "#/$defs/section"}}
+      }
+    },
+    "page": {
+      "type": "object",
+      "required": ["id", "kind", "title"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
+        "kind": {"enum": ["list", "detail", "create", "dashboard", "settings", "other"]},
+        "title": {"$ref": "#/$defs/shortText", "description": "page heading; '{resource-name}' for instance pages"},
+        "route": {"type": "string", "description": "native console route (path+hash, region stripped); informative only"},
+        "breadcrumbs": {"type": "array", "items": {"$ref": "#/$defs/shortText"}},
+        "captures": {"type": "array", "items": {"type": "string"}, "description": "capture paths (no extension) relative to the PRIVATE captures root; '*' masks instance names"},
+        "provenance": {"$ref": "#/$defs/provenance"},
+        "confidence": {"$ref": "#/$defs/confidence"},
+        "header_actions": {"type": "array", "items": {"$ref": "#/$defs/shortText"}, "description": "page-level buttons next to the title"},
+        "table": {"$ref": "#/$defs/table"},
+        "extra_tables": {"type": "array", "items": {"$ref": "#/$defs/table"}},
+        "tabs": {"type": "array", "items": {"$ref": "#/$defs/shortText"}, "description": "tab labels, left to right"},
+        "tab_panels": {"type": "array", "items": {"$ref": "#/$defs/tabPanel"}, "description": "what each tab contains"},
+        "sections": {"type": "array", "items": {"$ref": "#/$defs/section"}},
+        "steps": {"type": "array", "items": {"$ref": "#/$defs/step"}},
+        "submit": {"$ref": "#/$defs/shortText", "description": "primary submit button label"},
+        "notes": {"$ref": "#/$defs/shortText"}
+      }
+    }
+  }
+}

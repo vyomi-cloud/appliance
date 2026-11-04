@@ -1,0 +1,162 @@
+{
+ "$doc": "Vyomi capability registry — Microsoft Entra ID (Azure AD). See aws/s3.json for the contract.",
+ "azure.entra.users.crud": {
+  "title": "Users (create, get, list, update, delete) over Microsoft Graph",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_azure_graph_core.py"
+  ]
+ },
+ "azure.entra.groups.crud": {
+  "title": "Groups (create, get, list, delete, membership) over Microsoft Graph",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "Dynamic membership rules are stored but never evaluated — Vyomi only tracks membership added/removed explicitly."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_graph_core.py"
+  ]
+ },
+ "azure.entra.applications.crud": {
+  "title": "App registrations, their auto-created enterprise application (service principal), and client secrets",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "Only the default Microsoft Graph User.Read delegated permission is seeded on every new registration; the API permissions / admin-consent workflow and OAuth2 token issuance are not simulated."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_graph_core.py"
+  ]
+ },
+ "azure.entra.domains": {
+  "title": "Custom domain names (add, list, delete)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "Added domains are never verified (isVerified stays false) — Vyomi has no DNS/TXT-record check to perform."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_graph_core.py"
+  ]
+ },
+ "azure.entra.administrative_units": {
+  "title": "Administrative units (add, list, delete)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_azure_graph_core.py"
+  ]
+ },
+ "azure.entra.roles_and_administrators": {
+  "title": "Roles and administrators (built-in + custom directory roles, assignments)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "Shares its evaluation engine with Azure RBAC (Microsoft.Authorization); directory roles are modelled as role definitions assignable at the tenant-root scope rather than through the real roleManagement/directory Graph surface."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_rbac_core.py"
+  ]
+ },
+ "azure.entra.directory_audit_log": {
+  "title": "Audit logs (directory mutations)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "Only console/API-triggered directory mutations made since the simulation booted are recorded (no historical backfill); category/activity filtering and the date-range picker are not modelled."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_graph_core.py"
+  ]
+ },
+ "azure.entra.organization_properties": {
+  "title": "Tenant properties (name, technical/privacy contacts, verified domains)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_azure_graph_core.py"
+  ]
+ },
+ "azure.entra.directory_settings": {
+  "title": "User settings (default user role permissions, guest access, LinkedIn connections)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "'Users can create security groups' = No really blocks POST /v1.0/groups for security groups (Microsoft 365 groups are unaffected); 'Users can register applications' = No really blocks POST /v1.0/applications — both return Graph's 403 Authorization_RequestDenied.",
+   "The real console only applies those two toggles to non-admin members; Vyomi has no signed-in-identity model to tell members from admins apart, so the toggle blocks every caller tenant-wide rather than just non-admins.",
+   "The remaining toggles (guest user access restrictions, restrict non-admin users from creating tenants, restrict access to the admin center, LinkedIn connections, show keep user signed in) are stored and returned exactly as set but not enforced — Vyomi has no tenant-creation flow, no separate admin-center surface, and no LinkedIn integration to gate."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_graph_core.py"
+  ]
+ },
+ "azure.entra.sign_in_logs": {
+  "title": "Sign-in logs",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Service principal sign-ins are real: POST /{tenant}/oauth2/v2.0/token validates the caller's actual client secret (set by addPassword/removePassword on the app, core/azure_graph_core.py) and appends a success or failure row for that exact attempt — never sample data.",
+   "User sign-ins (non-interactive) are real: the oauth2/v2.0/token password (ROPC) grant checks the directory user's actual password and appends a success/failure row (AADSTS50126 wrong password, 50034 unknown user, 50057 disabled). Refresh-token and MFA flows are not modelled.",
+   "'User sign-ins (interactive)' and 'Managed identity sign-ins' stay honestly empty — Vyomi has no interactive browser sign-in flow and no managed-identity token endpoint to drive them.",
+   "IP address and location are not derived from a real network topology; every row shows the simulator's own loopback address."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_graph_core.py"
+  ]
+ },
+ "azure.entra.security_defaults": {
+  "title": "Security defaults / Access management for Azure resources",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "'Access management for Azure resources' = Yes really grants a tenant-root (scope \"/\") 'User Access Administrator' role assignment over the same Azure RBAC checkAccess engine every subscription's Access control (IAM) page uses — the real console's elevateAccess action. It is modelled for the single caller identity Vyomi has (no signed-in-admin model), not per-signed-in-user.",
+   "'Security defaults' (Manage security defaults) is a real Graph policy document (policies/identitySecurityDefaultsEnforcementPolicy) stored and returned exactly as set, but not enforced — Vyomi has no interactive sign-in flow to require MFA or block legacy authentication against."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_rbac_core.py",
+   "tests/conformance/test_azure_graph_core.py"
+  ]
+ },
+ "azure.entra.devices": {
+  "title": "Devices (registration, inventory, a user's registered devices)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Registration, listing and deletion of real device objects (GET/POST /v1.0/users/{id}/registeredDevices, GET/DELETE /v1.0/devices/{id}) is real and enforced — the Devices overview's alert counts and 'Download devices' export read this same live inventory, not stored config.",
+   "Vyomi has no OS-level join client (Azure AD Join, Hybrid Join, workplace join) or VM login extension, so a device is registered directly rather than by an end-user signing in from it; isCompliant/isManaged are set by the admin at registration time rather than evaluated by a real MDM/Intune policy engine.",
+   "'BitLocker keys' stays an honest not-simulated gap: recovery-key escrow needs real disk encryption on real hardware, which a software simulator cannot provide."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_graph_core.py"
+  ]
+ }
+}
