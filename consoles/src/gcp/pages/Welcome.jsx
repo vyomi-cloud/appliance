@@ -3,6 +3,7 @@
  * action chips, a promo card on the right, Quick access tiles and "View all products".
  * Every action goes somewhere real: a v4 page, the classic console, or the Connect dialog.
  * The old Cloud overview dashboard lives on at #/dashboard. */
+import NanoVideoBanner from "../../common/NanoVideoBanner.jsx";
 import { useState } from "react";
 import { Box, Button, ButtonBase, Dialog, DialogContent, DialogTitle, IconButton, Link, Paper, Stack, Tooltip, Typography } from "@mui/material";
 import AddBoxIcon from "@mui/icons-material/esm/AddBox.js";
@@ -64,6 +65,7 @@ export default function Welcome({ onPicker }) {
 
   return (
     <Box sx={{ maxWidth: 1060, mx: "auto", px: { xs: 0, md: 4 }, pt: 6, position: "relative" }}>
+      <NanoVideoBanner cloud="gcp" />
       <Decor />
       <Stack direction={{ xs: "column", md: "row" }} spacing={4} justifyContent="space-between" alignItems={{ md: "flex-end" }}>
         <Box>

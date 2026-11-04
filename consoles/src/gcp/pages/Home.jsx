@@ -2,6 +2,7 @@
  * Recommendations), Customize, a dismissible promo card, and cards with icon / title / ⋮ menu /
  * "→ Go to …" footer. Every value is live: project from the picker, product health and resource
  * counts from one real native call per product, API request rate from Vyomi's event log. */
+import NanoVideoBanner from "../../common/NanoVideoBanner.jsx";
 import { useMemo, useState } from "react";
 import {
   Box, Button, Checkbox, Dialog, DialogActions, DialogContent, DialogTitle, Divider, FormControlLabel, IconButton,
@@ -246,6 +247,7 @@ export default function Home() {
 
   return (
     <Box>
+      <NanoVideoBanner cloud="gcp" />
       <Stack direction="row" alignItems="flex-end" sx={{ borderBottom: 1, borderColor: "divider", mb: 2 }}>
         <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ flex: 1, borderBottom: 0, "&&": { mx: 0, px: 0 } }}>
           <Tab label="Dashboard" /><Tab label="Activity" /><Tab label="Recommendations" />

@@ -28,6 +28,10 @@ const CLOUDS = ["aws", "gcp", "azure"].filter((c) => (!only || c === only) && ex
 const _bootHash = (f) => { try { return createHash("sha256").update(readFileSync(new URL(`../wasm/${f}`, import.meta.url))).digest("hex").slice(0, 12); } catch { return "0"; } };
 const NANO_HEAD = `<script type="module" src="../../nano-boot.js?v=${_bootHash("nano-boot.js")}"></script>\n`;
 const NANO_BODY = `<script src="../../nano-kernel.js?v=${_bootHash("nano-kernel.js")}"></script>\n<script>window.__nk = window.NanoKernel && NanoKernel.start("Vyomi console");</script>\n`;
+// Nano chrome the legacy consoles carried and users see today: the bottom app bar (Spaces / Health / Knowledge /
+// SDK & CLI / API, back to clouds.html) and the "How Nano <cloud> works" video banner (mounted on each Home by
+// consoles/src/common/NanoVideoBanner.jsx). Plain scripts, shared with clouds.html; v4 pages sit two levels down.
+const nanoChrome = (cloud) => `<script>window.__VY_ASSET_BASE = "../../";</script>\n<script src="../../nano-video.js?v=${_bootHash("nano-video.js")}"></script>\n<script src="../../vyomi-appbar.js?v=${_bootHash("vyomi-appbar.js")}" data-cloud="${cloud}" data-clouds="../../clouds.html" defer></script>\n`;
 
 // Cache-busting: asset URLs carry a hash of the bundle, so browsers (and Nano's service
 // worker) fetch the new build after every rebuild/upgrade instead of a stale main.js.
@@ -42,7 +46,7 @@ const html = (cloud, title, nano = false) => `<!doctype html>
 ${existsSync(join(HERE, "..", "static", "v4", cloud, "main.css")) ? `<link rel="stylesheet" href="./main.css?v=${assetVersion}">\n` : ""}${nano ? NANO_HEAD : ""}</head>
 <body>
 ${nano ? NANO_BODY : ""}<div id="root"></div>
-<script type="module" src="./main.js?v=${assetVersion}"></script>
+${nano ? nanoChrome(cloud) : ""}<script type="module" src="./main.js?v=${assetVersion}"></script>
 </body>
 </html>
 `;

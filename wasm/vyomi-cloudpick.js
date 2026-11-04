@@ -11,7 +11,7 @@
   var s = document.currentScript;
   var NANO = !!(s && s.hasAttribute('data-nano'));
   var KEY = 'vyomi.defaultSpace';
-  function consolePath(c) { return NANO ? c + '-console.html' : '/console/' + c; }
+  function consolePath(c) { return NANO ? 'v4/' + c + '/' : '/console/' + c; }
   function getDefault() { try { return localStorage.getItem(KEY) || null; } catch (e) { return null; } }
   function setDefault(id) { try { localStorage.setItem(KEY, id); } catch (e) {} }
   function jget(u) { return fetch(u).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }); }

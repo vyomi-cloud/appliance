@@ -1,4 +1,5 @@
 /* Portal Home: "Azure services" tile strip and the "Resources" list (Recent / Favorite). */
+import NanoVideoBanner from "../../common/NanoVideoBanner.jsx";
 import { useState } from "react";
 import { Button, Tab, TabList, Table, TableBody, TableCell, TableHeader, TableHeaderCell, TableRow, Link, Tooltip } from "@fluentui/react-components";
 import {
@@ -93,6 +94,7 @@ export default function Home() {
   const rows = recent();
   return (
     <div className="vy-home">
+      <NanoVideoBanner cloud="azure" />
       <h2>Azure services</h2>
       <div className="vy-tiles">
         <a className="vy-tile vy-link" href="#/allservices"><Add24Regular style={{ width: 32, height: 32 }} />Create a resource</a>
