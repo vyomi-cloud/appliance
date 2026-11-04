@@ -110,6 +110,10 @@ try:                                              # v4: Azure Backup + Site Reco
     from core import azure_backup_core as backup_engine
 except ImportError:
     import azure_backup_core as backup_engine      # type: ignore
+try:                                              # v4: Azure SQL copy / PITR / restore / geo-replication / LTR over the SqlStore data plane
+    from core import azure_sqlbackup_core as sqlbk
+except ImportError:
+    import azure_sqlbackup_core as sqlbk           # type: ignore
 try:                                              # v4 AZ-08: Azure Files, AI Search, Storage Mover, Marketplace, quota/billing extras
     from core import azure_files_core as files_engine, azure_search_core as search_engine
     from core import azure_storagemover_core as mover_engine, azure_marketplace_core as market_engine
@@ -1672,6 +1676,10 @@ class AzureArm:
                 blocked = cfgext.validate(self.state, full_type, rid, payload, _net_prev, sub, rg)
                 if blocked:
                     return blocked
+            if sqlbk.handles(full_type):
+                blocked = sqlbk.validate(self.state, full_type, rid, payload, _net_prev, sub, rg, self.sql_store)
+                if blocked:
+                    return blocked
             if full_type.lower() == "microsoft.authorization/roleassignments":
                 # Real ARM derives a role assignment's scope from the resource ID it was PUT
                 # under — not from a client-supplied properties.scope — so checkAccess and the
@@ -1697,6 +1705,11 @@ class AzureArm:
                 resp["body"] = _view(self.state[key])
             if cfgext.handles(full_type) and key in self.state:
                 cfgext.after_put(self.state, self.state[key], payload, _net_prev)
+                resp["body"] = _view(self.state[key])
+            if sqlbk.handles(full_type) and key in self.state:
+                blocked = sqlbk.after_put(self.state, self.state[key], payload, _net_prev, self.sql_store, self.blob_store)
+                if blocked:
+                    return blocked
                 resp["body"] = _view(self.state[key])
             deployment_failed = False
             if full_type.lower() == "microsoft.resources/deployments":
@@ -1777,7 +1790,13 @@ class AzureArm:
                     blocked = cfgext.before_delete(self.state, _net_rec)
                     if blocked:
                         return blocked
+                if sqlbk.handles(_net_rec.get("_type") or ""):
+                    blocked = sqlbk.before_delete(self.state, _net_rec)
+                    if blocked:
+                        return blocked
             rec = self.state.pop(key, None)
+            if rec is not None and sqlbk.handles(rec.get("_type") or ""):
+                sqlbk.on_delete(self.state, rec, self.sql_store, self.blob_store)
             if rec is not None:
                 if rec.get("_ipam_alloc"):
                     self._release_ipam_pool(rec["_ipam_alloc"])
@@ -1865,6 +1884,9 @@ class AzureArm:
             return {"status": r["status"], "headers": {}, "body": r["body"]}
         if ns == "microsoft.storagemover" and (rg is not None or len(chain) == 1):
             r = mover_engine.dispatch(self.state, method, sub, rg, chain, payload, query, blob_store=self.blob_store, base=self._base)
+            return {"status": r["status"], "headers": {}, "body": r["body"]}
+        if ns == "microsoft.sql" and chain and sqlbk.owns(chain) and (rg is not None or chain[0].lower() == "locations"):
+            r = sqlbk.dispatch(self.state, method, sub, rg, chain, payload, query, sql_store=self.sql_store, blob_store=self.blob_store)
             return {"status": r["status"], "headers": {}, "body": r["body"]}
         if ns == "microsoft.recoveryservices" and (rg is not None or len(chain) == 1 or (chain and chain[0].lower() == "locations")):
             r = backup_engine.dispatch(self.state, method, sub, rg, chain, payload, query, blob_store=self.blob_store, base=self._base,
