@@ -367,6 +367,7 @@ _SIGNING = {
     "rbin": "rbin",   # EC2 Recycle Bin (rest-json /rules...) -> core/ec2_ops_core.rbin_dispatch over the shared EC2 model
     "schemas": "schemas",   # EventBridge Schemas (rest-json /v1/registries, /v1/discoverers) -> core/eventbridge_schemas_core via the EventBridge store
     "application-autoscaling": "appas",   # Application Auto Scaling (DynamoDB) -> core/appautoscaling_core over the DynamoDB store
+    "cloudfront": "cloudfront",   # CloudFront public keys + key groups (rest-xml /2020-05-31/...) -> core/cloudfront_keys_core via the S3 store
     "backup": "backup",   # AWS Backup subset (region settings + DynamoDB copy jobs) -> core/backup_core over the DynamoDB + S3 stores
     "s3vectors": "s3vectors",   # Amazon S3 Vectors (rest-json POST /<Operation>) -> core/s3_vectors_core via the S3 store
     "s3tables": "s3tables",   # Amazon S3 Tables (rest-json /buckets, /namespaces, /tables, /tag) -> core/s3_tables_core via the S3 store
@@ -1044,6 +1045,10 @@ class AwsWireRouter:
             hdrs = dict(r.headers or {})
             hdrs.setdefault("content-type", "application/json")
             return {"status": r.status, "headers": hdrs, "body": r.body or b""}
+
+        if svc == "cloudfront":
+            from core import cloudfront_keys_core
+            return cloudfront_keys_core.dispatch(self.s3, method, path, query or {}, headers or {}, bytes(body))
 
         if svc == "s3vectors":
             r = s3.dispatch(self.s3, method, "/__s3vectors__" + path, query or {}, headers or {}, bytes(body))

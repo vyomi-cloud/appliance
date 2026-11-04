@@ -185,9 +185,30 @@
  },
  "iam.root.cloudfront-key-pairs": {
   "title": "CloudFront key pairs (root user)",
-  "level": {"nano": "not_simulated", "offline": "not_simulated"},
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
   "limitations": [
-   "Vyomi has no Amazon CloudFront service, so there is nothing for a root CloudFront signing key pair to sign. AWS itself has deprecated root-account CloudFront key pairs in favour of CloudFront public keys and key groups, which would live in a CloudFront control plane that does not exist here."
+   "CloudFront signing keys: the legacy account-level key pairs (create from a browser-generated RSA-2048 key - the private key is downloaded and never sent to Vyomi - make active/inactive, delete; at most 2), plus the real CloudFront 2020-05-31 control plane for public keys and key groups (Create/Get/GetConfig/List/Update/Delete with ETag + If-Match, RSA-2048 PEM validation, immutable EncodedKey, 1-5 keys per group, PublicKeyInUse while a key group references a key). A Vyomi-specific validator checks a signed URL the way the edge does (Key-Pair-Id resolves to a key group member or an active root key pair, canned Expires or custom Policy with wildcard Resource, DateLessThan/DateGreaterThan, IpAddress, and a real RSA-SHA1 PKCS#1 v1.5 signature check).",
+   "Vyomi has no CloudFront distributions or edge: key groups cannot be attached to a cache behavior and no request is rejected for a bad signature - validation is the explicit validator tool, not enforcement. Signed cookies use the same policy rules but are not validated separately."
+  ],
+  "api": [
+   "CreatePublicKey",
+   "GetPublicKey",
+   "GetPublicKeyConfig",
+   "ListPublicKeys",
+   "UpdatePublicKey",
+   "DeletePublicKey",
+   "CreateKeyGroup",
+   "GetKeyGroup",
+   "GetKeyGroupConfig",
+   "ListKeyGroups",
+   "UpdateKeyGroup",
+   "DeleteKeyGroup"
+  ],
+  "tests": [
+   "tests/conformance/test_cloudfront_keys.py"
   ]
  },
  "iam.organizations": {
