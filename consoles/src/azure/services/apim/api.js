@@ -21,6 +21,17 @@ export const createService = (rg, name, body) => ARM.put(rg, name, body);
 export const updateService = (rg, name, body) => ARM.patch(rg, name, body);
 export const deleteService = (rg, name) => ARM.remove(rg, name);
 
+export const gatewayAnalytics = (rg, name) => restJson("GET", `${ARM.path(rg, name)}/vyomiAnalytics`, { query: { "api-version": ARM.apiVersion } });
+/** One request through the simulated gateway data plane (/azure-data/apim/{service}/...): returns {status, body}. */
+export async function gatewayCall(name, method, path, { key, headers = {}, body } = {}) {
+  const h = { ...headers, ...(key ? { "Ocp-Apim-Subscription-Key": key } : {}) };
+  try {
+    const data = await restJson(method, `/azure-data/apim/${encodeURIComponent(name)}/${path.replace(/^\//, "")}`, { headers: h, body });
+    return { status: 200, body: data };
+  } catch (e) { return { status: e.status || 0, body: e.message }; }
+}
+export const listSecrets = (rg, svc, sub) => restJson("POST", `${ARM.path(rg, svc)}/subscriptions/${encodeURIComponent(sub)}/listSecrets`, { query: { "api-version": ARM.apiVersion } });
+
 export const gatewayUrl = (name) => `https://${name}.azure-api.net`;
 export const portalUrl = (name) => `https://${name}.developer.azure-api.net`;
 

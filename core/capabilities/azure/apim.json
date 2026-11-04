@@ -140,7 +140,7 @@
   "title": "Metrics, Logs, Analytics",
   "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "These three dashboards are real — built over this service's actual stored data (API/product/subscription counts, active-subscription counts, and the real Activity log's management-plane write events) — but they are NOT the real APIM gateway metrics (Requests, Duration, Capacity). Vyomi's APIs never carry live gateway traffic, so there is no request/latency/capacity time-series to chart; Analytics likewise reports on real configuration (APIs by type, subscriptions by product) rather than real call volume."
+   "Metrics and Logs are real dashboards over this service's stored data (API/product/subscription counts, the real Activity log's management-plane writes). Analytics now ALSO reports real gateway traffic: request counts, status classes, per API/operation/subscription and latency, computed from requests that actually went through the simulated gateway (azure.apim.gateway). An Azure Monitor metric time-series (Requests/Duration/Capacity charts via Microsoft.Insights) is not emitted, and 'Monitor + secure' on the create wizard (wiring a NEW service to Log Analytics / Application Insights / Defender for APIs) is still not modeled."
   ],
   "tests": ["tests/conformance/test_azure_arm_core.py"]
  },
@@ -210,10 +210,10 @@
   "tests": ["tests/conformance/test_azure_arm_core.py"]
  },
  "azure.apim.tools": {
-  "title": "Diagnose and solve problems, Events, Tasks, Support + Troubleshooting",
+  "title": "Diagnose and solve problems, Support + Troubleshooting",
   "level": { "nano": "not_simulated", "offline": "not_simulated" },
   "limitations": [
-   "Diagnose and solve problems runs Azure's own fleet-wide diagnostics heuristics against telemetry Vyomi never collects. Events and Tasks route to Azure's real multi-tenant notification/automation backends, and Support + Troubleshooting opens a real Azure support ticket against Microsoft — all infrastructure outside any local simulator, consistent with every other Vyomi service (Storage, Service Bus, AKS, ACR, App Service, VMs, …)."
+   "Diagnose and solve problems runs Azure's own fleet-wide diagnostics heuristics against telemetry Vyomi never collects. Events (preview) is served by the Events panel; Tasks are real (azure.apim.tasks), and Support + Troubleshooting opens a real Azure support ticket against Microsoft — all infrastructure outside any local simulator, consistent with every other Vyomi service (Storage, Service Bus, AKS, ACR, App Service, VMs, …)."
   ]
  },
  "azure.apim.exporttemplate": {
@@ -223,5 +223,21 @@
   "tests": ["tests/conformance/test_azure_arm_core.py"]
  },
  "azure.apim.gateway_apis": {"title": "API to self-hosted gateway association (service/gateways/{gw}/apis/{api})", "level": {"nano": "config_only", "offline": "config_only"}, "limitations": ["The association is a validated ARM resource (gateway and API must exist) listed on the gateway. No self-hosted gateway process exists to serve or withhold the API."], "tests": ["tests/conformance/test_azure_cfgext_core.py"]},
- "azure.apim.softdelete": {"title": "Soft-delete: deleted services list, restore (properties.restore) and purge", "level": {"nano": "limited", "offline": "limited"}, "limitations": ["Deleting a service keeps a 48-hour soft-deleted record (with its APIs, products and other children) under deletedservices; reusing the name conflicts until it is restored or purged. The record is not purged automatically when the date passes (purge is manual), and the restored service keeps its stored configuration only."], "tests": ["tests/conformance/test_azure_cfgext_core.py"]}
+ "azure.apim.softdelete": {"title": "Soft-delete: deleted services list, restore (properties.restore) and purge", "level": {"nano": "limited", "offline": "limited"}, "limitations": ["Deleting a service keeps a 48-hour soft-deleted record (with its APIs, products and other children) under deletedservices; reusing the name conflicts until it is restored or purged. The record is not purged automatically when the date passes (purge is manual), and the restored service keeps its stored configuration only."], "tests": ["tests/conformance/test_azure_cfgext_core.py"]},
+ "azure.apim.gateway": {
+  "title": "Gateway data plane: routing, subscription keys, policies, backends, request analytics and the Capacity gauge",
+  "level": {
+   "nano": "limited",
+   "offline": "full"
+  },
+  "limitations": [
+   "Served at /azure-data/apim/{service}/{api-path}/{operation} (the real https://{service}.azure-api.net host is not bound). REAL: longest-prefix API routing + operation matching ({param} templates), Ocp-Apim-Subscription-Key / subscription-key (missing, invalid, suspended and out-of-scope keys give the real 401 messages; master, all-APIs, API- and product-scoped subscriptions), global/API/operation policy scopes composed through <base />, and the policies rate-limit, rate-limit-by-key, quota, quota-by-key, set-header, set-query-parameter, rewrite-uri, mock-response (operation sample), return-response, set-backend-service (base-url / backend-id), validate-jwt, check-header, set-body (literal) and cors (origins). Any other policy element is skipped and named in the x-vyomi-apim-skipped-policies response header (never silently passed); only a small @(...) expression subset is evaluated.",
+   "validate-jwt verifies HS256 signatures against issuer-signing-keys; RS256/ES256 tokens are claims-checked (exp/nbf/issuer/audience/required-claims) but the signature is NOT verified (response carries x-vyomi-apim-warning: jwt-signature-unverified). No response caching, schema validation, or WebSocket/gRPC/GraphQL pass-through.",
+   "The Capacity gauge and Analytics are computed from the real requests above against a nominal requests/second per SKU unit; the real gauge is CPU/memory-based, which a simulator does not have. Nano: policies, mock-response, return-response and all rejections work; forwarding to a backend returns 502 because a browser tab has no outbound sockets."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_apim_gateway_core.py"
+  ]
+ },
+ "azure.apim.tasks": {"title": "Tasks (Logic App-backed task templates)", "level": {"nano": "limited", "offline": "limited"}, "limitations": ["A task is a REAL Microsoft.Logic/workflows record (Recurrence trigger + Http actions against management.azure.com) created from a template via POST .../Microsoft.Logic/vyomiCreateTask; runs are fired by the simulator scheduler (core/schedule_core.py) or 'Run now' and call the simulator's own ARM, so the effect is real (power state, restarts, key rotation, usage snapshots), with per-action results in Microsoft.Logic/workflows/runs. Only Recurrence triggers and Http-to-ARM/Compose actions run (anything else fails the run with ActionNotSupported); the managed identity is not authorised (RBAC is not evaluated); workflow expressions are not evaluated; there are no e-mail/Teams connectors, so report tasks keep their result in the run output. Missed schedules coalesce into one run; Nano only fires schedules while the tab is open."], "tests": ["tests/conformance/test_azure_tasks_core.py"]}
 }

@@ -28,6 +28,7 @@ import * as api from "./api.js";
 import * as ops from "./AppOps.jsx";
 import { ResourceRecommendations } from "../defender/Pages.jsx";
 import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
+import TasksPanel from "../../kit/TasksPanel.jsx";
 import SharedActivityLog from "../../kit/ActivityLog.jsx";
 import { ClassicAdminsPanel, DenyAssignmentsPanel, MyAccess } from "../../kit/IamExtras.jsx";
 import SharedResourceVisualizer from "../../kit/ResourceVisualizer.jsx";
@@ -118,6 +119,7 @@ export default function WebAppBlade({ params, query }) {
       alerts: () => <ResourceAlerts id={a.id} name={a.name} />,
       metrics: () => <ResourceMetrics id={a.id} name={a.name} />,
       logs: () => <ResourceLogs id={a.id} name={a.name} />,
+      tasks: () => <TasksPanel a={a} />,
       exporttemplate: () => <SharedExportTemplate id={a.id} name={a.name} resourceGroup={a.resourceGroup} />,
       supportrequest: () => <SharedSupportPanel resourceId={a.id} name={a.name} service="appservices" />,
       resourcehealth: () => <SharedResourceHealth id={a.id} name={a.name} />,

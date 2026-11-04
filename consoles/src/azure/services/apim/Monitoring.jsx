@@ -12,6 +12,7 @@ import BrowseGrid from "../../kit/BrowseGrid.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { KV, Loading, fmtDate } from "../../kit/common.jsx";
 import * as api from "./api.js";
+import { RequestAnalytics } from "./Gateway.jsx";
 
 const ID_RE = /^[a-zA-Z0-9][a-zA-Z0-9-._]{0,255}$/;
 
@@ -225,7 +226,8 @@ export function Analytics({ a }) {
   const productName = (id) => (products.data || []).find((p) => p.name === id)?.properties?.displayName || id;
   return (
     <CapabilityContainer id="azure.apim.monitoring" title={`${a.name} | Analytics`}>
-      <p style={{ fontSize: 13 }} className="vy-muted">Real breakdowns of this service's own configuration — not call-volume analytics (Vyomi's APIs don't carry gateway traffic).</p>
+      <p style={{ fontSize: 13 }} className="vy-muted">Request analytics below come from requests that really went through this service's simulated gateway; the configuration breakdowns follow.</p>
+      <RequestAnalytics a={a} />
       <section className="vy-section">
         <h3>APIs by type</h3>
         <table className="vy-grid"><thead><tr><th>Type</th><th>Count</th></tr></thead>
