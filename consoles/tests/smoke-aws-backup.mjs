@@ -39,7 +39,8 @@ await page.getByRole("button", { name: "Create on-demand backup" }).click();
 await page.getByRole("dialog").getByRole("textbox").first().fill(`arn:aws:dynamodb:us-east-1:123456789012:table/${T}`);
 await page.getByRole("dialog").getByRole("button", { name: "Create on-demand backup" }).click();
 await page.getByText("DynamoDB").first().waitFor({ timeout: 15000 });
-const rps = (await bkp("GET", "/backup-vaults/ui-vault/recovery-points")).body.RecoveryPoints || [];
+let rps = [];
+for (let i = 0; i < 20 && !rps.length; i++) { rps = (await bkp("GET", "/backup-vaults/ui-vault/recovery-points")).body.RecoveryPoints || []; if (!rps.length) await page.waitForTimeout(500); }  // Nano: the UI row can render before the wire write lands
 check("recovery point created for the real table", rps.length === 1 && rps[0].ResourceType === "DynamoDB", rps[0]?.RecoveryPointArn);
 
 // restore via UI
@@ -49,7 +50,8 @@ await page.getByRole("dialog").getByRole("button", { name: "Restore backup" }).w
 await page.getByRole("dialog").getByRole("textbox").first().fill(`${T}-restored`);
 await page.getByRole("dialog").getByRole("button", { name: "Restore backup" }).click();
 await page.getByText("COMPLETED").first().waitFor({ timeout: 15000 });
-const d = JSON.parse((await ddb("DescribeTable", { TableName: `${T}-restored` })).text);
+let d = {};
+for (let i = 0; i < 20 && !d.Table; i++) { d = JSON.parse((await ddb("DescribeTable", { TableName: `${T}-restored` })).text); if (!d.Table) await page.waitForTimeout(500); }
 check("restore job created a real table", !!d.Table, JSON.stringify(d).slice(0, 80));
 
 // plan create via UI

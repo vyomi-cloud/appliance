@@ -65,7 +65,9 @@ await page.getByRole("row", { name: new RegExp(T) }).first().getByRole("radio").
 check("Copy disabled while integration is off", await page.getByRole("button", { name: "Copy", exact: true }).isDisabled());
 await page.getByRole("button", { name: "Turn on" }).click();
 await page.getByText("Activated").first().waitFor({ timeout: 10000 });
-check("settings back ON", (await bkp("GET", "/account-settings")).body.ResourceTypeManagementPreference?.DynamoDB === true);
+let on = false;
+for (let i = 0; i < 20 && !on; i++) { on = (await bkp("GET", "/account-settings")).body.ResourceTypeManagementPreference?.DynamoDB === true; if (!on) await page.waitForTimeout(500); }  // Nano: UI can show "Activated" (still from before) ahead of the wire write
+check("settings back ON", on);
 
 // restore from S3-backed backup via wire + delete cleans S3
 await ddb("DeleteTable", { TableName: T });
