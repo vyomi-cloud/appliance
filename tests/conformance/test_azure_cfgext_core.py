@@ -201,6 +201,28 @@ def run():
     r = dp("PUT", "/ctr/d.txt", {"x-ms-blob-type": "BlockBlob"}, b"hi")
     _check("disabled scope refuses writes", r.status == 403)
 
+    # ── Application security groups: NIC membership + NSG rule endpoints
+    NQ = {"api-version": "2023-11-01"}
+    asg = f"{RG}/providers/Microsoft.Network/applicationSecurityGroups/web"
+    put(asg, {"location": "eastus"}, NQ)
+    nic = f"{RG}/providers/Microsoft.Network/networkInterfaces/n1"
+    ipc = lambda ids: {"location": "eastus", "properties": {"ipConfigurations": [{"name": "ipconfig1", "properties": {"applicationSecurityGroups": [{"id": i} for i in ids]}}]}}
+    _check("NIC rejects unknown ASG", put(nic, ipc([asg + "x"]), NQ)["status"] == 404)
+    put(f"{RG}/providers/Microsoft.Network/applicationSecurityGroups/west", {"location": "westus"}, NQ)
+    _check("NIC rejects cross-region ASG", put(nic, ipc([f"{RG}/providers/Microsoft.Network/applicationSecurityGroups/west"]), NQ)["status"] == 400)
+    _check("NIC joins ASG", put(nic, ipc([asg]), NQ)["status"] in (200, 201))
+    nsg = f"{RG}/providers/Microsoft.Network/networkSecurityGroups/ng"
+    put(nsg, {"location": "eastus"}, NQ)
+    rule = lambda **k: {"properties": {"priority": 200, "direction": "Inbound", "access": "Allow", "protocol": "Tcp", "sourcePortRange": "*", "destinationPortRange": "443", "sourceAddressPrefix": "*", "destinationAddressPrefix": "*", **k}}
+    _check("rule rejects unknown ASG", put(nsg + "/securityRules/r1", rule(destinationApplicationSecurityGroups=[{"id": asg + "x"}]), NQ)["status"] == 404)
+    _check("rule rejects ASG + prefix", put(nsg + "/securityRules/r1", rule(sourceAddressPrefix="10.0.0.0/8", sourceApplicationSecurityGroups=[{"id": asg}]), NQ)["status"] == 400)
+    _check("rule with ASG endpoint", put(nsg + "/securityRules/r1", rule(destinationApplicationSecurityGroups=[{"id": asg}]), NQ)["status"] in (200, 201))
+    r = a.handle("DELETE", asg, NQ)
+    _check("in-use ASG cannot be deleted", r["status"] == 400 and code(r) == "ApplicationSecurityGroupInUse")
+    a.handle("DELETE", nsg + "/securityRules/r1", NQ)
+    put(nic, ipc([]), NQ)
+    _check("unused ASG deletes", a.handle("DELETE", asg, NQ)["status"] in (200, 204))
+
     # ── SQL Data Discovery & Classification labels
     SQ2 = {"api-version": "2020-11-01-preview"}
     sqs = f"{RG}/providers/Microsoft.Sql/servers/cxsql"

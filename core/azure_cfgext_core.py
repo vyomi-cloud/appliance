@@ -43,6 +43,9 @@ APIM_DELETED = "microsoft.apimanagement/deletedservices"
 APIM_GW_API = "microsoft.apimanagement/service/gateways/apis"
 VNET = "microsoft.network/virtualnetworks"
 PE = "microsoft.network/privateendpoints"
+ASG = "microsoft.network/applicationsecuritygroups"
+NIC = "microsoft.network/networkinterfaces"
+NSG_RULE = "microsoft.network/networksecuritygroups/securityrules"
 ENC_SCOPE = "microsoft.storage/storageaccounts/encryptionscopes"
 BLOB_CONTAINER = "microsoft.storage/storageaccounts/blobservices/containers"
 
@@ -85,7 +88,7 @@ def _err(status: int, code: str, message: str) -> dict:
 
 def handles(full_type: str) -> bool:
     ft = full_type.lower()
-    return ft in (AKS, COSMOS, COSMOS_SVC, SBNS, SB_NETRULES, VNET, APIM_GW_API, APIM, SQL_LABEL, STORAGE, ENC_SCOPE, BLOB_CONTAINER) or ft.endswith("/providers/extensions")
+    return ft in (AKS, COSMOS, COSMOS_SVC, SBNS, SB_NETRULES, VNET, APIM_GW_API, APIM, SQL_LABEL, STORAGE, ENC_SCOPE, BLOB_CONTAINER, ASG, NIC, NSG_RULE) or ft.endswith("/providers/extensions")
 
 
 def _merged(existing, payload) -> dict:
@@ -151,6 +154,11 @@ def validate(state: dict, full_type: str, rid: str, payload: dict, existing: dic
         return _validate_apim_soft_deleted(state, rid, payload, existing)
     if ft == SQL_LABEL:
         return _validate_sql_label(state, rid, payload)
+    if ft == NIC:
+        return _validate_asg_refs(state, [g for c in (props.get("ipConfigurations") or []) for g in ((c.get("properties") or {}).get("applicationSecurityGroups") or [])],
+                                  (existing or {}).get("location") or (payload or {}).get("location"), "network interface", per_ipconfig=props.get("ipConfigurations"))
+    if ft == NSG_RULE:
+        return _validate_nsg_rule_asgs(state, props)
     if ft == ENC_SCOPE:
         return _validate_enc_scope(state, rid, payload, existing)
     if ft == BLOB_CONTAINER:
@@ -162,6 +170,38 @@ def validate(state: dict, full_type: str, rid: str, payload: dict, existing: dic
             if not toks or any(t not in ("None", "AzureServices", "Logging", "Metrics") for t in toks) or ("None" in toks and len(toks) > 1):
                 return _err(400, "InvalidNetworkAclsBypass", "networkAcls.bypass must be None or a comma separated combination of AzureServices, Logging and Metrics.")
         return None
+    return None
+
+
+def _validate_asg_refs(state: dict, refs: list, location, what: str, per_ipconfig=None):
+    """A NIC ip configuration may join up to 20 application security groups; each must exist and live in the NIC's region."""
+    for c in per_ipconfig or []:
+        if len((c.get("properties") or {}).get("applicationSecurityGroups") or []) > 20:
+            return _err(400, "ApplicationSecurityGroupLimitExceeded", "A network interface IP configuration can be a member of at most 20 application security groups.")
+    for g in refs:
+        gid = str((g or {}).get("id") or "")
+        rec = state.get(gid.lower())
+        if rec is None or (rec.get("_type") or "").lower() != ASG:
+            return _err(404, "ResourceNotFound", f"The application security group '{gid.rsplit('/', 1)[-1]}' referenced by the {what} was not found.")
+        if location and str(rec.get("location") or "").replace(" ", "").lower() != str(location).replace(" ", "").lower():
+            return _err(400, "ApplicationSecurityGroupLocationMismatch", f"The application security group '{rec['name']}' is in {rec.get('location')} but the {what} is in {location}; they must share a region.")
+    return None
+
+
+def _validate_nsg_rule_asgs(state: dict, props: dict):
+    """Security-rule ASG endpoints must exist and cannot be combined with an address prefix other than '*'."""
+    for side in ("source", "destination"):
+        groups = props.get(f"{side}ApplicationSecurityGroups") or []
+        if not groups:
+            continue
+        prefixes = [x for x in [props.get(f"{side}AddressPrefix")] + list(props.get(f"{side}AddressPrefixes") or []) if x]
+        if any(x != "*" for x in prefixes):
+            return _err(400, "SecurityRuleParameterContainsConflictingValues", f"{side}ApplicationSecurityGroups cannot be combined with a {side}AddressPrefix other than '*'.")
+        for g in groups:
+            gid = str((g or {}).get("id") or "")
+            rec = state.get(gid.lower())
+            if rec is None or (rec.get("_type") or "").lower() != ASG:
+                return _err(404, "ResourceNotFound", f"The application security group '{gid.rsplit('/', 1)[-1]}' referenced by the security rule was not found.")
     return None
 
 
@@ -547,6 +587,9 @@ def after_put(state: dict, rec: dict, payload: dict, prev: dict | None = None) -
         p["isDisabled"] = bool(p.get("isDisabled", False))
         p.setdefault("managedBy", "Vyomi")
         rec["type"] = "Microsoft.Sql/servers/databases/schemas/tables/columns/sensitivityLabels"
+    elif ft == ASG:
+        p["provisioningState"] = "Succeeded"
+        p.setdefault("resourceGuid", str(uuid.uuid4()))
     elif ft == ENC_SCOPE:
         p.setdefault("source", "Microsoft.Storage")
         p.setdefault("state", "Enabled")
@@ -574,8 +617,28 @@ def after_put(state: dict, rec: dict, payload: dict, prev: dict | None = None) -
         rec["type"] = "Microsoft.ServiceBus/Namespaces/NetworkRuleSets"
 
 
+def _asg_users(state: dict, asg_id: str):
+    want = asg_id.lower()
+    out = []
+    for k, r in state.items():
+        t = (r.get("_type") or "").lower() if isinstance(r, dict) else ""
+        if t not in (NIC, NSG_RULE, "microsoft.network/networksecuritygroups"):
+            continue
+        p = r.get("properties") or {}
+        refs = [g for c in (p.get("ipConfigurations") or []) for g in ((c.get("properties") or {}).get("applicationSecurityGroups") or [])]
+        refs += (p.get("sourceApplicationSecurityGroups") or []) + (p.get("destinationApplicationSecurityGroups") or [])
+        refs += [g for sr in (p.get("securityRules") or []) for g in ((sr.get("properties") or {}).get("sourceApplicationSecurityGroups") or []) + ((sr.get("properties") or {}).get("destinationApplicationSecurityGroups") or [])]
+        if any(str((g or {}).get("id") or "").lower() == want for g in refs):
+            out.append(r.get("name"))
+    return out
+
+
 def before_delete(state: dict, rec: dict):
     ft = (rec.get("_type") or "").lower()
+    if ft == ASG:
+        users = _asg_users(state, rec["id"])
+        if users:
+            return _err(400, "ApplicationSecurityGroupInUse", f"Application security group '{rec['name']}' cannot be deleted: it is used by {', '.join(sorted(set(users)))}.")
     if ft == APIM:
         import datetime
         now = datetime.datetime.now(datetime.timezone.utc)

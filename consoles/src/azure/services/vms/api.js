@@ -17,6 +17,9 @@ import { armType, getSubscription, parseId } from "../../kit/arm.js";
 
 export const ARM = armType("Microsoft.Compute", "virtualMachines", "2023-09-01");
 const NIC_ARM = armType("Microsoft.Network", "networkInterfaces", "2023-11-01");
+const ASG_ARM = armType("Microsoft.Network", "applicationSecurityGroups", "2023-11-01");
+export const listAsgs = async () => (await ASG_ARM.list()).map((g) => ({ ...g, resourceGroup: parseId(g.id).resourceGroup }));
+export const putAsg = (rg, name, location) => ASG_ARM.put(rg, name, { location });
 const NSG_ARM = armType("Microsoft.Network", "networkSecurityGroups", "2023-11-01");
 const PIP_ARM = armType("Microsoft.Network", "publicIPAddresses", "2023-11-01");
 const RULE_API_VERSION = "2023-11-01";

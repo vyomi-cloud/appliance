@@ -188,6 +188,18 @@ try {
   const hp = await wire(`/${ESA}/wormc?restype=container`, { method: "GET", headers: { "x-ms-version": "2021-12-02", authorization: `SharedKey ${ESA}:x` } });
   check("data plane container is created", hp.status === 200);
 
+  // ── VM application security groups
+  const VM = `cxvm${n}`;
+  await arm("PUT", P("Network", "applicationSecurityGroups", `web${n}`), { location: "eastus" }, "2023-11-01");
+  await arm("PUT", P("Network", "networkInterfaces", VM + "-nic"), { location: "eastus", properties: { ipConfigurations: [{ name: "ipconfig1", properties: {} }] } }, "2023-11-01");
+  await arm("PUT", P("Compute", "virtualMachines", VM), { location: "eastus", properties: { hardwareProfile: { vmSize: "Standard_B1s" }, networkProfile: { networkInterfaces: [{ id: `/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/networkInterfaces/${VM}-nic` }] } } }, "2023-09-01");
+  await page.goto(UI + `#/vms/${RG}/${VM}/asgs`);
+  await page.getByLabel(`Member of web${n}`, { exact: true }).click();
+  await page.waitForTimeout(1200);
+  check("NIC joined the ASG over ARM", JSON.stringify(json(await arm("GET", P("Network", "networkInterfaces", VM + "-nic"), null, "2023-11-01")).properties?.ipConfigurations?.[0]?.properties?.applicationSecurityGroups || []).includes(`applicationSecurityGroups/web${n}`));
+  check("in-use ASG delete refused", (await arm("DELETE", P("Network", "applicationSecurityGroups", `web${n}`), null, "2023-11-01")).status === 400);
+  await noNS("VM application security groups");
+
   // ── App Configuration
   const A = `cxappcfg${n}`;
   await arm("PUT", P("AppConfiguration", "configurationStores", A), { location: "eastus", sku: { name: "standard" } }, "2024-05-01");
