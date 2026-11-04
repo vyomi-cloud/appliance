@@ -120,7 +120,7 @@ CORES = [
     "azure_health_core.py",                         # v4: Resource health + Advisor, imported by azure_arm_core
     "azure_templates_core.py",                      # v4: Export template (ARM -> Bicep/Terraform), lazily imported by azure_arm_core
     "azure_storage_ext_core.py",                    # v4: storage keys rotation + route endpoints — before azure_arm_core
-    "azure_policy_core.py", "azure_netsvc_core.py", "azure_netcfg_core.py", "azure_webnet_core.py", "ci_core.py", "azure_acr_tasks_core.py", "azure_webdeploy_core.py",  # v4: Azure Policy, network services (private endpoints/Bastion/Firewall/DDoS/flow logs), Deployment Center — before azure_arm_core
+    "azure_policy_core.py", "azure_netsvc_core.py", "azure_netcfg_core.py", "azure_webnet_core.py", "ci_core.py", "azure_acr_tasks_core.py", "k8s_render.py", "azure_flux_core.py", "azure_webdeploy_core.py",  # v4: Azure Policy, network services (private endpoints/Bastion/Firewall/DDoS/flow logs), Deployment Center — before azure_arm_core
     "azure_firewall_eval.py",
     "azure_cfgext_core.py",
     "azure_backup_core.py",

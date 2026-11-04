@@ -25,6 +25,10 @@ connections.
 """
 from __future__ import annotations
 
+try:
+    from core import azure_flux_core as flux
+except ImportError:                                  # Pyodide flat layout
+    import azure_flux_core as flux                   # type: ignore
 import ipaddress
 import re
 import uuid
@@ -88,7 +92,7 @@ def _err(status: int, code: str, message: str) -> dict:
 
 def handles(full_type: str) -> bool:
     ft = full_type.lower()
-    return ft in (AKS, COSMOS, COSMOS_SVC, SBNS, SB_NETRULES, VNET, APIM_GW_API, APIM, SQL_LABEL, STORAGE, ENC_SCOPE, BLOB_CONTAINER, ASG, NIC, NSG_RULE) or ft.endswith("/providers/extensions")
+    return flux.handles(ft) or ft in (AKS, COSMOS, COSMOS_SVC, SBNS, SB_NETRULES, VNET, APIM_GW_API, APIM, SQL_LABEL, STORAGE, ENC_SCOPE, BLOB_CONTAINER, ASG, NIC, NSG_RULE) or ft.endswith("/providers/extensions")
 
 
 def _merged(existing, payload) -> dict:
@@ -133,6 +137,8 @@ def _cidr_ok(s: str) -> bool:
 # ── pre-write validation ────────────────────────────────────────────────────────────────
 def validate(state: dict, full_type: str, rid: str, payload: dict, existing: dict | None, sub: str, rg: str | None):
     ft = full_type.lower()
+    if flux.handles(ft):
+        return flux.validate(state, ft, rid, payload, existing, sub, rg)
     props = _merged(existing, payload)
     if ft == AKS:
         return _validate_aks(props, payload, existing)
@@ -547,6 +553,8 @@ def _validate_vnet(state: dict, rid: str, payload: dict, props: dict):
 def after_put(state: dict, rec: dict, payload: dict, prev: dict | None = None) -> None:
     ft = (rec.get("_type") or "").lower()
     p = rec.setdefault("properties", {})
+    if flux.handles(ft):
+        return flux.after_put(state, rec, payload, prev)
     if ft.endswith("/providers/extensions"):
         et = str(p.get("extensionType", "")).lower()
         p.setdefault("autoUpgradeMinorVersion", not p.get("version"))
@@ -635,6 +643,8 @@ def _asg_users(state: dict, asg_id: str):
 
 def before_delete(state: dict, rec: dict):
     ft = (rec.get("_type") or "").lower()
+    if flux.handles(ft):
+        return flux.before_delete(state, rec)
     if ft == ASG:
         users = _asg_users(state, rec["id"])
         if users:
