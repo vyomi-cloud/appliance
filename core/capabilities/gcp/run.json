@@ -393,24 +393,47 @@
    "tests/conformance/test_gcp_run_ext.py"
   ]
  },
-  "gcp.run.gpu": {
-    "title": "GPU for Cloud Run services and jobs (NVIDIA L4)",
-    "level": {
-      "nano": "not_simulated",
-      "offline": "not_simulated"
-    },
-    "limitations": [
-      "Cloud Run GPUs attach NVIDIA L4 hardware to a container instance; Vyomi runs containers on the host Docker engine with no GPU passthrough or scheduler."
-    ]
+ "gcp.run.gpu": {
+  "title": "GPU for Cloud Run services and jobs (NVIDIA L4)",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
   },
-  "gcp.run.networking": {
-    "title": "Networking (HTTP/2 end-to-end, session affinity, VPC egress, service mesh, custom audiences)",
-    "level": { "nano": "limited", "offline": "limited" },
-    "limitations": [
-      "These are validated configuration on the revision/service, enforced and round-tripped like the real Cloud Run Admin API v2: ports[].name http1/h2c (one port, ingress container only), sessionAffinity, vpcAccess (connector in the same region that must exist in the VPC core, or one Direct VPC interface whose subnetwork must exist, egress ALL_TRAFFIC / PRIVATE_RANGES_ONLY, network tags), serviceMesh resource name, and customAudiences.",
-      "Vyomi's local request path is plain HTTP/1.1 with no load balancer: HTTP/2 end-to-end, session affinity and VPC egress routing change nothing about how a request is actually served or where outbound traffic goes, and the service mesh resource is format-checked only (Network Services meshes are not modelled). Custom domains are the Domain mappings feature; no managed certificate is issued."
-    ],
-    "api": ["services.create", "services.patch", "revisions.get"],
-    "tests": ["tests/conformance/test_gcp_run_networking.py"]
-  }
+  "limitations": [
+   "Cloud Run GPUs attach NVIDIA L4 hardware to a container instance; Vyomi runs containers on the host Docker engine with no GPU passthrough or scheduler."
+  ]
+ },
+ "gcp.run.networking": {
+  "title": "Networking (HTTP/2 end-to-end, session affinity, VPC egress, service mesh, custom audiences)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "These are validated configuration on the revision/service, enforced and round-tripped like the real Cloud Run Admin API v2: ports[].name http1/h2c (one port, ingress container only), sessionAffinity, vpcAccess (connector in the same region that must exist in the VPC core, or one Direct VPC interface whose subnetwork must exist, egress ALL_TRAFFIC / PRIVATE_RANGES_ONLY, network tags), serviceMesh resource name, and customAudiences.",
+   "Vyomi's local request path is plain HTTP/1.1 with no load balancer: HTTP/2 end-to-end, session affinity and VPC egress routing change nothing about how a request is actually served or where outbound traffic goes, and the service mesh resource is format-checked only (Network Services meshes are not modelled). Custom domains are the Domain mappings feature; no managed certificate is issued."
+  ],
+  "api": [
+   "services.create",
+   "services.patch",
+   "revisions.get"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_run_networking.py"
+  ]
+ },
+ "gcp.run.source-deploy-ar": {
+  "title": "Source deploy pushes the BuildKit image into Artifact Registry (cloud-run-source-deploy)",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Offline: a connected-repo source deploy builds the Dockerfile on BuildKit, pushes the image into the simulated Artifact Registry repository cloud-run-source-deploy (created on demand, as gcloud does) and cuts the revision with that Artifact Registry reference. Vyomi still does not run the container for arbitrary images; no buildpacks.",
+   "Nano has no container builder, so a source build fails with that reason."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_cloudbuild_core.py"
+  ]
+ }
 }
