@@ -124,7 +124,7 @@ await page.getByRole("link", { name: SCP }).waitFor({ timeout: 10000 });
 check("SCP created in the UI is visible natively", ((await org("ListPolicies", { Filter: "SERVICE_CONTROL_POLICY" })).json.Policies || []).some((p) => p.Name === SCP));
 await page.getByRole("link", { name: SCP }).click();
 await page.getByRole("heading", { name: SCP }).first().waitFor({ timeout: 15000 });
-await page.getByRole("button", { name: /Choose a target/ }).click();
+await page.getByRole("button", { name: /Attach target Choose a target/ }).click();
 await page.getByRole("option", { name: new RegExp(`OU: Root / ${OU}`) }).click();
 await page.getByRole("button", { name: "Attach", exact: true }).click();
 await page.getByRole("cell", { name: ouId }).waitFor({ timeout: 10000 });
@@ -134,7 +134,7 @@ check("Attach -> native ListTargetsForPolicy", ((await org("ListTargetsForPolicy
 await page.getByRole("button", { name: "Detach" }).click();
 await page.getByText(/at least one SCP/i).first().waitFor({ timeout: 10000 });
 check("Detaching the last SCP of a target is refused (ConstraintViolation shown in the UI)", true);
-check("Service access report is a registered gap (exactly 1 badge on the SCP detail)", (await badges()) === 1);
+check("SCP detail: the service access report is real now (no gap badge; see smoke-aws-accessreport)", (await badges()) === 0);
 await shot("iam2-scp-detail");
 await org("DetachPolicy", { PolicyId: scpId, TargetId: ouId }).catch(() => {});
 await go("#/iam/service-control-policies", "Service control policies (SCPs)");
