@@ -93,6 +93,8 @@ def _gcp_service(path):
         # workerPools/operations) because Cloud Logging also lives under /v2/projects/,
         # and Cloud Scheduler's /v1/.../locations/.../jobs shares the shape one version down.
         return "gcp-run"
+    if re.match(r"^/v1(beta1)?/projects/[^/]+/locations/[^/]+/publishers/[^/]+/models/[^/:]+:[A-Za-z]+$", path):
+        return "gcp-aiplatform"   # Vertex AI publisher models (Gemini generateContent/countTokens/embed) -> core/ai_models_core over the local-LLM seam
     if path.startswith(("/storage/v1", "/upload/storage/v1", "/download/storage/v1", "/storage/website/")):
         return "gcp-gcs"
     if re.match(r"^/v[12]/projects/[^/]+/traces([/:]|$)", path) or re.match(r"^/v2/projects/[^/]+/traces/", path) \
@@ -278,6 +280,8 @@ def _azure_service(path, lheaders, query):
     if path.startswith("/v1.0/") or path.startswith("/beta/"):
         return "az-graph"
     p0 = path.split("?", 1)[0]
+    if re.match(r"^/openai/(deployments/[^/]+/)?(chat/completions|completions|embeddings)$|^/openai/v1/", p0):
+        return "az-openai"   # Azure OpenAI data plane -> core/ai_models_core (deployment must exist in the ARM state)
     if re.search(r"/oauth2(/v2\.0)?/token$", p0):
         return "az-graph"
     p = path
@@ -378,6 +382,7 @@ _SIGNING = {
     "application-autoscaling": "appas",   # Application Auto Scaling (DynamoDB) -> core/appautoscaling_core over the DynamoDB store
     "cloudfront": "cloudfront",   # CloudFront public keys + key groups (rest-xml /2020-05-31/...) -> core/cloudfront_keys_core via the S3 store
     "savingsplans": "savingsplans",   # Savings Plans (rest-json POST /<Operation>) + EC2 coverage/capacity views -> core/savingsplans_core over the EC2 model
+    "bedrock": "bedrock",   # Bedrock runtime + foundation-model catalogue -> core/ai_models_core over the local-LLM seam (core/llm_core)
     "backup": "backup",   # AWS Backup subset (region settings + DynamoDB copy jobs) -> core/backup_core over the DynamoDB + S3 stores
     "s3vectors": "s3vectors",   # Amazon S3 Vectors (rest-json POST /<Operation>) -> core/s3_vectors_core via the S3 store
     "s3tables": "s3tables",   # Amazon S3 Tables (rest-json /buckets, /namespaces, /tables, /tag) -> core/s3_tables_core via the S3 store
@@ -1075,6 +1080,18 @@ class AwsWireRouter:
             from core import s3files_core
             r = s3files_core.fsx_dispatch(self.s3, self.vpc, lheaders.get("x-amz-target", ""), bytes(body))
             return {"status": r.status, "headers": dict(r.headers or {}), "body": r.body or b""}
+
+        if svc == "bedrock":
+            from core import ai_models_core
+            return ai_models_core.bedrock_dispatch(method, path, query or {}, lheaders, bytes(body))
+
+        if svc == "gcp-aiplatform":
+            from core import ai_models_core
+            return ai_models_core.vertex_dispatch(method, path.split("?", 1)[0], query or {}, lheaders, bytes(body))
+
+        if svc == "az-openai":
+            from core import ai_models_core
+            return ai_models_core.azure_openai_dispatch(self.az_arm.state, method, path.split("?", 1)[0], query or {}, lheaders, bytes(body))
 
         if svc == "backup":
             from core import backup_core
