@@ -39,6 +39,7 @@ import SelfHostedGateways from "./SelfHostedGateways.jsx";
 import * as DeveloperPortal from "./DeveloperPortal.jsx";
 import * as Deployment from "./Deployment.jsx";
 import * as Monitoring from "./Monitoring.jsx";
+import { CapacityGauge } from "./Gateway.jsx";
 import * as api from "./api.js";
 import { ResourceRecommendations } from "../defender/Pages.jsx";
 import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
@@ -208,7 +209,7 @@ function Overview({ a, reload, self }) {
         </div>
       )}
       {tab === "monitoring" && <ResourceMetrics id={a.id} name={a.name} title="Monitoring" />}
-      {tab === "capacity" && <NotSimulatedContainer feature="The capacity gauge" />}
+      {tab === "capacity" && <CapacityGauge a={a} />}
       {tab === "properties" && <PropertyList a={a} />}
 
       <DeleteDialog open={del} onClose={() => setDel(false)} resourceType="API Management service" names={[a.name]}

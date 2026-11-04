@@ -2341,6 +2341,15 @@ def route(state, method, sub, rg, after, payload=None, query=None, executor=None
             return _err(404, "ResourceNotFound", f"Subscription '{after[4]}' not found.")
         pk, sk = apim_sub_keys(svc_id, after[4], srec)
         return _ok({"primaryKey": pk, "secondaryKey": sk})
+    if low[0] == "microsoft.apimanagement" and low[1] == "service" and len(after) == 4 and low[3] == "vyomianalytics":
+        svc = state.get(scope_id(sub, rg, after[:3]).lower())   # gateway request analytics + capacity gauge (core/azure_apim_gateway_core.py)
+        if svc is None:
+            return _err(404, "ResourceNotFound", f"API Management service '{after[2]}' not found.")
+        try:
+            from core import azure_apim_gateway_core as _gw
+        except ImportError:
+            import azure_apim_gateway_core as _gw   # type: ignore
+        return _ok(_gw.analytics(svc)) if method == "GET" else _err(405, "MethodNotAllowed", "GET only.")
     if low[0] == "microsoft.apimanagement" and low[1] == "service" and len(after) >= 4 and low[3] == "namedvalues" \
             and method == "GET":   # (listValue is v4's: AzureArm._apim_namedvalue_listvalue resolves Key Vault refs for real)
         r = _apim_route(state, method, sub, rg, after, payload)

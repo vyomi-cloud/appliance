@@ -1157,6 +1157,8 @@ class AwsWireRouter:
             return "azure-arm"
         if path.startswith("/azure-data/appconfig/"):   # App Configuration data plane (store endpoint)
             return "azure-appconfig"
+        if path.startswith("/azure-data/apim/"):   # API Management gateway data plane (/azure-data/apim/{service}/{api path}/...)
+            return "azure-apim-gw"
         if path.split("?", 1)[0] == "/azure-data/dns/query":   # Azure DNS resolution ("dig" over HTTP)
             return "azure-dns-query"
         if path.startswith("/azure-sql/") or path == "/azure-sql":  # Azure SQL data plane
@@ -1432,6 +1434,25 @@ class AwsWireRouter:
         from core import secscan_core as sc
         return sc.aws_posture_findings(self.secscan_inventory(), [])
 
+    @staticmethod
+    def _apim_fetch():
+        """Outbound HTTP for the APIM gateway (offline appliance only; Nano has no sockets and passes None)."""
+        try:
+            import urllib.request
+            import socket  # noqa: F401
+        except Exception:
+            return None
+
+        def fetch(method, url, headers, data):
+            import urllib.error
+            req = urllib.request.Request(url, data=data or None, method=method, headers=headers)
+            try:
+                with urllib.request.urlopen(req, timeout=10) as r:
+                    return r.status, dict(r.headers), r.read()
+            except urllib.error.HTTPError as e:
+                return e.code, dict(e.headers), e.read()
+        return fetch
+
     def handle(self, method, path, query, headers, body):
         """Telemetry-recording front door: measures each request (resource, op, status, latency) into the shared
         observability recorder, serves the /_obs OTLP / Jaeger / Prometheus surface, and refreshes the cloud metric
@@ -1705,6 +1726,17 @@ class AwsWireRouter:
             if out is not None:
                 hdrs.setdefault("content-type", "application/json")
             return {"status": r["status"], "headers": hdrs, "body": json.dumps(out).encode() if out is not None else b""}
+
+        if svc == "azure-apim-gw":   # core/azure_apim_gateway_core.py: real routing + policies + subscription keys over the ARM state
+            from core import azure_apim_gateway_core as apim_gw
+            name, _, rest = path.split("?", 1)[0][len("/azure-data/apim/"):].partition("/")
+            svc_rec = apim_gw.find_service(self.az_arm.state, name, lheaders.get("x-vyomi-rg"))
+            if svc_rec is None:
+                return {"status": 404, "headers": {"content-type": "application/json"},
+                        "body": json.dumps({"statusCode": 404, "message": f"API Management service '{name}' not found."}).encode()}
+            r = apim_gw.handle(self.az_arm.state, svc_rec, method, "/" + rest, query or {}, lheaders, bytes(body or b""),
+                               fetch=self._apim_fetch(), ip=lheaders.get("x-forwarded-for", "127.0.0.1").split(",")[0].strip())
+            return {"status": r["status"], "headers": r["headers"], "body": r["body"]}
 
         if svc == "azure-appconfig":   # /azure-data/appconfig/{store}/... over the ARM state's stores
             host = lheaders.get("host", "")
