@@ -7,6 +7,7 @@ let pw;
 try { pw = require(process.env.PW || "playwright"); } catch { pw = require("/Users/sudhirganti/Applications/simulator/portal/node_modules/playwright"); }
 const BASE = process.env.BASE || "http://127.0.0.1:9084";
 const UI = `${BASE}${process.env.UI_PATH || "/v4/aws/"}`;
+const WIRE = `${BASE}${process.env.WIRE_PATH ?? "/_wire"}`;
 const OUT = process.env.OUT || "smoke-out";
 const T = `limits-${Date.now() % 100000}`;
 const results = [];
@@ -23,7 +24,7 @@ await page.getByLabel("Name", { exact: true }).fill(T);
 await page.getByLabel("Maximum message size").fill("200");
 await page.getByRole("button", { name: "Create topic" }).last().click();
 await page.waitForURL(new RegExp(`#/sns/topics/${T}`), { timeout: 15000 });
-const attrs = await page.evaluate(async ([t]) => { const r = await fetch(`/_wire/`, { method: "POST", headers: { authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/sns/aws4_request, SignedHeaders=host, Signature=0", "content-type": "application/x-www-form-urlencoded" }, body: `Action=GetTopicAttributes&TopicArn=arn:aws:sns:us-east-1:123456789012:${t}` }); return r.text(); }, [T]);
+const attrs = await page.evaluate(async ([t, w]) => { const r = await fetch(`${w}/`, { method: "POST", headers: { authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/sns/aws4_request, SignedHeaders=host, Signature=0", "content-type": "application/x-www-form-urlencoded" }, body: `Action=GetTopicAttributes&TopicArn=arn:aws:sns:us-east-1:123456789012:${t}` }); return r.text(); }, [T, WIRE]);
 check("VyomiMaximumMessageSize stored on the topic", /VyomiMaximumMessageSize[\s\S]*?200/.test(attrs));
 // over the cap
 await page.goto(UI + `#/sns/topics/${T}/publish`);
