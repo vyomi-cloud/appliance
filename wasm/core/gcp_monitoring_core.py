@@ -398,6 +398,17 @@ BUILTIN_METRICS = {m["type"]: m for m in [
         "Ops Agent heartbeat, fed from the Compute Engine instance's own metadata (enable-osconfig=TRUE, "
         "the real flag OS Config uses to manage an Ops Agent policy on a VM) instead of a real agent "
         "process reporting in.", [], "Ops Agent heartbeat", ["gce_instance"]),
+    _md("agent.googleapis.com/cpu/utilization", "GAUGE", "DOUBLE", "10^2.%",
+        "CPU the instance's runtime measured in use (cgroup cpu.stat delta / wall time x vCPUs), pushed by a runtime as cpu_state=used "
+        "(the real agent splits user/system/idle/etc; Vyomi only has the total).", [{"key": "cpu_state", "valueType": "STRING"}],
+        "Ops Agent CPU utilization", ["gce_instance"]),
+    _md("agent.googleapis.com/interface/traffic", "DELTA", "INT64", "By",
+        "Bytes through the instance's NIC between two readings (/proc/net/dev).", [{"key": "direction", "valueType": "STRING"}],
+        "Ops Agent network traffic", ["gce_instance"]),
+    _md("agent.googleapis.com/disk/read_bytes_count", "DELTA", "INT64", "By",
+        "Bytes read from the instance's block device between two readings (cgroup io.stat).", [], "Ops Agent disk read bytes", ["gce_instance"]),
+    _md("agent.googleapis.com/disk/write_bytes_count", "DELTA", "INT64", "By",
+        "Bytes written to the instance's block device between two readings (cgroup io.stat).", [], "Ops Agent disk write bytes", ["gce_instance"]),
     _md("redis.googleapis.com/stats/memory/maxmemory", "GAUGE", "INT64", "By",
         "Maximum memory of a Memorystore for Redis instance, from its configured memorySizeGb (real instance "
         "state). Vyomi runs no Redis process, so usage, client and command metrics are not emitted.", [],
@@ -407,6 +418,18 @@ BUILTIN_METRICS = {m["type"]: m for m in [
     _md("redis.googleapis.com/replication/role", "GAUGE", "INT64", "1",
         "1 for the primary node; replicas of STANDARD_HA instances report 0.", [{"key": "role", "valueType": "STRING"}],
         "Node role", ["redis_instance"]),
+    _md("redis.googleapis.com/stats/memory/usage", "GAUGE", "INT64", "By",
+        "Bytes of memory the Valkey data plane reports in use (INFO used_memory), pushed by a runtime that read it.", [], "Memory usage", ["redis_instance"]),
+    _md("redis.googleapis.com/clients/connected", "GAUGE", "INT64", "1",
+        "Connected clients (INFO connected_clients), measured on the Valkey data plane.", [], "Connected clients", ["redis_instance"]),
+    _md("redis.googleapis.com/commands/calls", "GAUGE", "INT64", "1",
+        "Cumulative commands processed (INFO total_commands_processed), measured on the Valkey data plane.", [], "Commands processed", ["redis_instance"]),
+    _md("redis.googleapis.com/stats/connections/total", "GAUGE", "INT64", "1",
+        "Cumulative connections received (INFO total_connections_received).", [], "Total connections", ["redis_instance"]),
+    _md("redis.googleapis.com/stats/cache_hit_ratio", "GAUGE", "DOUBLE", "1",
+        "keyspace_hits / (hits + misses) from INFO.", [], "Cache hit ratio", ["redis_instance"]),
+    _md("redis.googleapis.com/stats/evicted_keys", "GAUGE", "INT64", "1",
+        "Cumulative evicted keys (INFO evicted_keys).", [], "Evicted keys", ["redis_instance"]),
     _md("billing.googleapis.com/billing/total_cost", "GAUGE", "DOUBLE", "{USD}",
         "Live month-to-date cost Vyomi computes from this project's actual resource inventory (real "
         "on-demand pricing x real uptime/usage), mirrored into Cloud Monitoring the same way real Cloud "

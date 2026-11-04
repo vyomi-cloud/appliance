@@ -37,6 +37,8 @@ MAX_SERIES_SAMPLES = 4000
 MAX_LOGS = 5000
 LOOKBACK = 300.0
 BUCKETS_MS = [1, 5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000]
+_AZ_HOST_SUFFIXES = (".vault.azure.net", ".azconfig.io", ".azurecr.io", ".servicebus.windows.net", ".documents.azure.com",
+                     ".azurewebsites.net", ".azure-api.net", ".database.windows.net")
 HEX32, HEX16 = re.compile(r"^[0-9a-f]{32}$"), re.compile(r"^[0-9a-f]{16}$")
 
 
@@ -140,11 +142,21 @@ def extract_resource(cloud: str, service: str, method: str, path: str, headers: 
         if host.endswith(".core.windows.net") or host.endswith(".azurite") :
             res, op = host.split(".", 1)[0], method.upper()
             return res, op
+        if host.endswith(_AZ_HOST_SUFFIXES):             # data-plane host names carry the resource: {vault}.vault.azure.net ...
+            return host.split(".", 1)[0], method.upper()
+        if "microsoft.insights" in low:                   # monitoring reads/writes about a resource are not requests TO it
+            return "", "MonitorRead"
+        if "providers" in low:                            # ARM: .../providers/Microsoft.X/<type>/<name>[/...]
+            i = low.index("providers")
+            if i + 3 < len(segs):
+                return segs[i + 3], method.upper()
+        if low[:1] == ["azure-data"] and len(segs) >= 3 and segs[2] not in ("_",):
+            return segs[2], method.upper()               # /azure-data/<svc>/<name>/...
         for k in ("accounts", "storageaccounts", "sites", "servers", "databaseaccounts", "service", "virtualmachines"):
             if k in low and low.index(k) + 1 < len(segs):
                 res = segs[low.index(k) + 1]
                 break
-        if not res and segs:
+        if not res and segs and not svc.startswith("az-"):   # native data-plane paths (/dbs, /secrets ...) name no resource
             res = segs[0]
         op = method.upper()
     elif cloud == "gcp":
@@ -881,7 +893,7 @@ def pg_stats_from_row(row) -> dict:
 
 
 def dispatch(obs: ObsStore, method: str, path: str, query: dict | None = None, headers: dict | None = None, body: bytes = b"",
-             cw_store=None) -> Resp:
+             cw_store=None, mon_store=None) -> Resp:
     """Serve one /_obs/... request. `path` may include the /_obs prefix."""
     query = dict(query or {})
     h = {str(k).lower(): v for k, v in (headers or {}).items()}
@@ -921,6 +933,19 @@ def dispatch(obs: ObsStore, method: str, path: str, query: dict | None = None, h
             if not dbid or not isinstance(d.get("stats"), dict):
                 return Resp(400, {"error": "dbInstanceIdentifier and stats{} are required"})
             return Resp(200, {"published": publish_rds_stats(cw_store, dbid, d["stats"])})
+        if p == "/appinsights/query" and m == "GET":
+            names = [x for x in (query.get("names") or "").split(",") if x]
+            return Resp(200, appinsights_query(obs, names, query.get("ikey", ""), query.get("window") and float(query["window"]) or 3600.0))
+        if p == "/redis-info" and m == "POST":   # a runtime pushes Valkey INFO text for an instance
+            return Resp(501, {"error": "no Cloud Monitoring store is attached to this endpoint"}) if mon_store is None else _redis_push(mon_store, body)
+        if p == "/gce-counters" and m == "POST":   # a runtime pushes READ_COUNTERS_CMD output for a GCE instance (Ops Agent metrics)
+            if mon_store is None:
+                return Resp(501, {"error": "no Cloud Monitoring store is attached to this endpoint"})
+            d = json.loads(body or b"{}")
+            if not d.get("project") or not d.get("instance") or not isinstance(d.get("counters"), str):
+                return Resp(400, {"error": "project, instance and counters (text) are required"})
+            return Resp(200, {"published": publish_ops_agent(mon_store, d["project"], d["instance"], d.get("zone", ""), d["counters"],
+                                                             now=d.get("ts"), vcpus=int(d.get("vcpus", 1)))})
         if p == "/trace-stats" and m == "GET":
             return Resp(200, trace_latency_stats(obs, query.get("service", "")))
         if p == "/rollup" and m == "GET":
@@ -930,6 +955,13 @@ def dispatch(obs: ObsStore, method: str, path: str, query: dict | None = None, h
         return Resp(404, {"error": "unknown observability path %s" % p})
     except PromError as e:
         return _prom_err(e)
+
+
+def _redis_push(mon_store, body: bytes) -> Resp:
+    d = json.loads(body or b"{}")
+    if not d.get("project") or not d.get("instance") or not isinstance(d.get("info"), str):
+        return Resp(400, {"error": "project, instance and info (INFO text) are required"})
+    return Resp(200, {"published": publish_redis_info(mon_store, d["project"], d["instance"], d.get("region", "us-central1"), parse_redis_info(d["info"]))})
 
 
 def _prom_api(obs: ObsStore, m: str, rest: str, q: dict) -> Resp:
@@ -1115,7 +1147,6 @@ def publish_gcp(obs: ObsStore, mon_store, project: str, now: float | None = None
     out = []
     types = {"gcp-gcs": ("storage.googleapis.com/api/request_count", "gcs_bucket", "bucket_name"),
              "gcs": ("storage.googleapis.com/api/request_count", "gcs_bucket", "bucket_name"),
-             "gcp-redis": ("redis.googleapis.com/commands/calls", "redis_instance", "instance_id"),
              "gcp-run": ("run.googleapis.com/request_count", "cloud_run_revision", "service_name"),
              "gcp-cloudsql": ("cloudsql.googleapis.com/database/network/connections", "cloudsql_database", "database_id")}
     for (svc, res, b), rs in groups.items():
@@ -1183,3 +1214,268 @@ def sync_gcp_traces(obs: ObsStore, mon_store, project: str) -> int:
             pass
     obs.pub_mark["gcptrace:" + project] = newest
     return n
+
+
+# ───────────────────────────── Azure per-resource metrics (Microsoft.Insights/metrics) ─────────────────────────────
+# metric name -> (unit, kind). kinds: all (count), ok (count 2xx/3xx), e4 / e5 / err (count), avg_all / avg_ok (ms), avail (% non-5xx),
+# sec_all (avg latency in seconds), ru (modelled request units, see below)
+_GENERIC = {"Requests": ("Count", "all"), "SuccessE2ELatency": ("MilliSeconds", "avg_ok"), "Errors": ("Count", "err")}
+AZURE_RESOURCE_METRICS = {
+    "microsoft.keyvault/vaults": ({"keyvault", "az-kv-keys", "az-kv-secrets", "az-kv-certs"},
+        {"ServiceApiHit": ("Count", "all"), "ServiceApiLatency": ("MilliSeconds", "avg_all"), "Availability": ("Percent", "avail")}),
+    "microsoft.servicebus/namespaces": ({"servicebus", "az-servicebus"},
+        {"IncomingRequests": ("Count", "all"), "SuccessfulRequests": ("Count", "ok"), "ServerErrors": ("Count", "e5"), "UserErrors": ("Count", "e4")}),
+    "microsoft.documentdb/databaseaccounts": ({"cosmos", "az-cosmos"},
+        {"TotalRequests": ("Count", "all"), "ServerSideLatency": ("MilliSeconds", "avg_all"), "TotalRequestUnits": ("Count", "ru")}),
+    "microsoft.appconfiguration/configurationstores": ({"appconfiguration", "az-appconfig"},
+        {"HttpIncomingRequestCount": ("Count", "all"), "HttpIncomingRequestDuration": ("MilliSeconds", "avg_all")}),
+    "microsoft.containerregistry/registries": ({"acr", "az-acr", "containerregistry"}, {}),
+    "microsoft.apimanagement/service": ({"apim"},
+        {"TotalRequests": ("Count", "all"), "FailedRequests": ("Count", "err"), "Duration": ("MilliSeconds", "avg_all")}),
+    "microsoft.web/sites": ({"functionapp", "appservice", "webapp"},
+        {"Http4xx": ("Count", "e4"), "Http5xx": ("Count", "e5"), "HttpResponseTime": ("Seconds", "sec_all")}),
+    "microsoft.sql/servers/databases": ({"sql", "az-sql"}, {}),
+    "microsoft.sql/servers": ({"sql", "az-sql"}, {}),
+}
+
+
+def azure_metric_defs(rtype: str) -> dict:
+    """{metric: (unit, kind)} Vyomi measures for an ARM resource type (empty for types with no request-serving core)."""
+    ent = AZURE_RESOURCE_METRICS.get((rtype or "").lower())
+    if ent is None:
+        return {}
+    return {**_GENERIC, **ent[1]}
+
+
+def _cosmos_ru(op: str, nbytes: int, status: int) -> float:
+    """Request units per Microsoft's PUBLISHED cost model (1 RU = a 1 KB point read; a 1 KB write ~ 5 RU; a query >= 2.5 RU).
+    This is a MODEL applied to the measured request size, not a measurement of an RU-metering engine."""
+    kb = max(1.0, nbytes / 1024.0)
+    op = (op or "").upper()
+    if status >= 400:
+        return 1.0
+    if op in ("POST", "PUT", "PATCH", "DELETE"):
+        return round(5.0 * kb, 2)
+    return round(1.0 * kb, 2)
+
+
+def azure_series(obs: ObsStore, rtype: str, name: str, metric: str, start: float, end: float, step: float,
+                 unique_of_type: bool = False) -> list:
+    """Time-bucketed MEASURED series for one ARM resource: [{ts, total, count, average, minimum, maximum}] ONLY for buckets that
+    saw requests (idle = empty). Rows are the recorder's rows whose resource equals the ARM name; data-plane requests the
+    protocol cannot attribute to a named resource (resource '' or '_') count for the type's only resource."""
+    ent = AZURE_RESOURCE_METRICS.get((rtype or "").lower())
+    defs = azure_metric_defs(rtype)
+    if ent is None or metric not in defs:
+        return []
+    services, kind = ent[0], defs[metric][1]
+    nm = (name or "").lower()
+    buckets: dict = {}
+    for ts, c, s, r, op, st, ms, bi, bo in obs.recent:
+        if c != "azure" or ts < start or ts > end or s not in services or op == "MonitorRead":
+            continue
+        rl = (r or "").lower()
+        if rl != nm and not (unique_of_type and rl in ("", "_")):
+            continue
+        buckets.setdefault(int((ts - start) // step), []).append((st, ms, op, bi + bo))
+    out = []
+    for i in sorted(buckets):
+        rows = buckets[i]
+        if kind == "all":
+            vals = [1.0] * len(rows)
+        elif kind == "ok":
+            vals = [1.0] * sum(1 for r in rows if r[0] < 400)
+        elif kind == "e4":
+            vals = [1.0] * sum(1 for r in rows if 400 <= r[0] < 500)
+        elif kind == "e5":
+            vals = [1.0] * sum(1 for r in rows if r[0] >= 500)
+        elif kind == "err":
+            vals = [1.0] * sum(1 for r in rows if r[0] >= 400)
+        elif kind == "avail":
+            vals = [100.0 if r[0] < 500 else 0.0 for r in rows]
+        elif kind == "avg_ok":
+            vals = [r[1] for r in rows if r[0] < 400]
+        elif kind == "avg_all":
+            vals = [r[1] for r in rows]
+        elif kind == "sec_all":
+            vals = [r[1] / 1000.0 for r in rows]
+        elif kind == "ru":
+            vals = [_cosmos_ru(r[2], r[3], r[0]) for r in rows]
+        else:
+            vals = []
+        if not vals:
+            if kind in ("ok", "e4", "e5", "err"):
+                out.append({"ts": start + i * step, "total": 0.0, "count": 0, "average": 0.0, "minimum": 0.0, "maximum": 0.0})
+            continue
+        n = len(vals)
+        cnt_kind = kind in ("all", "ok", "e4", "e5", "err", "ru")
+        out.append({"ts": start + i * step, "total": round(sum(vals), 3) if cnt_kind else round(sum(vals) / n, 3), "count": n,
+                    "average": round(sum(vals) / n, 3), "minimum": round(min(vals), 3), "maximum": round(max(vals), 3)})
+    return out
+
+
+# ───────────────────────────── Application Insights (backed by the trace / log store) ─────────────────────────────
+def _ai_match(sp: dict, names: set, ikey: str) -> bool:
+    a = sp.get("attributes") or {}
+    return ((sp.get("service") or "").lower() in names or str(a.get("resource", "")).lower() in names
+            or str(a.get("service.name", "")).lower() in names or (ikey and a.get("ai.instrumentationKey") == ikey))
+
+
+def appinsights_query(obs: ObsStore, names: list, ikey: str = "", window_s: float = 3600.0, now: float | None = None) -> dict:
+    """Application Insights views over MEASURED telemetry: spans whose service / resource equals one of `names` (the
+    component, its linked web app) or that carry the component's instrumentation key. SERVER spans = requests, CLIENT /
+    PRODUCER spans = dependencies, ERROR spans or `exception` span events = exceptions, other span events + log records = events/traces."""
+    now = now if now is not None else time.time()
+    lo = int((now - window_s) * 1e9)
+    nm = {n.lower() for n in names if n}
+    reqs, deps, exc, evs = [], [], [], []
+    for tid, spans in obs.spans.items():
+        for sp in spans:
+            if int(sp["endTimeUnixNano"]) < lo or not _ai_match(sp, nm, ikey):
+                continue
+            dur = (int(sp["endTimeUnixNano"]) - int(sp["startTimeUnixNano"])) / 1e6
+            a = sp.get("attributes") or {}
+            failed = (sp.get("status") or {}).get("code") == 2 or int(a.get("http.status_code", 0) or 0) >= 500
+            row = {"timestamp": int(sp["startTimeUnixNano"]) / 1e9, "name": sp["name"], "durationMs": round(dur, 3), "success": not failed,
+                   "resultCode": a.get("http.status_code", ""), "operationId": tid, "id": sp["spanId"], "cloudRoleName": sp.get("service", "")}
+            if sp.get("kind") == 2 or sp.get("kind") == 0:
+                reqs.append(row)
+            elif sp.get("kind") in (3, 4):
+                deps.append(row)
+            if failed:
+                exc.append({**row, "type": "SpanError", "message": (sp.get("status") or {}).get("message") or "HTTP %s" % a.get("http.status_code", "")})
+            for ev in sp.get("events") or []:
+                (exc if ev.get("name") == "exception" else evs).append({"timestamp": int(ev.get("timeUnixNano") or sp["startTimeUnixNano"]) / 1e9,
+                                                                       "name": ev.get("name", ""), "operationId": tid, "attributes": _attrs(ev.get("attributes"))})
+    traces = [{"timestamp": l["time"] / 1e9, "severity": l["severity"], "message": l["body"], "operationId": l["traceId"]}
+              for l in obs.logs if l["time"] >= lo and (l.get("service", "").lower() in nm or (ikey and l["attributes"].get("ai.instrumentationKey") == ikey))]
+    for rows in (reqs, deps, exc, evs, traces):
+        rows.sort(key=lambda r: r["timestamp"], reverse=True)
+    lat = sorted(r["durationMs"] for r in reqs)
+    return {"summary": {"requests": len(reqs), "failedRequests": sum(1 for r in reqs if not r["success"]), "dependencies": len(deps),
+                        "exceptions": len(exc), "events": len(evs), "traces": len(traces),
+                        "avgDurationMs": round(sum(lat) / len(lat), 3) if lat else 0, "p95DurationMs": lat[min(len(lat) - 1, int(.95 * len(lat)))] if lat else 0},
+            "requests": reqs[:200], "dependencies": deps[:200], "exceptions": exc[:200], "events": evs[:200], "traces": traces[:200]}
+
+
+# ───────────────────────────── RDS runtime collector (offline Postgres / Nano PGlite) ─────────────────────────────
+def collect_rds_stats(sql_store, cw_store, docker_line: str = "", now: float | None = None) -> dict:
+    """SYNC collector: for every RDS instance whose engine answers Postgres' pg_stat views, run PG_STATS_SQL and publish the
+    measured counters (plus an optional `docker stats` JSON line for the container hosting the engine). Engines that cannot
+    answer (sqlite in the in-memory default) publish nothing - never invented. Returns {db_id: [metrics published]}.
+    NOTE: pg_stat_database is database-wide, so instances sharing one Postgres (schema-per-instance) share those counters."""
+    out = {}
+    dstats = parse_docker_stats(docker_line) if docker_line else {}
+    for db_id in list(getattr(sql_store, "db_instances", {}) or {}):
+        stats = dict(dstats)
+        try:
+            res = sql_store.execute_sql(db_id, PG_STATS_SQL)
+            rows = res.get("rows") or []
+            if rows:
+                stats.update(pg_stats_from_row(rows[0]))
+        except Exception:
+            pass
+        if stats:
+            out[db_id] = publish_rds_stats(cw_store, db_id, stats, ts=now)
+    return out
+
+
+async def acollect_rds_stats(sql_store, cw_store, now: float | None = None) -> dict:
+    """ASYNC twin for engines whose execute is a coroutine (Nano PGlite)."""
+    out = {}
+    for db_id in list(getattr(sql_store, "db_instances", {}) or {}):
+        try:
+            res = await sql_store.aexecute_sql(db_id, PG_STATS_SQL)
+            rows = res.get("rows") or []
+            if rows:
+                out[db_id] = publish_rds_stats(cw_store, db_id, pg_stats_from_row(rows[0]), ts=now)
+        except Exception:
+            pass
+    return out
+
+
+# ───────────────────────────── Memorystore INFO -> Cloud Monitoring ─────────────────────────────
+def parse_redis_info(text: str) -> dict:
+    """`INFO` (Redis/Valkey) -> flat dict of the fields we publish; unreadable text -> {}."""
+    kv = {}
+    for line in (text or "").splitlines():
+        if ":" in line and not line.startswith("#"):
+            k, _, v = line.strip().partition(":")
+            kv[k] = v
+    out = {}
+    for k, dst in (("used_memory", "memory_used"), ("connected_clients", "clients"), ("total_commands_processed", "commands_total"),
+                   ("total_connections_received", "connections_total"), ("keyspace_hits", "hits"), ("keyspace_misses", "misses"),
+                   ("evicted_keys", "evicted"), ("expired_keys", "expired"), ("instantaneous_ops_per_sec", "ops_per_sec")):
+        try:
+            if k in kv:
+                out[dst] = float(kv[k])
+        except ValueError:
+            pass
+    return out
+
+
+def publish_redis_info(mon_store, project: str, instance_id: str, region: str, info: dict, now: float | None = None) -> list:
+    """Write measured Valkey INFO values as redis.googleapis.com series on node-0 of the instance."""
+    from datetime import datetime, timezone
+    try:
+        from core import gcp_monitoring_core as gm
+    except ImportError:
+        import gcp_monitoring_core as gm  # type: ignore
+    now = now if now is not None else time.time()
+    end_iso = datetime.fromtimestamp(now, timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    res = {"type": "redis_instance", "labels": {"project_id": project, "region": region, "instance_id": instance_id, "node_id": "node-0"}}
+    spec = [("redis.googleapis.com/stats/memory/usage", "memory_used", "By"), ("redis.googleapis.com/clients/connected", "clients", "1"),
+            ("redis.googleapis.com/commands/calls", "commands_total", "1"), ("redis.googleapis.com/stats/connections/total", "connections_total", "1"),
+            ("redis.googleapis.com/stats/cache_hit_ratio", None, "1"), ("redis.googleapis.com/stats/evicted_keys", "evicted", "1")]
+    out = []
+    for mtype, key, unit in spec:
+        if key is None:
+            h, m = info.get("hits"), info.get("misses")
+            if h is None or m is None or (h + m) <= 0:
+                continue
+            val = h / (h + m)
+        else:
+            if key not in info:
+                continue
+            val = info[key]
+        gm.record_system_point(mon_store, project, mtype, res, val, end_iso, unit=unit)
+        out.append(mtype)
+    return out
+
+
+# ───────────────────────────── Ops Agent (GCE) host metrics from instance counters ─────────────────────────────
+_OPS_PREV: dict = {}
+
+
+def publish_ops_agent(mon_store, project: str, instance_id: str, zone: str, counters_text: str, now: float | None = None, vcpus: int = 1) -> list:
+    """`counters_text` is the output of core.ec2_metrics_core.READ_COUNTERS_CMD run inside the instance (cgroup + /proc). The first
+    reading only sets the baseline; later readings publish deltas as agent.googleapis.com series. Unreadable -> nothing."""
+    from datetime import datetime, timezone
+    try:
+        from core import ec2_metrics_core as em, gcp_monitoring_core as gm
+    except ImportError:
+        import ec2_metrics_core as em, gcp_monitoring_core as gm  # type: ignore
+    now = now if now is not None else time.time()
+    c = em.parse_counters(counters_text)
+    if c is None:
+        return []
+    prev = _OPS_PREV.setdefault((project, instance_id), {})
+    last, last_ts = prev.get("counters"), prev.get("ts")
+    prev["counters"], prev["ts"] = dict(c), now
+    if not last or last_ts is None or now <= last_ts:
+        return []
+    dt = now - last_ts
+    d = lambda k: max(0, (c.get(k) or 0) - (last.get(k) or 0))
+    end_iso = datetime.fromtimestamp(now, timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    res = {"type": "gce_instance", "labels": {"project_id": project, "instance_id": instance_id, "zone": zone}}
+    out = []
+    if c.get("cpu_usec") is not None and last.get("cpu_usec") is not None:
+        gm.record_system_point(mon_store, project, "agent.googleapis.com/cpu/utilization", res,
+                               round(min(100.0, 100.0 * max(0, c["cpu_usec"] - last["cpu_usec"]) / (dt * 1e6 * max(1, vcpus))), 4), end_iso,
+                               unit="10^2.%", metric_labels={"cpu_state": "used"})
+        out.append("agent.googleapis.com/cpu/utilization")
+    gm.record_system_point(mon_store, project, "agent.googleapis.com/interface/traffic", res, d("rx_bytes"), end_iso, unit="By", metric_labels={"direction": "received"})
+    gm.record_system_point(mon_store, project, "agent.googleapis.com/interface/traffic", res, d("tx_bytes"), end_iso, unit="By", metric_labels={"direction": "sent"})
+    gm.record_system_point(mon_store, project, "agent.googleapis.com/disk/read_bytes_count", res, d("rbytes"), end_iso, unit="By")
+    gm.record_system_point(mon_store, project, "agent.googleapis.com/disk/write_bytes_count", res, d("wbytes"), end_iso, unit="By")
+    return out + ["agent.googleapis.com/interface/traffic", "agent.googleapis.com/disk/read_bytes_count", "agent.googleapis.com/disk/write_bytes_count"]

@@ -677,6 +677,8 @@ class AwsWireRouter:
         self.obs = s.get("obs") or _obsc0.ObsStore()           # shared request-telemetry recorder + OTLP trace/metric store
         from core import azure_monitor_core as _azmon0
         _azmon0.request_telemetry = lambda acct, _o=self.obs: _obsc0.azure_storage_request_metrics(_o, acct)   # storage Availability/latency from measured requests
+        _azmon0.resource_metric_defs = _obsc0.azure_metric_defs
+        _azmon0.resource_series = lambda *a, _o=self.obs: _obsc0.azure_series(_o, *a)   # per-resource request/latency/error metrics
         self.cw = s.get("cw") or cw.CloudWatchStore()          # CloudWatch metrics / alarms / dashboards
         self.cw.msg_store, self.cw.lam_store = self.msg, self.lam   # real SNS / Lambda alarm actions
         self.vpc = s.get("vpc") or s.get("vpc_net") or _types.SimpleNamespace()   # EC2/VPC network model
@@ -1101,7 +1103,7 @@ class AwsWireRouter:
         from core import observability_core as _obsc
         p0 = path.split("?", 1)[0]
         if p0.startswith(_obsc.BASE + "/") or p0 == _obsc.BASE:
-            r = _obsc.dispatch(self.obs, method, p0, query or {}, headers or {}, body if isinstance(body, (bytes, bytearray)) else (body or "").encode())
+            r = _obsc.dispatch(self.obs, method, p0, query or {}, headers or {}, body if isinstance(body, (bytes, bytearray)) else (body or "").encode(), cw_store=self.cw, mon_store=self.gcp_mon)
             return {"status": r.status, "headers": dict(r.headers), "body": r.body}
         lh = _lower_headers(headers)
         bb = body if isinstance(body, (bytes, bytearray)) else (body or b"")
