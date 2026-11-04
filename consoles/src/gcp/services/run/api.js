@@ -259,3 +259,24 @@ export async function listAllTriggers(region, name) {
   return r.triggers || [];
 }
 export const triggerSource = (t) => (t.eventType || "").includes("storage") ? `Cloud Storage: ${t.bucket}` : "Pub/Sub";
+
+// ── Eventarc API (eventarc.googleapis.com v1): non-Pub/Sub sources and Cloud Run job destinations ─────────
+const evBase = (region) => `/v1/projects/${e(getProject())}/locations/${e(region)}`;
+export const listEventarcTriggers = (region) => restJson("GET", `${evBase(region)}/triggers`).then((r) => r.triggers || []);
+export const createEventarcTrigger = (region, id, body) => restJson("POST", `${evBase(region)}/triggers`, { query: { triggerId: id }, body });
+export const deleteEventarcTrigger = (region, id) => restJson("DELETE", `${evBase(region)}/triggers/${e(id)}`);
+export const eventarcDeliveries = (region, id) => restJson("GET", `${evBase(region)}/triggers/${e(id)}/deliveries`);
+export const EVENTARC_EVENTS = [
+  ["google.cloud.storage.object.v1.finalized", "Cloud Storage: object finalized", [["bucket", "Bucket"]]],
+  ["google.cloud.storage.object.v1.deleted", "Cloud Storage: object deleted", [["bucket", "Bucket"]]],
+  ["google.cloud.pubsub.topic.v1.messagePublished", "Cloud Pub/Sub: message published", []],
+  ["google.cloud.audit.log.v1.written", "Cloud Audit Logs: log entry written", [["serviceName", "Service name (e.g. cloudkms.googleapis.com)"], ["methodName", "Method name"]]],
+  ["google.cloud.firestore.document.v1.created", "Firestore: document created", [["database", "Database"], ["document", "Document path pattern (e.g. users/{uid})"]]],
+  ["google.cloud.firestore.document.v1.updated", "Firestore: document updated", [["database", "Database"], ["document", "Document path pattern"]]],
+  ["google.cloud.firestore.document.v1.deleted", "Firestore: document deleted", [["database", "Database"], ["document", "Document path pattern"]]],
+];
+export function eventarcFilters(type, values) {
+  const f = [{ attribute: "type", value: type }];
+  for (const [k, v] of Object.entries(values)) if (v) f.push(k === "document" ? { attribute: k, value: v, operator: "match-path-pattern" } : { attribute: k, value: v });
+  return f;
+}

@@ -197,6 +197,11 @@ async def _firestore_native(request: Request):
     return _resp(_fs(request.method, _raw_path(request), _query(request), await request.body(), request))
 
 
+async def _eventarc_native(request: Request):
+    return _resp(_wi.dispatch_service("gcp_eventarc", request.method, _raw_path(request), _query(request),
+                                      {"content-type": "application/json"}, await request.body()))
+
+
 async def _firestore_classic(request: Request):
     path = _raw_path(request)
     native = path[len("/api/gcp/firestore"):] if path.startswith("/api/gcp/") else path[len("/firestore"):]
@@ -475,6 +480,10 @@ def register(app) -> list:
                 app.add_route(v + "/projects/{project}:" + verb, _firestore_native, methods=_METHODS)
             app.add_route(v + "/projects/{project}/indexes", _firestore_native, methods=_METHODS)         # Datastore admin indexes
             app.add_route(v + "/projects/{project}/indexes/{rest:path}", _firestore_native, methods=_METHODS)
+            if v == "/v1":   # Eventarc API
+                for coll in ("triggers", "providers"):   # (operations stay with GKE/Memorystore: Eventarc LROs complete inline)
+                    app.add_route(f"/v1/projects/{{project}}/locations/{{loc}}/{coll}", _eventarc_native, methods=_METHODS)
+                    app.add_route(f"/v1/projects/{{project}}/locations/{{loc}}/{coll}/{{rest:path}}", _eventarc_native, methods=_METHODS)
             app.add_route(v + "/projects/{project}/locations/{loc}/backups", _firestore_native, methods=_METHODS)
             app.add_route(v + "/projects/{project}/locations/{loc}/backups/{rest:path}", _firestore_native, methods=_METHODS)
         for pre in ("/firestore/v1", "/api/gcp/firestore/v1"):

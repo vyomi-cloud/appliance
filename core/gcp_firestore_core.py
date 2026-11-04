@@ -104,13 +104,29 @@ class FirestoreStore:
         d = self.documents.get(f"{db}/{rel}")
         return d if isinstance(d, dict) else None
 
+    on_doc_event = None   # optional hook(db, rel, old_entry|None, new_entry|None) — Eventarc Firestore triggers
+
     def put(self, db: str, rel: str, entry: dict) -> None:
+        old = self.documents.get(f"{db}/{rel}") if self.on_doc_event else None
+        if old is not None and "datastore" in old:
+            old = None
         self.documents[f"{db}/{rel}"] = entry
         self._record_history(db, rel, entry)
+        if self.on_doc_event and "datastore" not in entry:
+            self._fire_doc_event(db, rel, old, entry)
 
     def delete(self, db: str, rel: str) -> None:
+        old = self.documents.get(f"{db}/{rel}") if self.on_doc_event else None
         self.documents.pop(f"{db}/{rel}", None)
         self._record_history(db, rel, None)
+        if self.on_doc_event and old is not None and "datastore" not in old:
+            self._fire_doc_event(db, rel, old, None)
+
+    def _fire_doc_event(self, db, rel, old, new) -> None:
+        try:
+            self.on_doc_event(db, rel, json.loads(json.dumps(old)) if old else None, json.loads(json.dumps(new)) if new else None)
+        except Exception:   # a trigger problem never fails the write (real Eventarc is async)
+            pass
 
     def _record_history(self, db: str, rel: str, entry: dict | None) -> None:
         if (self.databases.get(db) or {}).get("pointInTimeRecoveryEnablement") != "POINT_IN_TIME_RECOVERY_ENABLED":

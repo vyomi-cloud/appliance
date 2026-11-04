@@ -15,6 +15,7 @@ import { NotSimulatedContainer, Section } from "./common.jsx";
 import cap_artifacts from "../../../../core/capabilities/gcp/artifacts.json";
 import cap_cloudscheduler from "../../../../core/capabilities/gcp/cloudscheduler.json";
 import cap_compute from "../../../../core/capabilities/gcp/compute.json";
+import cap_eventarc from "../../../../core/capabilities/gcp/eventarc.json";
 import cap_firestore from "../../../../core/capabilities/gcp/firestore.json";
 import cap_functions from "../../../../core/capabilities/gcp/functions.json";
 import cap_iam_admin from "../../../../core/capabilities/gcp/iam-admin.json";
@@ -31,7 +32,7 @@ import cap_secret_manager from "../../../../core/capabilities/gcp/secret-manager
 import cap_sql from "../../../../core/capabilities/gcp/sql.json";
 import cap_storage from "../../../../core/capabilities/gcp/storage.json";
 
-const REGISTRY = { ...cap_artifacts, ...cap_cloudscheduler, ...cap_compute, ...cap_firestore, ...cap_functions, ...cap_iam_admin, ...cap_kms, ...cap_kubernetes, ...cap_logs, ...cap_memorystore, ...cap_monitoring, ...cap_networking, ...cap_pubsub, ...cap_resource_manager, ...cap_run, ...cap_secret_manager, ...cap_sql, ...cap_storage };
+const REGISTRY = { ...cap_artifacts, ...cap_cloudscheduler, ...cap_compute, ...cap_eventarc, ...cap_firestore, ...cap_functions, ...cap_iam_admin, ...cap_kms, ...cap_kubernetes, ...cap_logs, ...cap_memorystore, ...cap_monitoring, ...cap_networking, ...cap_pubsub, ...cap_resource_manager, ...cap_run, ...cap_secret_manager, ...cap_sql, ...cap_storage };
 
 export const SUBSTRATE = (typeof document !== "undefined" && document.querySelector('meta[name="vyomi-substrate"]')?.content) || "offline";
 

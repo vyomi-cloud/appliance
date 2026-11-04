@@ -280,6 +280,11 @@ def dispatch_service(service: str, method: str, path: str, query: dict, headers:
                      body: bytes, router: AwsWireRouter | None = None, account: str | None = None,
                      on_publish=None) -> dict:
     out = _dispatch_service(service, method, path, query, headers, body, router, account, on_publish)
+    if service.startswith("gcp") and method.upper() != "GET":
+        try:   # Admin Activity audit log + Eventarc audit triggers (core/gcp_audit_core.py); never affects the response
+            (router or appliance_router()).gcp_audit(method, path, query, headers, body, out.get("status", 200))
+        except Exception:
+            pass
     if service not in ("securityhub", "guardduty") and not service.startswith("azure"):
         try:   # security audit feed (core/secscan_core.py): classify the served call; never affects the response
             (router or appliance_router()).secscan_audit("gcp" if service.startswith("gcp") else "aws", method, path, query, headers, body,
@@ -392,6 +397,11 @@ def _dispatch_service(service: str, method: str, path: str, query: dict, headers
         hdrs = dict(resp.headers or {})
         hdrs.setdefault("content-type", resp.media_type or "application/json")
         return {"status": resp.status, "headers": hdrs, "body": resp.body or b""}
+    if service == "gcp_eventarc":
+        from core import gcp_eventarc_core
+        resp = gcp_eventarc_core.dispatch(r.gcp_mon, method, path, query, headers, body, run_store=r.gcp_run,
+                                          pubsub_store=r.gcp_msg, gcs_store=r.gcs, log_fn=r._run_log)
+        return {"status": resp.status, "headers": dict(resp.headers or {}), "body": resp.body or b""}
     if service == "gcp_compute":
         from core import gcp_compute_core, gcp_compute_instances_core
         from core.aws_wire_router import _gcp_service

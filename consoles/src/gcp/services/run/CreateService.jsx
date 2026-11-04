@@ -94,7 +94,11 @@ export default function CreateService({ query }) {
       }
       applyAdvanced(adv, { container, template: body.template, body, gen1: execEnv === "gen1", region });
       await api.createService(region, name, body);
-      if (trigBucket && source !== "image") await runApi.createStorageTrigger(region, name, `${name}-trigger`, trigBucket, runApi.STORAGE_EVENTS[0][0]);
+      if (trigBucket === "@firestore-created" && source !== "image") {
+        await runApi.createEventarcTrigger(region, `${name}-fs`, { eventFilters: runApi.eventarcFilters("google.cloud.firestore.document.v1.created", { database: "(default)", document: "{collection}/{doc}" }), destination: { cloudRun: { service: name, region } } });
+      } else if (trigBucket === "@audit-iam" && source !== "image") {
+        await runApi.createEventarcTrigger(region, `${name}-audit`, { eventFilters: runApi.eventarcFilters("google.cloud.audit.log.v1.written", { serviceName: "cloudresourcemanager.googleapis.com", methodName: "SetIamPolicy" }), destination: { cloudRun: { service: name, region } } });
+      } else if (trigBucket && source !== "image") await runApi.createStorageTrigger(region, name, `${name}-trigger`, trigBucket, runApi.STORAGE_EVENTS[0][0]);
       if (authMode === "public") await api.setPublic(region, name, true);
       api.setRegion(region);
       notify.success(`Deployed service "${name}"`);
@@ -137,6 +141,8 @@ export default function CreateService({ query }) {
               <InputLabel id="ft-l">Trigger (optional)</InputLabel>
               <Select labelId="ft-l" label="Trigger (optional)" value={trigBucket} onChange={(e) => setTrigBucket(e.target.value)} inputProps={{ "aria-label": "Trigger bucket" }}>
                 <MenuItem value="">None (HTTPS only)</MenuItem>
+                <MenuItem value="@firestore-created">Firestore: document created (default database)</MenuItem>
+                <MenuItem value="@audit-iam">Cloud Audit Logs: IAM policy changes (SetIamPolicy)</MenuItem>
                 {(trigBuckets || []).map((b) => <MenuItem key={b} value={b}>{`Cloud Storage: object finalized in ${b}`}</MenuItem>)}
               </Select>
             </FormControl>
