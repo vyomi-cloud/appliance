@@ -208,13 +208,6 @@ export function CertificateUpdate() {
   );
 }
 
-export function RestoreFromS3() {
-  return <ContentLayout header={<Header variant="h1">Create database by restoring from S3</Header>}>
-    <NotSimulatedContainer title="Restore from S3" feature="Restoring a MySQL backup from Amazon S3"
-      note="This path imports a MySQL backup file from an S3 bucket outside Vyomi; it isn't modeled." />
-  </ContentLayout>;
-}
-
 /** A list page honestly backed by a native call, with a header action that opens
  * an honest create route (never a fake success). */
 function ResourceTableHonestList({ resourceName, list, trackBy, createHref, createLabel, emptyTitle, otherActions, columns }) {

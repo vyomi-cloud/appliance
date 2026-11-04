@@ -23,6 +23,26 @@ def write_parquet(schema: list, columns: list) -> bytes:
     return buf.getvalue()
 
 
+def read_parquet(data: bytes) -> dict:
+    """Reader twin of write_parquet for RestoreDBInstanceFromS3: {"columns": [{"name","type"}], "rows": [[...]]}."""
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+    t = pq.read_table(io.BytesIO(data))
+    def kind(ty):
+        if pa.types.is_integer(ty):
+            return "int64"
+        if pa.types.is_floating(ty):
+            return "float64"
+        if pa.types.is_boolean(ty):
+            return "bool"
+        if pa.types.is_binary(ty) or pa.types.is_large_binary(ty):
+            return "binary"
+        return "string"
+    cols = [{"name": f.name, "type": kind(f.type)} for f in t.schema]
+    lists = [t.column(i).to_pylist() for i in range(t.num_columns)]
+    return {"columns": cols, "rows": [list(r) for r in zip(*lists)] if lists else []}
+
+
 def install() -> bool:
     """Register write_parquet as rds_core's Parquet writer. False when pyarrow is
     missing — exports then FAIL with a clear FailureCause (no format fallback)."""
@@ -32,4 +52,9 @@ def install() -> bool:
         return False
     from core import rds_core
     rds_core.set_parquet_writer(write_parquet)
+    try:
+        from core import rds_restore_core
+        rds_restore_core.set_parquet_reader(read_parquet)
+    except Exception:  # noqa: BLE001
+        pass
     return True
