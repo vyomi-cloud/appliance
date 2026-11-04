@@ -1583,6 +1583,14 @@ class AzureArm:
             if self.state.get(_canonical_id(sub, rg, type_chain[:2], names[:1]).lower()) is None:
                 return _err(404, "ResourceNotFound", f"Network watcher '{names[0]}' not found.")
             return self._network_watcher(chain[2].lower(), payload or {})
+        # Azure Firewall rule evaluation (simulator action, not a real ARM action): POST .../azureFirewalls/{fw}/evaluate
+        if (method == "POST" and namespace.lower() == "microsoft.network" and len(chain) == 3
+                and chain[0].lower() == "azurefirewalls" and chain[2].lower() == "evaluate"):
+            from core import azure_firewall_eval as _fwe
+            fw_id = _canonical_id(sub, rg, type_chain[:2], names[:1])
+            if self.state.get(fw_id.lower()) is None:
+                return _err(404, "ResourceNotFound", f"Azure Firewall '{names[0]}' not found.")
+            return _ok(_fwe.evaluate(self.state, fw_id, payload or {}))
         # POST action verbs (listKeys / start / powerOff / runCommand / …)
         if method == "POST" and is_collection and len(type_chain) >= 3 and names:
             parent_rid = _canonical_id(sub, rg, type_chain[:-1], names)

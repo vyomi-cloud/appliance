@@ -96,7 +96,7 @@ def main():
     st, o, e = L("DELETE", f"/targetgroups/{tg['id']}")
     _check("target group in use cannot be deleted", st == 409)
     st, o, _ = L("POST", f"/targetgroups/{tg['id']}/listtargets", {})
-    _check("targets become INITIAL once the group is attached", o["items"][0]["status"] == "INITIAL")
+    _check("targets leave UNUSED once the group is attached (health is derived, see test_vpc_lattice_dataplane)", o["items"][0]["status"] != "UNUSED")
     st, o, _ = L("GET", f"/services/{svc['id']}/listeners/{lis['id']}/rules")
     default = o["items"][0]
     _check("default rule is created with the listener", default["isDefault"] is True)

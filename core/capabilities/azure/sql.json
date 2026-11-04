@@ -37,9 +37,9 @@
   "title": "Server public network access toggle",
   "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "When publicNetworkAccess is Disabled, the azure-sql query data plane now rejects every connection with a 403 (matching real SQL servers, where disabling it blocks public-endpoint traffic outright). Per-IP firewall-rule filtering when Enabled is still not modelled — there is no real client IP to check against in a browser-only simulator, so any connection succeeds while public access stays Enabled."
+   "When publicNetworkAccess is Disabled, the azure-sql query data plane now rejects every connection with a 403 (matching real SQL servers, where disabling it blocks public-endpoint traffic outright). A caller that declares its network identity (request headers x-vyomi-source-ip / x-vyomi-source-subnet / x-vyomi-private-endpoint / x-vyomi-trusted-service, core/azure_netaccess.py) is checked against the server's firewall rules (start/end IP ranges, the 0.0.0.0 'Allow Azure services' rule for trusted services), virtualNetworkRules (subnet must carry the Microsoft.Sql service endpoint) and Approved private endpoint connections; a miss answers 403 ClientIpNotAllowed. A caller that declares nothing (the browser console) keeps the legacy behaviour - any connection succeeds while public access stays Enabled - because there is no real client network in a browser-only simulator."
   ],
-  "tests": ["tests/conformance/test_azure_sql_core.py", "tests/conformance/test_azure_arm_core.py"]
+  "tests": ["tests/conformance/test_azure_sql_core.py", "tests/conformance/test_azure_arm_core.py", "tests/conformance/test_azure_netaccess.py"]
  },
  "azure.sql.query_editor": {
   "title": "Query editor (real SQL execution over the azure-sql data plane)",

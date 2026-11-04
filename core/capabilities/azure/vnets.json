@@ -148,10 +148,11 @@
    "offline": "limited"
   },
   "limitations": [
-   "Azure Firewall and firewall policies are real ARM resources (AzureFirewallSubnet /26, Standard static public IP, tier must match the policy, Basic requires a management subnet + IP, rule collection / group priorities 100-65000 and unique, a private IP is allocated from the subnet; policies in use cannot be deleted). Rules are stored and validated but do not filter traffic: there is no packet path through the firewall, and the Rules / Threat intelligence / IDPS authoring screens are not built."
+   "Azure Firewall and firewall policies are real ARM resources (AzureFirewallSubnet /26, Standard static public IP, tier must match the policy, Basic requires a management subnet + IP, rule collection / group priorities 100-65000 and unique, a private IP is allocated from the subnet; policies in use cannot be deleted). The rule base is EVALUATED on both substrates through the simulator action POST .../azureFirewalls/{fw}/evaluate (core/azure_firewall_eval.py): DNAT, then network, then application rules, each by rule-collection-group then rule-collection priority, base-policy rules first, implicit deny, IP/CIDR/range/FQDN (leading wildcard) and port-range matching, and the DNAT translation is reported. Not modelled: the firewall is not inserted into UDR/netsim routing (no VM traffic is filtered), threat-intelligence deny, IDPS, TLS inspection, IP Groups / FQDN tags / web categories (rules using them are skipped and reported), SNAT; the Rules / Threat intelligence / IDPS authoring screens are not built."
   ],
   "tests": [
-   "tests/conformance/test_azure_netsvc_core.py"
+   "tests/conformance/test_azure_netsvc_core.py",
+   "tests/conformance/test_azure_firewall_eval.py"
   ]
  },
  "azure.vnets.ddos": {

@@ -62,7 +62,7 @@ CORES = [
     "gcp_compute_instances_core.py",                # GCP: Compute Engine REST v1 (instances, disks, images, templates, groups, health checks — control plane)
     "gcp_resourcemanager_core.py",                 # GCP: Resource Manager (project, tags, essential contacts, org policies) — IAM & Admin
     "gcp_pam_core.py",                             # GCP: Privileged Access Manager entitlements — IAM & Admin
-    "azure_blob_core.py",                           # Azure: Blob REST (native azure-storage-blob)
+    "azure_netaccess.py", "azure_blob_core.py",                           # Azure: Blob REST (native azure-storage-blob)
     "azure_cosmos_core.py",                         # Azure: Cosmos DB SQL/Core API (native azure-cosmos)
     "azure_keyvault_secrets_core.py",               # Azure: Key Vault secrets (native azure-keyvault-secrets)
     "azure_keyvault_keys_core.py",                  # Azure: Key Vault keys (native azure-keyvault-keys)
@@ -100,7 +100,7 @@ CORES = [
     "cloudformation_core.py", "cloudformation_stacksets_core.py", "cloudformation_registry_core.py",                      # AWS: CloudFormation (stacks, change sets, stack sets — provisions through s3/ddb/sns/sqs/iam)
     "cloudwatch_core.py",                          # AWS CloudWatch: metrics / alarms / dashboards (rpc-v2-cbor + JSON + Query wire)
     "vpc_vpn_core.py",
-    "vpc_extras_core.py", "vpc_lattice_core.py", "ec2_ops_core.py",
+    "vpc_extras_core.py", "vpc_lattice_core.py", "vpc_lattice_dataplane.py", "ec2_ops_core.py",
     "netfw_core.py",
     "dnsfw_core.py",
     "vpc_core.py",                                 # v2.8.0 AWS: VPC network-simulation data plane (reachability analyzer)
@@ -120,6 +120,7 @@ CORES = [
     "azure_templates_core.py",                      # v4: Export template (ARM -> Bicep/Terraform), lazily imported by azure_arm_core
     "azure_storage_ext_core.py",                    # v4: storage keys rotation + route endpoints — before azure_arm_core
     "azure_policy_core.py", "azure_netsvc_core.py", "azure_netcfg_core.py", "azure_webnet_core.py", "ci_core.py", "azure_acr_tasks_core.py", "azure_webdeploy_core.py",  # v4: Azure Policy, network services (private endpoints/Bastion/Firewall/DDoS/flow logs), Deployment Center — before azure_arm_core
+    "azure_firewall_eval.py",
     "azure_cfgext_core.py",
     "azure_support_core.py",                        # v4: Microsoft.Support support requests filed with Vyomi
     "azure_monitorproducts_core.py",                # v4: Azure Monitor workspaces (Managed Prometheus) + Managed Grafana control plane — before azure_arm_core

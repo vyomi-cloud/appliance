@@ -13,7 +13,7 @@
    "offline": "limited"
   },
   "limitations": [
-   "networkAcls.virtualNetworkRules and ipRules are real ARM state with real validation: each subnet must exist and carry the Microsoft.Storage service endpoint (the portal enables it for you), IP rules must be public IPv4 addresses / CIDRs (no private ranges, no /31 or /32 CIDR, no duplicates). The rules are not enforced against Blob/Queue/Table data-plane requests: there is no source-network path to evaluate them against."
+   "networkAcls.virtualNetworkRules and ipRules are real ARM state with real validation: each subnet must exist and carry the Microsoft.Storage service endpoint (the portal enables it for you), IP rules must be public IPv4 addresses / CIDRs (no private ranges, no /31 or /32 CIDR, no duplicates). The rules ARE enforced on Blob data-plane requests from a caller that declares its source network (x-vyomi-source-ip / x-vyomi-source-subnet headers; see azure.storage.networking and core/azure_netaccess.py); Queue/Table requests and callers that declare no network identity are not filtered."
   ],
   "tests": [
    "tests/conformance/test_azure_netsvc_core.py"
@@ -59,16 +59,16 @@
   "title": "Redundancy (replication SKU)",
   "level": { "nano": "limited", "offline": "limited" },
   "limitations": ["ENFORCED: an RA-GRS/RA-GZRS sku really exposes a separate, read-only `{account}-secondary` Blob endpoint serving this account's own data; any other sku 404s it, and writes against it always 403. Still not simulated: actual geo-replication lag, a genuinely separate secondary-region store and customer-managed failover — Vyomi stores data once, locally."],
-  "tests": ["tests/conformance/test_azure_arm_core.py", "tests/conformance/test_azure_storage_wave5b_core.py"]
+  "tests": ["tests/conformance/test_azure_arm_core.py", "tests/conformance/test_azure_storage_wave5b_core.py", "tests/conformance/test_azure_netaccess.py"]
  },
  "azure.storage.networking": {
   "title": "Networking (public network access / firewall default action / routing preference)",
   "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "ENFORCED: publicNetworkAccess=\"Disabled\" really rejects every Blob data-plane request for that account (403 AuthorizationFailure) — the account has no private endpoint in this simulator, so \"disabled\" means unreachable, same as the real service with no private endpoint configured. Still not simulated: virtual network rules, IP firewall rules, private endpoints and the networkAcls.defaultAction allow-list (which needs a real client network identity to match against — core/netsim models inter-VNet reachability, not a public-Internet client's source IP) and routingPreference.",
+   "ENFORCED: publicNetworkAccess=\"Disabled\" really rejects every Blob data-plane request for that account (403 AuthorizationFailure) — the account has no private endpoint in this simulator, so \"disabled\" means unreachable, same as the real service with no private endpoint configured. ENFORCED for a caller that declares its network identity (request headers x-vyomi-source-ip / x-vyomi-source-subnet / x-vyomi-private-endpoint / x-vyomi-trusted-service, core/azure_netaccess.py): networkAcls.defaultAction=Deny is checked against ipRules (CIDR/IP), virtualNetworkRules (the subnet must carry the Microsoft.Storage service endpoint), networkAcls.bypass=AzureServices, and an Approved private endpoint connection to the account (which also bypasses publicNetworkAccess=Disabled; a Pending/Rejected connection or unknown endpoint is denied) - all answer 403 AuthorizationFailure. A caller that declares no identity (the browser console, an SDK with no header) keeps the legacy behaviour: only publicNetworkAccess=Disabled blocks, allow-lists are not applied, because the simulator has no real client network to read an address from. routingPreference is still not simulated.",
    "Resource instances (networkAcls.resourceAccessRules), custom domain (customDomain, no real CNAME validation) and route-specific endpoints (routingPreference.publishMicrosoftEndpoints/publishInternetEndpoints -> primaryEndpoints.microsoftEndpoints/internetEndpoints, both resolving to the account's single data path) are stored and returned exactly as configured but not enforced / not DNS-validated."
   ],
-  "tests": ["tests/conformance/test_azure_arm_core.py", "tests/conformance/test_azure_storage_depth_core.py", "tests/conformance/test_azure_storage_ext_core.py"]
+  "tests": ["tests/conformance/test_azure_arm_core.py", "tests/conformance/test_azure_storage_depth_core.py", "tests/conformance/test_azure_storage_ext_core.py", "tests/conformance/test_azure_netaccess.py"]
  },
  "azure.storage.encryption": {
   "title": "Encryption (key source)",

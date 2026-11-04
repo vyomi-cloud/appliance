@@ -229,6 +229,85 @@ def _gcp_flow_and_mirror_logs(space: str) -> None:
         _warn_once(f"flowlogs:{type(exc).__name__}", f"flow/mirror log collection skipped: {exc}")
 
 
+_COLLECTORS: dict = {}
+
+
+def deliver_flows(accepted: list, rejected: list, topo, *, aws_model: dict | None, logs_store=None, s3_store=None,
+                  az_state: dict | None = None, az_blob_store=None, collector=None, now: int | None = None) -> dict:
+    """Real per-flow counters -> AWS flow logs (CloudWatch Logs / S3) and Azure NSG flow logs (blob PT1H.json),
+    gated by each cloud's own flow-log configuration. Explicit stores so it is testable without Docker.
+    Returns {"aws": {fl-id: rows}, "azure": [blob paths]}."""
+    from core.netsim import flowdeliver as fd
+    from core.netsim.flowlogs import FlowLogCollector
+    col = collector or FlowLogCollector(topo)
+    col.topo = topo
+    col.ingest(accepted, rejected, now=now)
+    out = {"aws": {}, "azure": []}
+    rows = col.aws_rows()
+    if aws_model and aws_model.get("flow_logs") and rows:
+        def cw_put(group, stream, evs):
+            if logs_store is None or group not in logs_store.log_groups:
+                return False
+            from core import logs_core as lc
+            lc.dispatch(logs_store, "Logs_20140328.CreateLogStream", {"logGroupName": group, "logStreamName": stream})
+            r = lc.dispatch(logs_store, "Logs_20140328.PutLogEvents", {"logGroupName": group, "logStreamName": stream,
+                            "logEvents": [{"timestamp": t, "message": m} for t, m in evs]})
+            return r.status == 200
+
+        def s3_put(bucket, key, data):
+            if s3_store is None or not s3_store.bucket_exists(bucket):
+                return False
+            from core import s3_object_core as s3
+            return s3.dispatch(s3_store, "PUT", f"/{bucket}/{key}", {}, {}, data).status < 300
+        out["aws"] = fd.aws_deliver(aws_model["flow_logs"], rows, cw_put, s3_put, now=now)
+    if az_state and az_blob_store is not None:
+        targets = {}
+        for rec in az_state.values():
+            if (rec.get("_type") or "").lower() == "microsoft.network/networkwatchers/flowlogs":
+                p = rec.get("properties") or {}
+                if p.get("enabled", True) and p.get("targetResourceId") and p.get("storageId"):
+                    targets[p["targetResourceId"].lower()] = p["storageId"]
+        if targets:
+            by_nsg = {}
+            for r in col.azure_rows():
+                tgt = r["nsg"] if r["nsg"] in targets else None
+                if tgt:
+                    by_nsg.setdefault(tgt, []).append(r)
+            from core import azure_blob_core as ab
+            for nsg, rs in by_nsg.items():
+                acct = targets[nsg].rsplit("/", 1)[-1]
+                hdr = {"authorization": f"SharedKey {acct}:sig"}
+                cont = "insights-logs-networksecuritygroupflowevent"
+                ab.dispatch(az_blob_store, "PUT", f"/{acct}/{cont}", {"restype": "container"}, hdr, b"", arm_state=None)
+                for path, data in fd.azure_blobs({nsg: rs}, now=now).items():
+                    ab.dispatch(az_blob_store, "PUT", f"/{acct}/{cont}/{path}", {}, {**hdr, "x-ms-blob-type": "BlockBlob"}, data, arm_state=None)
+                    out["azure"].append(path)
+    return out
+
+
+def _deliver_cloud_flow_logs(space: str) -> None:
+    try:
+        from core import appliance_stores as aps
+        from core.wire_ingress import appliance_router
+        enf = _ENFORCERS.get(space)
+        if enf is None:
+            return
+        accepted, rejected = enf.flow_sets()
+        if not accepted and not rejected:
+            return
+        from providers import azure_services
+        r = appliance_router()
+        from core.netsim.flowlogs import FlowLogCollector
+        topo = netsim_topology(space)
+        col = _COLLECTORS.get(space)
+        if col is None:                       # persistent: deltas per window, never re-delivering cumulative counters
+            col = _COLLECTORS[space] = FlowLogCollector(topo)
+        deliver_flows(accepted, rejected, topo, aws_model=aws_model(), logs_store=r.logs, s3_store=r.s3,
+                      az_state=azure_services._state, az_blob_store=aps.az_blob_store(), collector=col)
+    except Exception as exc:
+        _warn_once(f"cloudflowlogs:{type(exc).__name__}", f"AWS/Azure flow-log delivery skipped: {exc}")
+
+
 def apply_now(reason: str = "") -> dict | None:
     if not enabled():
         return None
@@ -241,6 +320,7 @@ def apply_now(reason: str = "") -> dict | None:
             res = {"ok": True, "space": space, "reason": reason, "table": plan.table, "networks": len(plan.networks),
                    "warnings": plan.warnings[:20], "ms": int((time.time() - t0) * 1000), "at": time.time()}
             _gcp_flow_and_mirror_logs(space)
+            _deliver_cloud_flow_logs(space)
         except Exception as exc:          # never propagate: enforcement is best-effort
             res = {"ok": False, "space": space, "reason": reason, "error": str(exc)[:500], "at": time.time()}
             _warn_once(f"apply:{type(exc).__name__}", f"apply failed ({reason}): {exc}")
