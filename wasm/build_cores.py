@@ -45,7 +45,7 @@ CORES = [
     "gcp_storageinsights_core.py",                  # GCP: Storage Insights inventory reports + Anywhere Cache (used by gcp_storage_core)
     "gcp_storage_core.py",                          # GCP: GCS JSON API (native google-cloud-storage wire)
     "gcp_firestore_core.py",                        # GCP: Firestore REST (native google-cloud-firestore)
-    "gcp_kms_core.py",                              # GCP: Cloud KMS REST (native google-cloud-kms)
+    "gcp_kms_import.py", "gcp_kms_core.py",                              # GCP: Cloud KMS REST (native google-cloud-kms)
     "gcp_secretmanager_core.py",                    # GCP: Secret Manager REST (native google-cloud-secret-manager)
     "gcp_pubsub_core.py",                           # GCP: Pub/Sub REST (native google-cloud-pubsub)
     "gcp_iam_core.py",                              # GCP: Cloud IAM REST (SA + policy eval)

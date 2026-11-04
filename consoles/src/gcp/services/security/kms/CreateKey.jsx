@@ -53,6 +53,7 @@ export default function CreateKey({ query }) {
     try {
       await api.createKey(ring.location, ring.keyRing, name, {
         purpose,
+        ...(material === "IMPORTED" ? { importOnly: true } : {}),
         versionTemplate: { algorithm: "GOOGLE_SYMMETRIC_ENCRYPTION" },
         ...(rotationPeriod ? { rotationPeriod, nextRotationTime: new Date((startDate ? new Date(startDate).getTime() : Date.now()) + Number(rotationPeriod.replace("s", "")) * 1000).toISOString() } : {}),
         destroyScheduledDuration: `${Math.max(1, Number(destroyDays) || 30) * 86400}s`,
@@ -98,9 +99,9 @@ export default function CreateKey({ query }) {
       <Step title="Key material">
         <RadioGroup value={material} onChange={(e) => setMaterial(e.target.value)} aria-label="Key material">
           <FormControlLabel value="GENERATED" control={<Radio size="small" />} label="Generated key" />
-          <FormControlLabel value="IMPORTED" disabled control={<Radio size="small" />} label="Imported key" />
+          <FormControlLabel value="IMPORTED" control={<Radio size="small" />} label="Imported key" />
         </RadioGroup>
-        <NotSimulated compact feature="Imported key material" note="Vyomi always generates its own key material." />
+        {material === "IMPORTED" && <Typography variant="body2" color="text.secondary">Creates an import-only key with no version. Create an import job in the key ring, then import wrapped key material from the key's Versions tab. Only symmetric 256-bit keys can be imported.</Typography>}
       </Step>
       <Divider />
 
