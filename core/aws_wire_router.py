@@ -366,6 +366,7 @@ _SIGNING = {
     "vpc-lattice": "vpc-lattice",   # VPC Lattice control plane (rest-json /servicenetworks, /services, /targetgroups, ...) -> core/vpc_lattice_core over the EC2 model
     "rbin": "rbin",   # EC2 Recycle Bin (rest-json /rules...) -> core/ec2_ops_core.rbin_dispatch over the shared EC2 model
     "schemas": "schemas",   # EventBridge Schemas (rest-json /v1/registries, /v1/discoverers) -> core/eventbridge_schemas_core via the EventBridge store
+    "application-autoscaling": "appas",   # Application Auto Scaling (DynamoDB) -> core/appautoscaling_core over the DynamoDB store
     "backup": "backup",   # AWS Backup subset (region settings + DynamoDB copy jobs) -> core/backup_core over the DynamoDB + S3 stores
     "s3vectors": "s3vectors",   # Amazon S3 Vectors (rest-json POST /<Operation>) -> core/s3_vectors_core via the S3 store
     "s3tables": "s3tables",   # Amazon S3 Tables (rest-json /buckets, /namespaces, /tables, /tag) -> core/s3_tables_core via the S3 store
@@ -391,6 +392,7 @@ _TARGET_PREFIX = {
     "com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101": "cloudtrail",
     "AWSOrganizationsV20161128": "organizations",
     "AWSInsightsIndexService": "ce",   # Cost Explorer
+    "AnyScaleFrontendService": "appas",   # Application Auto Scaling
 }
 
 # Native JSON content-types the real SDK expects back per service.
@@ -402,6 +404,7 @@ _JSON_CT = {
     "stepfunctions": "application/x-amz-json-1.0",
     "ram": "application/x-amz-json-1.1",
     "organizations": "application/x-amz-json-1.1", "ce": "application/x-amz-json-1.1",
+    "appas": "application/x-amz-json-1.1",
     "netfw": "application/x-amz-json-1.0", "dnsfw": "application/x-amz-json-1.1",
 }
 
@@ -1316,6 +1319,9 @@ class AwsWireRouter:
             elif svc == "ce":   # Cost Explorer over the EC2/EBS (VPC model) + RDS inventory
                 from core import ce_core
                 r = ce_core.dispatch(self.vpc, self.rds, target, payload)
+            elif svc == "appas":   # Application Auto Scaling for DynamoDB (adjusts the table's real provisioned capacity)
+                from core import appautoscaling_core
+                r = appautoscaling_core.dispatch(self.ddb, target, payload)
             else:  # sqs
                 r = sqs.dispatch(self.msg, target, payload, lam_store=self.lam)
             hdrs = dict(r.headers or {})
