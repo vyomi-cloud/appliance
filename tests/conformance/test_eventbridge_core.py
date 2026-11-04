@@ -129,6 +129,17 @@ def run(store=None):
     _check("Lambda target invoked through lambda_core store (Nano path)",
            real and real[0][0].endswith("/functions/sink/invocations") and real[0][1]["detail"] == {"k": 8})
 
+    # Event-bus target: default-bus rule forwards to bus "audit"; its rule delivers to SQS.
+    qurl3 = sqs.dispatch(s, "AmazonSQS.CreateQueue", {"QueueName": "audit-q"}).body["QueueUrl"]
+    qarn3 = sqs.dispatch(s, "AmazonSQS.GetQueueAttributes", {"QueueUrl": qurl3}).body["Attributes"]["QueueArn"]
+    call("PutRule", {"Name": "fwd", "EventPattern": json.dumps({"source": ["fwd.app"]})})
+    call("PutTargets", {"Rule": "fwd", "Targets": [{"Id": "b1", "Arn": f"arn:aws:events:us-east-1:{s.account_id}:event-bus/audit"}]})
+    call("PutRule", {"Name": "audit-r", "EventBusName": "audit", "EventPattern": json.dumps({"source": ["fwd.app"]})})
+    call("PutTargets", {"Rule": "audit-r", "Targets": [{"Id": "q", "Arn": qarn3}]})
+    call("PutEvents", {"Entries": [{"Source": "fwd.app", "DetailType": "x", "Detail": "{}"}]})
+    got = sqs.dispatch(s, "AmazonSQS.ReceiveMessage", {"QueueUrl": qurl3, "MaxNumberOfMessages": 10}).body.get("Messages", [])
+    _check("event-bus target forwards to the destination bus's rules", len(got) == 1)
+
     _check("ListRules",call("ListRules", {}).body["Rules"][0]["Name"] == "r1")
     _check("ListTargetsByRule", call("ListTargetsByRule", {"Rule": "r1"}).body["Targets"][0]["Id"] == "t1")
 

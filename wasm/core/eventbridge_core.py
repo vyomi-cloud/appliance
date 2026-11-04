@@ -290,7 +290,7 @@ def _deliver_lambda(lambda_store, arn, body_str):
         pass
 
 
-def route_event(rules, bus, event_obj, envelope, send_sqs, invoke_lambda, publish_sns):
+def route_event(rules, bus, event_obj, envelope, send_sqs, invoke_lambda, publish_sns, forward_bus=None, _depth=0):
     """Match `event_obj` against every ENABLED rule on `bus` and hand each matching target
     its (Input/InputPath/InputTransformer-shaped) body via the three delivery callbacks.
     Shared by the Nano wire (eventbridge_core) and the offline appliance. Returns #deliveries."""
@@ -310,6 +310,12 @@ def route_event(rules, bus, event_obj, envelope, send_sqs, invoke_lambda, publis
                 publish_sns(arn, body_str)
             elif ":lambda:" in arn or ":function:" in arn:
                 invoke_lambda(arn, body_str)
+            elif ":event-bus/" in arn and forward_bus is not None and _depth < 5:
+                # Event-bus target: the event is re-matched against the destination bus's rules.
+                # (Real EventBridge also refuses bus chains deeper than the cycle limit.)
+                dest = arn.split(":event-bus/", 1)[1]
+                n += route_event(rules, dest, event_obj, envelope, send_sqs, invoke_lambda,
+                                 publish_sns, forward_bus, _depth + 1)
             else:
                 continue
             n += 1
@@ -342,7 +348,7 @@ def _put_events(store, body, lambda_store=None):
 
         route_event(_rules(store).values(), bus, event_obj, envelope, send_sqs,
                     lambda arn, b: _deliver_lambda(lambda_store, arn, b),
-                    lambda arn, b: _deliver_sns(store, arn, b))
+                    lambda arn, b: _deliver_sns(store, arn, b), forward_bus=True)
         entries_out.append({"EventId": event_id})
     store.persist()
     return EventsResponse(body={"FailedEntryCount": 0, "Entries": entries_out})
