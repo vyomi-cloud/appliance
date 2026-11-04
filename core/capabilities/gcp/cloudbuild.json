@@ -1,0 +1,21 @@
+{
+ "$doc": "Vyomi capability registry — Cloud Build (cloudbuild.googleapis.com v1). See eventarc.json for the contract. Core: core/gcp_cloudbuild_core.py over the shared CI seam (core/ci_core.py).",
+ "gcp.cloudbuild.builds": {
+  "title": "Builds (create, get, list, retry, cancel) running docker build/push steps and pushing images into Artifact Registry",
+  "level": { "nano": "not_simulated", "offline": "limited" },
+  "limitations": [
+   "Offline: docker build steps really run on the BuildKit builder (shared CI seam) and docker push / the top-level images: field push the built image into the simulated Artifact Registry (a missing repo fails the step like the registry). Substitutions are applied and validated, sources come from the CI repos (Gitea/vyomi://), a GitHub repo (user's own PAT) or a GCS tar/zip. Only docker build/push steps run: other builder containers (gcloud, npm, bash...) FAIL with that reason instead of being faked; no worker pools, approvals or Cloud Logging streaming (logs are on the build as vyomiLogs). Builds run synchronously, so :cancel only ever sees finished builds.",
+   "Nano has no container builder, so a build with a docker build step FAILS with that reason (the API, validation, substitutions and push-to-registry error paths still run)."
+  ],
+  "tests": ["tests/conformance/test_gcp_cloudbuild_core.py"]
+ },
+ "gcp.cloudbuild.triggers": {
+  "title": "Build triggers (push to a branch of a CI repo / GitHub repo, manual run, cloudbuild.yaml/json or inline build)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "A push to a repo through the Vyomi extension POST /v1/projects/{p}/triggers:vyomiPush (or :vyomiReconcile for pushes made straight to the git host) fires every enabled trigger whose branch regex matches and whose included/ignored file globs allow it; the build reads cloudbuild.yaml (a built-in YAML subset parser: maps, lists, flow collections, block scalars) or cloudbuild.json at the pushed commit. A bad config yields a FAILURE build.",
+   "Not simulated: pull_request / pubsub / webhook triggers, regional trigger paths (that URL is Eventarc's), autodetect / gitFileSource configs, build approvals."
+  ],
+  "tests": ["tests/conformance/test_gcp_cloudbuild_core.py"]
+ }
+}
