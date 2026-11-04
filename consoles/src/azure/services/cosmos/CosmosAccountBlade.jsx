@@ -391,7 +391,9 @@ function Replicate({ a, reload }) {
   const [failoverTarget, setFailoverTarget] = useState("");
   const [busy, setBusy] = useState(false);
   const locations = a.properties?.locations || [{ locationName: a.location, failoverPriority: 0 }];
-  const unused = LOCATIONS.filter(([id]) => !locations.some((l) => l.locationName === id));
+  // ARM returns display names ("East US") while the catalogue ids are "eastus": compare normalised.
+  const normLoc = (x) => String(x || "").toLowerCase().replace(/\s+/g, "");
+  const unused = LOCATIONS.filter(([id]) => !locations.some((l) => normLoc(l.locationName) === normLoc(id)));
   const others = locations.filter((l) => l.failoverPriority !== 0);
 
   const openAddRegion = () => { setNewRegion(unused[0]?.[0] || ""); setAddRegion(true); };
