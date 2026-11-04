@@ -79,18 +79,27 @@ class FlowLogCollector:
         return rows
 
     # ── AWS ──
-    def aws_records(self) -> list:
+    def aws_rows(self) -> list:
+        """Structured v2+ rows, one per OUR-ENI the flow touches (the cloud logs a flow on each ENI)."""
         out = []
         for start, end, rows in self.windows:
             for r in rows:
-                for ip in (r["src"], r["dst"]):        # logged on each of OUR ENIs it touches
+                for ip in dict.fromkeys((r["src"], r["dst"])):
                     iface = self.topo.iface_by_ip(ip)
                     if iface is None or iface.ip != ip:
                         continue
-                    out.append(" ".join(str(x) for x in (
-                        2, self.account_id, iface.id, r["src"], r["dst"], r["sport"], r["dport"], r["proto"],
-                        r["packets"], r["bytes"], start, end, r["action"], "OK")))
+                    sub = self.topo.subnets.get(iface.subnet)
+                    out.append({"version": 2, "account-id": self.account_id, "interface-id": iface.id, "srcaddr": r["src"], "dstaddr": r["dst"],
+                                "srcport": r["sport"], "dstport": r["dport"], "protocol": r["proto"], "packets": r["packets"], "bytes": r["bytes"],
+                                "start": start, "end": end, "action": r["action"], "log-status": "OK",
+                                "vpc-id": getattr(sub, "network", "") or "-", "subnet-id": iface.subnet, "instance-id": iface.instance or "-",
+                                "pkt-srcaddr": r["src"], "pkt-dstaddr": r["dst"],
+                                "flow-direction": "egress" if ip == r["src"] else "ingress", "type": "IPv4"})
         return out
+
+    def aws_records(self) -> list:
+        return [" ".join(str(row[k]) for k in ("version", "account-id", "interface-id", "srcaddr", "dstaddr", "srcport", "dstport", "protocol",
+                                                  "packets", "bytes", "start", "end", "action", "log-status")) for row in self.aws_rows()]
 
     # ── GCP ──
     def gcp_records(self) -> list:
@@ -114,6 +123,42 @@ class FlowLogCollector:
         return out
 
     # ── Azure ──
+    def azure_rows(self) -> list:
+        """One entry per (NSG, flow, role): {nsg, iface, rule, tuple}. `rule` is the NSG rule that decided the
+        flow, found by the shared evaluator (DefaultRule_<n> for implied rules, UserRule_<n> otherwise)."""
+        try:
+            from core.netsim import evaluate as ev
+            from core.netsim.model import EGRESS, INGRESS
+        except ImportError:                                   # pragma: no cover - flat layout
+            import evaluate as ev                             # type: ignore
+            from model import EGRESS, INGRESS                 # type: ignore
+        out = []
+        for _start, end, rows in self.windows:
+            for r in rows:
+                proto = {6: "T", 17: "U"}.get(r["proto"], "T")
+                pname = {6: "tcp", 17: "udp", 1: "icmp"}.get(r["proto"], "tcp")
+                for direction, own, other in (("O", r["src"], r["dst"]), ("I", r["dst"], r["src"])):
+                    iface = self.topo.iface_by_ip(own)
+                    if iface is None or iface.ip != own:
+                        continue
+                    sub = self.topo.subnets.get(iface.subnet)
+                    d = EGRESS if direction == "O" else INGRESS
+                    for nsg_id in list(iface.rulesets) + list(getattr(sub, "rulesets", []) or []):
+                        rs = self.topo.rulesets.get(nsg_id)
+                        if rs is None or rs.kind != "nsg":
+                            continue
+                        dport = r["dport"] if direction == "I" else r["dport"]
+                        allowed, desc = ev.eval_priority(self.topo, rs, d, pname, dport, other, self.topo.iface_by_ip(other), iface, r["sport"])
+                        label = desc.split(" ")[0]
+                        rule = next((x for x in rs.rules if x.name == label), None)
+                        rname = ("DefaultRule_" if rule is not None and rule.implied else "UserRule_") + label
+                        # an allowed flow that a LATER layer denied is still logged with this NSG's own decision
+                        decision = "A" if (allowed and r["action"] == "ACCEPT") else "D"
+                        state = "C" if decision == "A" else "B"
+                        out.append({"nsg": nsg_id, "iface": iface.id, "rule": rname,
+                                    "tuple": f"{end},{r['src']},{r['dst']},{r['sport']},{r['dport']},{proto},{direction},{decision},{state},{r['packets']},{r['bytes']},0,0"})
+        return out
+
     def azure_tuples(self) -> list:
         out = []
         for _start, end, rows in self.windows:

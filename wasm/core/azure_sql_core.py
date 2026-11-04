@@ -41,6 +41,7 @@ import re
 from dataclasses import dataclass, field
 
 from core import azure_keyvault_keys_core as kv_keys
+from core import azure_netaccess as _netaccess
 from core.sql_store import SqlStore
 
 
@@ -234,7 +235,7 @@ def _db_size_bytes(store: SqlStore, db_id: str) -> int:
 
 
 def _query(store: SqlStore, server: str, database: str, body: bytes,
-          arm_state: dict | None = None, kv_store=None) -> AzureSqlResponse:
+          arm_state: dict | None = None, kv_store=None, headers: dict | None = None) -> AzureSqlResponse:
     try:
         payload = json.loads(body.decode("utf-8")) if body else {}
     except Exception:
@@ -243,7 +244,14 @@ def _query(store: SqlStore, server: str, database: str, body: bytes,
     if not sql:
         return _err(400, "BadRequest", "A 'sql' statement is required.")
 
-    if _server_props(arm_state, server).get("publicNetworkAccess") == "Disabled":
+    _na_ctx = _netaccess.caller_context(headers)
+    _na_rec = _netaccess.find_arm(arm_state, "microsoft.sql/servers", f"servers/{server}") if _na_ctx else None
+    if _na_rec is not None:
+        # caller declared a network identity (x-vyomi-source-*): firewall / vnet rules / private endpoint are enforced
+        _denied = _netaccess.check(arm_state, _na_rec["id"], "sql", _na_rec.get("properties") or {}, _na_ctx)
+        if _denied:
+            return _err(_denied[0], _denied[1], f"Cannot connect to server '{server}.database.windows.net': {_denied[2]}")
+    elif _server_props(arm_state, server).get("publicNetworkAccess") == "Disabled":
         return _err(403, "PublicNetworkAccessDisabled",
                     f"Cannot connect to server '{server}.database.windows.net': "
                     "public network access is disabled.")
@@ -413,7 +421,7 @@ def dispatch(store: SqlStore, method: str, path: str,
                 return _delete_database(store, server, database)
             return _err(405, "MethodNotAllowed", f"Unsupported method {method} on database")
         if len(segs) == 5 and segs[4] == "query" and method == "POST":
-            return _query(store, server, database, body, arm_state, kv_store)
+            return _query(store, server, database, body, arm_state, kv_store, headers)
         if len(segs) == 5 and segs[4] == "recommendations" and method == "GET":
             db_id = _db_id(server, database)
             if not store.instance_exists(db_id):

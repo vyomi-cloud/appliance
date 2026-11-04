@@ -363,7 +363,32 @@ def resolve_decision(store, vpc_id, qname, qtype="A"):
     return {"action": "ALERT" if alerts else None, "block": None, "rule": alerts[0][1] if alerts else "", "group": alerts[0][0] if alerts else "", "alerts": alerts}
 
 
+def _resolve_query(store, p):
+    """Simulator verb (not a real Route 53 Resolver API): what the VPC's Resolver would answer for one DNS query
+    given the associated DNS Firewall rule groups. Rules are evaluated by association then rule priority."""
+    n = _st(store)
+    vpc = _need(p, "VpcId")
+    if not any(a["vpc"] == vpc for a in n["assocs"].values()):
+        # no firewall associated: the Resolver answers normally (we have no zones to answer from)
+        return {"VpcId": vpc, "DomainName": p.get("DomainName"), "Action": None, "Resolver": "RESOLVE", "Rule": "", "RuleGroup": "", "Alerts": []}
+    q = _need(p, "DomainName")
+    d = resolve_decision(store, vpc, q, p.get("QueryType", "A"))
+    act = d["action"]
+    out = {"VpcId": vpc, "DomainName": q, "Action": act, "Rule": d["rule"], "RuleGroup": d["group"],
+           "Alerts": [{"RuleGroup": g, "Rule": r} for g, r in d["alerts"]]}
+    if act == "BLOCK":
+        out["Resolver"] = d["block"]                      # NODATA | NXDOMAIN | OVERRIDE
+        if d["block"] == "OVERRIDE":
+            g = n["groups"][next(a["group"] for a in n["assocs"].values() if a["vpc"] == vpc and n["groups"][a["group"]]["name"] == d["group"])]
+            r = next(x for x in g["rules"] if x["name"] == d["rule"])
+            out.update({"OverrideDomain": r.get("override_domain"), "OverrideDnsType": "CNAME", "OverrideTtl": r.get("override_ttl", 300)})
+    else:
+        out["Resolver"] = "RESOLVE"                       # ALLOW / ALERT / no match: resolved normally
+    return out
+
+
 OPS = {
+    "ResolveDnsQuery": _resolve_query,
     "CreateFirewallDomainList": _create_list, "GetFirewallDomainList": _get_list, "ListFirewallDomainLists": _list_lists, "UpdateFirewallDomains": _update_domains,
     "ListFirewallDomains": _list_domains, "DeleteFirewallDomainList": _delete_list,
     "CreateFirewallRuleGroup": _create_group, "GetFirewallRuleGroup": _get_group, "ListFirewallRuleGroups": _list_groups, "DeleteFirewallRuleGroup": _delete_group,

@@ -248,6 +248,9 @@ class _Compiler:
                 else:
                     lines.append(f"{_dst(r.dest)}counter goto deny comment {_q(c + ' ' + code)}")
             else:
+                if r.kind == "nfw":
+                    self.warnings.append(f"{S.route_table}: route {r.dest} → Network Firewall endpoint {r.target} is evaluated "
+                                         f"(AnalyzeReachability) but not packet-enforced (enforced as drop)")
                 if r.kind == INSTANCE:
                     self.warnings.append(f"{S.route_table}: appliance route {r.dest} → {r.target} is evaluated "
                                          f"but not enforced (enforced as drop)")

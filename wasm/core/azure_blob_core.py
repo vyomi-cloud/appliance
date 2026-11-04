@@ -123,6 +123,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import unquote
+
+from core import azure_netaccess as _netaccess
 from xml.sax.saxutils import escape
 
 X_MS_VERSION = "2021-12-02"
@@ -646,7 +648,14 @@ def dispatch(store: AzureBlobStore, method: str, path: str,
 
     # ---- account configuration gates (ENFORCED — see module docstring) ----
     props = _account_properties(arm_state, acct)
-    if props.get("publicNetworkAccess") == "Disabled":
+    _na_ctx = _netaccess.caller_context(headers)
+    _na_rec = _netaccess.find_arm(arm_state, "microsoft.storage/storageaccounts", f"storageaccounts/{acct}") if _na_ctx else None
+    if _na_rec is not None:
+        # caller declared a network identity (x-vyomi-source-*): IP / vnet / private-endpoint rules are enforced
+        _denied = _netaccess.check(arm_state, _na_rec["id"], "storage", props, _na_ctx)
+        if _denied:
+            return _err(_denied[0], _denied[1], _denied[2])
+    elif props.get("publicNetworkAccess") == "Disabled":
         return _err(403, "AuthorizationFailure",
                     "Public network access is disabled for this storage account.")
     auth_header = headers.get("authorization", "") or ""
