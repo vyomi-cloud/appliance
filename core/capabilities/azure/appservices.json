@@ -355,5 +355,21 @@
   "tests": [
    "consoles/tests/smoke-azure-kudu.mjs"
   ]
+ },
+ "azure.appservices.webapp.events": {
+  "title": "Events (preview): Event Grid system events of the web app and its plan",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Event subscriptions are real Microsoft.EventGrid/eventSubscriptions scoped to the site. Real events are raised by actual operations: Microsoft.Web.AppUpdated (site/config/app-settings writes and start/stop/restart), SlotSwapCompleted, BackupOperationCompleted and, on the plan, AppServicePlanUpdated. The Started/Failed/Preview variants (BackupOperationStarted/Failed, Restore*, SlotSwapStarted/Failed/WithPreview*) are accepted as filters but only fire from 'Send test event'. Delivery is real only to Service Bus queue/topic destinations on the offline appliance; other destinations (and every destination on Nano) are unreachable and resolve to dead-lettered/dropped."
+  ],
+  "api": [
+   "sites/providers/Microsoft.EventGrid/eventSubscriptions"
+  ],
+  "tests": [
+   "tests/conformance/test_azure_kudu_diagnose.py"
+  ]
  }
 }

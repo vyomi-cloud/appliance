@@ -34,6 +34,7 @@ import { ClassicAdminsPanel, DenyAssignmentsPanel, MyAccess } from "../../kit/Ia
 import SharedResourceVisualizer from "../../kit/ResourceVisualizer.jsx";
 import SharedResourceHealth from "../../kit/ResourceHealth.jsx";
 import SharedAdvisor from "../../kit/Advisor.jsx";
+import ResourceEvents from "../../kit/ResourceEvents.jsx";
 import Diagnose from "../../kit/Diagnose.jsx";
 import SharedSupportPanel from "../../kit/SupportPanel.jsx";
 import AppInsights from "../../kit/AppInsights.jsx";
@@ -97,6 +98,7 @@ export default function WebAppBlade({ params, query }) {
   else {
     const a = site.data, reload = site.reload;
     const P = {
+      events: () => <ResourceEvents scopeId={a.id} kind="webapp" capId="azure.appservices.webapp.events" title={`${a.name} | Events (preview)`} />,
       diagnose: () => <Diagnose id={a.id} name={a.name} />,
       overview: () => <Overview a={a} reload={reload} self={self} />,
       defender: () => <ResourceRecommendations resourceId={a.id} />,

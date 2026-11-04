@@ -15,12 +15,13 @@ export const EVENT_TYPES = {
   keyvault: ["Microsoft.KeyVault.SecretNewVersionCreated", "Microsoft.KeyVault.SecretNearExpiry", "Microsoft.KeyVault.SecretExpired", "Microsoft.KeyVault.KeyNewVersionCreated", "Microsoft.KeyVault.KeyNearExpiry", "Microsoft.KeyVault.KeyExpired", "Microsoft.KeyVault.CertificateNewVersionCreated", "Microsoft.KeyVault.CertificateNearExpiry", "Microsoft.KeyVault.CertificateExpired"],
   appconfiguration: ["Microsoft.AppConfiguration.KeyValueModified", "Microsoft.AppConfiguration.KeyValueDeleted", "Microsoft.AppConfiguration.SnapshotCreated", "Microsoft.AppConfiguration.SnapshotModified"],
   apim: ["Microsoft.ApiManagement.APICreated", "Microsoft.ApiManagement.APIUpdated", "Microsoft.ApiManagement.APIDeleted", "Microsoft.ApiManagement.ProductCreated", "Microsoft.ApiManagement.ProductUpdated", "Microsoft.ApiManagement.ProductDeleted", "Microsoft.ApiManagement.UserCreated", "Microsoft.ApiManagement.SubscriptionCreated"],
+  webapp: ["Microsoft.Web.AppUpdated", "Microsoft.Web.BackupOperationStarted", "Microsoft.Web.BackupOperationCompleted", "Microsoft.Web.BackupOperationFailed", "Microsoft.Web.RestoreOperationStarted", "Microsoft.Web.RestoreOperationCompleted", "Microsoft.Web.RestoreOperationFailed", "Microsoft.Web.SlotSwapStarted", "Microsoft.Web.SlotSwapCompleted", "Microsoft.Web.SlotSwapFailed", "Microsoft.Web.SlotSwapWithPreviewStarted", "Microsoft.Web.SlotSwapWithPreviewCancelled"],
   servicebus: ["Microsoft.ServiceBus.ActiveMessagesAvailableWithNoListeners", "Microsoft.ServiceBus.DeadletterMessagesAvailableWithNoListeners", "Microsoft.ServiceBus.ActiveMessagesAvailablePeriodicNotifications", "Microsoft.ServiceBus.DeadletterMessagesAvailablePeriodicNotifications"],
   resourcegroup: ["Microsoft.Resources.ResourceWriteSuccess", "Microsoft.Resources.ResourceDeleteSuccess", "Microsoft.Resources.ResourceActionSuccess", "Microsoft.Resources.ResourceWriteFailure"],
 };
 const base = (scopeId) => `${scopeId}/providers/Microsoft.EventGrid/eventSubscriptions`;
 
-export default function ResourceEvents({ scopeId, kind, title = "Events" }) {
+export default function ResourceEvents({ scopeId, kind, title = "Events", capId = "azure.eventgrid.resourceevents" }) {
   const notify = useNotify();
   const types = EVENT_TYPES[kind] || [];
   const subs = useAsync(async () => {
@@ -50,7 +51,7 @@ export default function ResourceEvents({ scopeId, kind, title = "Events" }) {
   const remove = async (n) => { try { await restJson("DELETE", `${base(scopeId)}/${encodeURIComponent(n)}`, { query: { "api-version": AV } }); subs.reload(); } catch (e) { notify.error(e, "Delete failed"); } };
   const rows = subs.data || [];
   return (
-    <CapabilityContainer id="azure.eventgrid.resourceevents" title={title}>
+    <CapabilityContainer id={capId} title={title}>
       <ErrorBar error={subs.error} />
       <InfoBar>Event subscriptions on this resource's system events. Event types are validated against what this resource type raises.</InfoBar>
       <div style={{ display: "flex", gap: 8, margin: "8px 0", alignItems: "center", flexWrap: "wrap" }}>

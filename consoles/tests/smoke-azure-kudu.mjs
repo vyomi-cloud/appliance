@@ -94,6 +94,13 @@ await diag("apim", `apim/${RG}/kapim${n}`, "sku-sla", "Warning");
 await diag("app configuration", `appconfiguration/${RG}/kcfg${n}`, "soft-delete", "Info");
 await diag("cognitive services", `cognitiveservices/${RG}/kcog${n}`, "deployments", "Warning");
 
+// Events (preview)
+await go("events");
+ok("events panel is real", (await NS()) === 0 && (await pg.getByLabel("Add event subscription").count()) === 1);
+await pg.getByLabel("Test event type").selectOption("Microsoft.Web.AppUpdated");
+await pg.getByLabel("Send test event").click(); await pg.waitForTimeout(800);
+ok("send test event reports a result", (await pg.content()).includes("Test event sent") || (await pg.content()).includes("raised"));
+
 // Create wizard: secure unique default hostname + Database + Application Insights
 const WA = `wiz${n}`;
 await pg.goto(`${UI}#/appservices/create`); await pg.waitForTimeout(1500);

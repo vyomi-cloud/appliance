@@ -1392,6 +1392,8 @@ class AzureArm:
         if x is not None:
             if method != "GET" and x["status"] < 300 and x.get("scope"):
                 self._event(method, x["scope"], x["type"], x["name"])
+            if method != "GET" and x["status"] < 300 and after[0].lower() == "microsoft.web":
+                self._web_events(method, sub, rg, after[1:])
             return {"status": x["status"], "headers": dict(x.get("headers") or {}), "body": x["body"]}
 
         namespace = after[0]
@@ -3480,12 +3482,52 @@ class AzureArm:
     def _web(self, method, sub, rg, chain, payload, query):
         r = web_engine.dispatch(self.state, method, sub, rg, chain, [], payload, query)
         resp = {"status": r["status"], "headers": {}, "body": r["body"]}
+        if r["status"] < 300 and method != "GET":
+            self._web_events(method, sub, rg, chain)
         if r["lro"] and r["status"] < 300:
             resp["status"] = 200 if r["status"] == 201 else r["status"]
             op_id = self._make_operation(r["rid"], method)
             url = f"{self._base}/api/azure/operations/{op_id}?api-version={query.get('api-version') or web_engine.API_VERSION}"
             resp["headers"].update({"Azure-AsyncOperation": url, "Location": url, "Retry-After": "0"})
         return resp
+
+    def _web_events(self, method, sub, rg, chain):
+        """Event Grid system events App Service raises on a site / plan (Microsoft.Web.AppUpdated, SlotSwapCompleted,
+        BackupOperationCompleted, AppServicePlanUpdated) to subscriptions scoped to that resource. Reads (POST .../list,
+        publishing profile) and Kudu/dev-tool calls raise none."""
+        try:
+            kind = chain[0].lower() if chain else ""
+            if kind not in ("sites", "serverfarms") or len(chain) < 2:
+                return
+            tail = [c.lower() for c in chain[2:]]
+            scope = f"/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Web/{chain[0]}/{chain[1]}"
+            if kind == "serverfarms":
+                if tail:
+                    return
+                evt, action = "Microsoft.Web.AppServicePlanUpdated", {"stage": "Completed", "action": "Updated"}
+            else:
+                if tail[:1] == ["kudu"] or (method == "POST" and tail[-1:] in (["list"], ["publishxml"])) or tail[:1] in (["functions"], ["host"]) and tail[1:2] == ["invoke"]:
+                    return
+                if tail[:1] == ["slotsswap"]:
+                    evt, action = "Microsoft.Web.SlotSwapCompleted", {"stage": "Completed", "action": "SlotSwap"}
+                elif tail[:1] == ["backups"] and method == "POST" and not tail[1:]:
+                    evt, action = "Microsoft.Web.BackupOperationCompleted", {"stage": "Completed", "action": "Backup"}
+                elif tail[:1] in (["start"], ["stop"], ["restart"]):
+                    evt, action = "Microsoft.Web.AppUpdated", {"stage": "Completed", "action": {"start": "Started", "stop": "Stopped", "restart": "Restarted"}[tail[0]]}
+                elif method in ("PUT", "PATCH", "DELETE") or tail[:1] == ["config"]:
+                    if method == "DELETE" and not tail:
+                        return
+                    evt = "Microsoft.Web.AppUpdated"
+                    action = {"stage": "Completed", "action": "ChangedAppSettings" if tail[:2] == ["config", "appsettings"] else "Updated"}
+                else:
+                    return
+            eventgrid_engine.emit_system_event(self.state, scope, evt, scope, {
+                "name": chain[1], "clientRequestId": str(uuid.uuid4()), "correlationId": str(uuid.uuid4()), "requestId": str(uuid.uuid4()),
+                "address": scope, "verb": method, "appEventTypeDetail": action,
+                "sitename": chain[1], "serverFarmId": scope if kind == "serverfarms" else None},
+                sb_store=getattr(self, "sb_store", None))
+        except Exception:
+            pass
 
     # ── CRUD primitives ───────────────────────────────────────────────────
     def _list(self, sub, rg, full_type, parent_prefix=None):

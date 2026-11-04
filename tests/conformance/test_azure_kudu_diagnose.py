@@ -8,7 +8,7 @@ except ImportError:  # pragma: no cover
     from azure_arm_core import AzureArm, DEFAULT_SUBSCRIPTION as SUB  # type: ignore
 
 
-def check(name, cond):
+def check(name, cond, *_):
     if not cond:
         raise AssertionError(name)
     print("  ok ", name)
@@ -163,4 +163,25 @@ check("name > 40 chars with scope 400", mk(SUB, "rg", "u" * 41, "NoReuse")[0] ==
 mk(SUB, "rg", "plainname", None)
 check("plain name is a global namespace: second RG conflicts", mk(SUB, "rg2", "plainname", None)[0] == 409)
 check("plain hostname unchanged", mk(SUB, "rg", "plain2", None)[1]["properties"]["defaultHostName"] == "plain2.azurewebsites.net")
+
+# ── App Service system events (Event Grid, resource-scoped) ──
+EG = P + "/Microsoft.Web/sites/evw"
+call("PUT", EG, {"location": "eastus", "kind": "app", "properties": {}})
+ES = EG + "/providers/Microsoft.EventGrid/eventSubscriptions/s1"
+r = a.handle("PUT", ES, {"api-version": "2022-06-15"}, {"properties": {"destination": {"endpointType": "WebHook", "properties": {"endpointUrl": "https://127.0.0.1:9/x"}},
+                                                         "filter": {"includedEventTypes": ["Microsoft.Web.AppUpdated", "Microsoft.Web.SlotSwapCompleted"]}}})
+check("scoped event subscription on a web app is accepted", r["status"] in (200, 201), r)
+key = ES.lower()
+matched = lambda: (a.state[key].get("_delivery") or {}).get("matched", 0)
+m0 = matched()
+call("POST", EG + "/restart")
+check("restart raises Microsoft.Web.AppUpdated to the subscription", matched() == m0 + 1)
+call("PUT", EG + "/config/appsettings", {"properties": {"X": "1"}})
+check("app settings change raises AppUpdated", matched() == m0 + 2)
+call("POST", EG + "/kudu/api/command", {"command": "ls"})
+call("GET", EG + "/config/appsettings")
+check("reads and Kudu console calls raise no events", matched() == m0 + 2)
+r = a.handle("PUT", EG + "/providers/Microsoft.EventGrid/eventSubscriptions/bad", {"api-version": "2022-06-15"},
+             {"properties": {"destination": {"endpointType": "WebHook", "properties": {"endpointUrl": "https://127.0.0.1:9/x"}}, "filter": {"includedEventTypes": ["Microsoft.Web.Nope"]}}})
+check("unknown web event type rejected", r["status"] == 400, r)
 print("ALL OK")
