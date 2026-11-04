@@ -16,6 +16,7 @@ import { ErrorAlert, KeyValue, NotSimulated, PageHeader, Section, fmtDate, fmtDu
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { hashHref } from "../../link.jsx";
 import * as api from "./api.js";
+import NanoVmPanel, { isNano, pendingAttr, useNanoVmRefresh } from "../../../common/NanoVmPanel.jsx";
 import { RecommendationsTable } from "./Ext.jsx";
 import OpsAgentMetrics from "./OpsAgentMetrics.jsx";
 
@@ -92,7 +93,8 @@ export default function InstanceDetail({ params }) {
   const [del, setDel] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editLabels, setEditLabels] = useState("");
-  const { data: inst, loading, error, reload } = useAsync(() => api.getInstance(zone, name), [zone, name]);
+  const { data: inst, loading, error, reload, refresh } = useAsync(() => api.getInstance(zone, name), [zone, name]);
+  useNanoVmRefresh(refresh, inst?.status === "PROVISIONING" || inst?.status === "STAGING");
 
   const act = async (action) => {
     try { await api.instanceAction(zone, name, action); notify.success(`${action} requested for "${name}"`); reload(); }
@@ -122,13 +124,15 @@ export default function InstanceDetail({ params }) {
         </>}
       >
         <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
-          <Chip size="small" color={api.statusChipColor(inst.status)} label={inst.status} />
+          <span {...pendingAttr(inst.status === "PROVISIONING" || inst.status === "STAGING", "spin")}><Chip size="small" color={api.statusChipColor(inst.status)} label={inst.status} /></span>
           {inst.deletionProtection && <Chip size="small" label="Deletion protection on" />}
         </Stack>
       </PageHeader>
 
       <Box sx={{ mb: 2 }}>
-        <CapabilityContainer id="gcp.compute.instances.data_plane" title="SSH" />
+        {isNano()
+          ? <CapabilityContainer id="gcp.compute.instances.nano_vm" title="SSH"><NanoVmPanel cloud="gcp" vmRef={name} /></CapabilityContainer>
+          : <CapabilityContainer id="gcp.compute.instances.data_plane" title="SSH" />}
       </Box>
 
       <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 2 }}>

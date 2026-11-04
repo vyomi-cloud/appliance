@@ -2,6 +2,7 @@
  * google-cloud-compute / gcloud compute speak). Every call here is a real GCE v1 operation. */
 import { restJson } from "../../../common/wire.js";
 import { getProject } from "../../project.js";
+import { vmShownState } from "../../../common/NanoVmPanel.jsx";
 
 const e = encodeURIComponent;
 const base = () => `/compute/v1/projects/${e(getProject())}`;
@@ -63,12 +64,14 @@ export const listRegions = async () => (await restJson("GET", `${base()}/regions
 export const listMachineTypes = async (zone) => (await restJson("GET", `${base()}/zones/${e(zone)}/machineTypes`)).items || [];
 
 // ── instances ─────────────────────────────────────────────────────────────────
+// Nano with in-browser VMs on: a record the store calls RUNNING is only running once its v86 VM booted (PROVISIONING -> RUNNING animates).
+const nanoVm = (i) => (i && i.status === "RUNNING" ? { ...i, status: vmShownState("gcp", i.name, "RUNNING", { running: "RUNNING", pending: "PROVISIONING", stopped: "TERMINATED" }) } : i);
 export async function listInstancesAllZones() {
   const r = await restJson("GET", `${base()}/aggregated/instances`);
-  return Object.entries(r.items || {}).flatMap(([scope, v]) => (v.instances || []).map((i) => ({ ...i, _zoneScope: scope.replace("zones/", "") })));
+  return Object.entries(r.items || {}).flatMap(([scope, v]) => (v.instances || []).map((i) => nanoVm({ ...i, _zoneScope: scope.replace("zones/", "") })));
 }
-export const listInstances = async (zone) => (await restJson("GET", `${base()}/zones/${e(zone)}/instances`)).items || [];
-export const getInstance = (zone, name) => restJson("GET", `${base()}/zones/${e(zone)}/instances/${e(name)}`);
+export const listInstances = async (zone) => ((await restJson("GET", `${base()}/zones/${e(zone)}/instances`)).items || []).map(nanoVm);
+export const getInstance = async (zone, name) => nanoVm(await restJson("GET", `${base()}/zones/${e(zone)}/instances/${e(name)}`));
 export const insertInstance = (zone, body) => restJson("POST", `${base()}/zones/${e(zone)}/instances`, { body });
 export const deleteInstance = (zone, name) => restJson("DELETE", `${base()}/zones/${e(zone)}/instances/${e(name)}`);
 export const instanceAction = (zone, name, action) => restJson("POST", `${base()}/zones/${e(zone)}/instances/${e(name)}:${action}`, { body: {} });

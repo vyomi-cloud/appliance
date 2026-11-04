@@ -4,7 +4,9 @@ import { useEffect, useState } from "react";
 
 const KEY = "vyomi.v4.gcp.project";
 const LIST = "vyomi.v4.gcp.projects";
-export const DEFAULT_PROJECT = "vyomi-project";
+// Nano has one fixed project (core/gcp_project.NANO_PROJECT); the wire refuses any other id, so the console must default to it there.
+const NANO = typeof document !== "undefined" && document.querySelector('meta[name="vyomi-substrate"]')?.content === "nano";
+export const DEFAULT_PROJECT = NANO ? "nano-project" : "vyomi-project";
 
 const read = (k, d) => { try { return localStorage.getItem(k) || d; } catch { return d; } };
 const write = (k, v) => { try { localStorage.setItem(k, v); } catch {} };

@@ -21,6 +21,7 @@ import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { Link } from "../../link.jsx";
 import { useProject } from "../../project.js";
 import * as api from "./api.js";
+import { isNano, pendingAttr, useNanoVmRefresh } from "../../../common/NanoVmPanel.jsx";
 import { InstanceSchedules, RecommendationsTable } from "./Ext.jsx";
 
 function TabPanel({ value, name, children }) {
@@ -35,7 +36,8 @@ export default function VmInstances() {
   const [del, setDel] = useState(false);
   const [menu, setMenu] = useState(null);
   const [importOpen, setImportOpen] = useState(false);
-  const { data = [], loading, error, reload } = useAsync(() => api.listInstancesAllZones(), [project]);
+  const { data = [], loading, error, reload, refresh } = useAsync(() => api.listInstancesAllZones(), [project]);
+  useNanoVmRefresh(refresh, data.some((i) => i.status === "PROVISIONING" || i.status === "STAGING"));
   const { data: ops = [], loading: opsLoading } = useAsync(() => api.listOperations(), [project]);
   const instanceOps = ops.filter((o) => (o.targetLink || "").includes("/instances/"));
 
@@ -84,7 +86,7 @@ export default function VmInstances() {
           rowKey={(i) => `${i._zoneScope}/${i.name}`}
           filterPlaceholder="Enter property name or value"
           columns={[
-            { id: "status", header: "Status", sortField: "status", cell: (i) => <Chip size="small" color={api.statusChipColor(i.status)} label={i.status} /> },
+            { id: "status", header: "Status", sortField: "status", cell: (i) => <span {...pendingAttr(i.status === "PROVISIONING" || i.status === "STAGING", "spin")}><Chip size="small" color={api.statusChipColor(i.status)} label={i.status} /></span> },
             { id: "name", header: "Name", sortField: "name", cell: (i) => <Link href={`#/compute/instances/${i._zoneScope}/${i.name}`}>{i.name}</Link> },
             { id: "zone", header: "Zone", sortField: "_zoneScope", cell: (i) => i._zoneScope },
             { id: "rec", header: "Recommendations", cell: () => "—" },
@@ -93,7 +95,9 @@ export default function VmInstances() {
             { id: "external", header: "External IP", cell: (i) => api.externalIpOf(i) },
             {
               id: "connect", header: "Connect",
-              cell: (i) => i.status === "RUNNING"
+              cell: (i) => i.status === "RUNNING" && isNano()
+                ? <Button size="small" href={`#/compute/instances/${i._zoneScope}/${i.name}`}>SSH</Button>
+                : i.status === "RUNNING"
                 ? <NotSimulated compact feature="SSH" note="No guest OS runs behind this instance." />
                 : <Typography variant="body2" color="text.secondary">—</Typography>,
             },

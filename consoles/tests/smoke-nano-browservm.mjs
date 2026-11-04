@@ -40,7 +40,7 @@ const A = {
     pending: (page) => page.locator('[data-vy-pending]').first(),
   },
 };
-const wjson = (path, method, body) => page.evaluate(async ([u, m, b]) => { const r = await fetch(u, { method: m, headers: { "content-type": "application/json" }, body: b ? JSON.stringify(b) : undefined }); const t = await r.text(); let j = null; try { j = JSON.parse(t); } catch {} return { status: r.status, body: j, text: t.slice(0, 300) }; }, [WIRE + path, method, body]);
+const wjson = (path, method, body) => page.evaluate(async ([u, m, b]) => { const r = await fetch(u, { method: m, headers: { "content-type": "application/json" }, body: b ? JSON.stringify(b) : undefined }); const t = await r.text(); let j = null; try { j = JSON.parse(t); } catch {} return { status: r.status, body: j, text: t.slice(0, 900) }; }, [WIRE + path, method, body]);
 const SUB = "00000000-0000-0000-0000-cloudlearn01";
 A.azure = {
   home: "#/",
@@ -62,11 +62,10 @@ A.azure = {
 A.gcp = {
   home: "#/",
   async create() {
-    const project = await page.evaluate(() => { try { return localStorage.getItem("vyomi.v4.gcp.project") || "vyomi-project"; } catch { return "vyomi-project"; } });
+    await page.getByRole("heading", { name: "Welcome" }).waitFor({ timeout: 120000 });
+    const project = "nano-project";   // Nano's one project (core/gcp_project.NANO_PROJECT)
     const name = `vm-${Date.now() % 100000}`, zone = "us-central1-a";
-    const r = await wjson(`/compute/v1/projects/${project}/zones/${zone}/instances`, "POST", { name, machineType: `zones/${zone}/machineTypes/e2-micro`,
-      disks: [{ boot: true, autoDelete: true, initializeParams: { sourceImage: "projects/debian-cloud/global/images/family/debian-12", diskSizeGb: "10" } }],
-      networkInterfaces: [{ network: "global/networks/default" }] });
+    const r = await wjson(`/compute/v1/projects/${project}/zones/${zone}/instances`, "POST", { name, machineType: "e2-medium", disks: [{ boot: true, initializeParams: { diskSizeGb: "10" } }] });
     if (r.status >= 300) throw new Error("create instance failed: " + r.text);
     this.zone = zone; return name;
   },
