@@ -5,7 +5,8 @@ import AddIcon from "@mui/icons-material/esm/Add.js";
 import ListIcon from "@mui/icons-material/esm/List.js";
 import RefreshIcon from "@mui/icons-material/esm/Refresh.js";
 import { useAsync } from "../../../common/useAsync.js";
-import { NotSimulatedContainer, PageHeader, Section } from "../../kit/common.jsx";
+import { PageHeader, Section } from "../../kit/common.jsx";
+import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { useProject } from "../../project.js";
 import * as api from "./api.js";
 
@@ -33,7 +34,7 @@ export default function Overview() {
         <Button startIcon={<RefreshIcon />} onClick={reload}>Refresh</Button>
       </>} />
       <Stack spacing={2}>
-        <NotSimulatedContainer title="Google Cloud incidents" feature="Google Cloud incidents" note="Vyomi is a simulator with no real Google Cloud status feed to report." />
+        <CapabilityContainer id="gcp.compute.incidents" title="Google Cloud incidents" />
         <Section title="Resource footprint">
           {error ? <Typography color="error" variant="body2">{error.message}</Typography> : (
             <Stack useFlexGap direction="row" spacing={2} flexWrap="wrap">

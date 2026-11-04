@@ -133,7 +133,7 @@ def _gcp_service(path):
         # anything with a sub-resource after the project id is Cloud Monitoring
         # (alertPolicies, metricDescriptors, timeSeries, …).
         return "gcp-monitoring" if m.group(1) else "gcp-resourcemanager"
-    if path.startswith(("/v3/tagKeys", "/v3/tagValues", "/v3/tagBindings")):
+    if path.startswith(("/v3/tagKeys", "/v3/tagValues", "/v3/tagBindings", "/v3/folders")):
         return "gcp-resourcemanager"
     # Deny policies (IAM Deny API): /v2/policies/{attachmentPoint}/denypolicies[/…]
     if re.match(r"^/v2/policies/[^/]+/denypolicies(/.*)?$", path):
@@ -163,6 +163,8 @@ def _gcp_service(path):
         return "gcp-resourcemanager"
     if path.startswith("/v1/locations/global/workforcePools"):
         return "gcp-resourcemanager"
+    if re.match(r"^/v1/projects/[^/]+/locations/[^/]+/(reportConfigs|reportDetails)([/:?]|$)", path):
+        return "gcp-gcs"   # storageinsights.googleapis.com inventory reports (core/gcp_storageinsights_core via gcp_storage_core)
     if re.match(r"^/v1/projects/[^/]+/locations/global/connectivityTests([/:?]|$)", path):
         return "gcp-compute"   # Network Intelligence Center Connectivity Tests → netsim via the VPC core
     if re.search(r"^/v1/projects/[^/]+/locations/[^/]+/internalRanges([/:?]|$)", path):
@@ -1159,6 +1161,8 @@ class AwsWireRouter:
             elif svc == "gcp-cloudsql":   # instances.export/import read/write the simulator's GCS objects
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), gcs_store=self.gcs)
             elif svc == "gcp-firestore":   # exportDocuments/importDocuments read/write real GCS objects
+                r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), gcs_store=self.gcs)
+            elif svc == "gcp-compute-vm":   # image import (rawDisk) / export read+write the simulator's GCS objects
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), gcs_store=self.gcs)
             elif svc == "gcp-compute":   # Connectivity Tests evaluate against the VMs too
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), vm_store=self.gcp_compute_vm)

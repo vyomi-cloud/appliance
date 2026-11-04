@@ -11,7 +11,7 @@ import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import ResourceTable from "../../kit/ResourceTable.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
-import { ErrorAlert, fmtBytes, fmtDate, NotSimulated, PageHeader } from "../../kit/common.jsx";
+import { ErrorAlert, fmtBytes, fmtDate, PageHeader } from "../../kit/common.jsx";
 import { useProject } from "../../project.js";
 import * as api from "./api.js";
 
@@ -71,6 +71,83 @@ function CreateImageDialog({ open, onClose, onCreated }) {
   );
 }
 
+function ImportImageDialog({ open, onClose, onDone }) {
+  const [name, setName] = useState("");
+  const [src, setSrc] = useState("gs://");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const submit = async () => {
+    setBusy(true); setError(null);
+    try { await api.importImage(name, src); onDone(`Imported image "${name}"`); setName(""); setSrc("gs://"); onClose(); }
+    catch (e) { setError(e); } finally { setBusy(false); }
+  };
+  return (
+    <Dialog open={open} onClose={busy ? undefined : onClose} maxWidth="sm" fullWidth aria-labelledby="imp-title">
+      <DialogTitle id="imp-title">Import image</DialogTitle>
+      <DialogContent>
+        <Stack spacing={2} sx={{ pt: 1 }}>
+          <ErrorAlert error={error} title="Failed to import image" />
+          <TextField label="Source (Cloud Storage .tar.gz containing disk.raw)" value={src} onChange={(e) => setSrc(e.target.value.trim())} inputProps={{ "aria-label": "Import source" }} />
+          <TextField label="Image name" value={name} onChange={(e) => setName(e.target.value.trim())} error={!!name && !!api.validResourceName(name)} helperText={name ? api.validResourceName(name) || " " : " "} inputProps={{ "aria-label": "Imported image name" }} />
+        </Stack>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2 }}>
+        <Button onClick={onClose} disabled={busy}>Cancel</Button>
+        <Button variant="contained" disabled={busy || !name || !!api.validResourceName(name) || src.length < 8} onClick={submit}>{busy ? "Importing…" : "Import"}</Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+function ExportImageDialog({ image, onClose, onDone }) {
+  const [dest, setDest] = useState("gs://");
+  const [fmt, setFmt] = useState("raw");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const submit = async () => {
+    setBusy(true); setError(null);
+    try { await api.exportImage(image, dest, fmt); onDone(`Exported image "${image}"`); onClose(); }
+    catch (e) { setError(e); } finally { setBusy(false); }
+  };
+  return (
+    <Dialog open onClose={busy ? undefined : onClose} maxWidth="sm" fullWidth aria-labelledby="exp-title">
+      <DialogTitle id="exp-title">Export image {image}</DialogTitle>
+      <DialogContent>
+        <Stack spacing={2} sx={{ pt: 1 }}>
+          <ErrorAlert error={error} title="Failed to export image" />
+          <TextField label="Destination (gs://bucket/file.tar.gz)" value={dest} onChange={(e) => setDest(e.target.value.trim())} inputProps={{ "aria-label": "Export destination" }} />
+          <FormControl fullWidth>
+            <InputLabel id="exp-fmt">Format</InputLabel>
+            <Select labelId="exp-fmt" label="Format" value={fmt} onChange={(e) => setFmt(e.target.value)}>
+              {["raw", "vmdk", "vpc", "vhdx", "vdi", "qcow2"].map((f) => <MenuItem key={f} value={f}>{f}</MenuItem>)}
+            </Select>
+          </FormControl>
+        </Stack>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2 }}>
+        <Button onClick={onClose} disabled={busy}>Cancel</Button>
+        <Button variant="contained" disabled={busy || dest.length < 8} onClick={submit}>{busy ? "Exporting…" : "Export"}</Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+function JobHistory({ kind }) {
+  const { data = [], loading, error, reload } = useAsync(() => api.listImageJobs(kind), [kind]);
+  return (
+    <ResourceTable resourceName={`image ${kind}s`} items={data} rowKey={(j) => j.id} loading={loading} error={error} onRetry={reload}
+      filterPlaceholder="Filter history"
+      columns={[
+        { id: "status", header: "Status", sortField: "status", cell: (j) => j.status },
+        { id: "image", header: "Image", sortField: "image", cell: (j) => j.image },
+        { id: "uri", header: kind === "import" ? "Source" : "Destination", cell: (j) => j.uri },
+        { id: "started", header: "Started", sortField: "startTime", cell: (j) => fmtDate(j.startTime) },
+        { id: "error", header: "Error", cell: (j) => j.error || "—" },
+      ]}
+      empty={<Typography variant="body2" color="text.secondary">No image {kind}s have been run in this project.</Typography>} />
+  );
+}
+
 export default function Images() {
   const notify = useNotify();
   const project = useProject();
@@ -78,12 +155,16 @@ export default function Images() {
   const [sel, setSel] = useState([]);
   const [del, setDel] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [exportName, setExportName] = useState(null);
   const { data = [], loading, error, reload } = useAsync(() => api.listImages(), [project]);
 
   return (
     <>
       <PageHeader title="Images" actions={<>
         <Button startIcon={<AddIcon />} onClick={() => setCreateOpen(true)}>Create image</Button>
+        <Button onClick={() => setImportOpen(true)}>Import image</Button>
+        <Button disabled={sel.length !== 1} onClick={() => setExportName(sel[0])}>Export image</Button>
         <Button startIcon={<RefreshIcon />} onClick={reload}>Refresh</Button>
         <Button startIcon={<DeleteIcon />} disabled={!sel.length} onClick={() => setDel(true)}>Delete</Button>
       </>} />
@@ -122,12 +203,14 @@ export default function Images() {
         />
       </TabPanel>
       <TabPanel value={tab} name="import">
-        <NotSimulated feature="Image import history" note="Importing VM images from external sources isn't modeled." />
+        <JobHistory kind="import" key={`i${tab}${importOpen}${data.length}`} />
       </TabPanel>
       <TabPanel value={tab} name="export">
-        <NotSimulated feature="Image export history" note="Exporting images isn't modeled." />
+        <JobHistory kind="export" key={`e${tab}${exportName}`} />
       </TabPanel>
 
+      <ImportImageDialog open={importOpen} onClose={() => setImportOpen(false)} onDone={(m) => { notify.success(m); reload(); }} />
+      {exportName && <ExportImageDialog image={exportName} onClose={() => setExportName(null)} onDone={(m) => notify.success(m)} />}
       <CreateImageDialog
         open={createOpen}
         onClose={() => setCreateOpen(false)}

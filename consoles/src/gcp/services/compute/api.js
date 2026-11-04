@@ -237,3 +237,11 @@ export async function listRecommendations() {
 }
 export const markRecommendation = (rec, verb) =>
   restJson("POST", `/v1/${rec.name}:${verb}`, { body: { etag: rec.etag } });
+
+// ── image import / export (rawDisk images.insert from GCS; export + history are Vyomi collections — see gcp_compute_instances_core) ──
+export const importImage = (name, source, family) => restJson("POST", `${base()}/global/images`, { body: { name, rawDisk: { source }, ...(family ? { family } : {}) } });
+export const exportImage = (name, destinationUri, format) => restJson("POST", `${base()}/global/images/${e(name)}:export`, { body: { destinationUri, format } });
+export async function listImageJobs(kind) {
+  const r = await restJson("GET", `${base()}/global/imageJobs`);
+  return (r.items || []).filter((j) => !kind || j.kind === kind);
+}

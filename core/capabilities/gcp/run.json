@@ -392,5 +392,15 @@
   "tests": [
    "tests/conformance/test_gcp_run_ext.py"
   ]
- }
+ },
+  "gcp.run.gpu": {
+    "title": "GPU for Cloud Run services and jobs (NVIDIA L4)",
+    "level": {
+      "nano": "not_simulated",
+      "offline": "not_simulated"
+    },
+    "limitations": [
+      "Cloud Run GPUs attach NVIDIA L4 hardware to a container instance; Vyomi runs containers on the host Docker engine with no GPU passthrough or scheduler."
+    ]
+  }
 }

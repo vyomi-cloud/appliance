@@ -176,9 +176,9 @@
   "title": "Asset Inventory",
   "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "searchAllResources indexes what Vyomi's IAM & Resource Manager cores actually model for this project — service accounts, custom roles, workload identity pools, the project itself and its tag keys — live, from current state. It does not index resources from other GCP services (storage buckets, Pub/Sub topics, …) or keep Cloud Asset Inventory's change-history feed."
+   "searchAllResources indexes what Vyomi's IAM & Resource Manager cores actually model for this project — service accounts, custom roles, workload identity pools, the project itself, its folders and tag keys — live, from current state, and supports the real search query language: field:value / field=value / comparison operators, AND / OR / NOT / '-' negation, parentheses, wildcards, quoted values, labels.<key>, plus assetTypes (wildcards), orderBy and pageSize / pageToken. It does not index resources from other GCP services (storage buckets, Pub/Sub topics, …), has no analyzeIamPolicy / BigQuery-SQL queryAssets, and keeps no change-history feed."
   ],
-  "tests": ["tests/conformance/test_gcp_iam_core.py"]
+  "tests": ["tests/conformance/test_gcp_iam_core.py", "tests/conformance/test_gcp_asset_query.py"]
  },
  "gcp.iam-admin.security-insights": {
   "title": "Security Insights",
