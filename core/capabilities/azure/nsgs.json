@@ -6,6 +6,12 @@
   "limitations": [],
   "tests": ["tests/conformance/test_azure_arm_core.py"]
  },
+ "azure.nsgs.flow_logs": {
+  "title": "NSG flow logs",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["Flow logs are real Microsoft.Network/networkWatchers/{nw}/flowLogs resources (target NSG or vnet and storage account must exist, same region as the watcher, retention 0-365, version 1|2, one flow log per target, Traffic Analytics needs an existing workspace). Configuration only: no flow tuples are written to the storage account, because the simulator has no packet-level data plane to observe; Traffic Analytics produces no data. Note that real Azure retired NSG flow logs for new creation in June 2025 in favour of virtual network flow logs, which this engine also accepts."],
+  "tests": ["tests/conformance/test_azure_netsvc_core.py"]
+ },
  "azure.nsgs.tags": {
   "title": "Tags",
   "level": { "nano": "full", "offline": "full" },
