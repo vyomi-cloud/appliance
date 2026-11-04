@@ -89,13 +89,15 @@ export const GROUPS = {
   "Microsoft.DocumentDB/databaseAccounts": ["Sql", "MongoDB", "Cassandra", "Gremlin", "Table"],
   "Microsoft.ContainerRegistry/registries": ["registry"],
   "Microsoft.Cache/redis": ["redisCache"],
+  "Microsoft.AppConfiguration/configurationStores": ["configurationStores"],
+  "Microsoft.CognitiveServices/accounts": ["account"],
 };
 export async function listTargets() {
   const out = [];
   for (const type of Object.keys(GROUPS)) {
     try {
       const [ns, t] = type.split("/");
-      const api = { "Microsoft.Storage": "2023-01-01", "Microsoft.KeyVault": "2023-07-01", "Microsoft.Sql": "2023-05-01-preview", "Microsoft.DocumentDB": "2024-05-15", "Microsoft.ContainerRegistry": "2023-07-01", "Microsoft.Cache": "2024-03-01" }[ns];
+      const api = { "Microsoft.Storage": "2023-01-01", "Microsoft.KeyVault": "2023-07-01", "Microsoft.Sql": "2023-05-01-preview", "Microsoft.DocumentDB": "2024-05-15", "Microsoft.ContainerRegistry": "2023-07-01", "Microsoft.Cache": "2024-03-01", "Microsoft.AppConfiguration": "2023-03-01", "Microsoft.CognitiveServices": "2023-05-01" }[ns];
       const rows = (await restJson("GET", `${sub()}/providers/${ns}/${t}`, { query: { "api-version": api } })).value || [];
       rows.forEach((r) => out.push({ id: r.id, name: r.name, type }));
     } catch { /* type not present */ }

@@ -26,6 +26,7 @@ import { Essentials, ErrorBar, Glyph, KV, Loading, NotSimulated, NotSimulatedCon
 import ResourceIam from "../../kit/ResourceIam.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { remember, forget } from "../../kit/recent.js";
+import { PrivateEndpointConnectionsPanel } from "../../kit/PrivateEndpoints.jsx";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
 import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
@@ -612,6 +613,9 @@ function Networking({ a, reload }) {
         <Radio value="all" label="Allow public access from all networks" />
         <Radio value="disabled" label="Disable public access" />
       </RadioGroup>
+      <div style={{ marginTop: 24 }}>
+        <PrivateEndpointConnectionsPanel title="Private access" target={{ id: a.id, name: a.name, type: "Microsoft.AppConfiguration/configurationStores", location: a.location }} />
+      </div>
     </CapabilityContainer>
   );
 }
