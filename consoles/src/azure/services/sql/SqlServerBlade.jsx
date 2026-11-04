@@ -13,6 +13,7 @@ import BrowseGrid from "../../kit/BrowseGrid.jsx";
 import ResourceBlade from "../../kit/ResourceBlade.jsx";
 import { Essentials, ErrorBar, Glyph, Loading, NotSimulatedContainer } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
+import { PrivateEndpointConnectionsPanel, PeWizardSection, usePeWizard } from "../../kit/PrivateEndpoints.jsx";
 import * as api from "./api.js";
 
 export const MENU = [{ id: "overview", label: "Overview" }, { id: "networking", label: "Networking" }];
@@ -127,7 +128,7 @@ function Networking({ a }) {
           </section>
         </div>
       )}
-      {tab === "private" && <NotSimulatedContainer title="Private endpoint connections" feature="Private endpoint connections for a SQL server" />}
+      {tab === "private" && <PrivateEndpointConnectionsPanel target={{ id: a.id, name: a.name, type: "Microsoft.Sql/servers", location: a.location }} />}
       {tab === "connectivity" && <ConnectionPolicy serverId={a.id} />}
 
       <AddFirewallRuleDialog open={!!add} client={add === "client"} onClose={() => setAdd(false)}

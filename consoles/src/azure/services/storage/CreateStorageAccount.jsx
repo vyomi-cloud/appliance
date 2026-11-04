@@ -16,8 +16,10 @@ const NAME_RE = /^[a-z0-9]{3,24}$/;
 const RG_RE = /^[-\w._()]{1,90}$/;
 const ENFORCEMENT = "Saved on the storage account resource (ARM) and returned to your SDKs and the az CLI. The Vyomi Blob data plane does not enforce these settings.";
 
+import { PeWizardSection, usePeWizard } from "../../kit/PrivateEndpoints.jsx";
 export default function CreateStorageAccount() {
   const notify = useNotify();
+  const pe = usePeWizard("Microsoft.Storage/storageAccounts");
   const sub = useSubscription();
   const rgs = useAsync(() => listResourceGroups(), [sub.id]);
   const existing = useAsync(() => api.listStorageAccounts(), [sub.id]);
@@ -171,7 +173,7 @@ export default function CreateStorageAccount() {
         )}
       </FormSection>
       {f.networkAccess === "selected" && <NotSimulatedContainer title="Virtual networks" feature="Virtual network and IP address rules for storage accounts" />}
-      <NotSimulatedContainer title="Private endpoint" feature="Private endpoints for storage accounts" />
+      <PeWizardSection pe={pe} />
       <FormSection title="Network routing" description="Determine how to route your traffic as it travels from the source to its Azure endpoint.">
         <FormRow label="Routing preference">
           <RadioGroup value={f.routing} onChange={set("routing")} aria-label="Routing preference">
@@ -266,8 +268,9 @@ export default function CreateStorageAccount() {
 
   const onCreate = async () => {
     try {
-      await api.createStorageAccount(rg, f.name, body());
+      const created = await api.createStorageAccount(rg, f.name, body());
       await api.putBlobServiceProperties(rg, f.name, api.blobServiceFromWizard(f));
+      await pe.deploy({ id: created.id, name: f.name });
       notify.success(`Deployment of storage account '${f.name}' to resource group '${rg}' was successful.`, "Deployment succeeded");
       navigate("storage", rg, f.name);
     } catch (e) { notify.error(e, "Deployment failed"); }

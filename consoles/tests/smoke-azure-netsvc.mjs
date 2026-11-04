@@ -96,6 +96,24 @@ try {
   check("plan tracks the protected vnet", (plan.properties?.virtualNetworks || []).length === 1);
   await noNS("vnet DDoS");
 
+  // ── Target-side Private endpoint connections tab (storage) ──
+  await NV("PUT", net("privateEndpoints/pem" + n), { location: "eastus", properties: { subnet: { id: `${vid}/subnets/default` },
+    manualPrivateLinkServiceConnections: [{ name: "c", properties: { privateLinkServiceId: `/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Storage/storageAccounts/${SA}`, groupIds: ["file"], requestMessage: "pls" } }] } });
+  await page.goto(UI + `#/storage/${RG}/${SA}/networking`);
+  await page.getByRole("tab", { name: "Private access" }).click();
+  await page.locator("tr", { hasText: `pem${n}` }).waitFor({ timeout: 15000 });
+  check("target tab lists the Pending manual connection", /Pending/.test(await page.locator("tr", { hasText: `pem${n}` }).innerText()));
+  await page.getByRole("button", { name: new RegExp(`Approve pem${n}`) }).click();
+  await page.locator("tr", { hasText: `pem${n}` }).getByRole("cell", { name: "Approved", exact: true }).waitFor({ timeout: 10000 });
+  const pem = json(await NV("GET", net(`privateEndpoints/pem${n}`)));
+  check("UI approval flows back to the endpoint", pem.properties?.manualPrivateLinkServiceConnections?.[0]?.properties?.privateLinkServiceConnectionState?.status === "Approved");
+  await noNS("storage Private access", ["Exceptions", "Virtual networks"]);
+  // wizard section
+  await page.goto(UI + "#/keyvaults/create");
+  await page.getByRole("tab", { name: "Networking", exact: true }).click();
+  await page.getByLabel("Add a private endpoint").check();
+  check("Key Vault wizard offers a real private endpoint section", await page.getByLabel("Private endpoint target sub-resource").isVisible());
+
   // ── NSG flow logs ──
   await page.goto(UI + `#/nsgs/${RG}/nsg${n}/flowlogs`);
   await page.getByRole("button", { name: "Create", exact: true }).click();

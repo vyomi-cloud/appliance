@@ -18,6 +18,7 @@ import DeleteDialog from "../../kit/DeleteDialog.jsx";
 import ResourceBlade from "../../kit/ResourceBlade.jsx";
 import { Essentials, ErrorBar, Glyph, KV, Loading, NotSimulated, NotSimulatedContainer, downloadCsv, fmtDate } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
+import { PrivateEndpointConnectionsPanel, PeWizardSection, usePeWizard } from "../../kit/PrivateEndpoints.jsx";
 import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
@@ -936,7 +937,7 @@ function Networking({ a, reload }) {
           </RadioGroup>
         </CapabilityContainer>
       )}
-      {tab === "private" && <NotSimulatedContainer title="Private endpoint connections" feature="Private endpoint connections for key vaults" />}
+      {tab === "private" && <PrivateEndpointConnectionsPanel target={{ id: a.id, name: a.name, type: "Microsoft.KeyVault/vaults", location: a.location }} />}
     </>
   );
 }
