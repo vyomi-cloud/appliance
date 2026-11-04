@@ -14,7 +14,7 @@ const page = await browser.newPage({ viewport: { width: 1440, height: 1300 } });
 const errors = [];
 page.on("pageerror", (e) => errors.push(e.message));
 const wj = (path, init) => page.evaluate(async ([u, i]) => { const r = await fetch(u, i); const t = await r.text(); return { status: r.status, text: t }; }, [WIRE + path, init]);
-const P = "vyomi-project";
+const P = process.env.NANO === "1" ? "nano-project" : "vyomi-project";
 const D = `/v1/projects/${P}/databases/(default)/documents`;
 const jwt = (uid) => { const b = (o) => Buffer.from(JSON.stringify(o)).toString("base64url"); return `${b({ alg: "none" })}.${b({ iss: "https://securetoken.google.com/" + P, sub: uid, user_id: uid })}.`; };
 const RULES = `rules_version = '2';\nservice cloud.firestore {\n  match /databases/{database}/documents {\n    match /notes/{id} {\n      allow read, write: if request.auth != null && request.auth.uid == id;\n    }\n  }\n}`;

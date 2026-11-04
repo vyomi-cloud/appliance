@@ -11,7 +11,7 @@ const results = [];
 const check = (name, ok, detail = "") => { results.push({ name, ok }); console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? " - " + String(detail).slice(0, 200) : ""}`); };
 const browser = await pw.chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1440, height: 1300 } });
-const P = "vyomi-project";
+const P = process.env.NANO === "1" ? "nano-project" : "vyomi-project";
 const wj = (path, init) => page.evaluate(async ([u, i]) => { const r = await fetch(u, i); const t = await r.text(); try { return { status: r.status, ...JSON.parse(t || "{}") }; } catch { return { status: r.status, raw: t }; } }, [WIRE + path, init]);
 try {
   await page.goto(UI, { waitUntil: "networkidle" });

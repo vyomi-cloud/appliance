@@ -14,6 +14,7 @@ catch { pw = require("/Users/sudhirganti/Applications/simulator/portal/node_modu
 
 const BASE = process.env.BASE || "http://127.0.0.1:8740";
 const UI = `${BASE}${process.env.UI_PATH || "/v4/gcp/"}`;
+const PROJ = process.env.NANO === "1" ? "nano-project" : "vyomi-project";   // Nano's one project (core/gcp_project.NANO_PROJECT)
 const WIRE = `${BASE}${process.env.WIRE_PATH || "/_wire"}`;
 const OUT = process.env.OUT || "smoke-out-gcp";
 const B = `v4-gcp-smoke-${Date.now() % 100000}`;
@@ -75,7 +76,7 @@ try {
   await shot("03-create-filled");
   await page.getByRole("button", { name: "Create", exact: true }).click();
   await page.getByRole("heading", { name: B }).waitFor({ timeout: 10000 });
-  const list = await wjson("/storage/v1/b?project=vyomi-project");
+  const list = await wjson(`/storage/v1/b?project=${PROJ}`);
   const nb = (list.items || []).find((x) => x.name === B);
   check("create bucket → visible over native wire (buckets.list)", !!nb);
   check("bucket settings applied (location, class, labels, retention, UBLA/PAP)",
@@ -168,10 +169,10 @@ try {
 
   // CMEK: setting a Cloud KMS key via the UI validates the shape and really stamps every
   // object created afterward with it (gcp.storage.encryption — see core/gcp_storage_core.py).
-  const KMS_KEY = "projects/vyomi-project/locations/us-central1/keyRings/smoke-ring/cryptoKeys/smoke-key";
+  const KMS_KEY = `projects/${PROJ}/locations/us-central1/keyRings/smoke-ring/cryptoKeys/smoke-key`;
   // the key has to exist (real GCS validates a CMEK key against Cloud KMS wherever the router wires that check, e.g. Nano)
-  await wire(`/v1/projects/vyomi-project/locations/us-central1/keyRings?keyRingId=smoke-ring`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
-  await wire(`/v1/projects/vyomi-project/locations/us-central1/keyRings/smoke-ring/cryptoKeys?cryptoKeyId=smoke-key`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ purpose: "ENCRYPT_DECRYPT" }) });
+  await wire(`/v1/projects/${PROJ}/locations/us-central1/keyRings?keyRingId=smoke-ring`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+  await wire(`/v1/projects/${PROJ}/locations/us-central1/keyRings/smoke-ring/cryptoKeys?cryptoKeyId=smoke-key`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ purpose: "ENCRYPT_DECRYPT" }) });
   await page.getByRole("button", { name: "Use a Cloud KMS key" }).click();
   await page.getByRole("dialog").getByLabel("Cloud KMS key").fill(KMS_KEY);
   await page.getByRole("dialog").getByRole("button", { name: "Save" }).click();
@@ -206,13 +207,13 @@ try {
   await page.goto(UI + "#/storage/settings");
   await page.getByRole("tab", { name: "Interoperability" }).click();
   await page.getByRole("button", { name: "Create a key for a service account" }).click();
-  const HMAC_SA = `smoke-svc-${Date.now() % 100000}@vyomi-project.iam.gserviceaccount.com`;
+  const HMAC_SA = `smoke-svc-${Date.now() % 100000}@${PROJ}.iam.gserviceaccount.com`;
   await page.getByRole("dialog", { name: "Create a key for a service account" }).getByLabel("Service account").fill(HMAC_SA);
   await page.getByRole("dialog", { name: "Create a key for a service account" }).getByRole("button", { name: "Create" }).click();
   await page.getByRole("heading", { name: "HMAC key created" }).waitFor({ timeout: 10000 });
   await page.getByRole("button", { name: "Done" }).click();
   await page.getByText(HMAC_SA).waitFor({ timeout: 10000 });
-  const hmacKeys = await wjson("/storage/v1/projects/vyomi-project/hmacKeys");
+  const hmacKeys = await wjson(`/storage/v1/projects/${PROJ}/hmacKeys`);
   check("create HMAC key via UI → listed over native wire", (hmacKeys.items || []).some((k) => k.serviceAccountEmail === HMAC_SA && k.state === "ACTIVE"));
   await shot("10b-interoperability-hmac");
 
@@ -224,7 +225,7 @@ try {
   await page.getByRole("radio", { name: "npm" }).check();
   await page.getByRole("button", { name: "Create", exact: true }).click();
   await page.getByText(R, { exact: true }).waitFor({ timeout: 10000 });
-  const repos = await wjson("/v1/projects/vyomi-project/locations/-/repositories");
+  const repos = await wjson(`/v1/projects/${PROJ}/locations/-/repositories`);
   const nr = (repos.repositories || []).find((x) => x.name.endsWith(`/repositories/${R}`));
   check("create repository → visible over native wire (repositories.list, locations/-)", !!nr);
   check("repository format applied", nr?.format === "NPM", JSON.stringify(nr || {}).slice(0, 160));
@@ -244,15 +245,15 @@ try {
   await page.getByLabel("Confirm deletion").fill(R);
   await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
   await page.getByRole("dialog").waitFor({ state: "detached", timeout: 10000 });
-  const reposAfter = await wjson("/v1/projects/vyomi-project/locations/-/repositories");
+  const reposAfter = await wjson(`/v1/projects/${PROJ}/locations/-/repositories`);
   check("delete repository via UI → gone over native wire", !(reposAfter.repositories || []).some((x) => x.name.endsWith(`/repositories/${R}`)));
 
   // Cleanup policies are ENFORCED, not just stored: an unconditional "Delete artifacts"
   // policy added via the Edit dialog deletes a pushed version immediately.
   const CR = `v4-gcp-ar-cleanup-${Date.now() % 100000}`;
-  await wire(`/v1/projects/vyomi-project/locations/us-central1/repositories?repositoryId=${CR}`,
+  await wire(`/v1/projects/${PROJ}/locations/us-central1/repositories?repositoryId=${CR}`,
     { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ format: "DOCKER" }) });
-  await wire(`/v1/projects/vyomi-project/locations/us-central1/repositories/${CR}:pushSample`,
+  await wire(`/v1/projects/${PROJ}/locations/us-central1/repositories/${CR}:pushSample`,
     { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ image: "cleanup-me", tag: "v1" }) });
   await page.goto(UI + `#/artifacts/repo/us-central1/${CR}`);
   await page.getByRole("link", { name: "cleanup-me" }).waitFor({ timeout: 10000 });
@@ -267,7 +268,7 @@ try {
   await editDialog.getByRole("button", { name: "Save" }).click();
   await editDialog.waitFor({ state: "detached", timeout: 10000 });
   await page.getByText("No images in this repository yet.").waitFor({ timeout: 10000 });
-  const crVersions = await wjson(`/v1/projects/vyomi-project/locations/us-central1/repositories/${CR}/packages/cleanup-me/versions`);
+  const crVersions = await wjson(`/v1/projects/${PROJ}/locations/us-central1/repositories/${CR}/packages/cleanup-me/versions`);
   check("cleanup policy via UI → version actually deleted over native wire", !(crVersions.versions || []).length,
     JSON.stringify(crVersions).slice(0, 160));
   await shot("13b-cleanup-policy-enforced");
@@ -278,9 +279,9 @@ try {
   const VSTD2 = `v4-gcp-ar-vstd2-${Date.now() % 100000}`;
   const VIRT = `v4-gcp-ar-virt-${Date.now() % 100000}`;
   for (const [id, image] of [[VSTD1, "from-std1"], [VSTD2, "from-std2"]]) {
-    await wire(`/v1/projects/vyomi-project/locations/us-central1/repositories?repositoryId=${id}`,
+    await wire(`/v1/projects/${PROJ}/locations/us-central1/repositories?repositoryId=${id}`,
       { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ format: "DOCKER" }) });
-    await wire(`/v1/projects/vyomi-project/locations/us-central1/repositories/${id}:pushSample`,
+    await wire(`/v1/projects/${PROJ}/locations/us-central1/repositories/${id}:pushSample`,
       { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ image, tag: "v1" }) });
   }
   await page.goto(UI + "#/artifacts/create-repo");
@@ -309,7 +310,7 @@ try {
   await page.getByRole("link", { name: "from-std2" }).waitFor({ timeout: 10000 });
   check("virtual repository aggregates both upstreams' images in the UI", true);
   check("virtual repository is read-only: no Push sample button", (await page.getByRole("button", { name: /Push sample/ }).count()) === 0);
-  const virtImages = await wjson(`/v1/projects/vyomi-project/locations/us-central1/repositories/${VIRT}/dockerImages`);
+  const virtImages = await wjson(`/v1/projects/${PROJ}/locations/us-central1/repositories/${VIRT}/dockerImages`);
   const virtNames = (virtImages.dockerImages || []).map((i) => i.name.split("/dockerImages/")[1]);
   check("virtual repository aggregation enforced over native wire (dockerImages)",
     virtNames.some((n) => n.startsWith("from-std1")) && virtNames.some((n) => n.startsWith("from-std2")), JSON.stringify(virtNames));
@@ -319,17 +320,17 @@ try {
   // setIamPolicy over the wire, then prove an update is denied for an ungranted principal
   // and allowed for the one the policy actually grants the repoAdmin role to.
   const PR = `v4-gcp-ar-iam-${Date.now() % 100000}`;
-  await wire(`/v1/projects/vyomi-project/locations/us-central1/repositories?repositoryId=${PR}`,
+  await wire(`/v1/projects/${PROJ}/locations/us-central1/repositories?repositoryId=${PR}`,
     { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ format: "DOCKER" }) });
-  await wire(`/v1/projects/vyomi-project/locations/us-central1/repositories/${PR}:setIamPolicy`, {
+  await wire(`/v1/projects/${PROJ}/locations/us-central1/repositories/${PR}:setIamPolicy`, {
     method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify({ policy: { bindings: [{ role: "roles/artifactregistry.repoAdmin", members: ["user:ar-smoke@example.com"] }] } }),
   });
-  const arDenied = await wire(`/v1/projects/vyomi-project/locations/us-central1/repositories/${PR}?updateMask=description`, {
+  const arDenied = await wire(`/v1/projects/${PROJ}/locations/us-central1/repositories/${PR}?updateMask=description`, {
     method: "PATCH", headers: { "content-type": "application/json", "X-Cloudlearn-Principal": "someone-else@example.com" },
     body: JSON.stringify({ description: "nope" }),
   });
-  const arAllowed = await wire(`/v1/projects/vyomi-project/locations/us-central1/repositories/${PR}?updateMask=description`, {
+  const arAllowed = await wire(`/v1/projects/${PROJ}/locations/us-central1/repositories/${PR}?updateMask=description`, {
     method: "PATCH", headers: { "content-type": "application/json", "X-Cloudlearn-Principal": "ar-smoke@example.com" },
     body: JSON.stringify({ description: "granted" }),
   });
@@ -346,7 +347,7 @@ try {
   }
   await page.getByRole("button", { name: "Enable redirection" }).click();
   await page.getByText("Redirection is enabled for this project.").waitFor({ timeout: 10000 });
-  const settings = await wjson("/v1/projects/vyomi-project/projectSettings");
+  const settings = await wjson(`/v1/projects/${PROJ}/projectSettings`);
   check("settings toggle via UI → native projectSettings shows it", settings.legacyRedirectionState === "REDIRECTION_FROM_GCR_IO_ENABLED");
   await shot("14-artifacts-settings");
   // Cloud Logging: create a log bucket through the UI → visible over the native entries/buckets wire
@@ -355,7 +356,7 @@ try {
   await page.getByLabel("Name").fill(LB);
   await page.getByRole("button", { name: "Create bucket" }).click();
   await page.getByRole("heading", { name: LB }).waitFor({ timeout: 10000 });
-  const buckets = await wjson(`/v2/projects/vyomi-project/locations/-/buckets`);
+  const buckets = await wjson(`/v2/projects/${PROJ}/locations/-/buckets`);
   check("create log bucket via UI → visible over native wire (buckets.list)", (buckets.buckets || []).some((b) => b.name.endsWith(`/${LB}`)));
   await shot("12-log-bucket-details");
 
@@ -363,7 +364,7 @@ try {
   const MSG = `v4 gcp smoke entry ${Date.now() % 100000}`;
   await wire("/v2/entries:write", {
     method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ logName: "projects/vyomi-project/logs/smoke", resource: { type: "global" }, entries: [{ severity: "ERROR", textPayload: MSG }] }),
+    body: JSON.stringify({ logName: `projects/${PROJ}/logs/smoke`, resource: { type: "global" }, entries: [{ severity: "ERROR", textPayload: MSG }] }),
   });
   await page.goto(UI + "#/logs/query");
   await page.getByText(MSG).waitFor({ timeout: 10000 });
@@ -380,7 +381,7 @@ try {
   await page.getByLabel("Build inclusion filter").fill('severity>="ERROR"');
   await page.getByRole("button", { name: "Create sink" }).click();
   await page.getByRole("link", { name: SINK }).waitFor({ timeout: 10000 });
-  const sinks = await wjson(`/v2/projects/vyomi-project/sinks`);
+  const sinks = await wjson(`/v2/projects/${PROJ}/sinks`);
   check("create sink via UI → visible over native wire (sinks.list)", (sinks.sinks || []).some((s) => s.name.endsWith(`/${SINK}`) && s.destination === "storage.googleapis.com/v4-smoke-sink-bucket"));
   await shot("14-log-router");
 
@@ -393,7 +394,7 @@ try {
   await page.getByLabel("Threshold").fill("1");
   await page.getByRole("button", { name: "Create", exact: true }).click();
   await page.getByText(`Created usage alert "${ALERT}"`).waitFor({ timeout: 10000 });
-  const alertPolicies = await wjson(`/v3/projects/vyomi-project/alertPolicies`);
+  const alertPolicies = await wjson(`/v3/projects/${PROJ}/alertPolicies`);
   check("create usage alert via UI → real AlertPolicy over Monitoring's native wire",
     (alertPolicies.alertPolicies || []).some((p) => p.displayName === ALERT && p.conditions?.[0]?.conditionThreshold?.filter?.includes("logging.googleapis.com/byte_count")));
   await page.goto(UI + `#/logs/storage/bucket/${LB}?loc=global`);
@@ -408,13 +409,13 @@ try {
   await page.getByLabel("Name").first().fill(NET);
   await page.getByRole("button", { name: "Create", exact: true }).click();
   await page.getByRole("heading", { name: NET }).waitFor({ timeout: 10000 });
-  const nets = await wjson("/compute/v1/projects/vyomi-project/global/networks");
+  const nets = await wjson(`/compute/v1/projects/${PROJ}/global/networks`);
   check("create VPC network → visible over native wire (networks.list)", (nets.items || []).some((n) => n.name === NET));
   await shot("12-network-created");
 
   // Subnet created over the wire (SDK → UI direction) → shown in the network's Subnets tab
   const SUB = `v4-gcp-sub-${Date.now() % 100000}`;
-  await wire("/compute/v1/projects/vyomi-project/regions/us-central1/subnetworks", {
+  await wire(`/compute/v1/projects/${PROJ}/regions/us-central1/subnetworks`, {
     method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify({ name: SUB, network: NET, ipCidrRange: "10.9.0.0/24" }),
   });
@@ -430,7 +431,7 @@ try {
   await page.getByRole("option", { name: NET }).click();
   await page.getByRole("button", { name: "Create", exact: true }).click();
   await page.getByRole("cell", { name: FW, exact: true }).waitFor({ timeout: 10000 });
-  const fws = await wjson("/compute/v1/projects/vyomi-project/global/firewalls");
+  const fws = await wjson(`/compute/v1/projects/${PROJ}/global/firewalls`);
   check("create firewall rule via UI → visible over native wire (firewalls.list)", (fws.items || []).some((f) => f.name === FW));
   await page.getByRole("checkbox", { name: `Select ${FW}` }).check();
   // .first(): the page now also has a "Delete" action on the Network firewall policies panel below.
@@ -438,12 +439,12 @@ try {
   await page.getByLabel("Confirm deletion").fill(FW);
   await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
   await page.getByRole("dialog").waitFor({ state: "detached", timeout: 10000 });
-  check("delete firewall rule via UI → gone over native wire", (await wire(`/compute/v1/projects/vyomi-project/global/firewalls/${FW}`)).status === 404);
+  check("delete firewall rule via UI → gone over native wire", (await wire(`/compute/v1/projects/${PROJ}/global/firewalls/${FW}`)).status === 404);
   await shot("13-networking");
 
   // VPC network peering: create via the UI → visible over native wire, then remove via the UI
   const NET2 = `v4-gcp-net2-${Date.now() % 100000}`;
-  await wire("/compute/v1/projects/vyomi-project/global/networks", {
+  await wire(`/compute/v1/projects/${PROJ}/global/networks`, {
     method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify({ name: NET2, autoCreateSubnetworks: false }),
   });
@@ -456,14 +457,14 @@ try {
   await page.getByRole("option", { name: NET2 }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Create", exact: true }).click();
   await page.getByRole("cell", { name: PEER, exact: true }).waitFor({ timeout: 10000 });
-  const net1 = await wjson(`/compute/v1/projects/vyomi-project/global/networks/${NET}`);
+  const net1 = await wjson(`/compute/v1/projects/${PROJ}/global/networks/${NET}`);
   check("create VPC peering via UI → visible over native wire (networks.get)", (net1.peerings || []).some((p) => p.name === PEER && p.network.endsWith(`/networks/${NET2}`)));
   await page.getByRole("checkbox", { name: `Select ${PEER}` }).check();
   await page.getByRole("button", { name: "Delete", exact: true }).click();
   await page.getByRole("cell", { name: PEER, exact: true }).waitFor({ state: "detached", timeout: 10000 });
-  const net1b = await wjson(`/compute/v1/projects/vyomi-project/global/networks/${NET}`);
+  const net1b = await wjson(`/compute/v1/projects/${PROJ}/global/networks/${NET}`);
   check("delete VPC peering via UI → gone over native wire", !(net1b.peerings || []).some((p) => p.name === PEER));
-  await wire(`/compute/v1/projects/vyomi-project/global/networks/${NET2}`, { method: "DELETE" });
+  await wire(`/compute/v1/projects/${PROJ}/global/networks/${NET2}`, { method: "DELETE" });
 
   // Delete the subnet (so the network can be deleted) then the network itself, from the UI
   await page.getByRole("tab", { name: "Subnets" }).click();
@@ -474,12 +475,12 @@ try {
   await page.getByLabel("Confirm deletion").fill(NET);
   await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
   await page.getByRole("heading", { name: "VPC networks" }).waitFor({ timeout: 10000 });
-  check("delete VPC network via UI → gone over native wire", (await wire(`/compute/v1/projects/vyomi-project/global/networks/${NET}`)).status === 404);
+  check("delete VPC network via UI → gone over native wire", (await wire(`/compute/v1/projects/${PROJ}/global/networks/${NET}`)).status === 404);
 
   // Internal ranges (networkconnectivity v1): reserve via the UI → visible over native wire,
   // then delete via the UI.
   const NET3 = `v4-gcp-net3-${Date.now() % 100000}`;
-  await wire("/compute/v1/projects/vyomi-project/global/networks", {
+  await wire(`/compute/v1/projects/${PROJ}/global/networks`, {
     method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify({ name: NET3, autoCreateSubnetworks: false }),
   });
@@ -491,7 +492,7 @@ try {
   await page.getByRole("option", { name: NET3 }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Create", exact: true }).click();
   await page.getByRole("cell", { name: IR, exact: true }).waitFor({ timeout: 10000 });
-  const irs = await wjson("/v1/projects/vyomi-project/locations/global/internalRanges");
+  const irs = await wjson(`/v1/projects/${PROJ}/locations/global/internalRanges`);
   check("reserve internal range via UI → visible over native wire (internalRanges.list)",
     (irs.internalRanges || []).some((r) => r.name.endsWith(`/${IR}`) && r.network.endsWith(`/networks/${NET3}`)));
   await page.getByRole("checkbox", { name: `Select ${IR}` }).check();
@@ -499,9 +500,9 @@ try {
   await page.getByLabel("Confirm deletion").fill(IR);
   await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
   await page.getByRole("cell", { name: IR, exact: true }).waitFor({ state: "detached", timeout: 10000 });
-  const irsAfter = await wjson("/v1/projects/vyomi-project/locations/global/internalRanges");
+  const irsAfter = await wjson(`/v1/projects/${PROJ}/locations/global/internalRanges`);
   check("delete internal range via UI → gone over native wire", !(irsAfter.internalRanges || []).some((r) => r.name.endsWith(`/${IR}`)));
-  await wire(`/compute/v1/projects/vyomi-project/global/networks/${NET3}`, { method: "DELETE" });
+  await wire(`/compute/v1/projects/${PROJ}/global/networks/${NET3}`, { method: "DELETE" });
 
   // Shared VPC (XPN): set up this project as a host and attach a service project via the UI.
   const SVC_PROJ = `v4-gcp-svc-${Date.now() % 100000}`;
@@ -511,7 +512,7 @@ try {
   await page.getByLabel("Service project ID").fill(SVC_PROJ);
   await page.getByRole("dialog").getByRole("button", { name: "Attach" }).click();
   await page.getByRole("cell", { name: SVC_PROJ, exact: true }).waitFor({ timeout: 10000 });
-  const xpn = await wjson("/compute/v1/projects/vyomi-project/getXpnResources");
+  const xpn = await wjson(`/compute/v1/projects/${PROJ}/getXpnResources`);
   check("attach service project via UI → visible over native wire (getXpnResources)",
     (xpn.resources || []).some((r) => r.id === SVC_PROJ));
 
@@ -526,7 +527,7 @@ try {
   await page.getByLabel("Port").fill("443");
   await page.getByRole("button", { name: "Create", exact: true }).click();
   await page.getByRole("heading", { name: CT }).waitFor({ timeout: 10000 });
-  const ct = await wjson(`/v1/projects/vyomi-project/locations/global/connectivityTests/${CT}`);
+  const ct = await wjson(`/v1/projects/${PROJ}/locations/global/connectivityTests/${CT}`);
   check("create connectivity test via UI → visible over native wire (connectivityTests.get)",
     ct.source?.ipAddress === "203.0.113.9" && ct.destination?.ipAddress === "203.0.113.10" && ct.destination?.port === 443);
   check("reachability result rendered in the UI matches the native wire result",
@@ -535,7 +536,7 @@ try {
 
   // Connectivity test created over the wire (SDK direction) → shown in the UI list
   const CT2 = `v4-gcp-ct2-${Date.now() % 100000}`;
-  await wire(`/v1/projects/vyomi-project/locations/global/connectivityTests?testId=${CT2}`, {
+  await wire(`/v1/projects/${PROJ}/locations/global/connectivityTests?testId=${CT2}`, {
     method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify({ source: { ipAddress: "10.0.0.5" }, destination: { ipAddress: "10.0.0.6", port: 22 }, protocol: "TCP" }),
   });
@@ -553,8 +554,8 @@ try {
   await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
   await page.waitForURL(/#\/networking\/connectivity-tests\/list$/, { timeout: 10000 });
   check("delete connectivity test via UI → gone over native wire",
-    (await wire(`/v1/projects/vyomi-project/locations/global/connectivityTests/${CT}`)).status === 404);
-  await wire(`/v1/projects/vyomi-project/locations/global/connectivityTests/${CT2}`, { method: "DELETE" });
+    (await wire(`/v1/projects/${PROJ}/locations/global/connectivityTests/${CT}`)).status === 404);
+  await wire(`/v1/projects/${PROJ}/locations/global/connectivityTests/${CT2}`, { method: "DELETE" });
 
   // Compute Engine: create an instance via the UI → visible over the native wire (instances.list)
   const VM = `v4-gcp-smoke-vm-${Date.now() % 100000}`;
@@ -563,7 +564,7 @@ try {
   await shot("12-create-instance-filled");
   await page.getByRole("button", { name: "Create", exact: true }).click();
   await page.getByRole("heading", { name: VM }).waitFor({ timeout: 10000 });
-  const inst = await wjson(`/compute/v1/projects/vyomi-project/zones/us-central1-a/instances/${VM}`);
+  const inst = await wjson(`/compute/v1/projects/${PROJ}/zones/us-central1-a/instances/${VM}`);
   check("create instance via UI → visible over native wire (instances.get)", inst.name === VM && inst.status === "RUNNING");
   await shot("13-instance-detail");
 
@@ -571,7 +572,7 @@ try {
   await page.getByRole("button", { name: "Stop" }).click();
   await page.waitForFunction(
     async (url) => (await (await fetch(url)).json()).status === "TERMINATED",
-    `${WIRE}/compute/v1/projects/vyomi-project/zones/us-central1-a/instances/${VM}`, { timeout: 10000 },
+    `${WIRE}/compute/v1/projects/${PROJ}/zones/us-central1-a/instances/${VM}`, { timeout: 10000 },
   );
   check("stop from instance detail → TERMINATED over native wire", true);
 
@@ -580,7 +581,7 @@ try {
   await page.getByRole("tab", { name: "Serial port output" }).click();
   await page.getByText(`Instance ${VM} created.`).waitFor({ timeout: 10000 });
   await page.getByText(`Instance ${VM} stopped.`).waitFor({ timeout: 10000 });
-  const serial = await wjson(`/compute/v1/projects/vyomi-project/zones/us-central1-a/instances/${VM}/serialPort`);
+  const serial = await wjson(`/compute/v1/projects/${PROJ}/zones/us-central1-a/instances/${VM}/serialPort`);
   check("serial port output tab matches native getSerialPortOutput",
     serial.contents.includes(`Instance ${VM} created.`) && serial.contents.includes(`Instance ${VM} stopped.`));
 
@@ -593,7 +594,7 @@ try {
 
   // Disk created over the wire (SDK direction) → shown in the UI list
   const DISK = `v4-gcp-smoke-disk-${Date.now() % 100000}`;
-  await wire("/compute/v1/projects/vyomi-project/zones/us-central1-a/disks", {
+  await wire(`/compute/v1/projects/${PROJ}/zones/us-central1-a/disks`, {
     method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: DISK, sizeGb: 10 }),
   });
   await page.goto(UI + "#/compute/disks");
@@ -622,10 +623,10 @@ try {
   await page.getByRole("button", { name: "Create", exact: true }).click();
   await page.getByRole("cell", { name: MIG_NAME, exact: true }).waitFor({ timeout: 10000 });
 
-  const migAgg1 = await wjson("/compute/v1/projects/vyomi-project/aggregated/instanceGroupManagers");
+  const migAgg1 = await wjson(`/compute/v1/projects/${PROJ}/aggregated/instanceGroupManagers`);
   const mig1 = Object.values(migAgg1.items || {}).flatMap((v) => v.instanceGroupManagers || []).find((m) => m.name === MIG_NAME);
   check("create managed instance group via UI → visible over native wire (instanceGroupManagers.get)", mig1?.targetSize === 2);
-  const instAgg1 = await wjson("/compute/v1/projects/vyomi-project/aggregated/instances");
+  const instAgg1 = await wjson(`/compute/v1/projects/${PROJ}/aggregated/instances`);
   const migMembers1 = Object.values(instAgg1.items || {}).flatMap((v) => v.instances || []).filter((i) => i.name.startsWith(`${MIG_NAME}-`));
   check("managed group stamped out real instances from the template", migMembers1.length === 2);
   await shot("15-managed-instance-group");
@@ -649,10 +650,10 @@ try {
   await page.getByRole("radio", { name: "All VM instances now (rolling replace)" }).check();
   await page.getByRole("button", { name: "Update", exact: true }).click();
   await page.getByRole("dialog").waitFor({ state: "detached", timeout: 10000 });
-  const migAgg1b = await wjson("/compute/v1/projects/vyomi-project/aggregated/instanceGroupManagers");
+  const migAgg1b = await wjson(`/compute/v1/projects/${PROJ}/aggregated/instanceGroupManagers`);
   const mig1b = Object.values(migAgg1b.items || {}).flatMap((v) => v.instanceGroupManagers || []).find((m) => m.name === MIG_NAME);
   check("change instance template via UI → instanceGroupManagers.get reflects the new template", !!mig1b?.instanceTemplate.endsWith(`/${MIG_TPL2}`));
-  const instAgg1b = await wjson("/compute/v1/projects/vyomi-project/aggregated/instances");
+  const instAgg1b = await wjson(`/compute/v1/projects/${PROJ}/aggregated/instances`);
   const migMembersRolled = Object.values(instAgg1b.items || {}).flatMap((v) => v.instances || []).filter((i) => i.name.startsWith(`${MIG_NAME}-`));
   check("rolling replace via UI → member count unchanged over native wire", migMembersRolled.length === 2);
   check("rolling replace via UI → every member recreated, none of the old names survive",
@@ -663,7 +664,7 @@ try {
   await page.getByLabel("Number of instances").fill("1");
   await page.getByRole("button", { name: "Resize", exact: true }).click();
   await page.getByRole("dialog").waitFor({ state: "detached", timeout: 10000 });
-  const instAgg2 = await wjson("/compute/v1/projects/vyomi-project/aggregated/instances");
+  const instAgg2 = await wjson(`/compute/v1/projects/${PROJ}/aggregated/instances`);
   const migMembers2 = Object.values(instAgg2.items || {}).flatMap((v) => v.instances || []).filter((i) => i.name.startsWith(`${MIG_NAME}-`));
   check("resize via UI → one member instance deleted over native wire", migMembers2.length === 1);
 
@@ -673,8 +674,8 @@ try {
   await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
   await page.getByRole("dialog").waitFor({ state: "detached", timeout: 10000 });
   check("delete managed instance group via UI → gone over native wire",
-    (await wire(`/compute/v1/projects/vyomi-project/zones/us-central1-a/instanceGroupManagers/${MIG_NAME}`)).status === 404);
-  const instAgg3 = await wjson("/compute/v1/projects/vyomi-project/aggregated/instances");
+    (await wire(`/compute/v1/projects/${PROJ}/zones/us-central1-a/instanceGroupManagers/${MIG_NAME}`)).status === 404);
+  const instAgg3 = await wjson(`/compute/v1/projects/${PROJ}/aggregated/instances`);
   check("deleting managed instance group deletes its member instances too",
     !Object.values(instAgg3.items || {}).flatMap((v) => v.instances || []).some((i) => i.name.startsWith(`${MIG_NAME}-`)));
 
@@ -684,7 +685,7 @@ try {
   await page.getByLabel("Confirm deletion").fill(VM);
   await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
   await page.waitForURL(/#\/compute\/instances$/, { timeout: 10000 });
-  check("delete instance via UI → gone over native wire", (await wire(`/compute/v1/projects/vyomi-project/zones/us-central1-a/instances/${VM}`)).status === 404);
+  check("delete instance via UI → gone over native wire", (await wire(`/compute/v1/projects/${PROJ}/zones/us-central1-a/instances/${VM}`)).status === 404);
   // IAM & Admin: grant access via UI → native getIamPolicy shows it; create a service
   // account over the wire → shown in the UI list (both round-trip directions).
   const M = `smoke-${Date.now() % 100000}@example.com`;
@@ -696,17 +697,17 @@ try {
   await page.getByRole("button", { name: "Save" }).click();
   await page.getByPlaceholder("Enter property name or value").first().fill(M);   // a long-lived space has >1 page of principals
   await page.getByText(M).first().waitFor({ timeout: 10000 });
-  const iamPol = await wjson("/v1/projects/vyomi-project:getIamPolicy", { method: "POST", body: "{}" });
+  const iamPol = await wjson(`/v1/projects/${PROJ}:getIamPolicy`, { method: "POST", body: "{}" });
   check("IAM grant access via UI → native getIamPolicy shows binding", (iamPol.bindings || []).some((b) => b.role === "roles/viewer" && b.members.includes(`user:${M}`)));
   await shot("12-iam-allow");
 
   // A run that failed mid-way may have left the "disable service account creation" org
   // policy enforced (it is durable) — clear it first so this run starts from a known state.
-  await wire("/v2/projects/vyomi-project/policies/constraints/iam.disableServiceAccountCreation", { method: "DELETE" });
+  await wire(`/v2/projects/${PROJ}/policies/constraints/iam.disableServiceAccountCreation`, { method: "DELETE" });
   const SA = `smoke-sa-${Date.now() % 100000}`;
-  await wire("/v1/projects/vyomi-project/serviceAccounts", { method: "POST", body: JSON.stringify({ accountId: SA, serviceAccount: { displayName: SA } }) });
+  await wire(`/v1/projects/${PROJ}/serviceAccounts`, { method: "POST", body: JSON.stringify({ accountId: SA, serviceAccount: { displayName: SA } }) });
   await page.goto(UI + "#/iam-admin/serviceaccounts");
-  const SA_EMAIL = `${SA}@vyomi-project.iam.gserviceaccount.com`;
+  const SA_EMAIL = `${SA}@${PROJ}.iam.gserviceaccount.com`;
   await page.getByText(SA_EMAIL).waitFor({ timeout: 10000 });
   check("service account created over wire → shown in UI list", true);
   await shot("13-service-accounts");
@@ -721,14 +722,14 @@ try {
   await page.getByText("Active").first().waitFor({ timeout: 10000 });
   await page.getByRole("tab", { name: "Logs" }).click();
   await page.getByText("Created key").first().waitFor({ timeout: 10000 });
-  const saActivity = await wjson(`/v1/projects/vyomi-project/serviceAccounts/${encodeURIComponent(SA_EMAIL)}/policyActivity`);
+  const saActivity = await wjson(`/v1/projects/${PROJ}/serviceAccounts/${encodeURIComponent(SA_EMAIL)}/policyActivity`);
   check("SA key creation via UI → shown in Logs tab and native per-SA policyActivity",
     (saActivity.activity || []).some((e) => e.action === "CREATE_KEY"));
   await shot("13b-service-account-logs");
 
   // Quotas & System Limits: a real dashboard over current resource counts, not a
   // static page — cross-check the "Service accounts" row against the native wire count.
-  const saCountWire = (await wjson("/v1/projects/vyomi-project/serviceAccounts")).accounts?.length || 0;
+  const saCountWire = (await wjson(`/v1/projects/${PROJ}/serviceAccounts`)).accounts?.length || 0;
   await page.goto(UI + "#/iam-admin/quotas");
   await page.getByRole("row", { name: /Service accounts/ }).getByText(String(saCountWire), { exact: true }).waitFor({ timeout: 10000 });
   check("Quotas & System Limits shows the real service-account count from the native wire", true);
@@ -753,10 +754,10 @@ try {
   check("org policy (disableServiceAccountCreation) enforced via UI → create blocked with a native error", true);
   // Lift it again so later service-account creations in this run (and any later tooling
   // reusing this backend process, e.g. ui-conformance.mjs's own fixtures) aren't blocked.
-  await wire("/v2/projects/vyomi-project/policies/constraints/iam.disableServiceAccountCreation", { method: "DELETE" });
+  await wire(`/v2/projects/${PROJ}/policies/constraints/iam.disableServiceAccountCreation`, { method: "DELETE" });
 
-  const iamPolForAudit = await wjson("/v1/projects/vyomi-project:getIamPolicy", { method: "POST", body: "{}" });
-  await wire("/v1/projects/vyomi-project:setIamPolicy", { method: "POST", body: JSON.stringify({ policy: {
+  const iamPolForAudit = await wjson(`/v1/projects/${PROJ}:getIamPolicy`, { method: "POST", body: "{}" });
+  await wire(`/v1/projects/${PROJ}:setIamPolicy`, { method: "POST", body: JSON.stringify({ policy: {
     ...iamPolForAudit, auditConfigs: [{ service: "iam.googleapis.com", auditLogConfigs: [{ logType: "ADMIN_READ" }] }],
   } }) });
   await page.goto(UI + "#/iam-admin/audit");
@@ -768,10 +769,10 @@ try {
     if (!auditChecked) await page.waitForTimeout(250);
   }
   check("audit config set over native wire → Admin Read checkbox shown checked in UI", auditChecked);
-  const entriesBefore = (await wjson("/v2/entries:list", { method: "POST", body: JSON.stringify({ resourceNames: ["projects/vyomi-project"] }) })).entries || [];
+  const entriesBefore = (await wjson("/v2/entries:list", { method: "POST", body: JSON.stringify({ resourceNames: [`projects/${PROJ}`] }) })).entries || [];
   await page.goto(UI + "#/iam-admin/serviceaccounts");
   await page.getByText(SA_EMAIL).first().waitFor({ timeout: 10000 });
-  const entriesAfter = (await wjson("/v2/entries:list", { method: "POST", body: JSON.stringify({ resourceNames: ["projects/vyomi-project"] }) })).entries || [];
+  const entriesAfter = (await wjson("/v2/entries:list", { method: "POST", body: JSON.stringify({ resourceNames: [`projects/${PROJ}`] }) })).entries || [];
   check("Data Access audit log Admin Read toggle enabled → a real Cloud Logging entry for an iam.googleapis.com read",
     // entries:list is a newest-first page, so counts stop growing once it's full (durable offline
     // state): what proves it is an entry that wasn't there before.
@@ -783,7 +784,7 @@ try {
   // native wire); an entitlement with an approver leaves the grant pending until the
   // Approve grants tab approves it, and revoking removes the binding again.
   const PAM_AUTO = `pam-auto-${Date.now() % 100000}`;
-  await wire(`/v1/projects/vyomi-project/locations/global/entitlements?entitlementId=${PAM_AUTO}`, {
+  await wire(`/v1/projects/${PROJ}/locations/global/entitlements?entitlementId=${PAM_AUTO}`, {
     method: "POST", body: JSON.stringify({ maxRequestDuration: "3600s", privilegedAccess: { gcpIamAccess: { roleBindings: [{ role: "roles/viewer" }] } } }),
   });
   const PAM_REQUESTER = `user:pam-${Date.now() % 100000}@example.com`;
@@ -795,13 +796,13 @@ try {
   await page.getByLabel("Requester").fill(PAM_REQUESTER);
   await page.getByRole("button", { name: "Submit request" }).click();
   await page.getByText(PAM_REQUESTER).first().waitFor({ timeout: 10000 });
-  const pamPolAfterGrant = await wjson("/v1/projects/vyomi-project:getIamPolicy", { method: "POST", body: "{}" });
+  const pamPolAfterGrant = await wjson(`/v1/projects/${PROJ}:getIamPolicy`, { method: "POST", body: "{}" });
   check("PAM request access via UI (auto-approved) → native getIamPolicy shows binding",
     (pamPolAfterGrant.bindings || []).some((b) => b.role === "roles/viewer" && b.members.includes(PAM_REQUESTER)));
   await shot("14-pam-grants");
 
   const PAM_APPROVAL = `pam-approval-${Date.now() % 100000}`;
-  await wire(`/v1/projects/vyomi-project/locations/global/entitlements?entitlementId=${PAM_APPROVAL}`, {
+  await wire(`/v1/projects/${PROJ}/locations/global/entitlements?entitlementId=${PAM_APPROVAL}`, {
     method: "POST",
     body: JSON.stringify({
       maxRequestDuration: "3600s", privilegedAccess: { gcpIamAccess: { roleBindings: [{ role: "roles/editor" }] } },
@@ -817,14 +818,14 @@ try {
   await page.getByLabel("Requester").fill(PAM_REQUESTER2);
   await page.getByRole("button", { name: "Submit request" }).click();
   await page.getByText(PAM_REQUESTER2).first().waitFor({ timeout: 10000 });
-  const pamPolPending = await wjson("/v1/projects/vyomi-project:getIamPolicy", { method: "POST", body: "{}" });
+  const pamPolPending = await wjson(`/v1/projects/${PROJ}:getIamPolicy`, { method: "POST", body: "{}" });
   check("PAM grant awaiting approval → no binding yet", !(pamPolPending.bindings || []).some((b) => b.role === "roles/editor" && b.members.includes(PAM_REQUESTER2)));
 
   await page.getByRole("tab", { name: "Approve grants" }).click();
   await page.getByText(PAM_REQUESTER2).first().waitFor({ timeout: 10000 });
   await page.getByRole("button", { name: "Approve" }).click();
   await page.getByText("No grants awaiting approval").waitFor({ timeout: 10000 });
-  const pamPolApproved = await wjson("/v1/projects/vyomi-project:getIamPolicy", { method: "POST", body: "{}" });
+  const pamPolApproved = await wjson(`/v1/projects/${PROJ}:getIamPolicy`, { method: "POST", body: "{}" });
   check("approve grant via UI → native getIamPolicy shows the binding",
     (pamPolApproved.bindings || []).some((b) => b.role === "roles/editor" && b.members.includes(PAM_REQUESTER2)));
 
@@ -832,7 +833,7 @@ try {
   await page.getByRole("row", { name: new RegExp(PAM_REQUESTER2) }).getByRole("button", { name: "Revoke" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Revoke" }).click();
   await page.waitForTimeout(500);
-  const pamPolRevoked = await wjson("/v1/projects/vyomi-project:getIamPolicy", { method: "POST", body: "{}" });
+  const pamPolRevoked = await wjson(`/v1/projects/${PROJ}:getIamPolicy`, { method: "POST", body: "{}" });
   check("revoke grant via UI → native getIamPolicy drops the binding",
     !(pamPolRevoked.bindings || []).some((b) => b.role === "roles/editor" && b.members.includes(PAM_REQUESTER2)));
   await shot("15-pam-approve-grants");
@@ -847,12 +848,12 @@ try {
   await page.getByRole("button", { name: "Save" }).click();
   await page.getByText("Saved PAM settings").first().waitFor({ timeout: 10000 });
   const PAM_NOJUST = `pam-nojust-${Date.now() % 100000}`;
-  await wire(`/v1/projects/vyomi-project/locations/global/entitlements?entitlementId=${PAM_NOJUST}`,
+  await wire(`/v1/projects/${PROJ}/locations/global/entitlements?entitlementId=${PAM_NOJUST}`,
     { method: "POST", body: JSON.stringify({ maxRequestDuration: "3600s" }) });
-  const noJustRes = await wire(`/v1/projects/vyomi-project/locations/global/entitlements/${PAM_NOJUST}/grants`,
+  const noJustRes = await wire(`/v1/projects/${PROJ}/locations/global/entitlements/${PAM_NOJUST}/grants`,
     { method: "POST", body: JSON.stringify({ requester: "user:nojust@example.com" }) });
   check("PAM Settings 'require justification' saved via UI → native wire rejects a grant with none", noJustRes.status === 400);
-  await wire("/v1/projects/vyomi-project/locations/global/settings", { method: "PATCH", body: JSON.stringify({ requireJustification: false }) });
+  await wire(`/v1/projects/${PROJ}/locations/global/settings`, { method: "PATCH", body: JSON.stringify({ requireJustification: false }) });
 
   // Service account Metrics tab: issuing a credential over the native iamcredentials wire
   // (as the smoke SA created above) shows up as a real request in the UI's Metrics tab.
@@ -888,18 +889,18 @@ try {
   // Principal Access Boundary: create a policy + binding over the wire that narrows a
   // member's access → the UI shows both, and the native testIamPermissions decision
   // reflects the real narrowing (not stored-but-unevaluated config).
-  const orgMeta = await wjson("/v3/projects/vyomi-project");
+  const orgMeta = await wjson(`/v3/projects/${PROJ}`);
   const ORG_NAME = `organizations/${orgMeta.parent.id}`;
   const PAB_ID = `smoke-pab-${Date.now() % 100000}`;
   const pabPolicy = await wjson(`/v3/${ORG_NAME}/locations/global/principalAccessBoundaryPolicies?principalAccessBoundaryPolicyId=${PAB_ID}`,
     { method: "POST", body: JSON.stringify({ displayName: PAB_ID, details: { rules: [{ resources: ["projects/some-other-project"] }] } }) });
   const PAB_MEMBER = `user:pab-${Date.now() % 100000}@example.com`;
-  await wire(`/v1/projects/vyomi-project:setIamPolicy`, { method: "POST", body: JSON.stringify({ policy: { bindings: [{ role: "roles/viewer", members: [PAB_MEMBER] }] } }) });
+  await wire(`/v1/projects/${PROJ}:setIamPolicy`, { method: "POST", body: JSON.stringify({ policy: { bindings: [{ role: "roles/viewer", members: [PAB_MEMBER] }] } }) });
   await wire(`/v3/${ORG_NAME}/locations/global/policyBindings?policyBindingId=${PAB_ID}`,
     { method: "POST", body: JSON.stringify({ policy: pabPolicy.name, target: { principal: PAB_MEMBER } }) });
   await page.goto(UI + "#/iam-admin/principal-access-boundary");
   await page.getByText(PAB_ID).first().waitFor({ timeout: 10000 });
-  const pabDecision = await wjson("/v1/projects/vyomi-project:testIamPermissions",
+  const pabDecision = await wjson(`/v1/projects/${PROJ}:testIamPermissions`,
     { method: "POST", body: JSON.stringify({ permissions: ["resourcemanager.projects.get"], member: PAB_MEMBER }) });
   check("PAB policy+binding created over wire → shown in UI, and REALLY denies the bound member on an out-of-boundary resource",
     (pabDecision.permissions || []).length === 0);
@@ -908,7 +909,7 @@ try {
   // Managed Workload Identities: create via the UI → real certificate issued, visible
   // over the native wire.
   const MWI_POOL = `smoke-mwi-pool-${Date.now() % 100000}`;   // unique: offline state outlives a run
-  await wire(`/v1/projects/vyomi-project/locations/global/workloadIdentityPools?workloadIdentityPoolId=${MWI_POOL}`,
+  await wire(`/v1/projects/${PROJ}/locations/global/workloadIdentityPools?workloadIdentityPoolId=${MWI_POOL}`,
     { method: "POST", body: JSON.stringify({ displayName: MWI_POOL }) });
   await page.goto(UI + "#/iam-admin/managed-workload-identity-pools");
   const MWI_ID = `smoke-mwi-${Date.now() % 100000}`;
@@ -918,22 +919,22 @@ try {
   await page.getByLabel("Managed identity ID").fill(MWI_ID);
   await page.getByRole("button", { name: "Create", exact: true }).click();
   await page.getByText(MWI_ID).first().waitFor({ timeout: 10000 });
-  const mwiWire = await wjson(`/v1/projects/vyomi-project/locations/global/workloadIdentityPools/${MWI_POOL}/managedIdentities`);
+  const mwiWire = await wjson(`/v1/projects/${PROJ}/locations/global/workloadIdentityPools/${MWI_POOL}/managedIdentities`);
   check("create managed identity via UI → visible over native wire with an issued certificate",
     (mwiWire.managedIdentities || []).some((m) => m.name.endsWith(`/${MWI_ID}`) && m.certificates.length === 1));
 
   // Asset Inventory: a service account created over the wire shows up in the UI search.
   const ASSET_SA = `smoke-asset-${Date.now() % 100000}`;
-  await wire("/v1/projects/vyomi-project/serviceAccounts", { method: "POST", body: JSON.stringify({ accountId: ASSET_SA }) });
+  await wire(`/v1/projects/${PROJ}/serviceAccounts`, { method: "POST", body: JSON.stringify({ accountId: ASSET_SA }) });
   await page.goto(UI + "#/iam-admin/asset-inventory");
-  await page.getByText(`${ASSET_SA}@vyomi-project.iam.gserviceaccount.com`).first().waitFor({ timeout: 10000 });
+  await page.getByText(`${ASSET_SA}@${PROJ}.iam.gserviceaccount.com`).first().waitFor({ timeout: 10000 });
   check("service account created over wire → found by Asset Inventory searchAllResources", true);
 
   // Security Insights: a service account with a user-managed key over the wire is really
   // flagged by the UI's live lint — not a canned list.
   const INSIGHT_SA = `smoke-insight-${Date.now() % 100000}`;
-  const insightSa = await wjson("/v1/projects/vyomi-project/serviceAccounts", { method: "POST", body: JSON.stringify({ accountId: INSIGHT_SA }) });
-  await wire(`/v1/projects/vyomi-project/serviceAccounts/${encodeURIComponent(insightSa.email)}/keys`, { method: "POST", body: "{}" });
+  const insightSa = await wjson(`/v1/projects/${PROJ}/serviceAccounts`, { method: "POST", body: JSON.stringify({ accountId: INSIGHT_SA }) });
+  await wire(`/v1/projects/${PROJ}/serviceAccounts/${encodeURIComponent(insightSa.email)}/keys`, { method: "POST", body: "{}" });
   await page.goto(UI + "#/iam-admin/security-insights");
   await page.getByText(new RegExp(insightSa.email)).first().waitFor({ timeout: 10000 });
   check("service account key created over wire → flagged live by Security Insights", true);
@@ -946,13 +947,13 @@ try {
   await page.getByLabel("Resource ID").fill(IAP_ID);
   await page.getByRole("button", { name: "Add", exact: true }).click();
   await page.getByText(IAP_ID).first().waitFor({ timeout: 10000 });
-  const iapDeniedWire = await wjson(`/v1/projects/vyomi-project/iap_web/${IAP_ID}:checkAccess`,
+  const iapDeniedWire = await wjson(`/v1/projects/${PROJ}/iap_web/${IAP_ID}:checkAccess`,
     { method: "POST", body: JSON.stringify({ member: "user:nobody@example.com" }) });
   check("IAP resource added via UI → native checkAccess denies a member with no accessor role", iapDeniedWire.allowed === false);
-  await wire(`/v1/projects/vyomi-project/iap_web/${IAP_ID}:setIamPolicy`, {
+  await wire(`/v1/projects/${PROJ}/iap_web/${IAP_ID}:setIamPolicy`, {
     method: "POST", body: JSON.stringify({ policy: { bindings: [{ role: "roles/iap.httpsResourceAccessor", members: ["user:nobody@example.com"] }] } }),
   });
-  const iapAllowedWire = await wjson(`/v1/projects/vyomi-project/iap_web/${IAP_ID}:checkAccess`,
+  const iapAllowedWire = await wjson(`/v1/projects/${PROJ}/iap_web/${IAP_ID}:checkAccess`,
     { method: "POST", body: JSON.stringify({ member: "user:nobody@example.com" }) });
   check("granting roles/iap.httpsResourceAccessor over the wire → native checkAccess now allows that member", iapAllowedWire.allowed === true);
   await shot("15c-identity-aware-proxy");
@@ -960,7 +961,7 @@ try {
   // Kubernetes Engine: create an Autopilot cluster through the UI, cross-check over the
   // native Kubernetes Engine REST API, add a node pool over the wire and see it in the UI.
   const K = `v4-gcp-smoke-k8s-${Date.now() % 100000}`;
-  const KL = "/v1/projects/vyomi-project/locations/us-central1";
+  const KL = `/v1/projects/${PROJ}/locations/us-central1`;
   await page.goto(UI + "#/kubernetes/clusters/create");
   await page.getByLabel("Name").fill(K);
   await page.getByRole("radio", { name: "Stable channel" }).check();
@@ -1088,11 +1089,11 @@ try {
   await page.getByRole("button", { name: "Create", exact: true }).click();
   await page.getByRole("heading", { name: "Uptime checks" }).waitFor({ timeout: 10000 });
   await page.getByText(UC).first().waitFor({ timeout: 10000 });
-  const checks = await wjson(`/v3/projects/vyomi-project/uptimeCheckConfigs`);
+  const checks = await wjson(`/v3/projects/${PROJ}/uptimeCheckConfigs`);
   check("create uptime check via UI wizard → visible over native wire", (checks.uptimeCheckConfigs || []).some((c) => c.displayName === UC && c.httpCheck?.path === "/"));
 
   const DASH = `v4-gcp-smoke-dash-${Date.now() % 100000}`;
-  await wire(`/v1/projects/vyomi-project/dashboards`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ displayName: DASH }) });
+  await wire(`/v1/projects/${PROJ}/dashboards`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ displayName: DASH }) });
   await page.goto(UI + "#/monitoring/dashboards");
   await page.getByText(DASH).waitFor({ timeout: 10000 });
   check("dashboard created over wire → shown in UI list", true);
@@ -1103,7 +1104,7 @@ try {
   // membership is evaluated against the resource instances this project's own time series
   // have reported (not an always-empty stub).
   const METRIC = `custom.googleapis.com/smoke/${Date.now() % 100000}`;
-  const dash2 = await wjson(`/v1/projects/vyomi-project/dashboards`, {
+  const dash2 = await wjson(`/v1/projects/${PROJ}/dashboards`, {
     method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify({ displayName: `v4-gcp-smoke-dashlive-${Date.now() % 100000}`, mosaicLayout: { columns: 12, tiles: [{
       xPos: 0, yPos: 0, width: 6, height: 4, widget: { title: "Smoke CPU", xyChart: { dataSets: [{
@@ -1111,10 +1112,10 @@ try {
       }] } },
     }] } }),
   });
-  await wjson(`/v3/projects/vyomi-project/timeSeries`, {
+  await wjson(`/v3/projects/${PROJ}/timeSeries`, {
     method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify({ timeSeries: [{
-      metric: { type: METRIC }, resource: { type: "global", labels: { project_id: "vyomi-project" } },
+      metric: { type: METRIC }, resource: { type: "global", labels: { project_id: `${PROJ}` } },
       points: [{ interval: { endTime: new Date().toISOString() }, value: { doubleValue: 42 } }],
     }] }),
   });
@@ -1159,19 +1160,19 @@ try {
   await sloDialog.getByLabel("Total events filter").fill(`metric.type = "${sloTotalMetric}"`);
   await sloDialog.getByRole("button", { name: "Create" }).click();
   await sloDialog.waitFor({ state: "detached", timeout: 10000 });
-  const svcWire = await wjson(`/v3/projects/vyomi-project/services`);
+  const svcWire = await wjson(`/v3/projects/${PROJ}/services`);
   const sloService = (svcWire.services || []).find((s) => s.displayName === SVC);
   check("create SLO via UI → visible over native Service Monitoring wire", !!sloService, JSON.stringify(svcWire).slice(0, 200));
-  const sloListWire = await wjson(`/v3/projects/vyomi-project/services/${sloService.name.split("/").pop()}/serviceLevelObjectives`);
+  const sloListWire = await wjson(`/v3/projects/${PROJ}/services/${sloService.name.split("/").pop()}/serviceLevelObjectives`);
   const slo = sloListWire.serviceLevelObjectives?.[0];
   check("SLO created via UI has the request-based good/total-ratio indicator", slo?.serviceLevelIndicator?.requestBased?.goodTotalRatio?.goodServiceFilter === `metric.type = "${sloGoodMetric}"`);
   // Burn the SLO's 1% error budget 2x over by writing a 2% failure rate, directly over the wire.
-  await wjson(`/v3/projects/vyomi-project/timeSeries`, {
+  await wjson(`/v3/projects/${PROJ}/timeSeries`, {
     method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify({ timeSeries: [
-      { metric: { type: sloGoodMetric }, resource: { type: "global", labels: { project_id: "vyomi-project" } },
+      { metric: { type: sloGoodMetric }, resource: { type: "global", labels: { project_id: `${PROJ}` } },
         points: [{ interval: { endTime: new Date().toISOString() }, value: { doubleValue: 98 } }] },
-      { metric: { type: sloTotalMetric }, resource: { type: "global", labels: { project_id: "vyomi-project" } },
+      { metric: { type: sloTotalMetric }, resource: { type: "global", labels: { project_id: `${PROJ}` } },
         points: [{ interval: { endTime: new Date().toISOString() }, value: { doubleValue: 100 } }] },
     ] }),
   });
@@ -1194,7 +1195,7 @@ try {
   // acknowledging it from the UI (the reverse direction) must round-trip back over the wire.
   const ALERT_POLICY = `v4-gcp-smoke-alertpol-${Date.now() % 100000}`;
   const ALERT_METRIC = `custom.googleapis.com/smoke-alert/${Date.now() % 100000}`;
-  const alertPolicyWire = await wjson(`/v3/projects/vyomi-project/alertPolicies`, {
+  const alertPolicyWire = await wjson(`/v3/projects/${PROJ}/alertPolicies`, {
     method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify({ displayName: ALERT_POLICY, combiner: "OR", conditions: [{
       displayName: "smoke breach", conditionThreshold: {
@@ -1202,10 +1203,10 @@ try {
       },
     }] }),
   });
-  await wjson(`/v3/projects/vyomi-project/timeSeries`, {
+  await wjson(`/v3/projects/${PROJ}/timeSeries`, {
     method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify({ timeSeries: [{
-      metric: { type: ALERT_METRIC }, resource: { type: "global", labels: { project_id: "vyomi-project" } },
+      metric: { type: ALERT_METRIC }, resource: { type: "global", labels: { project_id: `${PROJ}` } },
       points: [{ interval: { endTime: new Date().toISOString() }, value: { doubleValue: 99 } }],
     }] }),
   });
@@ -1219,7 +1220,7 @@ try {
   await page.getByRole("menuitem", { name: "Acknowledge" }).click();
   await page.getByText("Open (acknowledged)").waitFor({ timeout: 10000 });
   const incidentsFilter = encodeURIComponent(`policy_name = "${alertPolicyWire.name}"`);
-  const incidentsWire = await wjson(`/v3/projects/vyomi-project/incidents?filter=${incidentsFilter}`);
+  const incidentsWire = await wjson(`/v3/projects/${PROJ}/incidents?filter=${incidentsFilter}`);
   check("acknowledge via UI → native wire shows acknowledged", incidentsWire.incidents?.[0]?.acknowledged === true, JSON.stringify(incidentsWire));
 
   // Cloud Run functions: create a service via the UI → visible over the native Cloud Run
@@ -1230,10 +1231,10 @@ try {
   await page.getByLabel("Service name").fill(FN);
   await page.getByRole("button", { name: "Create", exact: true }).click();
   await page.getByRole("heading", { name: FN, exact: true }).waitFor({ timeout: 10000 });
-  const fnWire = await wjson(`/v2/projects/vyomi-project/locations/us-central1/services/${FN}`);
+  const fnWire = await wjson(`/v2/projects/${PROJ}/locations/us-central1/services/${FN}`);
   check("create function via UI → visible over native Cloud Run wire", fnWire.name?.endsWith(`/services/${FN}`), JSON.stringify(fnWire).slice(0, 200));
   check("function deploy sets a container image (inline-source placeholder)", !!fnWire.template?.containers?.[0]?.image);
-  const fnPolicy = await wjson(`/v2/projects/vyomi-project/locations/us-central1/services/${FN}:getIamPolicy`);
+  const fnPolicy = await wjson(`/v2/projects/${PROJ}/locations/us-central1/services/${FN}:getIamPolicy`);
   check("Allow public access → setIamPolicy grants allUsers run.invoker", (fnPolicy.bindings || []).some((b) => b.role === "roles/run.invoker" && b.members?.includes("allUsers")));
   await shot("12-function-created");
 
@@ -1244,12 +1245,12 @@ try {
   await page.getByLabel("Source files").fill("exports.handler = (event) => ({ redeployed: true });\n");
   await page.getByRole("button", { name: "Save and redeploy" }).click();
   await page.getByRole("button", { name: "Edit source" }).waitFor({ timeout: 10000 });
-  const fnRevs = await wjson(`/v2/projects/vyomi-project/locations/us-central1/services/${FN}/revisions`);
+  const fnRevs = await wjson(`/v2/projects/${PROJ}/locations/us-central1/services/${FN}/revisions`);
   check("editing function source redeploys a real new revision", (fnRevs.revisions || []).length === 2, JSON.stringify(fnRevs).slice(0, 200));
   await shot("12b-function-source-redeployed");
 
   const JOB = `v4-gcp-job-${Date.now() % 100000}`;
-  await wire("/v2/projects/vyomi-project/locations/us-central1/jobs?jobId=" + JOB, {
+  await wire(`/v2/projects/${PROJ}/locations/us-central1/jobs?jobId=` + JOB, {
     method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify({ template: { template: { containers: [{ image: "us-docker.pkg.dev/cloudrun/container/hello" }] } } }),
   });
@@ -1264,7 +1265,7 @@ try {
   await page.getByLabel("Confirm deletion").fill(FN);
   await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
   await page.getByRole("dialog").waitFor({ state: "detached", timeout: 10000 });
-  check("delete function via UI → gone over native wire", (await wire(`/v2/projects/vyomi-project/locations/us-central1/services/${FN}`)).status === 404);
+  check("delete function via UI → gone over native wire", (await wire(`/v2/projects/${PROJ}/locations/us-central1/services/${FN}`)).status === 404);
 
   // Cloud Run functions depth (WAVE 5b): continuous deployment — "Set up continuous
   // deployment" really connects a repo, and a "push" (trigger build) only lands a new
@@ -1282,27 +1283,27 @@ try {
   await page.getByRole("button", { name: "Build stored source" }).click();
   await page.getByText(/build-\d+ — SUCCESS/).waitFor({ timeout: 10000 });
   await page.getByRole("dialog").getByRole("button", { name: "Close" }).click();
-  const cdFnRevs = await wjson(`/v2/projects/vyomi-project/locations/us-central1/services/${CDFN}/revisions`);
+  const cdFnRevs = await wjson(`/v2/projects/${PROJ}/locations/us-central1/services/${CDFN}/revisions`);
   check("continuous deployment push really deploys a new revision", (cdFnRevs.revisions || []).length === 2, JSON.stringify(cdFnRevs).slice(0, 200));
   await shot("12c-functions-continuous-deployment");
 
   // Cloud Run functions depth: an Eventarc Pub/Sub trigger really invokes the destination
   // service — publishing a message feeds real Observability metrics, not a stored binding.
-  await wire(`/v1/projects/vyomi-project/topics/${CDFN}-topic`, { method: "PUT", headers: { "content-type": "application/json" }, body: "{}" });
+  await wire(`/v1/projects/${PROJ}/topics/${CDFN}-topic`, { method: "PUT", headers: { "content-type": "application/json" }, body: "{}" });
   await page.goto(UI + `#/functions/detail/us-central1/${CDFN}?tab=triggers`);
   await page.getByRole("button", { name: "Add trigger" }).click();
   await page.getByLabel("Trigger name").fill("on-event");
   await page.getByLabel("Pub/Sub topic ID").fill(`${CDFN}-topic`);
   await page.getByRole("dialog").getByRole("button", { name: "Add trigger" }).click();
   await page.getByRole("cell", { name: "on-event" }).waitFor({ timeout: 10000 });
-  await wire(`/v1/projects/vyomi-project/topics/${CDFN}-topic:publish`, {
+  await wire(`/v1/projects/${PROJ}/topics/${CDFN}-topic:publish`, {
     method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ messages: [{ data: "e30=" }] }),
   });
   const metricsQS = new URLSearchParams({
     filter: `metric.type="run.googleapis.com/request_count" AND resource.labels.service_name="${CDFN}"`,
     "interval.startTime": "2000-01-01T00:00:00Z", "interval.endTime": "2100-01-01T00:00:00Z",
   });
-  const cdFnMetrics = await wjson(`/v3/projects/vyomi-project/timeSeries?${metricsQS}`);
+  const cdFnMetrics = await wjson(`/v3/projects/${PROJ}/timeSeries?${metricsQS}`);
   check("publishing to the trigger's topic really invokes the service (real metrics)", (cdFnMetrics.timeSeries || []).length === 1, JSON.stringify(cdFnMetrics).slice(0, 200));
   await page.goto(UI + `#/functions/detail/us-central1/${CDFN}`);
   await page.getByText("Request count").waitFor({ timeout: 10000 });
@@ -1315,9 +1316,9 @@ try {
   await page.getByLabel("Service name").fill(RUNSVC);
   await page.getByRole("button", { name: "Create", exact: true }).click();
   await page.getByRole("heading", { name: RUNSVC, exact: true }).waitFor({ timeout: 10000 });
-  const runSvcWire = await wjson(`/v2/projects/vyomi-project/locations/us-central1/services/${RUNSVC}`);
+  const runSvcWire = await wjson(`/v2/projects/${PROJ}/locations/us-central1/services/${RUNSVC}`);
   check("create service via UI → visible over native Cloud Run wire", runSvcWire.name?.endsWith(`/services/${RUNSVC}`), JSON.stringify(runSvcWire).slice(0, 200));
-  const runSvcPolicy = await wjson(`/v2/projects/vyomi-project/locations/us-central1/services/${RUNSVC}:getIamPolicy`);
+  const runSvcPolicy = await wjson(`/v2/projects/${PROJ}/locations/us-central1/services/${RUNSVC}:getIamPolicy`);
   check("Allow public access → setIamPolicy grants allUsers run.invoker", (runSvcPolicy.bindings || []).some((b) => b.role === "roles/run.invoker" && b.members?.includes("allUsers")));
   await shot("14-run-service-created");
 
@@ -1335,12 +1336,12 @@ try {
   await page.getByLabel("Source files").fill("exports.handler = (event) => ({ redeployed: true });\n");
   await page.getByRole("button", { name: "Save and redeploy" }).click();
   await page.getByRole("button", { name: "Edit source" }).waitFor({ timeout: 10000 });
-  const runFnRevs = await wjson(`/v2/projects/vyomi-project/locations/us-central1/services/${RUNFN}/revisions`);
+  const runFnRevs = await wjson(`/v2/projects/${PROJ}/locations/us-central1/services/${RUNFN}/revisions`);
   check("editing Cloud Run function source redeploys a real new revision", (runFnRevs.revisions || []).length === 2, JSON.stringify(runFnRevs).slice(0, 200));
   await shot("14b-run-source-redeployed");
 
   const RUNJOB = `v4-gcp-run-job-${Date.now() % 100000}`;
-  await wire(`/v2/projects/vyomi-project/locations/us-central1/jobs?jobId=${RUNJOB}`, {
+  await wire(`/v2/projects/${PROJ}/locations/us-central1/jobs?jobId=${RUNJOB}`, {
     method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify({ template: { template: { containers: [{ image: "us-docker.pkg.dev/cloudrun/container/hello" }] } } }),
   });
@@ -1357,7 +1358,7 @@ try {
   await page.getByRole("button", { name: "Run now" }).waitFor({ timeout: 10000 });
   await page.getByRole("button", { name: "Run now" }).click();
   await page.getByRole("cell", { name: "Succeeded" }).waitFor({ timeout: 10000 });
-  const runJobAfterTrigger = await wjson(`/v2/projects/vyomi-project/locations/us-central1/jobs/${RUNJOB}`);
+  const runJobAfterTrigger = await wjson(`/v2/projects/${PROJ}/locations/us-central1/jobs/${RUNJOB}`);
   check("Cloud Scheduler trigger really starts a Cloud Run job execution", runJobAfterTrigger.executionCount === 1, JSON.stringify(runJobAfterTrigger).slice(0, 200));
   await shot("14c-run-job-trigger-fired");
 
@@ -1365,14 +1366,14 @@ try {
   // delivers — publishing on the bound Pub/Sub topic (over the native wire) invokes the
   // service and writes a real Cloud Logging entry, read back on the Observability tab.
   const RUNTOPIC = `v4-gcp-run-evt-${Date.now() % 100000}`;
-  await wire(`/v1/projects/vyomi-project/topics/${RUNTOPIC}`, { method: "PUT", headers: { "content-type": "application/json" }, body: "{}" });
+  await wire(`/v1/projects/${PROJ}/topics/${RUNTOPIC}`, { method: "PUT", headers: { "content-type": "application/json" }, body: "{}" });
   await page.goto(UI + `#/run/detail/us-central1/${RUNSVC}?tab=triggers`);
   await page.getByRole("button", { name: "Add trigger" }).click();
   await page.getByLabel("Pub/Sub topic").click();
   await page.getByRole("option", { name: RUNTOPIC, exact: true }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Create" }).click();
   await page.getByRole("cell", { name: `${RUNSVC}-trigger` }).waitFor({ timeout: 10000 });
-  await wire(`/v1/projects/vyomi-project/topics/${RUNTOPIC}:publish`, {
+  await wire(`/v1/projects/${PROJ}/topics/${RUNTOPIC}:publish`, {
     method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify({ messages: [{ data: Buffer.from("smoke test event").toString("base64") }] }),
   });
@@ -1387,7 +1388,7 @@ try {
   await page.getByLabel("Confirm deletion").fill(RUNSVC);
   await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
   await page.getByRole("dialog").waitFor({ state: "detached", timeout: 10000 });
-  check("delete service via UI → gone over native wire", (await wire(`/v2/projects/vyomi-project/locations/us-central1/services/${RUNSVC}`)).status === 404);
+  check("delete service via UI → gone over native wire", (await wire(`/v2/projects/${PROJ}/locations/us-central1/services/${RUNSVC}`)).status === 404);
 
   // Nano: the browser stops idle service workers while the tab keeps running. A restarted worker
   // has lost its in-memory readiness, and must recover instead of leaving requests hanging forever.
@@ -1399,7 +1400,7 @@ try {
     await page.evaluate(() => { location.hash = "#/memorystore"; });
     await page.getByRole("button", { name: "Refresh" }).first().click();
     await page.waitForFunction(() => !document.querySelector("main [role=progressbar]"), null, { timeout: 20000 });
-    check("service worker restarted under a live tab → requests still answer", (await wire("/v1/projects/vyomi-project/locations/-/instances")).status === 200);
+    check("service worker restarted under a live tab → requests still answer", (await wire(`/v1/projects/${PROJ}/locations/-/instances`)).status === 200);
   }
 
   // Not-simulated gaps carry the conformance attribute
@@ -1416,53 +1417,53 @@ try {
   await shot("12-scheduler-create-filled");
   await page.getByRole("button", { name: "Create", exact: true }).click();
   await page.getByRole("heading", { name: J }).waitFor({ timeout: 10000 });
-  const job = await wjson(`/v1/projects/vyomi-project/locations/us-central1/jobs/${J}`);
+  const job = await wjson(`/v1/projects/${PROJ}/locations/us-central1/jobs/${J}`);
   check("create job → visible over native wire (jobs.get)", job.name?.endsWith(`/jobs/${J}`) && job.httpTarget?.uri === "https://example.com/handler");
   await shot("13-scheduler-detail");
 
   // Pause / resume / force run over the UI, each checked back over the wire
   await page.getByRole("button", { name: "Pause", exact: true }).click();
   await page.getByRole("button", { name: "Resume", exact: true }).waitFor({ timeout: 10000 });
-  check("pause via UI → jobs.get shows PAUSED", (await wjson(`/v1/projects/vyomi-project/locations/us-central1/jobs/${J}`)).state === "PAUSED");
+  check("pause via UI → jobs.get shows PAUSED", (await wjson(`/v1/projects/${PROJ}/locations/us-central1/jobs/${J}`)).state === "PAUSED");
   await page.getByRole("button", { name: "Resume", exact: true }).click();
   await page.getByRole("button", { name: "Pause", exact: true }).waitFor({ timeout: 10000 });
-  check("resume via UI → jobs.get shows ENABLED", (await wjson(`/v1/projects/vyomi-project/locations/us-central1/jobs/${J}`)).state === "ENABLED");
+  check("resume via UI → jobs.get shows ENABLED", (await wjson(`/v1/projects/${PROJ}/locations/us-central1/jobs/${J}`)).state === "ENABLED");
   await page.getByRole("button", { name: "Force run" }).click();
   await page.waitForTimeout(500);
-  check("force run via UI → jobs.get shows a lastAttemptTime", !!(await wjson(`/v1/projects/vyomi-project/locations/us-central1/jobs/${J}`)).lastAttemptTime);
+  check("force run via UI → jobs.get shows a lastAttemptTime", !!(await wjson(`/v1/projects/${PROJ}/locations/us-central1/jobs/${J}`)).lastAttemptTime);
 
   // Edit: switch the target to Pub/Sub (a real topic, created over the wire) and save
   const T = `v4-gcp-topic-${Date.now() % 100000}`;
-  await wire(`/v1/projects/vyomi-project/topics/${T}`, { method: "PUT", headers: { "content-type": "application/json" }, body: "{}" });
+  await wire(`/v1/projects/${PROJ}/topics/${T}`, { method: "PUT", headers: { "content-type": "application/json" }, body: "{}" });
   await page.getByRole("link", { name: "Edit" }).click();
   await page.getByLabel("Target type").click();
   await page.getByRole("option", { name: "Pub/Sub" }).click();
   await page.getByLabel("Select a Cloud Pub/Sub topic").click();
-  await page.getByRole("option", { name: `projects/vyomi-project/topics/${T}` }).click();
+  await page.getByRole("option", { name: `projects/${PROJ}/topics/${T}` }).click();
   await page.getByRole("button", { name: "Save" }).click();
   await page.getByRole("heading", { name: J }).waitFor({ timeout: 10000 });
-  const edited = await wjson(`/v1/projects/vyomi-project/locations/us-central1/jobs/${J}`);
-  check("edit job target via UI → jobs.get shows pubsubTarget, httpTarget gone", edited.pubsubTarget?.topicName === `projects/vyomi-project/topics/${T}` && !edited.httpTarget);
+  const edited = await wjson(`/v1/projects/${PROJ}/locations/us-central1/jobs/${J}`);
+  check("edit job target via UI → jobs.get shows pubsubTarget, httpTarget gone", edited.pubsubTarget?.topicName === `projects/${PROJ}/topics/${T}` && !edited.httpTarget);
   await shot("14-scheduler-edited");
 
   // Delete from the list
   await page.goto(UI + "#/cloudscheduler/jobs");
   await page.getByRole("link", { name: J }).waitFor({ timeout: 10000 });
-  await page.getByRole("checkbox", { name: `Select projects/vyomi-project/locations/us-central1/jobs/${J}` }).check();
+  await page.getByRole("checkbox", { name: `Select projects/${PROJ}/locations/us-central1/jobs/${J}` }).check();
   await page.getByRole("button", { name: "Delete", exact: true }).click();
   await page.getByLabel("Confirm deletion").fill(J);
   await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
   await page.getByRole("dialog").waitFor({ state: "detached", timeout: 10000 });
-  check("delete job via UI → gone over native wire", (await wire(`/v1/projects/vyomi-project/locations/us-central1/jobs/${J}`)).status === 404);
+  check("delete job via UI → gone over native wire", (await wire(`/v1/projects/${PROJ}/locations/us-central1/jobs/${J}`)).status === 404);
 
   // Cloud Scheduler "Cron jobs" tab: legacy App Engine cron.yaml jobs. The real console has
   // no create UI for these (they arrive via `gcloud app deploy cron.yaml`), so the fixture
   // deploys one straight over the native wire, same as the real CLI would.
   const CRON = `v4-gcp-cron-${Date.now() % 100000}`;
-  await wire(`/v1/projects/vyomi-project/locations/appengine/jobs`, {
+  await wire(`/v1/projects/${PROJ}/locations/appengine/jobs`, {
     method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify({
-      name: `projects/vyomi-project/locations/appengine/jobs/${CRON}`,
+      name: `projects/${PROJ}/locations/appengine/jobs/${CRON}`,
       description: `smoke cron job ${CRON}`,
       schedule: "every 1 hours synchronized",
       appEngineHttpTarget: { relativeUri: "/tasks/cleanup", httpMethod: "GET" },
@@ -1474,9 +1475,9 @@ try {
   await shot("14b-scheduler-cron-jobs");
   await page.getByRole("row", { name: `smoke cron job ${CRON}` }).getByRole("button", { name: "Run now" }).click();
   await page.waitForTimeout(500);
-  const cronAfterRun = await wjson(`/v1/projects/vyomi-project/locations/appengine/jobs/${CRON}`);
+  const cronAfterRun = await wjson(`/v1/projects/${PROJ}/locations/appengine/jobs/${CRON}`);
   check("Run now via UI → jobs.get shows lastAttemptTime", !!cronAfterRun.lastAttemptTime);
-  await wire(`/v1/projects/vyomi-project/locations/appengine/jobs/${CRON}`, { method: "DELETE" });
+  await wire(`/v1/projects/${PROJ}/locations/appengine/jobs/${CRON}`, { method: "DELETE" });
 
   // Firestore: create database → start a collection via the UI → cross-check the native wire,
   // then the reverse (a document created over the wire shows up in the Studio UI).
@@ -1486,7 +1487,7 @@ try {
   await page.getByRole("button", { name: "Create Database" }).click();
   await page.getByRole("heading", { name: "Firestore Studio" }).waitFor({ timeout: 10000 });
   check("create database via UI → visible over native wire (databases.list)",
-    !!(await wjson(`/v1/projects/vyomi-project/databases`)).databases?.some((d) => d.name.endsWith(`/databases/${FSDB}`)));
+    !!(await wjson(`/v1/projects/${PROJ}/databases`)).databases?.some((d) => d.name.endsWith(`/databases/${FSDB}`)));
 
   await page.getByRole("button", { name: "Start collection" }).click();
   await page.getByLabel("Collection ID").fill("smoke-items");
@@ -1497,9 +1498,9 @@ try {
   await page.getByRole("dialog").waitFor({ state: "detached", timeout: 10000 });
   await page.getByText("item-1", { exact: true }).waitFor({ timeout: 10000 });
   check("start collection via UI → readable over native wire",
-    (await wjson(`/v1/projects/vyomi-project/databases/${FSDB}/documents/smoke-items/item-1`)).fields?.title?.stringValue === "Smoke test item");
+    (await wjson(`/v1/projects/${PROJ}/databases/${FSDB}/documents/smoke-items/item-1`)).fields?.title?.stringValue === "Smoke test item");
 
-  await wire(`/v1/projects/vyomi-project/databases/${FSDB}/documents/wire-coll?documentId=w1`, {
+  await wire(`/v1/projects/${PROJ}/databases/${FSDB}/documents/wire-coll?documentId=w1`, {
     method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify({ fields: { k: { stringValue: "v" } } }),
   });
@@ -1525,15 +1526,15 @@ try {
   await page.getByText(VC, { exact: true }).first().waitFor({ timeout: 10000 });
   check("create vector index via UI → shown in Vector tab", true);
 
-  await wire(`/v1/projects/vyomi-project/databases/${FSDB}/documents/${VC}?documentId=near`, {
+  await wire(`/v1/projects/${PROJ}/databases/${FSDB}/documents/${VC}?documentId=near`, {
     method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify({ fields: { embedding: vec([1, 0, 0]) } }),
   });
-  await wire(`/v1/projects/vyomi-project/databases/${FSDB}/documents/${VC}?documentId=far`, {
+  await wire(`/v1/projects/${PROJ}/databases/${FSDB}/documents/${VC}?documentId=far`, {
     method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify({ fields: { embedding: vec([0, 1, 0]) } }),
   });
-  const nearest = await wjson(`/v1/projects/vyomi-project/databases/${FSDB}/documents:runQuery`, {
+  const nearest = await wjson(`/v1/projects/${PROJ}/databases/${FSDB}/documents:runQuery`, {
     method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify({ structuredQuery: { from: [{ collectionId: VC }], findNearest: {
       vectorField: { fieldPath: "embedding" }, queryVector: vec([1, 0, 0]), distanceMeasure: "EUCLIDEAN", limit: 1,
@@ -1564,14 +1565,14 @@ try {
   // Firestore DEPTH: insights — a real missing-index query failure surfaces as a
   // recommendation; "Create index" from the UI makes a real composite index over the wire.
   const IC = `smoke-insight-${Date.now() % 100000}`;
-  await wire(`/v1/projects/vyomi-project/databases/${FSDB}/documents/${IC}?documentId=i1`, {
+  await wire(`/v1/projects/${PROJ}/databases/${FSDB}/documents/${IC}?documentId=i1`, {
     method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ fields: { score: { integerValue: "1" } } }),
   });
-  await wire(`/v1/projects/vyomi-project/databases/${FSDB}/collectionGroups/${IC}/fields/score`, {
+  await wire(`/v1/projects/${PROJ}/databases/${FSDB}/collectionGroups/${IC}/fields/score`, {
     method: "PATCH", headers: { "content-type": "application/json" },
     body: JSON.stringify({ indexConfig: { indexes: [], usesAncestorConfig: false } }),
   });
-  await wire(`/v1/projects/vyomi-project/databases/${FSDB}/documents:runQuery`, {
+  await wire(`/v1/projects/${PROJ}/databases/${FSDB}/documents:runQuery`, {
     method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify({ structuredQuery: { from: [{ collectionId: IC }],
       where: { fieldFilter: { field: { fieldPath: "score" }, op: "GREATER_THAN", value: { integerValue: "0" } } } } }),
@@ -1582,7 +1583,7 @@ try {
   await page.getByRole("button", { name: "Create index" }).click();
   await page.waitForFunction(
     async ([url, cg]) => (await (await fetch(url)).json()).indexes?.some((i) => i.collectionGroup === cg),
-    [`${WIRE}/v1/projects/vyomi-project/databases/${FSDB}/collectionGroups/-/indexes`, IC], { timeout: 10000 },
+    [`${WIRE}/v1/projects/${PROJ}/databases/${FSDB}/collectionGroups/-/indexes`, IC], { timeout: 10000 },
   );
   check("Insights \"Create index\" via UI → a real composite index over the native wire", true);
   await shot("24-firestore-insights");
@@ -1601,7 +1602,7 @@ try {
   await page.getByLabel("Confirm deletion").fill(FSDB);
   await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
   await page.getByRole("dialog").waitFor({ state: "detached", timeout: 10000 });
-  check("delete database via UI → gone over native wire", (await wire(`/v1/projects/vyomi-project/databases/${FSDB}`)).status === 404);
+  check("delete database via UI → gone over native wire", (await wire(`/v1/projects/${PROJ}/databases/${FSDB}`)).status === 404);
 
   // Cloud KMS: create a key ring + key through the UI → native Cloud KMS REST wire, then
   // version lifecycle (rotate, disable, make primary, destroy, restore), labels, rotation
@@ -1611,7 +1612,7 @@ try {
   await page.getByLabel("Key ring name").fill(KR);
   await page.getByRole("button", { name: "Create", exact: true }).click();
   await page.getByRole("heading", { name: KR }).waitFor({ timeout: 10000 });
-  const krWire = await wjson(`/v1/projects/vyomi-project/locations/us-central1/keyRings/${KR}`);
+  const krWire = await wjson(`/v1/projects/${PROJ}/locations/us-central1/keyRings/${KR}`);
   check("create key ring via UI → visible over native wire (keyRings.get)", krWire.name?.endsWith(`/keyRings/${KR}`));
   await shot("15-kms-keyring-created");
 
@@ -1620,7 +1621,7 @@ try {
   await page.getByLabel("Key name").fill(KK);
   await page.getByRole("button", { name: "Create", exact: true }).click();
   await page.getByRole("heading", { name: KK }).waitFor({ timeout: 10000 });
-  const keyWire = await wjson(`/v1/projects/vyomi-project/locations/us-central1/keyRings/${KR}/cryptoKeys/${KK}`);
+  const keyWire = await wjson(`/v1/projects/${PROJ}/locations/us-central1/keyRings/${KR}/cryptoKeys/${KK}`);
   check("create key via UI → visible over native wire (cryptoKeys.get)",
     keyWire.name?.endsWith(`/cryptoKeys/${KK}`) && keyWire.purpose === "ENCRYPT_DECRYPT"
       && keyWire.versionTemplate?.algorithm === "GOOGLE_SYMMETRIC_ENCRYPTION" && keyWire.rotationPeriod === "2592000s",
@@ -1629,7 +1630,7 @@ try {
 
   // Reverse direction: a key created over the wire shows up in the Key inventory UI.
   const KK2 = `v4-gcp-kms-key2-${Date.now() % 100000}`;
-  await wire(`/v1/projects/vyomi-project/locations/us-central1/keyRings/${KR}/cryptoKeys?cryptoKeyId=${KK2}`, {
+  await wire(`/v1/projects/${PROJ}/locations/us-central1/keyRings/${KR}/cryptoKeys?cryptoKeyId=${KK2}`, {
     method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify({ purpose: "ENCRYPT_DECRYPT", versionTemplate: { algorithm: "GOOGLE_SYMMETRIC_ENCRYPTION" } }),
   });
@@ -1650,7 +1651,7 @@ try {
   await page.getByRole("button", { name: "Rotate key" }).click();
   await page.waitForFunction(
     async (url) => (await (await fetch(url)).json()).primary?.name?.endsWith("/cryptoKeyVersions/2"),
-    `${WIRE}/v1/projects/vyomi-project/locations/us-central1/keyRings/${KR}/cryptoKeys/${KK}`, { timeout: 10000 },
+    `${WIRE}/v1/projects/${PROJ}/locations/us-central1/keyRings/${KR}/cryptoKeys/${KK}`, { timeout: 10000 },
   );
   check("rotate key via UI → primary version advances to 2", true);
 
@@ -1658,7 +1659,7 @@ try {
   await page.getByRole("menuitem", { name: "Disable" }).click();
   await page.waitForFunction(
     async (url) => (await (await fetch(url)).json()).state === "DISABLED",
-    `${WIRE}/v1/projects/vyomi-project/locations/us-central1/keyRings/${KR}/cryptoKeys/${KK}/cryptoKeyVersions/2`, { timeout: 10000 },
+    `${WIRE}/v1/projects/${PROJ}/locations/us-central1/keyRings/${KR}/cryptoKeys/${KK}/cryptoKeyVersions/2`, { timeout: 10000 },
   );
   check("disable version via UI → cryptoKeyVersions.get shows DISABLED", true);
 
@@ -1666,7 +1667,7 @@ try {
   await page.getByRole("menuitem", { name: "Make primary" }).click();
   await page.waitForFunction(
     async (url) => (await (await fetch(url)).json()).primary?.name?.endsWith("/cryptoKeyVersions/1"),
-    `${WIRE}/v1/projects/vyomi-project/locations/us-central1/keyRings/${KR}/cryptoKeys/${KK}`, { timeout: 10000 },
+    `${WIRE}/v1/projects/${PROJ}/locations/us-central1/keyRings/${KR}/cryptoKeys/${KK}`, { timeout: 10000 },
   );
   check("make primary via UI → primary is version 1", true);
 
@@ -1674,7 +1675,7 @@ try {
   await page.getByRole("menuitem", { name: "Destroy" }).click();
   await page.waitForFunction(
     async (url) => (await (await fetch(url)).json()).state === "DESTROY_SCHEDULED",
-    `${WIRE}/v1/projects/vyomi-project/locations/us-central1/keyRings/${KR}/cryptoKeys/${KK}/cryptoKeyVersions/2`, { timeout: 10000 },
+    `${WIRE}/v1/projects/${PROJ}/locations/us-central1/keyRings/${KR}/cryptoKeys/${KK}/cryptoKeyVersions/2`, { timeout: 10000 },
   );
   check("destroy version via UI → DESTROY_SCHEDULED", true);
   await shot("19-kms-versions");
@@ -1683,7 +1684,7 @@ try {
   await page.getByRole("button", { name: "Restore", exact: true }).click();
   await page.waitForFunction(
     async (url) => (await (await fetch(url)).json()).state === "DISABLED",
-    `${WIRE}/v1/projects/vyomi-project/locations/us-central1/keyRings/${KR}/cryptoKeys/${KK}/cryptoKeyVersions/2`, { timeout: 10000 },
+    `${WIRE}/v1/projects/${PROJ}/locations/us-central1/keyRings/${KR}/cryptoKeys/${KK}/cryptoKeyVersions/2`, { timeout: 10000 },
   );
   check("restore version via UI (bulk) → DISABLED", true);
 
@@ -1695,7 +1696,7 @@ try {
   await page.getByLabel("Value 1").fill("smoke");
   await page.getByRole("button", { name: "Save" }).click();
   await page.getByText("env: smoke").waitFor({ timeout: 10000 });
-  let kv = await wjson(`/v1/projects/vyomi-project/locations/us-central1/keyRings/${KR}/cryptoKeys/${KK}`);
+  let kv = await wjson(`/v1/projects/${PROJ}/locations/us-central1/keyRings/${KR}/cryptoKeys/${KK}`);
   check("edit labels via UI → cryptoKeys.get shows label", kv.labels?.env === "smoke");
 
   await page.getByRole("button", { name: "Edit rotation period" }).click();
@@ -1704,7 +1705,7 @@ try {
   await page.getByRole("button", { name: "Save" }).click();
   await page.waitForFunction(
     async (url) => (await (await fetch(url)).json()).rotationPeriod === "31536000s",
-    `${WIRE}/v1/projects/vyomi-project/locations/us-central1/keyRings/${KR}/cryptoKeys/${KK}`, { timeout: 10000 },
+    `${WIRE}/v1/projects/${PROJ}/locations/us-central1/keyRings/${KR}/cryptoKeys/${KK}`, { timeout: 10000 },
   );
   check("edit rotation period via UI → cryptoKeys.get shows new period", true);
   await shot("20-kms-overview");
@@ -1717,12 +1718,12 @@ try {
   await page.getByLabel("New principals").fill("user:kms-smoke@example.com");
   await page.getByRole("button", { name: "Save" }).click();
   await page.getByText("user:kms-smoke@example.com").first().waitFor({ timeout: 10000 });
-  const kmsPol = await wjson(`/v1/projects/vyomi-project/locations/us-central1/keyRings/${KR}/cryptoKeys/${KK}:getIamPolicy`);
+  const kmsPol = await wjson(`/v1/projects/${PROJ}/locations/us-central1/keyRings/${KR}/cryptoKeys/${KK}:getIamPolicy`);
   check("grant access via UI → getIamPolicy shows binding",
     (kmsPol.bindings || []).some((b) => b.role === "roles/cloudkms.cryptoKeyEncrypterDecrypter" && b.members.includes("user:kms-smoke@example.com")));
   await shot("21-kms-permissions");
 
-  const kmsEncPath = `/v1/projects/vyomi-project/locations/us-central1/keyRings/${KR}/cryptoKeys/${KK}:encrypt`;
+  const kmsEncPath = `/v1/projects/${PROJ}/locations/us-central1/keyRings/${KR}/cryptoKeys/${KK}:encrypt`;
   const kmsDeniedResp = await wire(kmsEncPath, {
     method: "POST", headers: { "content-type": "application/json", "X-Cloudlearn-Principal": "someone-else@example.com" },
     body: JSON.stringify({ plaintext: Buffer.from("smoke-secret").toString("base64") }),
@@ -1740,7 +1741,7 @@ try {
   const AK_PROJECT = `v4-gcp-autokey-keys-${Date.now() % 100000}`;
   // Reset first: an earlier run (e.g. ui-conformance.mjs against the same dev_server) may
   // have already left Autokey ACTIVE for this project.
-  await wjson("/v1/projects/vyomi-project/autokeyConfig?updateMask=state", {
+  await wjson(`/v1/projects/${PROJ}/autokeyConfig?updateMask=state`, {
     method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ state: "DISABLED" }),
   });
   await page.goto(UI + "#/security/kms/autokey");
@@ -1748,7 +1749,7 @@ try {
   await page.getByLabel("Key project").fill(AK_PROJECT);
   await page.getByRole("button", { name: "Enable" }).click();
   await page.getByText(AK_PROJECT).waitFor({ timeout: 10000 });
-  const akCfg = await wjson("/v1/projects/vyomi-project/autokeyConfig");
+  const akCfg = await wjson(`/v1/projects/${PROJ}/autokeyConfig`);
   check("set up Autokey via UI → autokeyConfig.get shows ACTIVE + keyProject",
     akCfg.state === "ACTIVE" && akCfg.keyProject === AK_PROJECT);
 
@@ -1757,7 +1758,7 @@ try {
   await page.keyboard.press("Escape");   // close the Autocomplete dropdown so it doesn't cover the Save button
   await page.getByRole("button", { name: "Save" }).click();
   await page.getByText("compute.googleapis.com/Disk").first().waitFor({ timeout: 10000 });
-  const akHandles = await wjson("/v1/projects/vyomi-project/locations/-/keyHandles");
+  const akHandles = await wjson(`/v1/projects/${PROJ}/locations/-/keyHandles`);
   const akHandle = (akHandles.keyHandles || []).find((h) => h.kmsKey?.startsWith(`projects/${AK_PROJECT}/locations/`));
   check("create key handle via UI → listKeyHandles shows it with a provisioned kmsKey",
     akHandle?.resourceTypeSelector === "compute.googleapis.com/Disk");
@@ -1774,9 +1775,9 @@ try {
   await page.getByLabel("Secret value").fill("smoke-value-1");
   await page.getByRole("button", { name: "Create secret", exact: true }).click();
   await page.getByRole("heading", { name: SM }).waitFor({ timeout: 10000 });
-  const sec = await wjson(`/v1/projects/vyomi-project/secrets/${SM}`);
+  const sec = await wjson(`/v1/projects/${PROJ}/secrets/${SM}`);
   check("create secret via UI → visible over native wire (secrets.get)", sec.name?.endsWith(`/secrets/${SM}`));
-  const v1 = await wjson(`/v1/projects/vyomi-project/secrets/${SM}/versions/latest:access`);
+  const v1 = await wjson(`/v1/projects/${PROJ}/secrets/${SM}/versions/latest:access`);
   check("initial value accessible over native wire", Buffer.from(v1.payload?.data || "", "base64").toString() === "smoke-value-1");
   await shot("12-secret-detail");
 
@@ -1786,12 +1787,12 @@ try {
   await page.getByRole("dialog").getByRole("button", { name: "Add new version", exact: true }).click();
   await page.getByRole("dialog").waitFor({ state: "detached", timeout: 10000 });
   await page.getByRole("cell", { name: "2", exact: true }).waitFor({ timeout: 10000 });
-  const v2 = await wjson(`/v1/projects/vyomi-project/secrets/${SM}/versions/latest:access`);
+  const v2 = await wjson(`/v1/projects/${PROJ}/secrets/${SM}/versions/latest:access`);
   check("add version via UI → latest value over native wire", Buffer.from(v2.payload?.data || "", "base64").toString() === "smoke-value-2");
   await shot("13-secret-versions");
 
   // Reverse direction: add a version over the wire → shown in the UI's Versions table
-  await wire(`/v1/projects/vyomi-project/secrets/${SM}:addVersion`, {
+  await wire(`/v1/projects/${PROJ}/secrets/${SM}:addVersion`, {
     method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify({ payload: { data: Buffer.from("smoke-value-3").toString("base64") } }),
   });
@@ -1803,12 +1804,12 @@ try {
   await page.goto(UI + "#/security/secret-manager");
   await page.getByPlaceholder("Filter").first().fill(SM);   // a long-lived project has >1 page of secrets
   await page.getByRole("link", { name: SM }).waitFor({ timeout: 10000 });
-  await page.getByRole("checkbox", { name: `Select projects/vyomi-project/secrets/${SM}` }).check();
+  await page.getByRole("checkbox", { name: `Select projects/${PROJ}/secrets/${SM}` }).check();
   await page.getByRole("button", { name: "Delete", exact: true }).click();
   await page.getByLabel("Confirm deletion").fill(SM);
   await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
   await page.getByRole("dialog").waitFor({ state: "detached", timeout: 10000 });
-  check("delete secret via UI → gone over native wire", (await wire(`/v1/projects/vyomi-project/secrets/${SM}`)).status === 404);
+  check("delete secret via UI → gone over native wire", (await wire(`/v1/projects/${PROJ}/secrets/${SM}`)).status === 404);
 
   // Secret Manager DEPTH: Permissions is a real, ENFORCED per-secret IAM policy (unlike KMS/
   // Pub/Sub's store-only policy) — grant access via the UI, then prove the native wire
@@ -1819,7 +1820,7 @@ try {
   await page.getByLabel("Name").fill(SM2);
   await page.getByRole("button", { name: "Create secret", exact: true }).click();
   await page.getByRole("heading", { name: SM2 }).waitFor({ timeout: 10000 });
-  await wire(`/v1/projects/vyomi-project/secrets/${SM2}:addVersion`, {
+  await wire(`/v1/projects/${PROJ}/secrets/${SM2}:addVersion`, {
     method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify({ payload: { data: Buffer.from("smoke-value").toString("base64") } }),
   });
@@ -1828,15 +1829,15 @@ try {
   await page.getByLabel("New principals").fill("user:sm-smoke@example.com");
   await page.getByRole("button", { name: "Save" }).click();
   await page.getByText("user:sm-smoke@example.com").first().waitFor({ timeout: 10000 });
-  const deniedResp = await wire(`/v1/projects/vyomi-project/secrets/${SM2}/versions/latest:access`,
+  const deniedResp = await wire(`/v1/projects/${PROJ}/secrets/${SM2}/versions/latest:access`,
     { headers: { "X-Cloudlearn-Principal": "someone-else@example.com" } });
-  const allowedResp = await wire(`/v1/projects/vyomi-project/secrets/${SM2}/versions/latest:access`,
+  const allowedResp = await wire(`/v1/projects/${PROJ}/secrets/${SM2}/versions/latest:access`,
     { headers: { "X-Cloudlearn-Principal": "sm-smoke@example.com" } });
   check("grant access via UI → native wire denies an ungranted principal", deniedResp.status === 403);
   check("grant access via UI → native wire allows the granted principal", allowedResp.status === 200);
   await shot("14-secret-permissions");
 
-  await wire(`/v1/projects/vyomi-project/secrets/${SM2}:addVersion`, {
+  await wire(`/v1/projects/${PROJ}/secrets/${SM2}:addVersion`, {
     method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify({ payload: { data: Buffer.from("smoke-value").toString("base64") } }),
   });
@@ -1863,16 +1864,16 @@ try {
   await page.getByRole("dialog").getByRole("button", { name: "Create secret", exact: true }).click();
   await page.getByRole("dialog").waitFor({ state: "detached", timeout: 10000 });
   await page.getByRole("link", { name: RSM }).waitFor({ timeout: 10000 });
-  const rsec = await wjson(`/v1/projects/vyomi-project/locations/us-east1/secrets/${RSM}`);
+  const rsec = await wjson(`/v1/projects/${PROJ}/locations/us-east1/secrets/${RSM}`);
   check("create regional secret via UI → visible over native regional wire",
     rsec.name?.endsWith(`/locations/us-east1/secrets/${RSM}`));
   check("regional secret has no replication field (it IS the one location)", !("replication" in rsec));
-  const rv1 = await wjson(`/v1/projects/vyomi-project/locations/us-east1/secrets/${RSM}/versions/latest:access`);
+  const rv1 = await wjson(`/v1/projects/${PROJ}/locations/us-east1/secrets/${RSM}/versions/latest:access`);
   check("regional initial value accessible over native wire",
     Buffer.from(rv1.payload?.data || "", "base64").toString() === "regional-smoke-1");
   await shot("15d-secret-regional");
 
-  await wire(`/v1/projects/vyomi-project/locations/us-east1/secrets/${RSM}:addVersion`, {
+  await wire(`/v1/projects/${PROJ}/locations/us-east1/secrets/${RSM}:addVersion`, {
     method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify({ payload: { data: Buffer.from("regional-smoke-2").toString("base64") } }),
   });
@@ -1883,13 +1884,13 @@ try {
   await page.goto(UI + "#/security/secret-manager?tab=regional&location=us-east1");
   await page.getByPlaceholder("Filter").first().fill(RSM);
   await page.getByRole("link", { name: RSM }).waitFor({ timeout: 10000 });
-  await page.getByRole("checkbox", { name: `Select projects/vyomi-project/locations/us-east1/secrets/${RSM}` }).check();
+  await page.getByRole("checkbox", { name: `Select projects/${PROJ}/locations/us-east1/secrets/${RSM}` }).check();
   await page.getByRole("button", { name: "Delete", exact: true }).click();
   await page.getByLabel("Confirm deletion").fill(RSM);
   await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
   await page.getByRole("dialog").waitFor({ state: "detached", timeout: 10000 });
   check("delete regional secret via UI → gone over native wire",
-    (await wire(`/v1/projects/vyomi-project/locations/us-east1/secrets/${RSM}`)).status === 404);
+    (await wire(`/v1/projects/${PROJ}/locations/us-east1/secrets/${RSM}`)).status === 404);
 
   // Cloud SQL: create instance via UI → native Admin API, add a database over the wire →
   // shown in the UI, then delete the instance via UI → gone over the wire.
@@ -1899,12 +1900,12 @@ try {
   await page.getByLabel("Password", { exact: true }).fill("Sm0ke-Passw0rd!");
   await page.getByRole("button", { name: "Create instance", exact: true }).click();
   await page.getByRole("heading", { name: SQLI }).waitFor({ timeout: 10000 });
-  const sqlInstances = await wjson(`/sql/v1beta4/projects/vyomi-project/instances`);
+  const sqlInstances = await wjson(`/sql/v1beta4/projects/${PROJ}/instances`);
   check("create instance via UI → visible over native wire (instances.list)", (sqlInstances.items || []).some((i) => i.name === SQLI));
   await shot("15-sql-instance-overview");
 
   const SQLDB = `wiredb${Date.now() % 100000}`;
-  await wire(`/sql/v1beta4/projects/vyomi-project/instances/${SQLI}/databases`, {
+  await wire(`/sql/v1beta4/projects/${PROJ}/instances/${SQLI}/databases`, {
     method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: SQLDB }),
   });
   await page.goto(UI + `#/sql/instances/${SQLI}/databases`);
@@ -1919,7 +1920,7 @@ try {
   await page.getByLabel("Replica instance ID").fill(SQLREP);
   await page.getByRole("dialog").getByRole("button", { name: "Create", exact: true }).click();
   await page.getByRole("link", { name: SQLREP }).waitFor({ timeout: 10000 });
-  const repDbs = await wjson(`/sql/v1beta4/projects/vyomi-project/instances/${SQLREP}/databases`);
+  const repDbs = await wjson(`/sql/v1beta4/projects/${PROJ}/instances/${SQLREP}/databases`);
   check("replica created via UI → seeded with primary's database over native wire", (repDbs.items || []).some((d) => d.name === SQLDB));
   await shot("15b-sql-replica");
 
@@ -1930,11 +1931,11 @@ try {
   await page.getByRole("button", { name: "Create backup" }).click();
   await backupPost;
   await page.getByRole("button", { name: "Restore", exact: true }).first().waitFor({ timeout: 10000 });
-  await wire(`/sql/v1beta4/projects/vyomi-project/instances/${SQLI}/databases/${SQLDB}`, { method: "DELETE" });
+  await wire(`/sql/v1beta4/projects/${PROJ}/instances/${SQLI}/databases/${SQLDB}`, { method: "DELETE" });
   await page.getByRole("button", { name: "Restore", exact: true }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Restore", exact: true }).click();
   await page.getByRole("dialog").waitFor({ state: "detached", timeout: 10000 });
-  const restoredDbs = await wjson(`/sql/v1beta4/projects/vyomi-project/instances/${SQLI}/databases`);
+  const restoredDbs = await wjson(`/sql/v1beta4/projects/${PROJ}/instances/${SQLI}/databases`);
   check("restore backup via UI → deleted database reappears over native wire", (restoredDbs.items || []).some((d) => d.name === SQLDB));
   await shot("15c-sql-restore");
 
@@ -1947,7 +1948,7 @@ try {
   await page.getByRole("button", { name: "Run" }).click();
   await page.getByText("affected.").waitFor({ timeout: 10000 });
   check("run query via Studio UI → real table created over native wire",
-    (await wjson(`/sql/v1beta4/projects/vyomi-project/instances/${SQLI}/tables`)).tables?.includes(SQLTABLE));
+    (await wjson(`/sql/v1beta4/projects/${PROJ}/instances/${SQLI}/tables`)).tables?.includes(SQLTABLE));
   await page.goto(UI + `#/sql/instances/${SQLI}/query-insights`);
   await page.getByText(SQLTABLE).first().waitFor({ timeout: 10000 });
   check("query via Studio UI → shown in Query insights", true);
@@ -1968,7 +1969,7 @@ try {
   await page.getByRole("heading", { name: "Client certificate created" }).waitFor({ timeout: 10000 });
   await page.getByRole("button", { name: "Done" }).click();
   check("create client cert via UI → native sslCerts.list shows it",
-    (await wjson(`/sql/v1beta4/projects/vyomi-project/instances/${SQLI}/sslCerts`)).items?.some((c) => c.commonName === "smoke-client"));
+    (await wjson(`/sql/v1beta4/projects/${PROJ}/instances/${SQLI}/sslCerts`)).items?.some((c) => c.commonName === "smoke-client"));
 
   await page.goto(UI + `#/sql/instances/${SQLI}/studio`);
   await page.getByLabel("SQL editor").fill("SELECT 1");
@@ -1978,14 +1979,14 @@ try {
 
   // A primary can't be deleted while it has live replicas (native restriction) —
   // delete the replica over the wire first, then the primary via the UI below.
-  await wire(`/sql/v1beta4/projects/vyomi-project/instances/${SQLREP}`, { method: "DELETE" });
+  await wire(`/sql/v1beta4/projects/${PROJ}/instances/${SQLREP}`, { method: "DELETE" });
 
   await page.goto(UI + `#/sql/instances/${SQLI}/overview`);
   await page.getByRole("button", { name: "Delete", exact: true }).click();
   await page.getByLabel("Confirm deletion").fill(SQLI);
   await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
   await page.getByRole("heading", { name: "Instances" }).waitFor({ timeout: 10000 });
-  check("delete instance via UI → gone over native wire", (await wire(`/sql/v1beta4/projects/vyomi-project/instances/${SQLI}`)).status === 404);
+  check("delete instance via UI → gone over native wire", (await wire(`/sql/v1beta4/projects/${PROJ}/instances/${SQLI}`)).status === 404);
   // Pub/Sub: create a topic via the UI (with its default subscription) → native wire,
   // publish a message via the UI, publish over the wire → pull+ack in the UI, snapshot,
   // then delete both resources via the UI.
@@ -1994,7 +1995,7 @@ try {
   await page.getByLabel("Topic ID").fill(PST);
   await page.getByRole("button", { name: "Create", exact: true }).click();
   await page.getByRole("heading", { name: PST }).waitFor({ timeout: 10000 });
-  const psTopics = await wjson(`/v1/projects/vyomi-project/topics`);
+  const psTopics = await wjson(`/v1/projects/${PROJ}/topics`);
   check("create topic via UI → visible over native wire (topics.list)", (psTopics.topics || []).some((t) => t.name.endsWith(`/topics/${PST}`)));
   await shot("15-pubsub-topic");
 
@@ -2009,7 +2010,7 @@ try {
   await page.getByLabel("Message body").fill(PMSG);
   await page.getByRole("button", { name: "Publish", exact: true }).click();
   await page.getByRole("heading", { name: PST }).waitFor({ timeout: 10000 });
-  const pulled = await wjson(`/v1/projects/vyomi-project/subscriptions/${PST}-sub:pull`, {
+  const pulled = await wjson(`/v1/projects/${PROJ}/subscriptions/${PST}-sub:pull`, {
     method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ maxMessages: 10 }),
   });
   check("publish via UI → readable over native wire (subscriptions.pull)",
@@ -2021,7 +2022,7 @@ try {
 
   // Message published over the wire (SDK direction) → pulled + acked in the UI
   const PMSG2 = `v4 pubsub wire-to-ui ${Date.now() % 100000}`;
-  await wire(`/v1/projects/vyomi-project/topics/${PST}:publish`, {
+  await wire(`/v1/projects/${PROJ}/topics/${PST}:publish`, {
     method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify({ messages: [{ data: Buffer.from(PMSG2).toString("base64") }] }),
   });
@@ -2032,7 +2033,7 @@ try {
   await page.getByText(PMSG2).waitFor({ timeout: 10000 });
   check("message published over wire → pulled in the UI", true);
   await shot("17-pubsub-pull");
-  const afterAck = await wjson(`/v1/projects/vyomi-project/subscriptions/${PST}-sub:pull`, {
+  const afterAck = await wjson(`/v1/projects/${PROJ}/subscriptions/${PST}-sub:pull`, {
     method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ maxMessages: 10 }),
   });
   check("auto-ack via UI → message gone over native wire", !(afterAck.receivedMessages || []).length);
@@ -2046,7 +2047,7 @@ try {
   await page.getByRole("option", { name: `${PST}-sub` }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Create" }).click();
   await page.getByText(PSNAP, { exact: true }).waitFor({ timeout: 10000 });
-  const psSnaps = await wjson(`/v1/projects/vyomi-project/snapshots`);
+  const psSnaps = await wjson(`/v1/projects/${PROJ}/snapshots`);
   check("create snapshot via UI → visible over native wire (snapshots.list)", (psSnaps.snapshots || []).some((s) => s.name.endsWith(`/snapshots/${PSNAP}`)));
   await shot("18-pubsub-snapshot");
 
@@ -2056,14 +2057,14 @@ try {
   await page.getByLabel("Confirm deletion").fill(`${PST}-sub`);
   await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
   await page.getByRole("dialog").waitFor({ state: "detached", timeout: 10000 });
-  check("delete subscription via UI → gone over native wire", (await wire(`/v1/projects/vyomi-project/subscriptions/${PST}-sub`)).status === 404);
+  check("delete subscription via UI → gone over native wire", (await wire(`/v1/projects/${PROJ}/subscriptions/${PST}-sub`)).status === 404);
 
   await page.goto(UI + `#/pubsub/topics/${PST}`);
   await page.getByRole("button", { name: "Delete", exact: true }).click();
   await page.getByLabel("Confirm deletion").fill(PST);
   await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
   await page.getByRole("dialog").waitFor({ state: "detached", timeout: 10000 });
-  check("delete topic via UI → gone over native wire", (await wire(`/v1/projects/vyomi-project/topics/${PST}`)).status === 404);
+  check("delete topic via UI → gone over native wire", (await wire(`/v1/projects/${PROJ}/topics/${PST}`)).status === 404);
 
   // Schemas: create via the UI → visible over the native wire
   await page.goto(UI + "#/pubsub/schemas");
@@ -2073,14 +2074,14 @@ try {
   await page.getByLabel("Definition").fill('{"type":"record","name":"Smoke","fields":[]}');
   await page.getByRole("dialog").getByRole("button", { name: "Create" }).click();
   await page.getByText(PSCHEMA, { exact: true }).waitFor({ timeout: 10000 });
-  const psSchemas = await wjson(`/v1/projects/vyomi-project/schemas`);
+  const psSchemas = await wjson(`/v1/projects/${PROJ}/schemas`);
   check("create schema via UI → visible over native wire (schemas.list)", (psSchemas.schemas || []).some((s) => s.name.endsWith(`/schemas/${PSCHEMA}`)));
   await shot("19-pubsub-schema");
 
   // Subscription filter (DEPTH): a subscription created in the UI with a filter only
   // receives messages (published over the native wire) whose attributes match it.
   const PFTOPIC = `v4-gcp-ps-filter-topic-${Date.now() % 100000}`;
-  await wire(`/v1/projects/vyomi-project/topics/${PFTOPIC}`, { method: "PUT", headers: { "content-type": "application/json" }, body: "{}" });
+  await wire(`/v1/projects/${PROJ}/topics/${PFTOPIC}`, { method: "PUT", headers: { "content-type": "application/json" }, body: "{}" });
   await page.goto(UI + "#/pubsub/subscriptions/create");
   const PFSUB = `v4-gcp-ps-filter-sub-${Date.now() % 100000}`;
   await page.getByLabel("Subscription ID").fill(PFSUB);
@@ -2089,10 +2090,10 @@ try {
   await page.getByLabel("Subscription filter").fill('attributes.kind = "keep"');
   await page.getByRole("button", { name: "Create", exact: true }).click();
   await page.getByRole("heading", { name: PFSUB }).waitFor({ timeout: 10000 });
-  const pfSub = await wjson(`/v1/projects/vyomi-project/subscriptions/${PFSUB}`);
+  const pfSub = await wjson(`/v1/projects/${PROJ}/subscriptions/${PFSUB}`);
   check("subscription filter set via UI → stored over native wire", pfSub.filter === 'attributes.kind = "keep"');
 
-  await wire(`/v1/projects/vyomi-project/topics/${PFTOPIC}:publish`, {
+  await wire(`/v1/projects/${PROJ}/topics/${PFTOPIC}:publish`, {
     method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify({ messages: [
       { data: Buffer.from("keep-this").toString("base64"), attributes: { kind: "keep" } },
@@ -2111,9 +2112,9 @@ try {
   // via the UI with "Write to Cloud Storage" really writes each delivered message as a
   // real object in a real GCS bucket, never queuing it.
   const PGCS_BUCKET = `v4-gcp-ps-gcs-${Date.now() % 100000}`;
-  await wire(`/storage/v1/b?project=vyomi-project`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: PGCS_BUCKET }) });
+  await wire(`/storage/v1/b?project=${PROJ}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: PGCS_BUCKET }) });
   const PGCS_TOPIC = `v4-gcp-ps-gcs-topic-${Date.now() % 100000}`;
-  await wire(`/v1/projects/vyomi-project/topics/${PGCS_TOPIC}`, { method: "PUT", headers: { "content-type": "application/json" }, body: "{}" });
+  await wire(`/v1/projects/${PROJ}/topics/${PGCS_TOPIC}`, { method: "PUT", headers: { "content-type": "application/json" }, body: "{}" });
   await page.goto(UI + "#/pubsub/subscriptions/create");
   const PGCS_SUB = `v4-gcp-ps-gcs-sub-${Date.now() % 100000}`;
   await page.getByLabel("Subscription ID").fill(PGCS_SUB);
@@ -2124,14 +2125,14 @@ try {
   await shot("20b-pubsub-gcs-delivery-create");
   await page.getByRole("button", { name: "Create", exact: true }).click();
   await page.getByRole("heading", { name: PGCS_SUB }).waitFor({ timeout: 10000 });
-  await wire(`/v1/projects/vyomi-project/topics/${PGCS_TOPIC}:publish`, {
+  await wire(`/v1/projects/${PROJ}/topics/${PGCS_TOPIC}:publish`, {
     method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify({ messages: [{ data: Buffer.from("gcs delivery row").toString("base64") }] }),
   });
   const gcsDelivered = await wjson(`/storage/v1/b/${PGCS_BUCKET}/o`);
   check("Cloud Storage delivery via UI → message written as a real object over native wire",
     (gcsDelivered.items || []).length === 1);
-  const psGcsDeliverySub = await wjson(`/v1/projects/vyomi-project/subscriptions/${PGCS_SUB}`);
+  const psGcsDeliverySub = await wjson(`/v1/projects/${PROJ}/subscriptions/${PGCS_SUB}`);
   check("a Cloud Storage subscription never queues the message itself", !psGcsDeliverySub.messages);
 
   // BigQuery delivery: submitted for real, rejected with a real error — never a silent
@@ -2150,7 +2151,7 @@ try {
   // Topic ingestion from Cloud Storage: a topic configured via the UI really ingests an
   // object already in the bucket as a message, the next time the topic is read.
   const PING_BUCKET = `v4-gcp-ps-ingest-${Date.now() % 100000}`;
-  await wire(`/storage/v1/b?project=vyomi-project`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: PING_BUCKET }) });
+  await wire(`/storage/v1/b?project=${PROJ}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: PING_BUCKET }) });
   await page.goto(UI + "#/pubsub/topics/create");
   const PING_TOPIC = `v4-gcp-ps-ingest-topic-${Date.now() % 100000}`;
   await page.getByLabel("Topic ID").fill(PING_TOPIC);
@@ -2161,14 +2162,14 @@ try {
   await page.getByRole("button", { name: "Create", exact: true }).click();
   await page.getByRole("heading", { name: PING_TOPIC }).waitFor({ timeout: 10000 });
   const PING_SUB = `${PING_TOPIC}-sub`;
-  await wire(`/v1/projects/vyomi-project/subscriptions/${PING_SUB}`, {
-    method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ topic: `projects/vyomi-project/topics/${PING_TOPIC}` }),
+  await wire(`/v1/projects/${PROJ}/subscriptions/${PING_SUB}`, {
+    method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ topic: `projects/${PROJ}/topics/${PING_TOPIC}` }),
   });
   await wire(`/upload/storage/v1/b/${PING_BUCKET}/o?uploadType=media&name=${encodeURIComponent("orders/ingested.txt")}`, {
     method: "POST", headers: { "content-type": "text/plain" }, body: "ingested from gcs",
   });
   await page.reload();   // re-GETting the topic lazily syncs ingestion — no background poller
-  const ingestPulled = await wjson(`/v1/projects/vyomi-project/subscriptions/${PING_SUB}:pull`, {
+  const ingestPulled = await wjson(`/v1/projects/${PROJ}/subscriptions/${PING_SUB}:pull`, {
     method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ maxMessages: 10 }),
   });
   check("topic ingestion via UI → the GCS object arrived as a real message",
@@ -2185,11 +2186,11 @@ try {
   await shot("20e-pubsub-transform-create");
   await page.getByRole("button", { name: "Create", exact: true }).click();
   await page.getByRole("heading", { name: PUDF_TOPIC }).waitFor({ timeout: 10000 });
-  await wire(`/v1/projects/vyomi-project/topics/${PUDF_TOPIC}:publish`, {
+  await wire(`/v1/projects/${PROJ}/topics/${PUDF_TOPIC}:publish`, {
     method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify({ messages: [{ data: Buffer.from(JSON.stringify({ ssn: "123-45-6789", name: "bob" })).toString("base64") }] }),
   });
-  const udfPulled = await wjson(`/v1/projects/vyomi-project/subscriptions/${PUDF_TOPIC}-sub:pull`, {
+  const udfPulled = await wjson(`/v1/projects/${PROJ}/subscriptions/${PUDF_TOPIC}-sub:pull`, {
     method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ maxMessages: 10 }),
   });
   const udfDecoded = (udfPulled.receivedMessages || []).map((m) => JSON.parse(Buffer.from(m.message.data, "base64").toString()));
@@ -2223,7 +2224,7 @@ try {
   await shot("21-memorystore-create-filled");
   await page.getByRole("button", { name: "Create instance", exact: true }).click();
   await page.getByRole("heading", { name: MS }).waitFor({ timeout: 10000 });
-  const msList = await wjson("/v1/projects/vyomi-project/locations/-/instances");
+  const msList = await wjson(`/v1/projects/${PROJ}/locations/-/instances`);
   const msInst = (msList.instances || []).find((i) => i.name.endsWith(`/instances/${MS}`));
   check("create instance via UI → visible over native wire (instances.list)", !!msInst);
   check("create instance via UI → tier/version/capacity/labels/AUTH applied",
@@ -2233,7 +2234,7 @@ try {
 
   await page.getByRole("link", { name: "Connections" }).click();
   await page.getByRole("button", { name: "Show" }).click();
-  const msAuth = await wjson(`/v1/projects/vyomi-project/locations/us-central1/instances/${MS}/authString`);
+  const msAuth = await wjson(`/v1/projects/${PROJ}/locations/us-central1/instances/${MS}/authString`);
   await page.getByText(msAuth.authString).waitFor({ timeout: 10000 });
   check("Connections 'Show' → matches native getAuthString", !!msAuth.authString);
   await shot("23-memorystore-connections");
@@ -2246,7 +2247,7 @@ try {
   await page.getByRole("radio", { name: "RDB snapshot" }).check();
   await page.getByRole("dialog").getByRole("button", { name: "Save" }).click();
   await page.getByRole("dialog").waitFor({ state: "detached", timeout: 10000 });
-  const msCfg = await wjson(`/v1/projects/vyomi-project/locations/us-central1/instances/${MS}`);
+  const msCfg = await wjson(`/v1/projects/${PROJ}/locations/us-central1/instances/${MS}`);
   check("edit configuration via UI → patched over native wire",
     msCfg.redisConfigs?.["maxmemory-policy"] === "allkeys-lru" && msCfg.persistenceConfig?.persistenceMode === "RDB");
   await page.getByText("allkeys-lru").waitFor({ timeout: 10000 });
@@ -2261,7 +2262,7 @@ try {
   await page.getByRole("option", { name: "Monday" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Save" }).click();
   await page.getByRole("dialog").waitFor({ state: "detached", timeout: 10000 });
-  const msMaint = await wjson(`/v1/projects/vyomi-project/locations/us-central1/instances/${MS}`);
+  const msMaint = await wjson(`/v1/projects/${PROJ}/locations/us-central1/instances/${MS}`);
   check("edit maintenance policy via UI → weeklyMaintenanceWindow over native wire",
     msMaint.maintenancePolicy?.weeklyMaintenanceWindow?.[0]?.day === "MONDAY");
   await page.getByText("Monday").waitFor({ timeout: 10000 });
@@ -2269,7 +2270,7 @@ try {
   await page.getByRole("radio", { name: "Immediate" }).check();
   await page.getByRole("dialog").getByRole("button", { name: "Reschedule" }).click();
   await page.getByRole("dialog").waitFor({ state: "detached", timeout: 10000 });
-  const msResched = await wjson(`/v1/projects/vyomi-project/locations/us-central1/instances/${MS}`);
+  const msResched = await wjson(`/v1/projects/${PROJ}/locations/us-central1/instances/${MS}`);
   check("reschedule maintenance via UI → maintenanceSchedule set over native wire", !!msResched.maintenanceSchedule);
   await shot("25-memorystore-maintenance");
 
@@ -2282,7 +2283,7 @@ try {
   await page.getByRole("option", { name: "Redis 7.2" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Upgrade" }).click();
   await page.getByRole("dialog").waitFor({ state: "detached", timeout: 10000 });
-  const msUpgraded = await wjson(`/v1/projects/vyomi-project/locations/us-central1/instances/${MS}`);
+  const msUpgraded = await wjson(`/v1/projects/${PROJ}/locations/us-central1/instances/${MS}`);
   check("upgrade Redis version via UI (list row menu) → applied over native wire", msUpgraded.redisVersion === "REDIS_7_2");
 
   await page.goto(UI + `#/memorystore/instances/us-central1/${MS}/overview`);
@@ -2305,7 +2306,7 @@ try {
   await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
   await page.getByRole("heading", { name: "Instances" }).waitFor({ timeout: 10000 });
   check("delete instance via UI → gone over native wire",
-    (await wire(`/v1/projects/vyomi-project/locations/us-central1/instances/${MS}`)).status === 404);
+    (await wire(`/v1/projects/${PROJ}/locations/us-central1/instances/${MS}`)).status === 404);
 
   // Resource Manager: "Manage resources" — create a project through the New Project form,
   // confirm it over the native Resource Manager v3 wire (projects.search), rename it via the

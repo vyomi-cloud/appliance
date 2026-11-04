@@ -15,7 +15,7 @@ const errors = [];
 page.on("pageerror", (e) => errors.push(e.message));
 const wj = (path, init) => page.evaluate(async ([u, i]) => { const r = await fetch(u, i); const t = await r.text(); try { return { status: r.status, ...JSON.parse(t || "{}") }; } catch { return { status: r.status, raw: t }; } }, [WIRE + path, init]);
 const J = { "content-type": "application/json" };
-const P = "vyomi-project", L = "us-central1";
+const P = process.env.NANO === "1" ? "nano-project" : "vyomi-project", L = "us-central1";
 const N = Date.now() % 100000;
 try {
   await page.goto(UI, { waitUntil: "networkidle" });
