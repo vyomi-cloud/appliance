@@ -41,11 +41,11 @@
   "tests": ["tests/conformance/test_gcp_compute_instances_core.py"]
  },
  "gcp.compute.images.crud": {
-  "title": "Custom images",
-  "level": { "nano": "full", "offline": "full" },
-  "limitations": [],
+  "title": "Custom images (create from disk, import rawDisk from Cloud Storage, export to Cloud Storage, import/export history)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["Import (images.insert with rawDisk.source) really checks the .tar.gz object exists in the simulator's Cloud Storage; export writes an image archive (tar.gz with image metadata) into a real destination bucket object. Disk CONTENTS are not modeled, so neither moves guest bytes.", "Export, and the import/export history (global/imageJobs), are Vyomi collections: real gcloud compute images import|export run Cloud Build workflows and show up as Cloud Build history, which Vyomi does not run."],
   "api": ["images.insert", "images.get", "images.list", "images.delete"],
-  "tests": ["tests/conformance/test_gcp_compute_instances_core.py"]
+  "tests": ["tests/conformance/test_gcp_compute_instances_core.py", "tests/conformance/test_gcp_image_import_export.py"]
  },
  "gcp.compute.machine_images.crud": {
   "title": "Machine images",
