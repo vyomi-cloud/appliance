@@ -21,6 +21,7 @@ import { TrustStores, CreateTrustStore } from "./TrustStores.jsx";
 import { LifecycleManager, CreateLifecyclePolicy } from "./LifecycleManager.jsx";
 import { AutoScalingGroups, AutoScalingGroupDetail, CreateAutoScalingGroup } from "./AutoScaling.jsx";
 import * as Honest from "./HonestPages.jsx";
+import * as Commit from "./CommitmentPages.jsx";
 import * as Ops from "./OpsPages.jsx";
 
 const crumb = (text, ...path) => ({ text, href: `#/ec2/${path.join("/")}` });
@@ -84,12 +85,12 @@ export default {
     { pattern: "/ec2/create-launch-template", component: CreateLaunchTemplate, crumbs: () => [crumb("EC2", ""), crumb("Launch templates", "launch-templates"), crumb("Create launch template", "create-launch-template")] },
 
     { pattern: "/ec2/spot-requests", component: Ops.SpotRequests, crumbs: () => [crumb("EC2", ""), crumb("Spot Requests", "spot-requests")] },
-    { pattern: "/ec2/savings-plans", component: Honest.SavingsPlans, crumbs: () => [crumb("EC2", ""), crumb("Savings Plans", "savings-plans")] },
+    { pattern: "/ec2/savings-plans", component: Commit.SavingsPlans, crumbs: () => [crumb("EC2", ""), crumb("Savings Plans", "savings-plans")] },
     { pattern: "/ec2/reserved-instances", component: Ops.ReservedInstances, crumbs: () => [crumb("EC2", ""), crumb("Reserved Instances", "reserved-instances")] },
     { pattern: "/ec2/dedicated-hosts", component: Ops.DedicatedHosts, crumbs: () => [crumb("EC2", ""), crumb("Dedicated Hosts", "dedicated-hosts")] },
     { pattern: "/ec2/capacity-reservations", component: Ops.CapacityReservations, crumbs: () => [crumb("EC2", ""), crumb("Capacity Reservations", "capacity-reservations")] },
     { pattern: "/ec2/ultraservers", component: Honest.UltraServers, crumbs: () => [crumb("EC2", ""), crumb("UltraServers", "ultraservers")] },
-    { pattern: "/ec2/capacity-manager", component: Honest.CapacityManager, crumbs: () => [crumb("EC2", ""), crumb("Capacity Manager", "capacity-manager")] },
+    { pattern: "/ec2/capacity-manager", component: Commit.CapacityManager, crumbs: () => [crumb("EC2", ""), crumb("Capacity Manager", "capacity-manager")] },
 
     { pattern: "/ec2/amis", component: Amis, crumbs: () => [crumb("EC2", ""), crumb("AMIs", "amis")] },
     { pattern: "/ec2/amis/:id", component: AmiDetail, crumbs: (p) => [crumb("EC2", ""), crumb("AMIs", "amis"), crumb(p.id, "amis", p.id)] },

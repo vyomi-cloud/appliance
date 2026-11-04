@@ -64,10 +64,13 @@
     "tests": ["tests/conformance/test_gcp_redis_core.py"]
   },
   "gcp.memorystore.monitoring": {
-    "title": "Overview: Monitoring (memory usage, connected clients)",
-    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "title": "Overview: Monitoring (memory capacity, uptime, node role)",
+    "level": { "nano": "limited", "offline": "limited" },
     "limitations": [
-      "Vyomi collects no Redis runtime metrics (memory usage, connected clients, ops/sec) for Memorystore instances."
-    ]
+      "Only metrics derivable from real instance state are emitted into Cloud Monitoring (redis.googleapis.com/stats/memory/maxmemory from memorySizeGb, server/uptime from createTime, replication/role per node), queryable through timeSeries.list like any metric.",
+      "Vyomi runs no Redis process, so memory usage, connected clients, commands/sec, hit ratio and CPU are not emitted at all; the tab shows them as 'no data' instead of invented values."
+    ],
+    "api": ["timeSeries.list", "metricDescriptors.list"],
+    "tests": ["tests/conformance/test_gcp_apphub_redis_metrics.py"]
   }
 }

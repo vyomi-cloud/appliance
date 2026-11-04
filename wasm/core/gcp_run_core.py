@@ -461,6 +461,91 @@ def _check_sql_instances(insts, store):
             raise _E(400, "INVALID_ARGUMENT", "Cloud SQL instance '%s' does not exist." % conn)
 
 
+_CONNECTOR = re.compile(r"^projects/([^/]+)/locations/([^/]+)/connectors/([a-z][-a-z0-9]{0,23}[a-z0-9])$")
+_MESH = re.compile(r"^projects/[^/]+/locations/global/meshes/[a-zA-Z][-a-zA-Z0-9_]*$")
+_EGRESS = ("ALL_TRAFFIC", "PRIVATE_RANGES_ONLY", "VPC_EGRESS_UNSPECIFIED")
+
+
+def _check_networking(spec, is_job, store, project, location):
+    """HTTP/2 end-to-end (h2c port), session affinity, VPC egress (connector or Direct VPC), service mesh."""
+    for ci, c in enumerate(spec.get("containers") or []):
+        ports = c.get("ports")
+        if ports is None:
+            continue
+        w = "template.containers[%d].ports" % ci
+        if is_job:
+            raise _E(400, "INVALID_ARGUMENT", "Jobs do not expose ports (%s)." % w)
+        if not isinstance(ports, list) or len(ports) > 1:
+            raise _E(400, "INVALID_ARGUMENT", "%s: a container may expose at most one port." % w)
+        for p in ports:
+            if (p or {}).get("name", "") not in ("", "http1", "h2c"):
+                raise _E(400, "INVALID_ARGUMENT", "%s[].name must be \"http1\" or \"h2c\" (HTTP/2 end-to-end), got %r." % (w, p.get("name")))
+            _int_in((p or {}).get("containerPort", 8080), 1, 65535, "%s[].containerPort" % w)
+            if ci > 0 and p:
+                raise _E(400, "INVALID_ARGUMENT", "Only the ingress container (the first) may expose a port; %s is set on a sidecar." % w)
+    if "sessionAffinity" in spec:
+        if is_job:
+            raise _E(400, "INVALID_ARGUMENT", "Jobs do not support sessionAffinity.")
+        if not isinstance(spec["sessionAffinity"], bool):
+            raise _E(400, "INVALID_ARGUMENT", "template.sessionAffinity must be a boolean.")
+    va = spec.get("vpcAccess")
+    if va is not None:
+        if not isinstance(va, dict):
+            raise _E(400, "INVALID_ARGUMENT", "template.vpcAccess must be an object.")
+        for k in va:
+            if k not in ("connector", "egress", "networkInterfaces"):
+                raise _E(400, "INVALID_ARGUMENT", "Unknown field template.vpcAccess.%s." % k)
+        if va.get("connector") and va.get("networkInterfaces"):
+            raise _E(400, "INVALID_ARGUMENT", "template.vpcAccess: set either a connector or networkInterfaces (Direct VPC egress), not both.")
+        if va.get("egress") not in (None,) + _EGRESS:
+            raise _E(400, "INVALID_ARGUMENT", "template.vpcAccess.egress must be ALL_TRAFFIC or PRIVATE_RANGES_ONLY.")
+        if va.get("connector"):
+            m = _CONNECTOR.match(str(va["connector"]))
+            if not m:
+                raise _E(400, "INVALID_ARGUMENT", "template.vpcAccess.connector must be projects/P/locations/L/connectors/NAME.")
+            if location and m.group(2) != location:
+                raise _E(400, "INVALID_ARGUMENT", "The VPC connector region %r must match the region %r." % (m.group(2), location))
+            if _ref(store, "vpcconn", m.group(1), m.group(2), m.group(3)) is False:
+                raise _E(400, "INVALID_ARGUMENT", "VPC Access connector '%s' does not exist." % va["connector"])
+        elif va.get("networkInterfaces"):
+            nics = va["networkInterfaces"]
+            if not isinstance(nics, list) or len(nics) != 1:
+                raise _E(400, "INVALID_ARGUMENT", "template.vpcAccess.networkInterfaces must contain exactly one interface.")
+            n = nics[0] or {}
+            if not (n.get("network") or n.get("subnetwork")):
+                raise _E(400, "INVALID_ARGUMENT", "template.vpcAccess.networkInterfaces[0] needs a network or a subnetwork.")
+            if n.get("subnetwork"):
+                m = re.match(r"^(?:projects/([^/]+)/regions/([^/]+)/subnetworks/)?([^/]+)$", str(n["subnetwork"]))
+                if not m:
+                    raise _E(400, "INVALID_ARGUMENT", "template.vpcAccess.networkInterfaces[0].subnetwork must be a subnetwork name or projects/P/regions/R/subnetworks/NAME.")
+                sproj, sreg = m.group(1) or project, m.group(2) or location
+                if sreg and location and sreg != location:
+                    raise _E(400, "INVALID_ARGUMENT", "The subnetwork region %r must match the region %r." % (sreg, location))
+                if sreg and _ref(store, "subnet", sproj, sreg, m.group(3)) is False:
+                    raise _E(400, "INVALID_ARGUMENT", "Subnetwork '%s' does not exist in region %s." % (m.group(3), sreg))
+            for t in n.get("tags") or []:
+                if not re.match(r"^[a-z]([-a-z0-9]{0,61}[a-z0-9])?$", str(t)):
+                    raise _E(400, "INVALID_ARGUMENT", "Invalid network tag %r." % t)
+        elif va.get("egress") in ("ALL_TRAFFIC", "PRIVATE_RANGES_ONLY"):
+            raise _E(400, "INVALID_ARGUMENT", "template.vpcAccess.egress requires a connector or networkInterfaces.")
+    mesh = spec.get("serviceMesh")
+    if mesh is not None:
+        if is_job:
+            raise _E(400, "INVALID_ARGUMENT", "Jobs do not support serviceMesh.")
+        if not isinstance(mesh, dict) or not _MESH.match(str(mesh.get("mesh", ""))):
+            raise _E(400, "INVALID_ARGUMENT", "template.serviceMesh.mesh must be projects/P/locations/global/meshes/NAME.")
+
+
+def _check_custom_audiences(v):
+    """Custom audiences (the 'Custom URLs' an IAM-authenticated caller may mint tokens for)."""
+    if not isinstance(v, list) or len(v) > 20 or len(set(map(str, v))) != len(v):
+        raise _E(400, "INVALID_ARGUMENT", "customAudiences must be a list of at most 20 unique strings.")
+    for a in v:
+        if not isinstance(a, str) or not (1 <= len(a) <= 253) or re.search(r"\s", a):
+            raise _E(400, "INVALID_ARGUMENT", "Invalid custom audience %r." % (a,))
+    return list(v)
+
+
 def _validate_template_ext(spec, is_job, store, project, location):
     ann = spec.get("annotations") or {}
     for c in spec.get("containers") or []:
@@ -470,6 +555,7 @@ def _validate_template_ext(spec, is_job, store, project, location):
                     raise _E(400, "INVALID_ARGUMENT", "Jobs do not support %s." % key)
                 _check_probe(c[key], which, "container.%s" % key)
     _check_volumes(spec, is_job, store, project)
+    _check_networking(spec, is_job, store, project, location)
     if ann.get(_ANN_SQL):   # the annotation form functions / gcloud use
         _check_sql_instances([x.strip() for x in str(ann[_ANN_SQL]).split(",") if x.strip()], store)
     if not is_job:
@@ -795,6 +881,8 @@ def create_service(store, project, location, query, payload):
            "ingress": spec.get("ingress") or "INGRESS_TRAFFIC_ALL", "launchStage": spec.get("launchStage") or "GA",
            "template": template, "traffic": traffic, "uri": _service_uri(project, location, sid),
            "defaultUriDisabled": bool(spec.get("defaultUriDisabled", False)), "urls": []}
+    if spec.get("customAudiences") is not None:
+        svc["customAudiences"] = _check_custom_audiences(spec["customAudiences"])
     if spec.get("binaryAuthorization"):
         svc["binaryAuthorization"] = spec["binaryAuthorization"]
     if spec.get("scaling"):
@@ -817,7 +905,7 @@ def _get_service(store, project, location, sid):
 
 
 _PATCHABLE = ("description", "labels", "annotations", "client", "clientVersion", "ingress", "launchStage",
-              "template", "traffic", "binaryAuthorization", "scaling", "defaultUriDisabled")
+              "template", "traffic", "binaryAuthorization", "scaling", "defaultUriDisabled", "customAudiences")
 
 
 def _mask_fields(query, payload):
@@ -850,6 +938,8 @@ def update_service(store, project, location, sid, query, payload):
             continue
         if f in ("labels", "annotations"):
             _check_map(spec[f], f)
+        if f == "customAudiences":
+            spec[f] = _check_custom_audiences(spec[f])
         if f == "template":
             tpl = _revision_template(project, spec["template"], False, store, location)
             cur = _copy(svc["template"])

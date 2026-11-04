@@ -234,13 +234,23 @@
   ]
  },
  "gcp.monitoring.application-monitoring": {
-  "title": "Application monitoring (APM)",
+  "title": "Application monitoring (App Hub applications)",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Application monitoring needs Cloud Profiler/APM language agents reporting into the project; Vyomi has no application runtime to instrument. The alert policy wizard's Application and Service or Workload selectors, which link a policy to Application Monitoring, aren't modeled either."
+   "App Hub applications are real (apphub v1: scope, criticality/environment/owner attributes, long-running create/patch/delete) and services/workloads are registered from real discovered resources: Cloud Run services and Compute managed instance groups in the application's location, each registerable once.",
+   "There is no APM data behind an application: no Cloud Profiler/agent telemetry, no per-application golden-signal dashboards, and alert policies are linked to an application only by a user label, not by App Hub selectors. GKE, load balancer and other discovery sources are not modelled."
+  ],
+  "api": [
+   "applications.create", "applications.get", "applications.list", "applications.patch", "applications.delete",
+   "applications.services.create", "applications.services.list", "applications.services.delete",
+   "applications.workloads.create", "applications.workloads.list", "applications.workloads.delete",
+   "discoveredServices.list", "discoveredWorkloads.list"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_apphub_redis_metrics.py"
   ]
  },
  "gcp.monitoring.ops-agent": {

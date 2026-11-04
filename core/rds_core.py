@@ -25,6 +25,7 @@ next.
 from __future__ import annotations
 
 import json
+import re
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -879,6 +880,98 @@ def _restore_db_instance_from_db_snapshot(store: SqlStore, params: dict, msg_sto
     store.persist()
     _log_event(store, db_id, "db-instance", f"DB instance {db_id} restored from snapshot {snap_id}.", ["creation"], msg_store)
     return _success("RestoreDBInstanceFromDBSnapshot", _db_instance_xml(record))
+
+
+_ROLE_ARN = re.compile(r"^arn:aws[a-z-]*:iam::\d{12}:role/.+$")
+
+
+def _restore_from_s3_begin(store: SqlStore, params: dict, s3_store) -> tuple:
+    """Validate RestoreDBInstanceFromS3 like the real API and read the backup. Returns (record, statements)."""
+    try:
+        from core import rds_restore_core as rr
+    except ImportError:  # pragma: no cover - Pyodide flat layout
+        import rds_restore_core as rr  # type: ignore
+    db_id = str(params.get("DBInstanceIdentifier", "")).strip()
+    for req in ("DBInstanceIdentifier", "DBInstanceClass", "Engine", "SourceEngine", "SourceEngineVersion", "S3BucketName",
+                "S3IngestionRoleArn"):
+        if not str(params.get(req, "")).strip():
+            raise RdsError("MissingParameter", f"The request must contain the parameter {req}.", 400)
+    if store.instance_exists(db_id):
+        raise RdsError("DBInstanceAlreadyExists", f"DBInstance {db_id} already exists.", 400)
+    engine = str(params["Engine"]).lower()
+    if engine != "mysql":
+        raise RdsError("InvalidParameterValue", f"Engine {params['Engine']} is not supported for restoring from S3; only mysql is.", 400)
+    if str(params["SourceEngine"]).lower() != "mysql":
+        raise RdsError("InvalidParameterValue", f"SourceEngine {params['SourceEngine']} is not supported; only mysql is.", 400)
+    if not _ROLE_ARN.match(str(params["S3IngestionRoleArn"])):
+        raise RdsError("InvalidParameterValue", "S3IngestionRoleArn must be the ARN of an IAM role.", 400)
+    if not str(params.get("MasterUsername", "")).strip() or not str(params.get("MasterUserPassword", "")).strip():
+        raise RdsError("InvalidParameterCombination", "MasterUsername and MasterUserPassword are required to restore from S3.", 400)
+    bucket, prefix = str(params["S3BucketName"]).strip(), str(params.get("S3Prefix", "")).strip().lstrip("/")
+    work, err = rr.collect(s3_store, bucket, prefix)
+    if work is None:
+        raise RdsError("InvalidS3BucketFault", err.split(": ", 1)[-1], 400)
+    stmts = rr.statements(store, work)
+    record = {
+        "db_instance_identifier": db_id, "db_instance_class": str(params["DBInstanceClass"]), "engine": "mysql",
+        "engine_version": str(params.get("EngineVersion") or params["SourceEngineVersion"]),
+        "db_name": str(params.get("DBName", "")), "db_instance_status": "available",
+        "master_username": str(params["MasterUsername"]), "master_user_password": str(params["MasterUserPassword"]),
+        "allocated_storage": _int(params, "AllocatedStorage", 20), "storage_type": str(params.get("StorageType", "gp3")),
+        "availability_zone": str(params.get("AvailabilityZone", "us-east-1a")),
+        "multi_az": str(params.get("MultiAZ", "false")).lower() == "true",
+        "read_replica_source_db_instance_identifier": None, "read_replica_db_instance_identifiers": [],
+        "publicly_accessible": str(params.get("PubliclyAccessible", "false")).lower() == "true",
+        "backup_retention_period": _int(params, "BackupRetentionPeriod", 7),
+        "endpoint_address": f"{db_id}.nano-rds.local", "endpoint_port": _int(params, "Port", _engine_port("mysql")),
+        "db_instance_arn": _instance_arn(store, db_id), "db_subnet_group_name": str(params.get("DBSubnetGroupName", "default")),
+        "db_parameter_group_name": str(params.get("DBParameterGroupName", "default")),
+        "vpc_security_group_ids": _members(params, "VpcSecurityGroupIds") or ["sg-default"],
+        "deletion_protection": str(params.get("DeletionProtection", "false")).lower() == "true",
+        "ca_certificate_identifier": str(params.get("CACertificateIdentifier", DEFAULT_CA)),
+        "created": _now(), "updated": _now(), "runtime_backend": "sqlite",
+        "restored_from_s3": f"s3://{bucket}/{prefix}", "s3_ingestion_role_arn": str(params["S3IngestionRoleArn"]),
+    }
+    return record, stmts
+
+
+def _restore_from_s3_finish(store: SqlStore, record: dict, failure: str, msg_store=None) -> RdsResponse:
+    db_id = record["db_instance_identifier"]
+    if failure:
+        record["db_instance_status"] = "incompatible-restore"
+        record["restore_failure"] = failure
+    store.put_instance(db_id, record)
+    store.mirror_create_instance(db_id, record)
+    store.persist()
+    if failure:
+        _log_event(store, db_id, "db-instance", f"Restore from S3 failed: {failure}", ["failure"], msg_store)
+    else:
+        _log_event(store, db_id, "db-instance", f"DB instance {db_id} restored from {record['restored_from_s3']}.", ["creation"], msg_store)
+    return _success("RestoreDBInstanceFromS3", _db_instance_xml(record))
+
+
+def _restore_db_instance_from_s3(store: SqlStore, params: dict, msg_store=None, s3_store=None) -> RdsResponse:
+    record, stmts = _restore_from_s3_begin(store, params, s3_store)
+    failure = ""
+    store.put_instance(record["db_instance_identifier"], record)      # the engine opens by instance id
+    try:
+        for stmt in stmts:
+            store.execute_sql(record["db_instance_identifier"], stmt)
+    except Exception as e:  # noqa: BLE001 - the failing statement fails the restore
+        failure = f"{e} (statement: {stmt[:120]})"
+    return _restore_from_s3_finish(store, record, failure, msg_store)
+
+
+async def _arestore_db_instance_from_s3(store: SqlStore, params: dict, msg_store=None, s3_store=None) -> RdsResponse:
+    record, stmts = _restore_from_s3_begin(store, params, s3_store)
+    failure = ""
+    store.put_instance(record["db_instance_identifier"], record)
+    try:
+        for stmt in stmts:
+            await store.aexecute_sql(record["db_instance_identifier"], stmt)
+    except Exception as e:  # noqa: BLE001
+        failure = f"{e} (statement: {stmt[:120]})"
+    return _restore_from_s3_finish(store, record, failure, msg_store)
 
 
 def _describe_db_snapshots(store: SqlStore, params: dict) -> RdsResponse:
@@ -1884,6 +1977,8 @@ def dispatch(store: SqlStore, params: dict | None = None, msg_store=None, s3_sto
             return _delete_db_snapshot(store, params)
         if action == "RestoreDBInstanceFromDBSnapshot":
             return _restore_db_instance_from_db_snapshot(store, params, msg_store)
+        if action == "RestoreDBInstanceFromS3":
+            return _restore_db_instance_from_s3(store, params, msg_store, s3_store)
         if action == "CreateDBSubnetGroup":
             return _create_db_subnet_group(store, params)
         if action == "DescribeDBSubnetGroups":
@@ -1973,6 +2068,14 @@ def dispatch(store: SqlStore, params: dict | None = None, msg_store=None, s3_sto
         return _error(e.code, e.message, e.status)
 
 
+def _sq_is_async(store) -> bool:
+    try:
+        from core import sql_store as _sq
+    except ImportError:  # pragma: no cover - Pyodide flat layout
+        import sql_store as _sq  # type: ignore
+    return _sq.is_async_engine(store)
+
+
 async def adispatch(store: SqlStore, params: dict | None = None, msg_store=None, s3_store=None) -> RdsResponse:
     """Async front door (AwsWireRouter.ahandle — the Nano relay / console and the
     offline appliance). Same actions as dispatch(); the ones that read the engine's
@@ -1984,6 +2087,8 @@ async def adispatch(store: SqlStore, params: dict | None = None, msg_store=None,
     try:
         if action == "StartExportTask":
             return await _astart_export_task(store, params, s3_store)
+        if action == "RestoreDBInstanceFromS3" and _sq_is_async(store):
+            return await _arestore_db_instance_from_s3(store, params, msg_store, s3_store)
         snapshotting = (action == "CreateDBSnapshot" or (
             action == "DeleteDBInstance" and str(params.get("SkipFinalSnapshot", "true")).lower() != "true"))
         if snapshotting:

@@ -89,13 +89,15 @@ export const GROUPS = {
   "Microsoft.DocumentDB/databaseAccounts": ["Sql", "MongoDB", "Cassandra", "Gremlin", "Table"],
   "Microsoft.ContainerRegistry/registries": ["registry"],
   "Microsoft.Cache/redis": ["redisCache"],
+  "Microsoft.AppConfiguration/configurationStores": ["configurationStores"],
+  "Microsoft.CognitiveServices/accounts": ["account"],
 };
 export async function listTargets() {
   const out = [];
   for (const type of Object.keys(GROUPS)) {
     try {
       const [ns, t] = type.split("/");
-      const api = { "Microsoft.Storage": "2023-01-01", "Microsoft.KeyVault": "2023-07-01", "Microsoft.Sql": "2023-05-01-preview", "Microsoft.DocumentDB": "2024-05-15", "Microsoft.ContainerRegistry": "2023-07-01", "Microsoft.Cache": "2024-03-01" }[ns];
+      const api = { "Microsoft.Storage": "2023-01-01", "Microsoft.KeyVault": "2023-07-01", "Microsoft.Sql": "2023-05-01-preview", "Microsoft.DocumentDB": "2024-05-15", "Microsoft.ContainerRegistry": "2023-07-01", "Microsoft.Cache": "2024-03-01", "Microsoft.AppConfiguration": "2023-03-01", "Microsoft.CognitiveServices": "2023-05-01" }[ns];
       const rows = (await restJson("GET", `${sub()}/providers/${ns}/${t}`, { query: { "api-version": api } })).value || [];
       rows.forEach((r) => out.push({ id: r.id, name: r.name, type }));
     } catch { /* type not present */ }
@@ -128,3 +130,38 @@ export async function putFlowLog(target, name, props) {
 }
 export const deleteFlowLog = (f) => restJson("DELETE", `${NW.path(f.nwRg, f.networkWatcher)}/flowLogs/${encodeURIComponent(f.name)}`, { query: { "api-version": V } });
 export const listStorage = async () => STORAGE.list();
+
+// ── Network Manager (core/azure_netcfg_core.py): managers, groups, connectivity configurations ──
+export const NM = armType("Microsoft.Network", "networkManagers", "2024-05-01");
+const NMV = "2024-05-01";
+const call = (method, path, body) => restJson(method, path, { query: { "api-version": NMV }, body });
+export async function listNetworkManagerView(vnetId) {
+  const out = [];
+  for (const nm of await NM.list()) {
+    const base = NM.path(rgOf(nm.id), nm.name);
+    const groups = ((await call("GET", `${base}/networkGroups`)).value) || [];
+    const members = [];
+    for (const g of groups) {
+      for (const m of ((await call("GET", `${base}/networkGroups/${g.name}/staticMembers`)).value) || []) members.push({ group: g.name, id: m.properties?.resourceId });
+    }
+    const connectivity = ((await call("GET", `${base}/connectivityConfigurations`)).value) || [];
+    const inGroups = members.filter((m) => same(m.id, vnetId)).map((m) => m.group);
+    const applies = connectivity.filter((c) => (c.properties?.appliesToGroups || []).some((g) => inGroups.some((n) => same(String(g.networkGroupId).split("/").pop(), n))) || (c.properties?.hubs || []).some((h) => same(h.resourceId, vnetId)));
+    out.push({ ...nm, _groups: groups, _inGroups: inGroups, _connectivity: connectivity, _applies: applies });
+  }
+  return out;
+}
+export const createNetworkManager = (rg, name, location, accesses) =>
+  NM.put(rg, name, { location, properties: { networkManagerScopes: { subscriptions: [`/subscriptions/${getSubscription()}`] }, networkManagerScopeAccesses: accesses } });
+export const addToNetworkGroup = async (nm, group, vnetId) => {
+  const base = NM.path(rgOf(nm.id), nm.name);
+  await call("PUT", `${base}/networkGroups/${group}`, { properties: { memberType: "VirtualNetwork" } });
+  return call("PUT", `${base}/networkGroups/${group}/staticMembers/${vnetId.split("/").pop()}`, { properties: { resourceId: vnetId } });
+};
+export const createConnectivityConfig = (nm, name, topology, group, hubId) => {
+  const base = NM.path(rgOf(nm.id), nm.name);
+  return call("PUT", `${base}/connectivityConfigurations/${name}`, { properties: {
+    connectivityTopology: topology, ...(topology === "HubAndSpoke" ? { hubs: [{ resourceId: hubId, resourceType: "Microsoft.Network/virtualNetworks" }] } : {}),
+    appliesToGroups: [{ networkGroupId: `${base}/networkGroups/${group}`, groupConnectivity: "None", useHubGateway: "False", isGlobal: "False" }] } });
+};
+export const deleteConnectivityConfig = (nm, name) => call("DELETE", `${NM.path(rgOf(nm.id), nm.name)}/connectivityConfigurations/${name}`);

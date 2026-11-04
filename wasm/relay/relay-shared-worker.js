@@ -32,7 +32,7 @@ const CORES = [
   // GCP + Azure cores — imported by aws_wire_router (must load before it).
   "gcp_project.py", "function_shims.py", "gcp_console_tabs.py", "nano_triggers.py",   // main-side cores (merged with v4)
   "gcp_storageinsights_core.py", "gcp_storage_core.py", "gcp_firestore_core.py", "gcp_kms_core.py",
-  "gcp_secretmanager_core.py", "gcp_pubsub_core.py", "gcp_iam_core.py", "gcp_asset_query_core.py", "gcp_wif_core.py", "gcp_trace_core.py", "gcp_posture_core.py", "gcp_cloudsql_core.py", "gcp_artifactregistry_core.py", "gcp_logging_core.py", "gcp_compute_core.py", "instance_catalog.py", "gcp_compute_instances_core.py", "gcp_compute_ext_core.py", "gcp_resourcemanager_core.py", "gcp_pam_core.py",
+  "gcp_secretmanager_core.py", "gcp_pubsub_core.py", "gcp_iam_core.py", "gcp_asset_query_core.py", "gcp_wif_core.py", "gcp_trace_core.py", "gcp_apphub_core.py", "gcp_osconfig_core.py", "gcp_hybrid_core.py", "gcp_posture_core.py", "gcp_cloudsql_core.py", "gcp_artifactregistry_core.py", "gcp_logging_core.py", "gcp_compute_core.py", "instance_catalog.py", "gcp_compute_instances_core.py", "gcp_compute_ext_core.py", "gcp_resourcemanager_core.py", "gcp_pam_core.py",
   "azure_blob_core.py", "azure_cosmos_core.py", "azure_keyvault_secrets_core.py",
   "azure_keyvault_keys_core.py", "azure_keyvault_certificates_core.py", "azure_queue_core.py", "azure_table_core.py", "azure_servicebus_core.py",
   "eventbridge_core.py", "eventbridge_schemas_core.py", "scheduler_core.py", "lambda_core.py", "apigateway_core.py", "apigatewayv2_core.py", "apigatewayv2_gateway.py", "vpc_core.py", "vpc_vpn_core.py", "vpc_extras_core.py", "vpc_lattice_core.py", "ec2_ops_core.py", "netfw_core.py", "dnsfw_core.py", "autoscaling_core.py", "ram_core.py", "dlm_core.py", "kinesis_core.py", "cloudwatch_core.py", "cloudformation_core.py", "logs_core.py", "ssm_core.py", "stepfunctions_core.py", "gcp_cloudscheduler_core.py", "gcp_container_core.py", "gcp_redis_core.py", "gcp_iamcredentials_core.py", "gcp_monitoring_core.py", "gcp_run_core.py", "gcp_gke_dataplane_core.py",
@@ -41,9 +41,11 @@ const CORES = [
   "azure_app_core.py", "azure_webapp_core.py", "azure_appconfiguration_core.py", "azure_cognitiveservices_core.py", "azure_dns_core.py", "azure_monitor_core.py", "azure_operationalinsights_core.py",
   "azure_eventgrid_core.py", "azure_locks_core.py", "azure_templates_core.py", "azure_health_core.py", "azure_support_core.py", "azure_monitorproducts_core.py",
   "k8s_yaml.py", "azure_aks_k8s_core.py", "kubescape_catalog.py", "kubescape_core.py", "azure_security_core.py",   // AKS objects + Defender for Cloud
-  "azure_arm_ext_core.py", "azure_keyvault_x509_core.py",   // main-side cores (merged with v4)
-  "cost_model.py", "azure_cost_core.py", "azure_arm_data.py", "azure_storage_ext_core.py", "azure_policy_core.py", "azure_netsvc_core.py", "azure_webdeploy_core.py", "azure_arm_core.py",   // Azure ARM control plane — nano_registry imports it
+  "azure_arm_ext_core.py", "azure_keyvault_x509_core.py",   // main-side Azure cores (merged)
+  "cost_model.py", "azure_cost_core.py", "azure_arm_data.py", "azure_storage_ext_core.py", "azure_policy_core.py", "azure_netsvc_core.py", "azure_netcfg_core.py", "azure_webnet_core.py", "azure_webdeploy_core.py", "azure_arm_core.py",   // Azure ARM control plane — nano_registry imports it
+  "azure_cfgext_core.py",
   "ce_core.py",
+  "vpc_encryption_core.py", "savingsplans_core.py", "cloudfront_keys_core.py", "rds_restore_core.py", "appautoscaling_core.py",
   "azure_files_core.py", "azure_search_core.py", "azure_storagemover_core.py", "azure_marketplace_core.py", "azure_billing_ext_core.py",
   "aws_wire_router.py",
   "nano_events.py", "nano_registry.py", "nano_persist.py",   // shared registry + store persistence (console↔CLI parity)

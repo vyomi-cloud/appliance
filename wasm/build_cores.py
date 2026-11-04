@@ -49,11 +49,13 @@ CORES = [
     "gcp_asset_query_core.py",                      # GCP: Cloud Asset Inventory search query language (used by gcp_iam_core)
     "gcp_wif_core.py",                              # GCP: workload/workforce identity federation (providers, mapping, STS exchange)
     "gcp_trace_core.py",                            # GCP: Cloud Trace spans, Trace scopes, Log scopes
-    "gcp_posture_core.py",                          # GCP: rule-based security posture findings over real VM/firewall/bucket state
-    "gcp_cloudsql_core.py",                         # GCP: Cloud SQL Admin REST (control plane)
-    "gcp_artifactregistry_core.py",                 # GCP: Artifact Registry REST v1 (repositories, packages, versions, tags, docker images)
+    "gcp_apphub_core.py",                           # GCP: App Hub applications (Application monitoring)
+    "gcp_osconfig_core.py",                         # GCP: VM Manager (OS Config patch jobs/deployments, OS policy assignments, VM extension policies)
+    "gcp_hybrid_core.py",                           # GCP: BYOIP prefixes + Interconnect / VLAN attachments (control plane)
     "function_shims.py",                            # flask / functions_framework / azure.functions shims + request plumbing for function code
     "gcp_console_tabs.py",                          # GCP console resource-detail tabs (validation + records no engine models)
+    "gcp_cloudsql_core.py",                         # GCP: Cloud SQL Admin REST (control plane)
+    "gcp_posture_core.py",                          # GCP: rule-based security posture findings over real VM/firewall/bucket state    "gcp_artifactregistry_core.py",                 # GCP: Artifact Registry REST v1 (repositories, packages, versions, tags, docker images)
     "gcp_compute_core.py",                          # GCP: Compute Engine networking REST v1 (VPC networks, subnets, firewalls, routes, addresses)
     "instance_catalog.py",                          # real cloud instance-type catalog (GCP machine type shapes) — gcp_compute_instances_core depends on it
     "gcp_compute_ext_core.py",                      # GCP Compute extensions: resource policies/schedulers, reservations, sole-tenant, storage pools, NEGs, Recommender
@@ -76,7 +78,7 @@ CORES = [
     "eventbridge_core.py", "eventbridge_schemas_core.py", "eventbridge_partner_core.py",                          # v2.6.0 AWS: EventBridge event-bus data plane (rules → SQS delivery)
     "lambda_core.py",                              # v2.6.0 AWS: Lambda serverless invoke (sandboxed Python runtime)
     "apigateway_core.py",                          # v2.7.0 AWS: API Gateway data plane (routing + MOCK/Lambda-proxy integrations)
-    "cost_model.py", "ce_core.py",                                # list prices -> the space cost-savings metrics (pure data)
+    "cost_model.py", "ce_core.py", "vpc_encryption_core.py", "savingsplans_core.py", "cloudfront_keys_core.py", "rds_restore_core.py", "appautoscaling_core.py",                                # list prices -> the space cost-savings metrics (pure data)
     "kinesis_core.py",                             # AWS: Kinesis Data Streams (shards, records, iterators, consumers)
     "apigatewayv2_core.py",                        # AWS: API Gateway V2 control plane
     "apigatewayv2_gateway.py",                     # AWS: API Gateway V2 data plane (authorizers, throttling, CORS, Lambda proxy)
@@ -119,7 +121,8 @@ CORES = [
     "azure_health_core.py",                         # v4: Resource health + Advisor, imported by azure_arm_core
     "azure_templates_core.py",                      # v4: Export template (ARM -> Bicep/Terraform), lazily imported by azure_arm_core
     "azure_storage_ext_core.py",                    # v4: storage keys rotation + route endpoints — before azure_arm_core
-    "azure_policy_core.py", "azure_netsvc_core.py", "azure_webdeploy_core.py",  # v4: Azure Policy, network services (private endpoints/Bastion/Firewall/DDoS/flow logs), Deployment Center — before azure_arm_core
+    "azure_policy_core.py", "azure_netsvc_core.py", "azure_netcfg_core.py", "azure_webnet_core.py", "azure_webdeploy_core.py",  # v4: Azure Policy, network services (private endpoints/Bastion/Firewall/DDoS/flow logs), Deployment Center — before azure_arm_core
+    "azure_cfgext_core.py",
     "azure_support_core.py",                        # v4: Microsoft.Support support requests filed with Vyomi
     "azure_monitorproducts_core.py",                # v4: Azure Monitor workspaces (Managed Prometheus) + Managed Grafana control plane — before azure_arm_core
     "azure_files_core.py",

@@ -15,5 +15,5 @@ const page = (title, id, note) => function Page() {
 };
 
 export { default as CostExplorer } from "./CostExplorer.jsx";
-export const ApplicationMonitoring = page("Application monitoring", "gcp.monitoring.application-monitoring", "Application monitoring (APM)");
+export { default as ApplicationMonitoring } from "./ApplicationMonitoring.jsx";
 export { default as TraceExplorer } from "./TraceExplorer.jsx";

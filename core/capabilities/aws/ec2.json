@@ -481,7 +481,7 @@
    "offline": "limited"
   },
   "limitations": [
-   "Spot requests, Reserved Instances, Capacity Reservations and Dedicated Hosts are real (see their own entries). Savings Plans, UltraServers and Capacity Manager are not simulated.",
+   "Spot requests, Reserved Instances, Capacity Reservations and Dedicated Hosts are real (see their own entries). Savings Plans and Capacity Manager are limited-real (see their entries); UltraServers is not simulated.",
    "There is no billing; prices are illustrative."
   ],
   "tests": [
@@ -644,11 +644,26 @@
  "ec2.purchasing.savings-plans": {
   "title": "Savings Plans",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Savings Plans is a separate billing service; Vyomi has no billing or commitment model."
+   "Real Savings Plans API (service savingsplans): DescribeSavingsPlansOfferings (Compute / EC2 Instance, 1 or 3 year, all payment options, filters), CreateSavingsPlan (hourly commitment, upfront-payment check, clientToken idempotency, a future purchaseTime queues the plan), DescribeSavingsPlans, DeleteQueuedSavingsPlan, ReturnSavingsPlan (only within 7 days and the same calendar month), DescribeSavingsPlanRates, Tag/Untag/ListTagsForResource. The plan's effect is computed against the EC2 instances that really run: the console's coverage and utilization allocate each active plan's hourly commitment to the on-demand usage it applies to (highest discount first) and report coverage, utilization, unused commitment and net savings.",
+   "There is no billing: nothing is charged or invoiced, list prices are Vyomi's illustrative on-demand rates and the discounts are fixed per plan type and term, not the real price list. Database and SageMaker plans are not offered, only EC2 usage is covered, coverage and utilization are a snapshot of the current hourly run-rate (not a billing-period history, and not exposed through Cost Explorer's GetSavingsPlans* APIs), and the offline appliance couples plans to the instances in the shared EC2 model like Reserved Instances do."
+  ],
+  "api": [
+   "DescribeSavingsPlansOfferings",
+   "CreateSavingsPlan",
+   "DescribeSavingsPlans",
+   "DeleteQueuedSavingsPlan",
+   "ReturnSavingsPlan",
+   "DescribeSavingsPlanRates",
+   "TagResource",
+   "UntagResource",
+   "ListTagsForResource"
+  ],
+  "tests": [
+   "tests/conformance/test_savingsplans.py"
   ]
  },
  "ec2.purchasing.ultraservers": {
@@ -658,17 +673,22 @@
    "offline": "not_simulated"
   },
   "limitations": [
-   "UltraServer capacity (multi-host accelerator domains) is not modeled."
+   "UltraServers are multi-host accelerator domains (for example 72-GPU GB200 NVL72 systems) bought as Capacity Blocks; Vyomi has no accelerator instance types, no Capacity Block market and no fabric to model, so there is nothing real to manage here. Use Capacity Reservations for reserved capacity of the instance types Vyomi does run."
   ]
  },
  "ec2.purchasing.capacity-manager": {
   "title": "Capacity Manager",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Capacity Manager's cross-account capacity analytics aren't modeled."
+   "A console view derived from the simulator's own EC2 inventory: running / stopped instances and vCPUs by instance type and Availability Zone, Spot requests, active Reserved Instances matched against running instances of the same type (unused reservations), Capacity Reservations and Savings Plans coverage. The numbers are real aggregates of what is running in this environment.",
+   "Vyomi does not mirror the Capacity Manager APIs (data exports, metric queries, cross-account / Organizations aggregation): the view is single-account, current-state only, with no historical metric series, no forecasting and no data export to S3."
+  ],
+  "api": [],
+  "tests": [
+   "tests/conformance/test_savingsplans.py"
   ]
  },
  "ec2.volumes.monitoring": {

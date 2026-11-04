@@ -82,17 +82,10 @@
  },
  "azure.appservices.webapp.deploymentcenter": {
   "title": "Deployment Center (CI/CD source, FTPS credentials)",
-  "level": {
-   "nano": "limited",
-   "offline": "limited"
-  },
-  "limitations": [
-   "Real ARM control plane: sourcecontrols/web (repo URL, branch, manual/continuous integration, GitHub Actions with a generated workflow YAML per runtime stack; scmType maintained), deployments + log, publishing credentials ($site user, rotating password) and per-protocol basic-auth policies. No build runner and no outbound git/GitHub access exist, so a sync or continuous-integration push is recorded as a Failed deployment with an explanation (never a fake success), the GitHub workflow is generated but not committed, and GitHub/Azure DevOps/Bitbucket account authorization (OAuth) is not performed. Local Git, Container registry and Azure Repos sources are not offered."
-  ],
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["Real ARM control plane: sourcecontrols/web (repo URL, branch, manual/continuous integration, GitHub Actions with a generated workflow YAML per runtime stack; scmType maintained), deployments + log, publishing credentials ($site user, rotating password) and per-protocol basic-auth policies. No build runner and no outbound git/GitHub access exist, so a sync or continuous-integration push is recorded as a Failed deployment with an explanation (never a fake success), the GitHub workflow is generated but not committed, and GitHub/Azure DevOps/Bitbucket account authorization (OAuth) is not performed. Source choices: GitHub (incl. Actions), External Git, Azure Repos (VSTSRM), Bitbucket, Local Git (scmType LocalGit; the Git remote has no receiving Kudu so a push is not accepted) and Container registry (linuxFxVersion DOCKER|image validated); OneDrive/Dropbox are not offered."],
   "api": [],
-  "tests": [
-   "tests/conformance/test_azure_webdeploy_core.py"
-  ]
+  "tests": ["tests/conformance/test_azure_webdeploy_core.py", "tests/conformance/test_azure_webnet_core.py"]
  },
  "azure.appservices.webapp.monitoring": {
   "title": "Monitoring (Alerts, Metrics, Logs, Advisor recommendations, Health check, Diagnostic settings, Log stream, Process explorer)",
@@ -123,11 +116,7 @@
  "azure.appservices.webapp.platform": {
   "title": "Authentication, Identity, Application Insights, Backups, Certificates, Networking, WebJobs, Service Connector",
   "level": { "nano": "limited", "offline": "limited" },
-  "limitations": [
-   "Identity: enabling a system-assigned managed identity mints a stable principalId/tenantId that can be the subject of a role assignment on Access control (IAM); user-assigned identities are not modelled.",
-   "Backups: modelled as snapshots — backup configuration (storage URL, schedule) and on-demand/scheduled backup records (status, size, timestamp) round-trip for real, and Restore acknowledges, but there is no real site content to archive or replay.",
-   "Authentication providers, Application Insights linkage, TLS/SSL certificates, VNet integration / private endpoints, WebJobs and Service Connector are not modelled."
-  ],
+  "limitations": ["Identity: enabling a system-assigned managed identity mints a stable principalId/tenantId that can be the subject of a role assignment on Access control (IAM); user-assigned identities are not modelled.", "Backups: modelled as snapshots — backup configuration (storage URL, schedule) and on-demand/scheduled backup records (status, size, timestamp) round-trip for real, and Restore acknowledges, but there is no real site content to archive or replay.", "Authentication providers, Application Insights linkage, TLS/SSL certificates, private endpoints, WebJobs and Service Connector are not modelled."],
   "api": ["sites Update (identity)", "sites/config/backup CreateOrUpdate", "sites/backups List/Create", "sites/backups/{id}/restore Action"],
   "tests": ["tests/conformance/test_azure_webapp_core.py"]
  },
@@ -215,5 +204,11 @@
   "limitations": ["Copies the site configuration, app settings and connection strings into a new app; there is no site content to copy and slots, backups and custom domains are not cloned."],
   "api": ["sites CreateOrUpdate", "sites/config/appsettings"],
   "tests": ["tests/conformance/test_azure_webapp_ops.py"]
+ },
+ "azure.appservices.webapp.networking": {
+  "title": "Networking: regional VNet integration, access restrictions, hybrid connections",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["Regional VNet integration (create-time virtualNetworkSubnetId and networkConfig/virtualNetwork) checks the subnet exists, is delegated to Microsoft.Web/serverFarms, is at least a /28, is in the app's region, is not used by another plan, and that the plan is Basic or higher; virtualNetworkConnections and vnetRouteAllEnabled follow. Access restrictions (main + SCM) validate priorities, actions, CIDRs, service tags, subnet service endpoints and Front Door header rules, and derive the implicit Allow all / Deny all rule and default action. Hybrid connections validate the relay ARM URI, endpoint, port and the per-plan limit (Basic 5, Standard 25, Premium 200) and stay NotConnected. No traffic flows through the VNet or relay and access restrictions are not enforced on inbound requests."],
+  "tests": ["tests/conformance/test_azure_webnet_core.py"]
  }
 }

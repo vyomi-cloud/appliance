@@ -260,11 +260,34 @@ def _deleted_view(rec):
             "properties": dict(rec["properties"])}
 
 
+def _cmk_check(state, rec, payload):
+    """Customer-managed key: Standard/Premium SKU, a managed identity, a well-formed key identifier whose vault
+    exists in this subscription (the key itself lives in the Key Vault data plane and is not looked up)."""
+    enc = (payload.get("properties") or {}).get("encryption")
+    kvp = (enc or {}).get("keyVaultProperties") if isinstance(enc, dict) else None
+    if not kvp:
+        return
+    try:
+        from core import azure_cfgext_core as cfg
+    except ImportError:
+        import azure_cfgext_core as cfg  # type: ignore
+    sku = str((payload.get("sku") or (rec or {}).get("sku") or {}).get("name") or "Standard").lower()
+    if sku not in ("standard", "premium"):
+        raise _E(400, "BadRequest", "Customer-managed key encryption requires a Standard or Premium App Configuration store.")
+    bad = cfg._check_key_uri(state, kvp.get("keyIdentifier"), "encryption.keyVaultProperties.keyIdentifier")
+    if bad:
+        err = bad["body"]["error"]
+        raise _E(bad["status"], err["code"], err["message"])
+    if not (cfg._has_identity(payload) or cfg._has_identity(rec or {})):
+        raise _E(400, "BadRequest", "Customer-managed key encryption requires a managed identity assigned to the store.")
+
+
 def _put_store(state, sub, rg, rid, name, payload, method, base=""):
     rec = state.get(rid.lower())
     prob = _name_problem(name)
     if prob:
         raise _E(400, "InvalidParameter", prob[1])
+    _cmk_check(state, rec, payload)
     if rec is None and method == "PATCH":
         raise _not_found("configurationStores", name, rg)
     if rec is None:

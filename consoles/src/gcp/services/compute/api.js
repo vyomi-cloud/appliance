@@ -245,3 +245,36 @@ export async function listImageJobs(kind) {
   const r = await restJson("GET", `${base()}/global/imageJobs`);
   return (r.items || []).filter((j) => !kind || j.kind === kind);
 }
+
+// ── VM Manager: OS Config patch jobs / deployments / OS policy assignments, VM extension policies (core/gcp_osconfig_core) ──
+const osc = () => `/v1/projects/${e(getProject())}`;
+export const listPatchJobs = async () => (await restJson("GET", `${osc()}/patchJobs`)).patchJobs || [];
+export const executePatchJob = (body) => restJson("POST", `${osc()}/patchJobs:execute`, { body });
+export const cancelPatchJob = (id) => restJson("POST", `${osc()}/patchJobs/${e(id)}:cancel`, { body: {} });
+export const patchJobInstances = async (id) => (await restJson("GET", `${osc()}/patchJobs/${e(id)}/instanceDetails`)).patchJobInstanceDetails || [];
+export const listPatchDeployments = async () => (await restJson("GET", `${osc()}/patchDeployments`)).patchDeployments || [];
+export const createPatchDeployment = (id, body) => restJson("POST", `${osc()}/patchDeployments`, { query: { patchDeploymentId: id }, body });
+export const patchDeploymentAction = (id, verb) => restJson("POST", `${osc()}/patchDeployments/${e(id)}:${verb}`, { body: {} });
+export const deletePatchDeployment = (id) => restJson("DELETE", `${osc()}/patchDeployments/${e(id)}`);
+export const listOsPolicyAssignments = async () => (await restJson("GET", `${osc()}/locations/-/osPolicyAssignments`)).osPolicyAssignments || [];
+export const createOsPolicyAssignment = (zone, id, body) => restJson("POST", `${osc()}/locations/${e(zone)}/osPolicyAssignments`, { query: { osPolicyAssignmentId: id }, body });
+export const deleteOsPolicyAssignment = (zone, id) => restJson("DELETE", `${osc()}/locations/${e(zone)}/osPolicyAssignments/${e(id)}`);
+export const listVmExtensionPolicies = async () => (await restJson("GET", `${base()}/global/vmExtensionPolicies`)).items || [];
+export const insertVmExtensionPolicy = (body) => restJson("POST", `${base()}/global/vmExtensionPolicies`, { body });
+export const deleteVmExtensionPolicy = (name) => restJson("DELETE", `${base()}/global/vmExtensionPolicies/${e(name)}`);
+
+// Ops Agent policy = a real OS policy assignment (what `gcloud compute instances ops-agents policies create` writes), keyed on a VM label.
+export const OPS_AGENT_LABEL = "goog-ops-agent-policy";
+export const OPS_AGENT_LABEL_VALUE = "v2-x86-template-1-4-0";
+export async function ensureOpsAgentPolicy(zone) {
+  const id = `goog-ops-agent-v2x-template-1-4-0-${zone}`;
+  try { await restJson("GET", `${osc()}/locations/${e(zone)}/osPolicyAssignments/${e(id)}`); return; } catch (err) { if (!/404|not found/i.test(String(err?.message || err))) throw err; }
+  await createOsPolicyAssignment(zone, id, {
+    description: "Vyomi-managed Ops Agent policy (install and keep the Ops Agent current)",
+    osPolicies: [{ id: "ops-agent", mode: "ENFORCEMENT", resourceGroups: [{ resources: [
+      { id: "ops-agent-repo", repository: { apt: { archiveType: "DEB", uri: "https://packages.cloud.google.com/apt", distribution: "google-cloud-ops-agent-bookworm-all", components: ["main"], gpgKey: "https://packages.cloud.google.com/apt/doc/apt-key.gpg" } } },
+      { id: "ops-agent-pkg", pkg: { desiredState: "INSTALLED", apt: { name: "google-cloud-ops-agent" } } }] }] }],
+    instanceFilter: { inclusionLabels: [{ labels: { [OPS_AGENT_LABEL]: OPS_AGENT_LABEL_VALUE } }] },
+    rollout: { disruptionBudget: { percent: 100 }, minWaitDuration: "0s" },
+  });
+}

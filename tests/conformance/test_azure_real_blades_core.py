@@ -57,7 +57,7 @@ def test_vm_blades():
             "subnet": {"id": sub_id}, "publicIPAddress": {"id": pip["id"], "properties": {"deleteOption": "Delete"}}}}]}}
     s, nic = call(arm, "PUT", f"{P}/Microsoft.Network/networkInterfaces/nic1", nic_body)
     ip = nic["properties"]["ipConfigurations"][0]["properties"]["privateIPAddress"]
-    _check("NIC private IP allocated from the subnet (Azure reserves .0-.3)", s == 201 and ip == "10.4.1.4", ip)
+    _check("NIC private IP allocated from the subnet (Azure reserves .0-.3)", s == 200 and ip == "10.4.1.4", ip)
     s, nic2 = call(arm, "PUT", f"{P}/Microsoft.Network/networkInterfaces/nic2",
                    {"location": "eastus", "properties": {"ipConfigurations": [{"name": "c", "properties": {"subnet": {"id": sub_id}}}]}})
     _check("second NIC gets the next free address", nic2["properties"]["ipConfigurations"][0]["properties"]["privateIPAddress"] == "10.4.1.5")

@@ -171,6 +171,25 @@ def run():
     _check("vnet flow log allowed", fl("f3", {**base, "targetResourceId": vid})["status"] in (200, 201))
     _check("analytics needs workspace", fl("f4", {**base, "targetResourceId": f"{N}/networkSecurityGroups/nsg1",
            "flowAnalyticsConfiguration": {"networkWatcherFlowAnalyticsConfiguration": {"enabled": True, "workspaceResourceId": "/x"}}})["status"] in (400, 409))
+    # ── App Configuration + Cognitive Services private endpoint connections (engines own their routes)
+    ac = f"{RG}/providers/Microsoft.AppConfiguration/configurationStores/acfg-net"
+    cs = f"{RG}/providers/Microsoft.CognitiveServices/accounts/cs-net"
+    _check("appconfig store", put(ac, {"location": "eastus", "sku": {"name": "standard"}}, {"api-version": "2023-03-01"})["status"] in (200, 201))
+    _check("cogsvc account", put(cs, {"location": "eastus", "kind": "OpenAI", "sku": {"name": "S0"}, "properties": {}}, {"api-version": "2023-05-01"})["status"] in (200, 201))
+    for tgt, grp in ((ac, "configurationStores"), (cs, "account")):
+        bad = put(f"{N}/privateEndpoints/pe-x-{grp}", {"location": "eastus", "properties": {"subnet": {"id": f"{vid}/subnets/default"}, "privateLinkServiceConnections": [{"name": "c", "properties": {"privateLinkServiceId": tgt, "groupIds": ["blob"]}}]}})
+        _check(f"{grp}: wrong groupId rejected", bad["status"] == 400)
+        r = put(f"{N}/privateEndpoints/pe-{grp}", {"location": "eastus", "properties": {"subnet": {"id": f"{vid}/subnets/default"}, "manualPrivateLinkServiceConnections": [{"name": "c", "properties": {"privateLinkServiceId": tgt, "groupIds": [grp]}}]}})
+        _check(f"{grp}: endpoint created", r["status"] in (200, 201))
+        lst = get(f"{tgt}/privateEndpointConnections", {"api-version": "2023-05-01"})["body"]["value"]
+        _check(f"{grp}: target lists Pending connection", len(lst) == 1 and lst[0]["properties"]["privateLinkServiceConnectionState"]["status"] == "Pending")
+        cid = lst[0]["id"]
+        _check(f"{grp}: invalid state rejected", put(cid, {"properties": {"privateLinkServiceConnectionState": {"status": "Maybe"}}}, {"api-version": "2023-05-01"})["status"] == 400)
+        _check(f"{grp}: approve", put(cid, {"properties": {"privateLinkServiceConnectionState": {"status": "Approved", "description": "ok"}}}, {"api-version": "2023-05-01"})["status"] == 200)
+        _check(f"{grp}: approval flows back to endpoint", get(f"{N}/privateEndpoints/pe-{grp}")["body"]["properties"]["manualPrivateLinkServiceConnections"][0]["properties"]["privateLinkServiceConnectionState"]["status"] == "Approved")
+        _check(f"{grp}: target resource shows Approved", get(tgt, {"api-version": "2023-05-01"})["body"]["properties"]["privateEndpointConnections"][0]["properties"]["privateLinkServiceConnectionState"]["status"] == "Approved")
+        dele(cid, {"api-version": "2023-05-01"})
+        _check(f"{grp}: delete disconnects endpoint", get(f"{N}/privateEndpoints/pe-{grp}")["body"]["properties"]["manualPrivateLinkServiceConnections"][0]["properties"]["privateLinkServiceConnectionState"]["status"] == "Disconnected")
     print("PASS test_azure_netsvc_core")
 
 

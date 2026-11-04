@@ -15,6 +15,7 @@ export const EVENT_TYPES = {
   keyvault: ["Microsoft.KeyVault.SecretNewVersionCreated", "Microsoft.KeyVault.SecretNearExpiry", "Microsoft.KeyVault.SecretExpired", "Microsoft.KeyVault.KeyNewVersionCreated", "Microsoft.KeyVault.KeyNearExpiry", "Microsoft.KeyVault.KeyExpired", "Microsoft.KeyVault.CertificateNewVersionCreated", "Microsoft.KeyVault.CertificateNearExpiry", "Microsoft.KeyVault.CertificateExpired"],
   appconfiguration: ["Microsoft.AppConfiguration.KeyValueModified", "Microsoft.AppConfiguration.KeyValueDeleted", "Microsoft.AppConfiguration.SnapshotCreated", "Microsoft.AppConfiguration.SnapshotModified"],
   apim: ["Microsoft.ApiManagement.APICreated", "Microsoft.ApiManagement.APIUpdated", "Microsoft.ApiManagement.APIDeleted", "Microsoft.ApiManagement.ProductCreated", "Microsoft.ApiManagement.ProductUpdated", "Microsoft.ApiManagement.ProductDeleted", "Microsoft.ApiManagement.UserCreated", "Microsoft.ApiManagement.SubscriptionCreated"],
+  servicebus: ["Microsoft.ServiceBus.ActiveMessagesAvailableWithNoListeners", "Microsoft.ServiceBus.DeadletterMessagesAvailableWithNoListeners", "Microsoft.ServiceBus.ActiveMessagesAvailablePeriodicNotifications", "Microsoft.ServiceBus.DeadletterMessagesAvailablePeriodicNotifications"],
   resourcegroup: ["Microsoft.Resources.ResourceWriteSuccess", "Microsoft.Resources.ResourceDeleteSuccess", "Microsoft.Resources.ResourceActionSuccess", "Microsoft.Resources.ResourceWriteFailure"],
 };
 const base = (scopeId) => `${scopeId}/providers/Microsoft.EventGrid/eventSubscriptions`;

@@ -223,3 +223,27 @@ async function listLogEntries(logId) {
 }
 export const listFlowLogEntries = () => listLogEntries("compute.googleapis.com%2Fvpc_flows");
 export const listMirroredPacketLogEntries = () => listLogEntries("vyomi.dev%2Fpacket_mirroring");
+
+// ── BYOIP + hybrid connectivity (core/gcp_hybrid_core): public prefixes, Interconnect, VLAN attachments ──
+export const listPublicAdvertisedPrefixes = async () => (await restJson("GET", `${base()}/global/publicAdvertisedPrefixes`)).items || [];
+export const insertPublicAdvertisedPrefix = (body) => restJson("POST", `${base()}/global/publicAdvertisedPrefixes`, { body });
+export const prefixAction = (name, verb) => restJson("POST", `${base()}/global/publicAdvertisedPrefixes/${e(name)}/${verb}`, { body: {} });
+export const deletePublicAdvertisedPrefix = (name) => restJson("DELETE", `${base()}/global/publicAdvertisedPrefixes/${e(name)}`);
+const aggItems = async (coll) => {
+  const r = await restJson("GET", `${base()}/aggregated/${coll}`);
+  return Object.entries(r.items || {}).flatMap(([scope, v]) => (v[coll] || []).map((x) => ({ ...x, _region: scope.replace(/^regions\//, "") })));
+};
+export const listPublicDelegatedPrefixes = () => aggItems("publicDelegatedPrefixes");
+export const insertPublicDelegatedPrefix = (region, body) => restJson("POST", `${base()}/regions/${e(region)}/publicDelegatedPrefixes`, { body });
+export const delegatedAction = (region, name, verb) => restJson("POST", `${base()}/regions/${e(region)}/publicDelegatedPrefixes/${e(name)}/${verb}`, { body: {} });
+export const deletePublicDelegatedPrefix = (region, name) => restJson("DELETE", `${base()}/regions/${e(region)}/publicDelegatedPrefixes/${e(name)}`);
+export const listInterconnects = async () => (await restJson("GET", `${base()}/global/interconnects`)).items || [];
+export const insertInterconnect = (body) => restJson("POST", `${base()}/global/interconnects`, { body });
+export const patchInterconnect = (name, body) => restJson("PATCH", `${base()}/global/interconnects/${e(name)}`, { body });
+export const deleteInterconnect = (name) => restJson("DELETE", `${base()}/global/interconnects/${e(name)}`);
+export const listInterconnectLocations = async () => (await restJson("GET", `${base()}/global/interconnectLocations`)).items || [];
+export const listVlanAttachments = () => aggItems("interconnectAttachments");
+export const insertVlanAttachment = (region, body) => restJson("POST", `${base()}/regions/${e(region)}/interconnectAttachments`, { body });
+export const patchVlanAttachment = (region, name, body) => restJson("PATCH", `${base()}/regions/${e(region)}/interconnectAttachments/${e(name)}`, { body });
+export const deleteVlanAttachment = (region, name) => restJson("DELETE", `${base()}/regions/${e(region)}/interconnectAttachments/${e(name)}`);
+export const listRoutersIn = async (region) => (await restJson("GET", `${base()}/regions/${e(region)}/routers`)).items || [];

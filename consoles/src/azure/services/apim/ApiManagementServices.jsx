@@ -9,6 +9,7 @@ import { locationLabel } from "../../kit/arm.js";
 import BrowseGrid from "../../kit/BrowseGrid.jsx";
 import { Glyph, NotSimulated } from "../../kit/common.jsx";
 import { TitleRow } from "../../kit/ResourceBlade.jsx";
+import { ApimDeletedServices } from "../../kit/ConfigPages.jsx";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
 
@@ -37,8 +38,7 @@ export default function ApiManagementServices() {
           }}
           subscriptionLabel={subName}
           csvName="api-management-services.csv"
-          extraCommands={<>
-          </>}
+          extraCommands={<ToolbarButton onClick={() => setGap("Manage deleted services")}>Manage deleted services</ToolbarButton>}
           pills={[
             { key: "rg", label: "Resource group", value: (r) => r.resourceGroup },
             { key: "loc", label: "Location", value: (r) => locationLabel(r.location) },
@@ -58,7 +58,7 @@ export default function ApiManagementServices() {
         <DialogSurface aria-label={gap || "Not simulated"}>
           <DialogBody>
             <DialogTitle>{gap}</DialogTitle>
-            <DialogContent><NotSimulated feature={gap === "Open query" ? "Azure Resource Graph queries" : "Bulk-assigning tags from the browse grid"} /></DialogContent>
+            <DialogContent>{gap === "Manage deleted services" ? <ApimDeletedServices onRestored={() => { setGap(null); reload(); }} /> : <NotSimulated feature={gap === "Open query" ? "Azure Resource Graph queries" : "Bulk-assigning tags from the browse grid"} />}</DialogContent>
             <DialogActions><Button onClick={() => setGap(null)}>Close</Button></DialogActions>
           </DialogBody>
         </DialogSurface>

@@ -4,6 +4,7 @@
  * backed by native ARM / App Configuration data-plane calls; everything else in the menu is
  * an honest NotSimulated panel. */
 import ResourceEvents from "../../kit/ResourceEvents.jsx";
+import { AppConfigEncryption } from "../../kit/ConfigPages.jsx";
 import { ManagedIdentityPage } from "../../kit/UserAssignedIdentities.jsx";
 import { useEffect, useState } from "react";
 import {
@@ -26,6 +27,7 @@ import { Essentials, ErrorBar, Glyph, KV, Loading, NotSimulated, NotSimulatedCon
 import ResourceIam from "../../kit/ResourceIam.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { remember, forget } from "../../kit/recent.js";
+import { PrivateEndpointConnectionsPanel } from "../../kit/PrivateEndpoints.jsx";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
 import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
@@ -97,6 +99,7 @@ export default function ConfigStoreBlade({ params, query }) {
       tags: () => <Tags a={a} reload={reload} />,
       identity: () => <ManagedIdentityPage resourceId={a.id} apiVersion="2024-05-15" name={a.name} onChanged={reload} />,
       events: () => <ResourceEvents scopeId={a.id} kind="appconfiguration" title={`${a.name} | Events`} />,
+      encryption: () => <AppConfigEncryption a={a} reload={reload} />,
       explorer: () => <ConfigExplorer self={self} query={query} />,
       importexport: () => <ImportExport store={name} />,
       features: () => <FeatureManager />,
@@ -616,6 +619,9 @@ function Networking({ a, reload }) {
         <Radio value="all" label="Allow public access from all networks" />
         <Radio value="disabled" label="Disable public access" />
       </RadioGroup>
+      <div style={{ marginTop: 24 }}>
+        <PrivateEndpointConnectionsPanel title="Private access" target={{ id: a.id, name: a.name, type: "Microsoft.AppConfiguration/configurationStores", location: a.location }} />
+      </div>
     </CapabilityContainer>
   );
 }

@@ -27,6 +27,7 @@ import SharedResourceHealth from "../../kit/ResourceHealth.jsx";
 import { ResourceAlerts, ResourceMetrics, ResourceLogs } from "../../kit/ResourceMonitoring.jsx";
 import SharedDiagnosticSettings from "../../kit/DiagnosticSettings.jsx";
 import SharedSupportPanel from "../../kit/SupportPanel.jsx";
+import { PrivateEndpointConnectionsPanel } from "../../kit/PrivateEndpoints.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -417,7 +418,7 @@ function Networking({ a, reload }) {
           </RadioGroup>
         </CapabilityContainer>
       )}
-      {tab === "private" && <NotSimulatedContainer title="Private endpoint connections" feature="Private endpoint connections for Azure AI services accounts" />}
+      {tab === "private" && <PrivateEndpointConnectionsPanel target={{ id: a.id, name: a.name, type: "Microsoft.CognitiveServices/accounts", location: a.location }} />}
     </>
   );
 }

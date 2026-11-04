@@ -15,6 +15,7 @@ export default function SelfHostedGateways({ rg, svc }) {
   const notify = useNotify();
   const { data, loading, error, reload } = useAsync(() => api.Gateways.list(rg, svc), [rg, svc]);
   const [add, setAdd] = useState(false);
+  const counts = useAsync(async () => Object.fromEntries(await Promise.all((data || []).map(async (r) => [r.name, (await api.listGatewayApis(rg, svc, r.name).catch(() => [])).map((x) => x.name).join(", ")]))), [data]);
   return (
     <CapabilityContainer id="azure.apim.deployment" title={`${svc} | Self-hosted gateways`}>
       <BrowseGrid
@@ -31,6 +32,7 @@ export default function SelfHostedGateways({ rg, svc }) {
           { key: "name", label: "Name" },
           { key: "description", label: "Description", value: (r) => r.properties?.description || "--" },
           { key: "region", label: "Region", value: (r) => r.properties?.locationData?.name || "--" },
+          { key: "apis", label: "APIs", value: (r) => counts.data?.[r.name] || "--" },
         ]}
       />
       <AddGatewayDialog open={add} onClose={() => setAdd(false)} existing={data || []}

@@ -117,6 +117,7 @@ def dispatch(state, rec, rest, method, payload):
         if method == "DELETE":
             s["source"] = None
             _scm_type(rec, "None")
+            rec.setdefault("properties", {}).setdefault("siteConfig", {})["continuousDeploymentEnabled"] = False
             return _ok(None)
         if method in ("PUT", "PATCH"):
             return _put_source(rec, s, props, method)
@@ -146,6 +147,8 @@ def dispatch(state, rec, rest, method, payload):
         if method != "POST":
             return _err(405, "MethodNotAllowed", "Use POST to sync.")
         src = s["source"]
+        if not src and ((rec.get("properties", {}).get("siteConfig") or {}).get("scmType")) == "LocalGit":
+            return _err(400, "BadRequest", "This app deploys from a local Git repository; deployments are created by pushing to the app's Git remote, not by a sync.")
         if not src:
             return _err(400, "BadRequest", "No source control is configured on this app; configure the Deployment Center first.")
         if src.get("isGitHubAction"):
@@ -211,6 +214,15 @@ def _put_source(rec, s, props, method):
     if gh and not re.match(r"^https://github\.com/[^/]+/[^/]+?(\.git)?/?$", repo):
         return _err(400, "BadRequest", "GitHub Actions deployment requires a https://github.com/{org}/{repo} repository URL.")
     cur["isGitHubAction"] = gh
+    existing_scm = (rec.get("properties", {}).get("siteConfig") or {}).get("scmType") or "None"
+    if existing_scm == "LocalGit":
+        return _err(409, "SourceControlAlreadyConfigured", "The app deploys from a local Git repository (scmType LocalGit); disconnect it (scmType None) before configuring a repository source.")
+    provider = _provider(repo)
+    if provider == "AzureRepos" and not re.match(r"^https://(dev\.azure\.com/[^/]+/[^/]+|[^/.]+\.visualstudio\.com(/[^/]+)?)/_git/[^/]+/?$", repo):
+        return _err(400, "BadRequest", "An Azure Repos source needs a URL like https://dev.azure.com/{org}/{project}/_git/{repo}.")
+    if provider == "AzureRepos" and gh:
+        return _err(400, "BadRequest", "isGitHubAction is only valid for GitHub repositories.")
+    cur["provider"] = provider
     cur["isManualIntegration"] = bool(cur.get("isManualIntegration", False))
     cur["isMercurial"] = bool(cur.get("isMercurial", False))
     cur["deploymentRollbackEnabled"] = bool(cur.get("deploymentRollbackEnabled", False))
@@ -233,11 +245,22 @@ def _put_source(rec, s, props, method):
         cur.pop("gitHubActionConfiguration", None)
     first = s["source"] is None
     s["source"] = cur
-    _scm_type(rec, "GitHubAction" if gh else "ExternalGit")
+    _scm_type(rec, "GitHubAction" if gh else {"AzureRepos": "VSTSRM", "Bitbucket": "BitbucketGit"}.get(provider, "ExternalGit"))
     rec["properties"]["siteConfig"]["continuousDeploymentEnabled"] = not cur["isManualIntegration"]
     if not gh and not cur["isManualIntegration"]:
         _record_deployment(rec, s, cur)        # continuous integration: ARM kicks off an immediate sync
     return _ok(_source_view(rec, s), 201 if first else 200)
+
+
+def _provider(repo):
+    h = repo.lower()
+    if "dev.azure.com/" in h or ".visualstudio.com" in h:
+        return "AzureRepos"
+    if "bitbucket.org/" in h:
+        return "Bitbucket"
+    if "github.com" in h:
+        return "GitHub"
+    return "ExternalGit"
 
 
 def _record_deployment(rec, s, src):

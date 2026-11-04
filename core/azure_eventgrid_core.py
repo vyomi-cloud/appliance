@@ -364,6 +364,8 @@ SYSTEM_EVENT_TYPES = {
     "microsoft.apimanagement/service": ["Microsoft.ApiManagement.APICreated", "Microsoft.ApiManagement.APIUpdated", "Microsoft.ApiManagement.APIDeleted",
                                         "Microsoft.ApiManagement.ProductCreated", "Microsoft.ApiManagement.ProductUpdated", "Microsoft.ApiManagement.ProductDeleted",
                                         "Microsoft.ApiManagement.UserCreated", "Microsoft.ApiManagement.SubscriptionCreated"],
+    "microsoft.servicebus/namespaces": ["Microsoft.ServiceBus.ActiveMessagesAvailableWithNoListeners", "Microsoft.ServiceBus.DeadletterMessagesAvailableWithNoListeners",
+                                        "Microsoft.ServiceBus.ActiveMessagesAvailablePeriodicNotifications", "Microsoft.ServiceBus.DeadletterMessagesAvailablePeriodicNotifications"],
     "microsoft.resources/resourcegroups": ["Microsoft.Resources.ResourceWriteSuccess", "Microsoft.Resources.ResourceDeleteSuccess",
                                            "Microsoft.Resources.ResourceActionSuccess", "Microsoft.Resources.ResourceWriteFailure"],
     "microsoft.resources/subscriptions": ["Microsoft.Resources.ResourceWriteSuccess", "Microsoft.Resources.ResourceDeleteSuccess",
@@ -424,6 +426,10 @@ def scoped_dispatch(state: dict, method: str, sub: str, scope_rid: str, rest, pa
         props = payload.get("properties") if isinstance(payload.get("properties"), dict) else {}
         if not existed and not (props.get("destination") or {}).get("endpointType"):
             return _err(400, "InvalidRequest", "properties.destination.endpointType is required to create an event subscription.")
+        if scope_kind(scope_rid) == "microsoft.servicebus/namespaces":
+            ns = state.get(parent) or {}
+            if str((ns.get("sku") or {}).get("name") or "Standard").lower() != "premium":
+                return _err(400, "InvalidRequest", "Event Grid integration is only available for Premium Service Bus namespaces.")
         known = SYSTEM_EVENT_TYPES.get(scope_kind(scope_rid))
         bad = [t for t in ((props.get("filter") or {}).get("includedEventTypes") or [])
                if known and t.lower() != "all" and t not in known]

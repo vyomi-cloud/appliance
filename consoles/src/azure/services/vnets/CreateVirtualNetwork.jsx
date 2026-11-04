@@ -2,7 +2,7 @@
  * native ARM PUT for the vnet, plus one native ARM PUT per initial subnet (real ARM has no
  * single call that creates both — the portal's wizard issues the same two calls). */
 import { useState } from "react";
-import { Button, Checkbox, Input, Link, Select } from "@fluentui/react-components";
+import { Button, Checkbox, Input, Link, Select, Textarea } from "@fluentui/react-components";
 import { Add20Regular, Delete20Regular } from "@fluentui/react-icons";
 import { useNotify } from "../../../common/notify.jsx";
 import { navigate } from "../../../common/router.js";
@@ -10,6 +10,7 @@ import { useAsync } from "../../../common/useAsync.js";
 import { DEFAULT_RG, LOCATIONS, listResourceGroups, locationLabel } from "../../kit/arm.js";
 import CreateWizard, { FormRow, FormSection } from "../../kit/CreateWizard.jsx";
 import { Glyph, NotSimulatedContainer } from "../../kit/common.jsx";
+import { CapabilityContainer } from "../../kit/Capability.jsx";
 import * as ns from "./netsvc.js";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
@@ -30,7 +31,7 @@ export default function CreateVirtualNetwork() {
     encryption: false,
     bastion: false, firewall: false, firewallTier: "Standard", ddos: "",
     usePool: false, ipamPool: "", ipamPoolSize: "256",
-    addressPrefixes: ["10.0.0.0/16"],
+    addressPrefixes: ["10.0.0.0/16"], advertised: "",
     subnets: [{ name: "default", prefix: "10.0.0.0/24" }],
     tags: [{ name: "", value: "" }],
   });
@@ -218,8 +219,13 @@ export default function CreateVirtualNetwork() {
           </>
         )}
       </FormSection>
-      <NotSimulatedContainer title="Advertised address prefixes" feature="Advertised address prefixes"
-        note="Custom BGP route advertisement only affects routing once this vnet peers with a real ExpressRoute circuit's carrier-network routers — hardware outside any local simulator — so Vyomi stores no advertised gateway prefixes." />
+      <CapabilityContainer id="azure.vnets.advertised_prefixes" title="Advertised address prefixes">
+        <FormSection title="Advertised address prefixes" description="Address ranges inside this virtual network that are advertised to connected gateways (one CIDR per line). Each must be inside the address space.">
+          <FormRow label="Prefixes" htmlFor="vnet-advertised">
+            <Textarea id="vnet-advertised" value={f.advertised} rows={3} onChange={(_, d) => setF((x) => ({ ...x, advertised: d.value }))} aria-label="Advertised address prefixes" placeholder="10.0.4.0/22" />
+          </FormRow>
+        </FormSection>
+      </CapabilityContainer>
     </>
   );
 

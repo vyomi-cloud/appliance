@@ -18,7 +18,7 @@ import { CapabilityContainer } from "../../kit/Capability.jsx";
 import * as api from "./api.js";
 import * as runApi from "../run/api.js";
 import ImagePicker from "../run/ImagePicker.jsx";
-import { applyAdvanced, AutoscalingFactors, CloudSqlPanel, EphemeralDisk, HealthChecks, SecurityPanel, useAdvanced, VolumesPanel } from "../run/AdvancedSettings.jsx";
+import { applyAdvanced, AutoscalingFactors, CloudSqlPanel, CustomUrlsPanel, NetworkingPanel, EphemeralDisk, HealthChecks, SecurityPanel, useAdvanced, VolumesPanel } from "../run/AdvancedSettings.jsx";
 
 const SourceOpt = ({ title, children }) => (
   <Box>
@@ -96,7 +96,7 @@ export default function CreateService({ query }) {
       if (source === "function" || source === "repo") {
         body.annotations = api.functionAnnotations(runtime, "handler", api.DEFAULT_FUNCTION_SOURCE[runtime] || "");
       }
-      applyAdvanced(adv, { container, template: body.template, body, gen1: execEnv === "gen1" });
+      applyAdvanced(adv, { container, template: body.template, body, gen1: execEnv === "gen1", region });
       await api.createService(region, name, body);
       if (trigBucket && source !== "image") await runApi.createStorageTrigger(region, name, `${name}-trigger`, trigBucket, runApi.STORAGE_EVENTS[0][0]);
       if (authMode === "public") await api.setPublic(region, name, true);
@@ -164,7 +164,7 @@ export default function CreateService({ query }) {
             {api.REGIONS.map(([v, l]) => <MenuItem key={v} value={v}>{l}</MenuItem>)}
           </Select>
         </FormControl>
-        <NotSimulated compact feature="Custom URLs" note="Vyomi has no custom-domain or load-balancer integration for Cloud Run services." />
+        <CustomUrlsPanel a={adv} set={setAdv} cap="gcp.functions.networking" />
         <Typography variant="body2" color="text.secondary">Endpoint URL: generated after you create the service.</Typography>
       </SourceOpt>
       <Divider />
@@ -266,8 +266,7 @@ export default function CreateService({ query }) {
             </Box>
             <Box>
               <Typography variant="subtitle1" sx={{ fontWeight: 500, mb: 1.5 }}>Networking</Typography>
-              <NotSimulated feature="Use HTTP/2 end-to-end, Session affinity, Connect to a VPC for outbound traffic, Join a Service Mesh."
-                note="Vyomi has no VPC, service-mesh or HTTP/2 data plane to model these against." />
+              <NetworkingPanel a={adv} set={setAdv} cap="gcp.functions.networking" />
             </Box>
             <Box>
               <Typography variant="subtitle1" sx={{ fontWeight: 500, mb: 1.5 }}>Security</Typography>

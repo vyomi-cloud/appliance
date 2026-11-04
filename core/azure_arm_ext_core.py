@@ -634,7 +634,7 @@ def _nic(state, method, sub, rg, after, payload):
         rec.setdefault("tags", {})
         state[key] = rec
         _nic_link(state, rec)
-        return _ok(_view(rec), 200 if old else 201, rid, NIC_T, name)
+        return _ok(_view(rec), 200, rid, NIC_T, name)
     return _err(405, "MethodNotAllowed", f"{method} not allowed.")
 
 
@@ -2273,6 +2273,8 @@ def route(state, method, sub, rg, after, payload=None, query=None, executor=None
             return _identity_default(parent, scope) if method == "GET" else _err(405, "MethodNotAllowed", "GET only.")
         if nsl == "microsoft.security" and t0 in ("assessments", "subassessments", "alerts", "recommendations", "securitystatuses"):
             return None   # Defender for Cloud assessments / sub-assessments: v4's security engine
+        if nsl in ("microsoft.kubernetesconfiguration", "microsoft.network"):
+            return None   # AKS GitOps/extensions and network extension resources (netcfg/netsvc): v4's engines
         if nsl == "microsoft.eventgrid":
             return None   # scoped event subscriptions: v4's Event Grid engine
         if nsl == "microsoft.insights":

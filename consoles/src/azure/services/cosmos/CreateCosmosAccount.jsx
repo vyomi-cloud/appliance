@@ -11,6 +11,7 @@ import { DEFAULT_RG, LOCATIONS, listResourceGroups, locationLabel } from "../../
 import { TitleRow } from "../../kit/ResourceBlade.jsx";
 import CreateWizard, { FormRow, FormSection } from "../../kit/CreateWizard.jsx";
 import { Glyph, NotSimulatedContainer } from "../../kit/common.jsx";
+import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
 
@@ -243,7 +244,14 @@ export default function CreateCosmosAccount() {
           <Radio value="Customer-managed key (CMK)" label="Customer-managed key (CMK)" />
         </RadioGroup>
       </FormRow>
-      {f.dataEncryption !== "Service-managed key" && <NotSimulatedContainer feature="Customer-managed keys (CMK) for Cosmos DB encryption" />}
+      {f.dataEncryption !== "Service-managed key" && (
+        <CapabilityContainer id="azure.cosmos.dataencryption" title="Customer-managed key">
+          <FormRow label="Key URI" required>
+            <Input value={f.keyUri || ""} onChange={(_, d) => setF((x) => ({ ...x, keyUri: d.value }))} placeholder="https://<vault>.vault.azure.net/keys/<name>" aria-label="Key URI" style={{ width: "100%" }} />
+          </FormRow>
+          <p className="vy-muted" style={{ fontSize: 13 }}>The account is created with a system-assigned identity that uses this key. The vault must already exist in the subscription.</p>
+        </CapabilityContainer>
+      )}
     </FormSection>
   );
 

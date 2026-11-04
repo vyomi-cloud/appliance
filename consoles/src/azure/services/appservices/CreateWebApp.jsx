@@ -12,6 +12,8 @@ import { useAsync } from "../../../common/useAsync.js";
 import { DEFAULT_RG, LOCATIONS, listResourceGroups, locationLabel } from "../../kit/arm.js";
 import CreateWizard, { FormRow, FormSection } from "../../kit/CreateWizard.jsx";
 import { Glyph, InfoBar, NotSimulatedContainer } from "../../kit/common.jsx";
+import { CapabilityContainer } from "../../kit/Capability.jsx";
+import { listAllSubnets } from "../../kit/PrivateEndpoints.jsx";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
 
@@ -183,12 +185,25 @@ export default function CreateWebApp() {
     </>
   );
 
+  const subnets = useAsync(listAllSubnets, []);
   const networking = (
     <FormSection title="Networking">
       <FormRow label="Enable public access">
         <Checkbox checked={f.publicAccess} onChange={chk("publicAccess")} aria-label="Enable public access" />
       </FormRow>
-      <NotSimulatedContainer title="Enable network injection" feature="Enable network injection" note="VNet integration for the App Service plan is not modelled." />
+      <CapabilityContainer id="azure.appservices.webapp.networking" title="Network injection">
+        <FormRow label="Enable network injection">
+          <Checkbox checked={!!f.inject} onChange={chk("inject")} aria-label="Enable network injection" />
+        </FormRow>
+        {f.inject && (
+          <FormRow label="Virtual network integration subnet" htmlFor="app-inject-subnet">
+            <Select id="app-inject-subnet" value={f.injectSubnet || subnets.data?.[0]?.id || ""} onChange={(_, d) => setF((x) => ({ ...x, injectSubnet: d.value }))} aria-label="Integration subnet">
+              {(subnets.data || []).map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+            </Select>
+            <div style={{ fontSize: 12 }}>The subnet must be delegated to Microsoft.Web/serverFarms, at least a /28, in the app's region, and the plan must be Basic or higher.</div>
+          </FormRow>
+        )}
+      </CapabilityContainer>
     </FormSection>
   );
 
@@ -254,7 +269,8 @@ export default function CreateWebApp() {
       await api.createSite(rg, f.name, {
         location: f.location, kind: f.os === "Linux" ? "app,linux" : "app",
         tags: Object.fromEntries(f.tags.filter((t) => t.name).map((t) => [t.name, t.value])),
-        properties: { serverFarmId: planId, siteConfig, publicNetworkAccess: f.publicAccess ? "Enabled" : "Disabled" },
+        properties: { serverFarmId: planId, siteConfig, publicNetworkAccess: f.publicAccess ? "Enabled" : "Disabled",
+          ...(f.inject ? { virtualNetworkSubnetId: f.injectSubnet || subnets.data?.[0]?.id } : {}) },
       });
       if (f.continuousDeployment === "Enable" && f.ghRepo) {
         await api.putSourceControl(rg, f.name, { repoUrl: f.ghRepo, branch: f.ghBranch || "main", isGitHubAction: true, gitHubActionConfiguration: {

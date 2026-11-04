@@ -10,6 +10,7 @@ import { PageHeader, Section } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { useProject } from "../../project.js";
 import * as api from "./api.js";
+import { VlanAttachments } from "./HybridConnectivity.jsx";
 
 export default function VpcFlowLogs() {
   const project = useProject();
@@ -65,7 +66,7 @@ export default function VpcFlowLogs() {
           </Box>
         </>
       )}
-      {tab === "vlan" && <CapabilityContainer id="gcp.networking.hybrid-connectivity" title="VLAN attachments" />}
+      {tab === "vlan" && <VlanAttachments title="VLAN attachments" />}
       {tab === "vpn" && <CapabilityContainer id="gcp.networking.hybrid-connectivity" title="Cloud VPN tunnels" />}
     </>
   );

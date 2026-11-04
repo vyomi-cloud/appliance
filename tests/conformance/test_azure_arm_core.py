@@ -843,7 +843,7 @@ def run() -> int:
     vnet3 = _p(RG, "Microsoft.Network", "virtualNetworks", "vnet3")
     r = arm.handle("PUT", vnet3, {"api-version": "2023-11-01"}, {"location": "eastus", "properties": {
         "subnets": [{"name": "inline", "properties": {"addressPrefix": "10.0.2.0/24", "networkSecurityGroup": {"id": nsg3}}}]}})
-    _check("vnet put with an inline subnet", r["status"] in (200, 201))
+    _check("vnet put with an inline subnet", r["status"] == 200)
     inline_subnet = vnet3 + "/subnets/inline"
     r = arm.handle("GET", inline_subnet, {"api-version": "2023-11-01"})
     _check("inline subnet individually gettable via the dedicated subresource path",
@@ -897,7 +897,7 @@ def run() -> int:
            r["body"]["value"][0]["accessDecision"] == "NotAllowed")
     r = arm.handle("GET", f"/subscriptions/{SUB}/providers/Microsoft.Authorization/roleDefinitions", {"api-version": "2022-04-01"})
     _check("Roles (role definitions) listing used by the VNet IAM 'Roles' tab is subscription-wide",
-           any(x["name"] == "Owner" or (x.get("properties") or {}).get("roleName") == "Owner" for x in r["body"]["value"]))
+           any(x["name"] == "Owner" for x in r["body"]["value"]))
 
     # 23. Microsoft.DocumentDB/databaseAccounts listKeys / listReadOnlyKeys /
     # listConnectionStrings / regenerateKey — the real Cosmos shape (not the generic
@@ -929,7 +929,7 @@ def run() -> int:
     nic2 = _p(RG, "Microsoft.Network", "networkInterfaces", "nic2")
     r = arm.handle("PUT", nic2, {"api-version": "2023-11-01"},
                    {"location": "eastus", "properties": {"ipConfigurations": [{"name": "ipconfig1", "properties": {"subnet": {"id": subnet}}}]}})
-    _check("network interface put with subnet association 200", r["status"] in (200, 201))
+    _check("network interface put with subnet association 200", r["status"] == 200)
     r = arm.handle("GET", nic_collection, {"api-version": "2023-11-01"})
     nic2_rec = next(x for x in r["body"]["value"] if x["name"] == "nic2")
     _check("network interface carries its subnet association (Connected devices wiring)",
@@ -1320,7 +1320,8 @@ def run() -> int:
     # non-overlapping CIDR block carved out of the pool (AzureArm._allocate_ipam_pool), not a
     # stored label.
     nm1 = _p(RG, "Microsoft.Network", "networkManagers", "nm1")
-    r = arm.handle("PUT", nm1, {"api-version": "2024-05-01"}, {"location": "eastus"})
+    r = arm.handle("PUT", nm1, {"api-version": "2024-05-01"}, {"location": "eastus", "properties": {
+        "networkManagerScopes": {"subscriptions": [f"/subscriptions/{DEFAULT_SUBSCRIPTION}"]}, "networkManagerScopeAccesses": ["Connectivity"]}})
     _check("network manager created", r["status"] == 200)  # top-level type: async LRO shape, same as every other catalog resource
     pool1 = f"{nm1}/ipamPools/pool1"
     r = arm.handle("PUT", pool1, {"api-version": "2024-05-01"}, {"properties": {"addressPrefixes": ["10.50.0.0/16"]}})

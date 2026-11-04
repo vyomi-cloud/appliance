@@ -16,6 +16,7 @@ import { useNotify } from "../../../common/notify.jsx";
 import { ErrorAlert, PageHeader, Section, SECTION_TABLE_BLEED } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import * as api from "./api.js";
+import { listApplications } from "./ApplicationMonitoring.jsx";
 import ScrollTable from "../../kit/ScrollTable.jsx";
 
 const STEPS = ["New condition", "Configure trigger", "Notifications and name", "Review alert"];
@@ -46,6 +47,8 @@ export default function CreateAlertPolicy() {
   const [notifyClosure, setNotifyClosure] = useState(false);
   const [autoClose, setAutoClose] = useState("1 day");
   const [labels, setLabels] = useState([]);
+  const [appId, setAppId] = useState("");
+  const { data: apps = [] } = useAsync(() => listApplications(), []);
   const [severity, setSeverity] = useState("No severity");
   const [documentation, setDocumentation] = useState("");
   const [policyName, setPolicyName] = useState("");
@@ -71,7 +74,7 @@ export default function CreateAlertPolicy() {
               } }),
         }],
         notificationChannels: useChannel ? channelIds : [],
-        userLabels: Object.fromEntries(labels.filter((l) => l.key).map((l) => [l.key, l.value])),
+        userLabels: { ...Object.fromEntries(labels.filter((l) => l.key).map((l) => [l.key, l.value])), ...(appId ? { "apphub-application": appId } : {}) },
         alertStrategy: { autoClose: `${AUTOCLOSE.find(([l]) => l === autoClose)[1]}s`, notifyOnClosure: notifyClosure },
       };
       if (severity !== "No severity") body.severity = severity.toUpperCase();
@@ -174,7 +177,15 @@ export default function CreateAlertPolicy() {
                 {AUTOCLOSE.map(([l]) => <MenuItem key={l} value={l}>{l}</MenuItem>)}
               </Select>
             </FormControl>
-            <CapabilityContainer id="gcp.monitoring.application-monitoring" title="Application labels" />
+            <CapabilityContainer id="gcp.monitoring.application-monitoring" title="Application labels">
+              <FormControl sx={{ maxWidth: 420 }}>
+                <InputLabel id="app-label">Application</InputLabel>
+                <Select labelId="app-label" label="Application" value={appId} onChange={(e) => setAppId(e.target.value)} inputProps={{ "aria-label": "Application" }}>
+                  <MenuItem value="">None</MenuItem>
+                  {apps.map((a) => <MenuItem key={a.name} value={a.name.split("/")[5]}>{a.displayName || a.name.split("/")[5]}</MenuItem>)}
+                </Select>
+              </FormControl>
+            </CapabilityContainer>
             <Box>
               <Typography variant="body2" sx={{ fontWeight: 500, mb: 1 }}>Policy user labels</Typography>
               <Stack spacing={1}>

@@ -113,12 +113,13 @@ const CORES = [
   "kubescape_catalog.py",   // Kubescape control metadata (generated) — kubescape_core imports it
   "kubescape_core.py",   // Kubescape results + scanner seam (calls the OPA-wasm evaluator) — loaded before azure_arm_core
   "azure_security_core.py",   // Microsoft Defender for Cloud (Microsoft.Security) — loaded before azure_arm_core which delegates to it
-  "azure_arm_data.py", "azure_storage_ext_core.py", "azure_policy_core.py", "azure_netsvc_core.py", "azure_webdeploy_core.py", "azure_arm_core.py",   // Azure ARM control plane (native /subscriptions/* wire)
+  "azure_arm_data.py", "azure_storage_ext_core.py", "azure_policy_core.py", "azure_netsvc_core.py", "azure_netcfg_core.py", "azure_webnet_core.py", "azure_webdeploy_core.py", "azure_arm_core.py",   // Azure ARM control plane (native /subscriptions/* wire)
+  "azure_cfgext_core.py",
   "azure_files_core.py", "azure_search_core.py", "azure_storagemover_core.py", "azure_marketplace_core.py", "azure_billing_ext_core.py",
   // GCP conformance cores — the gcp_core_adapter data-plane (console CRUD).
   "gcp_project.py", "function_shims.py", "gcp_console_tabs.py", "nano_triggers.py",   // main-side cores (merged with v4)
   "gcp_storageinsights_core.py", "gcp_storage_core.py", "gcp_firestore_core.py", "gcp_kms_core.py",
-  "gcp_secretmanager_core.py", "gcp_pubsub_core.py", "gcp_iam_core.py", "gcp_asset_query_core.py", "gcp_wif_core.py", "gcp_trace_core.py", "gcp_posture_core.py", "gcp_cloudsql_core.py", "gcp_artifactregistry_core.py", "gcp_logging_core.py", "gcp_compute_core.py", "instance_catalog.py", "gcp_compute_instances_core.py", "gcp_compute_ext_core.py", "gcp_resourcemanager_core.py", "gcp_pam_core.py", "gcp_run_core.py",
+  "gcp_secretmanager_core.py", "gcp_pubsub_core.py", "gcp_iam_core.py", "gcp_asset_query_core.py", "gcp_wif_core.py", "gcp_trace_core.py", "gcp_apphub_core.py", "gcp_osconfig_core.py", "gcp_hybrid_core.py", "gcp_posture_core.py", "gcp_cloudsql_core.py", "gcp_artifactregistry_core.py", "gcp_logging_core.py", "gcp_compute_core.py", "instance_catalog.py", "gcp_compute_instances_core.py", "gcp_compute_ext_core.py", "gcp_resourcemanager_core.py", "gcp_pam_core.py", "gcp_run_core.py",
   // Azure data-plane cores — the azure_core_adapter data-plane (console CRUD).
   "azure_blob_core.py", "azure_cosmos_core.py", "azure_keyvault_secrets_core.py",
   "azure_keyvault_keys_core.py", "azure_keyvault_certificates_core.py", "azure_queue_core.py", "azure_table_core.py",
@@ -135,7 +136,7 @@ const CORES = [
   "azure_servicebus_core.py", "eventbridge_core.py", "eventbridge_schemas_core.py", "scheduler_core.py", "lambda_core.py",
   "azure_keyvault_x509_core.py",   // main-side cores (merged with v4)
   "apigateway_core.py", "apigatewayv2_core.py", "apigatewayv2_gateway.py", "vpc_core.py", "vpc_vpn_core.py", "vpc_extras_core.py", "vpc_lattice_core.py", "ec2_ops_core.py", "netfw_core.py", "dnsfw_core.py", "kinesis_core.py", "cost_model.py", "cloudwatch_core.py", "azure_sql_core.py", "azure_iam_core.py", "logs_core.py", "ssm_core.py", "stepfunctions_core.py", "cloudformation_core.py", "gcp_cloudscheduler_core.py", "gcp_container_core.py", "gcp_redis_core.py", "gcp_iamcredentials_core.py", "gcp_monitoring_core.py",
-  "eventbridge_partner_core.py", "ce_core.py", "cloudformation_stacksets_core.py", "cloudformation_registry_core.py",
+  "eventbridge_partner_core.py", "ce_core.py", "vpc_encryption_core.py", "savingsplans_core.py", "cloudfront_keys_core.py", "rds_restore_core.py", "appautoscaling_core.py", "cloudformation_stacksets_core.py", "cloudformation_registry_core.py",
   // console-next capability manifest dependency (slice 1): the pure conformance
   // signal module (only imports `os` — safe in Pyodide, no FastAPI).
   "console_conformance.py",
