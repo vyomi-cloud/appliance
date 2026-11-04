@@ -328,7 +328,7 @@
   "title": "Application Insights",
   "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "Shows the app's real instrumentation key app setting plus request-count/failure-rate derived from the real recorded invocation log — not a real Application Insights resource, Kusto query engine or distributed trace view."
+   "A real Microsoft.Insights/components resource linked through the app's connection string; requests / failures / dependencies / events / traces are read from the OTLP-ingested trace + log store (and requests Vyomi measured for the app). No Kusto query engine, Live Metrics stream or Application Map."
   ],
   "api": ["WebApps_ListApplicationSettings", "WebApps_InvokeFunction"],
   "tests": ["tests/conformance/test_azure_functionapp_core.py"]

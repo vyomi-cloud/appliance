@@ -2,6 +2,7 @@
  * Environment variables, Scale and concurrency, Locks, Export template and Access control
  * (role assignments/roles) are backed by native ARM calls; everything else in the menu is an
  * honest NotSimulated panel (Vyomi has no diagnostics/telemetry/identity backend for them). */
+import SharedAppInsights from "../../kit/AppInsights.jsx";
 import { ResourceMetrics, ResourceLogs, ResourceNotifications } from "../../kit/ResourceMonitoring.jsx";
 import DeploymentCenter from "../../kit/DeploymentCenter.jsx";
 import { ClassicAdminsPanel, DenyAssignmentsPanel, MyAccess } from "../../kit/IamExtras.jsx";
@@ -125,7 +126,7 @@ export default function FunctionAppBlade({ params }) {
       "resource-health": () => <ResourceHealthPanel a={a} />,
       "resource-visualizer": () => <ResourceVisualizer a={a} />,
       "app-files": () => <AppFiles a={a} />,
-      "application-insights": () => <ApplicationInsights a={a} />,
+      "application-insights": () => <SharedAppInsights site={a} capId="azure.functionapp.applicationinsights" getSettings={() => api.listAppSettings(a.resourceGroup, a.name)} putSettings={(v) => api.setAppSettings(a.resourceGroup, a.name, v)} />,
     }[panel];
     body = P ? P() : (GAPS[panel] ? <GapPanel name={a.name} id={panel} capId={GAPS[panel]} /> : <Placeholder name={a.name} id={panel} />);
   }

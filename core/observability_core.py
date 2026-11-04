@@ -931,6 +931,9 @@ def dispatch(obs: ObsStore, method: str, path: str, query: dict | None = None, h
             if not dbid or not isinstance(d.get("stats"), dict):
                 return Resp(400, {"error": "dbInstanceIdentifier and stats{} are required"})
             return Resp(200, {"published": publish_rds_stats(cw_store, dbid, d["stats"])})
+        if p == "/appinsights/query" and m == "GET":
+            names = [x for x in (query.get("names") or "").split(",") if x]
+            return Resp(200, appinsights_query(obs, names, query.get("ikey", ""), query.get("window") and float(query["window"]) or 3600.0))
         if p == "/trace-stats" and m == "GET":
             return Resp(200, trace_latency_stats(obs, query.get("service", "")))
         if p == "/rollup" and m == "GET":
@@ -1291,3 +1294,47 @@ def azure_series(obs: ObsStore, rtype: str, name: str, metric: str, start: float
         out.append({"ts": start + i * step, "total": round(sum(vals), 3) if cnt_kind else round(sum(vals) / n, 3), "count": n,
                     "average": round(sum(vals) / n, 3), "minimum": round(min(vals), 3), "maximum": round(max(vals), 3)})
     return out
+
+
+# ───────────────────────────── Application Insights (backed by the trace / log store) ─────────────────────────────
+def _ai_match(sp: dict, names: set, ikey: str) -> bool:
+    a = sp.get("attributes") or {}
+    return ((sp.get("service") or "").lower() in names or str(a.get("resource", "")).lower() in names
+            or str(a.get("service.name", "")).lower() in names or (ikey and a.get("ai.instrumentationKey") == ikey))
+
+
+def appinsights_query(obs: ObsStore, names: list, ikey: str = "", window_s: float = 3600.0, now: float | None = None) -> dict:
+    """Application Insights views over MEASURED telemetry: spans whose service / resource equals one of `names` (the
+    component, its linked web app) or that carry the component's instrumentation key. SERVER spans = requests, CLIENT /
+    PRODUCER spans = dependencies, ERROR spans or `exception` span events = exceptions, other span events + log records = events/traces."""
+    now = now if now is not None else time.time()
+    lo = int((now - window_s) * 1e9)
+    nm = {n.lower() for n in names if n}
+    reqs, deps, exc, evs = [], [], [], []
+    for tid, spans in obs.spans.items():
+        for sp in spans:
+            if int(sp["endTimeUnixNano"]) < lo or not _ai_match(sp, nm, ikey):
+                continue
+            dur = (int(sp["endTimeUnixNano"]) - int(sp["startTimeUnixNano"])) / 1e6
+            a = sp.get("attributes") or {}
+            failed = (sp.get("status") or {}).get("code") == 2 or int(a.get("http.status_code", 0) or 0) >= 500
+            row = {"timestamp": int(sp["startTimeUnixNano"]) / 1e9, "name": sp["name"], "durationMs": round(dur, 3), "success": not failed,
+                   "resultCode": a.get("http.status_code", ""), "operationId": tid, "id": sp["spanId"], "cloudRoleName": sp.get("service", "")}
+            if sp.get("kind") == 2 or sp.get("kind") == 0:
+                reqs.append(row)
+            elif sp.get("kind") in (3, 4):
+                deps.append(row)
+            if failed:
+                exc.append({**row, "type": "SpanError", "message": (sp.get("status") or {}).get("message") or "HTTP %s" % a.get("http.status_code", "")})
+            for ev in sp.get("events") or []:
+                (exc if ev.get("name") == "exception" else evs).append({"timestamp": int(ev.get("timeUnixNano") or sp["startTimeUnixNano"]) / 1e9,
+                                                                       "name": ev.get("name", ""), "operationId": tid, "attributes": _attrs(ev.get("attributes"))})
+    traces = [{"timestamp": l["time"] / 1e9, "severity": l["severity"], "message": l["body"], "operationId": l["traceId"]}
+              for l in obs.logs if l["time"] >= lo and (l.get("service", "").lower() in nm or (ikey and l["attributes"].get("ai.instrumentationKey") == ikey))]
+    for rows in (reqs, deps, exc, evs, traces):
+        rows.sort(key=lambda r: r["timestamp"], reverse=True)
+    lat = sorted(r["durationMs"] for r in reqs)
+    return {"summary": {"requests": len(reqs), "failedRequests": sum(1 for r in reqs if not r["success"]), "dependencies": len(deps),
+                        "exceptions": len(exc), "events": len(evs), "traces": len(traces),
+                        "avgDurationMs": round(sum(lat) / len(lat), 3) if lat else 0, "p95DurationMs": lat[min(len(lat) - 1, int(.95 * len(lat)))] if lat else 0},
+            "requests": reqs[:200], "dependencies": deps[:200], "exceptions": exc[:200], "events": evs[:200], "traces": traces[:200]}

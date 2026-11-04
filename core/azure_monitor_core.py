@@ -68,6 +68,7 @@ TYPES = {
     "privatelinkscopes": ("privateLinkScopes", "2021-07-01-preview"),
     "healthmodels": ("healthModels", "2023-04-01-preview"),
     "pipelinegroups": ("pipelineGroups", "2023-10-01-preview"),
+    "components": ("components", "2020-02-02"),
 }
 # ARM echoes these type strings back (autoscale is lower-cased in the real service)
 TYPE_STRINGS = {"actiongroups": "Microsoft.Insights/actionGroups", "metricalerts": "Microsoft.Insights/metricAlerts",
@@ -78,7 +79,8 @@ TYPE_STRINGS = {"actiongroups": "Microsoft.Insights/actionGroups", "metricalerts
                 "datacollectionendpoints": "Microsoft.Insights/dataCollectionEndpoints",
                 "privatelinkscopes": "Microsoft.Insights/privateLinkScopes",
                 "healthmodels": "Microsoft.Insights/healthModels",
-                "pipelinegroups": "Microsoft.Insights/pipelineGroups"}
+                "pipelinegroups": "Microsoft.Insights/pipelineGroups",
+                "components": "Microsoft.Insights/components"}
 
 EVAL_FREQUENCIES = ("PT1M", "PT5M", "PT15M", "PT30M", "PT1H")
 WINDOW_SIZES = ("PT1M", "PT5M", "PT15M", "PT30M", "PT1H", "PT6H", "PT12H", "P1D")
@@ -558,7 +560,36 @@ def _pipeline_props(props, old=None):
             "provisioningState": "Succeeded"}
 
 
-_BUILDERS = {"actiongroups": lambda pr, old, nm: _action_group_props(pr, old),
+# ═══════════════════════════ Application Insights components ═════════════════════
+# Microsoft.Insights/components: a real ARM resource with a generated AppId / InstrumentationKey / ConnectionString.
+# Its telemetry is the observability store (core/observability_core.appinsights_query): OTLP/HTTP spans + logs posted to the
+# IngestionEndpoint in the connection string, plus the requests Vyomi measured for the linked app. No Kusto engine.
+APPINSIGHTS_APP_TYPES = ("web", "other")
+
+
+def _component_props(props, old=None):
+    p = dict(old or {})
+    p.update(props)
+    app_type = _enum(p.get("Application_Type") or "web", "Application_Type", APPINSIGHTS_APP_TYPES)
+    days = p.get("RetentionInDays", 90)
+    if not isinstance(days, int) or isinstance(days, bool) or not (30 <= days <= 730):
+        raise _bad("The property 'RetentionInDays' must be an integer between 30 and 730.")
+    ik = (old or {}).get("InstrumentationKey") or str(uuid.uuid4())
+    app_id = (old or {}).get("AppId") or str(uuid.uuid4())
+    out = {"Application_Type": app_type, "Flow_Type": p.get("Flow_Type") or "Bluefield", "Request_Source": p.get("Request_Source") or "rest",
+           "RetentionInDays": days, "IngestionMode": p.get("IngestionMode") or "ApplicationInsights",
+           "publicNetworkAccessForIngestion": p.get("publicNetworkAccessForIngestion") or "Enabled",
+           "publicNetworkAccessForQuery": p.get("publicNetworkAccessForQuery") or "Enabled",
+           "AppId": app_id, "InstrumentationKey": ik, "Name": p.get("Name") or "",
+           "ConnectionString": f"InstrumentationKey={ik};IngestionEndpoint=/_obs/;LiveEndpoint=/_obs/",
+           "TenantId": "00000000-0000-0000-0000-000000000000", "provisioningState": "Succeeded"}
+    if p.get("WorkspaceResourceId"):
+        out["WorkspaceResourceId"] = str(p["WorkspaceResourceId"])
+    return out
+
+
+_BUILDERS = {"components": lambda pr, old, nm: _component_props(pr, old),
+             "actiongroups": lambda pr, old, nm: _action_group_props(pr, old),
              "metricalerts": lambda pr, old, nm: _metric_alert_props(pr, old),
              "activitylogalerts": lambda pr, old, nm: _activity_props(pr, old),
              "autoscalesettings": _autoscale_props,
@@ -1080,7 +1111,8 @@ def _put(state, sub, rg, low, name, payload, method):
     else:
         if not isinstance(props_in, dict):
             raise _bad("The request body must contain 'properties'.")
-        props = _BUILDERS[low](props_in, None, name)
+        seed = {k: rec["properties"][k] for k in ("AppId", "InstrumentationKey")} if (rec and low == "components") else None
+        props = _BUILDERS[low](props_in, seed, name)
     if rec is None:
         loc = payload.get("location") or DEFAULT_LOCATION
         if low in ("actiongroups", "activitylogalerts", "metricalerts") and str(loc).lower() == "global":
