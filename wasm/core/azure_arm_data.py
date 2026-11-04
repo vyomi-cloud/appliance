@@ -112,3 +112,18 @@ CATALOG += [
     {'key': 'userassignedidentity', 'namespace': 'Microsoft.ManagedIdentity', 'type': 'userAssignedIdentities', 'api_version': '2023-01-31',
      'defaults': {'properties': {'tenantId': '00000000-0000-0000-0000-000000000000', 'principalId': '__UUID__', 'clientId': '__UUID__'}}},
 ]
+
+# v4 AZ-07 network services (hand-added): private endpoints, Bastion, Azure Firewall (+ policies, whose
+# ruleCollectionGroups are nested children), DDoS plans. Semantics live in core/azure_netsvc_core.py.
+CATALOG += [
+    {'key': 'privateendpoint', 'namespace': 'Microsoft.Network', 'type': 'privateEndpoints', 'api_version': '2023-11-01',
+     'defaults': {'properties': {'provisioningState': 'Succeeded'}}},
+    {'key': 'bastion', 'namespace': 'Microsoft.Network', 'type': 'bastionHosts', 'api_version': '2023-11-01',
+     'defaults': {'sku': {'name': 'Standard'}, 'properties': {'provisioningState': 'Succeeded'}}},
+    {'key': 'azurefirewall', 'namespace': 'Microsoft.Network', 'type': 'azureFirewalls', 'api_version': '2023-11-01',
+     'defaults': {'properties': {'provisioningState': 'Succeeded'}}},
+    {'key': 'firewallpolicy', 'namespace': 'Microsoft.Network', 'type': 'firewallPolicies', 'api_version': '2023-11-01',
+     'defaults': {'properties': {'provisioningState': 'Succeeded', 'sku': {'tier': 'Standard'}, 'threatIntelMode': 'Alert'}}},
+    {'key': 'ddosplan', 'namespace': 'Microsoft.Network', 'type': 'ddosProtectionPlans', 'api_version': '2023-11-01',
+     'defaults': {'properties': {'provisioningState': 'Succeeded', 'virtualNetworks': []}}},
+]
