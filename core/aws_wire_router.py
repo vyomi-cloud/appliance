@@ -104,7 +104,7 @@ def _gcp_service(path):
     if re.match(r"^/v1/projects/[^/]+/(patchJobs|patchDeployments)([/:]|$)", path) \
             or re.match(r"^/v1/projects/[^/]+/locations/[^/]+/osPolicyAssignments([/:]|$)", path):
         return "gcp-osconfig"   # VM Manager: OS Config patch jobs/deployments + OS policy assignments (core/gcp_osconfig_core, state on the VM store)
-    if re.match(r"^/v1/projects/[^/]+/securityPosture/(compute|storage)$", path):
+    if re.match(r"^/v1/projects/[^/]+/(securityPosture/(compute|storage|threats|vulnerabilities|all)|occurrences(:vulnerabilitySummary)?)$", path):
         return "gcp-posture"   # rule-based posture findings over real VM / firewall / bucket state (core/gcp_posture_core)
     if path.startswith("/v2/entries"):   # Cloud Logging: entries:write / entries:list
         return "gcp-logging"
@@ -1252,7 +1252,12 @@ class AwsWireRouter:
             return {"status": r.status, "headers": hdrs, "body": r.body or b""}
 
         if svc == "gcp-posture":
-            r = gcp_posture.dispatch(self.gcp_compute_vm, self.gcp_compute, self.gcs, method, path)
+            proj = path.split("/")[3] if path.count("/") >= 3 else ""
+            try:
+                scans = gcp_ar.scan_images(self.gcp_ar, proj)
+            except Exception:
+                scans = []
+            r = gcp_posture.dispatch(self.gcp_compute_vm, self.gcp_compute, self.gcs, method, path, threats=self.secscan_threats("gcp"), scans=scans)
             return {"status": r.status, "headers": {"content-type": r.media_type}, "body": r.body}
 
         if svc and svc.startswith("gcp-"):   # GCP services — native google-cloud-* REST wire
