@@ -106,6 +106,10 @@ try:                                              # v4 AZ-02..05: KEDA / AKS ext
     from core import azure_cfgext_core as cfgext
 except ImportError:
     import azure_cfgext_core as cfgext             # type: ignore
+try:                                              # v4: Azure Backup + Site Recovery (Recovery Services vaults) over real Blob artifacts
+    from core import azure_backup_core as backup_engine
+except ImportError:
+    import azure_backup_core as backup_engine      # type: ignore
 try:                                              # v4 AZ-08: Azure Files, AI Search, Storage Mover, Marketplace, quota/billing extras
     from core import azure_files_core as files_engine, azure_search_core as search_engine
     from core import azure_storagemover_core as mover_engine, azure_marketplace_core as market_engine
@@ -1862,6 +1866,10 @@ class AzureArm:
         if ns == "microsoft.storagemover" and (rg is not None or len(chain) == 1):
             r = mover_engine.dispatch(self.state, method, sub, rg, chain, payload, query, blob_store=self.blob_store, base=self._base)
             return {"status": r["status"], "headers": {}, "body": r["body"]}
+        if ns == "microsoft.recoveryservices" and (rg is not None or len(chain) == 1 or (chain and chain[0].lower() == "locations")):
+            r = backup_engine.dispatch(self.state, method, sub, rg, chain, payload, query, blob_store=self.blob_store, base=self._base,
+                                       arm_put=lambda rid, api, body: self.handle("PUT", rid, {"api-version": api}, body))
+            return {"status": r["status"], "headers": r.get("headers") or {}, "body": r["body"]}
         if ns == "microsoft.marketplace":
             r = market_engine.catalog(chain, query)
             return {"status": r["status"], "headers": {}, "body": r["body"]}
