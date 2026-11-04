@@ -154,7 +154,8 @@ def run() -> int:
     asvm = _p(RG, "Microsoft.Compute", "virtualMachines", "asvm")
     arm.handle("PUT", asvm, {"api-version": AV}, {"location": "eastus", "properties": {"hardwareProfile": {"vmSize": "Standard_B1s"}}})
     arm.handle("POST", asvm + "/start", {"api-version": AV})
-    future = (_dt.datetime.now(_dt.timezone.utc) + _dt.timedelta(hours=2)).strftime("%H:%M")
+    _n = _dt.datetime.now(_dt.timezone.utc)
+    future = "23:59" if (_n.hour, _n.minute) < (23, 58) else "23:59"  # fixed late-today slot: "+2h" wrapped past midnight UTC after 22:00 and broke the check
     arm.handle("PATCH", asvm, {"api-version": AV}, {"properties": {"autoShutdown": {"enabled": True, "time": future, "timeZone": "UTC"}}})
     r = arm.handle("GET", asvm, {"api-version": AV})
     _check("auto-shutdown schedule still ahead today leaves the VM's power state alone",
