@@ -569,6 +569,14 @@ def _update_site(state, rec, payload, method):
         rec["properties"][k] = _to_bool(v) if k in _BOOL_PROPS else v
 
 
+def _webnet():
+    try:
+        from core import azure_webnet_core as m
+    except ImportError:
+        import azure_webnet_core as m      # type: ignore  (Nano: flat module path)
+    return m
+
+
 def _site_ops(state, sub, rg, chain, method, payload):
     if len(chain) == 1:
         if method != "GET":
@@ -598,6 +606,9 @@ def _site_ops(state, sub, rg, chain, method, payload):
         existed = rec is not None
         if method == "PATCH" and not existed:
             raise _not_found("sites", name, rg)
+        _wn = _webnet().validate_site(state, sub, rg, name, rec, payload)
+        if _wn:
+            return _err(_wn["status"], _wn["body"]["error"]["code"], _wn["body"]["error"]["message"])
         if existed:
             _migrate_locks(state, rec)
             blocked = _lock_block(state, rec, for_delete=False)
@@ -609,6 +620,7 @@ def _site_ops(state, sub, rg, chain, method, payload):
             _validate_name(name, "Web app", fn=_is_fn(payload.get("kind")))
             rec = _new_site(state, sub, rg, name, payload)
             state[rid.lower()] = rec
+        _webnet().after_site(state, rec)
         resp = _ok(_view(rec), 200 if existed else 201, lro=True, rid=rid, verb=method.lower())
         _log_site_call(state, rec, [], method, resp, existed)
         return resp
@@ -644,8 +656,19 @@ def _site_subresource(state, rec, rest, method, payload):
             import azure_webdeploy_core as _wd          # type: ignore  (Nano: flat module path)
         r = _wd.dispatch(state, rec, rest, method, payload)
         return _ok(r["body"], r["status"]) if r["status"] < 300 else _err(r["status"], r["body"]["error"]["code"], r["body"]["error"]["message"])
+    if _webnet().handles(rest):
+        r = _webnet().dispatch(state, rec, rest, method, payload)
+        return _ok(r["body"], r["status"]) if r["status"] < 300 else _err(r["status"], r["body"]["error"]["code"], r["body"]["error"]["message"])
     if r0 == "config":
-        return _config_ops(rec, rest[1:], method, payload)
+        if len(rest) >= 2 and rest[1].lower() == "web" and method in ("PUT", "PATCH"):
+            _wn = _webnet().validate_config(state, rec, _props(payload))
+            if _wn:
+                return _err(_wn["status"], _wn["body"]["error"]["code"], _wn["body"]["error"]["message"])
+        resp = _config_ops(rec, rest[1:], method, payload)
+        if len(rest) >= 2 and rest[1].lower() == "web" and method in ("PUT", "PATCH") and resp["status"] < 300:
+            _webnet().after_site(state, rec)
+            resp = _ok({"properties": rec["properties"]["siteConfig"]})
+        return resp
     if r0 == "locks":
         return _lock_ops(state, rec, rest[1:], method, payload)
     if r0 == "providers" and len(rest) >= 3 and rest[1].lower() == "microsoft.authorization" and rest[2].lower() == "locks":

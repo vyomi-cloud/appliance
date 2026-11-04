@@ -127,3 +127,9 @@ CATALOG += [
     {'key': 'ddosplan', 'namespace': 'Microsoft.Network', 'type': 'ddosProtectionPlans', 'api_version': '2023-11-01',
      'defaults': {'properties': {'provisioningState': 'Succeeded', 'virtualNetworks': []}}},
 ]
+
+# v4 AZ-07: Azure Front Door / CDN profiles (control plane). Semantics + children live in core/azure_netcfg_core.py.
+CATALOG += [
+    {'key': 'cdnprofile', 'namespace': 'Microsoft.Cdn', 'type': 'profiles', 'api_version': '2024-02-01',
+     'defaults': {'location': 'global', 'sku': {'name': 'Standard_AzureFrontDoor'}, 'properties': {'provisioningState': 'Succeeded'}}},
+]
