@@ -11,6 +11,7 @@ import CreateWizard, { FormRow, FormSection } from "../../kit/CreateWizard.jsx";
 import { Glyph, InfoBar, NotSimulatedContainer } from "../../kit/common.jsx";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
+import * as filesApi from "./files.js";
 
 const NAME_RE = /^[a-z0-9]{3,24}$/;
 const RG_RE = /^[-\w._()]{1,90}$/;
@@ -30,6 +31,7 @@ export default function CreateStorageAccount() {
     networkAccess: "all", routing: "MicrosoftRouting",
     pitr: false, softDeleteBlobs: true, softDeleteBlobDays: 7, softDeleteContainers: true, softDeleteContainerDays: 7, permanentDelete: false,
     versioning: false, changeFeed: false, immutability: false,
+    sftp: false, nfsv3: false, largeFileShares: false, softDeleteShares: true, softDeleteShareDays: 7,
     cmk: false, keyvaulturi: "", keyname: "", cmkQueueTable: false, infraEncryption: false,
     tags: [{ name: "", value: "" }],
   });
@@ -134,7 +136,11 @@ export default function CreateStorageAccount() {
       <FormSection title="Hierarchical Namespace" description="Hierarchical namespace, complemented by Data Lake Storage Gen2 endpoint, enables file and directory semantics.">
         <FormRow label="Enable hierarchical namespace"><Checkbox checked={f.hns} onChange={chk("hns")} aria-label="Enable hierarchical namespace" /></FormRow>
       </FormSection>
-      <NotSimulatedContainer title="Access protocols" feature="Enable SFTP and Enable network file system v3 access" />
+      <FormSection title="Access protocols" description="Enable SFTP or NFS v3 access to blob data. Both require hierarchical namespace; NFS v3 also requires secure transfer to be off and is fixed at creation.">
+        <FormRow label="Enable SFTP"><Checkbox checked={f.sftp} onChange={chk("sftp")} disabled={!f.hns} aria-label="Enable SFTP" /></FormRow>
+        <FormRow label="Enable network file system v3"><Checkbox checked={f.nfsv3} disabled={!f.hns}
+          onChange={(_, d) => setF((x) => ({ ...x, nfsv3: !!d.checked, ...(d.checked ? { secureTransfer: false } : {}) }))} aria-label="Enable network file system v3" /></FormRow>
+      </FormSection>
       {f.performance === "Standard" && (
         <FormSection title="Blob storage">
           <FormRow label="Access tier">
@@ -147,7 +153,9 @@ export default function CreateStorageAccount() {
           <FormRow label="Allow cross-tenant replication"><Checkbox checked={f.allowCrossTenantReplication} onChange={chk("allowCrossTenantReplication")} aria-label="Allow cross-tenant replication" /></FormRow>
         </FormSection>
       )}
-      <NotSimulatedContainer title="Azure Files" feature="Enable large file shares" />
+      <FormSection title="Azure Files" description="Large file shares raise the maximum share size to 100 TiB; they cannot be disabled afterwards and need Standard LRS, ZRS, GRS or GZRS.">
+        <FormRow label="Enable large file shares"><Checkbox checked={f.largeFileShares} onChange={chk("largeFileShares")} disabled={f.performance === "Premium" || (geo && f.readAccess)} aria-label="Enable large file shares" /></FormRow>
+      </FormSection>
     </>
   );
 
@@ -194,7 +202,10 @@ export default function CreateStorageAccount() {
         {f.softDeleteContainers && <FormRow label="Days to retain deleted containers"><Input type="number" value={String(f.softDeleteContainerDays)} onChange={set("softDeleteContainerDays")} aria-label="Days to retain deleted containers" /></FormRow>}
         <FormRow label="Enable permanent delete for soft deleted items"><Checkbox checked={f.permanentDelete} onChange={chk("permanentDelete")} aria-label="Enable permanent delete for soft deleted items" /></FormRow>
       </FormSection>
-      <NotSimulatedContainer title="Azure Files recovery" feature="Enable soft delete for file shares and Days to retain deleted file shares" note="Azure Files has no core in Vyomi." />
+      <FormSection title="Azure Files recovery" description="Saved as the account's fileServices/default share delete retention policy.">
+        <FormRow label="Enable soft delete for file shares"><Checkbox checked={f.softDeleteShares} onChange={chk("softDeleteShares")} aria-label="Enable soft delete for file shares" /></FormRow>
+        {f.softDeleteShares && <FormRow label="Days to retain deleted file shares"><Input type="number" value={String(f.softDeleteShareDays)} onChange={set("softDeleteShareDays")} aria-label="Days to retain deleted file shares" /></FormRow>}
+      </FormSection>
       <FormSection title="Tracking" description="Manage versions and keep track of changes made to your blob data.">
         <FormRow label="Enable versioning for blobs"><Checkbox checked={f.versioning} onChange={chk("versioning")} aria-label="Enable versioning for blobs" /></FormRow>
         <FormRow label="Enable blob change feed"><Checkbox checked={f.changeFeed} onChange={chk("changeFeed")} aria-label="Enable blob change feed" /></FormRow>
@@ -268,6 +279,7 @@ export default function CreateStorageAccount() {
     try {
       await api.createStorageAccount(rg, f.name, body());
       await api.putBlobServiceProperties(rg, f.name, api.blobServiceFromWizard(f));
+      if (!(f.performance === "Premium" && f.premiumKind === "BlockBlobStorage")) await filesApi.putFileService({ resourceGroup: rg, name: f.name }, { shareDeleteRetentionPolicy: { enabled: !!f.softDeleteShares, days: Number(f.softDeleteShareDays) || 7 } }).catch(() => {});
       notify.success(`Deployment of storage account '${f.name}' to resource group '${rg}' was successful.`, "Deployment succeeded");
       navigate("storage", rg, f.name);
     } catch (e) { notify.error(e, "Deployment failed"); }

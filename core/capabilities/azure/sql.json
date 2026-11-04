@@ -132,5 +132,11 @@
   "level": { "nano": "limited", "offline": "limited" },
   "limitations": ["The configured maintenance window (maintenanceConfigurationId) is the database's real property; the event history is always empty because Vyomi never performs platform maintenance."],
   "tests": ["tests/conformance/test_azure_sql_ext_core.py"]
+ },
+ "azure.sql.addazuresearch": {
+  "title": "Add Azure AI Search (SQL)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["A real search service, index, data source and indexer are created through Microsoft.Search, but Vyomi indexers only read Blob data: running the indexer on an azuresql data source ends in transientFailure with that message. Pulling table rows into an index is not implemented."],
+  "tests": ["tests/conformance/test_azure_search_core.py"]
  }
 }

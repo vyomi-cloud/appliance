@@ -28,6 +28,7 @@ import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
 import SharedActivityLog from "../../kit/ActivityLog.jsx";
 import SharedResourceHealth from "../../kit/ResourceHealth.jsx";
 import SharedDiagnosticSettings from "../../kit/DiagnosticSettings.jsx";
+import AiSearchIntegration from "../../kit/AiSearchIntegration.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -108,6 +109,8 @@ export default function SqlDatabaseBlade({ params }) {
       exporttemplate: () => <SharedExportTemplate id={a.id} name={a.name} resourceGroup={a.resourceGroup} />,
       resourcehealth: () => <SharedResourceHealth id={a.id} name={a.name} />,
       diagnosticsettings: () => <SharedDiagnosticSettings id={a.id} name={a.name} />,
+      addazuresearch: () => <AiSearchIntegration source={{ kind: "sql", capId: "azure.sql.addazuresearch", title: `${a.name} | Add Azure AI Search`, account: a.name, containerName: "dbo.Table1",
+        connectionString: `Server=tcp:${a.server}.database.windows.net;Database=${a.name}` }} />,
     }[panel];
     body = P ? P() : (
       <>

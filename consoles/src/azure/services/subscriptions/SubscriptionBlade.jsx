@@ -57,14 +57,14 @@ export const MENU = [
     { id: "support", label: "Support + Troubleshooting" },
   ] },
 ];
+import { ManagementCertificates, PartnerInformation, QuotaRequests, RequestIncreaseDialog, TopFreeServices } from "./SubscriptionExtras.jsx";
+import MarketplaceBrowser from "../../kit/MarketplaceBrowser.jsx";
 const LABEL = Object.fromEntries(MENU.flatMap((m) => (m.group ? m.items : [m])).map((i) => [i.id, i.label]));
 // The portal's Essentials "Offer"/"Offer ID" are looked up from subscriptionPolicies.quotaId
 // through this same static catalog in real Azure — not a separate field on the subscription.
 const OFFERS = { "PayAsYouGo_2014-09-01": { offer: "Pay-As-You-Go", offerId: "MS-AZR-0003P" } };
 // Every other menu item with no dedicated panel below: the remaining honest not_simulated gaps.
 const GAP_CAP = {
-  managementcertificates: "azure.subscriptions.management_certificates",
-  partnerinformation: "azure.subscriptions.partner_information",
   support: "azure.subscriptions.support_troubleshooting",
 };
 
@@ -106,6 +106,8 @@ export default function SubscriptionBlade({ params }) {
       deploymentstacks: () => <DeploymentStacks id={id} />,
       programmaticdeployment: () => <ProgrammaticDeployment id={id} />,
       billingproperties: () => <BillingProperties id={id} />,
+      managementcertificates: () => <ManagementCertificates id={id} name={name} />,
+      partnerinformation: () => <PartnerInformation id={id} name={name} />,
     }[panel];
     body = P ? P() : <CapabilityContainer id={GAP_CAP[panel] || "azure.subscriptions.menu_gaps"} title={`${name} | ${LABEL[panel] || panel}`} />;
   }
@@ -182,7 +184,7 @@ function Overview({ a, reload, id, name, self }) {
           )}
         </div>
       )}
-      {tab === "free" && <div style={{ marginTop: 12 }}><NotSimulatedContainer feature="Top free services by usage" /></div>}
+      {tab === "free" && <div style={{ marginTop: 12 }}><TopFreeServices id={id} /></div>}
 
       <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
         <DialogSurface aria-label={gap || "Not simulated"}>
@@ -628,7 +630,16 @@ function ResourcesPanel({ id }) {
           { key: "location", label: "Location", value: (r) => locationLabel(r.location) },
         ]}
       />
-      <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
+      <Dialog open={gap === "Create"} onOpenChange={(_, d) => !d.open && setGap(null)}>
+        <DialogSurface aria-label="Create a resource from the Marketplace" style={{ maxWidth: 960, width: "90vw" }}>
+          <DialogBody>
+            <DialogTitle>Create a resource from the Marketplace</DialogTitle>
+            <DialogContent><MarketplaceBrowser capId="azure.subscriptions.marketplace" title="Vyomi Marketplace" /></DialogContent>
+            <DialogActions><Button onClick={() => { setGap(null); reload(); }}>Close</Button></DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
+      <Dialog open={!!gap && gap !== "Create"} onOpenChange={(_, d) => !d.open && setGap(null)}>
         <DialogSurface aria-label={gap || "Not simulated"}>
           <DialogBody>
             <DialogTitle>{gap}</DialogTitle>
@@ -1004,10 +1015,11 @@ function PreviewFeatures({ id }) {
 // enforced at create time (core/azure_arm_core.py's AzureArm._quota_block). ────────────────
 function UsageQuotas({ id, name }) {
   const [gap, setGap] = useState(false);
+  const [req, setReq] = useState(0);
   const compute = useAsync(() => api.listComputeUsages(id), [id]);
   const network = useAsync(() => api.listNetworkUsages(id), [id]);
   const loading = compute.loading || network.loading;
-  const rows = [...(compute.data || []), ...(network.data || [])];
+  const rows = [...(compute.data || []).map((r) => ({ ...r, __ns: "Microsoft.Compute" })), ...(network.data || []).map((r) => ({ ...r, __ns: "Microsoft.Network" }))];
   return (
     <>
       <div className="vy-panel-title">Usage + quotas <CapabilityBadge id="azure.subscriptions.usage_quotas" /></div>
@@ -1027,17 +1039,8 @@ function UsageQuotas({ id, name }) {
           { key: "adjustable", label: "Adjustable", value: () => "Yes" },
         ]}
       />
-      <Dialog open={gap} onOpenChange={(_, d) => !d.open && setGap(false)}>
-        <DialogSurface aria-label="Request increase">
-          <DialogBody>
-            <DialogTitle>Request increase</DialogTitle>
-            <DialogContent>
-              <NotSimulated feature="Requesting a quota increase" note="Raising a real Azure quota goes through Microsoft support approval outside Vyomi; Vyomi's modeled default limits are fixed." />
-            </DialogContent>
-            <DialogActions><Button onClick={() => setGap(false)}>Close</Button></DialogActions>
-          </DialogBody>
-        </DialogSurface>
-      </Dialog>
+      <RequestIncreaseDialog open={gap} onClose={() => setGap(false)} id={id} rows={rows} onDone={() => { compute.reload(); network.reload(); setReq((n) => n + 1); }} />
+      <QuotaRequests key={req} id={id} />
     </>
   );
 }

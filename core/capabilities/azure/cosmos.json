@@ -83,5 +83,17 @@
    "Role assignments and role definitions are real ARM resources (Microsoft.Authorization/roleAssignments, roleDefinitions). The Role assignments list is now ENFORCED scoped to this account (plus its subscription/resource-group ancestors, matching real Azure's inherited-access view) instead of the whole subscription; Roles stays subscription-wide, which matches real Azure (built-in role definitions are listed tenant-wide too). 'Check access' / 'My access' evaluation is still not modelled — Vyomi never denies a console action based on a role assignment."
   ],
   "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.cosmos.costmgmt": {
+  "title": "Cost Management for this account",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["Month-to-date real-Azure cost, list price per month and money saved are derived from the shared Cost Management engine over this account's ARM record (account-level list price; per-container RU/s and storage metering is not modelled)."],
+  "tests": ["tests/conformance/test_azure_billing_ext_core.py"]
+ },
+ "azure.cosmos.addsearch": {
+  "title": "Add Azure AI Search (Cosmos DB)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["A real search service, index, data source and indexer are created through Microsoft.Search, but Vyomi indexers only read Blob data: running the indexer on a cosmosdb data source ends in transientFailure with that message. Pulling Cosmos documents into an index is not implemented."],
+  "tests": ["tests/conformance/test_azure_search_core.py"]
  }
 }

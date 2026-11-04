@@ -3,6 +3,7 @@
  * Cost Management pages are backed by real native ARM calls; everything else in the menu is
  * an honest NotSimulated panel. */
 import DeploymentStacks from "./DeploymentStacks.jsx";
+import MarketplaceBrowser from "../../kit/MarketplaceBrowser.jsx";
 import ResourceEvents from "../../kit/ResourceEvents.jsx";
 import { useEffect, useState } from "react";
 import {
@@ -196,7 +197,16 @@ function Overview({ a, reload, self, name }) {
       )}
       {tab === "recommendations" && <SharedAdvisor bare scope={a.id} />}
 
-      <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
+      <Dialog open={gap === "Create"} onOpenChange={(_, d) => !d.open && setGap(null)}>
+        <DialogSurface aria-label="Create a resource from the Marketplace" style={{ maxWidth: 960, width: "90vw" }}>
+          <DialogBody>
+            <DialogTitle>Create a resource from the Marketplace</DialogTitle>
+            <DialogContent><MarketplaceBrowser capId="azure.resourcegroups.marketplace" title="Vyomi Marketplace" fixedRg={a.name} /></DialogContent>
+            <DialogActions><Button onClick={() => { setGap(null); resources.reload(); }}>Close</Button></DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
+      <Dialog open={!!gap && gap !== "Create"} onOpenChange={(_, d) => !d.open && setGap(null)}>
         <DialogSurface aria-label={gap || "Not simulated"}>
           <DialogBody>
             <DialogTitle>{gap}</DialogTitle>
