@@ -61,7 +61,7 @@ def _view(rec):
 
 def handles(namespace: str, chain) -> bool:
     return (namespace.lower() == "microsoft.storage" and len(chain) >= 3 and chain[0].lower() == "storageaccounts"
-            and chain[2].lower() == "fileservices")
+            and chain[2].lower() in ("fileservices", "queueservices", "tableservices"))
 
 
 def _account(state, sub, rg, name):
@@ -336,6 +336,30 @@ def _lease(share, payload):
     return _err(400, "InvalidInput", "action must be acquire, release, renew, change or break.")
 
 
+def _qt_service(acct, base, chain, method, payload):
+    """queueServices/default and tableServices/default: CORS rules only (validated + stored; the Queue / Table data planes
+    do not evaluate preflight requests, so the capability is config_only)."""
+    kind = "queueServices" if chain[2].lower() == "queueservices" else "tableServices"
+    store = acct.setdefault("_" + kind, {"cors": {"corsRules": []}})
+    view = lambda: {"id": f"{base}/{kind}/default", "name": "default", "type": f"Microsoft.Storage/storageAccounts/{kind}",
+                    "properties": {"cors": store["cors"]}}
+    if len(chain) == 3:
+        return {"status": 200, "body": {"value": [view()]}} if method == "GET" else _err(405, "MethodNotAllowed", "Collection supports GET only.")
+    if chain[3].lower() != "default" or len(chain) > 4:
+        return _err(404, "ResourceNotFound", f"The only {kind[:-1]} is named 'default'.")
+    if method == "GET":
+        return {"status": 200, "body": view()}
+    if method in ("PUT", "PATCH"):
+        cors = (((payload or {}).get("properties") or {}).get("cors"))
+        if cors is not None:
+            e = _validate_cors(cors.get("corsRules", []))
+            if e:
+                return _err(400, "InvalidXmlDocument", e)
+            store["cors"] = {"corsRules": cors.get("corsRules", [])}
+        return {"status": 200, "body": view()}
+    return _err(405, "MethodNotAllowed", f"{method} not allowed.")
+
+
 def dispatch(state, method, sub, rg, chain, payload, query):
     """chain = ['storageAccounts', sa, 'fileServices', 'default', ...]."""
     sa = chain[1]
@@ -346,6 +370,8 @@ def dispatch(state, method, sub, rg, chain, payload, query):
     kind = (acct.get("kind") or "").lower()
     if kind == "blobstorage" or kind == "blockblobstorage":
         return _err(400, "FeatureNotSupported", f"File services are not supported on {acct.get('kind')} storage accounts.")
+    if chain[2].lower() in ("queueservices", "tableservices"):
+        return _qt_service(acct, base, chain, method, payload)
     rest = chain[3:]
     if len(chain) == 3:
         if method != "GET":
@@ -455,3 +481,43 @@ def expire_deleted(state, days_elapsed: int = 1):
             sa[k]["_retention_left"] = sa[k].get("_retention_left", 0) - days_elapsed
             if sa[k]["_retention_left"] <= 0:
                 sa.pop(k)
+
+
+# ── account-level properties (create wizard "Access protocols" / "Azure Files", Configuration "Large file shares") ──
+def validate_account(existing, payload):
+    """Validate largeFileSharesState / isNfsV3Enabled / isSftpEnabled on a storage-account PUT/PATCH. Returns an error
+    body ``{"error": {...}}`` or ``None``."""
+    props = (payload or {}).get("properties") or {}
+    if not any(k in props for k in ("largeFileSharesState", "isNfsV3Enabled", "isSftpEnabled")):
+        return None
+    old = (existing or {}).get("properties") or {}
+    kind = (payload or {}).get("kind") or (existing or {}).get("kind") or "StorageV2"
+    sku = (((payload or {}).get("sku") or {}).get("name") or ((existing or {}).get("sku") or {}).get("name") or "Standard_LRS")
+    merged = dict(old, **props)
+
+    def bad(code, msg):
+        return {"error": {"code": code, "message": msg}}
+    if "largeFileSharesState" in props:
+        st = props["largeFileSharesState"]
+        if st not in ("Enabled", "Disabled"):
+            return bad("InvalidRequestContent", "largeFileSharesState must be Enabled or Disabled.")
+        if st == "Enabled" and not old.get("largeFileSharesState") == "Enabled":
+            if kind == "FileStorage" or sku.lower().startswith("premium"):
+                return bad("InvalidRequestContent", "Large file shares are always available on premium FileStorage accounts; the setting is not applicable.")
+            if re.search(r"_ra", sku, re.I) or not re.match(r"^standard_(lrs|zrs|grs|gzrs)$", sku, re.I):
+                return bad("InvalidRequestContent", "Large file shares require Standard LRS, ZRS, GRS or GZRS redundancy.")
+        if st == "Disabled" and old.get("largeFileSharesState") == "Enabled":
+            return bad("InvalidRequestContent", "Large file shares cannot be disabled once enabled.")
+    if "isNfsV3Enabled" in props:
+        if existing is not None and bool(old.get("isNfsV3Enabled")) != bool(props["isNfsV3Enabled"]):
+            return bad("InvalidRequestContent", "NFS v3 can only be set when the storage account is created.")
+        if props["isNfsV3Enabled"]:
+            if not merged.get("isHnsEnabled"):
+                return bad("InvalidRequestContent", "NFS v3 requires hierarchical namespace (isHnsEnabled) to be enabled.")
+            if kind not in ("StorageV2", "BlockBlobStorage"):
+                return bad("InvalidRequestContent", "NFS v3 requires a general-purpose v2 or premium block blob storage account.")
+            if merged.get("supportsHttpsTrafficOnly", True):
+                return bad("InvalidRequestContent", "NFS v3 requires 'secure transfer required' (supportsHttpsTrafficOnly) to be disabled.")
+    if props.get("isSftpEnabled") and not merged.get("isHnsEnabled"):
+        return bad("InvalidRequestContent", "SFTP requires hierarchical namespace (isHnsEnabled) to be enabled.")
+    return None

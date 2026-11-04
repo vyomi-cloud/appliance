@@ -86,6 +86,19 @@ def run():
     _check("recreate while soft-deleted 409", h("PUT", f"{fs}/shares/docs", {"properties": {}})["status"] == 409)
     _check("restore", h("POST", f"{fs}/shares/docs/restore")["status"] == 200 and h("GET", f"{fs}/shares/docs")["status"] == 200)
     _check("permanent delete refused unless allowed", h("DELETE", f"{fs}/shares/docs", None, {"permanent": "true"})["status"] == 409)
+    rule = {"allowedOrigins": ["*"], "allowedMethods": ["GET"], "maxAgeInSeconds": 60, "exposedHeaders": ["*"], "allowedHeaders": ["*"]}
+    for svc in ("queueServices", "tableServices"):
+        _check(f"{svc} cors stored", h("PUT", f"{sa}/stdacct/{svc}/default", {"properties": {"cors": {"corsRules": [rule]}}})["body"]["properties"]["cors"]["corsRules"][0]["maxAgeInSeconds"] == 60
+               and h("GET", f"{sa}/stdacct/{svc}/default")["body"]["properties"]["cors"]["corsRules"][0]["allowedOrigins"] == ["*"])
+        _check(f"{svc} cors validated", h("PUT", f"{sa}/stdacct/{svc}/default", {"properties": {"cors": {"corsRules": [dict(rule, allowedMethods=["NOPE"])]}}})["status"] == 400)
+    # account-level properties
+    _check("large file shares need standard LRS/ZRS/GRS/GZRS", h("PATCH", f"{sa}/premacct", {"properties": {"largeFileSharesState": "Enabled"}})["status"] == 400)
+    _check("large file shares one-way", h("PATCH", f"{sa}/stdacct", {"properties": {"largeFileSharesState": "Disabled"}})["status"] == 400)
+    _check("NFSv3 needs HNS", h("PUT", f"{sa}/nfsacct", {"location": "eastus", "kind": "StorageV2", "sku": {"name": "Standard_LRS"}, "properties": {"isNfsV3Enabled": True}})["status"] == 400)
+    _check("NFSv3 needs secure transfer off", h("PUT", f"{sa}/nfsacct", {"location": "eastus", "kind": "StorageV2", "sku": {"name": "Standard_LRS"}, "properties": {"isNfsV3Enabled": True, "isHnsEnabled": True}})["status"] == 400)
+    _check("NFSv3 account", h("PUT", f"{sa}/nfsacct", {"location": "eastus", "kind": "StorageV2", "sku": {"name": "Standard_LRS"}, "properties": {"isNfsV3Enabled": True, "isHnsEnabled": True, "supportsHttpsTrafficOnly": False}})["status"] in (200, 201))
+    _check("NFSv3 immutable after create", h("PATCH", f"{sa}/nfsacct", {"properties": {"isNfsV3Enabled": False}})["status"] == 400)
+    _check("SFTP needs HNS", h("PATCH", f"{sa}/stdacct", {"properties": {"isSftpEnabled": True}})["status"] == 400)
     print("PASS test_azure_files_core")
 
 

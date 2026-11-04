@@ -1141,6 +1141,11 @@ async def _handle_arm_inner(request: Request, rest: str) -> JSONResponse:
         blocked = _core_create_block(sub, rg, full_type, key, payload)   # assigned policies + quotas
         if blocked is not None:
             return blocked
+        if full_type.lower() == "microsoft.storage/storageaccounts" and method in ("PUT", "PATCH"):
+            from core import azure_files_core as _fx
+            _fe = _fx.validate_account(_state.get(key), payload)
+            if _fe:
+                return JSONResponse(status_code=400, content=_fe)
         _new_vault = full_type.lower() == "microsoft.keyvault/vaults" and key not in _state
         resp = _upsert(rid, key, full_type, leaf_name, top, payload, base, patch=(method == "PATCH"))
         if _new_vault and key in _state:   # the creator gets data-plane access, as on the core engine + Nano

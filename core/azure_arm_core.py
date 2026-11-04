@@ -2478,6 +2478,9 @@ class AzureArm:
                 or len(type_chain) != 2:
             return None
         props = (payload or {}).get("properties") or {}
+        _fe = files_engine.validate_account(self.state.get(_canonical_id(sub, rg, type_chain, names).lower()), payload)
+        if _fe:
+            return _err(400, _fe["error"]["code"], _fe["error"]["message"])
         if "isHnsEnabled" not in props:
             return None
         existing = self.state.get(_canonical_id(sub, rg, type_chain, names).lower())
