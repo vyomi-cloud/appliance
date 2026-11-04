@@ -31,6 +31,26 @@ def _tgz(files, top="o-r-abc123"):
     return b.getvalue()
 
 
+def _save_tar(layers=(b"L1-bytes", b"L2-bytes")):
+    b = io.BytesIO()
+    cfg = json.dumps({"architecture": "amd64", "os": "linux", "config": {"Env": ["A=1"]}}).encode()
+    files = {"blobs/sha256/cfg": cfg}
+    names = []
+    for i, l in enumerate(layers):
+        files[f"blobs/sha256/l{i}"] = l; names.append(f"blobs/sha256/l{i}")
+    files["manifest.json"] = json.dumps([{"Config": "blobs/sha256/cfg", "RepoTags": ["x:y"], "Layers": names}]).encode()
+    with tarfile.open(fileobj=b, mode="w") as tf:
+        for n, c in files.items():
+            ti = tarfile.TarInfo(n); ti.size = len(c); tf.addfile(ti, io.BytesIO(c))
+    return b.getvalue()
+
+
+def docker_stub(argv, i, t):
+    if argv[1] == "build": return 0, b"ok\n"
+    if argv[1] == "save": return 0, _save_tar()
+    return 0, b"sha256:abc123 2048\n"
+
+
 def run():
     ci.set_git(None); ci.set_builder(None); ci.set_fetcher(None)
     db = ci.get_db({})
@@ -179,12 +199,24 @@ def run():
     r = sr({"type": "DockerBuildRequest", "imageNames": ["samples/app:{{.Run.ID}}"], "vyomiFiles": {"Dockerfile": "FROM alpine:3\nCOPY a.txt /a\n", "a.txt": "x"}})
     pr = r["body"]["properties"]
     _check("Nano-style (no container builder): image run is Failed with reason, no outputImages", r["status"] == 200 and pr["status"] == "Failed" and "No container builder" in pr["errorMessage"] and not pr["outputImages"])
-    ci.set_builder(ci.BuildKitBuilder(lambda argv, i, t: (0, b"ok\n") if argv[1] == "build" else (0, b"sha256:abc123 2048\n")))
+    ci.set_builder(ci.BuildKitBuilder(docker_stub))
+    from core.azure_acr_core import AcrRegistryStore
+    a.acr_store = AcrRegistryStore()
     r = sr({"type": "DockerBuildRequest", "imageNames": ["samples/app:{{.Run.ID}}"], "vyomiFiles": {"Dockerfile": "FROM alpine:3\nCOPY a.txt /a\n", "a.txt": "x"}})
     pr = r["body"]["properties"]
-    _check("BuildKit run Succeeded with real outputImages + log", pr["status"] == "Succeeded" and pr["outputImages"][0]["digest"] == "sha256:abc123" and pr["outputImages"][0]["tag"].startswith("ca") and any("docker build" in l for l in pr["vyomiLogs"]))
+    _check("BuildKit run Succeeded with real outputImages + log", pr["status"] == "Succeeded" and pr["outputImages"][0]["digest"].startswith("sha256:") and pr["outputImages"][0]["tag"].startswith("ca") and any("docker build" in l for l in pr["vyomiLogs"]))
+    pr0 = pr["outputImages"][0]
+    repo0 = a.acr_store.repos.get("samples/app")
+    _check("ACR run PUSHED the image into the simulated registry store (tag, manifest, blobs)",
+           repo0 and pr0["tag"] in repo0["tags"] and repo0["tags"][pr0["tag"]]["digest"] == pr0["digest"]
+           and len(repo0["blobs"]) == 3 and all(("sha256:" + __import__("hashlib").sha256(b).hexdigest()) == d for d, b in repo0["blobs"].items()))
+    mf = json.loads(repo0["manifests"][pr0["digest"]]["body"])
+    _check("pushed manifest is a valid schema2 manifest referencing only stored blobs",
+           mf["schemaVersion"] == 2 and all(l["digest"] in repo0["blobs"] for l in mf["layers"]) and mf["config"]["digest"] in repo0["blobs"])
+    r2 = sr({"type": "DockerBuildRequest", "imageNames": ["samples/np:1"], "isPushEnabled": False, "vyomiFiles": {"Dockerfile": "FROM alpine:3\n"}})
+    _check("isPushEnabled=false leaves the registry untouched", r2["body"]["properties"]["status"] == "Succeeded" and "samples/np" not in a.acr_store.repos)
     runs = a.handle("GET", f"{R}/runs", {"api-version": "2019-04-01"})["body"]["value"]
-    _check("runs listed as ARM children", len(runs) == 2 and {x["properties"]["status"] for x in runs} == {"Failed", "Succeeded"})
+    _check("runs listed as ARM children", len(runs) == 3 and {x["properties"]["status"] for x in runs} == {"Failed", "Succeeded"})
     _check("DF path honoured / missing Dockerfile fails", sr({"type": "DockerBuildRequest", "dockerFilePath": "x/Dockerfile", "vyomiFiles": {"a": "b"}})["body"]["properties"]["status"] == "Failed")
     a.handle("PUT", f"{R}/tasks/t1", {"api-version": "2019-06-01-preview"}, {"properties": {"step": {"type": "Docker", "contextPath": "https://github.com/o/r#main", "dockerFilePath": "Dockerfile", "imageNames": ["t/x:v1"]}}})
     _check("task run: unknown task 404", sr({"type": "TaskRunRequest", "taskName": "zz"})["status"] == 404)

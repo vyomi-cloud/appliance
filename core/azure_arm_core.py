@@ -3485,7 +3485,14 @@ class AzureArm:
                 from core import azure_acr_tasks_core as _acrt
             except ImportError:                      # Pyodide flat layout
                 import azure_acr_tasks_core as _acrt  # type: ignore
-            return _acrt.schedule_run(self.state, parent_rid, rec, payload, sub, rg)
+            _st = getattr(self, "acr_store", None)
+            if _st is None:
+                try:
+                    from core import appliance_stores as _aps
+                    _st = _aps.acr_store()
+                except Exception:
+                    _st = None
+            return _acrt.schedule_run(self.state, parent_rid, rec, payload, sub, rg, _st)
         if ns == "microsoft.containerregistry" and typ == "registries" and action in ("listcredentials", "regeneratecredential"):
             rec = self.state.get(parent_rid.lower()) if parent_rid else None
             if not rec:

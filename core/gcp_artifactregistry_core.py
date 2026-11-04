@@ -735,6 +735,14 @@ def ingest_package(store: ArtifactRegistryStore, repo_name: str, package: str, v
     return ver
 
 
+def push_built_image(store: ArtifactRegistryStore, repo_name: str, image: str, tag: str, img: dict,
+                     kms_store=None) -> dict:
+    """Record an image really built by the CI seam (img = ci_core.image_to_registry) as a Docker version."""
+    ver = ingest_package(store, repo_name, image, img["digest"], img["size"], [tag], kms_store=kms_store)
+    ver["_config"] = img["config"]
+    return ver
+
+
 def ingest_image(store: ArtifactRegistryStore, repo_name: str, image: str = "sample-app",
                  tag: str = "latest", size_bytes: int = 5 * 1024 * 1024,
                  kms_store=None, headers=None) -> dict:

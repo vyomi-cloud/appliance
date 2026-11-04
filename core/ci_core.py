@@ -338,6 +338,65 @@ class BuildKitBuilder:
         iid, _, size = idb.decode().strip().partition(" ")
         return {"ok": True, "artifact": {"type": "image", "tag": tag, "digest": iid, "size": int(size or 0)}}
 
+    def export(self, tag):
+        rc, raw = self.run(["docker", "save", tag], None, self.timeout)
+        if rc != 0:
+            raise CiError("ExportFailed", f"docker save {tag} failed (exit {rc})", 500)
+        if len(raw) > MAX_EXPORT:
+            raise CiError("ExportTooLarge", f"Image is {len(raw) // 1048576} MB; images over {MAX_EXPORT // 1048576} MB are not pushed to the simulated registry.", 413)
+        return parse_docker_save(raw)
+
+
+MAX_EXPORT = 300 * 1024 * 1024
+
+
+def parse_docker_save(raw: bytes) -> dict:
+    """Parse a ``docker save`` archive (docker-archive or OCI layout; both carry manifest.json) into the image
+    config blob + layer blobs, ready to be pushed to a registry. Digests are of the bytes exactly as stored."""
+    try:
+        tf = tarfile.open(fileobj=io.BytesIO(raw), mode="r:")
+    except tarfile.TarError as e:
+        raise CiError("ExportFailed", f"docker save output is not a tar archive: {e}", 500)
+    with tf:
+        def read(name):
+            try:
+                return tf.extractfile(tf.getmember(name.lstrip("./"))).read()
+            except (KeyError, AttributeError):
+                raise CiError("ExportFailed", f"docker save archive is missing '{name}'", 500)
+        man = json.loads(read("manifest.json"))
+        if not man:
+            raise CiError("ExportFailed", "docker save archive has an empty manifest.json", 500)
+        m = man[0]
+        cfg = read(m["Config"])
+        layers = [read(n) for n in m.get("Layers", [])]
+    return {"config": cfg, "layers": layers, "repoTags": m.get("RepoTags") or []}
+
+
+def image_to_registry(exp: dict) -> dict:
+    """Docker v2 schema2 manifest + blobs ({digest: bytes}) for an exported image."""
+    blobs, layer_desc = {}, []
+    for lb in exp["layers"]:
+        d = "sha256:" + hashlib.sha256(lb).hexdigest()
+        blobs[d] = lb
+        gz = lb[:2] == b"\x1f\x8b"
+        layer_desc.append({"mediaType": "application/vnd.docker.image.rootfs.diff.tar.gzip" if gz else "application/vnd.docker.image.rootfs.diff.tar",
+                           "size": len(lb), "digest": d})
+    cd = "sha256:" + hashlib.sha256(exp["config"]).hexdigest()
+    blobs[cd] = exp["config"]
+    manifest = json.dumps({"schemaVersion": 2, "mediaType": "application/vnd.docker.distribution.manifest.v2+json",
+                           "config": {"mediaType": "application/vnd.docker.container.image.v1+json", "size": len(exp["config"]), "digest": cd},
+                           "layers": layer_desc}, separators=(",", ":")).encode()
+    return {"manifest": manifest, "digest": "sha256:" + hashlib.sha256(manifest).hexdigest(), "blobs": blobs,
+            "config": json.loads(exp["config"] or b"{}"), "size": sum(len(b) for b in blobs.values()) + len(manifest)}
+
+
+def export_image(tag: str) -> dict:
+    """Export a built image (by tag) from the active builder. Only a builder that really holds images can."""
+    fn = getattr(_builder, "export", None)
+    if fn is None:
+        raise CiError("NoImage", f"The '{_builder.name}' builder holds no container images, so nothing can be pushed to a registry.", 400)
+    return image_to_registry(fn(tag))
+
 
 _git: object = MemoryGit()
 _builder: object = PackageBuilder()
