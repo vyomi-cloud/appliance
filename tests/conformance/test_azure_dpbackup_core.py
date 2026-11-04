@@ -281,6 +281,21 @@ EOF"""
     _check("restored", r["status"] == 200 and h("GET", SB, None, sv)["status"] == 200)
     _check("restored with the latest deletion's SKU + tags", h("GET", SB, None, sv)["body"]["sku"]["name"] == "Standard_GRS" and h("GET", SB, None, sv)["body"]["tags"] == {"t": "2"})
     _check("no longer in deleted list", h("GET", DL, None, sv)["body"]["value"] == [])
+    # ───────── VM boot diagnostics ─────────
+    VM = f"{R}/providers/Microsoft.Compute/virtualMachines/bdvm"
+    vv = {"api-version": "2023-09-01"}
+    h("PUT", VM, {"location": "eastus", "properties": {"hardwareProfile": {"vmSize": "Standard_B1s"}}}, vv)
+    _check("boot diagnostics off -> BootDiagnosticsNotEnabled", code(h("POST", f"{VM}/retrieveBootDiagnosticsData", None, vv)) == "BootDiagnosticsNotEnabled")
+    _check("unknown VM", h("POST", f"{R}/providers/Microsoft.Compute/virtualMachines/ghost/retrieveBootDiagnosticsData", None, vv)["status"] == 404)
+    h("PATCH", VM, {"properties": {"diagnosticsProfile": {"bootDiagnostics": {"enabled": True}}}}, vv)
+    _check("bad SAS expiry", h("POST", f"{VM}/retrieveBootDiagnosticsData", None, dict(vv, sasUriExpirationTimeInMinutes="5000"))["status"] == 400)
+    r = h("POST", f"{VM}/retrieveBootDiagnosticsData", None, vv)["body"]
+    _check("blob URIs returned, source stated honestly", r["serialConsoleLogBlobUri"].endswith("&sig=vyomi") and r["properties"]["serialLogSource"] == "platform" and r["properties"]["screenshotIsPlaceholder"] is True)
+    from core import azure_dpbackup_core as dpb
+    dpb.GUEST_LOG["fn"] = lambda vm: "[    0.000000] Linux version 6.1 (guest dmesg)\n"
+    r = h("POST", f"{VM}/retrieveBootDiagnosticsData", None, vv)["body"]
+    _check("a host-injected guest log is used when present", r["properties"]["serialLogSource"] == "guest")
+    dpb.GUEST_LOG["fn"] = None
     print("ALL OK")
 
 

@@ -2213,6 +2213,9 @@ class AzureArm:
     def _az08(self, method, sub, rg, namespace, chain, payload, query):
         ns = namespace.lower()
         low = [c.lower() for c in chain]
+        if dpb.boot_diag_handles(namespace, chain):
+            r = dpb.boot_diag(self.state, method, sub, rg, chain, query)
+            return {"status": r["status"], "headers": {}, "body": r["body"]}
         if dpb.handles(namespace, chain) and (rg is not None or ns != "microsoft.dataprotection" or len(chain) == 1):
             r = dpb.dispatch(self.state, method, sub, rg, namespace, chain, payload, query,
                              arm_put=lambda rid, api, body: self.handle("PUT", rid, {"api-version": api}, body))

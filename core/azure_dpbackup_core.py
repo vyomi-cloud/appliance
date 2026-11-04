@@ -1300,3 +1300,73 @@ def app_ops(state, rec, rest, method, payload):
     if len(rest) == 3 and rest[2].lower() == "restore" and method == "POST":
         return app_restore(state, rec, b, payload)
     return _err(404, "ResourceTypeNotSupported", f"backups/{'/'.join(rest[1:])} is not supported.")
+
+
+# ═══════════════════════════ VM boot diagnostics ═══════════════════════════════════════════
+VM_T = "microsoft.compute/virtualmachines"
+GUEST_LOG = {"fn": None}          # host-injected: fn(vm_record) -> str | None  (offline appliance: the container's real dmesg)
+
+
+def _png(width=640, height=480, rgb=(24, 28, 36)):
+    import struct
+    import zlib
+    raw = b"".join(b"\x00" + bytes(rgb) * width for _ in range(height))
+
+    def chunk(t, d):
+        c = struct.pack(">I", len(d)) + t + d
+        return c + struct.pack(">I", zlib.crc32(t + d) & 0xffffffff)
+    return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b"")
+
+
+def boot_diag_handles(namespace, chain):
+    return namespace.lower() == "microsoft.compute" and len(chain) == 3 and chain[0].lower() == "virtualmachines" and chain[2].lower() == "retrievebootdiagnosticsdata"
+
+
+def boot_diag(state, method, sub, rg, chain, query):
+    """POST .../virtualMachines/{vm}/retrieveBootDiagnosticsData -> serial log + screenshot blob URIs (written to the vyomibootdiag account)."""
+    if method != "POST":
+        return _err(405, "MethodNotAllowed", "Use POST.")
+    if rg is None:
+        return _err(400, "InvalidRequest", "A VM path needs a resource group.")
+    rid = f"/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Compute/virtualMachines/{chain[1]}"
+    vm = state.get(rid.lower())
+    if vm is None:
+        return _err(404, "ResourceNotFound", f"The Resource 'Microsoft.Compute/virtualMachines/{chain[1]}' under resource group '{rg}' was not found.")
+    bd = (((vm.get("properties") or {}).get("diagnosticsProfile") or {}).get("bootDiagnostics") or {})
+    if not bd.get("enabled"):
+        return _err(400, "BootDiagnosticsNotEnabled", f"Boot diagnostics is not enabled for virtual machine '{vm['name']}'. Enable it in Configuration or create the VM with diagnosticsProfile.bootDiagnostics.enabled.")
+    sas_h = (query or {}).get("sasUriExpirationTimeInMinutes")
+    if sas_h is not None and not (str(sas_h).isdigit() and 1 <= int(sas_h) <= 1440):
+        return _err(400, "InvalidParameter", "sasUriExpirationTimeInMinutes must be between 1 and 1440.")
+    vmid = (vm.get("properties") or {}).get("vmId") or str(uuid.uuid5(uuid.NAMESPACE_URL, vm["id"].lower()))
+    guest = None
+    try:
+        guest = GUEST_LOG["fn"](vm) if GUEST_LOG["fn"] else None
+    except Exception:
+        guest = None
+    state_txt = ((vm.get("properties") or {}).get("instanceView") or {}).get("powerState") or (vm.get("properties") or {}).get("provisioningState")
+    if guest:
+        log, source = guest, "guest"
+    else:
+        log = (f"[vyomi] Platform log for {vm['name']} (vmId {vmid})\n[vyomi] provisioningState={(vm.get('properties') or {}).get('provisioningState')} powerState={state_txt}\n"
+               f"[vyomi] created {vm.get('_created') or 'unknown'}\n[vyomi] No guest console is reachable on this substrate; this file holds Vyomi's own lifecycle record, not the guest's serial output.\n")
+        source = "platform"
+    cont = f"bootdiagnostics-{re.sub(r'[^a-z0-9]', '', vm['name'].lower())[:10]}-{vmid}"
+    art_log = _art_put_acct("vyomibootdiag", cont, f"{vm['name']}.{vmid}.serialconsole.log", log.encode(), "text/plain")
+    art_png = _art_put_acct("vyomibootdiag", cont, f"{vm['name']}.{vmid}.screenshot.png", _png(), "image/png")
+    exp = _now(0, int(sas_h or 60) * 60)
+    base = f"https://vyomibootdiag.blob.core.windows.net/{cont}"
+    sas = f"?sv=2022-11-02&se={exp[:19]}Z&sp=r&sig=vyomi"
+    return _ok({"consoleScreenshotBlobUri": f"{base}/{vm['name']}.{vmid}.screenshot.png{sas}", "serialConsoleLogBlobUri": f"{base}/{vm['name']}.{vmid}.serialconsole.log{sas}",
+                "properties": {"serialLogSource": source, "screenshotIsPlaceholder": True, "stored": bool(art_log and art_png)}})
+
+
+def _art_put_acct(account, container, path, data, ctype):
+    bs = BLOB["store"]
+    if bs is None:
+        return None
+    key = f"{account}/{container}"
+    if not bs.container_exists(key):
+        bs.create_container(key)
+    r = _blob.dispatch(bs, "PUT", f"/{container}/{path}", {}, {"x-ms-blob-type": "BlockBlob", "content-type": ctype}, data, account=account)
+    return None if r.status >= 300 else {"container": container, "path": path, "account": account}
