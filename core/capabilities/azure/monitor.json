@@ -223,7 +223,7 @@
     },
     "limitations": [
       "Microsoft.Dashboard/grafana is a real ARM resource: name, SKU and major-version validation, generated endpoint, system identity, and Azure Monitor workspace integrations validated against real Azure Monitor workspaces.",
-      "Vyomi runs no Grafana server: the endpoint is a stable name, not a live web app. A real Grafana pointed at /_obs/prom (Prometheus data source) or /_obs/jaeger works against the measured series; data sources, managed private endpoints and API keys are not modelled on the ARM resource."
+      "Vyomi runs no Grafana server: the endpoint is a stable name, not a live web app. A real Grafana pointed at /_obs/prom (Prometheus data source) or /_obs/jaeger works against the measured series; data sources, managed private endpoints and API keys are not modelled on the ARM resource. Opening a workspace shows the Prometheus data source URL, a Save & test button, an Explore box and a built-in dashboard (request rate by service, 5xx rate, p95 latency, totals) whose panels are PromQL queries against /_obs/prom over the requests Vyomi measured; idle = empty panels."
     ],
     "tests": [
       "tests/conformance/test_azure_monitorproducts.py"
