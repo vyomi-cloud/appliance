@@ -111,5 +111,29 @@
   "tests": [
    "tests/conformance/test_azure_arm_core.py"
   ]
+ },
+ "azure.common.support": {
+  "title": "Support requests (Microsoft.Support) on every blade, filed with Vyomi",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Requests are real Microsoft.Support/supportTickets (services, problem classifications, severity, contact details, communications, close) with validation and a Vyomi Support acknowledgement, and are stored in the simulator. Delivery to the Vyomi portal support queue is not wired yet: each ticket reports properties.vyomiDelivery = recorded-locally, and no human replies arrive here. Support plans, phone callbacks and Microsoft's own engineers do not exist."
+  ],
+  "api": [
+   "SupportTickets.Create",
+   "SupportTickets.Get",
+   "SupportTickets.List",
+   "SupportTickets.Update",
+   "Communications.Create",
+   "Communications.List",
+   "Services.List",
+   "ProblemClassifications.List",
+   "SupportTickets.CheckNameAvailability"
+  ],
+  "tests": [
+   "tests/conformance/test_azure_support_core.py"
+  ]
  }
 }

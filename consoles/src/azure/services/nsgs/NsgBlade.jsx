@@ -28,6 +28,7 @@ import NetworkWatcherTools from "./NetworkWatcher.jsx";
 import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
 import SharedActivityLog from "../../kit/ActivityLog.jsx";
 import { ClassicAdminsPanel, DenyAssignmentsPanel, MyAccess } from "../../kit/IamExtras.jsx";
+import SharedSupportPanel from "../../kit/SupportPanel.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -65,6 +66,7 @@ export default function NsgBlade({ params }) {
     const P = {
       overview: () => <Overview a={a} reload={reload} self={self} />,
       iam: () => <AccessControlIam a={a} />,
+      support: () => <SharedSupportPanel resourceId={a.id} name={a.name} service="nsgs" />,
       tags: () => <Tags a={a} reload={reload} />,
       inbound: () => <RuleList key="inbound" rg={rg} name={name} direction="Inbound" />,
       outbound: () => <RuleList key="outbound" rg={rg} name={name} direction="Outbound" />,

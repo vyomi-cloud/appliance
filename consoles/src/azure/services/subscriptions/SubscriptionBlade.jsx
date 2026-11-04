@@ -19,6 +19,7 @@ import { downloadCsv, Essentials, ErrorBar, Glyph, InfoBar, Loading, NotSimulate
 import { remember } from "../../kit/recent.js";
 import * as api from "./api.js";
 import SharedActivityLog from "../../kit/ActivityLog.jsx";
+import SharedSupportPanel from "../../kit/SupportPanel.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -65,7 +66,6 @@ const OFFERS = { "PayAsYouGo_2014-09-01": { offer: "Pay-As-You-Go", offerId: "MS
 const GAP_CAP = {
   managementcertificates: "azure.subscriptions.management_certificates",
   partnerinformation: "azure.subscriptions.partner_information",
-  support: "azure.subscriptions.support_troubleshooting",
 };
 
 export default function SubscriptionBlade({ params }) {
@@ -85,6 +85,7 @@ export default function SubscriptionBlade({ params }) {
       overview: () => <Overview a={a} reload={reload} id={id} name={name} self={self} />,
       activitylog: () => <SharedActivityLog scope="" name={name} capId="azure.subscriptions.activity_log" />,
       iam: () => <AccessControlIam id={id} />,
+      support: () => <SharedSupportPanel resourceId={undefined} name={undefined} service="subscriptions" />,
       tags: () => <Tags a={a} id={id} reload={reload} />,
       costanalysis: () => <CostAnalysis id={id} />,
       costalerts: () => <CostAlerts id={id} />,

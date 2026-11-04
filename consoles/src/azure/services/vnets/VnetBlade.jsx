@@ -29,6 +29,7 @@ import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
 import SharedActivityLog from "../../kit/ActivityLog.jsx";
 import { ClassicAdminsPanel, DenyAssignmentsPanel, MyAccess } from "../../kit/IamExtras.jsx";
 import SharedAdvisor from "../../kit/Advisor.jsx";
+import SharedSupportPanel from "../../kit/SupportPanel.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -808,7 +809,6 @@ function ResourceVisualizer({ a }) {
 // Resource health) plus one honest, narrowly-scoped gap: filing an actual Microsoft support
 // ticket needs Microsoft's own support ticketing service (azure.vnets.tools). ─────────────
 function Support({ self }) {
-  const [gap, setGap] = useState(false);
   return (
     <>
       <div className="vy-panel-title">Support + Troubleshooting</div>
@@ -822,20 +822,8 @@ function Support({ self }) {
           <h3>Resource health</h3>
           <p style={{ fontSize: 13 }}>This virtual network is <b>Available</b> — Vyomi has no fault-injection model, so every simulated resource always reports healthy.</p>
         </section>
-        <section className="vy-section">
-          <h3>New support request</h3>
-          <Button onClick={() => setGap(true)}>New support request</Button>
-        </section>
+        <SharedSupportPanel service="vnets" title="New support request" />
       </div>
-      <Dialog open={gap} onOpenChange={(_, d) => !d.open && setGap(false)}>
-        <DialogSurface aria-label="New support request">
-          <DialogBody>
-            <DialogTitle>New support request</DialogTitle>
-            <DialogContent><NotSimulatedContainer feature="Filing a Microsoft support ticket" note="Creating a real support case needs Microsoft's own support ticketing service — outside anything a local simulator can model." /></DialogContent>
-            <DialogActions><Button onClick={() => setGap(false)}>Close</Button></DialogActions>
-          </DialogBody>
-        </DialogSurface>
-      </Dialog>
     </>
   );
 }

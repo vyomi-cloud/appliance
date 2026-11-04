@@ -293,16 +293,6 @@
    "Requires a real Microsoft Cloud Solution Provider (CSP) partner organization with an actual MPN ID and billing-account linkage to that third party — a real external business relationship Vyomi cannot simulate a counterpart for."
   ]
  },
- "azure.subscriptions.support_troubleshooting": {
-  "title": "Support + Troubleshooting",
-  "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
-  },
-  "limitations": [
-   "Creating a support request routes to Microsoft's own human support engineers and real-time Azure service-health telemetry — a real third party outside Vyomi, with no simulated backend to stand in for it."
-  ]
- },
  "azure.subscriptions.cost_management": {
   "title": "Cost analysis, budgets and cost alerts, subscription scope",
   "level": {

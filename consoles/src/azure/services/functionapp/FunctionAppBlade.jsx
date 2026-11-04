@@ -30,6 +30,7 @@ import * as api from "./api.js";
 import { ResourceRecommendations } from "../defender/Pages.jsx";
 import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
 import SharedActivityLog from "../../kit/ActivityLog.jsx";
+import SharedSupportPanel from "../../kit/SupportPanel.jsx";
 
 const ROLE_ASSIGNMENTS = armType("Microsoft.Authorization", "roleAssignments", "2022-04-01");
 const ROLE_DEFINITIONS = armType("Microsoft.Authorization", "roleDefinitions", "2022-04-01");
@@ -74,7 +75,6 @@ const GAPS = {
   "advanced-tools": "azure.functionapp.advancedtools",
   "extensions": "azure.functionapp.extensions",
   "tasks": "azure.functionapp.tasks",
-  "new-support-request": "azure.functionapp.newsupportrequest",
 };
 
 export default function FunctionAppBlade({ params }) {
@@ -119,6 +119,7 @@ export default function FunctionAppBlade({ params }) {
       "health-check": () => <HealthCheckPanel a={a} reload={reload} />,
       "advisor-recommendations": () => <Advisor a={a} />,
       "diagnose-and-solve-problems": () => <DiagnoseAndSolve a={a} />,
+      "new-support-request": () => <SharedSupportPanel resourceId={a.id} name={a.name} service="functionapp" />,
       "resource-health": () => <ResourceHealthPanel a={a} />,
       "resource-visualizer": () => <ResourceVisualizer a={a} />,
       "app-files": () => <AppFiles a={a} />,

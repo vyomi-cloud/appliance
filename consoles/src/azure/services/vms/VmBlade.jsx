@@ -31,6 +31,7 @@ import * as api from "./api.js";
 import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
 import SharedActivityLog from "../../kit/ActivityLog.jsx";
 import { ClassicAdminsPanel, DenyAssignmentsPanel, MyAccess } from "../../kit/IamExtras.jsx";
+import SharedSupportPanel from "../../kit/SupportPanel.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -128,6 +129,7 @@ export default function VmBlade({ params }) {
       resourcevisualizer: () => <ResourceVisualizer a={a} />,
       advisor: () => <Advisor a={a} />,
       diagnose: () => <Diagnose a={a} />,
+      support: () => <SharedSupportPanel resourceId={a.id} name={a.name} service="vms" />,
       resourcehealth: () => <ResourceHealth a={a} />,
       changetracking: () => <ChangeTracking a={a} />,
       defender: () => <Defender a={a} />,
