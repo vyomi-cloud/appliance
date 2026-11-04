@@ -9,14 +9,20 @@ from fastapi import FastAPI, Request
 from fastapi.responses import Response
 
 from core import observability_core as obs
+from routes.aws_cloudwatch import get_store
 
 
 def register(app: FastAPI) -> None:
+    try:   # Azure storage Availability / SuccessE2ELatency come from the requests this process measured
+        from core import azure_monitor_core
+        azure_monitor_core.request_telemetry = lambda acct: obs.azure_storage_request_metrics(obs.default_store(), acct)
+    except Exception:
+        pass
 
     async def serve(request: Request, rest: str = "") -> Response:
         body = await request.body()
         r = obs.dispatch(obs.default_store(), request.method, request.url.path, dict(request.query_params),
-                         dict(request.headers), body)
+                         dict(request.headers), body, cw_store=get_store())
         return Response(content=r.body, status_code=r.status, media_type=r.media_type)
 
     app.add_api_route("/_obs/{rest:path}", serve, methods=["GET", "POST"], include_in_schema=False)

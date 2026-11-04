@@ -134,6 +134,10 @@ def extract_resource(cloud: str, service: str, method: str, path: str, headers: 
         except Exception:
             res = ""
     elif cloud == "azure":
+        host = (h.get("host") or "").split(":")[0].lower()
+        if host.endswith(".core.windows.net") or host.endswith(".azurite") :
+            res, op = host.split(".", 1)[0], method.upper()
+            return res, op
         for k in ("accounts", "storageaccounts", "sites", "servers", "databaseaccounts", "service", "virtualmachines"):
             if k in low and low.index(k) + 1 < len(segs):
                 res = segs[low.index(k) + 1]
@@ -835,7 +839,47 @@ def _form(body: bytes) -> dict:
     return dict(parse_qsl((body or b"").decode("utf-8", "replace")))
 
 
-def dispatch(obs: ObsStore, method: str, path: str, query: dict | None = None, headers: dict | None = None, body: bytes = b"") -> Resp:
+_SIZE = {"b": 1, "kb": 1000, "mb": 1000 ** 2, "gb": 1000 ** 3, "tb": 1000 ** 4, "kib": 1024, "mib": 1024 ** 2, "gib": 1024 ** 3, "tib": 1024 ** 4}
+
+
+def _bytes(txt: str):
+    m = re.fullmatch(r"\s*([0-9.]+)\s*([a-zA-Z]*)\s*", txt or "")
+    if not m or (m.group(2).lower() or "b") not in _SIZE:
+        return None
+    return float(m.group(1)) * _SIZE[m.group(2).lower() or "b"]
+
+
+def parse_docker_stats(line: str) -> dict:
+    """`docker stats --no-stream --format '{{json .}}'` -> RDS stats keys (cpu_pct, mem_used_bytes, mem_limit_bytes, net_*)."""
+    try:
+        d = json.loads(line)
+    except ValueError:
+        return {}
+    out = {}
+    if str(d.get("CPUPerc", "")).endswith("%"):
+        out["cpu_pct"] = float(d["CPUPerc"][:-1])
+    mu = str(d.get("MemUsage", "")).split("/")
+    if len(mu) == 2 and _bytes(mu[0]) is not None and _bytes(mu[1]) is not None:
+        out["mem_used_bytes"], out["mem_limit_bytes"] = _bytes(mu[0]), _bytes(mu[1])
+    nio = str(d.get("NetIO", "")).split("/")
+    if len(nio) == 2 and _bytes(nio[0]) is not None and _bytes(nio[1]) is not None:
+        out["net_rx_bytes"], out["net_tx_bytes"] = _bytes(nio[0]), _bytes(nio[1])
+    return out
+
+
+# The one query a Postgres runtime (offline container OR Nano PGlite) runs to feed RDS Database Insights.
+PG_STATS_SQL = ("SELECT d.numbackends, d.xact_commit, d.xact_rollback, d.blks_read, d.blks_hit, d.deadlocks, "
+                "(SELECT count(*) FROM pg_stat_activity WHERE state = 'active' AND pid <> pg_backend_pid()) "
+                "FROM pg_stat_database d WHERE d.datname = current_database()")
+
+
+def pg_stats_from_row(row) -> dict:
+    keys = ("connections", "xact_commit", "xact_rollback", "blks_read", "blks_hit", "deadlocks", "active_backends")
+    return {k: float(v) for k, v in zip(keys, row or ()) if v is not None}
+
+
+def dispatch(obs: ObsStore, method: str, path: str, query: dict | None = None, headers: dict | None = None, body: bytes = b"",
+             cw_store=None) -> Resp:
     """Serve one /_obs/... request. `path` may include the /_obs prefix."""
     query = dict(query or {})
     h = {str(k).lower(): v for k, v in (headers or {}).items()}
@@ -867,6 +911,14 @@ def dispatch(obs: ObsStore, method: str, path: str, query: dict | None = None, h
             return Resp(200, body=b"Prometheus Server is Healthy.\n", ctype="text/plain")
         if p.startswith("/prom/api/v1/"):
             return _prom_api(obs, m, p[len("/prom/api/v1/"):], {**query, **(_form(body) if m == "POST" else {})})
+        if p == "/rds-stats" and m == "POST":   # a runtime (docker stats / pg_stat) pushes MEASURED RDS counters
+            if cw_store is None:
+                return Resp(501, {"error": "no CloudWatch store is attached to this endpoint"})
+            d = json.loads(body or b"{}")
+            dbid = d.get("dbInstanceIdentifier") or ""
+            if not dbid or not isinstance(d.get("stats"), dict):
+                return Resp(400, {"error": "dbInstanceIdentifier and stats{} are required"})
+            return Resp(200, {"published": publish_rds_stats(cw_store, dbid, d["stats"])})
         if p == "/trace-stats" and m == "GET":
             return Resp(200, trace_latency_stats(obs, query.get("service", "")))
         if p == "/rollup" and m == "GET":
@@ -1082,7 +1134,7 @@ def azure_storage_request_metrics(obs: ObsStore, account: str, window: float = 3
     """Storage-account Availability / SuccessE2ELatency / SuccessServerLatency / ClientOtherError / Transactions derived from
     MEASURED blob-service requests (`service` = blob, resource = the account). Absent when the account saw no traffic."""
     now = now if now is not None else time.time()
-    rows = [r for r in obs.recent if r[1] == "azure" and r[3].lower() == account.lower() and r[2] in ("blob", "az-blob", "storage")
+    rows = [r for r in obs.recent if r[1] == "azure" and r[3].lower() == account.lower() and "blob" in r[2]
             and r[0] >= now - window]
     if not rows:
         return {}

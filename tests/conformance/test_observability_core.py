@@ -99,6 +99,13 @@ ob2 = O.ObsStore()
 O.record(ob2, "azure", "blob", "acct1", "PUT", 201, 12, ts=T); O.record(ob2, "azure", "blob", "acct1", "GET", 500, 30, ts=T)
 am = O.azure_storage_request_metrics(ob2, "acct1", now=T + 5)
 ck("azure storage availability/latency", am["Availability"] == 50.0 and am["SuccessE2ELatency"] == 12.0 and O.azure_storage_request_metrics(ob2, "other", now=T) == {})
+ds = O.parse_docker_stats('{"CPUPerc":"12.50%","MemUsage":"100MiB / 1GiB","NetIO":"1.5kB / 3kB"}')
+ck("docker stats parse", ds["cpu_pct"] == 12.5 and ds["mem_limit_bytes"] == 1024 ** 3 and ds["net_tx_bytes"] == 3000 and O.parse_docker_stats("junk") == {})
+ck("pg row parse", O.pg_stats_from_row((3, 10, 1, 5, 95, 0, 2))["active_backends"] == 2)
+cwx = cw.CloudWatchStore()
+rr = O.dispatch(obs, "POST", "/_obs/rds-stats", {}, {}, json.dumps({"dbInstanceIdentifier": "db9", "stats": {**ds, **O.pg_stats_from_row((3, 10, 1, 5, 95, 0, 2))}}).encode(), cw_store=cwx)
+ck("rds-stats push publishes DBLoad", "DBLoad" in json.loads(rr.body)["published"] and any(v["MetricName"] == "CPUUtilization" for v in cwx.metrics.values()))
+ck("rds-stats validation", O.dispatch(obs, "POST", "/_obs/rds-stats", {}, {}, b"{}", cw_store=cwx).status == 400)
 # Nano substrate: the wire router records measured requests and serves /_obs
 from core.aws_wire_router import AwsWireRouter
 r = AwsWireRouter()

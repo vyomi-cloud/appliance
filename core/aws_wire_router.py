@@ -664,6 +664,8 @@ class AwsWireRouter:
         self.apigwv2 = s.get("apigwv2") or apigw2.ApiGwV2Store()   # API Gateway V2 (HTTP/WebSocket APIs)
         from core import observability_core as _obsc0
         self.obs = s.get("obs") or _obsc0.ObsStore()           # shared request-telemetry recorder + OTLP trace/metric store
+        from core import azure_monitor_core as _azmon0
+        _azmon0.request_telemetry = lambda acct, _o=self.obs: _obsc0.azure_storage_request_metrics(_o, acct)   # storage Availability/latency from measured requests
         self.cw = s.get("cw") or cw.CloudWatchStore()          # CloudWatch metrics / alarms / dashboards
         self.cw.msg_store, self.cw.lam_store = self.msg, self.lam   # real SNS / Lambda alarm actions
         self.vpc = s.get("vpc") or s.get("vpc_net") or _types.SimpleNamespace()   # EC2/VPC network model
