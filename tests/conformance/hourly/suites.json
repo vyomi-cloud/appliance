@@ -42,6 +42,14 @@
       "timeout": 120
     },
     {
+      "id": "offline-api-azure-new-api-versions",
+      "target": "offline",
+      "cloud": "azure",
+      "kind": "api",
+      "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/test_azure_new_api_versions.py",
+      "timeout": 120
+    },
+    {
       "id": "offline-sdk-python-azure-vm-runcommand",
       "target": "offline",
       "cloud": "azure",
