@@ -134,31 +134,14 @@
  },
  "dynamodb.backups": {
   "title": "On-demand backups + AWS Backup copy",
-  "level": {
-   "nano": "limited",
-   "offline": "limited"
-  },
+  "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
    "CreateBackup writes the backup's table definition (backup-metadata.json) and every item as DynamoDB-JSON (data/1.json) into the simulator's own S3, in the visible bucket vyomi-dynamodb-backups under AWSDynamoDB/backups/<table>/<id>/. RestoreTableFromBackup reads those objects back, so deleting the S3 object makes the backup unusable (BackupNotFoundException) and DeleteBackup removes the objects. If no S3 store is wired the backup falls back to an in-store snapshot. BackupSizeBytes is the real size of the stored data.",
-   "AWS Backup subset (service backup): DescribeRegionSettings / UpdateRegionSettings (DynamoDB advanced features on/off; copy jobs are refused while off) and StartCopyJob / DescribeCopyJob / ListCopyJobs. A copy job copies the backup's S3 objects to a new location and registers a new backup (type AWS_BACKUP) under the destination Region/account ARN, which can be restored. Vyomi simulates one account and one data plane, so the destination Region/account is an ARN plus its own S3 object set, not an isolated Region; backup vaults, plans, selections, vault lock, restore jobs and other services' recovery points are not implemented, and the IAM role is accepted but not checked.",
+   "AWS Backup subset (service backup): DescribeRegionSettings / UpdateRegionSettings (DynamoDB advanced features on/off; copy jobs are refused while off) and StartCopyJob / DescribeCopyJob / ListCopyJobs. A copy job copies the backup's S3 objects to a new location and registers a new backup (type AWS_BACKUP) under the destination Region/account ARN, which can be restored. Vyomi simulates one account and one data plane, so the destination Region/account is an ARN plus its own S3 object set, not an isolated Region; backup vaults, plans, selections, vault lock and restore jobs are modelled by the separate AWS Backup service (see dynamodb.aws_backup_vaults); the IAM role is accepted but not checked.",
    "Backups are full copies taken synchronously (no incremental backup, no scheduled/continuous backup plan, no point-in-time change history)."
   ],
-  "api": [
-   "CreateBackup",
-   "ListBackups",
-   "DescribeBackup",
-   "DeleteBackup",
-   "RestoreTableFromBackup",
-   "DescribeRegionSettings",
-   "UpdateRegionSettings",
-   "StartCopyJob",
-   "DescribeCopyJob",
-   "ListCopyJobs"
-  ],
-  "tests": [
-   "tests/conformance/test_dynamodb_table_ops_core.py",
-   "tests/conformance/test_dynamodb_backup_s3.py"
-  ]
+  "api": ["CreateBackup", "ListBackups", "DescribeBackup", "DeleteBackup", "RestoreTableFromBackup", "DescribeRegionSettings", "UpdateRegionSettings", "StartCopyJob", "DescribeCopyJob", "ListCopyJobs"],
+  "tests": ["tests/conformance/test_dynamodb_table_ops_core.py", "tests/conformance/test_dynamodb_backup_s3.py"]
  },
  "dynamodb.partiql": {
   "title": "PartiQL editor",
@@ -446,5 +429,5 @@
   ],
   "api": []
  },
- "dynamodb.aws_backup_vaults": {"title": "AWS Backup vaults, plans, selections, jobs, recovery points, restore jobs, vault lock", "level": {"nano": "limited", "offline": "limited"}, "limitations": ["Backup plan rules with a ScheduleExpression (cron/rate, UTC) really run from the shared scheduler tick (core/schedule_core) against the selection's explicit Resources ARNs, creating attributed backup jobs + recovery points, and recovery points past DeleteAfterDays expire. Offline: background loop; Nano: only while the page is open. Tag/condition-based selections are listed but not expanded; missed runs coalesce into one; ScheduleExpressionTimezone is ignored.", "Real: vault CRUD + lock (min/max retention enforced on lifecycle and recovery-point deletion), plans/selections with validation, backup jobs for DynamoDB (S3-backed backup), RDS (awsbackup:job-* snapshot with table data), S3 (object artifact in vyomi-aws-backup) and EBS (EC2 snapshot), and restore jobs that create the table / DB instance / bucket / volume.", "Plans do not run on their cron schedule (use StartBackupJob); EC2 AMI, EC2 instances (real AMI recovery points, restore launches an instance) and FSx for OpenZFS volumes (file-tree recovery points, restore into an existing volume) ARE protected; EFS and Aurora clusters are refused honestly (the simulator has no EFS file systems or Aurora DB clusters) and Redshift is not backed up; no audit frameworks, report plans, restore testing or logically air-gapped vaults; the IAM role is accepted but not checked."], "tests": ["tests/conformance/test_aws_backup_ec2_fsx.py", "tests/conformance/test_schedule_core.py", "tests/conformance/test_aws_backup_vaults.py"]}
+ "dynamodb.aws_backup_vaults": {"title": "AWS Backup vaults, plans, selections, jobs, recovery points, restore jobs, vault lock", "level": {"nano": "limited", "offline": "limited"}, "limitations": ["Backup plan rules with a ScheduleExpression (cron/rate, UTC) really run from the shared scheduler tick (core/schedule_core) against the selection's explicit Resources ARNs, creating attributed backup jobs + recovery points, and recovery points past DeleteAfterDays expire. Offline: background loop; Nano: only while the page is open. Tag/condition-based selections are listed but not expanded; missed runs coalesce into one; ScheduleExpressionTimezone is ignored.", "Real: vault CRUD + lock (min/max retention enforced on lifecycle and recovery-point deletion), plans/selections with validation, backup jobs for DynamoDB (S3-backed backup), RDS (awsbackup:job-* snapshot with table data), S3 (object artifact in vyomi-aws-backup) and EBS (EC2 snapshot), and restore jobs that create the table / DB instance / bucket / volume.", "EC2 AMI, EC2 instances (real AMI recovery points, restore launches an instance) and FSx for OpenZFS volumes (file-tree recovery points, restore into an existing volume) ARE protected; EFS and Aurora clusters are refused honestly (the simulator has no EFS file systems or Aurora DB clusters) and Redshift is not backed up; no audit frameworks, report plans, restore testing or logically air-gapped vaults; the IAM role is accepted but not checked."], "tests": ["tests/conformance/test_aws_backup_ec2_fsx.py", "tests/conformance/test_schedule_core.py", "tests/conformance/test_aws_backup_vaults.py"]}
 }
