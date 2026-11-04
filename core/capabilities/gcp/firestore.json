@@ -64,6 +64,21 @@
     ],
     "tests": ["tests/conformance/test_gcp_firestore_rules_core.py", "tests/conformance/test_gcp_firestore_rules_enforce_core.py"]
   },
+  "gcp.datastore.entities": {
+    "title": "Datastore mode entities (Cloud Datastore API)",
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": [
+      "Entities, keys (ids, names, ancestors, namespaces), insert/update/upsert/delete with versions + baseVersion, transactions (all-or-nothing commit), lookup, runQuery (filters, ordering, limit/offset/cursors, projections, keys-only), a GQL SELECT subset, and COUNT/SUM/AVG aggregations are real and conform to the Datastore REST wire.",
+      "Not implemented: transaction read isolation (a transaction id is accepted but reads inside it are not snapshotted), GQL beyond SELECT … FROM … WHERE … ORDER BY … LIMIT/OFFSET, multi-kind queries, export/import for Datastore mode, and built-in single-property index exemptions. Firestore-API access to a Datastore-mode database is not blocked."
+    ],
+    "tests": ["tests/conformance/test_gcp_datastore_core.py"]
+  },
+  "gcp.datastore.indexes": {
+    "title": "Datastore composite indexes",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": [],
+    "tests": ["tests/conformance/test_gcp_datastore_core.py"]
+  },
   "gcp.firestore.import-export": {
     "title": "Import / Export (exportDocuments / importDocuments)",
     "level": { "nano": "full", "offline": "full" },

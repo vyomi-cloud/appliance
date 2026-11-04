@@ -30,6 +30,7 @@ export const PRODUCTS = [
   { id: "kubernetes", title: "Kubernetes Engine", description: "Managed Kubernetes clusters", category: "Compute", icon: ClusterIcon, load: () => import("./kubernetes/index.jsx") },
   { id: "sql", title: "Cloud SQL", description: "Managed MySQL, PostgreSQL, SQL Server", category: "Databases", icon: SqlIcon, load: () => import("./sql/index.jsx") },
   { id: "firestore", title: "Firestore", description: "Serverless NoSQL document database", category: "Databases", icon: DocumentIcon, load: () => import("./firestore/index.jsx") },
+  { id: "datastore", title: "Datastore", description: "Firestore in Datastore mode: entities, GQL and composite indexes", category: "Databases", icon: DocumentIcon, load: () => import("./firestore/datastore.jsx") },
   { id: "memorystore", title: "Memorystore", description: "Fully managed Redis for caching and real-time data", category: "Databases", icon: MemorystoreIcon, load: () => import("./memorystore/index.jsx") },
   { id: "networking", title: "VPC network", description: "Networks, subnets, firewall rules", category: "Networking", icon: NetworkIcon, load: () => import("./networking/index.jsx") },
   { id: "run", title: "Cloud Run", description: "Fully managed container platform", category: "Serverless", icon: RunIcon, load: () => import("./run/index.jsx") },

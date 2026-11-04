@@ -55,6 +55,7 @@ from core import cloudformation_core as cfn
 from core import rds_data_core as rds_data
 from core import gcp_storage_core as gcs   # GCP: GCS JSON API, path-routed (not SigV4)
 from core import gcp_firestore_core as gcp_fs
+from core import gcp_datastore_core as gcp_ds
 from core.gcp_firestore_core import FirestoreStore
 from core import gcp_kms_core as gcp_kms
 from core import gcp_secretmanager_core as gcp_sec
@@ -195,6 +196,8 @@ def _gcp_service(path):
             return "gcp-container"
         if re.search(r"/locations/[^/]+/jobs([/:]|$)", path) or re.search(r"^/v1(beta1)?/projects/[^/]+/locations/?$", path):
             return "gcp-cloudscheduler"
+        if gcp_ds.is_datastore_path(path):
+            return "gcp-datastore"
         if re.search(r"^/v1(beta1)?/projects/[^/]+/locations/[^/]+/backups([/:]|$)", path):
             return "gcp-firestore"
         if "/locations/" in path and ("/repositories" in path or "/operations/" in path):
@@ -1321,7 +1324,7 @@ class AwsWireRouter:
 
         if svc and svc.startswith("gcp-"):   # GCP services — native google-cloud-* REST wire
             _gcp_core = {
-                "gcp-gcs": (gcs, self.gcs), "gcp-firestore": (gcp_fs, self.gcp_fs),
+                "gcp-gcs": (gcs, self.gcs), "gcp-firestore": (gcp_fs, self.gcp_fs), "gcp-datastore": (gcp_ds, self.gcp_fs),
                 "gcp-kms": (gcp_kms, self.gcp_kms), "gcp-secretmanager": (gcp_sec, self.gcp_sec),
                 "gcp-pubsub": (gcp_ps, self.gcp_msg), "gcp-iam": (gcp_iam, self.gcp_iam),
                 "gcp-cloudsql": (gcp_sql, self.gcp_sql), "gcp-cloudscheduler": (gcp_sched, self.gcp_sched),

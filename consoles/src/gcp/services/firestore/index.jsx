@@ -47,7 +47,6 @@ export default {
   },
   routes: [
     { pattern: "/firestore", component: Databases },
-    { pattern: "/datastore", component: Databases },
     { pattern: "/firestore/databases", component: Databases },
     { pattern: "/firestore/create-database", component: CreateDatabase },
     { pattern: "/firestore/databases/:name/studio", component: FirestoreStudio },
