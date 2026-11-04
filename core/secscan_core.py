@@ -637,7 +637,7 @@ AZ_SEV = {"CRITICAL": "High", "HIGH": "High", "MEDIUM": "Medium", "LOW": "Low", 
 
 def azure_alert_view(t: dict, sub: str, status: str = "Active", location: str = "centralus") -> dict:
     rid = t["resource"] if str(t["resource"]).startswith("/subscriptions/") else f"/subscriptions/{sub}"
-    rg = rid.split("/resourcegroups/", 1)[1].split("/", 1)[0] if "/resourcegroups/" in rid.lower() else "vyomi-rg"
+    rg = re.split(r"/resourcegroups/", rid, flags=re.I)[1].split("/", 1)[0] if "/resourcegroups/" in rid.lower() else "vyomi-rg"
     name = str(uuid.uuid5(uuid.NAMESPACE_URL, t["id"]))
     return {"id": f"/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Security/locations/{location}/alerts/{name}", "name": name,
             "type": "Microsoft.Security/Locations/alerts",

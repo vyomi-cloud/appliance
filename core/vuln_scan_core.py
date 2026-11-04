@@ -235,3 +235,34 @@ def parse_trivy_report(report: dict) -> dict:
 
 def finding_id(*parts) -> str:
     return hashlib.sha1("|".join(map(str, parts)).encode()).hexdigest()[:16]
+
+
+# ── registry walkers ────────────────────────────────────────────────────────
+def _config_of_manifest(body, get_blob):
+    """The image config JSON of an OCI/Docker v2 image manifest (None for indexes / unreadable)."""
+    try:
+        man = json.loads(body.decode("utf-8") if isinstance(body, (bytes, bytearray)) else body)
+        digest = (man.get("config") or {}).get("digest")
+        if not digest:
+            return None
+        blob = get_blob(digest)
+        if blob is None:
+            return None
+        return json.loads(blob.decode("utf-8") if isinstance(blob, (bytes, bytearray)) else blob)
+    except Exception:
+        return None
+
+
+def scan_acr_store(store, trivy_reports: dict | None = None) -> list:
+    """Every tagged image in an Azure Container Registry store (core/azure_acr_core.AcrRegistryStore) ->
+    [{repo, tag, digest, scan}]. Reads each image's stored config blob; layers are never unpacked."""
+    out = []
+    for repo_name, repo in sorted((getattr(store, "repos", None) or {}).items()):
+        for tag, t in sorted((repo.get("tags") or {}).items()):
+            man = (repo.get("manifests") or {}).get(t.get("digest"))
+            if not man:
+                continue
+            cfg = _config_of_manifest(man.get("body") or b"", lambda d, r=repo: (r.get("blobs") or {}).get(d))
+            out.append({"repo": repo_name, "tag": tag, "digest": t["digest"],
+                        "scan": scan_image(cfg, repo_name, tag, (trivy_reports or {}).get(t["digest"]))})
+    return out

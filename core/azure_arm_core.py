@@ -951,6 +951,10 @@ class AzureArm:
         if missing:
             return _err(400, "ResourceNotFound", f"The Resource '{missing}' of type 'Microsoft.ManagedIdentity/userAssignedIdentities' was not found.")
         out = self._handle_raw(method, path, query, body)
+        if m != "GET" and isinstance(out, dict):   # security audit feed (core/secscan_core.py classifier)
+            sub_m = re.search(r"/subscriptions/([^/]+)", str(path))
+            if sub_m:
+                security_engine.record_call(self.state, sub_m.group(1), m, str(path).split("?")[0], body, out.get("status", 200))
         if ua and isinstance(out, dict) and out.get("status", 500) < 300:
             self._resolve_identity_at(path, out)
         return out
@@ -2645,8 +2649,27 @@ class AzureArm:
                             "properties.locations.failoverPriority must be a 0-based, gap-free sequence with exactly one region at priority 0.")
         return None
 
+    def _acr_images(self):
+        """Scanned images of the registry data plane (core/vuln_scan_core.py) for Defender for Containers."""
+        store = getattr(self, "acr_store", None)
+        if store is None:
+            try:
+                from core import appliance_stores as _aps
+                store = _aps.acr_store()
+            except Exception:
+                return []
+        try:
+            try:
+                from core import vuln_scan_core
+            except ImportError:
+                import vuln_scan_core  # type: ignore
+            return vuln_scan_core.scan_acr_store(store)
+        except Exception:
+            return []
+
     def _security(self, method, sub, rg, chain, payload, query, scope_rid):
-        r = security_engine.dispatch(self.state, method, sub, rg, chain, payload or {}, query or {}, scope_rid)
+        ctx = {"images": self._acr_images()} if security_engine.plan_on(self.state, sub, "Containers") else {}
+        r = security_engine.dispatch(self.state, method, sub, rg, chain, payload or {}, query or {}, scope_rid, ctx)
         if r["status"] < 300 and method in ("PUT", "PATCH") and chain[:1] and chain[0].lower() == "pricings":
             self._record_activity(f"/subscriptions/{sub}/providers/Microsoft.Security/pricings/{chain[1] if len(chain) > 1 else ''}",
                                   "Microsoft.Security/pricings/write", sub)

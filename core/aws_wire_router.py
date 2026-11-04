@@ -635,6 +635,7 @@ class AwsWireRouter:
         self.az_queue = s.get("az_queue") or AzureQueueStore()
         self.az_table = s.get("az_table") or AzureTableStore()
         self.az_arm = s.get("az_arm") or AzureArm()   # ARM control plane — read by the blob core for CORS/lifecycle/static-website enforcement
+        self.az_arm.acr_store = None   # set below once the ACR store exists (Defender for Containers image scanning)
         self.az_arm.kv_secrets_store = self.az_kvsec   # APIM named values: Key Vault-type listValue resolves against this SAME space's KV secrets
         if getattr(self.az_arm, "sql_store", None) is None:   # Azure SQL export/import: this router's SQL data plane + Blob store
             self.az_arm.sql_store = self.rds
@@ -642,6 +643,7 @@ class AwsWireRouter:
             self.az_arm.blob_store = self.az_blob
         self.az_sb = s.get("az_sb") or InMemoryMessagingStore()   # Service Bus topics (fan-out)
         self.az_acr = s.get("az_acr") or AcrRegistryStore()   # Container Registry repositories/tags/manifests
+        self.az_arm.acr_store = self.az_acr
         self.az_graph = s.get("az_graph") or az_graph.GraphStore()   # Microsoft Graph (Entra ID)
         # EventBridge shares the messaging store (rules + SQS delivery); Lambda gets
         # its own lightweight function registry (a namespace the core attaches to).

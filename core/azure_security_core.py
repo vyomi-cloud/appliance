@@ -21,8 +21,15 @@ LIVE from the ARM state every time it is read — nothing here is static data:
                              the secure score, computed from the assessments with Azure's formula
                              (control score = max x healthy / (healthy + unhealthy) resources;
                              subscription % = sum(current) / sum(max) over controls in play).
-  * alerts                   NOT simulated (501): Defender derives alerts from runtime threat
-                             telemetry of running workloads, and Vyomi runs none.
+  * alerts                   Microsoft.Security/locations/alerts from Vyomi's DETERMINISTIC detector
+                             (core/secscan_core.py) over the ARM control-plane audit feed kept in this state
+                             (storage opened to anonymous access, Owner role assigned, NSG management port
+                             exposed to the internet, diagnostic settings deleted, Key Vault purged, ...).
+                             Each alert is gated by its Defender plan (Storage / Resource Manager / Key
+                             Vaults) exactly like Azure, carries vendorName "Vyomi", and dismiss / activate /
+                             resolve are real. No real attacker or workload telemetry exists, so no ML alerts.
+  * container images         Defender for Containers vulnerability assessment of the images in the registry
+                             (core/vuln_scan_core.py; the real Trivy container where the appliance has it).
 
 State it keeps (JSON-only, persisted with the ARM state, excluded from resource listings):
 ``/subscriptions/{sub}/providers/microsoft.security/pricings`` (plan tiers) and
@@ -36,8 +43,10 @@ import uuid
 
 try:
     from core import kubescape_core as ks
+    from core import secscan_core as sc
 except ImportError:                                    # Pyodide flat layout
     import kubescape_core as ks                        # type: ignore
+    import secscan_core as sc                          # type: ignore
 
 API_PRICINGS = "2024-01-01"
 NS = "Microsoft.Security"
@@ -378,8 +387,15 @@ def _resources(state, sub, rtype):
             yield k, r
 
 
-def evaluate(state: dict, sub: str, *, refresh: bool = True) -> dict:
-    """All assessments for a subscription -> {assessments: [...], scanners: [...]}"""
+IMG_META = {"name": _id("vyomi", "acr-image-vulnerabilities"), "displayName": "Container registry images should have vulnerability findings resolved",
+            "severity": "High", "control": "Remediate vulnerabilities", "categories": ["Containers"], "effort": "Moderate", "impact": "Low", "threats": ["dataExfiltration"],
+            "description": "Vulnerabilities were found in the packages and runtime of images pushed to the registry (Defender for Containers vulnerability assessment).",
+            "remediation": "Rebuild the image with the fixed package versions listed in the sub-assessments, push the new tag and delete the vulnerable one."}
+
+
+def evaluate(state: dict, sub: str, *, refresh: bool = True, ctx: dict | None = None) -> dict:
+    """All assessments for a subscription -> {assessments: [...], scanners: [...]}.
+    ctx (optional, supplied by the ARM engine): {"images": [{"repo","tag","digest","scan"}]} — scanned registry images."""
     out, scanners = [], []
     for rl in RULES:
         for key, r in _resources(state, sub, rl["rtype"]):
@@ -389,6 +405,17 @@ def evaluate(state: dict, sub: str, *, refresh: bool = True) -> dict:
             status, cause = res
             out.append({"meta": rl, "rid": r.get("id") or key, "status": status, "cause": cause, "sub": None})
     containers_on = plan_on(state, sub, "Containers")
+    images = (ctx or {}).get("images") or []
+    regs = sorted(_resources(state, sub, "microsoft.containerregistry/registries"), key=lambda kr: kr[0])
+    if containers_on and images and regs:
+        # Vyomi's registry data plane is one flat store (not tied to a login server): its images are assessed on the
+        # subscription's first registry.
+        rid = regs[0][1].get("id") or regs[0][0]
+        bad = [i for i in images if i["scan"]["findings"]]
+        n = sum(len(i["scan"]["findings"]) for i in images)
+        res = ("Unhealthy", f"{n} vulnerabilities in {len(bad)} of {len(images)} image(s)") if bad else ("Healthy", "")
+        out.append({"meta": IMG_META, "rid": rid, "status": res[0], "cause": res[1], "sub": None, "images": images,
+                    "engine": images[0]["scan"]["engine"]})
     for key, r in _resources(state, sub, "microsoft.containerservice/managedclusters"):
         rid = r.get("id") or key
         if not containers_on:
@@ -450,6 +477,10 @@ def _assessment_view(state, sub, a) -> dict:
                "kubescapeSeverity": f.get("severity"), "frameworks": ", ".join(f.get("frameworks") or []),
                "failedResources": str(f.get("failedCount") or 0), "passedResources": str(f.get("passedCount") or 0),
                "evaluatedBy": f"Kubescape ({a.get('engine') or ''})", "scannedAt": a.get("scannedAt") or ""}
+    if a.get("images"):
+        add = {"evaluatedBy": f"Vyomi image scanner ({a.get('engine')})", "imagesScanned": str(len(a["images"])),
+               "vulnerabilities": str(sum(len(i["scan"]["findings"]) for i in a["images"])),
+               "scanEngines": ", ".join(sorted({i["scan"]["engine"] for i in a["images"]}))}
     return {
         "id": aid, "name": m["name"], "type": f"{NS}/assessments",
         "properties": {
@@ -474,7 +505,30 @@ def _metadata_props(m) -> dict:
     return p
 
 
+def _image_sub_views(a, aid) -> list:
+    out = []
+    for im in a.get("images") or []:
+        for v in im["scan"]["findings"]:
+            oid = f"{im['repo']}:{im['tag']}/{v['vulnerabilityId']}/{v['package']}"
+            name = _id("subimg", aid.lower(), oid, im["digest"])
+            out.append({"id": f"{aid}/subAssessments/{name}", "name": name, "type": f"{NS}/assessments/subAssessments",
+                        "properties": {"id": v["vulnerabilityId"], "displayName": f"{v['vulnerabilityId']} in {v['package']} {v['installedVersion']}",
+                                       "status": {"code": "Unhealthy", "severity": {"CRITICAL": "High", "HIGH": "High", "MEDIUM": "Medium"}.get(v["severity"], "Low"),
+                                                  "cause": "", "description": v["title"]},
+                                       "remediation": f"Upgrade {v['package']} to {v['fixedVersion']} or later." if v["fixedVersion"] else "No fixed version is available yet.",
+                                       "impact": v["title"], "category": "Vulnerability", "description": v["title"],
+                                       "timeGenerated": _now(), "resourceDetails": {"source": "Azure", "id": a["rid"]},
+                                       "additionalData": {"assessedResourceType": "AzureContainerRegistryVulnerability", "type": "Vulnerability",
+                                                          "cvss": {"base": v["cvss"]}, "repositoryName": im["repo"], "imageTag": im["tag"], "imageDigest": im["digest"],
+                                                          "patchable": bool(v["fixedVersion"]), "cve": [{"title": v["vulnerabilityId"]}],
+                                                          "publishedTime": "", "vulnerabilityScanner": im["scan"]["engine"], "package": v["package"],
+                                                          "installedVersion": v["installedVersion"], "fixedVersion": v["fixedVersion"]}}})
+    return out
+
+
 def _sub_views(a, aid) -> list:
+    if a.get("images"):
+        return _image_sub_views(a, aid) if a["status"] == "Unhealthy" else []
     f = a.get("sub")
     if not f or a["status"] != "Unhealthy":
         return []
@@ -506,6 +560,7 @@ def _all_meta(state, sub) -> list:
     for rl in RULES:
         if rl["name"] not in seen:
             seen.add(rl["name"]); out.append(rl)
+    out.append(IMG_META)
     for key, r in _resources(state, sub, "microsoft.containerservice/managedclusters"):
         for f in (ks.result(r) or {}).get("controls") or []:
             m = k8s_meta(f)
@@ -578,7 +633,7 @@ def find_marker(chain: list):
     return None
 
 
-def dispatch(state: dict, method: str, sub: str, rg, chain: list, payload: dict, query: dict, scope_rid: str | None = None):
+def dispatch(state: dict, method: str, sub: str, rg, chain: list, payload: dict, query: dict, scope_rid: str | None = None, ctx: dict | None = None):
     """`chain` = segments after providers/Microsoft.Security; scope_rid = the resource the call is
     scoped to (resource-scoped assessments), else subscription / resource-group scope."""
     low = [c.lower() for c in chain]
@@ -587,10 +642,8 @@ def dispatch(state: dict, method: str, sub: str, rg, chain: list, payload: dict,
     head = low[0]
     if head == "pricings":
         return _pricings(state, method, sub, chain[1:], payload)
-    if head == "alerts":
-        return _err(501, "NotImplemented",
-                    "Security alerts are not simulated: Defender for Cloud derives alerts from runtime threat telemetry "
-                    "(process, network and control-plane activity of running workloads), and Vyomi runs no workloads.")
+    if head in ("alerts", "locations"):
+        return _alerts(state, method, sub, rg, chain, ctx)
     if method != "GET":
         return _err(405, "MethodNotAllowed", f"{NS}/{chain[0]} supports GET only in Vyomi.")
     if head == "assessmentmetadata":
@@ -601,7 +654,7 @@ def dispatch(state: dict, method: str, sub: str, rg, chain: list, payload: dict,
         return _ok(_meta_view(sub, m)) if m else _err(404, "NotFound", f"Assessment metadata '{chain[1]}' not found.")
     if head == "securescorecontroldefinitions":
         return _ok({"value": [_definition_view(n) for n in CONTROLS]})
-    ev = evaluate(state, sub)
+    ev = evaluate(state, sub, ctx=ctx)
     assessments = ev["assessments"]
     if rg is not None:
         assessments = [a for a in assessments if f"/resourcegroups/{rg.lower()}/" in a["rid"].lower()]
@@ -647,6 +700,82 @@ def dispatch(state: dict, method: str, sub: str, rg, chain: list, payload: dict,
             return _err(404, "NotFound", f"Secure score '{chain[1]}' not found (Vyomi computes the 'ascScore' initiative).")
         return _ok(score)
     return _err(404, "ResourceTypeNotSupported", f"Type '{NS}/{chain[0]}' is not simulated.")
+
+
+# ── alerts (Vyomi deterministic detector over the ARM audit feed) ─────────────────────────
+AUDIT_LIMIT = sc.AUDIT_CAP
+
+
+def _feed_key(sub):
+    return f"/subscriptions/{sub}/providers/microsoft.security/__auditfeed__"
+
+
+def audit_feed(state: dict, sub: str) -> list:
+    rec = state.get(_feed_key(sub))
+    if rec is None:
+        rec = state[_feed_key(sub)] = {"_type": "microsoft.security/auditfeed", "_sub": sub, "events": [], "alerts": {}}
+    return rec["events"]
+
+
+def record_call(state: dict, sub: str, method: str, path: str, body, status: int, actor: str = "console") -> None:
+    """Classify one served ARM call into the audit feed (best effort; ignores non security-relevant calls)."""
+    try:
+        ev = sc.classify("azure", method, path, {}, {}, json.dumps(body) if isinstance(body, dict) else body, int(status), actor=actor)
+        if ev:
+            sc.append(audit_feed(state, sub), ev)
+    except Exception:
+        pass
+
+
+_ALERT_PLAN = {"storage-public": "StorageAccounts", "block-public-access-disabled": "StorageAccounts", "key-destruction": "KeyVaults"}
+
+
+def threats(state: dict, sub: str) -> list:
+    """Detector output, gated by Defender plans (an alert needs its workload protection plan to be Standard)."""
+    out = []
+    for t in sc.detect("azure", audit_feed(state, sub)):
+        if plan_on(state, sub, _ALERT_PLAN.get(t["rule"], "Arm")):
+            out.append(t)
+    return out
+
+
+def _alerts(state, method, sub, rg, chain, ctx):
+    low = [c.lower() for c in chain]
+    rec = state.get(_feed_key(sub)) or {}
+    states = (rec.get("alerts") if rec else None) or {}
+    views = {}
+    for t in threats(state, sub):
+        v = sc.azure_alert_view(t, sub, states.get(t["id"], "Active"))
+        views[v["name"]] = (t, v)
+    # .../alerts            (subscription / resource group)         .../locations/{loc}/alerts[/{name}[/{action}]]
+    if low[0] == "locations":
+        if len(low) < 3 or low[2] != "alerts":
+            return _err(404, "ResourceTypeNotSupported", f"Type '{NS}/{chain[0]}' is not simulated.")
+        rest = chain[3:]
+    else:
+        rest = chain[1:]
+    if rg is not None:
+        views = {k: tv for k, tv in views.items() if f"/resourcegroups/{rg.lower()}/" in tv[1]["id"].lower()}
+    if not rest:
+        if method != "GET":
+            return _err(405, "MethodNotAllowed", "Use GET to list alerts.")
+        return _ok({"value": [v for _, v in views.values()]})
+    hit = views.get(rest[0].lower())
+    if hit is None:
+        return _err(404, "ResourceNotFound", f"Alert '{rest[0]}' was not found.")
+    t, v = hit
+    if len(rest) == 1:
+        return _ok(v) if method == "GET" else _err(405, "MethodNotAllowed", "Use GET, or POST dismiss / activate / resolve.")
+    action = rest[1].lower()
+    new = {"dismiss": "Dismissed", "activate": "Active", "resolve": "Resolved"}.get(action)
+    if new is None or method != "POST":
+        return _err(404, "NotFound", f"Alert action '{rest[1]}' is not supported (dismiss, activate, resolve).")
+    fr = state.get(_feed_key(sub))
+    if fr is None:
+        audit_feed(state, sub)
+        fr = state[_feed_key(sub)]
+    fr.setdefault("alerts", {})[t["id"]] = new
+    return {"status": 204, "headers": {}, "body": None}
 
 
 def _pricings(state, method, sub, rest, payload):
