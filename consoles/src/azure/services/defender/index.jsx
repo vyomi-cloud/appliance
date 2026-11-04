@@ -1,4 +1,4 @@
-import { Alerts, Compliance, DefenderPlans, Environment, Inventory, NotSimulatedPanel, Overview, Posture, RecommendationDetail, Recommendations } from "./Pages.jsx";
+import { AlertDetail, Alerts, Compliance, DefenderPlans, Environment, Inventory, NotSimulatedPanel, Overview, Posture, RecommendationDetail, Recommendations } from "./Pages.jsx";
 import { LABEL } from "./DefenderShell.jsx";
 
 const crumb = (text, href) => [{ text, href }];
@@ -11,6 +11,8 @@ export default {
     { pattern: "/defender/recommendations/:name", component: RecommendationDetail,
       crumbs: (p) => [{ text: "Recommendations", href: "#/defender/recommendations" }, { text: "Recommendation details", href: `#/defender/recommendations/${p.name}` }] },
     { pattern: "/defender/alerts", component: Alerts, crumbs: () => crumb("Security alerts", "#/defender/alerts") },
+    { pattern: "/defender/alerts/:name", component: AlertDetail,
+      crumbs: (p) => [{ text: "Security alerts", href: "#/defender/alerts" }, { text: "Alert details", href: `#/defender/alerts/${p.name}` }] },
     { pattern: "/defender/inventory", component: Inventory, crumbs: () => crumb("Inventory", "#/defender/inventory") },
     { pattern: "/defender/posture", component: Posture, crumbs: () => crumb("Security posture", "#/defender/posture") },
     { pattern: "/defender/compliance", component: Compliance, crumbs: () => crumb("Regulatory compliance", "#/defender/compliance") },

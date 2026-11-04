@@ -433,7 +433,7 @@ export function Alerts() {
           pills={[{ key: "severity", label: "Severity", value: (r) => r.severity }, { key: "status", label: "Status", value: (r) => r.status }]}
           columns={[
             { key: "sev", label: "Severity", render: (r) => <SeverityBadge s={r.severity} />, value: (r) => r.severity },
-            { key: "name", label: "Alert", render: (r) => <span>{r.alertDisplayName}<div style={{ opacity: 0.7, fontSize: 12 }}>{r.description}</div></span>, value: (r) => r.alertDisplayName },
+            { key: "name", label: "Alert", render: (r) => <span><Link href={`#/defender/alerts/${r.name}`}>{r.alertDisplayName}</Link><div style={{ opacity: 0.7, fontSize: 12 }}>{r.description}</div></span>, value: (r) => r.alertDisplayName },
             { key: "res", label: "Affected resource", value: (r) => api.resourceName(r.compromisedEntity) },
             { key: "type", label: "Alert type", value: (r) => r.alertType },
             { key: "time", label: "Last seen", render: (r) => fmtDate(r.endTimeUtc), value: (r) => r.endTimeUtc },
@@ -444,6 +444,60 @@ export function Alerts() {
           ]}
         />
       </CapabilityContainer>
+    </DefenderShell>
+  );
+}
+
+export function AlertDetail({ params }) {
+  const notify = useNotify();
+  const d = useAsync(async () => (await api.listAlerts()).find((a) => a.name === params.name) || null, [params.name]);
+  const a = d.data;
+  const p = a?.properties || {};
+  const act = async (action, label) => {
+    try { await api.alertAction(a.id, action); notify.success(label); d.reload(); }
+    catch (e) { notify.error(e.message || String(e)); }
+  };
+  let hist = [], rem = null;
+  try { hist = JSON.parse(p.extendedProperties?.statusHistory || "[]"); } catch { hist = []; }
+  try { rem = p.extendedProperties?.remediation ? JSON.parse(p.extendedProperties.remediation) : null; } catch { rem = null; }
+  return (
+    <DefenderShell active="alerts">
+      <div className="vy-panel-title">Security alert</div>
+      <Cmd onRefresh={d.reload}>
+        {a && p.status !== "InProgress" && p.status !== "Resolved" && <ToolbarButton onClick={() => act("inprogress", "Alert set to In progress")}>Set in progress</ToolbarButton>}
+        {a && p.status !== "Resolved" && <ToolbarButton onClick={() => act("remediate", "Remediation applied")}>Take action (remediate)</ToolbarButton>}
+        {a && p.status !== "Resolved" && <ToolbarButton onClick={() => act("resolve", "Alert resolved")}>Resolve</ToolbarButton>}
+        {a && p.status !== "Dismissed" && <ToolbarButton onClick={() => act("dismiss", "Alert dismissed")}>Dismiss</ToolbarButton>}
+        {a && p.status !== "Active" && <ToolbarButton onClick={() => act("activate", "Alert activated")}>Activate</ToolbarButton>}
+      </Cmd>
+      {d.loading && !d.data ? <Loading /> : d.error ? <ErrorBar error={d.error} /> : !a ? (
+        <InfoBar intent="warning" title="Alert not found">The alert no longer exists. <Link href="#/defender/alerts">Back to security alerts</Link></InfoBar>
+      ) : (
+        <CapabilityContainer id="azure.defender.alerts" title="Alert details">
+          <h2 style={{ margin: "8px 0" }}>{p.alertDisplayName}</h2>
+          <div style={{ display: "flex", gap: 24, flexWrap: "wrap", margin: "8px 0 16px" }}>
+            <KV label="Severity" value={<SeverityBadge s={p.severity} />} />
+            <KV label="Status" value={<Badge appearance="outline">{p.status}</Badge>} />
+            <KV label="Alert type" value={p.alertType} />
+            <KV label="Affected resource" value={api.resourceName(p.compromisedEntity)} />
+            <KV label="First seen" value={fmtDate(p.startTimeUtc)} />
+            <KV label="Last seen" value={fmtDate(p.endTimeUtc)} />
+            <KV label="Events" value={p.extendedProperties?.eventCount} />
+          </div>
+          <p>{p.description}</p>
+          <h3>Remediation steps</h3>
+          <ul>{(p.remediationSteps || []).map((s) => <li key={s}>{s}</li>)}</ul>
+          {rem && <InfoBar intent="success" title="Remediation applied">{rem.action} ({api.resourceName(rem.resource)})</InfoBar>}
+          <h3>Status history</h3>
+          <Table size="small" aria-label="Alert status history">
+            <TableHeader><TableRow><TableHeaderCell>Time</TableHeaderCell><TableHeaderCell>Action</TableHeaderCell><TableHeaderCell>Status</TableHeaderCell></TableRow></TableHeader>
+            <TableBody>
+              {hist.length === 0 && <TableRow><TableCell colSpan={3}>No status changes yet.</TableCell></TableRow>}
+              {hist.map((h, i) => <TableRow key={i}><TableCell>{fmtDate(h.time)}</TableCell><TableCell>{h.action}</TableCell><TableCell>{h.status}</TableCell></TableRow>)}
+            </TableBody>
+          </Table>
+        </CapabilityContainer>
+      )}
     </DefenderShell>
   );
 }
