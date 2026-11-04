@@ -664,6 +664,10 @@ class AwsWireRouter:
         self.s3.msg_store, self.s3.lam_store = self.msg, self.lam
         self.kinesis = s.get("kinesis") or kinesis.KinesisStore()   # Kinesis Data Streams
         self.apigwv2 = s.get("apigwv2") or apigw2.ApiGwV2Store()   # API Gateway V2 (HTTP/WebSocket APIs)
+        from core import observability_core as _obsc0
+        self.obs = s.get("obs") or _obsc0.ObsStore()           # shared request-telemetry recorder + OTLP trace/metric store
+        from core import azure_monitor_core as _azmon0
+        _azmon0.request_telemetry = lambda acct, _o=self.obs: _obsc0.azure_storage_request_metrics(_o, acct)   # storage Availability/latency from measured requests
         self.cw = s.get("cw") or cw.CloudWatchStore()          # CloudWatch metrics / alarms / dashboards
         self.cw.msg_store, self.cw.lam_store = self.msg, self.lam   # real SNS / Lambda alarm actions
         self.vpc = s.get("vpc") or s.get("vpc_net") or _types.SimpleNamespace()   # EC2/VPC network model
@@ -1024,6 +1028,40 @@ class AwsWireRouter:
         return self.handle(method, path, query, headers, body)
 
     def handle(self, method, path, query, headers, body):
+        """Telemetry-recording front door: measures each request (resource, op, status, latency) into the shared
+        observability recorder, serves the /_obs OTLP / Jaeger / Prometheus surface, and refreshes the cloud metric
+        stores from the measured series before a read of them."""
+        import time as _t
+        from core import observability_core as _obsc
+        p0 = path.split("?", 1)[0]
+        if p0.startswith(_obsc.BASE + "/") or p0 == _obsc.BASE:
+            r = _obsc.dispatch(self.obs, method, p0, query or {}, headers or {}, body if isinstance(body, (bytes, bytearray)) else (body or "").encode())
+            return {"status": r.status, "headers": dict(r.headers), "body": r.body}
+        lh = _lower_headers(headers)
+        bb = body if isinstance(body, (bytes, bytearray)) else (body or b"")
+        svc = self.service_of(method, path, lh, bb if isinstance(bb, bytes) else bytes(bb), query)
+        try:
+            if svc == "cloudwatch":
+                _obsc.publish_cloudwatch(self.obs, self.cw)
+            elif svc == "gcp-monitoring":
+                _obsc.publish_gcp(self.obs, self.gcp_mon, _obsc.gcp_project_of(path))
+            elif svc == "gcp-trace":
+                _obsc.sync_gcp_traces(self.obs, self.gcp_mon, _obsc.gcp_project_of(path))
+        except Exception:
+            pass
+        t0 = _t.time()
+        res = self._handle_inner(method, path, query, headers, body)
+        try:
+            if svc:
+                cloud = "gcp" if svc.startswith("gcp-") else ("azure" if svc.startswith("az-") else "aws")
+                r_, op_ = _obsc.extract_resource(cloud, svc, method, path, lh, bytes(bb))
+                _obsc.record(self.obs, cloud, svc, r_, op_, int(res.get("status", 0)), (_t.time() - t0) * 1000.0,
+                             traceparent=lh.get("traceparent", ""), nbytes_in=len(bb), nbytes_out=len(res.get("body") or b""))
+        except Exception:
+            pass
+        return res
+
+    def _handle_inner(self, method, path, query, headers, body):
         """Route ONE native-wire request. Returns {status, headers, body(bytes)}.
         SYNC services only — the RDS Data API goes through ahandle()."""
         lheaders = _lower_headers(headers)

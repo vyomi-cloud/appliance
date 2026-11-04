@@ -743,10 +743,16 @@ METRICS_API_VERSION = "2018-01-01"
 STORAGE_METRIC_UNITS = {
     "UsedCapacity": "Bytes", "BlobCount": "Count", "ContainerCount": "Count",
     "Transactions": "Count", "Ingress": "Bytes", "Egress": "Bytes",
+    # MEASURED from real blob-service requests (core/observability_core): no traffic -> no datapoints, never invented
+    "Availability": "Percent", "SuccessE2ELatency": "MilliSeconds", "SuccessServerLatency": "MilliSeconds", "ClientOtherError": "Count",
 }
+_REQUEST_DERIVED = ("Availability", "SuccessE2ELatency", "SuccessServerLatency", "ClientOtherError")
+request_telemetry = None   # optional hook: (account_name) -> {metric: value} of request-derived storage metrics (set by the substrate)
 _STORAGE_METRIC_FIELD = {
     "UsedCapacity": "usedCapacity", "BlobCount": "blobCount", "ContainerCount": "containerCount",
     "Transactions": "transactions", "Ingress": "ingress", "Egress": "egress",
+    "Availability": "Availability", "SuccessE2ELatency": "SuccessE2ELatency", "SuccessServerLatency": "SuccessServerLatency",
+    "ClientOtherError": "ClientOtherError",
 }
 _STORAGE_TYPE = "microsoft.storage/storageaccounts"
 
@@ -886,6 +892,8 @@ def get_metrics(state, scope_rid, query, blob_store=None, rg_exists=False):
             point["maximum"] = c
         data.append(point)
     stats = blob_engine.account_metrics(blob_store, acct) if any(n.lower() in storage_by_lower for n in names) else None
+    if stats is not None:
+        stats = _with_request_stats(stats, acct)
     value = []
     for n in names:
         if n.lower() in storage_by_lower:
@@ -907,7 +915,11 @@ def get_metrics(state, scope_rid, query, blob_store=None, rg_exists=False):
 def _storage_metric_entry(scope_rid, name, stats, aggs, now):
     """One storage metric: a single current-value point (no persisted history), every requested
     aggregation carrying that same real value."""
-    v = stats[_STORAGE_METRIC_FIELD[name]]
+    v = stats.get(_STORAGE_METRIC_FIELD[name])
+    if v is None:   # request-derived metric with no measured traffic: a real, empty series
+        return {"id": f"{scope_rid}/providers/{NAMESPACE}/metrics/{name}", "type": "Microsoft.Insights/metrics",
+                "name": {"value": name, "localizedValue": name}, "unit": STORAGE_METRIC_UNITS[name],
+                "timeseries": [{"metadatavalues": [], "data": []}]}
     point = {"timeStamp": now.strftime("%Y-%m-%dT%H:%M:%SZ")}
     for a in aggs:
         point[a.lower()] = v
@@ -918,14 +930,24 @@ def _storage_metric_entry(scope_rid, name, stats, aggs, now):
     }
 
 
+def _with_request_stats(stats: dict, acct: str) -> dict:
+    hook = request_telemetry
+    if hook is None:
+        return stats
+    try:
+        return {**stats, **(hook(acct) or {})}
+    except Exception:
+        return stats
+
+
 def get_storage_metrics(blob_store, acct: str, query: dict, scope_rid: str = "") -> dict:
     """`blob_store`: core/azure_blob_core.AzureBlobStore. `acct`: the storage account's
     (lower-cased) name. Storage metrics only (no ARM state needed) — a single current-value data
     point per requested metric; unknown names are skipped. The ARM `metrics` endpoint goes
     through get_metrics, which also validates names and mixes in ActivityOperations."""
     query = query or {}
-    names = [n for n in (query.get("metricnames") or "").split(",") if n] or list(STORAGE_METRIC_UNITS)
-    stats = blob_engine.account_metrics(blob_store, acct)
+    names = [n for n in (query.get("metricnames") or "").split(",") if n] or [n for n in STORAGE_METRIC_UNITS if n not in _REQUEST_DERIVED]
+    stats = _with_request_stats(blob_engine.account_metrics(blob_store, acct), acct)
     now = datetime.now(timezone.utc)
     value = [_storage_metric_entry(scope_rid, n, stats, ["Total"], now)
              for n in names if n in _STORAGE_METRIC_FIELD]
