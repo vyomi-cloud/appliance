@@ -153,6 +153,18 @@ def run():
     _check("gateway link needs api", put(ap + "/gateways/gw1/apis/nope", {}, AQ2)["status"] == 404)
     _check("gateway link created", put(ap + "/gateways/gw1/apis/echo", {}, AQ2)["status"] in (200, 201))
     _check("gateway apis listed", len(get(ap + "/gateways/gw1/apis", AQ2)["body"]["value"]) == 1)
+    # ── SQL Data Discovery & Classification labels
+    SQ2 = {"api-version": "2020-11-01-preview"}
+    sqs = f"{RG}/providers/Microsoft.Sql/servers/cxsql"
+    put(sqs, {"location": "eastus", "properties": {"administratorLogin": "u", "administratorLoginPassword": "Pass1234!x"}}, SQ2)
+    lab = sqs + "/databases/d1/schemas/dbo/tables/Customer/columns/Email/sensitivityLabels/current"
+    _check("label needs database", put(lab, {"properties": {"labelName": "Confidential"}}, SQ2)["status"] == 404)
+    put(sqs + "/databases/d1", {"location": "eastus"}, SQ2)
+    _check("label rank validated", put(lab, {"properties": {"labelName": "Confidential", "rank": "Huge"}}, SQ2)["status"] == 400)
+    _check("label needs name or type", put(lab, {"properties": {"rank": "High"}}, SQ2)["status"] == 400)
+    r = put(lab, {"properties": {"labelName": "Confidential", "informationType": "Contact Info", "rank": "Medium"}}, SQ2)
+    _check("label stored", r["status"] in (200, 201) and get(lab, SQ2)["body"]["properties"]["rank"] == "Medium")
+
     # ── API Management soft-delete + restore
     DS = f"/subscriptions/{SUB}/providers/Microsoft.ApiManagement"
     _check("apim delete", a.handle("DELETE", ap, AQ2)["status"] in (200, 202, 204))

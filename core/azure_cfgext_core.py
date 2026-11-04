@@ -35,6 +35,8 @@ COSMOS_SVC = "microsoft.documentdb/databaseaccounts/services"
 SBNS = "microsoft.servicebus/namespaces"
 SB_NETRULES = "microsoft.servicebus/namespaces/networkrulesets"
 APPCFG = "microsoft.appconfiguration/configurationstores"
+SQL_LABEL = "microsoft.sql/servers/databases/schemas/tables/columns/sensitivitylabels"
+SQL_RANKS = ("None", "Low", "Medium", "High", "Critical")
 APIM = "microsoft.apimanagement/service"
 APIM_DELETED = "microsoft.apimanagement/deletedservices"
 APIM_GW_API = "microsoft.apimanagement/service/gateways/apis"
@@ -80,7 +82,7 @@ def _err(status: int, code: str, message: str) -> dict:
 
 def handles(full_type: str) -> bool:
     ft = full_type.lower()
-    return ft in (AKS, COSMOS, COSMOS_SVC, SBNS, SB_NETRULES, VNET, APIM_GW_API, APIM) or ft.endswith("/providers/extensions")
+    return ft in (AKS, COSMOS, COSMOS_SVC, SBNS, SB_NETRULES, VNET, APIM_GW_API, APIM, SQL_LABEL) or ft.endswith("/providers/extensions")
 
 
 def _merged(existing, payload) -> dict:
@@ -144,6 +146,27 @@ def validate(state: dict, full_type: str, rid: str, payload: dict, existing: dic
         return _validate_gw_api(state, rid)
     if ft == APIM:
         return _validate_apim_soft_deleted(state, rid, payload, existing)
+    if ft == SQL_LABEL:
+        return _validate_sql_label(state, rid, payload)
+    return None
+
+
+def _validate_sql_label(state: dict, rid: str, payload: dict):
+    """Data Discovery & Classification: a column sensitivity label ('current'). The database must exist; rank is one of
+    None/Low/Medium/High/Critical; a label name or an information type is required (strings, at most 128 characters)."""
+    db_id = rid[: rid.lower().index("/schemas/")]
+    if state.get(db_id.lower()) is None:
+        return _err(404, "ResourceNotFound", f"The database '{db_id.rsplit('/', 1)[-1]}' was not found.")
+    if rid.rsplit("/", 1)[-1] != "current":
+        return _err(400, "InvalidParameter", "The sensitivity label name must be 'current'.")
+    p = (payload or {}).get("properties") or {}
+    if not (p.get("labelName") or p.get("informationType")):
+        return _err(400, "InvalidParameter", "A sensitivity label needs a labelName or an informationType.")
+    for k in ("labelName", "labelId", "informationType", "informationTypeId"):
+        if p.get(k) is not None and (not isinstance(p[k], str) or len(p[k]) > 128):
+            return _err(400, "InvalidParameter", f"{k} must be a string of at most 128 characters.")
+    if p.get("rank") is not None and p["rank"] not in SQL_RANKS:
+        return _err(400, "InvalidParameter", f"rank must be one of {', '.join(SQL_RANKS)}.")
     return None
 
 
@@ -442,6 +465,11 @@ def after_put(state: dict, rec: dict, payload: dict, prev: dict | None = None) -
                 p.setdefault(k, v)
             p.pop("restore", None)
             state.pop(key, None)
+    elif ft == SQL_LABEL:
+        p.setdefault("rank", "None")
+        p["isDisabled"] = bool(p.get("isDisabled", False))
+        p.setdefault("managedBy", "Vyomi")
+        rec["type"] = "Microsoft.Sql/servers/databases/schemas/tables/columns/sensitivityLabels"
     elif ft == SB_NETRULES:
         p.setdefault("defaultAction", "Allow")
         p.setdefault("publicNetworkAccess", "Enabled")

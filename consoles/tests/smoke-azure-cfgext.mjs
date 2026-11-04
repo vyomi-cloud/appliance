@@ -142,6 +142,20 @@ try {
   await page.waitForTimeout(1500);
   check("APIM restored with its API", json(await arm("GET", P("ApiManagement", "service", M) + "/apis/echo", null, "2022-08-01")).name === "echo");
 
+  // ── SQL Data Discovery & Classification
+  const SS = `cxsql${n}`;
+  await arm("PUT", P("Sql", "servers", SS), { location: "eastus", properties: { administratorLogin: "sqladmin", administratorLoginPassword: "Pass1234!xyz" } }, "2023-08-01");
+  await arm("PUT", P("Sql", "servers", SS) + "/databases/db1", { location: "eastus" }, "2023-08-01");
+  await wire(`/azure-sql/servers/${SS}`, { method: "PUT", headers: { "content-type": "application/json" }, body: "{}" });
+  await wire(`/azure-sql/servers/${SS}/databases/db1`, { method: "PUT", headers: { "content-type": "application/json" }, body: "{}" });
+  await wire(`/azure-sql/servers/${SS}/databases/db1/query`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ sql: "CREATE TABLE Customer (CustomerID INTEGER, EmailAddress TEXT, Notes TEXT)" }) });
+  await page.goto(UI + `#/sql/${RG}/${SS}/db1/datadiscovery`);
+  await page.locator("tr", { hasText: "EmailAddress" }).waitFor({ timeout: 15000 });
+  await page.getByRole("button", { name: "Accept all recommendations" }).click();
+  await page.locator("tr", { hasText: "EmailAddress" }).getByText("Medium").waitFor({ timeout: 10000 }).then(() => check("recommended classification applied", true), () => check("recommended classification applied", false));
+  check("label is an ARM child", json(await arm("GET", P("Sql", "servers", SS) + "/databases/db1/schemas/dbo/tables/Customer/columns/EmailAddress/sensitivityLabels/current", null, "2020-11-01-preview")).properties?.informationType === "Contact Info");
+  await noNS("SQL data discovery");
+
   // ── App Configuration
   const A = `cxappcfg${n}`;
   await arm("PUT", P("AppConfiguration", "configurationStores", A), { location: "eastus", sku: { name: "standard" } }, "2024-05-01");

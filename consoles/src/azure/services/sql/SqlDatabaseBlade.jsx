@@ -3,7 +3,7 @@
  * encryption, Identity, Automatic tuning, Performance recommendations and Export template
  * are backed by native ARM / the azure-sql data-plane wire; everything else in the menu is
  * an honest NotSimulated panel. */
-import { DataMasking, Ledger, Maintenance } from "./SqlSecurityPages.jsx";
+import { DataDiscovery, DataMasking, Ledger, Maintenance } from "./SqlSecurityPages.jsx";
 import { UserAssignedIdentities } from "../../kit/UserAssignedIdentities.jsx";
 import { useEffect, useState } from "react";
 import {
@@ -102,6 +102,7 @@ export default function SqlDatabaseBlade({ params }) {
       locks: () => <Locks a={a} />,
       activitylog: () => <SharedActivityLog scope={a.id} name={a.name} />,
       tde: () => <Tde a={a} reload={reload} />,
+      datadiscovery: () => <DataDiscovery a={a} />,
       datamasking: () => <DataMasking a={a} />,
       ledger: () => <Ledger a={a} />,
       maintenance: () => <Maintenance a={a} />,
