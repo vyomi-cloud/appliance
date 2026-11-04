@@ -120,10 +120,10 @@
     "tests": ["tests/conformance/test_azure_monitor_core.py"]
   },
   "azure.servicebus.namespace.monitoring": {
-    "title": "Insights workbook and Metrics charts on a namespace",
-    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "title": "Insights and Metrics charts on a namespace",
+    "level": { "nano": "limited", "offline": "limited" },
     "limitations": [
-      "No metric time-series storage/emission pipeline exists yet in the shared engine — metric values (e.g. incoming/outgoing message counts) aren't sampled or retained over time anywhere in Vyomi, only read as a live point-in-time count (see the Overview/Queues/Topics message-count columns); charting history requires that pipeline to land first. Diagnostic settings and Alert rules on this namespace ARE real (azure.servicebus.namespace.diagnosticsettings / .alerts); Logs is real too (azure.servicebus.namespace.logs). The Insights workbook itself is pre-authored Microsoft content (Microsoft.Insights/workbooks), not user data, and is not modeled."
+      "Insights and Metrics are the shared per-resource panels (azure.common.resource_monitoring): the only metric is the namespace's own Activity-log operation count, charted over the last 24 hours. Message-count, throttling and size metrics are not sampled or retained over time anywhere in Vyomi (only the live point-in-time counts on the Overview/Queues/Topics pages). The pre-authored Microsoft Insights workbook is not modelled."
     ]
   },
   "azure.servicebus.namespace.logs": {

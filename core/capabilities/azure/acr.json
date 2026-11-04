@@ -80,7 +80,7 @@
   "title": "Insights, Alerts, Metrics, Diagnostic settings and Logs",
   "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "Diagnostic settings (Microsoft.Insights/diagnosticSettings) is a real ARM extension resource scoped to this registry: logs/metrics are stored and validated exactly as the real resource requires, but never actually delivered to the configured destination (workspace, storage account or event hub) — there is no agent/telemetry pipeline. Insights, Alerts, Metrics and Logs for container registries remain an honest gap."
+   "Diagnostic settings (Microsoft.Insights/diagnosticSettings) is a real ARM extension resource scoped to this registry: logs/metrics are stored and validated exactly as the real resource requires, but never actually delivered to the configured destination (workspace, storage account or event hub) — there is no agent/telemetry pipeline. Insights, Alerts, Metrics and Logs are the shared per-resource panels (azure.common.resource_monitoring): the only metric is the registry's own Activity-log operation count, there is no pull/push or storage telemetry."
   ],
   "tests": ["tests/conformance/test_azure_monitor_core.py", "tests/conformance/test_azure_arm_core.py"]
  },
