@@ -415,7 +415,7 @@
  "azure.functionapp.bindingseditor": {
   "title": "Function Integration (bindings editor)",
   "level": { "nano": "limited", "offline": "limited" },
-  "limitations": ["Bindings are stored as the function's function.json and returned by the API; only the HTTP trigger/return binding is executed, queue/blob/timer/service bus triggers never fire and output bindings write nothing."],
+  "limitations": ["Bindings are stored as the function's function.json and returned by the API; the HTTP trigger and the Cosmos DB change-feed trigger (cosmosDBTrigger, run inline on each write) are executed; queue/blob/timer/service bus triggers never fire and output bindings write nothing."],
   "api": ["sites/functions CreateOrUpdate (config.bindings)", "sites/functions Get"],
   "tests": ["tests/conformance/test_azure_webapp_ops.py"]
  },
