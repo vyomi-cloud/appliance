@@ -1,6 +1,7 @@
 /* Route 53 Resolver DNS Firewall pages over the native JSON wire (core/dnsfw_core.py). */
 import Box from "@cloudscape-design/components/box";
 import Table from "@cloudscape-design/components/table";
+import SimPanel from "../../kit/SimPanel.jsx";
 import { ResourceList } from "./Crud.jsx";
 import * as df from "./apiDnsFw.js";
 import * as x from "./apiExtras.js";
@@ -24,6 +25,10 @@ export const DnsFirewallRuleGroups = () => (
     del={{ label: "Delete", type: "rule group", run: (r) => df.deleteRuleGroup(r) }}
     detail={(g) => [
       { id: "rules", label: "Rules", content: <Sub title="Rules" empty="No rules" items={g.Rules} columns={[col("p", "Priority", (r) => r.Priority), col("n", "Name", (r) => r.Name), col("l", "Domain list", (r) => r.FirewallDomainListId), col("a", "Action", (r) => r.Action), col("b", "Block response", (r) => r.BlockResponse || "-")]} /> },
+      { id: "resolve", label: "Resolve query", content: <SimPanel key={g.Id} title="Resolve query" testId="dnsfw" description="What the VPC's Resolver answers for one DNS query given the associated DNS Firewall rule groups. Simulator verb: ResolveDnsQuery."
+        fields={[{ key: "vpc", label: "VPC", default: g.Assocs[0]?.VpcId || "" }, { key: "name", label: "Domain name", default: "example.com" }, { key: "type", label: "Query type", default: "A", options: ["A", "AAAA", "CNAME", "MX", "TXT"].map((m) => ({ value: m, label: m })) }]}
+        run={(v) => df.resolveQuery(v.vpc, v.name, v.type)}
+        verdict={(r) => [r.Action === "BLOCK" ? "warning" : "success", r.Action ? `${r.Action} by rule ${r.Rule} (${r.RuleGroup}) - Resolver answers ${r.Resolver}${r.OverrideDomain ? ` -> ${r.OverrideDomain}` : ""}` : `No rule matched - Resolver answers normally (${r.Resolver})`]} /> },
       { id: "vpcs", label: "Associated VPCs", content: <Sub title="Associated VPCs" empty="Not associated with any VPC" items={g.Assocs} columns={[col("v", "VPC", (r) => r.VpcId), col("n", "Association", (r) => r.Name), col("p", "Priority", (r) => r.Priority), col("s", "Status", (r) => r.Status)]} /> },
     ]} />
 );
