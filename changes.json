@@ -1,61 +1,282 @@
 {
- "at": "2026-11-04T16:31:05+00:00",
+ "at": "2026-11-04T22:07:06+00:00",
  "baseline": false,
  "changes": [
   {
-   "cloud": "gcp",
-   "service": "sqladmin/v1beta4",
-   "kind": "operation-flapping",
-   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.start:fd389969f2ca",
-   "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.start changed",
+   "cloud": "aws",
+   "service": "dynamodb",
+   "kind": "operation-added",
+   "key": "aws:dynamodb:CancelBulkOperation:added",
+   "title": "AWS dynamodb: new operation CancelBulkOperation",
    "detail": {
-    "request": {
-     "was": "SqlWorkloadCapturesStartRequest",
-     "now": "WorkloadCapturesStartRequest"
+    "in": [
+     "BulkOperationArn"
+    ],
+    "required": [
+     "BulkOperationArn"
+    ],
+    "out": [
+     "BulkOperationArn",
+     "BulkOperationStatus"
+    ],
+    "http": "POST",
+    "deprecated": false
+   },
+   "actionable": true
+  },
+  {
+   "cloud": "aws",
+   "service": "dynamodb",
+   "kind": "operation-added",
+   "key": "aws:dynamodb:DescribeBulkOperation:added",
+   "title": "AWS dynamodb: new operation DescribeBulkOperation",
+   "detail": {
+    "in": [
+     "BulkOperationArn"
+    ],
+    "required": [
+     "BulkOperationArn"
+    ],
+    "out": [
+     "BulkOperationDescription"
+    ],
+    "http": "POST",
+    "deprecated": false
+   },
+   "actionable": true
+  },
+  {
+   "cloud": "aws",
+   "service": "dynamodb",
+   "kind": "operation-added",
+   "key": "aws:dynamodb:ListBulkOperations:added",
+   "title": "AWS dynamodb: new operation ListBulkOperations",
+   "detail": {
+    "in": [
+     "MaxResults",
+     "NextToken"
+    ],
+    "required": [],
+    "out": [
+     "BulkOperationsSummaryList",
+     "NextToken"
+    ],
+    "http": "POST",
+    "deprecated": false
+   },
+   "actionable": true
+  },
+  {
+   "cloud": "aws",
+   "service": "dynamodb",
+   "kind": "operation-added",
+   "key": "aws:dynamodb:StartBulkPutItems:added",
+   "title": "AWS dynamodb: new operation StartBulkPutItems",
+   "detail": {
+    "in": [
+     "ClientToken",
+     "InputS3Configuration",
+     "MaxWriteRequestUnits",
+     "OutputS3Configuration",
+     "PerformanceTier",
+     "TableName"
+    ],
+    "required": [
+     "InputS3Configuration",
+     "OutputS3Configuration",
+     "TableName"
+    ],
+    "out": [
+     "BulkOperationDescription"
+    ],
+    "http": "POST",
+    "deprecated": false
+   },
+   "actionable": true
+  },
+  {
+   "cloud": "aws",
+   "service": "rds",
+   "kind": "operation-changed",
+   "key": "aws:rds:CopyDBSnapshot:651e161fc04a",
+   "title": "AWS rds: operation CopyDBSnapshot changed",
+   "detail": {
+    "in": {
+     "was": [
+      "CopyOptionGroup",
+      "CopyTags",
+      "KmsKeyId",
+      "OptionGroupName",
+      "PreSignedUrl",
+      "SnapshotAvailabilityZone",
+      "SnapshotTarget",
+      "SourceDBSnapshotIdentifier",
+      "Tags",
+      "TargetCustomAvailabilityZone",
+      "TargetDBSnapshotIdentifier"
+     ],
+     "now": [
+      "CopyOptionGroup",
+      "CopyTags",
+      "KmsKeyId",
+      "OptionGroupName",
+      "PreSignedUrl",
+      "SnapshotAvailabilityZone",
+      "SnapshotTarget",
+      "SourceDBSnapshotIdentifier",
+      "TagSpecifications",
+      "Tags",
+      "TargetCustomAvailabilityZone",
+      "TargetDBSnapshotIdentifier"
+     ]
     }
    },
    "actionable": false
   },
   {
-   "cloud": "gcp",
-   "service": "sqladmin/v1beta4",
-   "kind": "operation-flapping",
-   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.startReplay:f421c3d61dc0",
-   "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.startReplay changed",
-   "detail": {
-    "request": {
-     "was": "SqlWorkloadCapturesStartReplayRequest",
-     "now": "WorkloadCapturesStartReplayRequest"
-    }
-   },
+   "cloud": "sdk",
+   "service": "pypi:boto3",
+   "kind": "release",
+   "key": "ver:pypi:boto3:1.43.124",
+   "title": "pypi:boto3: 1.43.123 \u2192 1.43.124",
+   "actionable": false
+  },
+  {
+   "cloud": "sdk",
+   "service": "pypi:botocore",
+   "kind": "release",
+   "key": "ver:pypi:botocore:1.43.124",
+   "title": "pypi:botocore: 1.43.123 \u2192 1.43.124",
+   "actionable": false
+  },
+  {
+   "cloud": "sdk",
+   "service": "go:github.com/aws/aws-sdk-go-v2/service/s3",
+   "kind": "release",
+   "key": "ver:go:github.com/aws/aws-sdk-go-v2/service/s3:v1.114.7",
+   "title": "go:github.com/aws/aws-sdk-go-v2/service/s3: v1.114.6 \u2192 v1.114.7",
+   "actionable": false
+  },
+  {
+   "cloud": "sdk",
+   "service": "go:github.com/aws/aws-sdk-go-v2/service/dynamodb",
+   "kind": "release",
+   "key": "ver:go:github.com/aws/aws-sdk-go-v2/service/dynamodb:v1.73.0",
+   "title": "go:github.com/aws/aws-sdk-go-v2/service/dynamodb: v1.72.3 \u2192 v1.73.0",
+   "actionable": false
+  },
+  {
+   "cloud": "sdk",
+   "service": "go:github.com/aws/aws-sdk-go-v2/service/sqs",
+   "kind": "release",
+   "key": "ver:go:github.com/aws/aws-sdk-go-v2/service/sqs:v1.52.9",
+   "title": "go:github.com/aws/aws-sdk-go-v2/service/sqs: v1.52.8 \u2192 v1.52.9",
+   "actionable": false
+  },
+  {
+   "cloud": "sdk",
+   "service": "go:cloud.google.com/go/pubsub",
+   "kind": "release",
+   "key": "ver:go:cloud.google.com/go/pubsub:v1.52.0",
+   "title": "go:cloud.google.com/go/pubsub: v1.51.1 \u2192 v1.52.0",
+   "actionable": false
+  },
+  {
+   "cloud": "sdk",
+   "service": "cli:aws",
+   "kind": "release",
+   "key": "ver:cli:aws:2.39.4",
+   "title": "cli:aws: 2.39.3 \u2192 2.39.4",
+   "actionable": false
+  },
+  {
+   "cloud": "aws",
+   "service": "AWS Lambda, CloudWatch",
+   "kind": "announcement",
+   "key": "feed:aws:176bc503f3bf",
+   "title": "Amazon DocumentDB (with MongoDB compatibility) is now available in the Asia Pacific (Taipei) and Asia Pacific (New Zealand) Regions",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-documentdb-mongodb-compatibility-asia-pacific-taipei-new-zealand-regions/",
+   "detail": "Amazon DocumentDB (with MongoDB compatibility) is now available in the Asia Pacific (Taipei) and Asia Pacific (New Zealand) Regions, adding to the list of available Regions where you can use Amazon DocumentDB. Amazon DocumentDB is a fully managed, native JSON database that makes it simple and cost-effective to operate critical document workloads at virtually any scale without managing infrastructure. Amazon DocumentDB is designed to give you the scalability and durability you need when operating mission-critical MongoDB workloads. Storage scales automatically up to 128 TiB without any impact t",
+   "actionable": false
+  },
+  {
+   "cloud": "aws",
+   "service": "Amazon RDS",
+   "kind": "announcement",
+   "key": "feed:aws:7631f8cef822",
+   "title": "Amazon RDS for Oracle now supports copying option groups during cross-Region snapshot copy",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-rds-oracle-cross-region-snapshot-copy-option-group/",
+   "detail": "Amazon RDS for Oracle now lets you copy the option group associated with a DB snapshot when you copy that snapshot to another AWS Region. Amazon RDS for Oracle uses option groups to enable and configure features that make it simple to manage your databases. Option groups are specific to the AWS Region where you create them. Previously, customers wanting to replicate RDS backups that had option groups to a different AWS Region had to copy the snapshot without the option group and then recreate the option group in the target Region before restoring the snapshot. Now, you no longer need to separa",
+   "actionable": false
+  },
+  {
+   "cloud": "aws",
+   "service": "Amazon EC2, Amazon VPC",
+   "kind": "announcement",
+   "key": "feed:aws:8efbb3dfc69a",
+   "title": "Amazon EC2 and VPC now display related resources for all resource types",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/ec2-vpc-related-resources-all-types/",
+   "detail": "Amazon Elastic Compute Cloud (Amazon EC2), Amazon Virtual Private Cloud (Amazon VPC), and AWS Global View now display related resources for all resource types in their consoles. Previously, only security groups had an option to view related resources. Now you can see relationships for all EC2 and VPC resource types, including EC2 instances, Amazon Elastic Block Store (Amazon EBS) volumes, Launch Templates, Auto Scaling groups, subnets, route tables, and more. The Related Resources tab has also been moved to the console toolbar for easier access. This capability helps you better understand your",
+   "actionable": false
+  },
+  {
+   "cloud": "aws",
+   "service": "Identity and Access Management",
+   "kind": "announcement",
+   "key": "feed:aws:4f4a6c21e949",
+   "title": "AWS DataSync Enhanced mode supports OpenID Connect (OIDC) for Google Cloud and Microsoft Azure",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/datasync-enhanced-oidc-google-azure/",
+   "detail": "AWS DataSync Enhanced mode now supports OpenID Connect (OIDC) authentication for Google Cloud Storage and Microsoft Azure Blob Storage locations. DataSync uses an AWS Identity and Access Management (IAM) role to get short-lived credentials from Google Cloud or Microsoft Entra ID and refreshes them automatically so your transfers run without interruption. You can now use DataSync to access your Google Cloud Storage and Azure Blob Storage without long-term credentials such as hash-based message authentication code (HMAC) keys or shared access signature (SAS) tokens. This lets you move data acros",
+   "actionable": false
+  },
+  {
+   "cloud": "aws",
+   "service": "Amazon EC2",
+   "kind": "announcement",
+   "key": "feed:aws:cdea1cc1aef2",
+   "title": "New features for Amazon EC2 Capacity Manager",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/ec2-capacity-manager-supportability-and-fulfillment/",
+   "detail": "Amazon EC2 Capacity Manager now offers real-time supportability checks and capacity fulfillment metrics. Real-time supportability checks help customers find capacity by scoring how well each instance type and Availability Zone can support a request, without launching or reserving instances. Capacity fulfillment metrics show how much capacity was delivered against the amount requested. Global enterprises that run thousands of workloads across hundreds of accounts often spread each one across multiple instance types and Availability Zones, giving Amazon EC2 more options to fulfill each request. ",
+   "actionable": false
+  },
+  {
+   "cloud": "aws",
+   "service": "CloudWatch",
+   "kind": "announcement",
+   "key": "feed:aws:febd5ce14cd3",
+   "title": "Amazon CloudWatch now supports API keys for OpenTelemetry traces",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-cloudwatch-api-keys-opentelemetry/",
+   "detail": "Amazon CloudWatch now supports bearer token authentication, using API keys (bearer tokens), as an additional option for sending OpenTelemetry traces to the AWS X-Ray OpenTelemetry Protocol (OTLP) traces endpoint. Any OTLP/HTTP client that can set an Authorization header, including the OpenTelemetry Collector and OpenTelemetry SDK exporters, can now authenticate with a bearer token instead of signing requests with AWS Signature Version 4 (SigV4). This helps teams send traces from workloads that can't use the AWS SDK or short-term credentials, such as applications running on premises or in other",
    "actionable": false
   },
   {
    "cloud": "gcp",
-   "service": "sqladmin/v1beta4",
-   "kind": "operation-flapping",
-   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.stop:c8c00d855f73",
-   "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.stop changed",
-   "detail": {
-    "request": {
-     "was": "SqlWorkloadCapturesStopRequest",
-     "now": "WorkloadCapturesStopRequest"
-    }
-   },
+   "service": "Virtual Private Cloud",
+   "kind": "announcement",
+   "key": "feed:gcp:80e3bcdf96cd",
+   "title": "Virtual Private Cloud: Feature (November 03, 2026)",
+   "link": "https://docs.cloud.google.com/release-notes#November_03_2026",
+   "detail": "General Availability : VPC Flow Logs supports logging for IPv6 encapsulation flows. For more information, see IpConnection field format .",
    "actionable": false
   },
   {
-   "cloud": "gcp",
-   "service": "sqladmin/v1beta4",
-   "kind": "operation-flapping",
-   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.stopReplay:acd5b7e919b1",
-   "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.stopReplay changed",
-   "detail": {
-    "request": {
-     "was": "SqlWorkloadCapturesStopReplayRequest",
-     "now": "WorkloadCapturesStopReplayRequest"
-    }
-   },
+   "cloud": "azure",
+   "service": "Azure Monitor",
+   "kind": "lifecycle",
+   "key": "feed:azure:489300621de9",
+   "title": "Retirement: Transition to Entra ID (formerly known as Azure AD) to query data from Azure Monitor application insights by March 31, 2027",
+   "link": "https://azure.microsoft.com/updates?id=transition-to-azure-ad-to-query-data-from-azure-monitor-application-insights-by-31-march-2026",
+   "detail": "*Note: We have extended the retirement date to March 31, 2027.On March 31, 2027 API keys used query application insights will be retired. You'll need to transition to Microsoft Entra ID (formerly known as Azure AD) which provides all the functionality of",
+   "actionable": true
+  },
+  {
+   "cloud": "azure",
+   "service": "Virtual Machines",
+   "kind": "announcement",
+   "key": "feed:azure:3300031655ae",
+   "title": "[In preview] Public Preview: Multi-disk crash-consistent VM restore points for Premium SSD v2 and Ultra Disks on VMs with SCSI disk controller",
+   "link": "https://azure.microsoft.com/updates?id=579162",
+   "detail": "Multi-disk crash-consistent restore points for Azure virtual machines with Premium SSD v2 and Ultra data disks are now available in public preview on VMs with SCSI disk controllers. You can use this to capture the agent-less crash consistent restore point",
    "actionable": false
   }
  ],
