@@ -260,3 +260,9 @@ export const connectionCheck = async (location, vmId, destinationAddress, destin
 const SEC_API = "2021-06-01";
 export const listVmAssessments = async (vmId) =>
   (await restJson("GET", `${vmId}/providers/Microsoft.Security/assessments`, { query: { "api-version": SEC_API } })).value || [];
+
+// ── Load balancers (Microsoft.Network/loadBalancers, core/azure_lb_core.py) ──────────────────
+const LB_ARM = armType("Microsoft.Network", "loadBalancers", "2023-11-01");
+export const listLoadBalancers = async () => (await LB_ARM.list()).map((l) => ({ ...l, resourceGroup: parseId(l.id).resourceGroup }));
+export const putLoadBalancer = (rg, name, body) => LB_ARM.put(rg, name, body);
+export const deleteLoadBalancer = (rg, name) => LB_ARM.remove(rg, name);

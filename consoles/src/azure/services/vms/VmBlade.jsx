@@ -78,13 +78,12 @@ const LABEL = Object.fromEntries(MENU.flatMap((m) => (m.group ? m.items : [m])).
 // third-party service) — never a disabled skeleton of the real UI. A few still share the
 // bundled azure.vms.tools capability id for the orchestrator's own bookkeeping.
 const GAP_CAP = {
-  bastion: "azure.vms.tools", loadbalancing: "azure.vms.tools", asgs: "azure.vms.tools", networkmanager: "azure.vms.tools",
+  bastion: "azure.vms.tools", asgs: "azure.vms.tools", networkmanager: "azure.vms.tools",
   extensions: "azure.vms.tools", disasterrecovery: "azure.vms.tools", updates: "azure.vms.tools", tasks: "azure.vms.tools",
   bootdiagnostics: "azure.vms.tools", perfdiagnostics: "azure.vms.tools", serialconsole: "azure.vms.tools", support: "azure.vms.tools",
 };
 const NOT_SIMULATED_REASON = {
   bastion: "Azure Bastion tunnels a browser session to the guest's own network stack over a private network path. Vyomi's virtual machines have no guest network stack to tunnel to — only the resource's own metadata exists in-browser.",
-  loadbalancing: "Distributing real traffic across two virtual machines needs a live network path forwarding real packets between them. A browser/WASM simulator has no virtual network device to carry that traffic — and Microsoft.Network/loadBalancers is not a resource type this lens's Networking service models.",
   networkmanager: "Network Manager centrally pushes connectivity/security configuration across a real multi-VNet packet path. There is no virtual network stack in a browser/WASM simulator for that configuration to actually take effect on.",
   extensions: "Installing a VM extension means a real guest agent downloading and executing a package inside the guest OS. Vyomi's virtual machines are metadata-only — no guest OS process exists in-browser to install anything into.",
   disasterrecovery: "Azure Site Recovery continuously replicates this VM's disks, block by block, to a second region and fails over to that replica on demand. Vyomi models one logical copy of each resource — there is no second region-local replica for a failover to cut over to.",
@@ -124,6 +123,7 @@ export default function VmBlade({ params }) {
       autoshutdown: () => <AutoShutdown a={a} reload={reload} />,
       connect: () => <Connect a={a} />,
       networksettings: () => <NetworkSettings a={a} />,
+      loadbalancing: () => <CapabilityContainer id="azure.vms.loadbalancing" title={`${a.name} | Load balancing`}><VmLoadBalancing a={a} /></CapabilityContainer>,
       asgs: () => <CapabilityContainer id="azure.vms.asgs" title={`${a.name} | Application security groups`}><VmAsgs a={a} /></CapabilityContainer>,
       runcommand: () => <RunCommand a={a} reload={reload} />,
       exporttemplate: () => <SharedExportTemplate id={a.id} name={a.name} resourceGroup={a.resourceGroup} />,
@@ -817,6 +817,64 @@ function Connect({ a }) {
 
 // ── Application security groups: real Microsoft.Network/applicationSecurityGroups, joined through the NIC's
 // ip configuration (validated in core/azure_cfgext_core.py; netsim evaluates rules that name them).
+/* Load balancing: the load balancers whose backend pool contains this VM's NIC, add/remove membership, and a quick-create. Backend state is
+ * derived from the VM's power state only - no health probe packet is sent and no traffic is balanced (see azure.vms.loadbalancing). */
+function VmLoadBalancing({ a }) {
+  const notify = useNotify();
+  const nicId = nicIdOf(a);
+  const lbs = useAsync(() => api.listLoadBalancers(), [a.id]);
+  const nic = useAsync(() => (nicId ? api.getNic(parseId(nicId).resourceGroup, parseId(nicId).name) : Promise.resolve(null)), [nicId]);
+  const [sel, setSel] = useState(""), [nm, setNm] = useState(""), [fp, setFp] = useState("80"), [bp, setBp] = useState("80");
+  if (!nicId) return <div className="vy-muted" style={{ padding: 16 }}>This virtual machine has no network interface.</div>;
+  const ipc = nic.data?.properties?.ipConfigurations?.[0];
+  const mine = new Set((ipc?.properties?.loadBalancerBackendAddressPools || []).map((p) => p.id.toLowerCase()));
+  const running = statusOf(a) === "Running";
+  const writePools = async (ids) => {
+    const body = JSON.parse(JSON.stringify(nic.data)); body.properties.ipConfigurations[0].properties.loadBalancerBackendAddressPools = ids.map((id) => ({ id }));
+    try { await api.putNic(parseId(nicId).resourceGroup, parseId(nicId).name, body); nic.reload(); lbs.reload(); }
+    catch (e) { notify.error(e, "Updating the backend pool membership failed"); }
+  };
+  const create = async () => {
+    const rg = a.resourceGroup, base = `/subscriptions/${parseId(a.id).subscription}/resourceGroups/${rg}/providers/Microsoft.Network`;
+    try {
+      await api.putPublicIp(rg, `${nm}-ip`, { location: a.location, sku: { name: "Standard" }, properties: { publicIPAllocationMethod: "Static" } });
+      const lb = `${base}/loadBalancers/${nm}`;
+      await api.putLoadBalancer(rg, nm, { location: a.location, sku: { name: "Standard", tier: "Regional" }, properties: {
+        frontendIPConfigurations: [{ name: "frontend", properties: { publicIPAddress: { id: `${base}/publicIPAddresses/${nm}-ip` } } }],
+        backendAddressPools: [{ name: "backend" }],
+        probes: [{ name: "tcp-probe", properties: { protocol: "Tcp", port: Number(bp), intervalInSeconds: 15, probeThreshold: 1 } }],
+        loadBalancingRules: [{ name: "rule-1", properties: { protocol: "Tcp", frontendPort: Number(fp), backendPort: Number(bp), idleTimeoutInMinutes: 4,
+          frontendIPConfiguration: { id: `${lb}/frontendIPConfigurations/frontend` }, backendAddressPool: { id: `${lb}/backendAddressPools/backend` }, probe: { id: `${lb}/probes/tcp-probe` } } }] } });
+      notify.success(`Load balancer '${nm}' was created.`, "Created"); setNm(""); lbs.reload();
+    } catch (e) { notify.error(e, "Creating the load balancer failed"); }
+  };
+  const region = (a.location || "").replace(/\s/g, "").toLowerCase();
+  const usable = (lbs.data || []).filter((l) => (l.location || "").replace(/\s/g, "").toLowerCase() === region);
+  return (
+    <>
+      <ErrorBar error={lbs.error || nic.error} />
+      <table className="vy-grid" aria-label="Load balancers">
+        <thead><tr><th>Load balancer</th><th>SKU</th><th>Backend pool</th><th>Rules</th><th>Member</th><th>Backend state</th></tr></thead>
+        <tbody>{usable.flatMap((l) => (l.properties?.backendAddressPools || []).map((p) => (
+          <tr key={p.id}><td>{l.name}</td><td>{l.sku?.name}</td><td>{p.name}</td>
+            <td>{(l.properties?.loadBalancingRules || []).map((r) => `${r.properties.protocol} ${r.properties.frontendPort}->${r.properties.backendPort}`).join(", ") || "--"}</td>
+            <td><input type="checkbox" aria-label={`Member of ${l.name}/${p.name}`} checked={mine.has(p.id.toLowerCase())} onChange={() => {
+              const cur = (ipc?.properties?.loadBalancerBackendAddressPools || []).map((x) => x.id);
+              writePools(mine.has(p.id.toLowerCase()) ? cur.filter((i) => i.toLowerCase() !== p.id.toLowerCase()) : [...cur, p.id]); }} /></td>
+            <td data-testid="lb-state">{mine.has(p.id.toLowerCase()) ? (running ? "VM running (probe not executed)" : "VM not running") : "--"}</td></tr>)))}</tbody>
+      </table>
+      {!usable.length && <p className="vy-muted" data-testid="lb-empty">No load balancer in {locationLabel(region)} yet.</p>}
+      <p className="vy-muted" style={{ fontSize: 12 }}>Membership is a real network-interface setting. Vyomi balances no traffic and sends no health-probe packet, so the backend state only reflects the VM's power state.</p>
+      <div style={{ display: "flex", gap: 8, alignItems: "end", marginTop: 8, flexWrap: "wrap" }}>
+        <Field label="New load balancer (Standard, public)"><Input value={nm} onChange={(_, d) => setNm(d.value)} aria-label="Load balancer name" /></Field>
+        <Field label="Frontend port"><Input type="number" value={fp} onChange={(_, d) => setFp(d.value)} aria-label="Frontend port" /></Field>
+        <Field label="Backend port"><Input type="number" value={bp} onChange={(_, d) => setBp(d.value)} aria-label="Backend port" /></Field>
+        <Button appearance="primary" disabled={!nm} onClick={create} aria-label="Create load balancer">Create</Button>
+      </div>
+    </>
+  );
+}
+
 function VmAsgs({ a }) {
   const notify = useNotify();
   const nicId = nicIdOf(a);
@@ -976,7 +1034,7 @@ function NetworkSettings({ a }) {
         {tab === "inbound" && <PortRules rg={a.resourceGroup} nsgName={nsgName} direction="Inbound" />}
         {tab === "outbound" && <PortRules rg={a.resourceGroup} nsgName={nsgName} direction="Outbound" />}
         {tab === "asgs" && <VmAsgs a={a} />}
-        {tab === "lb" && <NotSimulated feature="Load balancing" note="This lens does not model Microsoft.Network/loadBalancers." />}
+        {tab === "lb" && <VmLoadBalancing a={a} />}
       </div>
     </CapabilityContainer>
   );

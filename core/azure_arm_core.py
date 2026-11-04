@@ -100,8 +100,10 @@ except ImportError:
     import azure_netsvc_core as netsvc             # type: ignore
 try:                                              # v4 AZ-07: Network Manager, Front Door / CDN, AKS + Container Apps networking
     from core import azure_netcfg_core as netcfg
+    from core import azure_lb_core as lbcore
 except ImportError:
     import azure_netcfg_core as netcfg             # type: ignore
+    import azure_lb_core as lbcore                 # type: ignore
 try:                                              # v4 AZ-02..05: KEDA / AKS extensions, Cosmos CORS+gateway+CMK, Service Bus CMK+network rules, App Config CMK, subnet delegation
     from core import azure_cfgext_core as cfgext
 except ImportError:
@@ -1684,6 +1686,10 @@ class AzureArm:
                 blocked = netcfg.validate(self.state, full_type, rid, payload, _net_prev, sub, rg)
                 if blocked:
                     return blocked
+            if lbcore.handles(full_type):
+                blocked = lbcore.validate(self.state, full_type, rid, payload, _net_prev, sub, rg)
+                if blocked:
+                    return blocked
             if cfgext.handles(full_type):
                 blocked = cfgext.validate(self.state, full_type, rid, payload, _net_prev, sub, rg)
                 if blocked:
@@ -1714,6 +1720,9 @@ class AzureArm:
                 resp["body"] = _view(self.state[key])
             if netcfg.handles(full_type) and key in self.state:
                 netcfg.after_put(self.state, self.state[key], payload, _net_prev)
+                resp["body"] = _view(self.state[key])
+            if lbcore.handles(full_type) and key in self.state:
+                lbcore.after_put(self.state, self.state[key], payload, _net_prev)
                 resp["body"] = _view(self.state[key])
             if cfgext.handles(full_type) and key in self.state:
                 cfgext.after_put(self.state, self.state[key], payload, _net_prev)
@@ -1801,6 +1810,9 @@ class AzureArm:
                 blocked = netsvc.before_delete(self.state, _net_rec) or netcfg.before_delete(self.state, _net_rec)
                 if blocked:
                     return blocked
+                blocked = lbcore.before_delete(self.state, _net_rec)
+                if blocked:
+                    return blocked
                 if cfgext.handles(_net_rec.get("_type") or ""):
                     blocked = cfgext.before_delete(self.state, _net_rec)
                     if blocked:
@@ -1825,6 +1837,7 @@ class AzureArm:
                     del self.state[child_key]
                 netsvc.on_delete(self.state, rec)
                 netcfg.on_delete(self.state, rec)
+                lbcore.on_delete(self.state, rec)
                 self._record_activity(rid, f"{full_type}/delete", sub)
             return _ok(None, status=200 if rec is not None else 204)
         return _err(405, "MethodNotAllowed", f"{method} not allowed.")
