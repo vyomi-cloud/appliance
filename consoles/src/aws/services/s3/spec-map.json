@@ -116,11 +116,9 @@
     "honest_page": true
   },
   "aws-marketplace-for-s3": {
-    "route": "#/s3/marketplace",
-    "honest_page": true
+    "route": "#/s3/marketplace"
   },
   "amazon-s3": {
-    "route": "#/s3/get-started",
-    "honest_page": true
+    "route": "#/s3/get-started"
   }
 }

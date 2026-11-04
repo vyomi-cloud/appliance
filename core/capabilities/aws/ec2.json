@@ -125,11 +125,20 @@
  "ec2.ami-catalog.marketplace-community": {
   "title": "AMI catalog — AWS Marketplace AMIs / Community AMIs",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Vyomi has no connection to AWS Marketplace or the community AMI catalog; only AMIs you've created or the built-in quickstart set are available."
+   "The AWS Marketplace AMIs tab lists Vyomi's own AMI products (hardened Ubuntu, Nginx, PostgreSQL, Docker host, Windows IIS), not AWS Marketplace listings. Subscribing (license acceptance required) registers a real AMI in this account's EC2 model (owner aws-marketplace, a marketplace product code, visible in DescribeImages and launchable via RunInstances); ending the subscription is refused while an instance still runs the AMI and deregisters the AMI otherwise. The Community AMIs tab lists public images owned by other accounts, seeded on first use. NOT modelled: real image contents or software behind the AMIs (they boot the same base instance image as any other AMI), pricing/metering, private offers and the Marketplace seller flow."
+  ],
+  "api": [
+   "ListEntities",
+   "DescribeEntity",
+   "DescribeImages",
+   "RunInstances"
+  ],
+  "tests": [
+   "tests/conformance/test_marketplace_core.py"
   ]
  },
  "ec2.volumes": {

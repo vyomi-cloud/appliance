@@ -909,24 +909,36 @@
  "s3.account.marketplace": {
   "title": "AWS Marketplace for S3",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "AWS Marketplace listings are not part of Vyomi."
+   "The catalog is Vyomi's own: six SaaS spaces (payments, identity, e-mail, SMS, observability, git hosting) rather than AWS Marketplace listings. ListEntities / DescribeEntity follow the Marketplace Catalog API shapes (SaaSProduct filter by Category / Name, paging); subscribing (end-user license acceptance required, one active agreement per product) creates a real agreement with a space endpoint and API key, and cancelling ends it. NOT modelled: the third-party SaaS itself (the endpoint is an address handed to your app, nothing answers behind it), metering and billing, private offers and pricing terms, seller-side listing, and the AWS-hosted Agreement / Entitlement / Metering APIs."
   ],
-  "api": []
+  "api": [
+   "ListEntities",
+   "DescribeEntity",
+   "(Vyomi) POST /agreements",
+   "(Vyomi) GET /agreements",
+   "(Vyomi) DELETE /agreements/{agreementId}"
+  ],
+  "tests": [
+   "tests/conformance/test_marketplace_core.py"
+  ]
  },
  "s3.account.get-started": {
   "title": "Amazon S3",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "full",
+   "offline": "full"
   },
-  "limitations": [
-   "This marketing/getting-started page has no backing resource."
+  "limitations": [],
+  "api": [
+   "ListBuckets"
   ],
-  "api": []
+  "probe": {
+   "s3": "bucket-crud"
+  }
  },
  "s3.bucket.metadata-configuration": {
   "title": "Metadata configuration",

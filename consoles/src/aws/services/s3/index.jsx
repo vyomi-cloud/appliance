@@ -11,6 +11,7 @@ import { AccessPointsSection } from "./Sweep.jsx";
 import { AccountPublicAccessBlock, DirectoryBuckets, ObjectLambdaAccessPoints } from "./AccountPages.jsx";
 import { AccessGrants, BatchOperations, MultiRegionAccessPoints } from "./BatchPages.jsx";
 import { VectorBuckets } from "./VectorPages.jsx";
+import { S3GetStarted, S3Marketplace } from "./MarketplacePages.jsx";
 import { AccessAnalyzer, StorageLensDashboards, StorageLensGroups, TableBuckets } from "./InsightPages.jsx";
 
 // Account-level pages Vyomi has no backend for: each is a registered capability gap (core/capabilities/aws/s3.json).
@@ -57,7 +58,7 @@ export default {
     { pattern: "/s3/access-analyzer", component: AccessAnalyzer, crumbs: () => [{ text: "IAM Access Analyzer for S3", href: "#/s3/access-analyzer" }] },
     { pattern: "/s3/lens/dashboards", component: StorageLensDashboards, crumbs: () => [{ text: "Storage Lens dashboards", href: "#/s3/lens/dashboards" }] },
     { pattern: "/s3/lens/groups", component: StorageLensGroups, crumbs: () => [{ text: "Storage Lens groups", href: "#/s3/lens/groups" }] },
-    ...[["marketplace", "AWS Marketplace for S3", "marketplace"], ["get-started", "Amazon S3", "get-started"]]
-      .map(([p, t, id]) => ({ pattern: `/s3/${p}`, component: ns(t, id), crumbs: () => [{ text: t, href: `#/s3/${p}` }] })),
+    { pattern: "/s3/marketplace", component: S3Marketplace, crumbs: () => [{ text: "AWS Marketplace for S3", href: "#/s3/marketplace" }] },
+    { pattern: "/s3/get-started", component: S3GetStarted, crumbs: () => [{ text: "Amazon S3", href: "#/s3/get-started" }] },
   ],
 };
