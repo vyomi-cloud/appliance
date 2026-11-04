@@ -41,6 +41,15 @@ export const setVersionState = (loc, kr, k, v, state) => restJson("PATCH", versi
 export const destroyVersion = (loc, kr, k, v) => restJson("POST", `${version(loc, kr, k, v)}:destroy`, { body: {} });
 export const restoreVersion = (loc, kr, k, v) => restJson("POST", `${version(loc, kr, k, v)}:restore`, { body: {} });
 
+export const listImportJobs = (loc, kr) => restJson("GET", `${ring(loc, kr)}/importJobs`).then((r) => r.importJobs || []);
+export const createImportJob = (loc, kr, id, importMethod) =>
+  restJson("POST", `${ring(loc, kr)}/importJobs`, { query: { importJobId: id }, body: { importMethod, protectionLevel: "SOFTWARE" } });
+export const importVersion = (loc, kr, k, body) => restJson("POST", `${key(loc, kr, k)}/cryptoKeyVersions:import`, { body });
+export const IMPORT_METHODS = [
+  "RSA_OAEP_3072_SHA256_AES_256", "RSA_OAEP_4096_SHA256_AES_256", "RSA_OAEP_3072_SHA1_AES_256",
+  "RSA_OAEP_4096_SHA1_AES_256", "RSA_OAEP_3072_SHA256", "RSA_OAEP_4096_SHA256",
+];
+
 // GCP KMS resource locations (regions + the two multi-region aggregates + global).
 export const LOCATIONS = [
   ["global", "global"],

@@ -42,13 +42,14 @@ export default function SecurityRules({ params, query }) {
 function RulesEditor({ db, value, loading, error, onChange, onPublished }) {
   const notify = useNotify();
   const [busy, setBusy] = useState(false);
+  const history = useAsync(() => api.listRulesets(), [value === undefined]);
 
   const publish = async () => {
     setBusy(true);
     try {
       await api.updateSecurityRules(db, value);
       notify.success(`Rules published.${saveNotice("gcp.firestore.security-rules")}`);
-      onPublished();
+      onPublished(); history.reload();
     } catch (e) { notify.error(e); }
     finally { setBusy(false); }
   };
@@ -66,6 +67,12 @@ function RulesEditor({ db, value, loading, error, onChange, onPublished }) {
       <Stack direction="row" spacing={1} sx={{ mt: 1.5 }}>
         <Button size="small" onClick={() => onChange(api.DEFAULT_RULES)}>Reset to restrictive default</Button>
       </Stack>
+      <Typography variant="subtitle2" sx={{ mt: 3, mb: 1 }}>Rules history</Typography>
+      {history.data?.length ? (
+        <Box component="ul" data-testid="rules-history" sx={{ m: 0, pl: 2.5, fontSize: 13 }}>
+          {history.data.map((r, i) => <li key={r.name}>{i === 0 ? "Published " : ""}{r.createTime} — {r.name.split("/").pop().slice(0, 8)}</li>)}
+        </Box>
+      ) : <Typography variant="body2" color="text.secondary">No rules have been published yet.</Typography>}
     </CapabilityContainer>
   );
 }

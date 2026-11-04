@@ -98,14 +98,27 @@
    "tests/conformance/test_gcp_kms_core.py"
   ]
  },
-  "gcp.kms.hsm-protection": {
-    "title": "HSM, External and External via VPC protection levels",
-    "level": {
-      "nano": "not_simulated",
-      "offline": "not_simulated"
-    },
-    "limitations": [
-      "HSM keys are generated and held inside FIPS 140-2 Level 3 hardware modules and External keys live in a third-party key manager (EKM); Vyomi's key material always lives in its own software store, so offering these levels would misrepresent where the key is held."
-    ]
-  }
+ "gcp.kms.hsm-protection": {
+  "title": "HSM, External and External via VPC protection levels",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "HSM keys are generated and held inside FIPS 140-2 Level 3 hardware modules and External keys live in a third-party key manager (EKM); Vyomi's key material always lives in its own software store, so offering these levels would misrepresent where the key is held."
+  ]
+ },
+ "gcp.kms.import": {
+  "title": "Key import (import jobs, wrapped key import)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Symmetric 256-bit GOOGLE_SYMMETRIC_ENCRYPTION keys only, software protection only: import jobs mint a real RSA-3072/4096 wrapping key pair and cryptoKeyVersions:import really unwraps RSA-OAEP (SHA-1/SHA-256) + AES-KWP, but asymmetric/HMAC/RAW key import, HSM-backed jobs and attestation are not supported. Wrapping happens in pure Python on both substrates (no hardware key isolation)."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_kms_import_core.py"
+  ]
+ }
 }

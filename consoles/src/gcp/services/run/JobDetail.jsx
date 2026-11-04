@@ -3,7 +3,7 @@
 import { useState } from "react";
 import {
   Alert, Box, Breadcrumbs, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle,
-  IconButton, Stack, Tab, Tabs, TextField, Tooltip, Typography,
+  FormControl, IconButton, InputLabel, MenuItem, Select, Stack, Tab, Tabs, TextField, Tooltip, Typography,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/esm/ArrowBack.js";
 import RefreshIcon from "@mui/icons-material/esm/Refresh.js";
@@ -17,7 +17,7 @@ import { useNotify } from "../../../common/notify.jsx";
 import ResourceTable from "../../kit/ResourceTable.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
-import { ErrorAlert, fmtDate, NotSimulated, PageHeader } from "../../kit/common.jsx";
+import { ErrorAlert, fmtDate, PageHeader } from "../../kit/common.jsx";
 import { Link } from "../../link.jsx";
 import * as api from "./api.js";
 
@@ -108,10 +108,72 @@ function Triggers({ region, name }) {
           ) },
         ]}
       />
-      <NotSimulated compact feature="Event triggers (Eventarc)"
-        note="Vyomi has no Eventarc backend; only Cloud Scheduler triggers are modelled here, and firing one really starts an execution." />
+      <EventarcTriggers region={region} name={name} />
       {add && <AddTriggerDialog region={region} name={name} onClose={() => setAdd(false)} onAdded={() => { notify.success("Trigger added"); list.reload(); }} />}
     </Stack>
+  );
+}
+
+function EventarcTriggers({ region, name }) {
+  const notify = useNotify();
+  const list = useAsync(() => api.listEventarcTriggers(region).then((ts) => ts.filter((t) => t.destination?.cloudRunJob?.job === name)), [region, name]);
+  const [add, setAdd] = useState(false);
+  return (
+    <CapabilityContainer id="gcp.run.eventarc-job" title="Event triggers (Eventarc)" actions={<Button startIcon={<AddIcon />} onClick={() => setAdd(true)}>Add Eventarc trigger</Button>}>
+      <ResourceTable
+        resourceName="Eventarc triggers"
+        items={list.data || []}
+        rowKey={(t) => t.name}
+        loading={list.loading}
+        error={list.error}
+        onRetry={list.reload}
+        empty={<Typography variant="body2" color="text.secondary">No Eventarc triggers start this job.</Typography>}
+        columns={[
+          { id: "name", header: "Name", cell: (t) => t.name.split("/").pop() },
+          { id: "event", header: "Event type", cell: (t) => t.eventFilters.find((f) => f.attribute === "type")?.value },
+          { id: "filters", header: "Filters", cell: (t) => t.eventFilters.filter((f) => f.attribute !== "type").map((f) => `${f.attribute}=${f.value}`).join(", ") || "—" },
+          { id: "act", header: "Actions", cell: (t) => <Button size="small" color="error" onClick={async () => { await api.deleteEventarcTrigger(region, t.name.split("/").pop()); notify.success("Trigger deleted"); list.reload(); }}>Delete</Button> },
+        ]}
+      />
+      {add && <AddEventarcDialog region={region} name={name} onClose={() => setAdd(false)} onAdded={() => { notify.success("Eventarc trigger created"); list.reload(); }} />}
+    </CapabilityContainer>
+  );
+}
+
+function AddEventarcDialog({ region, name, onClose, onAdded }) {
+  const [id, setId] = useState(`${name}-event`);
+  const [type, setType] = useState(api.EVENTARC_EVENTS[0][0]);
+  const [vals, setVals] = useState({});
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const ev = api.EVENTARC_EVENTS.find((x) => x[0] === type);
+  const save = async () => {
+    setBusy(true); setError(null);
+    try {
+      await api.createEventarcTrigger(region, id, { eventFilters: api.eventarcFilters(type, vals), destination: { cloudRunJob: { job: name, region } } });
+      onAdded(); onClose();
+    } catch (e) { setError(e); } finally { setBusy(false); }
+  };
+  return (
+    <Dialog open onClose={busy ? undefined : onClose} maxWidth="sm" fullWidth aria-label="Add Eventarc trigger">
+      <DialogTitle>Add Eventarc trigger</DialogTitle>
+      <DialogContent>
+        <Stack spacing={2} sx={{ pt: 1 }}>
+          <Typography variant="body2" color="text.secondary">Starts an execution of this job for every matching event (Vyomi delivers the CloudEvent in the CLOUD_EVENT variable).</Typography>
+          <TextField label="Trigger name" value={id} onChange={(e) => setId(e.target.value.trim())} />
+          <FormControl><InputLabel id="ea-ev">Event</InputLabel>
+            <Select labelId="ea-ev" label="Event" value={type} onChange={(e) => { setType(e.target.value); setVals({}); }} inputProps={{ "aria-label": "Event" }}>
+              {api.EVENTARC_EVENTS.map(([v, l]) => <MenuItem key={v} value={v}>{l}</MenuItem>)}
+            </Select></FormControl>
+          {ev[2].map(([k, label]) => <TextField key={k} label={label} value={vals[k] || ""} onChange={(e) => setVals({ ...vals, [k]: e.target.value })} />)}
+          {error && <ErrorAlert error={error} />}
+        </Stack>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose} disabled={busy}>Cancel</Button>
+        <Button variant="contained" disabled={busy || !id} onClick={save}>Create</Button>
+      </DialogActions>
+    </Dialog>
   );
 }
 

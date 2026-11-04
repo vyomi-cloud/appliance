@@ -167,6 +167,7 @@ export async function getSecurityRules(db) {
   const r = await restJson("POST", `${dbBase(db)}:getSecurityRules`, { body: {} });
   return r.rules || "";
 }
+export const listRulesets = () => restJson("GET", `/v1/projects/${e(getProject())}/rulesets`).then((r) => r.rulesets || []);
 export const updateSecurityRules = (db, rules) => restJson("POST", `${dbBase(db)}:updateSecurityRules`, { body: { rules } });
 /** Development & test (Rules Playground): really parses + evaluates `rules` against one
  * simulated request. `request.resourceData` / `requestResourceData` are plain JSON (not
@@ -187,3 +188,34 @@ service cloud.firestore {
     }
   }
 }`;
+
+// ── Datastore mode (Cloud Datastore API v1) ───────────────────────────────────────────────
+const dsUrl = (verb) => `/v1/projects/${getProject()}:${verb}`;
+export const dsCall = (verb, body) => restJson("POST", dsUrl(verb), { body });
+export const dsListIndexes = (db) => restJson("GET", `/v1/projects/${getProject()}/indexes`).then((r) => r.indexes || []);
+export const dsCreateIndex = (body) => restJson("POST", `/v1/projects/${getProject()}/indexes`, { body });
+export const dsDeleteIndex = (id) => restJson("DELETE", `/v1/projects/${getProject()}/indexes/${e(id)}`);
+
+/** plain JSON -> Datastore Value (strings/ints/doubles/bools/null/arrays/objects). */
+export function toDsValue(v) {
+  if (v === null || v === undefined) return { nullValue: null };
+  if (typeof v === "boolean") return { booleanValue: v };
+  if (typeof v === "number") return Number.isInteger(v) ? { integerValue: String(v) } : { doubleValue: v };
+  if (typeof v === "string") return { stringValue: v };
+  if (Array.isArray(v)) return { arrayValue: { values: v.map(toDsValue) } };
+  return { entityValue: { properties: Object.fromEntries(Object.entries(v).map(([k, x]) => [k, toDsValue(x)])) } };
+}
+export function fromDsValue(v) {
+  if (!v) return null;
+  if ("stringValue" in v) return v.stringValue;
+  if ("integerValue" in v) return Number(v.integerValue);
+  if ("doubleValue" in v) return v.doubleValue;
+  if ("booleanValue" in v) return v.booleanValue;
+  if ("nullValue" in v) return null;
+  if ("timestampValue" in v) return v.timestampValue;
+  if ("arrayValue" in v) return (v.arrayValue.values || []).map(fromDsValue);
+  if ("entityValue" in v) return Object.fromEntries(Object.entries(v.entityValue.properties || {}).map(([k, x]) => [k, fromDsValue(x)]));
+  if ("keyValue" in v) return { __key__: v.keyValue.path.map((p) => `${p.kind}:${p.name ?? p.id}`).join("/") };
+  return v;
+}
+export const dsKeyLabel = (key) => (key?.path || []).map((p) => `${p.kind}(${p.name ?? p.id})`).join(" > ");

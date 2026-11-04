@@ -55,6 +55,10 @@ from core import cloudformation_core as cfn
 from core import rds_data_core as rds_data
 from core import gcp_storage_core as gcs   # GCP: GCS JSON API, path-routed (not SigV4)
 from core import gcp_firestore_core as gcp_fs
+from core import gcp_datastore_core as gcp_ds
+from core import gcp_eventarc_core as gcp_eventarc
+from core import gcp_hub_core as gcp_hub
+from core import gcp_audit_core as gcp_audit
 from core.gcp_firestore_core import FirestoreStore
 from core import gcp_kms_core as gcp_kms
 from core import gcp_secretmanager_core as gcp_sec
@@ -186,6 +190,8 @@ def _gcp_service(path):
         return "gcp-monitoring"
     # The /v1/projects/* family — gate on /projects/ so Azure's root /secrets,
     # /keys, /topics never collide (GCP always scopes these under a project).
+    if gcp_hub.is_hub_path(path):
+        return "gcp-hub"
     if "/projects/" in path:
         if re.search(r"^/v1/projects/[^/]+/locations/[^/]+/instances([/:]|$)", path):
             return "gcp-redis"
@@ -197,13 +203,18 @@ def _gcp_service(path):
             return "gcp-container"
         if re.search(r"/locations/[^/]+/jobs([/:]|$)", path) or re.search(r"^/v1(beta1)?/projects/[^/]+/locations/?$", path):
             return "gcp-cloudscheduler"
+        if gcp_ds.is_datastore_path(path):
+            return "gcp-datastore"
+        if gcp_eventarc.is_eventarc_path(path):
+            return "gcp-eventarc"
         if re.search(r"^/v1(beta1)?/projects/[^/]+/locations/[^/]+/backups([/:]|$)", path):
             return "gcp-firestore"
         if "/locations/" in path and ("/repositories" in path or "/operations/" in path):
             return "gcp-artifactregistry"
         if re.search(r"^/v1/projects/[^/]+/projectSettings$", path):
             return "gcp-artifactregistry"
-        if re.search(r"^/v1(beta1)?/projects/[^/]+/databases($|[/:])", path):
+        if re.search(r"^/v1(beta1)?/projects/[^/]+/databases($|[/:])", path) \
+                or re.search(r"^/v1/projects/[^/]+(/(rulesets|releases)([/?]|$)|:test$)", path.split("?", 1)[0]):
             return "gcp-firestore"
         if "/keyRings" in path or "/keyHandles" in path or "autokeyConfig" in path:
             return "gcp-kms"
@@ -637,6 +648,8 @@ class AwsWireRouter:
         self.gcp_run.logging_store = self.gcp_logging   # Observability "Logs" — real Cloud Logging entries per invocation
         self.gcp_mon.run_store, self.gcp_mon.vm_store = self.gcp_run, self.gcp_compute_vm   # App Hub discovers Cloud Run services + managed instance groups
         self.gcp_run.mon_store = self.gcp_mon       # Observability "Metrics" — real Cloud Monitoring points per invocation
+        if getattr(self.gcp_fs, "on_doc_event", None) is None:
+            self.gcp_fs.on_doc_event = self._firestore_event   # Eventarc Firestore document triggers fire on real writes
         if getattr(self.gcs, "refs", None) is None:
             self.gcs.refs = self._run_refs   # bucket CMEK keys are checked against real Cloud KMS keys
         if getattr(self.gcs, "on_object_event", None) is None:
@@ -827,10 +840,92 @@ class AwsWireRouter:
         }
         gcp_logging.write_entries(self.gcp_logging, None, {"entries": [entry]})
 
+    def hub_inputs(self, project):
+        """Live facts for Cloud Hub + Privacy & Security (read from the real stores / Cloud Logging)."""
+        def n(x):
+            try:
+                return len(x)
+            except Exception:
+                return 0
+        pre = "projects/%s/" % project
+        res = {}
+        def put(k, v):
+            if v:
+                res[k] = v
+        put("Cloud Storage buckets", n(getattr(self.gcs, "buckets", {}) or {}))
+        vm = self.gcp_compute_vm
+        put("Compute Engine VM instances", sum(1 for k in (getattr(vm, "instances", {}) or {}) if k.startswith(pre)))
+        put("Compute Engine disks", sum(1 for k in (getattr(vm, "disks", {}) or {}) if k.startswith(pre)))
+        put("Compute Engine snapshots", sum(1 for k in (getattr(vm, "snapshots", {}) or {}) if k.startswith(pre)))
+        put("GKE clusters", sum(1 for k in (getattr(self.gcp_gke, "clusters", {}) or {}) if k.startswith(pre)))
+        put("Cloud Run services", sum(1 for k in (getattr(self.gcp_run, "services", {}) or {}) if k.startswith(pre)))
+        put("Cloud Run jobs", sum(1 for k in (getattr(self.gcp_run, "jobs", {}) or {}) if k.startswith(pre)))
+        put("Firestore databases", n(getattr(self.gcp_fs, "databases", {}) or {}))
+        put("Pub/Sub topics", sum(1 for k in (getattr(self.gcp_msg, "topics", {}) or {}) if str(k).startswith(pre)))
+        keys = [k for k in self.gcp_kms.key_ids() if k.startswith(pre)] if hasattr(self.gcp_kms, "key_ids") else []
+        put("Cloud KMS keys", len(keys))
+        trg = [t for k, t in (self.gcp_mon.ext or {}).get("eventarc_triggers", {}).items() if k.startswith(pre)] if getattr(self.gcp_mon, "ext", None) else []
+        put("Eventarc triggers", len(trg))
+        audit = []
+        for e in reversed(getattr(self.gcp_logging, "entries", []) or []):
+            pp = e.get("protoPayload") or {}
+            if e.get("logName", "").startswith("projects/%s/logs/cloudaudit.googleapis.com" % project) and pp.get("methodName"):
+                audit.append({"time": e.get("timestamp"), "principal": (pp.get("authenticationInfo") or {}).get("principalEmail", ""),
+                              "service": pp.get("serviceName"), "method": pp.get("methodName"), "resource": pp.get("resourceName"),
+                              "logType": e["logName"].rsplit("%2F", 1)[-1]})
+            if len(audit) >= 500:
+                break
+        incidents = []
+        for k, inc in (getattr(self.gcp_mon, "incidents", {}) or {}).items():
+            if k.startswith(pre) and str(inc.get("state", "OPEN")).upper() == "OPEN":
+                incidents.append({"name": k, "summary": inc.get("summary") or inc.get("policyName") or k.rsplit("/", 1)[-1], "startTime": inc.get("startTime")})
+        uptime = [{"name": k.rsplit("/", 1)[-1], "displayName": (u or {}).get("displayName", "")} for k, u in (getattr(self.gcp_mon, "uptime_checks", {}) or {}).items() if k.startswith(pre)]
+        rm = getattr(self.gcp_rm, "org_policies", {}) or {}
+        loc = None
+        for name, pol in rm.items():
+            if name.endswith("constraints/gcp.resourceLocations"):
+                vals = []
+                for rule in (pol.get("spec") or {}).get("rules", []):
+                    vals += ((rule.get("values") or {}).get("allowedValues") or [])
+                loc = {"constraint": "constraints/gcp.resourceLocations", "state": "ENFORCED", "allowedValues": vals}
+        return {"resources": res, "incidents": incidents, "uptime": uptime, "audit": audit, "eventarc": len(trg),
+                "kms_keys": len(keys), "locations": loc, "audit_config": {"dataAccessEnabledServices": []}}
+
+    def _firestore_event(self, db, rel, old, new):
+        """A real Firestore document write -> Eventarc Firestore triggers."""
+        name = (self.gcp_fs.databases.get(db) or {}).get("name", "projects/-/databases/%s" % db)
+        gcp_eventarc.on_firestore_write(self.gcp_mon, self.gcp_run, name.split("/")[1], db, rel, old, new, log_fn=self._run_log)
+
+    def gcp_audit(self, method, path, query, headers, body, status):
+        """Describe a served GCP mutation as an Admin Activity audit log entry (core/gcp_audit_core.py) in Cloud
+        Logging, then fire Eventarc Cloud Audit Logs triggers on it. Best effort, never raises."""
+        try:
+            import time as _t
+            key = (method.upper(), path.split("?", 1)[0], hash(body), tuple(sorted((str(k), str(v)) for k, v in (query or {}).items())))
+            now = _t.monotonic()
+            seen = self.__dict__.setdefault("_audit_seen", {})
+            if now - seen.get(key, -9) < 1.5:
+                return
+            seen[key] = now
+            if len(seen) > 500:
+                seen.clear()
+            try:
+                bj = json.loads(body.decode()) if body else None
+            except Exception:
+                bj = None
+            entry = gcp_audit.build_entry(method, path, status, query, headers, bj if isinstance(bj, dict) else None)
+            if entry is None:
+                return
+            gcp_logging.write_entries(self.gcp_logging, None, {"entries": [entry]})
+            gcp_eventarc.on_audit_entry(self.gcp_mon, self.gcp_run, entry, log_fn=self._run_log)
+        except Exception:
+            pass
+
     def _eventarc_deliver(self, topic_full, messages):
         """A real Pub/Sub publish -> deliver to every Cloud Run Eventarc-style trigger
         bound to that topic (see core/gcp_run_core.deliver_event)."""
         gcp_run.deliver_event(self.gcp_run, topic_full, messages, log_fn=self._run_log)
+        gcp_eventarc.on_pubsub_publish(self.gcp_mon, self.gcp_run, topic_full, messages, log_fn=self._run_log)
 
     def _rm_inputs(self):
         """Existing GCP resources an org-policy simulation evaluates (read as a GCP request)."""
@@ -849,6 +944,7 @@ class AwsWireRouter:
 
     def _gcs_object_event(self, bucket, name, event, obj):
         gcp_run.deliver_storage_event(self.gcp_run, bucket, name, event, obj, log_fn=self._run_log)
+        gcp_eventarc.on_storage_event(self.gcp_mon, self.gcp_run, bucket, name, event, obj, log_fn=self._run_log)
 
     def _run_refs(self, kind, *args):
         """Existence of a resource a Cloud Run template references (True/False; None = unknown)."""
@@ -1418,7 +1514,7 @@ class AwsWireRouter:
 
         if svc and svc.startswith("gcp-"):   # GCP services — native google-cloud-* REST wire
             _gcp_core = {
-                "gcp-gcs": (gcs, self.gcs), "gcp-firestore": (gcp_fs, self.gcp_fs),
+                "gcp-gcs": (gcs, self.gcs), "gcp-firestore": (gcp_fs, self.gcp_fs), "gcp-datastore": (gcp_ds, self.gcp_fs), "gcp-eventarc": (gcp_eventarc, self.gcp_mon), "gcp-hub": (gcp_hub, self.gcp_mon),
                 "gcp-kms": (gcp_kms, self.gcp_kms), "gcp-secretmanager": (gcp_sec, self.gcp_sec),
                 "gcp-pubsub": (gcp_ps, self.gcp_msg), "gcp-iam": (gcp_iam, self.gcp_iam),
                 "gcp-cloudsql": (gcp_sql, self.gcp_sql), "gcp-cloudscheduler": (gcp_sched, self.gcp_sched),
@@ -1463,6 +1559,11 @@ class AwsWireRouter:
                                   rm_store=self.gcp_rm, logger=self._iam_audit_log, iamc_store=self.gcp_iamc)
             elif svc == "gcp-artifactregistry":   # a repository's CMEK key is checked/used through the real KMS core
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), kms_store=self.gcp_kms)
+            elif svc == "gcp-hub":   # Marketplace / Cloud Hub / Privacy & Security — derived from live state
+                r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), inputs=self.hub_inputs)
+            elif svc == "gcp-eventarc":   # triggers validate their Cloud Run destination / bucket / topic for real
+                r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), run_store=self.gcp_run,
+                                  pubsub_store=self.gcp_msg, gcs_store=self.gcs, log_fn=self._run_log)
             elif svc == "gcp-pubsub":   # a message delivered to an Eventarc-style Cloud Run trigger
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), on_publish=self._eventarc_deliver)
             elif svc == "gcp-run":   # real mutations + Eventarc deliveries -> real Cloud Logging entries
@@ -1473,6 +1574,8 @@ class AwsWireRouter:
             hdrs = dict(r.headers or {})
             if r.media_type and not any(k.lower() == "content-type" for k in hdrs):
                 hdrs["content-type"] = r.media_type
+            if method.upper() != "GET":
+                self.gcp_audit(method, path, query or {}, headers or {}, bytes(body), r.status)
             return {"status": r.status, "headers": hdrs, "body": r.body or b""}
 
         if svc == "az-appconfig":   # App Configuration data plane ({store}.azconfig.io: /kv /keys /labels /locks /revisions /snapshots /operations)
