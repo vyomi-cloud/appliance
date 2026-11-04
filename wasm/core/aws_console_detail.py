@@ -2550,16 +2550,17 @@ def apigw_stage_names(api: dict) -> list:
 def apigw_deployments(api: dict) -> list:
     by_dep = {}
     for sname, s in (api.get("stages") or {}).items():
-        if isinstance(s, dict) and s.get("deployment_id"):
-            by_dep.setdefault(s["deployment_id"], []).append(sname)
+        did = isinstance(s, dict) and (s.get("deployment_id") or s.get("deploymentId"))   # apigateway_core stores camelCase
+        if did:
+            by_dep.setdefault(did, []).append(sname)
     out = []
     for k, d in (api.get("deployments") or {}).items():
         if not isinstance(d, dict):
             continue
         out.append({"deployment_id": d.get("deployment_id") or d.get("id") or d.get("deploymentId") or k,
-                    "stage_name": d.get("stage_name") or d.get("stageName") or ", ".join(by_dep.get(d.get("deployment_id") or "", [])) or "(not deployed to a stage)",
+                    "stage_name": d.get("stage_name") or d.get("stageName") or ", ".join(by_dep.get(d.get("deployment_id") or d.get("id") or "", [])) or "(not deployed to a stage)",
                     "description": d.get("description", ""),
-                    "created": d.get("created", "")})
+                    "created": d.get("created") or d.get("createdDate") or ""})
     return sorted(out, key=lambda x: x["created"], reverse=True)
 
 
