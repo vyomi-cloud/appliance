@@ -1210,7 +1210,7 @@ class AwsWireRouter:
 
         if svc == "backup":
             from core import backup_core
-            r = backup_core.dispatch(self.ddb, self.s3, method, path, query or {}, bytes(body))
+            r = backup_core.dispatch(self.ddb, self.s3, method, path, query or {}, bytes(body), rds_store=self.rds, vpc_store=self.vpc)
             hdrs = dict(r.headers or {})
             hdrs.setdefault("content-type", "application/json")
             return {"status": r.status, "headers": hdrs, "body": r.body or b""}

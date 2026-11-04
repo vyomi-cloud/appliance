@@ -32,6 +32,7 @@ CORES = [
     "llm_core.py",
     "ai_models_core.py",
     "dms_core.py",
+    "backup_vaults_core.py",
     "nosql_store.py", "dynamodb_core.py",           # DynamoDB
     "dynamodb_expr.py",                             # DynamoDB expression engine (v4 C0: key/filter/condition/update/projection)
     "dax_core.py",                                  # DynamoDB Accelerator (DAX): clusters, subnet/parameter groups, cache engine
@@ -122,6 +123,8 @@ CORES = [
     "azure_policy_core.py", "azure_netsvc_core.py", "azure_netcfg_core.py", "azure_webnet_core.py", "ci_core.py", "azure_acr_tasks_core.py", "azure_webdeploy_core.py",  # v4: Azure Policy, network services (private endpoints/Bastion/Firewall/DDoS/flow logs), Deployment Center — before azure_arm_core
     "azure_firewall_eval.py",
     "azure_cfgext_core.py",
+    "azure_backup_core.py",
+    "azure_sqlbackup_core.py",
     "azure_support_core.py",                        # v4: Microsoft.Support support requests filed with Vyomi
     "azure_monitorproducts_core.py",                # v4: Azure Monitor workspaces (Managed Prometheus) + Managed Grafana control plane — before azure_arm_core
     "azure_files_core.py",
