@@ -45,7 +45,7 @@ const CORES = [
   "k8s_yaml.py", "azure_aks_k8s_core.py", "kubescape_catalog.py", "kubescape_core.py", "azure_security_core.py",   // AKS objects + Defender for Cloud
   "cost_model.py", "azure_cost_core.py", "azure_arm_data.py", "azure_storage_ext_core.py", "azure_policy_core.py", "azure_netsvc_core.py", "azure_netcfg_core.py", "azure_webnet_core.py", "ci_core.py", "azure_acr_tasks_core.py", "azure_webdeploy_core.py", "azure_arm_core.py",   // Azure ARM control plane — nano_registry imports it
   "azure_firewall_eval.py",
-  "vuln_scan_core.py", "secscan_core.py", "ecr_core.py",
+  "vuln_scan_core.py", "secscan_core.py", "ecr_core.py", "schedule_core.py",
   "azure_cfgext_core.py",
   "azure_backup_core.py",
   "azure_sqlbackup_core.py",

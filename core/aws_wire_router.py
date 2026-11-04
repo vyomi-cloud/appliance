@@ -897,6 +897,23 @@ class AwsWireRouter:
         return False
 
     # ── service detection ──────────────────────────────────────────────
+    _SCHED_EVERY_S = 20.0
+
+    def _sched_pulse(self):
+        """Lazy scheduler pulse (core/schedule_core): backup plans/policies, DLM, Cloud SQL backup windows and ECR lifecycle run on
+        their schedules whenever the router is serving traffic (Nano: only while the page is open); the offline appliance also
+        ticks from a background loop. Throttled; never affects the request."""
+        import time as _t
+        now = _t.time()
+        if now - getattr(self, "_sched_last", 0.0) < self._SCHED_EVERY_S:
+            return
+        self._sched_last = now
+        try:
+            from core import schedule_core
+            schedule_core.tick(self, now)
+        except Exception:
+            pass
+
     def ecr_registry(self, method, path, query, headers, body):
         r = ecr_core.registry_dispatch(self.s3, method, path, query, headers, bytes(body))
         return {"status": r.status, "headers": dict(r.headers or {}), "body": r.body or b""}
@@ -1108,6 +1125,7 @@ class AwsWireRouter:
         stores from the measured series before a read of them."""
         import time as _t
         from core import observability_core as _obsc
+        self._sched_pulse()
         p0 = path.split("?", 1)[0]
         if p0.startswith(_obsc.BASE + "/") or p0 == _obsc.BASE:
             r = _obsc.dispatch(self.obs, method, p0, query or {}, headers or {}, body if isinstance(body, (bytes, bytearray)) else (body or "").encode(), cw_store=self.cw, mon_store=self.gcp_mon)

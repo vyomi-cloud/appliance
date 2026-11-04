@@ -28,7 +28,7 @@
     "level": { "nano": "full", "offline": "full" },
     "limitations": [
       "A backupRun snapshots the control-plane metadata this core manages (databases, users) and instances.restoreBackup replays that snapshot back onto the instance; it does not capture an actual point-in-time copy of table row data (the separate SQL data plane, out of scope for this core).",
-      "Automated (scheduled) backups are not taken in the background — only on-demand backupRuns created from the console or API exist."
+      "Automated backups run on the backup window (backupConfiguration.startTime, UTC, daily) from the shared scheduler tick (core/schedule_core): offline in a background loop, on Nano only while the page is open; missed windows coalesce into one run and retainedBackups prunes the oldest automated runs. Binary-log/PITR streaming is not scheduled."
     ],
     "tests": ["tests/conformance/test_gcp_cloudsql_core.py"]
   },
