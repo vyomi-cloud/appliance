@@ -15,6 +15,7 @@ import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import { follow, href } from "../../../common/router.js";
 import { NotSimulatedContainer } from "../../kit/common.jsx";
+import ZeroEtl from "../../kit/ZeroEtl.jsx";
 import * as api from "./api.js";
 
 export function ReservedInstances() {
@@ -62,33 +63,11 @@ export function CreateCapacityReservation() {
 }
 
 export function ZeroEtlIntegrations() {
-  return (
-    <ResourceTableHonestList
-      resourceName="Zero-ETL integrations"
-      list={() => api.describeIntegrations()}
-      trackBy="IntegrationName"
-      createHref={href("rds", "create-zero-etl-integration")}
-      createLabel="Create zero-ETL integration"
-      emptyTitle="No integrations"
-      otherActions={["Modify", "Delete"]}
-      columns={[
-        { id: "name", header: "Integration name", isRowHeader: true, cell: (r) => r.IntegrationName },
-        { id: "status", header: "Status", cell: (r) => r.Status },
-        { id: "created", header: "Creation date", cell: (r) => r.CreateTime },
-        { id: "src", header: "Source ARN", cell: (r) => r.SourceArn },
-        { id: "destAccount", header: "Destination AWS account", cell: (r) => r.TargetArn },
-        { id: "destType", header: "Destination type", cell: () => "Redshift" },
-        { id: "dest", header: "Destination ARN", cell: (r) => r.TargetArn },
-      ]}
-    />
-  );
+  return <ZeroEtl kind="rds" />;
 }
 
 export function CreateZeroEtlIntegration() {
-  return <ContentLayout header={<Header variant="h1">Create zero-ETL integration</Header>}>
-    <NotSimulatedContainer title="Create zero-ETL integration" feature="RDS zero-ETL integrations"
-      note="A zero-ETL integration requires a real cross-service pipeline into Redshift that Vyomi does not run." />
-  </ContentLayout>;
+  return <ZeroEtl kind="rds" openCreate />;
 }
 
 export function CustomEngineVersions() {

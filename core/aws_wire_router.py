@@ -384,6 +384,7 @@ _SIGNING = {
     "cloudfront": "cloudfront",   # CloudFront public keys + key groups (rest-xml /2020-05-31/...) -> core/cloudfront_keys_core via the S3 store
     "savingsplans": "savingsplans",   # Savings Plans (rest-json POST /<Operation>) + EC2 coverage/capacity views -> core/savingsplans_core over the EC2 model
     "bedrock-agentcore": "agentcore",   # Bedrock AgentCore control plane + gateway MCP endpoint -> core/bedrock_agents_core (S3 + Lambda stores)
+    "glue": "glue", "redshift-data": "redshift-data",
     "dms": "dms", "bedrock": "bedrock",   # Bedrock runtime + foundation-model catalogue -> core/ai_models_core over the local-LLM seam (core/llm_core)
     "backup": "backup",   # AWS Backup subset (region settings + DynamoDB copy jobs) -> core/backup_core over the DynamoDB + S3 stores
     "s3vectors": "s3vectors",   # Amazon S3 Vectors (rest-json POST /<Operation>) -> core/s3_vectors_core via the S3 store
@@ -403,6 +404,7 @@ _TARGET_PREFIX = {
     "Kinesis_20131202": "kinesis",
     "Logs_20140328": "logs",
     "AmazonSSM": "ssm",
+    "AWSGlue": "glue", "RedshiftData": "redshift-data",   # Glue zero-ETL integrations + Redshift Data API over the Redshift-lite warehouse -> core/zeroetl_core
     "AmazonDMSv20160101": "dms",   # Database Migration Service between simulator RDS instances -> core/dms_core
     "AWSStepFunctions": "stepfunctions",
     "AWSRAMFrontendService": "ram",
@@ -420,6 +422,7 @@ _JSON_CT = {
     "secretsmanager": "application/x-amz-json-1.1", "sqs": "application/x-amz-json-1.0",
     "events": "application/x-amz-json-1.1", "logs": "application/x-amz-json-1.1",
     "ssm": "application/x-amz-json-1.1", "dms": "application/x-amz-json-1.1",
+    "glue": "application/x-amz-json-1.1", "redshift-data": "application/x-amz-json-1.1",
     "stepfunctions": "application/x-amz-json-1.0",
     "ram": "application/x-amz-json-1.1",
     "organizations": "application/x-amz-json-1.1", "ce": "application/x-amz-json-1.1",
@@ -1508,6 +1511,12 @@ class AwsWireRouter:
             elif svc == "dms":   # DMS: endpoints resolve to simulator RDS instances; tasks copy real rows between them
                 from core import dms_core
                 r = dms_core.dispatch(self.rds, target, payload)
+            elif svc in ("glue", "redshift-data"):   # zero-ETL integrations (DynamoDB/RDS -> Redshift-lite) + the Redshift Data API over them
+                from core import zeroetl_core
+                import types as _ty
+                _fn = zeroetl_core.dispatch_glue if svc == "glue" else zeroetl_core.dispatch_redshift_data
+                _st, _doc = _fn(self.rds, self.ddb, target, payload)
+                r = _ty.SimpleNamespace(status=_st, headers={"x-amzn-errortype": _doc["__type"]} if _st >= 400 else {}, body=_doc)
             elif svc == "netfw":   # AWS Network Firewall (state lives in the VPC model so subnets/VPCs are validated for real)
                 r = netfw.dispatch(self.vpc, target, payload)
             elif svc == "dnsfw":   # Route 53 Resolver DNS Firewall (state in the VPC model)

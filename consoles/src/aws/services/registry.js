@@ -5,7 +5,7 @@
 
 import { classicUrl } from "../../common/classic.js";
 
-export const CATEGORIES = ["Compute", "Storage", "Database", "Networking & Content Delivery", "Security, Identity, & Compliance", "Application Integration", "Management & Governance"];
+export const CATEGORIES = ["Compute", "Storage", "Database", "Networking & Content Delivery", "Security, Identity, & Compliance", "Application Integration", "Machine Learning", "Management & Governance"];
 
 export const SERVICES = [
   { id: "s3", icon: "s3", title: "S3", description: "Scalable storage in the cloud", category: "Storage", load: () => import("./s3/index.jsx") },
@@ -23,6 +23,7 @@ export const SERVICES = [
   { id: "eventbridge", icon: "eventbridge", title: "EventBridge", description: "Serverless event bus", category: "Application Integration", load: () => import("./eventbridge/index.jsx") },
   { id: "cloudwatch", icon: "cloudwatch", title: "CloudWatch", description: "Monitor resources and applications", category: "Management & Governance", load: () => import("./cloudwatch/index.jsx") },
   { id: "cloudformation", icon: "cloudformation", title: "CloudFormation", description: "Create and manage resources with templates", category: "Management & Governance", load: () => import("./cloudformation/index.jsx") },
+  { id: "bedrock", icon: "bedrock", title: "Amazon Bedrock", description: "Build generative AI applications with foundation models, knowledge bases and agents", category: "Machine Learning", load: () => import("./bedrock/index.jsx") },
   { id: "kinesis", icon: "kinesis", title: "Kinesis", description: "Collect, process, and analyze real-time data streams", category: "Application Integration", load: () => import("./kinesis/index.jsx") },
   { id: "states", icon: "states", title: "Step Functions", description: "Coordinate distributed applications with visual workflows", category: "Application Integration", load: () => import("./states/index.jsx") },
   { id: "cost-explorer", icon: "costexplorer", title: "Cost Explorer", description: "Explore what your resources would cost, and what Vyomi saved", category: "Management & Governance", load: () => import("./cost-explorer/index.jsx") },

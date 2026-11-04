@@ -249,10 +249,11 @@
    "offline": "limited"
   },
   "limitations": [
-   "CreateIntegration/DeleteIntegration/DescribeIntegrations is real, stateful metadata CRUD; Vyomi does not run the actual cross-service replication pipeline into Redshift, so the console's create wizard (picking a real Redshift target) is not built \u2014 call the action directly with source/target ARNs."
+   "The integration really replicates: DynamoDB table items / RDS table rows are copied into an in-process 'Redshift-lite' warehouse (sqlite) on every touch/query ('sync on read'), and the Redshift Data API (ExecuteStatement/GetStatementResult, CREATE DATABASE ... FROM INTEGRATION) queries it. The SQL dialect is SQLite's, not Redshift's; replication is poll-on-touch, not a continuous stream; no data filters, encryption or cross-account semantics; the warehouse is in memory and rebuilt from the sources on boot. A real Redshift/SageMaker lakehouse is not run."
   ],
   "tests": [
-   "tests/conformance/test_rds_console_v4_core.py"
+   "tests/conformance/test_rds_console_v4_core.py",
+   "tests/conformance/test_zeroetl_core.py"
   ]
  },
  "rds.custom-engine-versions": {

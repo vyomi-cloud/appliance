@@ -13,6 +13,7 @@ import { follow } from "../../../common/router.js";
 import { useAsync } from "../../../common/useAsync.js";
 import { ErrorAlert, fmtBytes, KeyValue } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
+import LambdaOnboarding from "../bedrock/LambdaOnboarding.jsx";
 import * as api from "./api.js";
 
 const ACCOUNT_LIMIT = 1000;
@@ -33,7 +34,7 @@ export default function Dashboard() {
   return (
     <ContentLayout header={<Header variant="h1">Dashboard</Header>}>
       <SpaceBetween size="l">
-        <CapabilityContainer id="lambda.dashboard.agent-onboarding" title="Set up your agent to build with Lambda" />
+        <LambdaOnboarding />
 
         <Tabs tabs={[
           {
