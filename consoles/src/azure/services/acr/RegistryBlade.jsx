@@ -986,23 +986,29 @@ function Tasks({ a }) {
   const runs = useAsync(() => api.listRuns(a.resourceGroup, a.name), [a.id]);
   const [add, setAdd] = useState(false);
   const [name, setName] = useState("");
+  const [quick, setQuick] = useState(false);
+  const [qdf, setQdf] = useState("FROM alpine:3\nRUN echo built\n");
+  const [qimg, setQimg] = useState("samples/app:{{.Run.ID}}");
+  const report = (run) => {
+    const pr = run.properties || {};
+    if (pr.status === "Succeeded") notify.success(`Run '${pr.runId}' succeeded.`, "Run succeeded");
+    else notify.error(new Error(pr.errorMessage || "The run failed."), `Run '${pr.runId}' failed`);
+    runs.reload();
+  };
   const runTask = async (task) => {
-    const runId = `run${Math.random().toString(36).slice(2, 8)}`;
-    try {
-      await api.putRun(a.resourceGroup, a.name, runId, { properties: {
-        taskName: task.name, status: "Succeeded", runType: "QuickRun",
-        startTime: new Date().toISOString(), finishTime: new Date().toISOString(),
-      } });
-      notify.success(`Run '${runId}' of task '${task.name}' succeeded.`, "Run succeeded");
-      runs.reload();
-    } catch (e) { notify.error(e, "Run failed"); }
+    try { report(await api.scheduleRun(a.resourceGroup, a.name, { type: "TaskRunRequest", taskName: task.name })); }
+    catch (e) { notify.error(e, "Run failed"); }
+  };
+  const quickRun = async () => {
+    try { setQuick(false); report(await api.scheduleRun(a.resourceGroup, a.name, { type: "DockerBuildRequest", imageNames: [qimg], vyomiFiles: { Dockerfile: qdf } })); }
+    catch (e) { notify.error(e, "Run failed"); }
   };
   return (
     <CapabilityContainer id="azure.acr.tasks" title="Tasks">
-      <p style={{ fontSize: 13, maxWidth: 680 }}>Task definitions and run history are real, stored ARM resources — "Run now" records a real run, but Vyomi does not execute the build itself.</p>
+      <p style={{ fontSize: 13, maxWidth: 680 }}>Task definitions and run history are real ARM resources. "Run now" and "Quick run" really build the task's source (a GitHub URL or an inline Dockerfile): with BuildKit on the offline appliance; on Nano there is no container runtime, so image runs fail with that reason.</p>
       <BrowseGrid resourceName="task" rowKey={(r) => r.name}
         items={tasks.data || []} loading={tasks.loading} error={tasks.error} onRefresh={tasks.reload}
-        extraCommands={<ToolbarButton icon={<Add20Regular />} onClick={() => setAdd(true)}>Add</ToolbarButton>}
+        extraCommands={<><ToolbarButton icon={<Add20Regular />} onClick={() => setAdd(true)}>Add</ToolbarButton><ToolbarButton icon={<Play16Regular />} onClick={() => setQuick(true)}>Quick run</ToolbarButton></>}
         onDelete={async (sel) => { for (const r of sel) await api.deleteTask(a.resourceGroup, a.name, r.name); notify.success(`Deleted ${sel.length} task${sel.length === 1 ? "" : "s"}.`, "Delete succeeded"); tasks.reload(); }}
         columns={[
           { key: "name", label: "Task" },
@@ -1018,8 +1024,21 @@ function Tasks({ a }) {
           { key: "task", label: "Task", value: (r) => r.properties?.taskName },
           { key: "status", label: "Status", value: (r) => r.properties?.status },
           { key: "startTime", label: "Started", value: (r) => fmtDate(r.properties?.startTime) },
+          { key: "detail", label: "Output / error", value: (r) => r.properties?.outputImages?.[0] ? `${r.properties.outputImages[0].repository}:${r.properties.outputImages[0].tag}` : (r.properties?.errorMessage || "") },
         ]}
       />
+      <Dialog open={quick} onOpenChange={(_, d) => !d.open && setQuick(false)}>
+        <DialogSurface aria-label="Quick run">
+          <DialogBody>
+            <DialogTitle>Quick run</DialogTitle>
+            <DialogContent>
+              <Field label="Dockerfile" required><Textarea value={qdf} rows={6} style={{ fontFamily: "monospace" }} onChange={(_, d) => setQdf(d.value)} aria-label="Dockerfile" /></Field>
+              <Field label="Image name"><Input value={qimg} onChange={(_, d) => setQimg(d.value)} aria-label="Image name" /></Field>
+            </DialogContent>
+            <DialogActions><Button appearance="primary" disabled={!qdf.trim()} onClick={quickRun}>Run</Button><Button onClick={() => setQuick(false)}>Cancel</Button></DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
       <Dialog open={add} onOpenChange={(_, d) => !d.open && setAdd(false)}>
         <DialogSurface aria-label="Add task">
           <DialogBody>

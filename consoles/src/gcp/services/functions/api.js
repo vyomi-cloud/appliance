@@ -209,8 +209,8 @@ export const REPO_ANN = "vyomi.dev/repo-connection";
 export function repoConnection(svc) {
   try { return svc?.annotations?.[REPO_ANN] ? JSON.parse(svc.annotations[REPO_ANN]) : null; } catch { return null; }
 }
-export const connectRepo = (region, name, repository, branch) =>
-  restJson("POST", `${base(region)}/services/${e(name)}:connectRepo`, { body: { repository, branch } });
+export const connectRepo = (region, name, repository, branch, accessToken) =>
+  restJson("POST", `${base(region)}/services/${e(name)}:connectRepo`, { body: { repository, branch, ...(accessToken ? { accessToken } : {}) } });
 export const disconnectRepo = (region, name) => restJson("POST", `${base(region)}/services/${e(name)}:disconnectRepo`, { body: {} });
 export const triggerBuild = (region, name, overrides) => restJson("POST", `${base(region)}/services/${e(name)}/builds`, { body: overrides || {} });
 export async function listBuilds(region, name) {

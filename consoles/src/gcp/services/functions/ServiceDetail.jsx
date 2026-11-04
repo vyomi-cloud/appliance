@@ -198,13 +198,14 @@ function ContinuousDeploymentDialog({ region, name, service, notify, onClose, re
   const conn = api.repoConnection(service);
   const [repository, setRepository] = useState(conn?.repository || "");
   const [branch, setBranch] = useState(conn?.branch || "main");
+  const [token, setToken] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const builds = useAsync(() => (conn ? api.listBuilds(region, name) : Promise.resolve([])), [region, name, conn?.repository]);
 
   const connect = async () => {
     setBusy(true); setError(null);
-    try { await api.connectRepo(region, name, repository, branch); notify.success(`Connected to "${repository}"`); reload(); }
+    try { await api.connectRepo(region, name, repository, branch, token.trim()); notify.success(`Connected to "${repository}"`); reload(); }
     catch (e) { setError(e); } finally { setBusy(false); }
   };
   const disconnect = async () => {
@@ -212,10 +213,10 @@ function ContinuousDeploymentDialog({ region, name, service, notify, onClose, re
     try { await api.disconnectRepo(region, name); notify.success("Repository disconnected"); reload(); }
     finally { setBusy(false); }
   };
-  const push = async () => {
+  const push = async (fromRepo) => {
     setBusy(true); setError(null);
     try {
-      const b = await api.triggerBuild(region, name, {});
+      const b = await api.triggerBuild(region, name, fromRepo === true ? { fromRepo: true } : {});
       notify[b.status === "SUCCESS" ? "success" : "error"](`Build ${b.id}: ${b.status}${b.revision ? ` → revision ${b.revision}` : ""}`);
       builds.reload(); reload();
     } catch (e) { setError(e); } finally { setBusy(false); }
@@ -232,6 +233,7 @@ function ContinuousDeploymentDialog({ region, name, service, notify, onClose, re
                 <TextField label="Repository" placeholder="owner/repo" required value={repository}
                   onChange={(e) => setRepository(e.target.value)} />
                 <TextField label="Branch" required value={branch} onChange={(e) => setBranch(e.target.value)} />
+                <TextField label="GitHub personal access token (optional)" type="password" helperText="For private repositories. Stored by the simulator, used only to fetch this repository." value={token} onChange={(e) => setToken(e.target.value)} />
                 <Box><Button variant="contained" disabled={busy || !repository.includes("/")} onClick={connect}>
                   {busy ? "Connecting…" : "Connect"}
                 </Button></Box>
@@ -240,9 +242,10 @@ function ContinuousDeploymentDialog({ region, name, service, notify, onClose, re
               <>
                 <Typography variant="body2">Connected to <b>{conn.repository}</b> @ <b>{conn.branch}</b></Typography>
                 <Stack direction="row" spacing={1}>
-                  <Button variant="contained" startIcon={<SyncIcon />} disabled={busy} onClick={push}>
-                    {busy ? "Pushing…" : "Simulate push (trigger build)"}
+                  <Button variant="contained" startIcon={<SyncIcon />} disabled={busy} onClick={() => push(true)}>
+                    {busy ? "Building…" : "Build from GitHub"}
                   </Button>
+                  <Button variant="outlined" disabled={busy} onClick={() => push(false)}>Build stored source</Button>
                   <Button color="error" disabled={busy} onClick={disconnect}>Disconnect</Button>
                 </Stack>
                 <Typography variant="subtitle2" sx={{ mt: 1 }}>Build history</Typography>

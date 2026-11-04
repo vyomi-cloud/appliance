@@ -1426,6 +1426,11 @@ def core_arm():
         kubescape_runner.install()
     except Exception:
         pass
+    try:                                          # shared CI seam: real BuildKit builds (+ opt-in Gitea) for Deployment Center etc.
+        from providers import ci_runner
+        ci_runner.install()
+    except Exception:
+        pass
     return arm
 
 

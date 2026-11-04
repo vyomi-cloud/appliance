@@ -3400,6 +3400,15 @@ class AzureArm:
         typ = type_chain[1].lower() if len(type_chain) > 1 else ""
         if ns == "microsoft.resources" and typ == "deployments" and action in ("cancel", "redeploy"):
             return self._deployment_action(action, resource_name, parent_rid, sub, rg)
+        if ns == "microsoft.containerregistry" and typ == "registries" and len(type_chain) == 3 and action == "schedulerun":
+            rec = self.state.get(parent_rid.lower()) if parent_rid else None
+            if not rec:
+                return _err(404, "ResourceNotFound", f"Registry '{resource_name}' not found.")
+            try:
+                from core import azure_acr_tasks_core as _acrt
+            except ImportError:                      # Pyodide flat layout
+                import azure_acr_tasks_core as _acrt  # type: ignore
+            return _acrt.schedule_run(self.state, parent_rid, rec, payload, sub, rg)
         if ns == "microsoft.containerregistry" and typ == "registries" and action in ("listcredentials", "regeneratecredential"):
             rec = self.state.get(parent_rid.lower()) if parent_rid else None
             if not rec:
