@@ -28,13 +28,18 @@ import datetime
 import re
 import uuid
 
-try:
-    from core import azure_blob_core as _blob
-except ImportError:                                  # Nano flat module path
-    try:
-        import azure_blob_core as _blob               # type: ignore
-    except ImportError:
-        _blob = None
+class _LazyBlob:
+    """azure_blob_core loads AFTER azure_arm_core in the Nano module order, so resolve it at call time."""
+
+    def __getattr__(self, name):
+        try:
+            from core import azure_blob_core as m
+        except ImportError:
+            import azure_blob_core as m           # type: ignore
+        return getattr(m, name)
+
+
+_blob = _LazyBlob()
 
 NAMESPACE = "Microsoft.StorageMover"
 API_VERSION = "2024-07-01"
