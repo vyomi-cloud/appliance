@@ -1435,6 +1435,8 @@ class AwsWireRouter:
                 # managementPolicies/default) — the single source of truth the Configuration/
                 # CORS/Lifecycle/Static website panels already write through ARM.
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), arm_state=self.az_arm.state)
+            elif svc == "az-cosmos":   # account network rules + provisioned/autoscale RU/s (429), from the ARM state
+                r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), arm_state=self.az_arm.state)
             elif svc == "az-acr":
                 # Same registry-scoped networking/retention enforcement as the offline substrate
                 # (core/wire_ingress.py) — see azure.acr.networking / azure.acr.retention. The

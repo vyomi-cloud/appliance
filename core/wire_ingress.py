@@ -446,7 +446,8 @@ def _dispatch_service(service: str, method: str, path: str, query: dict, headers
                     "azure_table": (azure_table_core, r.az_table)}[service]
         tok = _ctx.REQUEST_PROVIDER.set("azure")   # the state lives in the Azure space
         try:
-            resp = core.dispatch(st, method, path, query or {}, headers or {}, body or b"")
+            kw = {"arm_state": _ctx.azure_arm_state} if service == "azure_cosmos" else {}   # RU/s + network-rule enforcement
+            resp = core.dispatch(st, method, path, query or {}, headers or {}, body or b"", **kw)
         finally:
             _ctx.REQUEST_PROVIDER.reset(tok)
         hdrs = dict(resp.headers or {})

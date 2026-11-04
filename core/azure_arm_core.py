@@ -2639,6 +2639,13 @@ class AzureArm:
         # the caller sends (azure.cosmos.default_consistency, azure.cosmos.backup_restore,
         # azure.cosmos.replicate_data_globally); the underlying behaviour (read consistency,
         # taking/restoring a backup, provisioning a second region) is still not simulated.
+        if (len(type_chain) >= 4 and type_chain[0].lower() == "microsoft.documentdb" and type_chain[-1].lower() == "throughputsettings"):
+            try:
+                from core.azure_cosmos_core import validate_throughput_settings
+            except ImportError:  # pragma: no cover - Pyodide flat layout
+                from azure_cosmos_core import validate_throughput_settings  # type: ignore
+            msg = validate_throughput_settings((payload or {}).get("properties") or {})
+            return _err(400, "BadRequest", msg) if msg else None
         if type_chain[0].lower() != "microsoft.documentdb" or type_chain[1].lower() != "databaseaccounts" or len(type_chain) != 2:
             return None
         existing_props = (self.state.get(_canonical_id(sub, rg, type_chain, names).lower()) or {}).get("properties") or {}

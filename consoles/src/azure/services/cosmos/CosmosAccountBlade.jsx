@@ -108,6 +108,7 @@ export default function CosmosAccountBlade({ params }) {
   const panel = params.panel || "overview";
   const data = useAsync(() => api.getAccount(rg, name), [rg, name]);
   const self = `#/cosmos/${encodeURIComponent(rg)}/${encodeURIComponent(name)}`;
+  useEffect(() => { api.setActiveAccount(name); return () => api.setActiveAccount(""); }, [name]);
   useEffect(() => { if (data.data) remember({ name, type: "Azure Cosmos DB account", href: self }); }, [!!data.data, self]);
 
   let body;

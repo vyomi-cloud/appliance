@@ -56,7 +56,18 @@ export const listRoleAssignments = async (resPath) =>
 export const listRoleDefinitions = async (sub) => (await restJson("GET", `/subscriptions/${sub}/providers/Microsoft.Authorization/roleDefinitions`, { query: { "api-version": AUTHZ_API } })).value || [];
 
 // ── Cosmos data plane (core/azure_cosmos_core.py, native /dbs wire) ────────────────────
-const cosmos = (method, path, opts) => restJson(method, path, opts);
+// The data-plane wire names no account; the console carries the one it shows (x-vyomi-account) so that account's
+// network rules and RU/s offer are enforced (core/azure_cosmos_core.dispatch).
+let activeAccount = "";
+export const setActiveAccount = (name) => { activeAccount = name || ""; };
+const cosmos = (method, path, opts = {}) => restJson(method, path, activeAccount ? { ...opts, headers: { "x-vyomi-account": activeAccount, ...(opts.headers || {}) } } : opts);
+
+// ── throughput offers (ARM sqlDatabases[/containers]/throughputSettings/default) ───────────
+const tpPath = (rg, acct, db, coll) => `${ARM.path(rg, acct)}/sqlDatabases/${encodeURIComponent(db)}${coll ? `/containers/${encodeURIComponent(coll)}` : ""}/throughputSettings/default`;
+export const getOffer = async (rg, acct, db, coll) => { try { return (await restJson("GET", tpPath(rg, acct, db, coll), { query: { "api-version": "2024-05-15" } })).properties?.resource || null; } catch { return null; } };
+/** offer: { throughput } (manual) or { autoscaleSettings: { maxThroughput } } — validated server-side. */
+export const setOffer = (rg, acct, db, coll, offer) => restJson("PUT", tpPath(rg, acct, db, coll), { query: { "api-version": "2024-05-15" }, body: { properties: { resource: offer } } });
+export const deleteOffer = (rg, acct, db, coll) => restJson("DELETE", tpPath(rg, acct, db, coll), { query: { "api-version": "2024-05-15" } });
 
 export const listDatabases = async () => (await cosmos("GET", "/dbs")).Databases || [];
 export const createDatabase = (id) => cosmos("POST", "/dbs", { body: { id } });
