@@ -371,6 +371,51 @@ def _runtime_apply(verb: str, rec: dict, project: str, zone: str, payload: dict)
         s._record_usage(f"gcp.compute.{verb}_instance", {"instance_id": iid, "project": project, "zone": zone})
 
 
+def _guest_run(rec: dict):
+    """run(name, sh) -> (rc, stdout) through the compute backend for this instance's runtime record."""
+    def run(_n: str, sh: str):
+        try:
+            import server as s
+            if not s._docker_backed(rec):
+                return 1, ""
+            cp = s._docker_compute().exec(s._docker_instance_obj(rec), ["sh", "-c", sh])
+            return cp.returncode, (cp.stdout or b"").decode(errors="replace")
+        except Exception:
+            return 1, ""
+    return run
+
+
+def _guest_access(verb: str, method: str, out: dict, rec: dict, name: str, payload: dict) -> dict:
+    """Offline guest reach-in for the v4 instance: :sshKeys authorizes each USERNAME:KEY line in the
+    container (what the guest agent does); :osInfo overlays os-release/kernel/uptime from the live guest."""
+    from core import ssh_access_core as sa
+    try:
+        if verb == "sshKeys" and method in ("POST", "PUT"):
+            value = str(payload.get("sshKeys") if payload.get("sshKeys") is not None else payload.get("value") or "")
+            if rec.get("state") == "running":
+                res = sa.apply_gce_ssh_keys(sa.shared_store(), name, value, _guest_run(rec))
+            else:
+                res = {"keys": len(sa.parse_gce_ssh_keys(value)), "delivered": 0}
+            body = json.loads(out["body"])
+            body["guest"] = res
+            rec.setdefault("metadata_items", {})["ssh-keys"] = value
+            return _json_out(200, body)
+        if verb == "osInfo" and method == "GET" and rec.get("state") == "running":
+            rc, txt = _guest_run(rec)(name, sa.OS_INFO_CMD)
+            if rc == 0 and txt.strip():
+                d = sa.parse_os_info(txt)
+                body = json.loads(out["body"])
+                body.update({"source": "guest", "prettyName": d.get("pretty") or body.get("prettyName"), "id": d.get("id") or body.get("id"),
+                             "kernel": d.get("kernel"), "architecture": d.get("arch") or body.get("architecture"),
+                             "hostname": d.get("hostname") or body.get("hostname"), "uptimeSeconds": int(d.get("uptime") or 0),
+                             "memoryKb": int(d.get("mem_kb") or 0), "cpus": int(d.get("cpus") or 0), "packages": int(d.get("pkgs") or 0),
+                             "note": "Read from the running guest container (os-release, uname, /proc)."})
+                return _json_out(200, body)
+    except Exception as exc:
+        _log.warning("compute engine: guest %s for %s skipped: %s", verb, name, exc)
+    return out
+
+
 def compute(method: str, native: str, query: dict, body: bytes, classic: bool = False) -> dict:
     """Serve one Compute Engine call on the cores, keeping an instance's real runtime in
     step (see the module docstring)."""
@@ -415,6 +460,8 @@ def compute(method: str, native: str, query: dict, body: bytes, classic: bool = 
     if not target or out["status"] != 200:
         return out
     project, zone, name, verb = target
+    if verb in ("sshKeys", "osInfo") and isinstance(rec, dict):
+        return _guest_access(verb, method, out, rec, name, payload)
     try:
         if verb == "insert":
             st = aps.gcp_compute_vm_store()
