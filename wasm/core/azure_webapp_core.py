@@ -649,7 +649,7 @@ def _site_subresource(state, rec, rest, method, payload):
         return _err(404, "ResourceTypeNotSupported",
                     f"'{rest[0]}' is not supported on a {_label(rec)} (kind '{rec.get('kind')}').")
     if r0 == "config" and len(rest) >= 2 and rest[1].lower() == "publishingcredentials" or r0 in (
-            "sourcecontrols", "deployments", "sync", "newpassword", "basicpublishingcredentialspolicies"):
+            "sourcecontrols", "deployments", "sync", "newpassword", "basicpublishingcredentialspolicies", "localgit"):
         try:
             from core import azure_webdeploy_core as _wd
         except ImportError:

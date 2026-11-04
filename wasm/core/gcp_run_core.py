@@ -2260,6 +2260,15 @@ def connect_repo(store, project, location, sid, payload):
     branch = str(payload.get("branch") or "main").strip() or "main"
     if not repo or "/" not in repo or repo.startswith("/") or repo.endswith("/"):
         raise _E(400, "INVALID_ARGUMENT", "repository must be of the form \"owner/repo\".")
+    if payload.get("accessToken"):
+        try:
+            from core import ci_core as _ci
+        except ImportError:
+            import ci_core as _ci                          # type: ignore
+        try:
+            _ci.set_connection(_ci.get_db(store.__dict__.setdefault("_ci_holder", {})), "github", str(payload["accessToken"]))
+        except _ci.CiError as e:
+            raise _E(400, "INVALID_ARGUMENT", e.message)
     ann = dict(svc.get("annotations") or {})
     ann[_REPO_ANN] = json.dumps({"repository": repo, "branch": branch, "connectedAt": _ts()})
     svc["annotations"] = ann
@@ -2306,6 +2315,8 @@ def trigger_build(store, project, location, sid, payload):
     bfull = build_name(project, location, sid, bid)
     now = _ts()
     build = {"name": bfull, "id": bid, "createTime": now, "repository": conn["repository"], "branch": conn["branch"]}
+    if payload.get("fromRepo"):
+        return _build_from_repo(store, project, location, sid, full, svc, conn, build, bfull, bid)
     new_ann = dict(cur_ann, **{_FN_ANN_RUNTIME: runtime, _FN_ANN_ENTRY: entry, _FN_ANN_SOURCE: source})
     try:
         _validate_function_source(new_ann)
@@ -2332,6 +2343,47 @@ def trigger_build(store, project, location, sid, payload):
             "severity": "INFO",
             "textPayload": "Cloud Build %s: %s (%s@%s)" % (bid, build["status"], conn["repository"], conn["branch"]),
         }]})
+    return trigger_build_view(build)
+
+
+def _build_from_repo(store, project, location, sid, full, svc, conn, build, bfull, bid):
+    """Continuous deployment from the connected GitHub repo, through the shared CI seam (core/ci_core.py): the branch is
+    fetched (the user's own PAT if connected), the Dockerfile is built with BuildKit (offline appliance), and ONLY a
+    successfully built image is cut as a new revision. No Dockerfile -> FAILURE (no buildpacks); no container builder
+    (Nano) / no outbound fetch -> FAILURE with that reason."""
+    try:
+        from core import ci_core as ci
+    except ImportError:                                    # Pyodide flat layout
+        import ci_core as ci                               # type: ignore
+    holder = store.__dict__.setdefault("_ci_holder", {})
+    db = ci.get_db(holder)
+    repo = conn["repository"].replace("/", "--")
+    logs = []
+    try:
+        ci.ensure_repo(db, repo, conn["branch"])
+        ci.import_external(db, repo, "https://github.com/" + conn["repository"], conn["branch"], branch=conn["branch"],
+                           message="Cloud Run continuous deployment %s" % bid)
+        tree = ci.tree(db, repo, conn["branch"])
+        if "Dockerfile" not in tree:
+            raise ci.CiError("NoDockerfile", "No Dockerfile in %s@%s; source builds with buildpacks are not available in Vyomi." % (conn["repository"], conn["branch"]))
+        tag = "vyomi-run/%s/%s:%s" % (project, sid, bid)
+        job = ci.submit_job(db, repo, conn["branch"], {"kind": "image", "tag": tag}, trigger="cloudrun:" + sid)
+        logs = [l["message"] for l in job["logs"]]
+        if job["status"] != "Succeeded":
+            raise ci.CiError("BuildFailed", job["error"])
+    except ci.CiError as e:
+        build["status"], build["finishTime"] = "FAILURE", _ts()
+        build["logs"] = "\n".join(logs + ["Build failed: %s" % e.message])
+        store.builds[bfull] = build
+        return trigger_build_view(build)
+    template = _copy(svc["template"])
+    template["containers"][0]["image"] = tag
+    update_service(store, project, location, sid, {"updateMask": "template"}, {"template": template})
+    build["status"], build["finishTime"] = "SUCCESS", _ts()
+    build["image"] = tag
+    build["revision"] = store.services[full]["latestReadyRevision"].rsplit("/", 1)[-1]
+    build["logs"] = "\n".join(logs + ["Build succeeded; deployed revision %s with image %s." % (build["revision"], tag)])
+    store.builds[bfull] = build
     return trigger_build_view(build)
 
 
