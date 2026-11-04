@@ -1309,6 +1309,34 @@
     html.vy-acct #activate-modal.am-overlay { background: transparent; padding-top: 12px; }
 
     html.vy-entering body { visibility: hidden; }   /* default cloud set: no flash of the appliance page before redirecting */
+    /* vy-embed black-white: drawer views (Spaces, Health, Knowledge Center, SDK & CLI usage, API) in the standard black & white
+       theme. White background throughout, thin borders, no shadows, black buttons, no blue. */
+    html.vy-embed, html.vy-embed body { background: #fff !important; color: #18181b !important; background-image: none !important; }
+    html.vy-embed #app-main { background: transparent !important; }
+    html.vy-embed #app-main .surface-card, html.vy-embed #app-main .kc-panel, html.vy-embed #app-main .u-panel, html.vy-embed #app-main .u-panel, html.vy-embed #app-main .kc-panel {
+      background: #fafafa !important; border: 1px solid #e4e4e7 !important; border-radius: 8px !important; box-shadow: none !important; }
+    html.vy-embed #app-main .space-card, html.vy-embed #app-main .stat-card, html.vy-embed #app-main .pie-card, html.vy-embed #app-main .kct, html.vy-embed #app-main .u-card, html.vy-embed #app-main .u-tunnel-card {
+      background: #fff !important; border: 1px solid #e4e4e7 !important; border-radius: 8px !important; box-shadow: none !important; }
+    html.vy-embed #app-main .space-card:hover, html.vy-embed #app-main .kct:hover, html.vy-embed #app-main .u-card:hover { border-color: #000 !important; box-shadow: none !important; }
+    html.vy-embed #app-main .space-card.active { border: 1px solid #000 !important; box-shadow: none !important; }
+    html.vy-embed #app-main .sc-title, html.vy-embed #app-main .sc-title h2 { color: #000 !important; border-bottom-color: #000 !important; }
+    html.vy-embed #app-main .sc-title h2 .material-icons, html.vy-embed #app-main .material-icons[style*="2563eb"] { color: #000 !important; }
+    html.vy-embed #app-main .sc-desc, html.vy-embed #app-main .sc-head + .sc-desc { color: #52525b !important; }
+    html.vy-embed #app-main .btn-create-space { background: #000 !important; border-color: #000 !important; color: #fff !important; border-radius: 6px !important; box-shadow: none !important; }
+    html.vy-embed #app-main .btn-create-space:hover { background: #27272a !important; }
+    html.vy-embed #app-main .prov-filter button, html.vy-embed #app-main select { border: 1px solid #e4e4e7 !important; border-radius: 6px !important; box-shadow: none !important; background: #fff !important; color: #18181b !important; }
+    html.vy-embed #app-main .kc-open { color: #fff !important; background: #000 !important; border-color: #000 !important; border-radius: 6px !important; }
+    html.vy-embed #app-main .kct-open { color: #000 !important; }
+    html.vy-embed #app-main .kc-open:hover { background: #27272a !important; }
+    html.vy-embed #app-main .u-cloud-tab, html.vy-embed #app-main .u-tab { color: #71717a !important; }
+    html.vy-embed #app-main .u-cloud-tab:hover, html.vy-embed #app-main .u-tab:hover { color: #000 !important; }
+    html.vy-embed #app-main .u-cloud-tab.on { color: #000 !important; border-bottom-color: #000 !important; }
+    html.vy-embed #app-main .u-tab[aria-selected="true"] { color: #000 !important; box-shadow: inset 0 -2px 0 #000 !important; }
+    html.vy-embed #app-main .u-code, html.vy-embed #app-main .u-code { background: #fff !important; border: 1px solid #e4e4e7 !important; border-radius: 6px !important; color: #18181b !important; }
+    html.vy-embed #app-main .u-ibtn, html.vy-embed #app-main .u-ibtn { border: 1px solid #e4e4e7 !important; border-radius: 6px !important; box-shadow: none !important; color: #3f3f46 !important; }
+    html.vy-embed #app-main a { color: #000; }
+    html.vy-embed #app-main .kct-open, html.vy-embed #app-main .kct a, html.vy-embed #app-main .u-card a { color: #000 !important; }
+    html.vy-embed #app-main .stat-card .stat-actions button { border: 1px solid #e4e4e7 !important; border-radius: 6px !important; background: #fff !important; color: #18181b !important; }
 </style>
   <style id="vy-light-theme">
     /* ═══════════ Light theme — the whole console page (Spaces, Health, Knowledge Center,

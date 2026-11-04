@@ -161,7 +161,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
   aside.service-rail:not(.closed) .nav-open{display:none}
   /* Stub items are now real schema-driven pages — no special dim/tag needed */
 
-  main.aws-main{flex:1;overflow-y:auto;padding:20px 26px;max-width:1500px}
+  main.aws-main{flex:1;overflow-y:auto;padding:20px 26px;max-width:none;width:100%}
 
   /* ---- Page headers ---- */
   h1.page-h{font-size:24px;font-weight:700;color:var(--ink);margin:0 0 4px;display:flex;align-items:center;gap:10px}
@@ -451,8 +451,44 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
 }
 #disk-widget-slot .disk-popover .dp-close:hover { color: #0f1b2d; }
   .vy-co{display:inline-flex;align-items:center;flex:none;text-decoration:none}.vy-co img{height:18px;width:auto;display:block}.vy-co-sep{width:1px;height:22px;background:rgba(255,255,255,.35);flex:none;margin:0 -2px}
+  /* ── Small screens: compact header strip + no permanent side rail ── */
+  @media (max-width: 900px){
+    header.aws-top{gap:10px;padding:0 10px}
+    header .right{gap:10px}
+    header .right button[title="Settings"]{display:none}
+    aside.service-rail{display:none}
+  }
+  @media (max-width: 640px){
+    header.aws-top{height:44px;gap:8px;padding:0 8px}
+    .vy-co img{height:16px}
+    .vy-co-sep{display:none}
+    header .logo svg{width:30px;height:18px}
+    header button.nav-link{height:30px;padding:0 9px}
+    header .search{height:30px;padding:0 8px;min-width:0;flex:1;background:rgba(255,255,255,.12)}
+    header .search .material-symbols-outlined{color:#fff!important}
+    header .search input{color:#fff}
+    header .search input::placeholder{color:rgba(255,255,255,.7)}
+    header .search input{min-width:0;width:100%}
+    header .right{gap:6px}
+    header .right button[title="Cloud Shell"],header .right button[title="Settings"],header .right .hdr-menu .caret{display:none}
+    header .right .hdr-menu{height:30px;padding:0 9px;font-size:12px}
+    header .right #regionText{max-width:64px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    aside.service-rail{display:none}
+    .page{min-height:calc(100vh - 44px - 36px)}
+    main.aws-main{padding:14px 12px}
+    .svc-menu{top:44px;left:0;width:100vw;height:calc(100vh - 44px);border-radius:0;flex-direction:column}
+    .svc-menu .sm-nav{width:100%;display:flex;flex-wrap:nowrap;overflow-x:auto;border-right:0;border-bottom:1px solid #e9ebed;padding:6px 8px}
+    .svc-menu .sm-nav button{width:auto;white-space:nowrap;padding:8px 12px;border-radius:16px;flex:none}
+    .svc-menu .sm-nav button.on{box-shadow:none;background:#f2f8fd}
+    .svc-menu .sm-nav hr{display:none}
+    .svc-menu .sm-pane{padding:12px 14px}
+  }
 </style>
   <script type="module" src="./nano-boot.js?v=4"></script>
+  <script src="./nano-disclaimer.js"></script>
+  <script src="./nano-back.js"></script>
+  <script src="./nano-connect.js"></script>
+  <script src="./vyomi-dl-card.js"></script>
 <style>#acctBtn{display:none!important;}</style>
 <script src="./service-icons.js"></script>
 </head>
@@ -722,7 +758,8 @@ async function boot(){
       const id = await ir.json();
       INSTANCE_CATALOG = Array.isArray(id.instances) ? id.instances : [];
     } catch(_) { INSTANCE_CATALOG = []; }
-    // Initial route — Home page (no service)
+    // Initial route — restore the view from before a refresh, else Home
+    try{ const sv=((performance.getEntriesByType("navigation")[0]||{}).type==="reload")?JSON.parse(sessionStorage.getItem('vy_view_aws')||'null'):null; if(sv&&sv.view) STATE={...STATE,...sv}; }catch(_){}
     render();
   } catch (e) {
     document.getElementById("main").innerHTML = '<div class="empty">Failed to load AWS catalog: '+e+'</div>';
@@ -764,6 +801,16 @@ function _shouldSkipAutoRefresh(){
   return selectedCount > 0 || hasOpenDropdown || editing;
 }
 
+// A VM changed power state (booting -> running): repaint the open view so the state badge flips without a manual Refresh.
+addEventListener("nano-vm-power", () => {
+  try {
+    const ae = document.activeElement;
+    if (ae && ae.closest && ae.closest(".vy-term")) return;                  // never yank the shell away while typing
+    if (typeof _shouldSkipAutoRefresh === "function" && _shouldSkipAutoRefresh()) return;
+    if ((STATE.view === "list" || STATE.view === "detail") && STATE.service === "ec2") render();
+  } catch (_) {}
+});
+
 function navigate(next){
   // Track recently visited services (fed into Console Home widget)
   if (next && next.service && next.service !== STATE.service) recordRecentVisit(next.service);
@@ -774,6 +821,7 @@ function navigate(next){
   render();
 }
 function render(){
+  try{ sessionStorage.setItem('vy_view_aws', JSON.stringify(STATE)); }catch(_){}   // survive a hard refresh
   renderCrumbs();
   renderRail();
   const main = document.getElementById("main"); main.innerHTML = "";
@@ -1273,8 +1321,7 @@ function renderHome(main){
   const conn = el("div",{class:"widget"});
   conn.append(el("div",{class:"wh"}, icon("terminal"), "Connect your SDK or CLI",
     el("a",{class:"info",onclick:()=>toast("The real AWS CLI and SDKs reach this in-browser cloud through the Nano tunnel, with only the endpoint changed.","ok")}, "Info")));
-  conn.append(el("div",{class:"wb"}, vyCodeTabs({note:"Nano: start the tunnel first (Start tunnel in the bottom bar), or run vyomi-tunnel; then these reach this browser tab.", accent:"var(--link)",
-    tabs: vyConnectTabs({cloud:"aws", ep: nanoTunnelEp(), region: REGION, nano:true})})));
+  conn.append(el("div",{class:"wb"}, vyConnectSwitch({accent:"var(--link)", build:(ep)=>vyConnectTabs({cloud:"aws", ep, region: REGION, nano:true})})));
   grid.append(conn);
 
 
@@ -5416,7 +5463,7 @@ function renderDiskWidget(d) {
           '<div style="height:100%;width:' + pct + '%;background:' + accent + ';transition:width 0.3s"></div>' +
         '</div>' +
         '<div style="font-size:11px;color:#6b7280;margin-top:6px">' +
-          disk.used_gb + " / " + disk.total_gb + " GB · " + disk.avail_gb + " GB free" +
+          (+disk.used_gb).toFixed(2) + " / " + (+disk.total_gb).toFixed(2) + " GB · " + (+disk.avail_gb).toFixed(2) + " GB free" +
         '</div>' +
       '</div>' +
       '<div style="display:flex;gap:8px">' +
@@ -5671,7 +5718,7 @@ boot();
     epEl.title = external || "";
     // Persist the live endpoint so other views (e.g. the /docs/*/usage per-service
     // samples) can show the SAME relay URL even before their own channel connects.
-    if(phase==="connected" && external){ try{ localStorage.setItem("nano_relay_external", external); if(mode) localStorage.setItem("nano_relay_mode", mode); }catch(_){} }
+    if(phase==="connected" && external){ try{ localStorage.setItem("nano_relay_external", external); if(mode) localStorage.setItem("nano_relay_mode", mode); if(mode) localStorage.setItem(mode==="local"?"nano_local_ext":"nano_relay_cloud_ext", external); }catch(_){} }
     // Gentle GitHub-star nudge at natural moments: the first relayed request (a
     // "win") or the 30-min idle pause. Once per browser, dismissable, never blocks.
     if(served!=null && served>=1 && _prevServed<1) maybeNudge();
@@ -5747,6 +5794,7 @@ boot();
   }
 })();
 </script><script src="./vyomi-appbar.js" data-cloud="aws" data-clouds="clouds.html" defer></script>
+<script src="./nano-tunnel-tabs.js" defer></script>
 </body>
 </html>
 

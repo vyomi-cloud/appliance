@@ -1,7 +1,8 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <style>/* login-gated landing redirects to the Spaces console (see install-then-redirect below); hide marketing content to avoid a flash */ #app-main{visibility:hidden}</style>
+  <style>/* This page only redirects to the Spaces console (see install-then-redirect below). Hide the WHOLE shell (sidebar, top bar, footer bar) and keep the canvas light, so the old appliance dashboard never flashes. */ html{background:#fff} body{visibility:hidden}</style>
+  <script>setTimeout(function(){document.body&&(document.body.style.visibility="visible")},8000);</script>
   <script>
   (function(){
     var base = location.pathname.replace(/\/[^\/]*$/, "");
@@ -2767,5 +2768,6 @@ function nanoLogout(){
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", apply); else apply();
 })();
 </script>
+<script src="./nano-tunnel-tabs.js" defer></script>
 </body>
 </html>

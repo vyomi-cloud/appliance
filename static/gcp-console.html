@@ -3740,7 +3740,7 @@ function renderDiskWidget(d) {
       '<div style="height:8px;background:#f3f4f6;border-radius:999px;overflow:hidden">'+
         '<div style="height:100%;width:'+pct+'%;background:'+accent+';transition:width 0.3s"></div>'+
       '</div>'+
-      '<div style="font-size:11px;color:#6b7280;margin-top:6px;margin-bottom:10px">'+disk.used_gb+' / '+disk.total_gb+' GB · '+disk.avail_gb+' GB free</div>'+
+      '<div style="font-size:11px;color:#6b7280;margin-top:6px;margin-bottom:10px">'+(+disk.used_gb).toFixed(2)+' / '+(+disk.total_gb).toFixed(2)+' GB · '+(+disk.avail_gb).toFixed(2)+' GB free</div>'+
       '<div style="display:flex;gap:8px">'+
         '<button onclick="openDiskCleanup()" style="font-size:12px;padding:6px 12px;background:#1a73e8;color:#fff;border:0;border-radius:6px;cursor:pointer">Free up space</button>'+
         (canGrow ? '<button onclick="openDiskGrow()" style="font-size:12px;padding:6px 12px;background:#fff;color:#1a2330;border:1px solid #d8e0ea;border-radius:6px;cursor:pointer">Grow disk</button>' : '')+
@@ -3809,6 +3809,7 @@ setInterval(fetchDiskHealth, 30000);
 <script src="/assets/lazy_backends.js">
 </script>
 <script src="/assets/vyomi-appbar.js" data-cloud="gcp" defer></script>
+<script src="/assets/nano-disclaimer.js" defer></script>
 <script>
 /* Wrap every grid (table.gc) in a .vy-scroll frame as it is rendered, so wide/long grids scroll
    (horizontal + vertical, header pinned) instead of being clipped by the card. */

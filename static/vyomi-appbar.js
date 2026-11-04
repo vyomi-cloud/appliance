@@ -10,6 +10,8 @@
   var cloud = (s && s.getAttribute('data-cloud')) || 'aws';
   var CL = (s && s.getAttribute('data-clouds')) || '/clouds';   // appliance page: '/clouds' offline, 'clouds.html' on Nano
   var NAMES = { aws: 'AWS', gcp: 'Google Cloud', azure: 'Azure' };
+  // Drawer = the MAJOR capabilities only (ITEMS). Everything the product offers lives in CAPS and shows in the expand dialog;
+  // to add a capability, add a CAPS row (set major:true + an ITEMS entry only if it deserves a place in the drawer).
   var ITEMS = [
     ['spaces', 'Spaces', 'M12 2 2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5'],
     ['workspace', 'Health', 'M3 3v18h18M7 12h3v6H7zM12 8h3v10h-3zM17 4h3v14h-3z'],
@@ -29,10 +31,17 @@
     '#vy-appbar #disk-widget-slot .disk-chip:hover,#vy-appbar #disk-widget-slot.open .disk-chip{background:rgba(255,255,255,.08) !important;color:#fff !important}' +
     '#vy-appbar #disk-widget-slot .disk-chip *{color:inherit !important;font:inherit !important}' +
     '#vy-appbar #disk-widget-slot .disk-chip .disk-chip-caret{display:none}' +
+    '#vy-appbar #disk-widget-slot .disk-popover{padding:0 !important;background:transparent !important;border:0 !important;box-shadow:none !important;overflow:visible !important}' +
+    '#vy-appbar #disk-widget-slot .disk-popover > div{border:1px solid #e4e4e7 !important;box-shadow:0 8px 24px rgba(0,0,0,.16),0 2px 6px rgba(0,0,0,.08) !important;background:#fff !important;margin-bottom:0 !important}' +
+    '#vy-appbar #disk-widget-slot .disk-popover > div > div:first-child{padding-right:26px}' +   /* keep the status label clear of the close button */
+    '#vy-appbar #disk-widget-slot .disk-popover .dp-close{top:10px !important;right:10px !important}' +
     '#vy-appbar #disk-widget-slot .disk-popover{top:auto !important;bottom:calc(100% + 14px) !important;right:auto !important;left:50% !important;transform:translateX(-50%)}' +
     '#vy-appbar .vy-notch a{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 10px;border-radius:8px;color:#b4b8cc;font-size:12px;text-decoration:none;white-space:nowrap}' +
     '#vy-appbar .vy-notch a:hover{background:rgba(255,255,255,.08);color:#fff}' +
     '#vy-appbar .vy-notch a svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}' +
+    '@keyframes vy-tun{0%{box-shadow:0 0 0 0 rgba(77,140,243,.75)}70%{box-shadow:0 0 0 9px rgba(77,140,243,0)}100%{box-shadow:0 0 0 0 rgba(77,140,243,0)}}' +
+    '#vy-appbar .vy-notch a.vy-tun{position:relative;color:#fff;animation:vy-tun 1.6s ease-out infinite}' +
+    '#vy-appbar .vy-notch a.vy-tun::after{content:"";position:absolute;top:1px;right:1px;width:10px;height:10px;border-radius:50%;background:#f59e0b;box-shadow:0 0 0 2px #0f121c}' +
     '#vy-appbar .vy-notch a.on{background:rgba(77,140,243,.18);color:#fff}' +
     '#vy-modal{position:fixed;inset:0;z-index:200;background:rgba(10,12,24,.62);display:none;align-items:center;justify-content:center}' +
     '#vy-modal.open{display:flex}' +
@@ -89,6 +98,41 @@
     '#vy-acct-menu.vy-azure .vy-wt b{font-size:16px;font-weight:600}#vy-acct-menu.vy-azure a{padding:10px 20px;border-radius:0;font-size:14px;color:#323130}#vy-acct-menu.vy-azure a:hover{background:#f3f2f1}' +
     '#vy-acct-menu.vy-azure .vy-hr{display:none}#vy-acct-menu.vy-azure a[data-act=signout]{position:absolute;top:14px;right:14px;padding:4px 8px;color:#0078d4;font-size:13px}#vy-acct-menu.vy-azure a[data-act=signout]:hover{background:transparent;text-decoration:underline}#vy-acct-menu.vy-azure a[data-act=signout] svg{display:none}' +
     '#vy-so.vy-azure .dlg{border-radius:2px;padding:24px;font-family:"Segoe UI",system-ui,sans-serif;color:#323130}#vy-so.vy-azure h4{font-weight:600}#vy-so.vy-azure button{border-radius:2px;padding:6px 20px;font-weight:600}#vy-so.vy-azure .go{background:#0078d4;color:#fff;border:1px solid #0078d4}#vy-so.vy-azure .no{background:#fff;color:#323130;border:1px solid #8a8886}' +
+    '#vy-appbar .vy-notch button.vy-exp{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;margin-left:2px;padding:0;border:0;border-radius:8px;background:none;color:#b4b8cc;cursor:pointer}' +
+    '#vy-appbar .vy-notch button.vy-exp:hover,#vy-appbar .vy-notch button.vy-exp[aria-expanded=true]{background:rgba(255,255,255,.08);color:#fff}' +
+    '#vy-appbar .vy-notch button.vy-exp:not(.vy-ic){order:9}' +   /* expand = always the last icon; the info/download icons (order 2,3) sit before it */
+    '#vy-appbar .vy-notch button.vy-exp svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}' +
+    /* Expanded drawer = Vyomi Marketplace: standard black & white, landing-page grid field, thin borders, no shadows */
+    '#vy-cap{position:fixed;inset:0;z-index:210;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif}#vy-cap.open{display:flex}' +
+    '#vy-cap .cbox{width:min(1120px,96vw);height:min(720px,90vh);display:flex;flex-direction:column;background:#fff;color:#18181b;border:1px solid #e4e4e7;border-radius:8px;overflow:hidden}' +
+    '#vy-cap .chd{display:flex;align-items:center;gap:16px;padding:12px 20px;background:#fff;border-bottom:1px solid #e4e4e7}' +
+    '#vy-cap .cbrand{display:flex;align-items:center;gap:8px;font-size:16px;font-weight:700;letter-spacing:-.01em;color:#000;white-space:nowrap}' +
+    '#vy-cap .csearch{flex:1;max-width:520px;display:flex;align-items:center;gap:8px;height:36px;padding:0 10px;background:#fff;border:1px solid #e4e4e7;border-radius:6px;color:#71717a}#vy-cap .csearch:focus-within{border-color:#000}' +
+    '#vy-cap .csearch svg{width:16px;height:16px;flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}#vy-cap .csearch input{flex:1;min-width:0;border:0;outline:0;background:transparent;font:inherit;font-size:13.5px;color:#18181b}' +
+    '#vy-cap .cx{margin-left:auto;flex:none;display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border:1px solid #e4e4e7;border-radius:6px;background:#fff;color:#18181b;cursor:pointer}#vy-cap .cx:hover{border-color:#000}' +
+    '#vy-cap .cx svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}' +
+    '#vy-cap .cbody{flex:1;min-height:0;display:flex}' +
+    '#vy-cap .cside{width:220px;flex:none;padding:16px 10px;background:#fff;border-right:1px solid #e4e4e7;overflow:auto}' +
+    '#vy-cap .cside h5{margin:0 10px 8px;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#71717a}' +
+    '#vy-cap .ccat{display:flex;align-items:center;width:100%;padding:8px 10px;margin:0 0 2px;border:0;border-radius:6px;background:transparent;font:inherit;font-size:13.5px;color:#3f3f46;text-align:left;cursor:pointer}#vy-cap .ccat:hover{background:#f4f4f5}' +
+    '#vy-cap .ccat.on{background:#000;color:#fff;font-weight:600}#vy-cap .ccat i{margin-left:auto;font-style:normal;font-size:12px;color:#71717a}#vy-cap .ccat.on i{color:#d4d4d8}' +
+    '#vy-cap .cmain{flex:1;min-width:0;overflow:auto;padding:24px 28px;background:#fff}' +
+    '#vy-cap .chero{margin-bottom:24px;padding:18px 22px;border:1px solid #e4e4e7;border-radius:8px;background:#fff}' +
+    '#vy-cap .chero h3{margin:0 0 4px;font-size:20px;font-weight:700;letter-spacing:-.01em;color:#000}#vy-cap .chero p{margin:0;font-size:13.5px;color:#52525b}' +
+    '#vy-cap .csec{margin:0 0 12px;font-size:15px;font-weight:700;color:#000}#vy-cap .csec small{font-weight:500;color:#71717a;margin-left:6px;font-size:13px}' +
+    '#vy-cap .cgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}' +
+    '#vy-cap .ctile{display:flex;flex-direction:column;padding:0;text-align:left;font:inherit;color:inherit;background:#fff;border:1px solid #e4e4e7;border-radius:8px;cursor:pointer;text-decoration:none;overflow:hidden}' +
+    '#vy-cap .ctile:hover,#vy-cap .ctile:focus-visible{border-color:#000;outline:none}' +
+    '#vy-cap .ctop{display:flex;align-items:center;gap:12px;padding:16px 16px 0}' +
+    '#vy-cap .cic{flex:none;display:inline-flex;align-items:center;justify-content:center;width:38px;height:38px;border:1px solid #e4e4e7;border-radius:8px;color:#000;background:#fff}#vy-cap .cic svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}' +
+    '#vy-cap .ctl{display:block;font-size:14px;font-weight:600;color:#000;line-height:1.3}#vy-cap .cby{display:block;font-size:12px;color:#71717a}' +
+    '#vy-cap .cd{flex:1;padding:14px 16px 4px;font-size:13px;line-height:1.5;color:#52525b}' +
+    '#vy-cap .cft{display:flex;align-items:center;gap:8px;padding:10px 16px 14px}' +
+    '#vy-cap .loz{display:inline-block;padding:2px 8px;border:1px solid #d4d4d8;border-radius:999px;font-size:11px;font-weight:600;letter-spacing:.02em;color:#52525b;background:#fff}#vy-cap .loz.blue{background:#000;border-color:#000;color:#fff}' +
+    '#vy-cap .cgo{margin-left:auto;display:inline-flex;align-items:center;height:28px;padding:0 14px;border:1px solid #000;border-radius:6px;background:#000;color:#fff;font-size:12.5px;font-weight:600}#vy-cap .ctile:hover .cgo{background:#27272a}' +
+    '#vy-cap .cnone{padding:40px 0;text-align:center;color:#71717a;font-size:14px}' +
+    '#vy-cap .cmore{margin-top:24px;padding:14px 18px;border:1px dashed #a1a1aa;border-radius:8px;background:#fff;color:#52525b;font-size:13px}#vy-cap .cmore b{color:#000}' +
+    '@media(max-width:820px){#vy-cap .cside{display:none}#vy-cap .chd{gap:10px}#vy-cap .cbrand span{display:none}}' +
     '@media(max-width:900px){#vy-appbar .vy-notch a span{display:none}#vy-appbar .vy-cloud{display:none}}';
   function build() {
     if (document.getElementById('vy-appbar')) return;
@@ -107,6 +151,80 @@
     document.body.appendChild(bar);
     var disk = document.getElementById('disk-widget-slot');          // the disk-usage chip lives in the drawer too
     if (disk) { var nav = bar.querySelector('.vy-notch'); var sp = document.createElement('span'); sp.className = 'vy-sep'; nav.appendChild(sp); nav.appendChild(disk); }
+    // ---- expand: every capability, black & white tiles (the drawer itself keeps only the major ones) ----
+    var ICO = { spaces: ITEMS[0][2], workspace: ITEMS[1][2], kc: ITEMS[2][2], usage: ITEMS[3][2], api: ITEMS[4][2],
+      disk: 'M4 7c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3zM4 7v5c0 1.7 3.6 3 8 3s8-1.3 8-3V7M4 12v5c0 1.7 3.6 3 8 3s8-1.3 8-3v-5',
+      tunnel: 'M2 12h6M16 12h6M8 8v8M16 8v8M8 12h8', acct: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21c0-4.4 3.6-7 8-7s8 2.6 8 7',
+      star: 'M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z',
+      check: 'M9 12l2 2 4-4M12 2l2.4 1.8 3-.2.9 2.9 2.5 1.7-.9 2.9.9 2.9-2.5 1.7-.9 2.9-3-.2L12 22l-2.4-1.8-3 .2-.9-2.9-2.5-1.7.9-2.9-.9-2.9 2.5-1.7.9-2.9 3 .2z',
+      grid: 'M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z', layers: 'M12 2 2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5',
+      tag: 'M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8zM7.5 7.5h.01', doc: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M8 13h8M8 17h6' };
+    var SITE = 'https://vyomi.cloud';
+    var CAPS = [
+      { t: 'Spaces', d: 'Create, switch and manage your simulated cloud spaces.', i: 'spaces', major: 1, v: 'spaces' },
+      { t: 'Health', d: 'Backend and service status at a glance.', i: 'workspace', major: 1, v: 'workspace' },
+      { t: 'Knowledge Center', d: 'Guides, how-tos and reference for every service.', i: 'kc', major: 1, v: 'kc' },
+      { t: 'SDK & CLI usage', d: 'Point the real CLIs and SDKs at this cloud, per service.', i: 'usage', major: 1, v: 'usage' },
+      { t: 'API reference', d: 'Endpoints and request shapes this simulator serves.', i: 'api', major: 1, v: 'api' },
+      { t: 'Disk usage', d: 'See and free the space your simulator is using.', i: 'disk', major: 1, fn: function () { var c = document.querySelector('#disk-widget-slot .disk-chip'); if (c) c.click(); }, when: function () { return !!document.getElementById('disk-widget-slot'); } },
+      { t: 'Relay tunnel', d: 'Start or stop the tunnel so your CLI and SDK reach this browser tab.', i: 'tunnel', fn: function () { var b = document.getElementById('nano-foot-toggle'); if (b) b.click(); }, when: function () { return !!document.getElementById('nano-foot-toggle'); } },
+      { t: 'Account', d: 'Sign in, activate the appliance, start your free trial.', i: 'acct', fn: function () { openView('acct', 'Activate this appliance', true); } },
+      { t: 'Conformance', d: 'Latest SDK and CLI conformance results.', i: 'check', href: SITE + '/docs/conformance' },
+      { t: 'Service coverage', d: 'Which services and operations are supported, per cloud.', i: 'grid', href: SITE + '/docs/coverage' },
+      { t: 'Architecture', d: 'How the real backends and the in-browser engines fit together.', i: 'layers', href: SITE + '/docs/architecture' },
+      { t: 'Plans & pricing', d: 'Free, Pro and team plans.', i: 'tag', href: SITE + '/pricing' },
+      { t: 'Terms', d: 'Fair use, and how the simulated consoles differ from the real ones.', i: 'doc', href: SITE + '/terms#simulated-consoles' },
+      { t: 'Star on GitHub', d: 'Follow releases and help the project grow.', i: 'star', href: 'https://github.com/vyomi-cloud/appliance' }
+    ];
+    var cap = document.createElement('div'); cap.id = 'vy-cap';
+    cap.innerHTML = '<div class="cbox" role="dialog" aria-modal="true" aria-labelledby="vy-cap-t"><div class="chd"><div class="cbrand" id="vy-cap-t"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z"/></svg><span>Vyomi Marketplace</span></div>' +
+      '<label class="csearch"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg><input type="search" placeholder="Search capabilities" aria-label="Search capabilities"></label>' +
+      '<button type="button" class="cx" aria-label="Collapse" title="Collapse"><svg viewBox="0 0 24 24"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></svg></button></div>' +
+      '<div class="cbody"><nav class="cside" aria-label="Categories"></nav><div class="cmain"></div></div></div>';
+    document.body.appendChild(cap);
+    var CATS = ['Essentials', 'Learn & reference', 'Connect', 'Account & plans', 'Community'];
+    var CATCOL = { 'Essentials': '#0C66E4', 'Learn & reference': '#6554C0', 'Connect': '#00875A', 'Account & plans': '#C25100', 'Community': '#42526E' };
+    var catOf = { 'Spaces': 0, 'Health': 0, 'Disk usage': 0, 'Knowledge Center': 1, 'SDK & CLI usage': 1, 'API reference': 1, 'Architecture': 1, 'Service coverage': 1, 'Conformance': 1,
+                  'Relay tunnel': 2, 'Account': 3, 'Plans & pricing': 3, 'Terms': 3, 'Star on GitHub': 4 };
+    var curCat = 'All', query = '';
+    function visibleCaps() { return CAPS.filter(function (c) { return !c.when || c.when(); }); }
+    function paintCap() {
+      var all = visibleCaps(), side = cap.querySelector('.cside'), main = cap.querySelector('.cmain');
+      var cnt = {}; all.forEach(function (c) { var k = CATS[catOf[c.t]] || 'Essentials'; cnt[k] = (cnt[k] || 0) + 1; });
+      side.innerHTML = '<h5>Browse</h5>';
+      [['All', all.length]].concat(CATS.filter(function (k) { return cnt[k]; }).map(function (k) { return [k, cnt[k]]; })).forEach(function (r) {
+        var b = document.createElement('button'); b.type = 'button'; b.className = 'ccat' + (curCat === r[0] ? ' on' : ''); b.innerHTML = esc(r[0]) + '<i>' + r[1] + '</i>';
+        b.onclick = function () { curCat = r[0]; paintCap(); }; side.appendChild(b);
+      });
+      var q = query.trim().toLowerCase();
+      var list = all.filter(function (c) { var k = CATS[catOf[c.t]] || 'Essentials'; return (curCat === 'All' || k === curCat) && (!q || (c.t + ' ' + c.d + ' ' + k).toLowerCase().indexOf(q) >= 0); });
+      var h = '';
+      if (curCat === 'All' && !q) h += '<div class="chero"><div><h3>Everything Vyomi offers, in one place</h3><p>The drawer keeps the essentials. Browse the rest here, and watch this space for more.</p></div></div>';
+      h += '<h4 class="csec">' + (q ? 'Results' : esc(curCat === 'All' ? 'All capabilities' : curCat)) + '<small>' + list.length + '</small></h4>';
+      if (!list.length) h += '<div class="cnone">No capabilities match “' + esc(query) + '”.</div>';
+      h += '<div class="cgrid"></div>';
+      if (curCat === 'All' && !q) h += '<div class="cmore"><b>More coming.</b> New capabilities and integrations will land here first, and the best of them will be pinned to the drawer.</div>';
+      main.innerHTML = h;
+      var g = main.querySelector('.cgrid');
+      list.forEach(function (c) {
+        var k = CATS[catOf[c.t]] || 'Essentials';
+        var el = document.createElement(c.href ? 'a' : 'button'); el.className = 'ctile'; if (c.href) { el.href = c.href; el.target = '_blank'; el.rel = 'noopener noreferrer'; } else el.type = 'button';
+        el.innerHTML = '<span class="ctop"><span class="cic"><svg viewBox="0 0 24 24"><path d="' + ICO[c.i] + '"/></svg></span><span><span class="ctl">' + esc(c.t) + '</span><span class="cby">by Vyomi · ' + esc(k) + '</span></span></span>' +
+          '<span class="cd">' + esc(c.d) + '</span><span class="cft">' + (c.major ? '<span class="loz blue">In drawer</span>' : '<span class="loz">Built-in</span>') + '<span class="cgo">' + (c.href ? 'Open site' : (c.fn ? 'Launch' : 'Open')) + '</span></span>';
+        el.addEventListener('click', function () { closeCap(); if (c.href) return; if (c.v) openView(c.v, c.t, false); else if (c.fn) c.fn(); });
+        g.appendChild(el);
+      });
+    }
+    cap.querySelector('.csearch input').addEventListener('input', function (e) { query = e.target.value; paintCap(); });
+    var expBtn = document.createElement('button'); expBtn.type = 'button'; expBtn.className = 'vy-exp'; expBtn.title = 'All capabilities'; expBtn.setAttribute('aria-label', 'All capabilities'); expBtn.setAttribute('aria-expanded', 'false');
+    expBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>';
+    bar.querySelector('.vy-notch').appendChild(expBtn);
+    function closeCap() { cap.classList.remove('open'); expBtn.setAttribute('aria-expanded', 'false'); }
+    function openCap() { curCat = 'All'; query = ''; var inp = cap.querySelector('.csearch input'); inp.value = ''; paintCap(); cap.classList.add('open'); expBtn.setAttribute('aria-expanded', 'true'); setTimeout(function () { inp.focus(); }, 30); }
+    expBtn.addEventListener('click', function () { if (cap.classList.contains('open')) closeCap(); else openCap(); });
+    cap.addEventListener('click', function (e) { if (e.target === cap) closeCap(); });
+    cap.querySelector('.cx').addEventListener('click', closeCap);
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeCap(); });
     var m = document.createElement('div'); m.id = 'vy-modal';
     m.innerHTML = '<div class="box" role="dialog" aria-modal="true" aria-labelledby="vy-modal-t"><div class="hd"><span id="vy-modal-t"></span><button type="button" aria-label="Close">\u2715</button></div><iframe title="Appliance"></iframe></div>';
     document.body.appendChild(m);
@@ -121,8 +239,33 @@
       fr.src = CL + '?embed=1' + (view === 'acct' ? '&acct=1' : '') + '#' + (view === 'acct' ? 'spaces' : view);
       m.classList.add('open');
     }
+    // Arrived from the enterprise dashboard (cloudpick.js): open the requested drawer view's modal straight away.
+    try {
+      var pend = sessionStorage.getItem('vyomi.openView');
+      if (pend) {
+        sessionStorage.removeItem('vyomi.openView');
+        setTimeout(function () {
+          if (pend === 'disk') { var dc = document.querySelector('#disk-widget-slot .disk-chip'); if (dc) dc.click(); return; }
+          var it = ITEMS.filter(function (i) { return i[0] === pend; })[0]; if (it) openView(it[0], it[1], false);
+        }, 400);
+      }
+    } catch (_) {}
     // ---- account menu: a button in the console's main header (top-right) -> Activate appliance · GitHub ★ · Sign out
     var nav = bar.querySelector('.vy-notch'), NANO = CL !== '/clouds', st = { tier: 'free', trial: null }, authed = false, who = '', prof = { email: '', name: '', avatar: '', via: '' };
+    // Nano: pulse the SDK & CLI usage item until the local vyomi-tunnel has been seen running on this machine.
+    if (NANO) {
+      var tl = nav.querySelector('a[data-v="usage"]');
+      var seen = function () { try { return localStorage.getItem('vyomi.tunnel.seen') === '1'; } catch (_) { return false; } };
+      var probe = function () {
+        if (seen()) { tl && tl.classList.remove('vy-tun'); return; }
+        tl && tl.classList.add('vy-tun');
+        fetch('http://127.0.0.1:8090/health', { mode: 'no-cors', cache: 'no-store' }).then(function () {
+          try { localStorage.setItem('vyomi.tunnel.seen', '1'); } catch (_) {}
+          tl && tl.classList.remove('vy-tun');
+        }).catch(function () {});
+      };
+      probe(); setInterval(probe, 6000);
+    }
     function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
     var PERSON = '<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg>';
     var hdr = document.querySelector('header'), host = document.querySelector('header .right') || (function () { var h = document.querySelectorAll('header .hicons'); return h.length ? h[h.length - 1] : hdr; })();

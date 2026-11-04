@@ -92,7 +92,15 @@
   // Runtime facts → the instance record (grid / describe show launch status + ssh port).
   let annotateFn = null;
   const lastAnn = new Map();
+  const lastState = new Map();
+  let powerT = null;
   function onStatus(id, st) {
+    // Power transition (booting -> running ...): tell the open console to repaint its state badge in place.
+    if (lastState.get(id) !== st.state) {
+      lastState.set(id, st.state);
+      clearTimeout(powerT);
+      powerT = setTimeout(() => { try { window.dispatchEvent(new CustomEvent("nano-vm-power", { detail: { id, state: st.state } })); } catch (_) {} }, 400);
+    }
     const reg = readReg(), it = reg[id];
     if (!it || !annotateFn) return;
     const ann = { launch_status: st.state === "running" ? "ready" : st.state, nano_vm: { engine: "v86", state: st.state, host_port: st.host_port || null, image: st.image } };
@@ -287,7 +295,7 @@
           h("div", { style: S.title }, err === "NoRuntime" ? "In-browser VMs are off" : err === "TunnelRequired" ? "SSH needs vyomi-tunnel" : "VM not ready"),
           h("div", { style: S.sub }, d.hint || String(err)));
         if (err === "NoRuntime") {
-          box.append(h("button", { style: S.btn, onclick: () => { try { localStorage.setItem("nano_vm_compute", "1"); } catch (_) {} location.reload(); } }, "Turn on in-browser VMs and reload"));
+          box.append(h("button", { style: S.btn, onclick: () => { try { localStorage.setItem("nano_vm_compute", "1"); } catch (_) {} kick(); setTimeout(paint, 400); } }, "Turn on in-browser VMs"));  // no page reload: it dropped the user back to the console Home
         } else if (err === "TunnelRequired") {
           box.append(cmdRow("brew install vyomi-cloud/tap/vyomi-tunnel && vyomi-tunnel"));
         }
@@ -306,31 +314,86 @@
           h("div", { style: S.sub }, "3. Connect"), cmdRow(s.command || ""),
           h("div", { style: S.sub }, `Logs you in as ${s.user} on ${rt.os || "the VM"}, ${rt.mem_mb || "?"} MB RAM.`)));
       }
-      // Browser terminal: one command at a time over the exec endpoint (no tunnel needed).
-      const out = h("pre", { style: S.pre + ";min-height:80px;max-height:320px;overflow:auto", "data-nano-term": "1" }, "");
-      const inp = h("input", { type: "text", placeholder: "uname -a", style: "flex:1;font-family:ui-monospace,Menlo,monospace;font-size:12.5px;padding:6px 8px;border:1px solid var(--line,#aab7b8);border-radius:6px;background:transparent;color:inherit", "data-nano-term-input": "1" });
-      const run = async () => {
-        const cmd = inp.value.trim(); if (!cmd) return;
-        inp.value = ""; out.textContent += "$ " + cmd + "\n";
-        try {
-          const rr = await fetch(P.exec, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ command: cmd }) });
-          const jj = await rr.json();
-          out.textContent += rr.ok ? (jj.stdout || "") + (jj.exit_code ? `[exit ${jj.exit_code}]\n` : "") : `[${rr.status}] ${JSON.stringify(jj.detail || jj)}\n`;
-        } catch (e) { out.textContent += "[error] " + e.message + "\n"; }
-        if (!/\n$/.test(out.textContent)) out.textContent += "\n";
-        out.scrollTop = out.scrollHeight;
-      };
-      inp.addEventListener("keydown", (e) => { if (e.key === "Enter") run(); });
-      wrap.append(h("div", { style: S.box },
-        h("div", { style: S.title }, "Browser terminal"),
-        h("div", { style: S.sub }, "Runs each command in the VM as the login user (non-interactive; use SSH for a full shell)."),
-        out, h("div", { style: "display:flex;gap:8px" }, inp, h("button", { style: S.btn, onclick: run, "data-nano-term-run": "1" }, "Run"))));
+      // Browser shell: a real terminal (xterm.js) on the VM's serial console (ttyS0 -> /bin/sh). No tunnel needed.
+      wrap.append(shellBox(cloud, ref));
       wrap.append(h("div", { style: S.sub }, "Limits: 32-bit x86 only; RAM is the VM's disk (Stop saves it, Terminate discards it); " +
         "a background tab runs the VM several times slower; no general internet egress (only plain-HTTP URLs that allow CORS, fetched by the browser), so git clone / apk / pip from the internet do not work yet."));
     }
     paint();
     return wrap;
   }
+
+  // ── in-browser shell (xterm.js on the VM serial console) ───────────────
+  let xtermP = null;
+  function loadXterm() {
+    if (window.Terminal) return Promise.resolve(window.Terminal);
+    return xtermP || (xtermP = new Promise((res) => {
+      const l = document.createElement("link"); l.rel = "stylesheet"; l.href = VM_BASE + "xterm/xterm.css"; document.head.appendChild(l);
+      const sc = document.createElement("script"); sc.src = VM_BASE + "xterm/xterm.js";
+      sc.onload = () => res(window.Terminal); sc.onerror = () => res(null); document.head.appendChild(sc);
+    }));
+  }
+  const terms = new Map();   // vm id -> {term, el}: survives console re-renders so the session is not lost
+  function shellBox(cloud, ref) {
+    const id = vmId(cloud, ref);
+    const holder = h("div", { "data-nano-shell": "1", style: "background:#0c0c0c;border-radius:6px;padding:6px;min-height:120px" });
+    const fsBtn = h("button", { style: S.btn + ";float:right", title: "Full screen (Esc to exit)", "data-nano-shell-fs": "1" }, "Full screen");
+    const box = h("div", { style: S.box },
+      h("div", { style: S.title }, "Shell", fsBtn),
+      h("div", { style: S.sub }, "A real terminal on the VM's console (root, Alpine). Works without vyomi-tunnel. Click inside and type."),
+      holder);
+    // Full screen: the terminal box fills the display and the grid is re-fitted to it (and back on exit).
+    const fit = () => {
+      const t = terms.get(id); if (!t) return;
+      const full = document.fullscreenElement === holder;
+      try {
+        if (!full) { t.term.resize(110, 22); return; }
+        const d = t.term._core._renderService.dimensions.css.cell;
+        const cols = Math.max(40, Math.floor((holder.clientWidth - 16) / d.width)), rows = Math.max(10, Math.floor((holder.clientHeight - 16) / d.height));
+        t.term.resize(cols, rows); t.term.focus();
+      } catch (_) {}
+    };
+    fsBtn.onclick = () => { if (document.fullscreenElement === holder) document.exitFullscreen(); else if (holder.requestFullscreen) holder.requestFullscreen(); };
+    const onFs = () => { if (!holder.isConnected) { document.removeEventListener("fullscreenchange", onFs); return; } holder.style.padding = document.fullscreenElement === holder ? "10px" : "6px"; setTimeout(fit, 80); };
+    document.addEventListener("fullscreenchange", onFs);
+    loadXterm().then((T) => {
+      if (!T) { holder.textContent = "Terminal failed to load."; return; }
+      let t = terms.get(id);
+      if (t) { holder.append(t.el); try { t.term.refresh(0, t.term.rows - 1); } catch (_) {} return; }
+      const el = h("div", { class: "vy-term" });
+      holder.append(el);
+      const term = new T({ cols: 110, rows: 22, cursorBlink: true, fontSize: 13, fontFamily: "ui-monospace,Menlo,Consolas,monospace", theme: { background: "#0c0c0c" }, scrollback: 3000 });
+      term.open(el);
+      term.onData((d) => serialSend(cloud, ref, d));
+      onSerial((sid, data) => { if (sid === id) term.write(data); });
+      terms.set(id, { term, el });
+      serialSend(cloud, ref, "\r");   // draw a prompt
+    });
+    return box;
+  }
+
+  // ── animated pending state ───────────────────────────────────────────
+  (function () {
+    const st = document.createElement("style");
+    st.textContent = "@keyframes vyspin{to{transform:rotate(360deg)}}@keyframes vypulse{50%{opacity:.45}}@keyframes vylive{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(1.35)}}" +
+      ".vy-live .pip,.vy-live .dot{animation:vylive 2s ease-in-out infinite}.vy-live:not(:has(.pip,.dot))::before{content:'';display:inline-block;width:7px;height:7px;margin-right:6px;border-radius:50%;background:currentColor;vertical-align:1px;animation:vylive 2s ease-in-out infinite}.vy-spin .pip,.vy-spin .dot{display:none}.vy-spin{animation:vypulse 1.3s ease-in-out infinite}.vy-spin::before{content:'';display:inline-block;width:9px;height:9px;margin-right:6px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;vertical-align:-1px;animation:vyspin .8s linear infinite}";
+    document.head.appendChild(st);
+    const PEND = /^(pending|starting|provisioning|staging|vm starting|creating|stopping|shutting-down|deallocating|vm stopping|vm deallocating)$/i;
+    const LIVE = /^(running|vm running)$/i;
+    const own = (n) => Array.from(n.childNodes).filter((c) => c.nodeType === 3).map((c) => c.textContent).join('').trim().replace(/^PowerState\//i, '');
+    let q = false;
+    const scan = () => {
+      q = false;
+      document.querySelectorAll('.vy-spin').forEach((n) => { if (!PEND.test(own(n))) n.classList.remove('vy-spin'); });
+      document.querySelectorAll('.vy-live').forEach((n) => { if (!LIVE.test(own(n))) n.classList.remove('vy-live'); });
+      document.querySelectorAll("#main span, #main td, #main div, #bladeBody span, #bladeBody div, #bladeBody td").forEach((n) => {
+        if (n.classList.contains("vy-spin") || n.children.length > 2) return;
+        if (PEND.test(own(n))) n.classList.add("vy-spin");
+        else if (LIVE.test(own(n)) && !n.classList.contains("vy-live")) n.classList.add("vy-live");
+      });
+    };
+    new MutationObserver(() => { if (!q) { q = true; setTimeout(scan, 120); } }).observe(document.documentElement, { childList: true, subtree: true, characterData: true });
+  })();
 
   function onSerial(fn) { serialSubs.add(fn); return () => serialSubs.delete(fn); }
   function serialSend(cloud, ref, data) { const it = readReg()[vmId(cloud, ref)]; if (it) attach(it.id).port.postMessage({ type: "serial-in", data }); }
