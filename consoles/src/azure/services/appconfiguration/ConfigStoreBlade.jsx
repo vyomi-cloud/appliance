@@ -36,6 +36,7 @@ import SharedResourceHealth from "../../kit/ResourceHealth.jsx";
 import { ResourceAlerts, ResourceMetrics, ResourceLogs } from "../../kit/ResourceMonitoring.jsx";
 import SharedDiagnosticSettings from "../../kit/DiagnosticSettings.jsx";
 import ImportExport from "./ImportExport.jsx";
+import Diagnose from "../../kit/Diagnose.jsx";
 import SharedSupportPanel from "../../kit/SupportPanel.jsx";
 
 export const MENU = [
@@ -93,6 +94,7 @@ export default function ConfigStoreBlade({ params, query }) {
   else {
     const a = store.data, reload = store.reload;
     const P = {
+      diagnose: () => <Diagnose id={a.id} name={a.name} />,
       overview: () => <Overview a={a} reload={reload} self={self} />,
       activitylog: () => <SharedActivityLog scope={a.id} name={a.name} />,
       iam: () => <AccessControlIam a={a} />,

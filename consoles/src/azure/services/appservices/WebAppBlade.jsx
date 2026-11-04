@@ -26,6 +26,7 @@ import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
 import * as ops from "./AppOps.jsx";
+import * as dev from "./DevTools.jsx";
 import { ResourceRecommendations } from "../defender/Pages.jsx";
 import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
 import SharedActivityLog from "../../kit/ActivityLog.jsx";
@@ -33,6 +34,7 @@ import { ClassicAdminsPanel, DenyAssignmentsPanel, MyAccess } from "../../kit/Ia
 import SharedResourceVisualizer from "../../kit/ResourceVisualizer.jsx";
 import SharedResourceHealth from "../../kit/ResourceHealth.jsx";
 import SharedAdvisor from "../../kit/Advisor.jsx";
+import Diagnose from "../../kit/Diagnose.jsx";
 import SharedSupportPanel from "../../kit/SupportPanel.jsx";
 import AppInsights from "../../kit/AppInsights.jsx";
 
@@ -95,6 +97,7 @@ export default function WebAppBlade({ params, query }) {
   else {
     const a = site.data, reload = site.reload;
     const P = {
+      diagnose: () => <Diagnose id={a.id} name={a.name} />,
       overview: () => <Overview a={a} reload={reload} self={self} />,
       defender: () => <ResourceRecommendations resourceId={a.id} />,
       activitylog: () => <SharedActivityLog scope={a.id} name={a.name} />,
@@ -113,7 +116,12 @@ export default function WebAppBlade({ params, query }) {
       locks: () => <Locks rg={rg} name={name} />,
       appservicelogs: () => <AppServiceLogs rg={rg} name={name} />,
       appinsights: () => <AppInsights site={a} capId="azure.appservices.applicationinsights" getSettings={() => api.getAppSettings(rg, name)} putSettings={(v) => api.updateAppSettings(rg, name, v)} />,
-      logstream: () => <LogStream name={name} />,
+      logstream: () => <dev.LogStream a={a} rg={rg} name={name} />,
+      console: () => <dev.Console a={a} rg={rg} name={name} />,
+      advancedtools: () => <dev.AdvancedTools a={a} rg={rg} name={name} />,
+      appeditor: () => <dev.AppEditor a={a} rg={rg} name={name} />,
+      processexplorer: () => <dev.ProcessExplorer a={a} rg={rg} name={name} />,
+      extensions: () => <dev.Extensions a={a} rg={rg} name={name} />,
       diagnosticsettings: () => <DiagnosticSettings a={a} rg={rg} name={name} />,
       alerts: () => <ResourceAlerts id={a.id} name={a.name} />,
       metrics: () => <ResourceMetrics id={a.id} name={a.name} />,
@@ -846,20 +854,6 @@ function AppServiceLogs({ rg, name }) {
         <Button appearance="primary" icon={<Save20Regular />} disabled={busy} onClick={save}>{busy ? "Saving..." : "Save"}</Button>
         <Button onClick={reload}>Discard</Button>
       </div>
-    </>
-  );
-}
-
-// ── Log stream ───────────────────────────────────────────────────────────────────────────
-function LogStream({ name }) {
-  const [type, setType] = useState("App Service logs");
-  return (
-    <>
-      <div className="vy-panel-title">{name} | Log stream</div>
-      <section className="vy-section"><h3>Log stream</h3>
-        <Field label="Log type"><Select value={type} onChange={(_, d) => setType(d.value)} aria-label="Log type"><option>App Service logs</option><option>Platform logs</option></Select></Field>
-      </section>
-      <NotSimulatedContainer feature="Live log streaming" note={"Vyomi stores App Service log settings; there is no running workload to tail a live stream from."} />
     </>
   );
 }

@@ -99,9 +99,19 @@
  },
  "azure.appservices.webapp.devtools": {
   "title": "Development Tools (Clone App, Console, Advanced Tools, App Service Editor, Extensions)",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["No Kudu/SCM console, in-browser editor or site extension gallery."],
-  "api": []
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Clone App is real (azure.appservices.webapp.clone). Console, Advanced Tools, App Service Editor, Extensions, Process explorer and Log stream each have their own capability id (…console, …kudu, …appeditor, …extensions, …processes, …logstream) over the Kudu surface in core/azure_kudu_core.py; see those entries for what is real and what is limited."
+  ],
+  "api": [
+   "sites/kudu/api (Vyomi extension mirroring the Kudu REST API)"
+  ],
+  "tests": [
+   "tests/conformance/test_azure_kudu_diagnose.py"
+  ]
  },
  "azure.appservices.webapp.api": {
   "title": "API (API Management link, API definition, CORS)",
@@ -211,5 +221,105 @@
   "limitations": ["Inbound access restrictions are ENFORCED on requests to a Function App site (offline: /azure-data/functions/{app}/{fn}): rules evaluated by ascending priority, first match wins, implicit Deny all once an Allow rule exists, vnet-subnet / service-tag / Front Door x-azure-fdid header rules matched against the caller identity declared with x-vyomi-source-ip / x-vyomi-source-subnet / x-vyomi-source-service-tag headers (an undeclared caller is an unknown public client). 403 Forbidden otherwise. Nano has no site front end, so there it is validated config only; web apps (non-function) have no served runtime in Vyomi to enforce against. ","Regional VNet integration (create-time virtualNetworkSubnetId and networkConfig/virtualNetwork) checks the subnet exists, is delegated to Microsoft.Web/serverFarms, is at least a /28, is in the app's region, is not used by another plan, and that the plan is Basic or higher; virtualNetworkConnections and vnetRouteAllEnabled follow. Access restrictions (main + SCM) validate priorities, actions, CIDRs, service tags, subnet service endpoints and Front Door header rules, and derive the implicit Allow all / Deny all rule and default action. Hybrid connections validate the relay ARM URI, endpoint, port and the per-plan limit (Basic 5, Standard 25, Premium 200) and stay NotConnected. No traffic flows through the VNet or relay and access restrictions are not enforced on inbound requests."],
   "tests": ["tests/conformance/test_azure_webnet_core.py", "tests/conformance/test_azure_webnet_enforce.py"]
  },
- "azure.appservices.applicationinsights": {"title": "Application Insights (component, requests, failures, dependencies, events)", "level": {"nano": "limited", "offline": "limited"}, "limitations": ["A real Microsoft.Insights/components resource linked through the app's connection string; requests / failures / dependencies / events / traces are read from the OTLP-ingested trace + log store (and requests Vyomi measured for the app). No Kusto query engine, Live Metrics stream or Application Map.", "On Nano the telemetry recorder (OTLP spans, request counters, logs) lives in the open console page's memory: it is kept while the console stays open and starts empty after a page reload, whereas the offline appliance keeps it for the life of the appliance process."], "tests": ["tests/conformance/test_obs_appinsights.py"]}
+ "azure.appservices.applicationinsights": {"title": "Application Insights (component, requests, failures, dependencies, events)", "level": {"nano": "limited", "offline": "limited"}, "limitations": ["A real Microsoft.Insights/components resource linked through the app's connection string; requests / failures / dependencies / events / traces are read from the OTLP-ingested trace + log store (and requests Vyomi measured for the app). No Kusto query engine, Live Metrics stream or Application Map.", "On Nano the telemetry recorder (OTLP spans, request counters, logs) lives in the open console page's memory: it is kept while the console stays open and starts empty after a page reload, whereas the offline appliance keeps it for the life of the appliance process."], "tests": ["tests/conformance/test_obs_appinsights.py"]},
+ "azure.appservices.webapp.kudu": {
+  "title": "Advanced Tools (Kudu): environment, settings, deployments, tool links",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Served as an ARM extension under sites/{site}/kudu/api (vfs, command, processes, deployments, settings, environment, logstream, siteextensions), not as a separate https://{site}.scm.azurewebsites.net host, so the real Kudu dashboard UI and its Git/zip-deploy endpoints are not served there (use Deployment Center / the Local Git extension).",
+   "Settings (SCM_*) are stored and read back; they do not change Kudu behaviour. Deployments are the Deployment Center records."
+  ],
+  "api": [
+   "sites/kudu/api/environment",
+   "sites/kudu/api/settings",
+   "sites/kudu/api/deployments"
+  ],
+  "tests": [
+   "tests/conformance/test_azure_kudu_diagnose.py"
+  ]
+ },
+ "azure.appservices.webapp.console": {
+  "title": "Console (Kudu command console over the site's files and app settings)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "There is no operating-system process behind the simulated site, so programs cannot be executed; the interpreter covers file, environment and process-listing commands only.",
+   "Supported: pwd cd ls cat echo head tail wc grep mkdir touch rm cp mv env printenv ps whoami hostname date uname tree find, pipes and > / >> redirection. Anything else returns 'command not found'. Writes are real edits to the site's file store; the running (sandboxed) function code is not hot-reloaded by them."
+  ],
+  "api": [
+   "sites/kudu/api/command"
+  ],
+  "tests": [
+   "tests/conformance/test_azure_kudu_diagnose.py"
+  ]
+ },
+ "azure.appservices.webapp.appeditor": {
+  "title": "App Service Editor (edit the site's deployed files)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Edits the site's virtual file system (Deployment Center package contents, function sources, hostingstart.html, log files). Edits layer on top of deployed content and persist; the simulated runtime does not hot-swap to edited files. No syntax highlighting, no Git or debugging integration."
+  ],
+  "api": [
+   "sites/kudu/api/vfs"
+  ],
+  "tests": [
+   "tests/conformance/test_azure_kudu_diagnose.py"
+  ]
+ },
+ "azure.appservices.webapp.processes": {
+  "title": "Process explorer (processes of the site's runtime)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "The process table is MODELLED from the site's real state (runtime worker per instance, the Kudu/scm process, running continuous WebJobs); CPU time is the sum of the real measured invocation durations. It is not an operating-system process table: no kill/dump/profile actions and no per-thread detail."
+  ],
+  "api": [
+   "sites/kudu/api/processes"
+  ],
+  "tests": [
+   "tests/conformance/test_azure_kudu_diagnose.py"
+  ]
+ },
+ "azure.appservices.webapp.logstream": {
+  "title": "Log stream (live tail of the site's logs)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Tails real recorded lines (function invocations, WebJob runs, deployments, lifecycle and console actions) by polling a cursor every 2 seconds; stdout of a long-running workload does not exist because the simulated site runs no always-on process. Application logging level is reported but does not filter lines."
+  ],
+  "api": [
+   "sites/kudu/api/logstream"
+  ],
+  "tests": [
+   "tests/conformance/test_azure_kudu_diagnose.py"
+  ]
+ },
+ "azure.appservices.webapp.extensions": {
+  "title": "Extensions (site extension gallery and install state)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Windows apps only (Linux apps return 400, as in Azure). The gallery is a bundled list of well-known extensions; install/uninstall records state and a marker file under /home/SiteExtensions — the extension's own code is not downloaded or executed."
+  ],
+  "api": [
+   "sites/kudu/api/siteextensions"
+  ],
+  "tests": [
+   "tests/conformance/test_azure_kudu_diagnose.py"
+  ]
+ }
 }
