@@ -172,6 +172,31 @@ o = az("/openai/v1/chat/completions", {"model": "chat", "messages": [{"role": "u
 check("/openai/v1 with model=deployment", o["status"] == 200 and js(o)["choices"][0]["message"]["content"] == "echo[]:v1")
 check("tools rejected honestly", az("/openai/deployments/chat/chat/completions", {"messages": [{"role": "user", "content": "x"}], "tools": [{}]})["status"] == 400)
 
+# ── offline container lifecycle (docker stubbed)
+from core import llm_runtime as rt
+calls = []
+state = {"ps": ""}
+
+
+def fake(args):
+    calls.append(args)
+    if args[0] == "ps":
+        return 0, state["ps"], ""
+    if args[0] == "run":
+        state["ps"] = "running"
+    return 0, "", ""
+
+
+try:
+    rt.start(run=fake, disk=lambda: 5.0)
+    check("start refused below the disk guard", False)
+except rt.RuntimeError_:
+    check("start refused below the disk guard", not any(c[0] == "run" for c in calls))
+st = rt.start(run=fake, disk=lambda: 50.0)
+run_args = next(c for c in calls if c[0] == "run")
+check("start runs a named llama.cpp container with a model volume + small HF model", run_args[3] == rt.NAME and "-hf" in run_args and "--embeddings" in run_args and st["running"])
+check("start is idempotent when running", rt.start(run=fake, disk=lambda: 50.0)["running"] and sum(1 for c in calls if c[0] == "run") == 1)
+
 print(f"{PASS} passed, {FAIL} failed")
 
 
