@@ -56,6 +56,7 @@ check("invalid instance class surfaces the core's error", true);
 await page.getByLabel("DB instance class").fill("db.t3.micro");
 await page.getByRole("button", { name: "Create capacity reservation" }).last().click();
 await page.getByText(/rds-cr-/).first().waitFor({ timeout: 10000 });
+await page.getByText(/\d \(\d+(\.\d)?%\)/).first().waitFor({ timeout: 15000 }).catch(() => {});  // Nano: the table loads after the row appears
 check("reservation shows 1 of 2 in use (50%) from the running instance", /1 \(50%\)/.test(await text()), (await text()).match(/\d \(\d+(\.\d)?%\)/)?.[0]);
 await page.screenshot({ path: `${OUT}/rds-capacity.png`, fullPage: true });
 await post("rds", { "content-type": "application/x-www-form-urlencoded" }, new URLSearchParams({ Action: "DeleteDBInstance", DBInstanceIdentifier: DB, SkipFinalSnapshot: "true" }).toString());
