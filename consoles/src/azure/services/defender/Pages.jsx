@@ -64,14 +64,14 @@ export function ScannerStatus({ scanners }) {
 export function Overview() {
   const sub = useSubscription();
   const d = useAsync(async () => {
-    const [score, a, plans, resources] = await Promise.all([api.getSecureScore(), api.listAssessments(), api.listPricings(), api.listResources()]);
-    return { score, a, plans, resources };
+    const [score, a, plans, resources, alerts] = await Promise.all([api.getSecureScore(), api.listAssessments(), api.listPricings(), api.listResources(), api.listAlerts()]);
+    return { score, a, plans, resources, alerts };
   }, []);
   let body;
   if (d.loading && !d.data) body = <Loading />;
   else if (d.error) body = <ErrorBar error={d.error} title="Failed to load Defender for Cloud" />;
   else {
-    const { score, a, plans, resources } = d.data;
+    const { score, a, plans, resources, alerts } = d.data;
     const recs = api.groupRecommendations(a.value);
     const active = recs.filter((r) => r.unhealthy);
     const bySev = (s) => active.filter((r) => r.severity === s).length;
@@ -104,7 +104,11 @@ export function Overview() {
             <Link href={`#/defender/environment/${encodeURIComponent(sub.id)}`}>Manage Defender plans</Link>
           </CapabilityContainer>
         </div>
-        <CapabilityContainer id="azure.defender.alerts" title="Security alerts" />
+        <CapabilityContainer id="azure.defender.alerts" title="Security alerts">
+          <div style={{ fontSize: 34, fontWeight: 600, lineHeight: "44px" }} aria-label="Active security alerts">{alerts.filter((x) => x.properties.status === "Active").length}</div>
+          <KV label="High severity" value={alerts.filter((x) => x.properties.status === "Active" && x.properties.severity === "High").length} />
+          <Link href="#/defender/alerts">View security alerts</Link>
+        </CapabilityContainer>
         <ScannerStatus scanners={a.scanners} />
       </>
     );
@@ -410,10 +414,36 @@ export function DefenderPlans({ params }) {
 
 // ── Security alerts (honest) + every other not-simulated menu item ────────────────────
 export function Alerts() {
+  const notify = useNotify();
+  const d = useAsync(() => api.listAlerts(), []);
+  const rows = (d.data || []).map((a) => ({ id: a.id, name: a.name, ...a.properties }));
+  const act = async (r, action) => {
+    try { await api.alertAction(r.id, action); notify.success(`Alert ${action}d`); d.reload(); }
+    catch (e) { notify.error(e.message || String(e)); }
+  };
   return (
     <DefenderShell active="alerts">
       <div className="vy-panel-title">Security alerts</div>
-      <CapabilityContainer id="azure.defender.alerts" title="Security alerts" />
+      <Cmd onRefresh={d.reload} />
+      <InfoBar title="Vyomi rule engine">Alerts are raised by Vyomi's deterministic detector over the control-plane changes this simulator served, and only while the matching Defender plan (Storage, Resource Manager, Key Vault) is on. They are not Microsoft's ML alerts. <Link href="#/defender/environment">Manage Defender plans</Link></InfoBar>
+      <CapabilityContainer id="azure.defender.alerts" title="Security alerts">
+        <BrowseGrid
+          resourceName="alert" rowKey={(r) => r.id} items={rows} loading={d.loading} error={d.error} onRefresh={d.reload}
+          csvName="security-alerts.csv" filterPlaceholder="Search alerts"
+          pills={[{ key: "severity", label: "Severity", value: (r) => r.severity }, { key: "status", label: "Status", value: (r) => r.status }]}
+          columns={[
+            { key: "sev", label: "Severity", render: (r) => <SeverityBadge s={r.severity} />, value: (r) => r.severity },
+            { key: "name", label: "Alert", render: (r) => <span>{r.alertDisplayName}<div style={{ opacity: 0.7, fontSize: 12 }}>{r.description}</div></span>, value: (r) => r.alertDisplayName },
+            { key: "res", label: "Affected resource", value: (r) => api.resourceName(r.compromisedEntity) },
+            { key: "type", label: "Alert type", value: (r) => r.alertType },
+            { key: "time", label: "Last seen", render: (r) => fmtDate(r.endTimeUtc), value: (r) => r.endTimeUtc },
+            { key: "status", label: "Status", render: (r) => <Badge appearance="outline">{r.status}</Badge>, value: (r) => r.status },
+            { key: "act", label: "Actions", render: (r) => (r.status === "Active"
+              ? <><Link onClick={() => act(r, "dismiss")}>Dismiss</Link> <Link onClick={() => act(r, "resolve")}>Resolve</Link></>
+              : <Link onClick={() => act(r, "activate")}>Activate</Link>) },
+          ]}
+        />
+      </CapabilityContainer>
     </DefenderShell>
   );
 }
