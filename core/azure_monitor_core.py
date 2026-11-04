@@ -755,6 +755,26 @@ _STORAGE_METRIC_FIELD = {
     "ClientOtherError": "ClientOtherError",
 }
 _STORAGE_TYPE = "microsoft.storage/storageaccounts"
+# Optional hooks set by the substrate (core/observability_core): per-resource MEASURED request telemetry.
+resource_metric_defs = None   # (rtype_lower) -> {metric: (unit, kind)}
+resource_series = None        # (rtype_lower, name, metric, start_ts, end_ts, step_s, unique_of_type) -> [{ts,total,count,average,minimum,maximum}]
+
+
+def _rtype_of(state, scope_rid):
+    return str((state.get(scope_rid.lower()) or {}).get("_type", "")).lower()
+
+
+def _unique_of_type(state, rtype):
+    return sum(1 for r in state.values() if str(r.get("_type", "")).lower() == rtype) == 1
+
+
+def _hook_defs(state, scope_rid):
+    if resource_metric_defs is None:
+        return {}
+    try:
+        return resource_metric_defs(_rtype_of(state, scope_rid)) or {}
+    except Exception:
+        return {}
 
 
 _RG_ID = re.compile(r"^/subscriptions/[^/]+/resourcegroups/[^/]+$", re.I)
@@ -805,6 +825,11 @@ def list_metric_definitions(state, scope_rid, blob_store=None, rg_exists=False):
     defs = [_metric_definition(scope_rid, _METRIC_NAME, _METRIC_DISPLAY, _METRIC_UNIT)]
     if _storage_account(state, scope_rid, blob_store) is not None:
         defs += [_metric_definition(scope_rid, n, n, u) for n, u in STORAGE_METRIC_UNITS.items()]
+    for n, (u, kind) in _hook_defs(state, scope_rid).items():
+        d = _metric_definition(scope_rid, n, n, u)
+        if kind in ("avg_all", "avg_ok", "sec_all", "avail"):
+            d["primaryAggregationType"] = "Average"
+        defs.append(d)
     return _ok({"value": defs})
 
 
@@ -824,8 +849,10 @@ def get_metrics(state, scope_rid, query, blob_store=None, rg_exists=False):
     names = [n.strip() for n in str(query.get("metricnames") or _METRIC_NAME).split(",") if n.strip()]
     acct = _storage_account(state, scope_rid, blob_store)
     storage_by_lower = {k.lower(): k for k in STORAGE_METRIC_UNITS} if acct is not None else {}
+    hook_defs = _hook_defs(state, scope_rid)
+    hook_by_lower = {k.lower(): k for k in hook_defs}
     for n in names:
-        if n.lower() != _METRIC_NAME.lower() and n.lower() not in storage_by_lower:
+        if n.lower() != _METRIC_NAME.lower() and n.lower() not in storage_by_lower and n.lower() not in hook_by_lower:
             return _err(400, "BadRequest",
                         f"Failed to find metric configuration for provider: microsoft.insights, "
                         f"metric name: {n}, metric namespace: Platform.")
@@ -898,6 +925,27 @@ def get_metrics(state, scope_rid, query, blob_store=None, rg_exists=False):
     for n in names:
         if n.lower() in storage_by_lower:
             value.append(_storage_metric_entry(scope_rid, storage_by_lower[n.lower()], stats, aggs, now))
+            continue
+        if n.lower() in hook_by_lower:
+            hn = hook_by_lower[n.lower()]
+            pts = []
+            try:
+                rt = _rtype_of(state, scope_rid)
+                pts = resource_series(rt, scope_rid.rstrip("/").rsplit("/", 1)[-1], hn, start.timestamp(), end.timestamp(),
+                                      step_min * 60.0, _unique_of_type(state, rt)) or []
+            except Exception:
+                pts = []
+            data_h = []
+            for p in pts:   # only buckets that saw requests - an idle resource has an empty series, never zeros made up
+                dp = {"timeStamp": datetime.fromtimestamp(p["ts"], timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
+                for a in aggs:
+                    dp[a.lower()] = p[{"Total": "total", "Count": "count", "Average": "average", "Minimum": "minimum", "Maximum": "maximum"}[a]]
+                data_h.append(dp)
+            value.append({"id": f"{scope_rid}/providers/{NAMESPACE}/metrics/{hn}", "type": "Microsoft.Insights/metrics",
+                          "name": {"value": hn, "localizedValue": hn}, "unit": hook_defs[hn][0],
+                          "displayDescription": ("Modelled from measured request size using Microsoft's published RU cost model."
+                                                 if hook_defs[hn][1] == "ru" else "Measured from requests Vyomi served for this resource."),
+                          "timeseries": [{"metadatavalues": [], "data": data_h}]})
             continue
         value.append({
             "id": f"{scope_rid}/providers/{NAMESPACE}/metrics/{_METRIC_NAME}",

@@ -16,6 +16,8 @@ def register(app: FastAPI) -> None:
     try:   # Azure storage Availability / SuccessE2ELatency come from the requests this process measured
         from core import azure_monitor_core
         azure_monitor_core.request_telemetry = lambda acct: obs.azure_storage_request_metrics(obs.default_store(), acct)
+        azure_monitor_core.resource_metric_defs = obs.azure_metric_defs
+        azure_monitor_core.resource_series = lambda *a: obs.azure_series(obs.default_store(), *a)
     except Exception:
         pass
 

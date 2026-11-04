@@ -35,6 +35,8 @@ MAX_SERIES_SAMPLES = 4000
 MAX_LOGS = 5000
 LOOKBACK = 300.0
 BUCKETS_MS = [1, 5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000]
+_AZ_HOST_SUFFIXES = (".vault.azure.net", ".azconfig.io", ".azurecr.io", ".servicebus.windows.net", ".documents.azure.com",
+                     ".azurewebsites.net", ".azure-api.net", ".database.windows.net")
 HEX32, HEX16 = re.compile(r"^[0-9a-f]{32}$"), re.compile(r"^[0-9a-f]{16}$")
 
 
@@ -138,6 +140,16 @@ def extract_resource(cloud: str, service: str, method: str, path: str, headers: 
         if host.endswith(".core.windows.net") or host.endswith(".azurite") :
             res, op = host.split(".", 1)[0], method.upper()
             return res, op
+        if host.endswith(_AZ_HOST_SUFFIXES):             # data-plane host names carry the resource: {vault}.vault.azure.net ...
+            return host.split(".", 1)[0], method.upper()
+        if "microsoft.insights" in low:                   # monitoring reads/writes about a resource are not requests TO it
+            return "", "MonitorRead"
+        if "providers" in low:                            # ARM: .../providers/Microsoft.X/<type>/<name>[/...]
+            i = low.index("providers")
+            if i + 3 < len(segs):
+                return segs[i + 3], method.upper()
+        if low[:1] == ["azure-data"] and len(segs) >= 3 and segs[2] not in ("_",):
+            return segs[2], method.upper()               # /azure-data/<svc>/<name>/...
         for k in ("accounts", "storageaccounts", "sites", "servers", "databaseaccounts", "service", "virtualmachines"):
             if k in low and low.index(k) + 1 < len(segs):
                 res = segs[low.index(k) + 1]
@@ -1181,3 +1193,101 @@ def sync_gcp_traces(obs: ObsStore, mon_store, project: str) -> int:
             pass
     obs.pub_mark["gcptrace:" + project] = newest
     return n
+
+
+# ───────────────────────────── Azure per-resource metrics (Microsoft.Insights/metrics) ─────────────────────────────
+# metric name -> (unit, kind). kinds: all (count), ok (count 2xx/3xx), e4 / e5 / err (count), avg_all / avg_ok (ms), avail (% non-5xx),
+# sec_all (avg latency in seconds), ru (modelled request units, see below)
+_GENERIC = {"Requests": ("Count", "all"), "SuccessE2ELatency": ("MilliSeconds", "avg_ok"), "Errors": ("Count", "err")}
+AZURE_RESOURCE_METRICS = {
+    "microsoft.keyvault/vaults": ({"keyvault", "az-kv-keys", "az-kv-secrets", "az-kv-certs"},
+        {"ServiceApiHit": ("Count", "all"), "ServiceApiLatency": ("MilliSeconds", "avg_all"), "Availability": ("Percent", "avail")}),
+    "microsoft.servicebus/namespaces": ({"servicebus", "az-servicebus"},
+        {"IncomingRequests": ("Count", "all"), "SuccessfulRequests": ("Count", "ok"), "ServerErrors": ("Count", "e5"), "UserErrors": ("Count", "e4")}),
+    "microsoft.documentdb/databaseaccounts": ({"cosmos", "az-cosmos"},
+        {"TotalRequests": ("Count", "all"), "ServerSideLatency": ("MilliSeconds", "avg_all"), "TotalRequestUnits": ("Count", "ru")}),
+    "microsoft.appconfiguration/configurationstores": ({"appconfiguration", "az-appconfig"},
+        {"HttpIncomingRequestCount": ("Count", "all"), "HttpIncomingRequestDuration": ("MilliSeconds", "avg_all")}),
+    "microsoft.containerregistry/registries": ({"acr", "az-acr", "containerregistry"}, {}),
+    "microsoft.apimanagement/service": ({"apim"},
+        {"TotalRequests": ("Count", "all"), "FailedRequests": ("Count", "err"), "Duration": ("MilliSeconds", "avg_all")}),
+    "microsoft.web/sites": ({"functionapp", "appservice", "webapp"},
+        {"Http4xx": ("Count", "e4"), "Http5xx": ("Count", "e5"), "HttpResponseTime": ("Seconds", "sec_all")}),
+    "microsoft.sql/servers/databases": ({"sql", "az-sql"}, {}),
+    "microsoft.sql/servers": ({"sql", "az-sql"}, {}),
+}
+
+
+def azure_metric_defs(rtype: str) -> dict:
+    """{metric: (unit, kind)} Vyomi measures for an ARM resource type (empty for types with no request-serving core)."""
+    ent = AZURE_RESOURCE_METRICS.get((rtype or "").lower())
+    if ent is None:
+        return {}
+    return {**_GENERIC, **ent[1]}
+
+
+def _cosmos_ru(op: str, nbytes: int, status: int) -> float:
+    """Request units per Microsoft's PUBLISHED cost model (1 RU = a 1 KB point read; a 1 KB write ~ 5 RU; a query >= 2.5 RU).
+    This is a MODEL applied to the measured request size, not a measurement of an RU-metering engine."""
+    kb = max(1.0, nbytes / 1024.0)
+    op = (op or "").upper()
+    if status >= 400:
+        return 1.0
+    if op in ("POST", "PUT", "PATCH", "DELETE"):
+        return round(5.0 * kb, 2)
+    return round(1.0 * kb, 2)
+
+
+def azure_series(obs: ObsStore, rtype: str, name: str, metric: str, start: float, end: float, step: float,
+                 unique_of_type: bool = False) -> list:
+    """Time-bucketed MEASURED series for one ARM resource: [{ts, total, count, average, minimum, maximum}] ONLY for buckets that
+    saw requests (idle = empty). Rows are the recorder's rows whose resource equals the ARM name; data-plane requests the
+    protocol cannot attribute to a named resource (resource '' or '_') count for the type's only resource."""
+    ent = AZURE_RESOURCE_METRICS.get((rtype or "").lower())
+    defs = azure_metric_defs(rtype)
+    if ent is None or metric not in defs:
+        return []
+    services, kind = ent[0], defs[metric][1]
+    nm = (name or "").lower()
+    buckets: dict = {}
+    for ts, c, s, r, op, st, ms, bi, bo in obs.recent:
+        if c != "azure" or ts < start or ts > end or s not in services or op == "MonitorRead":
+            continue
+        rl = (r or "").lower()
+        if rl != nm and not (unique_of_type and rl in ("", "_")):
+            continue
+        buckets.setdefault(int((ts - start) // step), []).append((st, ms, op, bi + bo))
+    out = []
+    for i in sorted(buckets):
+        rows = buckets[i]
+        if kind == "all":
+            vals = [1.0] * len(rows)
+        elif kind == "ok":
+            vals = [1.0] * sum(1 for r in rows if r[0] < 400)
+        elif kind == "e4":
+            vals = [1.0] * sum(1 for r in rows if 400 <= r[0] < 500)
+        elif kind == "e5":
+            vals = [1.0] * sum(1 for r in rows if r[0] >= 500)
+        elif kind == "err":
+            vals = [1.0] * sum(1 for r in rows if r[0] >= 400)
+        elif kind == "avail":
+            vals = [100.0 if r[0] < 500 else 0.0 for r in rows]
+        elif kind == "avg_ok":
+            vals = [r[1] for r in rows if r[0] < 400]
+        elif kind == "avg_all":
+            vals = [r[1] for r in rows]
+        elif kind == "sec_all":
+            vals = [r[1] / 1000.0 for r in rows]
+        elif kind == "ru":
+            vals = [_cosmos_ru(r[2], r[3], r[0]) for r in rows]
+        else:
+            vals = []
+        if not vals:
+            if kind in ("ok", "e4", "e5", "err"):
+                out.append({"ts": start + i * step, "total": 0.0, "count": 0, "average": 0.0, "minimum": 0.0, "maximum": 0.0})
+            continue
+        n = len(vals)
+        cnt_kind = kind in ("all", "ok", "e4", "e5", "err", "ru")
+        out.append({"ts": start + i * step, "total": round(sum(vals), 3) if cnt_kind else round(sum(vals) / n, 3), "count": n,
+                    "average": round(sum(vals) / n, 3), "minimum": round(min(vals), 3), "maximum": round(max(vals), 3)})
+    return out

@@ -666,6 +666,8 @@ class AwsWireRouter:
         self.obs = s.get("obs") or _obsc0.ObsStore()           # shared request-telemetry recorder + OTLP trace/metric store
         from core import azure_monitor_core as _azmon0
         _azmon0.request_telemetry = lambda acct, _o=self.obs: _obsc0.azure_storage_request_metrics(_o, acct)   # storage Availability/latency from measured requests
+        _azmon0.resource_metric_defs = _obsc0.azure_metric_defs
+        _azmon0.resource_series = lambda *a, _o=self.obs: _obsc0.azure_series(_o, *a)   # per-resource request/latency/error metrics
         self.cw = s.get("cw") or cw.CloudWatchStore()          # CloudWatch metrics / alarms / dashboards
         self.cw.msg_store, self.cw.lam_store = self.msg, self.lam   # real SNS / Lambda alarm actions
         self.vpc = s.get("vpc") or s.get("vpc_net") or _types.SimpleNamespace()   # EC2/VPC network model
