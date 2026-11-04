@@ -17,7 +17,7 @@ VERSION = "0.26.2"
 CDN = f"https://cdn.jsdelivr.net/pyodide/v{VERSION}/full/"
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "vendor", "pyodide")
 CORE = ["pyodide.mjs", "pyodide.js", "pyodide.asm.js", "pyodide.asm.wasm", "python_stdlib.zip", "pyodide-lock.json"]
-PACKAGES = ["sqlite3"]          # loadPackage() calls in the relay
+PACKAGES = ["sqlite3", "tzdata"]   # loadPackage() calls in nano-boot.js (tzdata: zoneinfo database for Cloud Scheduler / Monitoring time zones)
 
 
 def fetch(name: str) -> None:
