@@ -28,7 +28,7 @@ await page.getByText("active", { exact: true }).first().waitFor({ timeout: 10000
 const plans = JSON.parse((await raw("savingsplans", { method: "POST", body: "{}", headers: { "content-type": "application/json" } }, "/DescribeSavingsPlans")).text).savingsPlans || [];
 check("plan purchased through the form", plans.length >= 1 && plans[0].commitment === "0.050" && plans[0].state === "active", JSON.stringify(plans[0]));
 await page.reload(); await page.getByText("Coverage and utilization").first().waitFor();
-await page.waitForTimeout(800);
+await page.getByText(/^(?!0\.0%)\d+\.\d%$/).first().waitFor({ timeout: 10000 }).catch(() => {});
 const body = await page.locator("body").innerText();
 check("coverage % is shown for the running instances", /Coverage\s*\n?\s*(?!0\.0%)\d+\.\d%/.test(body), body.match(/Coverage[\s\S]{0,40}/)?.[0]);
 await page.goto(UI + "#/ec2/capacity-manager");

@@ -30,6 +30,7 @@ await page.getByRole("button", { name: "Create encryption control" }).click();
 await page.getByRole("row", { name: new RegExp(vpc) }).waitFor({ timeout: 8000 });
 await page.getByRole("row", { name: new RegExp(vpc) }).getByRole("radio").check({ force: true });
 await page.getByText(`Resource audit - ${vpc}`).waitFor({ timeout: 8000 });
+await page.getByText("Unencrypted", { exact: true }).first().waitFor({ timeout: 10000 }).catch(() => {});
 check("audit flags the m5 instance as unencrypted", /Unencrypted/.test(await page.locator("body").innerText()) && /m5\.large/.test(await page.locator("body").innerText()));
 await page.getByRole("button", { name: "Switch to enforce" }).click();
 await page.waitForTimeout(800);

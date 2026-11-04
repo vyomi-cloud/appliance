@@ -5,7 +5,7 @@
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 let pw;
-try { pw = require(process.env.PW || "playwright"); } catch { pw = require("/Users/sudhirganti/Applications/simulator/portal/node_modules/playwright"); }
+try { pw = require(process.env.PW || "playwright"); } catch { pw = require("/Users/sudhirganti/Applications/simulator/portal-OLD/node_modules/playwright"); }
 const BASE = process.env.BASE || "http://127.0.0.1:9050";
 const UI = `${BASE}${process.env.UI_PATH || "/v4/aws/"}`;
 const WIRE = `${BASE}${process.env.WIRE_PATH || "/_wire"}`;
