@@ -15,8 +15,9 @@ import TagEditor from "@cloudscape-design/components/tag-editor";
 import Spinner from "@cloudscape-design/components/spinner";
 import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
-import { ErrorAlert, KeyValue, NotSimulated, NotSimulatedContainer } from "../../kit/common.jsx";
+import { ErrorAlert, KeyValue, NotSimulatedContainer } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
+import MetricGraphs from "../../kit/MetricGraphs.jsx";
 import { navigate } from "../../../common/router.js";
 import { StateBadge, nameOf } from "./Instances.jsx";
 import * as api from "./api.js";
@@ -194,8 +195,17 @@ function MonitoringTab({ i }) {
             { id: "v", header: "Maximum", cell: (p) => p.Maximum },
           ]}
           empty={<Box textAlign="center" color="inherit">No datapoints yet — open the Status and alarms tab to poll a status check.</Box>} />
-        <NotSimulated feature="CPU and network metrics"
-          note="CPU utilization (%), Network in (bytes), Network out (bytes), Network packets in (count), Network packets out (count), CPU credit usage (count), CPU credit balance (count) aren't collected — Vyomi has no CloudWatch metrics pipeline for EC2 beyond the real status-check metric above." />
+        <MetricGraphs bare columns={2} graphs={(() => { const d = [{ Name: "InstanceId", Value: i.instanceId }]; return [
+          { title: "CPU utilization (%)", namespace: "AWS/EC2", name: "CPUUtilization", dimensions: d, stat: "Average", unit: "Percent" },
+          { title: "Network in (bytes)", namespace: "AWS/EC2", name: "NetworkIn", dimensions: d, stat: "Sum", unit: "Bytes" },
+          { title: "Network out (bytes)", namespace: "AWS/EC2", name: "NetworkOut", dimensions: d, stat: "Sum", unit: "Bytes" },
+          { title: "Network packets in (count)", namespace: "AWS/EC2", name: "NetworkPacketsIn", dimensions: d, stat: "Sum", unit: "Count" },
+          { title: "Network packets out (count)", namespace: "AWS/EC2", name: "NetworkPacketsOut", dimensions: d, stat: "Sum", unit: "Count" },
+          { title: "EBS read bytes", namespace: "AWS/EC2", name: "EBSReadBytes", dimensions: d, stat: "Sum", unit: "Bytes" },
+          { title: "EBS write bytes", namespace: "AWS/EC2", name: "EBSWriteBytes", dimensions: d, stat: "Sum", unit: "Bytes" },
+          { title: "EBS read ops", namespace: "AWS/EC2", name: "EBSReadOps", dimensions: d, stat: "Sum", unit: "Count" },
+          { title: "EBS write ops", namespace: "AWS/EC2", name: "EBSWriteOps", dimensions: d, stat: "Sum", unit: "Count" },
+        ]; })()} />
       </SpaceBetween>
     </CapabilityContainer>
   );

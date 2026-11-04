@@ -29,12 +29,12 @@
    "offline": "limited"
   },
   "limitations": [
-   "Enforced for the one metric Vyomi actually publishes (StatusCheckFailed, from the instance's real status-check state): enabling it lets a fresh datapoint land every 1 minute instead of every 5.",
-   "CPU utilization (%), Network in (bytes), Network out (bytes), Network packets in (count), Network packets out (count), CPU credit usage (count) and CPU credit balance (count) still aren't collected — Vyomi has no CloudWatch metrics pipeline for those."
+   "Detailed monitoring selects a 1-minute instead of 5-minute sampling period. StatusCheckFailed* is published from the instance's real status-check state. On the offline appliance the Docker container behind each running instance is sampled (docker exec reading /proc/net/dev and the cgroup cpu.stat / io.stat counters; a daemon every 30 s, plus POST /api/aws/ec2/metrics/collect) and the interval deltas are published to CloudWatch as the real AWS/EC2 series CPUUtilization (CPU time / (wall time x vCPUs)), NetworkIn/Out, NetworkPacketsIn/Out and EBSRead/WriteBytes and Ops, so alarms and dashboards work on them. On Nano there is no measurable instance runtime, so these series stay empty (graphs draw No data points) rather than showing invented numbers. NOT produced: CPUCreditUsage / CPUCreditBalance, DiskRead/Write (instance store) metrics, per-ENI network breakdown, and Nitro-only metrics such as EBSIOBalance%."
   ],
   "tests": [
    "tests/conformance/test_ec2_console_v4_core.py",
-   "tests/conformance/test_ec2_offline_monitoring.py"
+   "tests/conformance/test_ec2_offline_monitoring.py",
+   "tests/conformance/test_ec2_metrics_core.py"
   ]
  },
  "ec2.instances.status-checks": {
@@ -648,6 +648,23 @@
   },
   "limitations": [
    "Capacity Manager's cross-account capacity analytics aren't modeled."
+  ]
+ },
+ "ec2.volumes.monitoring": {
+  "title": "EBS volume CloudWatch metrics",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "On the offline appliance an instance's root volume receives the real block I/O measured inside the instance's container (cgroup io.stat deltas) as the AWS/EBS series VolumeReadBytes, VolumeWriteBytes, VolumeReadOps, VolumeWriteOps and VolumeConsumedReadWriteOps (read ops + write ops). Attribution is to the root volume only: with several volumes attached the other volumes get no datapoints. On Nano there is no measurable runtime and the graphs show No data points. NOT produced: VolumeIdleTime, VolumeQueueLength, VolumeTotalReadTime / VolumeTotalWriteTime, VolumeThroughputPercentage and BurstBalance."
+  ],
+  "api": [
+   "GetMetricData",
+   "GetMetricStatistics"
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_metrics_core.py"
   ]
  }
 }

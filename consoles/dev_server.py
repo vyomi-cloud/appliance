@@ -104,7 +104,24 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    _EC2_PREV: dict = {}
+
+    def _dev_counters(self):
+        """TEST HARNESS ONLY: stands in for the offline appliance's `docker exec` sampler. POST the raw counters blob (the
+        output of core.ec2_metrics_core.READ_COUNTERS_CMD) for ?instance=&volume=&vcpus=&t=<epoch>; it goes through the same
+        parse + publish path the appliance uses, so the dev server can exercise the Monitoring tabs without Docker."""
+        from core import ec2_metrics_core as em
+        u = urlsplit(self.path)
+        q = dict(parse_qsl(u.query))
+        n = int(self.headers.get("content-length") or 0)
+        c = em.parse_counters(self.rfile.read(n).decode() if n else "")
+        names = [] if c is None else em.publish(ROUTER.cw, q["instance"], c, self._EC2_PREV.setdefault(q["instance"], {}), float(q["t"]), int(q.get("vcpus", 1)), q.get("volume"))
+        data = json.dumps({"published": names}).encode()
+        self.send_response(200); self.send_header("content-type", "application/json"); self.send_header("content-length", str(len(data))); self.end_headers(); self.wfile.write(data)
+
     def _go(self):
+        if self.path.startswith("/_dev/ec2-counters"):
+            return self._dev_counters()
         if self.path.startswith("/_wire"):
             return self._wire()
         return self._static()
