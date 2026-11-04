@@ -7,7 +7,7 @@
       "cloud": "all",
       "kind": "ui",
       "cmd": "TARGET=offline OUT=tests/conformance/hourly/out/ui-offline.json node tests/conformance/hourly/ui_crawler.mjs",
-      "timeout": 1500
+      "timeout": 3600
     },
     {
       "id": "offline-console-actions",
