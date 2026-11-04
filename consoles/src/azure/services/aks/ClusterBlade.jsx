@@ -34,6 +34,7 @@ import { ResourceAlerts, ResourceMetrics, ResourceLogs, ResourceInsightsPanel, R
 import SharedDiagnosticSettings from "../../kit/DiagnosticSettings.jsx";
 import SharedAdvisor from "../../kit/Advisor.jsx";
 import SharedSupportPanel from "../../kit/SupportPanel.jsx";
+import { AksKeda, AksNetworkingSettings, AksExtensions } from "../../kit/ConfigPages.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -112,8 +113,10 @@ export default function ClusterBlade({ params, query }) {
       runcommand: () => <RunCommand a={a} />,
       nodepools: () => <NodePools a={a} />,
       clusterconfiguration: () => <ClusterConfiguration a={a} reload={reload} />,
+      applicationscaling: () => <AksKeda a={a} reload={reload} />,
+      extensionsapplications: () => <AksExtensions a={a} />,
       policies: () => <PolicyPanel rg={a.resourceGroup || String(a.id).split('/')[4]} resourceId={a.id} title={`${a.name} | Policies`} />,
-      networking: () => <ClusterNetworking a={a} />,
+      networking: () => <><ClusterNetworking a={a} /><AksNetworkingSettings a={a} reload={reload} /></>,
       properties: () => <Properties a={a} />,
       locks: () => <Locks a={a} />,
       activitylog: () => <SharedActivityLog scope={a.id} name={a.name} />,

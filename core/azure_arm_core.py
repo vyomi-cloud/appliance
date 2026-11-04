@@ -102,6 +102,10 @@ try:                                              # v4 AZ-07: Network Manager, F
     from core import azure_netcfg_core as netcfg
 except ImportError:
     import azure_netcfg_core as netcfg             # type: ignore
+try:                                              # v4 AZ-02..05: KEDA / AKS extensions, Cosmos CORS+gateway+CMK, Service Bus CMK+network rules, App Config CMK, subnet delegation
+    from core import azure_cfgext_core as cfgext
+except ImportError:
+    import azure_cfgext_core as cfgext             # type: ignore
 try:                                              # v4 AZ-08: Azure Files, AI Search, Storage Mover, Marketplace, quota/billing extras
     from core import azure_files_core as files_engine, azure_search_core as search_engine
     from core import azure_storagemover_core as mover_engine, azure_marketplace_core as market_engine
@@ -1504,6 +1508,10 @@ class AzureArm:
         if namespace.lower() == "microsoft.appconfiguration":
             return self._appconfig(method, sub, rg, chain, payload, query)
 
+        # Microsoft.ApiManagement/deletedservices: soft-deleted services (restore = PUT service with properties.restore).
+        if namespace.lower() == "microsoft.apimanagement" and rg is None and chain and chain[0].lower() in ("deletedservices", "locations"):
+            return cfgext.apim_deleted_dispatch(self.state, method, sub, chain, payload)
+
         # Microsoft.Network/dnsZones (+ record sets): the Azure DNS engine owns the zone semantics.
         if namespace.lower() == "microsoft.network" and dns_engine.handles(chain):
             return self._dns(method, sub, rg, chain, payload, query)
@@ -1652,8 +1660,12 @@ class AzureArm:
                 blocked = netsvc.validate(self.state, full_type, rid, payload, _net_prev, sub, rg)
                 if blocked:
                     return blocked
-            if blocked is None and netcfg.handles(full_type):
+            if netcfg.handles(full_type):
                 blocked = netcfg.validate(self.state, full_type, rid, payload, _net_prev, sub, rg)
+                if blocked:
+                    return blocked
+            if cfgext.handles(full_type):
+                blocked = cfgext.validate(self.state, full_type, rid, payload, _net_prev, sub, rg)
                 if blocked:
                     return blocked
             if full_type.lower() == "microsoft.authorization/roleassignments":
@@ -1678,6 +1690,9 @@ class AzureArm:
                 resp["body"] = _view(self.state[key])
             if netcfg.handles(full_type) and key in self.state:
                 netcfg.after_put(self.state, self.state[key], payload, _net_prev)
+                resp["body"] = _view(self.state[key])
+            if cfgext.handles(full_type) and key in self.state:
+                cfgext.after_put(self.state, self.state[key], payload, _net_prev)
                 resp["body"] = _view(self.state[key])
             deployment_failed = False
             if full_type.lower() == "microsoft.resources/deployments":
@@ -1754,6 +1769,10 @@ class AzureArm:
                 blocked = netsvc.before_delete(self.state, _net_rec) or netcfg.before_delete(self.state, _net_rec)
                 if blocked:
                     return blocked
+                if cfgext.handles(_net_rec.get("_type") or ""):
+                    blocked = cfgext.before_delete(self.state, _net_rec)
+                    if blocked:
+                        return blocked
             rec = self.state.pop(key, None)
             if rec is not None:
                 if rec.get("_ipam_alloc"):

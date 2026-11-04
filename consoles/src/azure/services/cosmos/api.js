@@ -66,9 +66,11 @@ export const listContainers = async (db) => (await cosmos("GET", `/dbs/${encodeU
 /** indexingOff/uniqueKeys/analyticalStore are accepted the way the real Create Container form
  *  submits them; indexingPolicy round-trips through the Cosmos core for real, but
  *  uniqueKeyPolicy / analyticalStorageTtl are not modelled (see capabilities.json). */
-export const createContainer = (db, id, partitionKeyPath, { indexingOff, uniqueKeys, analyticalStore } = {}) =>
+export const createContainer = (db, id, partitionKeyPath, { indexingOff, uniqueKeys, analyticalStore, extraPartitionPaths = [] } = {}) =>
   cosmos("POST", `/dbs/${encodeURIComponent(db)}/colls`, { body: {
-    id, partitionKey: { paths: [partitionKeyPath || "/id"], kind: "Hash" },
+    id, partitionKey: extraPartitionPaths.length
+      ? { paths: [partitionKeyPath || "/id", ...extraPartitionPaths], kind: "MultiHash", version: 2 }
+      : { paths: [partitionKeyPath || "/id"], kind: "Hash" },
     ...(indexingOff ? { indexingPolicy: { indexingMode: "none", automatic: false } } : {}),
     ...(uniqueKeys?.length ? { uniqueKeyPolicy: { uniqueKeys: uniqueKeys.map((k) => ({ paths: [k] })) } } : {}),
     ...(analyticalStore === "On" ? { analyticalStorageTtl: -1 } : {}),
@@ -100,7 +102,9 @@ export function toArmBody(f) {
     location: f.location,
     kind: "GlobalDocumentDB",
     tags: Object.fromEntries(f.tags.filter((t) => t.name).map((t) => [t.name, t.value])),
+    ...(f.dataEncryption === "Customer-managed key (CMK)" && f.keyUri ? { identity: { type: "SystemAssigned" } } : {}),
     properties: {
+      ...(f.dataEncryption === "Customer-managed key (CMK)" && f.keyUri ? { keyVaultKeyUri: f.keyUri, defaultIdentity: "SystemAssignedIdentity" } : {}),
       databaseAccountOfferType: "Standard",
       locations: [{ locationName: f.location, failoverPriority: 0, isZoneRedundant: f.availabilityZones === "Enable" }],
       enableMultipleWriteLocations: f.multiRegionWrites === "Enable",

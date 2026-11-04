@@ -11,7 +11,8 @@ import { useNotify } from "../../../common/notify.jsx";
 import { navigate } from "../../../common/router.js";
 import { useAsync } from "../../../common/useAsync.js";
 import CreateWizard, { FormRow, FormSection } from "../../kit/CreateWizard.jsx";
-import { Glyph, NotSimulatedContainer } from "../../kit/common.jsx";
+import { Glyph } from "../../kit/common.jsx";
+import { CapabilityContainer } from "../../kit/Capability.jsx";
 import * as api from "./api.js";
 
 const NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9-]{0,255}$/;
@@ -31,6 +32,8 @@ export default function CreateHttpApi({ params }) {
   const self = `#/apim/${encodeURIComponent(rg)}/${encodeURIComponent(svc)}`;
   const products = useAsync(() => api.Products.list(rg, svc), [rg, svc]);
   const existing = useAsync(() => api.Apis.list(rg, svc), [rg, svc]);
+  const gateways = useAsync(() => api.Gateways.list(rg, svc), [rg, svc]);
+  const [gws, setGws] = useState(new Set());
   const [f, setF] = useState({
     displayName: "", name: "", serviceUrl: "", path: "", description: "",
     scheme: "HTTPS", product: "", versioned: false,
@@ -82,7 +85,13 @@ export default function CreateHttpApi({ params }) {
         </FormRow>
         <FormRow label="Version this API?"><Checkbox checked={f.versioned} onChange={(_, d) => setF((x) => ({ ...x, versioned: !!d.checked }))} aria-label="Version this API?" /></FormRow>
       </FormSection>
-      <NotSimulatedContainer title="Gateways" feature="Restricting a new API to specific self-hosted gateways" note="New APIs are always reachable on the managed gateway." />
+      <CapabilityContainer id="azure.apim.gateway_apis" title="Gateways">
+        <div className="vy-muted" style={{ fontSize: 13, marginBottom: 6 }}>The managed gateway always serves the API. Select self-hosted gateways to also expose it on.</div>
+        {(gateways.data || []).length ? gateways.data.map((g) => (
+          <Checkbox key={g.name} label={g.name} checked={gws.has(g.name)} aria-label={`Gateway ${g.name}`}
+            onChange={(_, d) => setGws((x) => { const n = new Set(x); d.checked ? n.add(g.name) : n.delete(g.name); return n; })} />
+        )) : <span className="vy-muted">No self-hosted gateways in this service.</span>}
+      </CapabilityContainer>
     </>
   );
 
@@ -96,6 +105,7 @@ export default function CreateHttpApi({ params }) {
     try {
       await api.Apis.put(rg, svc, f.name, body());
       if (f.product) await api.addProductApi(rg, svc, f.product, f.name);
+      for (const g of gws) await api.addGatewayApi(rg, svc, g, f.name);
       notify.success(`API '${f.displayName}' was created.`, "Create succeeded");
       navigate("apim", rg, svc, "apis");
     } catch (e) { notify.error(e, "Create failed"); }

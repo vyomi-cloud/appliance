@@ -81,6 +81,8 @@ export const SignUp = portalSetting("signup");
 // written through the SAME updateService PATCH the create wizard and Scale/Pricing tier use. ──
 export const Certificates = subResource("certificates");
 export const Gateways = subResource("gateways");
+export const addGatewayApi = (rg, svc, gateway, apiId) => restJson("PUT", `${Gateways.path(rg, svc, gateway)}/apis/${encodeURIComponent(apiId)}`, { query: { "api-version": ARM.apiVersion }, body: { properties: {} } });
+export const listGatewayApis = async (rg, svc, gateway) => (await restJson("GET", `${Gateways.path(rg, svc, gateway)}/apis`, { query: { "api-version": ARM.apiVersion } })).value || [];
 
 // ── Tools: Workspaces and Credential manager (authorization providers) are real ARM
 // sub-resources. ─────────────────────────────────────────────────────────────────────────

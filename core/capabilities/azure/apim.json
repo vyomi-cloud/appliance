@@ -221,5 +221,7 @@
   "level": { "nano": "full", "offline": "full" },
   "limitations": ["All three tabs (ARM Template, Bicep, Terraform) are generated from the live resource's own known shape, not a general decompiler for arbitrary resources."],
   "tests": ["tests/conformance/test_azure_arm_core.py"]
- }
+ },
+ "azure.apim.gateway_apis": {"title": "API to self-hosted gateway association (service/gateways/{gw}/apis/{api})", "level": {"nano": "config_only", "offline": "config_only"}, "limitations": ["The association is a validated ARM resource (gateway and API must exist) listed on the gateway. No self-hosted gateway process exists to serve or withhold the API."], "tests": ["tests/conformance/test_azure_cfgext_core.py"]},
+ "azure.apim.softdelete": {"title": "Soft-delete: deleted services list, restore (properties.restore) and purge", "level": {"nano": "limited", "offline": "limited"}, "limitations": ["Deleting a service keeps a 48-hour soft-deleted record (with its APIs, products and other children) under deletedservices; reusing the name conflicts until it is restored or purged. The record is not purged automatically when the date passes (purge is manual), and the restored service keeps its stored configuration only."], "tests": ["tests/conformance/test_azure_cfgext_core.py"]}
 }

@@ -96,3 +96,74 @@ export function Maintenance({ a }) {
     </CapabilityContainer>
   );
 }
+
+// ── Data Discovery & Classification: sensitivity labels on real columns of the database ──────────────
+// Recommendations come from the same column-name patterns Azure uses; labels are real
+// .../columns/{c}/sensitivityLabels/current ARM children (validated in core/azure_cfgext_core.py).
+const PATTERNS = [
+  [/email|e_mail/i, "Contact Info", "Confidential", "Medium"], [/phone|mobile|fax/i, "Contact Info", "Confidential", "Medium"],
+  [/address|street|zip|postal/i, "Contact Info", "Confidential", "Medium"], [/ssn|social_?sec|national_?id|passport/i, "National ID", "Highly Confidential", "High"],
+  [/credit|card_?n|cvv|iban|account_?n/i, "Credit Card", "Highly Confidential", "Critical"], [/passw|pwd|secret|token/i, "Credentials", "Highly Confidential", "Critical"],
+  [/first_?name|last_?name|full_?name|surname/i, "Name", "Confidential - GDPR", "Medium"], [/birth|dob/i, "Date Of Birth", "Confidential - GDPR", "Medium"],
+  [/salary|wage|income|totaldue|price/i, "Financial", "Confidential", "Low"],
+];
+const LABELS = ["Public", "General", "Confidential", "Confidential - GDPR", "Highly Confidential", "Highly Confidential - GDPR"];
+const RANKS = ["None", "Low", "Medium", "High", "Critical"];
+
+export function DataDiscovery({ a }) {
+  const notify = useNotify();
+  const labelPath = (t, c) => `${a.id}/schemas/dbo/tables/${encodeURIComponent(t)}/columns/${encodeURIComponent(c)}/sensitivityLabels/current`;
+  const LQ = { "api-version": "2020-11-01-preview" };
+  const cols = useAsync(async () => {
+    await api.ensureDataPlane(a.server, a.name);
+    const tables = (await api.listTables(a.server, a.name)).rows?.map((r) => r[0]) || [];
+    const out = [];
+    for (const t of tables) {
+      const info = await api.runQuery(a.server, a.name, `PRAGMA table_info("${t.replace(/"/g, "")}")`);
+      const idx = (info.columns || []).indexOf("name");
+      for (const r of info.rows || []) {
+        const c = r[idx];
+        const cur = await restJson("GET", labelPath(t, c), { query: LQ }).catch(() => null);
+        const rec = PATTERNS.find(([re]) => re.test(c));
+        out.push({ table: t, column: c, label: cur?.properties || null, rec: rec ? { informationType: rec[1], labelName: rec[2], rank: rec[3] } : null });
+      }
+    }
+    return out;
+  }, [a.id]);
+  const apply = async (row, p) => {
+    try { await restJson("PUT", labelPath(row.table, row.column), { query: LQ, body: { properties: p } }); notify.success(`Classified ${row.table}.${row.column}.`, "Saved"); cols.reload(); }
+    catch (e) { notify.error(e, "Classification failed"); }
+  };
+  const clear = async (row) => { try { await restJson("DELETE", labelPath(row.table, row.column), { query: LQ }); cols.reload(); } catch (e) { notify.error(e, "Removing the classification failed"); } };
+  const rows = cols.data || [];
+  const classified = rows.filter((r) => r.label);
+  const pending = rows.filter((r) => !r.label && r.rec);
+  return (
+    <CapabilityContainer id="azure.sql.datadiscovery" title={`${a.name} | Data Discovery & Classification`}>
+      <ErrorBar error={cols.error} />
+      {cols.loading && !cols.data ? <Loading /> : (
+        <>
+          <KV label="Classified columns" value={String(classified.length)} />
+          <KV label="Recommended, not yet applied" value={String(pending.length)} />
+          <div className="vy-cmdbar" style={{ margin: "8px 0" }}>
+            <Button appearance="primary" disabled={!pending.length} aria-label="Accept all recommendations" onClick={async () => { for (const r of pending) await apply(r, r.rec); }}>Accept all recommendations</Button>
+          </div>
+          <table className="vy-grid" aria-label="Columns">
+            <thead><tr><th>Table</th><th>Column</th><th>Information type</th><th>Sensitivity label</th><th>Rank</th><th /></tr></thead>
+            <tbody>{rows.length ? rows.map((r) => (
+              <tr key={`${r.table}.${r.column}`}>
+                <td>{r.table}</td><td>{r.column}</td>
+                <td>{r.label?.informationType || (r.rec ? <span className="vy-muted">{r.rec.informationType} (recommended)</span> : "--")}</td>
+                <td>{r.label?.labelName || (r.rec ? <span className="vy-muted">{r.rec.labelName} (recommended)</span> : "--")}</td>
+                <td>{r.label?.rank || "--"}</td>
+                <td>{r.label
+                  ? <Button size="small" aria-label={`Remove classification ${r.table}.${r.column}`} onClick={() => clear(r)}>Remove</Button>
+                  : <Button size="small" aria-label={`Classify ${r.table}.${r.column}`} onClick={() => apply(r, r.rec || { informationType: "Other", labelName: "General", rank: "None" })}>{r.rec ? "Accept" : "Classify"}</Button>}</td>
+              </tr>
+            )) : <tr><td colSpan={6} className="vy-muted">This database has no tables yet. Create tables from the Query editor and come back.</td></tr>}</tbody>
+          </table>
+        </>
+      )}
+    </CapabilityContainer>
+  );
+}
