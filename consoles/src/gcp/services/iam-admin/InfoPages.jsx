@@ -16,4 +16,4 @@ function orgOnly(title, id) {
   };
 }
 
-export const PrivacySecurity = orgOnly("Privacy & Security", "gcp.iam-admin.privacy-security");
+export { PrivacySecurity } from "../hub/index.jsx";

@@ -206,8 +206,9 @@
  },
  "gcp.iam-admin.privacy-security": {
   "title": "Privacy & Security",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["This feature requires an organization; Vyomi's GCP lens is project-scoped."]
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["Data residency, CMEK count and the Access Transparency-style log are derived from live project state and Admin Activity audit entries. There are no cloud-provider staff in a simulator, so Access Approval is not applicable and the log lists privileged control-plane access by project principals. Project-scoped (no organization-level view)."],
+  "tests": ["tests/conformance/test_gcp_hub_core.py"]
  },
  "gcp.iam-admin.identity-aware-proxy": {
   "title": "Identity-Aware Proxy",
