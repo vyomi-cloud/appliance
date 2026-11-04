@@ -130,7 +130,7 @@ export default function CreateDatabase() {
           <FormControlLabel value="restrictive" control={<Radio size="small" />} label={<><b>Restrictive</b> — Deny all client reads and writes</>} />
           <FormControlLabel value="open" control={<Radio size="small" />} label={<><b>Open</b> — Allow all client reads and writes for 30 days</>} />
         </RadioGroup>
-        <NotSimulated compact feature="Security rules enforcement" note="Vyomi stores the chosen rules and shows them on the Security rules page, but never evaluates them against a request." />
+        <Typography variant="body2" color="text.secondary">Published rules are evaluated for client-SDK requests (Firebase ID token or API key); Admin SDK / gcloud / console requests bypass them, as in Google Cloud.</Typography>
       </Step>
       <Divider />
 

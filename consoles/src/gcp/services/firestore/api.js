@@ -167,6 +167,7 @@ export async function getSecurityRules(db) {
   const r = await restJson("POST", `${dbBase(db)}:getSecurityRules`, { body: {} });
   return r.rules || "";
 }
+export const listRulesets = () => restJson("GET", `/v1/projects/${e(getProject())}/rulesets`).then((r) => r.rulesets || []);
 export const updateSecurityRules = (db, rules) => restJson("POST", `${dbBase(db)}:updateSecurityRules`, { body: { rules } });
 /** Development & test (Rules Playground): really parses + evaluates `rules` against one
  * simulated request. `request.resourceData` / `requestResourceData` are plain JSON (not

@@ -46,6 +46,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import re
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -572,6 +573,11 @@ def dispatch(store: FirestoreStore, method: str, path: str,
         project, database, base, rel, suffix = parsed
         _ensure_db(store, project, database)
         _sweep_ttl(store, database)
+        ctxinfo = client_rules_context(headers, query)
+        if ctxinfo is not None:
+            denied = _enforce_rules(store, database, base, method, rel, suffix, query, body, ctxinfo)
+            if denied is not None:
+                return denied
         r = _dispatch_documents(store, database, base, method, rel, suffix, query, body)
     else:
         r = _admin_dispatch(store, method, path, query, body, gcs_store)
@@ -1163,407 +1169,419 @@ def _run_find_nearest(store: FirestoreStore, db: str, base: str, coll: str, grou
     return _json(200, rows)
 
 
-# ── security rules — rules-language evaluator (Development & test playground) ─────────
-# A practical subset of the Firestore Rules Language v2: `service cloud.firestore { match
-# <path> { match <path> { allow <ops>: if <expr>; } } }`, path captures (`{id}`) and
-# recursive captures (`{id=**}`), and boolean expressions over request.auth / resource.data
-# / request.resource.data (member access, ==, !=, <, <=, >, >=, in, &&, ||, !, literals).
-# `function` blocks are recognized and skipped (unsupported) rather than breaking the parse.
-_RULES_MULTI_OPS = ("==", "!=", "&&", "||", "<=", ">=")
-_RULES_SINGLE_OPS = "{}()[],;:.!</>*=+-"
-
-
-def _rules_tokenize(src: str) -> list[tuple[str, str]]:
-    src = "\n".join(line.split("//", 1)[0] for line in src.split("\n"))
-    toks: list[tuple[str, str]] = []
-    i, n = 0, len(src)
-    while i < n:
-        c = src[i]
-        if c.isspace():
-            i += 1
-            continue
-        if src[i:i + 2] in _RULES_MULTI_OPS:
-            toks.append(("OP", src[i:i + 2])); i += 2; continue
-        if c in ("'", '"'):
-            j = i + 1
-            buf = []
-            while j < n and src[j] != c:
-                if src[j] == "\\" and j + 1 < n:
-                    buf.append(src[j + 1]); j += 2
-                else:
-                    buf.append(src[j]); j += 1
-            toks.append(("STR", "".join(buf))); i = j + 1; continue
-        if c.isdigit():
-            j = i
-            while j < n and (src[j].isdigit() or src[j] == "."):
-                j += 1
-            toks.append(("NUM", src[i:j])); i = j; continue
-        if c.isalpha() or c == "_":
-            j = i
-            while j < n and (src[j].isalnum() or src[j] == "_"):
-                j += 1
-            toks.append(("ID", src[i:j])); i = j; continue
-        if c in _RULES_SINGLE_OPS:
-            toks.append(("OP", c)); i += 1; continue
-        i += 1   # skip an unrecognized character rather than fail the whole parse
-    return toks
-
-
-class _RulesParser:
-    def __init__(self, toks: list[tuple[str, str]]) -> None:
-        self.toks = toks
-        self.pos = 0
-
-    def peek(self) -> tuple[str | None, str | None]:
-        return self.toks[self.pos] if self.pos < len(self.toks) else (None, None)
-
-    def next(self) -> tuple[str | None, str | None]:
-        t = self.peek(); self.pos += 1; return t
-
-    def expect(self, val: str) -> tuple[str | None, str | None]:
-        t = self.next()
-        if t[1] != val:
-            raise ValueError(f"expected {val!r}, got {t[1]!r}")
-        return t
-
-    def parse_document(self) -> list[dict]:
-        if self.peek()[1] == "rules_version":
-            while self.peek()[1] not in (";", None):
-                self.next()
-            self.next()
-        self.expect("service")
-        while self.peek()[1] not in ("{", None):
-            self.next()
-        self.expect("{")
-        body = self.parse_body()
-        self.expect("}")
-        return body
-
-    def parse_body(self) -> list[dict]:
-        nodes = []
-        while True:
-            _, tv = self.peek()
-            if tv == "match":
-                nodes.append(self.parse_match())
-            elif tv == "allow":
-                nodes.append(self.parse_allow())
-            elif tv == "function":
-                self.skip_function()
-            elif tv in ("}", None):
-                break
-            else:
-                self.next()
-        return nodes
-
-    def parse_match(self) -> dict:
-        self.expect("match")
-        segs = self.parse_path()
-        self.expect("{")
-        body = self.parse_body()
-        self.expect("}")
-        return {"kind": "match", "segments": segs, "body": body}
-
-    def parse_path(self) -> list[dict]:
-        segs = []
-        self.expect("/")
-        while True:
-            _, tv = self.peek()
-            if tv == "{":
-                self.next()
-                name = self.next()[1]
-                recursive = False
-                if self.peek()[1] == "=":
-                    self.next(); self.expect("*"); self.expect("*")
-                    recursive = True
-                self.expect("}")
-                segs.append({"kind": "capture", "name": name, "recursive": recursive})
-            else:
-                segs.append({"kind": "literal", "name": self.next()[1]})
-            if self.peek()[1] == "/":
-                self.next()
-                continue
-            break
-        return segs
-
-    def parse_allow(self) -> dict:
-        self.expect("allow")
-        ops = set()
-        while True:
-            ops.add(self.next()[1])
-            if self.peek()[1] == ",":
-                self.next(); continue
-            break
-        self.expect(":")
-        self.expect("if")
-        expr = self.parse_expr_until_semicolon()
-        self.expect(";")
-        return {"kind": "allow", "ops": ops, "expr": expr}
-
-    def skip_function(self) -> None:
-        self.expect("function")
-        self.next()
-        if self.peek()[1] == "(":
-            depth = 0
-            while True:
-                t = self.next()
-                if t[1] == "(":
-                    depth += 1
-                elif t[1] == ")":
-                    depth -= 1
-                    if depth == 0:
-                        break
-        self.expect("{")
-        depth = 1
-        while depth > 0:
-            t = self.next()
-            if t[0] is None:
-                break
-            if t[1] == "{":
-                depth += 1
-            elif t[1] == "}":
-                depth -= 1
-
-    def parse_expr_until_semicolon(self):
-        start = self.pos
-        depth = 0
-        while True:
-            _, tv = self.peek()
-            if tv in ("(", "["):
-                depth += 1
-            elif tv in (")", "]"):
-                depth -= 1
-            elif (tv == ";" and depth == 0) or tv is None:
-                break
-            self.next()
-        return _ExprParser(self.toks[start:self.pos]).parse()
-
-
-_REL_OPS = ("==", "!=", "<=", ">=", "<", ">", "in")
-
-
-class _ExprParser:
-    def __init__(self, toks: list[tuple[str, str]]) -> None:
-        self.toks = toks
-        self.pos = 0
-
-    def peek(self):
-        return self.toks[self.pos] if self.pos < len(self.toks) else (None, None)
-
-    def next(self):
-        t = self.peek(); self.pos += 1; return t
-
-    def parse(self):
-        return self.parse_or()
-
-    def parse_or(self):
-        node = self.parse_and()
-        while self.peek()[1] == "||":
-            self.next(); node = ("or", node, self.parse_and())
-        return node
-
-    def parse_and(self):
-        node = self.parse_not()
-        while self.peek()[1] == "&&":
-            self.next(); node = ("and", node, self.parse_not())
-        return node
-
-    def parse_not(self):
-        if self.peek()[1] == "!":
-            self.next()
-            return ("not", self.parse_not())
-        return self.parse_cmp()
-
-    def parse_cmp(self):
-        node = self.parse_primary()
-        _, tv = self.peek()
-        if tv in _REL_OPS:
-            self.next()
-            node = (tv, node, self.parse_primary())
-        return node
-
-    def parse_primary(self):
-        tt, tv = self.peek()
-        if tv == "(":
-            self.next()
-            node = self.parse_or()
-            if self.peek()[1] == ")":
-                self.next()
-            return node
-        if tv == "true":
-            self.next(); return ("lit", True)
-        if tv == "false":
-            self.next(); return ("lit", False)
-        if tv == "null":
-            self.next(); return ("lit", None)
-        if tt == "NUM":
-            self.next(); return ("lit", float(tv) if "." in tv else int(tv))
-        if tt == "STR":
-            self.next(); return ("lit", tv)
-        if tv == "[":
-            self.next()
-            items = []
-            while self.peek()[1] not in ("]", None):
-                items.append(self.parse_or())
-                if self.peek()[1] == ",":
-                    self.next()
-            self.next()
-            return ("list", items)
-        if tt == "ID":
-            path = [self.next()[1]]
-            while self.peek()[1] == ".":
-                self.next(); path.append(self.next()[1])
-            # a trailing call like `.size()` / `exists()` — unsupported: treat as None
-            if self.peek()[1] == "(":
-                depth = 0
-                while True:
-                    t = self.next()
-                    if t[1] == "(":
-                        depth += 1
-                    elif t[1] == ")":
-                        depth -= 1
-                        if depth == 0:
-                            break
-                    elif t[0] is None:
-                        break
-                return ("lit", None)
-            return ("member", path)
-        self.next()
-        return ("lit", None)
-
-
-def _rules_truthy(v: Any) -> bool:
-    return bool(v)
-
-
-def _rules_eval(node: tuple, ctx: dict) -> Any:
-    kind = node[0]
-    if kind == "lit":
-        return node[1]
-    if kind == "list":
-        return [_rules_eval(n, ctx) for n in node[1]]
-    if kind == "member":
-        cur: Any = ctx
-        for seg in node[1]:
-            cur = cur.get(seg) if isinstance(cur, dict) else None
-        return cur
-    if kind == "not":
-        return not _rules_truthy(_rules_eval(node[1], ctx))
-    if kind == "and":
-        return _rules_truthy(_rules_eval(node[1], ctx)) and _rules_truthy(_rules_eval(node[2], ctx))
-    if kind == "or":
-        return _rules_truthy(_rules_eval(node[1], ctx)) or _rules_truthy(_rules_eval(node[2], ctx))
-    if kind == "in":
-        return _rules_eval(node[1], ctx) in (_rules_eval(node[2], ctx) or [])
-    a, b = _rules_eval(node[1], ctx), _rules_eval(node[2], ctx)
-    try:
-        if kind == "==":
-            return a == b
-        if kind == "!=":
-            return a != b
-        if kind == "<":
-            return a < b
-        if kind == "<=":
-            return a <= b
-        if kind == ">":
-            return a > b
-        if kind == ">=":
-            return a >= b
-    except TypeError:
-        return False
-    return False
-
-
-def _rules_flatten(nodes: list[dict], prefix: list[dict]) -> list[tuple[list[dict], list[dict]]]:
-    out = []
-    for node in nodes:
-        if node["kind"] != "match":
-            continue
-        pat = prefix + node["segments"]
-        allows = [n for n in node["body"] if n["kind"] == "allow"]
-        if allows:
-            out.append((pat, allows))
-        out += _rules_flatten([n for n in node["body"] if n["kind"] == "match"], pat)
-    return out
-
-
-def _rules_pattern_matches(pattern: list[dict], path_segs: list[str]) -> dict | None:
-    caps: dict[str, str] = {}
-    pi = 0
-    for i, seg in enumerate(pattern):
-        if seg["kind"] == "capture" and seg.get("recursive"):
-            if i != len(pattern) - 1:
-                return None
-            caps[seg["name"]] = "/".join(path_segs[pi:])
-            return caps
-        if pi >= len(path_segs):
-            return None
-        if seg["kind"] == "literal":
-            if path_segs[pi] != seg["name"]:
-                return None
-        else:
-            caps[seg["name"]] = path_segs[pi]
-        pi += 1
-    return caps if pi == len(path_segs) else None
-
-
-_RULES_OP_ALIASES = {"get": {"get", "read"}, "list": {"list", "read"}, "create": {"create", "write"},
-                     "update": {"update", "write"}, "delete": {"delete", "write"}}
+# ── security rules ─────────────────────────────────────────────────────────────────────
+# The rules language lives in core/firestore_rules_core.py (functions, get()/exists(), map/list/
+# string methods, ...). Here: the playground shim and the client-SDK enforcement on the data plane.
+try:
+    from core import firestore_rules_core as _rules
+except ImportError:  # pragma: no cover - Pyodide flat layout
+    import firestore_rules_core as _rules  # type: ignore
 
 
 def evaluate_security_rules(rules_src: str, *, method: str, db: str, rel_path: str,
                             auth: dict | None, resource_data: dict | None,
-                            request_resource_data: dict | None) -> dict:
-    """Evaluate `rules_src` against one simulated request, for the console's Development &
-    test (Rules Playground) tab. Returns `{"allow", "matchedPath", "error"}`. This is the
-    ONLY path that ever evaluates rules — the native wire's actual document reads/writes
-    (what the console's own Data viewer and every Admin-SDK/gcloud caller use) always
-    bypass them, matching real Firestore (only end-user client-SDK requests are evaluated
-    against rules in production)."""
+                            request_resource_data: dict | None, fetch=None) -> dict:
+    """Evaluate `rules_src` against one simulated request (Rules Playground / :testSecurityRules).
+    Returns `{"allow", "matchedPath", "error", "trace"}`."""
+    segs = [s for s in rel_path.split("/") if s]
+    doc_id = segs[-1] if segs else ""
+    res = None if method in ("create",) and resource_data is None else {
+        "data": resource_data if resource_data is not None else (request_resource_data or {}),
+        "id": doc_id, "__name__": _rules.Path(["databases", db, "documents"] + segs)}
+    request = _rules_request(method, db, segs, auth, request_resource_data)
+    return _rules.evaluate(rules_src, method=method, rel_path=rel_path, db=db, request=request, resource=res, fetch=fetch)
+
+
+def _rules_request(method: str, db: str, segs: list, auth: dict | None, request_data, query: dict | None = None) -> dict:
+    a = None
+    if auth:
+        tok = dict(auth.get("token") or {})
+        tok.setdefault("sub", auth.get("uid"))
+        a = {"uid": auth.get("uid"), "token": tok}
+    return {"auth": a, "method": method, "time": _rules.parse_ts(_now()),
+            "path": _rules.Path(["databases", db, "documents"] + list(segs)),
+            "resource": {"data": request_data, "id": segs[-1] if segs else ""} if request_data is not None else None,
+            "query": query or {"limit": None, "offset": 0, "orderBy": None}}
+
+
+def _jwt_claims(token: str) -> dict | None:
+    import base64
+    parts = token.split(".")
+    if len(parts) != 3:
+        return None
     try:
-        top = _RulesParser(_rules_tokenize(rules_src)).parse_document()
-    except Exception as e:
-        return {"allow": False, "matchedPath": None, "error": f"Rules did not parse: {e}"}
-    path_segs = ["databases", db, "documents"] + [s for s in rel_path.split("/") if s]
-    flat = _rules_flatten(top, [])
-    ctx = {
-        "request": {
-            "auth": ({"uid": auth.get("uid")} if auth else None),
-            "resource": {"data": request_resource_data or {}},
-            "method": method,
-            "time": _now(),
-        },
-        "resource": {"data": resource_data if resource_data is not None else (request_resource_data or {})},
-    }
-    wanted = _RULES_OP_ALIASES.get(method, {method})
-    best = None
-    for pattern, allows in flat:
-        caps = _rules_pattern_matches(pattern, path_segs)
-        if caps is None:
-            continue
-        merged = {**ctx, **caps}
-        for rule in allows:
-            if not (rule["ops"] & wanted):
+        raw = parts[1] + "=" * (-len(parts[1]) % 4)
+        c = json.loads(base64.urlsafe_b64decode(raw))
+        return c if isinstance(c, dict) else None
+    except Exception:
+        return None
+
+
+def client_rules_context(headers: dict | None, query: dict) -> dict | None:
+    """None -> a privileged caller (Admin SDK / gcloud / the console's data viewer / emulator
+    `Bearer owner`): rules are bypassed, exactly as in production. Otherwise the request is an
+    end-user client-SDK request and carries {"auth": {...} | None}. Client = a Firebase ID token
+    (Bearer JWT issued by securetoken.google.com/<project>), or an API-key-only request
+    (`?key=` / X-Goog-Api-Key) which is an unauthenticated client. The token is decoded, not
+    signature-verified (as the Firebase emulator does)."""
+    h = {str(k).lower(): v for k, v in (headers or {}).items()}
+    authz = str(h.get("authorization") or "")
+    if authz.lower().startswith("bearer "):
+        tok = authz[7:].strip()
+        claims = _jwt_claims(tok)
+        if claims and ("securetoken.google.com" in str(claims.get("iss", "")) or "firebase" in claims):
+            uid = claims.get("user_id") or claims.get("sub")
+            return {"auth": {"uid": uid, "token": {k: v for k, v in claims.items() if k not in ("firebase",)}}}
+        return None
+    if h.get("x-goog-api-key") or h.get("x-firebase-gmpid") or query.get("key"):
+        return {"auth": None}
+    return None
+
+
+def _entry_ctx(db: str, rel: str, entry: dict | None) -> dict | None:
+    if entry is None:
+        return None
+    segs = [s for s in rel.split("/") if s]
+    return {"data": _rules.fields_to_data(entry.get("fields")), "id": segs[-1],
+            "__name__": _rules.Path(["databases", db, "documents"] + segs)}
+
+
+def _rules_check(store: FirestoreStore, db: str, method: str, rel: str, ctxinfo: dict, entry, new_fields,
+                 query: dict | None = None, staged: dict | None = None) -> str | None:
+    """-> None when allowed, else the denial reason."""
+    src = store.security_rules.get(db) if isinstance(store.security_rules.get(db), str) else None
+    if not src:
+        return "No security rules are published for this database; client access is denied by default."
+
+    def fetch(r):
+        e = store.get(db, r)
+        return _entry_ctx(db, r, e)
+
+    def fetch_after(r):
+        if staged is not None and r in staged:
+            return _entry_ctx(db, r, staged[r])
+        return fetch(r)
+
+    segs = [s for s in rel.split("/") if s]
+    req_data = _rules.fields_to_data(new_fields) if new_fields is not None else None
+    request = _rules_request(method if method not in ("get", "list") else method, db, segs, ctxinfo.get("auth"), req_data, query)
+    if method in ("get", "list"):
+        request["resource"] = None
+    res = _entry_ctx(db, rel, entry) if method not in ("create",) else None
+    out = _rules.evaluate(src, method=method, rel_path=rel, db=db, request=request, resource=res,
+                          fetch=fetch, fetch_after=fetch_after)
+    if out["allow"]:
+        return None
+    return out.get("error") or "Missing or insufficient permissions."
+
+
+_DENIED = "Missing or insufficient permissions."
+
+
+def _denied(reason: str | None = None) -> FirestoreResponse:
+    return _err(403, "PERMISSION_DENIED", _DENIED)
+
+
+def _eq_filters(where: dict | None) -> dict:
+    """Equality constraints (field -> python value) a query guarantees on every result."""
+    out: dict = {}
+
+    def walk(f):
+        if not isinstance(f, dict):
+            return
+        if "compositeFilter" in f and str(f["compositeFilter"].get("op", "AND")) in ("AND", "1"):
+            for x in f["compositeFilter"].get("filters", []):
+                walk(x)
+        elif "fieldFilter" in f and str(f["fieldFilter"].get("op")) in ("EQUAL", "5"):
+            ff = f["fieldFilter"]
+            out[(ff.get("field") or {}).get("fieldPath", "")] = _rules.from_fs_value(ff.get("value"))
+    walk(where)
+    return out
+
+
+def _nest(flat: dict) -> dict:
+    out: dict = {}
+    for path, v in flat.items():
+        cur = out
+        parts = path.split(".")
+        for p in parts[:-1]:
+            cur = cur.setdefault(p, {})
+        cur[parts[-1]] = v
+    return out
+
+
+def _enforce_rules(store: FirestoreStore, db: str, base: str, method: str, rel: str, suffix: str,
+                   query: dict, body: bytes, ctxinfo: dict) -> FirestoreResponse | None:
+    """Evaluate the database's published rules for a client-SDK request. None = proceed."""
+    segs = [s for s in rel.split("/") if s]
+    is_doc = len(segs) != 0 and len(segs) % 2 == 0
+    if suffix in ("beginTransaction", "rollback"):
+        return None
+    if suffix == "listCollectionIds":
+        return _denied()
+    if suffix == "batchGet":
+        for name in _load_json(body).get("documents") or []:
+            r = _rel_of(base, name)
+            if r is None or _rules_check(store, db, "get", r, ctxinfo, store.get(db, r), None):
+                return _denied()
+        return None
+    if suffix == "runQuery":
+        sq = _load_json(body).get("structuredQuery") or {}
+        q = {"limit": sq.get("limit") if not isinstance(sq.get("limit"), dict) else sq["limit"].get("value"),
+             "offset": sq.get("offset", 0), "orderBy": [(o.get("field") or {}).get("fieldPath") for o in sq.get("orderBy") or []]}
+        eq = _nest(_eq_filters(sq.get("where")))
+        for frm in sq.get("from") or [{}]:
+            coll = (rel + "/" if rel else "") + frm.get("collectionId", "")
+            group = bool(frm.get("allDescendants"))
+            probe = (coll + "/__query__") if not group else frm.get("collectionId", "") + "/__query__"
+            # a collection-group query is checked against `/{path=**}/<cid>/{doc}`
+            stub = {"fields": {}}
+            fields = {k: _to_fs(v) for k, v in eq.items()}
+            stub["fields"] = fields
+            if _rules_check(store, db, "list", probe if not group else "__group__/" + probe, ctxinfo, stub, None, q):
+                return _denied()
+        return None
+    if suffix == "commit":
+        staged: dict = {}
+        for w in _load_json(body).get("writes") or []:
+            name = (w.get("update") or {}).get("name") if "update" in w else (w.get("delete") or (w.get("transform") or {}).get("document"))
+            r = _rel_of(base, name)
+            if r is None:
+                return None
+            cur = staged[r] if r in staged else store.get(db, r)
+            if "delete" in w:
+                if _rules_check(store, db, "delete", r, ctxinfo, cur, None, staged=staged):
+                    return _denied()
+                staged[r] = None
                 continue
-            desc = "/" + "/".join(
-                s["name"] if s["kind"] == "literal" else "{" + s["name"] + ("=**" if s.get("recursive") else "") + "}"
-                for s in pattern)
-            try:
-                ok = _rules_truthy(_rules_eval(rule["expr"], merged))
-            except Exception:
-                ok = False
-            if ok:
-                return {"allow": True, "matchedPath": desc, "error": None}
-            best = best or {"allow": False, "matchedPath": desc, "error": None}
-    return best or {"allow": False, "matchedPath": None, "error": None}
+            entry = json.loads(json.dumps(cur)) if cur else {"fields": {}}
+            if "update" in w:
+                nf = (w["update"] or {}).get("fields") or {}
+                mask = (_mask_paths((w.get("updateMask") or {}).get("fieldPaths")) or []) if "updateMask" in w else None
+                entry["fields"] = _apply_mask(entry.get("fields") or {}, nf, mask) if mask is not None else json.loads(json.dumps(nf))
+            for t in (w.get("updateTransforms") or []):
+                _apply_transform(entry["fields"], t, _now())
+            op = "update" if cur is not None else "create"
+            staged[r] = entry
+            if _rules_check(store, db, op, r, ctxinfo, cur, entry["fields"], staged=staged):
+                return _denied()
+        return None
+    if is_doc:
+        entry = store.get(db, rel)
+        if method == "GET":
+            return _denied() if _rules_check(store, db, "get", rel, ctxinfo, entry, None) else None
+        if method == "DELETE":
+            return _denied() if _rules_check(store, db, "delete", rel, ctxinfo, entry, None) else None
+        if method in ("PATCH", "PUT"):
+            nf = _load_json(body).get("fields", {})
+            result = dict((entry or {}).get("fields") or {})
+            mask = _mask_paths(query.get("updateMask.fieldPaths"))
+            result = _apply_mask(result, nf, mask) if mask is not None else (nf if entry is None else {**result, **nf})
+            return _denied() if _rules_check(store, db, "update" if entry is not None else "create", rel, ctxinfo, entry, result) else None
+        return None
+    # collection
+    if method == "POST":
+        doc_id = query.get("documentId") or "__auto__"
+        nf = _load_json(body).get("fields", {})
+        return _denied() if _rules_check(store, db, "create", f"{rel}/{doc_id}", ctxinfo, None, nf) else None
+    if method == "GET":
+        q = {"limit": query.get("pageSize"), "offset": 0, "orderBy": query.get("orderBy")}
+        return _denied() if _rules_check(store, db, "list", f"{rel}/__query__", ctxinfo, None, None, q) else None
+    return None
+
+
+def _to_fs(v) -> dict:
+    if v is None: return {"nullValue": None}
+    if isinstance(v, bool): return {"booleanValue": v}
+    if isinstance(v, int): return {"integerValue": str(v)}
+    if isinstance(v, float): return {"doubleValue": v}
+    if isinstance(v, str): return {"stringValue": v}
+    if isinstance(v, dict): return {"mapValue": {"fields": {k: _to_fs(x) for k, x in v.items()}}}
+    if isinstance(v, list): return {"arrayValue": {"values": [_to_fs(x) for x in v]}}
+    return {"stringValue": str(v)}
 
 
 # ── admin plane ─────────────────────────────────────────────────────────────
+# ── Firebase Rules API (firebaserules.googleapis.com v1): rulesets, releases, :test ─────────
+_RS = "__rulesets__"
+_REL = "__releases__"
+
+
+def _rs(store):
+    return store.security_rules.setdefault(_RS, {})
+
+
+def _rel(store):
+    return store.security_rules.setdefault(_REL, {})
+
+
+def _db_of_release(rname: str) -> str:
+    # projects/{p}/releases/cloud.firestore[/{db}]
+    tail = rname.split("/releases/", 1)[1]
+    parts = tail.split("/", 1)
+    return parts[1] if len(parts) > 1 and parts[1] else "(default)"
+
+
+def _ruleset_source(rs: dict) -> str:
+    files = (rs.get("source") or {}).get("files") or []
+    return "\n".join(f.get("content", "") for f in files)
+
+
+def _publish_rules(store, project: str, db: str, src: str) -> dict:
+    """Console/legacy publish: create a ruleset and (re)point the database's release at it."""
+    now = _now()
+    rid = uuid.uuid4().hex[:8] + "-" + uuid.uuid4().hex[:4] + "-" + uuid.uuid4().hex[:4] + "-" + uuid.uuid4().hex[:12]
+    name = f"projects/{project}/rulesets/{rid}"
+    _rs(store)[name] = {"name": name, "createTime": now,
+                        "source": {"files": [{"name": "firestore.rules", "content": src}]}}
+    rname = f"projects/{project}/releases/cloud.firestore" + ("" if db == "(default)" else f"/{db}")
+    prev = _rel(store).get(rname)
+    _rel(store)[rname] = {"name": rname, "rulesetName": name, "createTime": (prev or {}).get("createTime", now), "updateTime": now}
+    store.security_rules[db] = src
+    return _rel(store)[rname]
+
+
+def _test_case(src_ast, case: dict, fetch_docs: dict) -> dict:
+    method = str(case.get("method") or "GET").lower()
+    path = str(case.get("path") or "")
+    m = re.match(r"^/databases/([^/]+)/documents/?(.*)$", path)
+    if not m:
+        return {"state": "FAILURE", "debugMessages": [f"Invalid path {path!r}; expected /databases/(default)/documents/..."]}
+    db, rel = m.group(1), m.group(2)
+    req = case.get("request") or {}
+    auth = req.get("auth")
+    res = case.get("resource")
+    r = evaluate_security_rules_ast(src_ast, method=method, db=db, rel_path=rel, auth=auth,
+                                   resource_data=(res or {}).get("data") if res is not None else None,
+                                   request_resource_data=(req.get("resource") or {}).get("data") if "resource" in req else (req.get("data")),
+                                   fetch=lambda rr: ({"data": fetch_docs[rr]} if rr in fetch_docs else None))
+    expect = str(case.get("expectation") or "ALLOW").upper()
+    ok = (r["allow"] and expect == "ALLOW") or (not r["allow"] and expect == "DENY")
+    out = {"state": "SUCCESS" if ok else "FAILURE",
+           "debugMessages": ([] if ok else [f"Expected {expect} but the request was {'ALLOWED' if r['allow'] else 'DENIED'}."])
+           + ([r["error"]] if r.get("error") else [])}
+    out["visitedExpressions"] = [{"sourcePosition": {"fileName": "firestore.rules", "line": t["line"]}, "value": {"boolValue": t["result"]}}
+                                 for t in r.get("trace", [])]
+    return out
+
+
+def evaluate_security_rules_ast(ast, **kw) -> dict:
+    segs = [x for x in kw["rel_path"].split("/") if x]
+    method = kw["method"]
+    rd = kw["resource_data"]
+    res = None if rd is None and method == "create" else {
+        "data": rd if rd is not None else (kw["request_resource_data"] or {}), "id": segs[-1] if segs else "",
+        "__name__": _rules.Path(["databases", kw["db"], "documents"] + segs)}
+    request = _rules_request(method, kw["db"], segs, kw["auth"], kw["request_resource_data"])
+    return _rules.evaluate(ast, method=method, rel_path=kw["rel_path"], db=kw["db"], request=request, resource=res, fetch=kw.get("fetch"))
+
+
+def _dispatch_rules_api(store, project: str, method: str, segs: list, body: bytes) -> FirestoreResponse:
+    data = _load_json(body)
+    head = segs[0]
+    if head.endswith(":test") or head == "test":
+        src = _ruleset_source({"source": data.get("source")}) if data.get("source") else None
+        if src is None:
+            return _err(400, "INVALID_ARGUMENT", "source is required.")
+        issues = _rules.validate(src)
+        if issues:
+            return _json(200, {"issues": issues})
+        ast = _rules.compile_rules(src)
+        docs = {}
+        for d in data.get("fixtures") or []:
+            pass
+        results = [_test_case(ast, c, docs) for c in (data.get("testSuite") or {}).get("testCases") or []]
+        return _json(200, {"testResults": results})
+    if head == "rulesets":
+        if len(segs) == 1:
+            if method == "POST":
+                src = _ruleset_source(data)
+                if not (data.get("source") or {}).get("files"):
+                    return _err(400, "INVALID_ARGUMENT", "Ruleset.source.files is required.")
+                issues = _rules.validate(src)
+                if issues:
+                    i = issues[0]
+                    return _err(400, "INVALID_ARGUMENT", f"Invalid argument: line {i['sourcePosition']['line']}, column {i['sourcePosition']['column']}: {i['description']}")
+                rid = str(uuid.uuid4())
+                name = f"projects/{project}/rulesets/{rid}"
+                rec = {"name": name, "createTime": _now(), "source": data["source"]}
+                _rs(store)[name] = rec
+                return _json(200, rec)
+            if method == "GET":
+                items = sorted(_rs(store).values(), key=lambda r: r["createTime"], reverse=True)
+                return _json(200, {"rulesets": [{k: v for k, v in r.items() if k != "source"} for r in items
+                                                if r["name"].startswith(f"projects/{project}/")]})
+        elif len(segs) == 2:
+            name = f"projects/{project}/rulesets/{segs[1]}"
+            rec = _rs(store).get(name)
+            if rec is None:
+                return _err(404, "NOT_FOUND", f"Requested entity was not found. ({name})")
+            if method == "GET":
+                return _json(200, rec)
+            if method == "DELETE":
+                if any(r["rulesetName"] == name for r in _rel(store).values()):
+                    return _err(400, "FAILED_PRECONDITION", "Cannot delete a ruleset that is referenced by a release.")
+                _rs(store).pop(name)
+                return _json(200, {})
+    if head == "releases":
+        rels = _rel(store)
+        if len(segs) == 1:
+            if method == "GET":
+                return _json(200, {"releases": [r for r in sorted(rels.values(), key=lambda r: r["name"]) if r["name"].startswith(f"projects/{project}/")]})
+            if method == "POST":
+                rname, rsname = data.get("name"), data.get("rulesetName")
+                if not rname or not rsname:
+                    return _err(400, "INVALID_ARGUMENT", "name and rulesetName are required.")
+                if rname in rels:
+                    return _err(409, "ALREADY_EXISTS", f"Release already exists: {rname}")
+                if rsname not in _rs(store):
+                    return _err(404, "NOT_FOUND", f"Requested entity was not found. ({rsname})")
+                if not re.match(r"^projects/[^/]+/releases/cloud\.firestore(/.+)?$", rname):
+                    return _err(400, "INVALID_ARGUMENT", "Only cloud.firestore releases are supported by Vyomi.")
+                now = _now()
+                rels[rname] = {"name": rname, "rulesetName": rsname, "createTime": now, "updateTime": now}
+                store.security_rules[_db_of_release(rname)] = _ruleset_source(_rs(store)[rsname])
+                return _json(200, rels[rname])
+        else:
+            rname = f"projects/{project}/releases/" + "/".join(segs[1:])
+            tail = segs[-1]
+            if tail == "executable" and method == "GET":
+                rname = f"projects/{project}/releases/" + "/".join(segs[1:-1])
+                rel = rels.get(rname)
+                if not rel:
+                    return _err(404, "NOT_FOUND", f"Requested entity was not found. ({rname})")
+                return _json(200, {"rulesetName": rel["rulesetName"], "executable": "FIRESTORE", "language": "FIRESTORE"})
+            rel = rels.get(rname)
+            if method == "GET":
+                return _json(200, rel) if rel else _err(404, "NOT_FOUND", f"Requested entity was not found. ({rname})")
+            if method == "PATCH":
+                if not rel:
+                    return _err(404, "NOT_FOUND", f"Requested entity was not found. ({rname})")
+                new = (data.get("release") or data).get("rulesetName")
+                if new not in _rs(store):
+                    return _err(404, "NOT_FOUND", f"Requested entity was not found. ({new})")
+                rel["rulesetName"], rel["updateTime"] = new, _now()
+                store.security_rules[_db_of_release(rname)] = _ruleset_source(_rs(store)[new])
+                return _json(200, rel)
+            if method == "DELETE":
+                if not rel:
+                    return _err(404, "NOT_FOUND", f"Requested entity was not found. ({rname})")
+                rels.pop(rname)
+                store.security_rules.pop(_db_of_release(rname), None)
+                return _json(200, {})
+    return _err(400, "INVALID_ARGUMENT", f"Unsupported Firebase Rules request {method} {'/'.join(segs)}")
+
+
 def _admin_dispatch(store: FirestoreStore, method: str, path: str,
                     query: dict, body: bytes, gcs_store=None) -> FirestoreResponse:
     segs = [unquote(s) for s in _admin_segs(path)]
+    if len(segs) == 2 and segs[0] == "projects" and segs[1].endswith(":test"):
+        return _dispatch_rules_api(store, segs[1][:-5], method, ["test"], body)
     if len(segs) < 3 or segs[0] != "projects":
         return _err(404, "NOT_FOUND", f"Unknown path: {path}")
     project = segs[1]
+    if segs[2] in ("rulesets", "releases") or segs[2] == "test" or (len(segs) == 3 and segs[2].endswith(":test")):
+        return _dispatch_rules_api(store, project, method, segs[2:], body)
     if segs[2] == "locations":
         return _dispatch_backups(store, project, method, segs[3:])
     base_seg, admin_suffix = _split_suffix(segs[2])
@@ -1623,7 +1641,12 @@ def _dispatch_database_item(store: FirestoreStore, project: str, dbid: str, suff
             return _json(200, {"rules": store.security_rules.get(dbid, "")})
         if suffix == "updateSecurityRules":
             data = _load_json(body)
-            store.security_rules[dbid] = data.get("rules", "")
+            src = data.get("rules", "")
+            issues = _rules.validate(src) if src else []
+            if issues:
+                return _err(400, "INVALID_ARGUMENT", "Rules failed validation: " + "; ".join(
+                    f"L{i['sourcePosition']['line']}:{i['sourcePosition']['column']} {i['description']}" for i in issues))
+            _publish_rules(store, project, dbid, src)
             return _json(200, {"rules": store.security_rules[dbid]})
         data = _load_json(body)
         rules_src = data.get("rules")

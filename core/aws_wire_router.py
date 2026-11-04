@@ -201,7 +201,8 @@ def _gcp_service(path):
             return "gcp-artifactregistry"
         if re.search(r"^/v1/projects/[^/]+/projectSettings$", path):
             return "gcp-artifactregistry"
-        if re.search(r"^/v1(beta1)?/projects/[^/]+/databases($|[/:])", path):
+        if re.search(r"^/v1(beta1)?/projects/[^/]+/databases($|[/:])", path) \
+                or re.search(r"^/v1/projects/[^/]+(/(rulesets|releases)([/?]|$)|:test$)", path.split("?", 1)[0]):
             return "gcp-firestore"
         if "/keyRings" in path or "/keyHandles" in path or "autokeyConfig" in path:
             return "gcp-kms"
