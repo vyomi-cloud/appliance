@@ -643,6 +643,15 @@ async def _function_app_handle(app_name: str, function_name: str, request: Reque
     if not func_rec:
         return JSONResponse(status_code=404, content={"error": f"Function App '{app_name}' not found"})
 
+    # Access restrictions (config/web ipSecurityRestrictions) are enforced on requests to the site.
+    try:
+        from core import azure_webnet_core as _wn
+        _den = _wn.evaluate_access({k.lower(): v for k, v in azure_resources.items()}, {**func_rec, "id": func_rec.get("id") or ""}, dict(request.headers))
+    except Exception:
+        _den = None
+    if _den:
+        return JSONResponse(status_code=_den[0], content={"error": {"code": _den[1], "message": _den[2]}})
+
     props = func_rec.get("properties") or {}
     code = props.get("code") or props.get("sourceCode") or ""
     entry = props.get("entryPoint") or "main"

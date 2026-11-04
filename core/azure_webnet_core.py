@@ -14,8 +14,11 @@ Real ARM behaviour on the site record:
 * **Deployment Center sources** -- ``config/web`` ``scmType`` transitions (LocalGit, ExternalGit, GitHubAction, VSTSRM,
   BitbucketGit, None) and container registry settings (``linuxFxVersion`` ``DOCKER|image:tag``, registry app settings).
 
-NOT modelled: no packet leaves the site through a VNet or hybrid connection, access restrictions are not enforced on
-inbound requests (there is no site front end), and a ``git push`` to the LocalGit remote has no receiving Kudu.
+Inbound access restrictions ARE enforced on requests that reach the site's data plane (evaluate_access: priority order, first
+match wins, the implicit tail rule / default action) for a caller that declares its network identity (x-vyomi-source-ip,
+x-vyomi-source-subnet, x-vyomi-source-service-tag, plus the Front Door x-azure-fdid header); a request with no declared identity
+is evaluated as an unknown public client (so Deny-default sites reject it). NOT modelled: no packet leaves the site through a VNet
+or hybrid connection, and a ``git push`` to the LocalGit remote has no receiving Kudu.
 """
 from __future__ import annotations
 
@@ -334,3 +337,45 @@ def _hc_view(rec, h):
             "properties": {"serviceBusNamespace": h["serviceBusNamespace"], "relayName": h["relayName"], "relayArmUri": h["relayArmUri"],
                            "hostname": h["hostname"], "port": h["port"], "sendKeyName": h["sendKeyName"], "sendKeyValue": None,
                            "serviceBusSuffix": ".servicebus.windows.net"}}
+
+
+# ── inbound enforcement ────────────────────────────────────────────────────────────────
+def evaluate_access(state: dict, site_rec: dict | None, headers: dict | None, scm: bool = False):
+    """None = allowed, else (403, "Forbidden", message) per the site's access restrictions (main site or the SCM/Kudu site).
+    Rules are matched in ascending priority, the first match decides; no match -> the configured default action."""
+    if not site_rec:
+        return None
+    cfg = (site_rec.get("properties") or {}).get("siteConfig") or {}
+    key, dk = ("scmIpSecurityRestrictions", "scmIpSecurityRestrictionsDefaultAction") if scm else ("ipSecurityRestrictions", "ipSecurityRestrictionsDefaultAction")
+    rules = sorted([r for r in cfg.get(key) or [] if r.get("priority") != 2147483647], key=lambda r: r.get("priority", 0))
+    if not rules:
+        return None
+    h = {(k or "").lower(): str(v) for k, v in (headers or {}).items()}
+    ip, subnet, tag = h.get("x-vyomi-source-ip", ""), h.get("x-vyomi-source-subnet", ""), h.get("x-vyomi-source-service-tag", "")
+    for r in rules:
+        hdr_rule = r.get("headers") or {}
+        ok_hdr = all(h.get(hk.lower()) in [str(x) for x in hv] for hk, hv in hdr_rule.items() if hk.lower() == "x-azure-fdid") if hdr_rule else True
+        addr, vnet = r.get("ipAddress"), r.get("vnetSubnetResourceId")
+        if vnet:
+            hit = bool(subnet) and subnet.lower() == str(vnet).lower()
+        elif addr and (r.get("tag") == "ServiceTag"):
+            hit = bool(tag) and tag.lower() == str(addr).lower()
+        elif addr:
+            a = str(addr).strip()
+            if a.lower() == "any":
+                hit = True
+            else:
+                net = _cidr(a)
+                try:
+                    hit = bool(ip) and net is not None and ipaddress.ip_address(ip) in net
+                except ValueError:
+                    hit = False
+        else:
+            hit = True
+        if hit and ok_hdr:
+            if r.get("action") == "Allow":
+                return None
+            return 403, "Forbidden", f"Ip Forbidden: the request was denied by access restriction rule '{r.get('name') or r.get('priority')}'."
+    if cfg.get(dk) == "Deny" or any(r.get("action") == "Allow" for r in rules):   # the implicit tail rule is Deny all once an Allow rule exists
+        return 403, "Forbidden", f"Ip Forbidden: client {ip or 'unknown'} does not match any Allow rule of the {'SCM ' if scm else ''}site's access restrictions."
+    return None
