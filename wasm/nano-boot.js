@@ -438,6 +438,10 @@ builtins._llm_bridge_set = _llm_bridge_set; builtins._llm_bridge_status = _llm_b
       // snapshot's shallow dict-merge would otherwise REPLACE a parent record
       // (e.g. a Cloud SQL instance) and drop a sub-resource just added to it
       // (a database) before the debounced save landed.
+      // A pending debounced save means a READ-classified op (e.g. an S3 Access Grants GetDataAccess GET,
+      // which mints credentials) changed local state that the snapshot does not hold yet: flush it first,
+      // otherwise the restore below would overwrite it with the stale snapshot and lose it.
+      if (_storeTimer && !_restoring) { clearTimeout(_storeTimer); _storeTimer = null; await writeStores(true); }
       if (!_restoring) {
         _restoring = true;
         try { restoreStores(await nbMetaGet(STORE_KEY)); } catch (_) {} finally { _restoring = false; }
