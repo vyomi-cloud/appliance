@@ -2371,6 +2371,10 @@ def _build_from_repo(store, project, location, sid, full, svc, conn, build, bful
         logs = [l["message"] for l in job["logs"]]
         if job["status"] != "Succeeded":
             raise ci.CiError("BuildFailed", job["error"])
+        push = getattr(store, "ar_push", None)   # `gcloud run deploy --source` pushes to the cloud-run-source-deploy Artifact Registry repo
+        if push:
+            tag = push(project, location, sid, tag, bid)
+            logs.append("Pushed image to Artifact Registry: %s" % tag)
     except ci.CiError as e:
         build["status"], build["finishTime"] = "FAILURE", _ts()
         build["logs"] = "\n".join(logs + ["Build failed: %s" % e.message])

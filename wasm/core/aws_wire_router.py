@@ -85,6 +85,8 @@ from core import gcp_run_core as gcp_run
 from core import gcp_trace_core as gcp_trace
 from core import gcp_osconfig_core as gcp_osconfig
 from core import gcp_apphub_core as gcp_apphub
+from core import gcp_clouddeploy_core as gcp_clouddeploy
+from core import gcp_cloudbuild_core as gcp_cloudbuild
 from core import gcp_posture_core as gcp_posture
 
 # Cloud Scheduler httpTarget that names a Cloud Run job's own Admin API v2 `:run` endpoint
@@ -112,6 +114,10 @@ def _gcp_service(path):
             or re.match(r"^/v1/projects/[^/]+/locations/global/traceScopes([/:]|$)", path) \
             or re.match(r"^/v2/projects/[^/]+/locations/global/logScopes([/:]|$)", path):
         return "gcp-trace"   # Cloud Trace v1/v2 + Trace scopes + Log scopes (core/gcp_trace_core, state on the Monitoring store)
+    if re.match(r"^/v1/projects/[^/]+/(locations/[^/]+/)?builds([/:?]|$)", path) or re.match(r"^/v1/projects/[^/]+/triggers([/:?]|$)", path):
+        return "gcp-cloudbuild"   # Cloud Build builds + triggers on the shared CI seam (core/gcp_cloudbuild_core; images pushed into Artifact Registry)
+    if re.match(r"^/v1/projects/[^/]+/locations/[^/]+/(deliveryPipelines|targets)([/:?]|$)", path):
+        return "gcp-clouddeploy"   # Cloud Deploy: pipelines/targets/releases/rollouts state machine deploying to the simulator's Cloud Run + GKE (core/gcp_clouddeploy_core)
     if re.match(r"^/v1/projects/[^/]+/locations/[^/]+/(applications|discoveredServices|discoveredWorkloads)([/:?]|$)", path):
         return "gcp-apphub"   # App Hub applications + registered services/workloads (core/gcp_apphub_core, state on the Monitoring store)
     if re.match(r"^/v1/projects/[^/]+/(patchJobs|patchDeployments)([/:]|$)", path) \
@@ -718,8 +724,10 @@ class AwsWireRouter:
         self.gcp_rm.inputs = self._rm_inputs   # org-policy simulation reads the project's real service accounts / keys / buckets
         self.gcp_pam = s.get("gcp_pam") or gcp_pam.PamStore()   # Privileged Access Manager entitlements
         self.gcp_run = s.get("gcp_run") or gcp_run.RunStore()   # Cloud Run (backs /functions, which the real console folds into it)
+        self.gcp_run.ar_push = self._run_ar_push   # source deploys push the built image into the simulated Artifact Registry
         self.gcp_run.pubsub_store = self.gcp_msg    # Eventarc Pub/Sub-sourced triggers validate/create a real subscription
         self.gcp_run.logging_store = self.gcp_logging   # Observability "Logs" — real Cloud Logging entries per invocation
+        self.gcp_mon.gke_store = self.gcp_gke   # Cloud Deploy deploys into GKE data planes
         self.gcp_mon.run_store, self.gcp_mon.vm_store = self.gcp_run, self.gcp_compute_vm   # App Hub discovers Cloud Run services + managed instance groups
         self.gcp_run.mon_store = self.gcp_mon       # Observability "Metrics" — real Cloud Monitoring points per invocation
         if getattr(self.gcp_fs, "on_doc_event", None) is None:
@@ -1412,6 +1420,23 @@ class AwsWireRouter:
                 pass
         return {"status": r.status, "headers": {**r.headers, "content-type": "application/json"}, "body": r.body}
 
+    def _run_ar_push(self, project, location, sid, tag, bid):
+        """Cloud Run source deploy: ensure the `cloud-run-source-deploy` Docker repo, push the BuildKit image, return its AR reference."""
+        repo = "cloud-run-source-deploy"
+        if gcp_ar._repo_name(project, location, repo) not in self.gcp_ar.repos:
+            gcp_ar._create_repo(self.gcp_ar, project, location, {"repositoryId": repo}, {"format": "DOCKER", "description": "Cloud Run Source Deployments"})
+        ref = "%s-docker.pkg.dev/%s/%s/%s:%s" % (location, project, repo, sid, bid)
+        gcp_cloudbuild.push_to_ar(self.gcp_ar, project, ref, tag)
+        return ref
+
+    def _gcs_read_object(self, bucket, obj):
+        """Bytes of a simulated GCS object (Cloud Build storageSource), or None."""
+        from urllib.parse import quote
+        if not self.gcs.bucket_exists(bucket):
+            return None
+        r = gcs.dispatch(self.gcs, "GET", "/storage/v1/b/%s/o/%s" % (bucket, quote(obj, safe="")), {"alt": "media"}, {}, b"")
+        return r.body if r.status == 200 else None
+
     def scc_ctx(self) -> dict:
         """What core/gcp_scc_core needs from the platform: generated posture rows + Pub/Sub for notification configs."""
         def generated(project):
@@ -1830,6 +1855,8 @@ class AwsWireRouter:
                 "gcp-trace": (gcp_trace, self.gcp_mon),
                 "gcp-osconfig": (gcp_osconfig, self.gcp_compute_vm),
                 "gcp-apphub": (gcp_apphub, self.gcp_mon),
+                "gcp-clouddeploy": (gcp_clouddeploy, self.gcp_mon),
+                "gcp-cloudbuild": (gcp_cloudbuild, self.gcp_mon),
                 "gcp-redis": (gcp_redis, self.gcp_redis),
                 "gcp-artifactregistry": (gcp_ar, self.gcp_ar),
                 "gcp-logging": (gcp_logging, self.gcp_logging),
@@ -1866,6 +1893,8 @@ class AwsWireRouter:
                                   rm_store=self.gcp_rm, logger=self._iam_audit_log, iamc_store=self.gcp_iamc)
             elif svc == "gcp-artifactregistry":   # a repository's CMEK key is checked/used through the real KMS core
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), kms_store=self.gcp_kms)
+            elif svc == "gcp-cloudbuild":   # docker build/push steps run on the CI seam and push into the simulated Artifact Registry
+                r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), ar_store=self.gcp_ar, gcs_read=self._gcs_read_object)
             elif svc == "gcp-hub":   # Marketplace / Cloud Hub / Privacy & Security — derived from live state
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), inputs=self.hub_inputs)
             elif svc == "gcp-eventarc":   # triggers validate their Cloud Run destination / bucket / topic for real
