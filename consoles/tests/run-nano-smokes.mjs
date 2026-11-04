@@ -41,8 +41,8 @@ for (const f of files) {
     p.stdout.on("data", (d) => (buf += d)); p.stderr.on("data", (d) => (buf += d));
     p.on("close", (code) => { clearTimeout(timer); resolve({ code, buf, timedOut }); });
   });
-  const fails = res.buf.split("\n").filter((l) => /^FAIL /.test(l));
-  const pass = (res.buf.match(/^PASS /gm) || []).length;
+  const fails = res.buf.split("\n").filter((l) => /^\s*\[?FAIL\]? /.test(l));
+  const pass = (res.buf.match(/^\s*\[?PASS\]? /gm) || []).length;
   const ok = res.code === 0 && !res.timedOut && !fails.length;
   rows.push({ file: f, ok, pass, fails, timedOut: res.timedOut, code: res.code, secs: Math.round((Date.now() - t0) / 1000), tail: ok ? "" : res.buf.split("\n").slice(-12).join("\n") });
   console.log(`${ok ? "OK  " : "FAIL"} ${f}  pass=${pass} fail=${fails.length}${res.timedOut ? " TIMEOUT" : ""} (${rows.at(-1).secs}s)`);

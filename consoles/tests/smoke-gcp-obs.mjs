@@ -14,7 +14,12 @@ const call = (m, url, body) => pg.evaluate(async ([m, url, body]) => {
   const t = await r.text(); let j = null; try { j = t ? JSON.parse(t) : null; } catch {} return { status: r.status, body: j };
 }, [m, url, body]);
 const b = await pw.chromium.launch(); pg = await (await b.newContext({ viewport: { width: 1400, height: 900 } })).newPage();
-await pg.goto(UI, { waitUntil: "networkidle" });
+await pg.goto(UI, { waitUntil: process.env.NANO ? "domcontentloaded" : "networkidle" });
+const ready = async () => { if (process.env.NANO) await pg.waitForFunction(() => navigator.serviceWorker?.controller && window.__vyomiNanoReady, null, { timeout: 240000, polling: 500 }); };
+/* Re-open the current page. Nano keeps request telemetry (OTLP spans, request counters) in the in-page recorder only - it does
+ * not survive a document reload - so on Nano re-navigate inside the SPA instead of reloading. */
+const refresh = async () => { if (process.env.NANO) { const u = pg.url(); await pg.goto(UI + "#/"); await pg.waitForTimeout(300); await pg.goto(u); } else await refresh(); };
+await ready();
 const project = await pg.evaluate(() => (window.__vyomiProject || localStorage.getItem("vyomi.gcp.project") || "vyomi-project"));
 // ── Trace explorer
 await pg.goto(`${UI}#/monitoring/trace-explorer`); await pg.waitForTimeout(1500);
@@ -22,7 +27,7 @@ ok("idle: percentiles 0 and honest empty heatmap", (await pg.getByTestId("trace-
 const now = Date.now() * 1e6;
 const spans = [5, 8, 12, 20, 40, 90, 250].map((ms, i) => ({ traceId: String(i + 1).padStart(32, "a"), spanId: String(i + 1).padStart(16, "b"), name: "op" + i, kind: 2, startTimeUnixNano: String(now - ms * 1e6 - i * 2e9), endTimeUnixNano: String(now - i * 2e9), status: { code: 0 } }));
 await call("POST", `${WIRE}/_obs/v1/traces`, { resourceSpans: [{ resource: { attributes: [{ key: "service.name", value: { stringValue: "checkout" } }] }, scopeSpans: [{ spans }] }] });
-await pg.reload(); await pg.waitForTimeout(2000);
+await refresh(); await pg.waitForTimeout(2000);
 ok("percentiles shown from 7 spans", (await pg.getByTestId("trace-spans").innerText()).trim() === "7");
 ok("p99 is the slow span", Number((await pg.getByTestId("trace-p99").innerText()).trim()) >= 200);
 ok("heatmap drawn", (await pg.getByTestId("trace-heatmap").count()) === 1);

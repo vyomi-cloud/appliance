@@ -9,7 +9,7 @@ import { mkdir } from "node:fs/promises";
 
 const require = createRequire(import.meta.url);
 let pw;
-try { pw = require("playwright"); }
+try { pw = require(process.env.PW || "playwright"); }
 catch { pw = require("/Users/sudhirganti/Applications/simulator/portal/node_modules/playwright"); }
 
 const BASE = process.env.BASE || "http://127.0.0.1:8740";

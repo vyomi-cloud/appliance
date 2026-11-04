@@ -17,10 +17,15 @@ const call = (m, url, body) => pg.evaluate(async ([m, url, body]) => {
 }, [m, url, body]);
 const arm = (m, path, body, v = "2023-12-01") => call(m, `${WIRE}/subscriptions/${SUB}${path}${path.includes("?") ? "&" : "?"}api-version=${v}`, body);
 const b = await pw.chromium.launch(); pg = await (await b.newContext({ viewport: { width: 1400, height: 900 } })).newPage();
-await pg.goto(UI, { waitUntil: "networkidle" });
+await pg.goto(UI, { waitUntil: process.env.NANO ? "domcontentloaded" : "networkidle" });
+const ready = async () => { if (process.env.NANO) await pg.waitForFunction(() => navigator.serviceWorker?.controller && window.__vyomiNanoReady, null, { timeout: 240000, polling: 500 }); };
+/* Re-open the current page. Nano keeps request telemetry (OTLP spans, request counters) in the in-page recorder only - it does
+ * not survive a document reload - so on Nano re-navigate inside the SPA instead of reloading. */
+const refresh = async () => { if (process.env.NANO) { const u = pg.url(); await pg.goto(UI + "#/"); await pg.waitForTimeout(300); await pg.goto(u); } else await pg.reload(); };
+await ready();
 await arm("PUT", `/resourcegroups/${RG}`, { location: "eastus" }, "2021-04-01");
 await arm("PUT", `/resourceGroups/${RG}/providers/Microsoft.Web/sites/${APP}`, { location: "eastus", properties: { siteConfig: {} } });
-await pg.goto(`${UI}#/appservices/${RG}/${APP}/appinsights`); await pg.waitForTimeout(1500);
+await pg.goto(`${UI}#/appservices/${RG}/${APP}/appinsights`); await ready(); await pg.waitForTimeout(1500);
 ok("not linked -> offers to turn on", (await pg.getByRole("button", { name: "Turn on Application Insights" }).count()) === 1);
 await pg.getByRole("button", { name: "Turn on Application Insights" }).click(); await pg.waitForTimeout(2000);
 ok("linked component shown", (await pg.getByTestId("ai-linked").count()) === 1);
@@ -32,7 +37,7 @@ const now = Date.now() * 1e6;
 const span = (name, kind, code, sid, extra = {}) => ({ traceId: "ab".repeat(16), spanId: sid, name, kind, startTimeUnixNano: String(now - 8e6), endTimeUnixNano: String(now), status: { code }, ...extra });
 await call("POST", `${WIRE}/_obs/v1/traces`, { resourceSpans: [{ resource: { attributes: [{ key: "service.name", value: { stringValue: APP } }] }, scopeSpans: [{ spans: [
   span("GET /", 2, 0, "11".repeat(8)), span("POST /pay", 2, 2, "22".repeat(8), { events: [{ name: "cart.checkout", timeUnixNano: String(now) }] }), span("SELECT orders", 3, 0, "33".repeat(8))] }] }] });
-await pg.reload(); await pg.waitForTimeout(2000);
+await refresh(); await pg.waitForTimeout(2000);
 ok("overview counts 2 requests / 1 failed", (await pg.getByTestId("ai-requests").innerText()).trim() === "2" && (await pg.getByTestId("ai-failed").innerText()).trim() === "1");
 await pg.getByRole("tab", { name: "Failures" }).click(); await pg.waitForTimeout(500);
 ok("failures lists the failed request", (await pg.getByTestId("ai-fail-row").count()) === 1);
