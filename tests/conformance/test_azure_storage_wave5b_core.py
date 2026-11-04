@@ -155,7 +155,7 @@ def run() -> int:
     def_units = {d["name"]["value"]: d["unit"] for d in defs["body"]["value"]}
     _check("storage metricDefinitions = ActivityOperations + the six storage metrics with units",
            defs["status"] == 200 and def_units.get("ActivityOperations") == "Count" and def_units.get("UsedCapacity") == "Bytes"
-           and def_units.get("Transactions") == "Count" and len(def_units) == 7)
+           and def_units.get("Transactions") == "Count" and len(def_units) >= 7)  # request-telemetry metrics (Ingress/Egress/Availability/latency) were added later
     mixed = arm.handle("GET", rid_path + "/providers/Microsoft.Insights/metrics",
                        {"api-version": "2018-01-01", "metricnames": "ActivityOperations,BlobCount"})
     _check("metricnames may mix ActivityOperations with storage metrics",
