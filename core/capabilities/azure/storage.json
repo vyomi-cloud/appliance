@@ -90,8 +90,10 @@
  },
  "azure.storage.locks": {
   "title": "Resource locks (Microsoft.Authorization/locks), scoped to this storage account",
-  "level": { "nano": "full", "offline": "full" },
-  "limitations": ["Locks are only simulated at the resource scope (this account); subscription- and resource-group-scoped lock lists are an honest 'Not simulated' gap, same as the real Subscription/Resource group scope-switch buttons."],
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Lock create/list/delete are real Microsoft.Authorization/locks over ARM at resource, resource-group and subscription scope (CanNotDelete/ReadOnly, name and notes validated); this blade manages the locks scoped to this storage account only and has no scope switch. A resource-group or subscription lock really blocks writes and deletes of everything under it with 409 ScopeLocked (core/azure_arm_ext_core.py lock_conflict), but a lock set directly on a storage account is stored and listed only: it does not block writes or deletes of the storage account itself."
+  ],
   "tests": ["tests/conformance/test_azure_arm_core.py"]
  },
  "azure.storage.activitylog": {

@@ -53,15 +53,16 @@
   "title": "System-assigned managed identity",
   "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "System-assigned identity (principalId/tenantId) is real and persists across PATCH. User-assigned managed identities are an honest 'Not simulated' gap — Microsoft.ManagedIdentity/userAssignedIdentities is not a catalogued resource type in Vyomi, so there is nothing to attach."
+   "System-assigned identity (principalId/tenantId) is real and persists across PATCH.",
+   "User assigned identities are real: the identity block can reference Microsoft.ManagedIdentity/userAssignedIdentities resources (create them in the Managed Identities service), an unknown reference is rejected with 400 ResourceNotFound, and the attached identity's principalId/clientId are resolved from that resource. The identity is not used to authorize anything: a managed identity only matters as the subject of a role assignment on Access control (IAM)."
   ],
   "tests": ["tests/conformance/test_azure_arm_core.py"]
  },
  "azure.cognitiveservices.locks": {
   "title": "Resource locks (Microsoft.Authorization/locks), scoped to this account",
-  "level": { "nano": "full", "offline": "full" },
+  "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "Locks are only simulated at the resource scope (this account); subscription- and resource-group-scoped lock lists are an honest 'Not simulated' gap, same as the real Subscription/Resource group scope-switch buttons."
+   "Lock create/list/delete are real Microsoft.Authorization/locks over ARM at resource, resource-group and subscription scope (CanNotDelete/ReadOnly, name and notes validated); this blade manages the locks scoped to this Cognitive Services account only and has no scope switch. A resource-group or subscription lock really blocks writes and deletes of everything under it with 409 ScopeLocked (core/azure_arm_ext_core.py lock_conflict), but a lock set directly on a Cognitive Services account is stored and listed only: it does not block writes or deletes of the Cognitive Services account itself."
   ],
   "tests": ["tests/conformance/test_azure_arm_core.py"]
  },

@@ -74,10 +74,12 @@
     "tests": ["tests/conformance/test_azure_arm_core.py"]
   },
   "azure.servicebus.namespace.identity": {
-    "title": "Identity (system-assigned managed identity)",
-    "level": { "nano": "full", "offline": "full" },
-    "limitations": ["User-assigned managed identities are not modeled (this lens has no standalone Microsoft.ManagedIdentity/userAssignedIdentities resource to attach)."],
-    "tests": ["tests/conformance/test_azure_arm_core.py"]
+   "title": "Identity (system-assigned managed identity)",
+   "level": { "nano": "full", "offline": "full" },
+   "limitations": [
+    "User assigned identities are real: the identity block can reference Microsoft.ManagedIdentity/userAssignedIdentities resources, an unknown reference is rejected with 400 ResourceNotFound and the attached identity's principalId/clientId are resolved from that resource."
+   ],
+   "tests": ["tests/conformance/test_azure_arm_core.py"]
   },
   "azure.servicebus.namespace.networking": {
     "title": "Networking (network rule sets)",

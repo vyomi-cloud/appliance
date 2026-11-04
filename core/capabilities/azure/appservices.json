@@ -116,7 +116,11 @@
  "azure.appservices.webapp.platform": {
   "title": "Authentication, Identity, Application Insights, Backups, Certificates, Networking, WebJobs, Service Connector",
   "level": { "nano": "limited", "offline": "limited" },
-  "limitations": ["Identity: enabling a system-assigned managed identity mints a stable principalId/tenantId that can be the subject of a role assignment on Access control (IAM); user-assigned identities are not modelled.", "Backups: modelled as snapshots — backup configuration (storage URL, schedule) and on-demand/scheduled backup records (status, size, timestamp) round-trip for real, and Restore acknowledges, but there is no real site content to archive or replay.", "Authentication providers, Application Insights linkage, TLS/SSL certificates, private endpoints, WebJobs and Service Connector are not modelled."],
+  "limitations": [
+   "Identity: enabling a system-assigned managed identity mints a stable principalId/tenantId that can be the subject of a role assignment on Access control (IAM); user-assigned identities are real too (references to Microsoft.ManagedIdentity/userAssignedIdentities are resolved, unknown ones rejected).",
+   "Backups: modelled as snapshots — backup configuration (storage URL, schedule) and on-demand/scheduled backup records (status, size, timestamp) round-trip for real, and Restore acknowledges, but there is no real site content to archive or replay.",
+   "Authentication providers, Application Insights linkage, TLS/SSL certificates, private endpoints, WebJobs and Service Connector are not modelled."
+  ],
   "api": ["sites Update (identity)", "sites/config/backup CreateOrUpdate", "sites/backups List/Create", "sites/backups/{id}/restore Action"],
   "tests": ["tests/conformance/test_azure_webapp_core.py"]
  },

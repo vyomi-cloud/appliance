@@ -91,16 +91,11 @@
  },
  "azure.appconfiguration.locks": {
   "title": "Resource locks (Microsoft.Authorization/locks), scoped to this configuration store",
-  "level": {
-   "nano": "full",
-   "offline": "full"
-  },
+  "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "Locks are only simulated at the resource scope (this configuration store); subscription- and resource-group-scoped lock lists are an honest 'Not simulated' gap, same as every other Azure resource blade's scope-switch buttons."
+   "Lock create/list/delete are real Microsoft.Authorization/locks over ARM at resource, resource-group and subscription scope (CanNotDelete/ReadOnly, name and notes validated); this blade manages the locks scoped to this App Configuration store only and has no scope switch. A resource-group or subscription lock really blocks writes and deletes of everything under it with 409 ScopeLocked (core/azure_arm_ext_core.py lock_conflict), but a lock set directly on a App Configuration store is stored and listed only: it does not block writes or deletes of the App Configuration store itself."
   ],
-  "tests": [
-   "tests/conformance/test_azure_arm_core.py"
-  ]
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
  },
  "azure.appconfiguration.activity_log": {
   "title": "Activity log",
@@ -133,5 +128,5 @@
   "limitations": ["Runs in the console over the real data plane (/kv) and Microsoft.Web app settings: JSON, .properties and simple YAML (maps and scalars only, no anchors or lists), the az appconfig kv import/export CLI is not part of Vyomi.", "Feature flags are skipped on export; Key Vault references are copied as plain values."],
   "tests": ["tests/conformance/test_azure_appconfiguration_core.py"]
  },
- "azure.appconfiguration.encryption": {"title": "Customer-managed key encryption", "level": {"nano": "config_only", "offline": "config_only"}, "limitations": ["Requires a Standard or Premium store, a managed identity and a key identifier whose Key Vault exists in this subscription. The key is looked up in the Key Vault keys data plane (400 KeyVaultKeyNotFound / KeyVaultKeyDisabled); that store is one keyspace shared by all vaults, so the lookup is by key name, not per vault, and data is not re-encrypted."], "tests": ["tests/conformance/test_azure_cfgext_core.py", "tests/conformance/test_azure_cmk_keylookup.py"]}
+ "azure.appconfiguration.encryption": {"title": "Customer-managed key encryption", "level": {"nano": "config_only", "offline": "config_only"}, "limitations": ["Requires a Standard or Premium store, a managed identity and a key identifier whose Key Vault exists in this subscription. The key is looked up in the Key Vault keys data plane (400 KeyVaultKeyNotFound / KeyVaultKeyDisabled); that store is one keyspace shared by all vaults, so the lookup is by key name, not per vault, and data is not re-encrypted."], "tests": ["tests/conformance/test_azure_cfgext_core.py", "tests/conformance/test_azure_cmk_keylookup.py"]},  "azure.appconfiguration.identity": {"title": "Identity (system and user assigned managed identity)", "level": {"nano": "limited", "offline": "limited"}, "limitations": ["System assigned managed identity mints a stable principalId/tenantId (core/azure_arm_core.py _apply_identity), persists across PATCH and clears on 'None'. User assigned identities are real: references to Microsoft.ManagedIdentity/userAssignedIdentities are resolved, an unknown reference is rejected with 400 ResourceNotFound. The identity is not used to authorize anything beyond being the subject of a role assignment on Access control (IAM)."], "tests": ["tests/conformance/test_azure_arm_core.py"]}
 }
