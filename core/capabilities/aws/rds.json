@@ -366,5 +366,36 @@
   "tests": [
    "tests/conformance/test_rds_restore_s3.py"
   ]
+ },
+ "rds.data-migrations": {
+  "title": "Data migrations (AWS DMS between simulator databases)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Real DMS control plane (core/dms_core.py, target AmazonDMSv20160101): replication instances, source/target endpoints, TestConnection, replication tasks with selection-rule TableMappings, DescribeTableStatistics. An endpoint's ServerName must resolve to a simulator RDS instance; StartReplicationTask really creates the selected tables on the target instance and copies the rows.",
+   "CDC is 'CDC-lite': a running cdc / full-load-and-cdc task re-reads the source and applies row-level inserts, updates and deletes (keyed on the primary key) whenever the task is described, reloaded, resumed or stopped - there is no WAL/binlog reader, so changes appear when polled rather than instantly.",
+   "Table and column discovery uses the simulator's SQL engine catalog (sqlite on the default engine). Not modelled: transformation rules, data validation, LOB settings, premigration assessments, DMS Serverless, non-SQL endpoint engines (accepted for configuration but TestConnection fails), schema conversion."
+  ],
+  "api": [
+   "CreateReplicationInstance",
+   "DescribeReplicationInstances",
+   "DeleteReplicationInstance",
+   "CreateEndpoint",
+   "DescribeEndpoints",
+   "DeleteEndpoint",
+   "TestConnection",
+   "DescribeConnections",
+   "CreateReplicationTask",
+   "DescribeReplicationTasks",
+   "StartReplicationTask",
+   "StopReplicationTask",
+   "DeleteReplicationTask",
+   "DescribeTableStatistics"
+  ],
+  "tests": [
+   "tests/conformance/test_dms_core.py"
+  ]
  }
 }

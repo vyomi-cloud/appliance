@@ -382,7 +382,7 @@ _SIGNING = {
     "application-autoscaling": "appas",   # Application Auto Scaling (DynamoDB) -> core/appautoscaling_core over the DynamoDB store
     "cloudfront": "cloudfront",   # CloudFront public keys + key groups (rest-xml /2020-05-31/...) -> core/cloudfront_keys_core via the S3 store
     "savingsplans": "savingsplans",   # Savings Plans (rest-json POST /<Operation>) + EC2 coverage/capacity views -> core/savingsplans_core over the EC2 model
-    "bedrock": "bedrock",   # Bedrock runtime + foundation-model catalogue -> core/ai_models_core over the local-LLM seam (core/llm_core)
+    "dms": "dms", "bedrock": "bedrock",   # Bedrock runtime + foundation-model catalogue -> core/ai_models_core over the local-LLM seam (core/llm_core)
     "backup": "backup",   # AWS Backup subset (region settings + DynamoDB copy jobs) -> core/backup_core over the DynamoDB + S3 stores
     "s3vectors": "s3vectors",   # Amazon S3 Vectors (rest-json POST /<Operation>) -> core/s3_vectors_core via the S3 store
     "s3tables": "s3tables",   # Amazon S3 Tables (rest-json /buckets, /namespaces, /tables, /tag) -> core/s3_tables_core via the S3 store
@@ -401,6 +401,7 @@ _TARGET_PREFIX = {
     "Kinesis_20131202": "kinesis",
     "Logs_20140328": "logs",
     "AmazonSSM": "ssm",
+    "AmazonDMSv20160101": "dms",   # Database Migration Service between simulator RDS instances -> core/dms_core
     "AWSStepFunctions": "stepfunctions",
     "AWSRAMFrontendService": "ram",
     "NetworkFirewall_20201112": "netfw",
@@ -416,7 +417,7 @@ _JSON_CT = {
     "dynamodb": "application/x-amz-json-1.0", "dax": "application/x-amz-json-1.1", "kms": "application/x-amz-json-1.1",
     "secretsmanager": "application/x-amz-json-1.1", "sqs": "application/x-amz-json-1.0",
     "events": "application/x-amz-json-1.1", "logs": "application/x-amz-json-1.1",
-    "ssm": "application/x-amz-json-1.1",
+    "ssm": "application/x-amz-json-1.1", "dms": "application/x-amz-json-1.1",
     "stepfunctions": "application/x-amz-json-1.0",
     "ram": "application/x-amz-json-1.1",
     "organizations": "application/x-amz-json-1.1", "ce": "application/x-amz-json-1.1",
@@ -1375,6 +1376,9 @@ class AwsWireRouter:
                 r = sfn.dispatch(self.sfn, target, payload, lambda_store=self.lam)
             elif svc == "ram":
                 r = ram.dispatch(self.ram, target, payload, vpc_store=self.vpc)
+            elif svc == "dms":   # DMS: endpoints resolve to simulator RDS instances; tasks copy real rows between them
+                from core import dms_core
+                r = dms_core.dispatch(self.rds, target, payload)
             elif svc == "netfw":   # AWS Network Firewall (state lives in the VPC model so subnets/VPCs are validated for real)
                 r = netfw.dispatch(self.vpc, target, payload)
             elif svc == "dnsfw":   # Route 53 Resolver DNS Firewall (state in the VPC model)
