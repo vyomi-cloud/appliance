@@ -192,6 +192,31 @@ def run():
     pr = sr({"type": "TaskRunRequest", "taskName": "t1"})["body"]["properties"]
     _check("task run builds the GitHub context and records the task name", pr["status"] == "Succeeded" and pr["taskName"] == "t1" and pr["outputImages"][0]["tag"] == "v1")
     ci.set_fetcher(None); ci.set_builder(None)
+
+    # Cloud Run continuous deployment from GitHub through the seam
+    try:
+        from core import gcp_run_core as rn
+    except ImportError:  # pragma: no cover
+        import gcp_run_core as rn  # type: ignore
+    st = rn.RunStore()
+    L = "/v2/projects/p1/locations/us-central1"
+    call = lambda m, path, body=None, q=None: (lambda r: (r.status, json.loads(r.body or b"{}")))(rn.dispatch(st, m, path, q or {}, {}, json.dumps(body).encode() if body is not None else b""))
+    _check("service created", call("POST", L + "/services", {"template": {"containers": [{"image": "gcr.io/x/app:1"}]}}, {"serviceId": "web"})[0] in (200, 201))
+    _check("connect repo + PAT", call("POST", L + "/services/web:connectRepo", {"repository": "o/r", "branch": "main", "accessToken": "ghp_cloudrunpat1"})[0] == 200)
+    _, b = call("POST", L + "/services/web/builds", {"fromRepo": True})
+    _check("no outbound fetch (Nano-like) -> FAILURE with reason, service untouched", b["status"] == "FAILURE" and "outbound" in b["logs"])
+    ci.set_fetcher(lambda u, h: (200, _tgz({"Dockerfile": b"FROM alpine:3\n"})) if h.get("Authorization") == "Bearer ghp_cloudrunpat1" else (404, b""))
+    _, b = call("POST", L + "/services/web/builds", {"fromRepo": True})
+    _check("no container builder -> FAILURE (no fake green)", b["status"] == "FAILURE" and "No container builder" in b["logs"])
+    ci.set_builder(ci.BuildKitBuilder(lambda argv, i, t: (0, b"ok") if argv[1] == "build" else (0, b"sha256:feed 1024")))
+    _, b = call("POST", L + "/services/web/builds", {"fromRepo": True})
+    _check("BuildKit build succeeds and cuts a revision with the built image", b["status"] == "SUCCESS" and b["image"].startswith("vyomi-run/p1/web:") and b["revision"])
+    _, svc = call("GET", L + "/services/web")
+    _check("service now serves the built image", svc["template"]["containers"][0]["image"] == b["image"])
+    ci.set_fetcher(lambda u, h: (200, _tgz({"main.py": b"x"})))
+    _, b = call("POST", L + "/services/web/builds", {"fromRepo": True})
+    _check("repo without Dockerfile -> FAILURE (no buildpacks)", b["status"] == "FAILURE" and "buildpacks" in b["logs"])
+    ci.set_fetcher(None); ci.set_builder(None)
     print("PASS test_ci_core")
 
 

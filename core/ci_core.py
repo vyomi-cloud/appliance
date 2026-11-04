@@ -536,6 +536,9 @@ def import_external(db, repo, url, ref, branch=None, message=None, ctx=None):
     if not files:
         raise CiError("EmptySource", "The repository ref contained no files.")
     ensure_repo(db, repo, branch or "main")
+    if _git.head(db, repo, branch or "main"):               # an import mirrors the remote: files it no longer has are removed
+        old = _git.tree(db, repo, branch or "main") or {}
+        files.update({p: None for p in old if p not in files})
     return commit_files(db, repo, branch or "main", files, message or f"Import {m.group(1)}/{m.group(2)}@{ref}", "github-import", ctx)
 
 
