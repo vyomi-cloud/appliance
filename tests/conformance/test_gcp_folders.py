@@ -65,7 +65,7 @@ check("move folder to another folder", s == 200 and op["response"]["parent"] == 
 check("name clash on move -> 409", (lambda: (call("POST", "/v3/folders", {"parent": ORG, "displayName": "Payments Team"}), call("POST", "/v3/" + pay["name"] + ":move", {"destinationParent": ORG})[0] == 409)[1])())
 # depth
 cur = plat["name"]
-for i in range(9):
+for i in range(10):
     s, op = call("POST", "/v3/folders", {"parent": cur, "displayName": "level %d" % i})
     if s != 200:
         break

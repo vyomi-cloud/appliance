@@ -1,19 +1,21 @@
-/* New Project — a single native Resource Manager v3 projects.create call. Vyomi's GCP lens
- * has no organizations or folders (see ManageResources.jsx), so "Location" only ever offers
- * "No organization"; the real console's folder/org Browse picker is a declared gap. */
+/* New Project — a native Resource Manager v3 projects.create call; "Location" browses the
+ * organization + folder hierarchy (LocationPicker) and sends it as the project's parent. */
 import { useState } from "react";
 import { Box, Button, IconButton, Stack, TextField, Typography } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/esm/ArrowBack.js";
 import { useNotify } from "../../../common/notify.jsx";
-import { ErrorAlert, NotSimulated, PageHeader } from "../../kit/common.jsx";
+import { ErrorAlert, PageHeader } from "../../kit/common.jsx";
 import { setProject } from "../../project.js";
 import * as api from "./api.js";
+import LocationPicker from "./LocationPicker.jsx";
 
 export default function CreateProject() {
   const notify = useNotify();
   const [name, setName] = useState("");
   const [id, setId] = useState("");
   const [idTouched, setIdTouched] = useState(false);
+  const [parent, setParent] = useState("");
+  const [browse, setBrowse] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
 
@@ -27,7 +29,7 @@ export default function CreateProject() {
     if (api.validProjectId(effectiveId)) return;
     setBusy(true); setError(null);
     try {
-      await api.createProject(effectiveId, name || effectiveId);
+      await api.createProjectIn(effectiveId, name || effectiveId, parent || undefined);
       notify.success(`Created project "${effectiveId}"`);
       setProject(effectiveId);
       location.hash = "/resource-manager";
@@ -48,9 +50,12 @@ export default function CreateProject() {
           helperText={idErr || "ID can't be changed later."} />
         <Box>
           <Typography variant="body2" sx={{ fontWeight: 500, mb: 0.5 }}>Location</Typography>
-          <Typography variant="body2" color="text.secondary">No organization</Typography>
+          <Stack direction="row" spacing={1} alignItems="center">
+            <Typography variant="body2" color="text.secondary">{parent || "Default organization"}</Typography>
+            <Button size="small" onClick={() => setBrowse((b) => !b)}>Browse</Button>
+          </Stack>
         </Box>
-        <NotSimulated compact feature="Browsing for a parent organization or folder" note="Vyomi's GCP lens is project-scoped; it models no organizations or folders, so every project is created with no parent." />
+        {browse && <LocationPicker value={parent} onChange={setParent} />}
       </Stack>
       <Stack direction="row" spacing={1} sx={{ pt: 3 }}>
         <Button type="submit" variant="contained" disabled={busy}>{busy ? "Creating…" : "Create"}</Button>
