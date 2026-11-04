@@ -28,7 +28,7 @@ OUT = os.path.join(HERE, "core")
 
 CORES = [
     "object_store.py", "s3_object_core.py",        # S3
-    "s3_tables_core.py", "s3_insights_core.py", "s3_ext_core.py", "s3_vectors_core.py", "backup_core.py", "marketplace_core.py", "s3files_core.py", "ec2_metrics_core.py", "organizations_core.py", "qr_png.py",     # S3 Tables (s3tables REST) + Access Analyzer for S3 / Storage Lens (loaded by s3_object_core)
+    "s3_tables_core.py", "s3_insights_core.py", "s3_ext_core.py", "s3_vectors_core.py", "backup_core.py", "backup_vaults_core.py", "marketplace_core.py", "s3files_core.py", "ec2_metrics_core.py", "organizations_core.py", "qr_png.py",     # S3 Tables (s3tables REST) + Access Analyzer for S3 / Storage Lens (loaded by s3_object_core)
     "nosql_store.py", "dynamodb_core.py",           # DynamoDB
     "dynamodb_expr.py",                             # DynamoDB expression engine (v4 C0: key/filter/condition/update/projection)
     "dax_core.py",                                  # DynamoDB Accelerator (DAX): clusters, subnet/parameter groups, cache engine
