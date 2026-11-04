@@ -167,6 +167,27 @@ try {
   await page.waitForTimeout(1200);
   check("storage bypass stored", /Logging/.test(json(await arm("GET", P("Storage", "storageAccounts", SA), null, "2023-01-01")).properties?.networkAcls?.bypass || ""));
 
+  // ── Storage encryption scopes + container scope / version-level immutability
+  const ESA = `cxenc${n}`;
+  await arm("PUT", P("Storage", "storageAccounts", ESA), { location: "eastus", kind: "StorageV2", sku: { name: "Standard_LRS" }, properties: { immutableStorageWithVersioning: { enabled: true } } }, "2023-05-01");
+  await page.goto(UI + `#/storage/${RG}/${ESA}/encryption`);
+  await page.getByLabel("Encryption scope name").fill("scopea");
+  await page.getByRole("button", { name: "Create encryption scope" }).click();
+  await page.locator("tr", { hasText: "scopea" }).waitFor({ timeout: 10000 }).then(() => check("encryption scope listed", true), () => check("encryption scope listed", false));
+  check("scope is an ARM child", json(await arm("GET", P("Storage", "storageAccounts", ESA) + "/encryptionScopes/scopea", null, "2023-05-01")).properties?.state === "Enabled");
+  await noNS("storage encryption");
+  await page.goto(UI + `#/storage/${RG}/${ESA}/containers`);
+  await page.getByRole("toolbar", { name: "Command bar" }).getByRole("button", { name: "Create" }).click();
+  await page.getByLabel("Container name").fill("wormc");
+  await page.getByLabel("Default encryption scope").selectOption("scopea");
+  await page.getByLabel("Enable version-level immutability support for this container").check();
+  await page.getByRole("dialog", { name: "New container" }).getByRole("button", { name: "Create", exact: true }).click();
+  await page.locator("tr", { hasText: "wormc" }).waitFor({ timeout: 15000 });
+  const cprops = json(await arm("GET", P("Storage", "storageAccounts", ESA) + "/blobServices/default/containers/wormc", null, "2023-05-01")).properties || {};
+  check("container carries scope and WORM over ARM", cprops.defaultEncryptionScope === "scopea" && cprops.immutableStorageWithVersioning?.enabled === true);
+  const hp = await wire(`/${ESA}/wormc?restype=container`, { method: "GET", headers: { "x-ms-version": "2021-12-02", authorization: `SharedKey ${ESA}:x` } });
+  check("data plane container is created", hp.status === 200);
+
   // ── App Configuration
   const A = `cxappcfg${n}`;
   await arm("PUT", P("AppConfiguration", "configurationStores", A), { location: "eastus", sku: { name: "standard" } }, "2024-05-01");

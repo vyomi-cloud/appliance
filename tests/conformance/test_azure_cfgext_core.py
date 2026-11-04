@@ -161,6 +161,46 @@ def run():
     _check("bypass None cannot combine", put(sa, sbody("None,Logging"), SAQ)["status"] == 400)
     _check("bypass stored", put(sa, sbody("AzureServices, Logging"), SAQ)["status"] in (200, 201) and "Logging" in get(sa, SAQ)["body"]["properties"]["networkAcls"]["bypass"])
 
+    # ── Storage encryption scopes + container default scope + version-level immutability
+    from core import azure_blob_core as bc
+    sx = f"{RG}/providers/Microsoft.Storage/storageAccounts/cxsa2"
+    _check("scope needs account", put(sx + "/encryptionScopes/s1x", {"properties": {"source": "Microsoft.Storage"}}, SAQ)["status"] == 404)
+    put(sx, {"location": "eastus", "kind": "StorageV2", "sku": {"name": "Standard_LRS"}, "properties": {}}, SAQ)
+    _check("scope name validated", put(sx + "/encryptionScopes/A", {"properties": {}}, SAQ)["status"] == 400)
+    _check("scope source validated", put(sx + "/encryptionScopes/scope1", {"properties": {"source": "Other"}}, SAQ)["status"] == 400)
+    r = put(sx + "/encryptionScopes/scope1", {"properties": {"source": "Microsoft.KeyVault", "keyVaultProperties": {"keyUri": "https://nokv.vault.azure.net/keys/k1"}}}, SAQ)
+    _check("CMK scope needs an existing vault", r["status"] == 400 and code(r) == "KeyVaultNotFound")
+    r = put(sx + "/encryptionScopes/scope1", {"properties": {"source": "Microsoft.Storage", "requireInfrastructureEncryption": True}}, SAQ)
+    _check("scope created enabled", r["status"] in (200, 201) and r["body"]["properties"]["state"] == "Enabled")
+    _check("infra encryption immutable", put(sx + "/encryptionScopes/scope1", {"properties": {"requireInfrastructureEncryption": False}}, SAQ)["status"] == 400)
+    BC = sx + "/blobServices/default/containers/c1"
+    _check("container unknown scope", put(BC, {"properties": {"defaultEncryptionScope": "nope"}}, SAQ)["status"] == 404)
+    _check("deny override needs scope", put(BC, {"properties": {"denyEncryptionScopeOverride": True}}, SAQ)["status"] == 400)
+    r = put(BC, {"properties": {"immutableStorageWithVersioning": {"enabled": True}}}, SAQ)
+    _check("container WORM needs account flag", r["status"] == 409 and code(r) == "ImmutableStorageWithVersioningNotEnabled")
+    put(sx, {"location": "eastus", "kind": "StorageV2", "sku": {"name": "Standard_LRS"}, "properties": {"immutableStorageWithVersioning": {"enabled": True}}}, SAQ)
+    r = put(BC, {"properties": {"defaultEncryptionScope": "scope1", "denyEncryptionScopeOverride": True, "immutableStorageWithVersioning": {"enabled": True}}}, SAQ)
+    _check("container with scope + WORM", r["status"] in (200, 201) and r["body"]["properties"]["immutableStorageWithVersioning"]["state"] == "Enabled")
+    _check("WORM cannot be disabled", put(BC, {"properties": {"immutableStorageWithVersioning": {"enabled": False}}}, SAQ)["status"] == 409)
+    # data plane honours the account's scopes
+    st = bc.AzureBlobStore()
+    dp = lambda m, path, h=None, body=b"", q=None: bc.dispatch(st, m, path, q or {}, h or {}, body, account="cxsa2", arm_state=a.state)
+    r = dp("PUT", "/ctr", {"x-ms-default-encryption-scope": "ghost"}, q={"restype": "container"})
+    _check("data plane: unknown default scope", r.status == 400)
+    r = dp("PUT", "/ctr", {"x-ms-default-encryption-scope": "scope1", "x-ms-deny-encryption-scope-override": "true"}, q={"restype": "container"})
+    _check("data plane: container with scope", r.status == 201)
+    r = dp("GET", "/ctr", q={"restype": "container"})
+    _check("container props report the scope", r.headers.get("x-ms-default-encryption-scope") == "scope1" and r.headers.get("x-ms-deny-encryption-scope-override") == "true")
+    r = dp("PUT", "/ctr/b.txt", {"x-ms-blob-type": "BlockBlob"}, b"hi")
+    _check("blob inherits the scope", r.status == 201 and r.headers.get("x-ms-encryption-scope") == "scope1")
+    r = dp("PUT", "/ctr/c.txt", {"x-ms-blob-type": "BlockBlob", "x-ms-encryption-scope": "other"}, b"hi")
+    _check("override denied", r.status == 409)
+    r = dp("HEAD", "/ctr/b.txt")
+    _check("blob HEAD reports the scope", r.headers.get("x-ms-encryption-scope") == "scope1")
+    put(sx + "/encryptionScopes/scope1", {"properties": {"state": "Disabled"}}, SAQ)
+    r = dp("PUT", "/ctr/d.txt", {"x-ms-blob-type": "BlockBlob"}, b"hi")
+    _check("disabled scope refuses writes", r.status == 403)
+
     # ── SQL Data Discovery & Classification labels
     SQ2 = {"api-version": "2020-11-01-preview"}
     sqs = f"{RG}/providers/Microsoft.Sql/servers/cxsql"
