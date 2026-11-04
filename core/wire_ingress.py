@@ -384,7 +384,11 @@ def _dispatch_service(service: str, method: str, path: str, query: dict, headers
         project = _project_of(path)
         if project and hasattr(st, "adopt"):
             st.adopt(project)            # pre-v4 databases / indexes / documents → this state (once)
-        resp = gcp_firestore_core.dispatch(st, method, path, query, headers, body, gcs_store=r.gcs)
+        from core import gcp_datastore_core
+        if gcp_datastore_core.is_datastore_path(path):   # Cloud Datastore API (Datastore-mode databases) shares this store
+            resp = gcp_datastore_core.dispatch(st, method, path, query, headers, body)
+        else:
+            resp = gcp_firestore_core.dispatch(st, method, path, query, headers, body, gcs_store=r.gcs)
         hdrs = dict(resp.headers or {})
         hdrs.setdefault("content-type", resp.media_type or "application/json")
         return {"status": resp.status, "headers": hdrs, "body": resp.body or b""}

@@ -110,9 +110,14 @@ def _typed_fields(fields) -> dict:
     return {k: (v if _is_typed(v) else server._gcp_firestore_value_from_json(v)) for k, v in fields.items()}
 
 
-def _fs(method: str, path: str, query: dict | None = None, body: bytes = b"") -> dict:
-    return _wi.dispatch_service("gcp_firestore", method, path, query or {},
-                                {"content-type": "application/json"}, body)
+_FWD_HEADERS = ("authorization", "x-goog-api-key", "x-firebase-gmpid", "x-goog-request-params")
+
+
+def _fs(method: str, path: str, query: dict | None = None, body: bytes = b"", request=None) -> dict:
+    hdrs = {"content-type": "application/json"}
+    if request is not None:   # client-SDK style callers are rule-checked by the core (Firebase ID token / API key)
+        hdrs.update({k: v for k, v in request.headers.items() if k.lower() in _FWD_HEADERS})
+    return _wi.dispatch_service("gcp_firestore", method, path, query or {}, hdrs, body)
 
 
 def _fs_classic(method: str, native: str, query: dict, body: bytes) -> dict:
@@ -189,7 +194,7 @@ def _fs_classic(method: str, native: str, query: dict, body: bytes) -> dict:
 
 
 async def _firestore_native(request: Request):
-    return _resp(_fs(request.method, _raw_path(request), _query(request), await request.body()))
+    return _resp(_fs(request.method, _raw_path(request), _query(request), await request.body(), request))
 
 
 async def _firestore_classic(request: Request):
@@ -461,6 +466,15 @@ def register(app) -> list:
         for v in ("/v1", "/v1beta1"):
             app.add_route(v + "/projects/{project}/databases", _firestore_native, methods=_METHODS)
             app.add_route(v + "/projects/{project}/databases/{rest:path}", _firestore_native, methods=_METHODS)
+            app.add_route(v + "/projects/{project}/rulesets", _firestore_native, methods=_METHODS)        # Firebase Rules API
+            app.add_route(v + "/projects/{project}/rulesets/{rest:path}", _firestore_native, methods=_METHODS)
+            app.add_route(v + "/projects/{project}/releases", _firestore_native, methods=_METHODS)
+            app.add_route(v + "/projects/{project}/releases/{rest:path}", _firestore_native, methods=_METHODS)
+            for verb in ("test", "lookup", "runQuery", "runAggregationQuery", "commit", "beginTransaction", "rollback",
+                         "allocateIds", "reserveIds"):   # projects/{p}:test (Rules API) + Cloud Datastore verbs
+                app.add_route(v + "/projects/{project}:" + verb, _firestore_native, methods=_METHODS)
+            app.add_route(v + "/projects/{project}/indexes", _firestore_native, methods=_METHODS)         # Datastore admin indexes
+            app.add_route(v + "/projects/{project}/indexes/{rest:path}", _firestore_native, methods=_METHODS)
             app.add_route(v + "/projects/{project}/locations/{loc}/backups", _firestore_native, methods=_METHODS)
             app.add_route(v + "/projects/{project}/locations/{loc}/backups/{rest:path}", _firestore_native, methods=_METHODS)
         for pre in ("/firestore/v1", "/api/gcp/firestore/v1"):
