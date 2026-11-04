@@ -37,8 +37,10 @@ await page.getByRole("button", { name: /Lambda rotation function/ }).click();
 await page.getByRole("option", { name: new RegExp(FN) }).click();
 check("rotation modal has a real function picker (no Not-simulated panel)", !/Not simulated in Vyomi/.test(await page.locator("body").innerText()));
 await shot("smrot-modal");
+const rotated = page.waitForResponse((r) => r.request().headers()["x-amz-target"] === "secretsmanager.RotateSecret", { timeout: 60000 });
 await page.getByRole("button", { name: "Save", exact: true }).click();
-await page.getByText(FN).first().waitFor({ timeout: 20000 });
+await rotated;   // the picker already shows FN, so wait on the wire call, not the text
+await page.waitForTimeout(500);
 const v = await sm("GetSecretValue", { SecretId: SEC });
 check("saving the rotation ran the Lambda and the secret holds its generated value", v.status === 200 && JSON.parse(v.json.SecretString).password.startsWith("ui-rotated-"), v.json.SecretString);
 const d = await sm("DescribeSecret", { SecretId: SEC });

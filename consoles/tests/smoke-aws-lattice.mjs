@@ -99,7 +99,7 @@ await page.getByRole("button", { name: "Create VPC association" }).click();
 await pick("VPC", vpcId);
 await page.getByRole("dialog").getByRole("button", { name: "Create", exact: true }).click();
 await page.getByText(vpcId).first().waitFor({ timeout: 15000 });
-const va = await L("GET", `/servicenetworkvpcassociations?serviceNetworkIdentifier=${sn.id}`);
+let va; for (let i = 0; i < 20; i++) { va = await L("GET", `/servicenetworkvpcassociations?serviceNetworkIdentifier=${sn.id}`); if ((va.json.items || []).some((a) => a.vpcId === vpcId)) break; await page.waitForTimeout(500); }
 check("VPC association created via UI (wire)", (va.json.items || []).some((a) => a.vpcId === vpcId));
 
 // resource gateway via UI
