@@ -640,6 +640,9 @@ _WEB_ONLY = ("slots", "slotsswap")
 _FN_ONLY = ("functions", "host")
 
 
+_QUERY = {}      # the current request's query string (set by dispatch; used by the Kudu log/extension readers)
+
+
 def _site_subresource(state, rec, rest, method, payload):
     r0 = rest[0].lower()
     fn = _is_fn(rec)
@@ -653,6 +656,13 @@ def _site_subresource(state, rec, rest, method, payload):
         except ImportError:
             import azure_webdeploy_core as _wd          # type: ignore  (Nano: flat module path)
         r = _wd.dispatch(state, rec, rest, method, payload)
+        return _ok(r["body"], r["status"]) if r["status"] < 300 else _err(r["status"], r["body"]["error"]["code"], r["body"]["error"]["message"])
+    if r0 == "kudu":
+        try:
+            from core import azure_kudu_core as _kd
+        except ImportError:
+            import azure_kudu_core as _kd               # type: ignore  (Nano: flat module path)
+        r = _kd.dispatch(state, rec, rest, method, payload, _QUERY)
         return _ok(r["body"], r["status"]) if r["status"] < 300 else _err(r["status"], r["body"]["error"]["code"], r["body"]["error"]["message"])
     if _webnet().handles(rest):
         r = _webnet().dispatch(state, rec, rest, method, payload)
@@ -1452,6 +1462,8 @@ def dispatch(state, method, sub, rg, chain, names, payload=None, query=None):
     ``state`` = the ARM resource map (lower-cased id → record), shared with the rest of ARM.
     """
     method = (method or "GET").upper()
+    global _QUERY
+    _QUERY = dict(query) if isinstance(query, dict) else {}
     # Own copy: records keep parts of the body, and callers may reuse theirs.
     payload = json.loads(json.dumps(payload)) if isinstance(payload, dict) else {}
     chain = list(chain or [])

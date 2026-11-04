@@ -204,7 +204,7 @@ def _appconfig(state, rec):
                   "Local (access key) authentication is disabled; only Entra ID works." if dla else "Access keys are enabled in addition to Entra ID.",
                   None if dla else "Set disableLocalAuth=true once clients use Entra ID.", {"disableLocalAuth": dla}))
     pna = p.get("publicNetworkAccess", "Enabled")
-    pecs = [c for c in _children(state, rec["id"], "privateendpointconnections")]
+    pecs = p.get("privateEndpointConnections") or []
     out.append(_d("network", "Network access", "Security", "Warning" if pna == "Enabled" and not pecs and not dla else "Healthy",
                   f"Public network access {pna}; {len(pecs)} private endpoint connection(s).",
                   "Restrict public access or add a private endpoint." if pna == "Enabled" and not pecs and not dla else None,
