@@ -14,6 +14,7 @@
  *   this lens (see core/capabilities/azure/vms.json: azure.vms.disks). */
 import { restJson } from "../../../common/wire.js";
 import { armType, getSubscription, parseId } from "../../kit/arm.js";
+import { vmShownState } from "../../../common/NanoVmPanel.jsx";
 
 export const ARM = armType("Microsoft.Compute", "virtualMachines", "2023-09-01");
 const NIC_ARM = armType("Microsoft.Network", "networkInterfaces", "2023-11-01");
@@ -25,7 +26,14 @@ const PIP_ARM = armType("Microsoft.Network", "publicIPAddresses", "2023-11-01");
 const RULE_API_VERSION = "2023-11-01";
 const LOCK_API_VERSION = "2020-05-01";
 
-const shape = (v) => ({ ...v, resourceGroup: parseId(v.id).resourceGroup });
+// Nano with in-browser VMs on: a VM the store calls running is only running once its v86 VM booted (starting -> running animates).
+const nanoPower = (v) => {
+  const ps = v.properties?.powerState;
+  if (ps && !/running$/i.test(ps)) return v;
+  const shown = vmShownState("azure", v.name, "PowerState/running", { running: "PowerState/running", pending: "PowerState/starting", stopped: "PowerState/stopped" });
+  return shown === "PowerState/running" ? v : { ...v, properties: { ...v.properties, powerState: shown } };
+};
+const shape = (v) => nanoPower({ ...v, resourceGroup: parseId(v.id).resourceGroup });
 
 export const listVms = async () => (await ARM.list()).map(shape);
 export const getVm = async (rg, name) => shape(await ARM.get(rg, name));

@@ -34,9 +34,47 @@ const A = {
       return (await ec2("RunInstances", { ImageId: ami, MinCount: "1", MaxCount: "1", InstanceType: "t3.micro" })).match(/<instanceId>(i-\w+)<\/instanceId>/)[1];
     },
     detail: (id) => `#/ec2/instances/${id}`,
+    connect: (id) => `#/ec2/instances/${id}`,
     list: "#/ec2/instances",
+    openShell: async (page) => { await page.getByTestId("open-shell").click(); },
     pending: (page) => page.locator('[data-vy-pending]').first(),
   },
+};
+const wjson = (path, method, body) => page.evaluate(async ([u, m, b]) => { const r = await fetch(u, { method: m, headers: { "content-type": "application/json" }, body: b ? JSON.stringify(b) : undefined }); const t = await r.text(); let j = null; try { j = JSON.parse(t); } catch {} return { status: r.status, body: j, text: t.slice(0, 300) }; }, [WIRE + path, method, body]);
+const SUB = "00000000-0000-0000-0000-cloudlearn01";
+A.azure = {
+  home: "#/",
+  async create() {
+    const n = Date.now() % 100000, RG = `vmrg${n}`, VM = `vm${n}`;
+    await wjson(`/subscriptions/${SUB}/resourceGroups/${RG}?api-version=2021-04-01`, "PUT", { location: "eastus" });
+    const r = await wjson(`/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Compute/virtualMachines/${VM}?api-version=2023-09-01`, "PUT",
+      { location: "eastus", properties: { hardwareProfile: { vmSize: "Standard_B1s" }, osProfile: { computerName: VM, adminUsername: "azureuser", linuxConfiguration: { disablePasswordAuthentication: true } },
+        storageProfile: { imageReference: { publisher: "Canonical", offer: "ubuntu-24_04-lts", sku: "server", version: "latest" }, osDisk: { createOption: "FromImage", osType: "Linux" } } } });
+    if (r.status >= 300) throw new Error("create VM failed: " + r.text);
+    this.rg = RG; return VM;
+  },
+  detail(id) { return `#/vms/${this.rg}/${id}`; },
+  connect(id) { return `#/vms/${this.rg}/${id}/connect`; },
+  list: "#/vms",
+  pending: (page) => page.locator("[data-vy-pending]").first(),
+  openShell: async () => {},
+};
+A.gcp = {
+  home: "#/",
+  async create() {
+    const project = await page.evaluate(() => { try { return localStorage.getItem("vyomi.v4.gcp.project") || "vyomi-project"; } catch { return "vyomi-project"; } });
+    const name = `vm-${Date.now() % 100000}`, zone = "us-central1-a";
+    const r = await wjson(`/compute/v1/projects/${project}/zones/${zone}/instances`, "POST", { name, machineType: `zones/${zone}/machineTypes/e2-micro`,
+      disks: [{ boot: true, autoDelete: true, initializeParams: { sourceImage: "projects/debian-cloud/global/images/family/debian-12", diskSizeGb: "10" } }],
+      networkInterfaces: [{ network: "global/networks/default" }] });
+    if (r.status >= 300) throw new Error("create instance failed: " + r.text);
+    this.zone = zone; return name;
+  },
+  detail(id) { return `#/compute/instances/${this.zone}/${id}`; },
+  connect(id) { return `#/compute/instances/${this.zone}/${id}`; },
+  list: "#/compute/instances",
+  pending: (page) => page.locator("[data-vy-pending]").first(),
+  openShell: async () => {},
 };
 const cl = A[CLOUD];
 await page.goto(UI + cl.home);
@@ -46,10 +84,10 @@ const vmId = await cl.create();
 check("instance created through the wire", !!vmId, vmId);
 
 // 1. flag off -> honest panel
-await page.goto(UI + cl.detail(vmId));
+await page.goto(UI + cl.connect(vmId));
 await page.evaluate(() => { window.__noReload = "same-page"; });
-await page.getByRole("button", { name: /^Connect$/ }).first().click();
-await page.getByText(/In-browser VMs are off/i).first().waitFor({ timeout: 30000 }).catch(async (e) => { await page.screenshot({ path: `${OUT}/browservm-${CLOUD}-fail.png` }); console.log((await page.locator("body").innerText()).slice(0, 600)); throw e; });
+if (CLOUD === "aws") await page.getByRole("button", { name: /^Connect$/ }).first().click();
+await page.getByText(/In-browser VMs are off/i).first().waitFor({ timeout: 30000 }).catch(async (e) => { await page.screenshot({ path: `${OUT}/browservm-${CLOUD}-fail.png` }); console.log(await page.evaluate(() => location.href)); console.log((await page.locator("body").innerText()).slice(0, 300)); throw e; });
 check("flag off: honest 'In-browser VMs are off' panel with a Turn on button", await page.getByRole("button", { name: /Turn on in-browser VMs/ }).isVisible());
 check("flag off: no Not-simulated panel", !/Not simulated in Vyomi/i.test(await page.locator("body").innerText()));
 await page.screenshot({ path: `${OUT}/browservm-${CLOUD}-off.png` });
@@ -73,12 +111,12 @@ await page.screenshot({ path: `${OUT}/browservm-${CLOUD}-pending.png` });
 if (!BOOT) { console.log("BOOT=0: stopped before waiting on the v86 boot"); }
 else {
   try {
-    await page.waitForFunction(() => /\brunning\b/i.test(document.querySelector("main, #root")?.innerText || "") && !document.querySelector("[data-vy-pending]"), null, { timeout: 240000, polling: 2000 });
+    await page.waitForFunction(() => /\brunning\b/i.test(document.body.innerText || "") && !document.querySelector("[data-vy-pending]"), null, { timeout: 240000, polling: 2000 });
     check("list: state flipped pending -> running without a manual reload", true);
   } catch { check("list: state flipped pending -> running without a manual reload", false, "VM did not boot within 240 s"); }
   await page.screenshot({ path: `${OUT}/browservm-${CLOUD}-running.png` });
-  await page.goto(UI + cl.detail(vmId)); await ready();
-  await page.getByTestId("open-shell").click().catch(async () => { await page.getByRole("button", { name: /^Connect$/ }).first().click(); });
+  await page.goto(UI + cl.connect(vmId)); await ready();
+  await cl.openShell(page);
   const term = page.locator(".vy-term .xterm-helper-textarea, .vy-term textarea").first();
   await term.waitFor({ state: "attached", timeout: 60000 });
   await page.locator(".vy-term").first().click();
@@ -94,6 +132,11 @@ else {
   await page.screenshot({ path: `${OUT}/browservm-${CLOUD}-repaint.png` });
   if (process.env.DBG) console.log(await page.evaluate(() => JSON.stringify({ terms: document.querySelectorAll(".vy-term").length, html: (document.querySelector(".vy-term")?.innerHTML || "").slice(0, 600), shells: document.querySelectorAll("[data-nano-shell]").length })));
   check("shell survives a power-state repaint (session kept)", /^hi-from-42$/m.test(await page.locator(".vy-term").first().innerText().catch(() => "")));
+}
+if (CLOUD === "azure" && BOOT) {
+  await page.goto(UI + `#/vms/${cl.rg}/${vmId}/serialconsole`); await ready();
+  await page.locator(".vy-term").first().waitFor({ timeout: 60000 }).catch(() => {});
+  check("azure Serial console blade is the in-browser shell (not Not-simulated)", (await page.locator(".vy-term").count()) === 1 && !/Not simulated in Vyomi/i.test(await page.locator("body").innerText()));
 }
 check("no uncaught page errors", errors.length === 0, errors.join(" | "));
 await browser.close();

@@ -9,6 +9,7 @@ import { Glyph, NotSimulatedContainer } from "../../kit/common.jsx";
 import { TitleRow } from "../../kit/ResourceBlade.jsx";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
+import { pendingAttr, useNanoVmRefresh } from "../../../common/NanoVmPanel.jsx";
 
 const osOf = (v) => (v.properties?.storageProfile?.osDisk?.osType) || (v.properties?.osProfile?.linuxConfiguration ? "Linux" : v.properties?.osProfile?.windowsConfiguration ? "Windows" : "Linux");
 const statusOf = (v) => {
@@ -21,7 +22,8 @@ const disksOf = (v) => 1 + (v.properties?.storageProfile?.dataDisks || []).lengt
 export default function VirtualMachines() {
   const notify = useNotify();
   const sub = useSubscription();
-  const { data, loading, error, reload } = useAsync(() => api.listVms(), [sub.id]);
+  const { data, loading, error, reload, refresh } = useAsync(() => api.listVms(), [sub.id]);
+  useNanoVmRefresh(refresh, (data || []).some((v) => statusOf(v) === "Starting"));
   const subName = sub.displayName || sub.id;
   return (
     <>
@@ -53,7 +55,7 @@ export default function VirtualMachines() {
             { key: "subscription", label: "Subscription", value: () => subName },
             { key: "resourceGroup", label: "Resource group" },
             { key: "location", label: "Location", value: (r) => locationLabel(r.location) },
-            { key: "status", label: "Status", value: statusOf },
+            { key: "status", label: "Status", value: statusOf, render: (r) => <span {...pendingAttr(statusOf(r) === "Starting", "spin")}>{statusOf(r)}</span> },
             { key: "os", label: "Operating system", value: osOf },
             { key: "size", label: "Size", value: sizeOf },
             { key: "publicip", label: "Public IP address", value: () => "--" },

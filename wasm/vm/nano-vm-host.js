@@ -448,7 +448,7 @@
       try {
         const u = typeof input === "string" ? input : (input && input.url) || "";
         const m = ((init && init.method) || (input && input.method) || "GET").toUpperCase();
-        if (m !== "GET" || !VM_URL.test(u) || /private-key|connect-info|\/exec|vm-status/.test(u) || !/json/i.test(res.headers.get("content-type") || "")) return res;
+        if (m !== "GET" || !VM_URL.test(u) || /\/_wire\//.test(u) || /private-key|connect-info|\/exec|vm-status/.test(u) || !/json/i.test(res.headers.get("content-type") || "")) return res;
         const j = await res.clone().json(); viewFix.url = u; viewFix(j, 0);
         return new Response(JSON.stringify(j), { status: res.status, statusText: res.statusText, headers: res.headers });
       } catch (_) { return res; }

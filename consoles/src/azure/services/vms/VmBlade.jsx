@@ -28,6 +28,7 @@ import DeleteDialog from "../../kit/DeleteDialog.jsx";
 import ResourceBlade from "../../kit/ResourceBlade.jsx";
 import { Essentials, ErrorBar, Glyph, KV, Loading, NotSimulated, NotSimulatedContainer, fmtDate } from "../../kit/common.jsx";
 import { remember, forget } from "../../kit/recent.js";
+import NanoVmPanel, { isNano, pendingAttr, useNanoVmRefresh } from "../../../common/NanoVmPanel.jsx";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
 import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
@@ -103,6 +104,7 @@ export default function VmBlade({ params }) {
   // the panel changes, and several panels (Disks, Size, Identity) read live-mutable VM fields
   // straight off `a` rather than issuing their own fetch, so a stale `a` would show stale state.
   const vm = useAsync(() => api.getVm(rg, name), [rg, name, panel]);
+  useNanoVmRefresh(vm.refresh, vm.data?.properties?.powerState === "PowerState/starting");
   const self = `#/vms/${encodeURIComponent(rg)}/${encodeURIComponent(name)}`;
   useEffect(() => { if (vm.data) remember({ name, type: "Virtual machine", href: self }); }, [!!vm.data, self]);
 
@@ -123,6 +125,7 @@ export default function VmBlade({ params }) {
       identity: () => <Identity a={a} reload={reload} />,
       autoshutdown: () => <AutoShutdown a={a} reload={reload} />,
       connect: () => <Connect a={a} />,
+      ...(isNano() ? { serialconsole: () => <NanoShell a={a} /> } : {}),
       networksettings: () => <NetworkSettings a={a} />,
       loadbalancing: () => <CapabilityContainer id="azure.vms.loadbalancing" title={`${a.name} | Load balancing`}><VmLoadBalancing a={a} /></CapabilityContainer>,
       asgs: () => <CapabilityContainer id="azure.vms.asgs" title={`${a.name} | Application security groups`}><VmAsgs a={a} /></CapabilityContainer>,
@@ -218,7 +221,7 @@ function Overview({ a, reload, self }) {
         actions={<Link as="button" onClick={() => setGap("JSON View")}>JSON View</Link>}
         left={[
           ["Resource group", <Link href="#/resourcegroups">{a.resourceGroup}</Link>],
-          ["Status", statusOf(a)],
+          ["Status", <span {...pendingAttr(statusOf(a) === "Starting", "spin")}>{statusOf(a)}</span>],
           ["Location", locationLabel(a.location)],
           ["Subscription", sub.displayName || sub.id],
           ["Subscription ID", sub.id],
@@ -798,6 +801,15 @@ function AutoShutdown({ a, reload }) {
 }
 
 // ── Connect ────────────────────────────────────────────────────────────────────────────
+/** Nano: the VM is a real v86 Linux VM in this tab; its serial console is the browser shell. */
+function NanoShell({ a }) {
+  return (
+    <CapabilityContainer id="azure.vms.connect" title={`${a.name} | Serial console`}>
+      <NanoVmPanel cloud="azure" vmRef={a.name} />
+    </CapabilityContainer>
+  );
+}
+
 function Connect({ a }) {
   const [gap, setGap] = useState(null);
   const nicId = nicIdOf(a);
@@ -808,6 +820,14 @@ function Connect({ a }) {
   const user = a.properties?.osProfile?.adminUsername;
   const cmd = `ssh ${user}@${publicIp || privateIp || "<no public ip>"}`;
   const cap = capability("azure.vms.connect");
+  if (isNano()) {
+    return (
+      <>
+        <div className="vy-panel-title">Connect</div>
+        <section className="vy-section"><NanoVmPanel cloud="azure" vmRef={a.name} /></section>
+      </>
+    );
+  }
   return (
     <>
       <div className="vy-panel-title">Connect</div>
