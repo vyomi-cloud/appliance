@@ -105,6 +105,15 @@ def test_nano_router_resource_manager():
     assert [p["projectId"] for p in _j(R.handle("GET", "/v3/projects:search", {}, {}, b""))["projects"]] == [pid]
 
 
+def test_nano_router_accepts_the_console_default_project_alias():
+    # Every v4 console / SDK snippet defaults to `vyomi-project`; Nano's one fixed project is `nano-project`.
+    R = AwsWireRouter()
+    assert R.handle("PUT", "/v1/projects/vyomi-project/topics/via-alias", {}, JSON, b"{}")["status"] == 200
+    assert R.handle("GET", "/v1/projects/nano-project/topics/via-alias", {}, {}, b"")["status"] == 200
+    assert R.handle("GET", "/storage/v1/b", {"project": "vyomi-project"}, {}, b"")["status"] == 200
+    assert R.handle("GET", "/storage/v1/b", {"project": "other-project"}, {}, b"")["status"] == 403
+
+
 def test_nano_router_one_store_for_id_and_number():
     R = AwsWireRouter()
     pid, num = gp.NANO_PROJECT["projectId"], gp.NANO_PROJECT["projectNumber"]

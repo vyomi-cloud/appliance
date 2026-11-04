@@ -38,6 +38,10 @@ page.on("console", (m) => m.type() === "error" && !/status of (40[034]|412)/.tes
 // Native 400/403/404s are legitimate API answers (e.g. a retention-protected delete, a
 // public-access-prevention rejection), not page errors.
 
+// Poll a native-wire read until its condition holds (the UI updates optimistically; the long-running
+// operation behind it settles a moment later, esp. on Nano) — returns the last value either way.
+const settle = async (read, ok, ms = 20000) => { let v; for (const t0 = Date.now(); Date.now() - t0 < ms;) { v = await read(); if (ok(v)) return v; await page.waitForTimeout(500); } return v; };
+
 const shot = (n) => page.screenshot({ path: `${OUT}/${n}.png`, fullPage: true });
 
 try {
@@ -499,7 +503,7 @@ try {
   await page.getByLabel("Confirm deletion").fill(IR);
   await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
   await page.getByRole("cell", { name: IR, exact: true }).waitFor({ state: "detached", timeout: 10000 });
-  const irsAfter = await wjson("/v1/projects/vyomi-project/locations/global/internalRanges");
+  const irsAfter = await settle(() => wjson("/v1/projects/vyomi-project/locations/global/internalRanges"), (x) => !(x.internalRanges || []).some((r) => r.name.endsWith(`/${IR}`)));
   check("delete internal range via UI → gone over native wire", !(irsAfter.internalRanges || []).some((r) => r.name.endsWith(`/${IR}`)));
   await wire(`/compute/v1/projects/vyomi-project/global/networks/${NET3}`, { method: "DELETE" });
 
@@ -563,8 +567,8 @@ try {
   await shot("12-create-instance-filled");
   await page.getByRole("button", { name: "Create", exact: true }).click();
   await page.getByRole("heading", { name: VM }).waitFor({ timeout: 10000 });
-  const inst = await wjson(`/compute/v1/projects/vyomi-project/zones/us-central1-a/instances/${VM}`);
-  check("create instance via UI → visible over native wire (instances.get)", inst.name === VM && inst.status === "RUNNING");
+  const inst = await settle(() => wjson(`/compute/v1/projects/vyomi-project/zones/us-central1-a/instances/${VM}`), (x) => x.status === "RUNNING");
+  check("create instance via UI → visible over native wire (instances.get)", inst.name === VM && inst.status === "RUNNING", `status=${inst.status} ${JSON.stringify(inst.error || "").slice(0, 160)}`);
   await shot("13-instance-detail");
 
   // Lifecycle action from the detail page → status change visible over the wire
