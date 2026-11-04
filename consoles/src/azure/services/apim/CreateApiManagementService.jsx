@@ -7,7 +7,10 @@ import { navigate } from "../../../common/router.js";
 import { useAsync } from "../../../common/useAsync.js";
 import { DEFAULT_RG, LOCATIONS, listResourceGroups, locationLabel } from "../../kit/arm.js";
 import CreateWizard, { FormRow, FormSection } from "../../kit/CreateWizard.jsx";
-import { Glyph, NotSimulatedContainer } from "../../kit/common.jsx";
+import { Components } from "../../kit/AppInsights.jsx";
+import { CapabilityContainer } from "../../kit/Capability.jsx";
+import { Glyph, InfoBar, NotSimulatedContainer } from "../../kit/common.jsx";
+import { setPricing } from "../defender/api.js";
 import { useSubscription } from "../../kit/subscription.js";
 import { TagRows } from "./ApimBlade.jsx";
 import * as api from "./api.js";
@@ -21,11 +24,13 @@ export default function CreateApiManagementService() {
   const sub = useSubscription();
   const rgs = useAsync(() => listResourceGroups(), [sub.id]);
   const existing = useAsync(() => api.listServices(), [sub.id]);
+  const workspaces = useAsync(() => api.listWorkspaces(), [sub.id]);
   const [newRg, setNewRg] = useState(null);
   const [f, setF] = useState({
     resourceGroup: DEFAULT_RG, name: "", location: "eastus", orgName: "", adminEmail: "",
     pricingTier: "Developer (no SLA)", units: 1,
     vnet: "None", systemAssignedIdentity: false,
+    logAnalytics: false, workspace: "", appInsights: false, aiName: "", defenderApis: false,
     protocols: api.defaultProtocols(),
     tags: [{ name: "", value: "" }],
   });
@@ -102,9 +107,46 @@ export default function CreateApiManagementService() {
   );
 
   const monitor = (
-    <NotSimulatedContainer title="Monitor + secure"
-      feature="Wiring a new service to Log Analytics, Application Insights or Defender for APIs"
-      note="These checkboxes provision separate monitoring/security resources in real Azure; Vyomi does not model that cross-resource wiring." />
+    <>
+      <FormSection title="Log Analytics">
+        <CapabilityContainer id="azure.apim.diagnosticsettings" title="Diagnostic setting">
+          <FormRow label="Send gateway logs and metrics to Log Analytics">
+            <Checkbox checked={f.logAnalytics} onChange={(_, d) => setF((x) => ({ ...x, logAnalytics: !!d.checked, workspace: d.checked ? x.workspace || workspaces.data?.[0]?.id || "" : x.workspace }))} aria-label="Enable Log Analytics" />
+          </FormRow>
+          {f.logAnalytics && (
+            <FormRow label="Log Analytics workspace" required htmlFor="apim-ws">
+              {workspaces.data?.length ? (
+                <Select id="apim-ws" value={f.workspace} onChange={set("workspace")} aria-label="Log Analytics workspace">
+                  {workspaces.data.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+                </Select>
+              ) : <span>No Log Analytics workspace yet. Create one in the Log Analytics workspaces service first.</span>}
+            </FormRow>
+          )}
+          {f.logAnalytics && <InfoBar title="Created with the service">A real Microsoft.Insights diagnostic setting (allLogs + AllMetrics) is created on the new API Management service, pointing at the workspace.</InfoBar>}
+        </CapabilityContainer>
+      </FormSection>
+      <FormSection title="Application Insights">
+        <CapabilityContainer id="azure.apim.monitoring.appinsights" title="Application Insights logger">
+          <FormRow label="Enable Application Insights">
+            <Checkbox checked={f.appInsights} onChange={(_, d) => setF((x) => ({ ...x, appInsights: !!d.checked }))} aria-label="Enable Application Insights" />
+          </FormRow>
+          {f.appInsights && (
+            <FormRow label="Application Insights name" htmlFor="apim-ai">
+              <Input id="apim-ai" value={f.aiName} placeholder={f.name ? `${f.name}-ai` : "Application Insights name"} onChange={set("aiName")} aria-label="Application Insights name" />
+            </FormRow>
+          )}
+          {f.appInsights && <InfoBar title="Created with the service">A real Microsoft.Insights/components resource is created in this region and linked as an API Management logger named 'appinsights'.</InfoBar>}
+        </CapabilityContainer>
+      </FormSection>
+      <FormSection title="Microsoft Defender for APIs">
+        <CapabilityContainer id="azure.defender.plans" title="Defender for APIs">
+          <FormRow label="Enable Microsoft Defender for APIs">
+            <Checkbox checked={f.defenderApis} onChange={(_, d) => setF((x) => ({ ...x, defenderApis: !!d.checked }))} aria-label="Enable Defender for APIs" />
+          </FormRow>
+          <InfoBar title="Subscription-wide plan">Like Azure, this turns the Defender for APIs plan on for the whole subscription (Defender for Cloud > Environment settings).</InfoBar>
+        </CapabilityContainer>
+      </FormSection>
+    </>
   );
 
   const vnetSection = (
@@ -162,6 +204,8 @@ export default function CreateApiManagementService() {
         <h3>Basics</h3>
         {dl([["Subscription", sub.displayName || sub.id], ["Resource Group", rg || "--"], ["Resource name", f.name || "--"], ["Region", locationLabel(f.location)],
           ["Organization name", f.orgName || "--"], ["Administrator email", f.adminEmail || "--"], ["Pricing tier", f.pricingTier], ["Units", String(f.units)]])}
+        <h3>Monitor + secure</h3>
+        {dl([["Log Analytics", f.logAnalytics ? (workspaces.data?.find((w) => w.id === f.workspace)?.name || "--") : "No"], ["Application Insights", f.appInsights ? `Yes (${f.aiName || f.name + "-ai"})` : "No"], ["Microsoft Defender for APIs", f.defenderApis ? "Yes" : "No"]])}
         <h3>Managed identity</h3>
         {dl([["System assigned managed identity", f.systemAssignedIdentity ? "On" : "Off"]])}
         <h3>Tags</h3>
@@ -173,6 +217,14 @@ export default function CreateApiManagementService() {
   const onCreate = async () => {
     try {
       await api.createService(rg, f.name, body());
+      if (f.appInsights) {
+        const c = await Components.put(rg, f.aiName || `${f.name}-ai`, { location: f.location, kind: "web", properties: { Application_Type: "web", Flow_Type: "Bluefield", Request_Source: "rest" } });
+        await api.Loggers.put(rg, f.name, "appinsights", { properties: { loggerType: "applicationInsights", description: "Application Insights logger created with the service", resourceId: c.id, credentials: { instrumentationKey: c.properties?.InstrumentationKey || "" } } });
+      }
+      if (f.logAnalytics && f.workspace) {
+        await api.putDiagnosticSetting(rg, f.name, "vyomi-apim-diag", { properties: { workspaceId: f.workspace, logs: [{ categoryGroup: "allLogs", enabled: true }], metrics: [{ category: "AllMetrics", enabled: true }] } });
+      }
+      if (f.defenderApis) await setPricing("Api", "Standard");
       notify.success(`Deployment of API Management service '${f.name}' to resource group '${rg}' was successful.`, "Deployment succeeded");
       navigate("apim", rg, f.name);
     } catch (e) { notify.error(e, "Deployment failed"); }

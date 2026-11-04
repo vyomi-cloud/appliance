@@ -1,0 +1,41 @@
+/* Smoke: API Management create wizard "Monitor + secure" really creates the diagnostic setting, the Application Insights
+ * logger and the Defender for APIs plan.   BASE=http://127.0.0.1:9092 PW=<playwright path> node consoles/tests/smoke-azure-apim-monitor-secure.mjs */
+import { createRequire } from "node:module";
+const require = createRequire(import.meta.url);
+const pw = require(process.env.PW || "playwright");
+const BASE = process.env.BASE || "http://127.0.0.1:9092";
+const UI = `${BASE}/v4/azure/`, WIRE = `${BASE}/_wire`;
+const SUB = "00000000-0000-0000-0000-cloudlearn01";
+const n = Date.now() % 100000, RG = `am-rg-${n}`, SVC = `amsvc${n}`, WS = `amws${n}`;
+let pass = 0, fail = 0;
+const ok = (name, c, d = "") => { c ? pass++ : fail++; console.log(`[${c ? "PASS" : "FAIL"}] ${name}${c ? "" : " " + d}`); };
+let pg;
+const arm = (m, path, body, v) => pg.evaluate(async ([m, url, body]) => {
+  const r = await fetch(url, { method: m, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
+  const t = await r.text(); return { status: r.status, body: t ? JSON.parse(t) : null };
+}, [m, `${WIRE}/subscriptions/${SUB}${path}${path.includes("?") ? "&" : "?"}api-version=${v}`, body]);
+const b = await pw.chromium.launch(); pg = await (await b.newContext({ viewport: { width: 1400, height: 1000 } })).newPage();
+await pg.goto(UI, { waitUntil: "networkidle" });
+await arm("PUT", `/resourcegroups/${RG}`, { location: "eastus" }, "2021-04-01");
+ok("workspace", [200, 201].includes((await arm("PUT", `/resourceGroups/${RG}/providers/Microsoft.OperationalInsights/workspaces/${WS}`, { location: "eastus", properties: {} }, "2022-10-01")).status));
+await pg.goto(`${UI}#/apim/create`); await pg.waitForTimeout(1500);
+await pg.getByLabel("Resource group").first().selectOption?.({ label: RG }).catch(() => {});
+await pg.getByLabel("Resource name").first().fill(SVC).catch(() => {});
+await pg.getByLabel("Organization name").fill("Org");
+await pg.getByLabel("Administrator email").fill("a@b.com");
+await pg.getByRole("tab", { name: "Monitor + secure" }).click(); await pg.waitForTimeout(500);
+ok("monitor tab is not a gap", (await pg.locator("[data-vyomi-not-simulated]").count()) === 0);
+await pg.getByLabel("Enable Log Analytics").check();
+await pg.getByLabel("Enable Application Insights").check();
+await pg.getByLabel("Enable Defender for APIs").check();
+await pg.getByRole("tab", { name: /Review/ }).click(); await pg.waitForTimeout(500);
+ok("review lists monitor choices", (await pg.locator("body").innerText()).includes("Microsoft Defender for APIs"));
+await pg.getByRole("button", { name: "Create", exact: true }).click(); await pg.waitForTimeout(3500);
+const svc = `/resourceGroups/${RG}/providers/Microsoft.ApiManagement/service/${SVC}`;
+const diag = await arm("GET", `${svc}/providers/Microsoft.Insights/diagnosticSettings`, null, "2021-05-01-preview");
+ok("diagnostic setting created on the service", diag.status === 200 && (diag.body.value || []).some((d) => (d.properties?.workspaceId || "").toLowerCase().includes(WS.toLowerCase())), JSON.stringify(diag.body).slice(0, 200));
+const lg = await arm("GET", `${svc}/loggers`, null, "2023-05-01-preview");
+ok("App Insights logger linked", (lg.body?.value || []).some((l) => l.name === "appinsights"), JSON.stringify(lg.body).slice(0, 200));
+const pr = await arm("GET", `/providers/Microsoft.Security/pricings/Api`, null, "2024-01-01");
+ok("Defender for APIs plan Standard", pr.body?.properties?.pricingTier === "Standard", JSON.stringify(pr.body).slice(0, 200));
+await b.close(); console.log(`${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);
