@@ -4,6 +4,7 @@
  * DB REST (SQL/Core API) data plane; everything else in the menu is an honest NotSimulated panel
  * (the spec captures them as blade menu items with no further content — "title only"). */
 import { CosmosNetworking } from "../../kit/NetworkRules.jsx";
+import { CosmosCors, CosmosDedicatedGateway, CosmosDataEncryption } from "../../kit/ConfigPages.jsx";
 import { ManagedIdentityPage } from "../../kit/UserAssignedIdentities.jsx";
 import { useEffect, useState } from "react";
 import {
@@ -119,6 +120,9 @@ export default function CosmosAccountBlade({ params }) {
       defender: () => <ResourceRecommendations resourceId={a.id} />,
       tags: () => <Tags a={a} reload={reload} />,
       identity: () => <ManagedIdentityPage resourceId={a.id} apiVersion="2024-05-15" name={a.name} onChanged={reload} />,
+      cors: () => <CosmosCors a={a} reload={reload} />,
+      dedicatedgateway: () => <CosmosDedicatedGateway a={a} />,
+      dataencryption: () => <CosmosDataEncryption a={a} reload={reload} />,
       dataexplorer: () => <DataExplorer />,
       replicate: () => <Replicate a={a} reload={reload} />,
       consistency: () => <Consistency a={a} reload={reload} />,

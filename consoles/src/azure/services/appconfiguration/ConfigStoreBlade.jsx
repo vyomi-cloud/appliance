@@ -4,6 +4,7 @@
  * backed by native ARM / App Configuration data-plane calls; everything else in the menu is
  * an honest NotSimulated panel. */
 import ResourceEvents from "../../kit/ResourceEvents.jsx";
+import { AppConfigEncryption } from "../../kit/ConfigPages.jsx";
 import { ManagedIdentityPage } from "../../kit/UserAssignedIdentities.jsx";
 import { useEffect, useState } from "react";
 import {
@@ -96,6 +97,7 @@ export default function ConfigStoreBlade({ params, query }) {
       tags: () => <Tags a={a} reload={reload} />,
       identity: () => <ManagedIdentityPage resourceId={a.id} apiVersion="2024-05-15" name={a.name} onChanged={reload} />,
       events: () => <ResourceEvents scopeId={a.id} kind="appconfiguration" title={`${a.name} | Events`} />,
+      encryption: () => <AppConfigEncryption a={a} reload={reload} />,
       explorer: () => <ConfigExplorer self={self} query={query} />,
       importexport: () => <ImportExport store={name} />,
       features: () => <FeatureManager />,

@@ -115,6 +115,14 @@ def run():
     put(sb2, {"location": "eastus", "sku": {"name": "Standard", "tier": "Standard"}}, SQ)
     _check("sb rule set needs Premium", put(sb2 + "/networkRuleSets/default", {"properties": {"defaultAction": "Deny"}}, SQ)["status"] == 400)
 
+    # ── Service Bus system events need Premium
+    EV = {"api-version": "2022-06-15"}
+    evb = {"properties": {"destination": {"endpointType": "WebHook", "properties": {"endpointUrl": "https://example.com/h"}}, "filter": {"includedEventTypes": ["Microsoft.ServiceBus.ActiveMessagesAvailableWithNoListeners"]}}}
+    _check("sb events need Premium", put(sb2 + "/providers/Microsoft.EventGrid/eventSubscriptions/e1", evb, EV)["status"] == 400)
+    _check("sb events on Premium", put(sb + "/providers/Microsoft.EventGrid/eventSubscriptions/e1", evb, EV)["status"] in (200, 201))
+    bad_t = {"properties": {**evb["properties"], "filter": {"includedEventTypes": ["Microsoft.Storage.BlobCreated"]}}}
+    _check("sb events validate type", put(sb + "/providers/Microsoft.EventGrid/eventSubscriptions/e2", bad_t, EV)["status"] == 400)
+
     # ── subnet service endpoints / delegations
     VQ = {"api-version": "2023-11-01"}
     bad = lambda sp: put(vn, {"location": "eastus", "properties": {"addressSpace": {"addressPrefixes": ["10.5.0.0/16"]}, "subnets": [{"name": "s1", "properties": {"addressPrefix": "10.5.0.0/24", **sp}}]}}, VQ)

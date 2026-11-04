@@ -27,6 +27,8 @@ import SharedActivityLog from "../../kit/ActivityLog.jsx";
 import { ClassicAdminsPanel, DenyAssignmentsPanel, MyAccess } from "../../kit/IamExtras.jsx";
 import SharedResourceHealth from "../../kit/ResourceHealth.jsx";
 import SharedSupportPanel from "../../kit/SupportPanel.jsx";
+import { SbEncryption, SbNetworking } from "../../kit/ConfigPages.jsx";
+import ResourceEvents from "../../kit/ResourceEvents.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -102,6 +104,9 @@ export default function NamespaceBlade({ params, query }) {
       exporttemplate: () => <SharedExportTemplate id={a.id} name={a.name} resourceGroup={a.resourceGroup} />,
       support: () => <SharedSupportPanel resourceId={a.id} name={a.name} service="servicebus" />,
       resourcehealth: () => <SharedResourceHealth id={a.id} name={a.name} />,
+      networking: () => <SbNetworking a={a} />,
+      encryption: () => <SbEncryption a={a} reload={reload} />,
+      events: () => <ResourceEvents scopeId={a.id} kind="servicebus" title={`${a.name} | Events`} />,
       identity: () => <Identity a={a} reload={reload} />,
       diagnosticsettings: () => <DiagnosticSettings a={a} />,
       alerts: () => <Alerts a={a} />,

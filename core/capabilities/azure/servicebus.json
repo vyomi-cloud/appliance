@@ -80,17 +80,29 @@
     "tests": ["tests/conformance/test_azure_arm_core.py"]
   },
   "azure.servicebus.namespace.networking": {
-    "title": "Networking (private endpoints / public network access path)",
-    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "title": "Networking (network rule sets)",
+    "level": {
+      "nano": "config_only",
+      "offline": "config_only"
+    },
     "limitations": [
-      "Private endpoints (Microsoft.Network/privateEndpoints wired to Microsoft.ServiceBus/namespaces/privateEndpointConnections) are not modeled for ANY resource type in Vyomi — core/netsim only models VNets/NSGs/routing, not the PrivateLinkService/PrivateEndpoint resource pair a real private-link connection needs, so there is no network path to actually gate traffic on. properties.publicNetworkAccess itself already round-trips through ARM (see the create wizard's Connectivity method), but the Networking page's per-rule virtual network / IP firewall list and the private endpoint connection list stay an honest gap until a private-link engine exists."
+      "Premium namespaces only: networkRuleSets/default (public network access, default action, IP rules, virtual network rules whose subnet must exist and carry the Microsoft.ServiceBus service endpoint) is a validated ARM resource. Rules are not evaluated against data-plane connections."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_cfgext_core.py"
     ]
   },
   "azure.servicebus.namespace.encryption": {
     "title": "Encryption (customer-managed key)",
-    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "level": {
+      "nano": "config_only",
+      "offline": "config_only"
+    },
     "limitations": [
-      "Customer-managed key encryption needs a system-assigned identity (real, see azure.servicebus.namespace.identity) PLUS a Key Vault key reference Vyomi would have to actually gate the namespace's read/write path on failure/revocation (as core/azure_sql_core.py does for SQL TDE) — not yet wired for Service Bus specifically, so the toggle would be config-only rather than enforced; left as an honest gap rather than ship a setting that looks enforced but isn't."
+      "Premium namespaces only; requires a managed identity and a Key Vault that exists in this subscription. The key is not looked up in the Key Vault data plane and messages are not re-encrypted or blocked when the key is disabled."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_cfgext_core.py"
     ]
   },
   "azure.servicebus.namespace.georecovery": {
