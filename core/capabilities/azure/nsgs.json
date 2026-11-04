@@ -64,7 +64,8 @@
   "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
    "Support + Troubleshooting is the shared support-request panel (azure.common.support): requests are filed with Vyomi, not Microsoft. The 'Diagnose and solve problems' tiles (IP flow verify, Next hop, VM connectivity issue, Network configuration diagnostics — azure.nsgs.network_watcher) and Tasks (azure.nsgs.tasks) are built on real backends."
-  ]
+  ],
+  "tests": ["tests/conformance/test_azure_support_core.py"]
  },
  "azure.nsgs.effective_rules": {
   "title": "Effective security rules",

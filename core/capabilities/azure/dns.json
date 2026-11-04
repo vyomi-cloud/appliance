@@ -63,10 +63,11 @@
  },
  "azure.dns.export_template": {
   "title": "Export template",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "ARM/Bicep/Terraform template export for a DNS zone is not built."
-  ]
+   "The Export template tab is the shared ARM/Bicep/Terraform export (azure.common.export_template), generated from the properties Vyomi stores for the zone."
+  ],
+  "tests": ["tests/conformance/test_azure_templates_core.py"]
  },
  "azure.dns.diagnose": {
   "title": "Diagnose and solve problems",
