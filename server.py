@@ -11469,6 +11469,18 @@ def _apply_license_jwt(token: str) -> dict:
             "reason": "this license has been revoked; contact support for a new one",
         })
 
+    # Enterprise access (enterprise-access-spec.md §3.6): sandboxes set
+    # VYOMI_REQUIRED_ENTERPRISE so a JWT minted for a different (or no)
+    # enterprise is refused outright — defense in depth; the portal is the
+    # real gate. Also covers the backup-restore path, which calls this
+    # same function.
+    required_ent = os.environ.get("VYOMI_REQUIRED_ENTERPRISE", "").strip()
+    if required_ent and claims.get("ent") != required_ent:
+        raise HTTPException(status_code=403, detail={
+            "ok": False, "code": "enterprise_mismatch",
+            "reason": "This sandbox belongs to a different enterprise.",
+        })
+
     # Persist on the active tenant — middleware reads license_tier from here.
     # Use the canonical tenants_state path so _tenant_dict() finds the value.
     tier = claims["tier"]
@@ -11477,6 +11489,7 @@ def _apply_license_jwt(token: str) -> dict:
     tenants = ts.setdefault("tenants", {})
     t = tenants.setdefault(tid, {"tenant_id": tid, "name": tid})
     t["license_tier"] = tier
+    t["license_enterprise"] = claims.get("ent")
     t["primary_cloud"] = claims.get("primary_cloud") or t.get("primary_cloud") or ""
     t["license_seats"] = int(claims.get("seats") or 1)
     t["license_jti"] = claims.get("jti")
@@ -11957,7 +11970,9 @@ def _start_license_background_tasks():
                      "sub": (STATE.get("license_claims") or {}).get("sub")})
 
     try:
-        _lr.start_revocation_poll(STATE, interval_seconds=24 * 3600, on_revoked=_on_revoked)
+        _lr.start_revocation_poll(STATE, interval_seconds=int(os.environ.get(
+            "CLOUDLEARN_LICENSE_REVOCATION_INTERVAL_SECONDS", str(24 * 3600))),
+            on_revoked=_on_revoked)
         # Refresh cadence default: 24h. Matches the JWT TTL + the user-facing
         # "validate once per day" promise. Override via env if a deployment
         # genuinely wants tighter coupling (e.g. high-churn enterprise).

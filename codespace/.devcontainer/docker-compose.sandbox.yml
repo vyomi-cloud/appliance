@@ -49,6 +49,11 @@ services:
       VYOMI_REQUIRE_ADMIN_KEY: "1"
       CLOUDLEARN_ADMIN_KEY: ${VYOMI_ADMIN_KEY:-}
       CLOUDLEARN_LICENSE_SECRET: ${VYOMI_SHARED_SECRET:-}
+      VYOMI_REQUIRED_ENTERPRISE: ${VYOMI_ENTERPRISE_ID:-}
+      # Enterprise removal SLA is 10 minutes (enterprise-access-spec.md §3.7):
+      # a sandbox must stop trusting a removed member's JWT within that window.
+      CLOUDLEARN_LICENSE_REFRESH_INTERVAL_SECONDS: "600"
+      CLOUDLEARN_LICENSE_REVOCATION_INTERVAL_SECONDS: "600"
       VYOMI_INSTALL_ID: ${CODESPACE_NAME:-vyomi-sandbox}
       # Let the appliance detect it's a cloud sandbox so spaces get a default
       # TTL and the countdown timer shows (0/no-expiry stays the offline default).
